@@ -3004,10 +3004,10 @@ impl<T: Eq> Eq for Pair<T> {
 
 #### Not Yet Implemented
 
-- [Method Resolution](#method-resolution) in full: the scope gate is not
-  enforced, and the compiler's sort still prefers an impl written in the calling
-  module. What remains is the known gaps of
-  [WEP: Trait Resolution](./wep-2026-09-01-trait-resolution.md)
+- [Method Resolution](#method-resolution) on a receiver whose type is a type
+  parameter: the ranks decide every other call, and a generic body's still
+  resolves by an older rule that prefers an impl written in the calling module
+  ([WEP: Trait Resolution](./wep-2026-09-01-trait-resolution.md))
 - Trait objects (`dyn Trait`)
 - Fully qualified `<Type as Trait>::method()`. Permanently out — a leading `<`
   in expression position is JSX's. The trait-qualified (UFCS) form

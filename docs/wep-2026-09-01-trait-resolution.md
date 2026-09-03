@@ -442,7 +442,15 @@ Two disciplines keep them functions rather than passes:
 Nothing flips at once. The fixture corpus is the drift detector, as
 `verify_arg_synthesis` already uses it for argument synthesis (WEP 2026-07-31):
 a question the solver answers is asserted against the compiler's own path in
-debug builds over every fixture before the compiler's path is retired.
+debug builds over every fixture before the compiler's path is retired. `holds`
+still runs that way beside `type_implements_trait`.
+
+What the order can decide is bounded by what the lowering states, and a shape it
+cannot say is an impl the search never sees. Lookup collecting a match means an
+impl applied, so the order finding no candidate at all — every impl out of scope
+being its own answer — means the lowering lost one. That is an assertion in
+selection, over a program no error has already rejected, so such a loss names
+the impl rather than reading as a missing method.
 
 ## Consequences
 
@@ -451,76 +459,27 @@ missing rank is visible. Two calls that used to differ only by declaration order
 now either agree or report, and the report names an impl the programmer can
 write.
 
-This document states the order. `select_trait_match` is its one implementation
-and cites this document rather than restating it; where the two differ today is
-under Known gaps.
+This document states the order and `candidates` with `rank` implement it, so
+`select_trait_match` decides nothing of its own: it collects the matches, asks
+the order, and keeps the ones it names.
 
 ## Known gaps
 
-### The order has no caller
+### The sort still answers for a type-parameter receiver
 
-`candidates` and `rank` answer the whole order, and nothing calls them:
-selection still runs on `select_trait_match`'s own collection and sort. It
-differs from the order above in five ways, and one differential closes all
-five.
+Selection asks `candidates` and `rank` and keeps the matches the order names.
+The compiler still collects them: a `TraitMethodMatch` carries the `MethodInfo`
+the rest of elaboration needs, and rebuilding that from an `ImplId` is a
+different job from deciding which impl runs.
 
-- [ ] Scope. `select_trait_match` consults it once, as a tie-break: when several
-      same-named declarations collide and exactly one is in scope, that one
-      answers. Otherwise a trait's methods are candidates wherever its impls are
-      loaded, and a body calling `Base`'s method through `T: Sub` resolves with
-      `Base` unimported. `candidates` gates on the declaration's scope and keeps
-      the unscoped search as the recovery path, reporting what it finds as the
-      trait to import rather than as a candidate.
-- [ ] Depth. The sort reads it off a blanket's bounds alone, so every
-      non-blanket candidate sits at 0 and rank 1 separates none of them: a
-      newtype's own `impl Tr for W` ties with its base's `impl Tr for Inner`
-      (`trait_newtype_concrete_impl_outranks_foreign_base.wado`), and a blanket
-      satisfied at the newtype loses to a concrete impl on the base
-      (`trait_newtype_blanket_beats_base_concrete.wado`). `candidates` measures
-      it as the level a candidate is selected at, over targets as well as
-      bounds.
-- [ ] Reference blankets. `impl<T: Bound> Tr for &T` reaches no call: the
-      reference step adopts only concrete `&T` impls, and the blanket collection
-      takes only value blankets (`trait_ref_blanket_dispatch.wado`). The
-      prelude's `Inspect for &T` works because the compiler answers that bound
-      itself. `candidates` walks the reference as a level of the chain, which
-      places such a blanket under a concrete `&T` impl and over the pointee's.
-- [ ] The cross-trait count. Blankets are excluded from it, so
-      `impl<T: Limit> Alpha for T` beside `impl<T: Limit> Beta for T`, both
-      declaring `describe`, tie silently. `candidates` collects a blanket like
-      any other candidate, so the pair reports.
-- [ ] Locality. The sort prefers a candidate in the calling module, and the
-      blanket ambiguity report groups local apart from foreign, so a tie the
-      order calls ambiguous is answered instead
-      (`trait_error_local_blanket_ties_foreign.wado`). `rank` reads no module at
-      all.
+One question the order cannot take. A receiver mentioning a type parameter
+holds by the bounds in force where the call was written, which reach the order
+as an `Env`, and the selection path carries no annotate-time scope to build one
+from. `select_trait_match` keeps its own sort — rank 0, then concrete over
+blanket, then bound depth, then local over foreign — for those alone.
 
-The differential is written and runs: `WADO_TRAIT_SELECTION_DIFF=1` over the
-corpus reports each call where the two answer differently, naming the impl block
-each took. It reports rather than asserting, because the five differences above
-are the point. It stays quiet where selection has already reported, as
-`verify_arg_synthesis` does, and declines two questions it cannot ask faithfully
-— a trait-qualified call, whose candidates are filtered before selection runs,
-and a receiver mentioning a type parameter, whose bounds reach the order as an
-`Env` the selection path has no annotate-time scope to build.
-
-What the corpus reports beyond the five, each its own gap:
-
-- [ ] `impl Tag for Box_<i32>` beside `impl<T> Tag for Box_<T>`: the sort takes
-      the head impl and monomorphization substitutes the specific body later,
-      where rank 2 takes the specific impl at selection
-      (`impl_concrete_instantiation_wins.wado`). The order is the one `spec.md`
-      states; the flip moves the decision one layer up.
-- [ ] Fixtures that call a method of a trait they never imported, which the
-      scope gate makes an error and the sort answers:
-      `cross_module_concrete_generic_impl.wado` imports `Token` and a function
-      but not `Tag`, and `cross_module_same_name_trait_direct.wado` imports
-      `Data` under two aliases but neither `Describe`. The flip adds the import
-      the call needs; that is the decision doing its work, not a regression.
-
-Then the flip. A `pub use` re-export putting the trait in scope wants pinning as
-part of it; an aliased import already is
-(`trait_alias_import_in_scope.wado`).
+- [ ] Give selection the bounds in force at the call, so the order answers for
+      a generic body too and the sort goes. Locality lives only there now.
 
 An unused-trait-import warning belongs to
 [Unused Diagnostics](./wep-2026-05-16-unused-diagnostics.md) rather than here,
