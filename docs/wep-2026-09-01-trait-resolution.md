@@ -64,7 +64,7 @@ These paths do not yet follow this order: see Known gaps.
 A call's candidates come from three places.
 
 First, the impls whose target matches the receiver anywhere along its newtype
-chain — impls written for the receiver's own type, for one instantiation of it
+chain: an impl written for the receiver's own type, for one instantiation of it
 (`impl Tag for Box_<i32>`), or for its head (`impl<T> Tag for Box_<T>`).
 
 Second, every _value blanket_ whose receiver-parameter bounds the receiver
@@ -83,10 +83,9 @@ All three lists are then gated on scope, below.
 never a candidate for it. Its traits are implemented for `()` directly
 (`trait_unit_eq_ord.wado`).
 
-Two impls of one `(Trait, Type)` pair are rejected where the second is written.
-Coherence claims the pair cannot exist, no rank distinguishes them, and a
-package compiles whole, so the check needs no open-world reasoning: the two are
-the same key, in one module or in two of one package.
+Two impls of one `(Trait, Type)` pair are rejected where the second is written,
+in one module or in two modules of one package. No rank distinguishes them, and
+a package compiles whole, so the check needs no open-world reasoning.
 
 ### Scope
 
@@ -169,19 +168,19 @@ Two shapes are reported, described below.
 
 Every rank reads only how a candidate relates to the receiver. Where the impl
 was written is not read at all: two candidates that tie at rank 2 are ambiguous
-whether or not one of them is in the calling module. Letting the reader's
-vantage decide a program's meaning is what ranks 1 and 2 exist to avoid, and the
-escape is one line: an impl written for the receiver, which says which body runs
-to every reader.
+whether or not one of them is in the calling module. Ranks 1 and 2 exist so that
+where the reader stands never decides what a program means. The escape is one
+line: an impl written for the receiver, which names the body that runs for
+every reader.
 
 This rejects one pattern: overriding a library's blanket with a second blanket
 of your own. Under this rule the two report for exactly the types that satisfy
 both bounds; write `impl Tr for YourType` instead. That is the strict side taken
 on purpose, and a concrete consumer of the pattern is reason to reopen it.
 
-Specificity is not a rank either. One blanket's bounds implying another's —
-`impl<T: A + B>` beside `impl<T: A>`, or `impl<T: Ord>` beside `impl<T: Eq>`
-under `Ord: Eq` — is rank 3, not a reason to prefer the narrower one. Which
+Specificity is not a rank either. When one blanket's bounds imply another's
+(`impl<T: A + B>` beside `impl<T: A>`, or `impl<T: Ord>` beside `impl<T: Eq>`
+under `Ord: Eq`), the pair is rank 3; the narrower one is not preferred. Which
 associated-type bindings a caller sees when a narrower impl binds them
 differently is the specialization soundness question, and answering it with a
 rank would decide it by accident. The escape is the impl rank 2 puts above both.
@@ -328,14 +327,15 @@ trait solving is one uniform search over impls:
   the parameters its members mention. A plain `enum` or `flags` has no
   members and derives unconditionally. A newtype derives nothing; it inherits.
 - Whether a declaration can derive is a definition-time fixpoint over the
-  declarations, which are finite and known before any body is elaborated: `D`
+  declarations, which are finite and known before any body is elaborated. `D`
   derives `Tr` when every member type satisfies `Tr` under `Pi: Tr`, asked of
-  `holds` with every declaration's tentative impl in place, and a declaration
-  that fails is removed until none does. Assuming and then refuting is what
-  makes a recursive type derive — the answer the compiler gives today.
+  `holds` with every declaration's tentative impl in place; a declaration that
+  fails is removed, until none does. Assuming and then refuting is what makes a
+  recursive type derive, which is the answer the compiler gives today.
 - A written impl for the pair blocks derivation, and a marker
-  (`impl Eq for D;`) demands it: the marker is an error where `D` cannot
-  derive, and answers the bound where it can.
+  (`impl Eq for D;`) demands it: the marker answers the bound, and the
+  compiler's conformance check reports one on a declaration that cannot
+  derive (WEP 2026-06-25).
 - A `Reflect*`-bounded blanket of a structural trait
   (`impl<S: ReflectStruct<…>, ..F: Serialize> Serialize for S`) is the derived
   body's source, not a candidate. The lowering leaves it out, and `derive`
@@ -415,8 +415,10 @@ under Known gaps.
 
 ### Scope is decided and not implemented
 
-Scope is not consulted: a trait's methods are candidates wherever its impls are
-loaded. What the decision above needs:
+Scope is consulted once today, as a tie-break: when several same-named
+declarations collide and exactly one is in scope, that one answers
+(`select_trait_match`). Otherwise a trait's methods are candidates wherever its
+impls are loaded. What the decision above needs:
 
 - [ ] Gate both candidate lists on the trait declaration's scope at the call
       site, so a call in a module that imported nothing sees only the prelude.
@@ -425,11 +427,8 @@ loaded. What the decision above needs:
       here" message rather than a candidate.
 - [ ] Gate the supertrait reach too: a body calling `Base`'s method through
       `T: Sub` resolves today with `Base` unimported, and must stop.
-- [ ] Pin an aliased import (`use { Loud as L }`) and a `pub use` re-export as
-      putting the trait in scope. Both follow from the rule and neither is
-      exercised by a fixture.
-- [ ] Pin that an impl in a module the caller never named still answers once
-      the trait is imported. Impls stay global; scope gates the declaration.
+- [ ] Pin a `pub use` re-export as putting the trait in scope. An aliased
+      import already is (`trait_alias_import_in_scope.wado`).
 
 An unused-trait-import warning belongs to
 [Unused Diagnostics](./wep-2026-05-16-unused-diagnostics.md) rather than here,
@@ -455,7 +454,7 @@ Depth is read off a blanket's bounds alone, so every non-blanket candidate sits
 at 0 and rank 1 separates none of them:
 
 - [ ] A newtype's own `impl Tr for W` and its base's `impl Tr for Inner` tie, and
-      the removed locality sort decides. Written in one module the newtype's
+      the locality sort (still in place, below) decides. Written in one module the newtype's
       wins, because the chain is collected nearest-first, but a local impl on
       the base beats a foreign one on the newtype
       (`trait_newtype_concrete_impl_outranks_foreign_base.wado`).
@@ -481,8 +480,8 @@ bound itself.
 ### Two traits' blankets sharing a method name are not reported
 
 `impl<T: Limit> Alpha for T` beside `impl<T: Limit> Beta for T`, both declaring
-`describe`, both applying to the receiver: the removed locality sort answers when
-exactly one is local, and otherwise collection order does. Blankets are excluded
+`describe`, both applying to the receiver: the locality sort (still in place,
+below) answers when exactly one is local, and otherwise collection order does. Blankets are excluded
 from the cross-trait count, which is what makes this tie silent. Scope removes
 most of it, since two foreign blankets only compete where both traits are
 imported. The rest is the count: a blanket must join the collision like any
@@ -502,19 +501,19 @@ call (a receiver type, an operand class, a bound list).
 ### Locality is still implemented
 
 The sort still prefers a candidate in the calling module, and the blanket
-ambiguity report still treats local and foreign candidates as separate groups,
-so a tie the order calls ambiguous is answered instead, and a tie neither
-settles falls to the order the candidates were collected in:
+ambiguity report still groups local apart from foreign. So a tie the order calls
+ambiguous is answered instead, and a tie neither settles falls to collection
+order:
 
 - [ ] Drop the local-over-foreign comparison from the sort.
 - [ ] Drop the locality grouping from the blanket ambiguity report, so two
       blankets tied at rank 2 report whichever modules wrote them
       (`trait_error_local_blanket_ties_foreign.wado`).
 
-Only one shape reaches this once the rest lands — two value blankets of one
-trait holding at the same level, one written in the calling module — because a
-duplicate pair is rejected where it is written, a newtype and its base are
-separated by rank 1, and two traits' blankets are the cross-trait ambiguity.
+Once the rest lands, only one shape reaches this: two value blankets of one
+trait holding at the same level, one written in the calling module. A duplicate
+pair is rejected where it is written, a newtype and its base are separated by
+rank 1, and two traits' blankets are the cross-trait ambiguity.
 
 ### Derivation is still a query in the compiler
 

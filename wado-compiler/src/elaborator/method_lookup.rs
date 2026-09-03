@@ -1691,7 +1691,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// How far down the receiver's newtype chain a blanket impl's target bounds
-    /// first hold — rank 2 of the selection order
+    /// first hold — rank 1 of the selection order
     /// (`docs/wep-2026-09-01-trait-resolution.md`). `None` when they never do;
     /// `Some(0)` for a non-blanket impl.
     fn blanket_target_bounds_depth(
@@ -2398,7 +2398,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         found_traits
     }
 
-    /// Report rank 4 for one trait's value blankets: two the receiver satisfies
+    /// Report rank 3 for one trait's value blankets: two the receiver satisfies
     /// with nothing ranking them (`docs/wep-2026-09-01-trait-resolution.md`).
     /// Runs on the sorted list, so each trait's first candidate is its best.
     fn report_ambiguous_value_blankets(

@@ -65,8 +65,7 @@ pub(super) fn type_param_defaults_of(params: &[ast::GenericParam]) -> Vec<Option
 
 impl StructFieldInfo {
     /// Whether a reflection written in `module` can enumerate every field
-    /// (WEP 2026-06-13, Visibility): one synthesized impl carries them all, so
-    /// admitting the struct on one public field would expose its private ones.
+    /// (WEP 2026-06-13, Visibility).
     pub(super) fn fields_visible_from(&self, module: &ModuleSource) -> bool {
         if self.fields.is_empty() || &self.module_source == module {
             return true;
@@ -1153,13 +1152,14 @@ impl TypeError {
                 span,
             } => (
                 Code::TypeMismatch,
-                match expected {
-                    Some(expected) => format!(
-                        "`{case}` is a case, and the expected type `{expected}` has none by that name; write `{qualified}`"
-                    ),
-                    None => format!(
-                        "`{case}` is a case, and nothing here says of which type; write `{qualified}`"
-                    ),
+                {
+                    let context = match expected {
+                        Some(expected) => {
+                            format!("the expected type `{expected}` has none by that name")
+                        }
+                        None => "nothing here says of which type".to_string(),
+                    };
+                    format!("`{case}` is a case, and {context}; write `{qualified}`")
                 },
                 *span,
             ),
@@ -1537,7 +1537,7 @@ impl TypeError {
             } => (
                 Code::OrphanRule,
                 format!(
-                    "duplicate impl of '{trait_name}' for '{self_type_name}': {conflicting_impl} implements the same pair, and nothing ranks two impls of one pair, so which one every call runs would be decided by the order they were loaded in"
+                    "duplicate impl of `{trait_name}` for `{self_type_name}`: {conflicting_impl} implements the same pair, and nothing ranks two impls of one pair, so which one every call runs would be decided by the order they were loaded in"
                 ),
                 *span,
             ),
@@ -1548,7 +1548,7 @@ impl TypeError {
             } => (
                 Code::OrphanRule,
                 format!(
-                    "blanket impl of '{trait_name}' for '{param}' states no bound: a blanket impl's receiver type parameter needs a bound, since the bound is what decides which receivers it covers"
+                    "blanket impl of `{trait_name}` for `{param}` states no bound: a blanket impl's receiver type parameter needs a bound, since the bound is what decides which receivers it covers"
                 ),
                 *span,
             ),
@@ -2542,7 +2542,7 @@ pub(super) struct TraitMethodMatch {
     /// what an ambiguity names two blankets by, neither having a name.
     pub(super) blanket_bounds: Option<String>,
     /// How far down the receiver's newtype chain this impl's target bounds
-    /// hold: 0 at the receiver itself, 1 at its base. Rank 2 of the selection
+    /// hold: 0 at the receiver itself, 1 at its base. Rank 1 of the selection
     /// order (`docs/wep-2026-09-01-trait-resolution.md`).
     pub(super) bound_depth: usize,
     /// The struct name that actually has the trait impl (may differ from the

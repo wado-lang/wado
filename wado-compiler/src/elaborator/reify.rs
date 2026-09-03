@@ -440,17 +440,18 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         Some(ident.segments[owner].id)
     }
 
-    /// A `Type::Case` identifier as the type declaring the case and the case's
+    /// A `Type::Case` identifier as the declaration owning the case and the
     /// spelling: `Color::Red` at its own segments, a bare `Red` as annotate
     /// read it off the expected type.
     fn case_path(&self, ident: &ast::IdentExpr) -> Option<(Option<crate::defs::DefId>, String)> {
         if let Some(&owner) = self.sem.types.bare_cases.get(&ident.id) {
             return Some((Some(owner), self.tysys.qualified_case(owner, &ident.name)));
         }
-        ident
-            .name
-            .contains("::")
-            .then(|| (None, ident.name.clone()))
+        let (prefix, _) = ident.name.split_once("::")?;
+        let owner = self
+            .type_lookup()
+            .declaration_at(self.qualified_owner_site(ident), prefix);
+        Some((owner, ident.name.clone()))
     }
 
     /// The symbol row behind a reference site — see
@@ -7796,15 +7797,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // ctor there too, but that shape would lower to a
         // `Call` against a function that doesn't exist.
         if let ast::Expr::Ident(ident) = &call.callee
-            && let Some((bare_owner, spelled)) = self.case_path(ident)
-            && let Some(pos) = spelled.find("::")
+            && let Some((owner, spelled)) = self.case_path(ident)
+            && let Some((prefix, suffix)) = spelled.split_once("::")
         {
-            let prefix = &spelled[..pos];
-            let suffix = &spelled[pos + 2..];
             if !suffix.contains("::") {
                 let lookup = self.type_lookup();
-                let owner = bare_owner
-                    .or_else(|| lookup.declaration_at(self.qualified_owner_site(ident), prefix));
                 if let Some(variant_info) = owner
                     .and_then(|owner| lookup.variant_cases_of(owner))
                     .cloned()
@@ -7971,7 +7968,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             && !ident.name[pos + 2..].contains("::")
             && call.args.len() == 1
         {
-            let _ = ident.name[..pos].to_string(); // prefix kept for context only
             let arg = self.reify_expr(&call.args[0], ctx, None);
             let arg_type = arg.type_id;
 
@@ -9069,8 +9065,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         //    instantiation's type_args when present. A bare case (`None`)
         //    resolves to its declaration, which is no function; it is the
         //    case below.
-        let case_path = self.case_path(ident);
-        let is_bare_case = case_path.as_ref().is_some_and(|(owner, _)| owner.is_some());
+        let is_bare_case = self.sem.types.bare_cases.contains_key(&ident.id);
         if !is_bare_case
             && self
                 .sem
@@ -9146,19 +9141,14 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         //    namespace-import form `ns::Type::Case` (two `::`
         //    separators) is handled by a dedicated branch in the
         //    elaborator that resolves the namespace alias first.
-        if let Some((bare_owner, spelled)) = case_path
-            && let Some(pos) = spelled.find("::")
+        if let Some((owner, spelled)) = self.case_path(ident)
+            && let Some((_, suffix)) = spelled.split_once("::")
         {
-            let prefix = &spelled[..pos];
-            let suffix = &spelled[pos + 2..];
-
             // Two-segment qualified path is "Type::Case". Anything with
             // a further `::` is `ns::Type::Case` (namespace path) —
             // defer to a later branch.
             if !suffix.contains("::") {
                 let lookup = self.type_lookup();
-                let owner = bare_owner
-                    .or_else(|| lookup.declaration_at(self.qualified_owner_site(ident), prefix));
 
                 // A newtype reaches its base's members and keeps its own type:
                 // `C::Green` is the implicit `Color::Green as C`.

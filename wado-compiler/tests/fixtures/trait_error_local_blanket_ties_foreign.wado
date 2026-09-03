@@ -1,18 +1,10 @@
 #![TODO]
-// Where the impl was written is not a rank. These two blankets hold at the same
-// level and one of them is written here, so they tie and the call reports —
-// letting the reader's vantage decide which body runs is what ranks 1 and 2
-// exist to avoid. The escape is `impl Describe for Point`, which rank 2 puts
-// above both.
-//
-// This is the strict side taken on purpose: "the library derives it, I override
-// it for my types", written as a second blanket, reports for exactly the types
-// that satisfy both bounds. A concrete consumer of that pattern is reason to
-// reopen it.
-//
-// Today the sort prefers the local candidate and the report groups local apart
-// from foreign, so the local blanket answers instead
-// (WEP 2026-09-01, "Locality is still implemented").
+// Where an impl was written is not a rank: these two blankets hold at the same
+// level, so they tie and the call reports even though one is written here. The
+// escape is `impl Describe for Point`, which rank 2 puts above both. Today the
+// sort prefers the local candidate and the report groups local apart from
+// foreign, so the local blanket answers (WEP 2026-09-01, "Locality is still
+// implemented").
 
 use { Limit, Mark, Describe } from "./sub/two_foreign_value_blankets_traits.wado";
 use { } from "./sub/two_foreign_value_blankets_limit.wado";

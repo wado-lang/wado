@@ -28,9 +28,8 @@ trait Describe {
     fn describe(&self) -> String;
 }
 
-// The body never calls `T::alpha()`: the two impls answer each other, so a
-// call would recurse forever. What is wrong here is that the bound holds at
-// all.
+// The body avoids `T::alpha()`, which would recurse forever; what is under test
+// is that the bound holds at all.
 impl<T: Alpha> Describe for T {
     fn describe(&self) -> String {
         return "ungrounded";

@@ -112,7 +112,8 @@ declaration in scope ([Trait Resolution](./wep-2026-09-01-trait-resolution.md)).
 Where the receiver or the impl was written does not matter. Two libraries'
 private `trait Loud` never collide through a shared receiver type, because a
 module importing neither sees neither. A blanket is scoped the same way and
-counts toward the collision like any other candidate.
+counts toward the collision like any other candidate (both are known gaps
+there).
 
 ### Resolution algorithm
 

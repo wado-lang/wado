@@ -33,17 +33,9 @@ pub(super) fn bounded(
     bounds: Vec<TraitDeclId>,
 ) -> ImplDef {
     ImplDef {
-        trait_: Some(trait_),
-        trait_args: vec![],
-        target,
         params: vec![ParamDef::bounded(bounds)],
-        origin: ImplOrigin::Written,
+        ..concrete(trait_, target)
     }
-}
-
-/// A program of these impls, at ids in order.
-pub(super) fn program(impls: impl IntoIterator<Item = ImplDef>) -> Program {
-    Builder::default().impls(impls).build()
 }
 
 #[derive(Default)]
@@ -55,10 +47,6 @@ impl Builder {
     pub(super) fn impl_(mut self, def: ImplDef) -> Self {
         self.program.push_impl(def);
         self
-    }
-
-    pub(super) fn impls(self, defs: impl IntoIterator<Item = ImplDef>) -> Self {
-        defs.into_iter().fold(self, Builder::impl_)
     }
 
     pub(super) fn concrete(self, trait_: TraitDeclId, target: SolverType) -> Self {

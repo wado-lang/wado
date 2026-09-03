@@ -1,8 +1,7 @@
 #![TODO]
-// The prelude is the only exemption: every other top-level symbol a module
-// names must be imported, and a supertrait is a second name. `T: Sub` reaches
-// `Sub`'s own methods, but calling `Base`'s through it needs `Base` imported
-// too, exactly as writing `T: Base` would.
+// Calling `Base`'s method through `T: Sub` needs `Base` imported, exactly as
+// writing `T: Base` would: a supertrait is a second name, and only the prelude
+// is exempt from import.
 //
 // Today the bound carries the supertrait's methods with it, so this resolves
 // with `Base` unnamed (WEP 2026-09-01, "Scope is decided and not implemented").

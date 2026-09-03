@@ -853,9 +853,9 @@ pub(crate) fn has_reflect_kind(type_id: TypeId, tt: &TypeTable) -> bool {
 }
 
 /// The value blanket serving `receiver`: the first whose bounds hold at the
-/// receiver, else one a link down its newtype chain (WEP 2026-09-01 rank 2).
+/// receiver, else one a link down its newtype chain (WEP 2026-09-01 rank 1).
 /// The walk stops at a link carrying an impl of its own, which the newtype
-/// inherits and which outranks any blanket (rank 1) — so `type Name = String`
+/// inherits and which outranks any blanket (rank 2) — so `type Name = String`
 /// takes `String`'s `Deserialize`, not the `ReflectStruct` derive its shape
 /// would otherwise admit. Monomorphization ranks blankets only here, so its
 /// several lookups cannot disagree about which one a newtype takes.

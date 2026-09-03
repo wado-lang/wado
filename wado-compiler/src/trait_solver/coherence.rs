@@ -22,8 +22,8 @@ pub fn coherence_errors(program: &Program) -> Vec<CoherenceError> {
     let mut errors = Vec::new();
     let mut seen: IndexMap<ImplKey, ImplId> = IndexMap::default();
     for (&id, def) in &program.impls {
-        if let Some(impl_) = unbounded_value_blanket(id, def) {
-            errors.push(impl_);
+        if is_unbounded_value_blanket(def) {
+            errors.push(CoherenceError::UnboundedValueBlanket { impl_: id });
         }
         let Some(key) = impl_key(program, def) else {
             continue;
@@ -38,11 +38,8 @@ pub fn coherence_errors(program: &Program) -> Vec<CoherenceError> {
     errors
 }
 
-/// What makes two impls the same pair: the trait at its arguments, the target,
-/// and its parameters' conditions, so `impl<T: A> Tr for T` and
-/// `impl<T: B> Tr for T` are two pairs. An omitted argument is its default and
-/// a condition's bounds and pins are sets, so `impl Mul for Point` and
-/// `impl Mul<Point> for Point` are one pair, as are `T: A + B` and `T: B + A`.
+/// What makes two impls one pair: trait, arguments at defaults, target, and
+/// each parameter's bounds and pins as sets.
 type ImplKey = (
     TraitDeclId,
     Vec<SolverType>,
@@ -68,53 +65,42 @@ fn impl_key(program: &Program, def: &ImplDef) -> Option<ImplKey> {
         .iter()
         .map(|p| (set(&p.bounds), set(&p.pins)))
         .collect();
-    Some((
-        trait_,
-        trait_args_at_defaults(program, trait_, def),
-        def.target.clone(),
-        conditions,
-    ))
+    let mut trait_args = def.trait_args.clone();
+    trait_args.extend((trait_args.len()..).map_while(|i| program.default_arg(def, i)));
+    Some((trait_, trait_args, def.target.clone(), conditions))
 }
 
-/// The impl's trait arguments with the omitted ones at the trait's defaults.
-/// A default the lowering cannot spell keeps the omission, so an impl writing
-/// that argument is another pair.
-fn trait_args_at_defaults(
-    program: &Program,
-    trait_: TraitDeclId,
-    def: &ImplDef,
-) -> Vec<SolverType> {
-    let mut args = def.trait_args.clone();
-    let Some(trait_def) = program.traits.get(&trait_) else {
-        return args;
-    };
-    for default in trait_def.arg_defaults.iter().skip(args.len()) {
-        match default.as_ref().and_then(|d| d.at(&def.target)) {
-            Some(ty) => args.push(ty),
-            None => break,
+/// A value blanket targets a bare parameter, whose bounds are the condition
+/// selection reads; without one the impl names no condition at all.
+fn is_unbounded_value_blanket(def: &ImplDef) -> bool {
+    match def.target {
+        SolverType::Param(index) => {
+            def.trait_.is_some() && def.params[index as usize].bounds.is_empty()
         }
+        SolverType::Decl(..)
+        | SolverType::Pack(_)
+        | SolverType::Ref { .. }
+        | SolverType::Tuple(_) => false,
     }
-    args
-}
-
-/// A value blanket targets a bare parameter, and that parameter states the
-/// condition selection reads. Without one the impl names no condition at all.
-fn unbounded_value_blanket(id: ImplId, def: &ImplDef) -> Option<CoherenceError> {
-    def.trait_?;
-    let SolverType::Param(index) = def.target else {
-        return None;
-    };
-    def.params[index as usize]
-        .bounds
-        .is_empty()
-        .then_some(CoherenceError::UnboundedValueBlanket { impl_: id })
 }
 
 #[cfg(test)]
 mod tests {
     use super::super::program::{ArgDefault, AssocId, ParamDef, TraitDef, TypeDeclId};
-    use super::super::testing::{concrete, decl, program};
+    use super::super::testing::{Builder, bounded, concrete, decl, ref_to};
     use super::*;
+
+    /// A program of these impls, at ids in order.
+    fn program(impls: impl IntoIterator<Item = ImplDef>) -> Program {
+        impls
+            .into_iter()
+            .fold(Builder::default(), Builder::impl_)
+            .build()
+    }
+
+    fn boxed(inner: SolverType) -> SolverType {
+        SolverType::Decl(BOX, vec![inner])
+    }
 
     const TR: TraitDeclId = TraitDeclId(0);
     const OTHER_TR: TraitDeclId = TraitDeclId(1);
@@ -187,17 +173,8 @@ mod tests {
     /// differ and selection ranks them rather than coherence rejecting them.
     #[test]
     fn a_specific_instantiation_beside_a_generic_head_is_no_duplicate() {
-        let specific = concrete(
-            TR,
-            SolverType::Decl(BOX, vec![SolverType::Decl(I32, vec![])]),
-        );
-        let general = ImplDef {
-            trait_: Some(TR),
-            trait_args: vec![],
-            target: SolverType::Decl(BOX, vec![SolverType::Param(0)]),
-            params: vec![ParamDef::default()],
-            origin: ImplOrigin::Written,
-        };
+        let specific = concrete(TR, boxed(decl(I32)));
+        let general = bounded(TR, boxed(SolverType::Param(0)), vec![]);
         assert_eq!(coherence_errors(&program([specific, general])), vec![]);
     }
 
@@ -205,13 +182,7 @@ mod tests {
     /// under different letters is one pair.
     #[test]
     fn a_generic_head_written_twice_is_a_duplicate() {
-        let head = || ImplDef {
-            trait_: Some(TR),
-            trait_args: vec![],
-            target: SolverType::Decl(BOX, vec![SolverType::Param(0)]),
-            params: vec![ParamDef::default()],
-            origin: ImplOrigin::Written,
-        };
+        let head = || bounded(TR, boxed(SolverType::Param(0)), vec![]);
         assert_eq!(
             coherence_errors(&program([head(), head()])),
             vec![CoherenceError::DuplicateImpl {
@@ -227,27 +198,16 @@ mod tests {
     fn inherent_impls_never_duplicate() {
         let inherent = || ImplDef {
             trait_: None,
-            trait_args: vec![],
-            target: point(),
-            params: vec![],
-            origin: ImplOrigin::Written,
+            ..concrete(TR, point())
         };
         assert_eq!(coherence_errors(&program([inherent(), inherent()])), vec![]);
     }
 
     /// A blanket names a condition, not a type, so two of them are one pair
-    /// only when they state the same condition. Whether two different bounds
-    /// can both hold is what an open world cannot decide, which is why the
-    /// overlap is a use-site report rather than a definition-time error.
+    /// only when they state the same condition.
     #[test]
     fn two_blankets_of_one_trait_at_different_bounds_are_no_duplicate() {
-        let blanket = |bound: TraitDeclId| ImplDef {
-            trait_: Some(TR),
-            trait_args: vec![],
-            target: SolverType::Param(0),
-            params: vec![ParamDef::bounded(vec![bound])],
-            origin: ImplOrigin::Written,
-        };
+        let blanket = |bound: TraitDeclId| bounded(TR, SolverType::Param(0), vec![bound]);
         assert_eq!(
             coherence_errors(&program([blanket(LIMIT), blanket(OTHER_TR)])),
             vec![]
@@ -256,13 +216,7 @@ mod tests {
 
     #[test]
     fn two_blankets_of_one_trait_at_one_bound_are_a_duplicate() {
-        let blanket = || ImplDef {
-            trait_: Some(TR),
-            trait_args: vec![],
-            target: SolverType::Param(0),
-            params: vec![ParamDef::bounded(vec![LIMIT])],
-            origin: ImplOrigin::Written,
-        };
+        let blanket = || bounded(TR, SolverType::Param(0), vec![LIMIT]);
         assert_eq!(
             coherence_errors(&program([blanket(), blanket()])),
             vec![CoherenceError::DuplicateImpl {
@@ -275,13 +229,7 @@ mod tests {
     /// `impl<T: A + B>` and `impl<T: B + A>` state one condition.
     #[test]
     fn two_blankets_at_reordered_bounds_are_a_duplicate() {
-        let blanket = |bounds: Vec<TraitDeclId>| ImplDef {
-            trait_: Some(TR),
-            trait_args: vec![],
-            target: SolverType::Param(0),
-            params: vec![ParamDef::bounded(bounds)],
-            origin: ImplOrigin::Written,
-        };
+        let blanket = |bounds: Vec<TraitDeclId>| bounded(TR, SolverType::Param(0), bounds);
         assert_eq!(
             coherence_errors(&program([
                 blanket(vec![LIMIT, OTHER_TR]),
@@ -304,14 +252,11 @@ mod tests {
             ty: decl(I32),
         };
         let blanket = |bounds: [TraitDeclId; 2]| ImplDef {
-            trait_: Some(TR),
-            trait_args: vec![],
-            target: SolverType::Param(0),
             params: vec![ParamDef {
                 bounds: bounds.to_vec(),
                 pins: bounds.map(pin).to_vec(),
             }],
-            origin: ImplOrigin::Written,
+            ..concrete(TR, SolverType::Param(0))
         };
         assert_eq!(
             coherence_errors(&program([
@@ -353,31 +298,20 @@ mod tests {
     /// `X` satisfying both, which is again undecidable where they are written.
     #[test]
     fn two_bounded_head_impls_at_different_bounds_are_no_duplicate() {
-        let boxed = |bound: TraitDeclId| ImplDef {
-            trait_: Some(TR),
-            trait_args: vec![],
-            target: SolverType::Decl(BOX, vec![SolverType::Param(0)]),
-            params: vec![ParamDef::bounded(vec![bound])],
-            origin: ImplOrigin::Written,
-        };
+        let head = |bound: TraitDeclId| bounded(TR, boxed(SolverType::Param(0)), vec![bound]);
         assert_eq!(
-            coherence_errors(&program([boxed(LIMIT), boxed(OTHER_TR)])),
+            coherence_errors(&program([head(LIMIT), head(OTHER_TR)])),
             vec![]
         );
     }
 
-    /// `impl Serialize for Handler;` beside a hand-written `impl Serialize for
-    /// Handler { … }` asks for the derived body and checks conformance; the
-    /// real impl answers it. Two requests for one pair are redundant the same
-    /// way (WEP 2026-06-25).
+    /// `impl Serialize for Handler;` beside a hand-written impl asks for the
+    /// derived body, which the real impl answers (WEP 2026-06-25).
     #[test]
     fn a_derivation_request_never_duplicates() {
         let request = || ImplDef {
-            trait_: Some(TR),
-            trait_args: vec![],
-            target: point(),
-            params: vec![],
             origin: ImplOrigin::Marker,
+            ..concrete(TR, point())
         };
         assert_eq!(
             coherence_errors(&program([concrete(TR, point()), request(), request()])),
@@ -387,25 +321,13 @@ mod tests {
 
     #[test]
     fn a_bounded_value_blanket_is_accepted() {
-        let p = program([ImplDef {
-            trait_: Some(TR),
-            trait_args: vec![],
-            target: SolverType::Param(0),
-            params: vec![ParamDef::bounded(vec![LIMIT])],
-            origin: ImplOrigin::Written,
-        }]);
+        let p = program([bounded(TR, SolverType::Param(0), vec![LIMIT])]);
         assert_eq!(coherence_errors(&p), vec![]);
     }
 
     #[test]
     fn an_unbounded_value_blanket_is_rejected() {
-        let p = program([ImplDef {
-            trait_: Some(TR),
-            trait_args: vec![],
-            target: SolverType::Param(0),
-            params: vec![ParamDef::default()],
-            origin: ImplOrigin::Written,
-        }]);
+        let p = program([bounded(TR, SolverType::Param(0), vec![])]);
         assert_eq!(
             coherence_errors(&p),
             vec![CoherenceError::UnboundedValueBlanket { impl_: ImplId(0) }]
@@ -416,16 +338,7 @@ mod tests {
     /// what selects it and an unbounded one is a different question.
     #[test]
     fn an_unbounded_reference_blanket_is_not_this_error() {
-        let p = program([ImplDef {
-            trait_: Some(TR),
-            trait_args: vec![],
-            target: SolverType::Ref {
-                is_mut: false,
-                inner: Box::new(SolverType::Param(0)),
-            },
-            params: vec![ParamDef::default()],
-            origin: ImplOrigin::Written,
-        }]);
+        let p = program([bounded(TR, ref_to(SolverType::Param(0)), vec![])]);
         assert_eq!(coherence_errors(&p), vec![]);
     }
 
@@ -433,13 +346,7 @@ mod tests {
     /// not hide each other.
     #[test]
     fn both_errors_are_reported_for_one_impl_set() {
-        let blanket = || ImplDef {
-            trait_: Some(TR),
-            trait_args: vec![],
-            target: SolverType::Param(0),
-            params: vec![ParamDef::default()],
-            origin: ImplOrigin::Written,
-        };
+        let blanket = || bounded(TR, SolverType::Param(0), vec![]);
         assert_eq!(
             coherence_errors(&program([blanket(), blanket()])),
             vec![

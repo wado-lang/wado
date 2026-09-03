@@ -10,6 +10,7 @@ use crate::tir::{FunctionRef, MonomorphInfo, ResolvedType, TypeId, TypeTable};
 
 use super::Elaborator;
 use super::callee::{CalleeRef, StaticMethodRef};
+use super::expr::BareCase;
 use super::infer::InferCtx;
 use super::instantiate::Instantiation;
 use super::scope::{BinderInScope, Scope};
@@ -482,16 +483,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if let CalleeIdentKind::AsIs(bare) = callee_kind
             && !bare.name.contains("::")
         {
-            match self.bare_case_in(expected_type, &bare.name) {
-                Some((owner, spelled)) => {
-                    self.record_bare_case(bare.id, owner);
+            match self.bare_case(bare, expected_type) {
+                BareCase::Of { owner, spelled } => {
                     callee_kind = CalleeIdentKind::Case { owner, spelled };
                 }
-                None => {
-                    if self.bare_case_needs_context(bare, expected_type) {
-                        return TypeTable::ERROR;
-                    }
-                }
+                BareCase::NeedsContext => return TypeTable::ERROR,
+                BareCase::None => {}
             }
         }
 
@@ -643,8 +640,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .collect();
                     let mut payload_type = case_data.payload;
                     if !variant_type_args.is_empty() {
-                        payload_type =
-                            self.substitute_type_params(payload_type, &variant_type_args);
+                        payload_type = self
+                            .tysys
+                            .substitute_type_params(payload_type, &variant_type_args);
                     } else if let Some(expected) = expected_type {
                         // Infer type args from expected type (e.g. Option::Some(null) expecting Option<Option<i32>>)
                         let expected_resolved =
@@ -661,8 +659,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                     .of_ast_id(variant_info.defined_at)
                             && expected_args.len() == variant_info.type_param_type_ids.len()
                         {
-                            payload_type =
-                                self.substitute_type_params(payload_type, &expected_args);
+                            payload_type = self
+                                .tysys
+                                .substitute_type_params(payload_type, &expected_args);
                         }
                     }
                     param_types.push(payload_type);
@@ -927,7 +926,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         combined_type_args.extend_from_slice(&method_type_args);
                         raw_param_types
                             .iter()
-                            .map(|&t| self.substitute_type_params(t, &combined_type_args))
+                            .map(|&t| self.tysys.substitute_type_params(t, &combined_type_args))
                             .collect()
                     };
                 self.recoerce_literal_args(&call.args, &mut args, &substituted);
@@ -1309,7 +1308,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         &final_mangled,
                     );
                     if !method_type_args.is_empty() {
-                        return_type = self.substitute_type_params(return_type, &method_type_args);
+                        return_type = self
+                            .tysys
+                            .substitute_type_params(return_type, &method_type_args);
                     }
 
                     let monomorph_info = if method_type_args.is_empty() {
@@ -1367,7 +1368,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     } else {
                         param_types
                             .iter()
-                            .map(|&t| self.substitute_type_params(t, &method_type_args))
+                            .map(|&t| self.tysys.substitute_type_params(t, &method_type_args))
                             .collect()
                     };
                     self.recoerce_literal_args(&call.args, &mut args, &checked);
@@ -1556,7 +1557,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // If we have explicit type args, substitute type parameters in the return type
         if !type_args.is_empty() {
-            return_type = self.substitute_type_params(return_type, &type_args);
+            return_type = self.tysys.substitute_type_params(return_type, &type_args);
         }
 
         // WEP 2026-05-26: record the inferred /
@@ -1576,7 +1577,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         } else {
             declared_param_types
                 .iter()
-                .map(|&param| self.substitute_type_params(param, &type_args))
+                .map(|&param| self.tysys.substitute_type_params(param, &type_args))
                 .collect()
         };
         if !check_param_types.is_empty() && args.len() < check_param_types.len() {
@@ -2380,7 +2381,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 && let Some(default_ty) = defaults[i]
             {
                 let snapshot = type_args.clone();
-                type_args[i] = self.substitute_type_params(default_ty, &snapshot);
+                type_args[i] = self.tysys.substitute_type_params(default_ty, &snapshot);
             }
         }
     }

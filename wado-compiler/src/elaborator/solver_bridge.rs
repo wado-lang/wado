@@ -14,7 +14,7 @@ use crate::trait_solver::{
 };
 
 use super::trait_env::{BlanketReceiver, ImplHeader};
-use super::trait_query::primitive_has_operator;
+use super::trait_query::{OnBoundTrait, primitive_has_operator};
 use super::tysys::TypeSystem;
 
 /// What a [`TypeDeclId`] stands for: a declaration, or a shape no module
@@ -45,38 +45,31 @@ pub(super) struct Lowering {
     assocs: IndexMap<(TraitDeclId, String), u32>,
 }
 
-impl Lowering {
-    fn intern(&mut self, key: DeclKey) -> u32 {
-        let next =
-            u32::try_from(self.decls.len()).expect("a program declares fewer than 2^32 items");
-        *self.decls.entry(key).or_insert(next)
-    }
+/// The id `key` has in `map`, minted at the next index when it has none.
+fn intern<K: std::hash::Hash + Eq>(map: &mut IndexMap<K, u32>, key: K) -> u32 {
+    let next = u32::try_from(map.len()).expect("a program declares fewer than 2^32 items");
+    *map.entry(key).or_insert(next)
+}
 
+impl Lowering {
     fn type_decl(&mut self, def: DefId) -> TypeDeclId {
-        TypeDeclId(self.intern(DeclKey::Def(def)))
+        TypeDeclId(intern(&mut self.decls, DeclKey::Def(def)))
     }
 
     fn builtin(&mut self, name: &str) -> TypeDeclId {
-        TypeDeclId(self.intern(DeclKey::Builtin(name.to_string())))
+        TypeDeclId(intern(&mut self.decls, DeclKey::Builtin(name.to_string())))
     }
 
     fn trait_decl(&mut self, def: DefId) -> TraitDeclId {
-        TraitDeclId(self.intern(DeclKey::Def(def)))
+        TraitDeclId(intern(&mut self.decls, DeclKey::Def(def)))
     }
 
     fn assoc(&mut self, trait_: TraitDeclId, name: &str) -> AssocId {
-        let next = u32::try_from(self.assocs.len()).expect("fewer than 2^32 associated types");
-        AssocId(
-            *self
-                .assocs
-                .entry((trait_, name.to_string()))
-                .or_insert(next),
-        )
+        AssocId(intern(&mut self.assocs, (trait_, name.to_string())))
     }
 
     fn module(&mut self, module: &ModuleSource) -> ModuleId {
-        let next = u32::try_from(self.modules.len()).expect("fewer than 2^32 modules");
-        ModuleId(*self.modules.entry(module.clone()).or_insert(next))
+        ModuleId(intern(&mut self.modules, module.clone()))
     }
 
     /// The id a declaration was given, if it was ever lowered.
@@ -133,32 +126,27 @@ impl Lowering {
                 } else {
                     self.type_decl(resolutions.declared(generic.id)?)
                 };
-                let mut args = Vec::with_capacity(generic.args.len());
-                for arg in &generic.args {
-                    args.push(self.ast_type(arg, param, resolutions, self_type)?);
-                }
+                let args = generic
+                    .args
+                    .iter()
+                    .map(|arg| self.ast_type(arg, param, resolutions, self_type))
+                    .collect::<Option<Vec<_>>>()?;
                 Some(SolverType::Decl(head, args))
             }
             Type::Tuple(elems) if elems.is_empty() => Some(SolverType::Decl(
                 self.builtin(TypeTable::UNIT_TYPE_NAME),
                 Vec::new(),
             )),
-            Type::Tuple(elems) => {
-                let mut lowered = Vec::with_capacity(elems.len());
-                for elem in elems {
-                    lowered.push(self.ast_type(elem, param, resolutions, self_type)?);
-                }
-                Some(SolverType::Tuple(lowered))
-            }
+            Type::Tuple(elems) => elems
+                .iter()
+                .map(|elem| self.ast_type(elem, param, resolutions, self_type))
+                .collect::<Option<Vec<_>>>()
+                .map(SolverType::Tuple),
             Type::TypePackSpread(name, _) => match param(name)? {
                 ParamKind::Pack(index) | ParamKind::Type(index) => Some(SolverType::Pack(index)),
             },
-            Type::Reference(inner) => Some(SolverType::Ref {
-                is_mut: false,
-                inner: Box::new(self.ast_type(inner, param, resolutions, self_type)?),
-            }),
-            Type::MutReference(inner) => Some(SolverType::Ref {
-                is_mut: true,
+            Type::Reference(inner) | Type::MutReference(inner) => Some(SolverType::Ref {
+                is_mut: matches!(ty, Type::MutReference(_)),
                 inner: Box::new(self.ast_type(inner, param, resolutions, self_type)?),
             }),
             Type::NamespacedGeneric(_) | Type::Function(_) | Type::Infer(_) | Type::Error(_) => {
@@ -195,8 +183,7 @@ impl Lowering {
                 DeclKey::Builtin(TypeTable::ARRAY_TYPE_NAME.to_string()),
                 vec![self.type_id(table, *elem, param)?],
             ),
-            // `()` is the unit type, not the empty tuple `[]`: an
-            // `impl Tr for ()` is its own, and `[..T]` does not answer for it
+            // `()` is the unit declaration, not the empty tuple
             // (WEP 2026-09-01, "The candidates").
             ResolvedType::Unit => decl(DeclKey::Builtin(TypeTable::UNIT_TYPE_NAME.into()), vec![]),
             ResolvedType::Struct { def, type_args } => instance(def.decl()?, type_args),
@@ -207,12 +194,8 @@ impl Lowering {
             ResolvedType::GenericResource { def, type_args }
             | ResolvedType::GenericInstance { def, type_args }
             | ResolvedType::Newtype { def, type_args, .. } => instance(*def, type_args),
-            ResolvedType::Ref(inner) => Some(SolverType::Ref {
-                is_mut: false,
-                inner: Box::new(self.type_id(table, *inner, param)?),
-            }),
-            ResolvedType::MutRef(inner) => Some(SolverType::Ref {
-                is_mut: true,
+            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => Some(SolverType::Ref {
+                is_mut: matches!(table.get(id), ResolvedType::MutRef(_)),
                 inner: Box::new(self.type_id(table, *inner, param)?),
             }),
             ResolvedType::TypeParam { name, index } => param(name, *index).map(SolverType::Param),
@@ -228,33 +211,18 @@ impl Lowering {
     }
 }
 
-/// Lower the impl headers into the value the solver answers from, and hand
-/// back the header each [`ImplId`](crate::trait_solver::ImplId) stands for so
-/// a finding can be given a span. A header the lowering cannot express is
-/// dropped, never approximated.
+/// Lower the impl headers into the program, and hand back the header each
+/// [`ImplId`](crate::trait_solver::ImplId) stands for. A header the lowering
+/// cannot express is dropped, never approximated.
 pub(super) fn lower_impls<'a>(
     lowering: &mut Lowering,
     program: &mut Program,
     impl_headers: impl IntoIterator<Item = (&'a DefId, &'a ImplHeader)>,
     resolutions: &crate::resolve::Resolutions,
-) -> Vec<DefId> {
-    let mut sources: Vec<DefId> = Vec::new();
-    for (&impl_def, header) in impl_headers {
-        // `impl FromIterator for List<T>` binds `T` without an `impl<T>`: a
-        // target argument no declaration answers is an implicit parameter,
-        // positioned after the declared ones.
-        let mut implicit: Vec<&str> = Vec::new();
-        if let Type::Generic(generic) = &header.ty {
-            for arg in &generic.args {
-                if let Type::Named(named) = arg
-                    && !header.type_params.iter().any(|p| p.name == named.name)
-                    && resolutions.declared(named.id).is_none()
-                    && !is_builtin_shape_name(&named.name)
-                {
-                    implicit.push(named.name.as_str());
-                }
-            }
-        }
+) -> Vec<&'a ImplHeader> {
+    let mut sources: Vec<&ImplHeader> = Vec::new();
+    for (_, header) in impl_headers {
+        let implicit = header.implicit_params(resolutions);
         let declared = header.type_params.len();
         let param = |name: &str| -> Option<ParamKind> {
             let index =
@@ -298,9 +266,9 @@ pub(super) fn lower_impls<'a>(
                     };
                     let bound = lowering.trait_decl(bound);
                     def.bounds.push(bound);
-                    // `T: Mul<Output = T>`. A pin the lowering cannot spell
-                    // is not carried, which is what the compiler's own check
-                    // does with a pin to anything but the receiver.
+                    // A pin the lowering cannot spell is dropped, as the
+                    // compiler's own check drops one to anything but the
+                    // receiver.
                     for constraint in &b.assoc_types {
                         let Some(ty) =
                             lowering.ast_type(&constraint.ty, &param, resolutions, Some(&target))
@@ -337,23 +305,29 @@ pub(super) fn lower_impls<'a>(
                 };
                 program
                     .assoc_bindings
-                    .insert((id, lowering.assoc(implemented, &binding.name)), ty);
+                    .entry(id)
+                    .or_default()
+                    .push((lowering.assoc(implemented, &binding.name), ty));
             }
         }
-        sources.push(impl_def);
+        sources.push(header);
     }
     sources
 }
 
-/// The shape a reflection kind holds of.
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum ReflectKind {
-    Any,
-    Struct,
-    Variant,
-    Enum,
-    Flags,
-    Newtype,
+/// The newtype declarations with their base types. A `flags` type sits in the
+/// same table and is not one.
+fn newtype_decls<'a>(
+    tysys: &'a TypeSystem,
+    table: &'a TypeTable,
+) -> impl Iterator<Item = (DefId, TypeId)> + 'a {
+    tysys
+        .all_newtypes
+        .iter()
+        .filter_map(|(&def, &id)| match table.get(id) {
+            ResolvedType::Newtype { base_type, .. } => Some((def, *base_type)),
+            _ => None,
+        })
 }
 
 /// The solver's view of the whole program, and the differential that checks
@@ -361,10 +335,6 @@ enum ReflectKind {
 pub(crate) struct SolverBridge {
     program: Program,
     lowering: Lowering,
-    /// Traits the differential does not ask about: the compiler items whose
-    /// answers the lowering does not state yet — the reference identities,
-    /// `Display`, `Default`.
-    excluded: IndexSet<DefId>,
 }
 
 impl SolverBridge {
@@ -392,20 +362,31 @@ impl SolverBridge {
         CompilerItem::Shr,
     ];
 
-    /// The reflection kinds, each with the shape it holds of. The root holds
-    /// of every kind, ungated by field visibility (WEP 2026-06-13).
-    const REFLECT: [(CompilerItem, ReflectKind); 6] = [
-        (CompilerItem::Reflect, ReflectKind::Any),
-        (CompilerItem::ReflectStruct, ReflectKind::Struct),
-        (CompilerItem::ReflectVariant, ReflectKind::Variant),
-        (CompilerItem::ReflectEnum, ReflectKind::Enum),
-        (CompilerItem::ReflectFlags, ReflectKind::Flags),
-        (CompilerItem::ReflectNewtype, ReflectKind::Newtype),
+    /// The reflection kinds. The root holds of every kind, ungated by field
+    /// visibility (WEP 2026-06-13).
+    const REFLECT: [OnBoundTrait; 6] = [
+        OnBoundTrait::Reflect,
+        OnBoundTrait::ReflectStruct,
+        OnBoundTrait::ReflectVariant,
+        OnBoundTrait::ReflectEnum,
+        OnBoundTrait::ReflectFlags,
+        OnBoundTrait::ReflectNewtype,
     ];
+
+    /// Whether the differential asks about `item`: the lowering states the
+    /// structural traits, `Inspect`, the reflection kinds and the operators.
+    fn states(item: CompilerItem) -> bool {
+        Self::DERIVED.contains(&item)
+            || item == CompilerItem::Inspect
+            || Self::REFLECT
+                .iter()
+                .any(|kind| kind.compiler_item() == item)
+            || Self::OPERATORS.contains(&item)
+    }
 
     pub(crate) fn build(tysys: &TypeSystem) -> Self {
         let mut lowering = Lowering::default();
-        let mut program = Program::new();
+        let mut program = Program::default();
         let table = tysys.type_table.borrow();
         lowering.tuple = table.compiler_item_def(CompilerItem::Tuple);
         Self::intern_declarations(tysys, &mut lowering);
@@ -425,11 +406,7 @@ impl SolverBridge {
         Self::state_newtype_bases(tysys, &table, &mut lowering, &mut program);
         Self::derive_all(tysys, &table, &mut lowering, &mut program);
         Self::state_reflect_facts(tysys, &table, &lowering, &mut program);
-        Self {
-            program,
-            lowering,
-            excluded: Self::excluded(tysys),
-        }
+        Self { program, lowering }
     }
 
     /// The `Reflect*`-bounded value blankets of the structural traits: each is
@@ -437,7 +414,7 @@ impl SolverBridge {
     fn derivation_sources(tysys: &TypeSystem) -> IndexSet<DefId> {
         let reflect: IndexSet<DefId> = Self::REFLECT
             .into_iter()
-            .filter_map(|(item, _)| tysys.compiler_trait_def(item))
+            .filter_map(|kind| tysys.compiler_trait_def(kind.compiler_item()))
             .collect();
         Self::DERIVED
             .into_iter()
@@ -476,12 +453,7 @@ impl SolverBridge {
         {
             lowering.type_decl(*def);
         }
-        let defs = tysys.resolutions.defs();
-        for module in tysys
-            .module_visible_types
-            .keys()
-            .chain(defs.iter().map(|def| defs.module(def)))
-        {
+        for module in tysys.module_visible_types.keys() {
             lowering.module(module);
         }
     }
@@ -543,9 +515,6 @@ impl SolverBridge {
                     })
                 })
                 .collect();
-            // `&T` compares by identity, so it is `Eq` of itself; it inherits
-            // the rest from `T` by auto-deref, where the trait's own shape
-            // lets a reference forward to the pointee.
             let on_ref = if Some(trait_) == eq {
                 RefRule::Always
             } else if tysys.ref_denies_bound(tysys.on_bound_of(trait_), trait_) {
@@ -577,11 +546,8 @@ impl SolverBridge {
                 },
             );
         };
-        for (&def, &newtype) in tysys.all_newtypes.iter() {
-            let ResolvedType::Newtype { base_type, .. } = table.get(newtype) else {
-                continue;
-            };
-            if let Some(base) = lowering.type_id(table, *base_type, &|_, _| None) {
+        for (def, base_type) in newtype_decls(tysys, table) {
+            if let Some(base) = lowering.type_id(table, base_type, &|_, _| None) {
                 newtype_base(lowering.declared_type(def), base);
             }
         }
@@ -603,18 +569,17 @@ impl SolverBridge {
         }
     }
 
-    /// The impls the declarations derive. A variant derives `Eq` and serde,
-    /// never `Ord` (spec, Structs: auto-derived traits), so the variants come
-    /// last and `Ord` stops before them.
+    /// The impls the declarations derive. A variant never derives `Ord`, so
+    /// the variants come last and `Ord` stops before them.
     fn derive_all(
         tysys: &TypeSystem,
         table: &TypeTable,
         lowering: &mut Lowering,
         program: &mut Program,
     ) {
-        let (declarations, variants) = Self::declarations(tysys, table, lowering);
+        let (mut declarations, variants) = Self::declarations(tysys, table, lowering);
         let variants_from = declarations.len();
-        let declarations: Vec<Declaration> = [declarations, variants].concat();
+        declarations.extend(variants);
         for item in Self::DERIVED {
             let Some(trait_) = tysys.compiler_trait_def(item) else {
                 continue;
@@ -624,43 +589,42 @@ impl SolverBridge {
             } else {
                 &declarations[..]
             };
-            for def in derive(program, lowering.trait_decl(trait_), eligible).impls {
-                program.push_impl(def);
-            }
+            derive(program, lowering.trait_decl(trait_), eligible);
         }
     }
 
     /// State each declaration's reflection kinds as facts. A struct's kind
-    /// holds only from the modules that see every field; a sealed reflection
-    /// member reflects nothing.
+    /// holds only from the modules that see every field.
     fn state_reflect_facts(
         tysys: &TypeSystem,
         table: &TypeTable,
         lowering: &Lowering,
         program: &mut Program,
     ) {
-        let kinds: Vec<(TraitDeclId, ReflectKind)> = Self::REFLECT
+        let kinds: Vec<(TraitDeclId, OnBoundTrait)> = Self::REFLECT
             .into_iter()
-            .filter_map(|(item, kind)| {
-                Some((lowering.known_trait(tysys.compiler_trait_def(item)?)?, kind))
+            .filter_map(|kind| {
+                let def = tysys.compiler_trait_def(kind.compiler_item())?;
+                Some((lowering.known_trait(def)?, kind))
             })
             .collect();
-        let eligible = |decl: crate::ast::AstId| !table.is_sealed_reflect_member(decl);
-        let mut state = |def: DefId, kind: ReflectKind, visible_from: Option<Vec<ModuleId>>| {
+        let defs = tysys.resolutions.defs();
+        let eligible = |def: DefId| !table.is_sealed_reflect_member(defs.ast_id(def));
+        let mut state = |def: DefId, kind: OnBoundTrait, visible_from: Option<Vec<ModuleId>>| {
             let head = lowering.declared_type(def);
             for &(trait_, stated) in &kinds {
-                let visible_from = match stated {
-                    ReflectKind::Any => None,
-                    stated if stated == kind => visible_from.clone(),
-                    _ => continue,
+                let visible_from = if stated == OnBoundTrait::Reflect {
+                    None
+                } else if stated == kind {
+                    visible_from.clone()
+                } else {
+                    continue;
                 };
                 program.facts.insert((head, trait_), Fact { visible_from });
             }
         };
         for (&def, info) in tysys.all_struct_fields.iter() {
-            // Kinds are disjoint: a variant registers struct-shaped fields for
-            // its payload under its own name, and is a variant.
-            if tysys.all_variant_cases.contains_key(&def) || !eligible(info.defined_at) {
+            if !eligible(def) {
                 continue;
             }
             let visible_from = (!info.fields.is_empty()).then(|| {
@@ -671,68 +635,71 @@ impl SolverBridge {
                     .map(|(_, &id)| ModuleId(id))
                     .collect()
             });
-            state(def, ReflectKind::Struct, visible_from);
+            state(def, OnBoundTrait::ReflectStruct, visible_from);
         }
-        for (&def, info) in tysys.all_variant_cases.iter() {
-            if eligible(info.defined_at) {
-                state(def, ReflectKind::Variant, None);
+        let of = |kind| move |def: &DefId| (*def, kind);
+        let memberless = tysys
+            .all_variant_cases
+            .keys()
+            .map(of(OnBoundTrait::ReflectVariant))
+            .chain(
+                tysys
+                    .all_enum_cases
+                    .keys()
+                    .map(of(OnBoundTrait::ReflectEnum)),
+            )
+            .chain(
+                tysys
+                    .all_flags_cases
+                    .keys()
+                    .map(of(OnBoundTrait::ReflectFlags)),
+            )
+            .chain(newtype_decls(tysys, table).map(|(def, _)| (def, OnBoundTrait::ReflectNewtype)))
+            .chain(
+                tysys
+                    .all_generic_newtypes
+                    .keys()
+                    .map(of(OnBoundTrait::ReflectNewtype)),
+            );
+        for (def, kind) in memberless {
+            if eligible(def) {
+                state(def, kind, None);
             }
-        }
-        for (&def, info) in tysys.all_enum_cases.iter() {
-            if eligible(info.defined_at) {
-                state(def, ReflectKind::Enum, None);
-            }
-        }
-        for (&def, info) in tysys.all_flags_cases.iter() {
-            if table.decl_of_type(info.type_id).is_some_and(eligible) {
-                state(def, ReflectKind::Flags, None);
-            }
-        }
-        // A newtype names itself and is a newtype at depth 0; its base's kind
-        // it inherits (WEP 2026-06-13). A `flags` type sits in the same table
-        // and is not one.
-        let newtypes = tysys
-            .all_newtypes
-            .iter()
-            .filter(|(_, id)| matches!(table.get(**id), ResolvedType::Newtype { .. }))
-            .map(|(&def, _)| def)
-            .chain(tysys.all_generic_newtypes.keys().copied());
-        for def in newtypes {
-            state(def, ReflectKind::Newtype, None);
         }
     }
 
     /// Every declaration as [`derive`] reads it: structs, plain enums and
-    /// flags, then the variants. A declaration with a member the lowering
-    /// cannot express — a function-typed field — is left out, so it does not
-    /// derive.
+    /// flags, then the variants. One with a member the lowering cannot express
+    /// is left out.
     fn declarations(
         tysys: &TypeSystem,
         table: &TypeTable,
         lowering: &Lowering,
     ) -> (Vec<Declaration>, Vec<Declaration>) {
         let by_index = |_: &str, index: u32| Some(index);
-        let declaration = |def: DefId, params: usize, members, module| Declaration {
-            id: lowering.declared_type(def),
-            params: u32::try_from(params).expect("fewer than 2^32 params"),
-            members,
-            module: lowering.declared_module(module),
+        let lowered = |def: DefId,
+                       params: usize,
+                       members: &mut dyn Iterator<Item = TypeId>,
+                       module: &ModuleSource|
+         -> Option<Declaration> {
+            let members = members
+                .map(|ty| lowering.type_id(table, ty, &by_index))
+                .collect::<Option<Vec<_>>>()?;
+            Some(Declaration {
+                id: lowering.declared_type(def),
+                params: u32::try_from(params).expect("fewer than 2^32 params"),
+                members,
+                module: lowering.declared_module(module),
+            })
         };
         let mut out = Vec::new();
         for (&def, info) in tysys.all_struct_fields.iter() {
-            let members: Option<Vec<SolverType>> = info
-                .fields
-                .iter()
-                .map(|(_, ty, _)| lowering.type_id(table, *ty, &by_index))
-                .collect();
-            if let Some(members) = members {
-                out.push(declaration(
-                    def,
-                    info.type_param_type_ids.len(),
-                    members,
-                    &info.module_source,
-                ));
-            }
+            out.extend(lowered(
+                def,
+                info.type_param_type_ids.len(),
+                &mut info.fields.iter().map(|(_, ty, _)| *ty),
+                &info.module_source,
+            ));
         }
         let memberless = tysys
             .all_enum_cases
@@ -745,51 +712,26 @@ impl SolverBridge {
                     .map(|(&def, info)| (def, &info.module_source)),
             );
         for (def, module) in memberless {
-            out.push(declaration(def, 0, vec![], module));
+            out.extend(lowered(def, 0, &mut std::iter::empty(), module));
         }
         let mut variants = Vec::new();
         for (&def, info) in tysys.all_variant_cases.iter() {
-            let members: Option<Vec<SolverType>> = info
-                .cases
-                .iter()
-                .filter(|c| c.payload != TypeTable::UNIT)
-                .map(|c| lowering.type_id(table, c.payload, &by_index))
-                .collect();
-            if let Some(members) = members {
-                variants.push(declaration(
-                    def,
-                    info.type_param_type_ids.len(),
-                    members,
-                    &info.module_source,
-                ));
-            }
+            variants.extend(lowered(
+                def,
+                info.type_param_type_ids.len(),
+                &mut info
+                    .cases
+                    .iter()
+                    .filter(|c| c.payload != TypeTable::UNIT)
+                    .map(|c| c.payload),
+                &info.module_source,
+            ));
         }
         (out, variants)
     }
 
-    /// The traits the differential skips: the compiler items whose answers
-    /// the lowering does not state.
-    fn excluded(tysys: &TypeSystem) -> IndexSet<DefId> {
-        let stated: IndexSet<DefId> = Self::DERIVED
-            .into_iter()
-            .chain([CompilerItem::Inspect])
-            .chain(Self::REFLECT.into_iter().map(|(item, _)| item))
-            .chain(Self::OPERATORS)
-            .filter_map(|item| tysys.compiler_trait_def(item))
-            .collect();
-        tysys
-            .trait_env
-            .impl_headers
-            .values()
-            .filter_map(|h| h.trait_ref)
-            .chain(tysys.trait_env.supertrait_closures().map(|(t, _)| *t))
-            .filter(|t| tysys.compiler_item_of_trait(*t).is_some() && !stated.contains(t))
-            .collect()
-    }
-
-    /// The question `type_implements_trait` answered, as the solver reads it,
-    /// or `None` where it is outside what the lowering states: an excluded
-    /// trait, a shape it cannot express, a bound it cannot name.
+    /// The question `type_implements_trait` answered, as the solver reads it;
+    /// `None` where the lowering states nothing about it.
     fn question(
         &self,
         tysys: &TypeSystem,
@@ -798,7 +740,10 @@ impl SolverBridge {
         type_id: TypeId,
         trait_: DefId,
     ) -> Option<Question> {
-        if self.excluded.contains(&trait_) {
+        if tysys
+            .compiler_item_of_trait(trait_)
+            .is_some_and(|item| !Self::states(item))
+        {
             return None;
         }
         let trait_ = self.lowering.known_trait(trait_)?;
@@ -829,13 +774,11 @@ impl SolverBridge {
             ty,
             trait_,
             module,
-            names: names.into_iter().cloned().collect(),
         })
     }
 
     /// The solver's answer to the question `type_implements_trait` just
-    /// answered, or `None` where the question is outside what the lowering
-    /// states.
+    /// answered; `None` where the lowering states nothing about it.
     pub(super) fn answer(
         &self,
         tysys: &TypeSystem,
@@ -874,9 +817,10 @@ impl SolverBridge {
                     },
                 )
         };
-        let env: Vec<(&String, Vec<String>)> = q
-            .names
-            .iter()
+        let env: Vec<(&String, Vec<String>)> = ctx
+            .trait_ctx
+            .type_param_bounds
+            .keys()
             .zip(&q.env.param_bounds)
             .map(|(name, bounds)| (name, bounds.iter().map(|b| name_of(b.0)).collect()))
             .collect();
@@ -912,6 +856,4 @@ struct Question {
     ty: SolverType,
     trait_: TraitDeclId,
     module: ModuleId,
-    /// The bound parameters' names, by the position `env` gives them.
-    names: Vec<String>,
 }

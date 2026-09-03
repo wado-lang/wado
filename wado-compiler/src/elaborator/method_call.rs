@@ -1504,8 +1504,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 if !payload_is_unit {
                     let mut payload_type = case_data.payload;
                     if !instance_type_args.is_empty() {
-                        payload_type =
-                            self.substitute_type_params(payload_type, &instance_type_args);
+                        payload_type = self
+                            .tysys
+                            .substitute_type_params(payload_type, &instance_type_args);
                     }
                     param_types.push(payload_type);
                 }
@@ -1768,9 +1769,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             _ => None,
                         };
                         let expected_payload = match result_args {
-                            Some(args_vec) => {
-                                Some(self.substitute_type_params(case_data.payload, &args_vec))
-                            }
+                            Some(args_vec) => Some(
+                                self.tysys
+                                    .substitute_type_params(case_data.payload, &args_vec),
+                            ),
                             None => param_types.first().copied(),
                         };
                         if let Some(expected_type) = expected_payload {
@@ -3794,7 +3796,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if !impl_type_args.is_empty() || !method_type_args.is_empty() {
             let mut combined = impl_type_args.to_vec();
             combined.extend_from_slice(method_type_args);
-            return_type = self.substitute_type_params(return_type, &combined);
+            return_type = self.tysys.substitute_type_params(return_type, &combined);
         }
 
         if let Some((newtype_id, base_type_id, _)) = newtype_dispatch

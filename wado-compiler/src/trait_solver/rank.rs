@@ -31,15 +31,13 @@ pub enum Selection {
     /// so nothing selects and the call must name one.
     AmbiguousTraits(Vec<usize>),
     /// Several blankets of one trait at one argument list. A blanket has no
-    /// name, so the call cannot pin one; only an impl written for the receiver
-    /// answers, which rank 2 puts above both.
+    /// name, so only an impl written for the receiver settles it (rank 2).
     AmbiguousBlankets(Vec<usize>),
     /// One trait declaration at several argument lists. The call's arguments
     /// choose (WEP 2026-07-31), which is not this function's question.
     Overloaded(Vec<usize>),
-    /// Several impls of one `(Trait, Type)` pair survived. Coherence rejects
-    /// the pair where it is written, so reaching here means that check did not
-    /// run; ranking has nothing to say about it.
+    /// Several impls of one `(Trait, Type)` pair, which coherence rejects where
+    /// they are written; ranking has nothing to say about them.
     Duplicated(Vec<usize>),
 }
 
@@ -54,8 +52,7 @@ pub fn rank(candidates: &[Candidate]) -> Selection {
 }
 
 /// Rank 0. Within one trait at one argument list, a variadic impl yields to a
-/// non-variadic one. The rule stays inside one trait, so a foreign blanket for
-/// trait `A` never displaces a local variadic impl of trait `B`.
+/// non-variadic one.
 fn drop_variadic_where_non_variadic_exists(candidates: &[Candidate], live: &mut Vec<usize>) {
     let covered: Vec<(TraitDeclId, &[SolverType])> = live
         .iter()
@@ -90,8 +87,7 @@ fn drop_blankets_where_concrete_exists(candidates: &[Candidate], live: &mut Vec<
 }
 
 /// Rank 3. What survives is one answer, or one of the shapes the caller
-/// reports. Distinct declarations are looked at before argument lists: two
-/// traits never form an overload set, whatever their arguments.
+/// reports; two traits never form an overload set, whatever their arguments.
 fn classify(candidates: &[Candidate], live: Vec<usize>) -> Selection {
     match live.as_slice() {
         [] => return Selection::None,
@@ -117,16 +113,13 @@ fn classify(candidates: &[Candidate], live: Vec<usize>) -> Selection {
 #[cfg(test)]
 mod tests {
     use super::super::program::TypeDeclId;
+    use super::super::testing::decl as arg;
     use super::*;
 
     const TR: TraitDeclId = TraitDeclId(0);
     const OTHER: TraitDeclId = TraitDeclId(1);
     const I32: TypeDeclId = TypeDeclId(0);
     const STRING: TypeDeclId = TypeDeclId(1);
-
-    fn arg(id: TypeDeclId) -> SolverType {
-        SolverType::Decl(id, vec![])
-    }
 
     struct Build(Vec<Candidate>);
 

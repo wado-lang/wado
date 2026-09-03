@@ -384,6 +384,7 @@ enum Color {
 }
 
 let c = Color::Red;
+let d: Color = Red; // bare only where the expected type supplies it; `let e = Red;` is an error
 
 // Pattern matching
 let name = match c {
@@ -417,7 +418,7 @@ variant Maybe<T> {
 // Construction
 let some_val = Option::Some(42);                         // type inferred
 let none_val: Option<i32> = null;                        // Option::None
-let ok_val: Result<i32, String> = Result::Ok(42);
+let ok_val: Result<i32, String> = Ok(42);                // bare: the annotation supplies the type
 let err_val: Result<i32, String> = Result::Err("fail");
 
 // Explicit turbofish (required when inference is insufficient). It sits on the

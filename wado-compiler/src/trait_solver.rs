@@ -10,7 +10,7 @@ mod rank;
 mod testing;
 
 pub use coherence::{CoherenceError, coherence_errors};
-pub use derive::{DeriveError, Derived, derive};
+pub use derive::derive;
 pub use holds::{Holds, holds};
 pub use program::{
     ArgDefault, AssocId, Declaration, DerivationRequest, Env, Fact, ImplDef, ImplId, ImplOrigin,

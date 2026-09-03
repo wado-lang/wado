@@ -267,6 +267,28 @@ impl ImplHeader {
         self.type_params.is_empty()
     }
 
+    /// The target arguments no declaration answers, in order:
+    /// `impl FromIterator for List<T>` binds `T` without an `impl<T>`.
+    pub(super) fn implicit_params(&self, resolutions: &crate::resolve::Resolutions) -> Vec<&str> {
+        let Type::Generic(generic) = &self.ty else {
+            return Vec::new();
+        };
+        generic
+            .args
+            .iter()
+            .filter_map(|arg| match arg {
+                Type::Named(named)
+                    if !self.type_params.iter().any(|p| p.name == named.name)
+                        && resolutions.declared(named.id).is_none()
+                        && !name::is_builtin_shape_name(&named.name) =>
+                {
+                    Some(named.name.as_str())
+                }
+                _ => None,
+            })
+            .collect()
+    }
+
     /// The implemented trait as a mangled method name embeds it: named by the
     /// module that declares it, carrying the header's written type arguments.
     /// `None` for an inherent impl, and for a trait position filled by a
@@ -2178,6 +2200,15 @@ impl VariadicImpl<'_> {
 /// The coherence checks the solver owns, given spans and names by the headers
 /// they came from. Only a user-local impl is reported: a stdlib pair the check
 /// would name is not something a program can fix.
+/// How a finding names the impl at `conflict`, reported at `here`.
+fn conflicting_impl_location(conflict: &ModuleSource, here: &ModuleSource) -> String {
+    if conflict == here {
+        "an earlier impl in this file".to_string()
+    } else {
+        format!("the one in `{conflict}`")
+    }
+}
+
 fn check_impl_coherence(
     impl_headers: &IndexMap<DefId, ImplHeader>,
     resolutions: &crate::resolve::Resolutions,
@@ -2185,9 +2216,15 @@ fn check_impl_coherence(
     use super::solver_bridge::{Lowering, lower_impls};
     use crate::trait_solver::{CoherenceError, ImplId, Program, coherence_errors};
     let mut lowering = Lowering::default();
-    let mut program = Program::new();
+    let mut program = Program::default();
     let sources = lower_impls(&mut lowering, &mut program, impl_headers, resolutions);
-    let header_of = |id: ImplId| -> &ImplHeader { &impl_headers[&sources[id.0 as usize]] };
+    let header_of = |id: ImplId| -> &ImplHeader { sources[id.0 as usize] };
+    let trait_name = |header: &ImplHeader| {
+        header
+            .trait_name
+            .clone()
+            .expect("a coherence finding names a trait impl")
+    };
     let mut violations = Vec::new();
     for error in coherence_errors(&program) {
         let (reported, error) = match error {
@@ -2196,13 +2233,9 @@ fn check_impl_coherence(
                 (
                     second,
                     TypeError::DuplicateTraitImpl {
-                        trait_name: second.trait_name.clone().unwrap_or_default(),
+                        trait_name: trait_name(second),
                         self_type_name: get_type_name_static(&second.ty),
-                        conflicting_impl: if first.module == second.module {
-                            "an earlier impl in this file".to_string()
-                        } else {
-                            format!("the one in '{}'", first.module)
-                        },
+                        conflicting_impl: conflicting_impl_location(&first.module, &second.module),
                         span: second.span,
                     },
                 )
@@ -2212,7 +2245,7 @@ fn check_impl_coherence(
                 (
                     header,
                     TypeError::UnboundedValueBlanket {
-                        trait_name: header.trait_name.clone().unwrap_or_default(),
+                        trait_name: trait_name(header),
                         param: get_type_name_static(&header.ty),
                         span: header.span,
                     },
@@ -2294,11 +2327,10 @@ fn check_variadic_impl_overlap(
                 TypeError::OverlappingVariadicImpls {
                     trait_name: candidate.trait_name.clone(),
                     self_type_name: "[..]".to_string(),
-                    conflicting_impl: if conflict.module_source == candidate.module_source {
-                        "the earlier one in this file".to_string()
-                    } else {
-                        format!("the one in `{}`", conflict.module_source)
-                    },
+                    conflicting_impl: conflicting_impl_location(
+                        conflict.module_source,
+                        candidate.module_source,
+                    ),
                     span: candidate.span,
                 },
             ));

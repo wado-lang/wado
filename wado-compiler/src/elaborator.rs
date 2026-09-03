@@ -519,14 +519,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         self.insert_reference(use_id, def_id);
     }
 
-    /// Record use→def edges for a `TypeName::CaseName` qualified path
-    /// expression. The prefix segment (`TypeName`) is resolved by name in
-    /// the current module's scope; the suffix segment (`CaseName`) points
-    /// directly at `case_ast_id` (its module is intrinsic to the id).
-    ///
-    /// Used for variant cases, enum cases, and flags members reached via
-    /// a two-segment qualified ident, and for a bare case (`Some`), whose
-    /// ident has no segments and is the case itself.
+    /// Record use→def edges for a case path: the `Type` prefix by name, the
+    /// case segment at `case_ast_id`. A bare case (`Some`) is the ident itself.
     pub(super) fn record_qualified_case(
         &mut self,
         ident: &crate::ast::IdentExpr,

@@ -3542,9 +3542,9 @@ enum Color {
 
 // Construction
 let c = Color::Red;
-let d: Color = Red; // the type name may be omitted only where the expected
-                    // type supplies it: an annotation, a parameter, a return
-                    // type, a payload. `let e = Red;` is an error.
+let d: Color = Red; // bare only where the expected type supplies it (an
+                    // annotation, a parameter, a return type, a payload);
+                    // `let e = Red;` is an error
 
 // Pattern matching: match, if let, matches
 let name = match c {
@@ -3601,6 +3601,7 @@ variant Maybe<T> {
 let s = Shape::Circle(5.0);
 let r = Shape::Rectangle([10.0, 20.0]);
 let p = Shape::Point;
+let c: Shape = Circle(5.0); // bare where the expected type supplies it
 
 // Option construction — type inferred from payload (forward inference)
 let opt = Option::Some(42);              // Option<i32> inferred

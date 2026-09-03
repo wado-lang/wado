@@ -891,26 +891,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ident: &ast::IdentExpr,
         expected_type: Option<TypeId>,
     ) -> Option<TypeId> {
-        // The type a case is qualified with is the segment just before the
-        // case's own name — the head for `Color::Red`, the second segment for
-        // `ns::Color::Red` — and the resolve walk answered for it in the
-        // module that wrote it. So a reference inside a foreign default
-        // resolves in the declaring module without a second, module-scoped
-        // lookup beside the first. A bare case (`None`, `Leaf`) has no such
-        // segment: the expected type supplies it, or nothing does.
+        // The segment before the case's own name is the type, and the resolve
+        // walk answered for it in the module that wrote it, so a reference
+        // inside a foreign default resolves in the declaring module. A bare
+        // case (`None`, `Leaf`) has no such segment: the expected type
+        // supplies it, or nothing does.
         let (owner, spelled) = if let Some(i) = ident.segments.len().checked_sub(2) {
             (
                 self.tysys.resolutions.declared(ident.segments[i].id),
                 ident.name.clone(),
             )
         } else {
-            let Some((owner, spelled)) = self.bare_case_in(expected_type, &ident.name) else {
-                return self
-                    .bare_case_needs_context(ident, expected_type)
-                    .then_some(TypeTable::ERROR);
-            };
-            self.record_bare_case(ident.id, owner);
-            (Some(owner), spelled)
+            match self.bare_case(ident, expected_type) {
+                BareCase::Of { owner, spelled } => (Some(owner), spelled),
+                BareCase::NeedsContext => return Some(TypeTable::ERROR),
+                BareCase::None => return None,
+            }
         };
         // A newtype reaches its base's members and keeps its own identity, so
         // `C::Green` on `type C = Color` reads Color's cases and is a `C` —
@@ -1042,10 +1038,34 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         None
     }
 
-    /// The case `name` of the expected type, spelled `Owner::name`, where the
-    /// expected type declares one. The one way a case is written unqualified:
-    /// a type name may be omitted only where the context supplies it.
-    pub(super) fn bare_case_in(
+    /// What the bare `ident` is as a case: a type name may be omitted only
+    /// where the expected type supplies it. A found case is recorded for reify.
+    pub(super) fn bare_case(
+        &mut self,
+        ident: &ast::IdentExpr,
+        expected: Option<TypeId>,
+    ) -> BareCase {
+        if let Some((owner, spelled)) = self.bare_case_in(expected, &ident.name) {
+            self.record_bare_case(ident.id, owner);
+            return BareCase::Of { owner, spelled };
+        }
+        let Some(qualified) = self.tysys.bare_case_at(ident.id) else {
+            return BareCase::None;
+        };
+        let expected = expected
+            .filter(|&t| t != TypeTable::ERROR && t != TypeTable::UNKNOWN)
+            .map(|t| self.tysys.type_table.borrow().type_name(t));
+        let _ = self.emit(TypeError::BareCaseNeedsContext {
+            case: ident.name.clone(),
+            qualified,
+            expected,
+            span: ident.span,
+        });
+        BareCase::NeedsContext
+    }
+
+    /// The case `name` of the expected type, spelled `Owner::name`.
+    fn bare_case_in(
         &self,
         expected: Option<TypeId>,
         name: &str,
@@ -1065,28 +1085,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .flags_members_of(members)
                 .is_some_and(|f| f.members.iter().any(|m| m.name == name));
         declared.then(|| (owner, self.tysys.qualified_case(owner, name)))
-    }
-
-    /// Whether `ident` is a case the resolve walk knows and no expected type
-    /// supplies; if so, the error names the qualification the site needs.
-    pub(super) fn bare_case_needs_context(
-        &mut self,
-        ident: &ast::IdentExpr,
-        expected: Option<TypeId>,
-    ) -> bool {
-        let Some((_, qualified)) = self.tysys.bare_case_at(ident.id) else {
-            return false;
-        };
-        let expected = expected
-            .filter(|&t| t != TypeTable::ERROR && t != TypeTable::UNKNOWN)
-            .map(|t| self.tysys.type_table.borrow().type_name(t));
-        let _ = self.emit(TypeError::BareCaseNeedsContext {
-            case: ident.name.clone(),
-            qualified,
-            expected,
-            span: ident.span,
-        });
-        true
     }
 
     /// Build a function type from a canonical signature. With `type_args`
@@ -1469,7 +1467,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     for (index, (fname, ftype, _)) in struct_info.fields.iter().enumerate() {
                         if fname == field_name {
                             // Substitute type parameters with concrete types
-                            let concrete_type = self.substitute_type_params(*ftype, &type_args);
+                            let concrete_type =
+                                self.tysys.substitute_type_params(*ftype, &type_args);
                             return (index as u32, concrete_type);
                         }
                     }
@@ -1592,31 +1591,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
             }
         }
-    }
-
-    /// Substitute type parameters in a type with concrete type arguments.
-    ///
-    /// Treats `type_args` as a dense substitution map keyed by `TypeParam`
-    /// index (i.e. `TypeParam { index: i }` is replaced by `type_args[i]`),
-    /// delegating the heavy lifting to
-    /// [`TypeTable::substitute_type_params`].
-    pub(super) fn substitute_type_params(
-        &mut self,
-        type_id: TypeId,
-        type_args: &[TypeId],
-    ) -> TypeId {
-        if type_args.is_empty() {
-            return type_id;
-        }
-        let substitution: IndexMap<u32, TypeId> = type_args
-            .iter()
-            .enumerate()
-            .map(|(i, &t)| (i as u32, t))
-            .collect();
-        self.tysys
-            .type_table
-            .borrow_mut()
-            .substitute_type_params(type_id, &substitution)
     }
 
     /// Substitute type parameters using a TypeId-to-TypeId map.
@@ -4010,7 +3984,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         if type_args.is_empty() {
                             *type_id
                         } else {
-                            self.substitute_type_params(*type_id, &type_args)
+                            self.tysys.substitute_type_params(*type_id, &type_args)
                         }
                     })
                 else {
@@ -5410,6 +5384,19 @@ impl AstVisitor for MutatedVarsCollector<'_> {
             _ => ast::walk_expr(self, expr),
         }
     }
+}
+
+/// A bare name (`Red`, `Some`) read as a case at a site.
+pub(super) enum BareCase {
+    /// A case of the expected type, `spelled` in its `Type::Case` form.
+    Of {
+        owner: crate::defs::DefId,
+        spelled: String,
+    },
+    /// A case with no expected type to supply it; the error is emitted.
+    NeedsContext,
+    /// No case.
+    None,
 }
 
 /// How to name the type an impl member is declared on.
