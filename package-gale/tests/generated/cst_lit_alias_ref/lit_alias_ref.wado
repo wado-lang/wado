@@ -1432,20 +1432,13 @@ fn scan_s(tokens: &Array<i32>, pos: i32) -> i32 {
     scan_alts: {
         if alt_kind == TK_K {
             let mut best: i32 = -1;
-            pos = start;
+            pos = start + 1;
             try_1: {
-                if pos >= tokens.len() || tokens[pos] != TK_K { break try_1; }
-                pos += 1;
                 if pos >= tokens.len() || tokens[pos] != TK_X { break try_1; }
                 pos += 1;
                 if pos > best { best = pos; }
             }
-            pos = start;
-            try_0: {
-                if pos >= tokens.len() || tokens[pos] != TK_K { break try_0; }
-                pos += 1;
-                if pos > best { best = pos; }
-            }
+            if start + 1 > best { best = start + 1; }
             if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else {

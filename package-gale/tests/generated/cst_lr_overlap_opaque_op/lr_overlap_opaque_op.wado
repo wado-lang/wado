@@ -1548,20 +1548,16 @@ fn scan_op(tokens: &Array<i32>, pos: i32) -> i32 {
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
         if alt_kind == TK_LIT_GT {
-            pos = start;
+            pos = start + 1;
             try_0: {
-                if pos >= tokens.len() || tokens[pos] != TK_LIT_GT { break try_0; }
-                pos += 1;
                 if pos >= tokens.len() || tokens[pos] != TK_LIT_GT { break try_0; }
                 pos += 1;
                 break scan_alts;
             }
             return -1;
         } else if alt_kind == TK_LIT_LT {
-            pos = start;
+            pos = start + 1;
             try_1: {
-                if pos >= tokens.len() || tokens[pos] != TK_LIT_LT { break try_1; }
-                pos += 1;
                 if pos >= tokens.len() || tokens[pos] != TK_LIT_LT { break try_1; }
                 pos += 1;
                 break scan_alts;

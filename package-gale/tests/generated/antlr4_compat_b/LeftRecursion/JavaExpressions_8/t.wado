@@ -3149,10 +3149,8 @@ fn scan_e_atom(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_
     scan_alts: {
         if alt_kind == TK_LIT_LPAREN {
             let mut best: i32 = -1;
-            pos = start;
+            pos = start + 1;
             try_7: {
-                if pos >= tokens.len() || tokens[pos] != TK_LIT_LPAREN { break try_7; }
-                pos += 1;
                 pos = scan_typespec(tokens, pos, &FOLLOW_MASK_1);
                 if pos < 0 { break try_7; }
                 if pos >= tokens.len() || tokens[pos] != TK_LIT_RPAREN { break try_7; }
@@ -3161,10 +3159,8 @@ fn scan_e_atom(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_
                 if pos < 0 { break try_7; }
                 if pos > best { best = pos; }
             }
-            pos = start;
+            pos = start + 1;
             try_0: {
-                if pos >= tokens.len() || tokens[pos] != TK_LIT_LPAREN { break try_0; }
-                pos += 1;
                 pos = scan_e(tokens, pos, &FOLLOW_MASK_1, 0);
                 if pos < 0 { break try_0; }
                 if pos >= tokens.len() || tokens[pos] != TK_LIT_RPAREN { break try_0; }
@@ -3174,39 +3170,19 @@ fn scan_e_atom(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_
             if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if alt_kind == TK_LIT_THIS {
-            pos = start;
-            try_1: {
-                if pos >= tokens.len() || tokens[pos] != TK_LIT_THIS { break try_1; }
-                pos += 1;
-                break scan_alts;
-            }
-            return -1;
+            pos = start + 1;
+            break scan_alts;
         } else if alt_kind == TK_LIT_SUPER {
-            pos = start;
-            try_2: {
-                if pos >= tokens.len() || tokens[pos] != TK_LIT_SUPER { break try_2; }
-                pos += 1;
-                break scan_alts;
-            }
-            return -1;
+            pos = start + 1;
+            break scan_alts;
         } else if alt_kind == TK_INT {
-            pos = start;
-            try_3: {
-                if pos >= tokens.len() || tokens[pos] != TK_INT { break try_3; }
-                pos += 1;
-                break scan_alts;
-            }
-            return -1;
+            pos = start + 1;
+            break scan_alts;
         } else if alt_kind == TK_ID {
             let mut best: i32 = -1;
             let try_5_end = scan_e_atom_alt_5(tokens, start, follow);
             if try_5_end > best { best = try_5_end; }
-            pos = start;
-            try_4: {
-                if pos >= tokens.len() || tokens[pos] != TK_ID { break try_4; }
-                pos += 1;
-                if pos > best { best = pos; }
-            }
+            if start + 1 > best { best = start + 1; }
             if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if alt_kind == TK_LIT_INT {
@@ -3214,10 +3190,8 @@ fn scan_e_atom(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_
             if pos >= 0 { break scan_alts; }
             return -1;
         } else if alt_kind == TK_LIT_NEW {
-            pos = start;
+            pos = start + 1;
             try_6: {
-                if pos >= tokens.len() || tokens[pos] != TK_LIT_NEW { break try_6; }
-                pos += 1;
                 pos = scan_typespec(tokens, pos, &FOLLOW_MASK_3);
                 if pos < 0 { break try_6; }
                 let gp_1 = pos;
@@ -4005,42 +3979,28 @@ fn scan_typespec(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPT
     scan_alts: {
         if alt_kind == TK_ID {
             let mut best: i32 = -1;
-            pos = start;
+            pos = start + 1;
             try_1: {
-                if pos >= tokens.len() || tokens[pos] != TK_ID { break try_1; }
-                pos += 1;
                 if pos >= tokens.len() || tokens[pos] != TK_LIT_LBRACKET { break try_1; }
                 pos += 1;
                 if pos >= tokens.len() || tokens[pos] != TK_LIT_RBRACKET { break try_1; }
                 pos += 1;
                 if pos > best { best = pos; }
             }
-            pos = start;
-            try_0: {
-                if pos >= tokens.len() || tokens[pos] != TK_ID { break try_0; }
-                pos += 1;
-                if pos > best { best = pos; }
-            }
+            if start + 1 > best { best = start + 1; }
             if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if alt_kind == TK_LIT_INT {
             let mut best: i32 = -1;
-            pos = start;
+            pos = start + 1;
             try_3: {
-                if pos >= tokens.len() || tokens[pos] != TK_LIT_INT { break try_3; }
-                pos += 1;
                 if pos >= tokens.len() || tokens[pos] != TK_LIT_LBRACKET { break try_3; }
                 pos += 1;
                 if pos >= tokens.len() || tokens[pos] != TK_LIT_RBRACKET { break try_3; }
                 pos += 1;
                 if pos > best { best = pos; }
             }
-            pos = start;
-            try_2: {
-                if pos >= tokens.len() || tokens[pos] != TK_LIT_INT { break try_2; }
-                pos += 1;
-                if pos > best { best = pos; }
-            }
+            if start + 1 > best { best = start + 1; }
             if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else {

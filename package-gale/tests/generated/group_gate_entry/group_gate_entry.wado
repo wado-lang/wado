@@ -1786,10 +1786,8 @@ fn scan_shape_opt(tokens: &Array<i32>, pos: i32) -> i32 {
             }
             return -1;
         } else if alt_kind == TK_C {
-            pos = start;
+            pos = start + 1;
             try_1: {
-                if pos >= tokens.len() || tokens[pos] != TK_C { break try_1; }
-                pos += 1;
                 if pos >= tokens.len() || tokens[pos] != TK_EOF { break try_1; }
                 pos += 1;
                 break scan_alts;

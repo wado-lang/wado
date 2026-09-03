@@ -1553,10 +1553,8 @@ fn scan_item(tokens: &Array<i32>, pos: i32) -> i32 {
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
         if alt_kind == TK_LIT_SET {
-            pos = start;
+            pos = start + 1;
             try_0: {
-                if pos >= tokens.len() || tokens[pos] != TK_LIT_SET { break try_0; }
-                pos += 1;
                 if pos >= tokens.len() || tokens[pos] != TK_ID { break try_0; }
                 pos += 1;
                 if pos >= tokens.len() || tokens[pos] != TK_LIT_SEMI { break try_0; }

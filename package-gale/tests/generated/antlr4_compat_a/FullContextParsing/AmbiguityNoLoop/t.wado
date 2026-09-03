@@ -2435,29 +2435,17 @@ fn scan_expr(tokens: &Array<i32>, pos: i32) -> i32 {
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
         if alt_kind == TK_LIT_AT {
-            pos = start;
-            try_0: {
-                if pos >= tokens.len() || tokens[pos] != TK_LIT_AT { break try_0; }
-                pos += 1;
-                break scan_alts;
-            }
-            return -1;
+            pos = start + 1;
+            break scan_alts;
         } else if alt_kind == TK_ID {
             let mut best: i32 = -1;
-            pos = start;
+            pos = start + 1;
             try_1: {
-                if pos >= tokens.len() || tokens[pos] != TK_ID { break try_1; }
-                pos += 1;
                 if pos >= tokens.len() || tokens[pos] != TK_LIT_AT { break try_1; }
                 pos += 1;
                 if pos > best { best = pos; }
             }
-            pos = start;
-            try_2: {
-                if pos >= tokens.len() || tokens[pos] != TK_ID { break try_2; }
-                pos += 1;
-                if pos > best { best = pos; }
-            }
+            if start + 1 > best { best = start + 1; }
             if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else {

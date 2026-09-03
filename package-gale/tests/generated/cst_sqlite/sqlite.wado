@@ -5565,10 +5565,8 @@ fn scan_select_or_values(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>>
             }
             return -1;
         } else if alt_kind == TK_K_VALUES {
-            pos = start;
+            pos = start + 1;
             try_1: {
-                if pos >= tokens.len() || tokens[pos] != TK_K_VALUES { break try_1; }
-                pos += 1;
                 if pos >= tokens.len() || tokens[pos] != TK_OPEN_PAR { break try_1; }
                 pos += 1;
                 pos = scan_expr(tokens, pos, &EMPTY_FOLLOW, 0);
@@ -6461,13 +6459,8 @@ fn scan_expr_atom(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMP
             if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if alt_kind == TK_BIND_PARAMETER {
-            pos = start;
-            try_1: {
-                if pos >= tokens.len() || tokens[pos] != TK_BIND_PARAMETER { break try_1; }
-                pos += 1;
-                break scan_alts;
-            }
-            return -1;
+            pos = start + 1;
+            break scan_alts;
         } else if _kind_set_42(alt_kind) {
             let mut best: i32 = -1;
             let try_4_end = scan_expr_atom_alt_4(tokens, start, follow);
@@ -6546,10 +6539,8 @@ fn scan_expr_atom(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMP
             return -1;
         } else if alt_kind == TK_K_CAST {
             let mut best: i32 = -1;
-            pos = start;
+            pos = start + 1;
             try_6: {
-                if pos >= tokens.len() || tokens[pos] != TK_K_CAST { break try_6; }
-                pos += 1;
                 if pos >= tokens.len() || tokens[pos] != TK_OPEN_PAR { break try_6; }
                 pos += 1;
                 pos = scan_expr(tokens, pos, &FOLLOW_MASK_2, 0);
@@ -6608,10 +6599,8 @@ fn scan_expr_atom(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMP
             let mut best: i32 = -1;
             let try_7_end = scan_expr_atom_alt_7(tokens, start, follow);
             if try_7_end > best { best = try_7_end; }
-            pos = start;
+            pos = start + 1;
             try_5: {
-                if pos >= tokens.len() || tokens[pos] != TK_OPEN_PAR { break try_5; }
-                pos += 1;
                 pos = scan_expr(tokens, pos, &FOLLOW_MASK_9, 0);
                 if pos < 0 { break try_5; }
                 if pos >= tokens.len() || tokens[pos] != TK_CLOSE_PAR { break try_5; }
@@ -7945,12 +7934,7 @@ fn scan_pragma_value(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &
             let mut best: i32 = -1;
             let try_1_end = scan_pragma_value_alt_1(tokens, start, follow);
             if try_1_end > best { best = try_1_end; }
-            pos = start;
-            try_2: {
-                if pos >= tokens.len() || tokens[pos] != TK_STRING_LITERAL { break try_2; }
-                pos += 1;
-                if pos > best { best = pos; }
-            }
+            if start + 1 > best { best = start + 1; }
             if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else {
@@ -8043,13 +8027,8 @@ fn scan_result_column(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = 
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
         if alt_kind == TK_STAR {
-            pos = start;
-            try_0: {
-                if pos >= tokens.len() || tokens[pos] != TK_STAR { break try_0; }
-                pos += 1;
-                break scan_alts;
-            }
-            return -1;
+            pos = start + 1;
+            break scan_alts;
         } else if _kind_set_4(alt_kind) {
             let mut best: i32 = -1;
             pos = start;
@@ -8246,10 +8225,8 @@ fn scan_table_or_subquery(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>
             return -1;
         } else if alt_kind == TK_OPEN_PAR {
             let mut best: i32 = -1;
-            pos = start;
+            pos = start + 1;
             try_3: {
-                if pos >= tokens.len() || tokens[pos] != TK_OPEN_PAR { break try_3; }
-                pos += 1;
                 pos = scan_select_stmt(tokens, pos, &FOLLOW_MASK_9);
                 if pos < 0 { break try_3; }
                 if pos >= tokens.len() || tokens[pos] != TK_CLOSE_PAR { break try_3; }
@@ -8370,13 +8347,8 @@ fn scan_join_operator(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = 
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
         if alt_kind == TK_COMMA {
-            pos = start;
-            try_0: {
-                if pos >= tokens.len() || tokens[pos] != TK_COMMA { break try_0; }
-                pos += 1;
-                break scan_alts;
-            }
-            return -1;
+            pos = start + 1;
+            break scan_alts;
         } else if _kind_set_33(alt_kind) {
             pos = start;
             try_1: {
@@ -8653,10 +8625,8 @@ fn scan_select_core(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &E
             }
             return -1;
         } else if alt_kind == TK_K_VALUES {
-            pos = start;
+            pos = start + 1;
             try_1: {
-                if pos >= tokens.len() || tokens[pos] != TK_K_VALUES { break try_1; }
-                pos += 1;
                 if pos >= tokens.len() || tokens[pos] != TK_OPEN_PAR { break try_1; }
                 pos += 1;
                 pos = scan_expr(tokens, pos, &EMPTY_FOLLOW, 0);
@@ -8729,38 +8699,21 @@ fn scan_compound_operator(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>
     scan_alts: {
         if alt_kind == TK_K_UNION {
             let mut best: i32 = -1;
-            pos = start;
+            pos = start + 1;
             try_1: {
-                if pos >= tokens.len() || tokens[pos] != TK_K_UNION { break try_1; }
-                pos += 1;
                 if pos >= tokens.len() || tokens[pos] != TK_K_ALL { break try_1; }
                 pos += 1;
                 if pos > best { best = pos; }
             }
-            pos = start;
-            try_0: {
-                if pos >= tokens.len() || tokens[pos] != TK_K_UNION { break try_0; }
-                pos += 1;
-                if pos > best { best = pos; }
-            }
+            if start + 1 > best { best = start + 1; }
             if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if alt_kind == TK_K_INTERSECT {
-            pos = start;
-            try_2: {
-                if pos >= tokens.len() || tokens[pos] != TK_K_INTERSECT { break try_2; }
-                pos += 1;
-                break scan_alts;
-            }
-            return -1;
+            pos = start + 1;
+            break scan_alts;
         } else if alt_kind == TK_K_EXCEPT {
-            pos = start;
-            try_3: {
-                if pos >= tokens.len() || tokens[pos] != TK_K_EXCEPT { break try_3; }
-                pos += 1;
-                break scan_alts;
-            }
-            return -1;
+            pos = start + 1;
+            break scan_alts;
         } else {
             return -1;
         }
@@ -9031,26 +8984,14 @@ fn scan_table_alias(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &E
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
         if alt_kind == TK_IDENTIFIER {
-            pos = start;
-            try_0: {
-                if pos >= tokens.len() || tokens[pos] != TK_IDENTIFIER { break try_0; }
-                pos += 1;
-                break scan_alts;
-            }
-            return -1;
+            pos = start + 1;
+            break scan_alts;
         } else if alt_kind == TK_STRING_LITERAL {
-            pos = start;
-            try_1: {
-                if pos >= tokens.len() || tokens[pos] != TK_STRING_LITERAL { break try_1; }
-                pos += 1;
-                break scan_alts;
-            }
-            return -1;
+            pos = start + 1;
+            break scan_alts;
         } else if alt_kind == TK_OPEN_PAR {
-            pos = start;
+            pos = start + 1;
             try_2: {
-                if pos >= tokens.len() || tokens[pos] != TK_OPEN_PAR { break try_2; }
-                pos += 1;
                 pos = scan_table_alias(tokens, pos, &FOLLOW_MASK_9);
                 if pos < 0 { break try_2; }
                 if pos >= tokens.len() || tokens[pos] != TK_CLOSE_PAR { break try_2; }
@@ -9080,13 +9021,8 @@ fn scan_any_name(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPT
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
         if alt_kind == TK_IDENTIFIER {
-            pos = start;
-            try_0: {
-                if pos >= tokens.len() || tokens[pos] != TK_IDENTIFIER { break try_0; }
-                pos += 1;
-                break scan_alts;
-            }
-            return -1;
+            pos = start + 1;
+            break scan_alts;
         } else if _kind_set_37(alt_kind) {
             pos = start;
             try_1: {
@@ -9096,18 +9032,11 @@ fn scan_any_name(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPT
             }
             return -1;
         } else if alt_kind == TK_STRING_LITERAL {
-            pos = start;
-            try_2: {
-                if pos >= tokens.len() || tokens[pos] != TK_STRING_LITERAL { break try_2; }
-                pos += 1;
-                break scan_alts;
-            }
-            return -1;
+            pos = start + 1;
+            break scan_alts;
         } else if alt_kind == TK_OPEN_PAR {
-            pos = start;
+            pos = start + 1;
             try_3: {
-                if pos >= tokens.len() || tokens[pos] != TK_OPEN_PAR { break try_3; }
-                pos += 1;
                 pos = scan_any_name(tokens, pos, &FOLLOW_MASK_9);
                 if pos < 0 { break try_3; }
                 if pos >= tokens.len() || tokens[pos] != TK_CLOSE_PAR { break try_3; }

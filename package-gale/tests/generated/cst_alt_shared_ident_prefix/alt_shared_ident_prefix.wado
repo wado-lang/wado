@@ -1681,13 +1681,8 @@ fn scan_pattern(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
         if alt_kind == TK_LIT_U5f {
-            pos = start;
-            try_0: {
-                if pos >= tokens.len() || tokens[pos] != TK_LIT_U5f { break try_0; }
-                pos += 1;
-                break scan_alts;
-            }
-            return -1;
+            pos = start + 1;
+            break scan_alts;
         } else if alt_kind == TK_LIT_MUT {
             pos = scan_pattern_alt_1(tokens, start, follow);
             if pos >= 0 { break scan_alts; }

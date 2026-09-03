@@ -2166,20 +2166,16 @@ fn scan_signed_atom(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &E
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
         if alt_kind == TK_PLUS {
-            pos = start;
+            pos = start + 1;
             try_0: {
-                if pos >= tokens.len() || tokens[pos] != TK_PLUS { break try_0; }
-                pos += 1;
                 pos = scan_signed_atom(tokens, pos, follow);
                 if pos < 0 { break try_0; }
                 break scan_alts;
             }
             return -1;
         } else if alt_kind == TK_MINUS {
-            pos = start;
+            pos = start + 1;
             try_1: {
-                if pos >= tokens.len() || tokens[pos] != TK_MINUS { break try_1; }
-                pos += 1;
                 pos = scan_signed_atom(tokens, pos, follow);
                 if pos < 0 { break try_1; }
                 break scan_alts;
@@ -2238,10 +2234,8 @@ fn scan_atom(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FO
             }
             return -1;
         } else if alt_kind == TK_LPAREN {
-            pos = start;
+            pos = start + 1;
             try_3: {
-                if pos >= tokens.len() || tokens[pos] != TK_LPAREN { break try_3; }
-                pos += 1;
                 pos = scan_expression(tokens, pos, &FOLLOW_MASK_3);
                 if pos < 0 { break try_3; }
                 if pos >= tokens.len() || tokens[pos] != TK_RPAREN { break try_3; }

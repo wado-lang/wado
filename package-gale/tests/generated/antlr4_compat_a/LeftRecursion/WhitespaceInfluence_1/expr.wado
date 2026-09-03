@@ -2192,10 +2192,8 @@ fn scan_expression_atom(tokens: &Array<i32>, pos: i32) -> i32 {
     scan_alts: {
         if alt_kind == TK_ID {
             let mut best: i32 = -1;
-            pos = start;
+            pos = start + 1;
             try_0: {
-                if pos >= tokens.len() || tokens[pos] != TK_ID { break try_0; }
-                pos += 1;
                 if pos >= tokens.len() || tokens[pos] != TK_LIT_LPAREN { break try_0; }
                 pos += 1;
                 pos = scan_expression(tokens, pos, 0);
@@ -2219,19 +2217,12 @@ fn scan_expression_atom(tokens: &Array<i32>, pos: i32) -> i32 {
                 pos += 1;
                 if pos > best { best = pos; }
             }
-            pos = start;
-            try_10: {
-                if pos >= tokens.len() || tokens[pos] != TK_ID { break try_10; }
-                pos += 1;
-                if pos > best { best = pos; }
-            }
+            if start + 1 > best { best = start + 1; }
             if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if alt_kind == TK_LIT_LPAREN {
-            pos = start;
+            pos = start + 1;
             try_1: {
-                if pos >= tokens.len() || tokens[pos] != TK_LIT_LPAREN { break try_1; }
-                pos += 1;
                 pos = scan_expression(tokens, pos, 0);
                 if pos < 0 { break try_1; }
                 if pos >= tokens.len() || tokens[pos] != TK_LIT_RPAREN { break try_1; }
@@ -2240,40 +2231,32 @@ fn scan_expression_atom(tokens: &Array<i32>, pos: i32) -> i32 {
             }
             return -1;
         } else if alt_kind == TK_LIT_BANG {
-            pos = start;
+            pos = start + 1;
             try_2: {
-                if pos >= tokens.len() || tokens[pos] != TK_LIT_BANG { break try_2; }
-                pos += 1;
                 pos = scan_expression(tokens, pos, 0);
                 if pos < 0 { break try_2; }
                 break scan_alts;
             }
             return -1;
         } else if alt_kind == TK_LIT_MINUS {
-            pos = start;
+            pos = start + 1;
             try_3: {
-                if pos >= tokens.len() || tokens[pos] != TK_LIT_MINUS { break try_3; }
-                pos += 1;
                 pos = scan_expression(tokens, pos, 0);
                 if pos < 0 { break try_3; }
                 break scan_alts;
             }
             return -1;
         } else if alt_kind == TK_LIT_PLUS {
-            pos = start;
+            pos = start + 1;
             try_4: {
-                if pos >= tokens.len() || tokens[pos] != TK_LIT_PLUS { break try_4; }
-                pos += 1;
                 pos = scan_expression(tokens, pos, 0);
                 if pos < 0 { break try_4; }
                 break scan_alts;
             }
             return -1;
         } else if alt_kind == TK_LIT_LBRACKET {
-            pos = start;
+            pos = start + 1;
             try_5: {
-                if pos >= tokens.len() || tokens[pos] != TK_LIT_LBRACKET { break try_5; }
-                pos += 1;
                 pos = scan_expression(tokens, pos, 0);
                 if pos < 0 { break try_5; }
                 while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA {
@@ -2297,53 +2280,23 @@ fn scan_expression_atom(tokens: &Array<i32>, pos: i32) -> i32 {
             }
             return -1;
         } else if alt_kind == TK_K_TRUE {
-            pos = start;
-            try_6: {
-                if pos >= tokens.len() || tokens[pos] != TK_K_TRUE { break try_6; }
-                pos += 1;
-                break scan_alts;
-            }
-            return -1;
+            pos = start + 1;
+            break scan_alts;
         } else if alt_kind == TK_K_FALSE {
-            pos = start;
-            try_7: {
-                if pos >= tokens.len() || tokens[pos] != TK_K_FALSE { break try_7; }
-                pos += 1;
-                break scan_alts;
-            }
-            return -1;
+            pos = start + 1;
+            break scan_alts;
         } else if alt_kind == TK_NUMBER {
-            pos = start;
-            try_8: {
-                if pos >= tokens.len() || tokens[pos] != TK_NUMBER { break try_8; }
-                pos += 1;
-                break scan_alts;
-            }
-            return -1;
+            pos = start + 1;
+            break scan_alts;
         } else if alt_kind == TK_DATE {
-            pos = start;
-            try_9: {
-                if pos >= tokens.len() || tokens[pos] != TK_DATE { break try_9; }
-                pos += 1;
-                break scan_alts;
-            }
-            return -1;
+            pos = start + 1;
+            break scan_alts;
         } else if alt_kind == TK_SQ_STRING {
-            pos = start;
-            try_11: {
-                if pos >= tokens.len() || tokens[pos] != TK_SQ_STRING { break try_11; }
-                pos += 1;
-                break scan_alts;
-            }
-            return -1;
+            pos = start + 1;
+            break scan_alts;
         } else if alt_kind == TK_K_NULL {
-            pos = start;
-            try_12: {
-                if pos >= tokens.len() || tokens[pos] != TK_K_NULL { break try_12; }
-                pos += 1;
-                break scan_alts;
-            }
-            return -1;
+            pos = start + 1;
+            break scan_alts;
         } else {
             return -1;
         }
