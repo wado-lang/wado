@@ -377,18 +377,31 @@ One note for whoever revives this. The invariance test is free: every slot a
 loop may write is bumped before the body walk and versions are monotonic, so a
 read below the loop-entry watermark is invariant.
 
-What used to hold that 2.7 % down was upstream, and is fixed: the loop
-heap-effect collection marked a call's receiver mutably borrowed whether or not
-the callee could mutate it, disagreeing with the alias analysis beside it, which
-asks that very question before aliasing the same receiver. Both now read one
-verdict. It bought no output: the fixture corpus is WIR-identical over 1 921
-goldens, and so is every benchmark. The reason is this section's other half —
-still no consumer. A field read of a reference parameter across an immutable
-call in a loop is already hoisted by LICM's structural path, which never asks
-the value graph, and the value-side consumers do not reach the shape at all,
-because a local struct is scalarized by SROA and a small callee is gone to the
-inliner before either matters. So the precision is real and unclaimed, and the
-consumer, not the precision, is what to build next.
+One conservatism that held that 2.7 % down is gone: the loop heap-effect
+collection marked a call's receiver mutably borrowed whether or not the callee
+could mutate it, while the alias analysis beside it asks that very question
+before aliasing the same receiver. Both now read one verdict. It fires widely —
+77 % of in-loop receiver calls on `sqlite_parse`, 64 % on `json_twitter` — and
+buys nothing: the fixture corpus is WIR-identical over 1 921 goldens, and so is
+every benchmark.
+
+It buys nothing because a sibling conservatism in the same match arm subsumes
+it. Every non-builtin call sets the blanket external-writes flag, a receiver
+call included, so any loop holding one bumps the whole `mut_escaped` set's
+generation — and a read rooted at an escaped local takes the max of that. The
+per-local mark and the set-wide flag invalidate the same reads, so suppressing
+the first pays only for a receiver outside `mut_escaped`. What remains
+unmeasured is how many of the suppressed receivers are in it; that count decides
+whether the flag explains the null entirely or only mostly.
+
+- [ ] Give the blanket external-writes flag the callee's mod/ref summary. It is
+      the same unjustified conservatism one line below the one just removed, and
+      the binding one: `mod_ref::FnEffect` knows what a callee writes, while the
+      flag bumps every escaped local's generation for every non-builtin call.
+      Narrowing it is what would let the receiver verdict above reach an output,
+      and it is a precondition for the in-loop consumer work below, not an
+      alternative to it. Measure the escaped-receiver count first — it sizes the
+      prize.
 
 - [ ] Reach the in-loop consumers. Every freeze that may plant a local-naming
       value runs after the fixed-point loop, so the passes inside it still see
