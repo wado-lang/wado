@@ -339,6 +339,51 @@ test "stored is larger than compressed" {
     assert c0.len() > c1.len();
 }
 
+test "stored block round-trip empty" {
+    // RFC 1951 needs at least one block with BFINAL set, even for no data.
+    let data: ByteList = [];
+    let compressed = deflate_raw(&data, Z_NO_COMPRESSION);
+    assert compressed.len() == 5;
+    assert bytes_equal(&data, &inflate_raw(&compressed));
+    assert bytes_equal(&data, &inflate_zlib(&zlib_compress(&data, Z_NO_COMPRESSION)).unwrap());
+}
+
+fn make_incompressible(size: i32) -> ByteList {
+    let mut data = ByteList::with_capacity(size);
+    let mut state: u32 = 0x12345678;
+    for let mut i = 0; i < size; i += 1 {
+        state = state ^ state << 13;
+        state = state ^ state >> 17;
+        state = state ^ state << 5;
+        data.push((state & 0xFF) as u8);
+    }
+    return data;
+}
+
+test "default strategy never loses to fixed or stored" {
+    // deflate_with_level estimates the stored, fixed and dynamic costs and
+    // emits the cheapest, so its output may never exceed either alternative.
+    let inputs: List<ByteList> = [
+        string_to_bytes(""),
+        string_to_bytes("a"),
+        string_to_bytes("Hello, world!"),
+        make_repeated(65, 3),
+        make_repeated(65, 1000),
+        make_pattern_data(1000),
+        make_pattern_data(70000),
+        make_incompressible(1000),
+        make_incompressible(70000),
+    ];
+    for let data of &inputs {
+        let chosen = deflate_raw(data, 6);
+        let fixed = deflate_raw(data, 6, Z_FIXED);
+        let stored = deflate_raw(data, 0);
+        assert chosen.len() <= fixed.len();
+        assert chosen.len() <= stored.len();
+        assert bytes_equal(data, &inflate_raw(&chosen));
+    }
+}
+
 test "strategy Huffman-only round-trip" {
     let data = make_pattern_data(1000);
     let compressed = zlib_compress(&data, 6, Z_HUFFMAN_ONLY);

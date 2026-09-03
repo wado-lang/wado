@@ -1436,8 +1436,9 @@ pub fn deflate_stored(input: &ByteList) -> ByteList {
     let total = input.len();
     let mut output = ByteList::with_capacity(total + (total / 65535 + 1) * 5);
 
+    // Emit at least one block: empty input still needs a BFINAL block.
     let mut pos = 0;
-    while pos < total {
+    loop {
         let block_len = i32::min(total - pos, 65535);
         let is_last = pos + block_len >= total;
 
@@ -1462,6 +1463,9 @@ pub fn deflate_stored(input: &ByteList) -> ByteList {
             output.push(input[pos + i]);
         }
         pos += block_len;
+        if pos >= total {
+            break;
+        }
     }
 
     return output;
