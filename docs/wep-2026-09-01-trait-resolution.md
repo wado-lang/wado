@@ -499,17 +499,12 @@ What the corpus reports beyond the five, each its own gap:
       where rank 2 takes the specific impl at selection
       (`impl_concrete_instantiation_wins.wado`). The order is the one `spec.md`
       states; the flip moves the decision one layer up.
-- [ ] Calls the sort answers and the order finds no candidate for, in fixtures
-      whose traits are declared in another module
-      (`cross_module_concrete_generic_impl.wado`,
-      `cross_module_same_name_trait_direct.wado`, `ns_qualified_trait_head.wado`).
-      The report does not yet separate "no impl applied" from "every impl was
-      out of scope", which is what would say whether this is the scope gate
-      working or a lowering that lost a candidate.
-- [ ] A user's `impl Add for i32` beside the operator impls the lowering states
-      for every primitive: the pair duplicates and the order reports
-      (`user_trait_method_survives_relowering.wado`). The lowering states an
-      impl the source also writes.
+- [ ] Fixtures that call a method of a trait they never imported, which the
+      scope gate makes an error and the sort answers:
+      `cross_module_concrete_generic_impl.wado` imports `Token` and a function
+      but not `Tag`, and `cross_module_same_name_trait_direct.wado` imports
+      `Data` under two aliases but neither `Describe`. The flip adds the import
+      the call needs; that is the decision doing its work, not a regression.
 
 Then the flip. A `pub use` re-export putting the trait in scope wants pinning as
 part of it; an aliased import already is

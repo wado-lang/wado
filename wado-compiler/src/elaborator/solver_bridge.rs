@@ -161,9 +161,18 @@ impl Lowering {
                 is_mut: matches!(ty, Type::MutReference(_)),
                 inner: Box::new(self.ast_type(inner, param, resolutions, self_type)?),
             }),
-            Type::NamespacedGeneric(_) | Type::Function(_) | Type::Infer(_) | Type::Error(_) => {
-                None
+            // `impl Greet for geo::Tag` names a declaration like any other; a
+            // qualified spelling is never a builtin shape.
+            Type::NamespacedGeneric(generic) => {
+                let head = self.type_decl(resolutions.declared(generic.id)?);
+                let args = generic
+                    .args
+                    .iter()
+                    .map(|arg| self.ast_type(arg, param, resolutions, self_type))
+                    .collect::<Option<Vec<_>>>()?;
+                Some(SolverType::Decl(head, args))
             }
+            Type::Function(_) | Type::Infer(_) | Type::Error(_) => None,
         }
     }
 
