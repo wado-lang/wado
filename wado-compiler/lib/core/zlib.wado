@@ -1540,6 +1540,11 @@ impl BitWriter {
         }
     }
 
+    // Write one packed encoding tree entry: its code, `enc_len` bits wide.
+    fn write_code(&mut self, entry: i32) {
+        self.write_bits((entry & 0xFFFF) as u32, entry >> 16 & 0xFF);
+    }
+
     fn flush(&mut self) {
         while self.bits >= 8 {
             self.output.push((self.buf & 0xFF) as u8);
@@ -1554,35 +1559,40 @@ impl BitWriter {
     }
 }
 
-// Code table entry for deflate encoding
-struct EncCode {
-    code: u16,
-    len: u8,
+// A deflate encoding table entry, packed into one i32 so an encoding tree is a
+// flat GC array rather than an array of references: the bit-reversed code in
+// bits 0-15, its length in bits 16-23.
+fn enc_pack(code: i32, len: i32) -> i32 {
+    return code & 0xFFFF | (len & 0xFF) << 16;
+}
+
+fn enc_len(entry: i32) -> i32 {
+    return entry >> 16 & 0xFF;
 }
 
 // Build fixed Huffman literal/length encoding table (288 symbols)
-fn build_fixed_ltree() -> List<EncCode> {
+fn build_fixed_ltree() -> List<i32> {
     let mut bl_count: List<i32> = List::filled(16, 0);
-    let mut tree: List<EncCode> = List::filled(288, EncCode { code: 0, len: 0 });
+    let mut tree: List<i32> = List::filled(288, 0);
 
     let mut n = 0;
     while n <= 143 {
-        tree[n] = EncCode { code: 0, len: 8 };
+        tree[n] = enc_pack(0, 8);
         bl_count[8] += 1;
         n += 1;
     }
     while n <= 255 {
-        tree[n] = EncCode { code: 0, len: 9 };
+        tree[n] = enc_pack(0, 9);
         bl_count[9] += 1;
         n += 1;
     }
     while n <= 279 {
-        tree[n] = EncCode { code: 0, len: 7 };
+        tree[n] = enc_pack(0, 7);
         bl_count[7] += 1;
         n += 1;
     }
     while n <= 287 {
-        tree[n] = EncCode { code: 0, len: 8 };
+        tree[n] = enc_pack(0, 8);
         bl_count[8] += 1;
         n += 1;
     }
@@ -1596,9 +1606,9 @@ fn build_fixed_ltree() -> List<EncCode> {
     }
 
     for let mut i = 0; i <= 287; i += 1 {
-        let len = tree[i].len as i32;
+        let len = enc_len(tree[i]);
         if len != 0 {
-            tree[i].code = bi_reverse(next_code[len], len) as u16;
+            tree[i] = enc_pack(bi_reverse(next_code[len], len) as i32, len);
             next_code[len] = next_code[len] + 1;
         }
     }
@@ -1620,10 +1630,10 @@ fn build_fixed_lengths() -> [ByteList, ByteList] {
 }
 
 // Build fixed distance encoding table (30 codes, all 5 bits)
-fn build_fixed_dtree() -> List<EncCode> {
-    let mut tree: List<EncCode> = List::filled(30, EncCode { code: 0, len: 5 });
+fn build_fixed_dtree() -> List<i32> {
+    let mut tree: List<i32> = List::filled(30, 0);
     for let mut i = 0; i < 30; i += 1 {
-        tree[i] = EncCode { code: bi_reverse(i as u32, 5) as u16, len: 5 };
+        tree[i] = enc_pack(bi_reverse(i as u32, 5) as i32, 5);
     }
     return tree;
 }
@@ -1721,8 +1731,7 @@ pub fn deflate_huffman(input: &ByteList) -> ByteList {
     bw.write_bits(1, 2);  // BTYPE = 01
 
     if input_len == 0 {
-        let eob = &ltree[256];
-        bw.write_bits(eob.code as u32, eob.len as i32);
+        bw.write_code(ltree[256]);
         bw.flush();
         return bw.output;
     }
@@ -1783,8 +1792,7 @@ pub fn deflate_huffman(input: &ByteList) -> ByteList {
             // Emit length/distance pair (inlined lookup)
             let lcode = length_codes[best_len - 3] as i32;
             let len_symbol = 257 + lcode;
-            let len_entry = &ltree[len_symbol];
-            bw.write_bits(len_entry.code as u32, len_entry.len as i32);
+            bw.write_code(ltree[len_symbol]);
             let len_ebits = LENGTH_EXTRA[lcode];
             if len_ebits > 0 {
                 bw.write_bits((best_len - LENGTH_BASE[lcode]) as u32, len_ebits);
@@ -1792,8 +1800,7 @@ pub fn deflate_huffman(input: &ByteList) -> ByteList {
 
             let dd = best_dist - 1;
             let dcode = if dd < 256 { dist_codes[dd] as i32 } else { dist_codes[256 + (dd >> 7)] as i32 };
-            let dist_entry = &dtree[dcode];
-            bw.write_bits(dist_entry.code as u32, dist_entry.len as i32);
+            bw.write_code(dtree[dcode]);
             let dist_ebits = DIST_EXTRA[dcode];
             if dist_ebits > 0 {
                 bw.write_bits((best_dist - DIST_BASE[dcode]) as u32, dist_ebits);
@@ -1810,16 +1817,13 @@ pub fn deflate_huffman(input: &ByteList) -> ByteList {
             pos += best_len;
         } else {
             // Emit literal
-            let lit = input[pos] as i32;
-            let lit_entry = &ltree[lit];
-            bw.write_bits(lit_entry.code as u32, lit_entry.len as i32);
+            bw.write_code(ltree[input[pos] as i32]);
             pos += 1;
         }
     }
 
     // End of block
-    let eob = &ltree[256];
-    bw.write_bits(eob.code as u32, eob.len as i32);
+    bw.write_code(ltree[256]);
     bw.flush();
 
     return bw.output;
@@ -2113,7 +2117,7 @@ fn build_huffman_tree(freqs: &List<i32>, max_sym: i32, max_bits: i32, bl_count: 
 }
 
 // Generate canonical Huffman codes from code lengths
-fn gen_huffman_codes(lengths: &ByteList, max_sym: i32, max_bits: i32) -> List<EncCode> {
+fn gen_huffman_codes(lengths: &ByteList, max_sym: i32, max_bits: i32) -> List<i32> {
     let mut bl_count: List<i32> = List::filled(max_bits + 1, 0);
     for let mut i = 0; i < max_sym; i += 1 {
         bl_count[lengths[i] as i32] += 1;
@@ -2127,11 +2131,11 @@ fn gen_huffman_codes(lengths: &ByteList, max_sym: i32, max_bits: i32) -> List<En
         next_code[bits] = code;
     }
 
-    let mut tree: List<EncCode> = List::filled(max_sym, EncCode { code: 0, len: 0 });
+    let mut tree: List<i32> = List::filled(max_sym, 0);
     for let mut i = 0; i < max_sym; i += 1 {
         let len = lengths[i] as i32;
         if len != 0 {
-            tree[i] = EncCode { code: bi_reverse(next_code[len], len) as u16, len: lengths[i] };
+            tree[i] = enc_pack(bi_reverse(next_code[len], len) as i32, len);
             next_code[len] = next_code[len] + 1;
         }
     }
@@ -2199,9 +2203,9 @@ fn encoded_data_bits(
 // three code trees, the RLE'd code-length header, and the block's exact bit
 // cost. `write_dynamic_block` emits a plan; `deflate_with_level` prices one.
 struct DynamicPlan {
-    lit_tree: List<EncCode>,
-    dist_tree: List<EncCode>,
-    bl_tree: List<EncCode>,
+    lit_tree: List<i32>,
+    dist_tree: List<i32>,
+    bl_tree: List<i32>,
     bl_lengths: ByteList,
     rle: ByteList,
     rle_extra: List<i32>,
@@ -2331,7 +2335,7 @@ fn plan_dynamic_block(lit_freq: &List<i32>, dist_freq: &mut List<i32>) -> Dynami
     let mut bits = 17 + nbl * 3;
     for let mut j = 0; j < rle.len(); j += 1 {
         let sym = rle[j] as i32;
-        bits += bl_tree[sym].len as i32;
+        bits += enc_len(bl_tree[sym]);
         if sym == 16 {
             bits += 2;
         } else if sym == 17 {
@@ -2397,7 +2401,7 @@ fn write_dynamic_block(
     // Send RLE-encoded code lengths
     for let mut j = 0; j < rle.len(); j += 1 {
         let sym = rle[j] as i32;
-        bw.write_bits(bl_tree[sym].code as u32, bl_tree[sym].len as i32);
+        bw.write_code(bl_tree[sym]);
         if sym == 16 {
             bw.write_bits(rle_extra[j] as u32, 2);
         } else if sym == 17 {
@@ -2412,16 +2416,16 @@ fn write_dynamic_block(
         let sym = symbols[i];
         if sym < 256 {
             // Literal
-            bw.write_bits(lit_tree[sym].code as u32, lit_tree[sym].len as i32);
+            bw.write_code(lit_tree[sym]);
         } else if sym == 256 {
             // EOB
-            bw.write_bits(lit_tree[256].code as u32, lit_tree[256].len as i32);
+            bw.write_code(lit_tree[256]);
         } else {
             // Length
             let len_val = sym - 257;
             let lcode = length_codes_table[len_val] as i32;
             let len_symbol = 257 + lcode;
-            bw.write_bits(lit_tree[len_symbol].code as u32, lit_tree[len_symbol].len as i32);
+            bw.write_code(lit_tree[len_symbol]);
             let len_ebits = LENGTH_EXTRA[lcode];
             if len_ebits > 0 {
                 bw.write_bits((len_val - (LENGTH_BASE[lcode] - 3)) as u32, len_ebits);
@@ -2431,7 +2435,7 @@ fn write_dynamic_block(
             let dist = distances[i];
             let dd = dist - 1;
             let dcode = if dd < 256 { dist_codes_table[dd] as i32 } else { dist_codes_table[256 + (dd >> 7)] as i32 };
-            bw.write_bits(dist_tree[dcode].code as u32, dist_tree[dcode].len as i32);
+            bw.write_code(dist_tree[dcode]);
             let dist_ebits = DIST_EXTRA[dcode];
             if dist_ebits > 0 {
                 bw.write_bits((dist - DIST_BASE[dcode]) as u32, dist_ebits);
@@ -2440,7 +2444,7 @@ fn write_dynamic_block(
     }
 
     // Write EOB
-    bw.write_bits(lit_tree[256].code as u32, lit_tree[256].len as i32);
+    bw.write_code(lit_tree[256]);
 }
 
 // Write a fixed Huffman block from symbol buffer
@@ -2450,8 +2454,8 @@ fn write_fixed_block(
     distances: &List<i32>,
     sym_count: i32,
     is_last: bool,
-    ltree: &List<EncCode>,
-    dtree: &List<EncCode>,
+    ltree: &List<i32>,
+    dtree: &List<i32>,
     length_codes_table: &ByteList,
     dist_codes_table: &ByteList,
 ) {
@@ -2465,12 +2469,12 @@ fn write_fixed_block(
     for let mut i = 0; i < sym_count; i += 1 {
         let sym = symbols[i];
         if sym < 256 {
-            bw.write_bits(ltree[sym].code as u32, ltree[sym].len as i32);
+            bw.write_code(ltree[sym]);
         } else {
             let len_val = sym - 257;
             let lcode = length_codes_table[len_val] as i32;
             let len_symbol = 257 + lcode;
-            bw.write_bits(ltree[len_symbol].code as u32, ltree[len_symbol].len as i32);
+            bw.write_code(ltree[len_symbol]);
             let len_ebits = LENGTH_EXTRA[lcode];
             if len_ebits > 0 {
                 bw.write_bits((len_val - (LENGTH_BASE[lcode] - 3)) as u32, len_ebits);
@@ -2479,7 +2483,7 @@ fn write_fixed_block(
             let dist = distances[i];
             let dd = dist - 1;
             let dcode = if dd < 256 { dist_codes_table[dd] as i32 } else { dist_codes_table[256 + (dd >> 7)] as i32 };
-            bw.write_bits(dtree[dcode].code as u32, dtree[dcode].len as i32);
+            bw.write_code(dtree[dcode]);
             let dist_ebits = DIST_EXTRA[dcode];
             if dist_ebits > 0 {
                 bw.write_bits((dist - DIST_BASE[dcode]) as u32, dist_ebits);
@@ -2488,7 +2492,7 @@ fn write_fixed_block(
     }
 
     // EOB
-    bw.write_bits(ltree[256].code as u32, ltree[256].len as i32);
+    bw.write_code(ltree[256]);
 }
 
 // Compression level configuration
@@ -2569,7 +2573,7 @@ pub fn deflate_with_level(input: &ByteList, level: i32, strategy: i32) -> ByteLi
         let ltree = build_fixed_ltree();
         bw.write_bits(1, 1);  // BFINAL
         bw.write_bits(1, 2);  // fixed
-        bw.write_bits(ltree[256].code as u32, ltree[256].len as i32);
+        bw.write_code(ltree[256]);
         bw.flush();
         return bw.output;
     }
