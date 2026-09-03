@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1788464538920,
+  "lastUpdate": 1788471625656,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -53053,6 +53053,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 282048,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "c2c9cccd45e44bc8dd2a0f46a4f9ebae742e1f62",
+          "message": "Merge pull request #1958 from wado-lang/perf-sqlite-parse\n\nperf(gale): elide a guarded scan alt's leading token re-test",
+          "timestamp": "2026-09-04T06:27:40+09:00",
+          "tree_id": "1977cfb5aa22701c6f00edc21ab092d6475d9114",
+          "url": "https://github.com/wado-lang/wado/commit/c2c9cccd45e44bc8dd2a0f46a4f9ebae742e1f62"
+        },
+        "date": 1788471625272,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 2028,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6418,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18908,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 281425,
             "unit": "bytes"
           }
         ]
