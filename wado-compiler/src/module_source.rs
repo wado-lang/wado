@@ -93,11 +93,11 @@ fn well_known_arcs() -> Vec<Arc<str>> {
 /// `Core` and `Binding` store the prefix-stripped path, `Wasm` the full one.
 static STDLIB_NAME_ARCS: LazyLock<Vec<Arc<str>>> = LazyLock::new(|| {
     let mut arcs: Vec<Arc<str>> = Vec::new();
-    for (path, _src) in crate::stdlib::all_core_modules() {
+    for path in crate::stdlib::CORE_MODULE_PATHS {
         let name = path.strip_prefix("core:").unwrap_or(path);
         arcs.push(Arc::<str>::from(name));
     }
-    for (path, _src) in crate::stdlib::all_binding_modules() {
+    for path in crate::stdlib::BINDING_MODULE_PATHS {
         let (_, interface) = CmNamespace::split_specifier(path)
             .unwrap_or_else(|| panic!("bundled binding module `{path}` has no reserved namespace"));
         arcs.push(Arc::<str>::from(interface));
