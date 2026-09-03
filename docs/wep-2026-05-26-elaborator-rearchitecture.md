@@ -147,9 +147,40 @@ there. `Semantics`, keyed by bare `AstId` too, holds no second copy: it routes
 a fact to the module whose walk recorded it. Routing is per fact kind, because
 a node two walks reach splits its kinds across them — a callee's parameter
 default is typed at each call site, while its own module records the edges
-around it. Several walks can also hold one kind for one node, that default's
-type among them; the last module in `AnnotateState::module_semantics` order is
-the one routed to.
+around it.
+
+### A body fact belongs to a walk, not to a module
+
+One module's walk is not one walk. A tuple `for-of` body is a single source
+sub-tree resolved once per element, so one `AstId` inside it carries one fact
+per element: a different receiver type, a different method, a different
+`From` impl. `sem.types` therefore holds one `BodyFacts` per walk — the
+module's own, plus the overlays each tuple `for-of` peeled off it — and a
+reader names the walk it wants rather than the module.
+
+The maps a walk records are named once, in `with_body_facts!`
+(`sem/types.rs`). The `BodyFacts` struct, the lens `split_off` truncates
+back to, the fact count, and reify's `ann_*` accessors are all generated from
+that list. A map added to it is peeled per element, swept for inference holes,
+and read through the overlays, with no second list to keep in step — which is
+the whole point: the copies are what fell out of step, silently and per fact
+kind, and each omission was a miscompile of the shape "every element gets the
+last element's answer".
+
+Membership: a map whose value can differ between the elements a tuple `for-of`
+unrolls belongs to `BodyFacts`. `assign_places` does not (an identifier's
+place is the same whichever element binds it), and the declaration-level maps
+(`impl_facts`, `function_effects`, `fn_param_types`, …) do not, since a
+declaration is walked once.
+
+Reading is total over the walks, at every layer. Reify consults the active
+overlay stack innermost-first and then the module's own (`Reify::ann`);
+`TypeAnnotations::all` answers every walk's value for one node; `Fact::all`
+lifts that through `Semantics`' routing, so a check that must hold for a call
+site inside an unrolled body sees each element's dispatch
+(`Semantics::method_dispatches_at`) rather than one of them.
+`Semantics::fact_at` and the LSP queries keep the singular shape and answer
+the first walk's.
 
 ### Signatures — every declaration signature is a decl-pass fact
 
@@ -302,9 +333,15 @@ and the default-expression module fallback. Effect parameters live in
 so they are generic-scope state and the `TypeParamScope` guard restores them
 with the rest of the context. All mutation goes through guards —
 `TypeParamScope`, `with_self_type` / `with_self_type_if_known`,
-`with_default_scope_module`, one shared field-restore guard behind the `with_*`
-helpers. Enforceable by inspection: no `mem::replace` or manual clone-restore
-of scope fields outside `scope.rs`.
+`with_default_scope_module`, `with_foreign_vantage`, one shared field-restore
+guard behind the `with_*` helpers. Enforceable by inspection: no `mem::replace`
+or manual clone-restore of scope fields outside `scope.rs`.
+
+The rule is about transient walk state, not about this struct: any value saved
+for the length of a sub-walk and restored after it needs a guard, so an early
+return or a panic cannot leave it swapped. Where that state sits on
+`Elaborator` or on `FunctionContext` instead of on `Scope`, the rule is
+[not yet met](#transient-walk-state-without-guards).
 
 ### Elaborator — the walker
 
@@ -357,13 +394,18 @@ re-derives only what is _uniquely determined by the AST alone_ — literal
 kinds, the syntactic shape of a node (`Index` vs `Field`) — never anything
 scope-, inference-, dispatch-, or mangling-sensitive.
 
-Two boundary invariants keep it that way:
+Three boundary invariants keep it that way:
 
 - Fail-loud, not fail-safe. Reify does not fall back to recomputation when a
   fact is absent; every decision-bearing read is an `.expect`. Exactly one
   `resolve_type` call survives: the global read for a snapshot-rehydrated
   callee module, whose `ModuleSemantics` legitimately carries no
   `current_module_globals` — a documented exception, not a fallback.
+- Every body fact is read through its `ann_*` accessor, so the walk reify is
+  replaying is the walk it reads. A direct `sem.types` read of a
+  `BodyFacts` map sees the module's own walk with each tuple `for-of`
+  element's entries already peeled out of it, which is not a stale answer but
+  a missing one.
 - Single source for the projection rule. The "dense, real type params"
   predicate (`!effect && !fn-bound`) that fixes positional monomorph slots
   lives once, as `ast::GenericParam::is_real_type_param`; the annotate walk
@@ -489,6 +531,11 @@ The four sub-structs of `ModuleSemantics` each get their own file because
 their membership rule is file-scoped. The crate uses the no-`mod.rs`
 convention.
 
+`sem/types.rs` opens with `with_body_facts!`, the list every per-walk map is
+declared in. It is exported, and reify invokes it with its own accessor
+macro, so the two files cannot hold different lists: a map is added in one
+place and the accessor appears.
+
 ### Reading the digest
 
 A consumer reads it via `.expect(…)` — a missing entry is a loud panic, never
@@ -540,17 +587,22 @@ neither swaps a perspective nor suppresses a recording.
 
 Each is a grep:
 
-| Rule                                             | Target | Now |
-| ------------------------------------------------ | ------ | --- |
-| AST-map reads outside reify / decl pass          | 0      | 0   |
-| Whole-module AST scans outside the decl pass     | 0      | 0   |
-| Name-keyed AST predicates                        | 0      | 1   |
-| AST-level type-param substitution helpers        | 0      | 1   |
-| Manual scope save/restore outside `scope.rs`     | 0      | 0   |
-| `with_module_perspective_for` call sites         | 2      | 2   |
-| `with_reference_recording_suppressed` call sites | 1      | 1   |
-| Walker signatures taking or returning a TIR node | 0      | 0   |
-| Reify `resolve_type` call sites                  | 1      | 1   |
+| Rule                                                          | Target | Now |
+| ------------------------------------------------------------- | ------ | --- |
+| Hand-kept copies of the body-fact list                        | 0      | 0   |
+| Body-fact reads in reify outside `ann_*`                      | 0      | 1   |
+| AST-map reads outside reify / decl pass                       | 0      | 0   |
+| Whole-module AST scans outside the decl pass                  | 0      | 0   |
+| Reify `resolve_type` call sites                               | 1      | 1   |
+| Reify `loaded_modules` / `symbols` reads                      | 0      | 7   |
+| `TypeLookup { … }` literals                                   | 1      | 4   |
+| Name-keyed AST predicates                                     | 0      | 1   |
+| AST-level type-param substitution helpers                     | 0      | 1   |
+| `substitute_type_params_by_map` call sites                    | 0      | 5   |
+| `mem::replace` / `mem::take` on walk state outside `scope.rs` | 0      | 29  |
+| `with_module_perspective_for` call sites                      | 2      | 2   |
+| `with_reference_recording_suppressed` call sites              | 1      | 1   |
+| Walker signatures taking or returning a TIR node              | 0      | 0   |
 
 The perspective and suppression rows are floors, not zeroes, and each is a
 walker frame rather than a query: both perspective swaps are the callee-scope
@@ -561,47 +613,234 @@ whose count exceeds its target is a [known gap](#known-gaps).
 
 ## Known gaps
 
-### The walker slim-down
+Three rules order what is left. Each names a class the measurements below are
+instances of, and each gap says what closing it takes.
 
-The borrowed compilation-unit inputs (symbols, logger, interner, invocations,
-entry module) are still five separate fields rather than one `ElabEnv`, and
-`AnnotateState` still exists, reaching `effect_check.rs`, `lib.rs` and
-`package.rs` as a carrier. `assoc_binding_stack` is transient walk state that
-landed on `Elaborator` rather than `Scope`, and is mutated by a hand-written
-insert / `shift_remove` pair rather than a guard — the "another field on
-`Elaborator`" default the membership rules exist to refuse.
+- One list. A set the compiler must keep in step is written once and
+  everything else generated from it; a field-by-field copy is a defect that
+  has not fired yet.
+- One core. A question with several partial answerers gets one complete
+  answerer, and the partial ones are deleted rather than wrapped.
+- One home. A fact is recorded where it is decided and read where it is
+  recorded; a phase recomputing a fact it could have read is re-deciding.
 
-Closing it: bundle the borrowed inputs behind `ElabEnv`, dissolve
-`AnnotateState` — `tysys` and `module_semantics` land on `Semantics`, the rest
-are driver locals — collapse the per-module construction site, and move the
-recursion stack into `Scope` behind a guard.
+### Per-element checks read one walk
 
-### Two more implementations of type-parameter substitution
+`BodyFacts` makes every walk's answer reachable, and reify, liveness and the
+effect / stores / purity checks read them all. The type-driven half of those
+checks does not: `Semantics::expression_type` and `local_type` answer the
+first walk, so a check that reasons about a value's type inside a tuple
+`for-of` body sees the first element's. A body binding a resource in one
+element and a plain value in another is checked against one of them.
 
-`elaborator/type_resolution.rs` holds an AST-level `substitute_type_params`
-that replaces type parameters by _name_ over an `ast::Type` — one helper
-answering for both AST rows above. `expr.rs::substitute_type_params_by_map` is
-a hand-rolled recursion over a handful of `ResolvedType` arms, so it is partial
-by construction wherever the arm list is not.
+Closing it: either a cursor that scopes a `Semantics` query to one
+instantiation's walk (`with_element(for_of, k, …)`), which is what reify's
+overlay stack already is, or moving the per-element part of those checks into
+the annotate walk, where the element is the frame being walked. Which of the
+two is a design question, not a mechanical one.
 
-Closing it: route both through `TypeTable::substitute_type_params_with`, the
-one implementation this WEP names, and delete them.
+### The hole sweep is still a hand list
+
+`infer_hole.rs::sweep_body_facts` enumerates the `BodyFacts` maps that can
+hold a `TypeId` by hand — 16 of the 20 — so a map added to `with_body_facts!`
+sweeps only if someone remembers. The four it omits carry none today; nothing
+in the type system says so.
+
+Closing it: a `SweepTypeIds` implementation per fact value type and a loop
+generated from the same list, so the omission is a missing impl rather than a
+silent leak of an unsolved variable into reify.
+
+### One question, several answerers
+
+The same computation is written several times, each copy partial in its own
+way. Every row is a defect class, not a style preference: the copies disagree.
+
+| Question                                      | Copies | Where                                                                |
+| --------------------------------------------- | ------ | -------------------------------------------------------------------- |
+| Check a call's arguments against a signature  | 8      | `call.rs` ×4, `method_call.rs` ×3, `method_lookup.rs`                |
+| Pad a call's arguments with declared defaults | 4      | `call.rs`, `method_call.rs` ×2, `reify.rs`                           |
+| A receiver's declaration, module, name, args  | 7      | `method_call.rs` ×4, `method_lookup.rs` ×2, `call.rs`                |
+| Construct a variant case from a call          | 4      | `call.rs` ×2, `method_call.rs` ×2                                    |
+| Dispatch an operator to its trait method      | 4      | `operators.rs`: comparison, arithmetic, shift, unary                 |
+| Agree the type of several branches            | 4      | `expr.rs`: `if`, `if let`, `match`, labeled block                    |
+| Substitute type parameters                    | 5      | `tir.rs` ×2, `tysys.rs`, `expr.rs`, `type_resolution.rs` (AST-level) |
+| Decide a pattern's shape                      | 2      | `resolve_if_pattern_inner`, and the `exh_*` family that mirrors it   |
+
+Two of these are holes rather than duplication. `resolve_static_method_call`
+reaches none of the eight argument checks, so a static call's arguments are
+never checked against the callee's signature; correctness there rests on
+expected-type threading alone. And the four default-padding copies implement
+two contradictory rules — reify's method path splices the caller's argument
+AST into the callee's default and reifies it under the caller's perspective,
+which the free path's own documentation explains must not be done.
+
+Closing it, in order of what unblocks what: `TypeSystem::receiver_shape`
+first, since three of the other rows derive a receiver on the way; then one
+`check_args(sig, args, spans)` every call path calls, which is what closes
+the static-call hole; then the default padding, the variant construction, the
+operator ladder and the branch agreement, each a mechanical merge once the
+first two exist. The substitution row closes by routing the AST-level helper
+and `substitute_type_params_by_map` through
+`TypeTable::substitute_type_params_with`, the one implementation this WEP
+names, and deleting them; `substitute_type_params_by_map` has one external
+caller and is partial by construction wherever its arm list is.
+
+[`wep-2026-09-01-trait-resolution.md`](./wep-2026-09-01-trait-resolution.md)
+names "one selection function serving every path" as what its dispatch order
+still needs, and states the obstacle as each path holding a different amount
+of the call. The receiver query and the argument core are that amount, made
+uniform.
+
+### The decl pass answers by scan
+
+The decl pass answers each of its questions with its own scan of every
+module's item list. Counted end to end, the module list or a module's items
+are walked 34 times between the start of `annotate_modules` and the end of
+`build_tir_from_state`, 23 of them over a user module's items; a module's
+`use` list alone is walked eight times, once per collector that needs
+namespace imports and again per iteration of the newtype fixpoint. So a new
+declaration fact defaults to a new scan rather than a place in an existing
+walk.
+
+Eight of those passes are not gated on the stdlib snapshot and so re-derive
+over all 86 stdlib modules on every compile: `Resolutions`, `TraitEnv`'s
+three, liveness, the topological sort, and the `DefTable` seed. The snapshot
+carries the `all_*` tables and the `TypeTable` but not these, though
+`TypeSystem` holds both behind `Rc` / `Arc` already.
+
+Three duplications sit inside the pass. `collect_function_signatures`
+resolves every impl method's return type into a name-keyed map, and
+`record_impl_decls` resolves the same methods again into `method_sigs` in the
+same pass. The five `generic_*` maps and `function_return_types` on
+`ModuleDecls` are `DeclSig` fields rekeyed by name and split, populated
+twice, and reassembled at their one consumer. `Signatures` assembly deep-clones
+every `MethodSig` / `ImplSig` / `TraitSig` in the program — including each
+default-argument AST — where `function_sigs` already proves `Rc` works.
+
+Closing it: one walk the collectors hang off; `TypeLookup::new(…)` and a
+hoisted `ModuleDecls::default()` in place of the two 19-field literals and
+their eight per-module empty maps; the newtype fixpoint replaced by a
+topological pass, since `Resolutions` already resolves each base's head; the
+name-keyed projections deleted in favour of reading `DeclSig`; `Rc` on the
+remaining signature kinds; and the snapshot seeding `Resolutions` and
+`TraitEnv` as it seeds the `all_*` tables.
+
+### Name resolution has four answerers
+
+`Resolutions` is the one answer for what a written name means
+([`wep-2026-08-12-declaration-identity.md`](./wep-2026-08-12-declaration-identity.md)),
+but three approximations of the same question survive: the
+`validate_*_type_names` walkers in `orchestration.rs` (1,231 lines) testing
+spellings against a global string set, `reject_unresolved_annotation` (23
+sites, silenced after the first error anywhere), and
+`TypeSystem::is_known_type_name`. The walkers are the weakest of the four:
+they never check a generic head, accept a name declared in an unrelated
+module because the set is a global union, and do not scope blocks — all three
+of which `Resolutions` answers, at the same `AstId`s.
+
+Closing it: emit the `UnknownType` and `InferPlaceholderNotAllowed`
+diagnostics from a scan of `Resolutions` for `Resolution::Unresolved` at
+type-position sites, and delete the walkers, `reject_unresolved_annotation`,
+and `known_type_names_cache` with them. The golden diffs are diagnostic
+ordering.
+
+### Reify re-decides what annotate knew
+
+The completeness rule holds for the facts that exist; what is left is the
+facts that do not. Reify still runs a resolver of its own —
+`symbol_named`, `case_path`, `lookup_struct_field_index`,
+`lookup_free_func_params`, `qualified_owner_decl`, the pattern-side
+`scrutinee_*` lookups — and `reify_call` re-derives its callee's shape in
+eight sequential probe arms. Those are why `Reify` still carries `symbols`,
+`loaded_modules`, `current_type_param_names` and `current_effect_param_names`,
+and why 14 `type_lookup()` sites survive in a phase that is meant to resolve
+no names.
+
+Each retires against one recorded fact: a `call_shape` on `CallExpr`
+(direct / indirect / variant / flags), a `field_access` on `FieldAccessExpr`
+(index, name, type), a `case_construct` on every case identifier and pattern
+(owner, index, payload type), effects on the written `fn(…) with E` node and
+`#[benign]` list, and the callee's parameter defaults on the free-call
+dispatch fact as the static path already carries them. The last two also
+retire the surviving `resolve_type` call and `apply_function_type_effects`.
+
+The reads that remain are fail-safe where the contract is fail-loud: 84
+`unwrap_or*` defaults against 48 `.expect`s. Most are legitimately optional
+("this node has no coercion"), but roughly a quarter are decision-bearing — an
+unknown field name writes field 0, a missing tuple overlay falls back to the
+truncated base map, a malformed literal emits `0` — and each silently changes
+emitted TIR. `unescape_checked` is the model for the literal group: the body
+walk already rejected the input, so the reify-side read is an `.expect`.
+
+Closing it: the five fact maps, then the fail-safe conversion, then one RAII
+`with_module_perspective` for the three hand-rolled module swaps (the
+default-argument one restores six values across a loop with an early exit),
+and `tir::build` for the pure TIR builders and the attribute extractors that
+have no reify content.
 
 ### The query layer is only partly moved
 
-Boundaries by type hold for the four components, but the walker still carries
-544 methods against `TypeSystem`'s 74, and the dispatch and call paths
+Boundaries by type hold for the four components, but the walker carries 660
+methods against `TypeSystem`'s 83, and 150 of those touch no walk state at
+all — they read `tysys` and nothing else, and are on `Elaborator` because
+that is where they were written. The dispatch and call paths
 (`method_lookup.rs`, `call.rs`) remain predominantly walker-side even where
-they ask no walk-state question. Methods exceeding 400 lines remain, with
-`resolve_call` the largest at 1282. Separately, the decl pass answers each of
-its questions
-with its own scan of every module's item list — more than a dozen in total — so
-a new declaration fact defaults to a new scan rather than a place in an
-existing walk.
+they ask no walk-state question, and `collect_trait_method_matches_from_impl`
+goes further: it enters a type-param scope, clears two maps and reads them
+straight back to build a slot map, using the walker's scope as a scratch
+accumulator for a value it could construct directly.
 
-Closing it: move each query that writes no walk state onto `TypeSystem`, which
-is also what makes it testable without a walker, and give the decl pass one
-walk that the individual collectors hang off.
+`AnnotateState` still exists, reaching `effect_check.rs` and `semantics.rs`
+as a carrier, and the borrowed compilation-unit inputs (symbols, logger,
+interner, invocations, entry module) are still five separate fields threaded
+identically through `module_elaborator` and `Reify::new` rather than one
+`ElabEnv`.
+
+Closing it: move each query that writes no walk state onto `TypeSystem`,
+which is also what makes it testable without a walker, with
+`typecheck.rs`'s three layers (pure function, `TypeSystem` method returning
+data, walker method that emits) as the template; dissolve `AnnotateState`,
+with `tysys`, `module_semantics`, `liveness` and `world_registry` landing on
+`Semantics` and the rest becoming driver locals or `ElabEnv` fields; and
+split `Scope`, whose recursion guards (`trait_check_stack`, `member_edges`)
+are query-local frames rather than walk state.
+
+### Transient walk state without guards
+
+`scope.rs` guards what it owns, and nothing else is guarded.
+`assoc_binding_stack` is mutated by a hand-written insert / `shift_remove`
+pair around a call that can return early;
+`with_module_perspective_for` and `with_reference_recording_suppressed`
+restore by assignment after the body rather than on drop;
+`FunctionContext`'s `for_continue_labels` and `compound_hoist_types` are
+saved and restored by hand at six sites, one of them with two restore points
+72 lines apart. None of the five is panic-safe, and the invariant row above
+counts 29 `mem::replace` / `mem::take` sites on walk state outside
+`scope.rs`.
+
+Closing it: `with_scope_field` is the pattern; each of the five becomes a
+guard, and `assoc_binding_stack` moves onto `Scope` where the membership rule
+puts it.
+
+### The walker's own duplication
+
+Below the dispatch layer the same shapes recur. `resolve_binary_op` (789
+lines) contains the operator ladder three times and `resolve_unary` a fourth,
+with three byte-identical receiver-name blocks and five identical
+`ResolvedTraitMethod` literals between them. `resolve_struct_literal` (544
+lines) looks the same declaration up nine times and substitutes through three
+different APIs. `resolve_if_expr`'s two condition arms share a seven-line
+identical block and a near-identical branch match. The `let` and `if let`
+struct-pattern arms duplicate their missing-field check and disagree on
+newtype transparency. The exhaustiveness checker (595 lines in `expr.rs`)
+needs `TypeSystem`, three environment questions and a diagnostic sink; seven
+of its 17 functions already take no `self`, and the `&mut` on the two walker
+methods it calls is unearned.
+
+Closing it: one operator dispatch, one `unify_branches`, one struct-pattern
+check, one declaration lookup per literal, and `elaborator/exhaustive.rs`.
+None of these changes what the language accepts; the e2e corpus is the
+verification.
 
 ## Consequences
 
@@ -611,6 +850,10 @@ walk that the individual collectors hang off.
   a walker arm cannot open-code a foreign-AST lookup because the map is gone.
   Every new field has a sub-struct it belongs to, and the membership criterion
   is mechanical.
+- A body fact is one line in one list, and every reader sees every walk. The
+  bug class this removes is omission from a hand-kept copy, whose symptom is
+  every element of an unrolled loop getting the last element's answer — a
+  miscompile or a check that never fires, per fact kind, silently.
 - `annotate` actually annotates. `Semantics` is complete when it returns, so
   the LSP path has a phase output with a contract rather than a by-product of
   TIR emission.
@@ -634,6 +877,13 @@ walk that the individual collectors hang off.
   default bodies), so for those nodes the AST outlives the walk that read it.
 - Diagnostic timing shifts: a broken signature errors once at its declaration,
   not at each use.
+- A body fact is read per walk, so a consumer that wants one answer for a node
+  must say which walk it means. `Semantics::fact_at` answering the first walk
+  is a default, not a derivation, and the checks that need every element must
+  say so.
+- `TypeAnnotations` derefs to its own `BodyFacts`, so a recorder writes
+  `types.<map>` whichever group holds the map. The two groups are then
+  distinguishable only at the struct definition.
 - Bigger up-front design surface. The membership rules must be respected when
   adding fields — which is the point, since they replace the absence of any
   rule.
@@ -647,6 +897,11 @@ walk that the individual collectors hang off.
 - `ModuleSemantics` or `Signatures` becomes the new dumping ground. Both
   membership rules are one sentence; reviews reject anything that is not a
   declaration's signature, or that has no sub-struct.
+- A body fact filed outside `with_body_facts!` because the placement question
+  was skipped. It compiles, and it is wrong only for a node inside an
+  unrolled tuple `for-of`, which is the corner the corpus covers thinnest —
+  `tuple_for_of_element_facts.wado` and `tuple_for_of_effect_error.wado` are
+  the two fixtures a new fact should be exercised against.
 - Stdlib-snapshot compatibility: `Signatures` is built in the same pass and
   seeded the same way as the other decl tables; the snapshot round-trip tests
   cover it.

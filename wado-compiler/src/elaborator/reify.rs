@@ -26,24 +26,15 @@ use super::sem::ModuleSemantics;
 use super::types::{FunctionContext, TypeLookup};
 use super::tysys::TypeSystem;
 
-/// Generate the `ann_*` annotation accessors on [`Reify`]. Each expands to
-/// a method that builds the canonical `AstId` for `id` in the current
-/// module, walks `self.tuple_overlay_stack` innermost-first looking for that
-/// key, then falls back to `self.sem.types.<map>`, returning a clone. See
-/// the accessor doc comment on the `impl` block for why this exists.
+/// Generate the `ann_*` annotation accessors on [`Reify`], one per
+/// [`super::sem::types::BodyFacts`] map from the list `with_body_facts!`
+/// names, each reading through [`Reify::ann`]. See the accessor doc comment
+/// on the `impl` block for why this exists.
 macro_rules! reify_annotation_accessors {
-    ($($name:ident => $map:ident : $val:ty),+ $(,)?) => {
+    ($($(#[$doc:meta])* $name:ident => $map:ident : $val:ty),+ $(,)?) => {
         $(
             fn $name(&self, id: crate::ast::AstId) -> Option<$val> {
-                // Annotation maps are keyed by the globally-unique `AstId`
-                // itself; a node names its facts no matter which module's
-                // perspective reify currently has swapped in.
-                for overlay in self.tuple_overlay_stack.iter().rev() {
-                    if let Some(v) = overlay.$map.get(&id) {
-                        return Some(v.clone());
-                    }
-                }
-                self.sem.types.$map.get(&id).cloned()
+                self.ann(|facts| &facts.$map, id)
             }
         )+
     };
@@ -341,13 +332,13 @@ pub(crate) struct Reify<'a, H: CompilerHost> {
     pub(crate) current_effect_param_names: Vec<String>,
     /// Active per-element annotation overlays for the tuple `for-of`(s)
     /// currently being unrolled, innermost last. While reifying element
-    /// `i` of a tuple for-of, that element's [`ElementOverlay`] sits on
-    /// top; the annotation accessors (`ann_*`) consult the stack from the
-    /// top down before falling back to `sem.types`. A nested inner for-of
-    /// pushes its own overlay above the outer one, so inner-body nodes
-    /// shadow correctly while outer-body nodes fall through to the outer
-    /// overlay. See [`Self::reify_tuple_for_of`].
-    pub(crate) tuple_overlay_stack: Vec<super::sem::types::ElementOverlay>,
+    /// `i` of a tuple for-of, that element's [`super::sem::types::BodyFacts`]
+    /// sits on top; [`Self::ann`] consults the stack from the top down before
+    /// falling back to `sem.types`. A nested inner for-of pushes its own
+    /// overlay above the outer one, so inner-body nodes shadow correctly while
+    /// outer-body nodes fall through to the outer overlay. See
+    /// [`Self::reify_tuple_for_of`].
+    pub(crate) tuple_overlay_stack: Vec<super::sem::types::BodyFacts>,
     /// Per-`ForOfStmt` visit counter. Annotate records one overlay set per
     /// *instantiation* of a tuple for-of in walk order; reify increments
     /// this each time it reifies the same `for_of.id` so it consumes the
@@ -444,7 +435,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// spelling: `Color::Red` at its own segments, a bare `Red` as annotate
     /// read it off the expected type.
     fn case_path(&self, ident: &ast::IdentExpr) -> Option<(Option<crate::defs::DefId>, String)> {
-        if let Some(&owner) = self.sem.types.bare_cases.get(&ident.id) {
+        if let Some(owner) = self.ann_bare_case(ident.id) {
             return Some((Some(owner), self.tysys.qualified_case(owner, &ident.name)));
         }
         let (prefix, _) = ident.name.split_once("::")?;
@@ -537,44 +528,36 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         }
     }
 
-    // Annotation accessors that honour active tuple `for-of` overlays. A tuple
-    // for-of body is resolved once per element, and annotate moved each
-    // element's facts out of the base `sem.types` maps into an `ElementOverlay`,
-    // truncating the base — so every read of one of these maps must go through
-    // its `ann_*` accessor, which walks the overlay stack innermost-first.
-    reify_annotation_accessors! {
-        ann_local_type => local_types: crate::tir::TypeId,
-        ann_let_annotated_type => let_annotated_types: crate::tir::TypeId,
-        ann_method_dispatch => method_dispatch: super::sem::types::MethodDispatch,
-        ann_coercions => coercions: super::sem::types::CoercionChoice,
-        ann_desugars => desugars: super::sem::types::DesugarKind,
-        ann_generic_instantiations => generic_instantiations: super::sem::types::GenericInstantiation,
-        ann_closure_captures => closure_captures: super::sem::types::ClosureCaptureInfo,
-        ann_call_param_types => call_param_types: Vec<crate::tir::TypeId>,
-        ann_assert_captures => assert_captures: super::sem::types::AssertCaptureInfo,
-        ann_for_of_iterator => for_of_iterator: super::sem::types::ForOfIteratorInfo,
-        ann_operator_dispatch => operator_dispatch: super::sem::types::OperatorDispatch,
-        ann_static_method_dispatch => static_method_dispatch: super::sem::types::StaticMethodDispatch,
-        ann_sequence_coercions => sequence_coercions: super::sem::types::SequenceCoercionFacts,
-        ann_key_value_coercions => key_value_coercions: super::sem::types::KeyValueCoercionFacts,
-        ann_literal_conversions => literal_conversions: super::sem::types::LiteralFromCall,
-        ann_index_assign_dispatch => index_assign_dispatch: super::sem::types::OperatorDispatch,
+    /// The body fact `map` records for `id` in the walk reify is replaying: a
+    /// tuple `for-of` body is resolved once per element, and annotate peeled
+    /// each element's facts off the module's own into a
+    /// [`super::sem::types::BodyFacts`] overlay, so the active overlays are
+    /// consulted innermost-first before the module's own. Every read of a body
+    /// fact goes through here — the maps are keyed by the globally-unique
+    /// `AstId`, so a node names its facts whichever module's perspective reify
+    /// has swapped in.
+    fn ann<V: Clone>(
+        &self,
+        map: fn(&super::sem::types::BodyFacts) -> &IndexMap<crate::ast::AstId, V>,
+        id: crate::ast::AstId,
+    ) -> Option<V> {
+        self.tuple_overlay_stack
+            .iter()
+            .rev()
+            .chain(std::iter::once(&self.sem.types.body))
+            .find_map(|facts| map(facts).get(&id).cloned())
     }
 
-    /// Recorded type of an expression, honouring tuple-for-of overlays like the
-    /// macro-generated accessors, but reporting an indefinite one as absent so
-    /// the node falls back to its `expected_type`.
+    super::sem::types::with_body_facts!(reify_annotation_accessors);
+
+    /// Recorded type of an expression, reporting an indefinite one as absent
+    /// so the node falls back to its `expected_type`.
     ///
     /// The body walk records indefinite types for its own AST analyses;
     /// building with one reifies a bare `null` as an `Option` nothing inhabits
     /// and fails WIR validation.
     fn ann_expression_types(&self, id: crate::ast::AstId) -> Option<crate::tir::TypeId> {
-        let raw = self
-            .tuple_overlay_stack
-            .iter()
-            .rev()
-            .find_map(|overlay| overlay.expression_types.get(&id).copied())
-            .or_else(|| self.sem.types.expression_types.get(&id).copied())?;
+        let raw = self.ann_recorded_expression_type(id)?;
         (!self.tysys.type_table.borrow().is_indefinite(raw)).then_some(raw)
     }
 
@@ -4018,7 +4001,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // element's overlay is pushed onto `tuple_overlay_stack` while its
         // binding and body are reified so the `ann_*` accessors see the
         // right per-element facts instead of the truncated base maps.
-        let instantiation: Vec<super::sem::types::ElementOverlay> = {
+        let instantiation: Vec<super::sem::types::BodyFacts> = {
             let for_of_key = for_of.id;
             let visit = self.tuple_overlay_visits.entry(for_of_key).or_insert(0);
             let k = *visit;
@@ -7090,16 +7073,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         use crate::tir::{CallArg, FunctionRef, TirExprKind};
 
         let _ = from_type;
-        let facts = self
-            .sem
-            .types
-            .from_call_facts
-            .get(&caller_id)
-            .cloned()
-            .expect(
-                "resolve_from_call records FromCallFacts at every site reify hits — \
+        let facts = self.ann_from_call_facts(caller_id).expect(
+            "resolve_from_call records FromCallFacts at every site reify hits — \
                  ?-op, Type::from(x), and Type::<…>::from(x)",
-            );
+        );
         let from_trait = facts.from_trait_name.with_args(vec![facts.from_name]);
 
         TirExpr::new(
@@ -7151,7 +7128,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             // reifies the handler expression and stitches one
             // `TirHandlerBinding` per recorded effect entry.
             let binding_key = binding.id;
-            let Some(facts) = self.sem.types.handler_bindings.get(&binding_key).cloned() else {
+            let Some(facts) = self.ann_handler_bindings(binding_key) else {
                 // Annotate didn't record this binding — either it
                 // bailed (diagnosed type) or the binding shape is
                 // unsupported; skip to mirror the elaborator's
@@ -7976,8 +7953,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             // `resolve_from_call` and records `FromCallFacts`
             // under `call.id`. Reify reuses `reify_from_call` so both the
             // ?-op path and this static-call path emit identical TIR.
-            let from_facts_key = call.id;
-            if self.sem.types.from_call_facts.contains_key(&from_facts_key) {
+            if self.ann_from_call_facts(call.id).is_some() {
                 return self.reify_from_call(recorded_type, arg_type, arg, span, call.id);
             }
 
@@ -9065,7 +9041,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         //    instantiation's type_args when present. A bare case (`None`)
         //    resolves to its declaration, which is no function; it is the
         //    case below.
-        let is_bare_case = self.sem.types.bare_cases.contains_key(&ident.id);
+        let is_bare_case = self.ann_bare_case(ident.id).is_some();
         if !is_bare_case
             && self
                 .sem

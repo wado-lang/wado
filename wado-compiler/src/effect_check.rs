@@ -1241,8 +1241,10 @@ impl AstVisitor for SemEffectWalker<'_> {
                 }
             }
             Expr::MethodCall(method_call) => {
-                let call_key = method_call.id;
-                if let Some(dispatch) = self.sem.method_dispatch_at(call_key) {
+                // One dispatch per walk that reached the call: a tuple for-of
+                // body's per element, each of which must hold.
+                let sem = self.sem;
+                for dispatch in sem.method_dispatches_at(method_call.id) {
                     let func_ref = dispatch.function_ref.clone();
                     let mut effects = self.method_effects(&func_ref);
                     effects.extend(self.effect_op_requirement(&func_ref, None));
@@ -1253,12 +1255,13 @@ impl AstVisitor for SemEffectWalker<'_> {
                 }
             }
             Expr::StaticMethodCall(static_call) => {
-                let call_key = static_call.id;
-                if let Some((func_ref, self_in_args)) = self
+                let dispatches: Vec<(FunctionRef, bool)> = self
                     .annotations
-                    .and_then(|ann| ann.static_method_dispatch.get(&call_key))
+                    .into_iter()
+                    .flat_map(|ann| ann.all(|facts| &facts.static_method_dispatch, static_call.id))
                     .map(|dispatch| (dispatch.function_ref.clone(), dispatch.self_in_args))
-                {
+                    .collect();
+                for (func_ref, self_in_args) in dispatches {
                     let mut effects = self.method_effects(&func_ref);
                     effects.extend(self.effect_op_requirement(&func_ref, None));
                     let params = self.method_param_types(&func_ref);
@@ -2061,18 +2064,17 @@ fn resolve_returned_args<'e>(
             let mut args: Vec<&Expr> = vec![&mc.receiver];
             args.extend(mc.args.iter());
             let returned = sem
-                .method_dispatch_at(mc.id)
-                .map(|d| mangled(&d.function_ref))
-                .unwrap_or_default();
+                .method_dispatches_at(mc.id)
+                .flat_map(|d| mangled(&d.function_ref))
+                .collect();
             Some(ReturnedCall { returned, args })
         }
         Expr::StaticMethodCall(sc) => {
             let args: Vec<&Expr> = sc.args.iter().collect();
             let returned = annotations
-                .static_method_dispatch
-                .get(&sc.id)
-                .map(|d| mangled(&d.function_ref))
-                .unwrap_or_default();
+                .all(|facts| &facts.static_method_dispatch, sc.id)
+                .flat_map(|d| mangled(&d.function_ref))
+                .collect();
             Some(ReturnedCall { returned, args })
         }
         _ => None,
@@ -2218,9 +2220,9 @@ impl RefFlow<'_, '_> {
                 let stored = self
                     .ctx
                     .sem
-                    .method_dispatch_at(mc.id)
-                    .map(|d| self.mangled_stored(&d.function_ref))
-                    .unwrap_or_default();
+                    .method_dispatches_at(mc.id)
+                    .flat_map(|d| self.mangled_stored(&d.function_ref))
+                    .collect();
                 Some(ResolvedCall { stored, args })
             }
             Expr::StaticMethodCall(sc) => {
@@ -2228,10 +2230,9 @@ impl RefFlow<'_, '_> {
                 let stored = self
                     .ctx
                     .annotations
-                    .static_method_dispatch
-                    .get(&sc.id)
-                    .map(|d| self.mangled_stored(&d.function_ref))
-                    .unwrap_or_default();
+                    .all(|facts| &facts.static_method_dispatch, sc.id)
+                    .flat_map(|d| self.mangled_stored(&d.function_ref))
+                    .collect();
                 Some(ResolvedCall { stored, args })
             }
             _ => None,
@@ -2635,17 +2636,20 @@ impl AstVisitor for PurityWalker<'_> {
                 }
             }
             Expr::MethodCall(method_call) => {
-                if let Some(dispatch) = self.sem.method_dispatch_at(method_call.id) {
+                let sem = self.sem;
+                for dispatch in sem.method_dispatches_at(method_call.id) {
                     let effects = self.index.method_effects(&dispatch.function_ref);
                     self.flag_if_effectful(&effects, &method_call.method, method_call.span);
                 }
             }
             Expr::StaticMethodCall(static_call) => {
-                if let Some(func_ref) = self
+                let func_refs: Vec<FunctionRef> = self
                     .annotations
-                    .and_then(|ann| ann.static_method_dispatch.get(&static_call.id))
+                    .into_iter()
+                    .flat_map(|ann| ann.all(|facts| &facts.static_method_dispatch, static_call.id))
                     .map(|dispatch| dispatch.function_ref.clone())
-                {
+                    .collect();
+                for func_ref in func_refs {
                     let effects = self.index.method_effects(&func_ref);
                     self.flag_if_effectful(&effects, &static_call.method, static_call.span);
                 }
