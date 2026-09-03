@@ -2461,7 +2461,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         receiver_type_id: Option<TypeId>,
         method_name: &str,
     ) {
-        let (Some(bridge), Some(receiver)) = (self.tysys.solver.clone(), receiver_type_id) else {
+        let (Some(bridge), Some(receiver)) = (self.tysys.solver.as_ref(), receiver_type_id) else {
             return;
         };
         bridge.report_selection_disagreement(

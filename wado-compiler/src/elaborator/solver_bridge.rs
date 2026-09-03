@@ -896,8 +896,15 @@ impl SolverBridge {
             return;
         }
         let defs = tysys.resolutions.defs();
+        // Two impls of one trait often sit in one module, so the module alone
+        // does not say which block ran. The span does.
         let name = |chosen: &Chosen| match chosen {
-            Chosen::Impl(def) => format!("the impl in `{}`", defs.module(*def)),
+            Chosen::Impl(def) => format!(
+                "the impl at `{}`{}",
+                defs.module(*def),
+                defs.span(*def)
+                    .map_or(String::new(), |s| format!(":{}", s.line))
+            ),
             Chosen::Derived => "a derived body".to_string(),
             Chosen::Nothing => "nothing".to_string(),
             Chosen::Ambiguous => "no one impl, and reports".to_string(),
