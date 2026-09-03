@@ -5,8 +5,10 @@ The Wado compiler crate. The NIR optimizer has its own guide:
 
 ## Rules
 
-- `codegen.rs` emits the `Package` as is; it knows nothing of the earlier phases.
-- Only `name.rs` knows a name format. Mangling and monomorphization go through it.
+- `src/codegen.rs` emits the `Package` as is; it knows nothing of the earlier
+  phases.
+- Only `src/name.rs` knows a name format. Mangling and monomorphization go
+  through it.
 - A declaration is identified by its `DefId`, never by its name — see
   [WEP: Declaration Identity](../docs/wep-2026-08-12-declaration-identity.md).
 - Walk IR through the visitor utilities, and answer a question with one resolver
@@ -27,7 +29,7 @@ release build embeds them, as does any `wasm32` build, which has no filesystem.
 `wado-from-idl/AGENTS.md` first.
 
 `builtin::select` returns one of its operands rather than a copy, so write the
-`if` for `i128`, `u128` and any composite: `optimize/select_lowering.rs`
+`if` for `i128`, `u128` and any composite: `src/optimize/select_lowering.rs`
 rewrites what qualifies and refuses the rest on that ground.
 
 ## E2E Tests
