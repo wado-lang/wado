@@ -841,6 +841,66 @@ impl<T: Deserialize> Deserialize for Option<T> {
     }
 }
 
+/// A value of any shape, read and thrown away.
+///
+/// It is how a schema requires a member's *absence*: an `Option<T>` field
+/// cannot, because it reads an explicit `null` as the member never sent.
+pub struct IgnoredAny {
+}
+
+struct IgnoredAnyVisitor {
+}
+
+impl Deserialize for IgnoredAny {
+    fn deserialize<D: Deserializer>(d: &mut D) -> Result<IgnoredAny, DeserializeError> {
+        let mut visitor = IgnoredAnyVisitor {};
+        return d.deserialize_any(&mut visitor);
+    }
+}
+
+impl Visitor for IgnoredAnyVisitor {
+    type Value = IgnoredAny;
+
+    fn visit_null(&mut self) -> Result<IgnoredAny, DeserializeError> {
+        return Result::Ok(IgnoredAny {});
+    }
+
+    fn visit_bool(&mut self, _v: bool) -> Result<IgnoredAny, DeserializeError> {
+        return Result::Ok(IgnoredAny {});
+    }
+
+    fn visit_f64(&mut self, _v: f64) -> Result<IgnoredAny, DeserializeError> {
+        return Result::Ok(IgnoredAny {});
+    }
+
+    fn visit_string(&mut self, _v: String) -> Result<IgnoredAny, DeserializeError> {
+        return Result::Ok(IgnoredAny {});
+    }
+
+    fn visit_bytes(&mut self, _v: ByteList) -> Result<IgnoredAny, DeserializeError> {
+        return Result::Ok(IgnoredAny {});
+    }
+
+    fn visit_unknown(&mut self, _raw: ByteList) -> Result<IgnoredAny, DeserializeError> {
+        return Result::Ok(IgnoredAny {});
+    }
+
+    fn visit_seq<A: DeserializeSeq>(&mut self, seq: &mut A) -> Result<IgnoredAny, DeserializeError> {
+        while let Some(_) = seq.next_element::<IgnoredAny>()? {
+        }
+        seq.end()?;
+        return Result::Ok(IgnoredAny {});
+    }
+
+    fn visit_map<A: DeserializeMap>(&mut self, map: &mut A) -> Result<IgnoredAny, DeserializeError> {
+        while let Some(_) = map.next_key_string()? {
+            let _ = map.next_value::<IgnoredAny>()?;
+        }
+        map.end()?;
+        return Result::Ok(IgnoredAny {});
+    }
+}
+
 impl<T: Deserialize> Deserialize for List<T> {
     fn deserialize<D: Deserializer>(d: &mut D) -> Result<List<T>, DeserializeError> {
         let mut seq = d.begin_seq()?;

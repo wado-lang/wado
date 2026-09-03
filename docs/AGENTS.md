@@ -167,3 +167,4 @@ missing and what closing it takes. A deliberate omission goes in Decision.
 - [Stream Copy Results](./wep-2026-08-30-stream-copy-result.md)
 - [`wado lint` — Corpus Checks](./wep-2026-08-31-wado-lint.md)
 - [Trait Resolution — One Order, Written Down](./wep-2026-09-01-trait-resolution.md)
+- [JSON Web Tokens (`core:jwt`)](./wep-2026-09-02-core-jwt.md)
