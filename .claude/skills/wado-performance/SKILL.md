@@ -230,6 +230,37 @@ mise run benchmark-all > h1.log 2>&1  # …and so on, 3 each
 node benchmark/ab.ts --base b1.log b2.log b3.log --head h1.log h2.log h3.log
 ```
 
+**Hash the wasm before you time anything.** Compile every benchmark under both
+compilers and compare: a row whose bytes are identical cannot have moved, so
+whatever the suite says about it is the host. That turns a noisy whole-suite run
+into a two-row question, and it is not a weaker check than timing — it is a
+stronger one. A `field_scalarize` fix left byte-identical output on nine of
+eleven benchmarks; the suite had meanwhile reported `fts` 6.9% SLOWER with
+non-overlapping ranges, which the identical SHA-256 retired outright.
+
+Delete both outputs each round and require both to exist: the glob also catches
+the schema modules, which are no world entry point and do not compile, and a
+compare against the previous round's leftovers reads as "identical" — the one
+answer this check must never give by accident. A `SKIPPED` row is uncovered, not
+unchanged, so finish the ones that have a world of their own
+(`--world wasi:http/service` for `http_routing/app.wado`) before reading the
+sweep as complete.
+
+```sh
+for f in benchmark/*/*.wado; do
+  rm -f /tmp/b.wasm /tmp/h.wasm
+  "$base" compile -O2 -o /tmp/b.wasm "$f" > /dev/null 2>&1
+  target/release/wado compile -O2 -o /tmp/h.wasm "$f" > /dev/null 2>&1
+  if [ -s /tmp/b.wasm ] && [ -s /tmp/h.wasm ]; then
+    cmp -s /tmp/b.wasm /tmp/h.wasm || echo "DIFFERS $f"
+  else
+    echo "SKIPPED $f"
+  fi
+done
+```
+
+Then time only the rows that differ, back to back, and read the rest as unmoved.
+
 `ab.ts` decides each row by whether the arms' `[min, max]` overlap, not by the
 delta: on a 5 ms benchmark a 6% gap between bests sits inside one arm's own
 spread. **Read the reference rows first** — C, Rust and JavaScript run the same
