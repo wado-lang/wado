@@ -508,8 +508,7 @@ Verified against the tree.
       `if c.pos == 0 { … } else { out.push(c) }` still moves `c`.
 - [x] Representative move / copy / share decisions pinned as e2e fixtures
       (`pattern_temp_no_alias`, over syntactic position × writability × binding
-      kind; `closure_capture_move`, `closure_confinement`,
-      `scalar_read_before_move`).
+      kind; `closure_capture`, `scalar_read_before_move`).
 - [ ] Key sharing on liveness rather than on the whole body, as _Sharing_ states.
       The share analysis is a forward walk with no liveness and no control flow,
       so a write anywhere refuses the binding.

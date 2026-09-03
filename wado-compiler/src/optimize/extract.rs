@@ -501,7 +501,7 @@ fn classify_candidate(
         ValueKind::FieldAccess { receiver, .. } => {
             let recv = *receiver;
             // Only a scalar field: an aggregate or reference field aliases a
-            // mutable backing the `heap_ver` does not pin (`array_index_1`).
+            // mutable backing the `heap_ver` does not pin (`array_index`).
             let scalar_field = ctx
                 .type_table
                 .is_primitive_like(engine.body.exprs[id].type_id);
