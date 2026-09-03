@@ -265,11 +265,12 @@ it. The solver takes one self-contained value instead:
 Program {
   impls:  ImplId      -> { trait_, trait_args, target, params: [{ bounds, pins }],
                            origin: Written | Derived | Marker }
-  traits: TraitDeclId -> { supertraits, holds_for_all, arg_defaults, on_ref }
+  traits: TraitDeclId -> { supertraits, holds_for_all, arg_defaults, on_ref,
+                           methods: [MethodId] }
   types:  TypeDeclId  -> { newtype_base }
   facts:  (TypeDeclId, TraitDeclId) -> { visible_from }
   assoc_bindings: (ImplId, AssocId) -> SolverType
-  scopes: ModuleId    -> { traits_in_scope }          -- arrives with `candidates`
+  scopes: ModuleId    -> { traits_in_scope }
 }
 
 SolverType = Decl(TypeDeclId, [SolverType]) | Param(u32) | Pack(u32)
@@ -277,9 +278,11 @@ SolverType = Decl(TypeDeclId, [SolverType]) | Param(u32) | Pack(u32)
 ```
 
 A declaration's kind and members are read by `derive` alone and arrive as a
-`Declaration` beside the program rather than living in it. Every id is a plain
-index, so a test writes `TypeDeclId(0)` and the program around it, with no
-source and no pipeline.
+`Declaration` beside the program rather than living in it. A `MethodId` is
+interned by name across the program, so two traits declaring `describe` share
+one and their collision is one question. Every id is a plain index, so a test
+writes `TypeDeclId(0)` and the program around it, with no source and no
+pipeline.
 
 A query carries an environment beside the program: the bounds in force where the
 question was asked. A generic body's `T: Tr` holds because its own signature says
@@ -413,22 +416,49 @@ under Known gaps.
 
 ## Known gaps
 
-### Scope is decided and not implemented
+### The order has no caller
 
-Scope is consulted once today, as a tie-break: when several same-named
-declarations collide and exactly one is in scope, that one answers
-(`select_trait_match`). Otherwise a trait's methods are candidates wherever its
-impls are loaded. What the decision above needs:
+`candidates` and `rank` answer the whole order, and nothing calls them:
+selection still runs on `select_trait_match`'s own collection and sort. It
+differs from the order above in five ways, and one differential closes all
+five.
 
-- [ ] Gate both candidate lists on the trait declaration's scope at the call
-      site, so a call in a module that imported nothing sees only the prelude.
-- [ ] Keep the unscoped search as the recovery path: run it only where the
-      scoped set came out empty, and turn its result into the "not imported
-      here" message rather than a candidate.
-- [ ] Gate the supertrait reach too: a body calling `Base`'s method through
-      `T: Sub` resolves today with `Base` unimported, and must stop.
-- [ ] Pin a `pub use` re-export as putting the trait in scope. An aliased
-      import already is (`trait_alias_import_in_scope.wado`).
+- [ ] Scope. `select_trait_match` consults it once, as a tie-break: when several
+      same-named declarations collide and exactly one is in scope, that one
+      answers. Otherwise a trait's methods are candidates wherever its impls are
+      loaded, and a body calling `Base`'s method through `T: Sub` resolves with
+      `Base` unimported. `candidates` gates on the declaration's scope and keeps
+      the unscoped search as the recovery path, reporting what it finds as the
+      trait to import rather than as a candidate.
+- [ ] Depth. The sort reads it off a blanket's bounds alone, so every
+      non-blanket candidate sits at 0 and rank 1 separates none of them: a
+      newtype's own `impl Tr for W` ties with its base's `impl Tr for Inner`
+      (`trait_newtype_concrete_impl_outranks_foreign_base.wado`), and a blanket
+      satisfied at the newtype loses to a concrete impl on the base
+      (`trait_newtype_blanket_beats_base_concrete.wado`). `candidates` measures
+      it as the level a candidate is selected at, over targets as well as
+      bounds.
+- [ ] Reference blankets. `impl<T: Bound> Tr for &T` reaches no call: the
+      reference step adopts only concrete `&T` impls, and the blanket collection
+      takes only value blankets (`trait_ref_blanket_dispatch.wado`). The
+      prelude's `Inspect for &T` works because the compiler answers that bound
+      itself. `candidates` walks the reference as a level of the chain, which
+      places such a blanket under a concrete `&T` impl and over the pointee's.
+- [ ] The cross-trait count. Blankets are excluded from it, so
+      `impl<T: Limit> Alpha for T` beside `impl<T: Limit> Beta for T`, both
+      declaring `describe`, tie silently. `candidates` collects a blanket like
+      any other candidate, so the pair reports.
+- [ ] Locality. The sort prefers a candidate in the calling module, and the
+      blanket ambiguity report groups local apart from foreign, so a tie the
+      order calls ambiguous is answered instead
+      (`trait_error_local_blanket_ties_foreign.wado`). `rank` reads no module at
+      all.
+
+Closing them is the differential for `candidates` and `rank` over the fixture
+corpus, as `verify_arg_synthesis` uses it for argument synthesis
+(WEP 2026-07-31), then the flip. A `pub use` re-export putting the trait in
+scope wants pinning as part of it; an aliased import already is
+(`trait_alias_import_in_scope.wado`).
 
 An unused-trait-import warning belongs to
 [Unused Diagnostics](./wep-2026-05-16-unused-diagnostics.md) rather than here,
@@ -448,45 +478,6 @@ unbounded value blanket. The other two still run over the AST:
 - [ ] The orphan rule. Moving it needs each declaration's module and the
       package boundary, which `Program` does not carry yet.
 
-### Rank 1 does not order the chain
-
-Depth is read off a blanket's bounds alone, so every non-blanket candidate sits
-at 0 and rank 1 separates none of them:
-
-- [ ] A newtype's own `impl Tr for W` and its base's `impl Tr for Inner` tie, and
-      the locality sort (still in place, below) decides. Written in one module the newtype's
-      wins, because the chain is collected nearest-first, but a local impl on
-      the base beats a foreign one on the newtype
-      (`trait_newtype_concrete_impl_outranks_foreign_base.wado`).
-- [ ] A blanket satisfied at the newtype loses to a concrete impl on the base,
-      because rank 2 runs first today
-      (`trait_newtype_blanket_beats_base_concrete.wado`).
-
-Closing both is one change: measure depth as the level a candidate is selected
-at, over an impl's target as well as a blanket's bounds, and rank it above
-concrete-over-blanket.
-
-### A ref blanket never dispatches
-
-`impl<T: Bound> Tr for &T` is accepted and reaches no call: the reference step
-adopts only concrete `&T` impls, and the blanket collection takes only value
-blankets. The prelude's `Inspect for &T` works because the compiler answers that
-bound itself.
-
-- [ ] Collect reference blankets as a third candidate list, ranked under a
-      concrete `&T` impl and over the base type's
-      (`trait_ref_blanket_dispatch.wado`).
-
-### Two traits' blankets sharing a method name are not reported
-
-`impl<T: Limit> Alpha for T` beside `impl<T: Limit> Beta for T`, both declaring
-`describe`, both applying to the receiver: the locality sort (still in place,
-below) answers when exactly one is local, and otherwise collection order does. Blankets are excluded
-from the cross-trait count, which is what makes this tie silent. Scope removes
-most of it, since two foreign blankets only compete where both traits are
-imported. The rest is the count: a blanket must join the collision like any
-other candidate.
-
 ### The other dispatch paths do not share the order
 
 `Type::m(args)` scans the receiver's trait impls current-module-first and takes
@@ -497,23 +488,6 @@ name. Ranks 0-3 exist on none of them; they agree with the order only by
 coincidence of scan order. One selection function serving every path is the
 fix; what stands in the way is that each path holds a different amount of the
 call (a receiver type, an operand class, a bound list).
-
-### Locality is still implemented
-
-The sort still prefers a candidate in the calling module, and the blanket
-ambiguity report still groups local apart from foreign. So a tie the order calls
-ambiguous is answered instead, and a tie neither settles falls to collection
-order:
-
-- [ ] Drop the local-over-foreign comparison from the sort.
-- [ ] Drop the locality grouping from the blanket ambiguity report, so two
-      blankets tied at rank 2 report whichever modules wrote them
-      (`trait_error_local_blanket_ties_foreign.wado`).
-
-Once the rest lands, only one shape reaches this: two value blankets of one
-trait holding at the same level, one written in the calling module. A duplicate
-pair is rejected where it is written, a newtype and its base are separated by
-rank 1, and two traits' blankets are the cross-trait ambiguity.
 
 ### Derivation is still a query in the compiler
 
@@ -526,14 +500,6 @@ descents to tell a recursive type from an ungrounded cycle. The solver's
 
 - [ ] Route the derived bodies through what `holds` reports instead of
       `record_bound_driven_synth_request_for`, and retire the member walk.
-
-### `candidates` is not written
-
-Of the five questions, `candidates` has no implementation and `rank` no caller,
-so selection still runs on `select_trait_match`'s own collection and sort.
-Closing this is the candidate lists and the scope gate as a function of
-`Program`, then the differential for `candidates` and `rank` over the corpus,
-then the flip.
 
 ### Three compiler items are outside the differential
 

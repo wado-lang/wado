@@ -84,7 +84,15 @@ impl Query<'_> {
         let answer = program
             .impls
             .iter()
-            .find_map(|(&id, def)| self.impl_answers(id, def, ty, trait_))
+            .find_map(|(&id, def)| {
+                // A bound spells no arguments, so only an impl at the trait's
+                // defaults answers one. Selection asks without this gate.
+                let implemented = def.trait_?;
+                if !program.bound_reaches(implemented, trait_) || !restates_defaults(program, def) {
+                    return None;
+                }
+                Some(self.impl_answers(id, def, ty)?.holds)
+            })
             .or_else(|| {
                 let base = newtype_base(program, ty)?;
                 self.holds(&base, trait_)
@@ -102,21 +110,11 @@ impl Query<'_> {
         answer
     }
 
-    /// Whether one impl answers the goal: its trait reaches `trait_` at the
-    /// defaults, its target matches `ty`, and every bound holds of what the
-    /// match bound.
-    fn impl_answers(
-        &mut self,
-        id: ImplId,
-        def: &ImplDef,
-        ty: &SolverType,
-        trait_: TraitDeclId,
-    ) -> Option<Holds> {
+    /// Whether one impl applies to `ty`: its target matches, and every bound
+    /// holds of what the match bound.
+    fn impl_answers(&mut self, id: ImplId, def: &ImplDef, ty: &SolverType) -> Option<Answer> {
         let program = self.program;
         let implemented = def.trait_?;
-        if !program.bound_reaches(implemented, trait_) || !restates_defaults(program, def) {
-            return None;
-        }
         // A value blanket answers no reference; `&T` reaches it through the
         // pointee.
         if matches!(def.target, SolverType::Param(_)) && matches!(ty, SolverType::Ref { .. }) {
@@ -180,8 +178,48 @@ impl Query<'_> {
             .flatten()
             .filter_map(|(assoc, binding)| Some((*assoc, bound_to(binding)?)))
             .collect();
-        Some(Holds { requests, assoc })
+        Some(Answer {
+            holds: Holds { requests, assoc },
+            trait_args: def
+                .trait_args
+                .iter()
+                .map(|arg| bound_to(arg).unwrap_or_else(|| arg.clone()))
+                .collect(),
+        })
     }
+}
+
+/// One impl applying to one type. `holds` reads the bound it answers; selection
+/// reads the arguments it answers at.
+struct Answer {
+    holds: Holds,
+    /// The impl's trait arguments at the type it matched, so two impls of one
+    /// trait compare on what the call would get rather than on how each spelled
+    /// it.
+    trait_args: Vec<SolverType>,
+}
+
+/// The trait arguments `def` applies to `ty` at, or `None` where it does not
+/// apply. This is selection's question: it names the trait, so unlike a bound
+/// it accepts an impl at any argument list (WEP 2026-07-31).
+pub(super) fn impl_applies(
+    program: &Program,
+    env: &Env,
+    scope: ModuleId,
+    id: ImplId,
+    def: &ImplDef,
+    ty: &SolverType,
+) -> Option<Vec<SolverType>> {
+    Some(
+        Query {
+            program,
+            env,
+            scope,
+            asking: Vec::new(),
+        }
+        .impl_answers(id, def, ty)?
+        .trait_args,
+    )
 }
 
 /// What a target parameter matched: a pack takes every element past the

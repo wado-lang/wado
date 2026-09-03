@@ -9,8 +9,9 @@ use crate::module_source::ModuleSource;
 use crate::name::is_builtin_shape_name;
 use crate::tir::{PrimitiveType, ResolvedType, TypeId, TypeTable};
 use crate::trait_solver::{
-    ArgDefault, AssocId, Declaration, Env, Fact, ImplDef, ImplOrigin, ModuleId, ParamDef, Pin,
-    Program, RefRule, SolverType, TraitDeclId, TypeDeclId, TypeDef, derive, holds,
+    ArgDefault, AssocId, Declaration, Env, Fact, ImplDef, ImplOrigin, MethodId, ModuleId,
+    ModuleScope, ParamDef, Pin, Program, RefRule, SolverType, TraitDeclId, TypeDeclId, TypeDef,
+    derive, holds,
 };
 
 use super::trait_env::{BlanketReceiver, ImplHeader};
@@ -43,6 +44,9 @@ pub(super) struct Lowering {
     tuple: Option<DefId>,
     /// A trait's associated types, by the trait and the name.
     assocs: IndexMap<(TraitDeclId, String), u32>,
+    /// Method names, interned across traits: two traits declaring `describe`
+    /// share one id, which is what makes their collision one question.
+    methods: IndexMap<String, u32>,
 }
 
 /// The id `key` has in `map`, minted at the next index when it has none.
@@ -66,6 +70,10 @@ impl Lowering {
 
     fn assoc(&mut self, trait_: TraitDeclId, name: &str) -> AssocId {
         AssocId(intern(&mut self.assocs, (trait_, name.to_string())))
+    }
+
+    fn method(&mut self, name: &str) -> MethodId {
+        MethodId(intern(&mut self.methods, name.to_string()))
     }
 
     fn module(&mut self, module: &ModuleSource) -> ModuleId {
@@ -403,6 +411,7 @@ impl SolverBridge {
         );
         Self::state_primitive_impls(tysys, &mut lowering, &mut program);
         Self::state_traits(tysys, &mut lowering, &mut program);
+        Self::state_scopes(tysys, &mut lowering, &mut program);
         Self::state_newtype_bases(tysys, &table, &mut lowering, &mut program);
         Self::derive_all(tysys, &table, &mut lowering, &mut program);
         Self::state_reflect_facts(tysys, &table, &lowering, &mut program);
@@ -522,10 +531,38 @@ impl SolverBridge {
             } else {
                 RefRule::Inherits
             };
+            let methods = header
+                .methods
+                .iter()
+                .map(|m| lowering.method(&m.name))
+                .collect();
             let id = lowering.trait_decl(trait_);
             let def = program.traits.entry(id).or_default();
             def.arg_defaults = defaults;
             def.on_ref = on_ref;
+            def.methods = methods;
+        }
+    }
+
+    /// What each module may name. A trait's methods are candidates at a call
+    /// site only where that trait's declaration is in scope there
+    /// (WEP 2026-09-01); where its impls were written does not enter.
+    fn state_scopes(tysys: &TypeSystem, lowering: &mut Lowering, program: &mut Program) {
+        for module in tysys.module_visible_types.keys() {
+            // A declaration reachable under two names is in scope once.
+            let traits_in_scope: IndexSet<TraitDeclId> = tysys
+                .resolutions
+                .decls_in_scope(module)
+                .filter(|def| tysys.trait_env.decl_index.contains(def))
+                .map(|def| lowering.trait_decl(def))
+                .collect();
+            let id = lowering.module(module);
+            program.scopes.insert(
+                id,
+                ModuleScope {
+                    traits_in_scope: traits_in_scope.into_iter().collect(),
+                },
+            );
         }
     }
 

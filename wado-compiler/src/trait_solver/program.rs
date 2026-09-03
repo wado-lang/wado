@@ -17,6 +17,11 @@ pub struct TraitDeclId(pub u32);
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 pub struct ImplId(pub u32);
 
+/// A method name, interned across the program: two traits declaring `describe`
+/// share one id, which is what makes their collision one question.
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+pub struct MethodId(pub u32);
+
 /// A type as selection reads it. A parameter is its position, so two targets
 /// equal here are one `(Trait, Type)` pair.
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
@@ -186,6 +191,21 @@ pub struct TraitDef {
     /// Per type parameter, its declared default, if any. A bound spells no
     /// arguments (WEP 2026-07-31), so it asks for the trait at its defaults.
     pub arg_defaults: Vec<Option<ArgDefault>>,
+    /// The methods it declares, which is what a call site matches on. A
+    /// supertrait's methods are not among them: an implementor writes a
+    /// separate impl for each trait.
+    pub methods: Vec<MethodId>,
+}
+
+/// What a module may name. A trait's methods are candidates only where its
+/// declaration is in scope, so a module absent from
+/// [`Program::scopes`](Program) reaches no trait at all.
+#[derive(Clone, PartialEq, Eq, Debug, Default)]
+pub struct ModuleScope {
+    /// Declared in the module, imported by name or by alias, re-exported to it
+    /// through `pub use`, or one of the prelude's. Where an impl was written
+    /// does not enter: impls stay globally visible.
+    pub traits_in_scope: Vec<TraitDeclId>,
 }
 
 /// A type declaration, reduced to what `holds` reads of it at a query. Its
@@ -242,6 +262,9 @@ pub struct Program {
     /// Each impl's `type X = …;` bindings, spelled with the impl's own
     /// parameters. What a [`Pin`] is checked against.
     pub assoc_bindings: IndexMap<ImplId, Vec<(AssocId, SolverType)>>,
+    /// What each module may name, which gates the candidates of a call made
+    /// there.
+    pub scopes: IndexMap<ModuleId, ModuleScope>,
 }
 
 /// The bounds in force where a question was asked: a generic body's `T: Tr`

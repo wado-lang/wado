@@ -260,12 +260,21 @@ impl Resolutions {
     /// can see the declaration, not whether some spelling matches.
     #[must_use]
     pub fn in_scope(&self, module: &ModuleSource, def: DefId) -> bool {
-        let tier = |t: &IndexMap<ModuleSource, IndexMap<String, DefId>>| {
-            t.get(module).is_some_and(|m| m.values().any(|d| *d == def))
-        };
-        tier(&self.scopes.imports)
-            || tier(&self.scopes.own)
-            || self.scopes.prelude.values().any(|d| *d == def)
+        self.decls_in_scope(module).any(|d| d == def)
+    }
+
+    /// Every declaration `module` may name: its `use` imports, its own —
+    /// including what its `pub use` re-exports reach — and the prelude's. A
+    /// declaration reachable under two names appears once per name.
+    pub fn decls_in_scope(&self, module: &ModuleSource) -> impl Iterator<Item = DefId> + '_ {
+        self.scopes
+            .imports
+            .get(module)
+            .into_iter()
+            .flatten()
+            .chain(self.scopes.own.get(module).into_iter().flatten())
+            .map(|(_, def)| *def)
+            .chain(self.scopes.prelude.values().copied())
     }
 
     /// The declaration a reference site names. `None` for a binder, a builtin
