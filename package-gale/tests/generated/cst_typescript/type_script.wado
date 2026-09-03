@@ -12791,7 +12791,8 @@ fn scan_single_expression_atom(tokens: &Array<i32>, pos: i32, follow: &List<List
             if try_0_end > best { best = try_0_end; }
             let try_19_end = scan_single_expression_atom_alt_19(tokens, start, follow);
             if try_19_end > best { best = try_19_end; }
-            if start + 1 > best { best = start + 1; }
+            pos = start + 1;
+            if pos > best { best = pos; }
             if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if alt_kind == TK_Delete {
@@ -12842,7 +12843,8 @@ fn scan_single_expression_atom(tokens: &Array<i32>, pos: i32, follow: &List<List
             if try_0_end > best { best = try_0_end; }
             let try_19_end = scan_single_expression_atom_alt_19(tokens, start, follow);
             if try_19_end > best { best = try_19_end; }
-            if start + 1 > best { best = start + 1; }
+            pos = start + 1;
+            if pos > best { best = pos; }
             if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if alt_kind == TK_Await {
@@ -14194,7 +14196,8 @@ fn scan_identifier_or_key_word(tokens: &Array<i32>, pos: i32, follow: &List<List
             let mut best: i32 = -1;
             let try_0_end = scan_identifier_or_key_word_alt_0(tokens, start, follow);
             if try_0_end > best { best = try_0_end; }
-            if start + 1 > best { best = start + 1; }
+            pos = start + 1;
+            if pos > best { best = pos; }
             if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if alt_kind == TK_Require {
@@ -14257,7 +14260,8 @@ fn scan_eos(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOL
     scan_alts: {
         if alt_kind == TK_SemiColon {
             let mut best: i32 = -1;
-            if start + 1 > best { best = start + 1; }
+            pos = start + 1;
+            if pos > best { best = pos; }
             let try_2_end = scan_eos_alt_2(tokens, start, follow);
             if try_2_end > best { best = try_2_end; }
             let try_3_end = scan_eos_alt_3(tokens, start, follow);

@@ -8181,7 +8181,8 @@ fn scan_pragma_value(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &
             let mut best: i32 = -1;
             let try_1_end = scan_pragma_value_alt_1(tokens, start, follow);
             if try_1_end > best { best = try_1_end; }
-            if start + 1 > best { best = start + 1; }
+            pos = start + 1;
+            if pos > best { best = pos; }
             if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else {
@@ -8952,7 +8953,8 @@ fn scan_compound_operator(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>
                 pos += 1;
                 if pos > best { best = pos; }
             }
-            if start + 1 > best { best = start + 1; }
+            pos = start + 1;
+            if pos > best { best = pos; }
             if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if alt_kind == TK_K_INTERSECT {

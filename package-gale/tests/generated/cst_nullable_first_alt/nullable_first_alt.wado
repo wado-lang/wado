@@ -1547,7 +1547,8 @@ fn scan_r(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLO
     scan_alts: {
         if alt_kind == TK_B {
             let mut best: i32 = -1;
-            if start + 1 > best { best = start + 1; }
+            pos = start + 1;
+            if pos > best { best = pos; }
             let try_0_end = scan_r_alt_0(tokens, start, follow);
             if try_0_end > best { best = try_0_end; }
             if best >= 0 { pos = best; break scan_alts; }

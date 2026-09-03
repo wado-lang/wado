@@ -195,7 +195,7 @@ Pick the current top frame off the live profile above rather than a fixed recipe
 here: the frames shift as levers land, and the mid-size ones are noisy, so
 re-measure before committing. Candidates read off the profile above:
 
-- **`TreeBuilder::finish`'s four column copies — measured, reverted (2026-09-03).**
+- **`TreeBuilder::finish`'s four column copies (measured, reverted 2026-09-03).**
   It value-copies `tag` / `a` / `b` / `alt` out of the builder into the
   returned `CstStore`, because Wado has no by-value `self` — four
   ~10K-element arrays per parse. Having the builder hold the `CstStore`
@@ -212,8 +212,8 @@ re-measure before committing. Candidates read off the profile above:
   leaves ~2000 comparisons on the fall-through path. ASCII resolves early (single-char
   branches are sorted and come first), so this is a worst case rather than a
   benchmark-visible cost. A sorted interval table with a binary search would bound it.
-- **A single-token partition guard re-tests the token its dispatch already
-  matched — landed for the single-token case (2026-09-03).**
+- **A guarded alt re-tests the token its partition guard already matched
+  (landed for the single-token guard, 2026-09-03).**
   `gen_scan_multi_alt` binds `alt_kind = pos < tokens.len() ? tokens[pos] :
   TK_EOF` and branches on it; a single-token partition
   (`groups_tokens[g] == [TK_IDENTIFIER]`, say) whose winning alt's first
@@ -221,20 +221,21 @@ re-measure before committing. Candidates read off the profile above:
   `if pos >= tokens.len() || tokens[pos] != TK_IDENTIFIER { break try_0; }`
   right after the branch that already established it. `guard_implies_first_token`
   (`parser_gen.wado`) elides that element and starts the alt body at
-  `pos = start + 1`; unsound to extend past a single-token guard without also
-  proving the alt's first element accepts every token the guard admits, which
-  it does not check. Isolated on `sqlite_parse`, three alternating pairs,
-  best-of-three: **1.150 → 1.120 ms/iter (+2.6%)**, all 3 rounds disjoint; 18
-  sites elide in the SQLite parser (`scan_any_name`'s `TK_IDENTIFIER` /
-  `TK_STRING_LITERAL` / `TK_OPEN_PAR` arms among them).
+  `pos = start + 1`. Extending it past a single-token guard needs proving the
+  alt's first element accepts every token the guard admits — a check the
+  landed version does not make, so it stays at exactly one token. Isolated on
+  `sqlite_parse`, three alternating pairs, best-of-three: **1.150 → 1.120
+  ms/iter (+2.6%)**, all 3 rounds disjoint; 18 sites elide in the SQLite
+  parser (`scan_any_name`'s `TK_IDENTIFIER` / `TK_STRING_LITERAL` /
+  `TK_OPEN_PAR` arms among them).
 
-  **Left open:** the multi-token case this bullet originally named —
-  `_kind_set_37(tokens[pos])` inside `scan_keyword`, reached from a
-  keyword-partition guard that already contains every token
-  `_kind_set_37` would test — needs the accepted-set-covers-guard-set
-  proof the landed version sidesteps by requiring exactly one token. Worth
-  it only if a future profile still shows `_kind_set_*` self-time
-  (2.6–4.7% pre-landing) after the single-token cut.
+  **Left open:** the multi-token case this bullet originally named. Inside
+  `scan_keyword`, `_kind_set_37(tokens[pos])` re-tests a keyword-partition
+  guard that already contains every token `_kind_set_37` would test. Closing
+  it needs the accepted-set-covers-guard-set proof the landed version
+  sidesteps by requiring exactly one token — worth it only if a future
+  profile still shows `_kind_set_*` self-time (2.6–4.7% pre-landing) after
+  the single-token cut.
 
 ### Generation-time cost: the generator itself (2026-07)
 
