@@ -260,21 +260,31 @@ impl Resolutions {
     /// can see the declaration, not whether some spelling matches.
     #[must_use]
     pub fn in_scope(&self, module: &ModuleSource, def: DefId) -> bool {
-        self.decls_in_scope(module).any(|d| d == def)
+        self.decls_in_scope(module).contains(&def)
     }
 
-    /// Every declaration `module` may name: its `use` imports, its own —
-    /// including what its `pub use` re-exports reach — and the prelude's. A
-    /// declaration reachable under two names appears once per name.
-    pub fn decls_in_scope(&self, module: &ModuleSource) -> impl Iterator<Item = DefId> + '_ {
-        self.scopes
-            .imports
-            .get(module)
+    /// Every declaration `module` may name — what each name it can write
+    /// reaches, through the one scope order: its `use` imports, then its own
+    /// (including what its `pub use` re-exports reach), then the prelude's.
+    ///
+    /// A nearer tier shadows a farther one, so a module declaring its own
+    /// `Add` reaches that one and not the prelude's. Enumerating the tiers
+    /// instead would put both in scope at once, which no name ever resolves to.
+    #[must_use]
+    pub fn decls_in_scope(&self, module: &ModuleSource) -> crate::hashmap::IndexSet<DefId> {
+        let tier = |t: &IndexMap<ModuleSource, IndexMap<String, DefId>>| {
+            t.get(module)
+                .into_iter()
+                .flatten()
+                .map(|(name, _)| name.clone())
+                .collect::<Vec<_>>()
+        };
+        tier(&self.scopes.imports)
             .into_iter()
-            .flatten()
-            .chain(self.scopes.own.get(module).into_iter().flatten())
-            .map(|(_, def)| *def)
-            .chain(self.scopes.prelude.values().copied())
+            .chain(tier(&self.scopes.own))
+            .chain(self.scopes.prelude.keys().cloned())
+            .filter_map(|name| self.scopes.resolve(module, &name))
+            .collect()
     }
 
     /// The declaration a reference site names. `None` for a binder, a builtin

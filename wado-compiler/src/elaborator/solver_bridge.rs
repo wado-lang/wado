@@ -558,6 +558,7 @@ impl SolverBridge {
             let traits_in_scope: IndexSet<TraitDeclId> = tysys
                 .resolutions
                 .decls_in_scope(module)
+                .into_iter()
                 .filter(|def| tysys.trait_env.decl_index.contains(def))
                 .map(|def| lowering.trait_decl(def))
                 .collect();
