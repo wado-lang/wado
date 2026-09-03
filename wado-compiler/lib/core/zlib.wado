@@ -2143,12 +2143,26 @@ fn gen_huffman_codes(lengths: &ByteList, max_sym: i32, max_bits: i32) -> List<i3
 }
 
 // Write a dynamic Huffman block
-// Symbol frequencies of a block: `symbols[i]` is a literal, EOB, or a length
-// symbol whose distance is `distances[i]`. Returns [lit_freq, dist_freq] with
-// EOB already counted.
+// An LZ77 token packed into one i32: the literal, EOB or length symbol in bits
+// 0-15, the match distance (0 for a literal) in bits 16-31. One flat buffer
+// instead of two parallel ones, so a block costs one push and one load per
+// token.
+fn token_pack(sym: i32, dist: i32) -> i32 {
+    return sym & 0xFFFF | (dist & 0xFFFF) << 16;
+}
+
+fn token_sym(token: i32) -> i32 {
+    return token & 0xFFFF;
+}
+
+fn token_dist(token: i32) -> i32 {
+    return token >> 16 & 0xFFFF;
+}
+
+// Symbol frequencies of a block. Returns [lit_freq, dist_freq] with EOB
+// already counted.
 fn count_block_freqs(
-    symbols: &List<i32>,
-    distances: &List<i32>,
+    tokens: &List<i32>,
     sym_count: i32,
     length_codes_table: &ByteList,
     dist_codes_table: &ByteList,
@@ -2157,7 +2171,8 @@ fn count_block_freqs(
     let mut dist_freq: List<i32> = List::filled(30, 0);
 
     for let mut i = 0; i < sym_count; i += 1 {
-        let sym = symbols[i];
+        let token = tokens[i];
+        let sym = token_sym(token);
         if sym < 256 {
             lit_freq[sym] += 1;
         } else if sym == 256 {
@@ -2167,7 +2182,7 @@ fn count_block_freqs(
             let lcode = length_codes_table[len_val] as i32;
             lit_freq[257 + lcode] += 1;
 
-            let dist = distances[i];
+            let dist = token_dist(token);
             let dd = dist - 1;
             let dcode = if dd < 256 { dist_codes_table[dd] as i32 } else { dist_codes_table[256 + (dd >> 7)] as i32 };
             dist_freq[dcode] += 1;
@@ -2362,8 +2377,7 @@ fn plan_dynamic_block(lit_freq: &List<i32>, dist_freq: &mut List<i32>) -> Dynami
 
 fn write_dynamic_block(
     bw: &mut BitWriter,
-    symbols: &List<i32>,
-    distances: &List<i32>,
+    tokens: &List<i32>,
     sym_count: i32,
     is_last: bool,
     plan: &DynamicPlan,
@@ -2413,7 +2427,8 @@ fn write_dynamic_block(
 
     // Encode symbols using dynamic trees
     for let mut i = 0; i < sym_count; i += 1 {
-        let sym = symbols[i];
+        let token = tokens[i];
+        let sym = token_sym(token);
         if sym < 256 {
             // Literal
             bw.write_code(lit_tree[sym]);
@@ -2432,7 +2447,7 @@ fn write_dynamic_block(
             }
 
             // Distance
-            let dist = distances[i];
+            let dist = token_dist(token);
             let dd = dist - 1;
             let dcode = if dd < 256 { dist_codes_table[dd] as i32 } else { dist_codes_table[256 + (dd >> 7)] as i32 };
             bw.write_code(dist_tree[dcode]);
@@ -2450,8 +2465,7 @@ fn write_dynamic_block(
 // Write a fixed Huffman block from symbol buffer
 fn write_fixed_block(
     bw: &mut BitWriter,
-    symbols: &List<i32>,
-    distances: &List<i32>,
+    tokens: &List<i32>,
     sym_count: i32,
     is_last: bool,
     ltree: &List<i32>,
@@ -2467,7 +2481,8 @@ fn write_fixed_block(
     bw.write_bits(1, 2);  // BTYPE=01 (fixed)
 
     for let mut i = 0; i < sym_count; i += 1 {
-        let sym = symbols[i];
+        let token = tokens[i];
+        let sym = token_sym(token);
         if sym < 256 {
             bw.write_code(ltree[sym]);
         } else {
@@ -2480,7 +2495,7 @@ fn write_fixed_block(
                 bw.write_bits((len_val - (LENGTH_BASE[lcode] - 3)) as u32, len_ebits);
             }
 
-            let dist = distances[i];
+            let dist = token_dist(token);
             let dd = dist - 1;
             let dcode = if dd < 256 { dist_codes_table[dd] as i32 } else { dist_codes_table[256 + (dd >> 7)] as i32 };
             bw.write_code(dtree[dcode]);
@@ -2564,8 +2579,7 @@ pub fn deflate_with_level(input: &ByteList, level: i32, strategy: i32) -> ByteLi
     let dist_codes_table = build_dist_codes(&DIST_EXTRA);
 
     // Collect symbols using LZ77
-    let mut symbols: List<i32> = List::with_capacity(input_len);
-    let mut distances: List<i32> = List::with_capacity(input_len);
+    let mut tokens: List<i32> = List::with_capacity(input_len);
 
     if input_len == 0 {
         // Empty input: just write empty block
@@ -2582,8 +2596,7 @@ pub fn deflate_with_level(input: &ByteList, level: i32, strategy: i32) -> ByteLi
     if strategy == 2 {
         // Z_HUFFMAN_ONLY
         for let mut i = 0; i < input_len; i += 1 {
-            symbols.push(input[i] as i32);
-            distances.push(0);
+            tokens.push(token_pack(input[i] as i32, 0));
         }
     } else if strategy == 3 {
         // Z_RLE — run-length only
@@ -2597,17 +2610,14 @@ pub fn deflate_with_level(input: &ByteList, level: i32, strategy: i32) -> ByteLi
             }
             if run >= 4 {
                 // Emit literal for first byte, then match(distance=1, length=run-1) for the rest
-                symbols.push(input[pos] as i32);
-                distances.push(0);
+                tokens.push(token_pack(input[pos] as i32, 0));
                 let match_len = run - 1;
                 // Cap match at 258
                 let actual_match = i32::min(match_len, 258);
-                symbols.push(257 + actual_match - 3);
-                distances.push(1);
+                tokens.push(token_pack(257 + actual_match - 3, 1));
                 pos += 1 + actual_match;
             } else {
-                symbols.push(input[pos] as i32);
-                distances.push(0);
+                tokens.push(token_pack(input[pos] as i32, 0));
                 pos += 1;
             }
         }
@@ -2695,15 +2705,13 @@ pub fn deflate_with_level(input: &ByteList, level: i32, strategy: i32) -> ByteLi
                 if match_available {
                     if best_len > prev_match_len {
                         // Current match is better: emit previous as literal
-                        symbols.push(builtin::i32_load8_u(scratch + pos - 1) as i32);
-                        distances.push(0);
+                        tokens.push(token_pack(builtin::i32_load8_u(scratch + pos - 1) as i32, 0));
                         prev_match_len = best_len;
                         prev_match_dist = best_dist;
                         pos += 1;
                     } else {
                         // Previous match was better: emit it
-                        symbols.push(257 + prev_match_len - 3);
-                        distances.push(prev_match_dist);
+                        tokens.push(token_pack(257 + prev_match_len - 3, prev_match_dist));
                         // Insert hash entries for skipped positions
                         let skip = prev_match_len - 1;
                         for let mut i = 0; i < skip - 1; i += 1 {
@@ -2731,8 +2739,7 @@ pub fn deflate_with_level(input: &ByteList, level: i32, strategy: i32) -> ByteLi
                         pos += 1;
                     } else {
                         // Match is long enough, emit immediately
-                        symbols.push(257 + best_len - 3);
-                        distances.push(best_dist);
+                        tokens.push(token_pack(257 + best_len - 3, best_dist));
                         for let mut i = 1; i < best_len; i += 1 {
                             if pos + i + 2 < input_len {
                                 let mh = hash3(builtin::i32_load8_u(scratch + pos + i), builtin::i32_load8_u(
@@ -2749,16 +2756,14 @@ pub fn deflate_with_level(input: &ByteList, level: i32, strategy: i32) -> ByteLi
                         prev_match_len = 0;
                     }
                 } else {
-                    symbols.push(builtin::i32_load8_u(scratch + pos) as i32);
-                    distances.push(0);
+                    tokens.push(token_pack(builtin::i32_load8_u(scratch + pos) as i32, 0));
                     pos += 1;
                 }
             }
 
             // Flush pending match
             if match_available {
-                symbols.push(builtin::i32_load8_u(scratch + input_len - 1) as i32);
-                distances.push(0);
+                tokens.push(token_pack(builtin::i32_load8_u(scratch + input_len - 1) as i32, 0));
             }
         } else {
             // Fast matching (levels 1-3) — no lazy evaluation
@@ -2813,8 +2818,7 @@ pub fn deflate_with_level(input: &ByteList, level: i32, strategy: i32) -> ByteLi
                 }
 
                 if best_len >= 3 {
-                    symbols.push(257 + best_len - 3);
-                    distances.push(best_dist);
+                    tokens.push(token_pack(257 + best_len - 3, best_dist));
                     for let mut i = 1; i < best_len; i += 1 {
                         if pos + i + 2 < input_len {
                             let mh = hash3(builtin::i32_load8_u(scratch + pos + i), builtin::i32_load8_u(
@@ -2826,8 +2830,7 @@ pub fn deflate_with_level(input: &ByteList, level: i32, strategy: i32) -> ByteLi
                     }
                     pos += best_len;
                 } else {
-                    symbols.push(builtin::i32_load8_u(scratch + pos) as i32);
-                    distances.push(0);
+                    tokens.push(token_pack(builtin::i32_load8_u(scratch + pos) as i32, 0));
                     pos += 1;
                 }
             }
@@ -2837,14 +2840,13 @@ pub fn deflate_with_level(input: &ByteList, level: i32, strategy: i32) -> ByteLi
         builtin::realloc(prev_ptr, hash_bytes, 4, 0);
     }
 
-    let sym_count = symbols.len();
+    let sym_count = tokens.len();
 
     // Price the three encodings against one another. The symbols are walked
     // once, here; every cost below is a sum over codes, and the dynamic plan
     // is the one the writer emits.
     let [lit_freq, mut dist_freq] = count_block_freqs(
-        &symbols,
-        &distances,
+        &tokens,
         sym_count,
         &length_codes_table,
         &dist_codes_table,
@@ -2871,8 +2873,7 @@ pub fn deflate_with_level(input: &ByteList, level: i32, strategy: i32) -> ByteLi
     } else if fixed_bits <= dynamic_bits {
         write_fixed_block(
             &mut bw,
-            &symbols,
-            &distances,
+            &tokens,
             sym_count,
             true,
             &ltree,
@@ -2883,8 +2884,7 @@ pub fn deflate_with_level(input: &ByteList, level: i32, strategy: i32) -> ByteLi
     } else {
         write_dynamic_block(
             &mut bw,
-            &symbols,
-            &distances,
+            &tokens,
             sym_count,
             true,
             &plan,
