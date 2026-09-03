@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1788446215371,
+  "lastUpdate": 1788464538920,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -52989,6 +52989,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/4dfaaf2be83c0865324f25bc8a122d0e94f33f7b"
         },
         "date": 1788446214646,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 2028,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6418,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18908,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 282048,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "4c816710758026f0352dc1551a3e65d6f749ae44",
+          "message": "Merge pull request #1957 from wado-lang/claude/nir-optimizer-wep-review-cz9fws\n\nfix(optimizer): use the receiver verdict alone for a call's receiver slot",
+          "timestamp": "2026-09-04T04:28:00+09:00",
+          "tree_id": "da47908dff136e1c195c6707d64483b8ab718014",
+          "url": "https://github.com/wado-lang/wado/commit/4c816710758026f0352dc1551a3e65d6f749ae44"
+        },
+        "date": 1788464538345,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
