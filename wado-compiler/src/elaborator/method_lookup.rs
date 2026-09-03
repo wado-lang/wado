@@ -2487,6 +2487,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
         bridge.select(
             &self.tysys,
+            &self.annotate_ctx,
             &self.current_module_source,
             receiver_type_id?,
             through_ref,

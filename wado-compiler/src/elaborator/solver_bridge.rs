@@ -917,6 +917,30 @@ impl SolverBridge {
 
     /// The question `type_implements_trait` answered, as the solver reads it;
     /// `None` where the lowering states nothing about it.
+    /// The bounds in force where a question is asked, and the parameter names
+    /// they are indexed by. A generic body's `T: Tr` holds because its own
+    /// signature says so, not because any impl exists, so no query about `T`
+    /// can be answered from the program alone. `None` where a bound names a
+    /// trait the lowering never interned, which the caller reads as "outside
+    /// what the lowering states".
+    fn env_at(&self, tysys: &TypeSystem, ctx: &super::scope::Scope) -> Option<(Env, Vec<String>)> {
+        let mut env = Env::default();
+        for bounds in ctx.trait_ctx.type_param_bounds.values() {
+            let mut ids = Vec::with_capacity(bounds.len());
+            for bound in bounds {
+                let def = bound
+                    .resolved
+                    .or_else(|| tysys.resolutions.declared(bound.id))?;
+                ids.push(self.lowering.known_trait(def)?);
+            }
+            env.param_bounds.push(ids);
+        }
+        Some((
+            env,
+            ctx.trait_ctx.type_param_bounds.keys().cloned().collect(),
+        ))
+    }
+
     fn question(
         &self,
         tysys: &TypeSystem,
@@ -932,27 +956,10 @@ impl SolverBridge {
             return None;
         }
         let trait_ = self.lowering.known_trait(trait_)?;
-        let names: Vec<&String> = ctx.trait_ctx.type_param_bounds.keys().collect();
-        let mut env = Env::default();
-        for bounds in ctx.trait_ctx.type_param_bounds.values() {
-            let mut ids = Vec::with_capacity(bounds.len());
-            for bound in bounds {
-                let def = bound
-                    .resolved
-                    .or_else(|| tysys.resolutions.declared(bound.id))?;
-                ids.push(self.lowering.known_trait(def)?);
-            }
-            env.param_bounds.push(ids);
-        }
-        let param = |name: &str, _: u32| -> Option<u32> {
-            names
-                .iter()
-                .position(|n| n.as_str() == name)
-                .map(|p| u32::try_from(p).expect("fewer than 2^32 params"))
-        };
-        let ty = self
-            .lowering
-            .type_id(&tysys.type_table.borrow(), type_id, &param)?;
+        let (env, names) = self.env_at(tysys, ctx)?;
+        let ty =
+            self.lowering
+                .type_id(&tysys.type_table.borrow(), type_id, &param_index(&names))?;
         let module = self.lowering.known_module(scope.current_module_source)?;
         Some(Question {
             env,
@@ -986,21 +993,23 @@ impl SolverBridge {
     pub(super) fn select(
         &self,
         tysys: &TypeSystem,
+        ctx: &super::scope::Scope,
         module: &ModuleSource,
         type_id: TypeId,
         through_ref: Option<bool>,
         method_name: &str,
     ) -> Option<Ordered> {
         let method = MethodId(*self.lowering.methods.get(method_name)?);
-        let ty = self
-            .lowering
-            .type_id(&tysys.type_table.borrow(), type_id, &|_, _| None)?;
+        let (env, names) = self.env_at(tysys, ctx)?;
+        let ty =
+            self.lowering
+                .type_id(&tysys.type_table.borrow(), type_id, &param_index(&names))?;
         let ty = through_ref.map_or(ty.clone(), |is_mut| SolverType::Ref {
             is_mut,
             inner: Box::new(ty),
         });
         let module = self.lowering.known_module(module)?;
-        let found = candidates(&self.program, &Env::default(), &ty, method, module);
+        let found = candidates(&self.program, &env, &ty, method, module);
         let named = |live: &[usize]| {
             live.iter()
                 .map(|&i| self.impl_def_of(found.in_scope[i].impl_))
@@ -1107,6 +1116,17 @@ pub(super) enum Ordered {
     /// Several impls of one pair, which coherence rejects where they are
     /// written.
     Duplicated(Vec<Option<DefId>>),
+}
+
+/// Where each type parameter sits in the environment [`SolverBridge::env_at`]
+/// built, which is what gives a rigid parameter its [`SolverType::Param`].
+fn param_index(names: &[String]) -> impl Fn(&str, u32) -> Option<u32> + '_ {
+    move |name: &str, _: u32| {
+        names
+            .iter()
+            .position(|n| n == name)
+            .map(|p| u32::try_from(p).expect("fewer than 2^32 params"))
+    }
 }
 
 /// A `type_implements_trait` question as the solver reads it.
