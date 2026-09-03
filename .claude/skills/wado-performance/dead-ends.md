@@ -18,6 +18,64 @@ wado dump -O2 benchmark/json_catalog/json_catalog.wado    # before/after: diff t
 for i in 1 2 3; do mise run json-catalog; done           # before and after
 ```
 
+## Where json-canada's time actually is (2026-09-04)
+
+Not a dead end — the map the entries below were measured against, since every
+share here was established by ablation rather than read off a profile. Each row
+is the whole benchmark minus one thing, dev build (which matches release on this
+benchmark to under 2%, so the stdlib can be edited and re-run in 8 seconds with
+no rebuild).
+
+Serialize, 7.65 ms/iter:
+
+| remove                                       | ms/iter | cost |
+| -------------------------------------------- | ------- | ---- |
+| — (baseline)                                  | 7.65    | —    |
+| every division in the digit loop              | 7.44    | 0.24 |
+| the decimal-point `array_copy` shift          | 7.28    | 0.37 |
+| `short()`, replaced by a constant             | 5.98    | 1.68 |
+| the digit loop, replaced by `array_fill`      | 5.77    | 1.90 |
+| all float formatting (19-byte `push_str`)     | 3.09    | 4.56 |
+| the float bytes entirely (traversal only)     | 1.58    | 6.07 |
+
+Deserialize, 10.96 ms/iter: `scanned_to_f64` → 0.0 costs 1.55 ms, and deleting
+`digits = digits * 10 + d` on top of that is free — the scan is bound by the
+bounds-checked `array.get` and its branches, not the arithmetic.
+
+Two things follow. The serde traversal alone (1.58 ms, no float bytes written)
+is already 65% of serde_json's entire 2.43 ms serialize, so the structural cost
+is the standing gap, not the codec. And `short()` at 1.68 ms is ~15 ns per
+conversion, which is ryu-class — there is no algorithmic slack left in it.
+
+## Three ways to get `uscale` inlined (2026-09-04)
+
+`uscale` costs 21 against the -O2 budget of 16, so `short` pays three calls per
+conversion, each recomputing the same `(1 << (s & 63)) - 1`. Raising the
+threshold to 22 buys json-canada ser 7% — the whole of the -O3 gain on this row
+— so the question is only how to admit it without the global bloat the
+2026-08-27 entry rules out. What landed was hoisting the mask to `short` and
+outlining the correction arm; these three did not:
+
+- **`builtin::cold_path()` in `uscale`'s exactness arm.** Prices the function by
+  its fast path and gets it inlined everywhere. json-canada ser +3.4%, de +2.7%
+  — and **fts -4.5%**, three rounds, non-overlapping. `fixed_width_for_prec`
+  scales once, so it gains nothing from the mask and only pays the growth; it is
+  the same size-sensitive function the skill's `cold_outline` note names.
+- **Merging `check_special`'s two zero tests** into `bits << 1 == 0` (cost 18 →
+  under budget). json-canada de **-2.4%** on its own and nothing measurable on
+  ser, on a function the de path never calls. Pure placement.
+- **Returning the two bracketing scalings together** (`uscale_bounds`), to shrink
+  `short` from three calls to two rather than grow it. The inliner takes it
+  anyway — a single-site candidate is charged nothing — so `short` grew from 87
+  to 113 dump lines regardless.
+
+Generalizes: at this scale module layout outweighs the instruction saving, in
+both directions. Growing `short` moved json-twitter serialize 2–5% on a hot path
+that is byte-identical bar block-label numbering. So hash the wasm of every row
+first and only measure the ones that differ — three of the five float-touching
+benchmarks came out byte-identical, which retires their readings outright and is
+the only reason the surviving numbers mean anything.
+
 ## Two digits at a time in `write_digits_at` (2026-09-04)
 
 `write_decimal` is 27.7% self on json-canada, whose shortest-round-trip
