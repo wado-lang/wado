@@ -676,12 +676,32 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             });
         }
 
+        // Arity, once the declared defaults have filled what they can. A
+        // parameter with a default is optional and the rest are required; the
+        // receiver is not one of them, so `args` and `expected_param_types`
+        // count the same list.
+        //
+        // Unlike the per-argument check below, this cannot wait for inference:
+        // an unfilled parameter leaves the emitted call one operand short and
+        // fails Wasm validation as an ICE, and an extra argument is dropped
+        // along with whatever its expression did.
+        let optional = param_defaults.iter().filter(|d| d.is_some()).count();
+        let required = expected_param_types.len().saturating_sub(optional);
+        if args.len() < required || args.len() > expected_param_types.len() {
+            let _ = self.emit(TypeError::ArgumentCountMismatch {
+                expected: expected_param_types.len(),
+                found: args.len(),
+                span,
+            });
+            return MethodCallOutcome::no_dispatch(TypeTable::ERROR);
+        }
+
         // Pin a deferred hole that rode a prior binding into an argument
         // (`let v = gen()?; out.push(v)`) against the parameter type.
         //
-        // Arguments are not checked here: the parameter types still name the
-        // method's own slots, which are opaque until inference — which needs
-        // these argument types — has run. The check happens once below,
+        // Argument *types* are not checked here: the parameter types still name
+        // the method's own slots, which are opaque until inference — which needs
+        // these argument types — has run. That check happens once below,
         // against the substituted parameter types.
         for (arg, &expected_type) in args.iter_mut().zip(expected_param_types.iter()) {
             if self.type_has_infer_hole(*arg) && self.hole_pinnable_against(expected_type) {
