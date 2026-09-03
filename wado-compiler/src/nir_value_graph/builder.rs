@@ -2084,9 +2084,15 @@ fn record_loop_heap_write(
             ..
         } => {
             // A receiver is borrowed unless the callee cannot write through it.
+            // The verdict already accounts for a declared `&mut self`, so it
+            // replaces `arg.is_mut` for that slot rather than joining it.
             let receiver_borrowed = *has_receiver && !facts.receiver_immutable.contains(&e);
             for (i, arg) in args.iter().enumerate() {
-                let borrowed = arg.is_mut || (receiver_borrowed && i == 0);
+                let borrowed = if *has_receiver && i == 0 {
+                    receiver_borrowed
+                } else {
+                    arg.is_mut
+                };
                 if borrowed
                     && let Some(ExprKind::Local { index, .. }) =
                         arg.expr.as_expr().map(|ae| &body.exprs[ae].kind)
@@ -2356,6 +2362,12 @@ mod tests {
 
     /// `self.m()` as the sole statement of a block, `self` being local 0.
     fn receiver_call_block(body: &mut Body) -> (BlockId, ExprId) {
+        receiver_call_block_with(body, false)
+    }
+
+    /// Like [`receiver_call_block`], with the receiver argument's declared
+    /// `is_mut` (a `&mut self` method's own parameter type) as given.
+    fn receiver_call_block_with(body: &mut Body, receiver_is_mut: bool) -> (BlockId, ExprId) {
         use crate::nir::{FuncId, NirLocal};
         use crate::nir_arena::{ArenaCallArg, BlockNode, ExprNode, StmtNode};
         use crate::token::Span;
@@ -2379,7 +2391,7 @@ mod tests {
                 type_args: vec![],
                 args: vec![ArenaCallArg {
                     expr: Operand::Expr(recv),
-                    is_mut: false,
+                    is_mut: receiver_is_mut,
                 }],
                 has_receiver: true,
             },
@@ -2415,6 +2427,22 @@ mod tests {
         let none = TestFacts::default();
         let eff = collect_loop_heap_effects(&body, &none.facts(), block);
         assert!(eff.mut_borrowed.contains(&0));
+    }
+
+    /// A method declared `&mut self` still does not borrow its receiver once
+    /// the verdict proves the body never writes through it: the declared
+    /// mutability alone must not override a proven-safe verdict.
+    #[test]
+    fn receiver_immutable_call_does_not_borrow_a_declared_mut_receiver() {
+        let mut body = Body::empty();
+        let (block, call) = receiver_call_block_with(&mut body, true);
+        let facts = TestFacts::immutable(&[call]);
+
+        let eff = collect_loop_heap_effects(&body, &facts.facts(), block);
+        assert!(
+            !eff.mut_borrowed.contains(&0),
+            "a proven-immutable receiver is not borrowed even when declared `&mut self`"
+        );
     }
 
     /// Receiver immutability says nothing about the other arguments, so it does
