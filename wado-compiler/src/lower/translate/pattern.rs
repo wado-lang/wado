@@ -1733,11 +1733,6 @@ impl<'a> PatternLowerer<'a> {
     /// an immutable local still holds a `&mut`. What is not a place is a
     /// temporary this body alone holds; whether *that* aliases the caller's
     /// storage is decided where it escapes, not here.
-    ///
-    /// A reference is asked for by [`place::is_reference`], which answers for
-    /// the `Box<T>` spelling too: `boxing::prepare_types` has already run, so a
-    /// `&mut` to a variant or a primitive reaches here as a box, and a raw
-    /// `Ref` / `MutRef` test would read the caller's storage as this body's.
     fn place_is_writable(&self, expr: &TirExpr, type_table: &TypeTable) -> bool {
         match &expr.kind {
             TirExprKind::Local { index, .. } => self

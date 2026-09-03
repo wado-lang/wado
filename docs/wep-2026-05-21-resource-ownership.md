@@ -330,10 +330,10 @@ projection is its root's, so the live set at a write is closed over what each
 live local took its value out of. Reading the local alone calls the storage dead
 while a binding is still looking at it, which shares across the write.
 
-Where control resumes decides which set that is. A `break` resumes at the loop's
-exit and a `continue` at its head, so the two read different sets; answering both
-with the exit set drops every loop-carried reader, and a write reached through a
-`continue` then looks unobserved.
+A `break` resumes at the loop's exit and a `continue` at its head, so the two
+read different live sets. Answering both with the exit set drops every
+loop-carried reader, and a write reached through a `continue` then looks
+unobserved.
 
 Two kinds of write reach different storage. `p.f = x` points `p.f` elsewhere, so
 a reference already taken out of `p.f` keeps what it has, and only a write
@@ -342,15 +342,15 @@ hands that binding the only reference to what the place held — the `take` /
 `drain` / `snapshot` idiom — so the binding may leave the function though it was
 read out of a place the caller still owns.
 
-`*p = v` is not the second kind. A `&mut` to an aggregate is expanded field by
-field into the referent, so the write lands in the storage the caller holds and
-everything read out of `*p` sees it; only a boxed borrow replaces a slot. Which
-one it is has a single answer, the same one the expansion asks.
+`*p = v` repoints nothing when the referent is an aggregate. The write is
+expanded field by field into the storage the caller holds, so everything read out
+of `*p` sees it. Only a boxed borrow replaces a slot, and one predicate decides
+which of the two an assignment is.
 
-A move is the third way storage leaves a binding, so what the fold will move out
-of cannot also share: a value read of the binding, or a place-level move of a
-field out of it. A binding move-eligible in neither way is handed nowhere, and
-refusing it a share on eligibility alone costs a copy that buys nothing.
+A move also hands storage on, so a binding the fold will move out of cannot share
+it. Two reads are such a move: a value read of the binding, and a place-level
+move of a field out of it. A binding with neither is handed nowhere, so refusing
+it a share on move-eligibility alone costs a copy that defends nothing.
 
 A `match` over a place needs no temp of its own: the arms project the place
 where it lies and each binding asks the fold for itself. Only a non-place
@@ -359,21 +359,21 @@ scrutinee is hoisted for `labeled_block_fusion`, whose temp the fold defends.
 What a call writes is read off the callee rather than assumed: `modref.rs`
 collects each function's writes as fields of the type carrying them and closes
 them over the call graph, so a read of one field survives a call that writes
-another — through the receiver or through any other `&mut` the call is handed,
-both being handles the callee's own answer covers. A callee with no body reaches
-only the `&mut` arguments it is handed; anything this cannot name writes
-everything.
+another. The receiver is one such handle and every other `&mut` the call is
+given is another, and the callee's own answer covers them alike. A callee with no
+body reaches only the `&mut` arguments it is handed; anything this cannot name
+writes everything.
 
-A handle the walk cannot follow — stored into an aggregate, or given to a callee
-with no body — writes the whole of what it was handed, and that is an answer of
-its own rather than a field index standing for every field. A caller comparing
-paths cannot tell such an index from one naming a real field, and reads the two
-as disjoint: the write it was told about is the one it then ignores. One function
-mints the key both sides compare (`place::field_owner`), so what a callee records
-and what a caller looks up cannot drift.
+Some handles the walk loses: one stored into an aggregate, and one given to a
+callee with no body. Each writes the whole of what it was handed. That answer is
+its own, never a field index standing for every field, because a caller comparing
+paths cannot tell such an index from one naming a real field. It reads the two as
+disjoint and ignores the very write it was told about. One function mints the key
+both sides compare (`place::field_owner`), so what a callee records and what a
+caller looks up cannot drift.
 
 Handing the source root to a new owner costs the binding its share on the same
-terms: that owner may write what the binding aliases, so the read matters where
+terms. That owner may write what the binding aliases, so the read matters where
 the binding's storage is still read afterwards, and nowhere else.
 
 Every analysis here asks one resolver what an expression names (`place.rs`).

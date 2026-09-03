@@ -426,12 +426,8 @@ pub fn place_root(expr: &TirExpr) -> Option<u32> {
     }
 }
 
-/// The type a [`Selector::Field`] is keyed by: the one carrying the field, as
-/// this walk spells it. Minted here alone, so an interprocedural consumer —
-/// `modref` recording a callee's writes, `last_use` re-rooting them at a
-/// caller's handle — asks the same question and cannot drift from the walk that
-/// wrote the key. A box is not peeled: both sides see the wrapper, and peeling
-/// on one alone is what would make the keys disagree.
+/// The type a [`Selector::Field`] is keyed by. Minted here alone, so a callee
+/// recording a write and a caller looking it up cannot spell the key apart.
 #[must_use]
 pub fn field_owner(base_type: TypeId, type_table: &TypeTable) -> TypeId {
     type_table.peel_refs(base_type)

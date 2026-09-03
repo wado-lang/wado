@@ -195,10 +195,8 @@ test "a take-and-replace binding owns what the place gave up" {
     assert src.items.len() == 1;
 }
 
-// `boxing::prepare_types` rewrites a `&mut` to a variant or a primitive onto
-// `Box<T>`, so the writability question must be asked of a predicate that reads
-// both spellings. The rows below are the ones a raw `Ref` / `MutRef` test misses:
-// the scrutinee is a box, and its payload is the caller's storage.
+// A `&mut` to a variant or a primitive is a `Box<T>` by the time these lower, so
+// the rows below add the spelling the ones above never take.
 
 fn push_then_len(slot: &mut V) -> i32 {
     match *slot {

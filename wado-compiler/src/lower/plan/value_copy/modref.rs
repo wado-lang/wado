@@ -1,6 +1,5 @@
-//! What a call writes into its receiver, as fields of the receiver's type, so
-//! a read of one field survives a call that writes another. A callee this
-//! analysis cannot read through writes everything.
+//! What a call writes through a `&mut` it is handed, as fields of the type
+//! carrying them. A callee this analysis cannot read through writes everything.
 
 use super::funcset::{FuncKeyMap, FuncKeySet};
 use super::place::{Names, Resolver, ReturnPaths, Selector, could_write_through, field_owner};
@@ -34,8 +33,8 @@ impl Writes {
         self.whole.contains(&owner)
     }
 
-    /// The fields of `owner` this writes, for a caller re-rooting them at its
-    /// own receiver.
+    /// The fields of `owner` this writes, for a caller re-rooting them at the
+    /// handle it passed.
     pub fn fields_of(&self, owner: TypeId) -> impl Iterator<Item = u32> + '_ {
         self.fields
             .iter()
@@ -55,21 +54,30 @@ impl Writes {
 }
 
 /// Every function's writes, closed over the call graph.
-#[derive(Default)]
 pub struct ModRef {
     per_func: FuncKeyMap<Writes>,
+    unknown: Writes,
 }
 
 impl ModRef {
     /// What calling `(module, name)` writes. A callee with no entry writes
     /// anything.
     #[must_use]
-    pub fn writes(&self, module: &ModuleSource, name: &str) -> Writes {
-        self.per_func.get(module, name).cloned().unwrap_or(Writes {
-            opaque: true,
-            ..Writes::default()
-        })
+    pub fn writes(&self, module: &ModuleSource, name: &str) -> &Writes {
+        self.per_func.get(module, name).unwrap_or(&self.unknown)
     }
+}
+
+/// What a path naming no field of its own writes.
+#[derive(Clone, Copy)]
+enum WholeOf {
+    /// Nothing. A callee's writes inside its own parameter arrive through the
+    /// call graph, not through the argument.
+    Nothing,
+    /// What this body was lent at the path's root.
+    Lent,
+    /// The type handed over, for a handle this walk cannot follow.
+    Handed(TypeId),
 }
 
 /// Collect each body's own writes, then close over the call graph: a caller
@@ -113,8 +121,9 @@ pub fn compute_mod_ref(
         for (module, name, _, callees) in &direct {
             let mut merged = per_func.get(module, name).cloned().unwrap_or_default();
             for (cm, cn) in callees {
-                let callee = per_func.get(cm, cn).cloned().unwrap_or_default();
-                merged.absorb(&callee);
+                if let Some(callee) = per_func.get(cm, cn) {
+                    merged.absorb(callee);
+                }
             }
             if per_func.get(module, name) != Some(&merged) {
                 per_func.insert(module.clone(), name.clone(), merged);
@@ -122,7 +131,13 @@ pub fn compute_mod_ref(
             }
         }
     }
-    ModRef { per_func }
+    ModRef {
+        per_func,
+        unknown: Writes {
+            opaque: true,
+            ..Writes::default()
+        },
+    }
 }
 
 fn scan(
@@ -132,7 +147,7 @@ fn scan(
     return_paths: &ReturnPaths,
     returns_owned: &FuncKeySet,
 ) -> (Writes, Vec<(ModuleSource, String)>) {
-    if func.body.is_none() {
+    let Some(body) = &func.body else {
         return (
             Writes {
                 opaque: true,
@@ -140,7 +155,7 @@ fn scan(
             },
             Vec::new(),
         );
-    }
+    };
     let resolver = Resolver::new(func, type_table, return_paths, returns_owned);
     let mut walker = Walker {
         type_table,
@@ -149,9 +164,7 @@ fn scan(
         writes: Writes::default(),
         callees: Vec::new(),
     };
-    if let Some(body) = &func.body {
-        walker.visit_block(body);
-    }
+    walker.visit_block(body);
     (walker.writes, walker.callees)
 }
 
@@ -164,75 +177,39 @@ struct Walker<'a> {
 }
 
 impl Walker<'_> {
-    /// Record a write to what `names` stands for. A path stopping at a root
-    /// names the whole of what the caller lent, or nothing where the root is
-    /// this function's own.
-    fn record(&mut self, names: &Names) {
-        match names {
-            Names::Place(place) => {
-                let mut named_a_field = false;
-                for selector in &place.selectors {
-                    if let Selector::Field { owner, index } = selector {
-                        self.writes.fields.insert((*owner, *index));
-                        named_a_field = true;
-                    }
-                }
-                if !named_a_field && let Some(lent) = self.resolver.lent(place.root) {
-                    self.writes.whole.insert(lent);
-                }
+    /// Record a write to what `names` stands for: every field the path names,
+    /// and where it names none, `whole`.
+    fn record(&mut self, names: &Names, whole: WholeOf) {
+        let Names::Place(place) = names else {
+            self.writes.opaque |= matches!(names, Names::Unknown);
+            return;
+        };
+        let mut named_a_field = false;
+        for selector in &place.selectors {
+            if let Selector::Field { owner, index } = selector {
+                self.writes.fields.insert((*owner, *index));
+                named_a_field = true;
             }
-            Names::Value => {}
-            Names::Unknown => self.writes.opaque = true,
         }
-    }
-
-    /// Record what a handle this walk cannot follow reaches: the fields the
-    /// place names, or — where it names none — the whole of what was handed
-    /// over. The whole answer has its own channel, because a caller cannot tell
-    /// a field index standing for "everything" from one naming a real field.
-    fn record_handed(&mut self, names: &Names, handed: TypeId) {
-        match names {
-            Names::Place(place)
-                if place
-                    .selectors
-                    .iter()
-                    .any(|s| matches!(s, Selector::Field { .. })) =>
-            {
-                self.record(names);
-            }
-            Names::Place(_) => {
-                let handed = field_owner(handed, self.type_table);
-                self.writes.whole.insert(handed);
-            }
-            Names::Value => {}
-            Names::Unknown => self.writes.opaque = true,
+        if named_a_field {
+            return;
+        }
+        let whole = match whole {
+            WholeOf::Nothing => None,
+            WholeOf::Lent => self.resolver.lent(place.root),
+            WholeOf::Handed(ty) => Some(field_owner(ty, self.type_table)),
+        };
+        if let Some(whole) = whole {
+            self.writes.whole.insert(whole);
         }
     }
 
     /// Record a writable handle escaping into an aggregate as a write to what
-    /// it borrows. Nothing else in this walk sees the write, because the
-    /// aggregate carries the handle past the expression that took it.
+    /// it borrows: the aggregate carries it past the expression that took it.
     fn record_handle_escape(&mut self, value: &TirExpr) {
-        if !could_write_through(value.type_id, self.type_table) {
-            return;
-        }
-        let names = self.resolver.names(value);
-        self.record_handed(&names, value.type_id);
-    }
-
-    /// Record only the fields a path names, leaving what a callee does inside
-    /// its own parameter to the call graph.
-    fn record_fields(&mut self, names: &Names) {
-        match names {
-            Names::Place(place) => {
-                for selector in &place.selectors {
-                    if let Selector::Field { owner, index } = selector {
-                        self.writes.fields.insert((*owner, *index));
-                    }
-                }
-            }
-            Names::Value => {}
-            Names::Unknown => self.writes.opaque = true,
+        if could_write_through(value.type_id, self.type_table) {
+            let names = self.resolver.names(value);
+            self.record(&names, WholeOf::Handed(value.type_id));
         }
     }
 }
@@ -250,11 +227,11 @@ impl TirRefVisitor for Walker<'_> {
                     && super::place::is_reference(target.type_id, self.type_table);
                 if !reseats {
                     let names = self.resolver.names(target);
-                    self.record(&names);
+                    self.record(&names, WholeOf::Lent);
                 }
             }
-            // The callee's own writes arrive through the call graph; what it
-            // writes through a handle lands in the place this body lent it.
+            // A callee this scan reads answers for its own parameter through the
+            // call graph; one it does not writes what it was handed.
             TirExprKind::Call { func, args, .. } => {
                 let known = self.defined.contains(&func.module_source, &func.name);
                 if known {
@@ -266,29 +243,25 @@ impl TirRefVisitor for Walker<'_> {
                     .filter(|a| could_write_through(a.expr.type_id, self.type_table))
                 {
                     let names = self.resolver.names(&arg.expr);
-                    if known {
-                        self.record_fields(&names);
+                    let whole = if known {
+                        WholeOf::Nothing
                     } else {
-                        self.record_handed(&names, arg.expr.type_id);
-                    }
+                        WholeOf::Handed(arg.expr.type_id)
+                    };
+                    self.record(&names, whole);
                 }
             }
-            // What an indirect call is handed. A closure reaches a frame only
-            // through its captures, which the frame that builds one accounts
-            // for.
+            // A closure reaches a frame only through its captures, which the
+            // frame that builds one accounts for.
             TirExprKind::IndirectCall { args, .. } => {
                 for arg in args
                     .iter()
                     .filter(|a| could_write_through(a.type_id, self.type_table))
                 {
                     let names = self.resolver.names(arg);
-                    self.record_handed(&names, arg.type_id);
+                    self.record(&names, WholeOf::Handed(arg.type_id));
                 }
             }
-            // A handle stored into an aggregate outlives the expression that
-            // took it, and this walk cannot follow where it is written — so it
-            // counts as a write to what it borrows, as an unknown callee's
-            // argument does.
             TirExprKind::StructLiteral { fields, .. } => {
                 for field in fields {
                     self.record_handle_escape(&field.value);

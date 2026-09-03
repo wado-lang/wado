@@ -1,11 +1,10 @@
-// What a write reaches, for the read-only share (WEP 2026-05-21). Each case is a
-// shape where a binding aliases storage something later writes, so the binding
-// keeps its copy. `value_copy_share_on_liveness` is the counterpart: the same
-// question answered the other way, where the write reaches nothing live.
+// What a write reaches, for the read-only share (WEP 2026-05-21). In each case
+// something writes the storage a binding was read out of while the binding can
+// still read it, so the binding keeps its copy. `value_copy_share_on_liveness`
+// is the counterpart, where the write reaches nothing that is read again.
 
 struct Inner {
     a: List<i32>,
-    b: i32,
 }
 
 struct Outer {
@@ -54,17 +53,13 @@ struct Pair {
     c: Counter,
 }
 
-// The write is reached through a `continue`, where what runs next is the loop
-// head — `snap` is read again on the next iteration, not dead as the loop's exit
-// set would say.
+// The write is reached through a `continue`. What runs next is the loop head, so
+// `snap` is read again; the loop's exit set says it is dead.
 fn across_a_continue(p: &mut Pair) -> i32 {
     let snap = p.c;
     let mut acc = 0;
     let mut i = 0;
-    loop {
-        if i >= 3 {
-            break;
-        }
+    while i < 3 {
         acc = acc + snap.n;
         i = i + 1;
         p.c.n = 9;
@@ -74,13 +69,13 @@ fn across_a_continue(p: &mut Pair) -> i32 {
 }
 
 export fn run() {
-    let mut o = Outer { inner: Inner { a: [1], b: 2 } };
+    let mut o = Outer { inner: Inner { a: [1] } };
     let stashed_arg = through_a_stashed_argument(&mut o);
     let after_arg = o.inner.a.len();
     assert stashed_arg == 1;
     assert after_arg == 2;
 
-    let mut o2 = Outer { inner: Inner { a: [1], b: 2 } };
+    let mut o2 = Outer { inner: Inner { a: [1] } };
     let stashed_recv = through_a_stashed_receiver(&mut o2);
     let after_recv = o2.inner.a.len();
     assert stashed_recv == 1;
