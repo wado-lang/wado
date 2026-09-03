@@ -1,0 +1,455 @@
+// Integer arithmetic, comparison, boundaries, wrapping and narrowing casts,
+// for every width. Display of each result is checked where the formatting is
+// the interesting part (widest values, negative quotients, floats).
+
+test "i8 arithmetic" {
+    let a: i8 = 10 as i8;
+    let b: i8 = 3 as i8;
+    assert a + b == 13 as i8;
+    assert a - b == 7 as i8;
+    assert a * b == 30 as i8;
+    assert a / b == 3 as i8;
+    assert a % b == 1 as i8;
+}
+
+test "i8 comparison" {
+    let a: i8 = 10 as i8;
+    let b: i8 = 20 as i8;
+    let c: i8 = -5 as i8;
+    let d: i8 = 10 as i8;
+    assert a < b;
+    assert a <= b;
+    assert b > a;
+    assert b >= a;
+    assert c < a;
+    assert c < 0 as i8;
+    assert a > c;
+    assert a == d;
+    assert a != b;
+}
+
+test "i8 boundaries" {
+    let max: i8 = 127 as i8;
+    let min: i8 = -128 as i8;
+    assert `${max}` == "127";
+    assert `${min}` == "-128";
+    assert -50 as i8 + 30 as i8 == -20 as i8;
+    // Signed division truncates toward zero and the remainder keeps the sign
+    // of the dividend.
+    let div: i8 = -10 as i8 / 3 as i8;
+    let rem: i8 = -10 as i8 % 3 as i8;
+    assert div == -3 as i8;
+    assert rem == -1 as i8;
+}
+
+test "i16 arithmetic" {
+    let a: i16 = 1000 as i16;
+    let b: i16 = 30 as i16;
+    assert a + b == 1030 as i16;
+    assert a - b == 970 as i16;
+    assert a * b == 30000 as i16;
+    assert a / b == 33 as i16;
+    assert a % b == 10 as i16;
+}
+
+test "i16 comparison" {
+    let a: i16 = 1000 as i16;
+    let b: i16 = 2000 as i16;
+    let c: i16 = -500 as i16;
+    let d: i16 = 1000 as i16;
+    assert a < b;
+    assert a <= b;
+    assert b > a;
+    assert b >= a;
+    assert c < a;
+    assert c < 0 as i16;
+    assert a > c;
+    assert a == d;
+    assert a != b;
+}
+
+test "i16 boundaries" {
+    let max: i16 = 32767 as i16;
+    let min: i16 = -32768 as i16;
+    assert `${max}` == "32767";
+    assert `${min}` == "-32768";
+    assert -5000 as i16 + 3000 as i16 == -2000 as i16;
+    let div: i16 = -100 as i16 / 7 as i16;
+    let rem: i16 = -100 as i16 % 7 as i16;
+    assert div == -14 as i16;
+    assert rem == -2 as i16;
+}
+
+test "i32 arithmetic" {
+    let a = 100000;
+    let b = 3000;
+    assert a + b == 103000;
+    assert a - b == 97000;
+    assert a * b == 300000000;
+    assert a / b == 33;
+    assert a % b == 1000;
+}
+
+test "i32 comparison" {
+    let a = 100000;
+    let b = 200000;
+    let c = -50000;
+    let d = 100000;
+    assert a < b;
+    assert a <= b;
+    assert b > a;
+    assert b >= a;
+    assert c < a;
+    assert c < 0;
+    assert a > c;
+    assert a == d;
+    assert a != b;
+}
+
+test "i32 boundaries" {
+    let max = 2147483647;
+    let min = -2147483648;
+    assert `${max}` == "2147483647";
+    assert `${min}` == "-2147483648";
+    assert -50000000 + 30000000 == -20000000;
+    assert -1000 / 7 == -142;
+    assert -1000 % 7 == -6;
+}
+
+test "i64 arithmetic" {
+    let a: i64 = 1000000000000 as i64;
+    let b: i64 = 500000000000 as i64;
+    assert a - b == 500000000000 as i64;
+    assert a + b == 1500000000000 as i64;
+    assert 1000000 as i64 * 1000000 as i64 == 1000000000000 as i64;
+    assert a / b == 2 as i64;
+    assert 1000000000 as i64 * 3 as i64 == 3000000000 as i64;
+    assert 1000000000 as i64 / 3 as i64 == 333333333 as i64;
+}
+
+test "i64 comparison" {
+    let a: i64 = 1000000000000 as i64;
+    let b: i64 = 2000000000000 as i64;
+    let c: i64 = -500000000000 as i64;
+    let d: i64 = 1000000000000 as i64;
+    assert a < b;
+    assert a <= b;
+    assert b > a;
+    assert b >= a;
+    assert c < a;
+    assert c < 0 as i64;
+    assert a > c;
+    assert a == d;
+    assert a != b;
+}
+
+test "i64 compares against an i32 literal" {
+    // The literal has no annotation of its own; the i64 operand supplies it.
+    let x: i64 = 100 as i64;
+    let y: i64 = -50 as i64;
+    assert x > 0;
+    assert y < 0;
+}
+
+test "i64 boundaries" {
+    let max: i64 = 9223372036854775807 as i64;
+    let min: i64 = -9223372036854775808 as i64;
+    assert `${max}` == "9223372036854775807";
+    assert `${min}` == "-9223372036854775808";
+    assert -5000000000000 as i64 + 3000000000000 as i64 == -2000000000000 as i64;
+    let div: i64 = -1000000000000 as i64 / 7 as i64;
+    let rem: i64 = -1000000000000 as i64 % 7 as i64;
+    assert div == -142857142857 as i64;
+    assert rem == -1 as i64;
+}
+
+test "u8 arithmetic" {
+    let a: u8 = 10 as u8;
+    let b: u8 = 3 as u8;
+    assert a + b == 13 as u8;
+    assert a - b == 7 as u8;
+    assert a * b == 30 as u8;
+    assert a / b == 3 as u8;
+    assert a % b == 1 as u8;
+}
+
+test "u8 comparison" {
+    let a: u8 = 10 as u8;
+    let b: u8 = 200 as u8;
+    let c: u8 = 0 as u8;
+    let d: u8 = 10 as u8;
+    assert a < b;
+    assert a <= b;
+    assert b > a;
+    assert b >= a;
+    assert c < a;
+    assert a > c;
+    assert a == d;
+    assert a != b;
+}
+
+test "u8 boundaries" {
+    let max: u8 = 255 as u8;
+    let min: u8 = 0 as u8;
+    assert `${max}` == "255";
+    assert `${min}` == "0";
+    let a: u8 = 200 as u8;
+    let b: u8 = 3 as u8;
+    assert a / b == 66 as u8;
+    assert a % b == 2 as u8;
+}
+
+test "u16 arithmetic" {
+    let a: u16 = 1000 as u16;
+    let b: u16 = 30 as u16;
+    assert a + b == 1030 as u16;
+    assert a - b == 970 as u16;
+    assert a * b == 30000 as u16;
+    assert a / b == 33 as u16;
+    assert a % b == 10 as u16;
+}
+
+test "u16 comparison" {
+    let a: u16 = 1000 as u16;
+    let b: u16 = 60000 as u16;
+    let c: u16 = 0 as u16;
+    let d: u16 = 1000 as u16;
+    assert a < b;
+    assert a <= b;
+    assert b > a;
+    assert b >= a;
+    assert c < a;
+    assert a > c;
+    assert a == d;
+    assert a != b;
+}
+
+test "u16 boundaries" {
+    let max: u16 = 65535 as u16;
+    let min: u16 = 0 as u16;
+    assert `${max}` == "65535";
+    assert `${min}` == "0";
+    let a: u16 = 60000 as u16;
+    let b: u16 = 7 as u16;
+    assert a / b == 8571 as u16;
+    assert a % b == 3 as u16;
+}
+
+test "u32 arithmetic" {
+    let a: u32 = 100000 as u32;
+    let b: u32 = 3000 as u32;
+    assert a + b == 103000 as u32;
+    assert a - b == 97000 as u32;
+    assert a * b == 300000000 as u32;
+    assert a / b == 33 as u32;
+    assert a % b == 1000 as u32;
+}
+
+test "u32 comparison" {
+    // Above i32::MAX, so a signed comparison would read `large` as negative.
+    let small: u32 = 100 as u32;
+    let large: u32 = 3000000000 as u32;
+    let zero: u32 = 0 as u32;
+    let another: u32 = 3000000000 as u32;
+    assert large > small;
+    assert large >= small;
+    assert small < large;
+    assert small <= large;
+    assert large > zero;
+    assert large == another;
+    assert large != small;
+}
+
+test "u32 boundaries" {
+    let max: u32 = 4294967295 as u32;
+    let min: u32 = 0 as u32;
+    let large: u32 = 3000000000 as u32;
+    assert `${max}` == "4294967295";
+    assert `${min}` == "0";
+    assert `${large}` == "3000000000";
+    assert large / 2 as u32 == 1500000000 as u32;
+    assert large % 7 as u32 == 4 as u32;
+}
+
+test "u64 arithmetic" {
+    let a: u64 = 1000000000000 as u64;
+    let b: u64 = 300000000000 as u64;
+    assert a + b == 1300000000000 as u64;
+    assert a - b == 700000000000 as u64;
+    assert 1000000 as u64 * 1000000 as u64 == 1000000000000 as u64;
+    assert a / b == 3 as u64;
+    assert a % b == 100000000000 as u64;
+}
+
+test "u64 comparison" {
+    // Above i64::MAX, so a signed comparison would read `large` as negative.
+    let small: u64 = 100 as u64;
+    let large: u64 = 10000000000000000000 as u64;
+    let zero: u64 = 0 as u64;
+    let another: u64 = 10000000000000000000 as u64;
+    assert large > small;
+    assert large >= small;
+    assert small < large;
+    assert small <= large;
+    assert large > zero;
+    assert large == another;
+    assert large != small;
+}
+
+test "u64 boundaries" {
+    let max: u64 = 18446744073709551615 as u64;
+    let min: u64 = 0 as u64;
+    let large: u64 = 10000000000000000000 as u64;
+    assert `${max}` == "18446744073709551615";
+    assert `${min}` == "0";
+    assert `${large}` == "10000000000000000000";
+    assert large / 2 as u64 == 5000000000000000000 as u64;
+    assert large % 7 as u64 == 3 as u64;
+}
+
+test "i8 overflow wraps" {
+    let a: i8 = 127 as i8;
+    let b: i8 = 1 as i8;
+    let sum = a + b;
+    assert sum == -128 as i8;
+    assert sum < 0 as i8;
+    let min: i8 = -128 as i8;
+    let sub = min - b;
+    assert sub == 127 as i8;
+    assert sub > 0 as i8;
+    assert a * 2 as i8 == -2 as i8;
+    assert -min == -128 as i8;
+    assert (100 as i8 + 100 as i8) < 0 as i8;
+}
+
+test "i16 overflow wraps" {
+    let a: i16 = 32767 as i16;
+    let b: i16 = 1 as i16;
+    let sum = a + b;
+    assert sum == -32768 as i16;
+    assert sum < 0 as i16;
+    let min: i16 = -32768 as i16;
+    let sub = min - b;
+    assert sub == 32767 as i16;
+    assert sub > 0 as i16;
+    assert a * 2 as i16 == -2 as i16;
+}
+
+test "u8 overflow wraps" {
+    let a: u8 = 255 as u8;
+    let b: u8 = 1 as u8;
+    assert a + b == 0 as u8;
+    assert 200 as u8 + 100 as u8 == 44 as u8;
+    assert 0 as u8 - b == 255 as u8;
+    assert 200 as u8 * 2 as u8 == 144 as u8;
+}
+
+test "u16 overflow wraps" {
+    let a: u16 = 65535 as u16;
+    let b: u16 = 1 as u16;
+    assert a + b == 0 as u16;
+    assert 0 as u16 - b == 65535 as u16;
+    assert 60000 as u16 * 2 as u16 == 54464 as u16;
+}
+
+test "u64 narrows in a digit loop" {
+    // `(v % 10) as i32` on a u64 was once miscompiled.
+    let mut digits: List<i32> = [];
+    let mut v = 12345 as u64;
+    while v > 0 as u64 {
+        digits.push((v % 10 as u64) as i32);
+        v = v / 10 as u64;
+    }
+    assert digits.len() == 5;
+    assert digits[0] == 5;
+    assert digits[1] == 4;
+    assert digits[2] == 3;
+    assert digits[3] == 2;
+    assert digits[4] == 1;
+}
+
+test "wide to narrow casts" {
+    assert 255 as u64 as i32 == 255;
+    assert 1000 as u64 as u32 == 1000 as u32;
+    assert 42 as i64 as i32 == 42;
+    assert 100 as i64 as u32 == 100 as u32;
+}
+
+test "widening and float casts" {
+    assert 42 as f64 == 42.0;
+    assert 3.99 as i32 == 3;
+    let small: i8 = 127;
+    assert small as i32 == 127;
+    let u: u32 = 255;
+    assert u as i64 == 255 as i64;
+}
+
+test "compound assignment" {
+    let mut x = 10;
+    x += 5;
+    assert x == 15;
+    x -= 3;
+    assert x == 12;
+    x *= 2;
+    assert x == 24;
+    x /= 4;
+    assert x == 6;
+    x %= 4;
+    assert x == 2;
+}
+
+test "compound bitwise assignment" {
+    let mut x = 0xFF;
+    x &= 0x0F;
+    assert x == 15;
+    x |= 0xF0;
+    assert x == 255;
+    x ^= 0xFF;
+    assert x == 0;
+    let mut y = 1;
+    y <<= 4;
+    assert y == 16;
+    y >>= 2;
+    assert y == 4;
+}
+
+test "chained comparison" {
+    let a = 1;
+    let b = 2;
+    let c = 3;
+    assert a < b < c;
+    assert a < b;
+    assert !(b > c);
+    assert a <= a;
+    assert c >= c;
+}
+
+test "negation and logical not" {
+    let x = 42;
+    assert -x == -42;
+    assert !true == false;
+    assert ~0xF0 == -241;
+}
+
+test "f64 arithmetic" {
+    let a = 3.14;
+    let b = 2.0;
+    // Display is the shortest roundtrip form, so the sum keeps its last digit.
+    assert `${a + b}` == "5.140000000000001";
+    assert `${a * b}` == "6.28";
+    assert `${a / b}` == "1.57";
+}
+
+test "unary negation on floats" {
+    assert `${-2.5}` == "-2.5";
+    assert `${-1.0 + 3.5}` == "2.5";
+    assert `${-(4.0 + 2.0)}` == "-6";
+}
+
+test "mixed int and float arithmetic" {
+    let width = 100;
+    let x_max = 1.0;
+    let x_min = -2.5;
+    let dx = (x_max - x_min) / width as f64;
+    assert `${dx}` == "0.035";
+}

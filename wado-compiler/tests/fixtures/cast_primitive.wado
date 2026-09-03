@@ -1,0 +1,197 @@
+// `as` between primitives: narrowing from 64 bits, float-literal conversion,
+// char conversions, precedence against `*`, and casts to a newtype.
+
+struct U64Box {
+    value: u64,
+}
+
+struct I64Box {
+    value: i64,
+}
+
+type Bytes = List<u8>;
+type Chunk = Slice<u8>;
+type Money = i128;
+type Big = u128;
+
+test "u64 narrows to every smaller integer" {
+    // Every pattern must emit `i32.wrap_i64`, struct field access included.
+    let x: u64 = 300;
+    let bx = U64Box { value: 300 };
+
+    // 300 & 0xFF = 44
+    assert x as u8 == 44 as u8;
+    assert bx.value as u8 == 44 as u8;
+    assert x as u16 == 300 as u16;
+    assert bx.value as u16 == 300 as u16;
+    assert x as u32 == 300 as u32;
+    assert bx.value as u32 == 300 as u32;
+    assert x as i8 == 44 as i8;
+    assert bx.value as i8 == 44 as i8;
+    assert x as i16 == 300 as i16;
+    assert bx.value as i16 == 300 as i16;
+    assert x as i32 == 300;
+    assert bx.value as i32 == 300;
+}
+
+test "i64 narrows to every smaller integer" {
+    let x: i64 = 300;
+    let bx = I64Box { value: 300 };
+
+    assert x as u8 == 44 as u8;
+    assert bx.value as u8 == 44 as u8;
+    assert x as u16 == 300 as u16;
+    assert bx.value as u16 == 300 as u16;
+    assert x as u32 == 300 as u32;
+    assert bx.value as u32 == 300 as u32;
+    assert x as i8 == 44 as i8;
+    assert bx.value as i8 == 44 as i8;
+    assert x as i16 == 300 as i16;
+    assert bx.value as i16 == 300 as i16;
+    assert x as i32 == 300;
+    assert bx.value as i32 == 300;
+}
+
+test "a negative i64 narrows by taking the low bits" {
+    // -1 is 0xFFFFFFFFFFFFFFFF; each narrowing keeps the low bits and the
+    // signed targets read them back as -1.
+    let x: i64 = -1;
+    let bx = I64Box { value: -1 };
+
+    assert x as i32 == -1;
+    assert bx.value as i32 == -1;
+    assert x as i8 == -1 as i8;
+    assert bx.value as i8 == -1 as i8;
+    assert x as i16 == -1 as i16;
+    assert bx.value as i16 == -1 as i16;
+    assert x as u8 == 255 as u8;
+    assert bx.value as u8 == 255 as u8;
+    assert x as u16 == 65535 as u16;
+    assert bx.value as u16 == 65535 as u16;
+}
+
+test "a float literal cast to an integer converts, not re-types" {
+    // Reify re-typed any numeric literal operand of an integer-targeted cast
+    // so `-9e15 as i64` would not truncate through `i32` before widening. A
+    // float-only literal took that path too, and reading "3.99" as an integer
+    // left `0`.
+    let folded = `${3.99 as i32} ${-3.99 as i32} ${2.0 as i64} ${3.99 as u8} ${300.7 as i8}`;
+    let f = builtin::black_box(3.99);
+    let n = builtin::black_box(-3.99);
+    let runtime = `${f as i32} ${n as i32} ${builtin::black_box(2.0) as i64} ${f as u8} ${builtin::black_box(300.7) as i8}`;
+    assert folded == "3 -3 2 3 44";
+    assert folded == runtime;
+    // The integer-literal path the re-typing exists for still widens first.
+    assert -9e15 as i64 == -9000000000000000 as i64;
+}
+
+test "char::from_u32 accepts exactly the unicode scalars" {
+    assert char::from_u32(65 as u32) == Option::Some('A');
+    assert char::from_i32(65) == Option::Some('A');
+    if let Some(c) = char::from_u32(0x1F600 as u32) {
+        assert c as i32 == 0x1F600;
+    } else {
+        panic("expected Some");
+    }
+
+    // Surrogates and anything past U+10FFFF are not scalars.
+    assert char::from_u32(0xD800 as u32) matches { None };
+    assert char::from_u32(0xDFFF as u32) matches { None };
+    assert char::from_u32(0x110000 as u32) matches { None };
+    assert char::from_i32(-1) matches { None };
+
+    // Boundaries of the valid ranges.
+    if let Some(c) = char::from_u32(0 as u32) {
+        assert c as i32 == 0;
+    } else {
+        panic("expected Some for U+0000");
+    }
+    if let Some(c) = char::from_u32(0xD7FF as u32) {
+        assert c as i32 == 0xD7FF;
+    } else {
+        panic("expected Some for U+D7FF");
+    }
+    if let Some(c) = char::from_u32(0xE000 as u32) {
+        assert c as i32 == 0xE000;
+    } else {
+        panic("expected Some for U+E000");
+    }
+    if let Some(c) = char::from_u32(0x10FFFF as u32) {
+        assert c as i32 == 0x10FFFF;
+    } else {
+        panic("expected Some for U+10FFFF");
+    }
+
+    assert char::from_u32_unchecked(65 as u32) == 'A';
+    assert char::from_u32_unchecked(0x1F600 as u32) as i32 == 0x1F600;
+}
+
+test "u8 as char is always a scalar" {
+    let byte: u8 = 65;
+    assert byte as char == 'A';
+    let max_byte: u8 = 255;
+    assert max_byte as char as i32 == 255;
+    let zero: u8 = 0;
+    assert zero as char as i32 == 0;
+}
+
+test "char casts to an integer code point" {
+    let c = 'A';
+    assert c as i32 == 65;
+    assert c as u32 == 65 as u32;
+    assert '😀' as i32 == 0x1F600;
+}
+
+// Unary `*` binds tighter than `as`, so `*r as T` is `(*r) as T`.
+// See docs/wep-2026-01-11-operator-precedence.md — level 3 over level 4.
+
+test "deref then cast" {
+    let x: i32 = 42;
+    let r = &x;
+    assert *r as i64 == 42 as i64;
+}
+
+test "deref then cast: negative value" {
+    let x: i32 = -1;
+    let r = &x;
+    assert *r as i64 == -1 as i64;
+}
+
+test "chained cast after deref" {
+    let x: i32 = 100;
+    let r = &x;
+    assert *r as i32 as i64 == 100 as i64;
+}
+
+test "deref cast in arithmetic" {
+    let x: i32 = 10;
+    let r = &x;
+    assert *r as i64 + 1 as i64 == 11 as i64;
+}
+
+test "double deref then cast" {
+    let x: i32 = 7;
+    let r = &x;
+    let rr = &r;
+    assert **rr as i64 == 7 as i64;
+}
+
+test "cast to a newtype of a generic base" {
+    let owned = "hi".as_bytes().to_list();
+    let named = owned as Bytes;
+    let back = named as List<u8>;
+    let view = back.as_slice() as Chunk;
+    assert back.len() == 2;
+    assert view.len() == 2;
+}
+
+test "cast to a newtype of a wide integer" {
+    let n = 5;
+    assert `${n as Money}` == "5";
+    assert `${170141183460469231731687303715884105727 as Money}`
+        == "170141183460469231731687303715884105727";
+    assert `${-170141183460469231731687303715884105728 as Money}`
+        == "-170141183460469231731687303715884105728";
+    assert `${42 as Big}` == "42";
+    assert `${2.5 as Money}` == "2";
+}
