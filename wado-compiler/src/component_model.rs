@@ -1678,17 +1678,18 @@ impl CmInterfaceRegistry {
         let mut modules: Vec<(&'static str, crate::ast::Module)> = Vec::new();
         let mut defs_by_module: IndexMap<&'static str, IndexMap<String, String>> =
             IndexMap::default();
-        for (path, source) in stdlib::all_binding_modules() {
-            let module = parse_module(source);
-            defs_by_module.insert(*path, collect_cm_definitions(&module));
-            modules.push((*path, module));
-        }
-        for path in [
+        let kiln = [
             "core:kiln/kiln_host.wado",
             "core:kiln/types.wado",
             "core:kiln/worlds.wado",
-        ] {
-            let source = stdlib::get_stdlib_module(path).expect("core:kiln is bundled");
+        ]
+        .map(|path| {
+            (
+                path,
+                stdlib::get_stdlib_module(path).expect("core:kiln is bundled"),
+            )
+        });
+        for (path, source) in stdlib::all_binding_modules().iter().copied().chain(kiln) {
             let module = parse_module(source);
             defs_by_module.insert(path, collect_cm_definitions(&module));
             modules.push((path, module));

@@ -618,8 +618,6 @@ test "integer clamp confines a value to the range" {
     assert i32::clamp(0, 1, 10) == 1;
     assert i32::clamp(11, 1, 10) == 10;
     assert i32::clamp(-5, -3, 3) == -3;
-
-    // A single-point range is that point, whatever comes in.
     assert i32::clamp(7, 4, 4) == 4;
 }
 
@@ -644,8 +642,8 @@ test "float clamp confines a value to the range" {
     assert f32::clamp(-1.0, 0.0, 1.0) == 0.0;
     assert f32::clamp(2.0, 0.0, 1.0) == 1.0;
 
-    // NaN is neither below nor above, so it is carried out rather than
-    // snapping to whichever bound the comparison order happens to reach.
+    // NaN is neither below nor above, so it passes through rather than
+    // snapping to a bound.
     assert f64::clamp(f64::NAN, 0.0, 1.0).is_nan();
     assert f32::clamp(f32::NAN, 0.0, 1.0).is_nan();
 }

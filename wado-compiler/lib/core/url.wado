@@ -82,6 +82,27 @@ fn default_port_for_scheme(scheme: &String) -> u16 {
     return 443;
 }
 
+/// Peels `#fragment` off the end and then `?query`, as `[rest, query,
+/// fragment]`. The fragment goes first: a `?` inside it is part of the
+/// fragment, not a query.
+fn split_off_query_and_fragment(input: String) -> [String, Option<String>, Option<String>] {
+    let mut rest = input;
+
+    let mut fragment: Option<String> = null;
+    if let Some([before, after]) = rest.split_once("#") {
+        fragment = Option::Some(after);
+        rest = before;
+    }
+
+    let mut query: Option<String> = null;
+    if let Some([before, after]) = rest.split_once("?") {
+        query = Option::Some(after);
+        rest = before;
+    }
+
+    return [rest, query, fragment];
+}
+
 fn is_special_scheme(s: &String) -> bool {
     return *s == "http" || *s == "https" || *s == "ws" || *s == "wss";
 }
@@ -197,6 +218,15 @@ fn percent_decode_query_component(input: &String) -> String {
     return *input;
 }
 
+/// The still-encoded key and value of one `key=value` query part. A part
+/// carrying no `=` is all key, with an empty value.
+fn split_query_part(part: String) -> [String, String] {
+    if let Some([key, val]) = part.split_once("=") {
+        return [key, val];
+    }
+    return [part, ""];
+}
+
 /// Parses a query string into key-value pairs (insertion-order preserved).
 /// Input should not include the leading "?".
 /// Handles "+" as space and decodes percent-encoding.
@@ -210,11 +240,8 @@ pub fn parse_query(query: String) -> TreeMap<String, String> {
         if part.is_empty() {
             continue;
         }
-        if let Some([key, val]) = part.split_once("=") {
-            result[percent_decode_query_component(&key)] = percent_decode_query_component(&val);
-        } else {
-            result[percent_decode_query_component(&part)] = "";
-        }
+        let [key, val] = split_query_part(part);
+        result[percent_decode_query_component(&key)] = percent_decode_query_component(&val);
     }
     return result;
 }
@@ -376,24 +403,11 @@ impl Url {
             return Result::Err(ParseError::InvalidScheme);
         }
 
-        let mut rest = after_colon;
-
-        if !rest.starts_with("//") {
+        let Some(after_slashes) = after_colon.strip_prefix("//") else {
             return Result::Err(ParseError::MissingHost);
-        }
-        rest = rest.substr_bytes(2, rest.len());
+        };
 
-        let mut fragment: Option<String> = null;
-        if let Some([before, after]) = rest.split_once("#") {
-            fragment = Option::Some(after);
-            rest = before;
-        }
-
-        let mut query: Option<String> = null;
-        if let Some([before, after]) = rest.split_once("?") {
-            query = Option::Some(after);
-            rest = before;
-        }
+        let [rest, query, fragment] = split_off_query_and_fragment(after_slashes);
 
         let mut authority_str = rest;
         let mut path = "/";
@@ -576,28 +590,15 @@ impl Url {
 
         let mut r_authority = "";
         let mut r_path = "";
-        let mut r_query: Option<String> = null;
-        let mut r_fragment: Option<String> = null;
 
-        let mut rest = reference;
+        let [rest, r_query, r_fragment] = split_off_query_and_fragment(reference);
 
-        if let Some([before, after]) = rest.split_once("#") {
-            r_fragment = Option::Some(after);
-            rest = before;
-        }
-
-        if let Some([before, after]) = rest.split_once("?") {
-            r_query = Option::Some(after);
-            rest = before;
-        }
-
-        if rest.starts_with("//") {
-            rest = rest.substr_bytes(2, rest.len());
-            if let Some(slash_pos) = rest.find("/") {
-                r_authority = rest.substr_bytes(0, slash_pos);
-                r_path = rest.substr_bytes(slash_pos, rest.len());
+        if let Some(after_slashes) = rest.strip_prefix("//") {
+            if let Some(slash_pos) = after_slashes.find("/") {
+                r_authority = after_slashes.substr_bytes(0, slash_pos);
+                r_path = after_slashes.substr_bytes(slash_pos, after_slashes.len());
             } else {
-                r_authority = rest;
+                r_authority = after_slashes;
                 r_path = "/";
             }
 
@@ -682,12 +683,9 @@ impl Url {
                 if part.is_empty() {
                     continue;
                 }
-                if let Some([k, v]) = part.split_once("=") {
-                    if percent_decode_query_component(&k) == key {
-                        result.push(percent_decode_query_component(&v));
-                    }
-                } else if percent_decode_query_component(&part) == key {
-                    result.push("");
+                let [k, v] = split_query_part(part);
+                if percent_decode_query_component(&k) == key {
+                    result.push(percent_decode_query_component(&v));
                 }
             }
         }

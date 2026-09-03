@@ -25,10 +25,10 @@ optimizer has its own guide: [`docs/optimizer.md`](../docs/optimizer.md).
 ## Standard Libraries
 
 `src/stdlib.rs` lists `lib/core/` and `lib/wasi/`. A dev build reads them from
-disk, so editing one takes effect on the next `wado` run with no rebuild; a
-release build — and any `wasm32` build, which has no filesystem — embeds them
-with `include_str!`. `lib/wasi/` and `lib/core/kiln/` are generated from WIT:
-read `wado-from-idl/AGENTS.md` first.
+disk, so editing one takes effect on the next `wado` run with no rebuild. A
+release build embeds them with `include_str!`, as does any `wasm32` build, which
+has no filesystem. `lib/wasi/` and `lib/core/kiln/` are generated from WIT: read
+`wado-from-idl/AGENTS.md` first.
 
 ## E2E Tests
 
