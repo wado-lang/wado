@@ -1,0 +1,278 @@
+// Indexing a list: the `IndexValue` / `IndexAssign` path in loops, through a
+// generic struct's field, inside a method that gets inlined, through recursive
+// `&mut` children, and over a niche-optimized `Option` element.
+
+struct Bag<T> {
+    items: List<T>,
+}
+
+struct Flagged<T> {
+    items: List<T>,
+    markers: List<bool>,
+}
+
+impl<T> Flagged<T> {
+    fn get_item(&self, i: i32) -> T {
+        return self.items[i];
+    }
+
+    fn is_flagged(&self, i: i32) -> bool {
+        return self.markers[i];
+    }
+
+    fn count_flagged(&self) -> i32 {
+        let mut count = 0;
+        for let mut i = 0; i < self.markers.len(); i += 1 {
+            if self.markers[i] {
+                count += 1;
+            }
+        }
+        return count;
+    }
+}
+
+struct Entries<K, V> {
+    keys: List<K>,
+    values: List<V>,
+    deleted: List<bool>,
+}
+
+impl<K, V> Entries<K, V> {
+    fn find_key_index(&self, key: &K) -> i32 {
+        let mut i = 0;
+        while i < self.keys.len() && self.keys[i] < *key {
+            i += 1;
+        }
+        return i;
+    }
+
+    fn is_full(&self, max_keys: i32) -> bool {
+        let mut count = 0;
+        for let mut i = 0; i < self.keys.len(); i += 1 {
+            if !self.deleted[i] {
+                count += 1;
+            }
+        }
+        return count >= max_keys;
+    }
+
+}
+
+struct Keys<K> {
+    keys: List<K>,
+    deleted: List<bool>,
+}
+
+impl<K> Keys<K> {
+    fn count_active(&self) -> i32 {
+        let mut count = 0;
+        for let mut i = 0; i < self.keys.len(); i += 1 {
+            if !self.deleted[i] {
+                count += 1;
+            }
+        }
+        return count;
+    }
+
+    fn is_full(&self, max_keys: i32) -> bool {
+        let mut count = 0;
+        for let mut i = 0; i < self.keys.len(); i += 1 {
+            if !self.deleted[i] {
+                count += 1;
+            }
+        }
+        return count >= max_keys;
+    }
+
+    fn find_index(&self, key: &K) -> i32 {
+        let mut i = 0;
+        while i < self.keys.len() && self.keys[i] < *key {
+            i += 1;
+        }
+        return i;
+    }
+}
+
+struct Tree<K> {
+    root: Keys<K>,
+    max_keys: i32,
+}
+
+impl<K> Tree<K> {
+    // `key` is a parameter rather than a literal: inside this body `K` is
+    // opaque, so no concrete key could satisfy `find_index(&K)`.
+    fn check(&self, key: &K) -> i32 {
+        let active = self.root.count_active();
+        let full = self.root.is_full(self.max_keys);
+        let idx = self.root.find_index(key);
+        if full {
+            return active + 100;
+        }
+        return active + idx;
+    }
+}
+
+struct Child<K> {
+    keys: List<K>,
+    children: List<&mut Child<K>>,
+    is_leaf: bool,
+}
+
+impl<K> Child<K> {
+    fn depths(&self, depth: i32, out: &mut List<i32>) {
+        out.push(depth);
+        if !self.is_leaf {
+            for let mut i = 0; i < self.children.len(); i += 1 {
+                self.children[i].depths(depth + 1, out);
+            }
+        }
+    }
+}
+
+fn find_key_index(keys: &List<String>, key: &String) -> i32 {
+    let mut i = 0;
+    while i < keys.len() && keys[i] < *key {
+        i += 1;
+    }
+    return i;
+}
+
+fn make(present: bool) -> Option<List<String>> {
+    if present {
+        return Option::Some(["x", "y"]);
+    }
+    return null;
+}
+
+test "read and write through the index operators" {
+    let mut arr: List<i32> = [10, 20, 30];
+    let first = arr[0];
+    let second = arr[1];
+    arr[2] = 100;
+    assert `${first}, ${second}, ${arr[2]}` == "10, 20, 100";
+}
+
+test "index in a loop, reading and writing" {
+    let arr: List<i32> = [10, 20, 30, 40, 50];
+    let mut sum = 0;
+    for let mut i = 0; i < arr.len(); i += 1 {
+        sum += arr[i];
+    }
+    assert sum == 150;
+
+    let mut arr2: List<i32> = [0, 0, 0];
+    for let mut i = 0; i < 3; i += 1 {
+        arr2[i] = i * 10;
+    }
+    assert arr2 == [0, 10, 20];
+}
+
+test "index a list held in a generic struct field" {
+    let c: Bag<i32> = Bag { items: [10, 20, 30] };
+    assert `${c.items[0]}, ${c.items[1]}, ${c.items[2]}` == "10, 20, 30";
+}
+
+test "index by comparison against a string key" {
+    let keys: List<String> = ["apple", "banana", "cherry", "date"];
+    assert find_key_index(&keys, &"cherry") == 2;
+}
+
+test "index inside methods that get inlined" {
+    let c: Flagged<String> = Flagged {
+        items: ["apple", "banana", "cherry"],
+        markers: [true, false, true],
+    };
+    assert c.get_item(0) == "apple";
+    assert c.get_item(1) == "banana";
+    assert c.get_item(2) == "cherry";
+    assert c.is_flagged(0);
+    assert !c.is_flagged(1);
+    assert c.count_flagged() == 2;
+}
+
+test "index several lists held in one struct" {
+    let node: Entries<String, i32> = Entries {
+        keys: ["apple", "banana", "cherry"],
+        values: [10, 20, 30],
+        deleted: [false, true, false],
+    };
+    let mut sum = 0;
+    for let mut i = 0; i < node.keys.len(); i += 1 {
+        if !node.deleted[i] {
+            sum += node.values[i];
+        }
+    }
+    assert sum == 40;
+    assert node.keys[0] == "apple";
+    assert node.find_key_index(&"cherry") == 2;
+    assert !node.is_full(5);
+}
+
+test "index through a chain of inlined generic methods" {
+    let tree: Tree<String> = Tree {
+        root: Keys {
+            keys: ["apple", "banana", "cherry", "date"],
+            deleted: [false, true, false, false],
+        },
+        max_keys: 5,
+    };
+    assert tree.check(&"cherry") == 5;
+}
+
+test "index into recursive &mut children" {
+    let mut leaf1: Child<String> = Child { keys: ["a", "b"], children: [], is_leaf: true };
+    let mut leaf2: Child<String> = Child { keys: ["d", "e"], children: [], is_leaf: true };
+    let root: Child<String> = Child {
+        keys: ["c"],
+        children: [&mut leaf1, &mut leaf2],
+        is_leaf: false,
+    };
+    let mut seen: List<i32> = [];
+    root.depths(0, &mut seen);
+    assert seen == [0, 1, 1];
+}
+
+// `array.get` on an array whose element is a niche-optimized `Option<ref>`
+// must not narrow the result to non-null: `None` is a genuine null ref, so the
+// old unconditional `ref.as_non_null` trapped on every `None` read.
+
+test "index a None element with a heap payload" {
+    let v: List<Option<List<String>>> = [null, Option::Some(["a"])];
+    assert v[0] matches { None };
+    let mut n = 0;
+    if let Some(inner) = v[1] {
+        n = inner.len();
+    }
+    assert n == 1;
+}
+
+test "by-ref iteration over None elements" {
+    let v: List<Option<List<String>>> = [null, make(true), null];
+    let mut some_count = 0;
+    let mut none_count = 0;
+    for let e of &v {
+        if let Some(_) = e {
+            some_count += 1;
+        } else {
+            none_count += 1;
+        }
+    }
+    assert some_count == 1;
+    assert none_count == 2;
+}
+
+test "assign into a None slot then read it back" {
+    let mut w: List<Option<List<String>>> = [null, null];
+    w[0] = Option::Some(["z"]);
+    assert w[1] matches { None };
+    let mut n = 0;
+    if let Some(inner) = w[0] {
+        n = inner.len();
+    }
+    assert n == 1;
+}
+
+test "a non-nullable ref element is still narrowed" {
+    let v: List<List<String>> = [["a", "b", "c"]];
+    assert v[0].len() == 3;
+}

@@ -1,0 +1,151 @@
+// List literals: how the element type is fixed (annotation, cast, parameter,
+// return type), what may sit in an element, and the `Array<T>` statics.
+
+type IntArr = Array<i32>;
+
+struct Wrapper<T> {
+    value: T,
+}
+
+impl<T> Wrapper<T> {
+    fn new(value: T) -> Wrapper<T> {
+        return Wrapper { value };
+    }
+}
+
+struct Container<T> {
+    items: List<T>,
+    size: i32,
+}
+
+impl<T> Container<T> {
+    fn new() -> Container<T> {
+        return Container { items: [], size: 0 };
+    }
+
+    fn add(&mut self, item: T) {
+        self.items.push(item);
+        self.size += 1;
+    }
+}
+
+fn sum_three(arr: List<i32>) -> i32 {
+    return arr[0] + arr[1] + arr[2];
+}
+
+fn get_numbers() -> List<i32> {
+    return [1, 2, 3] as List<i32>;
+}
+
+fn join_names(names: List<String>) -> String {
+    return `${names[0]} and ${names[1]}`;
+}
+
+fn bump(r: &mut i32, by: i32) -> i32 {
+    *r = *r + by;
+    return *r;
+}
+
+test "an empty literal needs its type from somewhere" {
+    let a: List<i32> = [] as List<i32>;
+    assert a.len() == 0;
+    let b: List<i32> = [];
+    assert b.len() == 0;
+}
+
+test "the element type comes from an annotation or a cast" {
+    let a: List<i32> = [1, 2, 3];
+    assert `${a[0]}, ${a[1]}, ${a[2]}` == "1, 2, 3";
+    let b = [1, 2, 3] as List<i32>;
+    assert `${b[0]}, ${b[1]}, ${b[2]}` == "1, 2, 3";
+    let c: List<f64> = [1.5, 2.5, 3.5];
+    assert `${c[0]}, ${c[1]}, ${c[2]}` == "1.5, 2.5, 3.5";
+}
+
+test "the element type comes from a parameter or a return type" {
+    assert sum_three([10, 20, 30]) == 60;
+    let a = get_numbers();
+    assert `${a[0]}, ${a[1]}, ${a[2]}` == "1, 2, 3";
+}
+
+test "a list of strings" {
+    let names: List<String> = ["Alice", "Bob", "Charlie"];
+    assert `${names[0]}, ${names[1]}, ${names[2]}` == "Alice, Bob, Charlie";
+    let cast = ["Hello", "World"] as List<String>;
+    assert `${cast[0]} ${cast[1]}` == "Hello World";
+    assert join_names(["Alice", "Bob"]) == "Alice and Bob";
+}
+
+test "elements coerce to the target element type" {
+    let a: List<u8> = [1, 2, 3];
+    assert `${a[0]}, ${a[1]}, ${a[2]}` == "1, 2, 3";
+    let b: List<i64> = [10, 20, 30];
+    assert `${b[0]}, ${b[1]}, ${b[2]}` == "10, 20, 30";
+    let c: List<u16> = [100, 200, 300];
+    assert `${c[0]}, ${c[1]}, ${c[2]}` == "100, 200, 300";
+    let d = [4, 5, 6] as List<u8>;
+    assert `${d[0]}, ${d[1]}, ${d[2]}` == "4, 5, 6";
+}
+
+test "a list of tuples holding unit" {
+    let arr: List<[i32, ()]> = [[1, ()], [2, ()], [3, ()]];
+    let mut seen: List<i32> = [];
+    for let item of arr {
+        seen.push(item.0);
+    }
+    assert seen == [1, 2, 3];
+}
+
+test "elements with side effects evaluate in order" {
+    // `lower` lifts the elements into `ArrayLiteral { elements }`, so the
+    // passes that walk aggregate elements to build safety sets — store/load
+    // forwarding's modified-locals set, const-folding's aliased-field
+    // invalidation, value_copy_demote's self-taint — must descend into
+    // `ArrayLiteral` as they do for `TupleLiteral`. A catch-all instead misses
+    // a mutation buried in an element and forwards a stale value.
+    let mut x = 1;
+    let before = x;
+    let arr: List<i32> = [bump(&mut x, 10), bump(&mut x, 100)];
+    assert before == 1;
+    assert arr[0] == 11;
+    assert arr[1] == 111;
+    assert x == 111;
+}
+
+test "turbofish on the Array statics" {
+    // `Array::<i32>::new(3)` parses as a StaticMethodCall whose receiver type
+    // is the compiler item `Array` (`ResolvedType::BuiltinArray`); it must
+    // route through static-method resolution and type as `Array<i32>`, not
+    // the error type.
+    let mut a: Array<i32> = Array::<i32>::new(3);
+    a[0] = 1;
+    a[1] = 2;
+    a[2] = 3;
+    assert a.len() == 3;
+    assert a[0] + a[1] + a[2] == 6;
+
+    let b: Array<i32> = Array::<i32>::filled(4, 7);
+    assert b.len() == 4;
+    assert b[0] == 7;
+    assert b[3] == 7;
+
+    // The turbofish value cast to a newtype must type-check, not ICE.
+    let c: IntArr = Array::<i32>::new(2) as IntArr;
+    assert c.len() == 2;
+}
+
+test "a list of a generic struct" {
+    let mut arr: List<Wrapper<i32>> = [];
+    arr.push(Wrapper::<i32>::new(10));
+    arr.push(Wrapper::<i32>::new(20));
+    assert arr.len() == 2;
+    assert arr[0].value == 10;
+    assert arr[1].value == 20;
+}
+
+test "a generic container of a generic struct" {
+    let mut c = Container::<Wrapper<i32>>::new();
+    c.add(Wrapper::<i32>::new(42));
+    assert c.size == 1;
+    assert c.items[0].value == 42;
+}

@@ -1,0 +1,66 @@
+// Global initializers run in dependency order, and a dependency reached
+// through a call counts. `#[inline(never)]` keeps each read behind its call,
+// which is the whole point: inlining would put the reference back in the
+// initializer, where the direct scan already sees it.
+
+// The scan once followed only references written directly in the initializer,
+// so `THROUGH_CALL` — whose value comes from a function that reads `LIST` —
+// was ordered first and read the placeholder still in `LIST`'s slot.
+global THROUGH_CALL: i32 = read_list() + 1;
+global LIST: List<i32> = [1, 2, 3];
+
+// A function named as a value reaches a call the scan cannot see: `apply`
+// calls `reader` through a parameter. `black_box` keeps the read off the
+// constant path — folded to a literal, the initializer would never run and the
+// ordering would go untested.
+global THROUGH_FN_VALUE: i32 = apply(reader) + 1;
+
+// What a callee reads is an inferred dependency, and the inference is
+// path-insensitive: `pick` names both globals, so each initializer calling it
+// looks dependent on the other even though neither execution reads either.
+// Such an edge must yield rather than manufacture a cycle out of a program
+// with none.
+global LEVEL: i32 = pick(1);
+global PREFIX: i32 = pick(2);
+
+#[inline(never)]
+fn read_list() -> i32 {
+    return LIST.len();
+}
+
+#[inline(never)]
+fn reader() -> i32 {
+    return builtin::black_box(LIST.len());
+}
+
+#[inline(never)]
+fn apply(f: fn() -> i32) -> i32 {
+    return f();
+}
+
+#[inline(never)]
+fn pick(n: i32) -> i32 {
+    if n == 1 {
+        return 10;
+    }
+    if n == 2 {
+        return 20;
+    }
+    if LEVEL > 0 {
+        return PREFIX;
+    }
+    return 0;
+}
+
+test "a dependency reached through a call is ordered first" {
+    assert THROUGH_CALL == 4;
+}
+
+test "a dependency reached through a function value is ordered first" {
+    assert THROUGH_FN_VALUE == 4;
+}
+
+test "a shared helper naming both globals is not a cycle" {
+    assert LEVEL == 10;
+    assert PREFIX == 20;
+}

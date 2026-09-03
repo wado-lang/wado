@@ -1,0 +1,113 @@
+// A `[ … ]` literal targeting a user type: coercion works for anything with a
+// `From<Array<T>>` impl — through an annotation, a cast, a parameter, or a
+// newtype over such a type.
+
+struct SeqVec<T> {
+    items: List<T>,
+}
+
+impl SeqVec<T> {
+    fn new() -> SeqVec<T> {
+        return SeqVec { items: [] };
+    }
+
+    fn len(&self) -> i32 {
+        return self.items.len();
+    }
+
+    fn get(&self, i: i32) -> T {
+        return self.items[i];
+    }
+}
+
+impl From<Array<T>> for SeqVec<T> {
+    fn from(elements: Array<T>) -> SeqVec<T> {
+        let mut out = SeqVec::<T>::new();
+        for let element of elements {
+            out.items.push(element);
+        }
+        return out;
+    }
+}
+
+// An immutable target: no builder, no mutation methods, one `From` impl.
+struct FrozenVec<T> {
+    items: List<T>,
+}
+
+impl FrozenVec<T> {
+    fn len(&self) -> i32 {
+        return self.items.len();
+    }
+
+    fn get(&self, i: i32) -> T {
+        return self.items[i];
+    }
+}
+
+impl From<Array<T>> for FrozenVec<T> {
+    fn from(elements: Array<T>) -> FrozenVec<T> {
+        let mut items = List::<T>::with_capacity(elements.len());
+        for let element of elements {
+            items.push(element);
+        }
+        return FrozenVec { items };
+    }
+}
+
+struct Vec3 {
+    x: f64,
+    y: f64,
+    z: f64,
+}
+
+impl From<Array<f64>> for Vec3 {
+    fn from(values: Array<f64>) -> Vec3 {
+        return Vec3 { x: values[0], y: values[1], z: values[2] };
+    }
+}
+
+type Position = Vec3;
+
+fn count_items(v: SeqVec<i32>) -> i32 {
+    return v.len();
+}
+
+test "an annotation or a cast supplies the target type" {
+    let s: SeqVec<i32> = [10, 20, 30];
+    assert s.len() == 3;
+    assert s.get(0) == 10;
+    assert s.get(1) == 20;
+    assert s.get(2) == 30;
+
+    let s2 = [1, 2, 3] as SeqVec<i32>;
+    assert s2.len() == 3;
+}
+
+test "a parameter supplies the target type, and an empty literal coerces" {
+    assert count_items([1, 2, 3, 4, 5]) == 5;
+    let empty: SeqVec<i32> = [];
+    assert empty.len() == 0;
+}
+
+test "an immutable target needs only the From impl" {
+    let v: FrozenVec<i32> = [1, 2, 3, 4, 5];
+    assert v.len() == 5;
+    assert v.get(0) == 1;
+    assert v.get(2) == 3;
+    assert v.get(4) == 5;
+
+    let v2 = [10, 20] as FrozenVec<i32>;
+    assert v2.len() == 2;
+    assert v2.get(1) == 20;
+}
+
+test "a newtype over such a type coerces like its base" {
+    let p: Position = [1.0, 2.0, 3.0];
+    assert p.x == 1.0;
+    assert p.y == 2.0;
+    assert p.z == 3.0;
+
+    let v: Vec3 = [4.0, 5.0, 6.0];
+    assert v.x == 4.0;
+}

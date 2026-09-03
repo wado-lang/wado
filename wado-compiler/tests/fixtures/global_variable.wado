@@ -1,0 +1,277 @@
+// Module-level `global`s: literal and expression initializers, mutation,
+// initialization order, and the types whose Wasm slot needs special care
+// (enum discriminants, unit, and the widths a constant expression may not use).
+
+struct GPoint {
+    x: i32,
+    y: i32,
+}
+
+struct Counter {
+    value: i32,
+}
+
+enum Level {
+    Trace,
+    Debug,
+    Info,
+}
+
+global ANSWER: i32 = 42;
+global PI: f64 = 3.14159;
+global FLAG: bool = true;
+
+global LETTER: char = 'A';
+global NEWLINE: char = '\n';
+global mut CURRENT: char = 'x';
+
+global DOUBLED_CONST: i32 = 21 * 2;
+global OFFSET: i32 = 100 + 23;
+global NEGATIVE: i32 = -42;
+global NEG_DOUBLED: i32 = -DOUBLED_CONST;
+
+global POW10_MIN: i32 = -348;
+global NEGATIVE_ONE_I64: i64 = -1;
+global I64_MIN: i64 = -9223372036854775808;
+
+global mut counter: i32 = 0;
+
+global BASE: i32 = 10;
+global STEP: i32 = BASE + 5;
+global DOUBLED_PROMO: i32 = STEP * 2;
+global COMBINED: i32 = BASE + DOUBLED_PROMO;
+global PRODUCT: i32 = 7 * 6;
+global LONG: i64 = 1000 as i64 + 234 as i64;
+
+global MAX_SIZE: i32 = 100;
+global HALF_SIZE: i32 = MAX_SIZE / 2;
+global GREETING: String = "hello";
+global PI_APPROX: f64 = 355.0 / 113.0;
+
+global mut total: i32 = 0;
+global mut call_count: i32 = 0;
+global mut shared: i32 = 100;
+global MULTIPLIER: i32 = 2;
+
+global mut ITEMS: List<i32> = [1, 2, 3];
+global mut MESSAGE: String = "Hello, World!";
+global mut ORIGIN: GPoint = GPoint { x: 0, y: 0 };
+
+// Declared out of dependency order on purpose: initialization is topologically
+// sorted, through a function call too.
+global C_TOPO: i32 = B_TOPO * 2;
+global B_TOPO: i32 = A_TOPO + 10;
+global A_TOPO: i32 = 5;
+global X_TOPO: i32 = compute_x();
+global Y_TOPO: i32 = X_TOPO + C_TOPO;
+
+global CONST_SUM: i32 = 1 + 2;
+global CONST_PRODUCT: i64 = 100000 * 100000;
+global CONST_MIXED: i32 = 2 * 3 - 1;
+global CONST_UNSIGNED: u32 = 4000000000 + 300000000;
+global CONST_SMALL: u8 = 200 as u8 + 100 as u8;
+
+global WRAPS_THEN_WIDENS: i64 = (2147483647 + 1) as i64;
+global NARROWS_THEN_ADDS: i32 = (300 as u8) as i32 + 1;
+global UNSIGNED_WRAPS: i64 = (3000000000 as u32 * 2) as i64;
+
+global DEFAULT_LEVEL: Level = Level::Debug;
+global mut RUNTIME_LEVEL: Level = DEFAULT_LEVEL;
+
+global mut current_counter: Option<&mut Counter> = null;
+
+global mut INIT_MARKS: i32 = 0;
+global READY: () = mark_init();
+global mut LATER: () = ();
+
+fn compute_x() -> i32 {
+    return A_TOPO * 3;
+}
+
+fn accumulate(n: i32) {
+    total += n;
+    call_count += 1;
+}
+
+fn increment_shared() {
+    shared = shared + 1;
+}
+
+fn double_shared() {
+    shared = shared * MULTIPLIER;
+}
+
+fn set_level(level: Level) {
+    RUNTIME_LEVEL = level;
+}
+
+fn mark_init() -> () {
+    INIT_MARKS += 1;
+}
+
+fn take(u: ()) -> i32 {
+    return 7;
+}
+
+fn read_counter() -> i32 {
+    if let Some(c) = current_counter {
+        return c.value;
+    }
+    return -1;
+}
+
+test "literal initializers" {
+    assert ANSWER == 42;
+    assert `${PI}` == "3.14159";
+    assert FLAG;
+    assert LETTER == 'A';
+    assert NEWLINE as i32 == 10;
+}
+
+test "a mutable global is written and read back" {
+    CURRENT = 'x';
+    assert CURRENT == 'x';
+    CURRENT = 'Z';
+    assert CURRENT == 'Z';
+
+    counter = 0;
+    counter = counter + 1;
+    assert counter == 1;
+    counter = counter + 10;
+    assert counter == 11;
+}
+
+test "constant-expression initializers" {
+    assert DOUBLED_CONST == 42;
+    assert OFFSET == 123;
+    assert NEGATIVE == -42;
+    assert NEG_DOUBLED == -42;
+    assert POW10_MIN == -348;
+    assert NEGATIVE_ONE_I64 == -1 as i64;
+    assert `${I64_MIN}` == "-9223372036854775808";
+}
+
+test "an initializer may name an earlier global" {
+    assert BASE == 10;
+    assert STEP == 15;
+    assert DOUBLED_PROMO == 30;
+    assert COMBINED == 40;
+    assert PRODUCT == 42;
+    assert LONG == 1234 as i64;
+    assert MAX_SIZE == 100;
+    assert HALF_SIZE == 50;
+    assert GREETING == "hello";
+    assert `${PI_APPROX}` == "3.1415929203539825";
+}
+
+test "initialization is topologically sorted" {
+    assert A_TOPO == 5;
+    assert B_TOPO == 15;
+    assert C_TOPO == 30;
+    assert X_TOPO == 15;
+    assert Y_TOPO == 45;
+}
+
+test "functions read and write globals" {
+    total = 0;
+    call_count = 0;
+    for let mut i = 0; i < 5; i += 1 {
+        accumulate(i * 10);
+    }
+    assert total == 100;
+    assert call_count == 5;
+
+    shared = 100;
+    increment_shared();
+    assert shared == 101;
+    double_shared();
+    assert shared == 202;
+    increment_shared();
+    increment_shared();
+    assert shared == 204;
+}
+
+test "globals of heap types" {
+    ITEMS = [1, 2, 3];
+    assert ITEMS.len() == 3;
+    assert ITEMS[0] == 1;
+    ITEMS.push(4);
+    assert ITEMS.len() == 4;
+
+    MESSAGE = "Hello, World!";
+    assert MESSAGE == "Hello, World!";
+    MESSAGE = "Updated!";
+    assert MESSAGE == "Updated!";
+
+    ORIGIN = GPoint { x: 0, y: 0 };
+    assert ORIGIN.x == 0;
+    assert ORIGIN.y == 0;
+    ORIGIN = GPoint { x: 10, y: 20 };
+    assert ORIGIN.x == 10;
+    assert ORIGIN.y == 20;
+}
+
+// Arithmetic over literals is a Wasm constant expression, so the global holds
+// its value directly instead of being assigned by an initialization function.
+// The `-O0` run is the load-bearing one: with no optimizer to fold `1 + 2`
+// first, the value has to survive lowering and reach the Wasm slot on its own.
+
+test "a constant-expression initializer reaches the slot directly" {
+    assert CONST_SUM == 3;
+    assert CONST_PRODUCT == 10000000000;
+    assert CONST_MIXED == 5;
+    // Wraps mod 2^32, as Wasm's i32.add does.
+    assert CONST_UNSIGNED == 5032704 as u32;
+    // Wraps at 8 bits, which is why it is not a constant expression and takes
+    // the deferred route instead.
+    assert CONST_SMALL == 44 as u8;
+}
+
+test "a cast in an initializer converts, at each operand's own width" {
+    // Each global is compared against the identical local expression, which
+    // goes through the ordinary evaluator.
+    let wraps_then_widens: i64 = (2147483647 + 1) as i64;
+    let narrows_then_adds: i32 = (300 as u8) as i32 + 1;
+    let unsigned_wraps: i64 = (3000000000 as u32 * 2) as i64;
+    assert WRAPS_THEN_WIDENS == wraps_then_widens;
+    assert NARROWS_THEN_ADDS == narrows_then_adds;
+    assert UNSIGNED_WRAPS == unsigned_wraps;
+    assert `${WRAPS_THEN_WIDENS} ${NARROWS_THEN_ADDS} ${UNSIGNED_WRAPS}`
+        == "-2147483648 45 1705032704";
+}
+
+test "an enum global holds its discriminant" {
+    // The generic heap-type default yields `(global (mut i32) (ref.null none))`,
+    // which fails validation.
+    RUNTIME_LEVEL = DEFAULT_LEVEL;
+    assert DEFAULT_LEVEL as i32 == 1;
+    assert RUNTIME_LEVEL as i32 == 1;
+    set_level(Level::Info);
+    assert RUNTIME_LEVEL >= Level::Info;
+}
+
+test "a unit global gets no slot but still runs its initializer" {
+    // Rust accepts `static X: () = ();` too. A unit global gets no Wasm slot,
+    // the way a unit local or parameter gets none, and both its initializer
+    // and a later assignment still run for their effects.
+    assert INIT_MARKS == 1;
+    let _ = READY;
+    LATER = mark_init();
+    assert INIT_MARKS == 2;
+    assert take(LATER) == 7;
+}
+
+test "a genuinely nullable global keeps its None" {
+    // Two distinct uses of nullable global storage were conflated: a
+    // *lazy-init* nullable (a non-Option ref global whose initializer is not
+    // constant, narrowed with `ref.as_non_null` after init) and a *genuinely*
+    // nullable `Option<&T>` whose `null` is the intended value. The narrowing
+    // was applied to both, so a `None` read trapped.
+    current_counter = null;
+    assert read_counter() == -1;
+    let mut c = Counter { value: 7 };
+    current_counter = Option::Some(&mut c);
+    assert read_counter() == 7;
+    current_counter = null;
+    assert read_counter() == -1;
+}

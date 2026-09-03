@@ -1,0 +1,239 @@
+// Anonymous struct literals: shape-based typing, nesting, destructuring, and
+// `..base` composition (WEP 2026-08-24).
+use { to_string } from "core:json";
+use { TreeMap } from "core:collections";
+
+struct CA {
+    x: i32,
+    y: i32,
+}
+
+struct CB {
+    y: i32,
+    z: i32,
+}
+
+struct EBox<T> {
+    v: T,
+    tag: i32,
+}
+
+struct EP {
+    id: i32,
+    keep: i32,
+}
+
+struct EQ {
+    id: String,
+}
+
+struct ECfg {
+    a: i32,
+    b: i32,
+}
+
+struct SB {
+    v: i32,
+}
+
+struct LogCtx {
+    user_id: i32,
+    ip: String,
+}
+
+global E_BASE: ECfg = ECfg { a: 1, b: 2 };
+global E_DERIVED: ECfg = ECfg { ..E_BASE, a: 10 };
+
+global mut COMPOSE_CALLS: i32 = 0;
+global mut ORDER: i32 = 0;
+
+fn make_a() -> CA {
+    COMPOSE_CALLS = COMPOSE_CALLS + 1;
+    return CA { x: 1, y: 2 };
+}
+
+fn mark_a() -> i32 {
+    ORDER = ORDER * 10 + 1;
+    return 7;
+}
+
+fn make_b() -> SB {
+    ORDER = ORDER * 10 + 2;
+    return SB { v: 9 };
+}
+
+test "field access on an anonymous struct" {
+    let p = { x: 1, y: 2 };
+    assert `${p.x}, ${p.y}` == "1, 2";
+}
+
+test "shorthand fields" {
+    let x = 10;
+    let y = 20;
+    let p = { x, y };
+    assert `${p.x}, ${p.y}` == "10, 20";
+}
+
+test "anonymous structs nest" {
+    let line = { start: { x: 0, y: 0 }, end: { x: 10, y: 20 } };
+    assert `${line.start.x}, ${line.start.y} -> ${line.end.x}, ${line.end.y}`
+        == "0, 0 -> 10, 20";
+}
+
+test "two literals of the same shape are one type" {
+    let a = { x: 1, y: 2 };
+    let b = { x: 3, y: 4 };
+    let c = if true { a } else { b };
+    assert `${c.x}, ${c.y}` == "1, 2";
+}
+
+test "destructuring an anonymous struct" {
+    // The struct names no declaration, so a field's index comes from the shape
+    // the literal interned.
+    let p = { x: 1, y: 2, z: 3 };
+    let { x, y, z } = p;
+    assert `${x}, ${y}, ${z}` == "1, 2, 3";
+    let { y: renamed, .. } = p;
+    assert renamed == 2;
+    let q = { outer: 10, inner: { deep: 20 } };
+    let { outer, inner: { deep } } = q;
+    assert `${outer}, ${deep}` == "10, 20";
+}
+
+test "fields of every type" {
+    let a: i8 = 1;
+    let b: i16 = 2;
+    let c: char = 'A';
+    let d: i64 = 100;
+    let e: i128 = 999;
+    let f = "hello";
+    let g = [1, true, "world"];
+    let s = { a, b, c, d, e, f, g };
+    assert `${s.a} ${s.b} ${s.c} ${s.d} ${s.e} ${s.f}` == "1 2 A 100 999 hello";
+    assert `${s.g.0}, ${s.g.1}, ${s.g.2}` == "1, true, world";
+}
+
+test "composition unions two structs, last wins on overlap" {
+    let a = CA { x: 1, y: 2 };
+    let b = CB { y: 20, z: 30 };
+    let c = { ..a, ..b };
+    assert c.x == 1;
+    assert c.y == 20;
+    assert c.z == 30;
+}
+
+test "an explicit field overrides the base" {
+    let a = CA { x: 1, y: 2 };
+    let c = { ..a, y: 99 };
+    assert c.x == 1;
+    assert c.y == 99;
+}
+
+test "an explicit field with a new name extends the shape" {
+    let a = CA { x: 1, y: 2 };
+    let c = { ..a, w: 7 };
+    assert c.x == 1;
+    assert c.y == 2;
+    assert c.w == 7;
+}
+
+test "the base is evaluated once" {
+    COMPOSE_CALLS = 0;
+    let c = { ..make_a(), y: 5 };
+    assert c.x == 1;
+    assert c.y == 5;
+    assert COMPOSE_CALLS == 1;
+}
+
+test "the base value is not mutated" {
+    let a = CA { x: 1, y: 2 };
+    let c = { ..a, x: 100 };
+    assert c.x == 100;
+    assert a.x == 1;
+}
+
+test "subexpressions evaluate in source order" {
+    ORDER = 0;
+    let c = { a: mark_a(), ..make_b() };
+    assert c.a == 7;
+    assert c.v == 9;
+    assert ORDER == 12;
+
+    ORDER = 0;
+    let d = { ..make_b(), a: mark_a() };
+    assert d.a == 7;
+    assert ORDER == 21;
+}
+
+test "a spread in a global initializer" {
+    assert E_DERIVED.a == 10;
+    assert E_DERIVED.b == 2;
+    assert E_BASE.a == 1;
+}
+
+test "a generic-instance base substitutes its type arguments" {
+    let b = EBox { v: 7, tag: 1 };
+    let c = { ..b, extra: 9 };
+    assert c.v == 7;
+    assert c.tag == 1;
+    assert c.extra == 9;
+}
+
+test "a field-name collision takes the last contributor's type" {
+    let p = EP { id: 5, keep: 8 };
+    let q = EQ { id: "hi" };
+    let c = { ..p, ..q };
+    assert c.id == "hi";
+    assert c.keep == 8;
+}
+
+test "compositions nest" {
+    let a = CA { x: 1, y: 2 };
+    let c = { ..{ ..a, x: 10 }, z: 3 };
+    assert c.x == 10;
+    assert c.y == 2;
+    assert c.z == 3;
+}
+
+test "a composed anonymous struct serializes" {
+    // Bound-driven `Serialize`, so `{ ..ctx, request_id }` serializes like a
+    // hand-written anonymous struct — the logger-fields use case.
+    let ctx = LogCtx { user_id: 7, ip: "10.0.0.1" };
+    let payload = { ..ctx, request_id: 42 };
+    if let Ok(json) = to_string(&payload) {
+        assert json == `\{"user_id":7,"ip":"10.0.0.1","request_id":42\}`;
+    } else {
+        panic("serialize failed");
+    }
+}
+
+test "the fold's accumulator local is reserved where reify allocates it" {
+    // A `{ ..base, … }` literal folds through an `__acc` local. Reserved
+    // nowhere, every local index after the literal was off by one and the
+    // closure below wrote its captured box into the wrong slot.
+    let base: TreeMap<String, i32> = { a: 1 };
+    let merged: TreeMap<String, i32> = { ..base, b: 2 };
+
+    let mut total = 0;
+    let mut bump = || { total += 1; };
+    bump();
+    bump();
+
+    assert merged.len() == 2;
+    assert merged["a"] == 1;
+    assert merged["b"] == 2;
+    assert base.len() == 1;
+    assert total == 2;
+
+    // Two spreads and a nested literal, so the fold allocates around
+    // subexpressions that take locals of their own.
+    let other: TreeMap<String, i32> = { c: 3 };
+    let all: TreeMap<String, i32> = { ..base, ..other, a: 9 };
+    let mut seen = 0;
+    let mut count = || { seen += 1; };
+    count();
+    assert all.len() == 2;
+    assert all["a"] == 9;
+    assert all["c"] == 3;
+    assert seen == 1;
+}
