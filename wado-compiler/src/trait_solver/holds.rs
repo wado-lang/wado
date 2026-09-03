@@ -30,6 +30,7 @@ pub fn holds(
         env,
         scope,
         asking: Vec::new(),
+        at_itself: None,
     }
     .holds(ty, trait_)
 }
@@ -40,6 +41,13 @@ struct Query<'a> {
     env: &'a Env,
     scope: ModuleId,
     asking: Vec<(SolverType, TraitDeclId)>,
+    /// A type this query answers about at the type itself, without inheriting
+    /// its newtype base's impls. Selection asks this way so that a blanket
+    /// whose bound only the base carries is a candidate at the base's level and
+    /// not at the newtype's — rank 1's question
+    /// (`docs/wep-2026-09-01-trait-resolution.md`). The subject stays the same
+    /// through a chained blanket's bounds, so the restriction travels with it.
+    at_itself: Option<SolverType>,
 }
 
 impl Query<'_> {
@@ -94,6 +102,9 @@ impl Query<'_> {
                 Some(self.impl_answers(id, def, ty)?.holds)
             })
             .or_else(|| {
+                if self.at_itself.as_ref() == Some(ty) {
+                    return None;
+                }
                 let base = newtype_base(program, ty)?;
                 self.holds(&base, trait_)
             })
@@ -200,8 +211,12 @@ struct Answer {
 }
 
 /// The trait arguments `def` applies to `ty` at, or `None` where it does not
-/// apply. This is selection's question: it names the trait, so unlike a bound
-/// it accepts an impl at any argument list (WEP 2026-07-31).
+/// apply. This is selection's question, and it differs from a bound's twice: it
+/// names the trait, so it accepts an impl at any argument list
+/// (WEP 2026-07-31); and it asks about `ty` at the type itself, so a blanket
+/// whose bound only `ty`'s newtype base carries does not apply here — the chain
+/// reaches that blanket at the base's own level, which is the depth rank 1
+/// wants.
 pub(super) fn impl_applies(
     program: &Program,
     env: &Env,
@@ -216,6 +231,7 @@ pub(super) fn impl_applies(
             env,
             scope,
             asking: Vec::new(),
+            at_itself: Some(ty.clone()),
         }
         .impl_answers(id, def, ty)?
         .trait_args,

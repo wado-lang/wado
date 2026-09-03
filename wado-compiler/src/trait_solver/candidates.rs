@@ -315,6 +315,30 @@ mod tests {
         assert_eq!(selected(&ask(&p, &decl(WRAPPER))), Some(ImplId(1)));
     }
 
+    /// The other half of rank 1: a blanket sits at the level its bound holds
+    /// at. A newtype inherits its base's impls, so the bound would answer at the
+    /// newtype too if the walk let it — and then two blankets, one keyed on the
+    /// newtype and one on the base, would tie at depth 0 and report. Selection
+    /// asks about each level at the type itself, so this one lands at the base.
+    #[test]
+    fn a_blanket_keyed_on_a_bound_only_the_base_carries_sits_at_the_base() {
+        let mut p = program(Builder::default().concrete(LIMIT, decl(POINT)).bounded(
+            TR,
+            SolverType::Param(0),
+            vec![LIMIT],
+        ));
+        p.types.insert(
+            WRAPPER,
+            TypeDef {
+                newtype_base: Some(decl(POINT)),
+            },
+        );
+        let found = ask(&p, &decl(WRAPPER));
+        assert_eq!(found.in_scope.len(), 1);
+        assert_eq!(found.in_scope[0].depth, 1);
+        assert_eq!(selected(&found), Some(ImplId(1)));
+    }
+
     /// `spec.md`'s "Specific Impls Win", assembled end to end.
     #[test]
     fn an_impl_for_one_instantiation_outranks_the_head_impl() {
