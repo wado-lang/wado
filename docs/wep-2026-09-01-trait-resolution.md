@@ -542,14 +542,6 @@ for the `Ref` / `RefMut` marker traits, so a bound on any of them is answered by
 the compiler's path alone and the differential skips it. Each is one more thing
 the lowering reads off a type, in the shape the section above gives the others.
 
-### `spec.md` overstates coherence
-
-Its "at most one impl can apply" describes what the orphan rules guarantee about
-_where impls may be written_. It does not describe how many apply to a call. Its
-"Method Resolution" section lists two steps of the six above. The selection order
-is language semantics and belongs in the spec. This WEP records the decision;
-writing the spec section is the follow-up.
-
 ## Related WEPs
 
 What each contributes to the order above.
