@@ -63,38 +63,64 @@
 (typeRef (IDENTIFIER) @type)
 (genericParam (IDENTIFIER) @type)
 ; `.method()`, and `.field` with a struct literal's and a pattern's field name.
-; A `::` segment is deliberately absent: it goes through `pathSegment`, which
-; nothing captures, because `Option::None` and `Foo::new` are one shape that
-; only name resolution splits.
-;
-; Each wrapper also spells out the contextual keywords usable as a name; only
-; those need listing, because they are the ones the compiler lexes as plain
-; identifiers (a real keyword stays a keyword on both sides).
-(methodName (IDENTIFIER) @function.method)
-(methodName "test" @function.method)
-(methodName "do" @function.method)
-(methodName "task" @function.method)
-(methodName "trap" @function.method)
-(methodName "forward" @function.method)
-(fieldName (IDENTIFIER) @property)
-(fieldName "test" @property)
-(fieldName "do" @property)
-(fieldName "task" @property)
-(fieldName "trap" @property)
-(fieldName "forward" @property)
+; A member name is a name whichever word it is, and `memberName` accepts ~47 of
+; them, keywords included. The whole rule carries the capture: the compiler
+; reads every one of those words through its ordinary name path. `self` is the
+; exception it reads lexically, wherever it stands.
+(fieldName "self" @constant.builtin)
+(methodName "self" @constant.builtin)
+(methodName) @function.method
+(fieldName) @property
+; A `::` segment's IDENTIFIER stays uncoloured: `Option::None` and `Foo::new`
+; are one shape that only name resolution splits. Its keywords are names all
+; the same, and `Instant::from(x)` is the shape every `From` impl is called
+; through. Listed are the words the compiler accepts as a segment: `identifier`
+; holds the ones that lex as keywords, and the rest lex as identifiers there.
+(pathSegment "from" @variable)
+(pathSegment "of" @variable)
+(pathSegment "type" @variable)
+(pathSegment "flags" @variable)
+(pathSegment "extends" @variable)
+(pathSegment "test" @variable)
+(pathSegment "do" @variable)
+(pathSegment "task" @variable)
+(pathSegment "trap" @variable)
+(pathSegment "forward" @variable)
+(pathSegment "resume" @variable)
 ; An interpolation holds ordinary code, so its names take the classes the rules
 ; above give them and nothing more. Painting the rest `@variable` would colour
 ; inside a template what the same name is left plain outside one.
 
-; The contextual keywords the `identifier` rule also accepts as names. In that
-; position they are not keywords — the compiler lexes them as identifiers and
-; only recognises them by where they sit — so `let test = |…|` must not colour
-; `test`. (`self` is absent from `identifier`: the language reserves it.)
+; Every contextual keyword the `identifier` rule accepts as a name. None of them
+; is a keyword there: `let type = 1` binds a variable and `fn from(…)` declares
+; a function. The compiler agrees, colouring these words by the position the
+; parse read them in rather than by how they lex. (`self` is absent from
+; `identifier`: the language reserves it.)
+;
+; Listed word by word rather than as `(identifier) @variable`, which would also
+; claim the IDENTIFIER token and outrank `typeRef` / `pathSegment` from further
+; in, painting every type name and enum case a variable.
+(identifier "from" @variable)
+(identifier "of" @variable)
+(identifier "type" @variable)
+(identifier "matches" @variable)
+(identifier "stores" @variable)
+(identifier "world" @variable)
+(identifier "interface" @variable)
+(identifier "resource" @variable)
+(identifier "import" @variable)
+(identifier "export" @variable)
+(identifier "reactive" @variable)
+(identifier "unique" @variable)
+(identifier "forward" @variable)
+(identifier "trap" @variable)
+(identifier "effect" @variable)
+(identifier "flags" @variable)
+(identifier "variant" @variable)
 (identifier "test" @variable)
 (identifier "do" @variable)
 (identifier "task" @variable)
-(identifier "trap" @variable)
-(identifier "forward" @variable)
+(identifier "extends" @variable)
 
 ; Operators, matching the compiler's `is_highlight_operator` set. `&` / `|`
 ; (references, unions, closure params) and `::` / `?` / `..` / `...` double as

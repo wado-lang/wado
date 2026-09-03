@@ -259,7 +259,7 @@ fn register_struct(
         let has_newtypes = mono
             .impl_type_args
             .iter()
-            .any(|t| type_table.resolve_newtype_base(*t) != *t);
+            .any(|t| type_table.representation_head(*t) != *t);
         if has_newtypes {
             let resolved_args: Vec<String> = mono
                 .impl_type_args
@@ -621,11 +621,11 @@ fn register_tuple_types(ctx: &mut WirContext<'_>) {
                 // resolved tuple already exists and reuse it.
                 let has_newtypes = elements
                     .iter()
-                    .any(|e| type_table.resolve_newtype_base(*e) != *e);
+                    .any(|e| type_table.representation_head(*e) != *e);
                 if has_newtypes {
                     let resolved_elements: Vec<TypeId> = elements
                         .iter()
-                        .map(|e| type_table.resolve_newtype_base(*e))
+                        .map(|e| type_table.representation_head(*e))
                         .collect();
                     if let Some(existing) = ctx.tuple_type_map.get(&resolved_elements).cloned() {
                         ctx.tuple_type_map.insert(elements.clone(), existing);
@@ -681,7 +681,7 @@ fn register_tuple_types(ctx: &mut WirContext<'_>) {
                 if has_newtypes {
                     let resolved_elements: Vec<TypeId> = elements
                         .iter()
-                        .map(|e| type_table.resolve_newtype_base(*e))
+                        .map(|e| type_table.representation_head(*e))
                         .collect();
                     if !ctx.tuple_type_map.contains_key(&resolved_elements) {
                         ctx.tuple_type_map.insert(resolved_elements, wir_type_id);

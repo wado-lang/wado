@@ -19,6 +19,16 @@ test "highlight CREATE TABLE keywords" {
     assert html.contains("<span class=\"keyword\">TABLE</span>"), `missing keyword TABLE in: ${html}`;
 }
 
+test "highlight a keyword used as a name" {
+    // `any_name : IDENTIFIER | keyword | ...`: `key` names a column here, and
+    // the same word in `PRIMARY KEY` is a keyword.
+    let html = sqlite_hl::highlight(&"SELECT key FROM t");
+    assert html.contains("<span class=\"variable\">key</span>"), `key is a name here: ${html}`;
+    assert html.contains("<span class=\"keyword\">SELECT</span>"), `missing keyword SELECT in: ${html}`;
+    let decl = sqlite_hl::highlight(&"CREATE TABLE t (id INTEGER PRIMARY KEY)");
+    assert decl.contains("<span class=\"keyword\">KEY</span>"), `KEY is a keyword here: ${decl}`;
+}
+
 test "highlight string literal" {
     let html = sqlite_hl::highlight(&"SELECT 'hello'");
     assert html.contains("class=\"string\""), `missing string class in: ${html}`;

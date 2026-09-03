@@ -1,0 +1,19 @@
+// A closure body is its own function with its own label stack, so a loop
+// around the closure binds no `break` written inside it.
+
+export fn run() {
+    let mut n = builtin::black_box(0);
+    loop {
+        let f = || {
+            break;
+        };
+        f();
+        n += 1;
+        if n > 2 {
+            break;
+        }
+    }
+}
+
+__DATA__
+{"compile_error": "`break` outside of a loop"}

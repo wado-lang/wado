@@ -108,7 +108,8 @@ compiler derives it eagerly:
   f64` renders `3.14`, no `as Name` tag). This is call-site inheritance, not a
   synthesized body: the format call peels the newtype to its base
   (`peel_transparent_newtype`), covering every transparent format trait. Only
-  `Inspect` is overridden per newtype (for the `as Name` tag).
+  `Inspect` is overridden for a newtype (for the `as Name` tag), by the
+  `ReflectNewtype` blanket in `core:prelude/traits`.
 
 `${x:#}` needs that same `Display` (manual, enum-synthesized, or
 newtype-inherited), so the alternate display of a `Display`-less type is

@@ -1365,7 +1365,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if replaces_on_assign(table.get(type_id)) {
             return true;
         }
-        let base = table.get_ultimate_base_type(type_id);
+        let base = table.representation_head(type_id);
         replaces_on_assign(table.get(base))
     }
 

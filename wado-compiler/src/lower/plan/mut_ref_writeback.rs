@@ -271,7 +271,7 @@ impl WriteBack<'_> {
     /// Whether a `&mut` to a place of this type is a detached box — of the
     /// replace types only a `variant` gets here, generic or not.
     fn detaches(&self, place_type: TypeId) -> bool {
-        let peeled = self.type_table.get_ultimate_base_type(place_type);
+        let peeled = self.type_table.representation_head(place_type);
         match self.type_table.get(peeled) {
             ResolvedType::Variant { .. } => true,
             ResolvedType::GenericInstance { def, .. } => {

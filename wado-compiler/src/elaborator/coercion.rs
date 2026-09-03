@@ -19,6 +19,19 @@ fn is_literal_expr(expr: &Expr) -> bool {
     }
 }
 
+/// Whether `expr` is one of the numeric-literal shapes
+/// [`Elaborator::try_coerce_numeric_literal`] retargets.
+pub(super) fn is_numeric_literal_expr(expr: &Expr) -> bool {
+    match expr {
+        Expr::Literal(lit) => matches!(lit.value, Literal::Number(_) | Literal::Byte(_)),
+        Expr::Unary(unary) => {
+            unary.op == UnaryOp::Neg
+                && matches!(&unary.expr, Expr::Literal(lit) if matches!(lit.value, Literal::Number(_)))
+        }
+        _ => false,
+    }
+}
+
 impl<H: CompilerHost> Elaborator<'_, H> {
     /// Coerce a numeric literal (or negated numeric literal) to the
     /// expected integer / float / i128 / u128 type. On success records
@@ -357,7 +370,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .tysys
                 .type_table
                 .borrow()
-                .get_ultimate_base_type(target_type);
+                .representation_head(target_type);
             let string_struct_name = self
                 .tysys
                 .type_table
@@ -400,7 +413,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .tysys
                 .type_table
                 .borrow()
-                .get_ultimate_base_type(target_type);
+                .representation_head(target_type);
             if base_id == list_u8 {
                 if let Expr::Literal(lit) = expr
                     && let Literal::Bytes(raw) = &lit.value
@@ -429,7 +442,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .tysys
                 .type_table
                 .borrow()
-                .get_ultimate_base_type(target_type);
+                .representation_head(target_type);
             let is_fn_newtype = matches!(
                 self.tysys.type_table.borrow().get(base_id),
                 ResolvedType::Function { .. }

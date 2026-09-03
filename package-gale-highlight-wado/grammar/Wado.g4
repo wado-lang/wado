@@ -100,7 +100,7 @@ identifier
     | 'from' | 'of' | 'type' | 'matches' | 'stores' | 'world'
     | 'interface' | 'resource' | 'import' | 'export' | 'reactive'
     | 'unique' | 'forward' | 'trap' | 'effect' | 'flags' | 'variant'
-    | 'test' | 'do' | 'task'
+    | 'test' | 'do' | 'task' | 'extends'
     ;
 
 paramList
@@ -301,7 +301,7 @@ memberName
     | 'type' | 'impl' | 'trait' | 'resource' | 'world' | 'async'
     | 'import' | 'export' | 'assert' | 'global' | 'const' | 'matches'
     | 'stores' | 'true' | 'false' | 'null' | 'trap' | 'forward'
-    | 'test' | 'do' | 'task'
+    | 'test' | 'do' | 'task' | 'extends' | 'internal' | 'resume' | 'self'
     ;
 
 block
@@ -342,7 +342,7 @@ localItemKind
     ;
 
 labeledBlock
-    : IDENTIFIER ':' block
+    : identifier ':' block
     ;
 
 letStatement
@@ -401,7 +401,7 @@ loopStatement
     ;
 
 breakStatement
-    : 'break' (IDENTIFIER (':' expression)?)?
+    : 'break' (identifier (':' expression)? | '(' ')')?
     ;
 
 continueStatement

@@ -201,7 +201,7 @@ impl TypeSystem {
         match tt.get(type_id) {
             ResolvedType::Struct { .. } | ResolvedType::GenericInstance { .. } => true,
             ResolvedType::Newtype { base_type, .. } => {
-                let ultimate = tt.get_ultimate_base_type(*base_type);
+                let ultimate = tt.representation_head(*base_type);
                 matches!(
                     tt.get(ultimate),
                     ResolvedType::Struct { .. }
@@ -356,7 +356,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
                 ResolvedType::Newtype { base_type, .. } => {
                     let tt = self.tysys.type_table.borrow();
-                    let ultimate = tt.get_ultimate_base_type(*base_type);
+                    let ultimate = tt.representation_head(*base_type);
                     match tt.get(ultimate) {
                         ResolvedType::Struct { .. } | ResolvedType::GenericInstance { .. } => {
                             Some(tt.fq_base_type_name(*base_type).into_string())
@@ -894,7 +894,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         {
             let float_name = {
                 let table = self.tysys.type_table.borrow();
-                match table.get(table.resolve_newtype_base(left)) {
+                match table.get(table.representation_head(left)) {
                     ResolvedType::Primitive(PrimitiveType::F32) => Some("f32"),
                     ResolvedType::Primitive(PrimitiveType::F64) => Some("f64"),
                     _ => None,

@@ -39,7 +39,7 @@ impl PrimitiveKind {
     /// scalar representation: a reference type, or a width WIR carries no
     /// scalar for (`i128` / `u128` / `v128`).
     fn from_type_id(type_table: &TypeTable, type_id: TypeId) -> Option<Self> {
-        match type_table.get(type_table.resolve_newtype_base(type_id)) {
+        match type_table.get(type_table.representation_head(type_id)) {
             ResolvedType::Primitive(p) => Self::from_primitive(*p),
             // A discriminant and a bitmask are both i32. Signed opcodes agree
             // with unsigned ones over their non-negative range.
@@ -338,7 +338,7 @@ impl FunctionTranslator<'_, '_> {
             // integer `xor -1` would leave `-1` / `-2`, both reading back as
             // `true`.
             NirUnaryOp::BitNot
-                if self.type_table.get_ultimate_base_type(operand_type_id) == TypeTable::BOOL =>
+                if self.type_table.representation_head(operand_type_id) == TypeTable::BOOL =>
             {
                 WirInstr::I32Eqz(operand)
             }

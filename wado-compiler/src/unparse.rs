@@ -1997,46 +1997,15 @@ impl<'a> Unparser<'a> {
     }
 
     fn unparse_call(&mut self, c: &CallExpr) {
-        // Parenthesize a callee that would re-parse differently bare: anything
-        // above the postfix level, whose `(args)` would bind tighter, plus
-        // `FieldAccess` (re-parses as a method call), `Closure` (an expression
-        // body swallows the call), and `Cast`. `If` / `Match` / `Block` and
-        // friends end with `}`, which terminates the expression cleanly.
-        let needs_parens = matches!(
-            &c.callee,
-            Expr::FieldAccess(_)
-                | Expr::Closure(_)
-                | Expr::Cast(_)
-                | Expr::Unary(_)
-                | Expr::Binary(_)
-                | Expr::Assign(_)
-                | Expr::CompoundAssign(_)
-                | Expr::ComparisonChain(_)
-                | Expr::Range(_)
-                | Expr::Matches(_)
-        );
-        self.with_parens_if(needs_parens, |s| s.unparse_expr(&c.callee));
+        self.with_parens_if(!binds_tighter_than(&c.callee, OperandSlot::Callee), |s| {
+            s.unparse_expr(&c.callee);
+        });
         self.unparse_turbofish(&c.type_args);
         self.unparse_call_args(&c.args, c.has_trailing_comma);
     }
 
     fn unparse_method_call(&mut self, m: &MethodCallExpr) {
-        // Expressions with lower operator precedence than `.` need parentheses
-        // when used as a method receiver, otherwise the formatter produces
-        // semantically different code:
-        //   `-128.to_string()`    → parsed as `-(128.to_string())`  (wrong)
-        //   `127 as i8.to_string()` → parsed as `127 as (i8.to_string())` (wrong)
-        let needs_parens = matches!(
-            &m.receiver,
-            Expr::Unary(_)
-                | Expr::Binary(_)
-                | Expr::Cast(_)
-                | Expr::Assign(_)
-                | Expr::CompoundAssign(_)
-                | Expr::Range(_)
-                | Expr::Matches(_)
-        );
-        self.with_parens_if(needs_parens, |s| s.unparse_expr(&m.receiver));
+        self.unparse_postfix_base(&m.receiver);
         self.output.push('.');
         self.output.push_str(&m.method);
         self.unparse_turbofish(&m.type_args);
@@ -2131,10 +2100,15 @@ impl<'a> Unparser<'a> {
     }
 
     /// Emit a postfix base expression, wrapping in parens if needed.
-    /// Prefix unary ops (*, -, !, &, ~) bind looser than postfix ops ([], ., ()),
-    /// so `(*p)[i]` must keep parens — `*p[i]` would mean `*(p[i])`.
+    ///
+    /// The postfix ops (`.`, `[]`, `()`) bind tightest, so a base spelled as
+    /// anything looser keeps the parens the parser needs: `(*p)[i]` would
+    /// otherwise read `*(p[i])`, and `(p as Point).x` would read the field
+    /// access into the cast's *type*. Listed the other way round — the forms
+    /// that need none are the postfix ones and the primaries — so a variant
+    /// added later is parenthesized until someone says it need not be.
     fn unparse_postfix_base(&mut self, expr: &Expr) {
-        self.with_parens_if(matches!(expr, Expr::Unary(_) | Expr::Matches(_)), |s| {
+        self.with_parens_if(!binds_tighter_than(expr, OperandSlot::Postfix), |s| {
             s.unparse_expr(expr);
         });
     }
@@ -2443,11 +2417,9 @@ impl<'a> Unparser<'a> {
     }
 
     fn unparse_cast(&mut self, c: &CastExpr) {
-        let needs_parens = matches!(
-            &c.expr,
-            Expr::Binary(_) | Expr::Assign(_) | Expr::CompoundAssign(_)
-        );
-        self.with_parens_if(needs_parens, |s| s.unparse_expr(&c.expr));
+        self.with_parens_if(!binds_tighter_than(&c.expr, OperandSlot::Cast), |s| {
+            s.unparse_expr(&c.expr);
+        });
         self.output.push_str(" as ");
         self.unparse_type(&c.target_type);
     }
@@ -3035,6 +3007,65 @@ fn ends_in_trailing_cast(expr: &Expr) -> bool {
         Expr::Cast(_) => true,
         Expr::Binary(b) => !needs_parens(&b.right, b.op, false) && ends_in_trailing_cast(&b.right),
         _ => false,
+    }
+}
+
+/// The operator an operand is about to be joined to, ordered by how tightly it
+/// binds. Each slot admits what the one above it does, and a little more.
+#[derive(Clone, Copy)]
+enum OperandSlot {
+    /// Callee of `(args)`. Like [`Self::Postfix`], except that a field access
+    /// re-parses as a method call, so `(v.f)(x)` keeps its parens.
+    Callee,
+    /// Base of `.field`, `[index]`, or `.method(args)`.
+    Postfix,
+    /// Operand of ` as T`, which binds looser than the postfix operators and
+    /// tighter than every binary one.
+    Cast,
+}
+
+/// Whether `expr` unparses tightly enough to sit in `slot` without parens.
+///
+/// Stated as what needs *no* parens, so a variant added to [`Expr`] later is
+/// parenthesized until someone says it need not be. The four deny-lists this
+/// replaces each silently admitted whatever nobody had written yet:
+/// `(p as Point).x` lost its parens and re-parsed the field access into the
+/// cast's type, and `(a < b < c).to_string()` read the call off `c`.
+fn binds_tighter_than(expr: &Expr, slot: OperandSlot) -> bool {
+    let postfix = matches!(
+        expr,
+        Expr::Ident(_)
+            | Expr::Literal(_)
+            | Expr::Call(_)
+            | Expr::MethodCall(_)
+            | Expr::StaticMethodCall(_)
+            | Expr::FieldAccess(_)
+            | Expr::Index(_)
+            | Expr::TryOp(_)
+            | Expr::TemplateString(_)
+            | Expr::StructLiteral(_)
+            | Expr::TupleLiteral(_)
+            | Expr::TupleComprehension(_)
+            // Closes with `}`, which ends the expression as cleanly as a
+            // `)` would. `Matches` closes the same way and still needs parens:
+            // its scrutinee sits to the left of the brace.
+            | Expr::Block(_)
+            | Expr::LabeledBlock(_)
+            | Expr::If(_)
+            | Expr::Match(_)
+            | Expr::Error(_)
+    );
+    match slot {
+        OperandSlot::Callee => postfix && !matches!(expr, Expr::FieldAccess(_)),
+        OperandSlot::Postfix => postfix,
+        // `a as T as U` is left-associative, and a value-producing unary binds
+        // tighter than `as`. Logical `!` does not — it sits above `matches`, so
+        // `!x as i32` reads as `!(x as i32)` and the operand keeps its parens.
+        OperandSlot::Cast => {
+            postfix
+                || matches!(expr, Expr::Cast(_))
+                || matches!(expr, Expr::Unary(u) if u.op != UnaryOp::Not)
+        }
     }
 }
 

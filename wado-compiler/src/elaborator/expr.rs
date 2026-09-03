@@ -5,7 +5,9 @@ use super::scope::BinderInScope;
 use super::sig::AssocConstSig;
 use crate::hashmap::{IndexMap, IndexSet};
 
-use crate::ast::{self, AstId, AstVisitor, Condition, Expr, IfExpr, Literal, MatchArm};
+use crate::ast::{
+    self, AstId, AstVisitor, Condition, Expr, IfExpr, LabeledBlockExpr, Literal, MatchArm,
+};
 use crate::compiler_host::CompilerHost;
 use crate::module_source::ModuleSource;
 use crate::name::{FqTypeName, LocalMethodName, MethodName, mangle_generic_name};
@@ -17,7 +19,7 @@ use super::call::turbofish_holes;
 use super::infer::InferCtx;
 use super::instantiate::Instantiation;
 use super::typecheck::{TypeCheckResult, check_assignable};
-use super::types::{FunctionContext, LabeledBlockTarget, TypeError, VarRef};
+use super::types::{FunctionContext, TypeError, VarRef};
 use super::util;
 
 /// Outcome of trying to derive type arguments for a generic function
@@ -187,6 +189,20 @@ pub(super) fn compose_union_plan(
         }
     }
     merged.into_values().collect()
+}
+
+/// What retargeting a branch tail touches: the literals that adopt the type,
+/// and the nested `if` / `match` nodes whose recorded type reify reads back as
+/// their result, so it has to follow.
+#[derive(Default)]
+struct NumericLiteralTails<'a> {
+    literals: Vec<&'a ast::Expr>,
+    branches: Vec<AstId>,
+}
+
+/// Whether a branch already produces `target`; `never` fits any of them.
+fn agrees_with_target(ty: TypeId, target: TypeId) -> bool {
+    ty == target || ty == TypeTable::NEVER
 }
 
 /// A struct-literal field as the body walk knows it: the name it was written
@@ -361,12 +377,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 self.resolve_tuple_literal(tuple_lit, ctx, expected_type)
             }
             Expr::LabeledBlock(lb) => {
-                ctx.labeled_block_targets.push(LabeledBlockTarget {
-                    label: lb.label.clone(),
-                    break_types: Vec::new(),
-                    expected_type,
-                });
-                ctx.active_labels.push(lb.label.clone());
+                ctx.push_labeled_block_frame(lb.label.clone(), expected_type);
 
                 ctx.enter_scope();
                 // A labeled block yields via `break label: value`, not a tail
@@ -376,59 +387,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 self.resolve_block(&lb.block, ctx, expected_type);
                 ctx.exit_scope();
 
-                ctx.active_labels.pop();
-                let target = ctx.labeled_block_targets.pop().unwrap();
+                let target = ctx.pop_labeled_block_frame();
 
-                // Unify every `break label: expr` with the fall-through path,
-                // whose value is the trailing statement's. The use-site expected
-                // type wins when present; otherwise pick a representative branch
-                // type, skipping `never` and any still holding UNKNOWN so a
-                // diverging or unresolved branch cannot mask the real one.
-                let tail_type = self.ast_block_result_type(&lb.block);
-                let mut branch_types = target.break_types.clone();
-                branch_types.push(tail_type);
-                let result_type = if let Some(ty) = expected_type {
-                    ty
-                } else {
-                    let tt = self.tysys.type_table.borrow();
-                    branch_types
-                        .iter()
-                        .copied()
-                        .find(|&t| t != TypeTable::NEVER && !tt.is_indefinite(t))
-                        .or_else(|| {
-                            branch_types
-                                .iter()
-                                .copied()
-                                .find(|&t| t != TypeTable::NEVER)
-                        })
-                        // Every branch diverges: the block's value is `never`.
-                        .unwrap_or(branch_types[0])
-                };
-
-                // Report any `break label: null` whose `Option<...>` inner
-                // could not be inferred against a resolved non-`Option`
-                // result — AST mirror of the old `NullBreakPatcher` pass
-                // (whose TIR mutation was dead). When the type stayed UNKNOWN
-                // (every break a bare `null`) `report_uninferable_result`
-                // already fired and the null pass is skipped.
-                if !self.report_uninferable_result(result_type, lb.span, "labeled block") {
-                    self.report_unresolved_null_breaks(result_type, &lb.block, &lb.label);
-                }
-
-                // Report any branch whose type disagrees with the unified
-                // result — the tail included, when it carries a value.
-                for &break_type in &target.break_types {
-                    self.check_branch_type(break_type, result_type, lb.span);
-                }
-                if tail_type != TypeTable::UNIT && tail_type != TypeTable::NEVER {
-                    self.check_branch_type(tail_type, result_type, lb.span);
-                }
-
-                // Reify rebuilds the `LabeledBlock` from the AST,
-                // re-running the same break-type unification. The body walk
-                // resolved the body and ran break-type / null diagnostics for
-                // their side effects; project only the unified result type.
-                result_type
+                // Reify rebuilds the `LabeledBlock` from the AST, re-running
+                // the same unification; project only the result type.
+                self.unify_labeled_block(lb, &target.break_types, expected_type)
             }
             Expr::Matches(m) => self.desugar_matches_expr(m, ctx, expected_type),
             Expr::Spread(..) => {
@@ -442,6 +405,66 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // reported, so resolve to the error type to suppress cascades.
             Expr::Error(_e) => TypeTable::ERROR,
         }
+    }
+
+    /// The type of a labeled block expression: its `break` values and its
+    /// fall-through tail unified into one, every disagreement reported.
+    fn unify_labeled_block(
+        &mut self,
+        lb: &LabeledBlockExpr,
+        break_types: &[TypeId],
+        expected_type: Option<TypeId>,
+    ) -> TypeId {
+        let tail_type = self.labeled_block_tail_type(lb);
+        let branch_types: Vec<TypeId> = break_types
+            .iter()
+            .copied()
+            .chain(std::iter::once(tail_type))
+            .collect();
+        let result_type =
+            expected_type.unwrap_or_else(|| self.representative_branch_type(&branch_types));
+
+        // Report a `break label: null` whose `Option<...>` inner could not be
+        // inferred against a resolved non-`Option` result. A type still UNKNOWN
+        // means every break was a bare `null`, which the first call reports.
+        if !self.report_uninferable_result(result_type, lb.span, "labeled block") {
+            self.report_unresolved_null_breaks(result_type, &lb.block, &lb.label);
+        }
+
+        for &branch_type in &branch_types {
+            if branch_type != TypeTable::NEVER {
+                self.check_branch_type(branch_type, result_type, lb.span);
+            }
+        }
+        result_type
+    }
+
+    /// What the path reaching the block's end yields, or `never` when no path
+    /// does. A trailing `loop` left only by `break label` reaches no tail.
+    fn labeled_block_tail_type(&self, lb: &LabeledBlockExpr) -> TypeId {
+        if self.ast_labeled_block_falls_through(&lb.block, &lb.label) {
+            self.ast_block_result_type(&lb.block)
+        } else {
+            TypeTable::NEVER
+        }
+    }
+
+    /// The branch that types a block the use site expects nothing from: the
+    /// first carrying a real value. A `never`, `unit` or unresolved branch
+    /// steps aside, and a block holding only those takes its first.
+    fn representative_branch_type(&self, branch_types: &[TypeId]) -> TypeId {
+        let tt = self.tysys.type_table.borrow();
+        branch_types
+            .iter()
+            .copied()
+            .find(|&t| t != TypeTable::NEVER && t != TypeTable::UNIT && !tt.is_indefinite(t))
+            .or_else(|| {
+                branch_types
+                    .iter()
+                    .copied()
+                    .find(|&t| t != TypeTable::NEVER)
+            })
+            .unwrap_or(branch_types[0])
     }
 
     /// Range-check an integer literal against the `i32` it defaults to, the
@@ -899,6 +922,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .len()
             .checked_sub(2)
             .and_then(|i| self.tysys.resolutions.declared(ident.segments[i].id));
+        // A newtype reaches its base's members and keeps its own identity, so
+        // `C::Green` on `type C = Color` reads Color's cases and is a `C` —
+        // the implicit form of `Color::Green as C`.
+        let through_newtype = owner.and_then(|def| {
+            super::types::newtype_member_owner(&self.type_lookup(), &self.tysys, def)
+        });
+        let owner = through_newtype.map(|(base, _)| base).or(owner);
         macro_rules! lookup_case {
             ($of:ident) => {
                 owner.and_then(|def| self.type_lookup().$of(def)).cloned()
@@ -981,7 +1011,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // Reify rebuilds the payload-less
                 // `VariantConstruct` from the AST + recorded generic
                 // instantiation. Not an l-value.
-                return Some(variant_type);
+                return Some(through_newtype.map_or(variant_type, |(_, named)| named));
             }
         }
 
@@ -999,7 +1029,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .type_id_of_decl(enum_info.defined_at);
 
             // Reify rebuilds the `EnumConstruct`. Not an l-value.
-            return Some(enum_type);
+            return Some(through_newtype.map_or(enum_type, |(_, named)| named));
         }
 
         // Check for flags member: PathFlags::SymlinkFollow
@@ -1014,7 +1044,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         {
             self.record_qualified_case(ident, prefix, member.ast_id);
             self.check_case_turbofish_arity(ident, prefix, 0);
-            return Some(flags_info.type_id);
+            return Some(through_newtype.map_or(flags_info.type_id, |(_, named)| named));
         }
         None
     }
@@ -2012,14 +2042,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let type_id = if let Some(ty) = expected_type {
                     ty
                 } else {
-                    // AST mirror of `block_result_type(chain_block)`, and the
-                    // same shape as the `Condition::Expr` arm below: the chain's
-                    // result is what the then block and the else block agree on.
-                    let else_type = if_expr
-                        .else_block
-                        .as_ref()
-                        .map_or(TypeTable::UNIT, |b| self.ast_block_result_type(b));
-                    let then_type = self.ast_block_result_type(&if_expr.then_block);
+                    // The chain's result is what the then block and the else
+                    // block agree on, exactly as in the `Condition::Expr` arm.
+                    let (then_type, else_type) = self.if_branch_types(if_expr);
                     match (
                         self.agreed_branch_type(&[then_type, else_type]),
                         &if_expr.else_block,
@@ -2101,25 +2126,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let type_id = if let Some(ty) = expected_type {
                     ty
                 } else {
-                    let mut then_type = self.ast_block_result_type(&if_expr.then_block);
-                    let mut else_type = if_expr
-                        .else_block
-                        .as_ref()
-                        .map_or(TypeTable::UNIT, |b| self.ast_block_result_type(b));
-
-                    // Let a numeric-literal branch adopt the sibling's concrete
-                    // numeric type before the agreement check below.
-                    if then_type != else_type
-                        && let Some(eb) = &if_expr.else_block
-                    {
-                        if let Some(t) = self.coerce_block_numeric_literal_tail(eb, then_type) {
-                            else_type = t;
-                        } else if let Some(t) =
-                            self.coerce_block_numeric_literal_tail(&if_expr.then_block, else_type)
-                        {
-                            then_type = t;
-                        }
-                    }
+                    let (then_type, else_type) = self.if_branch_types(if_expr);
 
                     // `never` is the bottom type: a branch returning `never` is compatible
                     // with any type, so the result type comes from the non-never branch.
@@ -2346,17 +2353,37 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.report_unresolved_nulls(&spans, result_type);
     }
 
-    /// Resolve a match expression
-    /// Give a numeric-literal branch tail the concrete numeric type fixed by a
-    /// sibling branch — the coercion `let x: T = <branch>` already performs.
-    /// Without it a `0` arm stays `i32` and conflicts with, say, a `u64`
-    /// sibling. Descends through a block tail; only a bare numeric literal (or
-    /// negated literal) is affected. Returns the coerced type when one applied.
-    fn coerce_numeric_literal_tail(&mut self, expr: &ast::Expr, target: TypeId) -> Option<TypeId> {
-        match expr {
-            ast::Expr::Block(block) => self.coerce_block_numeric_literal_tail(block, target),
-            _ => self.try_coerce_numeric_literal(expr, target),
+    /// The types an `if`'s two branches settle on, after a numeric literal
+    /// adopts its sibling's type. `if let` agrees its branches here too.
+    fn if_branch_types(&mut self, if_expr: &IfExpr) -> (TypeId, TypeId) {
+        let mut then_type = self.ast_block_result_type(&if_expr.then_block);
+        let mut else_type = if_expr
+            .else_block
+            .as_ref()
+            .map_or(TypeTable::UNIT, |b| self.ast_block_result_type(b));
+
+        if then_type != else_type
+            && let Some(eb) = &if_expr.else_block
+        {
+            if let Some(t) = self.coerce_block_numeric_literal_tail(eb, then_type) {
+                else_type = t;
+            } else if let Some(t) =
+                self.coerce_block_numeric_literal_tail(&if_expr.then_block, else_type)
+            {
+                then_type = t;
+            }
         }
+        (then_type, else_type)
+    }
+
+    /// Give a numeric-literal branch tail the type a sibling branch fixed, as
+    /// the coercion in `let x: T = <branch>` does. `None` when none applied.
+    fn coerce_numeric_literal_tail(&mut self, expr: &ast::Expr, target: TypeId) -> Option<TypeId> {
+        let mut tails = NumericLiteralTails::default();
+        if !self.collect_numeric_literal_tails(expr, target, &mut tails) {
+            return None;
+        }
+        self.retarget_numeric_literal_tails(tails, target)
     }
 
     fn coerce_block_numeric_literal_tail(
@@ -2364,10 +2391,126 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         block: &ast::Block,
         target: TypeId,
     ) -> Option<TypeId> {
-        match block.stmts.last() {
-            Some(ast::Stmt::Expr(e)) => self.coerce_numeric_literal_tail(&e.expr, target),
-            _ => None,
+        let mut tails = NumericLiteralTails::default();
+        if !self.collect_block_numeric_literal_tails(block, target, &mut tails) {
+            return None;
         }
+        self.retarget_numeric_literal_tails(tails, target)
+    }
+
+    fn retarget_numeric_literal_tails(
+        &mut self,
+        tails: NumericLiteralTails<'_>,
+        target: TypeId,
+    ) -> Option<TypeId> {
+        if tails.literals.is_empty() {
+            return None;
+        }
+        for literal in tails.literals {
+            // A refusal leaves the earlier literals retargeted, which is
+            // harmless: the caller's mismatch aborts before WIR build.
+            self.try_coerce_numeric_literal(literal, target)?;
+        }
+        for branch in tails.branches {
+            self.record_expression_type(branch, target);
+        }
+        Some(target)
+    }
+
+    /// Collect the tails `expr` has to retarget to land on `target`. `false`
+    /// when one of them is neither a numeric literal nor already `target`: the
+    /// caller then retargets nothing and reports the branches as written.
+    fn collect_numeric_literal_tails<'a>(
+        &self,
+        expr: &'a ast::Expr,
+        target: TypeId,
+        out: &mut NumericLiteralTails<'a>,
+    ) -> bool {
+        match expr {
+            ast::Expr::Block(block) => self.collect_block_numeric_literal_tails(block, target, out),
+            ast::Expr::If(if_expr) => {
+                out.branches.push(if_expr.id);
+                self.collect_if_numeric_literal_tails(
+                    &if_expr.then_block,
+                    if_expr.else_block.as_ref(),
+                    target,
+                    out,
+                )
+            }
+            ast::Expr::Match(match_expr) => {
+                self.collect_match_numeric_literal_tails(match_expr, target, out)
+            }
+            _ if super::coercion::is_numeric_literal_expr(expr) => {
+                out.literals.push(expr);
+                true
+            }
+            _ => self
+                .ast_expr_type(expr)
+                .is_some_and(|ty| agrees_with_target(ty, target)),
+        }
+    }
+
+    fn collect_block_numeric_literal_tails<'a>(
+        &self,
+        block: &'a ast::Block,
+        target: TypeId,
+        out: &mut NumericLiteralTails<'a>,
+    ) -> bool {
+        match block.stmts.last() {
+            Some(ast::Stmt::Expr(e)) => self.collect_numeric_literal_tails(&e.expr, target, out),
+            // `block_result_type` reads a trailing `if` / `match` statement as
+            // the block's value, so `else { if … }` retargets like `else if …`.
+            // A trailing `if` records no type: reify recomputes one from the
+            // branches it has just built.
+            Some(ast::Stmt::If(if_stmt)) => self.collect_if_numeric_literal_tails(
+                &if_stmt.then_block,
+                if_stmt.else_block.as_ref(),
+                target,
+                out,
+            ),
+            Some(ast::Stmt::Match(match_expr)) => {
+                self.collect_match_numeric_literal_tails(match_expr, target, out)
+            }
+            // No expression tail to retarget, so the block has to agree already.
+            _ => agrees_with_target(self.ast_block_result_type(block), target),
+        }
+    }
+
+    /// Whether every tail of a match arm is a numeric literal, leaving the arm
+    /// no type of its own for the result to be read from.
+    fn is_numeric_literal_arm(&self, body: &ast::Expr, body_type: TypeId) -> bool {
+        let mut tails = NumericLiteralTails::default();
+        self.collect_numeric_literal_tails(body, body_type, &mut tails)
+            && !tails.literals.is_empty()
+    }
+
+    /// The two halves of an `if`, in either its expression or its statement
+    /// spelling. A missing `else` is `()`, which no numeric target accepts.
+    fn collect_if_numeric_literal_tails<'a>(
+        &self,
+        then_block: &'a ast::Block,
+        else_block: Option<&'a ast::Block>,
+        target: TypeId,
+        out: &mut NumericLiteralTails<'a>,
+    ) -> bool {
+        let Some(else_block) = else_block else {
+            return false;
+        };
+        self.collect_block_numeric_literal_tails(then_block, target, out)
+            && self.collect_block_numeric_literal_tails(else_block, target, out)
+    }
+
+    fn collect_match_numeric_literal_tails<'a>(
+        &self,
+        match_expr: &'a ast::MatchExpr,
+        target: TypeId,
+        out: &mut NumericLiteralTails<'a>,
+    ) -> bool {
+        out.branches.push(match_expr.id);
+        match_expr
+            .arms
+            .iter()
+            .all(|arm| self.collect_numeric_literal_tails(&arm.body, target, out))
     }
 
     /// The type a set of branches agrees on, `None` when they disagree — the
@@ -2453,6 +2596,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         self.check_match_exhaustiveness(&match_expr.arms, scrutinee_type, match_expr.span);
 
+        // A numeric-literal arm holds its default type for want of a sibling
+        // saying otherwise, so it is in no position to fix the result: without
+        // this, `match k { 1 => 0, _ => a }` resolves to `i32` and rejects the
+        // `u64` arm, while the same match with its arms swapped compiles.
+        let literal_arms: Vec<bool> = match_expr
+            .arms
+            .iter()
+            .zip(&arm_bodies)
+            .map(|(arm, &(arm_type, _))| self.is_numeric_literal_arm(&arm.body, arm_type))
+            .collect();
+
         let type_id = expected_type.unwrap_or_else(|| {
             // Skip `never`-typed arms: `never` is the bottom type and is compatible
             // with any type, so the match result type is determined by the non-never arms.
@@ -2463,8 +2617,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let tt = self.tysys.type_table.borrow();
             arm_bodies
                 .iter()
-                .map(|(t, _)| *t)
+                .zip(&literal_arms)
+                .filter(|&(_, is_literal)| !*is_literal)
+                .map(|((t, _), _)| *t)
                 .find(|&t| t != TypeTable::NEVER && !tt.is_indefinite(t))
+                .or_else(|| {
+                    arm_bodies
+                        .iter()
+                        .map(|(t, _)| *t)
+                        .find(|&t| t != TypeTable::NEVER && !tt.is_indefinite(t))
+                })
                 .or_else(|| {
                     arm_bodies
                         .iter()
@@ -3180,8 +3342,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         source_type: TypeId,
         target_type: TypeId,
     ) -> Option<&'static str> {
-        let source_base = tt.get_ultimate_base_type(source_type);
-        let target_base = tt.get_ultimate_base_type(target_type);
+        let source_base = tt.representation_head(source_type);
+        let target_base = tt.representation_head(target_type);
         let slice_elem = |id| match tt.get(id) {
             ResolvedType::GenericInstance { def, type_args }
                 if tt.compiler_item_def(crate::compiler_item::CompilerItem::Slice)
@@ -3274,10 +3436,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Cast to i128/u128: expr as u128 → u128::from_u64(expr as u64)
         // For large literals: 170... as i128 → i128::from_pair(low, high)
-        let struct_name = match self.tysys.type_table.borrow().get(target_type).clone() {
+        //
+        // Which pair of words the literal has to fit is how the value is
+        // stored, so the representation answers: `type Signed = i128` is that
+        // pair too, and reading the name instead let an oversized literal
+        // through it with no diagnostic. The cast still yields `target_type`.
+        let repr_target = self
+            .tysys
+            .type_table
+            .borrow()
+            .representation_head(target_type);
+        let struct_name = match self.tysys.type_table.borrow().get(repr_target).clone() {
             ResolvedType::Struct { .. } => {
                 let tt = self.tysys.type_table.borrow();
-                tt.nominal_def(target_type).map(|def| {
+                tt.nominal_def(repr_target).map(|def| {
                     (
                         FqTypeName::declared(tt.defs(), def),
                         tt.def_name(def).to_string(),
@@ -3369,11 +3541,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // `i128` / `u128` are structs here; their rules below cover a
             // wide-int source only, so such a target never exempts an aggregate.
             let wide_int = |id| {
-                matches!(tt.get(tt.get_ultimate_base_type(id)), ResolvedType::Struct { def, .. }
+                matches!(tt.get(tt.representation_head(id)), ResolvedType::Struct { def, .. }
                     if tt.struct_head_name(*def) == "i128" || tt.struct_head_name(*def) == "u128")
             };
             // A tuple is a `GenericInstance` of a tuple head, so no arm of its own.
-            let source_base = tt.get_ultimate_base_type(source_type);
+            let source_base = tt.representation_head(source_type);
             let source_is_aggregate = !wide_int(source_type)
                 && matches!(
                     tt.get(source_base),
@@ -3381,7 +3553,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         | ResolvedType::GenericInstance { .. }
                         | ResolvedType::Variant { .. }
                 );
-            source_is_aggregate && source_base != tt.get_ultimate_base_type(target_type)
+            source_is_aggregate && source_base != tt.representation_head(target_type)
         };
         if unrelated_aggregate {
             let tt = self.tysys.type_table.borrow();
@@ -3420,12 +3592,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             use crate::tir::PrimitiveType;
             let tt = self.tysys.type_table.borrow();
             let source_is_wide_int = matches!(
-                tt.get(tt.get_ultimate_base_type(source_type)),
+                tt.get(tt.representation_head(source_type)),
                 ResolvedType::Struct { def, .. }
                     if tt.struct_head_name(*def) == "i128" || tt.struct_head_name(*def) == "u128"
             );
             let target_supported = !source_is_wide_int
-                || match tt.get(tt.get_ultimate_base_type(target_type)) {
+                || match tt.get(tt.representation_head(target_type)) {
                     ResolvedType::Primitive(
                         PrimitiveType::F64
                         | PrimitiveType::F32
@@ -3463,12 +3635,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .tysys
             .type_table
             .borrow()
-            .get_ultimate_base_type(source_type);
+            .representation_head(source_type);
         let target_base = self
             .tysys
             .type_table
             .borrow()
-            .get_ultimate_base_type(target_type);
+            .representation_head(target_type);
         if target_base == TypeTable::CHAR
             && source_base != TypeTable::CHAR
             && source_base != TypeTable::U8
@@ -4321,6 +4493,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             field_defaults: vec![None; effective_fields.len()],
             type_param_bounds: Vec::new(),
             type_param_type_ids: Vec::new(),
+            type_param_defaults: Vec::new(),
         };
         self.sem.decls.anon_struct_fields.insert(shape, field_info);
 

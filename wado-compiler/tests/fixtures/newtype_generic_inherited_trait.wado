@@ -1,6 +1,8 @@
 // A generic newtype answers under its own head for the methods it declares,
-// under its base for the trait impls it inherits — so `Inspect` renders whole,
-// without the ` as Name` tag a non-generic newtype's own impl adds.
+// and under its base for the trait impls it inherits. Identity is its own
+// either way, so `Inspect` renders the base's value and tags it with the
+// declaration's name — the same as a non-generic newtype (issue #1933; this
+// fixture recorded the missing tag as the expected output).
 
 type MyArray<T> = List<T>;
 
@@ -10,10 +12,16 @@ impl<T: Display> MyArray<T> {
     }
 }
 
+// Two instantiations in one program: one impl is written over the declaration,
+// so each use has to instantiate it for its own arguments.
 test "a generic newtype inherits its base's Inspect" {
     let a: MyArray<i32> = [1, 2];
-    assert `${a:?}` == "[1, 2]";
+    assert `${a:?}` == "[1, 2] as MyArray";
     assert a.first_label() == "1";
+
+    let s: MyArray<String> = ["x", "y"];
+    assert `${s:?}` == "[\"x\", \"y\"] as MyArray";
+    assert s.first_label() == "x";
 }
 
 __DATA__

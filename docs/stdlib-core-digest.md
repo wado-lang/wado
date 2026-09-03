@@ -3,12 +3,11 @@
 
 # core:digest
 
-Cryptographic hash functions.
+Cryptographic hash functions, and [`hmac`] to key one.
 
-This module provides the [`Digest`] trait — a common interface for
-incremental hashing — and concrete implementations. Currently only
-[`Sha256`] (SHA-256, FIPS 180-4 / RFC 6234) is provided; the trait keeps
-the module name stable as more algorithms are added.
+The [`Digest`] trait is the common interface for incremental hashing, and
+[`Sha256`] (FIPS 180-4 / RFC 6234) is so far its one implementation. The
+trait keeps the module name stable as more algorithms are added.
 
 Message bytes are accepted from any `AsByteSlice` source: a `ByteSlice`,
 `ByteList`, `ByteArray`, or a `String` (its UTF-8 bytes).
@@ -36,6 +35,21 @@ Hash a complete message with SHA-256, returning the 32-byte digest.
 Accepts any byte source via `AsByteSlice` (a `String` hashes its UTF-8
 bytes). Render the result as hex with `to_hex`, e.g. `sha256(&data).to_hex()`.
 
+### `pub fn hmac<H: Digest, K: AsByteSlice, M: AsByteSlice>(hasher: H, key: &K, message: &M) -> ByteList`
+
+Keyed message authentication over any [`Digest`] (HMAC, RFC 2104):
+`H((K ^ opad) || H((K ^ ipad) || message))`.
+
+Pass a fresh `hasher` of the algorithm to key. A key of any length works:
+the RFC's own reduction to one block applies.
+
+Check the result with `eq_constant_time`, never `==`.
+
+### `pub fn hmac_sha256<K: AsByteSlice, M: AsByteSlice>(key: &K, message: &M) -> ByteList`
+
+Key a complete message with HMAC-SHA256, returning the 32-byte MAC.
+The one-shot counterpart to [`hmac`], as [`sha256`] is to [`Sha256`].
+
 ## Traits
 
 ### `pub trait Digest`
@@ -45,6 +59,11 @@ A streaming message-digest algorithm.
 Feed message bytes with [`update`](Digest::update) (any number of times),
 then call [`finalize`](Digest::finalize) exactly once to obtain the digest.
 A value must not be used after `finalize`.
+
+#### `fn block_len(&self) -> i32`
+
+The algorithm's compression block width in bytes, 64 for SHA-256.
+[`hmac`] pads its key to it.
 
 #### `fn update<S: AsByteSlice>(&mut self, data: &S)`
 
@@ -70,6 +89,8 @@ _Fields are private._
 Create a fresh SHA-256 state initialized with the standard IV.
 
 #### `impl Digest for Sha256`
+
+##### `fn block_len(&self) -> i32`
 
 ##### `fn update<S: AsByteSlice>(&mut self, data: &S)`
 

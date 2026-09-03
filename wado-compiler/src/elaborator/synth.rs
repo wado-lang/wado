@@ -214,10 +214,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // safe side.
             ArgClass::Head(head) => {
                 tt.fq_base_type_name(param) == *head
-                    || tt.fq_base_type_name(tt.get_ultimate_base_type(param)) == *head
+                    || tt.fq_base_type_name(tt.representation_head(param)) == *head
             }
             ArgClass::IntLit => {
-                let base = tt.get_ultimate_base_type(param);
+                let base = tt.representation_head(param);
                 matches!(
                     tt.get(base),
                     ResolvedType::Primitive(
@@ -238,10 +238,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 ) || matches!(tt.base_type_name(base).as_str(), "i128" | "u128")
             }
             ArgClass::FloatLit => matches!(
-                tt.get(tt.get_ultimate_base_type(param)),
+                tt.get(tt.representation_head(param)),
                 ResolvedType::Primitive(PrimitiveType::F32 | PrimitiveType::F64)
             ),
-            ArgClass::StrLit => tt.base_type_name(tt.get_ultimate_base_type(param)) == "String",
+            ArgClass::StrLit => tt.base_type_name(tt.representation_head(param)) == "String",
             ArgClass::NullLit => tt.as_option(param).is_some(),
         }
     }

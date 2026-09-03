@@ -1,9 +1,14 @@
 // Test: the contextual keywords usable as names. Each is a keyword elsewhere
-// in the grammar and an ordinary name here, which is what the highlighter has
-// to tell apart — `check-highlight` compares Gale's colouring of this file
-// against the compiler's own classifier, and had no such case before.
+// in the grammar and an ordinary name here, which is what the two highlighters
+// have to tell apart. `check-highlight` compares Gale's colouring of this file
+// against the compiler's own classifier.
 
 use { println, Stdout } from "core:cli";
+
+struct Fields {
+    type: i32,
+    extends: i32,
+}
 
 fn contextual() -> i32 {
     let type = 1;
@@ -15,14 +20,22 @@ fn contextual() -> i32 {
     let task = 7;
     let trap = 8;
     let forward = 9;
-    return type + from + of + flags + test + do + task + trap + forward;
+    let extends = 10;
+    return type + from + of + flags + test + do + task + trap + forward + extends;
+}
+
+// A member name is a name too, and reaches the classifier through a different
+// rule than a binding does.
+fn members() -> i32 {
+    let f = Fields { type: 11, extends: 12 };
+    return f.type + f.extends;
 }
 
 export fn run() with Stdout {
-    println(`${contextual()}`);
+    println(`${contextual() + members()}`);
 }
 
 __DATA__
 {
-    "stdout": "45\n"
+    "stdout": "78\n"
 }

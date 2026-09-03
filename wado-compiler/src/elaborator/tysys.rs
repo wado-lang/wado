@@ -130,7 +130,7 @@ impl TypeSystem {
 
     fn carries_resource_rec(&self, type_id: TypeId, visited: &mut Vec<TypeId>) -> bool {
         use crate::tir::ResolvedType;
-        let base = self.type_table.borrow().get_ultimate_base_type(type_id);
+        let base = self.type_table.borrow().representation_head(type_id);
         if visited.contains(&base) {
             return false;
         }

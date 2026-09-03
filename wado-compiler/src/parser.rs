@@ -64,6 +64,10 @@ pub struct Parser {
     /// Syntax errors collected during error recovery. Drained via
     /// [`Parser::take_errors`] after [`Parser::parse`].
     errors: Vec<ParseError>,
+    /// Span of every token read against its lexical class, in source order —
+    /// an identifier read as a keyword, or a keyword read as a name. See
+    /// [`crate::ast::Module::contextual_keywords`].
+    contextual_keywords: Vec<Span>,
     /// Set by [`Parser::parse_expr_recovering`] for the duration of a
     /// statement-level expression. Enables operand-position recovery inside the
     /// binary / assignment parsers: a missing right operand becomes an
@@ -104,6 +108,7 @@ struct ParserCheckpoint {
     next_ast_id: u32,
     pending_gt: bool,
     errors_len: usize,
+    contextual_keywords_len: usize,
 }
 
 /// Groups of comparison operators for chain validation
@@ -197,6 +202,7 @@ impl Parser {
             comment_cursor: 0,
             trivia: crate::comment::TriviaMap::new(),
             errors: Vec::new(),
+            contextual_keywords: Vec::new(),
             recovering: false,
         }
     }
@@ -275,7 +281,26 @@ impl Parser {
             next_ast_id: self.next_ast_id,
             pending_gt: self.pending_gt,
             errors_len: self.errors.len(),
+            contextual_keywords_len: self.contextual_keywords.len(),
         }
+    }
+
+    /// Record an identifier token the parse reads as a keyword: `test` in
+    /// `test "…" { }`, `do`, `resume`, `task`, `trap`, `forward`.
+    fn mark_contextual_keyword(&mut self, span: Span) {
+        self.contextual_keywords.push(span);
+    }
+
+    /// Record the current token when it is a keyword the parse is about to read
+    /// as a *name* (`type` in `let type = 1`). Call it immediately before
+    /// consuming a name; a keyword no call covers keeps its lexical role.
+    fn mark_keyword_name(&mut self) {
+        let token = self.peek();
+        if matches!(token.kind, TokenKind::Ident(_)) {
+            return;
+        }
+        let span = token.span;
+        self.contextual_keywords.push(span);
     }
 
     fn restore(&mut self, cp: ParserCheckpoint) {
@@ -287,6 +312,10 @@ impl Parser {
         self.pending_gt = cp.pending_gt;
         // Drop errors recorded inside the speculative branch being rolled back.
         self.errors.truncate(cp.errors_len);
+        // Likewise the keyword readings: the branch that replaces this one
+        // decides again, and may read the same token as a name.
+        self.contextual_keywords
+            .truncate(cp.contextual_keywords_len);
     }
 
     /// Returns true if the parsed inner attributes include `#![TODO]`.
@@ -383,6 +412,7 @@ impl Parser {
             self.ast_id_space,
             self.next_ast_id,
             has_syntax_errors,
+            std::mem::take(&mut self.contextual_keywords),
         )
     }
 
@@ -977,6 +1007,7 @@ impl Parser {
         if let Some(name) = self.peek_kind().as_ident_name() {
             let name = name.to_string();
             let span = self.peek().span;
+            self.mark_keyword_name();
             self.advance();
             Ok((name, span))
         } else {
@@ -998,6 +1029,7 @@ impl Parser {
 
         // Try keyword
         if let Some(keyword) = self.peek_kind().as_keyword_str() {
+            self.mark_keyword_name();
             self.advance();
             return Ok(keyword.to_string());
         }
@@ -1108,6 +1140,7 @@ impl Parser {
         let id = self.alloc_ast_id();
         let start_span = self.peek().span;
         // Consume the "test" identifier (contextual keyword)
+        self.mark_contextual_keyword(start_span);
         self.advance();
 
         // Optional test name (string literal)
@@ -1246,6 +1279,7 @@ impl Parser {
                     AttrArg::Str(raw)
                 }
                 (Some(value), _) => {
+                    self.mark_keyword_name();
                     self.advance();
                     // Check if this identifier is followed by '=' making it a key=value pair
                     if self.check(&TokenKind::Eq) {
@@ -2142,8 +2176,9 @@ impl Parser {
 
     /// Parse a statement inside a block, allowing optional semicolon for the final expression
     fn parse_stmt_in_block(&mut self) -> ParseResult<Stmt> {
-        // Check for labeled block: `LABEL: { ... }`
-        if let TokenKind::Ident(_) = self.peek_kind()
+        // Check for labeled block: `LABEL: { ... }`. A local `type Foo = Bar`
+        // has no `:` and falls through to the item path below.
+        if self.peek_kind().as_ident_name().is_some()
             && matches!(self.peek_nth(1).kind, TokenKind::Colon)
             && matches!(self.peek_nth(2).kind, TokenKind::LBrace)
         {
@@ -2235,11 +2270,13 @@ impl Parser {
         let start_span = self.peek().span;
         let id = self.alloc_ast_id();
 
-        // Parse the label (identifier)
-        let label = match self.advance().kind.clone() {
-            TokenKind::Ident(name) => name,
-            _ => unreachable!("parse_labeled_block_stmt called without identifier"),
-        };
+        self.mark_keyword_name();
+        let label = self
+            .advance()
+            .kind
+            .as_ident_name()
+            .expect("parse_labeled_block_stmt called without identifier")
+            .to_string();
         self.check_label_available(&label, start_span)?;
 
         // Consume the colon
@@ -2408,6 +2445,7 @@ impl Parser {
         let start_span = self.peek().span;
         let id = self.alloc_ast_id();
         // Consume the `task` identifier
+        self.mark_contextual_keyword(start_span);
         self.advance();
         // Consume the `return` keyword
         self.expect(&TokenKind::Return)?;
@@ -2778,14 +2816,20 @@ impl Parser {
         Ok(Stmt::Loop(LoopStmt { id, body, span }))
     }
 
-    /// Parse break statement: `break;`, `break label;`, or `break label: expr;`
+    /// Parse break statement: `break;`, `break ()`, `break label;`, or
+    /// `break label: expr;`. An unlabeled break targets a loop, which yields no
+    /// value, so `break ()` says what `break;` says and both parse to no value.
     fn parse_break_stmt(&mut self) -> ParseResult<Stmt> {
         let start_span = self.peek().span;
         let id = self.alloc_ast_id();
         self.expect(&TokenKind::Break)?;
 
-        // Check for optional label
-        let (label, label_span, value) = if let TokenKind::Ident(name) = self.peek_kind().clone() {
+        // Check for an optional label, over the same names a labeled block
+        // accepts. `tail_span` is the last token this break owns, so a `break`
+        // ending a block without `;` does not stretch its span into the `}`.
+        let (label, tail_span, value) = if let Some(name) = self.peek_kind().as_ident_name() {
+            let name = name.to_string();
+            self.mark_keyword_name();
             let label_tok_span = self.advance().span;
             // Check for colon followed by expression (break with value)
             if self.check(&TokenKind::Colon) {
@@ -2796,6 +2840,12 @@ impl Parser {
                 // Just a label, no value
                 (Some(name), Some(label_tok_span), None)
             }
+        } else if self.check(&TokenKind::LParen)
+            && matches!(self.peek_nth(1).kind, TokenKind::RParen)
+        {
+            let open = self.advance().span;
+            let close = self.advance().span;
+            (None, Some(open.merge(&close)), None)
         } else {
             // No label, no value
             (None, None, None)
@@ -2805,7 +2855,7 @@ impl Parser {
             value
                 .as_ref()
                 .map(|v| v.span())
-                .or(label_span)
+                .or(tail_span)
                 .unwrap_or(start_span),
         )?;
 
@@ -2931,6 +2981,7 @@ impl Parser {
             // variable bindings is deferred to the elaborator using type information.
             let name = name.to_string();
             let start_span = self.peek().span;
+            self.mark_keyword_name();
             self.advance();
             if name == "_" {
                 Ok(Pattern::Wildcard)
@@ -3042,6 +3093,7 @@ impl Parser {
                         s
                     } else if let Some(name) = self.peek_kind().as_ident_name() {
                         let name = name.to_string();
+                        self.mark_keyword_name();
                         self.advance();
                         name
                     } else {
@@ -3944,6 +3996,7 @@ impl Parser {
                 return self.parse_resume_expr();
             }
             let name = name.to_string();
+            self.mark_keyword_name();
             self.advance();
             // Check for qualified name (Effect::function) or static method call
             if self.check(&TokenKind::ColonColon) {
@@ -4281,6 +4334,7 @@ impl Parser {
             ));
         }
         let do_span = self.peek().span;
+        self.mark_contextual_keyword(do_span);
         self.advance();
 
         let body = self.parse_block()?;
@@ -4351,6 +4405,7 @@ impl Parser {
     /// so we consume it by name rather than via a dedicated `TokenKind`.
     fn parse_resume_expr(&mut self) -> ParseResult<Expr> {
         let start_span = self.peek().span;
+        self.mark_contextual_keyword(start_span);
         self.advance(); // consume `resume` ident
         let id = self.alloc_ast_id();
         let value = self.parse_expr()?;
@@ -5554,6 +5609,7 @@ impl Parser {
                     }
                 };
                 let keyword_span = self.peek().span;
+                self.mark_contextual_keyword(keyword_span);
                 self.advance();
                 if self.check(&TokenKind::Semicolon) {
                     self.advance();
@@ -6070,6 +6126,10 @@ impl Parser {
         parser.next_ast_id = self.next_ast_id;
         let expr = parser.parse_expr()?;
         self.next_ast_id = parser.next_ast_id;
+        // An interpolation holds ordinary code, and its spans index the file,
+        // so what it read as a keyword belongs to the enclosing module.
+        self.contextual_keywords
+            .append(&mut parser.contextual_keywords);
         Ok(expr)
     }
 
@@ -8748,6 +8808,38 @@ line 2
         assert!(
             errors.is_empty(),
             "contextual keywords in statements must not trigger recovery: {errors:?}",
+        );
+    }
+
+    /// The parse records its reading because nothing downstream can re-derive
+    /// it: `type Alias` and `let type` put the same token in the same shape.
+    #[test]
+    fn contextual_keyword_readings_are_recorded() {
+        let source = concat!(
+            "type Alias = i32;\n",
+            "fn from(v: i32) -> Alias {\n",
+            "    let type = v;\n",
+            "    return type;\n",
+            "}\n",
+            "test \"t\" {\n",
+            "    let _ = 1;\n",
+            "}\n",
+        );
+        let module = parse(source).expect("parse");
+        let read: Vec<(usize, &str)> = module
+            .contextual_keywords()
+            .iter()
+            .map(|span| (span.start, &source[span.start..span.end]))
+            .collect();
+        assert_eq!(
+            read,
+            vec![
+                (source.find("fn from").unwrap() + 3, "from"),
+                (source.find("let type").unwrap() + 4, "type"),
+                (source.find("return type").unwrap() + 7, "type"),
+                (source.find("test \"t\"").unwrap(), "test"),
+            ],
+            "the `type` of `type Alias` is the only occurrence read as a keyword",
         );
     }
 

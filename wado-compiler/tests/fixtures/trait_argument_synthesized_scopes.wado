@@ -88,8 +88,9 @@ test "a tail match carries the block's type" {
     assert l[0] == 4;
 }
 
-// The break decides this block's type; the trailing `let` is no value at all,
-// so reading the tail would answer `()` for an `i32`.
+// The breaks decide this block's type; the trailing `let` is no value at all,
+// so reading the tail would answer `()` for an `i32`. Every path out is a
+// `break`, so the tail is unreachable and contributes no `()` branch.
 test "a labeled block's tail does not type it" {
     let c = true;
     let mut l: List<i32> = [];
@@ -98,6 +99,7 @@ test "a labeled block's tail does not type it" {
             break blk: 1
         }
         let unused = "not a value";
+        break blk: 2;
     });
     assert l[0] == 1;
 }

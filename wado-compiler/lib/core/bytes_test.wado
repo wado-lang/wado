@@ -70,3 +70,26 @@ test "ByteSlice get_unchecked respects the view offset" {
     assert s.get_unchecked(1) == 30;
     assert s.get_unchecked(2) == 40;
 }
+
+test "eq_constant_time compares byte buffers" {
+    let a: ByteList = [1, 2, 3];
+    let b: ByteList = [1, 2, 3];
+    let differs_last: ByteList = [1, 2, 4];
+    let differs_first: ByteList = [9, 2, 3];
+    let shorter: ByteList = [1, 2];
+    assert eq_constant_time(&a, &b);
+    assert !eq_constant_time(&a, &differs_last);
+    assert !eq_constant_time(&a, &differs_first);
+    assert !eq_constant_time(&a, &shorter);
+    let empty: ByteList = [];
+    assert eq_constant_time(&empty, &empty);
+}
+
+test "eq_constant_time spans the AsByteSlice family" {
+    let list: ByteList = b"opensesame";
+    let slice = list.as_byte_slice();
+    assert eq_constant_time(&list, &slice);
+    assert eq_constant_time(&"opensesame", &list);
+    assert eq_constant_time(&"opensesame", &"opensesame");
+    assert !eq_constant_time(&"opensesame", &"opensesamf");
+}

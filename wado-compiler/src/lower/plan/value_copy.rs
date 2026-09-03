@@ -268,7 +268,7 @@ fn resolve_projection_in_env(
     if let Some(resolved) = type_table.resolve_assoc_type(concrete, assoc_name) {
         return Some(resolved);
     }
-    let base = type_table.get_ultimate_base_type(concrete);
+    let base = type_table.representation_head(concrete);
     (base != concrete)
         .then(|| type_table.resolve_assoc_type(base, assoc_name))
         .flatten()
