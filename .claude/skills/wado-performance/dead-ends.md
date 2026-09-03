@@ -18,6 +18,35 @@ wado dump -O2 benchmark/json_catalog/json_catalog.wado    # before/after: diff t
 for i in 1 2 3; do mise run json-catalog; done           # before and after
 ```
 
+## Two digits at a time in `write_digits_at` (2026-09-04)
+
+`write_decimal` is 27.7% self on json-canada, whose shortest-round-trip
+mantissas are 17 digits: `v % 10` / `v / 10` per digit is a 17-long serial
+chain on `v`, which reads as latency-bound. Stepping `v / 100` and peeling the
+pair's two digits off `r` halves the chain and moves those two divisions off it.
+
+**5% slower**, three alternating pairs, ser 282.5/286.9/288.3 → 261.6/272.7/271.7
+MB/s. The chain was never the cost. Two ablations on the same loop say so:
+
+| `write_digits_at` variant                 | ser ms/iter |
+| ----------------------------------------- | ----------- |
+| today                                     | 7.65        |
+| `v & 7` / `v >> 1` (every division gone)   | 7.44        |
+| `array_fill` (whole loop gone, same bytes) | 5.77        |
+
+Deleting **every** division buys 0.24 ms; deleting the per-byte `array.set`
+loop buys 1.9 ms. The loop is store-bound at ~2.8 cycles/byte, and a bulk fill
+of the same span is near-free because it lowers to a vectorized memset. So two
+digits per step only added a third multiply to a loop the multiplies were never
+pacing.
+
+Generalizes: on a GC-array-backed `String` the digit loop's cost is the one
+`array.set` per byte, which no digit-generation scheme removes. Ablate the
+arithmetic before optimizing it — this is the same finding as the 2026-08-16
+entry below, reached from the opposite direction (a 17-digit chain rather than a
+short one), so the digit count is not the variable that makes it come out
+differently.
+
 ## i64 divisions in integer formatting (2026-08-16)
 
 Decimal formatting cost three i64 divisions per digit: `count_digits_i64` ran
