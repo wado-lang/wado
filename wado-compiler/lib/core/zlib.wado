@@ -2649,7 +2649,9 @@ pub fn deflate_with_level(input: &ByteList, level: i32, strategy: i32) -> ByteLi
             let mut match_available = false;
 
             while pos < input_len {
-                let mut best_len = 0;
+                // Only a match longer than the one already pending is worth
+                // taking, so start the search from it.
+                let mut best_len = prev_match_len;
                 let mut best_dist = 0;
 
                 if pos + 2 < input_len {
@@ -2673,12 +2675,17 @@ pub fn deflate_with_level(input: &ByteList, level: i32, strategy: i32) -> ByteLi
                             break;
                         }
 
-                        // Early termination: skip if can't beat current best
-                        if best_len >= 3
-                            && best_len < max_len
-                            && builtin::i32_load8_u(scratch + chain + best_len) != builtin::i32_load8_u(
-                            scratch + pos + best_len,
-                        ) {
+                        // A candidate can only win by matching at `cmp` and
+                        // `cmp - 1`; two loads reject most of the chain without
+                        // entering the compare loop. The floor of 2 makes the
+                        // test apply before any match is found, since a match
+                        // is at least 3 bytes.
+                        let cmp = if best_len >= 2 { best_len } else { 2 };
+                        if cmp < max_len
+                            && (builtin::i32_load8_u(scratch + chain + cmp) != builtin::i32_load8_u(scratch + pos + cmp)
+                            || builtin::i32_load8_u(scratch + chain + cmp - 1) != builtin::i32_load8_u(
+                            scratch + pos + cmp - 1,
+                        )) {
                             chain = builtin::i32_load(prev_ptr + (chain & 32767) * 4);
                             chain_count += 1;
                             continue;
@@ -2788,12 +2795,12 @@ pub fn deflate_with_level(input: &ByteList, level: i32, strategy: i32) -> ByteLi
                             break;
                         }
 
-                        // Early termination: skip if can't beat current best
-                        if best_len >= 3
-                            && best_len < max_len
-                            && builtin::i32_load8_u(scratch + chain + best_len) != builtin::i32_load8_u(
-                            scratch + pos + best_len,
-                        ) {
+                        let cmp = if best_len >= 2 { best_len } else { 2 };
+                        if cmp < max_len
+                            && (builtin::i32_load8_u(scratch + chain + cmp) != builtin::i32_load8_u(scratch + pos + cmp)
+                            || builtin::i32_load8_u(scratch + chain + cmp - 1) != builtin::i32_load8_u(
+                            scratch + pos + cmp - 1,
+                        )) {
                             chain = builtin::i32_load(prev_ptr + (chain & 32767) * 4);
                             chain_count += 1;
                             continue;
