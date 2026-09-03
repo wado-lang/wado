@@ -157,7 +157,7 @@ fn resolve_fraction_digits(f: &Formatter, default_digits: i32) -> i32 {
     if p == Formatter::PRECISION_INFINITE {
         return 9;
     }
-    return clamp_i32(p, 0, 9);
+    return i32::clamp(p, 0, 9);
 }
 
 /// Render an instant as an ISO 8601 / RFC 3339 string in the civil time given
@@ -2174,9 +2174,9 @@ impl PlainDate {
     /// A date with `month` clamped to `1..=12` and `day` to that month's
     /// length — Temporal's `constrain` overflow.
     pub fn constrain(year: i32, month: i32, day: i32) -> PlainDate {
-        let clamped_month = clamp_i32(month, 1, 12);
+        let clamped_month = i32::clamp(month, 1, 12);
         let length = days_in_month_value(year as i64, clamped_month as i64) as i32;
-        return PlainDate { year: year, month: clamped_month, day: clamp_i32(day, 1, length) };
+        return PlainDate { year: year, month: clamped_month, day: i32::clamp(day, 1, length) };
     }
 
     /// The date `days` after the Unix epoch.
@@ -2722,17 +2722,6 @@ fn parse_iso_time(text: &String, start: i32, end: i32) -> Result<[PlainTime, i32
         },
         i,
     ]);
-}
-
-/// Clamp `value` into `low..=high`.
-fn clamp_i32(value: i32, low: i32, high: i32) -> i32 {
-    if value < low {
-        return low;
-    }
-    if value > high {
-        return high;
-    }
-    return value;
 }
 
 /// Quotient of `a` by positive `m`, flooring toward negative infinity.
