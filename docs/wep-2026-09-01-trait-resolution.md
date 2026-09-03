@@ -79,10 +79,11 @@ and above any impl on the base type.
 
 All three lists are then gated on scope, below.
 
-An impl answers for the methods its trait declares, and for the ones its own
-body declares beyond them — a helper the bodies call on `self`. Such a method
-reaches a call through that impl alone; another impl of the trait never
-answers for it (`trait_impl_only_method.wado`).
+The compiler accepts a method an impl block declares beyond its trait's, and
+`core:cbor` calls one on `self`; whether the language keeps that is undecided
+(wado-lang/wado#1959). Selection reads the block's own names beside the
+trait's, so such a method is a candidate through that impl alone
+(`trait_impl_only_method.wado`).
 
 `()` is the unit type, not the empty tuple `[]`, so an impl for `[..T]` is
 never a candidate for it. Its traits are implemented for `()` directly
