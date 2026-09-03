@@ -3429,6 +3429,19 @@ pub fn fixed_width_for_prec(f: f64, precision: i32) -> FormatResult {
     let m: u64 = unpack.mantissa;
     let e: i32 = unpack.exponent;
     let log10_e63: i32 = "core::prelude/fpfmt.wado::log10_pow2"((e + 63));
+    let n_est: i32 = ((1 + log10_e63) + precision);
+    if ((n_est < 1) || (n_est > 17)) {
+        core::builtin::cold_path();
+        return "core::prelude/fpfmt.wado::fixed_width_out_of_range"(m, e, log10_e63, precision);
+    }
+    let lp: i32 = "core::prelude/fpfmt.wado::log2_pow10"(precision);
+    let pm: PmHiLo = "core::prelude/fpfmt.wado::get_pow10"(precision);
+    let s: i32 = -((e + lp) + 3);
+    let d: u64 = "core::prelude/fpfmt.wado::unrounded_round"("core::prelude/fpfmt.wado::uscale"(m, pm.hi, pm.lo, s));
+    return FormatResult { digits: d, exponent: -precision, n_digits: "core::prelude/fpfmt.wado::digits"(d) };
+}
+
+fn fixed_width_out_of_range(m: u64, e: i32, log10_e63: i32, precision: i32) -> FormatResult {
     let p1: i32 = -log10_e63;
     let lp1: i32 = "core::prelude/fpfmt.wado::log2_pow10"(p1);
     let pm1: PmHiLo = "core::prelude/fpfmt.wado::get_pow10"(p1);
