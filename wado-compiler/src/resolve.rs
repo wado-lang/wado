@@ -255,14 +255,6 @@ impl Resolutions {
 
     /// Whether `def` is reachable from `module` under any name at all.
     ///
-    /// The reverse of a lookup, and the only question a tie-break between two
-    /// same-named foreign declarations can be settled by: whether this module
-    /// can see the declaration, not whether some spelling matches.
-    #[must_use]
-    pub fn in_scope(&self, module: &ModuleSource, def: DefId) -> bool {
-        self.decls_in_scope(module).contains(&def)
-    }
-
     /// Every declaration `module` may name — what each name it can write
     /// reaches, through the one scope order: its `use` imports, then its own
     /// (including what its `pub use` re-exports reach), then the prelude's.

@@ -2561,10 +2561,6 @@ pub(super) struct TraitMethodMatch {
     /// the inner type is a type parameter. False for specific ref impls like
     /// `impl IntoIterator for &List<T>` where the inner type is a concrete generic.
     pub(super) is_blanket_ref_impl: bool,
-    /// True when the impl target spreads a type pack (`impl<..T> Trait for
-    /// [..T]`). Coherence Rule 1 (WEP 2026-03-14 §5) ranks such a match below
-    /// every non-variadic one.
-    pub(super) is_variadic_impl: bool,
 }
 
 /// Read-only view resolving a type name from a module's perspective without

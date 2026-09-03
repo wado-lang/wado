@@ -256,8 +256,10 @@ impl Lowering {
                     args,
                 )
             }
-            ResolvedType::Never
-            | ResolvedType::Reactive(_)
+            // `impl Inspect for !` is written in the prelude, so the receiver
+            // side names the same shape.
+            ResolvedType::Never => decl(DeclKey::Builtin("!".to_string()), vec![]),
+            ResolvedType::Reactive(_)
             | ResolvedType::InferVar(_)
             | ResolvedType::TypePack { .. }
             | ResolvedType::AssocTypeProjection { .. }
@@ -998,8 +1000,15 @@ impl SolverBridge {
         type_id: TypeId,
         through_ref: Option<bool>,
         method_name: &str,
+        required_trait: Option<DefId>,
     ) -> Option<Ordered> {
         let method = MethodId(*self.lowering.methods.get(method_name)?);
+        // A trait-qualified call named its trait, so the order runs within it:
+        // every rank still applies, and the cross-trait question does not.
+        let required = match required_trait {
+            Some(def) => Some(self.lowering.known_trait(def)?),
+            None => None,
+        };
         let (env, names) = self.env_at(tysys, ctx)?;
         let ty =
             self.lowering
@@ -1009,7 +1018,10 @@ impl SolverBridge {
             inner: Box::new(ty),
         });
         let module = self.lowering.known_module(module)?;
-        let found = candidates(&self.program, &env, &ty, method, module);
+        let mut found = candidates(&self.program, &env, &ty, method, module);
+        if let Some(required) = required {
+            found.in_scope.retain(|c| c.trait_ == required);
+        }
         let named = |live: &[usize]| {
             live.iter()
                 .map(|&i| self.impl_def_of(found.in_scope[i].impl_))

@@ -1857,15 +1857,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.decl_key_or_local(written)
     }
 
-    /// Whether the trait declaration `decl` is in scope in the current frame:
-    /// declared by the current module, or reachable from it under any name.
-    /// Ties between same-named foreign declarations break on this.
-    pub(super) fn trait_decl_in_scope(&self, decl: crate::defs::DefId) -> bool {
-        self.tysys
-            .resolutions
-            .in_scope(&self.current_module_source, decl)
-    }
-
     /// Whether the trait `key` names declares `method_name`. The cheap form of
     /// [`Self::trait_method_of`], for counting candidates without cloning each
     /// one's declaration.
@@ -2868,7 +2859,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             impl_struct_name: struct_name.to_string(),
             impl_struct_fq: self.tysys.fq_receiver_head(base_type_id),
             is_blanket_ref_impl: false,
-            is_variadic_impl: false,
         })
     }
 }
