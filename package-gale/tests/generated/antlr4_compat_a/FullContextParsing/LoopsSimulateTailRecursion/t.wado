@@ -2521,10 +2521,8 @@ fn scan_expr_primary(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
         if alt_kind == TK_LIT_LPAREN {
-            pos = start;
+            pos = start + 1;
             try_0: {
-                if pos >= tokens.len() || tokens[pos] != TK_LIT_LPAREN { break try_0; }
-                pos += 1;
                 if pos >= tokens.len() || tokens[pos] != TK_ID { break try_0; }
                 pos += 1;
                 if pos >= tokens.len() || tokens[pos] != TK_LIT_RPAREN { break try_0; }
@@ -2534,10 +2532,8 @@ fn scan_expr_primary(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &
             return -1;
         } else if alt_kind == TK_ID {
             let mut best: i32 = -1;
-            pos = start;
+            pos = start + 1;
             try_1: {
-                if pos >= tokens.len() || tokens[pos] != TK_ID { break try_1; }
-                pos += 1;
                 if pos >= tokens.len() || tokens[pos] != TK_LIT_LPAREN { break try_1; }
                 pos += 1;
                 if pos >= tokens.len() || tokens[pos] != TK_ID { break try_1; }
@@ -2546,12 +2542,8 @@ fn scan_expr_primary(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &
                 pos += 1;
                 if pos > best { best = pos; }
             }
-            pos = start;
-            try_2: {
-                if pos >= tokens.len() || tokens[pos] != TK_ID { break try_2; }
-                pos += 1;
-                if pos > best { best = pos; }
-            }
+            pos = start + 1;
+            if pos > best { best = pos; }
             if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else {

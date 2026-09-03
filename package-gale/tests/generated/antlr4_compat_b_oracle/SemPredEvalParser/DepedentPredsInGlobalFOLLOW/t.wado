@@ -1623,12 +1623,8 @@ fn scan_e(tokens: &Array<i32>, pos: i32) -> i32 {
     scan_alts: {
         if alt_kind == TK_ID {
             let mut best: i32 = -1;
-            pos = start;
-            try_0: {
-                if pos >= tokens.len() || tokens[pos] != TK_ID { break try_0; }
-                pos += 1;
-                if pos > best { best = pos; }
-            }
+            pos = start + 1;
+            if pos > best { best = pos; }
             let try_1_end = scan_e_alt_1(tokens, start);
             if try_1_end > best { best = try_1_end; }
             if best >= 0 { pos = best; break scan_alts; }

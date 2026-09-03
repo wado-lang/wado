@@ -1598,22 +1598,16 @@ fn scan_e_atom(tokens: &Array<i32>, pos: i32) -> i32 {
     scan_alts: {
         if alt_kind == TK_ID {
             let mut best: i32 = -1;
-            pos = start;
+            pos = start + 1;
             try_0: {
-                if pos >= tokens.len() || tokens[pos] != TK_ID { break try_0; }
-                pos += 1;
                 if pos >= tokens.len() || tokens[pos] != TK_LIT_EQ { break try_0; }
                 pos += 1;
                 pos = scan_e(tokens, pos, 0);
                 if pos < 0 { break try_0; }
                 if pos > best { best = pos; }
             }
-            pos = start;
-            try_1: {
-                if pos >= tokens.len() || tokens[pos] != TK_ID { break try_1; }
-                pos += 1;
-                if pos > best { best = pos; }
-            }
+            pos = start + 1;
+            if pos > best { best = pos; }
             if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else {

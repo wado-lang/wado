@@ -1515,10 +1515,8 @@ fn scan_a(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLO
     scan_alts: {
         if alt_kind == TK_X {
             let mut best: i32 = -1;
-            pos = start;
+            pos = start + 1;
             try_0: {
-                if pos >= tokens.len() || tokens[pos] != TK_X { break try_0; }
-                pos += 1;
                 pos = scan_a(tokens, pos, &follow_prepend(&FOLLOW_MASK_0, follow));
                 if pos < 0 { break try_0; }
                 if pos < tokens.len() && tokens[pos] == TK_Y && !(follow_yields(tokens, pos, follow, TK_EOF)) {
@@ -1526,12 +1524,8 @@ fn scan_a(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLO
                 }
                 if pos > best { best = pos; }
             }
-            pos = start;
-            try_1: {
-                if pos >= tokens.len() || tokens[pos] != TK_X { break try_1; }
-                pos += 1;
-                if pos > best { best = pos; }
-            }
+            pos = start + 1;
+            if pos > best { best = pos; }
             if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else {

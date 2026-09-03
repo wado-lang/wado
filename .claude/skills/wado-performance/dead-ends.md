@@ -315,3 +315,29 @@ reads the rule stack, so the CST walk that maintains it is unobservable, and
 Generalizes: a fast path you shrink is still a call until it is under the
 budget, and "under the budget" is a WIR question, not an eyeball one. Ask what
 makes the call unnecessary before asking what makes it cheap.
+
+## `TreeBuilder` handing its store over instead of copying it out (2026-09-03)
+
+`TreeBuilder::finish(&self) -> CstStore` deep-copied `tag`/`a`/`b`/`alt` — four
+~10K-element `List`s per `sqlite_parse` — because the builder held its own flat
+columns and `finish` handed a fresh `CstStore` back by value. Making the
+builder hold `store: CstStore` directly (`finish(&mut self)` fills the derived
+`end`/`flags`/`next` columns in place, caller reads `p.b.store`) removes all
+four `array_new` + `array_copy` pairs; confirmed in the WIR.
+
+It is a **regression**: isolated from the scan-guard elision that landed
+alongside it (`package-gale/perf.md`), three alternating pairs on
+`sqlite_parse`, best-of-three — base 1.150 ms/iter, this change alone 1.162
+ms/iter, **slower in all 3 rounds**. Combined with the scan elision it also
+loses to the scan elision alone in all 3 rounds (1.131–1.141 vs 1.120–1.124).
+
+`TreeBuilder::push_row` was 6.4% self-time in the profile (`perf.md`'s
+"Current state" table) — called once per CST row, several times per token.
+Nesting the four columns one level deeper (`self.tag` → `self.store.tag`)
+adds a `struct.get` on every field access in that function and in `finish`,
+paid every row; the four removed copies happen once per parse. Reverted.
+
+Generalizes: an allocation removed once per call is not free against an
+indirection paid on every access inside the function that removes it. Price
+a copy-elision idea against the loop it would run inside, not just the
+allocation it deletes.
