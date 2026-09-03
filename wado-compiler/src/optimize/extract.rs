@@ -334,13 +334,13 @@ pub(super) fn freeze_pure_arith(
         // *immutable*-`&`-escaped local (licm's `&config`) is stable and its field
         // constant freezes soundly. Keep a copy before `set_alias_sets` moves it.
         let mut_escaped_leaf = mut_escaped.clone();
-        let pure_calls =
-            super::alias::pure_calls(body, &type_table, &first_param_types, &call_immutability);
+        let verdicts =
+            super::alias::call_verdicts(body, &type_table, &first_param_types, &call_immutability);
         let mut engine = Engine::new(body, &mut buffers, locals);
         engine.set_alias_sets(aliased, untrackable, mut_escaped);
         engine.set_value_graph_type_table(&type_table);
         engine.set_param_locals(param_locals);
-        engine.set_pure_calls(pure_calls);
+        engine.set_call_verdicts(verdicts.pure, verdicts.receiver_immutable);
         engine.set_pure_builtin_callees(&pure_builtin_callees);
 
         // Locals a frozen value may not name, from the same predicate that

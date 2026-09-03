@@ -210,6 +210,7 @@ pub fn build(
     mut_escaped: &crate::hashmap::IndexSet<u32>,
     pure_calls: &crate::hashmap::IndexSet<ExprId>,
     pure_builtin_callees: &crate::hashmap::IndexSet<FuncId>,
+    receiver_immutable_calls: &crate::hashmap::IndexSet<ExprId>,
     type_table: Option<&crate::tir::TypeTable>,
 ) -> ValueGraphBuild {
     // Build into the body's own pool: take it out as the seed (so a promoted
@@ -221,6 +222,7 @@ pub fn build(
         let mut b = Builder::new(&*body, aliased, untrackable, mut_escaped, type_table, seed);
         b.pure_calls.clone_from(pure_calls);
         b.pure_builtin_callees.clone_from(pure_builtin_callees);
+        b.receiver_immutable_calls.clone_from(receiver_immutable_calls);
         b.seed_params(param_locals);
         b.walk_block(body.root);
         (b.pool, b.loop_entry_values)
@@ -472,6 +474,12 @@ struct Builder<'a> {
     /// intrinsics does not invalidate forwarded field versions. Empty is
     /// conservative (every call is a heap write). See [`is_builtin_pure_call`].
     pure_builtin_callees: crate::hashmap::IndexSet<FuncId>,
+    /// `ExprId` indices of `recv.m(…)` calls whose callee provably cannot write
+    /// through the receiver, so the call does not borrow it for the loop's
+    /// heap-effect summary. Same verdict `build_alias_info` uses to decide
+    /// whether to alias that receiver, so the two analyses agree by
+    /// construction. Empty is conservative (every receiver is borrowed).
+    receiver_immutable_calls: crate::hashmap::IndexSet<ExprId>,
 }
 
 impl<'a> Builder<'a> {
@@ -506,6 +514,7 @@ impl<'a> Builder<'a> {
             stmt_entry_version: IndexMap::default(),
             pure_calls: crate::hashmap::IndexSet::default(),
             pure_builtin_callees: crate::hashmap::IndexSet::default(),
+            receiver_immutable_calls: crate::hashmap::IndexSet::default(),
         }
     }
 
@@ -886,6 +895,7 @@ impl<'a> Builder<'a> {
                         let eff = collect_node_heap_effects(
                             self.body,
                             &self.pure_builtin_callees,
+                            &self.receiver_immutable_calls,
                             NodeRef::Expr(re),
                         );
                         self.apply_loop_heap_effects(&eff);
@@ -1795,7 +1805,12 @@ impl<'a> Builder<'a> {
     fn walk_loop(&mut self, body_block: crate::nir_arena::BlockId) {
         let writes = writes_of_block(self.body, body_block, &mut self.block_writes);
         let heap_effects =
-            collect_loop_heap_effects(self.body, &self.pure_builtin_callees, body_block);
+            collect_loop_heap_effects(
+                self.body,
+                &self.pure_builtin_callees,
+                &self.receiver_immutable_calls,
+                body_block,
+            );
         // Snapshot before the reassigned-local opaques below overwrite the
         // written locals' pre-loop values.
         self.fresh_invalidations.clear();
@@ -1962,9 +1977,15 @@ fn root_local_of(body: &Body, op: Operand) -> Option<u32> {
 fn collect_loop_heap_effects(
     body: &Body,
     pure_builtin_callees: &crate::hashmap::IndexSet<FuncId>,
+    receiver_immutable_calls: &crate::hashmap::IndexSet<ExprId>,
     block: BlockId,
 ) -> LoopHeapEffects {
-    collect_node_heap_effects(body, pure_builtin_callees, NodeRef::Block(block))
+    collect_node_heap_effects(
+        body,
+        pure_builtin_callees,
+        receiver_immutable_calls,
+        NodeRef::Block(block),
+    )
 }
 
 /// The heap-write effects of a node's subtree, so a caller can invalidate
@@ -1973,32 +1994,41 @@ fn collect_loop_heap_effects(
 fn collect_node_heap_effects(
     body: &Body,
     pure_builtin_callees: &crate::hashmap::IndexSet<FuncId>,
+    receiver_immutable_calls: &crate::hashmap::IndexSet<ExprId>,
     node: NodeRef,
 ) -> LoopHeapEffects {
     let mut eff = LoopHeapEffects::default();
-    collect_loop_heap_node(body, pure_builtin_callees, node, &mut eff);
+    collect_loop_heap_node(
+        body,
+        pure_builtin_callees,
+        receiver_immutable_calls,
+        node,
+        &mut eff,
+    );
     eff
 }
 
 fn collect_loop_heap_node(
     body: &Body,
     pure_builtin_callees: &crate::hashmap::IndexSet<FuncId>,
+    receiver_immutable_calls: &crate::hashmap::IndexSet<ExprId>,
     node: NodeRef,
     eff: &mut LoopHeapEffects,
 ) {
     if let NodeRef::Expr(e) = node {
-        record_loop_heap_write(body, pure_builtin_callees, e, eff);
+        record_loop_heap_write(body, pure_builtin_callees, receiver_immutable_calls, e, eff);
     }
     let mut kids = Vec::new();
     body.for_each_child(node, |c| kids.push(c));
     for c in kids {
-        collect_loop_heap_node(body, pure_builtin_callees, c, eff);
+        collect_loop_heap_node(body, pure_builtin_callees, receiver_immutable_calls, c, eff);
     }
 }
 
 fn record_loop_heap_write(
     body: &Body,
     pure_builtin_callees: &crate::hashmap::IndexSet<FuncId>,
+    receiver_immutable_calls: &crate::hashmap::IndexSet<ExprId>,
     e: ExprId,
     eff: &mut LoopHeapEffects,
 ) {
@@ -2051,10 +2081,13 @@ fn record_loop_heap_write(
             has_receiver,
             ..
         } => {
+            // A receiver is borrowed for the whole call unless the callee
+            // provably cannot write through it — the same verdict that decides
+            // whether `build_alias_info` aliases the receiver, so a call the
+            // alias analysis leaves unaliased does not get borrowed here.
+            let receiver_borrowed = *has_receiver && !receiver_immutable_calls.contains(&e);
             for (i, arg) in args.iter().enumerate() {
-                // A receiver is borrowed for the whole call whether or not the
-                // method declares `&mut self` — the callee reaches its storage.
-                let borrowed = arg.is_mut || (*has_receiver && i == 0);
+                let borrowed = arg.is_mut || (receiver_borrowed && i == 0);
                 if borrowed
                     && let Some(ExprKind::Local { index, .. }) =
                         arg.expr.as_expr().map(|ae| &body.exprs[ae].kind)
@@ -2283,6 +2316,88 @@ mod tests {
         b
     }
 
+    /// `self.m()` as the sole statement of a block, `self` being local 0.
+    fn receiver_call_block(body: &mut Body) -> (BlockId, ExprId) {
+        use crate::nir::{FuncId, NirLocal};
+        use crate::nir_arena::{ArenaCallArg, BlockNode, ExprNode, StmtNode};
+        use crate::token::Span;
+        let span = Span::new(0, 0, 0, 0);
+        body.locals = vec![NirLocal {
+            name: "self".to_string(),
+            type_id: TypeTable::I32,
+            is_mut: false,
+        }];
+        let recv = body.exprs.push(ExprNode {
+            kind: ExprKind::Local {
+                index: 0,
+                name: "self".to_string(),
+            },
+            type_id: TypeTable::I32,
+            span,
+        });
+        let call = body.exprs.push(ExprNode {
+            kind: ExprKind::Call {
+                func_id: FuncId::from_u32(0),
+                type_args: vec![],
+                args: vec![ArenaCallArg {
+                    expr: Operand::Expr(recv),
+                    is_mut: false,
+                }],
+                has_receiver: true,
+            },
+            type_id: TypeTable::I32,
+            span,
+        });
+        let stmt = body.stmts.push(StmtNode {
+            kind: StmtKind::Expr(Operand::Expr(call)),
+            span,
+        });
+        let block = body.blocks.push(BlockNode {
+            stmts: vec![stmt],
+            span,
+        });
+        (block, call)
+    }
+
+    /// A receiver is borrowed for the whole call only when the callee can write
+    /// through it. Marking it unconditionally bumps the receiver's `per_local`
+    /// generation, which kills every `self.field` invariance in a loop that
+    /// calls any method on `self` — while `build_alias_info` has already
+    /// declined to alias that same receiver. The two have to agree.
+    #[test]
+    fn receiver_immutable_call_does_not_borrow_its_receiver() {
+        use crate::hashmap::IndexSet;
+        let no_callees = IndexSet::default();
+        let mut body = Body::empty();
+        let (block, call) = receiver_call_block(&mut body);
+
+        let immutable: IndexSet<ExprId> = [call].into_iter().collect();
+        let eff = collect_loop_heap_effects(&body, &no_callees, &immutable, block);
+        assert!(
+            !eff.mut_borrowed.contains(&0),
+            "a callee that cannot write through the receiver does not borrow it"
+        );
+
+        // Unknown callee: the conservative mark stays.
+        let none: IndexSet<ExprId> = IndexSet::default();
+        let eff = collect_loop_heap_effects(&body, &no_callees, &none, block);
+        assert!(eff.mut_borrowed.contains(&0));
+    }
+
+    /// The blanket fallback is what covers every argument shape the bare-`Local`
+    /// mark misses, so proving the receiver immutable must not touch it.
+    #[test]
+    fn receiver_immutable_call_still_reports_external_writes() {
+        use crate::hashmap::IndexSet;
+        let no_callees = IndexSet::default();
+        let mut body = Body::empty();
+        let (block, call) = receiver_call_block(&mut body);
+        let immutable: IndexSet<ExprId> = [call].into_iter().collect();
+
+        let eff = collect_loop_heap_effects(&body, &no_callees, &immutable, block);
+        assert!(eff.has_external_writes);
+    }
+
     #[test]
     fn cse_independent_of_mut_escaped_iteration_order() {
         use crate::hashmap::IndexSet;
@@ -2301,6 +2416,7 @@ mod tests {
                 mut_escaped,
                 &no_calls,
                 &no_callees,
+                &no_calls,
                 None,
             );
             body.values.values

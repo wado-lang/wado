@@ -462,17 +462,31 @@ impl<'a> CallImmutability<'a> {
 
 use super::arena_query::storage_root;
 
-/// Call exprs that mutate no caller local: a free call, or one with a `&self`
-/// receiver, whose every argument is safe — not `mut`, an immutable borrow, or a
-/// call-immutable value the callee cannot reach back through. The value graph
-/// skips the per-call bump for these, so `arr.len()` does not split `arr.used`'s
-/// version. An unknown callee stays impure for a receiver.
-pub(super) fn pure_calls(
+/// The per-call verdicts the value-graph builder needs, both read off one walk.
+/// They nest — `pure` implies `receiver_immutable` — so computing them apart
+/// would ask [`method_mutates_receiver`] the same question twice and let the two
+/// answers drift.
+pub(super) struct CallVerdicts {
+    /// Calls that mutate no caller local: a free call, or one with a `&self`
+    /// receiver, whose every argument is safe — not `mut`, an immutable borrow,
+    /// or a call-immutable value the callee cannot reach back through. The value
+    /// graph skips the per-call bump for these, so `arr.len()` does not split
+    /// `arr.used`'s version. An unknown callee stays impure for a receiver.
+    pub pure: IndexSet<crate::nir_arena::ExprId>,
+    /// Calls whose callee provably cannot write through the receiver, whatever
+    /// the other arguments do. A loop containing one does not have to treat the
+    /// receiver as borrowed for the whole body, which is what keeps a
+    /// `self.field` read invariant across a `self.helper()`.
+    pub receiver_immutable: IndexSet<crate::nir_arena::ExprId>,
+}
+
+/// Classify every call in `body`. See [`CallVerdicts`].
+pub(super) fn call_verdicts(
     body: &Body,
     type_table: &TypeTable,
     first_param_types: &FirstParamTypes,
     call_immutability: &CallImmutability,
-) -> IndexSet<crate::nir_arena::ExprId> {
+) -> CallVerdicts {
     let arg_safe = |arg: &crate::nir_arena::ArenaCallArg| -> bool {
         if arg.is_mut {
             return false;
@@ -494,42 +508,46 @@ pub(super) fn pure_calls(
     };
     // Walk reachable nodes only: `body.exprs` also holds orphaned nodes left by
     // earlier promotion, whose stale `type_id`s are no longer in the table.
-    let mut out = IndexSet::default();
+    let mut out = CallVerdicts {
+        pure: IndexSet::default(),
+        receiver_immutable: IndexSet::default(),
+    };
     walk_all(body, NodeRef::Block(body.root), &mut |body, node| {
         let NodeRef::Expr(e) = node else {
             return;
         };
-        let pure = match &body.exprs[e].kind {
-            ExprKind::Call {
-                func_id,
-                args,
-                has_receiver,
-                ..
-            } => {
-                // A receiver is judged by the callee's declared `self` mode, which
-                // stays conservative for a callee absent from `first_param_types`;
-                // `arg_safe` alone would clear an unknown one.
-                let receiver_safe = !*has_receiver
-                    || args
-                        .first()
-                        .and_then(|a| a.expr.as_expr())
-                        .is_some_and(|re| {
-                            !method_mutates_receiver(
-                                body,
-                                re,
-                                *func_id,
-                                first_param_types,
-                                type_table,
-                                true,
-                                Some(call_immutability),
-                            )
-                        });
-                receiver_safe && args.iter().skip(usize::from(*has_receiver)).all(&arg_safe)
-            }
-            _ => false,
+        let ExprKind::Call {
+            func_id,
+            args,
+            has_receiver,
+            ..
+        } = &body.exprs[e].kind
+        else {
+            return;
         };
-        if pure {
-            out.insert(e);
+        // A receiver is judged by the callee's declared `self` mode, which
+        // stays conservative for a callee absent from `first_param_types`;
+        // `arg_safe` alone would clear an unknown one.
+        let receiver_safe = !*has_receiver
+            || args
+                .first()
+                .and_then(|a| a.expr.as_expr())
+                .is_some_and(|re| {
+                    !method_mutates_receiver(
+                        body,
+                        re,
+                        *func_id,
+                        first_param_types,
+                        type_table,
+                        true,
+                        Some(call_immutability),
+                    )
+                });
+        if receiver_safe {
+            out.receiver_immutable.insert(e);
+            if args.iter().skip(usize::from(*has_receiver)).all(&arg_safe) {
+                out.pure.insert(e);
+            }
         }
     });
     out

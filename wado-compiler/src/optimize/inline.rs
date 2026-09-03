@@ -1525,12 +1525,13 @@ pub fn inline_functions(
             // keys). Drives the graph-preserving gate below.
             let pure_set = {
                 let body = func.body.as_ref().unwrap();
-                super::alias::pure_calls(
+                super::alias::call_verdicts(
                     body,
                     &inline_type_table,
                     &inline_first_param_types,
                     &inline_call_immutability,
                 )
+                .pure
             };
             {
                 let body = func.body.as_mut().unwrap();

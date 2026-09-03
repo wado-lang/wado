@@ -250,10 +250,15 @@ pub struct Engine<'a> {
     /// [`Engine::set_param_locals`] first.
     param_locals: Vec<u32>,
     /// `ExprId` indices of calls that mutate no caller local
-    /// ([`crate::optimize::alias::pure_calls`]); the build skips their per-call
-    /// `mut_escaped` bump. Empty (conservative — every call bumps) unless a pass
-    /// supplies it via [`Engine::set_pure_calls`] before the first value query.
+    /// ([`crate::optimize::alias::call_verdicts`]); the build skips their
+    /// per-call `mut_escaped` bump. Empty (conservative — every call bumps)
+    /// unless a pass supplies it via [`Engine::set_call_verdicts`] before the
+    /// first value query.
     pure_calls: IndexSet<crate::nir_arena::ExprId>,
+    /// `ExprId` indices of calls whose callee cannot write through the receiver,
+    /// from the same walk as `pure_calls`. A loop containing one does not treat
+    /// the receiver as borrowed for its whole body. Empty is conservative.
+    receiver_immutable_calls: IndexSet<crate::nir_arena::ExprId>,
     /// Type table for the `ValueGraph` builder's constant folding of pure
     /// arithmetic. `None` (the default) disables folding. Set via
     /// [`Engine::set_value_graph_type_table`] before the first value query.
@@ -302,6 +307,7 @@ impl<'a> Engine<'a> {
             mut_escaped_locals: IndexSet::default(),
             param_locals: Vec::new(),
             pure_calls: IndexSet::default(),
+            receiver_immutable_calls: IndexSet::default(),
             vg_type_table: None,
             panic_callee_ids: None,
             pure_builtin_callees: None,
@@ -609,12 +615,20 @@ impl<'a> Engine<'a> {
         self.param_locals = locals;
     }
 
-    /// Record the `ExprId` indices of calls that mutate no caller local, so the
-    /// one build-once construction skips their per-call `mut_escaped` bump. Supply
-    /// before the first value query (the build is lazy); the persisted config
-    /// carries it so the verify oracle rebuilds consistently.
-    pub fn set_pure_calls(&mut self, pure_calls: IndexSet<crate::nir_arena::ExprId>) {
+    /// Record the per-call verdicts the build reads: the calls that mutate no
+    /// caller local (whose per-call `mut_escaped` bump is skipped) and those
+    /// whose callee cannot write through the receiver (which a loop does not
+    /// treat as borrowing it). Taken together because one walk decides both, and
+    /// answering either alone lets the two drift. Supply before the first value
+    /// query (the build is lazy); the persisted config carries them so the
+    /// verify oracle rebuilds consistently.
+    pub fn set_call_verdicts(
+        &mut self,
+        pure_calls: IndexSet<crate::nir_arena::ExprId>,
+        receiver_immutable_calls: IndexSet<crate::nir_arena::ExprId>,
+    ) {
         self.pure_calls = pure_calls;
+        self.receiver_immutable_calls = receiver_immutable_calls;
     }
 
     /// Record the function's reference-aliased and `stores`-aliased locals so
@@ -690,6 +704,7 @@ impl<'a> Engine<'a> {
             &self.mut_escaped_locals,
             &self.pure_calls,
             self.pure_builtin_callees.unwrap_or(&empty_builtins),
+            &self.receiver_immutable_calls,
             self.vg_type_table,
         );
         self.body.value_graph = Some(build);
