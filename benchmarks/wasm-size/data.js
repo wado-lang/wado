@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1788438784086,
+  "lastUpdate": 1788446215371,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -52945,6 +52945,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/99bf8511a35c781af21681e05e4ff4abb151579b"
         },
         "date": 1788438783096,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 2028,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6418,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18908,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 282048,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "4dfaaf2be83c0865324f25bc8a122d0e94f33f7b",
+          "message": "Merge pull request #1955 from wado-lang/claude/nir-optimizer-wep-review-cz9fws\n\nfix(optimizer): unify the per-call verdicts the value graph's loop summary and straight-line walk read",
+          "timestamp": "2026-09-03T23:19:51+09:00",
+          "tree_id": "5828357269d63bb9d86d7fdf6b13da0fc44fff1f",
+          "url": "https://github.com/wado-lang/wado/commit/4dfaaf2be83c0865324f25bc8a122d0e94f33f7b"
+        },
+        "date": 1788446214646,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
