@@ -356,10 +356,8 @@ pub fn compress_bound(source_len: i32) -> i32 {
 }
 
 
-// A decoding table entry, packed into one i32 so the table is a flat GC array
-// rather than an array of references: op (operation, extra bits, table bits) in
-// bits 0-7, code bits in 8-15, val (offset in table or code value) in 16-31.
-// The decode loop reads all three from a single unboxed load.
+// A decoding table entry in one i32, so the table is a flat GC array rather
+// than an array of references and a decode reads it with one unboxed load.
 fn code_pack(op: i32, bits: i32, val: i32) -> i32 {
     return op & 0xFF | (bits & 0xFF) << 8 | (val & 0xFFFF) << 16;
 }
@@ -1434,7 +1432,7 @@ pub fn deflate_stored(input: &ByteList) -> ByteList {
     let total = input.len();
     let mut output = ByteList::with_capacity(total + (total / 65535 + 1) * 5);
 
-    // Emit at least one block: empty input still needs a BFINAL block.
+    // Empty input still needs a BFINAL block, so the body runs at least once.
     let mut pos = 0;
     loop {
         let block_len = i32::min(total - pos, 65535);
@@ -1536,9 +1534,8 @@ impl BitWriter {
         }
     }
 
-    // Write one packed encoding tree entry: its code, `enc_len` bits wide.
     fn write_code(&mut self, entry: i32) {
-        self.write_bits((entry & 0xFFFF) as u32, entry >> 16 & 0xFF);
+        self.write_bits((entry & 0xFFFF) as u32, enc_len(entry));
     }
 
     fn flush(&mut self) {
@@ -1555,9 +1552,8 @@ impl BitWriter {
     }
 }
 
-// A deflate encoding table entry, packed into one i32 so an encoding tree is a
-// flat GC array rather than an array of references: the bit-reversed code in
-// bits 0-15, its length in bits 16-23.
+// A deflate encoding entry in one i32 — bit-reversed code, then its length — so
+// an encoding tree is a flat GC array rather than an array of references.
 fn enc_pack(code: i32, len: i32) -> i32 {
     return code & 0xFFFF | (len & 0xFF) << 16;
 }
@@ -1566,56 +1562,10 @@ fn enc_len(entry: i32) -> i32 {
     return entry >> 16 & 0xFF;
 }
 
-// Build fixed Huffman literal/length encoding table (288 symbols)
-fn build_fixed_ltree() -> List<i32> {
-    let mut bl_count: List<i32> = List::filled(16, 0);
-    let mut tree: List<i32> = List::filled(288, 0);
-
-    let mut n = 0;
-    while n <= 143 {
-        tree[n] = enc_pack(0, 8);
-        bl_count[8] += 1;
-        n += 1;
-    }
-    while n <= 255 {
-        tree[n] = enc_pack(0, 9);
-        bl_count[9] += 1;
-        n += 1;
-    }
-    while n <= 279 {
-        tree[n] = enc_pack(0, 7);
-        bl_count[7] += 1;
-        n += 1;
-    }
-    while n <= 287 {
-        tree[n] = enc_pack(0, 8);
-        bl_count[8] += 1;
-        n += 1;
-    }
-
-    // Generate canonical codes (gen_codes from trees.c)
-    let mut next_code: List<u32> = List::filled(16, 0);
-    let mut code: u32 = 0;
-    for let mut bits = 1; bits <= 15; bits += 1 {
-        code = code + bl_count[bits - 1] as u32 << 1;
-        next_code[bits] = code;
-    }
-
-    for let mut i = 0; i <= 287; i += 1 {
-        let len = enc_len(tree[i]);
-        if len != 0 {
-            tree[i] = enc_pack(bi_reverse(next_code[len], len) as i32, len);
-            next_code[len] = next_code[len] + 1;
-        }
-    }
-
-    return tree;
-}
-
 // Code lengths of the fixed literal/length and distance trees of RFC 1951
-// section 3.2.6, for costing a fixed block without building its codes.
+// section 3.2.6. Both fixed trees and the cost of a fixed block read them here.
 fn build_fixed_lengths() -> [ByteList, ByteList] {
-    let mut lit = ByteList::filled(286, 8);
+    let mut lit = ByteList::filled(288, 8);
     for let mut sym = 144; sym < 256; sym += 1 {
         lit[sym] = 9;
     }
@@ -1625,13 +1575,14 @@ fn build_fixed_lengths() -> [ByteList, ByteList] {
     return [lit, ByteList::filled(30, 5)];
 }
 
-// Build fixed distance encoding table (30 codes, all 5 bits)
+fn build_fixed_ltree() -> List<i32> {
+    let [lit_lengths, _dist_lengths] = build_fixed_lengths();
+    return gen_huffman_codes(&lit_lengths, 288, 15);
+}
+
 fn build_fixed_dtree() -> List<i32> {
-    let mut tree: List<i32> = List::filled(30, 0);
-    for let mut i = 0; i < 30; i += 1 {
-        tree[i] = enc_pack(bi_reverse(i as u32, 5) as i32, 5);
-    }
-    return tree;
+    let [_lit_lengths, dist_lengths] = build_fixed_lengths();
+    return gen_huffman_codes(&dist_lengths, 30, 15);
 }
 
 // Direct lookup table: length_codes[length - 3] = code index (0..=28)
@@ -1682,10 +1633,8 @@ fn hash3(a: u8, b: u8, c: u8) -> i32 {
     return (a as i32 << 10 ^ b as i32 << 5 ^ c as i32) & 32767;
 }
 
-// hash3 is rolling: masking every step is the same as masking once, since a
-// byte shifted 5 never reaches bit 15. Advancing one position therefore costs
-// one load rather than three.
-#[inline(always)]
+// hash3 is rolling — masking every step is the same as masking once, since a
+// byte shifted five never reaches bit 15 — so a position costs one load, not three.
 fn hash3_roll(h: i32, next: u8) -> i32 {
     return (h << 5 ^ next as i32) & 32767;
 }
@@ -2147,10 +2096,8 @@ fn gen_huffman_codes(lengths: &ByteList, max_sym: i32, max_bits: i32) -> List<i3
 }
 
 // Write a dynamic Huffman block
-// An LZ77 token packed into one i32: the literal, EOB or length symbol in bits
-// 0-15, the match distance (0 for a literal) in bits 16-31. One flat buffer
-// instead of two parallel ones, so a block costs one push and one load per
-// token.
+// An LZ77 token in one i32 — symbol, then the match distance (0 for a literal).
+// One flat buffer instead of two, so a block costs one push and one load a token.
 fn token_pack(sym: i32, dist: i32) -> i32 {
     return sym & 0xFFFF | (dist & 0xFFFF) << 16;
 }
@@ -2163,8 +2110,7 @@ fn token_dist(token: i32) -> i32 {
     return token >> 16 & 0xFFFF;
 }
 
-// Symbol frequencies of a block. Returns [lit_freq, dist_freq] with EOB
-// already counted.
+// Symbol frequencies of a block, with EOB already counted.
 fn count_block_freqs(
     tokens: &List<i32>,
     sym_count: i32,
@@ -2197,8 +2143,8 @@ fn count_block_freqs(
     return [lit_freq, dist_freq];
 }
 
-// Bits the symbol stream costs under the given code-length tables, summed over
-// codes rather than over tokens — the frequencies already hold the counts.
+// Bits the symbol stream costs under the given code-length tables. The
+// frequencies hold the counts, so this sums over codes, never over tokens.
 fn encoded_data_bits(
     lit_freq: &List<i32>,
     dist_freq: &List<i32>,
@@ -2218,9 +2164,8 @@ fn encoded_data_bits(
     return bits;
 }
 
-// Everything a dynamic block needs, derived once from the frequencies: the
-// three code trees, the RLE'd code-length header, and the block's exact bit
-// cost. `write_dynamic_block` emits a plan; `deflate_with_level` prices one.
+// Everything a dynamic block needs, derived once from the frequencies.
+// `write_dynamic_block` emits a plan; `deflate_with_level` prices one.
 struct DynamicPlan {
     lit_tree: List<i32>,
     dist_tree: List<i32>,
@@ -2681,10 +2626,10 @@ pub fn deflate_with_level(input: &ByteList, level: i32, strategy: i32) -> ByteLi
                         }
 
                         // A candidate can only win by matching at `cmp` and
-                        // `cmp - 1`; two loads reject most of the chain without
-                        // entering the compare loop. The floor of 2 makes the
-                        // test apply before any match is found, since a match
-                        // is at least 3 bytes.
+                        // `cmp - 1`, so two loads reject most of the chain
+                        // before the compare loop. The floor of 2 makes the
+                        // test apply before any match is found, a match being
+                        // at least 3 bytes.
                         let cmp = if best_len >= 2 { best_len } else { 2 };
                         if cmp < max_len
                             && (builtin::i32_load8_u(scratch + chain + cmp) != builtin::i32_load8_u(scratch + pos + cmp)
@@ -2724,8 +2669,7 @@ pub fn deflate_with_level(input: &ByteList, level: i32, strategy: i32) -> ByteLi
                     } else {
                         // Previous match was better: emit it
                         tokens.push(token_pack(257 + prev_match_len - 3, prev_match_dist));
-                        // Insert hash entries for skipped positions. hash3 is
-                        // a rolling hash, so each position costs one load.
+                        // Insert hash entries for the positions the match skips.
                         let skip = prev_match_len - 1;
                         let limit = i32::min(skip - 1, input_len - pos - 2);
                         let mut mh = h;
@@ -2846,9 +2790,8 @@ pub fn deflate_with_level(input: &ByteList, level: i32, strategy: i32) -> ByteLi
 
     let sym_count = tokens.len();
 
-    // Price the three encodings against one another. The symbols are walked
-    // once, here; every cost below is a sum over codes, and the dynamic plan
-    // is the one the writer emits.
+    // Price the three encodings against one another. This is the only walk over
+    // the symbols, and the dynamic plan it builds is the one the writer emits.
     let [lit_freq, mut dist_freq] = count_block_freqs(
         &tokens,
         sym_count,

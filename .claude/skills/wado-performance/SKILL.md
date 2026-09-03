@@ -231,20 +231,20 @@ node benchmark/ab.ts --base b1.log b2.log b3.log --head h1.log h2.log h3.log
 ```
 
 **Hash the wasm before you time anything.** Compile every benchmark under both
-compilers and compare: a row whose bytes are identical cannot have moved, so
-whatever the suite says about it is the host. That turns a noisy whole-suite run
-into a two-row question, and it is not a weaker check than timing — it is a
-stronger one. A `field_scalarize` fix left byte-identical output on nine of
-eleven benchmarks; the suite had meanwhile reported `fts` 6.9% SLOWER with
-non-overlapping ranges, which the identical SHA-256 retired outright.
+compilers and compare. A row whose bytes are identical cannot have moved, so
+whatever the suite says about it is the host. That is a stronger check than
+timing, and it leaves only the few rows that differ to measure. A
+`field_scalarize` fix came out byte-identical on all but three benchmarks. The
+suite had meanwhile called `fts` 6.9% SLOWER with non-overlapping ranges; the
+identical SHA-256 retired that reading outright.
 
-Delete both outputs each round and require both to exist: the glob also catches
+Delete both outputs each round and require both to exist. The glob also catches
 the schema modules, which are no world entry point and do not compile, and a
 compare against the previous round's leftovers reads as "identical" — the one
-answer this check must never give by accident. A `SKIPPED` row is uncovered, not
-unchanged, so finish the ones that have a world of their own
-(`--world wasi:http/service` for `http_routing/app.wado`) before reading the
-sweep as complete.
+answer this check must never give by accident. A `SKIPPED` row is uncovered
+rather than unchanged, so finish the ones with a world of their own
+(`--world wasi:http/service` for `http_routing/app.wado`) before calling the
+sweep complete.
 
 ```sh
 for f in benchmark/*/*.wado; do

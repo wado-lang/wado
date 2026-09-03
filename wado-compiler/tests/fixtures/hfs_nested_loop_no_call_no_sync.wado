@@ -1,12 +1,12 @@
 // A nested loop no call reaches leaves the outer scalars canonical.
 //
 // `walk_nested_loop` used to commit every `ScalarOnly` candidate before any
-// inner loop, sync the back edge, and re-read after — whatever the inner body
-// contained — and an unlabeled `break` out of that inner loop committed them
-// again, though it lands back inside the HFS region. A bit-buffer refill loop
-// holds no call that can reach `state`, so nothing in it observes the field:
-// the scalars stay canonical and every one of those syncs is pure cost.
-// `core:zlib`'s inflate state machine pays them per decoded symbol.
+// inner loop whatever its body held, sync the back edge each iteration, and
+// re-read after. An unlabeled `break` out of that loop committed them again,
+// though it lands back inside the HFS region. A bit-buffer refill loop holds no
+// call that can reach `state`, so nothing in it observes the field. Every one
+// of those syncs is pure cost, and `core:zlib`'s inflate state machine paid
+// them per decoded symbol.
 
 use { println, Stdout } from "core:cli";
 
@@ -45,12 +45,12 @@ export fn run() with Stdout {
     println(`${out} ${state.bits}`);
 }
 
-// The outer loop's own exit does commit — the caller reads `state.bits` — and
-// its write-back is the same text as the ones under test, so the patterns are
-// anchored on indentation: the sync that must be gone sits at the outer body's
-// level (12 spaces) or inside the inner loop (20), never at the exit branch's
-// 16. The positive patterns pin the local numbering the negative ones name, so
-// a renumbering fails the test rather than passing it silently.
+// The outer loop's own exit still commits, since the caller reads `state.bits`,
+// and that write-back is the same text as the ones under test. So the negative
+// patterns are anchored on indentation. A sync that must be gone sits at the
+// outer body's level (12 spaces) or inside the inner loop (20), never at the
+// exit branch's 16. The positive patterns pin the local numbering the negative
+// ones name, so a renumbering fails the test rather than passing it silently.
 
 __DATA__
 {

@@ -1303,10 +1303,10 @@ struct WalkCtx<'a> {
     /// (`ScalarOnly`-entry) candidate pays no write-back on a
     /// `continue` back-edge.
     loop_entry_stack: Vec<ScalarStates>,
-    /// Break-site observations per enclosing nested loop, innermost last.
-    /// An unlabeled `break` inside one lands back in the enclosing loop body
-    /// rather than leaving the HFS scope, so it is recorded and joined with the
-    /// loop's other exits instead of committing every scalar on the spot.
+    /// Break sites per enclosing nested loop, innermost last. An unlabeled
+    /// `break` inside one lands back in the enclosing loop body rather than
+    /// leaving the HFS scope, so `walk_nested_loop` joins it with that loop's
+    /// other exits instead of committing every scalar on the spot.
     loop_breaks: Vec<Vec<BreakRecord>>,
     /// Whether anything walked so far in the current statement (relative
     /// to the active sync sink) may have modified a candidate's scalar
@@ -1878,47 +1878,33 @@ fn walk_stmt(
             if let Some(v) = value {
                 walk_operand(body, v, states, true, out, ctx);
             }
-            // Unlabeled `break` leaves the HFS scope, so `ScalarOnly`
-            // candidates must be committed inline. A labeled break is only
-            // recorded — committing on every one over-syncs gale's hot loops —
-            // so `walk_labeled_block` JOINs the sites and syncs only the ones
-            // that diverge.
+            // A break that lands inside the HFS scope is only recorded, and the
+            // join that owns it syncs the sites that diverge: a registered
+            // label belongs to `walk_labeled_block`, an unlabeled break out of
+            // a nested loop to `walk_nested_loop`. Committing at every break
+            // instead over-syncs gale's hot loops. Anything else leaves the
+            // scope, and an empty `loop_breaks` is what says so.
             let registered_label = label
                 .as_ref()
                 .filter(|l| ctx.label_breaks.contains_key(*l))
                 .cloned();
-            if let Some(l) = registered_label {
-                let record = BreakRecord {
+            let join_site = match registered_label {
+                Some(l) => ctx.label_breaks.get_mut(&l),
+                None if label.is_none() => ctx.loop_breaks.last_mut(),
+                None => None,
+            };
+            if let Some(site) = join_site {
+                site.push(BreakRecord {
                     states: states.clone(),
                     block,
                     stmt: sid,
-                };
-                ctx.label_breaks
-                    .get_mut(&l)
-                    .expect("checked contains_key above")
-                    .push(record);
-                out.push(sid);
-            } else if label.is_none() && !ctx.loop_breaks.is_empty() {
-                // An unlabeled break inside a nested loop leaves that loop, not
-                // the HFS scope: control lands back in the enclosing loop body.
-                // Record it like a labeled break so `walk_nested_loop` joins it
-                // with the other exits and syncs only the ones that diverge.
-                let record = BreakRecord {
-                    states: states.clone(),
-                    block,
-                    stmt: sid,
-                };
-                ctx.loop_breaks
-                    .last_mut()
-                    .expect("checked non-empty above")
-                    .push(record);
+                });
                 out.push(sid);
             } else {
-                // An unlabeled break out of the HFS loop itself, or one to a
-                // label enclosing it: both escape the HFS scope like `return`.
-                // Commit `ScalarOnly` candidates, hoisting the break value into
-                // a temp when its own walk transitioned one (same hazard as
-                // `Return`).
+                // Out of the HFS loop itself, or to a label enclosing it: both
+                // escape like `return`. Commit `ScalarOnly` candidates, hoisting
+                // the break value into a temp when its own walk transitioned one
+                // (same hazard as `Return`).
                 if let Some(break_value) =
                     value.filter(|_| states.contains(&CanonState::ScalarOnly))
                 {
@@ -2116,18 +2102,13 @@ fn walk_nested_loop(
     ctx: &mut WalkCtx,
     span: crate::token::Span,
 ) {
-    // Only a call inside the body can observe a candidate through the struct:
-    // a direct field access is rewritten to the scalar, and a local or field
-    // whose address escapes was refused before selection. Every candidate
-    // outside that set keeps the scalar canonical across the loop, so it needs
-    // no pre-commit, no back-edge sync and no post-loop re-read — which is what
-    // a bit-buffer refill loop inside a state machine is made of.
+    // Commit a reached `ScalarOnly` candidate so inner reads (and a nested
+    // HFS's pre-load) observe an up-to-date field. An unreached one keeps its
+    // scalar canonical across the whole loop, so it is driven to `ScalarOnly`
+    // instead. That is a weaker claim about the field, which only ever asks for
+    // more write-backs later, and it is the entry state the body is walked
+    // under.
     let reached = loop_body_call_reach(body, block, ctx);
-    // Pre-recurse: commit a reached `ScalarOnly` candidate so inner reads (and
-    // a nested HFS's pre-load) observe an up-to-date field. An unreached one is
-    // driven to `ScalarOnly` instead — a weaker claim about the field, which
-    // only ever asks for more write-backs later, and the entry state the body
-    // is about to be walked under.
     for i in 0..ctx.candidates.len() {
         match states[i] {
             CanonState::ScalarOnly if reached.contains(&i) => {
@@ -2166,18 +2147,19 @@ fn walk_nested_loop(
     }
     // Post-loop state: JOIN over every exit — the zero-iteration path (which
     // leaves at `entry`), the fall-through, and each recorded `break`. A
-    // `ScalarOnly` join is demoted to `FieldOnly` unless every one of those
-    // exits is already `ScalarOnly`: the zero-iteration path has no slot for
-    // convergence sync, so over a field-canonical entry the join would let a
-    // later read trust a stale scalar. When they all agree there is nothing to
-    // converge, and demoting would only buy a re-read of a field the loop
-    // never wrote.
+    // `ScalarOnly` join is demoted to `FieldOnly` unless every exit already
+    // agrees on it: the zero-iteration path has no slot for convergence sync,
+    // so over a field-canonical entry the join would let a later read trust a
+    // stale scalar. Once they agree there is nothing to converge, and demoting
+    // would only buy a re-read of a field the loop never wrote.
+    let mut exits = Vec::with_capacity(2 + break_records.len());
     for i in 0..states.len() {
-        let mut exits = vec![entry_states[i], body_exit_pre_sync[i]];
+        exits.clear();
+        exits.push(entry_states[i]);
+        exits.push(body_exit_pre_sync[i]);
         exits.extend(break_records.iter().map(|r| r.states[i]));
         let converged = exits.iter().all(|s| *s == CanonState::ScalarOnly);
-        let joined = pick_join_target_for_candidate(&exits);
-        states[i] = match joined {
+        states[i] = match pick_join_target_for_candidate(&exits) {
             CanonState::ScalarOnly if !converged => CanonState::FieldOnly,
             other => other,
         };
@@ -2187,33 +2169,39 @@ fn walk_nested_loop(
     }
 }
 
-/// Candidate indices some call inside `block` can observe through the struct,
-/// as the union of every call's [`CallFieldEffects`]. Nothing else in a loop
-/// body reaches a candidate's field: a direct access is rewritten to the
-/// scalar, and an escaping address disqualified the candidate at selection.
+/// Candidates a call inside `block` can observe through the struct, as the
+/// union of every call's [`CallFieldEffects`]. Nothing else in a loop body
+/// reaches one: a direct access is rewritten to the scalar, and an escaping
+/// address disqualified the candidate at selection.
 fn loop_body_call_reach(body: &Body, block: BlockId, ctx: &WalkCtx) -> IndexSet<usize> {
-    let mut out = IndexSet::default();
-    collect_call_reach(body, NodeRef::Block(block), ctx, &mut out);
-    out
-}
-
-fn collect_call_reach(body: &Body, node: NodeRef, ctx: &WalkCtx, out: &mut IndexSet<usize>) {
-    if let NodeRef::Expr(e) = node
-        && matches!(
-            body.exprs[e].kind,
-            ExprKind::Call { .. } | ExprKind::CmRawCall { .. } | ExprKind::IndirectCall { .. }
-        )
-    {
-        let effects = compute_call_field_effects(body, e, ctx);
-        out.extend(effects.read_required);
-        out.extend(effects.mutated);
-        out.extend(effects.scalar_mutated);
+    struct Collect<'a, 'b> {
+        ctx: &'a WalkCtx<'b>,
+        reached: IndexSet<usize>,
     }
-    let mut kids = Vec::new();
-    body.for_each_child(node, |c| kids.push(c));
-    for c in kids {
-        collect_call_reach(body, c, ctx, out);
+    impl NirRefVisitor for Collect<'_, '_> {
+        fn visit_node(&mut self, body: &Body, node: NodeRef) {
+            if let NodeRef::Expr(e) = node
+                && matches!(
+                    body.exprs[e].kind,
+                    ExprKind::Call { .. }
+                        | ExprKind::CmRawCall { .. }
+                        | ExprKind::IndirectCall { .. }
+                )
+            {
+                let effects = compute_call_field_effects(body, e, self.ctx);
+                self.reached.extend(effects.read_required);
+                self.reached.extend(effects.mutated);
+                self.reached.extend(effects.scalar_mutated);
+            }
+            self.walk_node(body, node);
+        }
     }
+    let mut collect = Collect {
+        ctx,
+        reached: IndexSet::default(),
+    };
+    collect.visit_node(body, NodeRef::Block(block));
+    collect.reached
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

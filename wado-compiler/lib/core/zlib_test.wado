@@ -91,6 +91,18 @@ fn make_repeated(byte: u8, count: i32) -> ByteList {
     return data;
 }
 
+fn make_incompressible(size: i32) -> ByteList {
+    let mut data = ByteList::with_capacity(size);
+    let mut state: u32 = 0x12345678;
+    for let mut i = 0; i < size; i += 1 {
+        state = state ^ state << 13;
+        state = state ^ state >> 17;
+        state = state ^ state << 5;
+        data.push((state & 0xFF) as u8);
+    }
+    return data;
+}
+
 test "return codes" {
     assert Z_OK == 0;
     assert Z_STREAM_END == 1;
@@ -348,21 +360,9 @@ test "stored block round-trip empty" {
     assert bytes_equal(&data, &inflate_zlib(&zlib_compress(&data, Z_NO_COMPRESSION)).unwrap());
 }
 
-fn make_incompressible(size: i32) -> ByteList {
-    let mut data = ByteList::with_capacity(size);
-    let mut state: u32 = 0x12345678;
-    for let mut i = 0; i < size; i += 1 {
-        state = state ^ state << 13;
-        state = state ^ state >> 17;
-        state = state ^ state << 5;
-        data.push((state & 0xFF) as u8);
-    }
-    return data;
-}
-
 test "default strategy never loses to fixed or stored" {
-    // deflate_with_level estimates the stored, fixed and dynamic costs and
-    // emits the cheapest, so its output may never exceed either alternative.
+    // The encoder estimates all three costs and emits the cheapest, so its
+    // output may never exceed either alternative.
     let inputs: List<ByteList> = [
         string_to_bytes(""),
         string_to_bytes("a"),
