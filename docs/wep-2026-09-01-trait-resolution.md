@@ -18,10 +18,9 @@ impl Limit for Point { … }          // Point satisfies both bounds
 
 Several impls applying is not a defect. A trait is meant to carry several value
 blankets: `Inspect`, `Serialize` and `Deserialize` each derive over the four
-reflection kinds. What the language needs instead is a _selection order_. One
-exists. It was never written down.
-
-Its rules were spread across four WEPs, with one recorded in none of them:
+reflection kinds. What the language needs is a _selection order_, and until this
+WEP it existed only in `select_trait_match`'s `sort_by`. Its rules were spread
+across four WEPs, with one recorded in none of them:
 
 | Rule                                        | Recorded in    |
 | ------------------------------------------- | -------------- |
@@ -30,13 +29,12 @@ Its rules were spread across four WEPs, with one recorded in none of them:
 | A newtype's own impls select for it first   | WEP 2026-06-25 |
 | Two traits, one method name, is ambiguous   | WEP 2026-07-31 |
 | A `Reflect*` bound needs visible members    | WEP 2026-06-13 |
-| Locality — a local impl beats a foreign one | **nowhere**    |
+| Locality — a local impl beats a foreign one | nowhere        |
 
-Until now the only statement of the order was `select_trait_match`'s `sort_by`.
-Issue #1932 shows what that costs. A rank was missing, so a newtype took its
-base's blanket. Finding the fix meant reading the sort, because no document
-said what the order was. A new rule about bare-`T` blankets then went into
-"Variadic Type Parameters", the WEP that happened to hold the nearest rules.
+This WEP drops locality from the order. The sort still has it: see Known gaps.
+
+Issue #1932 was a missing rank, found by reading the sort because no document
+stated the order.
 
 ## Decision
 
@@ -44,61 +42,157 @@ One order, stated here. Every other WEP that owns a rule keeps it and links here
 for its place in the sequence. The implementation cites this document instead of
 being the only place the order is written.
 
+### Where the order applies
+
+The order governs the trait-impl step of a _method call_ `recv.m(args)`. Method
+lookup reaches it after two steps that are not part of it, and three other
+dispatch paths select without it:
+
+| Step or path                                  | What selects                                                                |
+| --------------------------------------------- | --------------------------------------------------------------------------- |
+| Inherent method (`impl Type { fn m }`)        | Shadows every trait method of that name, along the whole newtype chain      |
+| A reference receiver's `&T` impls             | Ranked ahead of the base type's, concrete before blanket                    |
+| Trait impls on the receiver                   | The order below                                                             |
+| A type parameter's bounds (`T: Tr` in a body) | The first bound declaring the method; two or more is an ambiguity error     |
+| `Type::m(args)` and other associated calls    | Current-module-first scan, first hit; value blankets on a separate fallback |
+| Operators and indexing                        | The operand's type, unique-or-error (WEP 2026-07-31)                        |
+
+These paths do not yet follow this order: see Known gaps.
+
+### The candidates
+
+A call's candidates come from three places.
+
+First, the impls whose target matches the receiver anywhere along its newtype
+chain: an impl written for the receiver's own type, for one instantiation of it
+(`impl Tag for Box_<i32>`), or for its head (`impl<T> Tag for Box_<T>`).
+
+Second, every _value blanket_ whose receiver-parameter bounds the receiver
+satisfies. A value blanket is `impl<T: Bound> Tr for T`, and its receiver
+parameter carries at least one bound: an unbounded `impl<T> Tr for T` names no
+condition that could select it, so it is rejected where it is written rather
+than accepted and never reached.
+
+Third, every _reference blanket_ (`impl<T: Bound> Tr for &T`) whose bound a
+reference receiver's referent satisfies. It ranks below a concrete `&T` impl
+and above any impl on the base type.
+
+All three lists are then gated on scope, below.
+
+`()` is the unit type, not the empty tuple `[]`, so an impl for `[..T]` is
+never a candidate for it. Its traits are implemented for `()` directly
+(`trait_unit_eq_ord.wado`).
+
+Two impls of one `(Trait, Type)` pair are rejected where the second is written,
+in one module or in two modules of one package. No rank distinguishes them, and
+a package compiles whole, so the check needs no open-world reasoning.
+
+### Scope
+
+A trait's methods are candidates at a call site only where that trait's
+_declaration_ is in scope. Where the impl was written does not matter; impls
+stay globally visible, and one in a module the caller never named still answers
+once the trait is imported.
+
+A declaration is in scope when the calling module declares it, imports it by
+name or by alias, imports it through a `pub use` re-export, or when it is one of
+the prelude's. The prelude is the only exemption in the language: every other
+top-level symbol a module names must be imported, and a trait is no different.
+`Display`, `Eq`, `Inspect`, `IntoIterator` and the operator traits therefore
+carry no import burden and nothing else is auto-used. Importing a _type_ brings
+none of the traits its impls mention.
+
+A bound is a name like any other, so `T: Sub` requires `Sub` imported and
+reaches `Sub`'s own methods. A supertrait is a second name: a body calling
+`Base`'s method through `T: Sub` imports `Base` as well, exactly as it would to
+write `T: Base`. The bound states which contract `T` satisfies, not which names
+the body may leave unwritten.
+
+The rule exists so that a reader can resolve a call from the imports alone.
+Without this gate a library's new blanket reaches every receiver in the program
+and silently changes what downstream calls mean. Scope confines it to the
+modules that imported the trait.
+
+Lookup keeps searching outside the scope, for the diagnostic alone. When the
+scoped candidates are empty and the unscoped ones are not, the call is an error
+naming the trait that would have answered and the import that would enable it:
+
+```text
+no method 'shout' on 'String' in scope: 'Loud' declares it and is not
+imported here; add `use { Loud } from "./lib_a.wado"`
+```
+
 ### The order
 
-A call's candidates come from two places. First, the impls whose target matches
-the receiver anywhere along its newtype chain. Second, every value blanket whose
-receiver-parameter bounds the receiver satisfies. They are ranked:
+Candidates are ranked.
 
-0. **Variadic yields to non-variadic.** Within one trait at one argument list, a
-   variadic impl (`impl<..T> Tr for [..T]`) is dropped when a non-variadic one is
-   present. The rule stays inside one trait, so a foreign blanket for trait `A`
-   never displaces a local variadic impl of trait `B` (WEP 2026-03-14 §5 Rule 1).
+#### Rank 0: variadic yields to non-variadic
 
-1. **A concrete impl beats a blanket.** An impl written for the receiver defines
-   the exact function the call names. A blanket only covers the general case.
-   This rank outranks locality: a foreign `impl Tr for Point` beats a local
-   `impl<T: B> Tr for T`.
+Within one trait at one argument list, a variadic impl
+(`impl<..T> Tr for [..T]`) is dropped when a non-variadic one is present. The
+rule stays inside one trait, so a foreign blanket for trait `A` never displaces
+a local variadic impl of trait `B` (WEP 2026-03-14 §5 Rule 1).
 
-2. **A shallower bound beats a deeper one.** This applies when the receiver is a
-   newtype. A blanket whose bounds hold at the newtype itself beats one that
-   holds only after peeling to the base. A newtype is a type distinct from its
-   base, so its own impls select for it first (WEP 2026-06-25). This rank also
-   outranks locality, because it asks which type selected the impl rather than
-   where the impl was written.
+#### Rank 1: the newtype before its base
 
-   The depth is measured over the whole derivation, not just its first step.
-   Take `impl<T: Base> Derived for T` answering `T: Derived`. That bound sits at
-   the depth the blanket's own bound holds at. A chained blanket therefore does
-   not report the base's bound as the newtype's.
+The search runs down the newtype chain and stops at the first level that
+answers. A newtype is a type distinct from its base, so everything written for
+it selects before anything written for the base (WEP 2026-06-25), and no later
+rank can reach past a level that answered.
 
-   The walk keeps the same subject throughout. If it reaches a `(type, trait)`
-   pair twice, that bound grounds nothing, so the walk answers no. Dispatch's
-   query answers yes to the same repeat, because it descends into members, where
-   a repeat is the well-founded structural case.
+Depth is the level a candidate is selected _at_, so it covers both shapes: an
+impl whose target is the newtype sits at 0 and one targeting the base at 1, and
+a blanket sits at the level its bounds hold at.
 
-3. **A local impl beats a foreign one.** When candidates are otherwise equal, the
-   one in the calling module wins. This is the last tie-break, and it is weaker
-   than the rest. Every rank above asks how the impl relates to the receiver.
-   This one asks only where the reader is standing.
+A blanket's depth is measured over the whole derivation, not just its first
+step. Take `impl<T: Base> Derived for T` answering `T: Derived`. That bound sits
+at the depth the blanket's own bound holds at. A chained blanket therefore does
+not report the base's bound as the newtype's.
 
-   It separates local from foreign and goes no finer. Two blankets in two foreign
-   modules stay tied and fall to rank 4. Ordering them by which module wrote them
-   would just be declaration order under another name.
+The walk keeps the same subject throughout. If it reaches a `(type, trait)` pair
+twice, that bound grounds nothing, so the walk answers no. Dispatch's query
+answers the same repeat by the same rule, with one exception: a repeat with a
+member descent between the two askings is a recursive type
+(`struct Node { next: Option<Node> }`), the well-founded structural case, and
+answers yes.
 
-4. **Anything left is ambiguous.** The compiler reports it instead of picking.
-   The two shapes are described below.
+#### Rank 2: a concrete impl beats a blanket
 
-Two filters sit beside the order rather than in it:
+Within one level, an impl written for the receiver defines the exact function
+the call names, and a blanket only covers the general case. A foreign
+`impl Tr for Point` therefore beats a blanket written here.
 
-- **Scope.** Two same-named trait declarations from different modules are
-  distinct traits. A declaration the calling module never imported does not
-  compete. Each module's `s.shout()` dispatches to the `Loud` in scope there
-  (`cross_module_same_name_foreign_impl.wado`). Only declarations in scope reach
-  the ambiguity rules.
-- **Arguments.** One trait declaration at several argument lists forms an
-  overload set, and the call's arguments choose (WEP 2026-07-31). Distinct
-  traits never form one.
+#### Rank 3: anything left is ambiguous
+
+Two shapes are reported, described below.
+
+Every rank reads only how a candidate relates to the receiver. Where the impl
+was written is not read at all: two candidates that tie at rank 2 are ambiguous
+whether or not one of them is in the calling module. Ranks 1 and 2 exist so that
+where the reader stands never decides what a program means. The escape is one
+line: an impl written for the receiver, which names the body that runs for
+every reader.
+
+This rejects one pattern: overriding a library's blanket with a second blanket
+of your own. Under this rule the two report for exactly the types that satisfy
+both bounds; write `impl Tr for YourType` instead. That is the strict side taken
+on purpose, and a concrete consumer of the pattern is reason to reopen it.
+
+Specificity is not a rank either. When one blanket's bounds imply another's
+(`impl<T: A + B>` beside `impl<T: A>`, or `impl<T: Ord>` beside `impl<T: Eq>`
+under `Ord: Eq`), the pair is rank 3; the narrower one is not preferred. Which
+associated-type bindings a caller sees when a narrower impl binds them
+differently is the specialization soundness question, and answering it with a
+rank would decide it by accident. The escape is the impl rank 2 puts above both.
+
+Argument lists filter candidates before the order runs: one trait declaration at
+several argument lists is an overload set, and the call's arguments choose
+(WEP 2026-07-31). Distinct traits never form one.
+
+Two same-named trait declarations from different modules are distinct traits, so
+Scope above settles them: each module's `s.shout()` dispatches to the `Loud`
+imported there (`cross_module_same_name_foreign_impl.wado`), and a module
+importing both gets the two-trait ambiguity below.
 
 ### The two ambiguities
 
@@ -110,11 +204,16 @@ The receiver has `impl Alpha for Item` and `impl Beta for Item`, both declaring
 `describe`. They share no contract, so nothing selects. The call names the
 trait: `Alpha::describe(&it)` (WEP 2026-07-31).
 
+Blankets join the collision like any other candidate. Two traits' blankets
+sharing a method name and both applying is the same question with no impl to
+name, and Scope is what keeps it rare: both traits have to be imported here for
+both to compete.
+
 #### Two blankets of one trait
 
 The receiver satisfies both bounds and nothing above ranks them. A blanket has
 no name, so the call _cannot_ pin one. The only answer is an impl written for
-the receiver, which rank 1 puts above both:
+the receiver, which rank 2 puts above both:
 
 ```text
 ambiguous blanket impls of 'Describe' for 'Point': 'T: Limit' and
@@ -126,10 +225,12 @@ The compiler reports this at the use site, the one place the question can be
 answered. Rejecting the overlap where the impls are written would mean deciding
 whether two bounds can both hold. An open world cannot decide that, since
 another module may write `impl Limit` for a struct at any time. So nothing is
-rejected at definition time. The standard library never reaches this rule: the
-five reflection kinds are mutually exclusive, so no receiver satisfies two.
+rejected at definition time.
 
-### What eligibility is, and is not
+The report covers one trait declaration at one argument list. Two blankets of
+_different_ traits are the two-trait ambiguity above.
+
+### Eligibility gates
 
 Ranking runs over candidates, and a bound that does not hold produces no
 candidate. Two gates decide that. They are not ranking rules:
@@ -138,15 +239,166 @@ candidate. Two gates decide that. They are not ranking rules:
   the use site (WEP 2026-06-13). This keeps `TreeMap` out of a downstream
   `T: ReflectStruct` without naming it.
 - A newtype inherits its base's impls for dispatch. So a blanket keyed by a bound
-  only the base carries is still a candidate for the newtype. Rank 2 places it at
+  only the base carries is still a candidate for the newtype. Rank 1 places it at
   depth 1 rather than excluding it.
 
-A binder belongs to one item. Asking whether a name reaches a blanket's receiver
-is therefore not the same as asking whether a name is spelled like it. A method
-parameter may shadow the receiver's letter, and inside that method the letter is
-the method's binder. Separately, all `impl` blocks in one module that bind a
-parameter of one spelling share an index bucket, which is neither a declaration
-nor a shape.
+A blanket's receiver parameter is matched by position, not by spelling: a method
+parameter named `T` inside the method is the method's own `T`.
+
+### How the order is guaranteed
+
+The order above is a specification. A `.wado` fixture pins what a program
+prints, so it proves the whole pipeline agreed on an answer; it does not pin the
+rule. A rank that never fires, a candidate list that quietly loses a shape, or a
+cycle rule only one receiver kind exercises has no test that can name it. The
+rules are therefore stated where they can be checked directly: as functions of a
+self-contained value, under unit tests with no Wado source.
+
+#### The solver's input
+
+Selection reads `TypeId`s, `DefId`s, `ImplHeader` AST nodes and the annotate-time
+`Scope`. Every one is an index into something only the pipeline builds, so a test
+that wants to ask a question has to write Wado source and run the compiler to ask
+it. The solver takes one self-contained value instead:
+
+```text
+Program {
+  impls:  ImplId      -> { trait_, trait_args, target, params: [{ bounds, pins }],
+                           origin: Written | Derived | Marker }
+  traits: TraitDeclId -> { supertraits, holds_for_all, arg_defaults, on_ref }
+  types:  TypeDeclId  -> { newtype_base }
+  facts:  (TypeDeclId, TraitDeclId) -> { visible_from }
+  assoc_bindings: (ImplId, AssocId) -> SolverType
+  scopes: ModuleId    -> { traits_in_scope }          -- arrives with `candidates`
+}
+
+SolverType = Decl(TypeDeclId, [SolverType]) | Param(u32) | Pack(u32)
+           | Ref { mut, inner } | Tuple([SolverType])
+```
+
+A declaration's kind and members are read by `derive` alone and arrive as a
+`Declaration` beside the program rather than living in it. Every id is a plain
+index, so a test writes `TypeDeclId(0)` and the program around it, with no
+source and no pipeline.
+
+A query carries an environment beside the program: the bounds in force where the
+question was asked. A generic body's `T: Tr` holds because its own signature says
+so, not because any impl exists, so no query can answer from `Program` alone.
+This is rustc's `ParamEnv`. It is a parameter from the start because the
+annotate-time `Scope` it replaces is mutable state threaded through the
+elaborator, which is hard to retrofit.
+
+A query also carries the asking module. A `Reflect*` bound holds only where the
+receiver's members are visible at the use site, and scope gates candidates by
+what that module imported, so `Program` carries member visibility and no query is
+a function of types alone.
+
+#### Derivation is impl generation
+
+Answering a bound is not, today, an impl lookup. In the compiler `T: Tr` holds
+these ways:
+
+- `Inspect` holds for everything.
+- A plain `enum` derives `Display`.
+- A generic body's parameter holds by its own signature.
+- A reference satisfies the reference identities.
+- A primitive carries `Eq` / `Ord` and the operator items.
+- A struct satisfies `Eq` / `Ord` / `Default` / serde, and a variant `Eq` /
+  serde, when its members do.
+- A declaration satisfies its own reflection kind.
+- An impl is written.
+- A blanket answers and its bound is asked in turn.
+
+Structural derivation for a struct or variant is the one that breaks the shape.
+It is asked as a _query_: "is this struct `Eq`?" walks the members and asks the
+full question of each, so derivation and impl search are mutually recursive, and
+a repeated `(type, trait)` pair means two different things depending on how it
+was reached. Through a blanket's bound it is the ungrounded cycle and answers
+no; through a member it is a recursive type (`struct Node { next: Option<Node> }`)
+and answers yes. That is the two-stack problem, and it exists only because `Eq`
+is modelled as an auto trait.
+
+The solver models derivation as impl generation, as Rust's `derive` does, so
+trait solving is one uniform search over impls:
+
+- A structural trait is not special in `holds`. It is answered by impls.
+- Derivation is generating an impl per _declaration_: `struct D<P1..Pn>` that
+  can derive `Eq` contributes `impl<Pi: Eq, …> Eq for D<P1..Pn>`, bounded on
+  the parameters its members mention. A plain `enum` or `flags` has no
+  members and derives unconditionally. A newtype derives nothing; it inherits.
+- Whether a declaration can derive is a definition-time fixpoint over the
+  declarations, which are finite and known before any body is elaborated. `D`
+  derives `Tr` when every member type satisfies `Tr` under `Pi: Tr`, asked of
+  `holds` with every declaration's tentative impl in place; a declaration that
+  fails is removed, until none does. Assuming and then refuting is what makes a
+  recursive type derive, which is the answer the compiler gives today.
+- A written impl for the pair blocks derivation, and a marker
+  (`impl Eq for D;`) demands it: the marker answers the bound, and the
+  compiler's conformance check reports one on a declaration that cannot
+  derive (WEP 2026-06-25).
+- A `Reflect*`-bounded blanket of a structural trait
+  (`impl<S: ReflectStruct<…>, ..F: Serialize> Serialize for S`) is the derived
+  body's source, not a candidate. The lowering leaves it out, and `derive`
+  answers per declaration.
+- `holds` reports the derived and marker impls its answer passed through. The
+  caller records the bodies to emit; the solver never records one itself.
+
+The solver then has one recursion: `holds` reaches other questions only through
+an impl's bounds, so a repeated pair is always the ungrounded cycle, and the
+rule is one line with unit tests. A generic instance never needs its own entry:
+`List<Point>: Eq` is the prelude's `impl<T: Eq> Eq for List<T>` and the
+derived `impl Eq for Point`, assembled at the query. And the derivation rule
+itself is a function of declarations, under unit test: every member satisfies
+the trait, under the parameters' bounds.
+
+The remaining ways are read off a type, and each goes where it belongs:
+
+- A primitive's `Eq`, `Ord` and operator items are impls the lowering states.
+- A trait that holds for everything is a flag on its declaration, since the
+  unbounded blanket that would say so is rejected.
+- How a reference answers is a flag on the trait: `Eq` of itself, `Ord` never,
+  and the rest by auto-deref to the pointee unless a receiverless method names
+  `Self`.
+- A reflection kind is a fact stated of a declaration. It depends on the asking
+  module's view of the members and on no member's trait, so the fact names the
+  modules the members are visible from and answers for every instance.
+
+A bound says two more things than a trait. It spells no arguments
+(WEP 2026-07-31), so it asks for the trait at its declared defaults, and an impl
+of another instantiation (`impl Mul<Inch> for Cm` against `T: Mul`) does not
+answer it: the defaults are on the trait, `Self` meaning the impl's target. And
+it may pin an associated type (`T: Mul<Output = T>`): the pin is on the bound,
+and the impl that answers it must bind the type as the pin says, read off the
+impl's own `type Output = …`. A pin naming a parameter the target leaves
+unbound (`Members = [..C]`) reads the projection rather than checking it. A
+bound on that parameter (`..C: Arbitrary`) waits for monomorphization
+(WEP 2026-03-14).
+
+#### The five questions
+
+| Function                                            | Rules it owns                                                                          |
+| --------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| `coherence_errors(program)`                         | duplicate `(Trait, Type)` pairs, an unbounded value blanket, variadic overlap, orphans |
+| `derive(program, trait_, declarations)`             | which declarations derive `trait_`, and the impls that says                            |
+| `holds(program, env, ty, trait_, scope)`            | bound satisfaction, supertraits, the cycle rule                                        |
+| `candidates(program, env, receiver, method, scope)` | the three candidate lists, the scope gate, each candidate's depth                      |
+| `rank(candidates)`                                  | ranks 0-3 and both ambiguities                                                         |
+
+Two disciplines keep them functions rather than passes:
+
+- A diagnostic is returned, never emitted. `rank` answers with a winner or a
+  description of the ambiguity by candidate, and the elaborator turns that into a
+  message with the names only `DefTable` knows. An ambiguity becomes testable for
+  the same reason.
+- A derivation request is returned, never recorded. Answering a bound today
+  writes "synthesize `Eq` for this type" into the `TypeTable` on the way past.
+  The function reports the requests its answer depends on and the caller records
+  them; a caller that drops one silently loses a derived body.
+
+Nothing flips at once. The fixture corpus is the drift detector, as
+`verify_arg_synthesis` already uses it for argument synthesis (WEP 2026-07-31):
+a question the solver answers is asserted against the compiler's own path in
+debug builds over every fixture before the compiler's path is retired.
 
 ## Consequences
 
@@ -155,58 +407,155 @@ missing rank is visible. Two calls that used to differ only by declaration order
 now either agree or report, and the report names an impl the programmer can
 write.
 
-This document states the order and `select_trait_match` implements it. The two
-must not diverge, so the sort cites this document instead of restating it.
+This document states the order. `select_trait_match` is its one implementation
+and cites this document rather than restating it; where the two differ today is
+under Known gaps.
 
 ## Known gaps
 
-### Specificity is not ranked
+### Scope is decided and not implemented
 
-Sometimes one blanket's bounds imply another's. An order exists there and goes
-unused. `impl<T: Ord>` is strictly narrower than `impl<T: Eq>` when `Ord: Eq`
-(WEP 2026-07-27), and `impl<T: A + B>` is narrower than `impl<T: A>`. Both are
-decidable from the trait declarations. Today such a pair is reported ambiguous.
+Scope is consulted once today, as a tie-break: when several same-named
+declarations collide and exactly one is in scope, that one answers
+(`select_trait_match`). Otherwise a trait's methods are candidates wherever its
+impls are loaded. What the decision above needs:
 
-This is left open on purpose, for two reasons. First, the rule would not fire:
-no standard-library trait carries two blankets with comparable bounds, because
-all three that carry several split on the mutually exclusive reflection kinds.
-Second, a blanket may bind associated types, as in
-`ReflectStruct<FieldTypes = [..F]>`. Deciding which binding a caller sees when a
-narrower impl binds them differently is the specialization soundness question,
-and it needs its own WEP. Rank 4 will surface a concrete case if one appears.
+- [ ] Gate both candidate lists on the trait declaration's scope at the call
+      site, so a call in a module that imported nothing sees only the prelude.
+- [ ] Keep the unscoped search as the recovery path: run it only where the
+      scoped set came out empty, and turn its result into the "not imported
+      here" message rather than a candidate.
+- [ ] Gate the supertrait reach too: a body calling `Base`'s method through
+      `T: Sub` resolves today with `Base` unimported, and must stop.
+- [ ] Pin a `pub use` re-export as putting the trait in scope. An aliased
+      import already is (`trait_alias_import_in_scope.wado`).
 
-### An ungrounded bound cycle satisfies its own bounds
+An unused-trait-import warning belongs to
+[Unused Diagnostics](./wep-2026-05-16-unused-diagnostics.md) rather than here,
+with one constraint this decision imposes on it: a trait imported only to enable
+a dispatch never appears in an expression, so the check must count enabling a
+dispatch as a use. A check that reads the source alone will tell the programmer
+to delete the import that makes the module compile.
 
-Write `impl<T: A> B for T` beside `impl<T: B> A for T` and neither trait is
-grounded. The dispatch query still answers yes to a repeated `(type, trait)`
-pair, so every type satisfies both. Rank 2's walk refuses the repeat, so a
-newtype is unaffected. A concrete receiver has no such walk and reaches the
-shared answer.
+### Two coherence rules still read the AST
 
-Closing this needs a second recursion stack. One stack cannot separate the two
-recursions: descent into members is well-founded and must answer yes, while a
-cycle at a fixed subject must answer no. That is a change to dispatch, not to
-selection, which is why it is recorded here rather than made.
+`coherence_errors` owns four rules and answers the duplicate pair and the
+unbounded value blanket. The other two still run over the AST:
 
-### Rank 3 is undocumented elsewhere
+- [ ] Variadic overlap, `check_variadic_impl_overlap`. Moving it needs `Program`
+      to carry a pack's bounds, which the key it compares on deliberately
+      ignores (WEP 2026-03-14 §5 Rule 2).
+- [ ] The orphan rule. Moving it needs each declaration's module and the
+      package boundary, which `Program` does not carry yet.
 
-Nobody ever proposed locality. It is recorded here as the behaviour that exists.
-Whether a tie should instead be an error is worth asking separately: letting the
-reader's vantage decide a program's meaning is exactly what ranks 1 and 2 avoid.
+### Rank 1 does not order the chain
+
+Depth is read off a blanket's bounds alone, so every non-blanket candidate sits
+at 0 and rank 1 separates none of them:
+
+- [ ] A newtype's own `impl Tr for W` and its base's `impl Tr for Inner` tie, and
+      the locality sort (still in place, below) decides. Written in one module the newtype's
+      wins, because the chain is collected nearest-first, but a local impl on
+      the base beats a foreign one on the newtype
+      (`trait_newtype_concrete_impl_outranks_foreign_base.wado`).
+- [ ] A blanket satisfied at the newtype loses to a concrete impl on the base,
+      because rank 2 runs first today
+      (`trait_newtype_blanket_beats_base_concrete.wado`).
+
+Closing both is one change: measure depth as the level a candidate is selected
+at, over an impl's target as well as a blanket's bounds, and rank it above
+concrete-over-blanket.
+
+### A ref blanket never dispatches
+
+`impl<T: Bound> Tr for &T` is accepted and reaches no call: the reference step
+adopts only concrete `&T` impls, and the blanket collection takes only value
+blankets. The prelude's `Inspect for &T` works because the compiler answers that
+bound itself.
+
+- [ ] Collect reference blankets as a third candidate list, ranked under a
+      concrete `&T` impl and over the base type's
+      (`trait_ref_blanket_dispatch.wado`).
+
+### Two traits' blankets sharing a method name are not reported
+
+`impl<T: Limit> Alpha for T` beside `impl<T: Limit> Beta for T`, both declaring
+`describe`, both applying to the receiver: the locality sort (still in place,
+below) answers when exactly one is local, and otherwise collection order does. Blankets are excluded
+from the cross-trait count, which is what makes this tie silent. Scope removes
+most of it, since two foreign blankets only compete where both traits are
+imported. The rest is the count: a blanket must join the collision like any
+other candidate.
+
+### The other dispatch paths do not share the order
+
+`Type::m(args)` scans the receiver's trait impls current-module-first and takes
+the first that declares the method, with value blankets on a separate fallback
+behind it; operators and indexing filter by operand type and report
+unique-or-error; a bound in a generic body takes the first bound declaring the
+name. Ranks 0-3 exist on none of them; they agree with the order only by
+coincidence of scan order. One selection function serving every path is the
+fix; what stands in the way is that each path holds a different amount of the
+call (a receiver type, an operand class, a bound list).
+
+### Locality is still implemented
+
+The sort still prefers a candidate in the calling module, and the blanket
+ambiguity report still groups local apart from foreign. So a tie the order calls
+ambiguous is answered instead, and a tie neither settles falls to collection
+order:
+
+- [ ] Drop the local-over-foreign comparison from the sort.
+- [ ] Drop the locality grouping from the blanket ambiguity report, so two
+      blankets tied at rank 2 report whichever modules wrote them
+      (`trait_error_local_blanket_ties_foreign.wado`).
+
+Once the rest lands, only one shape reaches this: two value blankets of one
+trait holding at the same level, one written in the calling module. A duplicate
+pair is rejected where it is written, a newtype and its base are separated by
+rank 1, and two traits' blankets are the cross-trait ambiguity.
+
+### Derivation is still a query in the compiler
+
+`structural_conformance` still walks a receiver's members at each bound and
+asks the full question of each, and the recursion guard counts the member
+descents to tell a recursive type from an ungrounded cycle. The solver's
+`derive` runs beside it: every declaration is lowered and derived when the
+`Program` is built, and `holds` answers under the differential against
+`type_implements_trait` over every fixture. What is left is the flip:
+
+- [ ] Route the derived bodies through what `holds` reports instead of
+      `record_bound_driven_synth_request_for`, and retire the member walk.
+
+### `candidates` is not written
+
+Of the five questions, `candidates` has no implementation and `rank` no caller,
+so selection still runs on `select_trait_match`'s own collection and sort.
+Closing this is the candidate lists and the scope gate as a function of
+`Program`, then the differential for `candidates` and `rank` over the corpus,
+then the flip.
+
+### Three compiler items are outside the differential
+
+The lowering states nothing for a plain `enum`'s `Display`, for `Default`, or
+for the `Ref` / `RefMut` marker traits, so a bound on any of them is answered by
+the compiler's path alone and the differential skips it. Each is one more thing
+the lowering reads off a type, in the shape the section above gives the others.
 
 ### `spec.md` overstates coherence
 
 Its "at most one impl can apply" describes what the orphan rules guarantee about
-_where impls may be written_. It does not describe how many apply to a call. The
-selection order is language semantics and belongs in the spec. This WEP records
-the decision; writing the spec section is the follow-up.
+_where impls may be written_. It does not describe how many apply to a call. Its
+"Method Resolution" section lists two steps of the six above. The selection order
+is language semantics and belongs in the spec. This WEP records the decision;
+writing the spec section is the follow-up.
 
 ## Related WEPs
 
 What each contributes to the order above.
 
 - [Variadic Type Parameters](./wep-2026-03-14-variadic-type-parameters.md) — rank 0
-- [Trait Derivation Policy](./wep-2026-06-25-trait-derivation.md) — rank 2
+- [Trait Derivation Policy](./wep-2026-06-25-trait-derivation.md) — rank 1
 - [Overload Resolution](./wep-2026-07-31-overload-resolution.md) — arguments, and the two-trait ambiguity
-- [Visibility](./wep-2026-06-25-visibility-internal-pub-export.md) — the `Reflect*` eligibility gate
+- [Library-Defined Derivation over `Reflect*`](./wep-2026-06-13-reflect-derivation.md) — the `Reflect*` eligibility gate
 - [Super Traits](./wep-2026-07-27-super-traits.md) — what a specificity rank would read

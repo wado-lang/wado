@@ -267,6 +267,28 @@ impl ImplHeader {
         self.type_params.is_empty()
     }
 
+    /// The target arguments no declaration answers, in order:
+    /// `impl FromIterator for List<T>` binds `T` without an `impl<T>`.
+    pub(super) fn implicit_params(&self, resolutions: &crate::resolve::Resolutions) -> Vec<&str> {
+        let Type::Generic(generic) = &self.ty else {
+            return Vec::new();
+        };
+        generic
+            .args
+            .iter()
+            .filter_map(|arg| match arg {
+                Type::Named(named)
+                    if !self.type_params.iter().any(|p| p.name == named.name)
+                        && resolutions.declared(named.id).is_none()
+                        && !name::is_builtin_shape_name(&named.name) =>
+                {
+                    Some(named.name.as_str())
+                }
+                _ => None,
+            })
+            .collect()
+    }
+
     /// The implemented trait as a mangled method name embeds it: named by the
     /// module that declares it, carrying the header's written type arguments.
     /// `None` for an inherent impl, and for a trait position filled by a
@@ -1268,6 +1290,7 @@ impl TraitEnv {
             [&struct_like_decl_modules, &newtype_decl_modules],
         );
 
+        violations.extend(check_impl_coherence(&impl_headers, resolutions));
         violations.extend(check_variadic_impl_overlap(defs, &impl_headers));
         violations.extend(check_inherent_impl_collisions(
             defs,
@@ -1323,6 +1346,13 @@ impl TraitEnv {
             .get(module)
             .cloned()
             .unwrap_or_default()
+    }
+
+    /// Every trait with its supertrait closure.
+    pub(super) fn supertrait_closures(
+        &self,
+    ) -> impl Iterator<Item = (&DefId, &Vec<InheritedBound>)> {
+        self.supertrait_closures.iter()
     }
 
     /// The transitive supertraits of the trait `key` names, deduplicated by
@@ -2167,6 +2197,68 @@ impl VariadicImpl<'_> {
     }
 }
 
+/// The coherence checks the solver owns, given spans and names by the headers
+/// they came from. Only a user-local impl is reported: a stdlib pair the check
+/// would name is not something a program can fix.
+/// How a finding names the impl at `conflict`, reported at `here`.
+fn conflicting_impl_location(conflict: &ModuleSource, here: &ModuleSource) -> String {
+    if conflict == here {
+        "an earlier impl in this file".to_string()
+    } else {
+        format!("the one in `{conflict}`")
+    }
+}
+
+fn check_impl_coherence(
+    impl_headers: &IndexMap<DefId, ImplHeader>,
+    resolutions: &crate::resolve::Resolutions,
+) -> Vec<(ModuleSource, TypeError)> {
+    use super::solver_bridge::{Lowering, lower_impls};
+    use crate::trait_solver::{CoherenceError, ImplId, Program, coherence_errors};
+    let mut lowering = Lowering::default();
+    let mut program = Program::default();
+    let sources = lower_impls(&mut lowering, &mut program, impl_headers, resolutions);
+    let header_of = |id: ImplId| -> &ImplHeader { sources[id.0 as usize] };
+    let trait_name = |header: &ImplHeader| {
+        header
+            .trait_name
+            .clone()
+            .expect("a coherence finding names a trait impl")
+    };
+    let mut violations = Vec::new();
+    for error in coherence_errors(&program) {
+        let (reported, error) = match error {
+            CoherenceError::DuplicateImpl { first, second } => {
+                let (first, second) = (header_of(first), header_of(second));
+                (
+                    second,
+                    TypeError::DuplicateTraitImpl {
+                        trait_name: trait_name(second),
+                        self_type_name: get_type_name_static(&second.ty),
+                        conflicting_impl: conflicting_impl_location(&first.module, &second.module),
+                        span: second.span,
+                    },
+                )
+            }
+            CoherenceError::UnboundedValueBlanket { impl_ } => {
+                let header = header_of(impl_);
+                (
+                    header,
+                    TypeError::UnboundedValueBlanket {
+                        trait_name: trait_name(header),
+                        param: get_type_name_static(&header.ty),
+                        span: header.span,
+                    },
+                )
+            }
+        };
+        if is_user_local(&reported.module) {
+            violations.push((reported.module.clone(), error));
+        }
+    }
+    violations
+}
+
 /// Coherence Rule 2 (WEP 2026-03-14 §5): two variadic impls of one trait accept
 /// the same tuples, and a pack's bounds resolve only at monomorphization, so
 /// nothing separates them at selection — reject the later one where it is
@@ -2235,11 +2327,10 @@ fn check_variadic_impl_overlap(
                 TypeError::OverlappingVariadicImpls {
                     trait_name: candidate.trait_name.clone(),
                     self_type_name: "[..]".to_string(),
-                    conflicting_impl: if conflict.module_source == candidate.module_source {
-                        "the earlier one in this file".to_string()
-                    } else {
-                        format!("the one in `{}`", conflict.module_source)
-                    },
+                    conflicting_impl: conflicting_impl_location(
+                        conflict.module_source,
+                        candidate.module_source,
+                    ),
                     span: candidate.span,
                 },
             ));

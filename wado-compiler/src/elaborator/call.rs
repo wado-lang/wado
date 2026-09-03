@@ -10,6 +10,7 @@ use crate::tir::{FunctionRef, MonomorphInfo, ResolvedType, TypeId, TypeTable};
 
 use super::Elaborator;
 use super::callee::{CalleeRef, StaticMethodRef};
+use super::expr::BareCase;
 use super::infer::InferCtx;
 use super::instantiate::Instantiation;
 use super::scope::{BinderInScope, Scope};
@@ -109,6 +110,13 @@ enum CalleeIdentKind<'a> {
     /// parameter currently bound to a concrete type. Holds the fully
     /// resolved `Concrete::suffix` name.
     Rewritten(String),
+    /// A bare case call (`Some(x)`), the expected type having supplied the
+    /// case. `owner` is the variant declaring it and `spelled` its
+    /// `Variant::Case` form, so the qualified constructor path serves it.
+    Case {
+        owner: crate::defs::DefId,
+        spelled: String,
+    },
     /// `T::suffix(...)` where `T` is still an abstract type parameter
     /// constrained only by trait bounds. Dispatched independently via
     /// `resolve_type_param_static_call`.
@@ -127,10 +135,19 @@ impl CalleeIdentKind<'_> {
     fn effective_name(&self) -> &str {
         match self {
             Self::AsIs(ident) => &ident.name,
-            Self::Rewritten(name) => name,
+            Self::Rewritten(name) | Self::Case { spelled: name, .. } => name,
             Self::AbstractTypeParam { .. } => {
                 unreachable!("AbstractTypeParam takes the type-param dispatch path")
             }
+        }
+    }
+
+    /// The variant a bare case call constructs; `None` for every other shape,
+    /// whose receiver is read from its own segment.
+    fn case_owner(&self) -> Option<crate::defs::DefId> {
+        match self {
+            Self::Case { owner, .. } => Some(*owner),
+            Self::AsIs(_) | Self::Rewritten(_) | Self::AbstractTypeParam { .. } => None,
         }
     }
 
@@ -140,7 +157,7 @@ impl CalleeIdentKind<'_> {
     fn callee_site(&self) -> Option<ast::AstId> {
         match self {
             Self::AsIs(ident) => Some(ident.id),
-            Self::Rewritten(_) | Self::AbstractTypeParam { .. } => None,
+            Self::Rewritten(_) | Self::Case { .. } | Self::AbstractTypeParam { .. } => None,
         }
     }
 
@@ -332,20 +349,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.is_effect_or_resource_decl(def).then_some(def)
     }
 
-    /// Whether the name spells a built-in variant case (`Ok`, `Err`, `Some`,
-    /// `None`). Read from the `CompilerItem` registry, so a stdlib rename
-    /// carries here without re-editing a literal set.
-    fn names_result_or_option_case(&self, name: &str) -> bool {
-        let tt = self.tysys.type_table.borrow();
-        let items = tt.compiler_items();
-        [
-            crate::compiler_item::CompilerItem::ResultOk,
-            crate::compiler_item::CompilerItem::ResultErr,
-            crate::compiler_item::CompilerItem::OptionSome,
-            crate::compiler_item::CompilerItem::OptionNone,
-        ]
-        .into_iter()
-        .any(|item| name == items.variant_case_name(item))
+    /// The variant a `Variant::Case(...)` callee constructs: the one the walk
+    /// answered for a bare case, else the one `prefix` names at its site.
+    fn variant_of_callee(
+        &self,
+        callee_kind: &CalleeIdentKind<'_>,
+        receiver_site: Option<ast::AstId>,
+        prefix: &str,
+    ) -> Option<&super::types::VariantInfo> {
+        match callee_kind.case_owner() {
+            Some(owner) => self.type_lookup().variant_cases_of(owner),
+            None => self.lookup_variant_cases_at(receiver_site, prefix),
+        }
     }
 
     pub(super) fn resolve_call(
@@ -462,7 +477,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let Expr::Ident(ident) = &call.callee else {
             unreachable!("non-Ident callees are handled by the indirect-call fast path above")
         };
-        let callee_kind = self.tysys.classify_call_callee(&self.annotate_ctx, ident);
+        let mut callee_kind = self.tysys.classify_call_callee(&self.annotate_ctx, ident);
+        // A bare case constructs (`Some(x)`) only where the expected type
+        // supplies it, and then ahead of any function of that name.
+        if let CalleeIdentKind::AsIs(bare) = callee_kind
+            && !bare.name.contains("::")
+        {
+            match self.bare_case(bare, expected_type) {
+                BareCase::Of { owner, spelled } => {
+                    callee_kind = CalleeIdentKind::Case { owner, spelled };
+                }
+                BareCase::NeedsContext => return TypeTable::ERROR,
+                BareCase::None => {}
+            }
+        }
 
         // `Trait::method(recv, args…)` — the trait-qualified (UFCS) call form
         // (WEP 2026-07-31). Routed before the argument walk below because the
@@ -518,7 +546,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // walk answered for it. Every receiver lookup below goes through that
         // site, so the spelling is never split back into an identity.
         let receiver_site = callee_kind.receiver_site();
-        if let Some((struct_name, _)) = effective_name.rsplit_once("::") {
+        // A case is reachable wherever its type is; only a static method has
+        // a visibility of its own to check.
+        if callee_kind.case_owner().is_none()
+            && let Some((struct_name, _)) = effective_name.rsplit_once("::")
+        {
             let receiver = self.impl_target_at(receiver_site, struct_name);
             self.check_static_call_visibility(&receiver, effective_name, Some(call.id), call.span);
         }
@@ -587,7 +619,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         {
             let prefix = &effective_name[..pos];
             let suffix = &effective_name[pos + 2..];
-            if let Some(variant_info) = self.lookup_variant_cases_at(receiver_site, prefix).cloned()
+            if let Some(variant_info) = self
+                .variant_of_callee(&callee_kind, receiver_site, prefix)
+                .cloned()
                 && let Some((_, case_data)) = variant_info
                     .cases
                     .iter()
@@ -606,8 +640,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .collect();
                     let mut payload_type = case_data.payload;
                     if !variant_type_args.is_empty() {
-                        payload_type =
-                            self.substitute_type_params(payload_type, &variant_type_args);
+                        payload_type = self
+                            .tysys
+                            .substitute_type_params(payload_type, &variant_type_args);
                     } else if let Some(expected) = expected_type {
                         // Infer type args from expected type (e.g. Option::Some(null) expecting Option<Option<i32>>)
                         let expected_resolved =
@@ -624,8 +659,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                     .of_ast_id(variant_info.defined_at)
                             && expected_args.len() == variant_info.type_param_type_ids.len()
                         {
-                            payload_type =
-                                self.substitute_type_params(payload_type, &expected_args);
+                            payload_type = self
+                                .tysys
+                                .substitute_type_params(payload_type, &expected_args);
                         }
                     }
                     param_types.push(payload_type);
@@ -890,7 +926,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         combined_type_args.extend_from_slice(&method_type_args);
                         raw_param_types
                             .iter()
-                            .map(|&t| self.substitute_type_params(t, &combined_type_args))
+                            .map(|&t| self.tysys.substitute_type_params(t, &combined_type_args))
                             .collect()
                     };
                 self.recoerce_literal_args(&call.args, &mut args, &substituted);
@@ -957,7 +993,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 return named.unwrap_or(flags_info.type_id);
             }
             // Check if this is a variant case construction (Color::Red)
-            else if let Some(variant_info) = self.lookup_variant_cases_at(receiver_site, prefix) {
+            else if let Some(variant_info) =
+                self.variant_of_callee(&callee_kind, receiver_site, prefix)
+            {
                 // Clone needed data to release the borrow on self
                 let variant_info = variant_info.clone();
                 let case_match = variant_info
@@ -1270,7 +1308,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         &final_mangled,
                     );
                     if !method_type_args.is_empty() {
-                        return_type = self.substitute_type_params(return_type, &method_type_args);
+                        return_type = self
+                            .tysys
+                            .substitute_type_params(return_type, &method_type_args);
                     }
 
                     let monomorph_info = if method_type_args.is_empty() {
@@ -1328,7 +1368,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     } else {
                         param_types
                             .iter()
-                            .map(|&t| self.substitute_type_params(t, &method_type_args))
+                            .map(|&t| self.tysys.substitute_type_params(t, &method_type_args))
                             .collect()
                     };
                     self.recoerce_literal_args(&call.args, &mut args, &checked);
@@ -1436,18 +1476,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 self.callee_in_module(&ModuleSource::rt(), effective_name),
                 effective_name.to_string(),
             )
-        }
-        // A built-in type constructor — a variant case, not a function, so the
-        // site above declines it.
-        else if self.names_result_or_option_case(effective_name) {
-            self.record_item_reference_by_name(ident.id, effective_name);
-            (
-                Some(CalleeRef::rendered(
-                    self.current_module_source.clone(),
-                    effective_name,
-                )),
-                effective_name.to_string(),
-            )
         } else {
             // Unknown function - will report error
             (None, effective_name.to_string())
@@ -1529,7 +1557,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // If we have explicit type args, substitute type parameters in the return type
         if !type_args.is_empty() {
-            return_type = self.substitute_type_params(return_type, &type_args);
+            return_type = self.tysys.substitute_type_params(return_type, &type_args);
         }
 
         // WEP 2026-05-26: record the inferred /
@@ -1549,7 +1577,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         } else {
             declared_param_types
                 .iter()
-                .map(|&param| self.substitute_type_params(param, &type_args))
+                .map(|&param| self.tysys.substitute_type_params(param, &type_args))
                 .collect()
         };
         if !check_param_types.is_empty() && args.len() < check_param_types.len() {
@@ -2353,7 +2381,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 && let Some(default_ty) = defaults[i]
             {
                 let snapshot = type_args.clone();
-                type_args[i] = self.substitute_type_params(default_ty, &snapshot);
+                type_args[i] = self.tysys.substitute_type_params(default_ty, &snapshot);
             }
         }
     }

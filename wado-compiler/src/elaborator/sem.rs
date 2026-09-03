@@ -138,5 +138,6 @@ impl ModuleSemantics {
             + t.let_annotated_types.len()
             + t.struct_field_types.len()
             + t.assign_places.len()
+            + t.bare_cases.len()
     }
 }

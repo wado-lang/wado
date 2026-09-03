@@ -1,0 +1,76 @@
+// A case may be written without its type name only where the expected type
+// supplies it: an annotation, a parameter, a return type, a payload. One rule
+// serves a variant declared here (`Circle(r)`), an imported one (`Leaf`), an
+// enum (`Red`), and the prelude's `Some` / `None` / `Ok` / `Err`. The payload
+// is typed from the expected type and literals coerce as through
+// `Option::Some`.
+
+use { FieldKind } from "./sub/variant_bare_case_lib.wado";
+
+variant Shape {
+    Circle(f64),
+    Dot,
+}
+
+enum Color {
+    Red,
+    Green,
+}
+
+fn parse(flag: bool) -> Result<i32, String> {
+    if flag {
+        return Ok(1);
+    }
+    return Err("bad");
+}
+
+fn wrap(v: ()) -> Option<()> {
+    return Some(v);
+}
+
+export fn run() {
+    let a: Option<i32> = Some(1);
+    let n: Option<i32> = None;
+    let nested: Option<Option<i32>> = Some(Some(2));
+    let coerced: Option<List<i32>> = Some([1, 2]);
+    let unit: Option<()> = Some(());
+    assert a == Option::Some(1);
+    assert n == Option::None;
+    assert nested matches { Some(Some(2)) };
+    if let Some(l) = coerced {
+        assert l.len() == 2;
+    } else {
+        panic("coerced");
+    }
+    assert unit matches { Some(_) };
+    assert wrap(()) matches { Some(_) };
+    assert parse(true) matches { Ok(1) };
+    if let Err(e) = parse(false) {
+        assert e == "bad";
+    } else {
+        panic("parse");
+    }
+    let inferred: Option<String> = Some("s");
+    assert inferred.unwrap() == "s";
+
+    let circle: Shape = Circle(2.0);
+    let dot: Shape = Dot;
+    if let Circle(r) = circle {
+        assert r == 2.0;
+    } else {
+        panic("circle");
+    }
+    assert dot == Shape::Dot;
+
+    let branch: FieldKind = Branch(3);
+    let leaf: FieldKind = Leaf;
+    assert branch matches { Branch(3) };
+    assert leaf == FieldKind::Leaf;
+
+    let red: Color = Red;
+    assert red == Color::Red;
+    assert Color::Green matches { Green };
+}
+
+__DATA__
+{}

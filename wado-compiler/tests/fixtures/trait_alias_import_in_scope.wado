@@ -1,0 +1,14 @@
+// An aliased import puts the trait in scope: scope asks which declaration the
+// module imported, not which spelling it used
+// (WEP 2026-09-01).
+
+use { Loud as Shouty, Speaker } from "./sub/trait_scope_lib.wado";
+
+test "a trait imported under an alias is in scope" {
+    let s = Speaker { id: 3 };
+    assert s.shout() == "speaker:3";
+    assert Shouty::shout(&s) == "speaker:3";
+}
+
+__DATA__
+{"test": {}}

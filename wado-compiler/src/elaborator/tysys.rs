@@ -57,6 +57,9 @@ pub(crate) struct TypeSystem {
     /// and blanket impls. Built once by [`TraitEnv::build`] and shared
     /// across every per-module elaborator via `Arc`.
     pub(crate) trait_env: Arc<TraitEnv>,
+    /// The solver's view of the program, built once every declaration is
+    /// resolved; `None` until then (WEP 2026-09-01, "How the order is guaranteed").
+    pub(crate) solver: Option<Rc<super::solver_bridge::SolverBridge>>,
 
     /// Registries the elaborator queries. The Component-Model
     /// `WorldRegistry` is built by the same `CmInterfaceRegistry::build_from_stdlib`
@@ -164,6 +167,40 @@ impl TypeSystem {
             Some(visible) => visible.contains(name),
             None => self.is_known_type_name(name),
         }
+    }
+
+    /// The `Type::Case` spelling of the case the resolve walk names at a bare
+    /// identifier site: the hint when no expected type supplies one.
+    pub(crate) fn bare_case_at(&self, site: crate::ast::AstId) -> Option<String> {
+        let case = self.resolutions.declared_if_walked(site)?;
+        let defs = self.resolutions.defs();
+        if !defs.kind(case).is_case() {
+            return None;
+        }
+        let owner = defs
+            .parent(case)
+            .expect("a case is a member of the type declaring it");
+        Some(self.qualified_case(owner, defs.name(case)))
+    }
+
+    /// `type_id` with each `TypeParam { index: i }` replaced by `type_args[i]`.
+    pub(crate) fn substitute_type_params(&self, type_id: TypeId, type_args: &[TypeId]) -> TypeId {
+        if type_args.is_empty() {
+            return type_id;
+        }
+        let substitution: crate::hashmap::IndexMap<u32, TypeId> = type_args
+            .iter()
+            .enumerate()
+            .map(|(i, &t)| (i as u32, t))
+            .collect();
+        self.type_table
+            .borrow_mut()
+            .substitute_type_params(type_id, &substitution)
+    }
+
+    /// The `Type::Case` spelling of `case` under `owner`.
+    pub(crate) fn qualified_case(&self, owner: crate::defs::DefId, case: &str) -> String {
+        format!("{}::{case}", self.resolutions.defs().name(owner))
     }
 
     /// The method `name` that `owner` — an `impl` block or a `trait`

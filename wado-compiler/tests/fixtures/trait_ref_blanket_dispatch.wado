@@ -1,0 +1,37 @@
+#![TODO]
+// A blanket over a reference (`impl<T: Bound> Tr for &T`) is a third candidate
+// list, ranked under a concrete `&T` impl and over the base type's. Today it
+// reaches no call: the reference step adopts only concrete `&T` impls and the
+// blanket collection takes only value blankets; the prelude's `Inspect for &T`
+// works because the compiler answers that bound itself (WEP 2026-09-01, "A ref
+// blanket never dispatches").
+
+trait Limit {
+    fn limit() -> i32;
+}
+
+trait Describe {
+    fn describe(&self) -> String;
+}
+
+struct Point {
+    x: i32,
+}
+
+impl Limit for Point {
+    fn limit() -> i32 {
+        return 7;
+    }
+}
+
+impl<T: Limit> Describe for &T {
+    fn describe(&self) -> String {
+        return "ref blanket";
+    }
+}
+
+test "a blanket over a reference dispatches" {
+    let p = Point { x: 1 };
+    let r = &p;
+    assert r.describe() == "ref blanket";
+}

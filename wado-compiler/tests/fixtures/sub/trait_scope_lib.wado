@@ -1,0 +1,39 @@
+// A trait, its supertrait, a blanket, and a type, declared where the calling
+// module reaches them only by importing them.
+pub trait Loud {
+    fn shout(&self) -> String;
+}
+
+pub trait Base {
+    fn base_name(&self) -> String;
+}
+
+pub trait Sub: Base {
+    fn sub_name(&self) -> String;
+}
+
+pub struct Speaker {
+    pub id: i32,
+}
+
+impl Loud for Speaker {
+    fn shout(&self) -> String {
+        return `speaker:${self.id}`;
+    }
+}
+
+impl Base for Speaker {
+    fn base_name(&self) -> String {
+        return "base";
+    }
+}
+
+impl Sub for Speaker {
+    fn sub_name(&self) -> String {
+        return "sub";
+    }
+}
+
+pub fn lib_version() -> i32 {
+    return 1;
+}

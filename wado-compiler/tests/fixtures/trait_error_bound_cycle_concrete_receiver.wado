@@ -1,0 +1,49 @@
+// `impl<T: Alpha> Beta for T` beside `impl<T: Beta> Alpha for T` grounds
+// neither trait. A repeated `(type, trait)` question with no member descent
+// between the two askings answers no, so a blanket keyed on either reaches no
+// receiver, on a concrete type as on a newtype
+// (`blanket_bound_cycle_on_newtype.wado`; WEP 2026-09-01).
+
+trait Alpha {
+    fn alpha() -> i32;
+}
+
+trait Beta {
+    fn beta() -> i32;
+}
+
+impl<T: Beta> Alpha for T {
+    fn alpha() -> i32 {
+        return T::beta();
+    }
+}
+
+impl<T: Alpha> Beta for T {
+    fn beta() -> i32 {
+        return T::alpha();
+    }
+}
+
+trait Describe {
+    fn describe(&self) -> String;
+}
+
+// The body avoids `T::alpha()`, which would recurse forever; what is under test
+// is that the bound holds at all.
+impl<T: Alpha> Describe for T {
+    fn describe(&self) -> String {
+        return "ungrounded";
+    }
+}
+
+struct Point {
+    x: i32,
+}
+
+export fn run() {
+    let p = Point { x: 1 };
+    assert p.describe() == "ungrounded";
+}
+
+__DATA__
+{"compile_error": "no method 'describe' found on type 'Point'"}

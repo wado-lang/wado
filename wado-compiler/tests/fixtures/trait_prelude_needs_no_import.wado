@@ -1,0 +1,35 @@
+// The prelude is the one exemption from the scope rule, so its traits dispatch
+// with nothing imported. A gate that reached them would take `==`, `<`, `${}`
+// and `for-of` away from every module at once; this pins that it does not
+// (WEP 2026-09-01).
+
+struct Point {
+    x: i32,
+}
+
+impl Eq for Point {
+    fn eq(&self, other: &Point) -> bool {
+        return self.x == other.x;
+    }
+}
+
+impl Display for Point {
+    pub fn fmt(&self, f: &mut Formatter) {
+        f.write_str(&`P${self.x}`);
+    }
+}
+
+test "prelude traits carry no import burden" {
+    assert Point { x: 1 } == Point { x: 1 };
+    assert `${Point { x: 2 }}` == "P2";
+    assert 1 < 2;
+
+    let mut total = 0;
+    for let v of [1, 2, 3] {
+        total = total + v;
+    }
+    assert total == 6;
+}
+
+__DATA__
+{"test": {}}

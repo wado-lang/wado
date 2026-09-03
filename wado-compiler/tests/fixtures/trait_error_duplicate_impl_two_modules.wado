@@ -1,0 +1,14 @@
+// The same pair as `trait_error_duplicate_impl_one_module`, split across two
+// modules of one package: the same key, and the same rejection.
+
+use { Describe, Point } from "./sub/trait_duplicate_impl_lib.wado";
+use { } from "./sub/trait_duplicate_impl_first.wado";
+use { } from "./sub/trait_duplicate_impl_second.wado";
+
+export fn run() {
+    let p = Point { x: 1 };
+    assert p.describe() == "first";
+}
+
+__DATA__
+{"compile_error": "duplicate impl of `Describe` for `Point`: the one in `./sub/trait_duplicate_impl_first.wado`"}

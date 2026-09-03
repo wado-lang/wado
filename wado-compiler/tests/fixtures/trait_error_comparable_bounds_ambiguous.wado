@@ -1,0 +1,53 @@
+// Specificity is not a rank: `T: A + B` is strictly narrower than `T: A`, both
+// hold at the receiver, and rank 3 reports them rather than picking the narrower
+// one. Preferring the narrower impl would decide by accident which
+// associated-type bindings a caller sees, which is the specialization soundness
+// question (WEP 2026-09-01).
+
+trait A {
+    fn a() -> i32;
+}
+
+trait B {
+    fn b() -> i32;
+}
+
+trait Describe {
+    fn describe(&self) -> String;
+}
+
+struct Point {
+    x: i32,
+}
+
+impl A for Point {
+    fn a() -> i32 {
+        return 1;
+    }
+}
+
+impl B for Point {
+    fn b() -> i32 {
+        return 2;
+    }
+}
+
+impl<T: A> Describe for T {
+    fn describe(&self) -> String {
+        return `a:${T::a()}`;
+    }
+}
+
+impl<T: A + B> Describe for T {
+    fn describe(&self) -> String {
+        return `ab:${T::a()}${T::b()}`;
+    }
+}
+
+export fn run() {
+    let p = Point { x: 1 };
+    assert p.describe() == "ab:12";
+}
+
+__DATA__
+{"compile_error": "ambiguous blanket impls of 'Describe' for 'Point'"}

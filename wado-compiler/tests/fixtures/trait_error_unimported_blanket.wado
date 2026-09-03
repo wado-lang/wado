@@ -1,0 +1,19 @@
+#![TODO]
+// A blanket is scoped like any other candidate. Neither `Tagged` nor `Marked`
+// is imported here, so `42.tag()` must not resolve at all.
+//
+// Today both blankets reach every `Display` receiver and collection order picks
+// one, so swapping the two `use` lines changes what this program prints. That
+// is the silent cross-trait tie the scope gate removes rather than reports
+// (WEP 2026-09-01, "Scope is decided and not implemented").
+
+use { tagged_version } from "./sub/trait_scope_blanket_tagged.wado";
+use { marked_version } from "./sub/trait_scope_blanket_marked.wado";
+
+export fn run() {
+    let _ = tagged_version() + marked_version();
+    assert 42.tag() == "tagged:42";
+}
+
+__DATA__
+{"compile_error": "is not imported here"}

@@ -1,0 +1,15 @@
+// A bare case needs an expected type. `let red = Red;` has none, so `Color`
+// being in scope does not help; write `Color::Red`.
+
+enum Color {
+    Red,
+    Green,
+}
+
+export fn run() {
+    let red = Red;
+    assert red == Color::Red;
+}
+
+__DATA__
+{"compile_error": "nothing here says of which type; write `Color::Red`"}

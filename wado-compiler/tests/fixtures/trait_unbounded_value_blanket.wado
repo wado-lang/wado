@@ -1,0 +1,25 @@
+// A value blanket's receiver parameter carries at least one bound: an unbounded
+// `impl<T> Describe for T` names no condition that could select it, so it is
+// rejected where it is written (WEP 2026-09-01, "The candidates").
+
+trait Describe {
+    fn describe(&self) -> String;
+}
+
+struct Point {
+    x: i32,
+}
+
+impl<T> Describe for T {
+    fn describe(&self) -> String {
+        return "blanket";
+    }
+}
+
+export fn run() {
+    let p = Point { x: 1 };
+    assert p.describe() == "blanket";
+}
+
+__DATA__
+{"compile_error": "blanket impl of `Describe` for `T` states no bound"}

@@ -64,7 +64,7 @@ So `Reflect::<P>::type_name()` answers `"P"` while `ReflectStruct::<P>::members(
 on `type P = Point` walks Point's fields.
 
 The two bounds therefore hold at different depths: `ReflectNewtype` at the
-newtype itself, a structure kind only after peeling to the base. That is rank 2
+newtype itself, a structure kind only after peeling to the base. That is rank 1
 of [Trait Resolution](./wep-2026-09-01-trait-resolution.md), so a derivation
 keyed on the newtype kind beats one keyed on its base's. `Inspect` is the one
 that uses it. Its `as Name` tag is a blanket over this kind, instantiated once

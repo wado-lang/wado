@@ -27,6 +27,7 @@ pub(crate) mod reify;
 mod scope;
 pub(crate) mod sem;
 pub(crate) mod sig;
+mod solver_bridge;
 mod stmt;
 mod synth;
 mod template;
@@ -518,24 +519,21 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         self.insert_reference(use_id, def_id);
     }
 
-    /// Record use→def edges for a `TypeName::CaseName` qualified path
-    /// expression. The prefix segment (`TypeName`) is resolved by name in
-    /// the current module's scope; the suffix segment (`CaseName`) points
-    /// directly at `case_ast_id` (its module is intrinsic to the id).
-    ///
-    /// Used for variant cases, enum cases, and flags members reached via
-    /// a two-segment qualified ident.
+    /// Record use→def edges for a case path: the `Type` prefix by name, the
+    /// case segment at `case_ast_id`. A bare case (`Some`) is the ident itself.
     pub(super) fn record_qualified_case(
         &mut self,
         ident: &crate::ast::IdentExpr,
         type_name: &str,
         case_ast_id: crate::ast::AstId,
     ) {
-        if let Some(prefix_seg) = ident.segments.first() {
-            self.record_item_reference_by_name(prefix_seg.id, type_name);
-        }
-        if let Some(suffix_seg) = ident.segments.get(1) {
-            self.record_reference_to_def(suffix_seg.id, case_ast_id);
+        match ident.segments.as_slice() {
+            [] => self.record_reference_to_def(ident.id, case_ast_id),
+            [prefix, case, ..] => {
+                self.record_item_reference_by_name(prefix.id, type_name);
+                self.record_reference_to_def(case.id, case_ast_id);
+            }
+            [_] => unreachable!("a qualified path has two or more segments"),
         }
     }
 
@@ -1345,6 +1343,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     ) {
         let key = ast_id;
         self.sem.types.assign_places.insert(key, place);
+    }
+
+    /// Record that the bare case at `site` is a case of `owner`, the expected
+    /// type there.
+    pub(super) fn record_bare_case(&mut self, site: crate::ast::AstId, owner: crate::defs::DefId) {
+        self.sem.types.bare_cases.insert(site, owner);
     }
 
     /// Look up the recorded assignment-target place classification for the

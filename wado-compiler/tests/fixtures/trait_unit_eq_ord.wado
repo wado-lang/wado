@@ -1,0 +1,24 @@
+// `()` is the unit type, not the empty tuple `[]`: the prelude's
+// `impl<..T: Eq> Eq for [..T]` does not answer for it, and its own
+// `impl Eq for ()` / `impl Ord for ()` do. A struct with a `()` member
+// derives through them like any other (WEP 2026-09-01).
+
+struct Entry<K, V> {
+    key: K,
+    value: V,
+}
+
+test "the unit type is Eq and Ord" {
+    assert () == ();
+    assert !(() < ());
+    assert ().cmp(&()) == Ordering::Equal;
+    let a = Entry { key: 1, value: () };
+    let b = Entry { key: 1, value: () };
+    assert a == b;
+    assert !(a < b);
+    let empty: [] = [];
+    assert empty == [];
+}
+
+__DATA__
+{"test": {}}

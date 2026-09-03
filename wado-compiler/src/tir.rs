@@ -310,23 +310,7 @@ impl PrimitiveType {
     /// Check if a name is a primitive type name.
     #[must_use]
     pub fn is_primitive_name(name: &str) -> bool {
-        matches!(
-            name,
-            "i8" | "i16"
-                | "i32"
-                | "i64"
-                | "i128"
-                | "u8"
-                | "u16"
-                | "u32"
-                | "u64"
-                | "u128"
-                | "f32"
-                | "f64"
-                | "bool"
-                | "char"
-                | "v128"
-        )
+        Self::all_primitive_names().contains(&name)
     }
 
     pub fn all_primitive_names() -> &'static [&'static str] {

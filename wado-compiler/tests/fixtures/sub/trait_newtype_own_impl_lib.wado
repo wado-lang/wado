@@ -1,0 +1,16 @@
+// A newtype and its own trait impl, written where the calling module is not.
+pub trait Describe {
+    fn describe(&self) -> String;
+}
+
+pub struct Inner {
+    pub x: i32,
+}
+
+pub type Wrapped = Inner;
+
+impl Describe for Wrapped {
+    fn describe(&self) -> String {
+        return "newtype";
+    }
+}

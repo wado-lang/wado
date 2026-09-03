@@ -1,0 +1,14 @@
+// One of two libraries whose blanket reaches every `Display` receiver.
+pub trait Tagged {
+    fn tag(&self) -> String;
+}
+
+impl<T: Display> Tagged for T {
+    fn tag(&self) -> String {
+        return `tagged:${self}`;
+    }
+}
+
+pub fn tagged_version() -> i32 {
+    return 1;
+}

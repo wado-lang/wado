@@ -164,7 +164,7 @@ emitted:
       for `flags` and newtypes. `tests/fixtures/eq_ord_manual_impl_todo.wado`
       pins the sites that already dispatch and marks the rest `#[TODO]`.
 
-That rule is rank 2 of the selection order:
+That rule is rank 1 of the selection order:
 [Trait Resolution](./wep-2026-09-01-trait-resolution.md).
 
 A marker for any of the structurally-checkable traits (`Eq` / `Ord` /

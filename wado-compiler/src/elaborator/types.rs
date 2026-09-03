@@ -63,6 +63,20 @@ pub(super) fn type_param_defaults_of(params: &[ast::GenericParam]) -> Vec<Option
     params.iter().map(|p| p.default.clone()).collect()
 }
 
+impl StructFieldInfo {
+    /// Whether a reflection written in `module` can enumerate every field
+    /// (WEP 2026-06-13, Visibility).
+    pub(super) fn fields_visible_from(&self, module: &ModuleSource) -> bool {
+        if self.fields.is_empty() || &self.module_source == module {
+            return true;
+        }
+        let same_package = self.module_source.same_package(module);
+        self.fields
+            .iter()
+            .all(|(_, _, vis)| vis.reachable_from(same_package))
+    }
+}
+
 /// A trait bound as a declaration digest records it: the site that wrote it,
 /// which is what says *which* trait, plus the spelling for diagnostics.
 #[derive(Clone, Debug)]
@@ -324,6 +338,17 @@ pub enum TypeError {
     /// (e.g. a bare `null` whose `Option<...>` inner is undetermined).
     CannotInferType {
         message: String,
+        span: Span,
+    },
+
+    /// A bare case (`Red`) where no expected type supplies it: the type name
+    /// may be omitted only where the context says which type is meant.
+    BareCaseNeedsContext {
+        case: String,
+        /// The `Type::Case` spelling the site needs.
+        qualified: String,
+        /// The expected type, when there is one and it has no such case.
+        expected: Option<String>,
         span: Span,
     },
 
@@ -620,6 +645,25 @@ pub enum TypeError {
         /// Where the impl this one collides with lives, named so the other
         /// half of the pair is not left for the reader to hunt down.
         conflicting_impl: String,
+        span: Span,
+    },
+
+    /// Coherence violation: two impls of one `(Trait, Type)` pair. No rank
+    /// separates them, so without this the collection order decides which body
+    /// every call runs.
+    DuplicateTraitImpl {
+        trait_name: String,
+        self_type_name: String,
+        /// Where the impl this one duplicates lives.
+        conflicting_impl: String,
+        span: Span,
+    },
+
+    /// Coherence violation: `impl<T> Trait for T`. A value blanket is selected
+    /// by its receiver parameter's bound, and this one states none.
+    UnboundedValueBlanket {
+        trait_name: String,
+        param: String,
         span: Span,
     },
 
@@ -1101,6 +1145,24 @@ impl TypeError {
             TypeError::CannotInferType { message, span } => {
                 (Code::TypeMismatch, message.clone(), *span)
             }
+            TypeError::BareCaseNeedsContext {
+                case,
+                qualified,
+                expected,
+                span,
+            } => (
+                Code::TypeMismatch,
+                {
+                    let context = match expected {
+                        Some(expected) => {
+                            format!("the expected type `{expected}` has none by that name")
+                        }
+                        None => "nothing here says of which type".to_string(),
+                    };
+                    format!("`{case}` is a case, and {context}; write `{qualified}`")
+                },
+                *span,
+            ),
 
             TypeError::CannotAssign { message, span } => (
                 Code::ImmutableAssignment,
@@ -1464,6 +1526,29 @@ impl TypeError {
                 Code::OrphanRule,
                 format!(
                     "overlapping variadic impls of `{trait_name}` for `{self_type_name}`: this one and {conflicting_impl} accept the same tuples, and a pack's bounds are only checked at monomorphization, so neither can be selected over the other"
+                ),
+                *span,
+            ),
+            TypeError::DuplicateTraitImpl {
+                trait_name,
+                self_type_name,
+                conflicting_impl,
+                span,
+            } => (
+                Code::OrphanRule,
+                format!(
+                    "duplicate impl of `{trait_name}` for `{self_type_name}`: {conflicting_impl} implements the same pair, and nothing ranks two impls of one pair, so which one every call runs would be decided by the order they were loaded in"
+                ),
+                *span,
+            ),
+            TypeError::UnboundedValueBlanket {
+                trait_name,
+                param,
+                span,
+            } => (
+                Code::OrphanRule,
+                format!(
+                    "blanket impl of `{trait_name}` for `{param}` states no bound: a blanket impl's receiver type parameter needs a bound, since the bound is what decides which receivers it covers"
                 ),
                 *span,
             ),
@@ -2457,7 +2542,7 @@ pub(super) struct TraitMethodMatch {
     /// what an ambiguity names two blankets by, neither having a name.
     pub(super) blanket_bounds: Option<String>,
     /// How far down the receiver's newtype chain this impl's target bounds
-    /// hold: 0 at the receiver itself, 1 at its base. Rank 2 of the selection
+    /// hold: 0 at the receiver itself, 1 at its base. Rank 1 of the selection
     /// order (`docs/wep-2026-09-01-trait-resolution.md`).
     pub(super) bound_depth: usize,
     /// The struct name that actually has the trait impl (may differ from the

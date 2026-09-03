@@ -2144,7 +2144,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         if let Some(payload) = payload_opt {
             // Substitute type parameters with concrete types
-            return self.substitute_type_params(payload, type_args);
+            return self.tysys.substitute_type_params(payload, type_args);
         }
 
         // The declaration is a variant — it answered `variant_cases_of` or it

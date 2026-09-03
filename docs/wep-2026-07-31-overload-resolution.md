@@ -104,23 +104,16 @@ shape, including the concrete-receiver case. The rationale is twofold: impls of
 different traits share no contract, so a type-directed pick is a semantic guess;
 and allowing it would reintroduce ad-hoc overloading through one-method traits,
 which the design philosophy rules out. The escape is the qualified call syntax
-below, not renaming. One tie-break before the error: when the colliding
-declarations share a bare name and exactly one is in scope at the call site
-(declared or imported by the calling module), that one is selected — a
-same-named foreign trait a module never imported does not break its calls, which
-is what keeps two libraries' private `trait Loud` from colliding through a
-shared receiver type.
+below, not renaming.
 
-One exception: a blanket candidate does not count toward the collision. Wado
-does not scope method candidates by which traits are imported, so a foreign
-`impl<T: Bound> Foreign for T` reaches every receiver in the program — counting
-it would make adding a blanket impl to a library a breaking change for every
-downstream method of that name, which is the cost Rust pays with trait-import
-scoping instead. A blanket is the general case and loses to any impl written for
-the receiver: the same specific-impls-win ordering the language already applies
-within one trait, read across traits. Two blankets colliding with each other
-resolve by the existing order rather than erroring; if that turns out to bite,
-the answer is candidate scoping, not counting blankets here.
+Which declarations can collide at all is settled before this rule: a trait's
+methods are candidates at a call only where the calling module has its
+declaration in scope ([Trait Resolution](./wep-2026-09-01-trait-resolution.md)).
+Where the receiver or the impl was written does not matter. Two libraries'
+private `trait Loud` never collide through a shared receiver type, because a
+module importing neither sees neither. A blanket is scoped the same way and
+counts toward the collision like any other candidate (both are known gaps
+there).
 
 ### Resolution algorithm
 
@@ -514,8 +507,6 @@ annotation on an argument that is already pinned.
 - Ranking. Beyond the existing specific-impls-win rule there is no preference
   order; resolution is unique-or-error, so adding a preference later would only
   turn errors into compiles (backward-compatible), while removing one never is.
-- Trait-import scoping of candidates. Trait impls stay globally visible to
-  method lookup; scoping candidates by `use` is a separate question.
 
 ### Rejected alternatives
 

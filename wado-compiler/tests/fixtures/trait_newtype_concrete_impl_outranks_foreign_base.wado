@@ -1,0 +1,20 @@
+#![TODO]
+// Rank 1 orders the newtype chain, so a newtype's own impl answers before
+// anything written for its base, wherever either is written.
+//
+// Today depth is read off a blanket's bounds alone, so both impls sit at 0 and
+// the locality sort decides: the local impl on the base takes a call on the newtype
+// (WEP 2026-09-01, "Rank 1 does not order the chain").
+
+use { Describe, Inner, Wrapped } from "./sub/trait_newtype_own_impl_lib.wado";
+
+impl Describe for Inner {
+    fn describe(&self) -> String {
+        return "base";
+    }
+}
+
+test "a newtype's own impl outranks a local impl on its base" {
+    let w = Inner { x: 1 } as Wrapped;
+    assert w.describe() == "newtype";
+}

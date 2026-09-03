@@ -58,6 +58,7 @@ pub mod tir;
 pub mod tir_visitor;
 pub mod token;
 pub mod trace;
+pub mod trait_solver;
 pub mod unparse;
 pub mod unresolved_types;
 pub mod wir;

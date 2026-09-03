@@ -1,0 +1,58 @@
+// An associated call selects on its own path, a current-module-first scan of
+// the receiver's trait impls with value blankets on a fallback behind it, so
+// rank 2 must come out of it too, in both declaration orders
+// (WEP 2026-09-01).
+
+trait Limit {
+    fn limit() -> i32;
+}
+
+trait Make {
+    fn make() -> String;
+}
+
+struct Early {
+    x: i32,
+}
+
+struct Late {
+    x: i32,
+}
+
+impl Limit for Early {
+    fn limit() -> i32 {
+        return 1;
+    }
+}
+
+impl Limit for Late {
+    fn limit() -> i32 {
+        return 2;
+    }
+}
+
+impl Make for Early {
+    fn make() -> String {
+        return "concrete";
+    }
+}
+
+impl<T: Limit> Make for T {
+    fn make() -> String {
+        return "blanket";
+    }
+}
+
+impl Make for Late {
+    fn make() -> String {
+        return "concrete";
+    }
+}
+
+test "an associated call takes the concrete impl, whichever side declares it" {
+    assert Early::make() == "concrete";
+    assert Late::make() == "concrete";
+}
+
+__DATA__
+{"test": {}}

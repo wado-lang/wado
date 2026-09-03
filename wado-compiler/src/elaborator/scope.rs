@@ -4,7 +4,7 @@
 //! helpers in this file — every entry has exactly one panic-safe restore
 //! path (WEP 2026-05-26).
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::ops::{Deref, DerefMut};
 
 use crate::ast;
@@ -104,6 +104,15 @@ impl TraitContext {
     }
 }
 
+/// One open `type_implements_trait` question.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(super) struct TraitCheckFrame {
+    pub(super) type_id: TypeId,
+    pub(super) trait_: crate::defs::DefId,
+    /// `Scope::member_edges` when the question was asked.
+    pub(super) member_edges: u32,
+}
+
 /// Per-function annotate-time scope, bundled so queries take one `&Scope`.
 /// None of it may move onto the shared `TypeSystem`: `trait_ctx` is
 /// per-function, `trait_check_stack` is a per-call frame stack whose
@@ -112,7 +121,13 @@ impl TraitContext {
 #[derive(Default)]
 pub(super) struct Scope {
     pub(super) trait_ctx: TraitContext,
-    pub(super) trait_check_stack: RefCell<Vec<(TypeId, crate::defs::DefId)>>,
+    /// The `(type, trait)` questions open above the current one, each with
+    /// the member edges taken up to it — see `TraitCheckFrame`.
+    pub(super) trait_check_stack: RefCell<Vec<TraitCheckFrame>>,
+    /// How many structural-member descents the open questions have taken. A
+    /// repeated question is grounded only when one of them lies between the
+    /// two askings.
+    pub(super) member_edges: Cell<u32>,
     /// When resolving a default-expression AST at a call site, fall back to
     /// looking up unresolved identifiers in this module's global scope —
     /// the callee's lexical scope for defaults that reference

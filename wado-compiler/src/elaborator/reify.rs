@@ -440,6 +440,20 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         Some(ident.segments[owner].id)
     }
 
+    /// A `Type::Case` identifier as the declaration owning the case and the
+    /// spelling: `Color::Red` at its own segments, a bare `Red` as annotate
+    /// read it off the expected type.
+    fn case_path(&self, ident: &ast::IdentExpr) -> Option<(Option<crate::defs::DefId>, String)> {
+        if let Some(&owner) = self.sem.types.bare_cases.get(&ident.id) {
+            return Some((Some(owner), self.tysys.qualified_case(owner, &ident.name)));
+        }
+        let (prefix, _) = ident.name.split_once("::")?;
+        let owner = self
+            .type_lookup()
+            .declaration_at(self.qualified_owner_site(ident), prefix);
+        Some((owner, ident.name.clone()))
+    }
+
     /// The symbol row behind a reference site — see
     /// `Elaborator::symbol_at`, which answers the same way from the same
     /// table, so annotate and reify cannot disagree.
@@ -7783,14 +7797,14 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // ctor there too, but that shape would lower to a
         // `Call` against a function that doesn't exist.
         if let ast::Expr::Ident(ident) = &call.callee
-            && let Some(pos) = ident.name.find("::")
+            && let Some((owner, spelled)) = self.case_path(ident)
+            && let Some((prefix, suffix)) = spelled.split_once("::")
         {
-            let prefix = &ident.name[..pos];
-            let suffix = &ident.name[pos + 2..];
             if !suffix.contains("::") {
-                let owner = self.qualified_owner_site(ident);
                 let lookup = self.type_lookup();
-                if let Some(variant_info) = lookup.variant_cases_at(owner, prefix).cloned()
+                if let Some(variant_info) = owner
+                    .and_then(|owner| lookup.variant_cases_of(owner))
+                    .cloned()
                     && let Some((case_index, case_data)) = variant_info
                         .cases
                         .iter()
@@ -7954,7 +7968,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             && !ident.name[pos + 2..].contains("::")
             && call.args.len() == 1
         {
-            let _ = ident.name[..pos].to_string(); // prefix kept for context only
             let arg = self.reify_expr(&call.args[0], ctx, None);
             let arg_type = arg.type_id;
 
@@ -9049,12 +9062,16 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // 5. Free function reference — the ident names a function in
         //    the current module or imported via a `use` declaration.
         //    Emit `TirExprKind::FuncRef` with the recorded
-        //    instantiation's type_args when present.
-        if self
-            .sem
-            .decls
-            .function_return_types
-            .contains_key(&ident.name)
+        //    instantiation's type_args when present. A bare case (`None`)
+        //    resolves to its declaration, which is no function; it is the
+        //    case below.
+        let is_bare_case = self.sem.types.bare_cases.contains_key(&ident.id);
+        if !is_bare_case
+            && self
+                .sem
+                .decls
+                .function_return_types
+                .contains_key(&ident.name)
         {
             let type_args = self
                 .ann_generic_instantiations(ident.id)
@@ -9070,7 +9087,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 ident.span,
             );
         }
-        if let Some(def) = self.tysys.resolutions.declared_if_walked(ident.id) {
+        if !is_bare_case && let Some(def) = self.tysys.resolutions.declared_if_walked(ident.id) {
             let (import_src, original_name) = {
                 let defs = self.tysys.resolutions.defs();
                 (defs.module(def).clone(), defs.name(def).to_string())
@@ -9124,27 +9141,25 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         //    namespace-import form `ns::Type::Case` (two `::`
         //    separators) is handled by a dedicated branch in the
         //    elaborator that resolves the namespace alias first.
-        if let Some(pos) = ident.name.find("::") {
-            let prefix = &ident.name[..pos];
-            let suffix = &ident.name[pos + 2..];
-
+        if let Some((owner, spelled)) = self.case_path(ident)
+            && let Some((_, suffix)) = spelled.split_once("::")
+        {
             // Two-segment qualified path is "Type::Case". Anything with
             // a further `::` is `ns::Type::Case` (namespace path) —
             // defer to a later branch.
             if !suffix.contains("::") {
-                let owner = self.qualified_owner_site(ident);
                 let lookup = self.type_lookup();
 
                 // A newtype reaches its base's members and keeps its own type:
                 // `C::Green` is the implicit `Color::Green as C`.
-                let through_newtype = self.newtype_member_owner(owner, prefix);
+                let through_newtype = owner
+                    .and_then(|def| super::types::newtype_member_owner(&lookup, &self.tysys, def));
+                let owner = through_newtype.map(|(base, _)| base).or(owner);
 
                 // Variant case.
-                let variant_info = match through_newtype {
-                    Some((base, _)) => lookup.variant_cases_of(base).cloned(),
-                    None => lookup.variant_cases_at(owner, prefix).cloned(),
-                };
-                if let Some(variant_info) = variant_info
+                if let Some(variant_info) = owner
+                    .and_then(|owner| lookup.variant_cases_of(owner))
+                    .cloned()
                     && let Some((case_index, case_data)) = variant_info
                         .cases
                         .iter()
@@ -9179,11 +9194,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 }
 
                 // Enum case.
-                let enum_info = match through_newtype {
-                    Some((base, _)) => lookup.enum_cases_of(base).cloned(),
-                    None => lookup.enum_cases_at(owner, prefix).cloned(),
-                };
-                if let Some(enum_info) = enum_info
+                if let Some(enum_info) =
+                    owner.and_then(|owner| lookup.enum_cases_of(owner)).cloned()
                     && let Some(case_data) = enum_info.find_case(suffix).cloned()
                 {
                     let enum_type = self
@@ -9203,11 +9215,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 }
 
                 // Flags member.
-                let flags_info = match through_newtype {
-                    Some((base, _)) => lookup.flags_members_of(base).cloned(),
-                    None => lookup.flags_members_at(owner, prefix).cloned(),
-                };
-                if let Some(flags_info) = flags_info
+                if let Some(flags_info) = owner
+                    .and_then(|owner| lookup.flags_members_of(owner))
+                    .cloned()
                     && let Some(member) = flags_info
                         .members
                         .iter()

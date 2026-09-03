@@ -1,0 +1,20 @@
+#![TODO]
+// Calling `Base`'s method through `T: Sub` needs `Base` imported, exactly as
+// writing `T: Base` would: a supertrait is a second name, and only the prelude
+// is exempt from import.
+//
+// Today the bound carries the supertrait's methods with it, so this resolves
+// with `Base` unnamed (WEP 2026-09-01, "Scope is decided and not implemented").
+
+use { Sub, Speaker } from "./sub/trait_scope_lib.wado";
+
+fn describe<T: Sub>(v: &T) -> String {
+    return v.base_name();
+}
+
+export fn run() {
+    assert describe(&Speaker { id: 1 }) == "base";
+}
+
+__DATA__
+{"compile_error": "'Base' is not imported here"}
