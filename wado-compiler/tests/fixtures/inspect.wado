@@ -1,0 +1,384 @@
+// `${x:?}` (Inspect) and `${x:#?}` (Inspect, indented) over every type shape:
+// primitives and containers, structs, variants and enums, then the pretty form.
+
+// --- primitives, containers and closures ---
+
+test "primitives" {
+    assert `${42:?}` == "42";
+    assert `${-7:?}` == "-7";
+    assert `${3.14:?}` == "3.14";
+    assert `${true:?}` == "true";
+    assert `${false:?}` == "false";
+    assert `${'A':?}` == "'A'";
+}
+
+test "float special" {
+    let inf = f64::INFINITY;
+    assert `${inf:?}` == "inf";
+    let neg_inf = f64::NEG_INFINITY;
+    assert `${neg_inf:?}` == "-inf";
+    let zero = 0.0;
+    assert `${zero:?}` == "0.0";
+    let neg_zero = -0.0;
+    assert `${neg_zero:?}` == "-0.0";
+    let f32_inf = f32::INFINITY;
+    assert `${f32_inf:?}` == "inf";
+}
+
+test "string" {
+    let s = "hello";
+    assert `${s:?}` == "\"hello\"";
+    let with_quote = "say \"hi\"";
+    assert `${with_quote:?}` == "\"say \\\"hi\\\"\"";
+    let with_newline = "line1\nline2";
+    assert `${with_newline:?}` == "\"line1\\nline2\"";
+    let empty = "";
+    assert `${empty:?}` == "\"\"";
+    // Control chars without a named escape render as `\u{HEX}` (not raw).
+    let with_control = `a${char::from_u32_unchecked(1)}b`;
+    assert `${with_control:?}` == "\"a\\u{1}b\"";
+    // Printable non-ASCII stays verbatim.
+    let unicode = "あ";
+    assert `${unicode:?}` == "\"あ\"";
+}
+
+test "tuple" {
+    let t = [1, "hello", true];
+    assert `${t:?}` == "[1, \"hello\", true]";
+}
+
+test "unit" {
+    let u = ();
+    assert `${u:?}` == "()";
+}
+
+test "ref" {
+    let x = 42;
+    let r = &x;
+    assert `${r:?}` == "&42";
+    let mut y = 100;
+    let mr = &mut y;
+    assert `${mr:?}` == "&mut 100";
+    let s = "hello";
+    let rs = &s;
+    assert `${rs:?}` == "&\"hello\"";
+    let b = true;
+    let rb = &b;
+    assert `${rb:?}` == "&true";
+}
+
+type Meters = f64;
+type Seconds = i32;
+
+test "newtype" {
+    let m: Meters = 100.5;
+    assert `${m:?}` == "100.5 as Meters";
+    let s: Seconds = 42;
+    assert `${s:?}` == "42 as Seconds";
+}
+
+enum InspColor {
+    Red,
+    Green,
+    Blue,
+}
+
+test "enum" {
+    let r = InspColor::Red;
+    assert `${r:?}` == "InspColor::Red";
+    let g = InspColor::Green;
+    assert `${g:?}` == "InspColor::Green";
+    let b = InspColor::Blue;
+    assert `${b:?}` == "InspColor::Blue";
+}
+
+variant InspShape {
+    Circle(f64),
+    Rectangle([f64, f64]),
+    InspPoint,
+}
+
+test "variant" {
+    let c = InspShape::Circle(5.0);
+    assert `${c:?}` == "InspShape::Circle(5.0)";
+    let r = InspShape::Rectangle([3.0, 4.0]);
+    assert `${r:?}` == "InspShape::Rectangle([3.0, 4.0])";
+    let p = InspShape::InspPoint;
+    assert `${p:?}` == "InspShape::InspPoint";
+}
+
+pub flags InspPerms {
+    Read,
+    Write,
+    Execute,
+}
+
+test "flags" {
+    let r = InspPerms::Read;
+    assert `${r:?}` == "InspPerms::Read";
+    let rw = InspPerms::Read | InspPerms::Write;
+    assert `${rw:?}` == "InspPerms::Read | InspPerms::Write";
+    let all = InspPerms::all();
+    assert `${all:?}` == "InspPerms::Read | InspPerms::Write | InspPerms::Execute";
+    let none = InspPerms::none();
+    assert `${none:?}` == "InspPerms::none()";
+}
+
+test "closure" {
+    let add_one = |x: i32| x + 1;
+    assert `${add_one:?}` == "|i32| -> i32";
+    let add = |a: i32, b: i32| a + b;
+    assert `${add:?}` == "|i32, i32| -> i32";
+    let always42 = || 42;
+    assert `${always42:?}` == "|| -> i32";
+
+    // alternate mode shows source (TIR-unparsed: binary ops get
+    // parenthesised for unambiguous round-tripping).
+    assert `${add_one:#?}` == "|x: i32| (x + 1)";
+    assert `${add:#?}` == "|a: i32, b: i32| (a + b)";
+    assert `${always42:#?}` == "|| 42";
+}
+
+// --- structs, variants and enums ---
+
+struct InspPoint {
+    x: i32,
+    y: i32,
+}
+
+struct InspLine {
+    start: InspPoint,
+    end: InspPoint,
+}
+
+struct InspWrapper {
+    value: Option<i32>,
+}
+
+struct InspMatrix {
+    data: List<List<i32>>,
+    rows: i32,
+}
+
+struct InspBox<T> {
+    value: T,
+}
+
+struct InspPair<T> {
+    first: T,
+    second: T,
+}
+
+struct InspUser {
+    name: String,
+
+    #[secret]
+    password: String,
+    age: i32,
+}
+
+struct InspAllHidden {
+    #[secret]
+    secret1: i32,
+
+    #[secret]
+    secret2: i32,
+}
+
+test "struct" {
+    let p = InspPoint { x: 10, y: 20 };
+    assert `${p:?}` == "InspPoint { x: 10, y: 20 }";
+    let origin = InspPoint { x: 0, y: 0 };
+    assert `${origin:?}` == "InspPoint { x: 0, y: 0 }";
+}
+
+test "struct option field" {
+    let w1 = InspWrapper { value: Option::<i32>::Some(42) };
+    assert `${w1:?}` == "InspWrapper { value: Option::Some(42) }";
+    let w2 = InspWrapper { value: null };
+    assert `${w2:?}` == "InspWrapper { value: Option::None }";
+}
+
+test "generic struct" {
+    let b = InspBox { value: 42 };
+    assert `${b:?}` == "InspBox { value: 42 }";
+    let p = InspPair { first: "hello", second: "world" };
+    assert `${p:?}` == "InspPair { first: \"hello\", second: \"world\" }";
+}
+
+test "hidden fields" {
+    let u = InspUser { name: "Alice", password: "secret123", age: 30 };
+    assert `${u:?}` == "InspUser { name: \"Alice\", age: 30, .. }";
+    let h = InspAllHidden { secret1: 1, secret2: 2 };
+    assert `${h:?}` == "InspAllHidden { .. }";
+}
+
+test "array" {
+    let arr: List<i32> = [1, 2, 3];
+    assert `${arr:?}` == "[1, 2, 3]";
+    let empty: List<i32> = [];
+    assert `${empty:?}` == "[]";
+    let single: List<i32> = [42];
+    assert `${single:?}` == "[42]";
+
+    // fallback to inspect without :?
+    assert `${arr}` == "[1, 2, 3]";
+    assert `${empty}` == "[]";
+
+    let points: List<InspPoint> = [InspPoint { x: 1, y: 2 }, InspPoint { x: 3, y: 4 }];
+    assert `${points}` == "[InspPoint { x: 1, y: 2 }, InspPoint { x: 3, y: 4 }]";
+}
+
+test "array option" {
+    let arr: List<Option<i32>> = [Option::<i32>::Some(1), null, Option::<i32>::Some(3)];
+    assert `${arr:?}` == "[Option::Some(1), Option::None, Option::Some(3)]";
+}
+
+test "nested struct" {
+    let line = InspLine {
+        start: InspPoint { x: 0, y: 0 },
+        end: InspPoint { x: 10, y: 20 },
+    };
+    assert `${line:?}` == "InspLine { start: InspPoint { x: 0, y: 0 }, end: InspPoint { x: 10, y: 20 } }";
+
+    let points: List<InspPoint> = [InspPoint { x: 1, y: 2 }, InspPoint { x: 3, y: 4 }];
+    assert `${points:?}` == "[InspPoint { x: 1, y: 2 }, InspPoint { x: 3, y: 4 }]";
+}
+
+test "option" {
+    let some_val: Option<i32> = Option::<i32>::Some(42);
+    assert `${some_val:?}` == "Option::Some(42)";
+    let none_val: Option<i32> = null;
+    assert `${none_val:?}` == "Option::None";
+}
+
+test "option nested" {
+    let some_some: Option<Option<i32>> = Option::<Option<i32>>::Some(Option::<i32>::Some(42));
+    assert `${some_some:?}` == "Option::Some(Option::Some(42))";
+    let some_none: Option<Option<i32>> = Option::<Option<i32>>::Some(null);
+    assert `${some_none:?}` == "Option::Some(Option::None)";
+    let none: Option<Option<i32>> = null;
+    assert `${none:?}` == "Option::None";
+}
+
+test "option deeply nested" {
+    let deep: Option<Option<Option<i32>>> = Option::<Option<Option<i32>>>::Some(Option::<Option<i32>>::Some(Option::<i32>::Some(7)));
+    assert `${deep:?}` == "Option::Some(Option::Some(Option::Some(7)))";
+}
+
+test "option of string" {
+    let some_some: Option<Option<String>> = Option::<Option<String>>::Some(Option::<String>::Some("hello"));
+    assert `${some_some:?}` == "Option::Some(Option::Some(\"hello\"))";
+}
+
+test "nested arrays" {
+    let matrix: List<List<i32>> = [[1, 2], [3, 4]];
+    assert `${matrix:?}` == "[[1, 2], [3, 4]]";
+    let deep: List<List<List<i32>>> = [[[1, 2], [3]], [[4, 5, 6]]];
+    assert `${deep:?}` == "[[[1, 2], [3]], [[4, 5, 6]]]";
+    let strs: List<List<String>> = [["a", "b"], ["c"]];
+    assert `${strs:?}` == "[[\"a\", \"b\"], [\"c\"]]";
+}
+
+test "nested array struct" {
+    let data: List<List<i32>> = [[1, 2], [3, 4]];
+    let m = InspMatrix { data: data, rows: 2 };
+    assert `${m:?}` == "InspMatrix { data: [[1, 2], [3, 4]], rows: 2 }";
+}
+
+test "nested array tuple" {
+    let arr: List<[i32, String]> = [[1, "one"], [2, "two"]];
+    assert `${arr:?}` == "[[1, \"one\"], [2, \"two\"]]";
+}
+
+test "option of struct" {
+    let opt_p: Option<InspPoint> = Option::<InspPoint>::Some(InspPoint { x: 10, y: 20 });
+    assert `${opt_p:?}` == "Option::Some(InspPoint { x: 10, y: 20 })";
+    let none_p: Option<InspPoint> = null;
+    assert `${none_p:?}` == "Option::None";
+}
+
+// --- the alternate (indented) form ---
+
+struct PrettyPoint {
+    x: i32,
+    y: i32,
+}
+
+struct PrettyLine {
+    start: PrettyPoint,
+    end: PrettyPoint,
+}
+
+test "pretty array" {
+    let empty: List<i32> = [];
+    assert `${empty:#?}` == "[]";
+
+    let nums: List<i32> = [1, 2, 3];
+    assert `${nums:#?}` == "[\n  1,\n  2,\n  3,\n]";
+
+    let points: List<PrettyPoint> = [
+        PrettyPoint { x: 1, y: 2 },
+        PrettyPoint { x: 3, y: 4 },
+    ] as List<PrettyPoint>;
+    assert `${points:#?}` == "[\n  PrettyPoint {\n    x: 1,\n    y: 2,\n  },\n  PrettyPoint {\n    x: 3,\n    y: 4,\n  },\n]";
+}
+
+test "pretty struct" {
+    let p = PrettyPoint { x: 1, y: 2 };
+    assert `${p:#?}` == "PrettyPoint {\n  x: 1,\n  y: 2,\n}";
+
+    let line = PrettyLine {
+        start: PrettyPoint { x: 10, y: 20 },
+        end: PrettyPoint { x: 30, y: 40 },
+    };
+    assert `${line:#?}` == "PrettyLine {\n  start: PrettyPoint {\n    x: 10,\n    y: 20,\n  },\n  end: PrettyPoint {\n    x: 30,\n    y: 40,\n  },\n}";
+}
+
+test "pretty variant" {
+    let some_val = Option::Some(42);
+    assert `${some_val:#?}` == "Option::Some(\n  42,\n)";
+    let none_val: Option<i32> = null;
+    assert `${none_val:#?}` == "Option::None";
+
+    let nested = Option::Some(PrettyPoint { x: 1, y: 2 });
+    assert `${nested:#?}` == "Option::Some(\n  PrettyPoint {\n    x: 1,\n    y: 2,\n  },\n)";
+}
+
+// inspect_no_display tests
+enum NDColor {
+    Red,
+    Green,
+    Blue,
+}
+
+variant NDShape {
+    Circle(f64),
+    NDPoint,
+}
+
+pub flags NDMode {
+    Read,
+    Write,
+}
+
+test "no display" {
+    let p = PrettyPoint { x: 1, y: 2 };
+    assert `${p:?}` == "PrettyPoint { x: 1, y: 2 }";
+    let c = NDColor::Red;
+    assert `${c:?}` == "NDColor::Red";
+    let s = NDShape::Circle(3.14);
+    assert `${s:?}` == "NDShape::Circle(3.14)";
+    let m = NDMode::Read | NDMode::Write;
+    assert `${m:?}` == "NDMode::Read | NDMode::Write";
+    let opt: Option<i32> = Option::<i32>::Some(42);
+    assert `${opt:?}` == "Option::Some(42)";
+    let none: Option<i32> = null;
+    assert `${none:?}` == "Option::None";
+    let opt_p: Option<PrettyPoint> = Option::<PrettyPoint>::Some(PrettyPoint { x: 10, y: 20 });
+    assert `${opt_p:?}` == "Option::Some(PrettyPoint { x: 10, y: 20 })";
+    let arr: List<PrettyPoint> = [PrettyPoint { x: 1, y: 2 }, PrettyPoint { x: 3, y: 4 }];
+    assert `${arr:?}` == "[PrettyPoint { x: 1, y: 2 }, PrettyPoint { x: 3, y: 4 }]";
+    let f = |x: i32| x * 2;
+    assert `${f:?}` == "|i32| -> i32";
+}

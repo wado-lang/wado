@@ -1,0 +1,91 @@
+// A trait's associated type: declared by the impl, named as `Self::Item` in the
+// trait, and the form the four indexing traits take.
+
+trait Holder {
+    type Item;
+
+    fn get(&self) -> Self::Item;
+}
+
+struct IntBox {
+    value: i32,
+}
+
+impl Holder for IntBox {
+    type Item = i32;
+
+    fn get(&self) -> Self::Item {
+        return self.value;
+    }
+}
+
+struct MutableBox {
+    value: i32,
+}
+
+impl<i32> IndexAssign<i32> for MutableBox {
+    type Output = i32;
+
+    fn index_assign(&mut self, _index: i32, value: Self::Output) {
+        self.value = value;
+    }
+}
+
+struct Counter {
+    value: i32,
+}
+
+impl Counter {
+    fn increment(&mut self) {
+        self.value = self.value + 1;
+    }
+}
+
+struct CounterBox {
+    item: Counter,
+}
+
+// `Counter` is a reference type, so the mutable access hands out `&mut`.
+impl<i32> IndexRefMut<i32> for CounterBox {
+    type Output = Counter;
+
+    fn index_ref_mut(&mut self, _index: i32) -> &mut Self::Output {
+        return &mut self.item;
+    }
+}
+
+struct ValueBox {
+    data: i32,
+}
+
+// A scalar element is read by value, not by `&i32`.
+impl<i32> IndexValue<i32> for ValueBox {
+    type Output = i32;
+
+    fn index_value(&self, _index: i32) -> Self::Output {
+        return self.data;
+    }
+}
+
+test "the impl supplies the associated type" {
+    let b = IntBox { value: 42 };
+    assert b.get() == 42;
+}
+
+test "IndexAssign names its value type as Output" {
+    let mut b = MutableBox { value: 0 };
+    b.index_assign(0, 42);
+    assert b.value == 42;
+}
+
+test "IndexRefMut names its element type as Output" {
+    let mut c = CounterBox { item: Counter { value: 0 } };
+    c.index_ref_mut(0).increment();
+    c.index_ref_mut(0).increment();
+    assert c.item.value == 2;
+}
+
+test "IndexValue names its element type as Output" {
+    let container = ValueBox { data: 42 };
+    assert container.index_value(0) == 42;
+}

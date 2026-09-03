@@ -328,7 +328,7 @@ pub(super) fn freeze_pure_arith(
         let param_locals: Vec<u32> = params.iter().map(|p| p.local_index).collect();
         let local_count = locals.len();
         let param_set: crate::hashmap::IndexSet<u32> = param_locals.iter().copied().collect();
-        // Locals a call may mutate through a `&mut` escape (ref_1's
+        // Locals a call may mutate through a `&mut` escape (`reference`'s
         // `set_bool(&mut c, …)`). A constant read of one is point-specific and the
         // build-once graph cannot keep it across the structural passes; an
         // *immutable*-`&`-escaped local (licm's `&config`) is stable and its field
