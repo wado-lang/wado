@@ -1,10 +1,9 @@
 // A nested loop that never writes a candidate leaves it `Both`.
 //
-// An unreached candidate is weakened to `ScalarOnly` at a nested loop so the
-// back edge costs nothing when the body writes it. A body that never writes it
-// cannot leave `Both` anyway, so the back edge is already free and weakening
-// would only buy a write-back at the next call that wants the field — here the
-// second `peek`, once per outer iteration.
+// Weakening an unreached candidate to `ScalarOnly` is what makes the back edge
+// free when the body writes it. A body that never writes it cannot leave
+// `Both`, so the back edge is already free, and weakening would buy nothing and
+// cost the second `peek` a write-back on every outer iteration.
 
 use { println, Stdout } from "core:cli";
 
@@ -27,14 +26,6 @@ fn peek(s: &S) -> i32 {
     return s.a + s.b;
 }
 
-// Same shape, named apart so the write-back the weakened path would emit before
-// it is one `wir_not_expect` can name. Two identical calls would put both
-// write-backs behind the same text, and substring matching cannot count.
-#[inline(never)]
-fn peek_after(s: &S) -> i32 {
-    return s.a + s.b;
-}
-
 export fn run() with Stdout {
     let mut s = S { a: 0, b: 0 };
     arm(&mut s);
@@ -49,18 +40,18 @@ export fn run() with Stdout {
         for let mut k = 0; k < 2; k += 1 {
             sink = sink + k;
         }
-        sink = sink + peek_after(&s);
+        sink = sink + peek(&s);
         o += 1;
     }
     println(`${sink} ${s.a}`);
 }
 
 // The first `peek` is what leaves `s.a` `Both` at the nested loop, and its
-// write-back is the only one the body should hold. The negative pattern is the
-// statement pair the weakened path would emit: a second write-back immediately
-// before the `peek_after` call. The positive pattern pins the local numbering
-// the negative one names, so a renumbering fails the test rather than passing
-// it silently.
+// write-back is the only one the body should hold. The weakened path adds one
+// straight after the nested loop, so the negative pattern is a write-back
+// following that loop's closing brace. The positive pattern pins the local
+// numbering the negative one names, so a renumbering fails the test rather than
+// passing it silently.
 
 __DATA__
 {
@@ -69,6 +60,6 @@ __DATA__
         "let __hfs_a_45: i32;"
     ],
     "wir_not_expect:O2": [
-        "s.a = __hfs_a_45;\n            sink = sink + \"hfs_nested_loop_untouched_keeps_both.wado/peek_after\"(s);"
+        "};\n            s.a = __hfs_a_45;"
     ]
 }

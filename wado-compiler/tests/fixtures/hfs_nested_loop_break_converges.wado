@@ -1,12 +1,12 @@
 // An unlabeled `break` out of a nested loop syncs when it diverges.
 //
 // The break is recorded rather than committed on the spot, so what makes it
-// sound is the convergence sync `walk_nested_loop` splices in afterwards.
-// Here the break leaves at `ScalarOnly` — the scalar write is the statement
-// before it — while the fall-through leaves at `FieldOnly`, because `bump`
-// mutates the field through `&mut`. The join is therefore `FieldOnly`, and the
-// outer read after the loop re-reads the field. Without the sync at the break,
-// that read sees the value `bump` left and the `s.pos + 2` is lost.
+// sound is the convergence sync `walk_nested_loop` splices in afterwards. The
+// break leaves at `ScalarOnly`, its scalar write being the statement before it.
+// The fall-through leaves at `FieldOnly`, since `bump` mutates the field
+// through `&mut`. So the join is `FieldOnly` and the outer read after the loop
+// re-reads the field. Without the sync, that read sees what `bump` left and the
+// `s.pos + 2` is lost.
 
 struct S {
     pos: i32,
