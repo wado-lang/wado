@@ -656,7 +656,6 @@ enum InflateMode {
     Dist,
     DistExt,
     Match,
-    Lit,
     Check,
     Done,
     Bad,
@@ -1188,8 +1187,9 @@ fn inflate_raw_ex(input: &ByteList, input_offset: i32, input_length: i32) -> [By
                 state.length = here_val;
 
                 if here_op == 0 {
-                    // literal
-                    state.mode = InflateMode::Lit;
+                    // Literal: write it here rather than through a Lit mode, so
+                    // the common symbol costs no extra dispatch round trip.
+                    output.push(state.length as u8);
                 } else if here_op & 32 != 0 {
                     // end of block
                     state.back = -1;
@@ -1328,10 +1328,6 @@ fn inflate_raw_ex(input: &ByteList, input_offset: i32, input_length: i32) -> [By
                     output.copy_within_append(src_start, state.length);
                     state.mode = InflateMode::Len;
                 }
-            },
-            Lit => {
-                output.push(state.length as u8);
-                state.mode = InflateMode::Len;
             },
             Check => {
                 if state.wrap == 1 {
