@@ -238,23 +238,25 @@ timing, and it leaves only the few rows that differ to measure. A
 suite had meanwhile called `fts` 6.9% SLOWER with non-overlapping ranges; the
 identical SHA-256 retired that reading outright.
 
-Delete both outputs each round and require both to exist. The glob also catches
-the schema modules, which are no world entry point and do not compile, and a
-compare against the previous round's leftovers reads as "identical" — the one
-answer this check must never give by accident. A `SKIPPED` row is uncovered
-rather than unchanged, so finish the ones with a world of their own
-(`--world wasi:http/service` for `http_routing/app.wado`) before calling the
-sweep complete.
+Delete both outputs each round and require both to exist. A compare against the
+previous round's leftovers reads as "identical", the one answer this check must
+never give by accident. Drop the schema modules, which are no world entry point,
+and give `http_routing` the world it targets. Every remaining benchmark must
+compile, so a `FAILED` row is one to go and read, never one quietly left out of
+the comparison.
 
 ```sh
 for f in benchmark/*/*.wado; do
+  case "$f" in *_schema.wado) continue ;; esac
+  world=""
+  case "$f" in */http_routing/*) world="--world wasi:http/service" ;; esac
   rm -f /tmp/b.wasm /tmp/h.wasm
-  "$base" compile -O2 -o /tmp/b.wasm "$f" > /dev/null 2>&1
-  target/release/wado compile -O2 -o /tmp/h.wasm "$f" > /dev/null 2>&1
-  if [ -s /tmp/b.wasm ] && [ -s /tmp/h.wasm ]; then
-    cmp -s /tmp/b.wasm /tmp/h.wasm || echo "DIFFERS $f"
-  else
-    echo "SKIPPED $f"
+  "$base" compile -O2 $world -o /tmp/b.wasm "$f" > /dev/null 2>&1
+  target/release/wado compile -O2 $world -o /tmp/h.wasm "$f" > /dev/null 2>&1
+  if [ ! -s /tmp/b.wasm ] || [ ! -s /tmp/h.wasm ]; then
+    echo "FAILED  $f"
+  elif ! cmp -s /tmp/b.wasm /tmp/h.wasm; then
+    echo "DIFFERS $f"
   fi
 done
 ```
