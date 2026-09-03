@@ -67,25 +67,28 @@ impl<i32> IndexValue<i32> for ValueBox {
     }
 }
 
+// Each input goes through `black_box`: without it the whole body constant-folds
+// at -O2 and the dispatch under test is never emitted, let alone run.
+
 test "the impl supplies the associated type" {
-    let b = IntBox { value: 42 };
+    let b = IntBox { value: builtin::black_box(42) };
     assert b.get() == 42;
 }
 
 test "IndexAssign names its value type as Output" {
-    let mut b = MutableBox { value: 0 };
-    b.index_assign(0, 42);
+    let mut b = MutableBox { value: builtin::black_box(0) };
+    b.index_assign(builtin::black_box(0), builtin::black_box(42));
     assert b.value == 42;
 }
 
 test "IndexRefMut names its element type as Output" {
-    let mut c = CounterBox { item: Counter { value: 0 } };
-    c.index_ref_mut(0).increment();
-    c.index_ref_mut(0).increment();
+    let mut c = CounterBox { item: Counter { value: builtin::black_box(0) } };
+    c.index_ref_mut(builtin::black_box(0)).increment();
+    c.index_ref_mut(builtin::black_box(0)).increment();
     assert c.item.value == 2;
 }
 
 test "IndexValue names its element type as Output" {
-    let container = ValueBox { data: 42 };
-    assert container.index_value(0) == 42;
+    let container = ValueBox { data: builtin::black_box(42) };
+    assert container.index_value(builtin::black_box(0)) == 42;
 }
