@@ -2766,12 +2766,14 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     return tir;
                 }
                 // `expr as Ty` — emit `Cast` with the recorded target type, and
-                // re-type a numeric-literal operand to the target width.
+                // re-type an *integer* literal operand to the target width.
                 // annotate propagates the target to a *direct* literal operand
                 // but not through a `Neg`, so `-9e15 as i64` would otherwise
                 // emit an `i32.const` that truncates before the cast widens.
+                // A float-only literal is not re-typed: `3.99 as i32` converts
+                // the value, and reading "3.99" as an integer yields `0`.
                 let target_is_int = self.tysys.type_table.borrow().is_integer(target_type);
-                let is_number_lit = |e: &ast::Expr| matches!(e, ast::Expr::Literal(l) if matches!(l.value, ast::Literal::Number(_)));
+                let is_number_lit = |e: &ast::Expr| matches!(e, ast::Expr::Literal(l) if matches!(&l.value, ast::Literal::Number(repr) if !super::util::is_float_only_literal(repr)));
                 let inner = if target_is_int && is_number_lit(&cast.expr) {
                     let ast::Expr::Literal(lit) = &cast.expr else {
                         unreachable!()
