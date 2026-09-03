@@ -49,6 +49,75 @@ test "parse with userinfo" {
     }
 }
 
+test "the last @ delimits user info from the host" {
+    if let Ok(url) = Url::parse("http://user@name@example.com/") {
+        assert url.username == "user%40name";
+        assert url.password == "";
+        assert url.host == "example.com";
+        // The serialized authority carries no raw `@`, so it parses back to
+        // the same URL rather than to a different host.
+        assert url.authority() == "user%40name@example.com";
+        if let Ok(again) = Url::parse(`http://${url.authority()}/`) {
+            assert again.username == url.username;
+            assert again.host == url.host;
+        } else {
+            panic("parse failed");
+        }
+    } else {
+        panic("parse failed");
+    }
+}
+
+test "a @ inside user info does not move the password's colon" {
+    if let Ok(url) = Url::parse("http://u@s:p@example.com/") {
+        assert url.username == "u%40s";
+        assert url.password == "p";
+        assert url.host == "example.com";
+    } else {
+        panic("parse failed");
+    }
+
+    if let Ok(url) = Url::parse("http://u:p@s@example.com/") {
+        assert url.username == "u";
+        assert url.password == "p%40s";
+        assert url.host == "example.com";
+    } else {
+        panic("parse failed");
+    }
+}
+
+// A credential is stored in WHATWG's userinfo percent-encode set, so what
+// `authority()` writes parses back to the credential it came from.
+test "user info is stored percent-encoded" {
+    if let Ok(url) = Url::parse("http://u:p:q@example.com/") {
+        assert url.password == "p%3Aq";
+        assert url.authority() == "u:p%3Aq@example.com";
+    } else {
+        panic("parse failed");
+    }
+
+    if let Ok(url) = Url::parse("http://a b@example.com/") {
+        assert url.username == "a%20b";
+    } else {
+        panic("parse failed");
+    }
+
+    // Non-ASCII goes out one `%XX` per UTF-8 byte.
+    if let Ok(url) = Url::parse("http://é@example.com/") {
+        assert url.username == "%C3%A9";
+    } else {
+        panic("parse failed");
+    }
+
+    // `%` is outside the set, so an already-encoded credential is unchanged.
+    if let Ok(url) = Url::parse("http://u:p%3Aq@example.com/") {
+        assert url.password == "p%3Aq";
+        assert url.authority() == "u:p%3Aq@example.com";
+    } else {
+        panic("parse failed");
+    }
+}
+
 test "parse with username only" {
     if let Ok(url) = Url::parse("https://admin@example.com/") {
         assert url.username == "admin";

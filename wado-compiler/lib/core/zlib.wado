@@ -356,16 +356,22 @@ pub fn compress_bound(source_len: i32) -> i32 {
 }
 
 
-struct Code {
-    op: u8,  // operation, extra bits, table bits
-    bits: u8,  // bits in this part of the code
-    val: u16,  // offset in table or code value
+// A decoding table entry in one i32, so the table is a flat GC array rather
+// than an array of references and a decode reads it with one unboxed load.
+fn code_pack(op: i32, bits: i32, val: i32) -> i32 {
+    return op & 0xFF | (bits & 0xFF) << 8 | (val & 0xFFFF) << 16;
 }
 
-impl Code {
-    fn new(op: i32, bits: i32, val: i32) -> Code {
-        return Code { op: op as u8, bits: bits as u8, val: val as u16 };
-    }
+fn code_op(entry: i32) -> i32 {
+    return entry & 0xFF;
+}
+
+fn code_bits(entry: i32) -> i32 {
+    return entry >> 8 & 0xFF;
+}
+
+fn code_val(entry: i32) -> i32 {
+    return entry >> 16 & 0xFFFF;
 }
 
 
@@ -404,7 +410,7 @@ fn inflate_table(
     lens: &List<u16>,
     lens_offset: i32,
     codes_count: i32,
-    table: &mut List<Code>,
+    table: &mut List<i32>,
     table_start: i32,
     bits_in: i32,
     work: &mut List<u16>,
@@ -453,8 +459,8 @@ fn inflate_table(
     }
     if max_len == 0 {
         // no symbols to code at all
-        table[table_start] = Code::new(64, 1, 0);
-        table[table_start + 1] = Code::new(64, 1, 0);
+        table[table_start] = code_pack(64, 1, 0);
+        table[table_start + 1] = code_pack(64, 1, 0);
         return [0, 1, table_start + 2];
     }
 
@@ -540,23 +546,23 @@ fn inflate_table(
     let mut done = false;
     while !done {
         // create table entry
-        let here_bits = (len - drop_val) as u8;
-        let mut here_op: u8 = 0;
-        let mut here_val: u16 = 0;
+        let here_bits = len - drop_val;
+        let mut here_op = 0;
+        let mut here_val = 0;
 
         let work_sym = work[sym] as i32;
         if work_sym + 1 < match_val {
             here_op = 0;
-            here_val = work_sym as u16;
+            here_val = work_sym;
         } else if work_sym >= match_val {
-            here_op = extra_table[work_sym - match_val] as u8;
-            here_val = base_table[work_sym - match_val];
+            here_op = extra_table[work_sym - match_val] as i32;
+            here_val = base_table[work_sym - match_val] as i32;
         } else {
-            here_op = (32 + 64) as u8;  // end of block
+            here_op = 32 + 64;  // end of block
             here_val = 0;
         }
 
-        let here = Code { op: here_op, bits: here_bits, val: here_val };
+        let here = code_pack(here_op, here_bits, here_val);
 
         // replicate for those indices with low len bits equal to huff
         let incr_rep = 1 as u32 << (len - drop_val) as u32;
@@ -565,7 +571,7 @@ fn inflate_table(
         loop {
             fill -= incr_rep;
             let idx = next + ((huff >> drop_val as u32) + fill) as i32;
-            table[idx] = Code { op: here.op, bits: here.bits, val: here.val };
+            table[idx] = here;
             if fill == 0 {
                 break;
             }
@@ -622,21 +628,13 @@ fn inflate_table(
 
             // point entry in root table to sub-table
             low = huff & mask;
-            table[table_start + low as i32] = Code {
-                op: curr as u8,
-                bits: root as u8,
-                val: (next - table_start) as u16,
-            };
+            table[table_start + low as i32] = code_pack(curr, root, next - table_start);
         }
     }
 
     // fill in remaining table entry if code is incomplete
     if huff != 0 {
-        table[next + huff as i32] = Code {
-            op: 64,
-            bits: (len - drop_val) as u8,
-            val: 0,
-        };
+        table[next + huff as i32] = code_pack(64, len - drop_val, 0);
     }
 
     return [0, root, table_start + used];
@@ -656,7 +654,6 @@ enum InflateMode {
     Dist,
     DistExt,
     Match,
-    Lit,
     Check,
     Done,
     Bad,
@@ -682,7 +679,7 @@ struct InflateState {
     extra: i32,
 
     // code tables
-    codes: List<Code>,
+    codes: List<i32>,
     lencode_off: i32,  // offset into codes for len/lit table
     distcode_off: i32,  // offset into codes for dist table
     lenbits: i32,
@@ -717,7 +714,7 @@ impl InflateState {
             length: 0,
             offset: 0,
             extra: 0,
-            codes: List::filled(ENOUGH, Code::new(0, 0, 0)),
+            codes: List::filled(ENOUGH, 0),
             lencode_off: 0,
             distcode_off: 0,
             lenbits: 0,
@@ -975,8 +972,7 @@ fn inflate_raw_ex(input: &ByteList, input_offset: i32, input_length: i32) -> [By
                     // decode using code length code
                     loop {
                         let idx = state.lencode_off + (state.hold & (1 as u32 << state.lenbits as u32) - 1) as i32;
-                        let here = &state.codes[idx];
-                        if here.bits as i32 <= state.bits {
+                        if code_bits(state.codes[idx]) <= state.bits {
                             break;
                         }
                         if have == 0 {
@@ -993,8 +989,9 @@ fn inflate_raw_ex(input: &ByteList, input_offset: i32, input_length: i32) -> [By
                     }
 
                     let idx = state.lencode_off + (state.hold & (1 as u32 << state.lenbits as u32) - 1) as i32;
-                    let here_val = state.codes[idx].val as i32;
-                    let here_bits = state.codes[idx].bits as i32;
+                    let here = state.codes[idx];
+                    let here_val = code_val(here);
+                    let here_bits = code_bits(here);
 
                     if here_val < 16 {
                         state.hold = state.hold >> here_bits as u32;
@@ -1131,8 +1128,7 @@ fn inflate_raw_ex(input: &ByteList, input_offset: i32, input_length: i32) -> [By
                 // decode literal/length code
                 loop {
                     let idx = state.lencode_off + (state.hold & (1 as u32 << state.lenbits as u32) - 1) as i32;
-                    let here = &state.codes[idx];
-                    if here.bits as i32 <= state.bits {
+                    if code_bits(state.codes[idx]) <= state.bits {
                         break;
                     }
                     if have == 0 {
@@ -1149,9 +1145,10 @@ fn inflate_raw_ex(input: &ByteList, input_offset: i32, input_length: i32) -> [By
                 }
 
                 let idx = state.lencode_off + (state.hold & (1 as u32 << state.lenbits as u32) - 1) as i32;
-                let mut here_op = state.codes[idx].op;
-                let mut here_bits = state.codes[idx].bits;
-                let mut here_val = state.codes[idx].val;
+                let here = state.codes[idx];
+                let mut here_op = code_op(here);
+                let mut here_bits = code_bits(here);
+                let mut here_val = code_val(here);
 
                 // handle 2nd level length code
                 if here_op != 0 && here_op & 0xF0 == 0 {
@@ -1159,11 +1156,12 @@ fn inflate_raw_ex(input: &ByteList, input_offset: i32, input_length: i32) -> [By
                     let last_op = here_op;
                     let last_val = here_val;
                     loop {
-                        let idx2 = state.lencode_off + last_val as i32 + ((state.hold & (1 as u32 << last_bits as u32 + last_op as u32) - 1) >> last_bits as u32) as i32;
-                        here_op = state.codes[idx2].op;
-                        here_bits = state.codes[idx2].bits;
-                        here_val = state.codes[idx2].val;
-                        if last_bits as i32 + here_bits as i32 <= state.bits {
+                        let idx2 = state.lencode_off + last_val + ((state.hold & (1 as u32 << last_bits as u32 + last_op as u32) - 1) >> last_bits as u32) as i32;
+                        let here2 = state.codes[idx2];
+                        here_op = code_op(here2);
+                        here_bits = code_bits(here2);
+                        here_val = code_val(here2);
+                        if last_bits + here_bits <= state.bits {
                             break;
                         }
                         if have == 0 {
@@ -1179,16 +1177,17 @@ fn inflate_raw_ex(input: &ByteList, input_offset: i32, input_length: i32) -> [By
                         break;
                     }
                     state.hold = state.hold >> last_bits as u32;
-                    state.bits -= last_bits as i32;
+                    state.bits -= last_bits;
                 }
 
                 state.hold = state.hold >> here_bits as u32;
-                state.bits -= here_bits as i32;
-                state.length = here_val as i32;
+                state.bits -= here_bits;
+                state.length = here_val;
 
-                if here_op as i32 == 0 {
-                    // literal
-                    state.mode = InflateMode::Lit;
+                if here_op == 0 {
+                    // Literal: write it here rather than through a Lit mode, so
+                    // the common symbol costs no extra dispatch round trip.
+                    output.push(state.length as u8);
                 } else if here_op & 32 != 0 {
                     // end of block
                     state.back = -1;
@@ -1196,7 +1195,7 @@ fn inflate_raw_ex(input: &ByteList, input_offset: i32, input_length: i32) -> [By
                 } else if here_op & 64 != 0 {
                     state.mode = InflateMode::Bad;
                 } else {
-                    state.extra = (here_op & 15) as i32;
+                    state.extra = here_op & 15;
                     state.mode = InflateMode::LenExt;
                 }
             },
@@ -1226,8 +1225,7 @@ fn inflate_raw_ex(input: &ByteList, input_offset: i32, input_length: i32) -> [By
                 // decode distance code
                 loop {
                     let idx = state.distcode_off + (state.hold & (1 as u32 << state.distbits as u32) - 1) as i32;
-                    let here = &state.codes[idx];
-                    if here.bits as i32 <= state.bits {
+                    if code_bits(state.codes[idx]) <= state.bits {
                         break;
                     }
                     if have == 0 {
@@ -1244,9 +1242,10 @@ fn inflate_raw_ex(input: &ByteList, input_offset: i32, input_length: i32) -> [By
                 }
 
                 let idx = state.distcode_off + (state.hold & (1 as u32 << state.distbits as u32) - 1) as i32;
-                let mut here_op = state.codes[idx].op;
-                let mut here_bits = state.codes[idx].bits;
-                let mut here_val = state.codes[idx].val;
+                let here = state.codes[idx];
+                let mut here_op = code_op(here);
+                let mut here_bits = code_bits(here);
+                let mut here_val = code_val(here);
 
                 // handle 2nd level distance code
                 if here_op & 0xF0 == 0 {
@@ -1254,11 +1253,12 @@ fn inflate_raw_ex(input: &ByteList, input_offset: i32, input_length: i32) -> [By
                     let last_op = here_op;
                     let last_val = here_val;
                     loop {
-                        let idx2 = state.distcode_off + last_val as i32 + ((state.hold & (1 as u32 << last_bits as u32 + last_op as u32) - 1) >> last_bits as u32) as i32;
-                        here_op = state.codes[idx2].op;
-                        here_bits = state.codes[idx2].bits;
-                        here_val = state.codes[idx2].val;
-                        if last_bits as i32 + here_bits as i32 <= state.bits {
+                        let idx2 = state.distcode_off + last_val + ((state.hold & (1 as u32 << last_bits as u32 + last_op as u32) - 1) >> last_bits as u32) as i32;
+                        let here2 = state.codes[idx2];
+                        here_op = code_op(here2);
+                        here_bits = code_bits(here2);
+                        here_val = code_val(here2);
+                        if last_bits + here_bits <= state.bits {
                             break;
                         }
                         if have == 0 {
@@ -1274,17 +1274,17 @@ fn inflate_raw_ex(input: &ByteList, input_offset: i32, input_length: i32) -> [By
                         break;
                     }
                     state.hold = state.hold >> last_bits as u32;
-                    state.bits -= last_bits as i32;
+                    state.bits -= last_bits;
                 }
 
                 state.hold = state.hold >> here_bits as u32;
-                state.bits -= here_bits as i32;
+                state.bits -= here_bits;
 
                 if here_op & 64 != 0 {
                     state.mode = InflateMode::Bad;
                 } else {
-                    state.offset = here_val as i32;
-                    state.extra = (here_op & 15) as i32;
+                    state.offset = here_val;
+                    state.extra = here_op & 15;
                     state.mode = InflateMode::DistExt;
                 }
             },
@@ -1326,10 +1326,6 @@ fn inflate_raw_ex(input: &ByteList, input_offset: i32, input_length: i32) -> [By
                     output.copy_within_append(src_start, state.length);
                     state.mode = InflateMode::Len;
                 }
-            },
-            Lit => {
-                output.push(state.length as u8);
-                state.mode = InflateMode::Len;
             },
             Check => {
                 if state.wrap == 1 {
@@ -1436,8 +1432,9 @@ pub fn deflate_stored(input: &ByteList) -> ByteList {
     let total = input.len();
     let mut output = ByteList::with_capacity(total + (total / 65535 + 1) * 5);
 
+    // Empty input still needs a BFINAL block, so the body runs at least once.
     let mut pos = 0;
-    while pos < total {
+    loop {
         let block_len = i32::min(total - pos, 65535);
         let is_last = pos + block_len >= total;
 
@@ -1462,6 +1459,9 @@ pub fn deflate_stored(input: &ByteList) -> ByteList {
             output.push(input[pos + i]);
         }
         pos += block_len;
+        if pos >= total {
+            break;
+        }
     }
 
     return output;
@@ -1534,6 +1534,10 @@ impl BitWriter {
         }
     }
 
+    fn write_code(&mut self, entry: i32) {
+        self.write_bits((entry & 0xFFFF) as u32, enc_len(entry));
+    }
+
     fn flush(&mut self) {
         while self.bits >= 8 {
             self.output.push((self.buf & 0xFF) as u8);
@@ -1548,65 +1552,37 @@ impl BitWriter {
     }
 }
 
-// Code table entry for deflate encoding
-struct EncCode {
-    code: u16,
-    len: u8,
+// A deflate encoding entry in one i32 — bit-reversed code, then its length — so
+// an encoding tree is a flat GC array rather than an array of references.
+fn enc_pack(code: i32, len: i32) -> i32 {
+    return code & 0xFFFF | (len & 0xFF) << 16;
 }
 
-// Build fixed Huffman literal/length encoding table (288 symbols)
-fn build_fixed_ltree() -> List<EncCode> {
-    let mut bl_count: List<i32> = List::filled(16, 0);
-    let mut tree: List<EncCode> = List::filled(288, EncCode { code: 0, len: 0 });
-
-    let mut n = 0;
-    while n <= 143 {
-        tree[n] = EncCode { code: 0, len: 8 };
-        bl_count[8] += 1;
-        n += 1;
-    }
-    while n <= 255 {
-        tree[n] = EncCode { code: 0, len: 9 };
-        bl_count[9] += 1;
-        n += 1;
-    }
-    while n <= 279 {
-        tree[n] = EncCode { code: 0, len: 7 };
-        bl_count[7] += 1;
-        n += 1;
-    }
-    while n <= 287 {
-        tree[n] = EncCode { code: 0, len: 8 };
-        bl_count[8] += 1;
-        n += 1;
-    }
-
-    // Generate canonical codes (gen_codes from trees.c)
-    let mut next_code: List<u32> = List::filled(16, 0);
-    let mut code: u32 = 0;
-    for let mut bits = 1; bits <= 15; bits += 1 {
-        code = code + bl_count[bits - 1] as u32 << 1;
-        next_code[bits] = code;
-    }
-
-    for let mut i = 0; i <= 287; i += 1 {
-        let len = tree[i].len as i32;
-        if len != 0 {
-            tree[i].code = bi_reverse(next_code[len], len) as u16;
-            next_code[len] = next_code[len] + 1;
-        }
-    }
-
-    return tree;
+fn enc_len(entry: i32) -> i32 {
+    return entry >> 16 & 0xFF;
 }
 
-// Build fixed distance encoding table (30 codes, all 5 bits)
-fn build_fixed_dtree() -> List<EncCode> {
-    let mut tree: List<EncCode> = List::filled(30, EncCode { code: 0, len: 5 });
-    for let mut i = 0; i < 30; i += 1 {
-        tree[i] = EncCode { code: bi_reverse(i as u32, 5) as u16, len: 5 };
+// Code lengths of the fixed literal/length and distance trees of RFC 1951
+// section 3.2.6. Both fixed trees and the cost of a fixed block read them here.
+fn build_fixed_lengths() -> [ByteList, ByteList] {
+    let mut lit = ByteList::filled(288, 8);
+    for let mut sym = 144; sym < 256; sym += 1 {
+        lit[sym] = 9;
     }
-    return tree;
+    for let mut sym = 256; sym < 280; sym += 1 {
+        lit[sym] = 7;
+    }
+    return [lit, ByteList::filled(30, 5)];
+}
+
+fn build_fixed_ltree() -> List<i32> {
+    let [lit_lengths, _dist_lengths] = build_fixed_lengths();
+    return gen_huffman_codes(&lit_lengths, 288, 15);
+}
+
+fn build_fixed_dtree() -> List<i32> {
+    let [_lit_lengths, dist_lengths] = build_fixed_lengths();
+    return gen_huffman_codes(&dist_lengths, 30, 15);
 }
 
 // Direct lookup table: length_codes[length - 3] = code index (0..=28)
@@ -1657,6 +1633,25 @@ fn hash3(a: u8, b: u8, c: u8) -> i32 {
     return (a as i32 << 10 ^ b as i32 << 5 ^ c as i32) & 32767;
 }
 
+// hash3 is rolling — masking every step is the same as masking once, since a
+// byte shifted five never reaches bit 15 — so a position costs one load, not three.
+fn hash3_roll(h: i32, next: u8) -> i32 {
+    return (h << 5 ^ next as i32) & 32767;
+}
+
+// Bucket the `run - 1` positions a match covers after `pos`, rolling `h`, the
+// hash `pos` was bucketed under. Starting at `pos` would set `prev[pos]` to
+// `pos` and strand every older candidate in that bucket behind the self-link.
+fn insert_hash_run(scratch: i32, head_ptr: i32, prev_ptr: i32, pos: i32, h: i32, run: i32, input_len: i32) {
+    let limit = i32::min(run, input_len - pos - 2);
+    let mut mh = h;
+    for let mut i = 1; i < limit; i += 1 {
+        mh = hash3_roll(mh, builtin::i32_load8_u(scratch + pos + i + 2));
+        builtin::i32_store(prev_ptr + (pos + i & 32767) * 4, builtin::i32_load(head_ptr + mh * 4));
+        builtin::i32_store(head_ptr + mh * 4, pos + i);
+    }
+}
+
 // Longest common run of `scratch[a..]` and `scratch[b..]`, capped at `max_len`,
 // via 16-byte SIMD compares. The scratch buffer's 16-byte zero pad keeps the
 // trailing `v128.load` past the match end in bounds.
@@ -1702,8 +1697,7 @@ pub fn deflate_huffman(input: &ByteList) -> ByteList {
     bw.write_bits(1, 2);  // BTYPE = 01
 
     if input_len == 0 {
-        let eob = &ltree[256];
-        bw.write_bits(eob.code as u32, eob.len as i32);
+        bw.write_code(ltree[256]);
         bw.flush();
         return bw.output;
     }
@@ -1764,8 +1758,7 @@ pub fn deflate_huffman(input: &ByteList) -> ByteList {
             // Emit length/distance pair (inlined lookup)
             let lcode = length_codes[best_len - 3] as i32;
             let len_symbol = 257 + lcode;
-            let len_entry = &ltree[len_symbol];
-            bw.write_bits(len_entry.code as u32, len_entry.len as i32);
+            bw.write_code(ltree[len_symbol]);
             let len_ebits = LENGTH_EXTRA[lcode];
             if len_ebits > 0 {
                 bw.write_bits((best_len - LENGTH_BASE[lcode]) as u32, len_ebits);
@@ -1773,8 +1766,7 @@ pub fn deflate_huffman(input: &ByteList) -> ByteList {
 
             let dd = best_dist - 1;
             let dcode = if dd < 256 { dist_codes[dd] as i32 } else { dist_codes[256 + (dd >> 7)] as i32 };
-            let dist_entry = &dtree[dcode];
-            bw.write_bits(dist_entry.code as u32, dist_entry.len as i32);
+            bw.write_code(dtree[dcode]);
             let dist_ebits = DIST_EXTRA[dcode];
             if dist_ebits > 0 {
                 bw.write_bits((best_dist - DIST_BASE[dcode]) as u32, dist_ebits);
@@ -1791,16 +1783,13 @@ pub fn deflate_huffman(input: &ByteList) -> ByteList {
             pos += best_len;
         } else {
             // Emit literal
-            let lit = input[pos] as i32;
-            let lit_entry = &ltree[lit];
-            bw.write_bits(lit_entry.code as u32, lit_entry.len as i32);
+            bw.write_code(ltree[input[pos] as i32]);
             pos += 1;
         }
     }
 
     // End of block
-    let eob = &ltree[256];
-    bw.write_bits(eob.code as u32, eob.len as i32);
+    bw.write_code(ltree[256]);
     bw.flush();
 
     return bw.output;
@@ -2094,7 +2083,7 @@ fn build_huffman_tree(freqs: &List<i32>, max_sym: i32, max_bits: i32, bl_count: 
 }
 
 // Generate canonical Huffman codes from code lengths
-fn gen_huffman_codes(lengths: &ByteList, max_sym: i32, max_bits: i32) -> List<EncCode> {
+fn gen_huffman_codes(lengths: &ByteList, max_sym: i32, max_bits: i32) -> List<i32> {
     let mut bl_count: List<i32> = List::filled(max_bits + 1, 0);
     for let mut i = 0; i < max_sym; i += 1 {
         bl_count[lengths[i] as i32] += 1;
@@ -2108,11 +2097,11 @@ fn gen_huffman_codes(lengths: &ByteList, max_sym: i32, max_bits: i32) -> List<En
         next_code[bits] = code;
     }
 
-    let mut tree: List<EncCode> = List::filled(max_sym, EncCode { code: 0, len: 0 });
+    let mut tree: List<i32> = List::filled(max_sym, 0);
     for let mut i = 0; i < max_sym; i += 1 {
         let len = lengths[i] as i32;
         if len != 0 {
-            tree[i] = EncCode { code: bi_reverse(next_code[len], len) as u16, len: lengths[i] };
+            tree[i] = enc_pack(bi_reverse(next_code[len], len) as i32, len);
             next_code[len] = next_code[len] + 1;
         }
     }
@@ -2120,66 +2109,117 @@ fn gen_huffman_codes(lengths: &ByteList, max_sym: i32, max_bits: i32) -> List<En
 }
 
 // Write a dynamic Huffman block
-fn write_dynamic_block(
-    bw: &mut BitWriter,
-    symbols: &List<i32>,
-    distances: &List<i32>,
+// An LZ77 token in one i32 — symbol, then the match distance (0 for a literal).
+// One flat buffer instead of two, so a block costs one push and one load a token.
+fn token_pack(sym: i32, dist: i32) -> i32 {
+    return sym & 0xFFFF | (dist & 0xFFFF) << 16;
+}
+
+fn token_sym(token: i32) -> i32 {
+    return token & 0xFFFF;
+}
+
+fn token_dist(token: i32) -> i32 {
+    return token >> 16 & 0xFFFF;
+}
+
+// Symbol frequencies of a block, with EOB already counted.
+fn count_block_freqs(
+    tokens: &List<i32>,
     sym_count: i32,
-    is_last: bool,
     length_codes_table: &ByteList,
     dist_codes_table: &ByteList,
-) {
-    // 0..=255=literal, 256=EOB, 257+=length
-    // distance for each length symbol (0 for literals)
-
-
-    // Count frequencies
+) -> [List<i32>, List<i32>] {
     let mut lit_freq: List<i32> = List::filled(286, 0);
     let mut dist_freq: List<i32> = List::filled(30, 0);
 
     for let mut i = 0; i < sym_count; i += 1 {
-        let sym = symbols[i];
+        let token = tokens[i];
+        let sym = token_sym(token);
         if sym < 256 {
             lit_freq[sym] += 1;
         } else if sym == 256 {
             lit_freq[256] += 1;
         } else {
-            // Length symbol
             let len_val = sym - 257;
             let lcode = length_codes_table[len_val] as i32;
             lit_freq[257 + lcode] += 1;
 
-            let dist = distances[i];
+            let dist = token_dist(token);
             let dd = dist - 1;
             let dcode = if dd < 256 { dist_codes_table[dd] as i32 } else { dist_codes_table[256 + (dd >> 7)] as i32 };
             dist_freq[dcode] += 1;
         }
     }
 
-    // Ensure EOB has frequency
-    lit_freq[256] += 1;
+    lit_freq[256] += 1;  // EOB
+    return [lit_freq, dist_freq];
+}
 
-    // Ensure at least one distance code
-    if dist_freq[0] == 0 {
-        let mut has_dist = false;
-        for let mut i = 0; i < 30; i += 1 {
-            if dist_freq[i] > 0 {
-                has_dist = true;
-            }
+// Bits the symbol stream costs under the given code-length tables. The
+// frequencies hold the counts, so this sums over codes, never over tokens.
+fn encoded_data_bits(
+    lit_freq: &List<i32>,
+    dist_freq: &List<i32>,
+    lit_lengths: &ByteList,
+    dist_lengths: &ByteList,
+) -> i32 {
+    let mut bits = 0;
+    for let mut sym = 0; sym < 286; sym += 1 {
+        bits += lit_freq[sym] * lit_lengths[sym] as i32;
+    }
+    for let mut lcode = 0; lcode < 29; lcode += 1 {
+        bits += lit_freq[257 + lcode] * LENGTH_EXTRA[lcode];
+    }
+    for let mut dcode = 0; dcode < 30; dcode += 1 {
+        bits += dist_freq[dcode] * (dist_lengths[dcode] as i32 + DIST_EXTRA[dcode]);
+    }
+    return bits;
+}
+
+// Everything a dynamic block needs, derived once from the frequencies.
+// `write_dynamic_block` emits a plan; `deflate_with_level` prices one.
+struct DynamicPlan {
+    lit_tree: List<i32>,
+    dist_tree: List<i32>,
+    bl_tree: List<i32>,
+    bl_lengths: ByteList,
+    rle: ByteList,
+    rle_extra: List<i32>,
+    nlit: i32,
+    ndist: i32,
+    nbl: i32,
+    bits: i32,
+}
+
+global BL_ORDER: List<i32> = [16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15];
+
+fn plan_dynamic_block(lit_freq: &List<i32>, dist_freq: &mut List<i32>) -> DynamicPlan {
+    // build_huffman_tree needs a distance code even for a stream of pure
+    // literals. The forced code is never emitted, so drop it again before
+    // costing the data.
+    let mut forced_dist = true;
+    for let mut i = 0; i < 30; i += 1 {
+        if dist_freq[i] > 0 {
+            forced_dist = false;
         }
-        if !has_dist {
-            dist_freq[0] = 1;
-        }
+    }
+    if forced_dist {
+        dist_freq[0] = 1;
     }
 
     // Build trees
     let mut lit_bl_count: List<i32> = List::filled(16, 0);
     let mut lit_lengths = ByteList::filled(286, 0);
-    build_huffman_tree(&lit_freq, 286, 15, &mut lit_bl_count, &mut lit_lengths);
+    build_huffman_tree(lit_freq, 286, 15, &mut lit_bl_count, &mut lit_lengths);
 
     let mut dist_bl_count: List<i32> = List::filled(16, 0);
     let mut dist_lengths = ByteList::filled(30, 0);
-    build_huffman_tree(&dist_freq, 30, 15, &mut dist_bl_count, &mut dist_lengths);
+    build_huffman_tree(dist_freq, 30, 15, &mut dist_bl_count, &mut dist_lengths);
+
+    if forced_dist {
+        dist_freq[0] = 0;
+    }
 
     // Generate codes
     let lit_tree = gen_huffman_codes(&lit_lengths, 286, 15);
@@ -2263,11 +2303,58 @@ fn write_dynamic_block(
     build_huffman_tree(&bl_freq, 19, MAX_BL_BITS, &mut bl_bl_count, &mut bl_lengths);
     let bl_tree = gen_huffman_codes(&bl_lengths, 19, MAX_BL_BITS);
 
-    let bl_order: List<i32> = [16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15];
     let mut nbl = 19;
-    while nbl > 4 && bl_lengths[bl_order[nbl - 1]] == 0 {
+    while nbl > 4 && bl_lengths[BL_ORDER[nbl - 1]] == 0 {
         nbl -= 1;
     }
+
+    // BFINAL(1) + BTYPE(2) + HLIT(5) + HDIST(5) + HCLEN(4) + nbl*3
+    let mut bits = 17 + nbl * 3;
+    for let mut j = 0; j < rle.len(); j += 1 {
+        let sym = rle[j] as i32;
+        bits += enc_len(bl_tree[sym]);
+        if sym == 16 {
+            bits += 2;
+        } else if sym == 17 {
+            bits += 3;
+        } else if sym == 18 {
+            bits += 7;
+        }
+    }
+    bits += encoded_data_bits(lit_freq, dist_freq, &lit_lengths, &dist_lengths);
+
+    return DynamicPlan {
+        lit_tree: lit_tree,
+        dist_tree: dist_tree,
+        bl_tree: bl_tree,
+        bl_lengths: bl_lengths,
+        rle: rle,
+        rle_extra: rle_extra,
+        nlit: nlit,
+        ndist: ndist,
+        nbl: nbl,
+        bits: bits,
+    };
+}
+
+fn write_dynamic_block(
+    bw: &mut BitWriter,
+    tokens: &List<i32>,
+    sym_count: i32,
+    is_last: bool,
+    plan: &DynamicPlan,
+    length_codes_table: &ByteList,
+    dist_codes_table: &ByteList,
+) {
+    let lit_tree = &plan.lit_tree;
+    let dist_tree = &plan.dist_tree;
+    let bl_tree = &plan.bl_tree;
+    let bl_lengths = &plan.bl_lengths;
+    let rle = &plan.rle;
+    let rle_extra = &plan.rle_extra;
+    let nlit = plan.nlit;
+    let ndist = plan.ndist;
+    let nbl = plan.nbl;
 
     // Write block header
     if is_last {
@@ -2284,13 +2371,13 @@ fn write_dynamic_block(
 
     // Send BL code lengths in permuted order
     for let mut j = 0; j < nbl; j += 1 {
-        bw.write_bits(bl_lengths[bl_order[j]] as u32, 3);
+        bw.write_bits(bl_lengths[BL_ORDER[j]] as u32, 3);
     }
 
     // Send RLE-encoded code lengths
     for let mut j = 0; j < rle.len(); j += 1 {
         let sym = rle[j] as i32;
-        bw.write_bits(bl_tree[sym].code as u32, bl_tree[sym].len as i32);
+        bw.write_code(bl_tree[sym]);
         if sym == 16 {
             bw.write_bits(rle_extra[j] as u32, 2);
         } else if sym == 17 {
@@ -2302,29 +2389,30 @@ fn write_dynamic_block(
 
     // Encode symbols using dynamic trees
     for let mut i = 0; i < sym_count; i += 1 {
-        let sym = symbols[i];
+        let token = tokens[i];
+        let sym = token_sym(token);
         if sym < 256 {
             // Literal
-            bw.write_bits(lit_tree[sym].code as u32, lit_tree[sym].len as i32);
+            bw.write_code(lit_tree[sym]);
         } else if sym == 256 {
             // EOB
-            bw.write_bits(lit_tree[256].code as u32, lit_tree[256].len as i32);
+            bw.write_code(lit_tree[256]);
         } else {
             // Length
             let len_val = sym - 257;
             let lcode = length_codes_table[len_val] as i32;
             let len_symbol = 257 + lcode;
-            bw.write_bits(lit_tree[len_symbol].code as u32, lit_tree[len_symbol].len as i32);
+            bw.write_code(lit_tree[len_symbol]);
             let len_ebits = LENGTH_EXTRA[lcode];
             if len_ebits > 0 {
                 bw.write_bits((len_val - (LENGTH_BASE[lcode] - 3)) as u32, len_ebits);
             }
 
             // Distance
-            let dist = distances[i];
+            let dist = token_dist(token);
             let dd = dist - 1;
             let dcode = if dd < 256 { dist_codes_table[dd] as i32 } else { dist_codes_table[256 + (dd >> 7)] as i32 };
-            bw.write_bits(dist_tree[dcode].code as u32, dist_tree[dcode].len as i32);
+            bw.write_code(dist_tree[dcode]);
             let dist_ebits = DIST_EXTRA[dcode];
             if dist_ebits > 0 {
                 bw.write_bits((dist - DIST_BASE[dcode]) as u32, dist_ebits);
@@ -2333,18 +2421,17 @@ fn write_dynamic_block(
     }
 
     // Write EOB
-    bw.write_bits(lit_tree[256].code as u32, lit_tree[256].len as i32);
+    bw.write_code(lit_tree[256]);
 }
 
 // Write a fixed Huffman block from symbol buffer
 fn write_fixed_block(
     bw: &mut BitWriter,
-    symbols: &List<i32>,
-    distances: &List<i32>,
+    tokens: &List<i32>,
     sym_count: i32,
     is_last: bool,
-    ltree: &List<EncCode>,
-    dtree: &List<EncCode>,
+    ltree: &List<i32>,
+    dtree: &List<i32>,
     length_codes_table: &ByteList,
     dist_codes_table: &ByteList,
 ) {
@@ -2356,23 +2443,24 @@ fn write_fixed_block(
     bw.write_bits(1, 2);  // BTYPE=01 (fixed)
 
     for let mut i = 0; i < sym_count; i += 1 {
-        let sym = symbols[i];
+        let token = tokens[i];
+        let sym = token_sym(token);
         if sym < 256 {
-            bw.write_bits(ltree[sym].code as u32, ltree[sym].len as i32);
+            bw.write_code(ltree[sym]);
         } else {
             let len_val = sym - 257;
             let lcode = length_codes_table[len_val] as i32;
             let len_symbol = 257 + lcode;
-            bw.write_bits(ltree[len_symbol].code as u32, ltree[len_symbol].len as i32);
+            bw.write_code(ltree[len_symbol]);
             let len_ebits = LENGTH_EXTRA[lcode];
             if len_ebits > 0 {
                 bw.write_bits((len_val - (LENGTH_BASE[lcode] - 3)) as u32, len_ebits);
             }
 
-            let dist = distances[i];
+            let dist = token_dist(token);
             let dd = dist - 1;
             let dcode = if dd < 256 { dist_codes_table[dd] as i32 } else { dist_codes_table[256 + (dd >> 7)] as i32 };
-            bw.write_bits(dtree[dcode].code as u32, dtree[dcode].len as i32);
+            bw.write_code(dtree[dcode]);
             let dist_ebits = DIST_EXTRA[dcode];
             if dist_ebits > 0 {
                 bw.write_bits((dist - DIST_BASE[dcode]) as u32, dist_ebits);
@@ -2381,7 +2469,7 @@ fn write_fixed_block(
     }
 
     // EOB
-    bw.write_bits(ltree[256].code as u32, ltree[256].len as i32);
+    bw.write_code(ltree[256]);
 }
 
 // Compression level configuration
@@ -2453,8 +2541,7 @@ pub fn deflate_with_level(input: &ByteList, level: i32, strategy: i32) -> ByteLi
     let dist_codes_table = build_dist_codes(&DIST_EXTRA);
 
     // Collect symbols using LZ77
-    let mut symbols: List<i32> = List::with_capacity(input_len);
-    let mut distances: List<i32> = List::with_capacity(input_len);
+    let mut tokens: List<i32> = List::with_capacity(input_len);
 
     if input_len == 0 {
         // Empty input: just write empty block
@@ -2462,7 +2549,7 @@ pub fn deflate_with_level(input: &ByteList, level: i32, strategy: i32) -> ByteLi
         let ltree = build_fixed_ltree();
         bw.write_bits(1, 1);  // BFINAL
         bw.write_bits(1, 2);  // fixed
-        bw.write_bits(ltree[256].code as u32, ltree[256].len as i32);
+        bw.write_code(ltree[256]);
         bw.flush();
         return bw.output;
     }
@@ -2471,8 +2558,7 @@ pub fn deflate_with_level(input: &ByteList, level: i32, strategy: i32) -> ByteLi
     if strategy == 2 {
         // Z_HUFFMAN_ONLY
         for let mut i = 0; i < input_len; i += 1 {
-            symbols.push(input[i] as i32);
-            distances.push(0);
+            tokens.push(token_pack(input[i] as i32, 0));
         }
     } else if strategy == 3 {
         // Z_RLE — run-length only
@@ -2486,17 +2572,14 @@ pub fn deflate_with_level(input: &ByteList, level: i32, strategy: i32) -> ByteLi
             }
             if run >= 4 {
                 // Emit literal for first byte, then match(distance=1, length=run-1) for the rest
-                symbols.push(input[pos] as i32);
-                distances.push(0);
+                tokens.push(token_pack(input[pos] as i32, 0));
                 let match_len = run - 1;
                 // Cap match at 258
                 let actual_match = i32::min(match_len, 258);
-                symbols.push(257 + actual_match - 3);
-                distances.push(1);
+                tokens.push(token_pack(257 + actual_match - 3, 1));
                 pos += 1 + actual_match;
             } else {
-                symbols.push(input[pos] as i32);
-                distances.push(0);
+                tokens.push(token_pack(input[pos] as i32, 0));
                 pos += 1;
             }
         }
@@ -2528,11 +2611,14 @@ pub fn deflate_with_level(input: &ByteList, level: i32, strategy: i32) -> ByteLi
             let mut match_available = false;
 
             while pos < input_len {
-                let mut best_len = 0;
+                // Only a match longer than the one already pending is worth
+                // taking, so start the search from it.
+                let mut best_len = prev_match_len;
                 let mut best_dist = 0;
+                let mut h = 0;
 
                 if pos + 2 < input_len {
-                    let h = hash3(
+                    h = hash3(
                         builtin::i32_load8_u(scratch + pos),
                         builtin::i32_load8_u(scratch + pos + 1),
                         builtin::i32_load8_u(scratch + pos + 2),
@@ -2552,12 +2638,17 @@ pub fn deflate_with_level(input: &ByteList, level: i32, strategy: i32) -> ByteLi
                             break;
                         }
 
-                        // Early termination: skip if can't beat current best
-                        if best_len >= 3
-                            && best_len < max_len
-                            && builtin::i32_load8_u(scratch + chain + best_len) != builtin::i32_load8_u(
-                            scratch + pos + best_len,
-                        ) {
+                        // A candidate can only win by matching at `cmp` and
+                        // `cmp - 1`, so two loads reject most of the chain
+                        // before the compare loop. The floor of 2 makes the
+                        // test apply before any match is found, a match being
+                        // at least 3 bytes.
+                        let cmp = if best_len >= 2 { best_len } else { 2 };
+                        if cmp < max_len
+                            && (builtin::i32_load8_u(scratch + chain + cmp) != builtin::i32_load8_u(scratch + pos + cmp)
+                            || builtin::i32_load8_u(scratch + chain + cmp - 1) != builtin::i32_load8_u(
+                            scratch + pos + cmp - 1,
+                        )) {
                             chain = builtin::i32_load(prev_ptr + (chain & 32767) * 4);
                             chain_count += 1;
                             continue;
@@ -2584,28 +2675,15 @@ pub fn deflate_with_level(input: &ByteList, level: i32, strategy: i32) -> ByteLi
                 if match_available {
                     if best_len > prev_match_len {
                         // Current match is better: emit previous as literal
-                        symbols.push(builtin::i32_load8_u(scratch + pos - 1) as i32);
-                        distances.push(0);
+                        tokens.push(token_pack(builtin::i32_load8_u(scratch + pos - 1) as i32, 0));
                         prev_match_len = best_len;
                         prev_match_dist = best_dist;
                         pos += 1;
                     } else {
                         // Previous match was better: emit it
-                        symbols.push(257 + prev_match_len - 3);
-                        distances.push(prev_match_dist);
-                        // Insert hash entries for skipped positions
+                        tokens.push(token_pack(257 + prev_match_len - 3, prev_match_dist));
                         let skip = prev_match_len - 1;
-                        for let mut i = 0; i < skip - 1; i += 1 {
-                            if pos + i + 2 < input_len {
-                                let mh = hash3(builtin::i32_load8_u(scratch + pos + i), builtin::i32_load8_u(
-                                    scratch + pos + i + 1,
-                                ), builtin::i32_load8_u(scratch + pos + i + 2));
-                                builtin::i32_store(prev_ptr + (pos + i & 32767) * 4, builtin::i32_load(
-                                    head_ptr + mh * 4,
-                                ));
-                                builtin::i32_store(head_ptr + mh * 4, pos + i);
-                            }
-                        }
+                        insert_hash_run(scratch, head_ptr, prev_ptr, pos, h, skip, input_len);
                         pos += skip;
                         match_available = false;
                         prev_match_len = 0;
@@ -2620,34 +2698,21 @@ pub fn deflate_with_level(input: &ByteList, level: i32, strategy: i32) -> ByteLi
                         pos += 1;
                     } else {
                         // Match is long enough, emit immediately
-                        symbols.push(257 + best_len - 3);
-                        distances.push(best_dist);
-                        for let mut i = 1; i < best_len; i += 1 {
-                            if pos + i + 2 < input_len {
-                                let mh = hash3(builtin::i32_load8_u(scratch + pos + i), builtin::i32_load8_u(
-                                    scratch + pos + i + 1,
-                                ), builtin::i32_load8_u(scratch + pos + i + 2));
-                                builtin::i32_store(prev_ptr + (pos + i & 32767) * 4, builtin::i32_load(
-                                    head_ptr + mh * 4,
-                                ));
-                                builtin::i32_store(head_ptr + mh * 4, pos + i);
-                            }
-                        }
+                        tokens.push(token_pack(257 + best_len - 3, best_dist));
+                        insert_hash_run(scratch, head_ptr, prev_ptr, pos, h, best_len, input_len);
                         pos += best_len;
                         match_available = false;
                         prev_match_len = 0;
                     }
                 } else {
-                    symbols.push(builtin::i32_load8_u(scratch + pos) as i32);
-                    distances.push(0);
+                    tokens.push(token_pack(builtin::i32_load8_u(scratch + pos) as i32, 0));
                     pos += 1;
                 }
             }
 
             // Flush pending match
             if match_available {
-                symbols.push(builtin::i32_load8_u(scratch + input_len - 1) as i32);
-                distances.push(0);
+                tokens.push(token_pack(builtin::i32_load8_u(scratch + input_len - 1) as i32, 0));
             }
         } else {
             // Fast matching (levels 1-3) — no lazy evaluation
@@ -2655,9 +2720,10 @@ pub fn deflate_with_level(input: &ByteList, level: i32, strategy: i32) -> ByteLi
             while pos < input_len {
                 let mut best_len = 0;
                 let mut best_dist = 0;
+                let mut h = 0;
 
                 if pos + 2 < input_len {
-                    let h = hash3(
+                    h = hash3(
                         builtin::i32_load8_u(scratch + pos),
                         builtin::i32_load8_u(scratch + pos + 1),
                         builtin::i32_load8_u(scratch + pos + 2),
@@ -2672,12 +2738,12 @@ pub fn deflate_with_level(input: &ByteList, level: i32, strategy: i32) -> ByteLi
                             break;
                         }
 
-                        // Early termination: skip if can't beat current best
-                        if best_len >= 3
-                            && best_len < max_len
-                            && builtin::i32_load8_u(scratch + chain + best_len) != builtin::i32_load8_u(
-                            scratch + pos + best_len,
-                        ) {
+                        let cmp = if best_len >= 2 { best_len } else { 2 };
+                        if cmp < max_len
+                            && (builtin::i32_load8_u(scratch + chain + cmp) != builtin::i32_load8_u(scratch + pos + cmp)
+                            || builtin::i32_load8_u(scratch + chain + cmp - 1) != builtin::i32_load8_u(
+                            scratch + pos + cmp - 1,
+                        )) {
                             chain = builtin::i32_load(prev_ptr + (chain & 32767) * 4);
                             chain_count += 1;
                             continue;
@@ -2702,21 +2768,11 @@ pub fn deflate_with_level(input: &ByteList, level: i32, strategy: i32) -> ByteLi
                 }
 
                 if best_len >= 3 {
-                    symbols.push(257 + best_len - 3);
-                    distances.push(best_dist);
-                    for let mut i = 1; i < best_len; i += 1 {
-                        if pos + i + 2 < input_len {
-                            let mh = hash3(builtin::i32_load8_u(scratch + pos + i), builtin::i32_load8_u(
-                                scratch + pos + i + 1,
-                            ), builtin::i32_load8_u(scratch + pos + i + 2));
-                            builtin::i32_store(prev_ptr + (pos + i & 32767) * 4, builtin::i32_load(head_ptr + mh * 4));
-                            builtin::i32_store(head_ptr + mh * 4, pos + i);
-                        }
-                    }
+                    tokens.push(token_pack(257 + best_len - 3, best_dist));
+                    insert_hash_run(scratch, head_ptr, prev_ptr, pos, h, best_len, input_len);
                     pos += best_len;
                 } else {
-                    symbols.push(builtin::i32_load8_u(scratch + pos) as i32);
-                    distances.push(0);
+                    tokens.push(token_pack(builtin::i32_load8_u(scratch + pos) as i32, 0));
                     pos += 1;
                 }
             }
@@ -2726,201 +2782,35 @@ pub fn deflate_with_level(input: &ByteList, level: i32, strategy: i32) -> ByteLi
         builtin::realloc(prev_ptr, hash_bytes, 4, 0);
     }
 
-    let sym_count = symbols.len();
+    let sym_count = tokens.len();
 
-    // Decide between dynamic and fixed Huffman encoding
-    // Compute cost of fixed encoding
-    let ltree = build_fixed_ltree();
-    let dtree = build_fixed_dtree();
-    let mut fixed_bits = 3;  // block header
-    for let mut i = 0; i < sym_count; i += 1 {
-        let sym = symbols[i];
-        if sym < 256 {
-            fixed_bits += ltree[sym].len as i32;
-        } else {
-            let len_val = sym - 257;
-            let lcode = length_codes_table[len_val] as i32;
-            fixed_bits += ltree[257 + lcode].len as i32;
-            fixed_bits += LENGTH_EXTRA[lcode];
-            let dist = distances[i];
-            let dd = dist - 1;
-            let dcode = if dd < 256 { dist_codes_table[dd] as i32 } else { dist_codes_table[256 + (dd >> 7)] as i32 };
-            fixed_bits += dtree[dcode].len as i32;
-            fixed_bits += DIST_EXTRA[dcode];
-        }
-    }
-    fixed_bits += ltree[256].len as i32;  // EOB
+    // Price the three encodings against one another. This is the only walk over
+    // the symbols, and the dynamic plan it builds is the one the writer emits.
+    let [lit_freq, mut dist_freq] = count_block_freqs(
+        &tokens,
+        sym_count,
+        &length_codes_table,
+        &dist_codes_table,
+    );
 
-    // Compute cost of dynamic encoding (approximate)
-    let mut lit_freq: List<i32> = List::filled(286, 0);
-    let mut dist_freq: List<i32> = List::filled(30, 0);
-    for let mut i = 0; i < sym_count; i += 1 {
-        let sym = symbols[i];
-        if sym < 256 {
-            lit_freq[sym] += 1;
-        } else {
-            let len_val = sym - 257;
-            let lcode = length_codes_table[len_val] as i32;
-            lit_freq[257 + lcode] += 1;
-            let dist = distances[i];
-            let dd = dist - 1;
-            let dcode = if dd < 256 { dist_codes_table[dd] as i32 } else { dist_codes_table[256 + (dd >> 7)] as i32 };
-            dist_freq[dcode] += 1;
-        }
-    }
-    lit_freq[256] += 1;
-    if dist_freq[0] == 0 {
-        let mut has_dist = false;
-        for let mut i = 0; i < 30; i += 1 {
-            if dist_freq[i] > 0 {
-                has_dist = true;
-            }
-        }
-        if !has_dist {
-            dist_freq[0] = 1;
-        }
-    }
+    let [fixed_lit_lengths, fixed_dist_lengths] = build_fixed_lengths();
+    let fixed_bits = 3 + encoded_data_bits(&lit_freq, &dist_freq, &fixed_lit_lengths, &fixed_dist_lengths);
 
-    // Build optimal trees to estimate dynamic cost
-    let mut lit_bl_count: List<i32> = List::filled(16, 0);
-    let mut lit_lengths = ByteList::filled(286, 0);
-    build_huffman_tree(&lit_freq, 286, 15, &mut lit_bl_count, &mut lit_lengths);
-    let mut dist_bl_count: List<i32> = List::filled(16, 0);
-    let mut dist_lengths = ByteList::filled(30, 0);
-    build_huffman_tree(&dist_freq, 30, 15, &mut dist_bl_count, &mut dist_lengths);
-
-    let mut dynamic_data_bits = 0;
-    for let mut i = 0; i < sym_count; i += 1 {
-        let sym = symbols[i];
-        if sym < 256 {
-            dynamic_data_bits += lit_lengths[sym] as i32;
-        } else {
-            let len_val = sym - 257;
-            let lcode = length_codes_table[len_val] as i32;
-            dynamic_data_bits += lit_lengths[257 + lcode] as i32;
-            dynamic_data_bits += LENGTH_EXTRA[lcode];
-            let dist = distances[i];
-            let dd = dist - 1;
-            let dcode = if dd < 256 { dist_codes_table[dd] as i32 } else { dist_codes_table[256 + (dd >> 7)] as i32 };
-            dynamic_data_bits += dist_lengths[dcode] as i32;
-            dynamic_data_bits += DIST_EXTRA[dcode];
-        }
-    }
-    dynamic_data_bits += lit_lengths[256] as i32;  // EOB
-
-    // Compute accurate tree header cost
-    let mut nlit = 286;
-    while nlit > 257 && lit_lengths[nlit - 1] == 0 {
-        nlit -= 1;
-    }
-    let mut ndist = 30;
-    while ndist > 1 && dist_lengths[ndist - 1] == 0 {
-        ndist -= 1;
-    }
-
-    // RLE-encode the combined code lengths to count header bits
-    let total_codes = nlit + ndist;
-    let mut hdr_combined = ByteList::filled(total_codes, 0);
-    for let mut hi = 0; hi < nlit; hi += 1 {
-        hdr_combined[hi] = lit_lengths[hi];
-    }
-    for let mut hi = 0; hi < ndist; hi += 1 {
-        hdr_combined[nlit + hi] = dist_lengths[hi];
-    }
-
-    let mut hdr_rle: ByteList = [];
-    let mut hdr_rle_extra: List<i32> = [];
-    let mut hci = 0;
-    while hci < total_codes {
-        let hval = hdr_combined[hci];
-        let mut hcount = 1;
-        while hci + hcount < total_codes && hdr_combined[hci + hcount] == hval {
-            hcount += 1;
-        }
-        if hval == 0 {
-            let mut hrem = hcount;
-            while hrem > 0 {
-                if hrem >= 11 {
-                    let hrun = i32::min(hrem, 138);
-                    hdr_rle.push(18);
-                    hdr_rle_extra.push(hrun - 11);
-                    hrem -= hrun;
-                } else if hrem >= 3 {
-                    hdr_rle.push(17);
-                    hdr_rle_extra.push(hrem - 3);
-                    hrem = 0;
-                } else {
-                    hdr_rle.push(0);
-                    hdr_rle_extra.push(0);
-                    hrem -= 1;
-                }
-            }
-        } else {
-            hdr_rle.push(hval);
-            hdr_rle_extra.push(0);
-            let mut hrem = hcount - 1;
-            while hrem > 0 {
-                if hrem >= 3 {
-                    let hrun = i32::min(hrem, 6);
-                    hdr_rle.push(16);
-                    hdr_rle_extra.push(hrun - 3);
-                    hrem -= hrun;
-                } else {
-                    hdr_rle.push(hval);
-                    hdr_rle_extra.push(0);
-                    hrem -= 1;
-                }
-            }
-        }
-        hci += hcount;
-    }
-
-    // Build BL tree for header cost
-    let mut hdr_bl_freq: List<i32> = List::filled(19, 0);
-    for let mut hj = 0; hj < hdr_rle.len(); hj += 1 {
-        hdr_bl_freq[hdr_rle[hj] as i32] += 1;
-    }
-    let mut hdr_bl_bl_count: List<i32> = List::filled(MAX_BL_BITS + 1, 0);
-    let mut hdr_bl_lengths = ByteList::filled(19, 0);
-    build_huffman_tree(&hdr_bl_freq, 19, MAX_BL_BITS, &mut hdr_bl_bl_count, &mut hdr_bl_lengths);
-    let hdr_bl_tree = gen_huffman_codes(&hdr_bl_lengths, 19, MAX_BL_BITS);
-
-    let hdr_bl_order: List<i32> = [16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15];
-    let mut hdr_nbl = 19;
-    while hdr_nbl > 4 && hdr_bl_lengths[hdr_bl_order[hdr_nbl - 1]] == 0 {
-        hdr_nbl -= 1;
-    }
-
-    let mut header_bits = 14 + hdr_nbl * 3;  // HLIT(5) + HDIST(5) + HCLEN(4) + nbl*3
-    for let mut hj = 0; hj < hdr_rle.len(); hj += 1 {
-        let hsym = hdr_rle[hj] as i32;
-        header_bits += hdr_bl_tree[hsym].len as i32;
-        if hsym == 16 {
-            header_bits += 2;
-        } else if hsym == 17 {
-            header_bits += 3;
-        } else if hsym == 18 {
-            header_bits += 7;
-        }
-    }
-
-    let dynamic_bits = 3 + header_bits + dynamic_data_bits;
-
-    // Also check stored cost
+    let plan = plan_dynamic_block(&lit_freq, &mut dist_freq);
+    let dynamic_bits = plan.bits;
     let stored_bits = input_len * 8 + (input_len / 65535 + 1) * 40 + 3;
 
-    // Choose best encoding
     let mut bw = BitWriter::new();
 
     if stored_bits <= fixed_bits && stored_bits <= dynamic_bits {
-        // Use stored blocks (only beneficial for incompressible data)
-        let stored = deflate_stored(input);
-        return stored;
+        // Stored only wins on incompressible data.
+        return deflate_stored(input);
     } else if fixed_bits <= dynamic_bits {
+        let ltree = build_fixed_ltree();
+        let dtree = build_fixed_dtree();
         write_fixed_block(
             &mut bw,
-            &symbols,
-            &distances,
+            &tokens,
             sym_count,
             true,
             &ltree,
@@ -2931,10 +2821,10 @@ pub fn deflate_with_level(input: &ByteList, level: i32, strategy: i32) -> ByteLi
     } else {
         write_dynamic_block(
             &mut bw,
-            &symbols,
-            &distances,
+            &tokens,
             sym_count,
             true,
+            &plan,
             &length_codes_table,
             &dist_codes_table,
         );

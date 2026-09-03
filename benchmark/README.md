@@ -192,19 +192,19 @@ Compress:
 
 | Implementation         |  Throughput |  ms/iter | vs best |
 | ---------------------- | ----------: | -------: | ------- |
-| Rust (zlib-rs)         | 312.98 MB/s | 2.018 ms | 1.00x   |
-| JavaScript (node:zlib) | 198.31 MB/s | 3.185 ms | 1.58x   |
-| C (zlib 1.3.1, Wasm)   | 128.95 MB/s | 4.897 ms | 2.43x   |
-| **Wado** (core:zlib)   |  76.15 MB/s | 8.293 ms | 4.11x   |
+| Rust (zlib-rs)         | 327.71 MB/s | 1.927 ms | 1.00x   |
+| JavaScript (node:zlib) | 205.94 MB/s | 3.067 ms | 1.59x   |
+| C (zlib 1.3.1, Wasm)   | 126.41 MB/s | 4.996 ms | 2.59x   |
+| **Wado** (core:zlib)   | 116.98 MB/s | 5.398 ms | 2.80x   |
 
 Decompress:
 
 | Implementation         |  Throughput |  ms/iter | vs best |
 | ---------------------- | ----------: | -------: | ------- |
-| Rust (zlib-rs)         |   3.14 GB/s | 0.201 ms | 1.00x   |
-| JavaScript (node:zlib) |   1.83 GB/s | 0.345 ms | 1.72x   |
-| C (zlib 1.3.1, Wasm)   | 807.14 MB/s | 0.782 ms | 3.89x   |
-| **Wado** (core:zlib)   | 383.80 MB/s | 1.645 ms | 8.18x   |
+| Rust (zlib-rs)         |   3.24 GB/s | 0.195 ms | 1.00x   |
+| JavaScript (node:zlib) |   1.79 GB/s | 0.354 ms | 1.82x   |
+| C (zlib 1.3.1, Wasm)   | 840.05 MB/s | 0.752 ms | 3.86x   |
+| **Wado** (core:zlib)   | 509.36 MB/s | 1.239 ms | 6.35x   |
 
 ## Parsing
 

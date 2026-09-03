@@ -61,7 +61,8 @@ impl BuiltinRegistry {
         static PARSED_MODULE: OnceLock<Module> = OnceLock::new();
 
         let module = PARSED_MODULE.get_or_init(|| {
-            let source = stdlib::CORE_BUILTIN;
+            let source =
+                stdlib::get_stdlib_module("core:builtin").expect("core:builtin is bundled");
             let r = crate::lexer::lex(source);
             assert!(
                 r.errors.is_empty(),

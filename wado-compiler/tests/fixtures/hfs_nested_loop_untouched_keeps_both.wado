@@ -1,0 +1,65 @@
+// A nested loop that never writes a candidate leaves it `Both`.
+//
+// Weakening an unreached candidate to `ScalarOnly` is what makes the back edge
+// free when the body writes it. A body that never writes it cannot leave
+// `Both`, so the back edge is already free, and weakening would buy nothing and
+// cost the second `peek` a write-back on every outer iteration.
+
+use { println, Stdout } from "core:cli";
+
+struct S {
+    a: i32,
+    b: i32,
+}
+
+// Keeps `s` off `sroa`'s non-escaping path, which would otherwise retire HFS.
+#[inline(never)]
+fn arm(s: &mut S) {
+    s.b = 0;
+}
+
+// `&S`, so the callee cannot write: the sync it needs is a write-back, leaving
+// both sides canonical. It reads two fields so `sroa_param` cannot reduce it to
+// a scalar parameter.
+#[inline(never)]
+fn peek(s: &S) -> i32 {
+    return s.a + s.b;
+}
+
+export fn run() with Stdout {
+    let mut s = S { a: 0, b: 0 };
+    arm(&mut s);
+    let mut sink = 0;
+    let mut o = 0;
+    while o < builtin::black_box(3) {
+        sink = sink + s.a;
+        s.a = s.a + 1;
+        sink = sink + s.a;
+        sink = sink + peek(&s);
+        // Touches nothing of `s`.
+        for let mut k = 0; k < 2; k += 1 {
+            sink = sink + k;
+        }
+        sink = sink + peek(&s);
+        o += 1;
+    }
+    println(`${sink} ${s.a}`);
+}
+
+// The first `peek` is what leaves `s.a` `Both` at the nested loop, and its
+// write-back is the only one the body should hold. The weakened path adds one
+// straight after the nested loop, so the negative pattern is a write-back
+// following that loop's closing brace. The positive pattern pins the local
+// numbering the negative one names, so a renumbering fails the test rather than
+// passing it silently.
+
+__DATA__
+{
+    "stdout": "24 3\n",
+    "wir_expect:O2": [
+        "let __hfs_a_45: i32;"
+    ],
+    "wir_not_expect:O2": [
+        "};\n            s.a = __hfs_a_45;"
+    ]
+}

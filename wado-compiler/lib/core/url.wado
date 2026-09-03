@@ -82,6 +82,26 @@ fn default_port_for_scheme(scheme: &String) -> u16 {
     return 443;
 }
 
+/// Peels `#fragment` then `?query` off `input`, as `[rest, query, fragment]`.
+/// The fragment goes first, so a `?` inside it stays part of the fragment.
+fn split_off_query_and_fragment(input: String) -> [String, Option<String>, Option<String>] {
+    let mut rest = input;
+
+    let mut fragment: Option<String> = null;
+    if let Some([before, after]) = rest.split_once("#") {
+        fragment = Option::Some(after);
+        rest = before;
+    }
+
+    let mut query: Option<String> = null;
+    if let Some([before, after]) = rest.split_once("?") {
+        query = Option::Some(after);
+        rest = before;
+    }
+
+    return [rest, query, fragment];
+}
+
 fn is_special_scheme(s: &String) -> bool {
     return *s == "http" || *s == "https" || *s == "ws" || *s == "wss";
 }
@@ -99,15 +119,44 @@ fn is_unreserved_char(c: char) -> bool {
     return c == '-' || c == '.' || c == '_' || c == '~';
 }
 
+/// Appends `c` as the `%XX` of each of its UTF-8 bytes.
+fn push_percent_encoded(c: char, out: &mut String) {
+    for let b of c.encode_utf8() {
+        let n = b as i32;
+        out.push_str(&`%${n:02X}`);
+    }
+}
+
 fn percent_encode_char(c: char, out: &mut String) {
     if is_unreserved_char(c) {
         out.push(c);
     } else {
-        for let b of c.encode_utf8() {
-            let n = b as i32;
-            out.push_str(&`%${n:02X}`);
+        push_percent_encoded(c, out);
+    }
+}
+
+/// Whether WHATWG percent-encodes `c` in user info: everything but the
+/// characters below, so every delimiter, control and non-ASCII code point.
+/// `%` is kept, which is what lets an existing `%HH` pass through.
+fn is_userinfo_encoded_char(c: char) -> bool {
+    return match c {
+        'a'..='z' | 'A'..='Z' | '0'..='9' => false,
+        '!' | '$' | '%' | '&' | '\'' | '(' | ')' | '*' | '+' | ',' | '-' | '.' | '_' | '~' => false,
+        _ => true,
+    };
+}
+
+/// One credential, spelled as WHATWG stores it.
+fn percent_encode_userinfo(input: String) -> String {
+    let mut out = String::with_capacity(input.len());
+    for let c of input.chars() {
+        if is_userinfo_encoded_char(c) {
+            push_percent_encoded(c, &mut out);
+        } else {
+            out.push(c);
         }
     }
+    return out;
 }
 
 /// Percent-encodes a string. Encodes all characters except unreserved
@@ -158,10 +207,7 @@ fn percent_encode_query_component(input: &String) -> String {
         } else if is_unreserved_char(c) {
             out.push(c);
         } else {
-            for let b of c.encode_utf8() {
-                let n = b as i32;
-                out.push_str(&`%${n:02X}`);
-            }
+            push_percent_encoded(c, &mut out);
         }
     }
     return out;
@@ -197,6 +243,15 @@ fn percent_decode_query_component(input: &String) -> String {
     return *input;
 }
 
+/// The still-encoded key and value of one `key=value` query part. A part
+/// carrying no `=` is all key, with an empty value.
+fn split_query_part(part: String) -> [String, String] {
+    if let Some([key, val]) = part.split_once("=") {
+        return [key, val];
+    }
+    return [part, ""];
+}
+
 /// Parses a query string into key-value pairs (insertion-order preserved).
 /// Input should not include the leading "?".
 /// Handles "+" as space and decodes percent-encoding.
@@ -210,13 +265,8 @@ pub fn parse_query(query: String) -> TreeMap<String, String> {
         if part.is_empty() {
             continue;
         }
-        if let Some(eq_pos) = part.find("=") {
-            let key = part.substr_bytes(0, eq_pos);
-            let val = part.substr_bytes(eq_pos + 1, part.len());
-            result[percent_decode_query_component(&key)] = percent_decode_query_component(&val);
-        } else {
-            result[percent_decode_query_component(&part)] = "";
-        }
+        let [key, val] = split_query_part(part);
+        result[percent_decode_query_component(&key)] = percent_decode_query_component(&val);
     }
     return result;
 }
@@ -296,14 +346,15 @@ fn parse_authority(authority: &String, url: &mut Url) -> Result<(), ParseError> 
     let input = *authority;
     let mut rest = input;
 
-    if let Some(at_pos) = input.find("@") {
-        let userinfo = input.substr_bytes(0, at_pos);
-        rest = input.substr_bytes(at_pos + 1, input.len());
-        if let Some(colon_pos) = userinfo.find(":") {
-            url.username = userinfo.substr_bytes(0, colon_pos);
-            url.password = userinfo.substr_bytes(colon_pos + 1, userinfo.len());
+    // User info runs to the last `@` and its password starts at the first `:`,
+    // so both delimiters are read before either credential is encoded.
+    if let Some([userinfo, after_at]) = input.rsplit_once("@") {
+        rest = after_at;
+        if let Some([user, password]) = userinfo.split_once(":") {
+            url.username = percent_encode_userinfo(user);
+            url.password = percent_encode_userinfo(password);
         } else {
-            url.username = userinfo;
+            url.username = percent_encode_userinfo(userinfo);
         }
     }
 
@@ -336,9 +387,7 @@ fn parse_authority(authority: &String, url: &mut Url) -> Result<(), ParseError> 
         return Result::Ok(());
     }
 
-    if let Some(colon_pos) = rest.rfind(":") {
-        let host_part = rest.substr_bytes(0, colon_pos);
-        let port_str = rest.substr_bytes(colon_pos + 1, rest.len());
+    if let Some([host_part, port_str]) = rest.rsplit_once(":") {
         if port_str.is_empty() {
             if host_part.is_empty() {
                 return Result::Err(ParseError::MissingHost);
@@ -373,36 +422,19 @@ impl Url {
             return Result::Err(ParseError::EmptyInput);
         }
 
-        let Some(colon) = input.find(":") else {
+        let Some([before_colon, after_colon]) = input.split_once(":") else {
             return Result::Err(ParseError::InvalidScheme);
         };
-        if colon == 0 {
-            return Result::Err(ParseError::InvalidScheme);
-        }
-
-        let scheme = input.substr_bytes(0, colon).to_ascii_lowercase();
+        let scheme = before_colon.to_ascii_lowercase();
         if !is_special_scheme(&scheme) {
             return Result::Err(ParseError::InvalidScheme);
         }
 
-        let mut rest = input.substr_bytes(colon + 1, input.len());
-
-        if !rest.starts_with("//") {
+        let Some(after_slashes) = after_colon.strip_prefix("//") else {
             return Result::Err(ParseError::MissingHost);
-        }
-        rest = rest.substr_bytes(2, rest.len());
+        };
 
-        let mut fragment: Option<String> = null;
-        if let Some(hash_pos) = rest.find("#") {
-            fragment = Option::Some(rest.substr_bytes(hash_pos + 1, rest.len()));
-            rest = rest.substr_bytes(0, hash_pos);
-        }
-
-        let mut query: Option<String> = null;
-        if let Some(q_pos) = rest.find("?") {
-            query = Option::Some(rest.substr_bytes(q_pos + 1, rest.len()));
-            rest = rest.substr_bytes(0, q_pos);
-        }
+        let [rest, query, fragment] = split_off_query_and_fragment(after_slashes);
 
         let mut authority_str = rest;
         let mut path = "/";
@@ -468,9 +500,9 @@ impl Url {
             "/";
         };
         let mut path_part = pwq;
-        if let Some(q_pos) = pwq.find("?") {
-            path_part = pwq.substr_bytes(0, q_pos);
-            url.query = Option::Some(pwq.substr_bytes(q_pos + 1, pwq.len()));
+        if let Some([before, after]) = pwq.split_once("?") {
+            path_part = before;
+            url.query = Option::Some(after);
         }
         if path_part.is_empty() {
             url.path = "/";
@@ -585,28 +617,15 @@ impl Url {
 
         let mut r_authority = "";
         let mut r_path = "";
-        let mut r_query: Option<String> = null;
-        let mut r_fragment: Option<String> = null;
 
-        let mut rest = reference;
+        let [rest, r_query, r_fragment] = split_off_query_and_fragment(reference);
 
-        if let Some(hash_pos) = rest.find("#") {
-            r_fragment = Option::Some(rest.substr_bytes(hash_pos + 1, rest.len()));
-            rest = rest.substr_bytes(0, hash_pos);
-        }
-
-        if let Some(q_pos) = rest.find("?") {
-            r_query = Option::Some(rest.substr_bytes(q_pos + 1, rest.len()));
-            rest = rest.substr_bytes(0, q_pos);
-        }
-
-        if rest.starts_with("//") {
-            rest = rest.substr_bytes(2, rest.len());
-            if let Some(slash_pos) = rest.find("/") {
-                r_authority = rest.substr_bytes(0, slash_pos);
-                r_path = rest.substr_bytes(slash_pos, rest.len());
+        if let Some(after_slashes) = rest.strip_prefix("//") {
+            if let Some(slash_pos) = after_slashes.find("/") {
+                r_authority = after_slashes.substr_bytes(0, slash_pos);
+                r_path = after_slashes.substr_bytes(slash_pos, after_slashes.len());
             } else {
-                r_authority = rest;
+                r_authority = after_slashes;
                 r_path = "/";
             }
 
@@ -691,14 +710,9 @@ impl Url {
                 if part.is_empty() {
                     continue;
                 }
-                if let Some(eq_pos) = part.find("=") {
-                    let k = part.substr_bytes(0, eq_pos);
-                    if percent_decode_query_component(&k) == key {
-                        let v = part.substr_bytes(eq_pos + 1, part.len());
-                        result.push(percent_decode_query_component(&v));
-                    }
-                } else if percent_decode_query_component(&part) == key {
-                    result.push("");
+                let [k, v] = split_query_part(part);
+                if percent_decode_query_component(&k) == key {
+                    result.push(percent_decode_query_component(&v));
                 }
             }
         }

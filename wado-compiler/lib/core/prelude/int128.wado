@@ -109,6 +109,28 @@ impl u128 {
         return u128 { low: 1, high: 0 };
     }
 
+    /// The larger of two values.
+    pub fn max(a: u128, b: u128) -> u128 {
+        if a > b {
+            return a;
+        }
+        return b;
+    }
+
+    /// The smaller of two values.
+    pub fn min(a: u128, b: u128) -> u128 {
+        if a < b {
+            return a;
+        }
+        return b;
+    }
+
+    /// `value` confined to `low..=high`. Traps when `low > high`.
+    pub fn clamp(value: u128, low: u128, high: u128) -> u128 {
+        assert low <= high;
+        return u128::min(u128::max(value, low), high);
+    }
+
     /// Gets the low 64 bits
     /// Used by the compiler to lower truncating `u128 as <int>` casts.
     #[compiler_item("u128_low")]
@@ -877,6 +899,28 @@ impl i128 {
     /// Creates an i128 with value 1
     pub fn one() -> i128 {
         return i128 { low: 1, high: 0 };
+    }
+
+    /// The larger of two values.
+    pub fn max(a: i128, b: i128) -> i128 {
+        if a > b {
+            return a;
+        }
+        return b;
+    }
+
+    /// The smaller of two values.
+    pub fn min(a: i128, b: i128) -> i128 {
+        if a < b {
+            return a;
+        }
+        return b;
+    }
+
+    /// `value` confined to `low..=high`. Traps when `low > high`.
+    pub fn clamp(value: i128, low: i128, high: i128) -> i128 {
+        assert low <= high;
+        return i128::min(i128::max(value, low), high);
     }
 
     /// Gets the low 64 bits (unsigned)
