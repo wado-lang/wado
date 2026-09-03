@@ -191,6 +191,20 @@ pub(super) fn compose_union_plan(
     merged.into_values().collect()
 }
 
+/// What retargeting a branch tail touches: the literals that adopt the type,
+/// and the nested `if` / `match` nodes whose recorded type reify reads back as
+/// their result, so it has to follow.
+#[derive(Default)]
+struct NumericLiteralTails<'a> {
+    literals: Vec<&'a ast::Expr>,
+    branches: Vec<AstId>,
+}
+
+/// Whether a branch already produces `target`; `never` fits any of them.
+fn agrees_with_target(ty: TypeId, target: TypeId) -> bool {
+    ty == target || ty == TypeTable::NEVER
+}
+
 /// A struct-literal field as the body walk knows it: the name it was written
 /// under, its declared position, and the type its value resolved to.
 pub(super) struct ResolvedField {
@@ -2056,14 +2070,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let type_id = if let Some(ty) = expected_type {
                     ty
                 } else {
-                    // AST mirror of `block_result_type(chain_block)`, and the
-                    // same shape as the `Condition::Expr` arm below: the chain's
-                    // result is what the then block and the else block agree on.
-                    let else_type = if_expr
-                        .else_block
-                        .as_ref()
-                        .map_or(TypeTable::UNIT, |b| self.ast_block_result_type(b));
-                    let then_type = self.ast_block_result_type(&if_expr.then_block);
+                    // The chain's result is what the then block and the else
+                    // block agree on, exactly as in the `Condition::Expr` arm.
+                    let (then_type, else_type) = self.if_branch_types(if_expr);
                     match (
                         self.agreed_branch_type(&[then_type, else_type]),
                         &if_expr.else_block,
@@ -2145,25 +2154,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let type_id = if let Some(ty) = expected_type {
                     ty
                 } else {
-                    let mut then_type = self.ast_block_result_type(&if_expr.then_block);
-                    let mut else_type = if_expr
-                        .else_block
-                        .as_ref()
-                        .map_or(TypeTable::UNIT, |b| self.ast_block_result_type(b));
-
-                    // Let a numeric-literal branch adopt the sibling's concrete
-                    // numeric type before the agreement check below.
-                    if then_type != else_type
-                        && let Some(eb) = &if_expr.else_block
-                    {
-                        if let Some(t) = self.coerce_block_numeric_literal_tail(eb, then_type) {
-                            else_type = t;
-                        } else if let Some(t) =
-                            self.coerce_block_numeric_literal_tail(&if_expr.then_block, else_type)
-                        {
-                            then_type = t;
-                        }
-                    }
+                    let (then_type, else_type) = self.if_branch_types(if_expr);
 
                     // `never` is the bottom type: a branch returning `never` is compatible
                     // with any type, so the result type comes from the non-never branch.
@@ -2390,17 +2381,37 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.report_unresolved_nulls(&spans, result_type);
     }
 
-    /// Resolve a match expression
-    /// Give a numeric-literal branch tail the concrete numeric type fixed by a
-    /// sibling branch — the coercion `let x: T = <branch>` already performs.
-    /// Without it a `0` arm stays `i32` and conflicts with, say, a `u64`
-    /// sibling. Descends through a block tail; only a bare numeric literal (or
-    /// negated literal) is affected. Returns the coerced type when one applied.
-    fn coerce_numeric_literal_tail(&mut self, expr: &ast::Expr, target: TypeId) -> Option<TypeId> {
-        match expr {
-            ast::Expr::Block(block) => self.coerce_block_numeric_literal_tail(block, target),
-            _ => self.try_coerce_numeric_literal(expr, target),
+    /// The types an `if`'s two branches settle on, after a numeric literal
+    /// adopts its sibling's type. `if let` agrees its branches here too.
+    fn if_branch_types(&mut self, if_expr: &IfExpr) -> (TypeId, TypeId) {
+        let mut then_type = self.ast_block_result_type(&if_expr.then_block);
+        let mut else_type = if_expr
+            .else_block
+            .as_ref()
+            .map_or(TypeTable::UNIT, |b| self.ast_block_result_type(b));
+
+        if then_type != else_type
+            && let Some(eb) = &if_expr.else_block
+        {
+            if let Some(t) = self.coerce_block_numeric_literal_tail(eb, then_type) {
+                else_type = t;
+            } else if let Some(t) =
+                self.coerce_block_numeric_literal_tail(&if_expr.then_block, else_type)
+            {
+                then_type = t;
+            }
         }
+        (then_type, else_type)
+    }
+
+    /// Give a numeric-literal branch tail the type a sibling branch fixed, as
+    /// the coercion in `let x: T = <branch>` does. `None` when none applied.
+    fn coerce_numeric_literal_tail(&mut self, expr: &ast::Expr, target: TypeId) -> Option<TypeId> {
+        let mut tails = NumericLiteralTails::default();
+        if !self.collect_numeric_literal_tails(expr, target, &mut tails) {
+            return None;
+        }
+        self.retarget_numeric_literal_tails(tails, target)
     }
 
     fn coerce_block_numeric_literal_tail(
@@ -2408,10 +2419,126 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         block: &ast::Block,
         target: TypeId,
     ) -> Option<TypeId> {
-        match block.stmts.last() {
-            Some(ast::Stmt::Expr(e)) => self.coerce_numeric_literal_tail(&e.expr, target),
-            _ => None,
+        let mut tails = NumericLiteralTails::default();
+        if !self.collect_block_numeric_literal_tails(block, target, &mut tails) {
+            return None;
         }
+        self.retarget_numeric_literal_tails(tails, target)
+    }
+
+    fn retarget_numeric_literal_tails(
+        &mut self,
+        tails: NumericLiteralTails<'_>,
+        target: TypeId,
+    ) -> Option<TypeId> {
+        if tails.literals.is_empty() {
+            return None;
+        }
+        for literal in tails.literals {
+            // A refusal leaves the earlier literals retargeted, which is
+            // harmless: the caller's mismatch aborts before WIR build.
+            self.try_coerce_numeric_literal(literal, target)?;
+        }
+        for branch in tails.branches {
+            self.record_expression_type(branch, target);
+        }
+        Some(target)
+    }
+
+    /// Collect the tails `expr` has to retarget to land on `target`. `false`
+    /// when one of them is neither a numeric literal nor already `target`: the
+    /// caller then retargets nothing and reports the branches as written.
+    fn collect_numeric_literal_tails<'a>(
+        &self,
+        expr: &'a ast::Expr,
+        target: TypeId,
+        out: &mut NumericLiteralTails<'a>,
+    ) -> bool {
+        match expr {
+            ast::Expr::Block(block) => self.collect_block_numeric_literal_tails(block, target, out),
+            ast::Expr::If(if_expr) => {
+                out.branches.push(if_expr.id);
+                self.collect_if_numeric_literal_tails(
+                    &if_expr.then_block,
+                    if_expr.else_block.as_ref(),
+                    target,
+                    out,
+                )
+            }
+            ast::Expr::Match(match_expr) => {
+                self.collect_match_numeric_literal_tails(match_expr, target, out)
+            }
+            _ if super::coercion::is_numeric_literal_expr(expr) => {
+                out.literals.push(expr);
+                true
+            }
+            _ => self
+                .ast_expr_type(expr)
+                .is_some_and(|ty| agrees_with_target(ty, target)),
+        }
+    }
+
+    fn collect_block_numeric_literal_tails<'a>(
+        &self,
+        block: &'a ast::Block,
+        target: TypeId,
+        out: &mut NumericLiteralTails<'a>,
+    ) -> bool {
+        match block.stmts.last() {
+            Some(ast::Stmt::Expr(e)) => self.collect_numeric_literal_tails(&e.expr, target, out),
+            // `block_result_type` reads a trailing `if` / `match` statement as
+            // the block's value, so `else { if … }` retargets like `else if …`.
+            // A trailing `if` records no type: reify recomputes one from the
+            // branches it has just built.
+            Some(ast::Stmt::If(if_stmt)) => self.collect_if_numeric_literal_tails(
+                &if_stmt.then_block,
+                if_stmt.else_block.as_ref(),
+                target,
+                out,
+            ),
+            Some(ast::Stmt::Match(match_expr)) => {
+                self.collect_match_numeric_literal_tails(match_expr, target, out)
+            }
+            // No expression tail to retarget, so the block has to agree already.
+            _ => agrees_with_target(self.ast_block_result_type(block), target),
+        }
+    }
+
+    /// Whether every tail of a match arm is a numeric literal, leaving the arm
+    /// no type of its own for the result to be read from.
+    fn is_numeric_literal_arm(&self, body: &ast::Expr, body_type: TypeId) -> bool {
+        let mut tails = NumericLiteralTails::default();
+        self.collect_numeric_literal_tails(body, body_type, &mut tails)
+            && !tails.literals.is_empty()
+    }
+
+    /// The two halves of an `if`, in either its expression or its statement
+    /// spelling. A missing `else` is `()`, which no numeric target accepts.
+    fn collect_if_numeric_literal_tails<'a>(
+        &self,
+        then_block: &'a ast::Block,
+        else_block: Option<&'a ast::Block>,
+        target: TypeId,
+        out: &mut NumericLiteralTails<'a>,
+    ) -> bool {
+        let Some(else_block) = else_block else {
+            return false;
+        };
+        self.collect_block_numeric_literal_tails(then_block, target, out)
+            && self.collect_block_numeric_literal_tails(else_block, target, out)
+    }
+
+    fn collect_match_numeric_literal_tails<'a>(
+        &self,
+        match_expr: &'a ast::MatchExpr,
+        target: TypeId,
+        out: &mut NumericLiteralTails<'a>,
+    ) -> bool {
+        out.branches.push(match_expr.id);
+        match_expr
+            .arms
+            .iter()
+            .all(|arm| self.collect_numeric_literal_tails(&arm.body, target, out))
     }
 
     /// The type a set of branches agrees on, `None` when they disagree — the
@@ -2497,6 +2624,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         self.check_match_exhaustiveness(&match_expr.arms, scrutinee_type, match_expr.span);
 
+        // A numeric-literal arm holds its default type for want of a sibling
+        // saying otherwise, so it is in no position to fix the result: without
+        // this, `match k { 1 => 0, _ => a }` resolves to `i32` and rejects the
+        // `u64` arm, while the same match with its arms swapped compiles.
+        let literal_arms: Vec<bool> = match_expr
+            .arms
+            .iter()
+            .zip(&arm_bodies)
+            .map(|(arm, &(arm_type, _))| self.is_numeric_literal_arm(&arm.body, arm_type))
+            .collect();
+
         let type_id = expected_type.unwrap_or_else(|| {
             // Skip `never`-typed arms: `never` is the bottom type and is compatible
             // with any type, so the match result type is determined by the non-never arms.
@@ -2507,8 +2645,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let tt = self.tysys.type_table.borrow();
             arm_bodies
                 .iter()
-                .map(|(t, _)| *t)
+                .zip(&literal_arms)
+                .filter(|&(_, is_literal)| !*is_literal)
+                .map(|((t, _), _)| *t)
                 .find(|&t| t != TypeTable::NEVER && !tt.is_indefinite(t))
+                .or_else(|| {
+                    arm_bodies
+                        .iter()
+                        .map(|(t, _)| *t)
+                        .find(|&t| t != TypeTable::NEVER && !tt.is_indefinite(t))
+                })
                 .or_else(|| {
                     arm_bodies
                         .iter()

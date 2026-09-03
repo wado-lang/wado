@@ -1,10 +1,9 @@
 #![stdlib("core:digest")]
-//! Cryptographic hash functions.
+//! Cryptographic hash functions, and [`hmac`] to key one.
 //!
-//! This module provides the [`Digest`] trait — a common interface for
-//! incremental hashing — and concrete implementations. Currently only
-//! [`Sha256`] (SHA-256, FIPS 180-4 / RFC 6234) is provided; the trait keeps
-//! the module name stable as more algorithms are added.
+//! The [`Digest`] trait is the common interface for incremental hashing, and
+//! [`Sha256`] (FIPS 180-4 / RFC 6234) is so far its one implementation. The
+//! trait keeps the module name stable as more algorithms are added.
 //!
 //! Message bytes are accepted from any `AsByteSlice` source: a `ByteSlice`,
 //! `ByteList`, `ByteArray`, or a `String` (its UTF-8 bytes).
@@ -15,6 +14,10 @@
 /// then call [`finalize`](Digest::finalize) exactly once to obtain the digest.
 /// A value must not be used after `finalize`.
 pub trait Digest {
+    /// The algorithm's compression block width in bytes, 64 for SHA-256.
+    /// [`hmac`] pads its key to it.
+    fn block_len(&self) -> i32;
+
     /// Absorb `data` into the running hash state.
     fn update<S: AsByteSlice>(&mut self, data: &S);
 
@@ -150,6 +153,10 @@ impl Sha256 {
 }
 
 impl Digest for Sha256 {
+    fn block_len(&self) -> i32 {
+        return 64;
+    }
+
     fn update<S: AsByteSlice>(&mut self, data: &S) {
         self.absorb(data.as_byte_slice());
     }
@@ -190,4 +197,48 @@ pub fn sha256<S: AsByteSlice>(data: &S) -> ByteList {
     let mut hasher = Sha256::new();
     hasher.update(data);
     return hasher.finalize();
+}
+
+/// Keyed message authentication over any [`Digest`] (HMAC, RFC 2104):
+/// `H((K ^ opad) || H((K ^ ipad) || message))`.
+///
+/// Pass a fresh `hasher` of the algorithm to key. A key of any length works:
+/// the RFC's own reduction to one block applies.
+///
+/// Check the result with `eq_constant_time`, never `==`.
+pub fn hmac<H: Digest, K: AsByteSlice, M: AsByteSlice>(hasher: H, key: &K, message: &M) -> ByteList {
+    let block_len = hasher.block_len();
+    let mut block = key.as_byte_slice().to_list() as ByteList;
+    if block.len() > block_len {
+        let mut keyed = hasher;
+        keyed.update(key);
+        block = keyed.finalize();
+        assert block.len() <= block_len, "a digest is no longer than its block";
+    }
+    while block.len() < block_len {
+        block.push(0);
+    }
+
+    let mut inner_pad: ByteList = [];
+    let mut outer_pad: ByteList = [];
+    for let mut i = 0; i < block_len; i += 1 {
+        inner_pad.push(block[i] ^ 0x36);
+        outer_pad.push(block[i] ^ 0x5c);
+    }
+
+    let mut inner = hasher;
+    inner.update(&inner_pad);
+    inner.update(message);
+    let digest = inner.finalize();
+
+    let mut outer = hasher;
+    outer.update(&outer_pad);
+    outer.update(&digest);
+    return outer.finalize();
+}
+
+/// Key a complete message with HMAC-SHA256, returning the 32-byte MAC.
+/// The one-shot counterpart to [`hmac`], as [`sha256`] is to [`Sha256`].
+pub fn hmac_sha256<K: AsByteSlice, M: AsByteSlice>(key: &K, message: &M) -> ByteList {
+    return hmac(Sha256::new(), key, message);
 }

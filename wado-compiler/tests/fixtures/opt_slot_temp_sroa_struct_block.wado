@@ -1,0 +1,129 @@
+// Test: `slot_temp_sroa` scalarizes a struct an inlined two-armed helper yields
+//
+// Inlining a helper whose arms build the aggregate leaves `let x = <labeled
+// block>`, which `sroa`'s direct-literal matcher cannot see, so the struct was
+// allocated on the heap and read straight back. `core:prelude/fpfmt.wado` has
+// the shape: a fast arm that builds the pair inline, a slow arm that calls out
+// for it, paid once per float conversion.
+//
+// What goes is the aggregate-valued block, so every expectation names a printed
+// result type. `HiLo` and `Pair` must go, `Half` and `Boxed` must stay. One
+// precondition holds each survivor, so dropping that precondition fails here.
+
+struct HiLo {
+    hi: u64,
+    lo: u64,
+}
+
+struct Pair {
+    a: u64,
+    b: u64,
+}
+
+// Both exits build the struct in place.
+fn pick_literal(p: i32) -> HiLo {
+    if p >= 0 && p < 8 {
+        return HiLo { hi: p as u64, lo: 7 };
+    }
+    return HiLo { hi: p as u64 * 3, lo: 5 };
+}
+
+#[inline("never")]
+fn use_literal(p: i32) -> u64 {
+    let x = pick_literal(p);
+    return x.hi + x.lo;
+}
+
+#[inline("never")]
+fn wide(p: i32) -> Pair {
+    return Pair { a: p as u64 * 3, b: p as u64 * 5 };
+}
+
+// One exit calls out for the struct: that arm has no fields to assign from, so
+// it binds the result and projects them.
+fn pick_call(p: i32) -> Pair {
+    if p >= 0 && p < 8 {
+        return Pair { a: p as u64, b: 7 };
+    }
+    return wide(p);
+}
+
+#[inline("never")]
+fn use_call(p: i32) -> u64 {
+    let x = pick_call(p);
+    return x.a + x.b;
+}
+
+struct Half {
+    kept: u64,
+    dropped: u64,
+}
+
+fn pick_half(p: i32) -> Half {
+    if p >= 0 && p < 8 {
+        return Half { kept: p as u64, dropped: 7 };
+    }
+    return Half { kept: p as u64 * 3, dropped: 5 };
+}
+
+// Only one field is read, so the struct is not fully decomposed and the block
+// stays: taking half of a named struct is what would strip the shape another
+// pass keys on — `tmpl_hoist` reads a template `String`'s `used` and no more.
+#[inline("never")]
+fn use_half(p: i32) -> u64 {
+    let x = pick_half(p);
+    return x.kept;
+}
+
+struct Boxed {
+    a: Option<String>,
+    b: u64,
+}
+
+#[inline("never")]
+fn wide_boxed(p: i32) -> Boxed {
+    return Boxed { a: Option::Some(`w${p}`), b: p as u64 * 5 };
+}
+
+fn pick_boxed(p: i32) -> Boxed {
+    if p >= 0 && p < 8 {
+        return Boxed { a: Option::Some("fast"), b: 7 };
+    }
+    return wide_boxed(p);
+}
+
+// Every field is read, so the arity rule admits it — but a slot holding a GC
+// reference does not survive the projection a materializing exit synthesises:
+// `$value_copy$T` insertion is long past, so the assignment would alias what
+// value semantics deep-copy. The block stays.
+#[inline("never")]
+fn use_boxed(p: i32) -> String {
+    let x = pick_boxed(p);
+    let head = if let Option::Some(v) = x.a { v } else { "" };
+    return `${head}/${x.b}`;
+}
+
+export fn run() {
+    assert use_literal(builtin::black_box(3)) == 10;
+    assert use_literal(builtin::black_box(90)) == 275;
+    assert use_call(builtin::black_box(3)) == 10;
+    assert use_call(builtin::black_box(90)) == 720;
+    assert use_half(builtin::black_box(3)) == 3;
+    assert use_half(builtin::black_box(90)) == 270;
+    assert use_boxed(builtin::black_box(3)) == "fast/7";
+    assert use_boxed(builtin::black_box(90)) == "w90/450";
+}
+
+__DATA__
+{
+    "stdout": "",
+    "wir_expect:O2": [
+        "__sroa_slot_",
+        "block -> ref \"opt_slot_temp_sroa_struct_block.wado//Half\"",
+        "block -> ref \"opt_slot_temp_sroa_struct_block.wado//Boxed\""
+    ],
+    "wir_not_expect:O2": [
+        "block -> ref \"opt_slot_temp_sroa_struct_block.wado//HiLo\"",
+        "block -> ref \"opt_slot_temp_sroa_struct_block.wado//Pair\""
+    ]
+}

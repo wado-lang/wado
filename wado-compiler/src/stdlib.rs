@@ -48,6 +48,7 @@ pub const CORE_RANDOM: &str = include_str!("../lib/core/random.wado");
 pub const CORE_UUID: &str = include_str!("../lib/core/uuid.wado");
 pub const CORE_TEMPORAL: &str = include_str!("../lib/core/temporal.wado");
 pub const CORE_LOG: &str = include_str!("../lib/core/log.wado");
+pub const CORE_JWT: &str = include_str!("../lib/core/jwt.wado");
 
 // WASI flat package files — re-export from all sub-interfaces (backward compat)
 pub const WASI_CLI: &str = include_str!("../lib/wasi/cli.wado");
@@ -151,6 +152,7 @@ pub const ALL_CORE_MODULES: &[(&str, &str)] = &[
     ("core:uuid", CORE_UUID),
     ("core:temporal", CORE_TEMPORAL),
     ("core:log", CORE_LOG),
+    ("core:jwt", CORE_JWT),
     ("core:kiln", CORE_KILN),
     ("core:kiln/kiln_host.wado", CORE_KILN_KILN_HOST),
     ("core:kiln/types.wado", CORE_KILN_TYPES),

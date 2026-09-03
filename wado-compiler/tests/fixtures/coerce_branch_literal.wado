@@ -46,3 +46,78 @@ test "if-else literal adopts the typed branch (either side)" {
     assert x == 7;
     assert y == 7;
 }
+
+test "else-if chain literal adopts the typed branch" {
+    let a: u64 = 7;
+    let x = if a == 1 { a } else if a == 7 { 0 } else { 1 };
+    let y = if false { 0 } else if false { 1 } else { a };
+    assert x == 0;
+    assert y == 7;
+}
+
+test "else-if chain of literals adopts a cast branch" {
+    let b: u8 = 5;
+    let v = if b < 3 {
+        (b - 1) as u32
+    } else if b < 10 {
+        (b - 2) as u32 + 26
+    } else if b == 30 {
+        62
+    } else {
+        63
+    };
+    assert v == 29;
+}
+
+// A literal arm holds `i32` only for want of a sibling saying otherwise, so
+// which arm comes first cannot decide the match's type.
+test "match literal arm adopts the typed arm from either position" {
+    let a: u64 = 18446744073709551615;
+    let k = 1;
+    let v = match k { 1 => 0, _ => a };
+    let w = match k { 1 => a, _ => 0 };
+    assert v == 0;
+    assert w == 18446744073709551615;
+}
+
+test "a braced literal arm adopts the typed arm before it" {
+    let a: u64 = 18446744073709551615;
+    let k = 2;
+    let v = match k { 1 => { 0 }, _ => a };
+    assert v == 18446744073709551615;
+}
+
+test "match arm whose body is an else-if chain of literals" {
+    let opt: Option<i64> = null;
+    let v = match opt { Some(x) => x, None => if true { 0 } else { 1 } };
+    assert v == 0;
+}
+
+// A trailing `if` / `match` statement is the block's value as much as a
+// trailing expression is, so `else { if … }` retargets like `else if …`.
+test "a braced else holding an if reaches the literals inside it" {
+    let a: i64 = 3;
+    let v = if a == 1 { a } else { if true { 0 } else { 1 } };
+    assert v == 0;
+}
+
+test "a braced else holding a match reaches the literals inside it" {
+    let a: u64 = 7;
+    let k = 1;
+    let v = if a == 1 { a } else { match k { 1 => 0, _ => 2 } };
+    assert v == 0;
+}
+
+test "a match arm block holding an if reaches the literals inside it" {
+    let opt: Option<i64> = null;
+    let v = match opt { Some(x) => x, None => { if true { 0 } else { 1 } } };
+    assert v == 0;
+}
+
+test "if let literal adopts the typed branch" {
+    let opt: Option<u64> = Option::Some(9);
+    let v = if let Some(x) = opt { x } else { 0 };
+    let w = if let Some(_) = opt { 0 } else { 9 as u64 };
+    assert v == 9;
+    assert w == 0;
+}

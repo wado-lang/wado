@@ -1,0 +1,214 @@
+use { Hs256Key, JwsAlgorithm, JwsSigner, JwsVerifier, JwtError, RegisteredClaims, sign, verify } from "core:jwt";
+use { decode_url_strict, encode_url } from "core:base64";
+use { hmac_sha256 } from "core:digest";
+use { from_bytes } from "core:json";
+
+// RFC 7515 A.1: the HS256 example token, its key, and its two segments.
+global RFC7515_HEADER: String = "eyJ0eXAiOiJKV1QiLA0KICJhbGciOiJIUzI1NiJ9";
+global RFC7515_PAYLOAD: String = "eyJpc3MiOiJqb2UiLA0KICJleHAiOjEzMDA4MTkzODAsDQogImh0dHA6Ly9leGFtcGxlLmNvbS9pc19yb290Ijp0cnVlfQ";
+global RFC7515_SIGNATURE: String = "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk";
+global RFC7515_KEY: String = "AyM1SysPpbyDfgZld3umj1qzKObwVMkoqQ-EstJQLr_T-1qS0gZH75aKtMN3Yj0iPS4hcgUuTwjAzZr1Z9CAow";
+
+fn rfc7515_key() -> Hs256Key {
+    let Some(secret) = decode_url_strict(&RFC7515_KEY) else {
+        panic("the RFC 7515 key is canonical base64url");
+    };
+    return Hs256Key::new(&secret);
+}
+
+fn rfc7515_token() -> String {
+    return `${RFC7515_HEADER}.${RFC7515_PAYLOAD}.${RFC7515_SIGNATURE}`;
+}
+
+fn shared_key() -> Hs256Key {
+    return Hs256Key::new(&"a 32-byte-or-longer shared secret");
+}
+
+/// A token carrying a header `sign` would not write, signed all the same.
+fn token_with_header<K: JwsSigner>(header: String, payload: String, key: &K) -> String {
+    let signing_input = `${encode_url(&header)}.${encode_url(&payload)}`;
+    let bytes: ByteList = signing_input.bytes().collect();
+    return `${signing_input}.${encode_url(&key.sign(&bytes))}`;
+}
+
+test "verifies the RFC 7515 A.1 token" {
+    let key = rfc7515_key();
+    let Ok(payload) = verify(&rfc7515_token(), &key) else {
+        panic("the RFC 7515 A.1 token verifies under its own key");
+    };
+    assert String::from_utf8(payload) matches { Ok(text) && text.contains("\"iss\":\"joe\"") };
+}
+
+test "signing reproduces the RFC 7515 A.1 signature" {
+    let key = rfc7515_key();
+    // The RFC's header carries a line break this module does not write, so the
+    // signature is compared over the RFC's own signing input.
+    let signing_input: ByteList = `${RFC7515_HEADER}.${RFC7515_PAYLOAD}`.bytes().collect();
+    assert encode_url(&key.sign(&signing_input)) == RFC7515_SIGNATURE;
+}
+
+test "a tampered payload fails verification" {
+    let key = rfc7515_key();
+    let forged = encode_url(&`{"iss":"eve"}`);
+    let token = `${RFC7515_HEADER}.${forged}.${RFC7515_SIGNATURE}`;
+    assert verify(&token, &key) matches { Err(JwtError::InvalidSignature) };
+}
+
+test "another key fails verification" {
+    let other = Hs256Key::new(&"another secret that is at least 32 bytes");
+    assert verify(&rfc7515_token(), &other) matches { Err(JwtError::InvalidSignature) };
+}
+
+test "a round trip carries the payload back" {
+    let key = shared_key();
+    let token = sign(&`{"sub":"joe"}`, &key);
+    let Ok(payload) = verify(&token, &key) else {
+        panic("a freshly signed token verifies");
+    };
+    assert String::from_utf8(payload) matches { Ok(text) && text == `{"sub":"joe"}` };
+}
+
+test "a malformed token is rejected before any hashing" {
+    let key = rfc7515_key();
+    assert verify(&"", &key) matches { Err(JwtError::Malformed) };
+    assert verify(&"a.b", &key) matches { Err(JwtError::Malformed) };
+    assert verify(&`${RFC7515_HEADER}.${RFC7515_PAYLOAD}.${RFC7515_SIGNATURE}.x`, &key) matches { Err(JwtError::Malformed) };
+    // A padded signature is a second spelling of the same bytes, so accepting
+    // it would let one token be rewritten into another that verifies.
+    assert verify(&`${RFC7515_HEADER}.${RFC7515_PAYLOAD}.${RFC7515_SIGNATURE}=`, &key) matches { Err(JwtError::Malformed) };
+}
+
+test "the header's alg must be the key's" {
+    let key = shared_key();
+    // The same payload signed by the same key, differing only in the header:
+    // the signature is this key's either way, and one of the two is refused.
+    assert verify(&token_with_header(`{"alg":"HS256"}`, `{"sub":"joe"}`, &key), &key) matches { Ok(_) };
+    assert verify(&token_with_header(`{"alg":"RS256"}`, `{"sub":"joe"}`, &key), &key) matches { Err(JwtError::AlgMismatch) };
+}
+
+test "a crit header is rejected in every spelling" {
+    let key = shared_key();
+    let listed = `{"alg":"HS256","crit":["exp"],"exp":1300819380}`;
+    assert verify(&token_with_header(listed, `{"sub":"joe"}`, &key), &key) matches { Err(JwtError::CriticalHeader) };
+    // Neither names an extension, and both are the member present. `null` is
+    // the one an `Option` field would read as absent.
+    assert verify(&token_with_header(`{"alg":"HS256","crit":null}`, `{"sub":"joe"}`, &key), &key) matches { Err(JwtError::CriticalHeader) };
+    assert verify(&token_with_header(`{"alg":"HS256","crit":[]}`, `{"sub":"joe"}`, &key), &key) matches { Err(JwtError::CriticalHeader) };
+}
+
+test "exp and nbf are checked against the time passed in" {
+    let claims = RegisteredClaims {
+        exp: Option::Some(1000),
+        nbf: Option::Some(100),
+    };
+    assert claims.validate_time(500) matches { Ok(_) };
+    assert claims.validate_time(1000) matches { Err(JwtError::Expired) };
+    assert claims.validate_time(99) matches { Err(JwtError::NotYetValid) };
+    assert claims.validate_time(1000, 1) matches { Ok(_) };
+    assert claims.validate_time(99, 1) matches { Ok(_) };
+}
+
+test "the window clamps at the i64 boundaries" {
+    let past = RegisteredClaims { nbf: Option::Some(0 as i64) };
+    assert past.validate_time(9223372036854775807, 1) matches { Ok(_) };
+    let future = RegisteredClaims { exp: Option::Some(0 as i64) };
+    assert future.validate_time(-9223372036854775808, 1) matches { Ok(_) };
+}
+
+#[expect_trap]
+test "a negative leeway is refused" {
+    let claims = RegisteredClaims { exp: Option::Some(1000 as i64) };
+    let _ = claims.validate_time(500, -60);
+}
+
+test "absent claims are not checked" {
+    let claims = RegisteredClaims {};
+    assert claims.validate_time(0) matches { Ok(_) };
+    assert claims.validate_time(9223372036854775807) matches { Ok(_) };
+}
+
+test "registered claims deserialize from a verified payload" {
+    let key = shared_key();
+    let token = sign(&`{"iss":"wado","sub":"joe","exp":1300819380,"scope":"read"}`, &key);
+    let Ok(payload) = verify(&token, &key) else {
+        panic("a freshly signed token verifies");
+    };
+    let Ok(claims) = from_bytes::<RegisteredClaims, ByteList>(payload) else {
+        panic("the payload is JSON");
+    };
+    assert claims.iss == Option::Some("wado");
+    assert claims.sub == Option::Some("joe");
+    assert claims.exp == Option::Some(1300819380 as i64);
+    assert claims.nbf == Option::<i64>::None;
+}
+
+#[expect_trap]
+test "a short HS256 secret is refused" {
+    let _ = Hs256Key::new(&"too short");
+}
+
+// An algorithm this module does not carry, added from outside it: the key type
+// is local to this file and plugs into `verify` unchanged.
+struct StubKey {
+    accept: ByteList,
+}
+
+impl JwsAlgorithm for StubKey {
+    fn alg(&self) -> String {
+        return "RS256";
+    }
+}
+
+impl JwsVerifier for StubKey {
+    fn verify(&self, signing_input: &ByteList, signature: &ByteList) -> bool {
+        return eq_constant_time(signature, &self.accept);
+    }
+}
+
+test "an out-of-tree key type plugs into the same entry points" {
+    let header = encode_url(&`{"alg":"RS256"}`);
+    let payload = encode_url(&`{"sub":"joe"}`);
+    let Some(accept) = decode_url_strict(&"__8") else {
+        panic("__8 is canonical base64url");
+    };
+    let key = StubKey { accept: accept };
+    let token = `${header}.${payload}.__8`;
+    assert verify(&token, &key) matches { Ok(_) };
+    assert verify(&`${header}.${payload}.__4`, &key) matches { Err(JwtError::InvalidSignature) };
+}
+
+// A key whose `alg` is whatever it is named, so `sign` is exercised over the
+// StringOrURI RFC 7515 §4.1.1 permits rather than the registered names alone.
+struct NamedKey {
+    name: String,
+}
+
+impl JwsAlgorithm for NamedKey {
+    fn alg(&self) -> String {
+        return self.name;
+    }
+}
+
+impl JwsSigner for NamedKey {
+    fn sign(&self, signing_input: &ByteList) -> ByteList {
+        return hmac_sha256(&self.name, signing_input);
+    }
+}
+
+impl JwsVerifier for NamedKey {
+    fn verify(&self, signing_input: &ByteList, signature: &ByteList) -> bool {
+        return eq_constant_time(&hmac_sha256(&self.name, signing_input), signature);
+    }
+}
+
+test "a collision-resistant URI alg round trips" {
+    let key = NamedKey { name: "http://example.com/alg" };
+    assert verify(&sign(&`{"sub":"joe"}`, &key), &key) matches { Ok(_) };
+}
+
+test "an alg cannot break out of the header JSON" {
+    // Spliced verbatim this closes the string and adds a member; escaped it is
+    // one `alg` value that reads back as itself.
+    let key = NamedKey { name: `hs","typ":"x` };
+    assert verify(&sign(&`{"sub":"joe"}`, &key), &key) matches { Ok(_) };
+}

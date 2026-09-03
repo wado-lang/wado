@@ -3145,6 +3145,22 @@ pub fn "fn(char)->char^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn(c
 
 pub fn "fn mut(char)->char^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn(char)->char>, f: &mut Formatter);
 
+fn "core:prelude/bytes.wado/ByteSlice^core:prelude/bytes.wado/AsByteSlice::as_byte_slice"(self: &Slice<u8>) -> Slice<u8> with stores[self] {
+    return *self;
+}
+
+fn "core:prelude/bytes.wado/ByteList^core:prelude/bytes.wado/AsByteSlice::as_byte_slice"(self: &List<u8>) -> Slice<u8> with stores[self] {
+    return self."core:prelude/list.wado/List<u8>^core:prelude/slice.wado/AsSlice::as_slice"() as Slice<u8>;
+}
+
+fn "core:prelude/bytes.wado/ByteArray^core:prelude/bytes.wado/AsByteSlice::as_byte_slice"(self: &Array<u8>) -> Slice<u8> with stores[self] {
+    return self."Array<u8>^core:prelude/slice.wado/AsSlice::as_slice"() as Slice<u8>;
+}
+
+fn "core:prelude/string.wado/String^core:prelude/bytes.wado/AsByteSlice::as_byte_slice"(self: &String) -> Slice<u8> with stores[self] {
+    return self."core:prelude/string.wado/String::as_bytes"();
+}
+
 pub fn "core:prelude/bytes.wado/ByteArray^core:prelude/traits.wado/Reflect::type_name"() -> String {
     return String { repr: packed"ByteArray", used: 9 };
 }
@@ -3434,6 +3450,19 @@ pub fn fixed_width_for_prec(f: f64, precision: i32) -> FormatResult {
     let m: u64 = unpack.mantissa;
     let e: i32 = unpack.exponent;
     let log10_e63: i32 = "core::prelude/fpfmt.wado::log10_pow2"((e + 63));
+    let n_est: i32 = ((1 + log10_e63) + precision);
+    if ((n_est < 1) || (n_est > 17)) {
+        core::builtin::cold_path();
+        return "core::prelude/fpfmt.wado::fixed_width_out_of_range"(m, e, log10_e63, precision);
+    }
+    let lp: i32 = "core::prelude/fpfmt.wado::log2_pow10"(precision);
+    let pm: PmHiLo = "core::prelude/fpfmt.wado::get_pow10"(precision);
+    let s: i32 = -((e + lp) + 3);
+    let d: u64 = "core::prelude/fpfmt.wado::unrounded_round"("core::prelude/fpfmt.wado::uscale"(m, pm.hi, pm.lo, s));
+    return FormatResult { digits: d, exponent: -precision, n_digits: "core::prelude/fpfmt.wado::digits"(d) };
+}
+
+fn fixed_width_out_of_range(m: u64, e: i32, log10_e63: i32, precision: i32) -> FormatResult {
     let p1: i32 = -log10_e63;
     let lp1: i32 = "core::prelude/fpfmt.wado::log2_pow10"(p1);
     let pm1: PmHiLo = "core::prelude/fpfmt.wado::get_pow10"(p1);
@@ -8963,6 +8992,10 @@ pub fn "core:prelude/string.wado/String::set_byte_unchecked"(self: &mut String, 
     self.repr."Array<u8>^core:prelude/traits.wado/IndexAssign<i32>::index_assign"(index, value);
 }
 
+pub fn "core:prelude/string.wado/String::as_bytes"(self: &String) -> Slice<u8> with stores[self] {
+    return "core::prelude/slice.wado::core:prelude/slice.wado/Slice<u8>::internal_new"(&self.repr as &Array<u8>, 0, self.used) as Slice<u8>;
+}
+
 fn "core:prelude/string.wado/String::internal_raw_bytes"(self: &String) -> &Array<u8> {
     return &self.repr as &Array<u8>;
 }
@@ -11915,10 +11948,6 @@ fn "core/rt/cm_stream_pair<u8>"(packed: i64) -> [Stream<u8>, StreamWritable<u8>]
     return [rx as Stream<u8>, tx as StreamWritable<u8>];
 }
 
-fn "core:prelude/slice.wado/Slice<u8>::internal_new"(repr: &Array<u8>, start: i32, end: i32) -> Slice<u8> with stores[repr] {
-    return Slice<u8> { repr: repr, start: start, end: end };
-}
-
 pub fn "core:prelude/types.wado/StreamWritable<u8>::write_raw_all"(self: &StreamWritable<u8>, data: Slice<u8>) -> CopyResult {
     if data."core:prelude/slice.wado/Slice<u8>^core:prelude/slice.wado/Sequence::is_empty"() {
         return CopyResult::Completed;
@@ -11954,6 +11983,10 @@ pub fn "core:prelude/slice.wado/Slice<u8>::to_array"(self: &Slice<u8>) -> Array<
 
 pub fn "Array<u8>::len"(self: &Array<u8>) -> i32 {
     return core::builtin::array_len::<u8>(self);
+}
+
+fn "core:prelude/slice.wado/Slice<u8>::internal_new"(repr: &Array<u8>, start: i32, end: i32) -> Slice<u8> with stores[repr] {
+    return Slice<u8> { repr: repr, start: start, end: end };
 }
 
 pub fn "core/builtin/array_new<u8>"(len: i32) -> Array<u8>;
@@ -12010,6 +12043,14 @@ fn "core:prelude/list.wado/List<u64>^core:prelude/traits.wado/IndexValue<i32>::i
         }
     }
     return self.repr."Array<u64>^core:prelude/traits.wado/IndexValue<i32>::index_value"(index);
+}
+
+fn "Array<u8>^core:prelude/slice.wado/AsSlice::as_slice"(self: &Array<u8>) -> Slice<u8> with stores[self] {
+    return "core::prelude/slice.wado::core:prelude/slice.wado/Slice<u8>::internal_new"(self, 0, core::builtin::array_len::<u8>(self));
+}
+
+fn "core:prelude/list.wado/List<u8>^core:prelude/slice.wado/AsSlice::as_slice"(self: &List<u8>) -> Slice<u8> with stores[self] {
+    return "core::prelude/slice.wado::core:prelude/slice.wado/Slice<u8>::internal_new"(&self.repr, 0, self.used);
 }
 
 fn "core:prelude/types.wado/Result<core:prelude/string.wado/String,core:prelude/string.wado/String>^core:prelude/traits.wado/Inspect::inspect"(self: Box<core:prelude/types.wado/Result<core:prelude/string.wado/String,core:prelude/string.wado/String>>, f: &mut Formatter) {
@@ -12106,10 +12147,6 @@ fn "core/prelude/array.wado/write_seq_inspect<i32>"(repr: &Array<i32>, start: i3
 
 fn "core:prelude/list.wado/List<i32>^core:prelude/slice.wado/Sequence::get_unchecked"(self: &List<i32>, index: i32) -> i32 {
     return self.repr."Array<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value"(index);
-}
-
-fn "core:prelude/list.wado/List<u8>^core:prelude/slice.wado/AsSlice::as_slice"(self: &List<u8>) -> Slice<u8> with stores[self] {
-    return "core::prelude/slice.wado::core:prelude/slice.wado/Slice<u8>::internal_new"(&self.repr, 0, self.used);
 }
 
 fn "core:prelude/list.wado/List<u8>^core:prelude/traits.wado/IntoIterator::into_iter"(self: &List<u8>) -> SliceValueIter<u8> {

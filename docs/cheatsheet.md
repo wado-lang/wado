@@ -1430,6 +1430,10 @@ type methods, and the prelude traits. See [`core:prelude`](./stdlib-core-prelude
 ```wado
 panic("error message");   // log to stderr and trap
 unreachable();            // trap on unreachable code
+
+// Comparing a secret (a MAC, a token, an API key): `==` stops at the first
+// differing byte, and how long it took says how much of a guess was right.
+eq_constant_time(&mac, &expected);   // any AsByteSlice: ByteList, String, …
 ```
 
 ### core:cli
@@ -1531,7 +1535,8 @@ let sig = to_bytes_canonical(&p);            // deterministic, for COSE/CWT
 - [`core:args`](./stdlib-core-args.md) — command-line argument parsing via serde
 - [`core:value`](./stdlib-core-value.md) — dynamic, format-agnostic value
 - [`core:base64`](./stdlib-core-base64.md) — base64 encoding and decoding
-- [`core:digest`](./stdlib-core-digest.md) — cryptographic hashes (SHA-256)
+- [`core:digest`](./stdlib-core-digest.md) — cryptographic hashes and HMAC (SHA-256)
+- [`core:jwt`](./stdlib-core-jwt.md) — JSON Web Tokens over JWS Compact (`HS256`)
 - [`core:zlib`](./stdlib-core-zlib.md) — zlib/gzip compression
 - [`core:simd`](./stdlib-core-simd.md) — Wasm 128-bit SIMD, incl. Relaxed SIMD
 - [`core:url`](./stdlib-core-url.md) — WHATWG URL parsing

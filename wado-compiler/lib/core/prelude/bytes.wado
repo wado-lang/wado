@@ -77,6 +77,31 @@ impl ByteList {
     }
 }
 
+/// Whether two byte strings are equal, in time that does not depend on where
+/// they first differ.
+///
+/// Use it whenever one side is a secret — a MAC, a token, an API key.
+/// `==` stops at the first differing byte, so how long it took says how much
+/// of a guess was right, and a secret falls one byte at a time. Everything
+/// else should keep using `==`, which is faster.
+///
+/// A length difference is still answered immediately: a MAC and a digest have
+/// public lengths, and only their contents are hidden. Neither the optimizer
+/// nor Wasm promises constant-time execution, so this takes the care it can
+/// rather than making a guarantee.
+pub fn eq_constant_time<A: AsByteSlice, B: AsByteSlice>(a: &A, b: &B) -> bool {
+    let left = a.as_byte_slice();
+    let right = b.as_byte_slice();
+    if left.len() != right.len() {
+        return false;
+    }
+    let mut diff: u8 = 0;
+    for let mut i = 0; i < left.len(); i += 1 {
+        diff = diff | left[i] ^ right[i];
+    }
+    return diff == 0;
+}
+
 // A `String` is a UTF-8 byte buffer, so it views as a `ByteSlice` directly.
 // This lets `from_bytes("...")` accept a string literal with no copy, even
 // though `String` still serializes as text (`serialize_string`), not bytes.

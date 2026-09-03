@@ -719,6 +719,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         control_flow::block_result_type(self.ctrl_flow_ctx(), block)
     }
 
+    /// Recorded type of one AST expression, the single-expression counterpart
+    /// of [`Self::ast_block_result_type`]. `None` until the body walk reaches it.
+    pub(super) fn ast_expr_type(&self, expr: &crate::ast::Expr) -> Option<TypeId> {
+        self.sem.types.expression_types.get(&expr.id()).copied()
+    }
+
     /// Emit `MissingReturn` when a declared non-Unit return type cannot be
     /// satisfied. Skipped for `Unit` / `Never`, for a bodyless external, and for a
     /// body whose every control path provably exits first. The analysis is

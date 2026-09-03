@@ -408,6 +408,17 @@ Used by variadic tuple deserialization via type pack expansion.
 
 #### `pub fn duplicate_field(name: String) -> DeserializeError`
 
+### `pub struct IgnoredAny`
+
+A value of any shape, read and thrown away.
+
+It is how a schema requires a member's _absence_: an `Option<T>` field
+cannot, because it reads an explicit `null` as the member never sent.
+
+#### `impl Deserialize for IgnoredAny`
+
+##### `fn deserialize<D: Deserializer>(d: &mut D) -> Result<IgnoredAny, DeserializeError>`
+
 ## Enums
 
 ### `pub enum SerializeErrorKind`
