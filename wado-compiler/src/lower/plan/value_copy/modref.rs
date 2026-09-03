@@ -210,6 +210,17 @@ struct Walker<'a> {
 }
 
 impl Walker<'_> {
+    /// Whether a field of `place` is visible outside this frame: reached
+    /// through a reference, or rooted at what the caller lent. A frame-local
+    /// aggregate's own field is neither — nothing a caller passed can observe
+    /// it.
+    fn reachable_from_caller(&self, place: &Names) -> bool {
+        let Names::Place(place) = place else {
+            return false;
+        };
+        place.through_borrow || self.resolver.lent(place.root).is_some()
+    }
+
     /// Record a write to what `names` stands for: every field the path names,
     /// and where it names none, `whole`.
     fn record(&mut self, names: &Names, whole: WholeOf) {
@@ -217,14 +228,18 @@ impl Walker<'_> {
             self.writes.opaque |= matches!(names, Names::Unknown);
             return;
         };
-        let mut named_a_field = false;
-        for selector in &place.selectors {
-            if let Selector::Field { owner, index } = selector {
-                self.writes.fields.insert((*owner, *index));
-                named_a_field = true;
-            }
-        }
+        let named_a_field = place
+            .selectors
+            .iter()
+            .any(|s| matches!(s, Selector::Field { .. }));
         if named_a_field {
+            if self.reachable_from_caller(names) {
+                for selector in &place.selectors {
+                    if let Selector::Field { owner, index } = selector {
+                        self.writes.fields.insert((*owner, *index));
+                    }
+                }
+            }
             return;
         }
         // A binding that names its root with no field selector at all — a
@@ -269,11 +284,13 @@ impl Walker<'_> {
             })
             .collect();
         if !fields.is_empty() {
-            self.pending.push(PendingProjection {
-                fields,
-                handed: field_owner(handed, self.type_table),
-                callee,
-            });
+            if self.reachable_from_caller(names) {
+                self.pending.push(PendingProjection {
+                    fields,
+                    handed: field_owner(handed, self.type_table),
+                    callee,
+                });
+            }
             return;
         }
         if let Some(lent) = self.resolver.lent(place.root)

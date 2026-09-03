@@ -1,5 +1,6 @@
 //! Move and share eligibility for the value-copy fold (WEP 2026-05-21), from one
-//! backward liveness walk per body. A handler or `resume` reads twice, so skips.
+//! backward liveness walk per body plus small auxiliary scans. A handler or
+//! `resume` reads twice, so skips.
 
 use super::analyze::is_owned_value;
 use super::funcset::FuncKeySet;
@@ -212,7 +213,7 @@ pub fn analyze_ownership(
     let place_spans: IndexSet<crate::token::Span> =
         moved_places.iter().map(|(_, _, span)| *span).collect();
 
-    let share_eligible = a.share_eligible(func, &place_move_bases);
+    let share_eligible = a.share_eligible(body, &place_move_bases);
     Ownership {
         move_eligible: MoveEligible {
             locals: owned,
@@ -356,22 +357,21 @@ impl Analyzer<'_> {
 
     /// The read-only bindings that may alias the storage they were read out of.
     /// Every rule below is stated in WEP 2026-05-21, _Sharing_.
-    fn share_eligible(
-        &self,
-        func: &TirFunction,
-        place_move_bases: &IndexSet<u32>,
-    ) -> IndexSet<u32> {
+    fn share_eligible(&self, body: &TirBlock, place_move_bases: &IndexSet<u32>) -> IndexSet<u32> {
         let parents = self.alias_parents();
         let at_write: Vec<IndexSet<u32>> = self
             .mutations
             .iter()
             .map(|m| readable_storage(&parents, &m.live))
             .collect();
-        let capacity_observed = func
-            .body
-            .as_ref()
-            .map(|body| capacity_observed_locals(body, self.type_table))
-            .unwrap_or_default();
+        let capacity_observed = capacity_observed_locals(body, self.type_table);
+        // What each consumed root's storage reaches, computed once per root
+        // rather than once per `share_sources` entry rooted there.
+        let consumed_reach: IndexMap<u32, IndexSet<u32>> = self
+            .consumed
+            .iter()
+            .map(|(&root, at)| (root, readable_storage(&parents, at)))
+            .collect();
         self.share_sources
             .iter()
             .filter_map(|(&local, path)| {
@@ -387,29 +387,28 @@ impl Analyzer<'_> {
                     return None;
                 }
                 // `let r = p; p = x;` leaves `r` holding what `p` gave up.
-                let released = self
-                    .mutations
-                    .iter()
-                    .zip(&at_write)
-                    .any(|(m, r)| m.rebinds_place && m.path == *path && r.contains(&local));
-                let root_given_away = self
-                    .consumed
+                // Every other mutation of `path`'s root, live where `local`
+                // could read it, must be unreachable from `local`'s path.
+                let mut released = false;
+                let mut share_safe = true;
+                for (m, r) in self.mutations.iter().zip(&at_write) {
+                    if m.rebinds_place && m.path == *path && r.contains(&local) {
+                        released = true;
+                    }
+                    if m.path.root == path.root && r.contains(&local) && !write_cannot_reach(m, path)
+                    {
+                        share_safe = false;
+                    }
+                }
+                let root_given_away = consumed_reach
                     .get(&path.root)
-                    .is_some_and(|at| readable_storage(&parents, at).contains(&local));
+                    .is_some_and(|reach| reach.contains(&local));
                 let moved_out = !released
                     && (self.consumed.contains_key(&local) || place_move_bases.contains(&local));
-                if moved_out || self.is_mutated_root(local) || root_given_away {
+                if moved_out || self.is_mutated_root(local) || root_given_away || !share_safe {
                     return None;
                 }
-                self.mutations
-                    .iter()
-                    .zip(&at_write)
-                    .all(|(m, r)| {
-                        m.path.root != path.root
-                            || !r.contains(&local)
-                            || write_cannot_reach(m, path)
-                    })
-                    .then_some(local)
+                Some(local)
             })
             .collect()
     }
