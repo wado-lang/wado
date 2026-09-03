@@ -72,38 +72,52 @@ pub fn candidates(
     found
 }
 
-/// The receiver, then what it dereferences or newtype-unwraps to, and so on.
-/// The index of a type here is the depth rank 1 reads: a reference's own impls
-/// are one level above its pointee's, and a newtype's above its base's.
+/// The levels of the receiver, nearest first. The index of a type here is the
+/// depth rank 1 reads.
+///
+/// A newtype is a type distinct from its base, so the walk finishes with the
+/// newtype before it reaches the base at all: under a reference, `&W` and `W`
+/// both come before `&Inner`. Within one level a reference precedes its
+/// pointee, which is what ranks a `&T` impl ahead of the pointee's.
 fn chain(program: &Program, receiver: &SolverType) -> Vec<SolverType> {
-    let mut chain = vec![receiver.clone()];
-    while let Some(next) = peel(program, chain.last().expect("a chain starts non-empty")) {
+    let (through_ref, mut level) = match receiver {
+        SolverType::Ref { is_mut, inner } => (Some(*is_mut), Some((**inner).clone())),
+        SolverType::Decl(..)
+        | SolverType::Param(_)
+        | SolverType::Pack(_)
+        | SolverType::Tuple(_) => (None, Some(receiver.clone())),
+    };
+    let mut chain: Vec<SolverType> = Vec::new();
+    let mut seen: Vec<SolverType> = Vec::new();
+    while let Some(ty) = level {
         // A newtype cycle is rejected where it is declared; refusing to walk one
         // twice keeps a malformed program from hanging the query.
-        if chain.contains(&next) {
+        if seen.contains(&ty) {
             break;
         }
-        chain.push(next);
+        seen.push(ty.clone());
+        level = newtype_base(program, &ty);
+        if let Some(is_mut) = through_ref {
+            chain.push(SolverType::Ref {
+                is_mut,
+                inner: Box::new(ty.clone()),
+            });
+        }
+        chain.push(ty);
     }
     chain
 }
 
-/// One level down: a reference reaches its pointee, and a newtype the base it
-/// inherits impls from, at the newtype's own type arguments.
-fn peel(program: &Program, ty: &SolverType) -> Option<SolverType> {
-    match ty {
-        SolverType::Ref { inner, .. } => Some((**inner).clone()),
-        SolverType::Decl(head, args) => {
-            let base = program.types.get(head)?.newtype_base.as_ref()?;
-            Some(
-                base.map_params(&|i| args.get(i as usize).cloned())
-                    .unwrap_or_else(|| {
-                        panic!("{base:?} mentions a parameter {ty:?} has no argument for")
-                    }),
-            )
-        }
-        SolverType::Param(_) | SolverType::Pack(_) | SolverType::Tuple(_) => None,
-    }
+/// The base a newtype inherits impls from, at the newtype's own type arguments.
+fn newtype_base(program: &Program, ty: &SolverType) -> Option<SolverType> {
+    let SolverType::Decl(head, args) = ty else {
+        return None;
+    };
+    let base = program.types.get(head)?.newtype_base.as_ref()?;
+    Some(
+        base.map_params(&|i| args.get(i as usize).cloned())
+            .unwrap_or_else(|| panic!("{base:?} mentions a parameter {ty:?} has no argument for")),
+    )
 }
 
 /// How much of the general case a target covers: rank 2's question, read off
@@ -258,6 +272,32 @@ mod tests {
                 .concrete(TR, ref_to(decl(POINT))),
         );
         assert_eq!(selected(&ask(&p, &ref_to(decl(POINT)))), Some(ImplId(2)));
+    }
+
+    /// A newtype is always preferred to its base, so a reference to one visits
+    /// `&W` and `W` before it reaches the base at all. Only then does the base's
+    /// own reference impl answer — which is how `for let b of &bag` over a
+    /// newtype of `List<u8>` reaches `impl<T> IntoIterator for &List<T>`
+    /// (`newtype_for_of_iteration.wado`).
+    #[test]
+    fn a_reference_to_a_newtype_finishes_the_newtype_before_the_base() {
+        let mut p = program(
+            Builder::default()
+                .concrete(TR, ref_to(decl(POINT)))
+                .concrete(TR, decl(WRAPPER)),
+        );
+        p.types.insert(
+            WRAPPER,
+            TypeDef {
+                newtype_base: Some(decl(POINT)),
+            },
+        );
+        let found = ask(&p, &ref_to(decl(WRAPPER)));
+        // &Wrapper, Wrapper, &Point, Point — the newtype's own impl at 1, the
+        // base's reference impl at 2.
+        assert_eq!(found.in_scope[0].depth, 1);
+        assert_eq!(found.in_scope[1].depth, 2);
+        assert_eq!(selected(&found), Some(ImplId(1)));
     }
 
     /// And above any impl on the base type, which sits one level down.

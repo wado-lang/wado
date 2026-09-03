@@ -144,6 +144,14 @@ Depth is the level a candidate is selected _at_, so it covers both shapes: an
 impl whose target is the newtype sits at 0 and one targeting the base at 1, and
 a blanket sits at the level its bounds hold at.
 
+A reference does not interrupt the chain. The newtype is always preferred, so a
+call on `&W` visits `&W` and `W` before it reaches the base at all, and only
+then `&Inner` and `Inner`. Within one level the reference precedes its pointee,
+which is what ranks a `&T` impl ahead of the pointee's. `for let b of &bag` over
+a newtype of `List<u8>` therefore takes the newtype's own impl where it has one
+and the base's `impl<T> IntoIterator for &List<T>` where it does not
+(`newtype_for_of_iteration.wado`).
+
 A blanket's depth is measured over the whole derivation, not just its first
 step. Take `impl<T: Base> Derived for T` answering `T: Derived`. That bound sits
 at the depth the blanket's own bound holds at. A chained blanket therefore does
@@ -491,12 +499,6 @@ What the corpus reports beyond the five, each its own gap:
       where rank 2 takes the specific impl at selection
       (`impl_concrete_instantiation_wins.wado`). The order is the one `spec.md`
       states; the flip moves the decision one layer up.
-- [ ] A reference to a newtype. The compiler peels the newtype and then adopts
-      the base's `&T` impl, so `for let b of &bag` over a `ByteBag` reaches
-      `impl<T> IntoIterator for &List<T>`. The chain peels the reference first
-      and never forms `&List<u8>`, so it takes `impl<T> IntoIterator for List<T>`
-      instead (`newtype_for_of_iteration.wado`). Which of `&Newtype` and
-      `&Base` a chain visits, and in what order, is undecided.
 - [ ] Calls the sort answers and the order finds no candidate for, in fixtures
       whose traits are declared in another module
       (`cross_module_concrete_generic_impl.wado`,
