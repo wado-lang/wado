@@ -407,20 +407,25 @@ overwhelmingly a _correct_ invalidation at the wrong granularity: a `&mut self`
 method calling `self.advance()` really does mutate `self`, and the bump kills
 every field of `self` where `advance` writes one. The prize is field-granular.
 
-- [ ] Field-granular receiver write sets. `compute_receiver_mutating` already
-      fixpoints "writes through param 0" as a bool; widen it to the set of
-      direct fields written (`self.f = …` contributes `f`; a deeper projection,
-      `*self = …`, a `&mut` hand-out or a `mut` argument contributes Top), and
-      at a call with a bare-local receiver bump those slots instead of the
-      local. The set-wide bump must then exempt that receiver, which is sound
-      exactly when the receiver is the callee's only path to it — not
-      `untrackable`, and no other argument in its alias class — since only then
-      is the param-0 write set complete. An O(1) exemption per local suffices:
-      record the escaped generation before and after the call, and let a read
-      of that local use the before-value while the after-value is still the
-      current one; the next unrelated impure call advances past it and the
-      exemption expires on its own. Unmeasured: what share of in-loop impure
-      calls carry a bare-local receiver, which is what this reaches.
+- [ ] Field-granular call effects — a per-parameter, per-field mod/ref
+      summary. The receiver-only version was designed and then priced out by
+      measurement: of the impure calls in loop bodies, a bare-local receiver is
+      18 % on `sqlite_parse` and 22 % on `json_twitter`, while 65 % and 57 %
+      have no receiver at all, and the loop summary is a union, so one
+      receiver-less impure call beside a receiver call re-bumps the escaped set
+      the receiver was exempted from. Precision at a call boundary is only as
+      good as the least precise call in the loop. So the summary a callee needs
+      is what it writes through _each_ parameter, by direct field, with Top for
+      a deeper projection, a `&mut` hand-out or a store through a global; the
+      existing param-0 fixpoint in `compute_receiver_mutating` is the shape of
+      it, widened to every parameter and from a bool to a field set. At a call
+      site each argument's storage root then takes slot bumps for its
+      parameter's set instead of the set-wide one, and the set-wide bump is
+      owed only by a call with a Top parameter or an argument the callee could
+      reach some other way (`untrackable`, or aliased with another argument).
+      This is a new analysis, not a rewiring of an existing verdict, and it is
+      the one thing that reaches the 66 % — nothing downstream of the call
+      boundary can.
 
 - [ ] Reach the in-loop consumers. Every freeze that may plant a local-naming
       value runs after the fixed-point loop, so the passes inside it still see
