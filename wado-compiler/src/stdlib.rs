@@ -1,163 +1,156 @@
-//! Standard library sources, bundled into the compiler binary by `include_str!`
-//! so it locates nothing at runtime. `core:*` is the high-level Wado library
+//! Standard library sources. `core:*` is the high-level Wado library
 //! (`core:cli`'s `println`, …) and `wasi:*` the raw WASI packages, keyed by
 //! interface (`wasi:cli/stdout`, `wasi:filesystem/types`).
+//!
+//! A release build — and any build for `wasm32`, which has no filesystem —
+//! embeds every module with `include_str!`, so the compiler locates nothing at
+//! runtime. A dev build reads them from `lib/` instead: `include_str!` makes
+//! each module a build dependency, so editing one would rebuild the compiler
+//! before it could be tried.
 
-pub const CORE_PRELUDE: &str = include_str!("../lib/core/prelude.wado");
+/// The `lib/` directory this crate was compiled from. A dev build reads its
+/// stdlib from there.
+#[cfg(all(debug_assertions, not(target_arch = "wasm32")))]
+const STDLIB_ROOT: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/lib");
 
-// Wasm assets bundled with the compiler. Loaded as raw bytes (UTF-8 for
-// `.wat`, binary for `.wasm`) and dispatched through `get_stdlib_wasm_asset`.
+#[cfg(all(debug_assertions, not(target_arch = "wasm32")))]
+fn read_stdlib_module(file: &str) -> &'static str {
+    let path = std::path::Path::new(STDLIB_ROOT).join(file);
+    let source = std::fs::read_to_string(&path)
+        .unwrap_or_else(|e| panic!("dev build reads the stdlib from {}: {e}", path.display()));
+    String::leak(source)
+}
+
+/// Declares a stdlib table as `(import_path, file)` pairs, `file` relative to
+/// `lib/`. Both build modes are generated from the one list.
+macro_rules! stdlib_table {
+    ($(#[$meta:meta])* $vis:vis fn $name:ident; $($import:literal => $file:literal,)*) => {
+        $(#[$meta])*
+        #[cfg(any(not(debug_assertions), target_arch = "wasm32"))]
+        $vis fn $name() -> &'static [(&'static str, &'static str)] {
+            const TABLE: &[(&str, &str)] =
+                &[$(($import, include_str!(concat!("../lib/", $file))),)*];
+            TABLE
+        }
+
+        $(#[$meta])*
+        #[cfg(all(debug_assertions, not(target_arch = "wasm32")))]
+        $vis fn $name() -> &'static [(&'static str, &'static str)] {
+            static TABLE: std::sync::OnceLock<Vec<(&'static str, &'static str)>> =
+                std::sync::OnceLock::new();
+            TABLE.get_or_init(|| vec![$(($import, read_stdlib_module($file)),)*])
+        }
+    };
+}
+
+stdlib_table! {
+    /// Every core stdlib module.
+    ///
+    /// This is the single source of truth for the set: the loader's
+    /// `cached_stdlib_module`, [`get_stdlib_module`], and the
+    /// `ModuleSourceInterner` well-known arc set all derive from it.
+    pub fn all_core_modules;
+    "core:allocator" => "core/allocator.wado",
+    "core:builtin" => "core/builtin.wado",
+    "core:cli" => "core/cli.wado",
+    "core:collections" => "core/collections.wado",
+    "core:rt" => "core/rt.wado",
+    "core:prelude" => "core/prelude.wado",
+    "core:prelude/array.wado" => "core/prelude/array.wado",
+    "core:prelude/slice.wado" => "core/prelude/slice.wado",
+    "core:prelude/list.wado" => "core/prelude/list.wado",
+    "core:prelude/format.wado" => "core/prelude/format.wado",
+    "core:prelude/fpfmt.wado" => "core/prelude/fpfmt.wado",
+    "core:prelude/int128.wado" => "core/prelude/int128.wado",
+    "core:prelude/intparse.wado" => "core/prelude/intparse.wado",
+    "core:prelude/primitive.wado" => "core/prelude/primitive.wado",
+    "core:prelude/range.wado" => "core/prelude/range.wado",
+    "core:prelude/bytes.wado" => "core/prelude/bytes.wado",
+    "core:prelude/string.wado" => "core/prelude/string.wado",
+    "core:prelude/traits.wado" => "core/prelude/traits.wado",
+    "core:prelude/tuple.wado" => "core/prelude/tuple.wado",
+    "core:prelude/types.wado" => "core/prelude/types.wado",
+    "core:zlib" => "core/zlib.wado",
+    "core:base64" => "core/base64.wado",
+    "core:benchmark" => "core/benchmark.wado",
+    "core:serde" => "core/serde.wado",
+    "core:json" => "core/json.wado",
+    "core:json_nsd" => "core/json_nsd.wado",
+    "core:args" => "core/args.wado",
+    "core:value" => "core/value.wado",
+    "core:cbor" => "core/cbor.wado",
+    "core:simd" => "core/simd.wado",
+    "core:url" => "core/url.wado",
+    "core:router" => "core/router.wado",
+    "core:digest" => "core/digest.wado",
+    "core:random" => "core/random.wado",
+    "core:uuid" => "core/uuid.wado",
+    "core:temporal" => "core/temporal.wado",
+    "core:log" => "core/log.wado",
+    "core:jwt" => "core/jwt.wado",
+    "core:kiln" => "core/kiln.wado",
+    "core:kiln/kiln_host.wado" => "core/kiln/kiln_host.wado",
+    "core:kiln/types.wado" => "core/kiln/types.wado",
+    "core:kiln/worlds.wado" => "core/kiln/worlds.wado",
+}
+
+stdlib_table! {
+    /// Every bundled CM binding module.
+    ///
+    /// The import path is what users write in a `from "wasi:..."` / `from
+    /// "web:..."` expression. The namespace of each is reserved because it
+    /// appears here — see `docs/wep-2026-06-17-package-module-syntax.md`.
+    /// A flat package path re-exports all of its sub-interfaces.
+    pub fn all_binding_modules;
+    "wasi:cli" => "wasi/cli.wado",
+    "wasi:filesystem" => "wasi/filesystem.wado",
+    "wasi:clocks" => "wasi/clocks.wado",
+    "wasi:random" => "wasi/random.wado",
+    "wasi:sockets" => "wasi/sockets.wado",
+    "wasi:tls" => "wasi/tls.wado",
+    "wasi:http" => "wasi/http.wado",
+    "wasi:cli/environment.wado" => "wasi/cli/environment.wado",
+    "wasi:cli/exit.wado" => "wasi/cli/exit.wado",
+    "wasi:cli/run.wado" => "wasi/cli/run.wado",
+    "wasi:cli/types.wado" => "wasi/cli/types.wado",
+    "wasi:cli/stdin.wado" => "wasi/cli/stdin.wado",
+    "wasi:cli/stdout.wado" => "wasi/cli/stdout.wado",
+    "wasi:cli/stderr.wado" => "wasi/cli/stderr.wado",
+    "wasi:cli/terminal_input.wado" => "wasi/cli/terminal_input.wado",
+    "wasi:cli/terminal_output.wado" => "wasi/cli/terminal_output.wado",
+    "wasi:cli/terminal_stdin.wado" => "wasi/cli/terminal_stdin.wado",
+    "wasi:cli/terminal_stdout.wado" => "wasi/cli/terminal_stdout.wado",
+    "wasi:cli/terminal_stderr.wado" => "wasi/cli/terminal_stderr.wado",
+    "wasi:cli/worlds.wado" => "wasi/cli/worlds.wado",
+    "wasi:clocks/types.wado" => "wasi/clocks/types.wado",
+    "wasi:clocks/monotonic_clock.wado" => "wasi/clocks/monotonic_clock.wado",
+    "wasi:clocks/system_clock.wado" => "wasi/clocks/system_clock.wado",
+    "wasi:clocks/timezone.wado" => "wasi/clocks/timezone.wado",
+    "wasi:clocks/worlds.wado" => "wasi/clocks/worlds.wado",
+    "wasi:filesystem/types.wado" => "wasi/filesystem/types.wado",
+    "wasi:filesystem/preopens.wado" => "wasi/filesystem/preopens.wado",
+    "wasi:filesystem/worlds.wado" => "wasi/filesystem/worlds.wado",
+    "wasi:http/types.wado" => "wasi/http/types.wado",
+    "wasi:http/handler.wado" => "wasi/http/handler.wado",
+    "wasi:http/client.wado" => "wasi/http/client.wado",
+    "wasi:http/worlds.wado" => "wasi/http/worlds.wado",
+    "wasi:random/insecure_seed.wado" => "wasi/random/insecure_seed.wado",
+    "wasi:random/insecure.wado" => "wasi/random/insecure.wado",
+    "wasi:random/random.wado" => "wasi/random/random.wado",
+    "wasi:random/worlds.wado" => "wasi/random/worlds.wado",
+    "wasi:sockets/types.wado" => "wasi/sockets/types.wado",
+    "wasi:sockets/ip_name_lookup.wado" => "wasi/sockets/ip_name_lookup.wado",
+    "wasi:sockets/worlds.wado" => "wasi/sockets/worlds.wado",
+    "wasi:tls/types.wado" => "wasi/tls/types.wado",
+    "wasi:tls/client.wado" => "wasi/tls/client.wado",
+    "wasi:tls/worlds.wado" => "wasi/tls/worlds.wado",
+    // Web platform bindings — the extern-handle slice Tide's WebIDL frontend replaces.
+    "web:dom" => "web/dom.wado",
+}
+
+/// A wasm asset bundled with the compiler, always embedded: it is generated
+/// rather than edited, and is bytes rather than source.
 pub const CORE_LIBM_WAT: &[u8] = include_bytes!("../lib/core/libm.wat");
-pub const CORE_CLI: &str = include_str!("../lib/core/cli.wado");
-pub const CORE_RT: &str = include_str!("../lib/core/rt.wado");
-pub const CORE_ALLOCATOR: &str = include_str!("../lib/core/allocator.wado");
-pub const CORE_PRELUDE_STRING: &str = include_str!("../lib/core/prelude/string.wado");
-pub const CORE_BUILTIN: &str = include_str!("../lib/core/builtin.wado");
-pub const CORE_PRELUDE_TRAITS: &str = include_str!("../lib/core/prelude/traits.wado");
-pub const CORE_PRELUDE_INT128: &str = include_str!("../lib/core/prelude/int128.wado");
-pub const CORE_PRELUDE_TYPES: &str = include_str!("../lib/core/prelude/types.wado");
-pub const CORE_PRELUDE_ARRAY: &str = include_str!("../lib/core/prelude/array.wado");
-pub const CORE_PRELUDE_SLICE: &str = include_str!("../lib/core/prelude/slice.wado");
-pub const CORE_PRELUDE_PRIMITIVE: &str = include_str!("../lib/core/prelude/primitive.wado");
-pub const CORE_PRELUDE_FORMAT: &str = include_str!("../lib/core/prelude/format.wado");
-pub const CORE_PRELUDE_LIST: &str = include_str!("../lib/core/prelude/list.wado");
-pub const CORE_PRELUDE_FPFMT: &str = include_str!("../lib/core/prelude/fpfmt.wado");
-pub const CORE_PRELUDE_INTPARSE: &str = include_str!("../lib/core/prelude/intparse.wado");
-pub const CORE_PRELUDE_TUPLE: &str = include_str!("../lib/core/prelude/tuple.wado");
-pub const CORE_PRELUDE_RANGE: &str = include_str!("../lib/core/prelude/range.wado");
-pub const CORE_PRELUDE_BYTES: &str = include_str!("../lib/core/prelude/bytes.wado");
-pub const CORE_COLLECTIONS: &str = include_str!("../lib/core/collections.wado");
-pub const CORE_ZLIB: &str = include_str!("../lib/core/zlib.wado");
-pub const CORE_BASE64: &str = include_str!("../lib/core/base64.wado");
-pub const CORE_BENCHMARK: &str = include_str!("../lib/core/benchmark.wado");
-pub const CORE_SERDE: &str = include_str!("../lib/core/serde.wado");
-pub const CORE_JSON: &str = include_str!("../lib/core/json.wado");
-pub const CORE_JSON_NSD: &str = include_str!("../lib/core/json_nsd.wado");
-pub const CORE_ARGS: &str = include_str!("../lib/core/args.wado");
-pub const CORE_VALUE: &str = include_str!("../lib/core/value.wado");
-pub const CORE_CBOR: &str = include_str!("../lib/core/cbor.wado");
-pub const CORE_SIMD: &str = include_str!("../lib/core/simd.wado");
-pub const CORE_KILN: &str = include_str!("../lib/core/kiln.wado");
-pub const CORE_KILN_KILN_HOST: &str = include_str!("../lib/core/kiln/kiln_host.wado");
-pub const CORE_KILN_TYPES: &str = include_str!("../lib/core/kiln/types.wado");
-pub const CORE_KILN_WORLDS: &str = include_str!("../lib/core/kiln/worlds.wado");
-pub const CORE_URL: &str = include_str!("../lib/core/url.wado");
-pub const CORE_ROUTER: &str = include_str!("../lib/core/router.wado");
-pub const CORE_DIGEST: &str = include_str!("../lib/core/digest.wado");
-pub const CORE_RANDOM: &str = include_str!("../lib/core/random.wado");
-pub const CORE_UUID: &str = include_str!("../lib/core/uuid.wado");
-pub const CORE_TEMPORAL: &str = include_str!("../lib/core/temporal.wado");
-pub const CORE_LOG: &str = include_str!("../lib/core/log.wado");
-pub const CORE_JWT: &str = include_str!("../lib/core/jwt.wado");
-
-// WASI flat package files — re-export from all sub-interfaces (backward compat)
-pub const WASI_CLI: &str = include_str!("../lib/wasi/cli.wado");
-pub const WASI_FILESYSTEM: &str = include_str!("../lib/wasi/filesystem.wado");
-pub const WASI_CLOCKS: &str = include_str!("../lib/wasi/clocks.wado");
-pub const WASI_RANDOM: &str = include_str!("../lib/wasi/random.wado");
-pub const WASI_SOCKETS: &str = include_str!("../lib/wasi/sockets.wado");
-pub const WASI_TLS: &str = include_str!("../lib/wasi/tls.wado");
-pub const WASI_HTTP: &str = include_str!("../lib/wasi/http.wado");
-
-// WASI interfaces — one constant per interface
-pub const WASI_CLI_ENVIRONMENT: &str = include_str!("../lib/wasi/cli/environment.wado");
-pub const WASI_CLI_EXIT: &str = include_str!("../lib/wasi/cli/exit.wado");
-pub const WASI_CLI_RUN: &str = include_str!("../lib/wasi/cli/run.wado");
-pub const WASI_CLI_TYPES: &str = include_str!("../lib/wasi/cli/types.wado");
-pub const WASI_CLI_STDIN: &str = include_str!("../lib/wasi/cli/stdin.wado");
-pub const WASI_CLI_STDOUT: &str = include_str!("../lib/wasi/cli/stdout.wado");
-pub const WASI_CLI_STDERR: &str = include_str!("../lib/wasi/cli/stderr.wado");
-pub const WASI_CLI_TERMINAL_INPUT: &str = include_str!("../lib/wasi/cli/terminal_input.wado");
-pub const WASI_CLI_TERMINAL_OUTPUT: &str = include_str!("../lib/wasi/cli/terminal_output.wado");
-pub const WASI_CLI_TERMINAL_STDIN: &str = include_str!("../lib/wasi/cli/terminal_stdin.wado");
-pub const WASI_CLI_TERMINAL_STDOUT: &str = include_str!("../lib/wasi/cli/terminal_stdout.wado");
-pub const WASI_CLI_TERMINAL_STDERR: &str = include_str!("../lib/wasi/cli/terminal_stderr.wado");
-pub const WASI_CLI_WORLDS: &str = include_str!("../lib/wasi/cli/worlds.wado");
-
-pub const WASI_CLOCKS_TYPES: &str = include_str!("../lib/wasi/clocks/types.wado");
-pub const WASI_CLOCKS_MONOTONIC_CLOCK: &str =
-    include_str!("../lib/wasi/clocks/monotonic_clock.wado");
-pub const WASI_CLOCKS_SYSTEM_CLOCK: &str = include_str!("../lib/wasi/clocks/system_clock.wado");
-pub const WASI_CLOCKS_TIMEZONE: &str = include_str!("../lib/wasi/clocks/timezone.wado");
-pub const WASI_CLOCKS_WORLDS: &str = include_str!("../lib/wasi/clocks/worlds.wado");
-
-pub const WASI_FILESYSTEM_TYPES: &str = include_str!("../lib/wasi/filesystem/types.wado");
-pub const WASI_FILESYSTEM_PREOPENS: &str = include_str!("../lib/wasi/filesystem/preopens.wado");
-pub const WASI_FILESYSTEM_WORLDS: &str = include_str!("../lib/wasi/filesystem/worlds.wado");
-
-pub const WASI_HTTP_TYPES: &str = include_str!("../lib/wasi/http/types.wado");
-pub const WASI_HTTP_HANDLER: &str = include_str!("../lib/wasi/http/handler.wado");
-pub const WASI_HTTP_CLIENT: &str = include_str!("../lib/wasi/http/client.wado");
-pub const WASI_HTTP_WORLDS: &str = include_str!("../lib/wasi/http/worlds.wado");
-
-pub const WASI_RANDOM_INSECURE_SEED: &str = include_str!("../lib/wasi/random/insecure_seed.wado");
-pub const WASI_RANDOM_INSECURE: &str = include_str!("../lib/wasi/random/insecure.wado");
-pub const WASI_RANDOM_RANDOM: &str = include_str!("../lib/wasi/random/random.wado");
-pub const WASI_RANDOM_WORLDS: &str = include_str!("../lib/wasi/random/worlds.wado");
-
-pub const WASI_SOCKETS_TYPES: &str = include_str!("../lib/wasi/sockets/types.wado");
-pub const WASI_SOCKETS_IP_NAME_LOOKUP: &str =
-    include_str!("../lib/wasi/sockets/ip_name_lookup.wado");
-pub const WASI_SOCKETS_WORLDS: &str = include_str!("../lib/wasi/sockets/worlds.wado");
-
-pub const WASI_TLS_TYPES: &str = include_str!("../lib/wasi/tls/types.wado");
-pub const WASI_TLS_CLIENT: &str = include_str!("../lib/wasi/tls/client.wado");
-pub const WASI_TLS_WORLDS: &str = include_str!("../lib/wasi/tls/worlds.wado");
-
-// Web platform bindings — the extern-handle slice Tide's WebIDL frontend replaces.
-pub const WEB_DOM: &str = include_str!("../lib/web/dom.wado");
-
-/// All core stdlib statics.
-///
-/// Each entry is `(import_path, source)` where `import_path` matches
-/// what users write in `from "core:..."` expressions. This is the
-/// single source of truth for the set of core stdlib modules: the
-/// loader's `cached_stdlib_module`, `get_stdlib_module`, and the
-/// `ModuleSourceInterner` well-known arc set all derive from it.
-pub const ALL_CORE_MODULES: &[(&str, &str)] = &[
-    ("core:allocator", CORE_ALLOCATOR),
-    ("core:builtin", CORE_BUILTIN),
-    ("core:cli", CORE_CLI),
-    ("core:collections", CORE_COLLECTIONS),
-    ("core:rt", CORE_RT),
-    ("core:prelude", CORE_PRELUDE),
-    ("core:prelude/array.wado", CORE_PRELUDE_ARRAY),
-    ("core:prelude/slice.wado", CORE_PRELUDE_SLICE),
-    ("core:prelude/list.wado", CORE_PRELUDE_LIST),
-    ("core:prelude/format.wado", CORE_PRELUDE_FORMAT),
-    ("core:prelude/fpfmt.wado", CORE_PRELUDE_FPFMT),
-    ("core:prelude/int128.wado", CORE_PRELUDE_INT128),
-    ("core:prelude/intparse.wado", CORE_PRELUDE_INTPARSE),
-    ("core:prelude/primitive.wado", CORE_PRELUDE_PRIMITIVE),
-    ("core:prelude/range.wado", CORE_PRELUDE_RANGE),
-    ("core:prelude/bytes.wado", CORE_PRELUDE_BYTES),
-    ("core:prelude/string.wado", CORE_PRELUDE_STRING),
-    ("core:prelude/traits.wado", CORE_PRELUDE_TRAITS),
-    ("core:prelude/tuple.wado", CORE_PRELUDE_TUPLE),
-    ("core:prelude/types.wado", CORE_PRELUDE_TYPES),
-    ("core:zlib", CORE_ZLIB),
-    ("core:base64", CORE_BASE64),
-    ("core:benchmark", CORE_BENCHMARK),
-    ("core:serde", CORE_SERDE),
-    ("core:json", CORE_JSON),
-    ("core:json_nsd", CORE_JSON_NSD),
-    ("core:args", CORE_ARGS),
-    ("core:value", CORE_VALUE),
-    ("core:cbor", CORE_CBOR),
-    ("core:simd", CORE_SIMD),
-    ("core:url", CORE_URL),
-    ("core:router", CORE_ROUTER),
-    ("core:digest", CORE_DIGEST),
-    ("core:random", CORE_RANDOM),
-    ("core:uuid", CORE_UUID),
-    ("core:temporal", CORE_TEMPORAL),
-    ("core:log", CORE_LOG),
-    ("core:jwt", CORE_JWT),
-    ("core:kiln", CORE_KILN),
-    ("core:kiln/kiln_host.wado", CORE_KILN_KILN_HOST),
-    ("core:kiln/types.wado", CORE_KILN_TYPES),
-    ("core:kiln/worlds.wado", CORE_KILN_WORLDS),
-];
 
 /// All bundled wasm assets, used for registry building.
 ///
@@ -165,66 +158,6 @@ pub const ALL_CORE_MODULES: &[(&str, &str)] = &[
 /// `wasm:`-style path that the loader assigns to
 /// [`ModuleSource::Wasm`](crate::module_source::ModuleSource::Wasm).
 pub const ALL_CORE_WASM_ASSETS: &[(&str, &[u8])] = &[("core:libm.wat", CORE_LIBM_WAT)];
-
-/// Every bundled CM binding module, used for registry building.
-///
-/// Each entry is `(import_path, source)` where `import_path` matches what users
-/// write in a `from "wasi:..."` / `from "web:..."` expression. The namespace of
-/// each is reserved because it appears here — see
-/// `docs/wep-2026-06-17-package-module-syntax.md`.
-pub const ALL_BINDING_MODULES: &[(&str, &str)] = &[
-    // Flat package paths (user-facing, backward compatible)
-    ("wasi:cli", WASI_CLI),
-    ("wasi:filesystem", WASI_FILESYSTEM),
-    ("wasi:clocks", WASI_CLOCKS),
-    ("wasi:random", WASI_RANDOM),
-    ("wasi:sockets", WASI_SOCKETS),
-    ("wasi:tls", WASI_TLS),
-    ("wasi:http", WASI_HTTP),
-    // Per-interface paths (for specific imports and cross-package references)
-    ("wasi:cli/environment.wado", WASI_CLI_ENVIRONMENT),
-    ("wasi:cli/exit.wado", WASI_CLI_EXIT),
-    ("wasi:cli/run.wado", WASI_CLI_RUN),
-    ("wasi:cli/types.wado", WASI_CLI_TYPES),
-    ("wasi:cli/stdin.wado", WASI_CLI_STDIN),
-    ("wasi:cli/stdout.wado", WASI_CLI_STDOUT),
-    ("wasi:cli/stderr.wado", WASI_CLI_STDERR),
-    ("wasi:cli/terminal_input.wado", WASI_CLI_TERMINAL_INPUT),
-    ("wasi:cli/terminal_output.wado", WASI_CLI_TERMINAL_OUTPUT),
-    ("wasi:cli/terminal_stdin.wado", WASI_CLI_TERMINAL_STDIN),
-    ("wasi:cli/terminal_stdout.wado", WASI_CLI_TERMINAL_STDOUT),
-    ("wasi:cli/terminal_stderr.wado", WASI_CLI_TERMINAL_STDERR),
-    ("wasi:cli/worlds.wado", WASI_CLI_WORLDS),
-    ("wasi:clocks/types.wado", WASI_CLOCKS_TYPES),
-    (
-        "wasi:clocks/monotonic_clock.wado",
-        WASI_CLOCKS_MONOTONIC_CLOCK,
-    ),
-    ("wasi:clocks/system_clock.wado", WASI_CLOCKS_SYSTEM_CLOCK),
-    ("wasi:clocks/timezone.wado", WASI_CLOCKS_TIMEZONE),
-    ("wasi:clocks/worlds.wado", WASI_CLOCKS_WORLDS),
-    ("wasi:filesystem/types.wado", WASI_FILESYSTEM_TYPES),
-    ("wasi:filesystem/preopens.wado", WASI_FILESYSTEM_PREOPENS),
-    ("wasi:filesystem/worlds.wado", WASI_FILESYSTEM_WORLDS),
-    ("wasi:http/types.wado", WASI_HTTP_TYPES),
-    ("wasi:http/handler.wado", WASI_HTTP_HANDLER),
-    ("wasi:http/client.wado", WASI_HTTP_CLIENT),
-    ("wasi:http/worlds.wado", WASI_HTTP_WORLDS),
-    ("wasi:random/insecure_seed.wado", WASI_RANDOM_INSECURE_SEED),
-    ("wasi:random/insecure.wado", WASI_RANDOM_INSECURE),
-    ("wasi:random/random.wado", WASI_RANDOM_RANDOM),
-    ("wasi:random/worlds.wado", WASI_RANDOM_WORLDS),
-    ("wasi:sockets/types.wado", WASI_SOCKETS_TYPES),
-    (
-        "wasi:sockets/ip_name_lookup.wado",
-        WASI_SOCKETS_IP_NAME_LOOKUP,
-    ),
-    ("wasi:sockets/worlds.wado", WASI_SOCKETS_WORLDS),
-    ("wasi:tls/types.wado", WASI_TLS_TYPES),
-    ("wasi:tls/client.wado", WASI_TLS_CLIENT),
-    ("wasi:tls/worlds.wado", WASI_TLS_WORLDS),
-    ("web:dom", WEB_DOM),
-];
 
 /// Get embedded wasm asset bytes by canonical path.
 ///
@@ -239,17 +172,18 @@ pub fn get_stdlib_wasm_asset(import_path: &str) -> Option<&'static [u8]> {
         .map(|(_, bytes)| *bytes)
 }
 
-/// Get embedded module source by import path.
+/// Get module source by import path.
 ///
 /// # Arguments
 /// * `import_path` - Import path string, e.g., `"core:cli"`, `"wasi:filesystem/types.wado"` or `"web:dom"`
 ///
 /// # Returns
 /// The source code of the module if found, or `None` if not a standard library module.
+#[must_use]
 pub fn get_stdlib_module(import_path: &str) -> Option<&'static str> {
-    ALL_CORE_MODULES
+    all_core_modules()
         .iter()
-        .chain(ALL_BINDING_MODULES.iter())
+        .chain(all_binding_modules())
         .find(|(path, _)| *path == import_path)
         .map(|(_, src)| *src)
 }
@@ -393,5 +327,35 @@ mod tests {
     fn test_non_stdlib_module() {
         assert!(get_stdlib_module("myapp:utils").is_none());
         assert!(get_stdlib_module("https://example.com/lib.wado").is_none());
+    }
+
+    #[test]
+    fn import_paths_are_unique() {
+        let mut seen = std::collections::HashSet::new();
+        for (import, _) in all_core_modules().iter().chain(all_binding_modules()) {
+            assert!(seen.insert(*import), "duplicate import path {import}");
+        }
+    }
+
+    /// Each module is served from the file its import path names — so a dev
+    /// build serves what is on disk now, rather than a copy the last `cargo
+    /// build` froze into the binary, and a table entry pointing at the wrong
+    /// file is a mismatch rather than a silent swap.
+    #[cfg(all(debug_assertions, not(target_arch = "wasm32")))]
+    #[test]
+    fn a_dev_build_serves_the_file_its_import_path_names() {
+        for (import, _) in all_core_modules().iter().chain(all_binding_modules()) {
+            let mut file = import.replace(':', "/");
+            if !file.ends_with(".wado") {
+                file.push_str(".wado");
+            }
+            let path = std::path::Path::new(STDLIB_ROOT).join(file);
+            let on_disk = std::fs::read_to_string(&path).expect(import);
+            assert_eq!(
+                get_stdlib_module(import).expect(import),
+                on_disk,
+                "{import}"
+            );
+        }
     }
 }

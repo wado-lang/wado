@@ -24,14 +24,11 @@ optimizer has its own guide: [`docs/optimizer.md`](../docs/optimizer.md).
 
 ## Standard Libraries
 
-`lib/core/` and `lib/wasi/` are embedded by `include_str!` in `src/stdlib.rs` —
-editing one has no effect until the crate is rebuilt. `lib/wasi/` and
-`lib/core/kiln/` are generated from WIT: read `wado-from-idl/AGENTS.md` first.
-
-`src/stdlib.rs` names no `_test.wado`, so the white-box tests beside a stdlib
-module are **not** embedded. `wado test lib/core/prelude/fpfmt_test.wado` reads
-one from disk and runs in seconds, so iterate there and spend the rebuild only
-on the module it tests.
+`src/stdlib.rs` lists `lib/core/` and `lib/wasi/`. A dev build reads them from
+disk, so editing one takes effect on the next `wado` run with no rebuild; a
+release build — and any `wasm32` build, which has no filesystem — embeds them
+with `include_str!`. `lib/wasi/` and `lib/core/kiln/` are generated from WIT:
+read `wado-from-idl/AGENTS.md` first.
 
 ## E2E Tests
 

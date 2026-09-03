@@ -1113,12 +1113,12 @@ fn stdlib_slots() -> &'static StdlibSlotMap {
 
     static SLOTS: OnceLock<StdlibSlotMap> = OnceLock::new();
     SLOTS.get_or_init(|| {
-        let total = stdlib::ALL_CORE_MODULES.len() + stdlib::ALL_BINDING_MODULES.len();
+        let total = stdlib::all_core_modules().len() + stdlib::all_binding_modules().len();
         let mut slots: StdlibSlotMap =
             crate::hashmap::IndexMap::with_capacity_and_hasher(total, FxBuildHasher);
-        for &(path, source) in stdlib::ALL_CORE_MODULES
+        for &(path, source) in stdlib::all_core_modules()
             .iter()
-            .chain(stdlib::ALL_BINDING_MODULES.iter())
+            .chain(stdlib::all_binding_modules())
         {
             slots.insert(
                 path,
