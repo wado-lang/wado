@@ -2104,19 +2104,30 @@ fn walk_nested_loop(
 ) {
     // Commit a reached `ScalarOnly` candidate so inner reads (and a nested
     // HFS's pre-load) observe an up-to-date field. An unreached one keeps its
-    // scalar canonical across the whole loop, so it is driven to `ScalarOnly`
-    // instead. That is a weaker claim about the field, which only ever asks for
-    // more write-backs later, and it is the entry state the body is walked
-    // under.
+    // scalar canonical across the whole loop, so it is left `ScalarOnly` — a
+    // weaker claim about the field, which only ever asks for more write-backs
+    // later, and the entry state the body is walked under.
+    //
+    // `Both` is weakened the same way only when the body writes the candidate,
+    // which is what would otherwise drive the back edge back to `Both` every
+    // iteration. A candidate the body never writes cannot leave `Both`, so the
+    // back edge is already free and weakening would only buy a write-back at
+    // the next call that wants the field.
     let reached = loop_body_call_reach(body, block, ctx);
+    let mut body_accesses: IndexMap<(u32, u32), FieldAccessInfo> = IndexMap::default();
+    count_field_accesses_in_block(body, block, &mut body_accesses, ctx.type_table);
     for i in 0..ctx.candidates.len() {
+        let c = &ctx.candidates[i];
+        let written = body_accesses
+            .get(&(c.local_index, c.field_index))
+            .is_some_and(|info| info.write_count > 0);
         match states[i] {
             CanonState::ScalarOnly if reached.contains(&i) => {
                 let stmt = make_write_back_stmt(body, &ctx.candidates[i], span);
                 out.push(stmt);
                 states[i] = CanonState::Both;
             }
-            CanonState::Both if !reached.contains(&i) => {
+            CanonState::Both if !reached.contains(&i) && written => {
                 states[i] = CanonState::ScalarOnly;
             }
             _ => {}

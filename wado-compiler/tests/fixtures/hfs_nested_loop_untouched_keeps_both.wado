@@ -1,0 +1,74 @@
+// A nested loop that never writes a candidate leaves it `Both`.
+//
+// An unreached candidate is weakened to `ScalarOnly` at a nested loop so the
+// back edge costs nothing when the body writes it. A body that never writes it
+// cannot leave `Both` anyway, so the back edge is already free and weakening
+// would only buy a write-back at the next call that wants the field — here the
+// second `peek`, once per outer iteration.
+
+use { println, Stdout } from "core:cli";
+
+struct S {
+    a: i32,
+    b: i32,
+}
+
+// Keeps `s` off `sroa`'s non-escaping path, which would otherwise retire HFS.
+#[inline(never)]
+fn arm(s: &mut S) {
+    s.b = 0;
+}
+
+// `&S`, so the callee cannot write: the sync it needs is a write-back, leaving
+// both sides canonical. It reads two fields so `sroa_param` cannot reduce it to
+// a scalar parameter.
+#[inline(never)]
+fn peek(s: &S) -> i32 {
+    return s.a + s.b;
+}
+
+// Same shape, named apart so the write-back the weakened path would emit before
+// it is one `wir_not_expect` can name. Two identical calls would put both
+// write-backs behind the same text, and substring matching cannot count.
+#[inline(never)]
+fn peek_after(s: &S) -> i32 {
+    return s.a + s.b;
+}
+
+export fn run() with Stdout {
+    let mut s = S { a: 0, b: 0 };
+    arm(&mut s);
+    let mut sink = 0;
+    let mut o = 0;
+    while o < builtin::black_box(3) {
+        sink = sink + s.a;
+        s.a = s.a + 1;
+        sink = sink + s.a;
+        sink = sink + peek(&s);
+        // Touches nothing of `s`.
+        for let mut k = 0; k < 2; k += 1 {
+            sink = sink + k;
+        }
+        sink = sink + peek_after(&s);
+        o += 1;
+    }
+    println(`${sink} ${s.a}`);
+}
+
+// The first `peek` is what leaves `s.a` `Both` at the nested loop, and its
+// write-back is the only one the body should hold. The negative pattern is the
+// statement pair the weakened path would emit: a second write-back immediately
+// before the `peek_after` call. The positive pattern pins the local numbering
+// the negative one names, so a renumbering fails the test rather than passing
+// it silently.
+
+__DATA__
+{
+    "stdout": "24 3\n",
+    "wir_expect:O2": [
+        "let __hfs_a_45: i32;"
+    ],
+    "wir_not_expect:O2": [
+        "s.a = __hfs_a_45;\n            sink = sink + \"hfs_nested_loop_untouched_keeps_both.wado/peek_after\"(s);"
+    ]
+}
