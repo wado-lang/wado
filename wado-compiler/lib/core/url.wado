@@ -320,13 +320,16 @@ fn parse_authority(authority: &String, url: &mut Url) -> Result<(), ParseError> 
     let input = *authority;
     let mut rest = input;
 
-    if let Some([userinfo, after_at]) = input.split_once("@") {
+    // User info runs to the last `@`. WHATWG carries an earlier one as `%40`,
+    // which adds no colon, so the password still starts at the first one.
+    if let Some([userinfo, after_at]) = input.rsplit_once("@") {
         rest = after_at;
-        if let Some([user, password]) = userinfo.split_once(":") {
+        let escaped = userinfo.replace("@", "%40");
+        if let Some([user, password]) = escaped.split_once(":") {
             url.username = user;
             url.password = password;
         } else {
-            url.username = userinfo;
+            url.username = escaped;
         }
     }
 
