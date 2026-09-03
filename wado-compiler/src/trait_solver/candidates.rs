@@ -4,7 +4,7 @@
 
 use super::holds::impl_applies;
 use super::program::{Env, MethodId, ModuleId, Program, SolverType, TraitDeclId};
-use super::rank::{Candidate, Generality};
+use super::rank::Candidate;
 
 /// The candidates at one call site, and what the diagnostic needs where there
 /// are none.
@@ -61,7 +61,7 @@ pub fn candidates(
                 trait_,
                 trait_args,
                 depth,
-                generality: generality(&def.target),
+                is_blanket: is_blanket(&def.target),
                 is_variadic: is_variadic(&def.target),
             });
         }
@@ -106,19 +106,13 @@ fn peel(program: &Program, ty: &SolverType) -> Option<SolverType> {
     }
 }
 
-/// How much of the general case a target covers: rank 2's question, read off
-/// the target alone.
-fn generality(target: &SolverType) -> Generality {
-    match target {
-        SolverType::Param(_) | SolverType::Pack(_) => Generality::Any,
-        SolverType::Decl(..) | SolverType::Ref { .. } | SolverType::Tuple(_) => {
-            if target.mentions(&|_| true) {
-                Generality::Head
-            } else {
-                Generality::Exact
-            }
-        }
-    }
+/// Rank 2's question, read off the target alone: a target mentioning a type
+/// parameter answers for every type that parameter can take, so it covers the
+/// general case rather than naming the receiver. `impl<T> Tag for Box_<T>` is
+/// therefore a blanket for `Box_<i32>`, which is what puts
+/// `impl Tag for Box_<i32>` above it (`spec.md`, "Specific Impls Win").
+fn is_blanket(target: &SolverType) -> bool {
+    target.mentions(&|_| true)
 }
 
 /// Whether the target is the bare `[..T]` a variadic impl is written for.
@@ -194,7 +188,7 @@ mod tests {
         let p = program(Builder::default().concrete(TR, decl(POINT)));
         let found = ask(&p, &decl(POINT));
         assert_eq!(selected(&found), Some(ImplId(0)));
-        assert_eq!(found.in_scope[0].generality, Generality::Exact);
+        assert!(!found.in_scope[0].is_blanket);
         assert_eq!(found.in_scope[0].depth, 0);
     }
 
@@ -224,7 +218,7 @@ mod tests {
         ));
         let found = ask(&p, &decl(POINT));
         assert_eq!(selected(&found), Some(ImplId(1)));
-        assert_eq!(found.in_scope[0].generality, Generality::Any);
+        assert!(found.in_scope[0].is_blanket);
     }
 
     #[test]
@@ -245,7 +239,7 @@ mod tests {
         let found = ask(&p, &ref_to(decl(POINT)));
         assert_eq!(selected(&found), Some(ImplId(1)));
         assert_eq!(found.in_scope[0].depth, 0);
-        assert_eq!(found.in_scope[0].generality, Generality::Head);
+        assert!(found.in_scope[0].is_blanket);
     }
 
     /// It ranks below a concrete `&T` impl.
@@ -327,7 +321,7 @@ mod tests {
                 .concrete(TR, SolverType::Decl(BOX, vec![decl(I32)])),
         );
         let found = ask(&p, &SolverType::Decl(BOX, vec![decl(I32)]));
-        assert_eq!(found.in_scope[0].generality, Generality::Head);
+        assert!(found.in_scope[0].is_blanket);
         assert_eq!(selected(&found), Some(ImplId(1)));
     }
 
@@ -344,6 +338,27 @@ mod tests {
         assert_eq!(
             selected(&ask(&p, &SolverType::Decl(BOX, vec![decl(POINT)]))),
             Some(ImplId(0))
+        );
+    }
+
+    /// An impl for the head and a value blanket both cover the general case, so
+    /// rank 2 separates neither and rank 3 reports them. Whether the head impl
+    /// should instead outrank the blanket is a rank the order does not have;
+    /// the differential over the corpus is what would say it is needed.
+    #[test]
+    fn a_head_impl_and_a_value_blanket_are_the_blanket_ambiguity() {
+        let p = program(
+            Builder::default()
+                .concrete(LIMIT, SolverType::Decl(BOX, vec![decl(I32)]))
+                .impl_(generic(
+                    1,
+                    concrete(TR, SolverType::Decl(BOX, vec![SolverType::Param(0)])),
+                ))
+                .bounded(TR, SolverType::Param(0), vec![LIMIT]),
+        );
+        assert_eq!(
+            rank(&ask(&p, &SolverType::Decl(BOX, vec![decl(I32)])).in_scope),
+            Selection::AmbiguousBlankets(vec![0, 1])
         );
     }
 
