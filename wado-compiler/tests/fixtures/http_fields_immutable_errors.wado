@@ -7,7 +7,7 @@
 // - Fields.get_and_delete on immutable fields → Err(HeaderError::Immutable)
 // - Fields.get and Fields.has still work on immutable fields
 
-use { Request, Response, ErrorCode, Fields, FieldName, FieldValue, HeaderError, Trailers } from "wasi:http";
+use { Request, Response, ErrorCode, Fields, Headers, FieldName, FieldValue, HeaderError, Trailers } from "wasi:http";
 
 export async fn handle(request: Request) -> Result<Response, ErrorCode> {
     // Get immutable headers from incoming request
@@ -49,7 +49,7 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> {
     // Return success
     let [trailers_future, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
     let [resp_rx, resp_tx] = Stream::<u8>::new();
-    let resp_headers = Fields::new();
+    let resp_headers = Headers::new();
     let [response, _tx_future] = Response::new(resp_headers, Option::<Stream<u8>>::Some(resp_rx), trailers_future);
 
     task return Result::<Response, ErrorCode>::Ok(response);

@@ -5255,7 +5255,7 @@ HTTP handlers return a `Response` that contains a `Future`-based trailers channe
 ```wado
 export async fn handle(request: Request) -> Result<Response, ErrorCode> {
     let [trailers_future, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
-    let headers = Fields::new();
+    let headers = Headers::new();
     let [response, _tx_future] = Response::new(headers, null, trailers_future);
 
     task return Result::<Response, ErrorCode>::Ok(response); // deliver result; function continues

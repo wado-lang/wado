@@ -1,7 +1,7 @@
 // WaitableSet::poll E2E test
 // Tests that WaitableSet::poll() returns None when no events are ready.
 
-use { Request, Response, ErrorCode, Fields, Trailers } from "wasi:http";
+use { Request, Response, ErrorCode, Fields, Headers, Trailers } from "wasi:http";
 
 export async fn handle(request: Request) -> Result<Response, ErrorCode> with WaitableSet {
     // Create a waitable set and poll it (should get None since nothing is joined)
@@ -12,7 +12,7 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> with Wai
     if let Some(_) = event {
         // Unexpected — should not happen. `ws` is dropped once after the `if`.
         let [trailers_future, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
-        let headers = Fields::new();
+        let headers = Headers::new();
         let [response, _tx_future] = Response::new(headers, null, trailers_future);
         task return Result::<Response, ErrorCode>::Ok(response);
         trailers_tx.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));
@@ -22,7 +22,7 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> with Wai
 
     // Return 200 OK
     let [trailers_future, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
-    let headers = Fields::new();
+    let headers = Headers::new();
     let [response, _tx_future] = Response::new(headers, null, trailers_future);
     task return Result::<Response, ErrorCode>::Ok(response);
     trailers_tx.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));

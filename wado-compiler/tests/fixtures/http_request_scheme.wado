@@ -2,7 +2,7 @@
 // Tests that request.get_scheme() returns a Scheme variant.
 // The test runner typically uses HTTP (not HTTPS), so we check for Http.
 
-use { Request, Response, ErrorCode, Fields, Scheme, Trailers } from "wasi:http";
+use { Request, Response, ErrorCode, Fields, Headers, Scheme, Trailers } from "wasi:http";
 
 export async fn handle(request: Request) -> Result<Response, ErrorCode> {
     let scheme = request.get_scheme();
@@ -13,7 +13,7 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> {
     // If None, that's also acceptable (depends on runtime)
 
     let [trailers_future, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
-    let headers = Fields::new();
+    let headers = Headers::new();
     let [response, _tx_future] = Response::new(headers, null, trailers_future);
     task return Result::<Response, ErrorCode>::Ok(response);
     trailers_tx.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));

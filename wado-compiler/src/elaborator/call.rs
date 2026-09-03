@@ -556,11 +556,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         // First, determine expected parameter types to handle coercion.
-        let (mut param_types, callee_slots) = self.lookup_function_signature(
+        // `None` is a callee whose signature this lookup could not find, which
+        // an empty parameter list does not say: a callee declaring no
+        // parameters has a count to check like any other.
+        let signature = self.lookup_function_signature(
             effective_name,
             receiver_site,
             callee_kind.callee_site(),
         );
+        let signature_known = signature.is_some();
+        let (mut param_types, callee_slots) = signature.unwrap_or_default();
         // The declaration's own frame, before instantiation replaces its slots
         // with inference variables. Inferred type arguments substitute into
         // these, not into the variables.
@@ -907,7 +912,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // i32/f64, so re-coerce once the substitution is known. A
                 // non-generic call is checked too, or a mismatch only shows at
                 // codegen, as an invalid module rather than at its own span.
-                let mut raw_param_types = self.lookup_static_method_param_types(prefix, suffix);
+                let mut raw_param_types = self
+                    .lookup_static_method_param_types(prefix, suffix)
+                    .unwrap_or_default();
                 let qualified_sig = self.static_method_sig(prefix, suffix);
                 // Written qualified, an instance method takes its receiver as
                 // the first argument — the one position the shared lookup
@@ -938,10 +945,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // reify, so only a signature without defaults has a count to
                 // check. Without this, a call missing its receiver passes and
                 // reaches codegen as an invalid module.
-                let counts_are_fixed = qualified_sig
-                    .as_ref()
+                // From the same lookup `raw_param_types` came from, so the two
+                // cannot disagree: an overloaded name yields no parameter list
+                // and so has no count to check here — the overload path picks
+                // the impl by argument, and reports its own mismatch.
+                let counts_are_fixed = self
+                    .unique_static_method_sig_named(prefix, suffix)
                     .is_some_and(|sig| sig.params.iter().all(|p| p.default.is_none()));
-                if counts_are_fixed && !substituted.is_empty() && args.len() != substituted.len() {
+                if counts_are_fixed && args.len() != substituted.len() {
                     let _ = self.emit(TypeError::ArgumentCountMismatch {
                         expected: substituted.len(),
                         found: args.len(),
@@ -1358,11 +1369,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         method_name,
                         ns_key.as_ref(),
                     );
-                    let param_types = self.lookup_static_method_param_types_keyed(
-                        type_name,
-                        method_name,
-                        ns_key.as_ref(),
-                    );
+                    let param_types = self
+                        .lookup_static_method_param_types_keyed(
+                            type_name,
+                            method_name,
+                            ns_key.as_ref(),
+                        )
+                        .unwrap_or_default();
                     let checked: Vec<TypeId> = if method_type_args.is_empty() {
                         param_types.clone()
                     } else {
@@ -1589,7 +1602,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 ctx,
             );
         }
-        if !check_param_types.is_empty() && args.len() != check_param_types.len() {
+        if signature_known && args.len() != check_param_types.len() {
             let _ = self.emit(TypeError::ArgumentCountMismatch {
                 expected: check_param_types.len(),
                 found: args.len(),
@@ -1814,22 +1827,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         name: &str,
         receiver_site: Option<ast::AstId>,
         callee_site: Option<ast::AstId>,
-    ) -> (Vec<TypeId>, Vec<TypeId>) {
+    ) -> Option<(Vec<TypeId>, Vec<TypeId>)> {
         // Check for qualified name (Type::method or Effect::operation)
         if let Some(pos) = name.find("::") {
             let prefix = &name[..pos];
             let suffix = &name[pos + 2..];
             // Check if it's a static method
             if self.is_static_method(prefix, suffix) {
-                // The parameter types come back in the declaration's own
-                // frame, slots and all, so the call site has the same reason
-                // to instantiate them as it does for a free function.
-                let params = self.lookup_static_method_param_types(prefix, suffix);
-                let slots = self
-                    .static_method_sig(prefix, suffix)
-                    .map(|sig| sig.decl.type_params.iter().map(|(_, id)| *id).collect())
-                    .unwrap_or_default();
-                return (params, slots);
+                // One signature answers both halves: the slots this use site
+                // instantiates and the parameters it checks against. The
+                // parameter types come back in the declaration's own frame, so
+                // the call site has the same reason to instantiate them as it
+                // does for a free function.
+                let sig = self.unique_static_method_sig_named(prefix, suffix)?;
+                return Some((
+                    sig.decl.param_types[sig.first_value_param()..].to_vec(),
+                    sig.decl.type_params.iter().map(|(_, id)| *id).collect(),
+                ));
             }
 
             // Builtin functions resolve through the `core:builtin` module,
@@ -1839,16 +1853,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 && let Some(def) = self.decl_in_module(&ModuleSource::builtin(), suffix)
                 && let Some(sig) = self.tysys.signatures.function_sig(def)
             {
-                return (
+                return Some((
                     sig.decl.param_types.clone(),
                     sig.decl.type_params.iter().map(|(_, id)| *id).collect(),
-                );
+                ));
             }
 
             if let Some(decl) = self.effect_or_resource_decl_at(receiver_site)
                 && let Some((params, _)) = self.resolve_effect_op_signature(decl, suffix)
             {
-                return (params, Vec::new());
+                return Some((params, Vec::new()));
             }
 
             // A namespace member's signature lives in that module, which no
@@ -1860,10 +1874,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 if let Some(def) = self.decl_in_module(&ns_source, suffix)
                     && let Some(sig) = self.tysys.signatures.function_sig(def)
                 {
-                    return (
+                    return Some((
                         sig.decl.param_types.clone(),
                         sig.decl.type_params.iter().map(|(_, id)| *id).collect(),
-                    );
+                    ));
                 }
                 // `is_static_method` above declines the `ns::Type::method`
                 // shape, so the receiver resolves through the namespace instead.
@@ -1872,29 +1886,29 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 {
                     let ns_key =
                         trait_env::ImplTargetKey::of_decl(self.tysys.resolutions.defs(), def);
-                    let params = self.lookup_static_method_param_types_keyed(
-                        type_name,
-                        method_name,
-                        Some(&ns_key),
-                    );
+                    let params = self
+                        .lookup_static_method_param_types_keyed(
+                            type_name,
+                            method_name,
+                            Some(&ns_key),
+                        )
+                        .unwrap_or_default();
                     if !params.is_empty() {
                         let slots = self.lookup_static_method_slots(method_name, &ns_key);
-                        return (params, slots);
+                        return Some((params, slots));
                     }
                 }
             }
-            return (Vec::new(), Vec::new());
+            return None;
         }
 
         // One read for this module's functions, its imports under either
         // spelling, and a default expression's callee scope.
-        let Some(sig) = callee_site.and_then(|site| self.free_function_sig_at(site)) else {
-            return (Vec::new(), Vec::new());
-        };
-        (
+        let sig = callee_site.and_then(|site| self.free_function_sig_at(site))?;
+        Some((
             sig.decl.param_types.clone(),
             sig.decl.type_params.iter().map(|(_, id)| *id).collect(),
-        )
+        ))
     }
 
     /// Fill missing trailing arguments from the callee's declared defaults,
@@ -2730,6 +2744,30 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .get(receiver)?
             .iter()
             .find(|e| e.name == method_name)
+    }
+
+    /// [`Self::static_method_sig`] where the name resolves to exactly one
+    /// declaration. An overloaded static (several `From` impls on one target)
+    /// answers `None`: the call site chooses among the candidates by argument,
+    /// so committing to the first indexed one would decide the overload here.
+    pub(super) fn unique_static_method_sig_named(
+        &self,
+        struct_name: &str,
+        method_name: &str,
+    ) -> Option<MethodSig> {
+        let key = self.impl_target(struct_name);
+        let mut declared = self
+            .tysys
+            .trait_env
+            .static_method_index
+            .get(&key)
+            .into_iter()
+            .flatten()
+            .filter(|e| e.name == method_name);
+        if declared.next().is_some() && declared.next().is_some() {
+            return None;
+        }
+        self.static_method_sig(struct_name, method_name)
     }
 
     /// The canonical signature of the receiver-less method `method_name` on

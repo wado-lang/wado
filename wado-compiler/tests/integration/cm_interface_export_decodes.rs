@@ -11,13 +11,13 @@ const SERVICE_WORLD: &str = "wasi:http/service";
 /// `Response` and `ErrorCode`, every one of them owned by `wasi:http/types`,
 /// which the world imports.
 const SERVICE_SOURCE: &str = r#"
-use { Request, Response, ErrorCode, Fields, Trailers, StatusCode } from "wasi:http";
+use { Request, Response, ErrorCode, Fields, Headers, Trailers, StatusCode } from "wasi:http";
 
 export async fn handle(request: Request) -> Result<Response, ErrorCode> {
     let [trailers_future, _trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
     let [body_rx, body_tx] = Stream::<u8>::new();
     let [response, _tx_future] = Response::new(
-        Fields::new(),
+        Headers::new(),
         Option::<Stream<u8>>::Some(body_rx),
         trailers_future,
     );

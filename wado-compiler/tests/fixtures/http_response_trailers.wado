@@ -6,7 +6,7 @@
 // - Response body + trailers flow
 // - Fields operations on trailer fields (append, has)
 
-use { Request, Response, ErrorCode, Fields, FieldName, FieldValue, Trailers } from "wasi:http";
+use { Request, Response, ErrorCode, Fields, Headers, FieldName, FieldValue, Trailers } from "wasi:http";
 
 export async fn handle(request: Request) -> Result<Response, ErrorCode> {
     // Prepare trailers
@@ -19,7 +19,7 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> {
     // Build response with body stream
     let [trailers_future, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
     let [resp_rx, resp_tx] = Stream::<u8>::new();
-    let headers = Fields::new();
+    let headers = Headers::new();
     let _ = headers.append("content-type" as FieldName, "text/plain".bytes().collect() as FieldValue);
     let [response, _tx_future] = Response::new(headers, Option::<Stream<u8>>::Some(resp_rx), trailers_future);
 

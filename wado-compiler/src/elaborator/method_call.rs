@@ -1447,7 +1447,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // modules' same-named structs each route to their own impl.
         let mut param_types = struct_name_for_lookup
             .as_ref()
-            .map(|name| {
+            .and_then(|name| {
                 self.lookup_static_method_param_types_keyed(
                     name,
                     &static_call.method,
@@ -2391,8 +2391,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             blanket_module.clone(),
             blanket_param.to_string(),
         );
-        let template =
-            self.lookup_static_method_param_types_keyed(blanket_param, method, Some(&key));
+        let template = self
+            .lookup_static_method_param_types_keyed(blanket_param, method, Some(&key))
+            .unwrap_or_default();
         let blanket_slot = self.blanket_param_slot(blanket_param);
         let mut tt = self.tysys.type_table.borrow_mut();
         template
@@ -2733,7 +2734,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         struct_name: &str,
         method_name: &str,
-    ) -> Vec<TypeId> {
+    ) -> Option<Vec<TypeId>> {
         self.lookup_static_method_param_types_keyed(struct_name, method_name, None)
     }
 
@@ -2744,12 +2745,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// in another module, the bare-name `struct_name` would canonicalise
     /// against a global "first matching name" bucket and pick the wrong
     /// impl. The explicit key bypasses that ambiguity.
+    ///
+    /// `None` is a receiver / method pair this lookup does not answer — a CM
+    /// resource's statics are resolved elsewhere in this file — which an empty
+    /// list would otherwise report as "declares no parameters".
     pub(super) fn lookup_static_method_param_types_keyed(
         &mut self,
         struct_name: &str,
         method_name: &str,
         target_hint: Option<&crate::elaborator::trait_env::ImplTargetKey>,
-    ) -> Vec<TypeId> {
+    ) -> Option<Vec<TypeId>> {
         // O(1) lookup via pre-built static method index. The index is
         // keyed by the receiver's canonical decl key so two same-named
         // structs in different modules each resolve to their own
@@ -2767,21 +2772,29 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Value parameters only: every caller keeps a receiver of its own,
         // separate from this list.
         if let Some(sig) = self.unique_static_method_sig(&static_key, method_name) {
-            return sig.decl.param_types[sig.first_value_param()..].to_vec();
+            return Some(sig.decl.param_types[sig.first_value_param()..].to_vec());
+        }
+        // A resource declares its statics in Wado like any other declaration,
+        // so they answer from the same signature table at the same point in the
+        // pass — `Response::new` is checked where `P::make` is. Statics are not
+        // inherited, so the receiver's own declaration answers, never its chain.
+        if let super::trait_env::ImplTargetKey::Decl(def) = &static_key
+            && let Some(sig) = self.tysys.signatures.resource_method_sig(*def, method_name)
+            && sig.self_kind == ast::SelfKind::None
+        {
+            return Some(sig.decl.param_types[sig.first_value_param()..].to_vec());
         }
         // The index holds only the declaring resource's own methods, so an
-        // inherited one is reached by walking the chain. Instance methods
-        // only: a static is not inherited, and answering for one here would
-        // newly type-check calls this lookup has always left alone. A static
-        // the receiver declares itself shadows an inherited instance method of
-        // the same name, so the chain must not answer for it either.
+        // inherited one is reached by walking the chain. Instance methods only:
+        // a static the receiver declares itself shadows an inherited instance
+        // method of the same name, and the arm above has already answered it.
         if let super::trait_env::ImplTargetKey::Decl(def) = &static_key
             && !self.declares_resource_static(*def, method_name)
             && let Some((_, sig)) = self.resource_instance_method(*def, method_name)
         {
-            return sig.decl.param_types[sig.first_value_param()..].to_vec();
+            return Some(sig.decl.param_types[sig.first_value_param()..].to_vec());
         }
-        Vec::new()
+        None
     }
 
     /// Whether the resource `def` declares `method_name` as a static of its own.
@@ -3887,11 +3900,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .zip(param_is_mut.iter().copied().chain(std::iter::repeat(false)))
             .map(|(_, is_mut)| is_mut)
             .collect();
-        let param_types = self.lookup_static_method_param_types_keyed(
-            &actual_struct_name,
-            method_name,
-            receiver_key.as_ref(),
-        );
+        let param_types = self
+            .lookup_static_method_param_types_keyed(
+                &actual_struct_name,
+                method_name,
+                receiver_key.as_ref(),
+            )
+            .unwrap_or_default();
         self.sem.types.static_method_dispatch.insert(
             call_id,
             super::sem::types::StaticMethodDispatch {

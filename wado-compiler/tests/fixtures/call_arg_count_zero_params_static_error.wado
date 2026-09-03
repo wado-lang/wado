@@ -1,0 +1,19 @@
+// The static-method spelling of `call_arg_count_zero_params_error.wado`.
+
+struct P {
+    v: i32,
+}
+
+impl P {
+    fn make() -> P {
+        return P { v: 1 };
+    }
+}
+
+export fn run() {
+    let p = P::make(1, 2);
+    let _ = p.v;
+}
+
+__DATA__
+{"compile_error": "expected 0 arguments, found 2"}

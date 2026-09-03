@@ -5,7 +5,7 @@
 // second iteration. Each `Fields` is also dropped, so the resource-table check
 // confirms no leak.
 
-use { Request, Response, ErrorCode, Fields, FieldName, FieldValue, Trailers } from "wasi:http";
+use { Request, Response, ErrorCode, Fields, Headers, FieldName, FieldValue, Trailers } from "wasi:http";
 
 fn take_fields(f: Fields) {
     let name = "x" as FieldName;
@@ -22,7 +22,7 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> {
     }
 
     let [trailers_future, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
-    let headers = Fields::new();
+    let headers = Headers::new();
     let [response, _tx_future] = Response::new(headers, null, trailers_future);
     task return Result::<Response, ErrorCode>::Ok(response);
     trailers_tx.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));
