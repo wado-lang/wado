@@ -1874,7 +1874,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if let Some(m) =
             self.select_trait_match(found_traits, method_name, &receiver_display, span, probe)
         {
-            self.report_selection_disagreement(&m, receiver_type_id, method_name);
+            // A trait-qualified call named its trait, and `found_traits` was
+            // filtered to it above. The order's cross-trait question does not
+            // arise, so asking it here would report an ambiguity the call site
+            // has already answered.
+            if required_trait.is_none() {
+                self.report_selection_disagreement(&m, type_key, receiver_type_id, method_name);
+            }
             return Some(m);
         }
 
@@ -2458,16 +2464,28 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     fn report_selection_disagreement(
         &self,
         chosen: &super::types::TraitMethodMatch,
+        type_key: &ImplTargetKey,
         receiver_type_id: Option<TypeId>,
         method_name: &str,
     ) {
         let (Some(bridge), Some(receiver)) = (self.tysys.solver.as_ref(), receiver_type_id) else {
             return;
         };
+        // A reference receiver arrives peeled, its `&` carried by `type_key`.
+        // The order reads the reference as a level of the receiver's chain, so
+        // it has to be put back.
+        let through_ref = match type_key {
+            ImplTargetKey::Ref(kind) => Some(*kind == crate::name::RefKind::Mut),
+            ImplTargetKey::Decl(_)
+            | ImplTargetKey::Undeclared(..)
+            | ImplTargetKey::TypeParam(..)
+            | ImplTargetKey::Builtin(_) => None,
+        };
         bridge.report_selection_disagreement(
             &self.tysys,
             &self.current_module_source,
             receiver,
+            through_ref,
             method_name,
             &chosen.impl_def.map_or(
                 super::solver_bridge::Chosen::Derived,

@@ -845,12 +845,17 @@ impl SolverBridge {
         tysys: &TypeSystem,
         module: &ModuleSource,
         type_id: TypeId,
+        through_ref: Option<bool>,
         method_name: &str,
     ) -> Option<Chosen> {
         let method = MethodId(*self.lowering.methods.get(method_name)?);
         let ty = self
             .lowering
             .type_id(&tysys.type_table.borrow(), type_id, &|_, _| None)?;
+        let ty = through_ref.map_or(ty.clone(), |is_mut| SolverType::Ref {
+            is_mut,
+            inner: Box::new(ty),
+        });
         let module = self.lowering.known_module(module)?;
         let found = candidates(&self.program, &Env::default(), &ty, method, module);
         Some(match rank(&found.in_scope) {
@@ -883,13 +888,14 @@ impl SolverBridge {
         tysys: &TypeSystem,
         module: &ModuleSource,
         type_id: TypeId,
+        through_ref: Option<bool>,
         method_name: &str,
         compiler: &Chosen,
     ) {
         if !reporting() {
             return;
         }
-        let Some(order) = self.select(tysys, module, type_id, method_name) else {
+        let Some(order) = self.select(tysys, module, type_id, through_ref, method_name) else {
             return;
         };
         if order == *compiler {
