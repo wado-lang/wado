@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1788412225466,
+  "lastUpdate": 1788434286070,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -52857,6 +52857,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/6fe3290010a61e40bb09f5afb163032a393a634e"
         },
         "date": 1788412224807,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 2028,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6418,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19617,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 282048,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "e411aa395753dcde3a3991f873b588850875d9ab",
+          "message": "Merge pull request #1952 from wado-lang/claude/jwt-stdlib-feasibility-e3u2y9\n\nfeat(core): add clamp and String::split_once, read the stdlib from disk in dev",
+          "timestamp": "2026-09-03T20:05:52+09:00",
+          "tree_id": "650060647868fa8c4401351110529b7a0b24c928",
+          "url": "https://github.com/wado-lang/wado/commit/e411aa395753dcde3a3991f873b588850875d9ab"
+        },
+        "date": 1788434285480,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
