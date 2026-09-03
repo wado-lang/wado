@@ -1686,6 +1686,14 @@ fn hash3(a: u8, b: u8, c: u8) -> i32 {
     return (a as i32 << 10 ^ b as i32 << 5 ^ c as i32) & 32767;
 }
 
+// hash3 is rolling: masking every step is the same as masking once, since a
+// byte shifted 5 never reaches bit 15. Advancing one position therefore costs
+// one load rather than three.
+#[inline(always)]
+fn hash3_roll(h: i32, next: u8) -> i32 {
+    return (h << 5 ^ next as i32) & 32767;
+}
+
 // Longest common run of `scratch[a..]` and `scratch[b..]`, capped at `max_len`,
 // via 16-byte SIMD compares. The scratch buffer's 16-byte zero pad keeps the
 // trailing `v128.load` past the match end in bounds.
@@ -2653,9 +2661,10 @@ pub fn deflate_with_level(input: &ByteList, level: i32, strategy: i32) -> ByteLi
                 // taking, so start the search from it.
                 let mut best_len = prev_match_len;
                 let mut best_dist = 0;
+                let mut h = 0;
 
                 if pos + 2 < input_len {
-                    let h = hash3(
+                    h = hash3(
                         builtin::i32_load8_u(scratch + pos),
                         builtin::i32_load8_u(scratch + pos + 1),
                         builtin::i32_load8_u(scratch + pos + 2),
@@ -2719,18 +2728,15 @@ pub fn deflate_with_level(input: &ByteList, level: i32, strategy: i32) -> ByteLi
                     } else {
                         // Previous match was better: emit it
                         tokens.push(token_pack(257 + prev_match_len - 3, prev_match_dist));
-                        // Insert hash entries for skipped positions
+                        // Insert hash entries for skipped positions. hash3 is
+                        // a rolling hash, so each position costs one load.
                         let skip = prev_match_len - 1;
-                        for let mut i = 0; i < skip - 1; i += 1 {
-                            if pos + i + 2 < input_len {
-                                let mh = hash3(builtin::i32_load8_u(scratch + pos + i), builtin::i32_load8_u(
-                                    scratch + pos + i + 1,
-                                ), builtin::i32_load8_u(scratch + pos + i + 2));
-                                builtin::i32_store(prev_ptr + (pos + i & 32767) * 4, builtin::i32_load(
-                                    head_ptr + mh * 4,
-                                ));
-                                builtin::i32_store(head_ptr + mh * 4, pos + i);
-                            }
+                        let limit = i32::min(skip - 1, input_len - pos - 2);
+                        let mut mh = h;
+                        for let mut i = 0; i < limit; i += 1 {
+                            builtin::i32_store(prev_ptr + (pos + i & 32767) * 4, builtin::i32_load(head_ptr + mh * 4));
+                            builtin::i32_store(head_ptr + mh * 4, pos + i);
+                            mh = hash3_roll(mh, builtin::i32_load8_u(scratch + pos + i + 3));
                         }
                         pos += skip;
                         match_available = false;
@@ -2747,16 +2753,12 @@ pub fn deflate_with_level(input: &ByteList, level: i32, strategy: i32) -> ByteLi
                     } else {
                         // Match is long enough, emit immediately
                         tokens.push(token_pack(257 + best_len - 3, best_dist));
-                        for let mut i = 1; i < best_len; i += 1 {
-                            if pos + i + 2 < input_len {
-                                let mh = hash3(builtin::i32_load8_u(scratch + pos + i), builtin::i32_load8_u(
-                                    scratch + pos + i + 1,
-                                ), builtin::i32_load8_u(scratch + pos + i + 2));
-                                builtin::i32_store(prev_ptr + (pos + i & 32767) * 4, builtin::i32_load(
-                                    head_ptr + mh * 4,
-                                ));
-                                builtin::i32_store(head_ptr + mh * 4, pos + i);
-                            }
+                        let limit = i32::min(best_len, input_len - pos - 2);
+                        let mut mh = h;
+                        for let mut i = 1; i < limit; i += 1 {
+                            mh = hash3_roll(mh, builtin::i32_load8_u(scratch + pos + i + 2));
+                            builtin::i32_store(prev_ptr + (pos + i & 32767) * 4, builtin::i32_load(head_ptr + mh * 4));
+                            builtin::i32_store(head_ptr + mh * 4, pos + i);
                         }
                         pos += best_len;
                         match_available = false;
@@ -2778,9 +2780,10 @@ pub fn deflate_with_level(input: &ByteList, level: i32, strategy: i32) -> ByteLi
             while pos < input_len {
                 let mut best_len = 0;
                 let mut best_dist = 0;
+                let mut h = 0;
 
                 if pos + 2 < input_len {
-                    let h = hash3(
+                    h = hash3(
                         builtin::i32_load8_u(scratch + pos),
                         builtin::i32_load8_u(scratch + pos + 1),
                         builtin::i32_load8_u(scratch + pos + 2),
@@ -2826,14 +2829,12 @@ pub fn deflate_with_level(input: &ByteList, level: i32, strategy: i32) -> ByteLi
 
                 if best_len >= 3 {
                     tokens.push(token_pack(257 + best_len - 3, best_dist));
-                    for let mut i = 1; i < best_len; i += 1 {
-                        if pos + i + 2 < input_len {
-                            let mh = hash3(builtin::i32_load8_u(scratch + pos + i), builtin::i32_load8_u(
-                                scratch + pos + i + 1,
-                            ), builtin::i32_load8_u(scratch + pos + i + 2));
-                            builtin::i32_store(prev_ptr + (pos + i & 32767) * 4, builtin::i32_load(head_ptr + mh * 4));
-                            builtin::i32_store(head_ptr + mh * 4, pos + i);
-                        }
+                    let limit = i32::min(best_len, input_len - pos - 2);
+                    let mut mh = h;
+                    for let mut i = 1; i < limit; i += 1 {
+                        mh = hash3_roll(mh, builtin::i32_load8_u(scratch + pos + i + 2));
+                        builtin::i32_store(prev_ptr + (pos + i & 32767) * 4, builtin::i32_load(head_ptr + mh * 4));
+                        builtin::i32_store(head_ptr + mh * 4, pos + i);
                     }
                     pos += best_len;
                 } else {
