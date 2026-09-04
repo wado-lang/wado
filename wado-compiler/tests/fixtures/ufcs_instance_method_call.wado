@@ -1,0 +1,41 @@
+// The qualified spelling of an instance method (`P::add(&p, 1)`) recorded no
+// use→def edge: the static-method index holds only receiver-less methods, so
+// liveness dropped the callee and WIR hit an unresolved call. Each method here
+// is reached *only* through the qualified spelling, so the edge is what the
+// fixture tests.
+
+use { println, Stdout } from "core:cli";
+use m from "./sub/ufcs_instance_method_target.wado";
+
+struct P {
+    v: i32,
+}
+
+impl P {
+    fn add(&self, n: i32) -> i32 {
+        return self.v + n;
+    }
+}
+
+trait Adder {
+    fn plus(&self, n: i32) -> i32;
+}
+
+impl Adder for P {
+    fn plus(&self, n: i32) -> i32 {
+        return self.v + n + 100;
+    }
+}
+
+export fn run() with Stdout {
+    let p = P { v: 41 };
+    println(`${P::add(&p, 1)}`);
+    println(`${Adder::plus(&p, 1)}`);
+    // The namespaced spelling reaches its own arm, whose return-type ladder
+    // read the same static-only index and answered `unknown`.
+    let q = m::Q { v: 21 };
+    println(`${m::Q::twice(&q)}`);
+}
+
+__DATA__
+{"stdout": "42\n142\n42\n"}

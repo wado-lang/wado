@@ -773,7 +773,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let method_def = self
                         .locate_static_method_impl(prefix, suffix, arg_hint.as_deref(), None)
                         .and_then(|r| r.method_id)
-                        .or_else(|| self.static_method_decl_at(receiver_site, prefix, suffix));
+                        .or_else(|| self.qualified_method_decl_at(receiver_site, prefix, suffix));
                     if let Some(method_def) = method_def {
                         self.record_reference_to_decl(suffix_seg.id, method_def);
                     }
@@ -1294,7 +1294,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                 defs,
                                 self.qualified_owner_decl(ident)?,
                             );
-                            self.static_method_decl_id(&receiver, method_name)
+                            self.qualified_method_decl_id(&receiver, method_name)
                         })
                     {
                         self.record_reference_to_decl(method_seg.id, method_def);
@@ -1369,13 +1369,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         method_name,
                         ns_key.as_ref(),
                     );
-                    let param_types = self
-                        .lookup_static_method_param_types_keyed(
-                            type_name,
-                            method_name,
-                            ns_key.as_ref(),
-                        )
-                        .unwrap_or_default();
+                    let declared_params = self.lookup_static_method_param_types_keyed(
+                        type_name,
+                        method_name,
+                        ns_key.as_ref(),
+                    );
+                    let declares_params = declared_params.is_some();
+                    let param_types = declared_params.unwrap_or_default();
                     let checked: Vec<TypeId> = if method_type_args.is_empty() {
                         param_types.clone()
                     } else {
@@ -1385,14 +1385,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             .collect()
                     };
                     self.recoerce_literal_args(&call.args, &mut args, &checked);
-                    for (i, arg) in args.iter().enumerate() {
-                        if let Some(&expected) = checked.get(i) {
-                            self.typecheck(
-                                *arg,
-                                expected,
-                                call.args.get(i).map_or(call.span, ast::Expr::span),
-                            );
-                        }
+                    // The same check the bare `Type::method` spelling gets: a
+                    // count is only skipped where no signature answered.
+                    let arg_spans: Vec<crate::Span> =
+                        call.args.iter().map(ast::Expr::span).collect();
+                    if declares_params
+                        && !self.check_static_call_args(
+                            &checked,
+                            &args,
+                            &arg_spans,
+                            &param_defaults,
+                            call.span,
+                        )
+                    {
+                        return TypeTable::ERROR;
                     }
 
                     let key = call.id;
@@ -1886,14 +1892,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 {
                     let ns_key =
                         trait_env::ImplTargetKey::of_decl(self.tysys.resolutions.defs(), def);
-                    let params = self
-                        .lookup_static_method_param_types_keyed(
-                            type_name,
-                            method_name,
-                            Some(&ns_key),
-                        )
-                        .unwrap_or_default();
-                    if !params.is_empty() {
+                    // The lookup says whether it answered, so a callee
+                    // declaring no parameters keeps its count — an empty list
+                    // read as "unknown" is what let an argument written at one
+                    // be dropped along with its side effect.
+                    if let Some(params) = self.lookup_static_method_param_types_keyed(
+                        type_name,
+                        method_name,
+                        Some(&ns_key),
+                    ) {
                         let slots = self.lookup_static_method_slots(method_name, &ns_key);
                         return Some((params, slots));
                     }

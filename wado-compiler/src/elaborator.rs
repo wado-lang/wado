@@ -634,37 +634,67 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// The declaration a `Type::method` call resolves to, seeing through a
     /// transparent alias. Every site that records the use→def edge for such a
     /// call ends its ladder here, so none of them stops one alias short.
-    pub(super) fn static_method_decl_at(
+    pub(super) fn qualified_method_decl_at(
         &self,
         site: Option<crate::ast::AstId>,
         type_name: &str,
         method_name: &str,
     ) -> Option<crate::defs::DefId> {
-        self.static_method_decl_id(&self.impl_target_at(site, type_name), method_name)
+        self.qualified_method_decl_id(&self.impl_target_at(site, type_name), method_name)
             .or_else(|| {
                 let (base, base_name) = self.newtype_base(type_name)?;
                 let receiver = self.impl_target_of(base, &crate::name::DeclName::new(&base_name));
-                self.static_method_decl_id(&receiver, method_name)
+                self.qualified_method_decl_id(&receiver, method_name)
             })
     }
 
-    /// The declaring node of the static method `receiver::method_name`, from
-    /// the static-method index.
+    /// The declaring node of `receiver::method_name` written qualified.
+    ///
+    /// The spelling admits both kinds of method: a receiver-less one, which the
+    /// static-method index holds, and an instance one whose receiver the call
+    /// passes as its first argument (`P::add(&p, 1)`), which it does not. Both
+    /// are answered here so that no caller's ladder covers only one kind — a
+    /// missed edge lets liveness drop the callee, and reify then emits a call
+    /// to a function that was never emitted.
     ///
     /// The receiver is a key the caller resolved from its own reference site.
     /// A second key from another vantage makes the order a silent tiebreak.
-    pub(super) fn static_method_decl_id(
+    pub(super) fn qualified_method_decl_id(
         &self,
         receiver: &trait_env::ImplTargetKey,
         method_name: &str,
     ) -> Option<crate::defs::DefId> {
-        self.tysys
+        self.qualified_method_decl_ids(receiver, method_name)
+            .into_iter()
+            .next()
+    }
+
+    /// Every declaration `receiver::method_name` can name, receiver-less ones
+    /// first. A caller that must choose reads them all rather than trusting the
+    /// order: one name over several impls is an overload, not a tiebreak.
+    pub(super) fn qualified_method_decl_ids(
+        &self,
+        receiver: &trait_env::ImplTargetKey,
+        method_name: &str,
+    ) -> Vec<crate::defs::DefId> {
+        let statics = self
+            .tysys
             .trait_env
             .static_method_index
-            .get(receiver)?
-            .iter()
-            .find(|e| e.name == method_name)
-            .map(|e| e.method_id)
+            .get(receiver)
+            .into_iter()
+            .flatten()
+            .filter(|e| e.name == method_name)
+            .map(|e| e.method_id);
+        let instances = self
+            .tysys
+            .trait_env
+            .all_impl_index
+            .get(receiver)
+            .into_iter()
+            .flatten()
+            .filter_map(|&impl_def| self.tysys.declared_method(impl_def, method_name));
+        statics.chain(instances).collect()
     }
 
     /// Build a [`control_flow::CtrlFlowCtx`] over the currently-active
