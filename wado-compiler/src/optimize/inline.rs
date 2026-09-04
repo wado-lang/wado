@@ -186,8 +186,8 @@ struct CostWalk<'a> {
 }
 
 /// What the caller's constant arguments make of a callee's body: which of its
-/// parameters arrive constant, which callees fold away on constant arguments,
-/// and which of those spin a loop while doing it.
+/// parameters hold a constant throughout, which callees fold away on constant
+/// arguments, and which of those spin a loop while doing it.
 pub(super) struct ConstView<'a> {
     params: &'a IndexSet<u32>,
     foldable: &'a [bool],
@@ -828,50 +828,49 @@ fn body_has_loop(body: &Body) -> bool {
     arena_query::block_contains_loop(body, body.root)
 }
 
+/// Locals the body writes, counting a write anywhere in the place (`p.x = f()`
+/// writes `p`) and a mutable hand-out, which is a write the body does not show.
+fn written_locals(body: &Body) -> IndexSet<u32> {
+    let mut written: IndexSet<u32> = IndexSet::default();
+    for node in arena_query::reachable_nodes(body) {
+        let NodeRef::Expr(e) = node else {
+            continue;
+        };
+        let root = match &body.exprs[e].kind {
+            ExprKind::Assign { target, .. } => place_root_local(body, *target),
+            ExprKind::Unary {
+                op: NirUnaryOp::MutRef,
+                expr: inner,
+            } => inner.as_expr().and_then(|x| place_root_local(body, x)),
+            _ => None,
+        };
+        written.extend(root);
+    }
+    written
+}
+
 /// Locals a body binds once, to a constant, and never writes — the shape a
 /// literal argument wears by the time it reaches a call (`let name = "id";
 /// f(&name)`), which is otherwise indistinguishable from a runtime value.
-fn constant_locals(body: &Body) -> IndexSet<u32> {
+fn constant_locals(body: &Body, written: &IndexSet<u32>) -> IndexSet<u32> {
     let mut bound: IndexMap<u32, bool> = IndexMap::default();
-    let mut written: IndexSet<u32> = IndexSet::default();
     for node in arena_query::reachable_nodes(body) {
-        match node {
-            NodeRef::Stmt(st) => {
-                if let StmtKind::Let {
-                    local_index, value, ..
-                } = &body.stmts[st].kind
-                {
-                    let is_const = is_constant_arg(body, *value, &IndexSet::default());
-                    match bound.get_mut(local_index) {
-                        // A second binding of the same slot: keep it only if
-                        // both are constant, since either may reach the call.
-                        Some(prev) => *prev &= is_const,
-                        None => {
-                            bound.insert(*local_index, is_const);
-                        }
-                    }
+        let NodeRef::Stmt(st) = node else {
+            continue;
+        };
+        if let StmtKind::Let {
+            local_index, value, ..
+        } = &body.stmts[st].kind
+        {
+            let is_const = is_constant_arg(body, *value, &IndexSet::default());
+            match bound.get_mut(local_index) {
+                // A second binding of the same slot: keep it only if both are
+                // constant, since either may reach the call.
+                Some(prev) => *prev &= is_const,
+                None => {
+                    bound.insert(*local_index, is_const);
                 }
             }
-            NodeRef::Expr(e) => match &body.exprs[e].kind {
-                // A write anywhere in the place, not just to the bare local:
-                // `p.x = f()` leaves `p` runtime-valued too.
-                ExprKind::Assign { target, .. } => {
-                    if let Some(root) = place_root_local(body, *target) {
-                        written.insert(root);
-                    }
-                }
-                // Handing a local out mutably is a write the body does not show.
-                ExprKind::Unary {
-                    op: NirUnaryOp::MutRef,
-                    expr: inner,
-                } => {
-                    if let Some(root) = inner.as_expr().and_then(|x| place_root_local(body, x)) {
-                        written.insert(root);
-                    }
-                }
-                _ => {}
-            },
-            NodeRef::Block(_) | NodeRef::Pat(_) => {}
         }
     }
     bound
@@ -947,20 +946,23 @@ fn is_constant_arg(body: &Body, op: Operand, const_locals: &IndexSet<u32>) -> bo
     }
 }
 
-/// For each callee, the parameter positions *every* call site in the program
-/// fills with a compile-time constant.
+/// For each callee, the parameters *every* call site in the program fills with
+/// a compile-time constant and the callee's own body never writes.
 ///
 /// Whole-program rather than per-site: admission stays a property of the
 /// callee, so a body taken on its folded cost is never spliced at a site that
 /// would not fold it. A callee nothing calls is absent.
-fn constant_params(project: &NirPackage) -> IndexMap<FuncId, IndexSet<u32>> {
+fn constant_params(
+    project: &NirPackage,
+    written_by_func: &[IndexSet<u32>],
+) -> IndexMap<FuncId, IndexSet<u32>> {
     let mut out: IndexMap<FuncId, IndexSet<u32>> = IndexMap::default();
-    for func_rc in &project.functions {
+    for (i, func_rc) in project.functions.iter().enumerate() {
         let func = func_rc.borrow();
         let Some(body) = &func.body else {
             continue;
         };
-        let const_locals = constant_locals(body);
+        let const_locals = constant_locals(body, &written_by_func[i]);
         for node in arena_query::reachable_nodes(body) {
             let NodeRef::Expr(e) = node else {
                 continue;
@@ -981,6 +983,25 @@ fn constant_params(project: &NirPackage) -> IndexMap<FuncId, IndexSet<u32>> {
                 }
             }
         }
+    }
+    // An argument arriving constant says nothing about what the parameter holds
+    // later: `fn f(mut n: i32) { n = g(); .. }` reassigns it, and the readers
+    // here are flow-insensitive, so one write disqualifies it for the whole
+    // body.
+    for (i, func_rc) in project.functions.iter().enumerate() {
+        let func = func_rc.borrow();
+        let Some(params) = func.id.and_then(|id| out.get_mut(&id)) else {
+            continue;
+        };
+        // The set is built from argument positions and read by local index.
+        assert!(
+            func.params
+                .iter()
+                .enumerate()
+                .all(|(pos, p)| p.local_index == pos as u32),
+            "a parameter's local index is its position"
+        );
+        params.retain(|&pos| !written_by_func[i].contains(&pos));
     }
     out.retain(|_, params| !params.is_empty());
     out
@@ -1057,6 +1078,7 @@ fn classify_callee(
     foldable: &[bool],
     loopy: &[bool],
     spliced: &[usize],
+    written: &IndexSet<u32>,
 ) -> Verdict {
     // Must have a body
     let Some(body) = &func.body else {
@@ -1111,7 +1133,14 @@ fn classify_callee(
     // two-line `peek`. Measured slower and not worth retrying — holding what
     // the call sites already admit, holding every candidate, and splicing from
     // a frozen copy, which no other pass can reach and `sroa_param` invalidates.
-    let all_params: IndexSet<u32> = func.params.iter().map(|p| p.local_index).collect();
+    // Optimistic about the call sites, not about the body: a parameter this
+    // body writes is not the caller's constant however it arrived.
+    let all_params: IndexSet<u32> = func
+        .params
+        .iter()
+        .map(|p| p.local_index)
+        .filter(|i| !written.contains(i))
+        .collect();
     let (_, optimistic_loop) = weigh(&ConstView {
         params: &all_params,
         foldable,
@@ -1435,7 +1464,18 @@ pub fn inline_functions(
     // Inputs for the folded-cost second chance: which parameters arrive
     // constant everywhere, which callees the compile-time engine runs on
     // constant arguments, and which of those spin a loop while doing it.
-    let const_params = constant_params(project);
+    let written_by_func: Vec<IndexSet<u32>> = project
+        .functions
+        .iter()
+        .map(|f| {
+            f.borrow()
+                .body
+                .as_ref()
+                .map(written_locals)
+                .unwrap_or_default()
+        })
+        .collect();
+    let const_params = constant_params(project, &written_by_func);
     let fn_effects =
         super::mod_ref::compute_fn_effects(&project.functions, &project.builtin_registry);
     let foldable: Vec<bool> = project
@@ -1509,7 +1549,7 @@ pub fn inline_functions(
             }
         })
         .collect();
-    for func_rc in &project.functions {
+    for (i, func_rc) in project.functions.iter().enumerate() {
         let func = func_rc.borrow();
         let size = match func.body.as_ref() {
             Some(b) if pricing => inline_size(b, &type_table, descriptors),
@@ -1534,6 +1574,7 @@ pub fn inline_functions(
             &foldable,
             &loopy,
             &spliced,
+            &written_by_func[i],
         );
         if verdict.hold
             && let Some(id) = func.id

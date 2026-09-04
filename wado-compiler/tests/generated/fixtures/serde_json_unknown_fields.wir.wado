@@ -285,11 +285,11 @@ type "functype//core:prelude/primitive.wado/f64::inspect_into$scalar" = fn(f64, 
 
 type "functype//core:prelude/primitive.wado/f64::fmt_fixed$scalar" = fn(f64, i32, ref "core:prelude/format.wado//Formatter");  // TypeId(110)
 
-type "functype//core:json/core:json/JsonDeserializer::scan_string_run$scalar" = fn(ref "core:prelude/slice.wado//Slice<u8>", i32) -> [i32, bool, bool];  // TypeId(111)
+type "functype//core:json/core:json/JsonDeserializer::append_scanned_run$scalar" = fn(ref "core:prelude/slice.wado//Slice<u8>", ref "core:prelude/string.wado//String", i32, i32, bool) -> ref null "core:serde//DeserializeError";  // TypeId(111)
 
-type "functype//core:json/core:json/JsonDeserializer::take_scanned_run$scalar" = fn(ref "core:prelude/slice.wado//Slice<u8>", i32, i32, bool) -> [i32, ref null "core:prelude/string.wado//String", ref null "core:serde//DeserializeError"];  // TypeId(112)
+type "functype//core:json/core:json/JsonDeserializer::scan_string_run$scalar" = fn(ref "core:prelude/slice.wado//Slice<u8>", i32) -> [i32, bool, bool];  // TypeId(112)
 
-type "functype//core:json/core:json/JsonDeserializer::append_scanned_run$scalar" = fn(ref "core:prelude/slice.wado//Slice<u8>", ref "core:prelude/string.wado//String", i32, i32, bool) -> ref null "core:serde//DeserializeError";  // TypeId(113)
+type "functype//core:json/core:json/JsonDeserializer::take_scanned_run$scalar" = fn(ref "core:prelude/slice.wado//Slice<u8>", i32, i32, bool) -> [i32, ref null "core:prelude/string.wado//String", ref null "core:serde//DeserializeError"];  // TypeId(113)
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(114)
 
@@ -3746,17 +3746,17 @@ fn "core:json/core:json/JsonDeserializer::skip_number"(self) {
     let b_5: i32;
     let sign: i32;
     let b2: i32;
-    let _licm_input_9: ref "core:prelude/slice.wado//Slice<u8>";
-    let _licm_input_10: ref "core:prelude/slice.wado//Slice<u8>";
-    let _licm_input_11: ref "core:prelude/slice.wado//Slice<u8>";
-    let _licm_end_33: i32;
-    let _licm_start_34: i32;
-    let _licm_repr_35: ref Array<u8>;
-    let _licm_arith_36: i32;
-    let _licm_end_37: i32;
-    let _licm_start_38: i32;
-    let _licm_repr_39: ref Array<u8>;
-    let _licm_arith_40: i32;
+    let _licm_input_30: ref "core:prelude/slice.wado//Slice<u8>";
+    let _licm_end_31: i32;
+    let _licm_start_32: i32;
+    let _licm_repr_33: ref Array<u8>;
+    let _licm_arith_34: i32;
+    let _licm_input_35: ref "core:prelude/slice.wado//Slice<u8>";
+    let _licm_end_36: i32;
+    let _licm_start_37: i32;
+    let _licm_repr_38: ref Array<u8>;
+    let _licm_arith_39: i32;
+    let _licm_input_40: ref "core:prelude/slice.wado//Slice<u8>";
     let _licm_end_41: i32;
     let _licm_start_42: i32;
     let _licm_repr_43: ref Array<u8>;
@@ -3775,19 +3775,19 @@ fn "core:json/core:json/JsonDeserializer::skip_number"(self) {
     }) {
         self.pos = _av_48 + 1;
     }
-    _licm_input_9 = self.input;
-    _licm_end_33 = _licm_input_9.end;
-    _licm_start_34 = _licm_input_9.start;
-    _licm_repr_35 = _licm_input_9.repr;
-    _licm_arith_36 = _licm_end_33 - _licm_start_34;
+    _licm_input_30 = self.input;
+    _licm_end_31 = _licm_input_30.end;
+    _licm_start_32 = _licm_input_30.start;
+    _licm_repr_33 = _licm_input_30.repr;
+    _licm_arith_34 = _licm_end_31 - _licm_start_32;
     __hfs_pos_45 = self.pos;
     b409: block {
         l410: loop {
-            if __hfs_pos_45 >= _licm_arith_36 {
+            if __hfs_pos_45 >= _licm_arith_34 {
                 self.pos = __hfs_pos_45;
                 break b409;
             }
-            b_1 = builtin::array_get_value<u8>(_licm_repr_35, _licm_start_34 + __hfs_pos_45);
+            b_1 = builtin::array_get_value<u8>(_licm_repr_33, _licm_start_32 + __hfs_pos_45);
             if select i32(48 <= b_1, b_1 <= 57, 0) {
                 __hfs_pos_45 = __hfs_pos_45 + 1;
             } else {
@@ -3804,19 +3804,19 @@ fn "core:json/core:json/JsonDeserializer::skip_number"(self) {
         0;
     }) {
         self.pos = _av_49 + 1;
-        _licm_input_10 = self.input;
-        _licm_end_37 = _licm_input_10.end;
-        _licm_start_38 = _licm_input_10.start;
-        _licm_repr_39 = _licm_input_10.repr;
-        _licm_arith_40 = _licm_end_37 - _licm_start_38;
+        _licm_input_35 = self.input;
+        _licm_end_36 = _licm_input_35.end;
+        _licm_start_37 = _licm_input_35.start;
+        _licm_repr_38 = _licm_input_35.repr;
+        _licm_arith_39 = _licm_end_36 - _licm_start_37;
         __hfs_pos_46 = self.pos;
         b415: block {
             l416: loop {
-                if __hfs_pos_46 >= _licm_arith_40 {
+                if __hfs_pos_46 >= _licm_arith_39 {
                     self.pos = __hfs_pos_46;
                     break b415;
                 }
-                b_3 = builtin::array_get_value<u8>(_licm_repr_39, _licm_start_38 + __hfs_pos_46);
+                b_3 = builtin::array_get_value<u8>(_licm_repr_38, _licm_start_37 + __hfs_pos_46);
                 if select i32(48 <= b_3, b_3 <= 57, 0) {
                     __hfs_pos_46 = __hfs_pos_46 + 1;
                 } else {
@@ -3838,10 +3838,10 @@ fn "core:json/core:json/JsonDeserializer::skip_number"(self) {
                     self.pos = self.pos + 1;
                 }
             }
-            _licm_input_11 = self.input;
-            _licm_end_41 = _licm_input_11.end;
-            _licm_start_42 = _licm_input_11.start;
-            _licm_repr_43 = _licm_input_11.repr;
+            _licm_input_40 = self.input;
+            _licm_end_41 = _licm_input_40.end;
+            _licm_start_42 = _licm_input_40.start;
+            _licm_repr_43 = _licm_input_40.repr;
             _licm_arith_44 = _licm_end_41 - _licm_start_42;
             __hfs_pos_47 = self.pos;
             b423: block {
@@ -5390,6 +5390,36 @@ fn "core:prelude/primitive.wado/f64::fmt_fixed$scalar"(self, precision, f) {
     }
 }
 
+fn "core:json/core:json/JsonDeserializer::append_scanned_run$scalar"(self, dst, start, end, valid) {
+    let slice: ref "core:prelude/slice.wado//Slice<u8>";
+    let len: i32;
+    let s: i32;
+    let e: i32;
+    let a_22: i32;
+    let a_32: i32;
+    if valid == 0 {
+        return ref.as_non_null(cold_path; "core:serde/core:serde/DeserializeError::malformed"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("invalid UTF-8 in string"), used: 23 }, builtin::i64_extend_i32_s(start)));
+    }
+    len = self.end - self.start;
+    if @unlikely(0 > len) {
+        cold_path;
+        "core:prelude/primitive.wado/i32::clamp$cold0"(0, len);
+        unreachable;
+    }
+    a_22 = select i32(start > 0, start, 0);
+    s = select i32(a_22 < len, a_22, len);
+    if @unlikely(s > len) {
+        cold_path;
+        "core:prelude/primitive.wado/i32::clamp$cold0"(s, len);
+        unreachable;
+    }
+    a_32 = select i32(end > s, end, s);
+    e = select i32(a_32 < len, a_32, len);
+    slice = struct.new "core:prelude/slice.wado//Slice<u8>" { repr: self.repr, start: self.start + s, end: self.start + e };
+    "core:prelude/string.wado/core:prelude/string.wado/String::push_bytes_unchecked<core:prelude/bytes.wado/ByteSlice>"(dst, slice);
+    return ref.null none;
+}
+
 fn "core:json/core:json/JsonDeserializer::scan_string_run$scalar"(self, from) {
     let len: i32;
     let pos: i32;
@@ -5404,24 +5434,24 @@ fn "core:json/core:json/JsonDeserializer::scan_string_run$scalar"(self, from) {
     valid = 1;
     _licm_repr_14 = self.repr;
     _licm_start_15 = self.start;
-    b635: block {
-        l636: loop {
-            break_if b635 pos >= len;
+    b638: block {
+        l639: loop {
+            break_if b638 pos >= len;
             b = builtin::array_get_value<u8>(_licm_repr_14, _licm_start_15 + pos);
             if b < 128 {
-                break_if b635 select i32(b == 34, 1, b == 92);
+                break_if b638 select i32(b == 34, 1, b == 92);
                 pos = pos + 1;
-                continue l636;
+                continue l639;
             }
             advance = "core:prelude/string.wado/core:prelude/string.wado/String::utf8_sequence_len"(self, pos, len);
             if @unlikely(advance == 0) {
                 cold_path;
                 valid = 0;
                 pos = pos + 1;
-                continue l636;
+                continue l639;
             }
             pos = pos + advance;
-            continue l636;
+            continue l639;
         };
     };
     at_escape = (if pos < len -> i32 {
@@ -5473,36 +5503,6 @@ fn "core:json/core:json/JsonDeserializer::take_scanned_run$scalar"(self, start, 
         return 1, ref.null none, __qm_e;
     }
     return 0, s_4, ref.null none;
-}
-
-fn "core:json/core:json/JsonDeserializer::append_scanned_run$scalar"(self, dst, start, end, valid) {
-    let slice: ref "core:prelude/slice.wado//Slice<u8>";
-    let len: i32;
-    let s: i32;
-    let e: i32;
-    let a_22: i32;
-    let a_32: i32;
-    if valid == 0 {
-        return ref.as_non_null(cold_path; "core:serde/core:serde/DeserializeError::malformed"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("invalid UTF-8 in string"), used: 23 }, builtin::i64_extend_i32_s(start)));
-    }
-    len = self.end - self.start;
-    if @unlikely(0 > len) {
-        cold_path;
-        "core:prelude/primitive.wado/i32::clamp$cold0"(0, len);
-        unreachable;
-    }
-    a_22 = select i32(start > 0, start, 0);
-    s = select i32(a_22 < len, a_22, len);
-    if @unlikely(s > len) {
-        cold_path;
-        "core:prelude/primitive.wado/i32::clamp$cold0"(s, len);
-        unreachable;
-    }
-    a_32 = select i32(end > s, end, s);
-    e = select i32(a_32 < len, a_32, len);
-    slice = struct.new "core:prelude/slice.wado//Slice<u8>" { repr: self.repr, start: self.start + s, end: self.start + e };
-    "core:prelude/string.wado/core:prelude/string.wado/String::push_bytes_unchecked<core:prelude/bytes.wado/ByteSlice>"(dst, slice);
-    return ref.null none;
 }
 
 export fn "serde_json_unknown_fields.wado/__cm_export____test_0_unknown_fields_ignored" as "__test_0_unknown_fields_ignored"
