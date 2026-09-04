@@ -685,6 +685,49 @@ pub(crate) struct StaticMethodDispatch {
     pub(crate) self_in_args: bool,
 }
 
+impl StaticMethodDispatch {
+    /// The dispatch a call records for a callee it resolved to `sig`.
+    ///
+    /// Whether the receiver is among the arguments is the one thing the three
+    /// per-parameter lists must agree on, so `self_in_args` decides all of them
+    /// here rather than at each recording site. Written qualified, an instance
+    /// method takes its receiver as the call's first argument, and every list
+    /// carries a leading entry for it: spelled at the call site and never
+    /// omitted, hence no default, and `mut` exactly when the method takes
+    /// `&mut self`.
+    pub(crate) fn of_signature(
+        method_def: Option<crate::defs::DefId>,
+        function_ref: FunctionRef,
+        type_args: Vec<TypeId>,
+        sig: &crate::elaborator::sig::MethodSig,
+        self_in_args: bool,
+    ) -> Self {
+        let receiver = self_in_args && sig.self_kind != ast::SelfKind::None;
+        let values = sig.first_value_param().min(sig.decl.param_types.len());
+        Self {
+            method_def,
+            function_ref,
+            param_is_mut: receiver
+                .then(|| sig.self_kind == ast::SelfKind::MutRef)
+                .into_iter()
+                .chain(crate::elaborator::sig::Param::is_mut_flags(&sig.params))
+                .collect(),
+            type_args,
+            param_defaults: receiver
+                .then(|| ("self".to_string(), None))
+                .into_iter()
+                .chain(crate::elaborator::sig::Param::named_defaults(&sig.params))
+                .collect(),
+            param_types: if receiver {
+                sig.decl.param_types.clone()
+            } else {
+                sig.decl.param_types[values..].to_vec()
+            },
+            self_in_args: receiver,
+        }
+    }
+}
+
 /// Generic-instantiation decision at a call, struct-literal, or
 /// variant-construction site. `type_args` holds the concrete type per generic
 /// parameter in declaration order, `instance_type` the resulting

@@ -1,0 +1,23 @@
+// The other half of the same rule: written qualified, a trailing default may
+// still be omitted.
+
+use { println, Stdout } from "core:cli";
+
+struct P {
+    v: i32,
+}
+
+impl P {
+    fn add(&self, a: i32, b: i32 = 5) -> i32 {
+        return a + b + self.v;
+    }
+}
+
+export fn run() with Stdout {
+    let p = P { v: 10 };
+    println(`${P::add(&p, 1)}`);
+    println(`${P::add(&p, 1, 2)}`);
+}
+
+__DATA__
+{"stdout": "16\n13\n"}

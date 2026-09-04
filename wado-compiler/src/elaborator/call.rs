@@ -924,20 +924,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             .collect()
                     };
                 self.recoerce_literal_args(&call.args, &mut args, &substituted);
-                // Per-argument checking alone passes a call with too few
-                // arguments: the loop below simply does not reach them, and the
-                // call reaches codegen as an invalid module. A defaulted
-                // parameter may be omitted and is filled at reify, so only a
-                // signature without defaults has a count to check.
+                // Per-argument checking alone passes a call of the wrong length:
+                // the loop below reaches neither a missing argument nor a
+                // surplus one, and the call reaches codegen as an invalid
+                // module. `Self::arg_count_fits` is the same rule the other
+                // static spellings check.
                 //
                 // From the same lookup `raw_param_types` came from, so the two
-                // cannot disagree: an overloaded name yields no parameter list
-                // and so has no count to check here — the overload path picks
-                // the impl by argument, and reports its own mismatch.
-                let counts_are_fixed = self
+                // cannot disagree: an overloaded name yields no signature here,
+                // and so no count to check — the overload path picks the impl
+                // by argument, and reports its own mismatch.
+                let optional = self
                     .unique_qualified_method_sig(prefix, suffix)
-                    .is_some_and(|sig| sig.params.iter().all(|p| p.default.is_none()));
-                if counts_are_fixed && args.len() != substituted.len() {
+                    .map(|sig| sig.params.iter().filter(|p| p.default.is_some()).count());
+                if let Some(optional) = optional
+                    && !Self::arg_count_fits(args.len(), substituted.len(), optional)
+                {
                     let _ = self.emit(TypeError::ArgumentCountMismatch {
                         expected: substituted.len(),
                         found: args.len(),

@@ -637,6 +637,31 @@ takes. Three rules order them.
 - One home. A fact is recorded where it is decided and read where it is
   recorded; a phase recomputing a fact it could have read is re-deciding.
 
+### A call to an operation with nothing to reach panics at WIR
+
+A `resource` operation has no body, so the `#[cm("...")]` import is the only
+thing a call to it can reach. Declaring one that names no import is accepted —
+11 fixtures and 46 integration cases declare such an operation to give a
+resource a method shape, and never call it — and calling one reaches
+`wir_build` naming a function no module holds, where it panics rather than
+being reported at its span:
+
+```wado
+internal resource Widget {
+    fn poke(&self, n: i32);
+}
+export fn run() with Widget {
+    Widget::poke(&(1 as Widget), 3);
+}
+```
+
+Closing it takes a check over the dispatch a call records, which is the only
+place total over both spellings: `Widget::poke(&w, 3)` records a
+`StaticMethodDispatch` and `w.poke(3)` a `MethodDispatch`, and each carries the
+`method_def` whose parent says the operation is a resource's. `wir_build` cannot
+answer it — it holds names, not declarations — and rejecting the declaration
+instead is the wrong altitude: the corpus writes those declarations on purpose.
+
 ### An argument check is a lookup away from being skipped
 
 Every call path now checks its arguments, but each reaches its own lookup to

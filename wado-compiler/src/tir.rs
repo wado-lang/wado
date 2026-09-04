@@ -3782,10 +3782,34 @@ impl TypeTable {
                     || self.contains_infer_var(*return_type)
             }
             ResolvedType::GenericInstance { type_args, .. }
-            | ResolvedType::GenericResource { type_args, .. } => {
+            | ResolvedType::GenericResource { type_args, .. }
+            | ResolvedType::Struct { type_args, .. }
+            | ResolvedType::Newtype { type_args, .. } => {
                 type_args.iter().any(|t| self.contains_infer_var(*t))
             }
-            _ => false,
+            ResolvedType::TypePack { mapped_elem, .. } => {
+                mapped_elem.is_some_and(|t| self.contains_infer_var(t))
+            }
+            ResolvedType::AssocTypeProjection {
+                param_id,
+                assoc_type_bindings,
+                ..
+            } => {
+                self.contains_infer_var(*param_id)
+                    || assoc_type_bindings
+                        .iter()
+                        .any(|(_, t)| self.contains_infer_var(*t))
+            }
+            ResolvedType::Primitive(_)
+            | ResolvedType::Unit
+            | ResolvedType::Never
+            | ResolvedType::Enum { .. }
+            | ResolvedType::Flags { .. }
+            | ResolvedType::Resource { .. }
+            | ResolvedType::Variant { .. }
+            | ResolvedType::TypeParam { .. }
+            | ResolvedType::Unknown
+            | ResolvedType::Error => false,
         }
     }
 

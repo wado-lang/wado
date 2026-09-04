@@ -2475,6 +2475,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .collect()
     }
 
+    /// Whether `args` arguments fill a callee declaring `params` parameters,
+    /// `optional` of them defaulted. A defaulted parameter may be omitted and is
+    /// filled at reify; nothing may be passed beyond the declared list, or the
+    /// extra argument is dropped along with whatever its expression did.
+    pub(super) fn arg_count_fits(args: usize, params: usize, optional: usize) -> bool {
+        args >= params.saturating_sub(optional) && args <= params
+    }
+
     /// Report an argument list a static method's signature cannot accept,
     /// returning `false` once a diagnostic was emitted. Shared by the three
     /// spellings that reach one: `Type::method(…)`, `Type::<T>::method(…)` and
@@ -2498,8 +2506,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .iter()
             .filter(|(_, d)| d.is_some())
             .count();
-        let required = param_types.len().saturating_sub(optional);
-        if args.len() < required || args.len() > param_types.len() {
+        if !Self::arg_count_fits(args.len(), param_types.len(), optional) {
             let _ = self.emit(TypeError::ArgumentCountMismatch {
                 expected: param_types.len(),
                 found: args.len(),
@@ -3843,17 +3850,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             })
         };
 
-        let param_is_mut = self.lookup_static_method_param_is_mut(
-            &actual_struct_name,
-            method_name,
-            receiver_key.as_ref(),
-        );
-
-        let param_defaults = self.lookup_static_method_param_defaults(
-            &actual_struct_name,
-            method_name,
-            receiver_key.as_ref(),
-        );
+        // The signature the spelling names, whichever kind of method it is. The
+        // dispatch derives its per-parameter lists from it, so they agree with
+        // each other and with where the receiver sits.
+        let callee_sig = self.qualified_method_sig(&actual_struct_name, method_name);
 
         // Propagate #[cm("...")] from resource static methods. A method the
         // *resource* declares names it as its own owner; one an `impl` block
@@ -3888,30 +3888,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Record the static-method dispatch decision so reify can reproduce
         // the same `Call` shape without re-running impl lookup, mangled-name
         // construction, or monomorph-info shaping.
-        let param_is_mut: Vec<bool> = args
-            .iter()
-            .zip(param_is_mut.iter().copied().chain(std::iter::repeat(false)))
-            .map(|(_, is_mut)| is_mut)
-            .collect();
-        let param_types = self
-            .lookup_static_method_param_types_keyed(
-                &actual_struct_name,
-                method_name,
-                receiver_key.as_ref(),
-            )
-            .unwrap_or_default();
-        self.sem.types.static_method_dispatch.insert(
-            call_id,
-            super::sem::types::StaticMethodDispatch {
-                method_def: method_ref.method_id,
-                function_ref: func_ref,
-                param_is_mut,
-                type_args: vec![],
-                param_defaults,
-                param_types,
-                self_in_args: false,
-            },
-        );
+        if let Some(sig) = &callee_sig {
+            self.sem.types.static_method_dispatch.insert(
+                call_id,
+                super::sem::types::StaticMethodDispatch::of_signature(
+                    method_ref.method_id,
+                    func_ref,
+                    vec![],
+                    sig,
+                    true,
+                ),
+            );
+        }
 
         return_type
     }

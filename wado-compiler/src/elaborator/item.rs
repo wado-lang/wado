@@ -1883,8 +1883,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         for method in methods {
             // A resource operation is a CM import in every case; an effect
             // operation only when it carries the attribute.
-            let binds_import = method.attrs.iter().any(|a| a.cm_boundary.is_some());
-            let cm_backed = is_resource || binds_import;
+            let cm_backed = is_resource || method.attrs.iter().any(|a| a.cm_boundary.is_some());
             // A resource method's `&self` becomes the CM adapter's first
             // parameter; an effect operation is called as `E::op(args)`.
             let receiver = (!is_resource)
@@ -1895,17 +1894,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .find(|p| p.self_kind != ast::SelfKind::None)
                 })
                 .flatten();
-            let rejections: [(Option<Span>, &'static str); 8] = [
+            let rejections: [(Option<Span>, &'static str); 7] = [
                 (
                     method.body.as_ref().filter(|_| cm_backed).map(|b| b.span),
                     "cannot carry a default implementation: a Component Model import backs it, \
                      so it has no no-handler case for a default to serve",
-                ),
-                (
-                    (is_resource && !binds_import).then_some(method.span),
-                    "must name the Component Model import that backs it with `#[cm(\"...\")]`: \
-                     a resource operation has no body, so one naming no import has nothing \
-                     to call",
                 ),
                 (
                     (method.is_async && method.body.is_some()).then_some(method.span),
