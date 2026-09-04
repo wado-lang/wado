@@ -293,8 +293,7 @@ impl CanonicalIntrinsic {
     }
 
     /// The stream intrinsic a payload-less base name denotes, at `payload`.
-    /// The one place that maps a `stream-*` name to its variant: parsing an
-    /// import name and parameterizing a call site both read it here.
+    /// The one place a `stream-*` name maps to its variant.
     pub fn stream_op(base: &str, payload: CmStreamPayload) -> Option<Self> {
         Some(match base {
             "stream-new" => Self::StreamNew(payload),

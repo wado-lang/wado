@@ -1662,9 +1662,9 @@ enum BindingTarget {
 }
 
 /// The `core:rt` binding a CM member needs beyond its canonical import: one
-/// that moves a payload across the boundary, or reads back what the canonical
-/// only signals. Naming these is a compiler decision, so it is listed; what a
-/// name means is [`CanonicalIntrinsic`]'s to say.
+/// that moves a payload, or reads back what the canonical only signals. Which
+/// binding is a compiler decision, so it is listed; what a name *means* is
+/// [`CanonicalIntrinsic`]'s to say.
 fn internal_cm_binding(cm_name: &str) -> Option<&'static str> {
     Some(match cm_name {
         "stream-read" => "cm_stream_read_u8",
@@ -1681,9 +1681,8 @@ fn internal_cm_binding(cm_name: &str) -> Option<&'static str> {
 }
 
 /// `None` for a method not handled here — it falls through to WIR translate.
-/// Every stream name reaching this point names a `u8` element, which the
-/// caller checks; a bare future name carries no payload and so parses to
-/// nothing, the parameterized paths above having taken the ones that do.
+/// Every stream name reaching this point names a `u8` element, which the caller
+/// checks; the payload-carrying futures the parameterized paths above took.
 fn cm_binding_function(cm_name: &str) -> Option<BindingTarget> {
     if let Some(binding) = internal_cm_binding(cm_name) {
         return Some(BindingTarget::Internal(binding));
@@ -1852,10 +1851,8 @@ impl TirMutVisitor for CmMethodRewriter<'_> {
 
 impl CmMethodRewriter<'_> {
     /// Rewrite a CM call — `recv.method(args)` or `Type::method(args)` — to a
-    /// builtin/internal call. A member operating on a handle takes it as
-    /// `args[0]` whichever spelling wrote the call, and the canonical import
-    /// takes that handle as an `i32`; a constructor's first argument is a value
-    /// (`ErrorContext::new(message)`), so what is cast is what is a handle.
+    /// builtin/internal call, casting the handle it operates on to the `i32` the
+    /// canonical import takes.
     fn rewrite_call(&self, expr: &mut TirExpr, target: BindingTarget) {
         let TirExprKind::Call { args, .. } = &mut expr.kind else {
             return;
@@ -1884,8 +1881,9 @@ impl CmMethodRewriter<'_> {
     }
 }
 
-/// Whether a type is a resource handle — what a canonical import takes as an
-/// `i32`, and `type MyStream = Stream<u8>` names one too.
+/// Whether a type is a resource handle. `args[0]` is one exactly where the
+/// member declares a receiver: a constructor's first argument is a value
+/// (`ErrorContext::new(message)`), which casting would corrupt.
 fn is_cm_handle(tt: &TypeTable, type_id: TypeId) -> bool {
     let peeled = crate::component_model::peel_newtypes(tt, tt.peel_refs(type_id));
     matches!(
@@ -1940,9 +1938,8 @@ fn rewrite_cm_new(expr: &mut TirExpr, tt: &TypeTable, is_future: bool) {
     );
 }
 
-/// Drop and cancel are the canonical import itself, so parameterizing the name
-/// by the receiver's payload is the whole binding. Read and write move a
-/// payload and need a generated one, so they are bound before this is reached.
+/// Drop and cancel are the canonical import itself, so the parameterized name
+/// is the whole binding. Read and write move a payload and need a generated one.
 fn is_drop_or_cancel(cm_name: &str) -> bool {
     let (_, op) = cm_name.split_once('-').unwrap_or_default();
     matches!(

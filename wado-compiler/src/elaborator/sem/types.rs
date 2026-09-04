@@ -685,11 +685,8 @@ pub(crate) struct StaticMethodDispatch {
 }
 
 /// What a call sees of its callee's parameters: the three lists it checks and
-/// pads against, and whether the receiver is the first of them.
-///
-/// One derivation, because the four cannot be read apart. A site that counts
-/// `self` in one list and not another rejects a legal call, or checks an
-/// argument against its neighbour's type.
+/// pads against, and whether the receiver leads them. One derivation, because a
+/// site that counts `self` in one list and not another misreads every argument.
 #[derive(Default)]
 pub(crate) struct CalleeParams {
     pub(crate) param_is_mut: Vec<bool>,

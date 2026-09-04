@@ -392,9 +392,7 @@ fn future_stream_payload_site(tt: &TypeTable, expr: &TirExpr) -> Option<(TypeId,
     } else {
         return None;
     };
-    // Every future / stream canonical but `new` operates on a handle, which the
-    // call carries whichever spelling wrote it. Read through the method-call
-    // view instead, only dot syntax answered.
+    // Every future / stream canonical but `new` operates on a handle.
     let (receiver, _) = expr.kind.call_receiver()?;
     let handle = tt.peel_refs(receiver.type_id);
     Some((*tt.generic_type_args(handle)?.first()?, is_future))

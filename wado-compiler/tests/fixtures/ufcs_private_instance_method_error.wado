@@ -1,0 +1,13 @@
+// A qualified call read the callee's reach from an index of receiver-less
+// methods. It found no entry for an instance method and checked nothing, so a
+// private one answered from another module. Dot syntax refuses the same call.
+
+use m from "./sub/ufcs_private_instance_target.wado";
+
+export fn run() {
+    let p = m::P { v: 1 };
+    let _ = m::P::hidden(&p);
+}
+
+__DATA__
+{"compile_error": "method `hidden` of `P` is private to its defining file"}

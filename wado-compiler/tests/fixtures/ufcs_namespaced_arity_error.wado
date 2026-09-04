@@ -1,0 +1,12 @@
+// A namespaced qualified call answered its argument count from a receiver-less
+// lookup, so an instance method declared nothing and the count went unchecked.
+
+use m from "./sub/ufcs_namespaced_facts_target.wado";
+
+export fn run() {
+    let q = m::Q { v: 1 };
+    let _ = m::Q::bump(&q);
+}
+
+__DATA__
+{"compile_error": "expected 3 arguments, found 1"}

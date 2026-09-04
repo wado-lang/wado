@@ -1815,11 +1815,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     span: method.span,
                 });
             }
-            // The `#[cm("...")]` payload, so dispatch synthesis maps a raw
-            // resource call site back to its per-monomorphisation wrapper. The
-            // bare attribute string, unsplit on `#`; `None` for an effect op
-            // and for a resource method without the attribute. Recorded on the
-            // signature, which is where every call site reads it.
+            // The bare `#[cm("...")]` payload, unsplit on `#`, recorded on the
+            // signature so every call site reads the same one.
             let cm_name = method
                 .attrs
                 .iter()

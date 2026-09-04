@@ -844,7 +844,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             ResolvedType::Unit => (TypeTable::UNIT_TYPE_NAME.to_string(), None, None, None),
             // An enum or a non-generic variant: the declaration is the whole
             // receiver, so its head names the impl blocks to search. A generic
-            // variant arrives as `GenericInstance` and is handled above.
+            // variant arrives as `GenericInstance`, handled above.
             ResolvedType::Enum { .. } | ResolvedType::Variant { .. } => {
                 let (name, module_source) = self
                     .tysys

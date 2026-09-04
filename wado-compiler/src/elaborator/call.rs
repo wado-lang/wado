@@ -1323,16 +1323,27 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     };
 
                     // The importing module never names `Type` on its own, so a
-                    // bare-name key reaches nothing and every `mut` parameter
-                    // would read as non-mut for the mutation and alias passes.
+                    // bare-name key reaches nothing and every fact below would
+                    // read as the callee declaring no parameters at all.
                     let ns_key = self.namespace_member(prefix, type_name).map(|def| {
                         trait_env::ImplTargetKey::of_decl(self.tysys.resolutions.defs(), def)
                     });
-                    let param_is_mut = self.lookup_static_method_param_is_mut(
-                        type_name,
-                        method_name,
-                        ns_key.as_ref(),
-                    );
+                    // One signature answers every list, at the receiver this
+                    // call resolved. Read apart, an instance method's defaults
+                    // came back empty and codegen bound the receiver to the
+                    // first value parameter. Reify replays the `Call` from what
+                    // is recorded below, so an empty list here is a call short
+                    // an argument, or padding left untyped.
+                    let callee_key = self.static_receiver_key(type_name, ns_key.as_ref());
+                    let callee_sig =
+                        self.unique_qualified_method_sig_keyed(&callee_key, method_name);
+                    let declares_params = callee_sig.is_some();
+                    let super::sem::types::CalleeParams {
+                        param_is_mut,
+                        param_defaults,
+                        param_types,
+                        self_in_args,
+                    } = super::sem::types::CalleeParams::of_signature(callee_sig.as_ref(), true);
 
                     let func_ref = FunctionRef {
                         module_source: struct_module,
@@ -1348,21 +1359,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         )),
                     };
 
-                    // Recorded so reify replays this Call shape without re-running
-                    // dispatch. Empty defaults would leave codegen a call short an
-                    // argument; empty types would leave reify padding untyped.
-                    let param_defaults = self.lookup_static_method_param_defaults(
-                        type_name,
-                        method_name,
-                        ns_key.as_ref(),
-                    );
-                    let declared_params = self.lookup_static_method_param_types_keyed(
-                        type_name,
-                        method_name,
-                        ns_key.as_ref(),
-                    );
-                    let declares_params = declared_params.is_some();
-                    let param_types = declared_params.unwrap_or_default();
                     let checked: Vec<TypeId> = if method_type_args.is_empty() {
                         param_types.clone()
                     } else {
@@ -1398,7 +1394,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             type_args: vec![],
                             param_defaults,
                             param_types,
-                            self_in_args: false,
+                            self_in_args,
                         },
                     );
 
@@ -2711,10 +2707,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let Some((struct_name, method_name)) = effective_name.rsplit_once("::") else {
             return;
         };
-        let Some(entry) = self.static_method_entry(receiver, method_name) else {
+        let Some((module, visibility)) = self.qualified_callee_reach(receiver, method_name) else {
             return;
         };
-        let (module, visibility) = (entry.module.clone(), entry.inherent_visibility);
         let owner = struct_name.to_string();
         self.check_inherent_member_visibility(
             visibility,
@@ -2725,6 +2720,32 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             node,
             span,
         );
+    }
+
+    /// The module a qualified callee was declared in and the reach it declared,
+    /// `None` where the member does not decide its own — a trait impl's method
+    /// takes the trait's. The static-method index holds receiver-less methods
+    /// alone, so an instance method answers from its inherent impl block.
+    fn qualified_callee_reach(
+        &self,
+        receiver: &super::trait_env::ImplTargetKey,
+        method_name: &str,
+    ) -> Option<(ModuleSource, Option<crate::ast::Visibility>)> {
+        if let Some(entry) = self.static_method_entry(receiver, method_name) {
+            return Some((entry.module.clone(), entry.inherent_visibility));
+        }
+        let trait_env = &self.tysys.trait_env;
+        let defs = self.tysys.resolutions.defs();
+        trait_env
+            .all_impl_index
+            .get(receiver)?
+            .iter()
+            .find_map(|impl_def| {
+                let header = trait_env.impl_headers.get(impl_def)?;
+                header.trait_key.is_none().then_some(())?;
+                let method = self.tysys.declared_method(*impl_def, method_name)?;
+                Some((header.module.clone(), Some(defs.visibility(method))))
+            })
     }
 
     /// The static-method index entry `receiver::name` selects, for the

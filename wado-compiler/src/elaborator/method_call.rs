@@ -1444,20 +1444,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             );
         }
 
-        // One signature answers every list this call checks and pads against, so
-        // none of them counts the receiver differently, at the receiver this
-        // call already resolved. `Type::<T>::op(&x)` writes the receiver first,
-        // which is what [`CalleeParams`] is told.
+        // One signature answers every list this call checks and pads against, at
+        // the receiver it already resolved, so none of them counts the receiver
+        // differently. `Type::<T>::op(&x)` writes that receiver first.
         let callee_sig = static_receiver
             .as_ref()
             .and_then(|key| self.unique_qualified_method_sig_keyed(key, &static_call.method));
-        let callee_params =
-            super::sem::types::CalleeParams::of_signature(callee_sig.as_ref(), true);
+        let super::sem::types::CalleeParams {
+            param_is_mut,
+            param_defaults: static_method_defaults,
+            mut param_types,
+            self_in_args,
+        } = super::sem::types::CalleeParams::of_signature(callee_sig.as_ref(), true);
         // Whether a signature answered at all. A variant case or a flags member
         // reaches this path with no signature behind it, and its own arm below
         // owns its argument count; only a declared callee has one to check here.
         let declares_params = callee_sig.is_some();
-        let mut param_types = callee_params.param_types.clone();
 
         // Literal preselect for a conversion call (WEP 2026-07-31 phase 4):
         // choose the impl before the argument is elaborated, so the expected
@@ -1479,10 +1481,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return TypeTable::ERROR;
         }
 
-        // From the same signature as `param_types`, so a defaulted parameter is
-        // counted against the list the arity check reads.
-        let static_method_defaults: Vec<(String, Option<ast::Expr>)> =
-            callee_params.param_defaults.clone();
         // The module those defaults were written in, so their bodies answer to
         // it rather than to this call site.
         let static_method_module = static_receiver.as_ref().and_then(|receiver| {
@@ -1562,10 +1560,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     &method_type_args,
                 );
                 // `param_types` leads with the receiver exactly where the
-                // spelling wrote one, so the instantiated list starts at the
-                // same parameter. Skipping it either way pairs each argument
-                // with its neighbour's type.
-                let skip = if callee_params.self_in_args {
+                // spelling wrote one, so the instantiated list must start at
+                // the same parameter.
+                let skip = if self_in_args {
                     0
                 } else {
                     sig.first_value_param().min(instantiated.param_types.len())
@@ -2223,8 +2220,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .map(|t| self.tysys.type_table.borrow().fq_type_name(*t))
             .collect();
 
-        let param_is_mut = callee_params.param_is_mut.clone();
-
         // Build method_info with base struct name and trait name (if applicable)
         let mut method_info = LocalMethodName::new(
             self.qualified_receiver_name(&struct_name),
@@ -2233,11 +2228,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         )
         .with_type_args(&impl_only_type_arg_names, &method_type_arg_names);
 
-        // The `#[cm("...")]` import the callee binds, read off the signature
-        // this call resolved to, at the receiver it resolved at. An index of
-        // receiver-less methods answers for one kind of method only, and an
-        // instance one written `Type::<T>::op(&x)` then lost its binding and
-        // left reify emitting a call to a name nothing declares.
+        // The `#[cm("...")]` import the callee binds, off the signature this
+        // call resolved to, at the receiver it resolved at.
         method_info.cm_name = static_receiver
             .as_ref()
             .and_then(|key| self.qualified_method_sig_keyed(key, &static_call.method))
@@ -2279,7 +2271,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 type_args: method_type_args,
                 param_defaults: static_method_defaults,
                 param_types: param_types.clone(),
-                self_in_args: callee_params.self_in_args,
+                self_in_args,
             },
         );
 
@@ -2821,10 +2813,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             TypeTable::ARRAY_TYPE_NAME.to_string(),
                         ));
                     }
-                    // Every other nominal type keys on its own declaration,
-                    // which is what `nominal_def` answers. Naming the kinds
-                    // here instead left a resource unanswered, so its callers
-                    // each derived a second key from the bare name.
+                    // Every other nominal type keys on its own declaration.
                     _ => {
                         break self
                             .tysys
@@ -2844,27 +2833,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         (name, key)
     }
 
-    /// Default-value expressions for a static method's non-self parameters, in
-    /// the same order as [`Self::lookup_static_method_param_types_keyed`].
-    /// Returns `(param_name, default_expr)` pairs; `default_expr` is `None` for
-    /// parameters without a declared default.
-    pub(super) fn lookup_static_method_param_defaults(
-        &mut self,
-        struct_name: &str,
-        method_name: &str,
-        target_hint: Option<&crate::elaborator::trait_env::ImplTargetKey>,
-    ) -> Vec<(String, Option<ast::Expr>)> {
-        let static_key = self.static_receiver_key(struct_name, target_hint);
-        // Names and defaults come out of the same record, so their order
-        // matches the parameter types by construction.
-        self.unique_static_method_sig(&static_key, method_name)
-            .map(|sig| crate::elaborator::sig::Param::named_defaults(&sig.params))
-            .unwrap_or_default()
-    }
-
     /// The receiver a static lookup keys on: the key its caller already
     /// resolved, else the written name over the walking module's frame.
-    fn static_receiver_key(
+    pub(super) fn static_receiver_key(
         &self,
         struct_name: &str,
         target_hint: Option<&ImplTargetKey>,
@@ -2991,23 +2962,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> Vec<TypeId> {
         self.unique_static_method_sig(static_key, method_name)
             .map(|sig| sig.decl.type_params.iter().map(|(_, id)| *id).collect())
-            .unwrap_or_default()
-    }
-
-    /// Whether each parameter of a static method is `mut`, empty for an unknown
-    /// method. The receiver key is pre-resolved where the caller holds one — a
-    /// namespace member's bare spelling cannot reach it.
-    pub(super) fn lookup_static_method_param_is_mut(
-        &self,
-        struct_name: &str,
-        method_name: &str,
-        target_hint: Option<&crate::elaborator::trait_env::ImplTargetKey>,
-    ) -> Vec<bool> {
-        let type_target = self.static_receiver_key(struct_name, target_hint);
-        self.impl_method_sigs(&type_target, method_name)
-            .into_iter()
-            .find(|sig| sig.self_kind == ast::SelfKind::None)
-            .map(|sig| super::sig::Param::is_mut_flags(&sig.params))
             .unwrap_or_default()
     }
 
