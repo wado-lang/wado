@@ -17,6 +17,8 @@ Language service engine for the Wado compiler toolchain.
 | `src/ast_search.rs`         | `FirstMatch` + `find_in_module`: the short-circuiting module walk that hover's local renderer and definition's `#include` path finder share                                             |
 | `src/host.rs`               | `FilesystemCompilerHost`: default `CompilerHost` for disk-backed source loading                                                                                                         |
 | `src/host/discovery.rs`     | The filesystem reads behind `dependency_index`: governing `wado.toml`, `wado.lock`, and what the warm `~/wado` cache holds. `wado-manifest` itself stays pure                           |
+| `src/kiln.rs`               | The kiln pre-pass: collect the entry's inline `with { generator }` clauses and resolve the consume-only redirect index off the on-disk artifact                                         |
+| `src/kiln/options.rs`       | Checks a clause's `options` table against the generator's `Options` struct, read from the generator's source — no generator run, so every host can do it                                |
 | `src/uri.rs`                | Typed `Uri` + `UriScheme` for parsing `file:` / `core:` / `wasi:` / `kiln:` URIs once instead of inline string splitting; percent-decodes and re-encodes `file:` paths                  |
 | `src/text.rs`               | `PositionEncoding`, LSP `Position` ↔ compiler 1-based codepoint `(line, col)` conversion, `range_from_codepoints` (the one span→`Range` conversion), and the shared `LineIndex`         |
 | `src/diagnostics.rs`        | Compiler `Diagnostic` to LSP-compatible `Diagnostic` conversion (re-encodes spans in the negotiated position encoding; tags unused / dead-code lints with `DiagnosticTag::Unnecessary`) |
@@ -67,14 +69,16 @@ that it resolves to its parameter binding and colours as a parameter.
 
 `Engine` owns per-document state: source text and a cached
 `Rc<Snapshot>` built by composing `wado_compiler::parse` →
-`wado_compiler::load` → `wado_compiler::semantics_of`, with kiln
-invocation discovery (`kiln::prepare_invocations`) interleaved between
-parse and load. A runtime-backed host that already ran the generators
-can instead supply a precomputed `InvocationIndex` via
-`open_document_with_invocations`; when present it is used verbatim and
-consume-only discovery is skipped (native `wado query` does this — see
-the Kiln WEP). `update_document` drops an injected index with the
-snapshot, so a changed document falls back to consume-only.
+`wado_compiler::load` → `wado_compiler::semantics_of`, with the kiln
+pre-pass (`kiln::prepare_invocations`) interleaved between parse and
+load. A runtime-backed host that already ran the generators can
+instead supply a precomputed `InvocationIndex` via
+`open_document_with_invocations`; when present it replaces the
+consume-only on-disk _discovery_ (native `wado query` does this — see
+the Kiln WEP), but not the pre-pass's checks on the source: a
+malformed clause and a bad `options` table are reported either way.
+`update_document` drops an injected index with the snapshot, so a
+changed document falls back to consume-only.
 The snapshot is built on first query and shared across back-to-back
 queries on the same document version; `update_document` /
 `close_document` invalidates it. The negotiated `PositionEncoding`

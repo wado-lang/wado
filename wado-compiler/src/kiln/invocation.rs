@@ -5,6 +5,46 @@
 
 use std::fmt;
 
+/// The `core:kiln/generator` world FQ name: what a generator package declares
+/// in `[world]`, and the target world its source is analyzed under.
+pub const GENERATOR_WORLD_FQ: &str = "core:kiln/generator";
+
+/// The parts of a `module:` build-dependency specifier: the
+/// `[build-dependencies]` lookup key (`ns:name` or `lib:nick`), an optional
+/// pinned `@version`, and an optional `/submodule` path. The coordinate and
+/// version never contain `/`, so the first `/` starts the submodule; the `@`
+/// split only applies to a segment carrying a `:`.
+#[derive(Debug, PartialEq, Eq)]
+pub struct SpecParts<'a> {
+    pub key: &'a str,
+    pub version: Option<&'a str>,
+    pub submodule: Option<&'a str>,
+}
+
+/// Parse a `module:` specifier into its [`SpecParts`].
+#[must_use]
+pub fn parse_spec(spec: &str) -> SpecParts<'_> {
+    let (head, submodule) = match spec.split_once('/') {
+        Some((h, s)) => (h, Some(s)),
+        None => (spec, None),
+    };
+    let (key, version) = match head.split_once('@') {
+        Some((k, v)) if k.contains(':') => (k, Some(v)),
+        _ => (head, None),
+    };
+    SpecParts {
+        key,
+        version,
+        submodule,
+    }
+}
+
+/// The `[build-dependencies]` lookup key for a `module:` specifier.
+#[must_use]
+pub fn spec_key(spec: &str) -> &str {
+    parse_spec(spec).key
+}
+
 /// A forward-slash, NFC-normalized file path relative to the project root.
 ///
 /// Wrapped to keep cache-key hashing consistent regardless of where the path

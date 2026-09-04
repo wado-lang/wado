@@ -2,7 +2,9 @@
 //!
 //! The typed check runs in the driver, long after the AST is gone, so the
 //! spans it reports come from the key spans the parser recorded on the
-//! `with { generator: { options: … } }` clause.
+//! `with { generator: { options: … } }` clause. The language service reaches
+//! the same verdict without running the generator at all, by reading its
+//! `Options` struct from source — `query diagnostics` is that path.
 
 use predicates::prelude::*;
 use std::fs;
@@ -103,6 +105,22 @@ fn options_diagnostics_point_at_the_offending_key() {
         ))
         .stderr(predicate::str::contains(
             "main.wado:5:9: error: kiln: required options field `options.verbose`",
+        ));
+}
+
+/// The language service reports the same key, on the same source, with no
+/// generated output on disk and no generator run.
+#[test]
+fn query_diagnostics_points_at_the_offending_key() {
+    let tmp = tempfile::tempdir().unwrap();
+    let app = write_project(tmp.path(), "{ verbsoe: false }");
+
+    wado_in(&app)
+        .args(["query", "diagnostics", "src/main.wado"])
+        .assert()
+        .failure()
+        .stdout(predicate::str::contains(
+            "src/main.wado:5:20: error: kiln: unknown options field `options.verbsoe`",
         ));
 }
 
