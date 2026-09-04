@@ -1,0 +1,35 @@
+// The other side of `trait_bound_on_rigid_param_is_checked.wado`: `B` carries
+// no `Tag`, so the variadic impl's bound does not hold of `[A, B]` and the call
+// finds no method. Adding `B: Tag` is what makes it resolve.
+
+trait Tag {
+    fn tag(&self) -> String;
+}
+
+impl Tag for i32 {
+    fn tag(&self) -> String {
+        return `i${*self}`;
+    }
+}
+
+impl<..T: Tag> Tag for [..T] {
+    fn tag(&self) -> String {
+        let mut out = "";
+        for let [_i, element] of self.enumerate() {
+            out = out + element.tag();
+        }
+        return out;
+    }
+}
+
+fn tagged<A: Tag, B>(a: A, b: B) -> String {
+    let both = [a, b];
+    return both.tag();
+}
+
+export fn run() {
+    assert tagged(1, 2) == "i1i2";
+}
+
+__DATA__
+{"compile_error": "no method 'tag' found"}

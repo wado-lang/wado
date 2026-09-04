@@ -279,7 +279,22 @@ _different_ traits are the two-trait ambiguity above.
 ### Eligibility gates
 
 Ranking runs over candidates, and a bound that does not hold produces no
-candidate. Two gates decide that. They are not ranking rules:
+candidate. A bound is read the same way wherever the impl puts its parameter —
+a type argument (`impl<T: B> Tr for List<T>`), a pointee (`impl<T: B> Tr for
+&T`), or a pack's elements (`impl<..T: B> Tr for [..T]`) — and a rigid type
+parameter satisfies it from the bounds in force on it and from nothing else. So
+`[..T]: Ord` does not hold of `[A, B]` under `A: Inspect, B: Inspect`, and the
+body that wants it says `A: Ord, B: Ord`
+(`trait_bound_on_rigid_param_is_checked.wado`,
+`trait_error_bound_missing_on_rigid_param.wado`).
+
+A marker on a generic declaration is the other question and keeps its own
+answer: `impl<T> Eq for Pair<T>;` asks whether the _declaration_ derives, and
+its body is emitted per instantiation, so a member that is one of the
+declaration's own parameters is that instantiation's to satisfy
+(WEP 2026-06-25, `eq_ord_explicit_request.wado`).
+
+Two further gates decide candidacy. They are not ranking rules:
 
 - A `Reflect*` bound holds only where every member of the receiver is visible at
   the use site (WEP 2026-06-13). This keeps `TreeMap` out of a downstream
@@ -491,17 +506,6 @@ the order, and keeps the ones it names.
 
 ## Known gaps
 
-### The walk still collects for one receiver
-
-Where the order finds no impl for a receiver the compiler's derivation walk
-assumes a bound of (below), it answers `Undecided`, and lookup falls back to its
-own collection (`collect_by_walk`): every impl on the newtype chain plus the
-value blankets whose bounds the walk says hold. That collection, and the
-applicability checks it carries, exist for this verdict alone.
-
-- [ ] Delete `collect_by_walk` once the derivation walk and the solver agree on
-      a bound of a rigid parameter (below).
-
 ### Scope gates method calls, not the bounds path
 
 A method call is gated: an impl that applies while its trait is unimported is
@@ -554,21 +558,13 @@ asks the full question of each, and the recursion guard counts the member
 descents to tell a recursive type from an ungrounded cycle. The solver's
 `derive` runs beside it: every declaration is lowered and derived when the
 `Program` is built, and `holds` answers under the differential against
-`type_implements_trait` over every fixture. Three receivers the differential
-skips, since only the compiler derives for them: one mentioning a type
-parameter with no bound, which the compiler's walk assumes `Pi: Tr` of; one
-mentioning a pack, whose elements the walk assumes the same of whatever the
-pack's bounds say (`[..T]: Ord` holds to it under `T: Inspect`); and a head the
-program names without members — an anonymous struct, whose shape a literal
-mints after the `Program` is built, and a struct declared in a body, whose
-fields annotate resolves in that body. Such a head reaches a blanket whose bound
-holds of everything (`Inspect`) or an impl written for it, and no `Reflect*`
-fact or derived impl (`trait_local_struct_receiver_blanket.wado`). Selection
-meets the first of these too: a derived call on a receiver whose own parameter
-carries no bound (`p.serialize(s)` under `fn f<T>(p: &Pair<T>, ..)`) is one the
-order has no impl to answer, so it says so (`Ordered::Undecided`) and what the
-compiler's walk collected stands (`trait_derived_method_call.wado`). What is
-left is the flip:
+`type_implements_trait` over every fixture. One receiver the differential skips,
+since only the compiler answers for it: a head the program names without members
+— an anonymous struct, whose shape a literal mints after the `Program` is built,
+and a struct declared in a body, whose fields annotate resolves in that body.
+Such a head reaches a blanket whose bound holds of everything (`Inspect`) or an
+impl written for it, and no `Reflect*` fact or derived impl
+(`trait_local_struct_receiver_blanket.wado`). What is left is the flip:
 
 - [ ] Route the derived bodies through what `holds` reports instead of
       `record_bound_driven_synth_request_for`, and retire the member walk.

@@ -1,9 +1,7 @@
-// A derived body answers a method call as an impl does. Lookup collects the
-// `Reflect*` blanket the body comes from, and the order names the derived impl
-// to that block; a marker `impl Serialize for T;` names its own block; a
-// receiver whose own parameter carries no bound is the compiler's derivation
-// walk to answer (WEP 2026-09-01, "Derivation is still a query in the
-// compiler").
+// A derived body answers a method call as an impl does. Lookup reads the match
+// off the `Reflect*` blanket the body comes from, which the order names for the
+// derived impl; a marker `impl Serialize for T;` names its own block
+// (WEP 2026-09-01, "Selection collects, the order decides").
 
 use { Serialize, Serializer, SerializeSeq, SerializeMap, SerializeStruct, SerializeVariant, SerializeError } from "core:serde";
 
@@ -133,7 +131,9 @@ struct Pair<T> {
     b: T,
 }
 
-fn write_pair<T>(p: &Pair<T>, ser: &mut Sink) -> Result<(), SerializeError> {
+// The derived body is conditional on the fields, so the bound is written here:
+// `Pair<T>` serializes where `T` does (WEP 2026-09-01, "Eligibility gates").
+fn write_pair<T: Serialize>(p: &Pair<T>, ser: &mut Sink) -> Result<(), SerializeError> {
     return p.serialize(ser);
 }
 
@@ -161,7 +161,7 @@ test "a primitive's impl answers a method call" {
     assert ser.out == "7";
 }
 
-test "a receiver with an unbounded parameter is the walk's to answer" {
+test "a derived body answers through a bounded parameter" {
     let p = Pair { a: 1, b: 2 };
     let mut ser = Sink { out: "" };
     let r = write_pair(&p, &mut ser);

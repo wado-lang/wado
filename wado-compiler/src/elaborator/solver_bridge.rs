@@ -558,23 +558,6 @@ fn representative(
     }
 }
 
-/// Whether the compiler's derivation walk assumes a bound of `ty` that no
-/// impl states: of a receiver's own parameter with no bound, and of a pack's
-/// elements whatever the pack's bounds say (`[..T]: Ord` holds to it under
-/// `T: Inspect`). Where it does, the two paths read the receiver differently
-/// until derivation is answered by impls (`docs/wep-2026-09-01-trait-resolution.md`,
-/// "Derivation is still a query in the compiler").
-fn assumed_by_walk(env: &Env, ty: &SolverType) -> bool {
-    ty.mentions(&|p| match p {
-        SolverType::Param(i) => env.param_bounds[*i as usize].is_empty(),
-        SolverType::Pack(_) => true,
-        SolverType::Decl(..)
-        | SolverType::Ref { .. }
-        | SolverType::Tuple(_)
-        | SolverType::Projection { .. } => false,
-    })
-}
-
 /// The newtype declarations with their base types. A `flags` type sits in the
 /// same table and is not one.
 fn newtype_decls<'a>(
@@ -1254,12 +1237,9 @@ impl SolverBridge {
         let ty =
             self.lowering
                 .type_id(&tysys.type_table.borrow(), type_id, &param_index(&names))?;
-        // Two receivers the compiler still derives for and the solver does not:
-        // one the walk assumes a bound of, and a head the program names without
-        // members, which `derive` never saw.
-        if assumed_by_walk(&env, &ty)
-            || ty.mentions_decl(&|h| self.lowering.opaque_heads.contains(&h))
-        {
+        // A head the program names without members is one `derive` never saw,
+        // so only the compiler answers for it.
+        if ty.mentions_decl(&|h| self.lowering.opaque_heads.contains(&h)) {
             return None;
         }
         let module = self.lowering.known_module(scope.current_module_source)?;
@@ -1359,7 +1339,6 @@ impl SolverBridge {
                         .collect(),
                 }
             }
-            Selection::None if assumed_by_walk(&env, &ty) => Ordered::Undecided,
             Selection::None => Ordered::Nothing,
             Selection::AmbiguousTraits(live) => Ordered::AmbiguousTraits(named(&live)),
             Selection::AmbiguousBlankets(live) => Ordered::AmbiguousBlankets(named(&live)),
@@ -1451,11 +1430,6 @@ pub(super) enum Ordered {
     One(Option<DefId>),
     /// No impl applied at all.
     Nothing,
-    /// No impl applied, and the receiver is one the compiler's derivation walk
-    /// assumes a bound of; what lookup collected stands, since the order has
-    /// no impl to read the assumption from ("Derivation is still a query in
-    /// the compiler").
-    Undecided,
     /// Impls applied and the call site had imported none of their traits. The
     /// scope gate working, not a candidate lost: the message names the traits
     /// an import would choose between, and one of the impls stands in so the

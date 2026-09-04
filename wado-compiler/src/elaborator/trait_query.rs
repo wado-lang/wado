@@ -1082,6 +1082,13 @@ impl TypeSystem {
                 self.type_implements_trait(ctx, scope, TypeTable::U32, trait_)
             }
             nominal => {
+                // A marker on a generic declaration (`impl<T> Eq for Pair<T>;`)
+                // asks whether the *declaration* derives, and its body is
+                // emitted per instantiation: a member that is one of the
+                // declaration's own parameters is that instantiation's to
+                // answer (WEP 2026-06-25). Not the receiver-versus-impl-bound
+                // question `enforce_impl_type_arg_bounds` asks, which admits no
+                // such deferral.
                 self.walk_structural_derive_members(scope, nominal, tr, &mut |_, member| {
                     matches!(
                         self.type_table.borrow().get(member),
@@ -2218,10 +2225,6 @@ impl TypeSystem {
             // type_args[0] is the inner type T.
             if let Some(bounds) = bounds_map.get(inner_name)
                 && let Some(&type_arg) = type_args.first()
-                && !matches!(
-                    self.type_table.borrow().get(type_arg),
-                    ResolvedType::TypeParam { .. }
-                )
             {
                 for &bound in bounds {
                     if !self.type_implements_trait(ctx, scope, type_arg, bound) {
@@ -2242,12 +2245,6 @@ impl TypeSystem {
                     continue;
                 };
                 for &type_arg in type_args {
-                    if matches!(
-                        self.type_table.borrow().get(type_arg),
-                        ResolvedType::TypeParam { .. } | ResolvedType::TypePack { .. }
-                    ) {
-                        continue;
-                    }
                     for &bound in bounds {
                         if !self.type_implements_trait(ctx, scope, type_arg, bound) {
                             return false;
