@@ -258,43 +258,7 @@ pub fn get_pow10(p: i32) -> PmHiLo {
     return mul_pow10(p);
 }
 
-// The mask `uscale` tests `hi` against, for the callers that scale several
-// mantissas by the same `s` and so can compute it once.
-pub fn uscale_mask(s: i32) -> u64 {
-    return (1 as u64 << (s & 63) as u64) - 1;
-}
-
-// The correction for a product whose discarded bits are all zero: only then
-// does the sticky bit need the low half of the 128-bit product. Out of line
-// because it is the rare arm, which is what leaves `uscale_masked` small
-// enough to inline.
-fn uscale_exact(x: u64, pm_lo: u64, mid: u64, hi: u64, s: i32) -> u64 {
-    // Go: mid2, _ := bits.Mul64(x, pm_lo) → mid2=high part, _=low part
-    // Wado: [_, mid2] = i64_mul_wide_u(x, pm_lo) → _=low part, mid2=high part
-    let [_, mid2_i64] = builtin::i64_mul_wide_u(x as i64, pm_lo as i64);
-    let mid2 = mid2_i64 as u64;
-    let sticky = (mid - mid2 > 1) as u64;
-    return (hi - (mid < mid2) as u64) >> s as u64 | sticky;
-}
-
-// uscale computes unround(x * 2^e * 10^p) using the pow10 table, taking the
-// `s` mask the caller already holds.
-pub fn uscale_masked(x: u64, pm_hi: u64, pm_lo: u64, s: i32, mask: u64) -> u64 {
-    // Note: i64_mul_wide_u returns [low, high] but Go's bits.Mul64 returns (high, low)
-    let [mid_i64, hi_tmp] = builtin::i64_mul_wide_u(x as i64, pm_hi as i64);
-    let hi = hi_tmp as u64;
-    if hi & mask == 0 {
-        return uscale_exact(x, pm_lo, mid_i64 as u64, hi, s);
-    }
-    return hi >> s as u64 | 1;
-}
-
-// uscale computes unround(x * 2^e * 10^p) using the pow10 table.
-//
-// The correction arm is written out here rather than shared with
-// `uscale_masked`: what makes that one inline is having the arm out of line,
-// and the callers below scale once, so inlining only grows them — measurably,
-// on `fixed_width_for_prec`, which `fts` is bound by.
+// uscale computes unround(x * 2^e * 10^p) using the pow10 table
 pub fn uscale(x: u64, pm_hi: u64, pm_lo: u64, s: i32) -> u64 {
     // Note: i64_mul_wide_u returns [low, high] but Go's bits.Mul64 returns (high, low)
     let [mid_i64, hi_tmp] = builtin::i64_mul_wide_u(x as i64, pm_hi as i64);
@@ -303,8 +267,11 @@ pub fn uscale(x: u64, pm_hi: u64, pm_lo: u64, s: i32) -> u64 {
 
     let mut sticky = 1 as u64;
 
-    let check_mask = uscale_mask(s);
+    let s_mod_64 = (s & 63) as u64;
+    let check_mask = (1 as u64 << s_mod_64) - 1;
     if hi & check_mask == 0 {
+        // Go: mid2, _ := bits.Mul64(x, pm_lo) → mid2=high part, _=low part
+        // Wado: [_, mid2] = i64_mul_wide_u(x, pm_lo) → _=low part, mid2=high part
         let [_, mid2_i64] = builtin::i64_mul_wide_u(x as i64, pm_lo as i64);
         let mid2 = mid2_i64 as u64;
         sticky = (mid - mid2 > 1) as u64;
@@ -461,12 +428,9 @@ pub fn short(f: f64) -> FormatResult {
     let lp = log2_pow10(p);
     let pm = get_pow10(p);
     let s = -(e + lp + 3);
-    // All three scalings share `s`, so the mask is computed once here rather
-    // than per call.
-    let mask = uscale_mask(s);
 
-    let dmin = unrounded_ceil(unrounded_nudge(uscale_masked(min_m, pm.hi, pm.lo, s, mask), odd));
-    let dmax = unrounded_floor(unrounded_nudge(uscale_masked(max_m, pm.hi, pm.lo, s, mask), -odd));
+    let dmin = unrounded_ceil(unrounded_nudge(uscale(min_m, pm.hi, pm.lo, s), odd));
+    let dmax = unrounded_floor(unrounded_nudge(uscale(max_m, pm.hi, pm.lo, s), -odd));
 
     // Check if we can trim to fewer digits
     let d_div_10 = dmax / 10;
@@ -479,7 +443,7 @@ pub fn short(f: f64) -> FormatResult {
 
     let mut d = dmin;
     if dmin < dmax {
-        d = unrounded_round(uscale_masked(m, pm.hi, pm.lo, s, mask));
+        d = unrounded_round(uscale(m, pm.hi, pm.lo, s));
     }
     return FormatResult { digits: d, exponent: -p, n_digits: digits(d) };
 }

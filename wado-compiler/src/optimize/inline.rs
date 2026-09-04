@@ -647,6 +647,21 @@ pub(super) fn call_site_size(param_count: usize) -> usize {
     weight::CALL + param_count * weight::OP
 }
 
+/// What splicing a body of `gross` price actually adds to the caller: the body
+/// less the call site it replaces.
+///
+/// The threshold bounds the caller's *increase*, so this is the quantity it
+/// judges. Comparing `gross` against it instead measures the body against zero,
+/// which prices every callee as if calling it were free and so under-inlines by
+/// exactly the arity: a four-parameter callee whose call site costs six is worth
+/// six more instructions than a nullary one of the same size.
+/// [`call_site_size`] is the same trade [`super::cold_outline`] already makes in
+/// the other direction, weighing a region against the call that would replace
+/// it.
+fn net_cost(gross: usize, param_count: usize) -> usize {
+    gross.saturating_sub(call_site_size(param_count))
+}
+
 /// What the caller pays for `body` once constant folding has run on it, given
 /// the parameters in `view` arrive constant at every call site: a branch a
 /// constant decides keeps one arm, and a pure call over constants becomes a
@@ -998,8 +1013,9 @@ fn classify_callee(
         inline_threshold
     };
 
+    let params = func.params.len();
     let plain = inline_cost(body, type_table, descriptors);
-    if plain <= effective_threshold {
+    if net_cost(plain, params) <= effective_threshold {
         return Verdict {
             hot: plain,
             inline: true,
@@ -1011,7 +1027,7 @@ fn classify_callee(
     // under. `(fits, drops a loop)` for one reading of the body.
     let weigh = |view: &ConstView<'_>| {
         let folded = inline_cost_folded(body, type_table, descriptors, view);
-        if folded > effective_threshold {
+        if net_cost(folded, params) > effective_threshold {
             return (false, false);
         }
         let walk = CostWalk::new(body, type_table, descriptors, Price::Hot).under(view);
