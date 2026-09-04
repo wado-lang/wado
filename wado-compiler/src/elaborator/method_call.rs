@@ -1444,21 +1444,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             );
         }
 
-        // Look up parameter types for coercion. Thread the canonical
-        // receiver key (from the resolved target type) so that two
-        // modules' same-named structs each route to their own impl.
-        let declared_params = struct_name_for_lookup.as_ref().and_then(|name| {
-            self.lookup_static_method_param_types_keyed(
-                name,
-                &static_call.method,
-                struct_key_for_lookup.as_ref(),
-            )
+        // One signature answers every list this call checks and pads against,
+        // so none of them counts the receiver differently. The key comes from
+        // the resolved target type, so two modules' same-named structs each
+        // route to their own impl. `Type::<T>::op(&x)` writes the receiver
+        // first, which is what [`CalleeParams`] is told.
+        let callee_sig = struct_name_for_lookup.as_ref().and_then(|name| {
+            let key = self.static_receiver_key(name, struct_key_for_lookup.as_ref());
+            self.unique_qualified_method_sig_keyed(&key, &static_call.method)
         });
+        let callee_params =
+            super::sem::types::CalleeParams::of_signature(callee_sig.as_ref(), true);
         // Whether a signature answered at all. A variant case or a flags member
         // reaches this path with no signature behind it, and its own arm below
-        // owns its argument count; only a declared static has one to check here.
-        let declares_params = declared_params.is_some();
-        let mut param_types = declared_params.unwrap_or_default();
+        // owns its argument count; only a declared callee has one to check here.
+        let declares_params = callee_sig.is_some();
+        let mut param_types = callee_params.param_types.clone();
 
         // Literal preselect for a conversion call (WEP 2026-07-31 phase 4):
         // choose the impl before the argument is elaborated, so the expected
@@ -1480,17 +1481,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return TypeTable::ERROR;
         }
 
-        // Looked up once, reused for arg padding and the recorded dispatch fact.
-        let static_method_defaults: Vec<(String, Option<ast::Expr>)> = struct_name_for_lookup
-            .as_ref()
-            .map(|name| {
-                self.lookup_static_method_param_defaults(
-                    name,
-                    &static_call.method,
-                    struct_key_for_lookup.as_ref(),
-                )
-            })
-            .unwrap_or_default();
+        // From the same signature as `param_types`, so a defaulted parameter is
+        // counted against the list the arity check reads.
+        let static_method_defaults: Vec<(String, Option<ast::Expr>)> =
+            callee_params.param_defaults.clone();
         // The module those defaults were written in, so their bodies answer to
         // it rather than to this call site.
         let static_method_module = static_receiver.as_ref().and_then(|receiver| {
@@ -1551,8 +1545,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 || !method_type_args.is_empty();
             if has_type_args
                 && !param_types.is_empty()
-                && let Some(name) = struct_name_for_lookup.as_deref()
-                && let Some(sig) = self.qualified_method_sig(name, &static_call.method)
+                && let Some(sig) = callee_sig.clone()
             {
                 let declaring_args: Vec<TypeId> = match &static_call.target_type {
                     ast::Type::Generic(g) => g.args.iter().map(|t| self.resolve_type(t)).collect(),
@@ -1570,10 +1563,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     &declaring_args,
                     &method_type_args,
                 );
-                let first_value = sig.first_value_param().min(instantiated.param_types.len());
+                // `param_types` leads with the receiver exactly where the
+                // spelling wrote one, so the instantiated list starts at the
+                // same parameter. Skipping it either way pairs each argument
+                // with its neighbour's type.
+                let skip = if callee_params.self_in_args {
+                    0
+                } else {
+                    sig.first_value_param().min(instantiated.param_types.len())
+                };
                 for (param_type, &instantiated_type) in param_types
                     .iter_mut()
-                    .zip(&instantiated.param_types[first_value..])
+                    .zip(&instantiated.param_types[skip..])
                 {
                     *param_type = instantiated_type;
                 }
@@ -2224,16 +2225,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .map(|t| self.tysys.type_table.borrow().fq_type_name(*t))
             .collect();
 
-        let param_is_mut = struct_name_for_lookup
-            .as_deref()
-            .map(|name| {
-                self.lookup_static_method_param_is_mut(
-                    name,
-                    &static_call.method,
-                    struct_key_for_lookup.as_ref(),
-                )
-            })
-            .unwrap_or_default();
+        let param_is_mut = callee_params.param_is_mut.clone();
 
         // Build method_info with base struct name and trait name (if applicable)
         let mut method_info = LocalMethodName::new(
@@ -2244,19 +2236,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         .with_type_args(&impl_only_type_arg_names, &method_type_arg_names);
 
         // The `#[cm("...")]` import the callee binds, read off the signature
-        // this call resolved to, keyed by the receiver it resolved at. An index
-        // of receiver-less methods answers for one kind of method only, and an
+        // this call resolved to, at the receiver it resolved at. An index of
+        // receiver-less methods answers for one kind of method only, and an
         // instance one written `Type::<T>::op(&x)` then lost its binding and
         // left reify emitting a call to a name nothing declares.
-        let cm_owner = self.tysys.type_table.borrow().nominal_def(target_type_id);
-        method_info.cm_name = cm_owner
-            .map(|def| {
-                crate::elaborator::trait_env::ImplTargetKey::of_decl(
-                    self.tysys.resolutions.defs(),
-                    def,
-                )
-            })
-            .and_then(|key| self.qualified_method_sig_keyed(&key, &static_call.method))
+        method_info.cm_name = static_receiver
+            .as_ref()
+            .and_then(|key| self.qualified_method_sig_keyed(key, &static_call.method))
             .and_then(|sig| sig.cm_name);
 
         // The selection covers trait impls only; an inherent static has none
@@ -2295,7 +2281,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 type_args: method_type_args,
                 param_defaults: static_method_defaults,
                 param_types: param_types.clone(),
-                self_in_args: false,
+                self_in_args: callee_params.self_in_args,
             },
         );
 
@@ -2826,14 +2812,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let mut current_type = target_type_id;
             loop {
                 match self.tysys.type_table.borrow().get(current_type).clone() {
-                    ResolvedType::Struct { .. } | ResolvedType::GenericInstance { .. } => {
-                        break self
-                            .tysys
-                            .type_table
-                            .borrow()
-                            .nominal_def(current_type)
-                            .map(|def| ImplTargetKey::of_decl(self.tysys.resolutions.defs(), def));
-                    }
+                    // Keyed on what they wrap, not on themselves: a newtype's
+                    // impls are looked up on its base, and `flags`' on `u32`.
                     ResolvedType::Newtype { base_type, .. } => current_type = base_type,
                     ResolvedType::Flags { .. } => {
                         current_type = TypeTable::U32;
@@ -2843,7 +2823,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             TypeTable::ARRAY_TYPE_NAME.to_string(),
                         ));
                     }
-                    _ => break None,
+                    // Every other nominal type keys on its own declaration,
+                    // which is what `nominal_def` answers. Naming the kinds
+                    // here instead left a resource unanswered, so its callers
+                    // each derived a second key from the bare name.
+                    _ => {
+                        break self
+                            .tysys
+                            .type_table
+                            .borrow()
+                            .nominal_def(current_type)
+                            .map(|def| ImplTargetKey::of_decl(self.tysys.resolutions.defs(), def));
+                    }
                 }
             }
         };

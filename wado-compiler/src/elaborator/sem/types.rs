@@ -684,50 +684,45 @@ pub(crate) struct StaticMethodDispatch {
     pub(crate) self_in_args: bool,
 }
 
-impl StaticMethodDispatch {
-    /// The dispatch a call records for a callee it resolved to `sig`.
-    ///
-    /// Whether the receiver is among the arguments is the one thing the three
-    /// per-parameter lists must agree on, so `self_in_args` decides all of them
-    /// here rather than at each recording site. Written qualified, an instance
-    /// method takes its receiver as the call's first argument, and every list
-    /// carries a leading entry for it: spelled at the call site and never
-    /// omitted, hence no default, and `mut` exactly when the method takes
-    /// `&mut self`.
+/// What a call sees of its callee's parameters: the three lists it checks and
+/// pads against, and whether the receiver is the first of them.
+///
+/// One derivation, because the four cannot be read apart. A site that counts
+/// `self` in one list and not another rejects a legal call, or checks an
+/// argument against its neighbour's type.
+#[derive(Default)]
+pub(crate) struct CalleeParams {
+    pub(crate) param_is_mut: Vec<bool>,
+    pub(crate) param_defaults: Vec<(String, Option<crate::ast::Expr>)>,
+    pub(crate) param_types: Vec<TypeId>,
+    pub(crate) self_in_args: bool,
+}
+
+impl CalleeParams {
+    /// `self_in_args` is the spelling's claim that the receiver is written as
+    /// the first argument, which holds only where the callee declares one.
+    /// Every list then carries a leading entry for it: spelled at the call site
+    /// and never omitted, hence no default, and `mut` exactly when the method
+    /// takes `&mut self`.
     ///
     /// `sig` is `None` for a callee no signature lookup answers — a trait static
-    /// on a primitive receiver, say. The lists are empty and reify reads the
-    /// call's own arguments; the fact is still recorded, because reify rebuilds
-    /// the `Call` from it and nothing else.
+    /// on a primitive receiver, say. The lists are empty and a consumer reads
+    /// the call's own arguments instead.
     pub(crate) fn of_signature(
-        method_def: Option<crate::defs::DefId>,
-        function_ref: FunctionRef,
-        type_args: Vec<TypeId>,
         sig: Option<&crate::elaborator::sig::MethodSig>,
         self_in_args: bool,
     ) -> Self {
         let Some(sig) = sig else {
-            return Self {
-                method_def,
-                function_ref,
-                param_is_mut: Vec::new(),
-                type_args,
-                param_defaults: Vec::new(),
-                param_types: Vec::new(),
-                self_in_args: false,
-            };
+            return Self::default();
         };
         let receiver = self_in_args && sig.self_kind != ast::SelfKind::None;
         let values = sig.first_value_param().min(sig.decl.param_types.len());
         Self {
-            method_def,
-            function_ref,
             param_is_mut: receiver
                 .then(|| sig.self_kind == ast::SelfKind::MutRef)
                 .into_iter()
                 .chain(crate::elaborator::sig::Param::is_mut_flags(&sig.params))
                 .collect(),
-            type_args,
             param_defaults: receiver
                 .then(|| ("self".to_string(), None))
                 .into_iter()
@@ -739,6 +734,30 @@ impl StaticMethodDispatch {
                 sig.decl.param_types[values..].to_vec()
             },
             self_in_args: receiver,
+        }
+    }
+}
+
+impl StaticMethodDispatch {
+    /// The dispatch a call records for a callee it resolved to `sig`. The
+    /// per-parameter lists come from [`CalleeParams`], so the recorded fact
+    /// says what the call site checked against.
+    pub(crate) fn of_signature(
+        method_def: Option<crate::defs::DefId>,
+        function_ref: FunctionRef,
+        type_args: Vec<TypeId>,
+        sig: Option<&crate::elaborator::sig::MethodSig>,
+        self_in_args: bool,
+    ) -> Self {
+        let params = CalleeParams::of_signature(sig, self_in_args);
+        Self {
+            method_def,
+            function_ref,
+            type_args,
+            param_is_mut: params.param_is_mut,
+            param_defaults: params.param_defaults,
+            param_types: params.param_types,
+            self_in_args: params.self_in_args,
         }
     }
 }

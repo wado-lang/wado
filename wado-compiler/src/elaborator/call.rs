@@ -2754,12 +2754,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         struct_name: &str,
         method_name: &str,
     ) -> Option<MethodSig> {
-        let key = self.impl_target(struct_name);
-        let mut declared = self.qualified_method_decl_ids(&key, method_name);
+        self.unique_qualified_method_sig_keyed(&self.impl_target(struct_name), method_name)
+    }
+
+    /// [`Self::unique_qualified_method_sig`] at a receiver the caller resolved.
+    pub(super) fn unique_qualified_method_sig_keyed(
+        &self,
+        key: &trait_env::ImplTargetKey,
+        method_name: &str,
+    ) -> Option<MethodSig> {
+        let mut declared = self.qualified_method_decl_ids(key, method_name);
         if declared.next().is_some() && declared.next().is_some() {
             return None;
         }
-        self.qualified_method_sig(struct_name, method_name)
+        self.qualified_method_sig_keyed(key, method_name)
     }
 
     /// The canonical signature `struct_name::method_name` names, receiver-less
