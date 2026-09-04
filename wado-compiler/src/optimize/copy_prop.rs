@@ -886,16 +886,12 @@ fn propagate_at_root(
         substitute_promoted_reads(engine, &substitutions);
         let root = engine.body.root;
         apply_in_block(engine, root, &substitutions, &dead_locals);
-        debug_assert!(
-            {
-                let mut reads = IndexSet::default();
-                super::arena_query::collect_reads(engine.body, &mut reads);
-                super::arena_query::promoted_local_reads(engine.body, &mut reads);
-                dead_locals.iter().all(|l| !reads.contains(l))
-            },
-            "[NIR] copy_prop: a propagated-away local is still read, \
-             in the skeleton or the value pool"
-        );
+        // Report the bindings this round propagated away rather than walking the
+        // body to check them here: the audit is `Body::surviving_read` either
+        // way, and reporting pays one walk per session instead of one per round.
+        for &local in &dead_locals {
+            engine.note_elided_local(local);
+        }
         ever_changed = true;
         if !has_deferred {
             break;

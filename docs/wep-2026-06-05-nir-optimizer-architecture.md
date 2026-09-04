@@ -163,6 +163,11 @@ every function, and re-marks the callers of a callee it shrinks. The loop's
 iteration cap is the quiescence bound. A pass whose summary a call-graph change
 invalidates cannot be gated on the callee's revision alone, and stays explicit.
 
+An empty column skips the pass before its whole-program setup, not after: a pass
+builds catalogs, callee maps, effect summaries and call-site censuses before it
+reaches its first function, and a late round that visits nothing would otherwise
+spend all its time there.
+
 Gating changes only which functions a pass visits, never the result of a visit.
 Every loop pass is an optimization, so an imprecise gate costs optimization
 quality, never correctness. The same one-sided argument covers the
