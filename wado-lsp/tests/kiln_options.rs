@@ -1,6 +1,8 @@
 //! The editor's view of a bad inline `options` table: a typo squiggles the key
 //! that is wrong, with no `wado compile` and no generator run in between.
 
+use std::path::Path;
+
 use wado_lsp::{Diagnostic, Engine, FilesystemCompilerHost, Severity};
 
 const GENERATOR: &str = r#"use { Request, Response, OutputFile, Error } from "core:kiln";
@@ -81,10 +83,12 @@ fn build(module: &str, options_table: &str, package: bool) -> Fixture {
     .unwrap();
     std::fs::write(app.join("src/schema.idl"), "anything\n").unwrap();
 
-    let source = consumer(module, options_table);
+    write_entry(tmp, &app, consumer(module, options_table))
+}
+
+fn write_entry(tmp: tempfile::TempDir, app: &Path, source: String) -> Fixture {
     let entry = app.join("src/main.wado");
     std::fs::write(&entry, &source).unwrap();
-
     Fixture {
         root: tmp,
         uri: format!("file://{}", entry.display()),
@@ -194,4 +198,38 @@ fn a_broken_generator_reports_nothing_on_the_consumer() {
         !diags.iter().any(|d| d.message.contains("nowhere.wado")),
         "the generator's own failure must stay off the consumer, got {diags:#?}",
     );
+}
+
+/// Two clauses through one generator describe it once and still answer for
+/// themselves: the shared descriptor must not cost the second clause its
+/// diagnostic, nor move it onto the first clause's key.
+#[test]
+fn two_clauses_through_one_generator_each_get_their_own_error() {
+    let fixture = build("./gen.wado", "{ verbose: true }", false);
+    let app = fixture.root.path().join("app");
+    std::fs::write(app.join("src/other.idl"), "anything\n").unwrap();
+    let fixture = write_entry(
+        fixture.root,
+        &app,
+        r#"use { greeting } from "./schema.idl" with {
+    generator: { module: "./gen.wado", options: { verbsoe: true } },
+};
+use { other } from "./other.idl" with {
+    generator: { module: "./gen.wado", options: { verbsoe: false } },
+};
+"#
+        .to_string(),
+    );
+
+    let diags = diagnostics(&fixture);
+    let unknown: Vec<(u32, u32)> = options_errors(&diags)
+        .iter()
+        .filter(|d| {
+            d.message
+                .contains("unknown options field `options.verbsoe`")
+        })
+        .map(|d| (d.range.start.line, d.range.start.character))
+        .collect();
+
+    assert_eq!(unknown, vec![(1, 50), (4, 50)], "got {diags:#?}");
 }

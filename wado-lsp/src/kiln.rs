@@ -58,9 +58,7 @@ pub async fn prepare_invocations<H: CompilerHost>(
         }
     };
 
-    for invocation in &invocations {
-        options::check(invocation, &manifest_root, host).await;
-    }
+    options::check_all(&invocations, &manifest_root, host).await;
 
     if let Some(index) = override_index {
         return index;

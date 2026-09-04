@@ -246,6 +246,29 @@ mod tests {
     use super::*;
 
     #[test]
+    fn parse_spec_splits_version_and_submodule() {
+        let bare = parse_spec("wado-lang:gale");
+        assert_eq!(bare.key, "wado-lang:gale");
+        assert_eq!(bare.version, None);
+        assert_eq!(bare.submodule, None);
+
+        let versioned = parse_spec("wado-lang:gale@0.0.9");
+        assert_eq!(versioned.key, "wado-lang:gale");
+        assert_eq!(versioned.version, Some("0.0.9"));
+        assert_eq!(versioned.submodule, None);
+
+        let sub = parse_spec("example:proto-codegen@1.2/generator");
+        assert_eq!(sub.key, "example:proto-codegen");
+        assert_eq!(sub.version, Some("1.2"));
+        assert_eq!(sub.submodule, Some("generator"));
+
+        let sub_no_ver = parse_spec("lib:gen/sub");
+        assert_eq!(sub_no_ver.key, "lib:gen");
+        assert_eq!(sub_no_ver.version, None);
+        assert_eq!(sub_no_ver.submodule, Some("sub"));
+    }
+
+    #[test]
     fn normalize_strips_dot_slash() {
         assert_eq!(InvocationPath::normalize("./foo/bar").as_str(), "foo/bar");
     }

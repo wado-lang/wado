@@ -8,6 +8,7 @@
 use std::path::{Path, PathBuf};
 
 use wado_compiler::CompilerHost;
+use wado_compiler::hashmap::IndexMap;
 use wado_compiler::kiln::{
     GENERATOR_WORLD_FQ, GeneratorModule, Invocation, InvocationIndex, OptionsAnchor,
     OptionsDescriptor, extract_options_descriptor, spec_key, validate_options,
@@ -17,27 +18,39 @@ use wado_manifest::DependencySource;
 
 use crate::DiagnosticCollector;
 
-/// Validate `invocation`'s options and emit every complaint through `host`.
+/// Validate every invocation's options and emit each complaint through `host`.
 /// A no-op for a generator the LSP cannot read in source.
-pub(super) async fn check<H: CompilerHost>(
-    invocation: &Invocation,
+///
+/// Describing a generator means analyzing its whole source, so each distinct
+/// entry file is described once and every clause naming it shares the verdict —
+/// several `use` clauses through one generator is the ordinary case.
+pub(super) async fn check_all<H: CompilerHost>(
+    invocations: &[Invocation],
     manifest_root: &Path,
     host: &H,
 ) {
-    let Some(entry) = generator_entry(invocation, manifest_root, host).await else {
-        return;
-    };
-    let Some(descriptor) = descriptor_of(&entry, host).await else {
-        return;
-    };
-    let anchor = OptionsAnchor {
-        file: &invocation.decl_site.module,
-        span: invocation.options_span,
-    };
-    if let Err(diagnostics) = validate_options(&descriptor, invocation.raw_options.as_ref(), anchor)
-    {
-        for d in diagnostics {
-            host.emit_diagnostic(d);
+    let mut described: IndexMap<PathBuf, Option<OptionsDescriptor>> = IndexMap::default();
+    for invocation in invocations {
+        let Some(entry) = generator_entry(invocation, manifest_root, host).await else {
+            continue;
+        };
+        if !described.contains_key(&entry) {
+            let descriptor = descriptor_of(&entry, host).await;
+            described.insert(entry.clone(), descriptor);
+        }
+        let Some(descriptor) = described[&entry].as_ref() else {
+            continue;
+        };
+        let anchor = OptionsAnchor {
+            file: &invocation.decl_site.module,
+            span: invocation.options_span,
+        };
+        if let Err(diagnostics) =
+            validate_options(descriptor, invocation.raw_options.as_ref(), anchor)
+        {
+            for d in diagnostics {
+                host.emit_diagnostic(d);
+            }
         }
     }
 }
