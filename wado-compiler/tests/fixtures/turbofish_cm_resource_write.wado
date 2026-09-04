@@ -1,0 +1,24 @@
+// A `#[cm(...)]` operation is callable however the call is spelled. Every
+// binding site read its handle through the dot-syntax view, so
+// `FutureWritable::<i32>::write(&tx, 42)` registered no payload and reached
+// codegen naming an import nothing generated, where `tx.write(42)` bound.
+
+use { Request, Response, ErrorCode, Fields, Headers, Trailers } from "wasi:http";
+
+export async fn handle(request: Request) -> Result<Response, ErrorCode> {
+    let [future_rx, future_tx] = Future::<i32>::new();
+
+    // Both ends written qualified, receiver first.
+    FutureWritable::<i32>::write(&future_tx, 42);
+    let result = Future::<i32>::read(&future_rx);
+    assert result == Option::Some(42);
+
+    let [trailers_future, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
+    let headers = Headers::new();
+    let [response, _tx_future] = Response::new(headers, null, trailers_future);
+    task return Result::<Response, ErrorCode>::Ok(response);
+    trailers_tx.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));
+}
+
+__DATA__
+{"wasi:http/service": {"status": 200}}

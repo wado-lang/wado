@@ -388,7 +388,7 @@ fn synthesize_future_writes(sites: &BindingSites<'_>) -> Vec<Rc<RefCell<TirFunct
 /// The payload type of a `future-write` method call, or `None` if the
 /// expression is not a future-write.
 fn future_write_payload(tt: &TypeTable, expr: &TirExpr) -> Option<TypeId> {
-    let (receiver, func, _) = expr.kind.as_method_call()?;
+    let (receiver, func) = expr.kind.call_receiver()?;
     if func.method_info.as_ref().and_then(|m| m.cm_name.as_deref()) != Some("future-write") {
         return None;
     }
@@ -1224,7 +1224,7 @@ fn record_stream_read_element(tt: &TypeTable, expr: &TirExpr) -> Option<TypeId> 
 /// What the receiver of a stream `#[cm]` method streams. Never read off what
 /// the call returns: monomorphize replaces a `StreamChunk<T>` with a struct.
 fn stream_receiver_element(tt: &TypeTable, expr: &TirExpr) -> Option<TypeId> {
-    let (receiver, _, _) = expr.kind.as_method_call()?;
+    let (receiver, _) = expr.kind.call_receiver()?;
     let mut recv = receiver.type_id;
     while let ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) = tt.get(recv) {
         recv = *inner;
@@ -1964,7 +1964,7 @@ fn parameterize_future_cm_name(
         "future-cancel-write" => CanonicalIntrinsic::FutureCancelWrite,
         _ => return None,
     };
-    let (receiver, _, _) = expr.kind.as_method_call()?;
+    let (receiver, _) = expr.kind.call_receiver()?;
     let mut type_id = receiver.type_id;
     while let ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) = tt.get(type_id) {
         type_id = *inner;

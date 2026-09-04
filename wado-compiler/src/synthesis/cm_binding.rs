@@ -392,7 +392,10 @@ fn future_stream_payload_site(tt: &TypeTable, expr: &TirExpr) -> Option<(TypeId,
     } else {
         return None;
     };
-    let (receiver, _, _) = expr.kind.as_method_call()?;
+    // Every future / stream canonical but `new` operates on a handle, which the
+    // call carries whichever spelling wrote it. Read through the method-call
+    // view instead, only dot syntax answered.
+    let (receiver, _) = expr.kind.call_receiver()?;
     let mut type_id = receiver.type_id;
     while let ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) = tt.get(type_id) {
         type_id = *inner;

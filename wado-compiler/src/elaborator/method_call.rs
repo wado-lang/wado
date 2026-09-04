@@ -1545,7 +1545,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 || !method_type_args.is_empty();
             if has_type_args
                 && !param_types.is_empty()
-                && let Some(sig) = callee_sig.clone()
+                && let Some(sig) = callee_sig.as_ref()
             {
                 let declaring_args: Vec<TypeId> = match &static_call.target_type {
                     ast::Type::Generic(g) => g.args.iter().map(|t| self.resolve_type(t)).collect(),
