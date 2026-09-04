@@ -39,9 +39,6 @@ the human's call.
 No "out of scope" section: an unfinished mechanism is a known gap. A deliberate
 omission goes in Decision.
 
-No "Consequences" section: an impact a reader must act on belongs to the
-decision that imposes it.
-
 ### Index of WEPs
 
 - [Target WASI P3 Only](./wep-2026-01-11-wasi-p3-only.md)
