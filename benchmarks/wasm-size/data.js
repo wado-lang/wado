@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1788471625656,
+  "lastUpdate": 1788487531518,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -53092,6 +53092,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "zlib",
             "value": 18908,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 281425,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "d694556d8927636e0bd1b7921e0fbc086e1fbc46",
+          "message": "Merge pull request #1956 from wado-lang/claude/value-copy-ownership-analysis-6xshz0\n\nperf(ownership): key value-copy sharing on liveness, not on the whole body",
+          "timestamp": "2026-09-04T10:52:34+09:00",
+          "tree_id": "fe891ced5c6669df75cb8b991425b75f64543adf",
+          "url": "https://github.com/wado-lang/wado/commit/d694556d8927636e0bd1b7921e0fbc086e1fbc46"
+        },
+        "date": 1788487530728,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 2028,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6418,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18877,
             "unit": "bytes"
           },
           {
