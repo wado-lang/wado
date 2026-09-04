@@ -332,6 +332,34 @@ fn body_calls_any(instr: &WirInstr, ids: &IndexSet<u32>) -> bool {
     found
 }
 
+/// Locals a body declares, at any depth.
+fn declared_locals(body: &[WirInstr]) -> usize {
+    fn count(instr: &WirInstr, n: &mut usize) {
+        if matches!(instr, WirInstr::DeclareLocal { .. }) {
+            *n += 1;
+        }
+        instr.for_each_child(&mut |c| count(c, n));
+    }
+    let mut n = 0;
+    for instr in body {
+        count(instr, &mut n);
+    }
+    n
+}
+
+/// Locals a call site's function may already hold before flattening stops
+/// paying there.
+///
+/// Splicing the slot trades one heap object for `layout.len()` more values live
+/// across the call. That is the trade SROA width already answers for elsewhere:
+/// past the register file, values live across a call are spill slots reloaded at
+/// every call boundary, and the allocation removed does not price them. Every
+/// benchmark that gains here decodes through callers of at most 93 locals
+/// (cbor-canada 40, json-catalog and cbor-catalog 93, worth +21%, +13% and
+/// +17%); the one that loses, cbor-twitter, decodes `User` and `Status` at 307
+/// and 186 for -6.3%. The cut sits between them.
+const MAX_CALLER_LOCALS: usize = 128;
+
 /// Phase 2: keep candidates whose every call site consumes the slot cleanly.
 pub(super) fn validate_slot_sites(
     module: &WirPackage,
@@ -386,6 +414,9 @@ pub(super) fn validate_slot_sites(
                     }
                 });
                 if total_calls != mvbind_calls {
+                    all_ok = false;
+                }
+                if mvbind_calls > 0 && declared_locals(body) > MAX_CALLER_LOCALS {
                     all_ok = false;
                 }
             }

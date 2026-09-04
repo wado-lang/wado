@@ -616,6 +616,22 @@ chain, and only where the node diverges, which is where it produces no value to
 declare. This is the hazard `all_returns_decompose` documents from the other
 side: the validator's coverage and the rewriter's have to move together.
 
+### The trade is priced against the caller, not the allocation
+
+Splicing the slot buys one fewer heap object and costs `layout.len()` more values
+live across the call, so it answers to the same rule SROA width does: past the
+register file, a value live across a call is a spill slot reloaded at every call
+boundary, and the allocation removed does not price it.
+
+`MAX_CALLER_LOCALS` declines a call site in a function already holding more
+locals than that. The benchmarks separate cleanly on it: every row that gains
+decodes through callers of at most 93 locals — cbor-canada at 40 for +20.1%,
+cbor-catalog and json-catalog at 93 for +19.5% and +9.9% — while cbor-twitter
+decodes `User` and `Status` at 307 and 186, and flattening those cost it 6.3%.
+Declining them leaves that row flat and every gain intact. `next_field<S>` is
+monomorphized per struct, so this reads as a per-callee rule and acts as a
+per-caller one.
+
 ### A settled binding is not a `mut` binding
 
 A `let mut t = f(x)` that nothing ever assigns is an immutable binding, and
