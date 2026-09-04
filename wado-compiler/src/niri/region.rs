@@ -84,6 +84,7 @@ pub(super) fn region_shape(body: &Body, e: ExprId) -> Option<(BlockId, Option<&s
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RegionRefusal {
     /// A write to a module-scope global, whose lifetime outlives the frame.
+    /// A store that only materializes a value for its own reader is not one.
     GlobalWrite,
     /// A call through a closure or across the CM boundary — no body to run.
     OpaqueCall,
@@ -145,7 +146,16 @@ pub(super) fn region_free_reads(
                 }
             }
             NodeRef::Expr(e) => match &body.exprs[e].kind {
-                ExprKind::GlobalVarSet { .. } => return Err(RegionRefusal::GlobalWrite),
+                ExprKind::GlobalVarSet {
+                    module_source,
+                    name,
+                    ..
+                } => {
+                    let key = (module_source.clone(), name.clone());
+                    if !facts.materializes(&key) {
+                        return Err(RegionRefusal::GlobalWrite);
+                    }
+                }
                 ExprKind::IndirectCall { .. } | ExprKind::CmRawCall { .. } => {
                     return Err(RegionRefusal::OpaqueCall);
                 }

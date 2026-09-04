@@ -35,6 +35,7 @@ impl FrameState {
     fn for_call(track: Trackability, params: impl IntoIterator<Item = (u32, Value)>) -> Self {
         let mut state = Self {
             aggregate_locals: track.aggregate_locals,
+            reassigned: track.reassigned,
             ..Self::default()
         };
         for (index, value) in params {
@@ -181,6 +182,14 @@ impl Interpreter<'_> {
         for s in stmts {
             match self.exec_stmt(body, s) {
                 Flow::Fallthrough(v) => value = v,
+                Flow::Bail => {
+                    crate::compiler_trace!(
+                        "ctfe_stmt",
+                        "abandoned at {s:?}: {:?}",
+                        body.stmts[s].kind
+                    );
+                    return Flow::Bail;
+                }
                 other => return other,
             }
         }
@@ -216,7 +225,15 @@ impl Interpreter<'_> {
                 {
                     return Flow::Bail;
                 }
-                if !is_mut && let Some(named) = self.aliased_operand(body, value) {
+                // A `let mut` binding a borrow aliases the same place an
+                // immutable one does. What makes the immutable case safe is
+                // that nothing displaces the binding, and a mutable local
+                // nothing reassigns is in the same position — which is what
+                // `sroa_param` mints for a scalarized `&mut` field, and what a
+                // constant template's buffer is threaded through.
+                if (!is_mut || !self.frame.reassigned.contains(index))
+                    && let Some(named) = self.aliased_operand(body, value)
+                {
                     return match self.record_place_alias(body, index, named) {
                         Some(()) => Flow::Fallthrough(Lattice::Unevaluated),
                         None => Flow::Bail,
@@ -346,6 +363,16 @@ impl Interpreter<'_> {
         {
             return flow;
         }
+        if let Some(e) = op.as_expr()
+            && let ExprKind::GlobalVarSet {
+                module_source,
+                name,
+                value,
+            } = &body.exprs[e].kind
+        {
+            let (key, value) = ((module_source.clone(), name.clone()), *value);
+            return self.exec_global_materialize(body, key, value);
+        }
         // A block at statement position is run for what it performs. Inlining
         // leaves one where a call stood, and a unit-typed one — every `push`
         // onto a string or list, once inlined — denotes nothing to evaluate, so
@@ -380,6 +407,31 @@ impl Interpreter<'_> {
         match self.apply_writes(run.writes) {
             Some(()) => Some(Flow::Fallthrough(run.result)),
             None => Some(Flow::Bail),
+        }
+    }
+
+    /// Bind what a materializing store names, so the read it serves resolves
+    /// inside the frame. The frame performs no write: the store and its reader
+    /// leave together with the region that carries them, which is what
+    /// [`MaterializingGlobals`] establishes. Any other store outlives the frame
+    /// and bails.
+    ///
+    /// [`MaterializingGlobals`]: super::MaterializingGlobals
+    fn exec_global_materialize(
+        &mut self,
+        body: &mut Body,
+        key: super::GlobalKey,
+        value: Operand,
+    ) -> Flow {
+        if !self.facts.materializes(&key) {
+            return Flow::Bail;
+        }
+        match self.eval_operand(body, value) {
+            Lattice::Const(value) => {
+                self.frame.materialized.insert(key, value);
+                Flow::Fallthrough(Lattice::Unevaluated)
+            }
+            Lattice::NonConst | Lattice::Unevaluated => Flow::Bail,
         }
     }
 
@@ -651,8 +703,22 @@ impl Interpreter<'_> {
     /// expensive half goes through here, so `WADO_TRACE=ctfe_call` lists what
     /// each declined call wanted that the frame could not give.
     fn decline(&self, key: &CalleeKey, why: &str) -> Option<CallRun> {
-        crate::compiler_trace!("ctfe_call", "{key:?}: {why}");
+        crate::compiler_trace!("ctfe_call", "{}: {why}", self.callee_name(key));
         None
+    }
+
+    /// The declined callee under the name its author wrote, for the trace. A
+    /// borrow already held (a self-call under the walker) leaves the id, which
+    /// is what the trace can still say about it.
+    fn callee_name(&self, key: &CalleeKey) -> String {
+        self.facts
+            .callees
+            .and_then(|m| m.get(key))
+            .and_then(|c| c.func.try_borrow().ok())
+            .map_or_else(
+                || format!("{key:?}"),
+                |f| crate::name::diagnostic_function_name(&f.name).to_string(),
+            )
     }
 
     /// Run a call in a compile-time frame: bind the parameters, execute the body,
@@ -729,7 +795,7 @@ impl Interpreter<'_> {
         if self.call_missed(key, may_write, &args) {
             return None;
         }
-        crate::compiler_trace!("ctfe_call", "{key:?}: running");
+        crate::compiler_trace!("ctfe_call", "{}: running", self.callee_name(&key));
         self.charge(1)?;
         self.call_stack.push(key);
         let mut scratch = callee_body.nodes_only_clone();
@@ -739,7 +805,11 @@ impl Interpreter<'_> {
         self.swap_frame(caller);
         self.call_stack.pop();
         if run.is_none() {
-            crate::compiler_trace!("ctfe_call", "{key:?}: body did not reach a value");
+            crate::compiler_trace!(
+                "ctfe_call",
+                "{}: body did not reach a value",
+                self.callee_name(&key)
+            );
             self.record_call_miss(key, may_write, args);
         }
         run.map(|run| {

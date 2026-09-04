@@ -530,11 +530,11 @@ export fn run() with Stdout {
 }
 
 #[test]
-fn a_constant_bool_interpolation_names_the_global_write() {
-    // `"true"` is globalized, and the lazy initializer the globalization leaves
-    // puts a global write inside the template region. That is what stops the
-    // fold, not the value model, so the remark says so rather than naming a
-    // call.
+fn a_materializing_global_store_does_not_refuse_a_region() {
+    // `"true"` is globalized, and the store the globalization leaves at the use
+    // site sits inside the template region. That store serves the read two
+    // statements below it and nothing else, so it is not a write the region is
+    // refused for. What the remark reports is the call still standing.
     let remarks = const_region_remarks(
         r#"
 use { println, Stdout } from "core:cli";
@@ -547,8 +547,12 @@ export fn run() with Stdout {
 
     assert_eq!(remarks.len(), 1, "expected one remark, got {remarks:?}");
     assert!(
-        remarks[0].contains("it writes a global"),
-        "the remark should name the refusal: {remarks:?}"
+        !remarks[0].contains("it writes a global"),
+        "a materializing store should not refuse the region: {remarks:?}"
+    );
+    assert!(
+        remarks[0].contains("Formatter::pad"),
+        "the remark should name the call still standing: {remarks:?}"
     );
 }
 

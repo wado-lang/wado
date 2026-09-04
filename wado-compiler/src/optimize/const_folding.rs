@@ -24,7 +24,7 @@ use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
 use crate::niri::{
     BorrowRoot, CalleeMap, CtfeBuiltinMap, EditSink, GlobalEnv, GlobalFieldEnv, GlobalKey,
-    Interpreter, Lattice, build_callee_map, build_ctfe_builtin_map,
+    Interpreter, Lattice, MaterializingGlobals, build_callee_map, build_ctfe_builtin_map,
 };
 use crate::tir::{PrimitiveType, ResolvedType, TypeId, TypeTable};
 
@@ -138,6 +138,9 @@ fn new_visitor<'a>(
     visitor.interpreter.with_ctfe_builtins(&maps.ctfe_builtins);
     visitor.interpreter.with_globals(&globals.values);
     visitor.interpreter.with_global_fields(&globals.fields);
+    visitor
+        .interpreter
+        .with_materializing_globals(&globals.materializing);
     visitor
 }
 
@@ -362,6 +365,8 @@ fn const_seq_len(body: &Body, e: ExprId) -> Option<i32> {
 /// `GlobalVarSet`, so reading that store back is what lets it fold. A store's
 /// value is body content still being reduced, hence rebuilt per pass.
 struct GlobalView {
+    /// See [`MaterializingGlobals`].
+    materializing: MaterializingGlobals,
     /// What each global holds. Seeded from [`FoldMaps::declared_globals`]; a
     /// global every store of which is the same constant overrides its
     /// placeholder's `NonConst`.
@@ -374,6 +379,7 @@ struct GlobalView {
 
 fn build_global_view(project: &NirPackage, type_table: &TypeTable, maps: &FoldMaps) -> GlobalView {
     let mut view = GlobalView {
+        materializing: materializing_globals(project),
         values: maps.declared_globals.clone(),
         fields: GlobalFieldEnv::default(),
     };
@@ -429,6 +435,99 @@ fn build_global_view(project: &NirPackage, type_table: &TypeTable, maps: &FoldMa
         view.values.insert(key, Lattice::NonConst);
     }
     view
+}
+
+/// The globals whose every mention in the package sits inside a `{ G = v; G }`
+/// block — the shape constant-object globalization leaves where it names a
+/// constant at a use site.
+///
+/// A store to one of these serves the single read two statements below it and
+/// nothing else, so a region carrying the pair may run: folding the region
+/// takes the store and that read away together. A global mentioned anywhere
+/// else is left out, since some read would then depend on a store the fold
+/// deleted and would come back `null`.
+///
+/// The property is what to test, not a count of stores. Inlining copies the
+/// pair whole, so two sites are as safe as one, and a global with a single
+/// store and a distant read is not safe at all.
+fn materializing_globals(project: &NirPackage) -> MaterializingGlobals {
+    let mut paired = MaterializingGlobals::default();
+    let mut loose: IndexSet<GlobalKey> = IndexSet::default();
+    let mut visit = |body: &Body| {
+        let mut stack = vec![(NodeRef::Block(body.root), None::<GlobalKey>)];
+        while let Some((node, enclosing)) = stack.pop() {
+            let enclosing = match node {
+                NodeRef::Block(b) => match materialization_pair(body, b) {
+                    Some(key) => {
+                        paired.insert(key.clone());
+                        Some(key)
+                    }
+                    None => enclosing,
+                },
+                _ => enclosing,
+            };
+            // A mention of some *other* global inside a pair block is a plain
+            // read, so the pair says nothing about it.
+            if let NodeRef::Expr(e) = node
+                && let Some(key) = global_mention(body, e)
+                && enclosing.as_ref() != Some(&key)
+            {
+                loose.insert(key);
+            }
+            body.for_each_child(node, |c| stack.push((c, enclosing.clone())));
+        }
+    };
+    for func_rc in &project.functions {
+        if let Some(body) = func_rc.borrow().body.as_ref() {
+            visit(body);
+        }
+    }
+    for global in &project.globals {
+        if let Some(declared) = global.init.declared() {
+            visit(declared.body());
+        }
+    }
+    paired.retain(|key| !loose.contains(key));
+    paired
+}
+
+/// The global a block materializes: exactly `{ G = v; G }`, the second
+/// statement reading what the first wrote.
+fn materialization_pair(body: &Body, block: BlockId) -> Option<GlobalKey> {
+    let [set, get] = body.blocks[block].stmts.as_slice() else {
+        return None;
+    };
+    let (StmtKind::Expr(set), StmtKind::Expr(get)) =
+        (&body.stmts[*set].kind, &body.stmts[*get].kind)
+    else {
+        return None;
+    };
+    let ExprKind::GlobalVarSet {
+        module_source,
+        name,
+        ..
+    } = &body.exprs[set.as_expr()?].kind
+    else {
+        return None;
+    };
+    let read = global_mention(body, get.as_expr()?)?;
+    (read == (module_source.clone(), name.clone())).then_some(read)
+}
+
+/// The global an expression names, whether it reads or writes it.
+fn global_mention(body: &Body, e: ExprId) -> Option<GlobalKey> {
+    match &body.exprs[e].kind {
+        ExprKind::GlobalVarGet {
+            module_source,
+            name,
+        }
+        | ExprKind::GlobalVarSet {
+            module_source,
+            name,
+            ..
+        } => Some((module_source.clone(), name.clone())),
+        _ => None,
+    }
 }
 
 /// Whether `e` is `&GLOBAL` — a shared borrow of a whole global, not of a part

@@ -114,6 +114,20 @@ pub type GlobalKey = (ModuleSource, String);
 /// same convention as an un-bound local.
 pub type GlobalEnv = IndexMap<GlobalKey, Lattice>;
 
+/// Globals whose every read is the tail of a `{ G = v; G }` block — the shape
+/// [constant-object globalization] leaves where it names a constant at a use
+/// site. Such a store materializes a value for its own reader rather than
+/// filling program state, so a frame may read through it and a region carrying
+/// one may run: folding the region deletes the store and the only read it
+/// serves together. A global read anywhere else is not in the set, since
+/// deleting a store it depends on would leave it reading `null`.
+///
+/// The property survives inlining, which copies the pair whole. A count would
+/// not.
+///
+/// [constant-object globalization]: ../docs/wep-2026-05-31-const-object-globalization.md
+pub type MaterializingGlobals = IndexSet<GlobalKey>;
+
 /// Known constant field values of module-scope globals, keyed by global then
 /// field name. It knows fields no initializer shows — such as the length body
 /// globalization records for a hoisted sequence.
@@ -326,6 +340,7 @@ pub fn region_queries(
         ctfe_builtins: Some(ctfe_builtins),
         globals: None,
         global_fields: None,
+        materializing: None,
     };
     let mut out = Vec::new();
     let mut stack = vec![crate::nir_arena::NodeRef::Block(body.root)];
@@ -397,6 +412,14 @@ struct FrameState {
     /// the real body too: the worst an entry left over from a rewritten node
     /// can cost is a fold nobody attempts.
     region_misses: IndexSet<ExprId>,
+    /// What a materializing store bound in this frame, read back by the
+    /// `GlobalVarGet` it was emitted for. Per frame, like every other binding
+    /// here: the store and its reader are one block, so neither outlives the
+    /// frame that ran them.
+    materialized: IndexMap<GlobalKey, Value>,
+    /// See [`Trackability::reassigned`]. Read when a `let mut` binds a borrow,
+    /// to tell a binding that can be displaced from one that cannot.
+    reassigned: LocalSet,
 }
 
 /// What the engine knows beyond the body in front of it. Every field is
@@ -410,6 +433,16 @@ pub(crate) struct ProgramFacts<'a> {
     pub(crate) ctfe_builtins: Option<&'a CtfeBuiltinMap>,
     globals: Option<&'a GlobalEnv>,
     global_fields: Option<&'a GlobalFieldEnv>,
+    materializing: Option<&'a MaterializingGlobals>,
+}
+
+impl ProgramFacts<'_> {
+    /// Whether a store to this global materializes a value for its own reader.
+    /// Without the fact installed, no store does — absence costs folds, not
+    /// correctness.
+    pub(crate) fn materializes(&self, key: &GlobalKey) -> bool {
+        self.materializing.is_some_and(|m| m.contains(key))
+    }
 }
 
 /// Partial evaluator over the arena `Body`.
@@ -537,6 +570,16 @@ impl<'a> Interpreter<'a> {
     /// up.
     pub fn with_globals(&mut self, globals: &'a GlobalEnv) -> &mut Self {
         self.facts.globals = Some(globals);
+        self
+    }
+
+    /// Install the [`MaterializingGlobals`] set. Without it, a region carrying
+    /// any global store is refused.
+    pub fn with_materializing_globals(
+        &mut self,
+        materializing: &'a MaterializingGlobals,
+    ) -> &mut Self {
+        self.facts.materializing = Some(materializing);
         self
     }
 

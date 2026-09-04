@@ -165,8 +165,9 @@ Ordered by what the census counts, not by what this document guessed.
       refused it as a frame. Read off the final IR, so it retires itself as the
       fold reaches each shape.
 - [x] `WADO_TRACE=ctfe_call`, which names what each declined call wanted that the
-      frame could not give. The remark reports the region; the trace reports the
-      call inside it.
+      frame could not give, and `ctfe_stmt`, which names the statement a frame
+      abandoned at. The remark reports the region; the traces report the call and
+      the statement inside it.
 - [x] A census over the benchmark and `wasm-size` corpora and the Wado packages
       (`mise run report-const-regions`).
 
@@ -200,15 +201,22 @@ back, which is a materialization the frame could read through rather than a
 write to program state. `` `v=${true}` `` is the smallest instance — `"true"`
 is globalized, and that alone stops the fold.
 
-- [ ] Decide when such a write can be read through rather than refused. The
-      soundness question is whether the region is the global's only initializer,
-      since folding the region away deletes the assignment; a global another site
-      also fills, or reads before this one runs, is not one to read through.
-- [ ] Whether the answer belongs in `niri` or in the globalization pass, which
-      could leave a shape the engine already reads. The pass knows which globals
-      it minted and where; the engine would have to re-derive it.
+- [x] Read such a store through instead of refusing it. The condition is a
+      property, not a count: every mention of the global in the package is one
+      half of a `{ G = v; G }` pair. Folding a region carrying one then deletes
+      the store and the only read it serves together, and no read anywhere is
+      left depending on a store that went away. A count would have been wrong
+      twice over — inlining copies the pair, so two sites are as safe as one,
+      and a global with a single store and a distant read is not safe at all.
+- [x] The answer lives in `niri`, since the globalization pass cannot know
+      whether the region around its store will fold, and the engine already
+      reads a global out of the assignment that fills it.
+- [ ] Recount the corpus. The refusal is gone — `` `v=${true}` `` now reports
+      the call still standing rather than the store — but the regions it
+      unblocked move into the next bucket rather than folding, so the census
+      measures stage 3's size, not this stage's win.
 
-Done when the census's largest bucket is gone and the corpus is recounted.
+Done when the corpus is recounted and the bucket has moved.
 
 ### 3. Which functions the engine cannot run, and why
 
@@ -238,6 +246,15 @@ A unit-returning call whose writes land in a place the frame owns, and a `&mut`
 argument written back on return, are already implemented — `exec_call_stmt` runs
 one and `run_call` applies the write-backs. What is left:
 
+- [x] A `let mut` binding a borrow resolves to a place alias when nothing
+      reassigns the local. Only an immutable binding did, and the buffer a
+      template threads through `sroa_param`'s scalarized field is spelled
+      `let mut`.
+- [ ] The buffer a region builds is `clobbered` by its own `&mut` borrow, so the
+      frame holds no value for it and abandons at the first append —
+      `WADO_TRACE=ctfe_stmt` names the statement. A borrow the frame itself
+      performs is not a write the frame cannot see, so what `Reached` covers is
+      what to settle, and every stage below waits on it.
 - [ ] A place-valued field, so an aggregate can carry a reference. Today such an
       aggregate is not a constant, since a field holding the referent's value
       would take a write meant for the referent; what it needs to hold is the

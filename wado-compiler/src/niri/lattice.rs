@@ -674,13 +674,16 @@ impl Interpreter<'_> {
     /// — the engine simply has no information, same convention as
     /// un-bound locals.
     pub(super) fn global_lattice(&self, module_source: &ModuleSource, name: &str) -> Lattice {
+        let key = (module_source.clone(), name.to_string());
+        // The frame's own materialization wins: it is what the store two
+        // statements up named, where the package-wide env speaks for the slot.
+        if let Some(value) = self.frame.materialized.get(&key) {
+            return Lattice::Const(value.clone());
+        }
         let Some(globals) = self.facts.globals else {
             return Lattice::Unevaluated;
         };
-        globals
-            .get(&(module_source.clone(), name.to_string()))
-            .cloned()
-            .unwrap_or(Lattice::Unevaluated)
+        globals.get(&key).cloned().unwrap_or(Lattice::Unevaluated)
     }
 }
 

@@ -352,6 +352,21 @@ pub(super) fn aggregate_safe_locals(
 ///
 /// Reachable body only, as in [`aggregate_safe_locals`]. The arena keeps every
 /// node an in-place rewrite displaced, and one nothing refers to cannot run.
+/// Every local an `Assign` names as its whole target. A projection into one is
+/// a write through the binding, not a rebinding of it, so only a bare local
+/// counts.
+fn reassigned_locals(body: &Body) -> LocalSet {
+    let mut set = LocalSet::default();
+    for e in reachable_exprs(body) {
+        if let ExprKind::Assign { target, .. } = &body.exprs[e].kind
+            && let ExprKind::Local { index, .. } = &body.exprs[*target].kind
+        {
+            set.insert(*index);
+        }
+    }
+    set
+}
+
 pub(super) fn clobbered_locals(body: &Body, reached: &Reached, type_table: &TypeTable) -> LocalSet {
     fn disqualify(body: &Body, op: Operand, set: &mut LocalSet) {
         if let Some(index) = lvalue_root_local(body, op) {
@@ -436,6 +451,10 @@ fn shared_reference_root(body: &Body, op: Operand, type_table: &TypeTable) -> Op
 pub(super) struct Trackability {
     pub(super) aggregate_locals: LocalSet,
     pub(super) clobbered: LocalSet,
+    /// Locals some `Assign` names as its whole target. A binding one of these
+    /// carries can be displaced, so it cannot stand for a place; one nothing
+    /// reassigns can, whether or not it was spelled `let mut`.
+    pub(super) reassigned: LocalSet,
 }
 
 impl Trackability {
@@ -445,6 +464,7 @@ impl Trackability {
         Self {
             aggregate_locals: aggregate_safe_locals(body, &reached, type_table),
             clobbered: clobbered_locals(body, &reached, type_table),
+            reassigned: reassigned_locals(body),
         }
     }
 
@@ -459,6 +479,7 @@ impl Trackability {
         Self {
             aggregate_locals: aggregate_safe_locals(body, &reached, type_table),
             clobbered: LocalSet::default(),
+            reassigned: reassigned_locals(body),
         }
     }
 }
