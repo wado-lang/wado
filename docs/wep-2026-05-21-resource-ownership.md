@@ -372,9 +372,20 @@ disjoint and ignores the very write it was told about. One function mints the ke
 both sides compare (`place::field_owner`), so what a callee records and what a
 caller looks up cannot drift.
 
+An `Index` or a `Variant` step names no type of its own, so a `Field` past one
+answers for the element rather than for the container the caller holds. A path
+reached through either writes the whole of what its root was lent. Keying it by
+the element's field alone leaves a caller holding the container nothing to match,
+and it shares storage the call goes on to write.
+
 Handing the source root to a new owner costs the binding its share on the same
 terms. That owner may write what the binding aliases, so the read matters where
 the binding's storage is still read afterwards, and nowhere else.
+
+A `List` or a `String` copy right-sizes its backing storage to the current
+length, which a share skips. Capacity is not part of the value, but `capacity()`
+reads it, so a binding whose own capacity is read keeps its copy. One that never
+asks observes no difference and shares.
 
 Every analysis here asks one resolver what an expression names (`place.rs`).
 Its answer separates a value of its own from a place the walk cannot follow, so

@@ -234,16 +234,10 @@ impl Walker<'_> {
             self.writes.opaque |= matches!(names, Names::Unknown);
             return;
         };
-        // An `Index` or `Variant` step names no field of its own — the
-        // caller-visible type at that step has no `(owner, index)` key —
-        // so a `Field` past one cannot be trusted as this write's sole key:
-        // `arr[i].v = …` off a lent `Array<Cell>` root must still mark the
-        // array itself written, not only `Cell`'s field.
-        let field_addressable = !place
-            .selectors
-            .iter()
-            .any(|s| matches!(s, Selector::Index | Selector::Variant(_)));
-        let named_a_field = field_addressable
+        // `arr[i].v = …` off a lent `Array<Cell>` root keys only `Cell`'s
+        // field, leaving the array itself unmarked, so a path an index or a
+        // variant step reaches through falls to the whole-root write below.
+        let named_a_field = place.field_addressable()
             && place
                 .selectors
                 .iter()
@@ -281,33 +275,27 @@ impl Walker<'_> {
     }
 
     /// A known callee's own writes are unsettled during this scan, so record
-    /// the shape a hit would add rather than adding it now. A bare argument
-    /// (no field selector) needs nothing here: its type already matches what
-    /// the call graph absorbs `callee`'s own writes into — unless it is a
-    /// variant payload typed like the payload rather than the value it was
-    /// matched out of, where trusting that match would misfile the write.
+    /// the shape a hit would add rather than adding it now — as the fields the
+    /// argument projects through, or, where those are no key a caller can look
+    /// the write up by, as the whole of what the root was lent. A bare argument
+    /// needs neither: its type already matches what the call graph absorbs
+    /// `callee`'s own writes into — unless it is a variant payload typed like
+    /// the payload rather than the value it was matched out of, where trusting
+    /// that match would misfile the write.
     fn record_pending(&mut self, names: &Names, handed: TypeId, callee: (ModuleSource, String)) {
         let Names::Place(place) = names else {
             self.writes.opaque |= matches!(names, Names::Unknown);
             return;
         };
-        // Same rule as `record`: an `Index` or `Variant` step leaves no
-        // caller-visible key of its own, so a `Field` past one cannot stand
-        // in for it. Defer a whole-root write instead of a field-precise
-        // one — like any other pending effect, only once the callee is
-        // known to write, so a no-op callee costs no share.
-        let field_addressable = !place
-            .selectors
-            .iter()
-            .any(|s| matches!(s, Selector::Index | Selector::Variant(_)));
-        if !field_addressable {
+        let handed = field_owner(handed, self.type_table);
+        if !place.field_addressable() {
             if let Some(lent) = self.resolver.lent(place.root)
-                && lent != field_owner(handed, self.type_table)
+                && lent != handed
             {
                 self.pending.push(PendingProjection {
                     fields: Vec::new(),
                     whole: Some(lent),
-                    handed: field_owner(handed, self.type_table),
+                    handed,
                     callee,
                 });
             }
@@ -326,14 +314,14 @@ impl Walker<'_> {
                 self.pending.push(PendingProjection {
                     fields,
                     whole: None,
-                    handed: field_owner(handed, self.type_table),
+                    handed,
                     callee,
                 });
             }
             return;
         }
         if let Some(lent) = self.resolver.lent(place.root)
-            && lent != field_owner(handed, self.type_table)
+            && lent != handed
         {
             self.writes.whole.insert(lent);
         }

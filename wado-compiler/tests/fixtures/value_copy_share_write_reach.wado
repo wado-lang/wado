@@ -70,9 +70,9 @@ fn bump_via_index(arr: &mut Array<Cell>) {
     r.v = r.v + 1;
 }
 
-// The write is reached only through an index off the root itself — no field
-// selector marks the array's own type — so the write must still be flagged
-// against the array, not only the element type it drills into.
+// An index off the root itself leaves no field selector naming the array's own
+// type. The write must still be flagged against the array, not only against the
+// element type it drills into.
 fn through_an_indexed_element(arr: &mut Array<Cell>) -> i32 {
     let snap = builtin::array_get_value(arr, 0);
     bump_via_index(arr);

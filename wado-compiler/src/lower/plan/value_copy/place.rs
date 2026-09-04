@@ -55,6 +55,18 @@ impl Place {
             through_borrow: false,
         }
     }
+
+    /// Whether every step this path takes is a field, so each `(owner, index)`
+    /// along it is a key a caller can look a write up by. An `Index` or a
+    /// `Variant` names no type of its own, and a `Field` past one answers for
+    /// the element rather than the container the caller holds.
+    #[must_use]
+    pub fn field_addressable(&self) -> bool {
+        !self
+            .selectors
+            .iter()
+            .any(|s| matches!(s, Selector::Index | Selector::Variant(_)))
+    }
 }
 
 /// What an expression names.

@@ -42,8 +42,8 @@ fn filled_len(slot: &mut Slot) -> i32 {
 }
 
 // `let r = p; p = x;` repoints `p`'s own binding rather than writing its old
-// storage in place, so the reassignment never conflicts with `r`'s share —
-// even while `p` stays live and readable up to that point.
+// storage in place. The reassignment never conflicts with `r`'s share, even
+// while `p` stays live and readable up to it.
 fn rebind_releases_storage() -> i32 {
     let mut p: List<i32> = [1, 2];
     let r = p;
@@ -56,9 +56,9 @@ struct Cell {
     v: i32,
 }
 
-// `read_only` writes nothing, so the deferred whole-root write `touch` would
-// add for it never lands: an index step off a lent root still costs no share
-// when the callee it is handed to turns out not to write.
+// An index step off a lent root defers its whole-root write until the callee
+// it is handed to is known to write. `read_only` writes nothing, so `touch`
+// costs the array's share nothing.
 fn read_only(c: &mut Cell) -> i32 {
     return c.v;
 }
