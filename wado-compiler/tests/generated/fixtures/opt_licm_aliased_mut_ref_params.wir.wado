@@ -45,29 +45,27 @@ type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // Ty
 
 type "functype//opt_licm_aliased_mut_ref_params.wado/run_loop" = fn(ref "opt_licm_aliased_mut_ref_params.wado//Node", ref "opt_licm_aliased_mut_ref_params.wado//Node") -> i32;  // TypeId(14)
 
-type "functype//opt_licm_aliased_mut_ref_params.wado/run" = fn();  // TypeId(15)
+type "functype//opt_licm_aliased_mut_ref_params.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(15)
 
-type "functype//opt_licm_aliased_mut_ref_params.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(16)
+type "functype//opt_licm_aliased_mut_ref_params.wado/__cm_export__run" = fn();  // TypeId(16)
 
-type "functype//opt_licm_aliased_mut_ref_params.wado/__cm_export__run" = fn();  // TypeId(17)
+type "functype//core:rt/write_string_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(17)
 
-type "functype//core:rt/write_string_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(18)
+type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(18)
 
-type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(19)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(19)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(20)
+type "functype//core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_raw_all" = fn(i32, ref "core:prelude/slice.wado//Slice<u8>") -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(20)
 
-type "functype//core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_raw_all" = fn(i32, ref "core:prelude/slice.wado//Slice<u8>") -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(21)
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar" = fn(i32, ref "core:prelude/string.wado//String");  // TypeId(21)
 
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar" = fn(i32, ref "core:prelude/string.wado//String");  // TypeId(22)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write$spec0$scalar" = fn(ref "core:prelude/string.wado//String", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(22)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write$spec0$scalar" = fn(ref "core:prelude/string.wado//String", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(23)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(23)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(24)
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(24)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(25)
-
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(26)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(25)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -102,10 +100,14 @@ fn "opt_licm_aliased_mut_ref_params.wado/run_loop"(a, b) {
     return sum;
 }
 
-fn "opt_licm_aliased_mut_ref_params.wado/run"() with Stdout {
+fn "opt_licm_aliased_mut_ref_params.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
+    return "wasi/wasi:cli/Stdout::write_via_stream"(data);
+}
+
+fn "opt_licm_aliased_mut_ref_params.wado/__cm_export__run"() {
     let n: ref "opt_licm_aliased_mut_ref_params.wado//Node";
     let result: i32;
-    let __local_2: ref "core:prelude/string.wado//String";
+    let __r: ref "core:prelude/string.wado//String";
     let handle: i32;
     let packed: i64;
     let rx_16: i32;
@@ -116,29 +118,21 @@ fn "opt_licm_aliased_mut_ref_params.wado/run"() with Stdout {
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:opt_licm_aliased_mut_ref_params.wado::__modules_initialized = 1;
     };
-    n = struct.new "opt_licm_aliased_mut_ref_params.wado//Node" { value: 0, tag: 0 };
-    result = "opt_licm_aliased_mut_ref_params.wado/run_loop"(n, n);
-    __local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(result, __local_2);
-    rx_16 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
-    tx_17 = builtin::i32_wrap_i64(packed >> 32_i64);
-    handle = "opt_licm_aliased_mut_ref_params.wado/__cm_binding__Stdout_write_via_stream"(rx_16);
-    "core:rt/write_string_to_stream"(tx_17, __local_2, 1);
-    "wasi/future-drop-readable:transmission-cli"(handle);
-}
-
-fn "opt_licm_aliased_mut_ref_params.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
-    return "wasi/wasi:cli/Stdout::write_via_stream"(data);
-}
-
-fn "opt_licm_aliased_mut_ref_params.wado/__cm_export__run"() {
-    __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:opt_licm_aliased_mut_ref_params.wado::__modules_initialized);
+    __inline___initialize_modules_2: block {
+        break_if __inline___initialize_modules_2 @likely(global:opt_licm_aliased_mut_ref_params.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:opt_licm_aliased_mut_ref_params.wado::__modules_initialized = 1;
     };
-    "opt_licm_aliased_mut_ref_params.wado/run"();
+    n = struct.new "opt_licm_aliased_mut_ref_params.wado//Node" { value: 0, tag: 0 };
+    result = "opt_licm_aliased_mut_ref_params.wado/run_loop"(n, n);
+    __r = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
+    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(result, __r);
+    rx_16 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
+    tx_17 = builtin::i32_wrap_i64(packed >> 32_i64);
+    handle = "opt_licm_aliased_mut_ref_params.wado/__cm_binding__Stdout_write_via_stream"(rx_16);
+    "core:rt/write_string_to_stream"(tx_17, __r, 1);
+    "wasi/future-drop-readable:transmission-cli"(handle);
     "wasi/task-return"(0);
 }
 

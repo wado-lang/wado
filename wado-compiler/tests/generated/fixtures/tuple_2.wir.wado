@@ -172,10 +172,11 @@ global global:tuple_2.wado::__const_obj_6: ref null "core:prelude/string.wado//S
 global global:tuple_2.wado::__const_obj_7: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(109, 97, 116, 99, 104, 101, 115, 32, 98, 111, 111, 108), used: 12 };
 global global:tuple_2.wado::__const_obj_8: ref null Array<u8> = array.new_fixed<u8>(105, 102, 45, 108, 101, 116, 32, 105, 110, 116, 58, 32);
 global global:tuple_2.wado::__const_obj_9: ref null Array<u8> = array.new_fixed<u8>(109, 97, 116, 99, 104, 101, 100, 32, 115, 116, 114, 105, 110, 103, 58, 32);
-global global:tuple_2.wado::__const_obj_10: ref null Array<u8> = array.new_fixed<u8>(109, 97, 116, 99, 104, 101, 100, 32, 99, 104, 97, 114, 58, 32);
-global global:tuple_2.wado::__const_obj_11: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(109, 97, 116, 99, 104, 101, 100, 32, 98, 111, 111, 108, 58, 32, 121, 101, 115), used: 17 };
-global global:tuple_2.wado::__const_obj_12: ref null Array<u8> = array.new_fixed<u8>(109, 97, 116, 99, 104, 101, 100, 32, 105, 110, 116, 58, 32);
-global global:core:prelude/primitive.wado::__const_obj_13: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
+global global:tuple_2.wado::__const_obj_10: ref null Array<u8> = array.new_fixed<u8>(104, 101, 108, 108, 111);
+global global:tuple_2.wado::__const_obj_11: ref null Array<u8> = array.new_fixed<u8>(109, 97, 116, 99, 104, 101, 100, 32, 99, 104, 97, 114, 58, 32);
+global global:tuple_2.wado::__const_obj_12: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(109, 97, 116, 99, 104, 101, 100, 32, 98, 111, 111, 108, 58, 32, 121, 101, 115), used: 17 };
+global global:tuple_2.wado::__const_obj_13: ref null Array<u8> = array.new_fixed<u8>(109, 97, 116, 99, 104, 101, 100, 32, 105, 110, 116, 58, 32);
+global global:core:prelude/primitive.wado::__const_obj_14: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
 
 fn "tuple_2.wado/destruct_basic"() with Stdout {
     let __local_2: ref "core:prelude/string.wado//String";
@@ -748,7 +749,7 @@ fn "tuple_2.wado/destruct_literal"() with Stdout {
         }
         start_42 = __local_16.used;
         __local_16.used = new_used_41;
-        builtin::array_copy<u8>(__local_16.repr, start_42, global:tuple_2.wado::__const_obj_12, 0, 13);
+        builtin::array_copy<u8>(__local_16.repr, start_42, global:tuple_2.wado::__const_obj_13, 0, 13);
         "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(42, __local_16);
         __local_16;
     } else {
@@ -762,7 +763,7 @@ fn "tuple_2.wado/destruct_literal"() with Stdout {
     rx_109 = builtin::i32_wrap_i64(local.tee packed_108("wasi/stream-new"()));
     tx_110 = builtin::i32_wrap_i64(packed_108 >> 32_i64);
     handle_106 = "tuple_2.wado/__cm_binding__Stdout_write_via_stream"(rx_109);
-    "core:rt/write_string_to_stream"(tx_110, global:tuple_2.wado::__const_obj_11, 1);
+    "core:rt/write_string_to_stream"(tx_110, global:tuple_2.wado::__const_obj_12, 1);
     "wasi/future-drop-readable:transmission-cli"(handle_106);
     result4 = (if 1 -> ref "core:prelude/string.wado//String" {
         __local_20 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(30), used: 0 };
@@ -773,7 +774,7 @@ fn "tuple_2.wado/destruct_literal"() with Stdout {
         }
         start_124 = __local_20.used;
         __local_20.used = new_used_123;
-        builtin::array_copy<u8>(__local_20.repr, start_124, global:tuple_2.wado::__const_obj_10, 0, 14);
+        builtin::array_copy<u8>(__local_20.repr, start_124, global:tuple_2.wado::__const_obj_11, 0, 14);
         "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(99, __local_20);
         __local_20;
     } else {
@@ -792,7 +793,7 @@ fn "tuple_2.wado/destruct_literal"() with Stdout {
         }
         __inline_bytes_match_at_1: block -> bool {
             haystack = __local_30.repr;
-            needle = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 }.repr;
+            needle = global:tuple_2.wado::__const_obj_10;
             j = 0;
             b32: block {
                 l33: loop {
@@ -2883,7 +2884,7 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar"(self, f) {
         };
         break __inline_count_digits_u64_1: n;
     };
-    offset_5 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write"(f, is_negative, global:core:prelude/primitive.wado::__const_obj_13, digit_count_4);
+    offset_5 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write"(f, is_negative, global:core:prelude/primitive.wado::__const_obj_14, digit_count_4);
     arr = f.buf.repr;
     pos = offset_5 + digit_count_4;
     t_15 = abs_val;
@@ -2931,7 +2932,7 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(self, f) {
         };
         break __inline_count_digits_u64_1: n;
     };
-    offset_5 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write$spec0$scalar"(f, is_negative, global:core:prelude/primitive.wado::__const_obj_13, digit_count_4);
+    offset_5 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write$spec0$scalar"(f, is_negative, global:core:prelude/primitive.wado::__const_obj_14, digit_count_4);
     arr = f.repr;
     pos = offset_5 + digit_count_4;
     t_15 = abs_val;

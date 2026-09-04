@@ -262,11 +262,15 @@ impl<'a> CostWalk<'a> {
         spliced.max(weight::CALL)
     }
 
-    /// Whether an argument is a compile-time constant as written.
+    /// Whether an argument reaches the callee as a compile-time constant:
+    /// written as one, or made one by the caller's constants under
+    /// [`CostWalk::under`]. A folded walk is exactly where the literal that
+    /// unrolls the callee's loop comes from, so reading only the as-written
+    /// shape would charge the loop the caller never receives.
     fn arg_is_constant(&self, op: Operand) -> bool {
         match op {
-            Operand::Value(v) => self.body.values.kind(v).is_operand_constant(),
-            Operand::Expr(_) => false,
+            Operand::Value(v) if self.body.values.kind(v).is_operand_constant() => true,
+            other => self.folds(other),
         }
     }
 
@@ -1005,6 +1009,48 @@ struct Verdict {
     hold: bool,
 }
 
+/// Whether this pass declines `func` outright, before any price is taken.
+///
+/// The `spliced` lookahead table reads this too, so it cannot charge a caller
+/// for a body that will stay a call. `#[inline(always)]` overrides the
+/// `Never`-return gate, which is why that one is not unconditional here.
+fn splice_barred(
+    func: &NirFunction,
+    recursive_functions: &IndexSet<FuncId>,
+    type_table: &TypeTable,
+) -> bool {
+    // A CM binding is an ABI bridge between Wado GC types and CM linear memory
+    // and must remain a separate function. A recursive callee is barred ahead of
+    // the `#[inline(always)]` short-circuit: splicing a recursive call only
+    // exposes the next one, so an unconditional force would expand without bound
+    // over the fixed point (a compiler stack overflow at higher iteration
+    // counts). It is keyed on `FuncId` — the identity the recursive set is built
+    // on — so a cross-module recursive function is not missed.
+    if func.inline_hint == InlineHint::Never || func.is_cm_binding {
+        return true;
+    }
+    if func.id.is_some_and(|id| recursive_functions.contains(&id)) {
+        return true;
+    }
+    // A `!`-returning body is an error/abort path: never hot, nothing to gain.
+    func.inline_hint != InlineHint::Always && type_table.is_never(func.return_type)
+}
+
+/// The threshold `func`'s own hint puts it under. An `#[inline]` hint raises it
+/// 5x.
+///
+/// The threshold applies even at a single call site: if that site sits inside a
+/// function itself duplicated at N sites, the large callee is copied N times
+/// rather than shared. Bypassing it measured +87% (`pi_approx`) / +186% (zlib) at
+/// `-Os` and regressed already at `-O1`.
+fn effective_threshold(func: &NirFunction, inline_threshold: usize) -> usize {
+    if func.inline_hint == InlineHint::Hint {
+        inline_threshold * 5
+    } else {
+        inline_threshold
+    }
+}
+
 /// Decide a callee's fate: whether to splice it, and whether to leave it
 /// alone so it stays spliceable. Both answers come from here so they cannot
 /// disagree about the budget or about which callees are eligible at all.
@@ -1019,35 +1065,17 @@ fn classify_callee(
     loopy: &[bool],
     spliced: &[usize],
 ) -> Verdict {
-    // #[inline(never)] unconditionally prevents inlining
-    if func.inline_hint == InlineHint::Never {
-        return Verdict::default();
-    }
-
     // Must have a body
     let Some(body) = &func.body else {
         return Verdict::default();
     };
 
-    // Don't inline CM binding functions - they are ABI bridges between
-    // Wado GC types and CM linear memory that must remain as separate functions
-    if func.is_cm_binding {
-        return Verdict::default();
-    }
-
-    // Not recursive — keyed on the function's `FuncId` (its store position),
-    // the same identity the recursive set is built on, so cross-module recursive
-    // functions are not missed. This precedes the `#[inline(always)]`
-    // short-circuit: inlining a recursive call only exposes the next recursive
-    // call, so an unconditional force would re-inline every fixed-point iteration
-    // and expand without bound (a compiler stack overflow at higher iteration
-    // counts).
-    if func.id.is_some_and(|id| recursive_functions.contains(&id)) {
+    if splice_barred(func, recursive_functions, type_table) {
         return Verdict::default();
     }
 
     // #[inline(always)] skips the remaining heuristic checks (but still requires
-    // a body, a non-adapter, and non-recursion, all checked above)
+    // a body and passes `splice_barred`, both checked above)
     if func.inline_hint == InlineHint::Always {
         return Verdict {
             hot: 0,
@@ -1056,22 +1084,7 @@ fn classify_callee(
         };
     }
 
-    // Don't inline functions that return Never (!)
-    // These are error/abort paths that are never hot, so no performance benefit to inlining
-    if type_table.is_never(func.return_type) {
-        return Verdict::default();
-    }
-
-    // The threshold applies even at a single call site: if that site sits inside
-    // a function itself duplicated at N sites, the large callee is copied N
-    // times rather than shared. Bypassing it measured +87% (pi_approx) / +186%
-    // (zlib) at -Os and regressed already at -O1. An `#[inline]` hint raises the
-    // threshold 5x.
-    let effective_threshold = if func.inline_hint == InlineHint::Hint {
-        inline_threshold * 5
-    } else {
-        inline_threshold
-    };
+    let effective_threshold = effective_threshold(func, inline_threshold);
 
     let params = func.params.len();
     let plain = inline_cost(body, type_table, descriptors, spliced);
@@ -1463,9 +1476,17 @@ pub fn inline_functions(
     let type_table = project.type_table.borrow();
     // What a call to each function costs a caller that splices it, for
     // `CostWalk::splicing`. Read as written — calls priced as ABI edges — so
-    // this is one level of lookahead and cannot recurse. A function the
-    // threshold would leave alone keeps `0`, which prices its call as the edge
-    // it stays.
+    // this is one level of lookahead and cannot recurse. A function this pass
+    // leaves alone keeps `0`, which prices its call as the edge it stays, and
+    // `splice_barred` / `effective_threshold` are read here so the table follows
+    // `classify_callee`'s answers rather than its own.
+    //
+    // The two can still part on one shape, by construction: the admission test
+    // here reads the gross price, while `classify_callee` reads the price this
+    // very table produces. A driver whose own loopy callees push it over the
+    // threshold is declined there and still charged to its callers here. Closing
+    // that means a second lookahead level; the entries below are what this one
+    // was measured at.
     //
     // Only a callee carrying a loop is priced this way. A loop is what the model
     // already charges most to splice, because it is a region of its own in the
@@ -1482,11 +1503,16 @@ pub fn inline_functions(
             let Some(body) = func.body.as_ref() else {
                 return 0;
             };
-            if !loopy.get(i).copied().unwrap_or(false) {
+            if !loopy.get(i).copied().unwrap_or(false)
+                || splice_barred(&func, &recursive_functions, &type_table)
+            {
                 return 0;
             }
             let gross = inline_cost(body, &type_table, descriptors, &[]);
-            if net_cost(gross, func.params.len()) <= inline_threshold {
+            if func.inline_hint == InlineHint::Always
+                || net_cost(gross, func.params.len())
+                    <= effective_threshold(&func, inline_threshold)
+            {
                 gross
             } else {
                 0
