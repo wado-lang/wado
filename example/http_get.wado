@@ -4,7 +4,7 @@
 
 use { println, Stdout } from "core:cli";
 use { Url } from "core:url";
-use { Request, Response, ErrorCode, Fields, FieldValue, Scheme, Trailers } from "wasi:http";
+use { Request, Response, ErrorCode, Fields, Headers, FieldValue, Scheme, Trailers } from "wasi:http";
 use { Client } from "wasi:http";
 
 fn scheme_of(url: Url) -> Scheme {
@@ -16,7 +16,7 @@ fn scheme_of(url: Url) -> Scheme {
 }
 
 fn send_get(url: Url) -> Response with Client {
-    let headers = Fields::new();
+    let headers = Headers::new();
     headers.append("user-agent", #file.bytes().collect() as FieldValue);
 
     let [trailers_rx, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();

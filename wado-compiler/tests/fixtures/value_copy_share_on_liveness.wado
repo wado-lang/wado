@@ -1,0 +1,102 @@
+// Sharing is keyed on liveness (WEP 2026-05-21, "Sharing"): a write conflicts
+// with a read-only binding only where that binding is still live. A binding
+// whose last read precedes the write needs no defensive copy, though a walk that
+// ignores liveness sees the write anywhere in the body and refuses the binding.
+//
+// `value_copy_elide_same_field_mut_kept` is the counterpart: the same write with
+// the binding still live keeps its copy.
+
+struct Store {
+    rows: List<List<i32>>,
+}
+
+impl Store {
+    // `row` is read out before the write to the same element and dead after it.
+    fn len_then_mutate(&mut self) -> i32 {
+        let row = self.rows[0];
+        let n = row.len();
+        self.rows[0].push(99);
+        return n;
+    }
+}
+
+variant Slot {
+    Filled(List<i32>),
+    Empty,
+}
+
+// The scrutinee temp a by-value arm binding needs is dead before the write, so
+// it shares the place it was hoisted out of.
+fn filled_len(slot: &mut Slot) -> i32 {
+    let mut n = 0;
+    match *slot {
+        Filled(v) => {
+            n = v.len();
+        }
+        Empty => {}
+    }
+    if let Filled(w) = slot {
+        w.push(9);
+    }
+    return n;
+}
+
+// `let r = p; p = x;` repoints `p`'s own binding rather than writing its old
+// storage in place. The reassignment never conflicts with `r`'s share, even
+// while `p` stays live and readable up to it.
+fn rebind_releases_storage() -> i32 {
+    let mut p: List<i32> = [1, 2];
+    let r = p;
+    let before = p[0];
+    p = [3, 4];
+    return before + r[0] + p[0];
+}
+
+struct Cell {
+    v: i32,
+}
+
+// An index step off a lent root defers its whole-root write until the callee
+// it is handed to is known to write. `read_only` writes nothing, so `touch`
+// costs the array's share nothing.
+fn read_only(c: &mut Cell) -> i32 {
+    return c.v;
+}
+
+fn touch(arr: &mut Array<Cell>) -> i32 {
+    let r = builtin::array_get_ref_mut(arr, 0);
+    return read_only(r);
+}
+
+fn cell_value(arr: &Array<Cell>) -> i32 {
+    return builtin::array_get_value(arr, 0).v;
+}
+
+export fn run() {
+    let mut s = Store { rows: [[1, 2, 3]] };
+    let n = s.len_then_mutate();
+    let after = s.rows[0].len();
+    assert n == 3;
+    assert after == 4;
+
+    let mut slot = Slot::Filled([1, 2]);
+    let filled = filled_len(&mut slot);
+    assert filled == 2;
+
+    let released = rebind_releases_storage();
+    assert released == 5;
+
+    let mut c: Array<Cell> = builtin::array_new(1);
+    builtin::array_set(&mut c, 0, Cell { v: 1 });
+    let shared = c;
+    let seen = touch(&mut c);
+    assert seen == 1;
+    assert cell_value(&shared) == 1;
+}
+
+__DATA__
+{
+    "stdout": "",
+    "wir_not_expect:O0": ["$value_copy$"],
+    "wir_not_expect:O2": ["array_clone"]
+}

@@ -1,0 +1,143 @@
+// Bitwise, shift and unary operators: the concrete instructions, precedence,
+// shift widths, and the same operators reached through a trait bound on a type
+// parameter.
+
+struct Cm {
+    v: i32,
+}
+
+impl Neg for Cm {
+    type Output = Cm;
+
+    fn neg(&self) -> Cm {
+        return Cm { v: -self.v };
+    }
+}
+
+fn negate<T: Neg<Output = T>>(a: T) -> T {
+    return -a;
+}
+
+fn mask<T: BitAnd<Output = T>>(a: T, b: T) -> T {
+    return a & b;
+}
+
+fn flip<T: BitNot<Output = T>>(a: T) -> T {
+    return ~a;
+}
+
+fn twice<T: Shl<Output = T>>(a: T) -> T {
+    return a << 1;
+}
+
+fn shl_by<T: Shl<Output = T>>(x: T) -> T {
+    return x << 3;
+}
+
+fn shr_by<T: Shr<Output = T>>(x: T) -> T {
+    return x >> 1;
+}
+
+test "and" {
+    let a = 0b1100; // 12
+    let b = 0b1010; // 10
+    assert a & b == 8; // 0b1000
+}
+
+test "or" {
+    let a = 0b1100;
+    let b = 0b1010;
+    assert a | b == 14; // 0b1110
+}
+
+test "xor" {
+    let a = 0b1100;
+    let b = 0b1010;
+    assert a ^ b == 6; // 0b0110
+}
+
+test "not" {
+    let a = 0;
+    assert ~a == -1; // all bits set
+}
+
+test "combined precedence" {
+    // `&` binds tighter than `|`
+    let a = 3; // 0b0011
+    let b = 4; // 0b0100
+    let c = 6; // 0b0110
+    assert a | b & c == 7; // 0b0011 | (0b0100 & 0b0110)
+}
+
+test "shift" {
+    let a = 1;
+    assert a << 3 == 8;
+    assert 16 >> 2 == 4;
+}
+
+test "shift i64" {
+    // u64 << literal (literal coerced to u64)
+    let x: u64 = 1;
+    assert x << 11 == 2048;
+
+    let y: u64 = 2048;
+    assert y >> 11 == 1;
+
+    let z: i64 = 1 as i64;
+    assert z << 11 == 2048 as i64;
+
+    let w: i64 = 2048 as i64;
+    assert w >> 11 == 1 as i64;
+
+    // u64 << u64 variable (same type)
+    let shift_amt: u64 = 5;
+    let v: u64 = 1;
+    assert v << shift_amt == 32;
+}
+
+test "bitwise operators on a type parameter" {
+    // The bound a primitive satisfies must match what the operator lowers to.
+    // The list carried only the five arithmetic traits, so `T: BitAnd` and
+    // `T: BitNot` were rejected for `i32` while `a & b` on a concrete `i32`
+    // compiled.
+    assert mask(12, 10) == 8;
+    assert flip(12) == -13;
+    assert twice(12) == 24;
+    assert mask(true, false) == false;
+}
+
+test "bitnot on a bool complements one bit" {
+    // A `bool` holds one bit, so `~b` is its complement. The lowering reused
+    // the integer `xor -1`, leaving `-1` / `-2` — both non-zero, so `~false`
+    // and `~true` both read back as `true`.
+    let f = builtin::black_box(false);
+    let t = builtin::black_box(true);
+    assert ~f == true;
+    assert ~t == false;
+    assert flip(f) == true;
+    assert flip(t) == false;
+    assert ~(0 as u8) == 255 as u8;
+}
+
+test "shift on a type parameter keeps the receiver width" {
+    // `Shl` / `Shr` declare `rhs: u32` whatever the receiver is, and the native
+    // instruction takes both operands at one width. Relowering a 64-bit shift
+    // fed `i64.shl` an `i32` and produced an invalid module.
+    let a = builtin::black_box(4 as i64);
+    let b = builtin::black_box(8 as u64);
+    let c = builtin::black_box(4 as i32);
+    let d = builtin::black_box(4 as u8);
+    assert shl_by(a) == 32 as i64;
+    assert shr_by(b) == 4 as u64;
+    assert shl_by(c) == 32;
+    assert shl_by(d) == 32 as u8;
+}
+
+test "unary negation on a type parameter" {
+    // `-a` on a type parameter dispatches through its bounds, as `a + b` does,
+    // and monomorphization turns the call back into the instruction for a
+    // primitive.
+    assert negate(Cm { v: 5 }).v == -5;
+    assert negate(7) == -7;
+    assert `${negate(2.5)}` == "-2.5";
+}

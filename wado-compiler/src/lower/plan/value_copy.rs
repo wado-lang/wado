@@ -173,8 +173,12 @@ pub fn plan(
             f.params.iter().map(|p| p.is_mut_ref).collect(),
         );
     }
-    let returns_receiver_alias =
-        ownership::compute_receiver_alias(flat, &call_graph, &return_paths);
+    let returns_receiver_alias = ownership::compute_receiver_alias(
+        flat,
+        &call_graph,
+        &return_paths,
+        &flat.type_table.borrow(),
+    );
     let indirect_owned_returns =
         ownership::compute_indirect_owned_returns(flat, &conventions.returns_owned);
     ValueCopyPlan {

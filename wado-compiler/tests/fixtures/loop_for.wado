@@ -1,0 +1,317 @@
+// `for` in both forms: the C-style header and `for-of` over lists, strings,
+// tuples, structs, references, generics and iterator adapters.
+
+global mut ITERABLE_CALLS: i32 = 0;
+
+struct Container<T> {
+    items: List<T>,
+}
+
+impl<T> Container<T> {
+    fn walk(&self) -> i32 {
+        let mut n = 0;
+        for let item of self.items {
+            n += 1;
+        }
+        return n;
+    }
+
+    fn walk_mut(&mut self) -> i32 {
+        let mut n = 0;
+        for let item of self.items {
+            n += 1;
+        }
+        return n;
+    }
+}
+
+struct Holder<K, V> {
+    items: List<[K, V]>,
+}
+
+impl<K, V> Holder<K, V> {
+    fn walk(&self) -> i32 {
+        let mut n = 0;
+        for let pair of self.items {
+            n += 1;
+        }
+        return n;
+    }
+}
+
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+fn get_numbers() -> List<i32> {
+    ITERABLE_CALLS += 1;
+    return [1, 2, 3];
+}
+
+fn for_of_with_continue(data: &List<List<i32>>) -> List<i32> {
+    let mut result: List<i32> = [];
+    for let mut k = 0; k < data.len(); k += 1 {
+        for let item of data[k] {
+            if item % 2 == 0 {
+                continue;
+            }
+            result.push(item);
+        }
+    }
+    return result;
+}
+
+fn for_of_with_break(data: &List<List<i32>>) -> List<i32> {
+    let mut result: List<i32> = [];
+    for let mut k = 0; k < data.len(); k += 1 {
+        for let item of data[k] {
+            if item > 2 {
+                break;
+            }
+            result.push(item);
+        }
+    }
+    return result;
+}
+
+test "c-style loop" {
+    let mut count = 0;
+    for let mut i = 0; i < 3; i = i + 1 {
+        count += 1;
+    }
+    assert count == 3;
+}
+
+test "c-style loop break" {
+    let mut count = 0;
+    for let mut i = 0; i < 10; i = i + 1 {
+        count += 1;
+        if i >= 2 {
+            break;
+        }
+    }
+    assert count == 3;
+}
+
+test "c-style loop continue" {
+    let mut sum = 0;
+    for let mut i = 0; i < 5; i = i + 1 {
+        if i == 2 {
+            continue;
+        }
+        sum += i;
+    }
+    assert sum == 0 + 1 + 3 + 4;
+}
+
+test "c-style header with a refutable let condition" {
+    let items: List<i32> = [10, 20, 30];
+    let mut iter = items.iter_value();
+    let mut count = 0;
+    let mut sum = 0;
+    for ; let Some(x) = iter.next(); count += 1 {
+        sum += x;
+    }
+    assert count == 3;
+    assert sum == 60;
+}
+
+test "for-of over a list" {
+    let numbers: List<i32> = [1, 2, 3, 4, 5];
+    let mut sum = 0;
+    for let n of numbers {
+        sum = sum + n;
+    }
+    assert sum == 15;
+}
+
+test "for-of break" {
+    let numbers: List<i32> = [1, 2, 3, 4, 5];
+    let mut seen: List<i32> = [];
+    for let n of numbers {
+        if n == 3 {
+            break;
+        }
+        seen.push(n);
+    }
+    assert seen == [1, 2];
+}
+
+test "for-of continue" {
+    let numbers: List<i32> = [1, 2, 3, 4, 5];
+    let mut seen: List<i32> = [];
+    for let n of numbers {
+        if n == 3 {
+            continue;
+        }
+        seen.push(n);
+    }
+    assert seen == [1, 2, 4, 5];
+}
+
+test "for-of over an empty list runs no iteration" {
+    let empty: List<i32> = [];
+    let mut n = 0;
+    for let item of empty {
+        n += 1;
+    }
+    assert n == 0;
+}
+
+test "for-of over a generic field" {
+    let mut c: Container<i32> = Container { items: [1, 2, 3] };
+    assert c.walk() == 3;
+    assert c.walk_mut() == 3;
+    assert Container { items: [1, 2, 3] as List<i32> }.walk() == 3;
+}
+
+test "for-of over a generic field of tuples" {
+    let h: Holder<String, i32> = Holder { items: [["a", 1], ["b", 2]] };
+    assert h.walk() == 2;
+}
+
+test "a mut binding is a copy the list does not see" {
+    let numbers: List<i32> = [1, 2, 3];
+    let mut doubled: List<i32> = [];
+    for let mut n of numbers {
+        n = n * 2;
+        doubled.push(n);
+    }
+    assert doubled == [2, 4, 6];
+    assert numbers == [1, 2, 3];
+}
+
+test "nested for-of" {
+    let outer: List<i32> = [1, 2, 3];
+    let inner: List<i32> = [10, 20];
+    let mut pairs: List<String> = [];
+    for let i of outer {
+        for let j of inner {
+            pairs.push(`${i},${j}`);
+        }
+    }
+    assert pairs == ["1,10", "1,20", "2,10", "2,20", "3,10", "3,20"];
+}
+
+test "the iterable expression is evaluated once" {
+    ITERABLE_CALLS = 0;
+    let mut sum = 0;
+    for let n of get_numbers() {
+        sum += n;
+    }
+    assert sum == 6;
+    assert ITERABLE_CALLS == 1;
+}
+
+test "for-of over strings" {
+    let names: List<String> = ["Alice", "Bob", "Charlie"];
+    let mut greeted: List<String> = [];
+    for let name of names {
+        greeted.push(`Hello, ${name}!`);
+    }
+    assert greeted == ["Hello, Alice!", "Hello, Bob!", "Hello, Charlie!"];
+}
+
+test "for-of over structs" {
+    let points: List<Point> = [Point { x: 1, y: 2 }, Point { x: 3, y: 4 }];
+    let mut out: List<String> = [];
+    for let p of points {
+        out.push(`${p.x},${p.y}`);
+    }
+    assert out == ["1,2", "3,4"];
+}
+
+test "for-of over tuples" {
+    let items: List<[String, i32]> = [["a", 1], ["b", 2]];
+    let mut keys: List<String> = [];
+    for let pair of items {
+        keys.push(pair.0);
+    }
+    assert keys == ["a", "b"];
+
+    let pairs: List<[i32, i32]> = [[1, 2], [3, 4]];
+    let mut out: List<String> = [];
+    for let p of pairs {
+        out.push(`${p.0},${p.1}`);
+    }
+    assert out == ["1,2", "3,4"];
+}
+
+test "for-of over a reference yields references" {
+    let arr: List<i32> = [10, 20, 30];
+    let mut sum = 0;
+    for let x of &arr {
+        sum += *x;
+    }
+    assert sum == 60;
+
+    let points: List<Point> = [Point { x: 1, y: 2 }, Point { x: 3, y: 4 }];
+    let mut total = 0;
+    for let p of &points {
+        total += p.x + p.y;
+    }
+    assert total == 10;
+
+    // The same when the binding itself has type `&List<T>`.
+    let three: List<i32> = [1, 2, 3];
+    let ra = &three;
+    let mut s = 0;
+    for let x of ra {
+        s += *x;
+    }
+    assert s == 6;
+
+    // A plain for-of still yields `T`.
+    let mut v = 0;
+    for let x of three {
+        v += x;
+    }
+    assert v == 6;
+}
+
+test "for-of over an enumerate adapter" {
+    // `resolve_iterator_for_of` stripped the user's `.enumerate()` for the
+    // type check and then re-added one to the same expression, building
+    // `expr.enumerate().enumerate()`. The outer `Self::Item` never
+    // substituted and codegen ICE'd on an unsubstituted projection.
+    let arr: List<i32> = [10, 20, 30];
+    let mut sum = 0;
+    let mut seen: List<String> = [];
+    for let [i, v] of arr.iter_value().enumerate() {
+        sum = sum + v;
+        seen.push(`${i}: ${v}`);
+    }
+    assert sum == 60;
+    assert seen == ["0: 10", "1: 20", "2: 30"];
+}
+
+// The desugarer turned a `continue` inside a for-of nested in a C-style for
+// into `break __for_N_body`, leaving the outer loop body instead of continuing
+// the inner for-of.
+
+test "continue in a for-of inside a c-style for" {
+    let data: List<List<i32>> = [[1, 2, 3], [4, 5, 6]];
+    assert for_of_with_continue(&data) == [1, 3, 5];
+}
+
+test "break in a for-of inside a c-style for" {
+    let data: List<List<i32>> = [[1, 2, 3], [4, 5, 6]];
+    // First inner list stops at 3, the second at 4.
+    assert for_of_with_break(&data) == [1, 2];
+}
+
+test "continue with a double-indexed iterable" {
+    let data: List<List<i32>> = [[10, 20, 30], [40, 50, 60]];
+    let indices: List<i32> = [0, 1];
+    let mut result: List<i32> = [];
+    for let mut k = 0; k < indices.len(); k += 1 {
+        for let item of data[indices[k]] {
+            if item % 20 == 0 {
+                continue;
+            }
+            result.push(item);
+        }
+    }
+    assert result == [10, 30, 50];
+}

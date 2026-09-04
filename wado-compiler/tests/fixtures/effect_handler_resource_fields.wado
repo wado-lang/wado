@@ -19,7 +19,7 @@
 //      exactly as for user-declared effects (see
 //      effect_handler_self_delegation.wado).
 
-use { Request, Response, ErrorCode, Fields, FieldName, Trailers } from "wasi:http";
+use { Request, Response, ErrorCode, Fields, Headers, FieldName, Trailers } from "wasi:http";
 
 global mut new_count: i32 = 0;
 global mut has_count: i32 = 0;
@@ -53,7 +53,7 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> {
     assert has_count == 2;
 
     let [trailers_future, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
-    let response_headers = Fields::new();
+    let response_headers = Headers::new();
     let [response, _tx_future] = Response::new(response_headers, null, trailers_future);
     task return Result::<Response, ErrorCode>::Ok(response);
     trailers_tx.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));

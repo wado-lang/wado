@@ -1,7 +1,7 @@
 // HTTP response body from string test
 // Tests writing a string-derived body to the response using byte conversion.
 
-use { Request, Response, ErrorCode, Fields, Trailers } from "wasi:http";
+use { Request, Response, ErrorCode, Fields, Headers, Trailers } from "wasi:http";
 
 fn string_to_bytes(s: String) -> List<u8> {
     let mut bytes: List<u8> = [];
@@ -15,7 +15,7 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> {
     let [trailers_future, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
     let [body_rx, body_tx] = Stream::<u8>::new();
 
-    let headers = Fields::new();
+    let headers = Headers::new();
     let [response, _tx_future] = Response::new(headers, Option::<Stream<u8>>::Some(body_rx), trailers_future);
 
     task return Result::<Response, ErrorCode>::Ok(response);

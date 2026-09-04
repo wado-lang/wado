@@ -1,0 +1,515 @@
+// The four indexing traits on a user type: `IndexValue` / `IndexAssign` return
+// and take a value, `IndexRef` / `IndexRefMut` hand out a reference — so
+// `c[i].method()` mutates in place and `&mut c[i]` aliases the element.
+use { TreeMap } from "core:collections";
+
+struct ReadOnlyBox {
+    value: i32,
+}
+
+impl<i32> IndexValue<i32> for ReadOnlyBox {
+    type Output = i32;
+
+    fn index_value(&self, _index: i32) -> Self::Output {
+        return self.value;
+    }
+}
+
+struct MutableBox {
+    value: i32,
+}
+
+impl<i32> IndexAssign<i32> for MutableBox {
+    type Output = i32;
+
+    fn index_assign(&mut self, _index: i32, value: Self::Output) {
+        self.value = value;
+    }
+}
+
+struct SlotPair {
+    a: i32,
+    b: i32,
+}
+
+impl<i32> IndexValue<i32> for SlotPair {
+    type Output = i32;
+
+    fn index_value(&self, _idx: i32) -> Self::Output {
+        return self.a;
+    }
+}
+
+impl<i32> IndexAssign<i32> for SlotPair {
+    type Output = i32;
+
+    fn index_assign(&mut self, _idx: i32, value: Self::Output) {
+        self.a = value;
+    }
+}
+
+struct IntStore {
+    a: i32,
+    b: i32,
+    c: i32,
+}
+
+impl IntStore {
+    fn new(a: i32, b: i32, c: i32) -> IntStore {
+        return IntStore { a, b, c };
+    }
+}
+
+impl<i32> IndexValue<i32> for IntStore {
+    type Output = i32;
+
+    fn index_value(&self, index: i32) -> Self::Output {
+        if index == 0 {
+            return self.a;
+        } else if index == 1 {
+            return self.b;
+        } else {
+            return self.c;
+        }
+    }
+}
+
+struct Triple<T> {
+    first: T,
+    second: T,
+    third: T,
+}
+
+impl<i32, T> IndexValue<i32> for Triple<T> {
+    type Output = T;
+
+    fn index_value(&self, index: i32) -> Self::Output {
+        if index == 0 {
+            return self.first;
+        } else if index == 1 {
+            return self.second;
+        } else {
+            return self.third;
+        }
+    }
+}
+
+struct OptBox<T> {
+    value: T,
+}
+
+impl<i32> IndexValue<i32> for OptBox<i32> {
+    type Output = Option<i32>;
+
+    fn index_value(&self, index: i32) -> Self::Output {
+        if index == 0 {
+            return Option::<i32>::Some(self.value);
+        }
+        return null;
+    }
+}
+
+struct Number {
+    n: i32,
+}
+
+impl Number {
+    fn add_and_get(&mut self, delta: i32) -> i32 {
+        self.n = self.n + delta;
+        return self.n;
+    }
+}
+
+struct NumHolder {
+    num: Number,
+}
+
+impl<i32> IndexRef<i32> for NumHolder {
+    type Output = Number;
+
+    fn index_ref(&self, _idx: i32) -> &Self::Output {
+        return &self.num;
+    }
+}
+
+impl<i32> IndexRefMut<i32> for NumHolder {
+    type Output = Number;
+
+    fn index_ref_mut(&mut self, _idx: i32) -> &mut Self::Output {
+        return &mut self.num;
+    }
+}
+
+struct Tally {
+    value: i32,
+}
+
+impl Tally {
+    fn increment(&mut self) {
+        self.value = self.value + 1;
+    }
+
+    fn decrement(&mut self) {
+        self.value = self.value - 1;
+    }
+}
+
+struct TallyBox {
+    item: Tally,
+}
+
+impl<i32> IndexRefMut<i32> for TallyBox {
+    type Output = Tally;
+
+    fn index_ref_mut(&mut self, _idx: i32) -> &mut Self::Output {
+        return &mut self.item;
+    }
+}
+
+struct Data {
+    value: i32,
+}
+
+impl Data {
+    fn set_value(&mut self, v: i32) {
+        self.value = v;
+    }
+}
+
+struct DataHolder {
+    data: Data,
+}
+
+impl<i32> IndexRef<i32> for DataHolder {
+    type Output = Data;
+
+    fn index_ref(&self, _idx: i32) -> &Self::Output {
+        return &self.data;
+    }
+}
+
+impl<i32> IndexRefMut<i32> for DataHolder {
+    type Output = Data;
+
+    fn index_ref_mut(&mut self, _idx: i32) -> &mut Self::Output {
+        return &mut self.data;
+    }
+}
+
+fn modify_holder(h: &mut DataHolder, new_value: i32) {
+    h[0].set_value(new_value);
+}
+
+struct Accumulator {
+    sum: i32,
+}
+
+impl Accumulator {
+    fn add(&mut self, n: i32) {
+        self.sum = self.sum + n;
+    }
+}
+
+struct AccBox {
+    acc: Accumulator,
+}
+
+impl<i32> IndexRefMut<i32> for AccBox {
+    type Output = Accumulator;
+
+    fn index_ref_mut(&mut self, _idx: i32) -> &mut Self::Output {
+        return &mut self.acc;
+    }
+}
+
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+impl Point {
+    fn move_by(&mut self, dx: i32, dy: i32) {
+        self.x = self.x + dx;
+        self.y = self.y + dy;
+    }
+}
+
+struct PointHolder {
+    point: Point,
+}
+
+impl<i32> IndexRef<i32> for PointHolder {
+    type Output = Point;
+
+    fn index_ref(&self, _idx: i32) -> &Self::Output {
+        return &self.point;
+    }
+}
+
+impl<i32> IndexRefMut<i32> for PointHolder {
+    type Output = Point;
+
+    fn index_ref_mut(&mut self, _idx: i32) -> &mut Self::Output {
+        return &mut self.point;
+    }
+}
+
+struct Value {
+    n: i32,
+}
+
+impl Value {
+    fn new(n: i32) -> Value {
+        return Value { n };
+    }
+
+    fn double(&mut self) {
+        self.n = self.n * 2;
+    }
+}
+
+struct ValueBox {
+    item: Value,
+}
+
+impl ValueBox {
+    fn new() -> ValueBox {
+        return ValueBox { item: Value::new(10) };
+    }
+}
+
+impl<i32> IndexRef<i32> for ValueBox {
+    type Output = Value;
+
+    fn index_ref(&self, _idx: i32) -> &Self::Output {
+        return &self.item;
+    }
+}
+
+impl<i32> IndexRefMut<i32> for ValueBox {
+    type Output = Value;
+
+    fn index_ref_mut(&mut self, _idx: i32) -> &mut Self::Output {
+        return &mut self.item;
+    }
+}
+
+impl<i32> IndexAssign<i32> for ValueBox {
+    type Output = Value;
+
+    fn index_assign(&mut self, _idx: i32, value: Self::Output) {
+        self.item = value;
+    }
+}
+
+struct Grid {
+    data: List<i32>,
+}
+
+impl IndexValue<List<i32>> for Grid {
+    type Output = i32;
+
+    fn index_value(&self, key: List<i32>) -> Self::Output {
+        return self.data[key[0]];
+    }
+}
+
+impl IndexAssign<List<i32>> for Grid {
+    type Output = i32;
+
+    fn index_assign(&mut self, key: List<i32>, v: Self::Output) {
+        self.data[key[0]] = v;
+    }
+}
+
+struct Bag {
+    items: List<i32>,
+}
+
+impl Bag {
+    fn add(&mut self, x: i32) {
+        self.items.push(x);
+    }
+
+    fn total(&self) -> i32 {
+        let mut sum = 0;
+        for let x of self.items {
+            sum += x;
+        }
+        return sum;
+    }
+}
+
+test "IndexValue serves the read operator" {
+    let b = ReadOnlyBox { value: 42 };
+    assert b[0] == 42;
+
+    let store = IntStore::new(10, 20, 30);
+    assert store[0] == 10;
+    assert store[1] == 20;
+    assert store[2] == 30;
+    // The read is a copy, so the operands stay independent.
+    assert store[0] + store[1] + store[2] == 60;
+}
+
+test "IndexAssign serves the assignment operator" {
+    let mut b = MutableBox { value: 0 };
+    b[0] = 42;
+    assert b.value == 42;
+}
+
+test "one type may carry both IndexValue and IndexAssign" {
+    let mut arr = SlotPair { a: 0, b: 0 };
+    arr[0] = 42;
+    assert arr[0] == 42;
+}
+
+test "IndexValue on a generic container binds its type parameter" {
+    let nums = Triple { first: 10, second: 20, third: 30 };
+    assert nums[0] == 10;
+    assert nums[1] == 20;
+    assert nums[2] == 30;
+    assert nums[0] + nums[1] + nums[2] == 60;
+
+    let longs: Triple<i64> = Triple {
+        first: 100 as i64,
+        second: 200 as i64,
+        third: 300 as i64,
+    };
+    assert longs[0] == 100 as i64;
+    assert longs[1] == 200 as i64;
+}
+
+test "an Output of Option is recognised as one by if let" {
+    let b = OptBox { value: 42 };
+    let mut got = 0;
+    if let Some(val) = b[0] {
+        got = val;
+    }
+    assert got == 42;
+}
+
+test "IndexRefMut lets `c[i].method()` mutate in place" {
+    let mut c = TallyBox { item: Tally { value: 0 } };
+    c[0].increment();
+    c[0].increment();
+    c[0].increment();
+    assert c.item.value == 3;
+}
+
+test "chained mutating calls through the index" {
+    let mut h = NumHolder { num: Number { n: 0 } };
+    assert h[0].add_and_get(10) == 10;
+    assert h[0].add_and_get(5) == 15;
+    assert h[0].add_and_get(3) == 18;
+    assert h.num.n == 18;
+}
+
+test "the index in each branch of an if" {
+    let mut b = TallyBox { item: Tally { value: 10 } };
+    let condition = builtin::black_box(true);
+    if condition {
+        b[0].increment();
+        b[0].increment();
+    } else {
+        b[0].decrement();
+    }
+    assert b.item.value == 12;
+}
+
+test "the index inside a loop" {
+    let mut w = AccBox { acc: Accumulator { sum: 0 } };
+    for let mut i = 1; i <= 5; i += 1 {
+        w[0].add(i);
+    }
+    assert w.acc.sum == 15;
+}
+
+test "the index through a helper function taking &mut" {
+    let mut h = DataHolder { data: Data { value: 0 } };
+    modify_holder(&mut h, 42);
+    assert h[0].value == 42;
+}
+
+test "several containers indexed side by side" {
+    let mut h1 = PointHolder { point: Point { x: 0, y: 0 } };
+    let mut h2 = PointHolder { point: Point { x: 10, y: 10 } };
+    h1[0].move_by(5, 5);
+    h2[0].move_by(-3, -3);
+    assert h1[0].x == 5;
+    assert h1[0].y == 5;
+    assert h2[0].x == 7;
+    assert h2[0].y == 7;
+}
+
+test "read, mutate and assign through the three traits on one type" {
+    let mut c = ValueBox::new();
+    assert c[0].n == 10;
+    c[0].double();
+    assert c.item.n == 20;
+    c[0] = Value::new(100);
+    assert c.item.n == 100;
+}
+
+test "a reference-typed key coerces the subscript" {
+    // A list-literal subscript `g[[0]]` must be coerced to the key type, not
+    // lowered as a bare tuple.
+    let g = Grid { data: [10, 20, 30] };
+    assert g[[0]] == 10;
+    assert g[[1]] == 20;
+    assert g[[2]] == 30;
+
+    let mut m = Grid { data: [10, 20, 30] };
+    m[[1]] = 99;
+    assert m[[1]] == 99;
+    assert m[[0]] == 10;
+    m[[1]] += 5;
+    assert m[[1]] == 104;
+}
+
+test "TreeMap hands out &mut V for RefMut values" {
+    let mut m: TreeMap<String, Bag> = TreeMap::new();
+    m["a"] = Bag { items: [] };
+
+    m["a"].add(1);
+    m["a"].add(2);
+    assert m["a"].total() == 3;
+
+    let r = &mut m["a"];
+    r.add(3);
+    assert m["a"].items.len() == 3;
+
+    let ref_bag = &m["a"];
+    assert ref_bag.total() == 6;
+}
+
+test "a Slice offers IndexRef but not IndexRefMut" {
+    let xs: List<Bag> = [Bag { items: [1, 2] }, Bag { items: [3] }];
+    let s = xs.as_slice();
+    assert s[0].total() == 3;
+    assert s[1].total() == 3;
+    let first = &s[0];
+    assert first.items.len() == 2;
+}
+
+test "index assignment at every element type" {
+    let mut arr_i32: List<i32> = [0];
+    arr_i32[0] = 42;
+    assert arr_i32[0] == 42;
+
+    let mut arr_i64: List<i64> = [0 as i64];
+    arr_i64[0] = 9999999999 as i64;
+    assert `${arr_i64[0]}` == "9999999999";
+
+    let mut arr_f32: List<f32> = [0.0 as f32];
+    arr_f32[0] = 3.14 as f32;
+    assert `${arr_f32[0]}` == "3.14";
+
+    let mut arr_f64: List<f64> = [0.0];
+    arr_f64[0] = 2.718281828;
+    assert `${arr_f64[0]}` == "2.718281828";
+
+    let mut arr_bool: List<bool> = [false];
+    arr_bool[0] = true;
+    assert arr_bool[0];
+}

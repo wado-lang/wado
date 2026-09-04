@@ -1,142 +1,216 @@
-use { println, Stdout } from "core:cli";
+// Template string literals: what an interpolation renders for each type, how
+// many segments a template may have, nesting, escapes, and the expressions an
+// interpolation accepts.
 
+struct Wrapper<T> {
+    value: T,
+}
 
-// from template_string_bool.wado
-fn template_string_bool() with Stdout {
+struct Case {
+    payload: Option<String>,
+}
+
+fn identity<T>(x: T) -> T {
+    return x;
+}
+
+fn make_wrapper<T>(value: T) -> Wrapper<T> {
+    return Wrapper { value: value };
+}
+
+fn pick(a: i32, c: char) -> i32 {
+    return a;
+}
+
+impl Wrapper<T> {
+    fn display_value(&self) -> String {
+        return `${self.value}`;
+    }
+
+    fn inspect_value(&self) -> String {
+        return `${self.value:?}`;
+    }
+
+    fn both(&self) -> String {
+        return `display=${self.value} inspect=${self.value:?}`;
+    }
+}
+
+test "bool interpolation" {
     let t = true;
     let f = false;
-    println(`true: ${t}`);
-    println(`false: ${f}`);
+    assert `true: ${t}` == "true: true";
+    assert `false: ${f}` == "false: false";
 }
 
-// from template_string_char.wado
-fn template_string_char() with Stdout {
+test "char interpolation" {
     let a = 'A';
     let z = 'Z';
-    println(`char A: ${a}`);
-    println(`char Z: ${z}`);
+    assert `char A: ${a}` == "char A: A";
+    assert `char Z: ${z}` == "char Z: Z";
 }
 
-// from template_string_empty.wado
-fn template_string_empty() with Stdout {
-    let s = ``;
-    println(s);
+test "an empty template is the empty string" {
+    assert `` == "";
 }
 
-// from template_string_f64.wado
-fn template_string_f64() with Stdout {
+test "f64 interpolation" {
     let pi = 3.14159;
     let neg = 0.0 - 2.5;
-    println(`pi: ${pi}`);
-    println(`negative: ${neg}`);
+    assert `pi: ${pi}` == "pi: 3.14159";
+    assert `negative: ${neg}` == "negative: -2.5";
 }
 
-// from template_string_i32.wado
-fn template_string_i32() with Stdout {
+test "i32 interpolation" {
     let pos = 42;
     let neg = 0 - 17;
     let zero = 0;
-    println(`positive: ${pos}`);
-    println(`negative: ${neg}`);
-    println(`zero: ${zero}`);
+    assert `positive: ${pos}` == "positive: 42";
+    assert `negative: ${neg}` == "negative: -17";
+    assert `zero: ${zero}` == "zero: 0";
 }
 
-// from template_string_i64.wado
-fn template_string_i64() with Stdout {
+test "i64 interpolation" {
     let pos: i64 = 12345 as i64;
-    // Build a large number through multiplication to avoid literal truncation
+    // Built through multiplication so the literal is not truncated.
     let big: i64 = 100000 as i64 * 1000000 as i64;
     let neg: i64 = 0 as i64 - 9876 as i64;
-    println(`positive: ${pos}`);
-    println(`big: ${big}`);
-    println(`negative: ${neg}`);
+    assert `positive: ${pos}` == "positive: 12345";
+    assert `big: ${big}` == "big: 100000000000";
+    assert `negative: ${neg}` == "negative: -9876";
 }
 
-// from template_string_multiline.wado
-fn template_string_multiline() with Stdout {
-    // Multiline template string without interpolation
+test "a template spans lines" {
     let simple = `Line 1
 Line 2
 Line 3`;
-    println(simple);
+    assert simple == "Line 1\nLine 2\nLine 3";
 
-    // Multiline template with interpolation
     let name = "Alice";
     let greeting = `Dear ${name},
 
 Welcome to Wado!
 
 Best regards`;
-    println(greeting);
+    assert greeting == "Dear Alice,\n\nWelcome to Wado!\n\nBest regards";
 
-    // Multiline with multiple interpolations
     let a = 1;
     let b = 2;
     let result = `First: ${a}
 Second: ${b}
 Sum: ${a + b}`;
-    println(result);
-
-    println("done");
+    assert result == "First: 1\nSecond: 2\nSum: 3";
 }
 
-// from template_string_three_interp.wado
-fn template_string_three_interp() with Stdout {
+test "segment layouts around the interpolations" {
     let s1 = "X";
     let s2 = "Y";
     let s3 = "Z";
-    println(`${s1} a ${s2} c ${s3}`);
+    assert `${s1} a ${s2} c ${s3}` == "X a Y c Z";
+    assert `a ${s1} b ${s2}` == "a X b Y";
+    assert `${s1} a ${s2} c` == "X a Y c";
+    assert `a ${s1} b ${s2} c` == "a X b Y c";
 }
 
-// from template_string_two_end.wado
-fn template_string_two_end() with Stdout {
-    let s1 = "X";
-    let s2 = "Y";
-    println(`a ${s1} b ${s2}`);
-}
-
-// from template_string_two_interp.wado
-fn template_string_two_interp() with Stdout {
-    let s1 = "X";
-    let s2 = "Y";
-    println(`${s1} a ${s2} c`);
-}
-
-// from template_string_two_middle.wado
-fn template_string_two_middle() with Stdout {
-    let s1 = "X";
-    let s2 = "Y";
-    println(`a ${s1} b ${s2} c`);
-}
-
-// Interpolations hold arbitrary expressions, so an `if`/`match` expression can
-// appear inside `{...}` — and each arm can itself be a template string, nesting
-// interpolation within interpolation.
-fn template_string_nested_expr() with Stdout {
+test "an interpolation holds an if or match expression, nested" {
     let n = 7;
-    // `if` expression with nested template strings in both arms.
-    println(`status: ${if n % 2 == 0 { `${n} is even` } else { `${n} is odd` }}`);
-    // `match` expression with nested template strings in the arms.
-    println(`${match n { 0 => `zero`, _ => `nonzero (${n})` }}`);
-    // Nested interpolation can stack more than one level deep.
+    assert `status: ${if n % 2 == 0 { `${n} is even` } else { `${n} is odd` }}`
+        == "status: 7 is odd";
+    assert `${match n { 0 => `zero`, _ => `nonzero (${n})` }}` == "nonzero (7)";
     let inner = 1;
-    println(`${if n > 0 { `inner=${if inner == 1 { `one` } else { `other` }}` } else { `none` }}`);
+    assert `${if n > 0 { `inner=${if inner == 1 { `one` } else { `other` }}` } else { `none` }}`
+        == "inner=one";
 }
 
-export fn run() with Stdout {
-    template_string_bool();
-    template_string_char();
-    template_string_empty();
-    template_string_f64();
-    template_string_i32();
-    template_string_i64();
-    template_string_multiline();
-    template_string_three_interp();
-    template_string_two_end();
-    template_string_two_interp();
-    template_string_two_middle();
-    template_string_nested_expr();
+// `\`` is a template-specific escape — the delimiter itself. The lexer
+// accepted it, but the unescaper had no arm for it and the reify path turned
+// that error into an empty string, so every literal segment of the template
+// silently vanished.
+
+test "an escaped backtick keeps the surrounding literal text" {
+    let name = "Fly";
+    assert `has no member \`${name}\`` == "has no member `Fly`";
 }
 
-__DATA__
-{"stdout": "true: true\nfalse: false\nchar A: A\nchar Z: Z\n\npi: 3.14159\nnegative: -2.5\npositive: 42\nnegative: -17\nzero: 0\npositive: 12345\nbig: 100000000000\nnegative: -9876\nLine 1\nLine 2\nLine 3\nDear Alice,\n\nWelcome to Wado!\n\nBest regards\nFirst: 1\nSecond: 2\nSum: 3\ndone\nX a Y c Z\na X b Y\nX a Y c\na X b Y c\nstatus: 7 is odd\nnonzero (7)\ninner=one\n"}
+test "an escaped backtick with no interpolation" {
+    assert `a \`b\` c` == "a `b` c";
+}
+
+test "an escaped backtick beside the other template escapes" {
+    let v = 1;
+    assert `\`\$\{${v}\}\`` == "`${1}`";
+}
+
+// A `:` inside parentheses/brackets within an interpolation belongs to the
+// expression, not to the `${expr:spec}` format specifier. The specifier split
+// once tracked only brace depth, so the `:` in `|p: i32|` was read as a
+// specifier and the expression was truncated mid-call.
+
+test "a colon inside a closure parameter is not a format specifier" {
+    let xs: List<i32> = [1, 2, 3];
+    assert `any big? ${xs.iter_value().any(|p: i32| p > 2)}` == "any big? true";
+}
+
+test "a specifier still applies after a closure-bearing expression" {
+    let nums: List<i32> = [255];
+    assert `hex=${nums.iter_value().fold(0, |acc: i32, x: i32| acc + x):x}` == "hex=ff";
+}
+
+test "a bracket inside a char literal does not unbalance the nesting count" {
+    assert `n=${pick(7, '('):02}` == "n=07";
+}
+
+// Inside a generic impl, monomorphization picks the concrete type's Display for
+// `${value}`, while `${value:?}` always renders the inspect form.
+
+test "display and inspect of an integer type parameter" {
+    let b = Wrapper { value: 42 };
+    assert b.display_value() == "42";
+    assert b.inspect_value() == "42";
+    assert Wrapper { value: 99 }.both() == "display=99 inspect=99";
+}
+
+test "display and inspect of a string type parameter" {
+    let b = Wrapper { value: "hello" };
+    assert b.display_value() == "hello";
+    assert b.inspect_value() == `"hello"`;
+    assert Wrapper { value: "world" }.both() == `display=world inspect="world"`;
+}
+
+test "display and inspect of a bool type parameter" {
+    let b = Wrapper { value: true };
+    assert b.display_value() == "true";
+    assert b.inspect_value() == "true";
+}
+
+// An interpolation parses a full expression, so call-site turbofish is allowed
+// inside it — and its `::` must not be mistaken for the specifier's `:`.
+
+test "free function turbofish in an interpolation" {
+    assert `${identity::<i32>(42)}` == "42";
+    assert `${identity::<String>("hi")}` == "hi";
+}
+
+test "turbofish followed by a format specifier" {
+    assert `${identity::<i32>(255):x}` == "ff";
+    assert `${identity::<i32>(7):03}` == "007";
+}
+
+test "turbofish on a generic constructor, then a field access" {
+    assert `${make_wrapper::<i32>(1).value}` == "1";
+    assert `${make_wrapper::<String>("a").value}` == "a";
+}
+
+test "a template built in a loop keeps each iteration's value" {
+    // Stored as `Option::Some(s)` and pushed, every element once pointed at
+    // the last iteration's string.
+    let mut cases: List<Case> = [];
+    let base = "Expr";
+    let labels: List<String> = ["BinOp", "Pass"];
+    for let mut i = 0; i < labels.len(); i += 1 {
+        let s = `${base}${labels[i]}`;
+        cases.push(Case { payload: Option::<String>::Some(s) });
+    }
+    assert cases[0].payload.unwrap() == "ExprBinOp";
+    assert cases[1].payload.unwrap() == "ExprPass";
+}

@@ -3,14 +3,14 @@
 // response status code, and forwards it as-is.
 // Unlike http-client-send-simple which forwards blindly, this test
 // verifies the upstream status before returning.
-use { Request, Response, ErrorCode, Fields, Trailers, Scheme } from "wasi:http";
+use { Request, Response, ErrorCode, Fields, Headers, Trailers, Scheme } from "wasi:http";
 use { Client } from "wasi:http/client.wado";
 
 export async fn handle(request: Request) -> Result<Response, ErrorCode>
     with Client
 {
     // Build an outgoing request to a specific upstream path
-    let headers = Fields::new();
+    let headers = Headers::new();
     let [trailers_future, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
     let [out_req, _req_future] = Request::new(headers, null, trailers_future, null);
 

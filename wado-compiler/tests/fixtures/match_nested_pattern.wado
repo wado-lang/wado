@@ -1,0 +1,307 @@
+// Patterns nested inside other patterns: a variant in a tuple, a tuple or
+// struct in a variant, a struct in a struct, literals in sub-positions, and
+// the same shapes reached through `if let`, `while let` and `matches`.
+
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+struct Line {
+    start: Point,
+    end: Point,
+}
+
+struct Tagged {
+    label: String,
+    value: Option<i32>,
+}
+
+struct Pair {
+    a: i32,
+    b: i32,
+}
+
+variant Shape {
+    Circle(f64),
+    Rect([i32, i32]),
+    Labeled([String, Point]),
+    Point,
+}
+
+variant Tree {
+    Leaf(i32),
+    Branch([Tree, Tree]),
+    Empty,
+}
+
+variant Figure {
+    Circle(i32),
+    Rect([i32, i32]),
+    Point,
+}
+
+enum Color {
+    Red,
+    Green,
+    Blue,
+}
+
+fn figure_pairs(s: Figure) -> List<Pair> {
+    return match s {
+        Circle(r) => {
+            if r > 0 {
+                [Pair { a: r, b: r }]
+            } else {
+                []
+            }
+        },
+        Rect(dims) => [Pair { a: dims.0, b: dims.1 }],
+        Point => [],
+    };
+}
+
+test "a variant inside a tuple pattern" {
+    let a = Option::Some(10);
+    let b: Option<i32> = null;
+    let pair = [a, b];
+    assert match pair {
+        [Some(a), Some(b)] => `both: ${a},${b}`,
+        [Some(a), None] => `left: ${a}`,
+        [None, Some(b)] => `right: ${b}`,
+        [None, None] => "neither",
+    } == "left: 10";
+
+    let pair2 = [Option::Some(3), Option::Some(7)];
+    assert match pair2 {
+        [Some(a), Some(b)] => `both: ${a},${b}`,
+        [Some(a), None] => `left: ${a}`,
+        [None, Some(b)] => `right: ${b}`,
+        [None, None] => "neither",
+    } == "both: 3,7";
+}
+
+test "a guard over variant bindings extracted from a tuple" {
+    // `[Some(a), Some(b)] && a > b` compared the wrong slots.
+    let pair = [Option::Some(100), Option::Some(5)];
+    assert match pair {
+        [Some(a), Some(b)] && a > b => `a wins: ${a}`,
+        [Some(a), Some(b)] => `b wins: ${b}`,
+        _ => "other",
+    } == "a wins: 100";
+}
+
+test "a tuple inside a variant pattern" {
+    let s = Shape::Rect([3, 4]);
+    assert match s {
+        Circle(r) => `circle r=${r}`,
+        Rect([w, h]) => `rect ${w}x${h}`,
+        Labeled(_) => "labeled",
+        Point => "point",
+    } == "rect 3x4";
+
+    let s2 = Shape::Labeled(["origin", Point { x: 0, y: 0 }]);
+    assert match s2 {
+        Circle(_) => "circle",
+        Rect(_) => "rect",
+        Labeled([name, { x, y }]) => `${name}: ${x},${y}`,
+        Point => "point",
+    } == "origin: 0,0";
+}
+
+test "a struct inside a variant pattern" {
+    // `Some({ x, y })` once bound zeroes instead of the payload's fields.
+    let opt = Option::Some(Point { x: 5, y: 10 });
+    assert match opt {
+        Some({ x, y }) => `point: ${x},${y}`,
+        None => "none",
+    } == "point: 5,10";
+}
+
+test "a variant inside a struct pattern" {
+    let t = Tagged { label: "test", value: Option::Some(99) };
+    assert match t {
+        { value: Some(n), .. } => `has: ${n}`,
+        { value: None, .. } => "empty",
+    } == "has: 99";
+}
+
+test "a variant inside a variant pattern" {
+    // `Some(Some(n))` once bound 0 instead of the inner payload.
+    let nested = Option::Some(Option::Some(42));
+    assert match nested {
+        Some(Some(n)) => `inner: ${n}`,
+        Some(None) => "some-none",
+        None => "none",
+    } == "inner: 42";
+
+    let inner: Option<i32> = null;
+    assert match Option::Some(inner) {
+        Some(Some(n)) => `inner: ${n}`,
+        Some(None) => "some-none",
+        None => "none",
+    } == "some-none";
+
+    let outer_none: Option<Option<i32>> = null;
+    assert match outer_none {
+        Some(Some(n)) => `inner: ${n}`,
+        Some(None) => "some-none",
+        None => "none",
+    } == "none";
+}
+
+test "a variant inside a tuple payload of a variant" {
+    let tree = Tree::Branch([Tree::Leaf(10), Tree::Leaf(20)]);
+    assert match tree {
+        Leaf(n) => `leaf:${n}`,
+        Branch([Leaf(a), Leaf(b)]) => `branch:${a},${b}`,
+        Branch(_) => "branch:other",
+        Empty => "empty",
+    } == "branch:10,20";
+
+    let tree2 = Tree::Branch([Tree::Branch([Tree::Leaf(1), Tree::Empty]), Tree::Leaf(2)]);
+    assert match tree2 {
+        Branch([Branch(_), Leaf(n)]) => `deep-right:${n}`,
+        Branch([Leaf(_), Branch(_)]) => "deep-left",
+        _ => "other",
+    } == "deep-right:2";
+}
+
+test "three levels: struct inside tuple inside variant" {
+    let data = Option::Some([Point { x: 1, y: 2 }, Point { x: 3, y: 4 }]);
+    assert match data {
+        Some([{ x: x1, y: y1 }, { x: x2, y: y2 }]) => `(${x1},${y1})->(${x2},${y2})`,
+        None => "none",
+    } == "(1,2)->(3,4)";
+}
+
+test "literal sub-patterns inside a tuple" {
+    let pair = [1, 2];
+    assert match pair {
+        [0, 0] => "origin",
+        [0, y] => `y-axis: ${y}`,
+        [x, 0] => `x-axis: ${x}`,
+        [x, y] => `point: ${x},${y}`,
+    } == "point: 1,2";
+
+    let pair2 = [0, 5];
+    assert match pair2 {
+        [0, 0] => "origin",
+        [0, y] => `y-axis: ${y}`,
+        [x, 0] => `x-axis: ${x}`,
+        [x, y] => `point: ${x},${y}`,
+    } == "y-axis: 5";
+}
+
+test "an enum inside a tuple pattern" {
+    let pair = [Color::Red, 100];
+    assert match pair {
+        [Red, n] => `red: ${n}`,
+        [Green, n] => `green: ${n}`,
+        [Blue, n] => `blue: ${n}`,
+    } == "red: 100";
+}
+
+test "an or-pattern over nested variant cases" {
+    let mut out: List<String> = [];
+    for let s of [Shape::Circle(1.0), Shape::Point, Shape::Rect([2, 3])] {
+        out.push(match s {
+            Circle(_) | Point => "simple",
+            Rect(_) | Labeled(_) => "complex",
+        });
+    }
+    assert out == ["simple", "simple", "complex"];
+}
+
+test "a nested pattern in if let" {
+    let opt = Option::Some([10, 20]);
+    let mut out = "";
+    if let Some([a, b]) = opt {
+        out = `if-let: ${a},${b}`;
+    }
+    assert out == "if-let: 10,20";
+
+    let nested = Option::Some(Option::Some(42));
+    let mut inner = 0;
+    if let Some(Some(n)) = nested {
+        inner = n;
+    }
+    assert inner == 42;
+
+    let sopt = Option::Some(Point { x: 5, y: 10 });
+    let mut pt = "";
+    if let Some({ x, y }) = sopt {
+        pt = `${x},${y}`;
+    }
+    assert pt == "5,10";
+}
+
+test "a nested pattern in while let" {
+    let items: List<[i32, i32]> = [[1, 2], [3, 4]];
+    let mut iter = items.iter_value();
+    let mut sum = 0;
+    while let Some([a, b]) = iter.next() {
+        sum += a + b;
+    }
+    assert sum == 10;
+}
+
+test "a nested pattern with the matches operator" {
+    let opt = Option::Some([1, 2]);
+    assert opt matches { Some([_, _]) };
+    let opt2 = Option::Some(Option::Some(42));
+    assert opt2 matches { Some(Some(_)) };
+    let opt3 = Option::Some(Point { x: 0, y: 0 });
+    assert opt3 matches { Some({ x: 0, .. }) };
+}
+
+test "a tuple pattern in a for-of binding, matched inside" {
+    let items: List<[Color, i32]> = [
+        [Color::Red, 1],
+        [Color::Green, 2],
+        [Color::Blue, 3],
+    ];
+    let mut out: List<String> = [];
+    for let [color, n] of items {
+        out.push(match color {
+            Red => `R:${n}`,
+            Green => `G:${n}`,
+            Blue => `B:${n}`,
+        });
+    }
+    assert out == ["R:1", "G:2", "B:3"];
+}
+
+test "literal fields in a struct pattern" {
+    let p = Point { x: 0, y: 5 };
+    assert match p {
+        { x: 0, y: 0 } => "origin",
+        { x: 0, y } => `y-axis: ${y}`,
+        { x, y: 0 } => `x-axis: ${x}`,
+        { x, y } => `point: ${x},${y}`,
+    } == "y-axis: 5";
+}
+
+test "a struct inside a struct pattern" {
+    let line = Line {
+        start: Point { x: 0, y: 0 },
+        end: Point { x: 10, y: 20 },
+    };
+    assert match line {
+        { start: { x: 0, y: 0 }, end: { x, y } } => `from origin to (${x},${y})`,
+        { start: { x: sx, y: sy }, end: { x: ex, y: ey } } => `(${sx},${sy})->(${ex},${ey})`,
+    } == "from origin to (10,20)";
+}
+
+test "an arm body building a list of structs" {
+    let result = figure_pairs(Figure::Circle(5));
+    assert result.len() == 1;
+    assert result[0].a == 5;
+
+    assert figure_pairs(Figure::Circle(-1)).len() == 0;
+
+    let rect = figure_pairs(Figure::Rect([3, 4]));
+    assert rect.len() == 1;
+    assert rect[0].a == 3;
+    assert rect[0].b == 4;
+}

@@ -3,7 +3,7 @@
 // `Result<Response, ErrorCode>` and the dispatch wrapper repackages it as an
 // already-completed `AsyncCall`, so the caller's `.wait()` follows the normal
 // completed-call path.
-use { Request, Response, ErrorCode, Fields, Trailers, StatusCode } from "wasi:http";
+use { Request, Response, ErrorCode, Fields, Headers, Trailers, StatusCode } from "wasi:http";
 use { Client } from "wasi:http/client.wado";
 
 struct MockClient {
@@ -18,14 +18,14 @@ impl Client for MockClient {
         self.calls += 1;
         assert request.get_path_with_query() matches { Some("/upstream") };
         let [trailers_future, _trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
-        let [resp, _tx_future] = Response::new(Fields::new(), null, trailers_future);
+        let [resp, _tx_future] = Response::new(Headers::new(), null, trailers_future);
         let _ = resp.set_status_code(201 as StatusCode);
         resume Result::<Response, ErrorCode>::Ok(resp);
     }
 }
 
 fn fetch_upstream() -> Response with Client {
-    let headers = Fields::new();
+    let headers = Headers::new();
     let [trailers_future, _trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
     let [req, _req_future] = Request::new(headers, null, trailers_future, null);
     req.set_path_with_query(Option::<String>::Some("/upstream"));
@@ -47,7 +47,7 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> {
     let [trailers_future, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
     let [body_rx, body_tx] = Stream::<u8>::new();
     let [response, _tx_future] = Response::new(
-        Fields::new(),
+        Headers::new(),
         Option::<Stream<u8>>::Some(body_rx),
         trailers_future,
     );

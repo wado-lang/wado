@@ -1,0 +1,47 @@
+// An `IntoIterator` loop nested inside the body a tuple `for-of` unrolls
+// records its iterator fact once per outer element. Reading only the module's
+// own walk lost the `next()` effect requirement that the same loop reports
+// when it is not nested.
+
+use { println, Stdout } from "core:cli";
+
+struct Counter {
+    n: i32,
+}
+
+impl Iterator for Counter {
+    type Item = i32;
+
+    fn next(&mut self) -> Option<i32> with Stdout {
+        println("tick");
+        if self.n <= 0 {
+            return null;
+        }
+        self.n = self.n - 1;
+        return Option::Some(self.n);
+    }
+}
+
+impl IntoIterator for Counter {
+    type Item = i32;
+    type Iter = Counter;
+
+    fn into_iter(&self) -> Counter {
+        return *self;
+    }
+}
+
+fn consume(c: Counter) {
+    for let w of [1, 2] {
+        for let v of c {
+            let _ = v + w;
+        }
+    }
+}
+
+export fn run() with Stdout {
+    consume(Counter { n: 2 });
+}
+
+__DATA__
+{"compile_error": "missing effect 'Stdout' required by 'next'"}

@@ -3765,7 +3765,13 @@ impl TypeTable {
         }
     }
 
-    /// Whether `id` (recursively) mentions an inference variable.
+    /// Whether `id` is an inference variable or is built over one — through the
+    /// constructors a use site instantiates and substitutes through.
+    ///
+    /// A declared head answers `false` whatever it carries: a `Struct`, a
+    /// `Newtype`, a pack's mapped element, and the bindings a projection carries
+    /// to be answered are not what a use site is still waiting on. Reading them
+    /// as such left `Ok(v)` in `f32::from_str_lenient` with no resolved type.
     pub fn contains_infer_var(&self, id: TypeId) -> bool {
         match self.get(id) {
             ResolvedType::InferVar(_) => true,
@@ -3785,7 +3791,20 @@ impl TypeTable {
             | ResolvedType::GenericResource { type_args, .. } => {
                 type_args.iter().any(|t| self.contains_infer_var(*t))
             }
-            _ => false,
+            ResolvedType::Struct { .. }
+            | ResolvedType::Newtype { .. }
+            | ResolvedType::TypePack { .. }
+            | ResolvedType::AssocTypeProjection { .. }
+            | ResolvedType::Primitive(_)
+            | ResolvedType::Unit
+            | ResolvedType::Never
+            | ResolvedType::Enum { .. }
+            | ResolvedType::Flags { .. }
+            | ResolvedType::Resource { .. }
+            | ResolvedType::Variant { .. }
+            | ResolvedType::TypeParam { .. }
+            | ResolvedType::Unknown
+            | ResolvedType::Error => false,
         }
     }
 

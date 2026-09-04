@@ -1,0 +1,185 @@
+// Struct literals: string-literal keys, `..base` spread, and how a generic
+// literal's slots are inferred from the fields that fill them.
+use { TreeMap } from "core:collections";
+
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+struct RuleCallOp {
+    target_name: String,
+    variant_id: i32,
+    min_prec_arg: i32,
+    field: i32,
+    dedup_base: i32,
+}
+
+struct SP3 {
+    x: i32,
+    y: i32,
+    z: i32,
+}
+
+struct FBox<T> {
+    value: T,
+    tag: i32,
+}
+
+struct Pair<A, B> {
+    first: A,
+    second: B,
+}
+
+struct Holder<T> {
+    tag: String,
+    items: List<T>,
+}
+
+global mut BASE_CALLS: i32 = 0;
+
+fn make_base() -> SP3 {
+    BASE_CALLS = BASE_CALLS + 1;
+    return SP3 { x: 1, y: 2, z: 3 };
+}
+
+test "a string literal names a field" {
+    let p = Point { "x": 10, "y": 20 };
+    assert `${p.x}, ${p.y}` == "10, 20";
+
+    let q = { "name": "Alice", "age": 30 };
+    assert `${q.name}, ${q.age}` == "Alice, 30";
+
+    // String-literal and identifier keys mix.
+    let r = Point { "x": 1, y: 2 };
+    assert `${r.x}, ${r.y}` == "1, 2";
+}
+
+test "a string literal names a field in a destructure" {
+    let p = Point { "x": 10, "y": 20 };
+    let { "x": a, "y": b } = p;
+    assert `${a}, ${b}` == "10, 20";
+    let { "x": c, y } = p;
+    assert `${c}, ${y}` == "10, 20";
+}
+
+test "a string literal key may hold non-identifier characters" {
+    let headers: TreeMap<String, String> = {
+        "Content-Type": "application/json",
+        "X-Request-ID": "abc-123",
+    };
+    assert headers.len() == 2;
+    assert headers["Content-Type"] == "application/json";
+    assert headers["X-Request-ID"] == "abc-123";
+
+    let config: TreeMap<String, i32> = {
+        width: 1920,
+        "max-height": 1080,
+    };
+    assert config["width"] == 1920;
+    assert config["max-height"] == 1080;
+}
+
+test "true, false and null are keyword field names" {
+    let m: TreeMap<String, i32> = { true: 1, false: 0, null: -1 };
+    assert m["true"] == 1;
+    assert m["false"] == 0;
+    assert m["null"] == -1;
+}
+
+test "a spread fills the fields the literal leaves out" {
+    let rc = RuleCallOp {
+        target_name: "a",
+        variant_id: 1,
+        min_prec_arg: 0,
+        field: 2,
+        dedup_base: 3,
+    };
+    let rc2 = RuleCallOp { ..rc, min_prec_arg: 9 };
+    assert rc2.target_name == "a";
+    assert rc2.variant_id == 1;
+    assert rc2.min_prec_arg == 9;
+    assert rc2.field == 2;
+    assert rc2.dedup_base == 3;
+}
+
+test "the base is not mutated" {
+    let p = SP3 { x: 1, y: 2, z: 3 };
+    let q = SP3 { ..p, x: 10 };
+    assert q.x == 10;
+    assert q.y == 2;
+    assert q.z == 3;
+    assert p.x == 1;
+}
+
+test "a spread with several overrides, or one that changes nothing" {
+    let p = SP3 { x: 1, y: 2, z: 3 };
+    let q = SP3 { ..p, x: 10, z: 30 };
+    assert q.x == 10;
+    assert q.y == 2;
+    assert q.z == 30;
+
+    let r = SP3 { x: 5, y: 6, z: 7 };
+    let s = SP3 { ..r, x: 5 };
+    assert s.x == 5;
+    assert s.y == 6;
+    assert s.z == 7;
+}
+
+test "the base expression is evaluated once" {
+    BASE_CALLS = 0;
+    let q = SP3 { ..make_base(), y: 20 };
+    assert q.x == 1;
+    assert q.y == 20;
+    assert q.z == 3;
+    assert BASE_CALLS == 1;
+}
+
+test "a generic struct infers its arguments from the base" {
+    let b = FBox { value: 7, tag: 100 };
+    let b2 = FBox { ..b, value: 9 };
+    assert b2.value == 9;
+    assert b2.tag == 100;
+}
+
+// A generic literal infers each slot from the field that fills it, by the
+// field's declaration index — not by the order the fields were written.
+// Without a spread the fields are sorted into declaration order first, which
+// hides the distinction; a spread skips that sort and leaves only the written
+// subset, so `second` first would bind `A` to `String`.
+
+test "an out-of-order literal infers by declaration index" {
+    let p = Pair { second: "x", first: 1 };
+    let a: i32 = p.first;
+    let b: String = p.second;
+    assert a == 1;
+    assert b == "x";
+}
+
+test "a spread does not change which slot a field fills" {
+    let base = Pair { first: 0, second: "" };
+    let p = Pair { ..base, second: "x", first: 1 };
+    let a: i32 = p.first;
+    let b: String = p.second;
+    assert a == 1;
+    assert b == "x";
+}
+
+test "a spread filling one slot leaves the other to the base" {
+    let base = Pair { first: 7, second: "kept" };
+    let p = Pair { ..base, first: 9 };
+    assert p.first == 9;
+    assert p.second == "kept";
+}
+
+test "a deferred sequence coercion follows its own field, not a position" {
+    // A sequence literal filling a slot-typed field is coerced in a second
+    // pass, once the slot is known. Keyed by position, that pass followed the
+    // sort into declaration order and coerced whichever field had landed
+    // there, silently building a shorter list.
+    let h = Holder { items: [1, 2, 3], tag: "x" };
+    assert h.items.len() == 3;
+    assert h.items[0] == 1;
+    assert h.items[2] == 3;
+    assert h.tag == "x";
+}

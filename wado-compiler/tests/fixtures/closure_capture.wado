@@ -1,0 +1,480 @@
+// How a closure captures: the kind is inferred from what the body does, a
+// writing body makes the closure `fn mut`, and a capture reaches the enclosing
+// frame without deciding anything for the locals it does not name.
+// See docs/wep-2026-01-16-closure-implementation.md.
+
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+struct Pair {
+    p: Point,
+}
+
+struct S {
+    items: List<i32>,
+    tag: i32,
+}
+
+struct Counter {
+    f: fn mut(),
+}
+
+struct Inner {
+    f: fn mut(),
+}
+
+struct Outer {
+    inner: Inner,
+}
+
+fn source() -> List<S> {
+    return [S { items: [1], tag: 0 }];
+}
+
+fn run_twice(mut f: fn mut(i32) -> i32) -> i32 {
+    let a = f(10);
+    let b = f(20);
+    return a + b;
+}
+
+fn make_counter() -> Counter {
+    let mut count = 0;
+    let inc = || {
+        count += 1;
+    };
+    return Counter { f: inc };
+}
+
+fn any_matching(rows: &List<i32>, probe: &List<i32>) -> bool {
+    return rows.into_iter().any(|r: &i32| {
+        let want = *r;
+        return probe.into_iter().any(|c: &i32| *c == want);
+    });
+}
+
+fn count_matching(rows: &List<i32>, probe: &List<i32>) -> i32 {
+    let mut total = 0;
+    for let r of rows {
+        let want = *r;
+        total += probe.into_iter().filter(|c: &i32| *c == want).count();
+    }
+    return total;
+}
+
+fn stash(out: &mut List<List<i32>>, xs: List<i32>, tag: i32) -> i32 {
+    let bump = || tag + 1;
+    out.push(xs);
+    return bump();
+}
+
+fn total_with_tag(xs: List<i32>, tag: i32) -> i32 {
+    let bump = || tag + 1;
+    return xs.len() + bump();
+}
+
+fn keep_capture(out: &mut List<List<i32>>, xs: List<i32>) -> i32 {
+    let count = || xs.len();
+    out.push(xs);
+    return count();
+}
+
+fn incr(x: &mut i32) {
+    *x += 1;
+}
+
+fn count_arg<T>(v: T) -> i32 {
+    return 1;
+}
+
+test "a read-only body captures by reference and the closure is fn" {
+    let n = 5;
+    let get = || n;
+    assert get() == 5;
+}
+
+test "a writing body captures &mut and the closure is fn mut" {
+    let mut count = 0;
+    let mut inc = || {
+        count += 1;
+    };
+    inc();
+    inc();
+    assert count == 2;
+}
+
+test "copying a closure copies its env of references" {
+    let mut count = 0;
+    let mut c1 = || { count += 1; };
+    let mut c2 = c1;
+    c1();
+    c2();
+    assert count == 2;
+}
+
+test "an intermediate local snapshots a value" {
+    // Wado has no `move` keyword; value semantics make the copy deep.
+    let original = 100;
+    let snapshot = original;
+    let f = || snapshot * 2;
+    assert f() == 200;
+}
+
+test "a fn mut closure as a parameter" {
+    let mut total = 0;
+    let result = run_twice(|x: i32| {
+        total += x;
+        return total;
+    });
+    assert result == 40;
+    assert total == 30;
+}
+
+test "a fn mut closure in a local binding" {
+    let mut count = 0;
+    let mut inc: fn mut() -> i32 = || {
+        count += 1;
+        return count;
+    };
+    assert inc() == 1;
+    assert inc() == 2;
+    assert inc() == 3;
+    assert count == 3;
+}
+
+// A closure body mutating a captured binding through a compound l-value must
+// still name the root binding as mutated. Without the root-ident walk in
+// `collect_mutated_vars` the closure was typed `fn`, no `&mut` capture was
+// materialised, and the write landed on a by-value copy — visible at -O2+,
+// where value-copy elision kicks in.
+
+test "assignment to a captured field" {
+    let mut p = Point { x: 0, y: 0 };
+    let mut bump_x = || {
+        p.x = 42;
+    };
+    bump_x();
+    assert p.x == 42;
+}
+
+test "compound assignment to a captured field" {
+    let mut p = Point { x: 0, y: 0 };
+    let mut inc_y = || {
+        p.y += 7;
+    };
+    inc_y();
+    inc_y();
+    assert p.y == 14;
+}
+
+test "assignment through a captured index" {
+    let mut arr: List<i32> = [10, 20, 30];
+    let mut set_first = || {
+        arr[0] = 99;
+    };
+    set_first();
+    assert arr[0] == 99;
+}
+
+test "assignment down a nested field path" {
+    let mut pair = Pair { p: Point { x: 0, y: 0 } };
+    let mut bump = || {
+        pair.p.x = 5;
+    };
+    bump();
+    assert pair.p.x == 5;
+}
+
+// `collect_mutated_vars_stmt` fell through to its catch-all for loop
+// statements, so the `__ref_<var>` desugar never fired and the closure was
+// mis-typed `fn`.
+
+test "mutation inside a c-style for" {
+    let mut count = 0;
+    let mut inc = || {
+        for let mut i = 0; i < 3; i += 1 {
+            count += 1;
+        }
+    };
+    inc();
+    assert count == 3;
+}
+
+test "mutation inside a while" {
+    let mut total = 0;
+    let mut add_until = |limit: i32| {
+        let mut n = 0;
+        while n < limit {
+            total += n;
+            n += 1;
+        }
+    };
+    add_until(4);
+    assert total == 6;
+}
+
+test "mutation inside a for-of" {
+    let mut sum = 0;
+    let items: List<i32> = [10, 20, 30];
+    let mut accumulate = || {
+        for let v of items {
+            sum += v;
+        }
+    };
+    accumulate();
+    assert sum == 60;
+}
+
+test "mutation inside a labeled block" {
+    let mut tally = 0;
+    let mut bump = || {
+        outer: {
+            tally += 5;
+            break outer;
+        }
+    };
+    bump();
+    bump();
+    assert tally == 10;
+}
+
+// The same catch-all swallowed the expression forms a closure's body may take.
+
+test "mutation inside a match used as the closure's expression body" {
+    let mut count = 0;
+    let mut on_label = |label: i32| match label {
+        1 => count += 10,
+        2 => count += 20,
+        _ => count += 1,
+    };
+    on_label(1);
+    on_label(2);
+    on_label(99);
+    assert count == 31;
+}
+
+test "mutation inside a match in a block body" {
+    let mut hits = 0;
+    let mut probe = |x: i32| {
+        match x {
+            0 => hits += 100,
+            _ => hits += 1,
+        }
+    };
+    probe(0);
+    probe(5);
+    probe(9);
+    assert hits == 102;
+}
+
+test "mutation beside an index read and a method call" {
+    let mut counter = 0;
+    let nums: List<i32> = [1, 2, 3];
+    let mut bump_with = |i: i32| {
+        let _ = nums[i];
+        counter += 1;
+    };
+    bump_with(0);
+    bump_with(1);
+    assert counter == 2;
+}
+
+// Calling a `fn mut` closure requires `mut` on the *root binding* of its place
+// expression — and nothing at all when the root is a temporary (issue #1098).
+
+test "a fn mut through a call-result root needs no binding" {
+    (make_counter().f)();
+}
+
+test "a mut root binding allows the call through a field path" {
+    let mut count = 0;
+    let inc = || {
+        count += 1;
+    };
+    let mut h = Counter { f: inc };
+    (h.f)();
+    (h.f)();
+    assert count == 2;
+}
+
+test "a mut root binding allows the call down a nested field path" {
+    let mut count = 0;
+    let inc = || {
+        count += 1;
+    };
+    let mut o = Outer { inner: Inner { f: inc } };
+    (o.inner.f)();
+    assert count == 1;
+}
+
+test "a mut root binding allows the call through an index path" {
+    let mut count = 0;
+    let inc = || {
+        count += 1;
+    };
+    let mut arr = [inc];
+    arr[0]();
+    arr[0]();
+    assert count == 2;
+
+    let mut boxed = [Counter { f: inc }];
+    (boxed[0].f)();
+    assert count == 3;
+}
+
+test "two closures over one binding get one slot each" {
+    // Each closure reserves its own `__ref_a` slot and the capture list records
+    // that index; reify writing to a slot it picked by name sent both closures
+    // to the same one.
+    let mut a = 0;
+    let mut f = || {
+        a += 1;
+    };
+    let mut g = || {
+        a += 1;
+    };
+    f();
+    g();
+    assert a == 2;
+}
+
+test "a mutating capture written straight into an argument" {
+    // `resolve_closure` reserves the `__ref_v` slot the capture materialises
+    // into and reify added a second, so the `&mut` was written to a slot the
+    // capture never read. Only a closure literal passed directly reached it.
+    let mut n = 0;
+    assert count_arg(|| { n += 1; }) == 1;
+}
+
+test "a closure taking a &mut ref to its own local" {
+    let f = || {
+        let mut c = 0;
+        incr(&mut c);
+        return c;
+    };
+    assert f() == 1;
+}
+
+test "a closure body constructing another closure" {
+    // The closure-lowering pass matched `Closure` nodes to functor structs by a
+    // per-walk counter; once it also lowered the cloned bodies inside generated
+    // `__call` methods, the counter fell out of sync and inner closures got
+    // functors of another shape. Every node now carries a stable `functor_id`.
+    let outer = || {
+        let inner = || 42;
+        return inner();
+    };
+    assert outer() == 42;
+}
+
+test "a closure nested in a closure captures the enclosing body's local" {
+    let rows: List<i32> = [3, 7];
+    let probe: List<i32> = [7, 9];
+    assert any_matching(&rows, &probe);
+    let miss: List<i32> = [1, 2];
+    assert !any_matching(&rows, &miss);
+}
+
+test "the same capture taken from a loop body" {
+    let rows: List<i32> = [3, 7];
+    let probe: List<i32> = [7, 7, 9];
+    assert count_matching(&rows, &probe) == 2;
+}
+
+test "a nested closure over a local derived in the outer body" {
+    let rows: List<i32> = [1, 2, 3];
+    let hits = rows.into_iter().filter(|r: i32| {
+        let doubled = r * 2;
+        return rows.into_iter().any(|c: i32| c == doubled);
+    }).count();
+    assert hits == 1;
+}
+
+// A closure reaches its frame only through its captures, so the locals it does
+// not name still answer move and share for themselves.
+
+test "a captured local handed away keeps its own storage" {
+    let src = source();
+    let count = || src.len();
+    let mut out: List<List<S>> = [];
+    out.push(src);
+    out[0].push(S { items: [2], tag: 1 });
+    assert count() == 1;
+    assert out[0].len() == 2;
+}
+
+test "a captured local misses a later write to the copy" {
+    let src = source();
+    let first_len = || src[0].items.len();
+    let mut out = src;
+    out[0].items.push(2);
+    assert first_len() == 1;
+    assert out[0].items.len() == 2;
+}
+
+test "a local the closure does not capture is untouched by it" {
+    let other = source();
+    let src = source();
+    let count = || src.len();
+    let mut out: List<List<S>> = [];
+    out.push(other);
+    out[0].push(S { items: [2], tag: 1 });
+    assert count() == 1;
+    assert out[0].len() == 2;
+}
+
+test "a capture read after the closure sees writes through the original" {
+    let mut src = source();
+    let count = || src.len();
+    src.push(S { items: [3], tag: 2 });
+    assert count() == 2;
+}
+
+test "a closure over one local leaves a sibling loop free to move" {
+    let src = source();
+    let count = || src.len();
+    let mut out: List<S> = [];
+    for let s of source() {
+        if s.tag == -1 {
+            out = [];
+        } else {
+            out.push(s);
+        }
+    }
+    out[0].items.push(2);
+    assert count() == 1;
+    assert src[0].items.len() == 1;
+    assert out[0].items.len() == 2;
+}
+
+// A closure in a callee reaches the frame only through its captures, so the
+// callee's other by-value parameters still answer confinement for themselves.
+
+test "a parameter the callee stores is copied at the call" {
+    let mut kept: List<List<i32>> = [];
+    let mut src: List<i32> = [1];
+    let n = stash(&mut kept, src, 5);
+    src.push(3);
+    assert n == 6;
+    assert kept[0].len() == 1;
+    assert src.len() == 2;
+}
+
+test "a parameter the callee only reads leaves the caller's value alone" {
+    let mut src: List<i32> = [1];
+    let n = total_with_tag(src, 5);
+    src.push(3);
+    assert n == 7;
+    assert src.len() == 2;
+}
+
+test "a parameter both captured and stored is copied at the call" {
+    let mut kept: List<List<i32>> = [];
+    let mut src: List<i32> = [1];
+    let n = keep_capture(&mut kept, src);
+    src.push(3);
+    assert n == 1;
+    assert kept[0].len() == 1;
+    assert src.len() == 2;
+}

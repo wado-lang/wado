@@ -453,7 +453,7 @@ Each was built, verified, and reverted. Do not retry as-is.
 - Promoting induction-variable local reads to source-bearing opaques. That
   resolver keyed one `ValueId` per local, where the builder mints one per
   assignment, so the id spanned every version of the local, and an induction
-  variable has one per iteration. Traps `closure_for_loop_mutation`.
+  variable has one per iteration. Traps `closure_capture`.
 - Freezing a local-naming value before the structural passes. The early freeze
   is sound because a frozen value survives inlining and SROA copying the operand
   around. That is true of a constant, which means the same thing wherever it

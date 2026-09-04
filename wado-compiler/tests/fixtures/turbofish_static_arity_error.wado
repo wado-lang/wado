@@ -1,0 +1,20 @@
+// The `Type::<T>::method(…)` spelling resolves in `resolve_static_method_call`,
+// which padded declared defaults but never checked the count — so a call past
+// the declared list compiled and discarded the extra arguments.
+
+struct Box3<T> {
+    v: T,
+}
+
+impl<T> Box3<T> {
+    fn empty() -> i32 {
+        return 0;
+    }
+}
+
+export fn run() {
+    let _ = Box3::<i32>::empty(1, 2);
+}
+
+__DATA__
+{"compile_error": "expected 0 arguments, found 2"}

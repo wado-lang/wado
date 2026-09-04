@@ -1,0 +1,109 @@
+// A bare function name is a `fn(...)` value: passing one, referencing one,
+// pinning a generic one's type arguments by inference or turbofish, and
+// replacing one through `&mut`.
+
+fn identity<T>(x: T) -> T {
+    return x;
+}
+
+fn pair<A, B>(a: A, b: B) -> A {
+    return a;
+}
+
+fn rec<T>(x: T) -> T {
+    if true {
+        return x;
+    }
+    let f = rec::<T>;
+    return f(x);
+}
+
+fn double(n: i32) -> i32 {
+    return n * 2;
+}
+
+fn triple(n: i32) -> i32 {
+    return n * 3;
+}
+
+fn apply_fn(f: fn(i32) -> i32, x: i32) -> i32 {
+    return f(x);
+}
+
+fn apply_ref(f: &fn(i32) -> i32, x: i32) -> i32 {
+    return f(x);
+}
+
+fn apply_ref_annot(x: i32) -> i32 {
+    let f: &fn(i32) -> i32 = &identity;
+    return f(x);
+}
+
+fn apply<U>(x: U) -> U {
+    let f: fn(U) -> U = identity;
+    return f(x);
+}
+
+fn apply_turbofish<U>(x: U) -> U {
+    let f = identity::<U>;
+    return f(x);
+}
+
+fn swap_to_triple(slot: &mut fn(i32) -> i32) {
+    *slot = triple;
+}
+
+test "a bare name passes as a fn value" {
+    assert apply_fn(double, 21) == 42;
+    let f = double;
+    assert f(21) == 42;
+    let g: fn(i32) -> i32 = double;
+    assert g(21) == 42;
+}
+
+test "&fn is a regular reference that auto-derefs at the call" {
+    assert apply_ref(&double, 21) == 42;
+    let r = &double;
+    assert r(21) == 42;
+}
+
+test "the expected fn type pins a generic function's type arguments" {
+    let f: fn(i32) -> i32 = identity;
+    assert f(42) == 42;
+    assert apply_fn(identity, 7) == 7;
+}
+
+test "a &fn expectation peels to fn for the same inference" {
+    assert apply_ref(&identity, 21) == 21;
+    assert apply_ref_annot(7) == 7;
+}
+
+test "turbofish pins the type arguments with no annotation" {
+    let f = identity::<i32>;
+    assert f(42) == 42;
+    let g = pair::<i32, bool>;
+    assert g(7, true) == 7;
+}
+
+test "a generic reference inside a generic function" {
+    // The inner type-arg expression flows through the outer's
+    // monomorphization, and the outer's substitution map fills in the
+    // FuncRef's pinned `type_args`.
+    assert apply(42) == 42;
+    assert apply(true);
+    assert apply_turbofish(7) == 7;
+}
+
+test "a generic function may reference itself through its own parameter" {
+    assert rec(42) == 42;
+    assert rec(true);
+}
+
+test "&mut fn replaces the caller's fn-typed slot" {
+    // The same `&mut T` deref-reassign rule applied to a `fn(...)`-typed
+    // location — `fn` gets no special treatment.
+    let mut f: fn(i32) -> i32 = double;
+    assert f(10) == 20;
+    swap_to_triple(&mut f);
+    assert f(10) == 30;
+}

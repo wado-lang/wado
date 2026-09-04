@@ -2481,9 +2481,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // overwritten so only the last element's facts survive (reify would
         // then dispatch every element to the last element's methods). Snapshot
         // the maps' pre-loop lengths; after each element, peel off and truncate
-        // the freshly recorded tail. See `ElementOverlay`.
-        let overlay_base = self.sem.types.overlay_base_lens();
-        let mut element_overlays: Vec<super::sem::types::ElementOverlay> = Vec::new();
+        // the freshly recorded tail. See `BodyFacts`.
+        let overlay_base = self.sem.types.lens();
+        let mut element_overlays: Vec<super::sem::types::BodyFacts> = Vec::new();
 
         for &elem_type in elems {
             ctx.enter_scope();
@@ -2568,7 +2568,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // Capture this element's body annotations and reset the maps back to
             // their pre-loop state so the next element records from a clean
             // slate.
-            element_overlays.push(self.sem.types.split_off_overlay(overlay_base));
+            element_overlays.push(self.sem.types.split_off(overlay_base));
 
             ctx.exit_scope();
         }

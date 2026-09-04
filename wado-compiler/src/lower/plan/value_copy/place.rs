@@ -55,6 +55,18 @@ impl Place {
             through_borrow: false,
         }
     }
+
+    /// Whether every step this path takes is a field, so each `(owner, index)`
+    /// along it is a key a caller can look a write up by. An `Index` or a
+    /// `Variant` names no type of its own, and a `Field` past one answers for
+    /// the element rather than the container the caller holds.
+    #[must_use]
+    pub fn field_addressable(&self) -> bool {
+        !self
+            .selectors
+            .iter()
+            .any(|s| matches!(s, Selector::Index | Selector::Variant(_)))
+    }
 }
 
 /// What an expression names.
@@ -218,7 +230,7 @@ impl<'a> Resolver<'a> {
             if param.is_mut_ref || is_reference(param.type_id, type_table) {
                 resolver
                     .lent
-                    .insert(param.local_index, type_table.peel_refs(param.type_id));
+                    .insert(param.local_index, field_owner(param.type_id, type_table));
             }
         }
         if let Some(body) = &func.body {
@@ -263,7 +275,7 @@ impl<'a> Resolver<'a> {
                 let names = self.project(
                     inner,
                     Selector::Field {
-                        owner: self.type_table.peel_refs(inner.type_id),
+                        owner: field_owner(inner.type_id, self.type_table),
                         index: *field_index,
                     },
                 );
@@ -426,6 +438,16 @@ pub fn place_root(expr: &TirExpr) -> Option<u32> {
     }
 }
 
+/// The type a [`Selector::Field`] is keyed by. Minted here alone, so a callee
+/// recording a write and a caller looking it up cannot spell the key apart.
+/// Peels `Box<T>` along with `Ref`/`MutRef`: a callee's own `&mut T`
+/// parameter is never boxed, but a caller's address-taken local passed to it
+/// is, by the time this walk runs — the two must key the same write alike.
+#[must_use]
+pub fn field_owner(base_type: TypeId, type_table: &TypeTable) -> TypeId {
+    type_table.peel_refs_and_box(base_type)
+}
+
 /// A name for storage someone else owns, as the type table spells it here —
 /// after `boxing::prepare_types`, where a `&primitive` reads as its `Box<T>`.
 #[must_use]
@@ -456,12 +478,23 @@ impl TirRefVisitor for BindingCollector<'_, '_> {
     fn visit_stmt(&mut self, stmt: &TirStmt) {
         match &stmt.kind {
             TirStmtKind::Let {
-                local_index, value, ..
+                local_index,
+                type_id,
+                value,
+                ..
             } => {
-                let names = if is_reference(value.type_id, self.resolver.type_table) {
+                // A reference-typed local redirects reads through it to its
+                // referent; any other local owns its own storage, so it stays
+                // its own place even when the value it starts with came from
+                // elsewhere. Keyed on the local's own declared type, not the
+                // initializer's — a payload projected out of a generic
+                // associated type can still carry the unresolved projection
+                // as its own `type_id` where the local's declared type is
+                // already the monomorphized reference.
+                let names = if is_reference(*type_id, self.resolver.type_table) {
                     self.resolver.names(value)
                 } else {
-                    Names::Value
+                    Names::Place(Place::local(*local_index))
                 };
                 self.resolver.bindings.set(*local_index, names);
             }

@@ -243,6 +243,7 @@ global global:core:prelude/primitive.wado::__const_obj_22: ref null "core:prelud
 fn "wasi_filesystem_open_at.wado/run"() with Stdout, Stderr, Preopens {
     let dirs: ref "core:prelude//List<[wasi:filesystem/types.wado/Descriptor,core:prelude/string.wado/String]>";
     let dir: i32;
+    let preopen_path: ref "core:prelude/string.wado//String";
     let open_result: ref "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>";
     let _file: i32;
     let missing_result: ref "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>";
@@ -253,43 +254,42 @@ fn "wasi_filesystem_open_at.wado/run"() with Stdout, Stderr, Preopens {
     let rx_19: i32;
     let tx_20: i32;
     let __v1_27: i32;
-    let v_31: ref "core:prelude/string.wado//String";
-    let __v1_34: i32;
-    let handle_41: i32;
-    let start_52: i32;
-    let new_used_57: i32;
-    let start_58: i32;
-    let self_60: ref Array<u8>;
-    let packed_70: i64;
-    let rx_71: i32;
-    let tx_72: i32;
-    let v_77: ref "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>";
-    let __vc_payload_0_78: i32;
-    let __vc_payload_1_79: ref "wasi:filesystem/types.wado//ErrorCode";
-    let handle_83: i32;
-    let packed_85: i64;
-    let rx_86: i32;
-    let tx_87: i32;
-    let handle_95: i32;
-    let packed_97: i64;
-    let rx_98: i32;
-    let tx_99: i32;
-    let v_104: ref "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>";
-    let __vc_payload_0_105: i32;
-    let __vc_payload_1_106: ref "wasi:filesystem/types.wado//ErrorCode";
-    let handle_110: i32;
-    let handle_115: i32;
-    let handle_120: i32;
-    let packed_122: i64;
-    let rx_123: i32;
-    let tx_124: i32;
-    let __sroa_preopen_path_used: i32;
-    let packed_145: i64;
-    let rx_146: i32;
-    let tx_147: i32;
-    let packed_152: i64;
-    let rx_153: i32;
-    let tx_154: i32;
+    let __v1_33: i32;
+    let handle_40: i32;
+    let start_51: i32;
+    let self_53: i32;
+    let new_used_56: i32;
+    let start_57: i32;
+    let self_59: ref Array<u8>;
+    let packed_69: i64;
+    let rx_70: i32;
+    let tx_71: i32;
+    let v_76: ref "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>";
+    let __vc_payload_0_77: i32;
+    let __vc_payload_1_78: ref "wasi:filesystem/types.wado//ErrorCode";
+    let handle_82: i32;
+    let packed_84: i64;
+    let rx_85: i32;
+    let tx_86: i32;
+    let handle_94: i32;
+    let packed_96: i64;
+    let rx_97: i32;
+    let tx_98: i32;
+    let v_103: ref "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>";
+    let __vc_payload_0_104: i32;
+    let __vc_payload_1_105: ref "wasi:filesystem/types.wado//ErrorCode";
+    let handle_109: i32;
+    let handle_114: i32;
+    let handle_119: i32;
+    let packed_121: i64;
+    let rx_122: i32;
+    let tx_123: i32;
+    let packed_142: i64;
+    let rx_143: i32;
+    let tx_144: i32;
+    let packed_149: i64;
+    let rx_150: i32;
+    let tx_151: i32;
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:wasi_filesystem_open_at.wado::__modules_initialized);
         cold_path;
@@ -310,98 +310,91 @@ fn "wasi_filesystem_open_at.wado/run"() with Stdout, Stderr, Preopens {
         "core:prelude/list.wado/core:prelude/list.wado/List<[wasi:filesystem/types.wado/Descriptor,core:prelude/string.wado/String]>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"(0, __v1_27);
         unreachable;
     }; builtin::array_get_value<ref "tuple//[wasi:filesystem/types.wado/Descriptor, core:prelude/string.wado/String]">(dirs.repr, 0).0;
-    v_31 = __v1_34 = dirs.used; if @unlikely(0 >= __v1_34) {
+    preopen_path = __v1_33 = dirs.used; if @unlikely(0 >= __v1_33) {
         cold_path;
-        "core:prelude/list.wado/core:prelude/list.wado/List<[wasi:filesystem/types.wado/Descriptor,core:prelude/string.wado/String]>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"(0, __v1_34);
+        "core:prelude/list.wado/core:prelude/list.wado/List<[wasi:filesystem/types.wado/Descriptor,core:prelude/string.wado/String]>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"(0, __v1_33);
         unreachable;
     }; builtin::array_get_value<ref "tuple//[wasi:filesystem/types.wado/Descriptor, core:prelude/string.wado/String]">(dirs.repr, 0).1;
-    let __array_clone_src_1: ref Array<u8>;
-    __array_clone_src_1 = v_31.repr;
-    let __array_clone_len_3: i32;
-    __array_clone_len_3 = v_31.used;
-    let __array_clone_dst_2: ref Array<u8>;
-    __array_clone_dst_2 = builtin::array_new<u8>(__array_clone_len_3);
-    builtin::array_copy<u8>(__array_clone_dst_2, 0, __array_clone_src_1, 0, __array_clone_len_3);
-    __sroa_preopen_path_used = v_31.used;
     __local_7 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(43), used: 0 };
     if @unlikely(26 > builtin::array_len(__local_7.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(__local_7, 26);
     }
-    start_52 = __local_7.used;
+    start_51 = __local_7.used;
     __local_7.used = 26;
-    builtin::array_copy<u8>(__local_7.repr, start_52, global:wasi_filesystem_open_at.wado::__const_obj_8, 0, 26);
-    new_used_57 = __local_7.used + (1 + __sroa_preopen_path_used);
-    if @unlikely(new_used_57 > builtin::array_len(__local_7.repr)) {
+    builtin::array_copy<u8>(__local_7.repr, start_51, global:wasi_filesystem_open_at.wado::__const_obj_8, 0, 26);
+    self_53 = preopen_path.used;
+    new_used_56 = __local_7.used + (1 + self_53);
+    if @unlikely(new_used_56 > builtin::array_len(__local_7.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(__local_7, new_used_57);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(__local_7, new_used_56);
     }
-    start_58 = __local_7.used;
-    __local_7.used = new_used_57;
-    self_60 = __local_7.repr;
-    builtin::array_copy<u8>(self_60, start_58, __array_clone_dst_2, 0, __sroa_preopen_path_used);
-    builtin::array_set_u8(__local_7.repr, start_58 + __sroa_preopen_path_used, 34);
-    rx_71 = builtin::i32_wrap_i64(local.tee packed_70("wasi/stream-new"()));
-    tx_72 = builtin::i32_wrap_i64(packed_70 >> 32_i64);
-    handle_41 = "wasi_filesystem_open_at.wado/__cm_binding__Stdout_write_via_stream"(rx_71);
-    "core:rt/write_string_to_stream"(tx_72, __local_7, 1);
-    "wasi/future-drop-readable:transmission-cli"(handle_41);
-    v_77 = "core:prelude/types.wado/core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>>::wait"("wasi_filesystem_open_at.wado/__cm_binding__Descriptor_open_at"(dir, 0, global:wasi_filesystem_open_at.wado::__const_obj_7, 0, 1));
-    open_result = (if ref.test "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>::Ok"(v_77) -> ref "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>" {
-        __vc_payload_0_78 = ref.cast "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>::Ok"(v_77).payload_0;
-        struct.new "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>::Ok" { discriminant: 0, payload_0: __vc_payload_0_78 };
+    start_57 = __local_7.used;
+    __local_7.used = new_used_56;
+    self_59 = __local_7.repr;
+    builtin::array_copy<u8>(self_59, start_57, preopen_path.repr, 0, self_53);
+    builtin::array_set_u8(__local_7.repr, start_57 + self_53, 34);
+    rx_70 = builtin::i32_wrap_i64(local.tee packed_69("wasi/stream-new"()));
+    tx_71 = builtin::i32_wrap_i64(packed_69 >> 32_i64);
+    handle_40 = "wasi_filesystem_open_at.wado/__cm_binding__Stdout_write_via_stream"(rx_70);
+    "core:rt/write_string_to_stream"(tx_71, __local_7, 1);
+    "wasi/future-drop-readable:transmission-cli"(handle_40);
+    v_76 = "core:prelude/types.wado/core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>>::wait"("wasi_filesystem_open_at.wado/__cm_binding__Descriptor_open_at"(dir, 0, global:wasi_filesystem_open_at.wado::__const_obj_7, 0, 1));
+    open_result = (if ref.test "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>::Ok"(v_76) -> ref "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>" {
+        __vc_payload_0_77 = ref.cast "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>::Ok"(v_76).payload_0;
+        struct.new "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>::Ok" { discriminant: 0, payload_0: __vc_payload_0_77 };
     } else {
-        __vc_payload_1_79 = ref.cast "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>::Err"(v_77).payload_0;
-        struct.new "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>::Err" { discriminant: 1, payload_0: ref.as_non_null("wasi_filesystem_open_at.wado/$value_copy$wasi:filesystem/types.wado/ErrorCode"(__vc_payload_1_79)) };
+        __vc_payload_1_78 = ref.cast "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>::Err"(v_76).payload_0;
+        struct.new "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>::Err" { discriminant: 1, payload_0: ref.as_non_null("wasi_filesystem_open_at.wado/$value_copy$wasi:filesystem/types.wado/ErrorCode"(__vc_payload_1_78)) };
     });
     if ref.test "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>::Ok"(open_result) {
         _file = ref.cast "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>::Ok"(open_result).payload_0;
-        rx_86 = builtin::i32_wrap_i64(local.tee packed_85("wasi/stream-new"()));
-        tx_87 = builtin::i32_wrap_i64(packed_85 >> 32_i64);
-        handle_83 = "wasi_filesystem_open_at.wado/__cm_binding__Stdout_write_via_stream"(rx_86);
-        "core:rt/write_string_to_stream"(tx_87, global:wasi_filesystem_open_at.wado::__const_obj_6, 1);
-        "wasi/future-drop-readable:transmission-cli"(handle_83);
+        rx_85 = builtin::i32_wrap_i64(local.tee packed_84("wasi/stream-new"()));
+        tx_86 = builtin::i32_wrap_i64(packed_84 >> 32_i64);
+        handle_82 = "wasi_filesystem_open_at.wado/__cm_binding__Stdout_write_via_stream"(rx_85);
+        "core:rt/write_string_to_stream"(tx_86, global:wasi_filesystem_open_at.wado::__const_obj_6, 1);
+        "wasi/future-drop-readable:transmission-cli"(handle_82);
         "wasi/resource-drop:descriptor"(_file);
     } else {
-        rx_98 = builtin::i32_wrap_i64(local.tee packed_97("wasi/stream-new"()));
-        tx_99 = builtin::i32_wrap_i64(packed_97 >> 32_i64);
-        handle_95 = "wasi_filesystem_open_at.wado/__cm_binding__Stderr_write_via_stream"(rx_98);
-        "core:rt/write_string_to_stream"(tx_99, global:wasi_filesystem_open_at.wado::__const_obj_5, 1);
-        "wasi/future-drop-readable:transmission-cli"(handle_95);
+        rx_97 = builtin::i32_wrap_i64(local.tee packed_96("wasi/stream-new"()));
+        tx_98 = builtin::i32_wrap_i64(packed_96 >> 32_i64);
+        handle_94 = "wasi_filesystem_open_at.wado/__cm_binding__Stderr_write_via_stream"(rx_97);
+        "core:rt/write_string_to_stream"(tx_98, global:wasi_filesystem_open_at.wado::__const_obj_5, 1);
+        "wasi/future-drop-readable:transmission-cli"(handle_94);
         "wasi/resource-drop:descriptor"(dir);
         return;
     }
-    v_104 = "core:prelude/types.wado/core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>>::wait"("wasi_filesystem_open_at.wado/__cm_binding__Descriptor_open_at"(dir, 0, global:wasi_filesystem_open_at.wado::__const_obj_4, 0, 1));
-    missing_result = (if ref.test "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>::Ok"(v_104) -> ref "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>" {
-        __vc_payload_0_105 = ref.cast "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>::Ok"(v_104).payload_0;
-        struct.new "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>::Ok" { discriminant: 0, payload_0: __vc_payload_0_105 };
+    v_103 = "core:prelude/types.wado/core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>>::wait"("wasi_filesystem_open_at.wado/__cm_binding__Descriptor_open_at"(dir, 0, global:wasi_filesystem_open_at.wado::__const_obj_4, 0, 1));
+    missing_result = (if ref.test "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>::Ok"(v_103) -> ref "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>" {
+        __vc_payload_0_104 = ref.cast "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>::Ok"(v_103).payload_0;
+        struct.new "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>::Ok" { discriminant: 0, payload_0: __vc_payload_0_104 };
     } else {
-        __vc_payload_1_106 = ref.cast "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>::Err"(v_104).payload_0;
-        struct.new "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>::Err" { discriminant: 1, payload_0: ref.as_non_null("wasi_filesystem_open_at.wado/$value_copy$wasi:filesystem/types.wado/ErrorCode"(__vc_payload_1_106)) };
+        __vc_payload_1_105 = ref.cast "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>::Err"(v_103).payload_0;
+        struct.new "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>::Err" { discriminant: 1, payload_0: ref.as_non_null("wasi_filesystem_open_at.wado/$value_copy$wasi:filesystem/types.wado/ErrorCode"(__vc_payload_1_105)) };
     });
     if ref.test "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>::Err"(missing_result) {
         drop(ref.cast "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>::Err"(missing_result).payload_0);
         block {
-            rx_146 = builtin::i32_wrap_i64(local.tee packed_145("wasi/stream-new"()));
-            tx_147 = builtin::i32_wrap_i64(packed_145 >> 32_i64);
-            handle_110 = "wasi_filesystem_open_at.wado/__cm_binding__Stdout_write_via_stream"(rx_146);
-            "core:rt/write_string_to_stream"(tx_147, global:wasi_filesystem_open_at.wado::__const_obj_3, 1);
-            "wasi/future-drop-readable:transmission-cli"(handle_110);
+            rx_143 = builtin::i32_wrap_i64(local.tee packed_142("wasi/stream-new"()));
+            tx_144 = builtin::i32_wrap_i64(packed_142 >> 32_i64);
+            handle_109 = "wasi_filesystem_open_at.wado/__cm_binding__Stdout_write_via_stream"(rx_143);
+            "core:rt/write_string_to_stream"(tx_144, global:wasi_filesystem_open_at.wado::__const_obj_3, 1);
+            "wasi/future-drop-readable:transmission-cli"(handle_109);
         };
     } else {
         block {
-            rx_153 = builtin::i32_wrap_i64(local.tee packed_152("wasi/stream-new"()));
-            tx_154 = builtin::i32_wrap_i64(packed_152 >> 32_i64);
-            handle_115 = "wasi_filesystem_open_at.wado/__cm_binding__Stderr_write_via_stream"(rx_153);
-            "core:rt/write_string_to_stream"(tx_154, global:wasi_filesystem_open_at.wado::__const_obj_2, 1);
-            "wasi/future-drop-readable:transmission-cli"(handle_115);
+            rx_150 = builtin::i32_wrap_i64(local.tee packed_149("wasi/stream-new"()));
+            tx_151 = builtin::i32_wrap_i64(packed_149 >> 32_i64);
+            handle_114 = "wasi_filesystem_open_at.wado/__cm_binding__Stderr_write_via_stream"(rx_150);
+            "core:rt/write_string_to_stream"(tx_151, global:wasi_filesystem_open_at.wado::__const_obj_2, 1);
+            "wasi/future-drop-readable:transmission-cli"(handle_114);
         };
     }
-    rx_123 = builtin::i32_wrap_i64(local.tee packed_122("wasi/stream-new"()));
-    tx_124 = builtin::i32_wrap_i64(packed_122 >> 32_i64);
-    handle_120 = "wasi_filesystem_open_at.wado/__cm_binding__Stdout_write_via_stream"(rx_123);
-    "core:rt/write_string_to_stream"(tx_124, global:wasi_filesystem_open_at.wado::__const_obj_1, 1);
-    "wasi/future-drop-readable:transmission-cli"(handle_120);
+    rx_122 = builtin::i32_wrap_i64(local.tee packed_121("wasi/stream-new"()));
+    tx_123 = builtin::i32_wrap_i64(packed_121 >> 32_i64);
+    handle_119 = "wasi_filesystem_open_at.wado/__cm_binding__Stdout_write_via_stream"(rx_122);
+    "core:rt/write_string_to_stream"(tx_123, global:wasi_filesystem_open_at.wado::__const_obj_1, 1);
+    "wasi/future-drop-readable:transmission-cli"(handle_119);
     if ref.test "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>::Ok"(missing_result) {
         "wasi/resource-drop:descriptor"(local.tee __drop_v_8(ref.cast "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>::Ok"(missing_result).payload_0));
     } else {

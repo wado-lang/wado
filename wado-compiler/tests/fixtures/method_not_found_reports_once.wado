@@ -1,0 +1,18 @@
+// An unresolved method has no signature, so it has no argument count either.
+// The arity check ran on the error-recovery `MethodInfo`, whose parameter list
+// is empty, and answered "no method of that name" with "expected 0 arguments".
+
+struct P {
+    v: i32,
+}
+
+export fn run() {
+    let p = P { v: 1 };
+    let _ = p.nope(1, 2);
+}
+
+__DATA__
+{
+    "compile_error": "no method 'nope' found on type 'P'",
+    "compile_errors_not_contains": ["expected 0 arguments"]
+}

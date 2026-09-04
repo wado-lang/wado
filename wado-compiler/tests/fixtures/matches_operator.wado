@@ -1,0 +1,138 @@
+// The `scrutinee matches { PATTERN }` operator: what it accepts as a pattern,
+// and where it sits in the precedence table.
+//
+// It binds looser than the value-producing prefix/binary operators
+// (deref, ref, neg, bitnot, cast, arithmetic, bitwise) but tighter than
+// logical `!`, so a computed scrutinee parses paren-free while the
+// `!x matches { P }` = "does not match" idiom is preserved.
+
+fn is_kw(m: &String) -> bool {
+    return *m matches { "text" | "int" };
+}
+
+fn neg_is_five(n: i32) -> bool {
+    return -n matches { -5 };
+}
+
+fn bitnot_is_zero(n: i32) -> bool {
+    return ~n matches { 0 };
+}
+
+fn cast_is_42(x: i64) -> bool {
+    return x as i32 matches { 42 };
+}
+
+fn sum_is_ten(a: i32, b: i32) -> bool {
+    return a + b matches { 10 };
+}
+
+fn low_nibble_is_a(flags: u32) -> bool {
+    return flags & 0x0F matches { 0x0A };
+}
+
+test "deref scrutinee" {
+    let s: String = "text";
+    assert is_kw(&s);
+    let t: String = "other";
+    assert !is_kw(&t);
+}
+
+test "neg scrutinee" {
+    assert neg_is_five(5);
+    assert !neg_is_five(3);
+}
+
+test "bitnot scrutinee" {
+    assert bitnot_is_zero(-1);
+    assert !bitnot_is_zero(0);
+}
+
+test "cast scrutinee" {
+    assert cast_is_42(42);
+    assert !cast_is_42(43);
+}
+
+test "arithmetic scrutinee" {
+    assert sum_is_ten(4, 6);
+    assert !sum_is_ten(1, 2);
+}
+
+test "bitwise scrutinee" {
+    assert low_nibble_is_a(0xFA);
+    assert !low_nibble_is_a(0xFB);
+}
+
+test "not-match idiom preserved" {
+    let none: Option<i32> = null;
+    assert !none matches { Some(_) };
+
+    let some: Option<i32> = Option::Some(1);
+    assert some matches { Some(_) };
+}
+
+test "not combined with deref" {
+    let m: &i32 = &5;
+    assert !*m matches { 6 };
+    assert *m matches { 5 };
+}
+
+test "explicit parens still work" {
+    let m: &i32 = &7;
+    assert (*m) matches { 7 };
+}
+
+test "matches in boolean chain" {
+    let a: Option<i32> = Option::Some(1);
+    let b: Option<i32> = null;
+    assert a matches { Some(_) } && b matches { None };
+}
+
+variant MatchShape {
+    Circle(f64),
+    MatchPoint,
+}
+
+test "matches over an Option" {
+    let opt: Option<i32> = Option::<i32>::Some(42);
+    let none: Option<i32> = null;
+    assert opt matches { Some(_) };
+    assert none matches { None };
+    assert !opt matches { None };
+}
+
+test "matches with a guard" {
+    let opt1: Option<i32> = Option::<i32>::Some(10);
+    let opt2: Option<i32> = Option::<i32>::Some(3);
+    let none: Option<i32> = null;
+    assert opt1 matches { Some(x) && x > 5 };
+    assert !opt2 matches { Some(x) && x > 5 };
+    assert !none matches { Some(x) && x > 5 };
+}
+
+test "matches with a guard over a char payload" {
+    let c = char::from_i32(46); // '.'
+    assert c matches { Some(ch) && ch == '.' };
+    let d = char::from_i32(65); // 'A'
+    assert !d matches { Some(ch) && ch == '.' };
+}
+
+test "matches over a variant" {
+    let circle = MatchShape::Circle(5.0);
+    let point = MatchShape::MatchPoint;
+    assert circle matches { Circle(_) };
+    assert circle matches { Circle(r) && r > 3.0 };
+    assert !point matches { Circle(_) };
+    assert point matches { MatchPoint };
+}
+
+// `matches { Some("literal") }` once matched a different string at O0/O2:
+// `Some("/foo") matches { Some("/") }` came back true.
+
+test "a string literal inside an Option pattern compares the whole string" {
+    let slash: Option<String> = Option::<String>::Some("/");
+    assert slash matches { Some("/") };
+    let foo: Option<String> = Option::<String>::Some("/foo");
+    assert !(foo matches { Some("/") });
+    let none: Option<String> = null;
+    assert !(none matches { Some("/") });
+}

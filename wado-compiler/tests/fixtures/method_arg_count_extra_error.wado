@@ -1,0 +1,21 @@
+// Counterpart to `method_arg_count_error.wado`: an extra argument is
+// rejected rather than dropped. A method taking no parameters at all is the
+// same question, and the receiver is not one of them.
+
+struct P {
+    v: i32,
+}
+
+impl P {
+    fn get(&self) -> i32 {
+        return self.v;
+    }
+}
+
+export fn run() {
+    let p = P { v: 10 };
+    let _ = p.get(1, 2);
+}
+
+__DATA__
+{"compile_error": "expected 0 arguments, found 2"}
