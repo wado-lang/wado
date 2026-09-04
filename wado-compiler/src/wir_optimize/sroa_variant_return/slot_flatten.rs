@@ -212,6 +212,11 @@ fn then_is_pure_slot_copy(then_body: &[WirInstr], slot_local: &str, def_use: &Lo
             _ => false,
         }
     }
+    // The arm can arrive as one `Seq` node rather than as two statements of the
+    // body slice — same shape, one level of nesting on.
+    if let [WirInstr::Seq(inner)] = then_body {
+        return then_is_pure_slot_copy(inner, slot_local, def_use);
+    }
     match then_body {
         [single] => is_slot_extraction(single, slot_local),
         [
@@ -698,6 +703,36 @@ fn expand_slot_binds(
     }
 }
 
+/// Drop the block result type along a diverging arm's tail chain.
+///
+/// The `?` desugar nests the error test as an `else if` carrying the binding's
+/// type. Once the binding is gone the outer `if` is a statement, and an inner
+/// arm still declaring a result leaves its value on the stack — "values
+/// remaining on stack at end of block". Only a node that diverges is touched,
+/// and a diverging one produces no value to begin with, so clearing the
+/// declaration is what makes the type match what the arm actually does.
+fn drop_tail_result(body: &mut [WirInstr]) {
+    let Some(last) = body.last_mut() else {
+        return;
+    };
+    if !WirInstr::always_diverges(last) {
+        return;
+    }
+    if let WirInstr::If {
+        result,
+        then_body,
+        else_body,
+        ..
+    } = last
+    {
+        *result = None;
+        drop_tail_result(then_body);
+        if let Some(eb) = else_body {
+            drop_tail_result(eb);
+        }
+    }
+}
+
 /// Replace `LocalSet(alias, If { cond, then, else })` (the `?`-unwrap) with the
 /// guard `If { cond, then: [], else }`, dropping the slot copy.
 fn rewrite_unwrap_to_guard(body: &mut [WirInstr], alias: &str) {
@@ -719,7 +754,10 @@ fn rewrite_unwrap_to_guard(body: &mut [WirInstr], alias: &str) {
             } = value.as_mut()
             {
                 let cond = std::mem::replace(condition.as_mut(), WirInstr::Nop);
-                let eb = else_body.take();
+                let mut eb = else_body.take();
+                if let Some(eb) = eb.as_mut() {
+                    drop_tail_result(eb);
+                }
                 *instr = WirInstr::If {
                     condition: Box::new(cond),
                     result: None,
