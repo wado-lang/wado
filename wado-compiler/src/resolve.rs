@@ -253,19 +253,26 @@ impl Resolutions {
             .copied()
     }
 
-    /// Whether `def` is reachable from `module` under any name at all.
+    /// Every declaration `module` may name — what each name it can write
+    /// reaches, through the one scope order: its `use` imports, then its own
+    /// (including what its `pub use` re-exports reach), then the prelude's.
     ///
-    /// The reverse of a lookup, and the only question a tie-break between two
-    /// same-named foreign declarations can be settled by: whether this module
-    /// can see the declaration, not whether some spelling matches.
+    /// A nearer tier shadows a farther one, so a module declaring its own
+    /// `Add` reaches that one and not the prelude's. Enumerating the tiers
+    /// instead would put both in scope at once, which no name ever resolves to.
     #[must_use]
-    pub fn in_scope(&self, module: &ModuleSource, def: DefId) -> bool {
-        let tier = |t: &IndexMap<ModuleSource, IndexMap<String, DefId>>| {
-            t.get(module).is_some_and(|m| m.values().any(|d| *d == def))
+    pub fn decls_in_scope(&self, module: &ModuleSource) -> crate::hashmap::IndexSet<DefId> {
+        let names = |t: &IndexMap<ModuleSource, IndexMap<String, DefId>>| {
+            t.get(module)
+                .map(|m| m.keys().cloned().collect::<Vec<_>>())
+                .unwrap_or_default()
         };
-        tier(&self.scopes.imports)
-            || tier(&self.scopes.own)
-            || self.scopes.prelude.values().any(|d| *d == def)
+        names(&self.scopes.imports)
+            .into_iter()
+            .chain(names(&self.scopes.own))
+            .chain(self.scopes.prelude.keys().cloned())
+            .filter_map(|name| self.scopes.resolve(module, &name))
+            .collect()
     }
 
     /// The declaration a reference site names. `None` for a binder, a builtin

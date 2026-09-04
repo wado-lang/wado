@@ -1,0 +1,43 @@
+// Inside a variadic impl, an element of the pack is a type of its own with
+// the pack's bound: `element.shrink()` returns `List<T>` for `..T: Shrink`,
+// and the `for` loop selects `into_iter` on it as on any `List<T>`. The
+// lowering reads such an element as a rigid parameter carrying the pack's
+// bounds (WEP 2026-09-01).
+
+trait Shrink {
+    fn shrink(&self) -> List<Self>;
+}
+
+impl Shrink for i32 {
+    fn shrink(&self) -> List<i32> {
+        if *self == 0 {
+            return [];
+        }
+        return [*self / 2];
+    }
+}
+
+impl<..T: Shrink> Shrink for [..T] {
+    fn shrink(&self) -> List<[..T]> {
+        let mut out = List::<[..T]>::with_capacity(4);
+        for let [i, element] of self.enumerate() {
+            for let candidate of element.shrink() {
+                let mut replaced = *self;
+                replaced[i] = candidate;
+                out.push(replaced);
+            }
+        }
+        return out;
+    }
+}
+
+test "a pack element's method result is iterated in the variadic body" {
+    let t = [4, 6];
+    let shrunk = t.shrink();
+    assert shrunk.len() == 2;
+    assert shrunk[0] == [2, 6];
+    assert shrunk[1] == [4, 3];
+}
+
+__DATA__
+{"test": {}}

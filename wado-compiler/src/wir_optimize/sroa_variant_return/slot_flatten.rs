@@ -212,6 +212,11 @@ fn then_is_pure_slot_copy(then_body: &[WirInstr], slot_local: &str, def_use: &Lo
             _ => false,
         }
     }
+    // The arm can arrive as one `Seq` node, one level of nesting on from the
+    // statement forms below.
+    if let [WirInstr::Seq(inner)] = then_body {
+        return then_is_pure_slot_copy(inner, slot_local, def_use);
+    }
     match then_body {
         [single] => is_slot_extraction(single, slot_local),
         [
@@ -327,6 +332,22 @@ fn body_calls_any(instr: &WirInstr, ids: &IndexSet<u32>) -> bool {
     found
 }
 
+/// Locals a call site's function may already hold before flattening stops
+/// paying there.
+///
+/// Splicing the slot trades one heap object for `layout.len()` more values live
+/// across the call. Past the register file those are spill slots reloaded at
+/// every call boundary, which the removed allocation does not pay for. Every
+/// benchmark that gains decodes through callers of at most 93 locals; the one
+/// that loses, cbor-twitter, decodes `User` and `Status` at 307 and 186. The cut
+/// sits between them — the WEP holds the measurements.
+///
+/// One caller over the cut declines the callee at every site, because the slot
+/// is part of the result signature. Monomorphization keeps that from being
+/// blunt: `next_field<S>` is a distinct callee per struct, so answering per
+/// callee still lands per decoded type.
+const MAX_CALLER_LOCALS: usize = 128;
+
 /// Phase 2: keep candidates whose every call site consumes the slot cleanly.
 pub(super) fn validate_slot_sites(
     module: &WirPackage,
@@ -336,14 +357,20 @@ pub(super) fn validate_slot_sites(
     // so build it lazily for exactly those — the common leaf/stdlib function
     // that references no candidate skips both the map build and the scan below.
     let cand_ids: IndexSet<u32> = cands.iter().map(|c| c.func_id_index).collect();
-    let def_use_by_func: Vec<Option<LocalDefUse>> = module
+    // Taken once per function, not once per candidate landing in it.
+    let sites: Vec<Option<(LocalDefUse, usize)>> = module
         .functions
         .iter()
         .map(|func| {
             func.body
                 .as_deref()
                 .filter(|body| body.iter().any(|i| body_calls_any(i, &cand_ids)))
-                .map(LocalDefUse::of_body)
+                .map(|body| {
+                    (
+                        LocalDefUse::of_body(body),
+                        func.declared_locals().iter().count(),
+                    )
+                })
         })
         .collect();
     cands
@@ -353,7 +380,7 @@ pub(super) fn validate_slot_sites(
             let mut saw_call = false;
             let mut all_ok = true;
             for (i, func) in module.functions.iter().enumerate() {
-                let Some(def_use) = &def_use_by_func[i] else {
+                let Some((def_use, locals)) = &sites[i] else {
                     continue;
                 };
                 let body = func.body.as_ref().unwrap();
@@ -381,6 +408,9 @@ pub(super) fn validate_slot_sites(
                     }
                 });
                 if total_calls != mvbind_calls {
+                    all_ok = false;
+                }
+                if mvbind_calls > 0 && *locals > MAX_CALLER_LOCALS {
                     all_ok = false;
                 }
             }
@@ -698,6 +728,41 @@ fn expand_slot_binds(
     }
 }
 
+/// Drop the block result type along a diverging arm's tail chain.
+///
+/// The `?` desugar nests the error test as an `else if` carrying the binding's
+/// type. Once the binding is gone the outer `if` is a statement, and an inner
+/// arm still declaring a result leaves its value on the stack — "values
+/// remaining on stack at end of block". Clearing it is safe because a diverging
+/// node produces no value to declare.
+///
+/// `Seq` is peeled because `always_diverges` sees through it, so stopping at one
+/// would clear nothing.
+fn drop_tail_result(body: &mut [WirInstr]) {
+    let Some(last) = body.last_mut() else {
+        return;
+    };
+    if !WirInstr::always_diverges(last) {
+        return;
+    }
+    match last {
+        WirInstr::If {
+            result,
+            then_body,
+            else_body,
+            ..
+        } => {
+            *result = None;
+            drop_tail_result(then_body);
+            if let Some(eb) = else_body {
+                drop_tail_result(eb);
+            }
+        }
+        WirInstr::Seq(inner) => drop_tail_result(inner),
+        _ => {}
+    }
+}
+
 /// Replace `LocalSet(alias, If { cond, then, else })` (the `?`-unwrap) with the
 /// guard `If { cond, then: [], else }`, dropping the slot copy.
 fn rewrite_unwrap_to_guard(body: &mut [WirInstr], alias: &str) {
@@ -719,7 +784,10 @@ fn rewrite_unwrap_to_guard(body: &mut [WirInstr], alias: &str) {
             } = value.as_mut()
             {
                 let cond = std::mem::replace(condition.as_mut(), WirInstr::Nop);
-                let eb = else_body.take();
+                let mut eb = else_body.take();
+                if let Some(eb) = eb.as_mut() {
+                    drop_tail_result(eb);
+                }
                 *instr = WirInstr::If {
                     condition: Box::new(cond),
                     result: None,

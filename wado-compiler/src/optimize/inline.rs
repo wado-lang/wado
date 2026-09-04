@@ -180,11 +180,14 @@ struct CostWalk<'a> {
     /// The constants this walk prices the body under, or `None` to price it as
     /// written. See [`ConstView`].
     consts: Option<&'a ConstView<'a>>,
+    /// Per-callee price to charge a call, indexed by `FuncId`; `0` for one this
+    /// pass will leave as a call. See [`CostWalk::splicing`].
+    spliced: &'a [usize],
 }
 
 /// What the caller's constant arguments make of a callee's body: which of its
-/// parameters arrive constant, which callees fold away on constant arguments,
-/// and which of those spin a loop while doing it.
+/// parameters hold a constant throughout, which callees fold away on constant
+/// arguments, and which of those spin a loop while doing it.
 pub(super) struct ConstView<'a> {
     params: &'a IndexSet<u32>,
     foldable: &'a [bool],
@@ -207,6 +210,7 @@ impl<'a> CostWalk<'a> {
             descriptors,
             price,
             consts: None,
+            spliced: &[],
         }
     }
 
@@ -216,9 +220,54 @@ impl<'a> CostWalk<'a> {
         self
     }
 
+    /// Price a call to a callee this pass will splice at what the splice costs,
+    /// rather than at the ABI edge. See [`CostWalk::call_price`]; the table
+    /// itself is built in [`inline_functions`].
+    fn splicing(mut self, spliced: &'a [usize]) -> Self {
+        self.spliced = spliced;
+        self
+    }
+
     /// What the whole body costs at this walk's price.
     fn whole_body(&self) -> usize {
         self.block(self.body.root, &mut SeenValues::default())
+    }
+
+    /// What a call to `callee` costs this body: the body it splices, when the
+    /// table says this pass will splice it, and the ABI edge otherwise.
+    ///
+    /// [`weight::CALL`] is what a call that *stays* a call costs. The driver it
+    /// describes comes in cheap on its own edges, while its caller receives every
+    /// one of the bodies behind them. `i64::fmt_decimal` is three such calls, two
+    /// of them loops, and splicing it put the whole integer-writing path into
+    /// `JsonSerializer::serialize_i64` for -6.9% on json-catalog serialize.
+    ///
+    /// A site handing the callee *any* constant is charged the edge regardless,
+    /// because the constant may unroll the loop the table priced:
+    /// `push_be(buf, bits, 8)` in `CborSerializer::serialize_f64` is that shape,
+    /// and charging it costs cbor-canada serialize 24%. The precise question —
+    /// does the fold this constant licenses delete a loop — is
+    /// [`fold_drops_loop`], but it reads a [`ConstView`] over the *callee's*
+    /// parameters, not one site's arguments, so `null`, `false` and a radix
+    /// argument all switch the lookahead off too.
+    fn call_price(&self, callee: FuncId, args: &[ArenaCallArg]) -> usize {
+        if args.iter().any(|a| self.arg_is_constant(a.expr)) {
+            return weight::CALL;
+        }
+        let spliced = self.spliced.get(callee.index()).copied().unwrap_or(0);
+        spliced.max(weight::CALL)
+    }
+
+    /// Whether an argument reaches the callee as a compile-time constant:
+    /// written as one, or made one by the caller's constants under
+    /// [`CostWalk::under`]. A folded walk is exactly where the literal that
+    /// unrolls the callee's loop comes from, so reading only the as-written
+    /// shape would charge the loop the caller never receives.
+    fn arg_is_constant(&self, op: Operand) -> bool {
+        match op {
+            Operand::Value(v) if self.body.values.kind(v).is_operand_constant() => true,
+            other => self.folds(other),
+        }
     }
 
     /// Whether `op` is a constant once the caller's constant arguments are
@@ -506,11 +555,11 @@ impl<'a> CostWalk<'a> {
 
             // A call is an ABI edge, not an operation — unless the compile-time
             // engine runs it on constant arguments, leaving a literal.
-            ExprKind::Call { args, .. } => {
+            ExprKind::Call { func_id, args, .. } => {
                 if self.folds(Operand::Expr(id)) {
                     return 0;
                 }
-                weight::CALL
+                self.call_price(*func_id, args)
                     + args
                         .iter()
                         .map(|a| self.operand(a.expr, seen))
@@ -612,9 +661,17 @@ fn arity_excess(len: usize) -> usize {
 /// Two is what a binary — the widest fixed-arity node — already takes free.
 const FREE_ARITY: usize = 2;
 
-/// The inline cost of a function body, in the unit [`weight`] defines.
-fn inline_cost(body: &Body, type_table: &TypeTable, descriptors: &[FunctionRef]) -> usize {
-    CostWalk::new(body, type_table, descriptors, Price::Hot).whole_body()
+/// The inline cost of a function body, in the unit [`weight`] defines. `spliced`
+/// prices its calls — see [`CostWalk::splicing`]; empty prices them as ABI edges.
+fn inline_cost(
+    body: &Body,
+    type_table: &TypeTable,
+    descriptors: &[FunctionRef],
+    spliced: &[usize],
+) -> usize {
+    CostWalk::new(body, type_table, descriptors, Price::Hot)
+        .splicing(spliced)
+        .whole_body()
 }
 
 /// What one copy of `body` occupies, cold paths included — the quantity the
@@ -647,6 +704,19 @@ pub(super) fn call_site_size(param_count: usize) -> usize {
     weight::CALL + param_count * weight::OP
 }
 
+/// What splicing a body of `gross` price actually adds to the caller: the body
+/// less the call site it replaces.
+///
+/// The threshold bounds the caller's *increase*, so this is the quantity it
+/// judges. Comparing `gross` against it prices every callee as if calling it
+/// were free, and so under-inlines by exactly the arity: a four-parameter callee
+/// whose call site costs six is worth six more instructions than a nullary one
+/// of the same size. [`super::cold_outline`] makes the same trade in the other
+/// direction, weighing a region against the call that would replace it.
+fn net_cost(gross: usize, param_count: usize) -> usize {
+    gross.saturating_sub(call_site_size(param_count))
+}
+
 /// What the caller pays for `body` once constant folding has run on it, given
 /// the parameters in `view` arrive constant at every call site: a branch a
 /// constant decides keeps one arm, and a pure call over constants becomes a
@@ -656,9 +726,11 @@ fn inline_cost_folded(
     type_table: &TypeTable,
     descriptors: &[FunctionRef],
     view: &ConstView<'_>,
+    spliced: &[usize],
 ) -> usize {
     CostWalk::new(body, type_table, descriptors, Price::Hot)
         .under(view)
+        .splicing(spliced)
         .whole_body()
 }
 
@@ -756,50 +828,61 @@ fn body_has_loop(body: &Body) -> bool {
     arena_query::block_contains_loop(body, body.root)
 }
 
+/// Locals the body writes, counting a write anywhere in the place (`p.x = f()`
+/// writes `p`) and a mutable hand-out, which is a write the body does not show.
+fn written_locals(body: &Body) -> IndexSet<u32> {
+    let mut written: IndexSet<u32> = IndexSet::default();
+    for node in arena_query::reachable_nodes(body) {
+        let NodeRef::Expr(e) = node else {
+            continue;
+        };
+        match &body.exprs[e].kind {
+            ExprKind::Assign { target, .. } => {
+                written.extend(place_root_local(body, *target));
+            }
+            ExprKind::Unary {
+                op: NirUnaryOp::MutRef,
+                expr: inner,
+            } => {
+                written.extend(inner.as_expr().and_then(|x| place_root_local(body, x)));
+            }
+            // A `&mut` argument is the callee's write. A `&mut` parameter passed
+            // on wears no `MutRef` of its own — it is already a reference, so it
+            // reaches the next call as a bare place and only `is_mut` says so.
+            // `args[0]` carries a method's `&mut self` the same way.
+            ExprKind::Call { args, .. } => {
+                for arg in args.iter().filter(|a| a.is_mut) {
+                    written.extend(arg.expr.as_expr().and_then(|x| place_root_local(body, x)));
+                }
+            }
+            _ => {}
+        }
+    }
+    written
+}
+
 /// Locals a body binds once, to a constant, and never writes — the shape a
 /// literal argument wears by the time it reaches a call (`let name = "id";
 /// f(&name)`), which is otherwise indistinguishable from a runtime value.
-fn constant_locals(body: &Body) -> IndexSet<u32> {
+fn constant_locals(body: &Body, written: &IndexSet<u32>) -> IndexSet<u32> {
     let mut bound: IndexMap<u32, bool> = IndexMap::default();
-    let mut written: IndexSet<u32> = IndexSet::default();
     for node in arena_query::reachable_nodes(body) {
-        match node {
-            NodeRef::Stmt(st) => {
-                if let StmtKind::Let {
-                    local_index, value, ..
-                } = &body.stmts[st].kind
-                {
-                    let is_const = is_constant_arg(body, *value, &IndexSet::default());
-                    match bound.get_mut(local_index) {
-                        // A second binding of the same slot: keep it only if
-                        // both are constant, since either may reach the call.
-                        Some(prev) => *prev &= is_const,
-                        None => {
-                            bound.insert(*local_index, is_const);
-                        }
-                    }
+        let NodeRef::Stmt(st) = node else {
+            continue;
+        };
+        if let StmtKind::Let {
+            local_index, value, ..
+        } = &body.stmts[st].kind
+        {
+            let is_const = is_constant_arg(body, *value, &IndexSet::default());
+            match bound.get_mut(local_index) {
+                // A second binding of the same slot: keep it only if both are
+                // constant, since either may reach the call.
+                Some(prev) => *prev &= is_const,
+                None => {
+                    bound.insert(*local_index, is_const);
                 }
             }
-            NodeRef::Expr(e) => match &body.exprs[e].kind {
-                // A write anywhere in the place, not just to the bare local:
-                // `p.x = f()` leaves `p` runtime-valued too.
-                ExprKind::Assign { target, .. } => {
-                    if let Some(root) = place_root_local(body, *target) {
-                        written.insert(root);
-                    }
-                }
-                // Handing a local out mutably is a write the body does not show.
-                ExprKind::Unary {
-                    op: NirUnaryOp::MutRef,
-                    expr: inner,
-                } => {
-                    if let Some(root) = inner.as_expr().and_then(|x| place_root_local(body, x)) {
-                        written.insert(root);
-                    }
-                }
-                _ => {}
-            },
-            NodeRef::Block(_) | NodeRef::Pat(_) => {}
         }
     }
     bound
@@ -875,20 +958,23 @@ fn is_constant_arg(body: &Body, op: Operand, const_locals: &IndexSet<u32>) -> bo
     }
 }
 
-/// For each callee, the parameter positions *every* call site in the program
-/// fills with a compile-time constant.
+/// For each callee, the parameters *every* call site in the program fills with
+/// a compile-time constant and the callee's own body never writes.
 ///
 /// Whole-program rather than per-site: admission stays a property of the
 /// callee, so a body taken on its folded cost is never spliced at a site that
 /// would not fold it. A callee nothing calls is absent.
-fn constant_params(project: &NirPackage) -> IndexMap<FuncId, IndexSet<u32>> {
+fn constant_params(
+    project: &NirPackage,
+    written_by_func: &[IndexSet<u32>],
+) -> IndexMap<FuncId, IndexSet<u32>> {
     let mut out: IndexMap<FuncId, IndexSet<u32>> = IndexMap::default();
-    for func_rc in &project.functions {
+    for (i, func_rc) in project.functions.iter().enumerate() {
         let func = func_rc.borrow();
         let Some(body) = &func.body else {
             continue;
         };
-        let const_locals = constant_locals(body);
+        let const_locals = constant_locals(body, &written_by_func[i]);
         for node in arena_query::reachable_nodes(body) {
             let NodeRef::Expr(e) = node else {
                 continue;
@@ -909,6 +995,25 @@ fn constant_params(project: &NirPackage) -> IndexMap<FuncId, IndexSet<u32>> {
                 }
             }
         }
+    }
+    // An argument arriving constant says nothing about what the parameter holds
+    // later: `fn f(mut n: i32) { n = g(); .. }` reassigns it, and the readers
+    // here are flow-insensitive, so one write disqualifies it for the whole
+    // body.
+    for (i, func_rc) in project.functions.iter().enumerate() {
+        let func = func_rc.borrow();
+        let Some(params) = func.id.and_then(|id| out.get_mut(&id)) else {
+            continue;
+        };
+        // The set is built from argument positions and read by local index.
+        assert!(
+            func.params
+                .iter()
+                .enumerate()
+                .all(|(pos, p)| p.local_index == pos as u32),
+            "a parameter's local index is its position"
+        );
+        params.retain(|&pos| !written_by_func[i].contains(&pos));
     }
     out.retain(|_, params| !params.is_empty());
     out
@@ -931,6 +1036,47 @@ struct Verdict {
     hold: bool,
 }
 
+/// Whether this pass declines `func` outright, before any price is taken. The
+/// `spliced` lookahead table reads it too, so the table cannot charge a caller
+/// for a body that will stay a call.
+fn splice_barred(
+    func: &NirFunction,
+    recursive_functions: &IndexSet<FuncId>,
+    type_table: &TypeTable,
+) -> bool {
+    // A CM binding is an ABI bridge between Wado GC types and CM linear memory,
+    // and has to stay a function of its own.
+    if func.inline_hint == InlineHint::Never || func.is_cm_binding {
+        return true;
+    }
+    // Recursion is barred ahead of the `#[inline(always)]` short-circuit below:
+    // splicing a recursive call only exposes the next one, so a force would
+    // expand without bound over the fixed point (a compiler stack overflow at
+    // higher iteration counts). Keyed on `FuncId`, the identity the recursive set
+    // is built on, so a cross-module recursive function is not missed.
+    if func.id.is_some_and(|id| recursive_functions.contains(&id)) {
+        return true;
+    }
+    // A `!`-returning body is an error/abort path: never hot, nothing to gain.
+    // `#[inline(always)]` overrides this one, which is why it is not a bare test.
+    func.inline_hint != InlineHint::Always && type_table.is_never(func.return_type)
+}
+
+/// The threshold `func`'s own hint puts it under. An `#[inline]` hint raises it
+/// 5x.
+///
+/// The threshold applies even at a single call site: if that site sits inside a
+/// function itself duplicated at N sites, the large callee is copied N times
+/// rather than shared. Bypassing it measured +87% (`pi_approx`) / +186% (zlib) at
+/// `-Os` and regressed already at `-O1`.
+fn effective_threshold(func: &NirFunction, inline_threshold: usize) -> usize {
+    if func.inline_hint == InlineHint::Hint {
+        inline_threshold * 5
+    } else {
+        inline_threshold
+    }
+}
+
 /// Decide a callee's fate: whether to splice it, and whether to leave it
 /// alone so it stays spliceable. Both answers come from here so they cannot
 /// disagree about the budget or about which callees are eligible at all.
@@ -943,36 +1089,20 @@ fn classify_callee(
     descriptors: &[FunctionRef],
     foldable: &[bool],
     loopy: &[bool],
+    spliced: &[usize],
+    written: &IndexSet<u32>,
 ) -> Verdict {
-    // #[inline(never)] unconditionally prevents inlining
-    if func.inline_hint == InlineHint::Never {
-        return Verdict::default();
-    }
-
     // Must have a body
     let Some(body) = &func.body else {
         return Verdict::default();
     };
 
-    // Don't inline CM binding functions - they are ABI bridges between
-    // Wado GC types and CM linear memory that must remain as separate functions
-    if func.is_cm_binding {
-        return Verdict::default();
-    }
-
-    // Not recursive — keyed on the function's `FuncId` (its store position),
-    // the same identity the recursive set is built on, so cross-module recursive
-    // functions are not missed. This precedes the `#[inline(always)]`
-    // short-circuit: inlining a recursive call only exposes the next recursive
-    // call, so an unconditional force would re-inline every fixed-point iteration
-    // and expand without bound (a compiler stack overflow at higher iteration
-    // counts).
-    if func.id.is_some_and(|id| recursive_functions.contains(&id)) {
+    if splice_barred(func, recursive_functions, type_table) {
         return Verdict::default();
     }
 
     // #[inline(always)] skips the remaining heuristic checks (but still requires
-    // a body, a non-adapter, and non-recursion, all checked above)
+    // a body and passes `splice_barred`, both checked above)
     if func.inline_hint == InlineHint::Always {
         return Verdict {
             hot: 0,
@@ -981,25 +1111,11 @@ fn classify_callee(
         };
     }
 
-    // Don't inline functions that return Never (!)
-    // These are error/abort paths that are never hot, so no performance benefit to inlining
-    if type_table.is_never(func.return_type) {
-        return Verdict::default();
-    }
+    let effective_threshold = effective_threshold(func, inline_threshold);
 
-    // The threshold applies even at a single call site: if that site sits inside
-    // a function itself duplicated at N sites, the large callee is copied N
-    // times rather than shared. Bypassing it measured +87% (pi_approx) / +186%
-    // (zlib) at -Os and regressed already at -O1. An `#[inline]` hint raises the
-    // threshold 5x.
-    let effective_threshold = if func.inline_hint == InlineHint::Hint {
-        inline_threshold * 5
-    } else {
-        inline_threshold
-    };
-
-    let plain = inline_cost(body, type_table, descriptors);
-    if plain <= effective_threshold {
+    let params = func.params.len();
+    let plain = inline_cost(body, type_table, descriptors, spliced);
+    if net_cost(plain, params) <= effective_threshold {
         return Verdict {
             hot: plain,
             inline: true,
@@ -1010,8 +1126,8 @@ fn classify_callee(
     // Over budget as written, but the caller's constants may still fold it
     // under. `(fits, drops a loop)` for one reading of the body.
     let weigh = |view: &ConstView<'_>| {
-        let folded = inline_cost_folded(body, type_table, descriptors, view);
-        if folded > effective_threshold {
+        let folded = inline_cost_folded(body, type_table, descriptors, view, spliced);
+        if net_cost(folded, params) > effective_threshold {
             return (false, false);
         }
         let walk = CostWalk::new(body, type_table, descriptors, Price::Hot).under(view);
@@ -1029,7 +1145,14 @@ fn classify_callee(
     // two-line `peek`. Measured slower and not worth retrying — holding what
     // the call sites already admit, holding every candidate, and splicing from
     // a frozen copy, which no other pass can reach and `sroa_param` invalidates.
-    let all_params: IndexSet<u32> = func.params.iter().map(|p| p.local_index).collect();
+    // Optimistic about the call sites, not about the body: a parameter this
+    // body writes is not the caller's constant however it arrived.
+    let all_params: IndexSet<u32> = func
+        .params
+        .iter()
+        .map(|p| p.local_index)
+        .filter(|i| !written.contains(i))
+        .collect();
     let (_, optimistic_loop) = weigh(&ConstView {
         params: &all_params,
         foldable,
@@ -1353,7 +1476,18 @@ pub fn inline_functions(
     // Inputs for the folded-cost second chance: which parameters arrive
     // constant everywhere, which callees the compile-time engine runs on
     // constant arguments, and which of those spin a loop while doing it.
-    let const_params = constant_params(project);
+    let written_by_func: Vec<IndexSet<u32>> = project
+        .functions
+        .iter()
+        .map(|f| {
+            f.borrow()
+                .body
+                .as_ref()
+                .map(written_locals)
+                .unwrap_or_default()
+        })
+        .collect();
+    let const_params = constant_params(project, &written_by_func);
     let fn_effects =
         super::mod_ref::compute_fn_effects(&project.functions, &project.builtin_registry);
     let foldable: Vec<bool> = project
@@ -1385,7 +1519,49 @@ pub fn inline_functions(
     let mut priced: Vec<Candidate> = Vec::new();
 
     let type_table = project.type_table.borrow();
-    for func_rc in &project.functions {
+    // What a call to each function costs a caller that splices it, for
+    // `CostWalk::splicing`. Every price here is read as written, with calls
+    // charged as ABI edges, so the table is one level of lookahead and cannot
+    // recurse. It keeps `0` for a function this pass leaves alone, reading
+    // `splice_barred` / `effective_threshold` so it agrees with
+    // `classify_callee` on which those are.
+    //
+    // The two disagree on one shape: this admission test reads the gross price,
+    // while `classify_callee` reads the price this table produces, so a driver
+    // that its own loopy callees push over the threshold is declined there and
+    // charged to its callers here. Closing that takes a second lookahead level.
+    //
+    // Only a callee carrying a loop is priced this way. A loop is what the model
+    // charges most to splice, being a region of its own in the caller. Pricing
+    // every inlinable callee by its whole body judges a driver by its
+    // post-inlining size against a threshold calibrated on as-written ones, and
+    // that suppresses inlining the CBOR serializers need.
+    let spliced: Vec<usize> = project
+        .functions
+        .iter()
+        .enumerate()
+        .map(|(i, f)| {
+            let func = f.borrow();
+            let Some(body) = func.body.as_ref() else {
+                return 0;
+            };
+            if !loopy.get(i).copied().unwrap_or(false)
+                || splice_barred(&func, &recursive_functions, &type_table)
+            {
+                return 0;
+            }
+            let gross = inline_cost(body, &type_table, descriptors, &[]);
+            if func.inline_hint == InlineHint::Always
+                || net_cost(gross, func.params.len())
+                    <= effective_threshold(&func, inline_threshold)
+            {
+                gross
+            } else {
+                0
+            }
+        })
+        .collect();
+    for (i, func_rc) in project.functions.iter().enumerate() {
         let func = func_rc.borrow();
         let size = match func.body.as_ref() {
             Some(b) if pricing => inline_size(b, &type_table, descriptors),
@@ -1409,6 +1585,8 @@ pub fn inline_functions(
             descriptors,
             &foldable,
             &loopy,
+            &spliced,
+            &written_by_func[i],
         );
         if verdict.hold
             && let Some(id) = func.id

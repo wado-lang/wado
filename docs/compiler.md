@@ -91,7 +91,7 @@ The elaborator covers trait selection, generic inference, method dispatch, coerc
 
 One trait implemented for one receiver at several argument lists is chosen by the arguments, which are classified before they are elaborated (`elaborator/synth.rs`, [WEP: Overload Resolution](./wep-2026-07-31-overload-resolution.md)). That classification is a read-only query: it runs under `Logger::quiet`, and debug builds assert it recorded no fact.
 
-Trait questions have a second answerer: `trait_solver/` states coherence, derivation, bound satisfaction and ranking as functions of a self-contained `Program`, which `elaborator/solver_bridge.rs` lowers the compiler's tables into. Debug builds check its `holds` against `type_implements_trait` on every outermost query ([WEP: Trait Resolution](./wep-2026-09-01-trait-resolution.md)).
+Trait selection is decided by `trait_solver/`, in every build profile. It states coherence, derivation, bound satisfaction, candidate collection and ranking as functions of a self-contained `Program`, which `elaborator/solver_bridge.rs` lowers the compiler's tables into. Method lookup then reads its matches off the impl blocks the order names, and enumerates no others. Bound satisfaction still has two answerers, and debug builds check the solver's `holds` against `type_implements_trait` on every outermost query ([WEP: Trait Resolution](./wep-2026-09-01-trait-resolution.md)).
 
 ### Rigid and flexible type variables
 

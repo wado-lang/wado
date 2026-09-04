@@ -3,7 +3,7 @@
 
 use super::program::{
     AssocId, DerivationRequest, Env, ImplDef, ImplId, ImplOrigin, ModuleId, Program, RefRule,
-    SolverType, TraitDeclId,
+    SolverType, TraitDeclId, TypeDeclId,
 };
 
 /// A bound that holds, and the bodies its answer owes.
@@ -30,6 +30,7 @@ pub fn holds(
         env,
         scope,
         asking: Vec::new(),
+        at_itself: None,
     }
     .holds(ty, trait_)
 }
@@ -40,6 +41,13 @@ struct Query<'a> {
     env: &'a Env,
     scope: ModuleId,
     asking: Vec<(SolverType, TraitDeclId)>,
+    /// A type this query answers about at the type itself, without inheriting
+    /// its newtype base's impls. Selection asks this way so that a blanket
+    /// whose bound only the base carries is a candidate at the base's level and
+    /// not at the newtype's — rank 1's question
+    /// (`docs/wep-2026-09-01-trait-resolution.md`). The subject stays the same
+    /// through a chained blanket's bounds, so the restriction travels with it.
+    at_itself: Option<SolverType>,
 }
 
 impl Query<'_> {
@@ -56,7 +64,9 @@ impl Query<'_> {
         if matches!(ty, SolverType::Ref { .. }) && on_ref == RefRule::Always {
             return Some(Holds::default());
         }
-        if let SolverType::Param(index) = ty
+        // A pack's bound holds of each element, so an element in a variadic
+        // body answers from the pack's slot.
+        if let SolverType::Param(index) | SolverType::Pack(index) = ty
             && let Some(bounds) = self.env.param_bounds.get(*index as usize)
             && bounds
                 .iter()
@@ -64,8 +74,25 @@ impl Query<'_> {
         {
             return Some(Holds::default());
         }
-        if let SolverType::Decl(head, _) = ty
-            && let Some(fact) = program.facts.get(&(*head, trait_))
+        // A projection satisfies what its trait declares of the associated
+        // type, by the declaration alone.
+        if let SolverType::Projection {
+            trait_: of, assoc, ..
+        } = ty
+            && program
+                .traits
+                .get(of)
+                .and_then(|def| def.assoc_bounds.get(assoc))
+                .is_some_and(|bounds| {
+                    bounds
+                        .iter()
+                        .any(|&bound| program.bound_reaches(bound, trait_))
+                })
+        {
+            return Some(Holds::default());
+        }
+        if let Some(head) = fact_head(program, ty)
+            && let Some(fact) = program.facts.get(&(head, trait_))
             && fact
                 .visible_from
                 .as_ref()
@@ -84,8 +111,19 @@ impl Query<'_> {
         let answer = program
             .impls
             .iter()
-            .find_map(|(&id, def)| self.impl_answers(id, def, ty, trait_))
+            .find_map(|(&id, def)| {
+                // A bound spells no arguments, so only an impl at the trait's
+                // defaults answers one. Selection asks without this gate.
+                let implemented = def.trait_?;
+                if !program.bound_reaches(implemented, trait_) || !restates_defaults(program, def) {
+                    return None;
+                }
+                Some(self.impl_answers(id, def, ty)?.holds)
+            })
             .or_else(|| {
+                if self.at_itself.as_ref() == Some(ty) {
+                    return None;
+                }
                 let base = newtype_base(program, ty)?;
                 self.holds(&base, trait_)
             })
@@ -102,21 +140,11 @@ impl Query<'_> {
         answer
     }
 
-    /// Whether one impl answers the goal: its trait reaches `trait_` at the
-    /// defaults, its target matches `ty`, and every bound holds of what the
-    /// match bound.
-    fn impl_answers(
-        &mut self,
-        id: ImplId,
-        def: &ImplDef,
-        ty: &SolverType,
-        trait_: TraitDeclId,
-    ) -> Option<Holds> {
+    /// Whether one impl applies to `ty`: its target matches, and every bound
+    /// holds of what the match bound.
+    fn impl_answers(&mut self, id: ImplId, def: &ImplDef, ty: &SolverType) -> Option<Answer> {
         let program = self.program;
         let implemented = def.trait_?;
-        if !program.bound_reaches(implemented, trait_) || !restates_defaults(program, def) {
-            return None;
-        }
         // A value blanket answers no reference; `&T` reaches it through the
         // pointee.
         if matches!(def.target, SolverType::Param(_)) && matches!(ty, SolverType::Ref { .. }) {
@@ -180,8 +208,53 @@ impl Query<'_> {
             .flatten()
             .filter_map(|(assoc, binding)| Some((*assoc, bound_to(binding)?)))
             .collect();
-        Some(Holds { requests, assoc })
+        Some(Answer {
+            holds: Holds { requests, assoc },
+            trait_args: def
+                .trait_args
+                .iter()
+                .map(|arg| bound_to(arg).unwrap_or_else(|| arg.clone()))
+                .collect(),
+        })
     }
+}
+
+/// One impl applying to one type. `holds` reads the bound it answers; selection
+/// reads the arguments it answers at.
+struct Answer {
+    holds: Holds,
+    /// The impl's trait arguments at the type it matched, so two impls of one
+    /// trait compare on what the call would get rather than on how each spelled
+    /// it.
+    trait_args: Vec<SolverType>,
+}
+
+/// The trait arguments `def` applies to `ty` at, or `None` where it does not
+/// apply. This is selection's question, and it differs from a bound's twice: it
+/// names the trait, so it accepts an impl at any argument list
+/// (WEP 2026-07-31); and it asks about `ty` at the type itself, so a blanket
+/// whose bound only `ty`'s newtype base carries does not apply here — the chain
+/// reaches that blanket at the base's own level, which is the depth rank 1
+/// wants.
+pub(super) fn impl_applies(
+    program: &Program,
+    env: &Env,
+    scope: ModuleId,
+    id: ImplId,
+    def: &ImplDef,
+    ty: &SolverType,
+) -> Option<Vec<SolverType>> {
+    Some(
+        Query {
+            program,
+            env,
+            scope,
+            asking: Vec::new(),
+            at_itself: Some(ty.clone()),
+        }
+        .impl_answers(id, def, ty)?
+        .trait_args,
+    )
 }
 
 /// What a target parameter matched: a pack takes every element past the
@@ -201,9 +274,23 @@ impl Binding {
     }
 }
 
+/// The declaration a type instantiates, which a fact is stated of. A tuple is
+/// an instance of the tuple declaration and lowers to its own shape rather than
+/// to a `Decl`, because an impl spells one `[..T]`.
+fn fact_head(program: &Program, ty: &SolverType) -> Option<TypeDeclId> {
+    match ty {
+        SolverType::Decl(head, _) => Some(*head),
+        SolverType::Tuple(_) => program.tuple,
+        SolverType::Param(_)
+        | SolverType::Pack(_)
+        | SolverType::Ref { .. }
+        | SolverType::Projection { .. } => None,
+    }
+}
+
 /// The base a newtype receiver inherits from, at the receiver's own type
 /// arguments.
-fn newtype_base(program: &Program, ty: &SolverType) -> Option<SolverType> {
+pub(super) fn newtype_base(program: &Program, ty: &SolverType) -> Option<SolverType> {
     let SolverType::Decl(head, args) = ty else {
         return None;
     };
@@ -277,16 +364,20 @@ fn match_target(target: &SolverType, ty: &SolverType, bindings: &mut [Option<Bin
             bindings[*index as usize] = Some(Binding::Pack(ty_elems.clone()));
             true
         }
+        // A target never spells a projection; one reaches a target only
+        // through a parameter, above.
         (
             SolverType::Decl(_, _)
             | SolverType::Ref { .. }
             | SolverType::Tuple(_)
-            | SolverType::Pack(_),
+            | SolverType::Pack(_)
+            | SolverType::Projection { .. },
             SolverType::Decl(_, _)
             | SolverType::Param(_)
             | SolverType::Pack(_)
             | SolverType::Ref { .. }
-            | SolverType::Tuple(_),
+            | SolverType::Tuple(_)
+            | SolverType::Projection { .. },
         ) => false,
     }
 }
@@ -358,6 +449,25 @@ mod tests {
             Some(Holds::default())
         );
         assert_eq!(holds(&p, &e, &SolverType::Param(0), BETA, HERE), None);
+    }
+
+    /// A pack's bound holds of each element, so inside a variadic body the
+    /// pack's own tuple satisfies an impl bounding its elements.
+    #[test]
+    fn a_bound_in_force_answers_for_a_packs_elements() {
+        let p = Builder::default()
+            .bounded(
+                BETA,
+                SolverType::Tuple(vec![SolverType::Pack(0)]),
+                vec![ALPHA],
+            )
+            .build();
+        let own = SolverType::Tuple(vec![SolverType::Pack(0)]);
+        assert_eq!(
+            holds(&p, &env(vec![vec![ALPHA]]), &own, BETA, HERE),
+            Some(Holds::default())
+        );
+        assert_eq!(holds(&p, &env(vec![vec![]]), &own, BETA, HERE), None);
     }
 
     #[test]

@@ -2779,11 +2779,17 @@ impl Aged for Person {
 
 #### Method Resolution
 
-When a method is called on a value:
+A call `recv.m(args)` resolves in one order, stated in full by
+[WEP: Trait Resolution](./wep-2026-09-01-trait-resolution.md). The receiver
+decides which step answers:
 
-1. Inherent methods (defined in `impl Type { }`) are checked first
-2. Trait methods (defined in `impl Trait for Type { }`) are checked if no inherent method matches
-3. If multiple traits define the same method name, it's a compile error
+1. An inherent method (`impl Type { … }`) shadows every trait method of that
+   name, along the whole newtype chain.
+2. A reference receiver's `&T` impls come before the base type's.
+3. The trait impls that apply to the receiver are ranked, below.
+4. A receiver whose type is a type parameter answers from its bounds instead:
+   the first bound declaring the method, and two or more declaring it is an
+   error.
 
 ```wado
 struct Robot { id: i32 }
@@ -2801,6 +2807,51 @@ impl Greet for Robot {
 let r = Robot { id: 1 };
 r.greet();  // Returns "Beep boop" (inherent method wins)
 ```
+
+##### Scope
+
+A trait contributes candidates only where its declaration is in scope: declared
+in this module, imported by name or alias, re-exported to it through `pub use`,
+or one of the prelude's. Importing a type brings none of the traits its impls
+mention, and a bound is a name like any other — calling a supertrait's method
+through `T: Sub` needs `Base` imported too. This is what keeps a library's new
+blanket impl from changing what a call means in a module that never named it.
+
+##### The Order
+
+Several impls applying to one receiver is normal: a trait carries several
+blanket impls. They are ranked:
+
+1. A variadic impl (`impl<..T> Tr for [..T]`) yields to a non-variadic one of
+   the same trait at the same argument list.
+2. The newtype before its base. The search stops at the first level of the
+   receiver's newtype chain that answers.
+3. Within one level, the impl that names more of the receiver. One written for
+   the receiver (`impl Tag for Box_<i32>`) comes first, then one written for its
+   head (`impl<T> Tag for Box_<T>`), then a value blanket
+   (`impl<T: Bound> Tr for T`). A blanket names no type at all, only a condition
+   the receiver meets. See [Specific Impls Win](#specific-impls-win).
+
+Where an impl was written is read at no rank, so a call means the same thing to
+every reader. Specificity is not a rank either: generality reads an impl's
+target, never its bounds, so `impl<T: A + B>` beside `impl<T: A>` reports rather
+than preferring the narrower one.
+
+##### Ambiguity
+
+Candidates the ranks cannot separate are an error. There are two of them,
+because the fix differs:
+
+- Two traits declaring the method name. They share no contract, so the call
+  names one: `Alpha::describe(&x)`.
+- Two impls of one trait, neither written for the receiver. A blanket has no
+  name to call it by, so the fix is an `impl Tr for TheType`, which generality
+  puts above both.
+
+Arguments filter candidates before the ranks run: one trait at several argument
+lists is an overload set the call's arguments choose from (see
+[One Trait at Two Argument Lists](#one-trait-at-two-argument-lists)). Operators
+and indexing select by operand type instead.
 
 #### Default Method Implementations
 
@@ -2960,7 +3011,6 @@ impl<T: Eq> Eq for Pair<T> {
   [WEP: Overload Resolution](./wep-2026-07-31-overload-resolution.md)); an
   associated function with no `self` has no receiver argument to bind `Self`
   from and stays unspellable
-- Using bounds for method resolution on type parameters (calling `T.method()` where `T: Trait`)
 - Positional trait arguments in bound position (`T: Take<i32>`) — bounds
   accept associated-type constraints (`T: Collect<Item = i32>`) but not a
   trait's own type arguments, so the bound-path counterpart of
@@ -2969,7 +3019,9 @@ impl<T: Eq> Eq for Pair<T> {
 
 ### Coherence and Orphan Rules
 
-Wado enforces coherence: for every `(Trait, Type)` pair, there is at most one `impl Trait for Type` that can apply. Coherence is guaranteed by the orphan rules, which restrict where trait implementations may be written.
+Wado enforces coherence: a `(Trait, Type)` pair is implemented once. A second impl of one pair is rejected where it is written, and the orphan rules below keep two packages from each writing one.
+
+That is a rule about where impls may be written, not about how many apply to a call: a trait carries several blanket impls, and more than one of them can apply to a receiver. [Method Resolution](#method-resolution) orders those.
 
 #### Package Boundary
 
@@ -3057,7 +3109,9 @@ impl Tag for [i32, i32] { … }         // specific — wins for [i32, i32]
 ```
 
 The specific impl applies to the instantiation it names; every other
-instantiation takes the general one. Declaration order does not matter.
+instantiation takes the general one. Declaration order does not matter. This is
+the generality rank of [Method Resolution](#the-order) — the same rank that puts
+either of these above a value blanket (`impl<T: Bound> Tag for T`).
 
 This holds only for a **trait** impl, where the trait gives both methods one
 signature. An inherent impl carries no such contract, so the pair is rejected:
