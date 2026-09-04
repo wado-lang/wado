@@ -1,0 +1,49 @@
+// A `mut` parameter the callee reassigns is not the caller's constant.
+//
+// `pick` is over the -O2 budget as written, so it is priced a second time on
+// the optimistic reading that every parameter arrives constant. That reading
+// decides `limit == 0` and prunes the arm holding the loop, so it says splicing
+// `pick` deletes a loop — and a callee that would delete a loop is held back
+// from receiving any inlining of its own.
+//
+// The body reassigns `limit` from a runtime value, so the branch is undecided
+// and the loop stays. `step` is small enough to splice into `pick`, and only a
+// price that reads the reassignment lets it.
+
+use { println, Stdout, Environment, args } from "core:cli";
+
+fn step(acc: i32, i: i32, seed: i32) -> i32 {
+    return ((acc * 31 + i) ^ ((acc + seed) >> 3)) + i * 13;
+}
+
+fn pick(mut limit: i32, seed: i32) -> i32 {
+    limit = seed & 7;
+    if limit == 0 {
+        return 0;
+    } else {
+        let mut acc = 0;
+        for let mut i = 0; i < limit; i += 1 {
+            acc = step(acc, i, seed);
+            if acc < 0 {
+                acc = -acc;
+            }
+            acc = acc * 7 + 3;
+            acc = acc ^ (acc >> 5);
+        }
+        return acc;
+    }
+}
+
+export fn run() with (Stdout, Environment) {
+    let seed = args().len() as i32;
+    let total = pick(0, seed) + pick(0, seed + 1) + pick(0, seed + 2);
+    println(`${total}`);
+}
+
+__DATA__
+{
+    "stdout": "746\n",
+    "wir_not_expect:O2": [
+        "\"inline_folded_cost_mut_param.wado/step\"("
+    ]
+}

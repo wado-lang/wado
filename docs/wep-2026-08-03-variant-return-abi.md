@@ -592,6 +592,54 @@ A NIR analogue means a tree-shaped layout through `compute_layout`,
 one or two functions. This pass _declines_ the shape instead, which restores the
 WIR splits it had been displacing.
 
+### A `?`-unwrapped slot, and the arm's result type
+
+`DeserializeSeq::next_element` returns `Result<Option<T>, DeserializeError>`.
+Single-level SROA gives it `[i32, ref Option<T>, ref E]`, and for a scalar `T`
+that `ref Option<T>` is a real heap object — `Option<f64>` cannot erase to a
+nullable ref because `f64` is not a GC ref. Left boxed it is a `struct.new` on
+every element of every sequence decode, in JSON and CBOR alike; flattening it is
+worth 12-21% on the deserialize rows.
+
+Two things had to meet for `slot_flatten` to reach it.
+
+`then_is_pure_slot_copy` matches the `?`-unwrap then-arm as `[single]` or as
+`[LocalSet t, LocalGet t]`. The arm can also arrive as one `Seq([LocalSet,
+LocalGet])` node, one level of nesting on from that shape, so it peels the `Seq`.
+
+Widening the predicate alone emits invalid Wasm. The desugar nests the error test
+as an `else if` carrying the binding's type, so `rewrite_unwrap_to_guard` turning
+the outer `if` into a statement leaves the inner arm still declaring a result —
+"values remaining on stack at end of block". `drop_tail_result` clears the
+declaration along the retained arm's tail chain, touching only nodes that
+diverge. A diverging node produces no value to declare. This is the hazard
+`all_returns_decompose` documents from the other side: the validator's coverage
+and the rewriter's have to move together.
+
+### The trade is priced against the caller, not the allocation
+
+Splicing the slot buys one fewer heap object and costs `layout.len()` more values
+live across the call, so it answers to the same rule SROA width does: past the
+register file, a value live across a call is a spill slot reloaded at every call
+boundary, and the allocation removed does not price it.
+
+`MAX_CALLER_LOCALS` declines the callee when any call site sits in a function
+already holding more locals than that — all of them or none, since the slot is
+part of the result signature. The benchmarks separate cleanly on it:
+
+| row             | caller locals | flattened |
+| --------------- | ------------: | --------: |
+| cbor-canada de  |            40 |    +20.1% |
+| cbor-catalog de |            93 |    +19.5% |
+| json-catalog de |            93 |     +9.9% |
+| cbor-twitter de |      307, 186 |     -6.3% |
+
+Every row that gains decodes through callers of at most 93 locals. cbor-twitter
+decodes `User` and `Status` at 307 and 186, so declining those two leaves that
+row flat and every gain intact. What keeps the all-or-nothing from being blunt is
+monomorphization: `next_field<S>` is a distinct callee per struct, so a rule that
+has to answer per callee still lands per decoded type.
+
 ### A settled binding is not a `mut` binding
 
 A `let mut t = f(x)` that nothing ever assigns is an immutable binding, and

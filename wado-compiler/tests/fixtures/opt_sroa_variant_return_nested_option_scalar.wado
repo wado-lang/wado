@@ -1,18 +1,20 @@
-// Test: a variant return whose payload is itself a variant stays boxed at the
-// inner level, and the outer level is still scalarized.
+// Test: a variant return whose payload is itself a variant is scalarized at
+// both levels, leaving nothing of `Result<Option<i64>, StepErr>` boxed.
 //
 // `Cursor::step` returns `Result<Option<i64>, StepErr>` (the serde
-// `next_element<scalar>` shape). `optimize::sroa_variant_return` gives it
-// `[outer_disc, ref Option<i64>, ref StepErr]` — the outer variant flattened,
-// the inner `Option<i64>` left as one slot it still builds at each return.
+// `next_element<scalar>` shape). `optimize::sroa_variant_return` flattens the
+// outer variant to `[outer_disc, ref Option<i64>, ref StepErr]` and leaves the
+// inner `Option<i64>` as one slot, still a real heap object: `i64` is not a GC
+// ref, so the slot cannot erase to a nullable one.
 //
-// Splitting that slot into `[inner_disc, i64]` is what `wir_optimize`'s
-// `slot_flatten` used to do, and it is deliberately not done here. Doing it in
-// NIR was implemented and discarded: the callee stops allocating, but a call
-// site that binds the whole inner value has to rebuild it, and the rebuild cost
-// more than the allocation it removed. Recovering it needs the destructure
-// pushed down into the call site, not the inner value reconstructed — see the
-// WEP.
+// `wir_optimize`'s `slot_flatten` then splits that slot into
+// `[inner_disc, i64]` against the `?`-unwrap at the call site, so `step`
+// returns `[i32, i32, i64, ref null StepErr]` and `sum_all` binds the pieces
+// directly. Splitting it in NIR instead was implemented and discarded: the
+// callee stops allocating, but a call site that binds the whole inner value has
+// to rebuild it, and the rebuild cost more than the allocation it removed. The
+// destructure has to be pushed down into the call site, which is what the WIR
+// pass does — see the WEP.
 //
 // `#[inline("never")]` keeps `step` a real SROA'd call site.
 variant StepErr {
@@ -71,6 +73,11 @@ __DATA__
     "stdout": "",
     "wir_expect:O2": [
         "Cursor::step\" = fn(ref \"",
-        "-> [i32, ref null \"core:prelude/types.wado//Option<i64>\", ref null \""
+        "-> [i32, i32, i64, ref null \"opt_sroa_variant_return_nested_option_scalar.wado//StepErr\"]",
+        "__n_discriminant",
+        "__n_payload_0"
+    ],
+    "wir_not_expect:O2": [
+        "Option<i64>"
     ]
 }

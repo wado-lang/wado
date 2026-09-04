@@ -14,6 +14,8 @@
 // length is a constant, so it shares the leading `<`'s reservation, and the
 // packed array it leaves behind is what `const_object_globalization` hoists —
 // the loop copies out of a module global instead of rebuilding the literal.
+// `framed` is small enough to be spliced into `run`, so that run is checked on
+// `run`'s own locals (`buf_0`, `start_9`); `constant` and `dynamic` stay calls.
 
 use { println, Stdout } from "core:cli";
 
@@ -64,8 +66,8 @@ __DATA__
         "self_18 = name.used;",
         "new_used_21 = buf.used + (2 + self_18);",
         ", start_22, name.repr, 0, self_18);",
-        ", start + 1, global:opt_string_append_fuse.wado::__const_obj_0, 0, 54);",
-        "builtin::array_set_u8(buf.repr, start + 55, 62);"
+        ", start_9 + 1, global:opt_string_append_fuse.wado::__const_obj_1, 0, 54);",
+        "builtin::array_set_u8(buf_0.repr, start_9 + 55, 62);"
     ],
     "wir_not_expect:O2": [
         "String::push_str\"(buf,",

@@ -186,6 +186,15 @@ pub fn optimize(
                 // first as the threshold climbs — -8.2% at 20, -35.3% at 26 —
                 // so 16 costs it least while still buying the serde rows.
                 // Below 13 every row is worse.
+                //
+                // That sweep raised the threshold uniformly, so it does not
+                // describe this gate. `inline::net_cost` subtracts the call site
+                // a splice removes, making it `gross - (CALL + params) <= 16`,
+                // which admits a four-parameter callee at gross 22. A credit
+                // proportional to what calling costs is a different regime: it
+                // buys json-catalog ser 11.9% on release, where a uniform 20
+                // cost that row 8.2%. 16 is inherited from the sweep, not
+                // re-derived under it.
                 inline_threshold: inline_threshold.unwrap_or(16),
                 inline_growth,
                 cap_is_defect: opt_iterations.is_none(),
