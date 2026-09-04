@@ -677,17 +677,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         // Arity, once the declared defaults have filled what they can. A
-        // parameter with a default is optional and the rest are required; the
-        // receiver is not one of them, so `args` and `expected_param_types`
-        // count the same list.
+        // defaulted parameter is optional and the rest are required; the
+        // receiver is neither, so `args` and `expected_param_types` count the
+        // same list.
         //
-        // Unlike the per-argument check below, this cannot wait for inference:
-        // an unfilled parameter leaves the emitted call one operand short and
-        // fails Wasm validation as an ICE, and an extra argument is dropped
-        // along with whatever its expression did.
-        // Only against a signature: the recovery `MethodInfo` above carries an
-        // empty parameter list, and reporting a count against it would answer
-        // "no method of that name" with "expected 0 arguments".
+        // Here rather than beside the per-argument check below, which waits for
+        // inference: a call of the wrong length has no operand list to infer
+        // from, and reaches codegen as an invalid module. `method_found`
+        // guards it because the recovery `MethodInfo` above declares no
+        // parameters, and "expected 0 arguments" is not "no method of that
+        // name".
         let optional = param_defaults.iter().filter(|d| d.is_some()).count();
         let required = expected_param_types.len().saturating_sub(optional);
         if method_found && (args.len() < required || args.len() > expected_param_types.len()) {
@@ -2742,30 +2741,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         TypeTable::UNKNOWN
     }
 
-    /// Look up static method parameter types for coercion.
+    /// A static method's value parameters, in the declaration's own frame — its
+    /// slots still `TypeParam`, for the caller to substitute after inference.
     ///
-    /// Sets up impl-level and method-level type parameters in scope so that
-    /// generic parameter types resolve to `TypeParam(...)` instead of `Unknown`.
-    /// Callers can then substitute these with concrete types after inference.
-    pub(super) fn lookup_static_method_param_types(
-        &mut self,
-        struct_name: &str,
-        method_name: &str,
-    ) -> Option<Vec<TypeId>> {
-        self.lookup_static_method_param_types_keyed(struct_name, method_name, None)
-    }
-
-    /// Like [`Self::lookup_static_method_param_types`] but takes a pre-
-    /// resolved canonical receiver key. Used by call sites that already
-    /// resolved the target type to a `TypeId` and extracted its
-    /// `(module_source, name)`: when the caller is on a same-name struct
-    /// in another module, the bare-name `struct_name` would canonicalise
-    /// against a global "first matching name" bucket and pick the wrong
-    /// impl. The explicit key bypasses that ambiguity.
+    /// `target_hint` is the receiver's canonical key, from a call site that
+    /// already resolved the target to a `TypeId`. Without it the bare
+    /// `struct_name` canonicalises against a global "first matching name"
+    /// bucket, which picks another module's same-named struct.
     ///
-    /// `None` is a receiver / method pair this lookup does not answer — a CM
-    /// resource's statics are resolved elsewhere in this file — which an empty
-    /// list would otherwise report as "declares no parameters".
+    /// `None` is a receiver / method pair nothing declares, which an empty list
+    /// would otherwise report as "declares no parameters" — and a count checked
+    /// against that drops the arguments a caller wrote.
     pub(super) fn lookup_static_method_param_types_keyed(
         &mut self,
         struct_name: &str,
@@ -2985,7 +2971,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> Option<TypeId> {
         let mut returns = self
             .qualified_method_decl_ids(static_key, method_name)
-            .into_iter()
             .filter_map(|def| self.tysys.signatures.method_sig(def))
             .map(|sig| sig.decl.return_type.unwrap_or(TypeTable::UNIT));
         let first = returns.next()?;
@@ -3000,13 +2985,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         static_key: &crate::elaborator::trait_env::ImplTargetKey,
         method_name: &str,
     ) -> Option<&super::sig::MethodSig> {
-        let mut declared = self
-            .tysys
-            .trait_env
-            .static_method_index
-            .get(static_key)?
-            .iter()
-            .filter(|e| e.name == method_name);
+        let mut declared = self.static_method_entries(static_key, method_name);
         let only = declared.next()?;
         if declared.next().is_some() {
             return None;

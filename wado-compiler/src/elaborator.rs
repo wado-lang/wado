@@ -664,9 +664,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         receiver: &trait_env::ImplTargetKey,
         method_name: &str,
     ) -> Option<crate::defs::DefId> {
-        self.qualified_method_decl_ids(receiver, method_name)
-            .into_iter()
-            .next()
+        self.qualified_method_decl_ids(receiver, method_name).next()
     }
 
     /// Every declaration `receiver::method_name` can name, receiver-less ones
@@ -676,15 +674,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         &self,
         receiver: &trait_env::ImplTargetKey,
         method_name: &str,
-    ) -> Vec<crate::defs::DefId> {
+    ) -> impl Iterator<Item = crate::defs::DefId> {
         let statics = self
-            .tysys
-            .trait_env
-            .static_method_index
-            .get(receiver)
-            .into_iter()
-            .flatten()
-            .filter(|e| e.name == method_name)
+            .static_method_entries(receiver, method_name)
             .map(|e| e.method_id);
         let instances = self
             .tysys
@@ -694,7 +686,24 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             .into_iter()
             .flatten()
             .filter_map(|&impl_def| self.tysys.declared_method(impl_def, method_name));
-        statics.chain(instances).collect()
+        statics.chain(instances)
+    }
+
+    /// The receiver-less declarations of `method_name` on `receiver`. Several
+    /// is an overload that only an argument separates, so a lookup that must
+    /// commit to one signature declines rather than deciding it here.
+    pub(in crate::elaborator) fn static_method_entries(
+        &self,
+        receiver: &trait_env::ImplTargetKey,
+        method_name: &str,
+    ) -> impl Iterator<Item = &trait_env::StaticMethodEntry> {
+        self.tysys
+            .trait_env
+            .static_method_index
+            .get(receiver)
+            .into_iter()
+            .flatten()
+            .filter(move |e| e.name == method_name)
     }
 
     /// Build a [`control_flow::CtrlFlowCtx`] over the currently-active

@@ -556,9 +556,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         // First, determine expected parameter types to handle coercion.
-        // `None` is a callee whose signature this lookup could not find, which
-        // an empty parameter list does not say: a callee declaring no
-        // parameters has a count to check like any other.
         let signature = self.lookup_function_signature(
             effective_name,
             receiver_site,
@@ -913,7 +910,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // non-generic call is checked too, or a mismatch only shows at
                 // codegen, as an invalid module rather than at its own span.
                 let mut raw_param_types = self
-                    .lookup_static_method_param_types(prefix, suffix)
+                    .lookup_static_method_param_types_keyed(prefix, suffix, None)
                     .unwrap_or_default();
                 let qualified_sig = self.static_method_sig(prefix, suffix);
                 // Written qualified, an instance method takes its receiver as
@@ -1828,6 +1825,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// slots are instantiated, and a rigid slot is opaque — a literal checked
     /// against one can only be rejected. An effect operation reports no slots;
     /// it infers through its own path.
+    ///
+    /// `None` is a callee this lookup could not find, which an empty parameter
+    /// list does not say: a callee declaring no parameters has a count to check
+    /// like any other, and reading the two alike is what let an argument
+    /// written at one be dropped along with its side effect.
     pub(super) fn lookup_function_signature(
         &mut self,
         name: &str,
@@ -1892,10 +1894,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 {
                     let ns_key =
                         trait_env::ImplTargetKey::of_decl(self.tysys.resolutions.defs(), def);
-                    // The lookup says whether it answered, so a callee
-                    // declaring no parameters keeps its count — an empty list
-                    // read as "unknown" is what let an argument written at one
-                    // be dropped along with its side effect.
                     if let Some(params) = self.lookup_static_method_param_types_keyed(
                         type_name,
                         method_name,
@@ -2763,14 +2761,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         method_name: &str,
     ) -> Option<MethodSig> {
         let key = self.impl_target(struct_name);
-        let mut declared = self
-            .tysys
-            .trait_env
-            .static_method_index
-            .get(&key)
-            .into_iter()
-            .flatten()
-            .filter(|e| e.name == method_name);
+        let mut declared = self.static_method_entries(&key, method_name);
         if declared.next().is_some() && declared.next().is_some() {
             return None;
         }

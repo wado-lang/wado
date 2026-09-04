@@ -464,6 +464,16 @@ impl TypeAnnotations {
         self.walks().filter_map(move |facts| map(facts).get(&id))
     }
 
+    /// Every dispatch recorded for the call at `id`, one per walk that reached
+    /// it. A checker must satisfy all of them: a tuple `for-of` body dispatches
+    /// once per element, and one element's callee is not the others'.
+    pub(crate) fn static_dispatches(
+        &self,
+        id: AstId,
+    ) -> impl Iterator<Item = &StaticMethodDispatch> {
+        self.all(|facts| &facts.static_method_dispatch, id)
+    }
+
     /// Every callee a dispatch decision names, as `(use site, declaration)`
     /// pairs, over every walk — see [`BodyFacts::dispatch_edges`].
     pub(crate) fn dispatched_callees(

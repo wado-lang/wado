@@ -528,14 +528,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         }
     }
 
-    /// The body fact `map` records for `id` in the walk reify is replaying: a
-    /// tuple `for-of` body is resolved once per element, and annotate peeled
-    /// each element's facts off the module's own into a
-    /// [`super::sem::types::BodyFacts`] overlay, so the active overlays are
-    /// consulted innermost-first before the module's own. Every read of a body
-    /// fact goes through here — the maps are keyed by the globally-unique
-    /// `AstId`, so a node names its facts whichever module's perspective reify
-    /// has swapped in.
+    /// The body fact `map` records for `id` in the walk reify is replaying:
+    /// the active tuple `for-of` overlays innermost-first, then the module's
+    /// own walk. Every read of a body fact goes through here, because annotate
+    /// peeled each element's facts out of the module's own maps.
     fn ann<V: Clone>(
         &self,
         map: fn(&super::sem::types::BodyFacts) -> &IndexMap<crate::ast::AstId, V>,

@@ -1182,26 +1182,24 @@ impl AstVisitor for SemEffectWalker<'_> {
         // `.next()` calls that have no source call id, so they record no
         // `method_dispatch` fact for `visit_expr` to consult. Check their
         // declared effects here from the recorded `for_of_iterator` fact.
-        // One iterator fact per walk that reached the loop: an inner `for-of`
-        // inside a tuple `for-of` body is walked once per outer element, and
-        // each element's `into_iter` / `next` has to be handled here.
-        let iterators: Vec<(crate::elaborator::sem::types::ForOfIteratorInfo, Span)> = match stmt {
-            Stmt::ForOf(for_of) => self
+        // One fact per walk that reached the loop: an inner `for-of` inside a
+        // tuple `for-of` body is walked once per outer element.
+        if let Stmt::ForOf(for_of) = stmt {
+            let iterators: Vec<crate::elaborator::sem::types::ForOfIteratorInfo> = self
                 .annotations
                 .into_iter()
                 .flat_map(|ann| ann.all(|facts| &facts.for_of_iterator, for_of.id))
-                .map(|info| (info.clone(), for_of.span))
-                .collect(),
-            _ => Vec::new(),
-        };
-        for (info, span) in &iterators {
-            for func_ref in [&info.into_iter, &info.next] {
-                let effects = self.index.method_effects(func_ref);
-                let callee = func_ref
-                    .method_info
-                    .as_ref()
-                    .map_or(func_ref.name.as_str(), |m| m.method_name.as_str());
-                self.report_missing(&effects, callee, *span);
+                .cloned()
+                .collect();
+            for info in &iterators {
+                for func_ref in [&info.into_iter, &info.next] {
+                    let effects = self.index.method_effects(func_ref);
+                    let callee = func_ref
+                        .method_info
+                        .as_ref()
+                        .map_or(func_ref.name.as_str(), |m| m.method_name.as_str());
+                    self.report_missing(&effects, callee, for_of.span);
+                }
             }
         }
         ast::walk_stmt(self, stmt);
@@ -1227,13 +1225,10 @@ impl AstVisitor for SemEffectWalker<'_> {
                 } else {
                     None
                 };
-                // One dispatch per walk that reached the call — a tuple for-of
-                // body's per element — and every one of them has to be handled
-                // where the call is written.
                 let dispatches: Vec<(FunctionRef, bool)> = self
                     .annotations
                     .into_iter()
-                    .flat_map(|ann| ann.all(|facts| &facts.static_method_dispatch, call.id))
+                    .flat_map(|ann| ann.static_dispatches(call.id))
                     .map(|dispatch| (dispatch.function_ref.clone(), dispatch.self_in_args))
                     .collect();
                 if let Some((def, effects, name)) = free {
@@ -1269,8 +1264,6 @@ impl AstVisitor for SemEffectWalker<'_> {
                 }
             }
             Expr::MethodCall(method_call) => {
-                // One dispatch per walk that reached the call: a tuple for-of
-                // body's per element, each of which must hold.
                 let sem = self.sem;
                 for dispatch in sem.method_dispatches_at(method_call.id) {
                     let func_ref = dispatch.function_ref.clone();
@@ -1286,7 +1279,7 @@ impl AstVisitor for SemEffectWalker<'_> {
                 let dispatches: Vec<(FunctionRef, bool)> = self
                     .annotations
                     .into_iter()
-                    .flat_map(|ann| ann.all(|facts| &facts.static_method_dispatch, static_call.id))
+                    .flat_map(|ann| ann.static_dispatches(static_call.id))
                     .map(|dispatch| (dispatch.function_ref.clone(), dispatch.self_in_args))
                     .collect();
                 for (func_ref, self_in_args) in dispatches {
@@ -2067,7 +2060,7 @@ fn resolve_returned_args<'e>(
                 return Some(ReturnedCall { returned, args });
             }
             let returned: IndexSet<u32> = annotations
-                .all(|facts| &facts.static_method_dispatch, call.id)
+                .static_dispatches(call.id)
                 .flat_map(|d| mangled(&d.function_ref))
                 .collect();
             if !returned.is_empty() {
@@ -2097,7 +2090,7 @@ fn resolve_returned_args<'e>(
         Expr::StaticMethodCall(sc) => {
             let args: Vec<&Expr> = sc.args.iter().collect();
             let returned = annotations
-                .all(|facts| &facts.static_method_dispatch, sc.id)
+                .static_dispatches(sc.id)
                 .flat_map(|d| mangled(&d.function_ref))
                 .collect();
             Some(ReturnedCall { returned, args })
@@ -2218,7 +2211,7 @@ impl RefFlow<'_, '_> {
                 let stored: Vec<u32> = self
                     .ctx
                     .annotations
-                    .all(|facts| &facts.static_method_dispatch, call.id)
+                    .static_dispatches(call.id)
                     .flat_map(|d| self.mangled_stored(&d.function_ref))
                     .collect();
                 if !stored.is_empty() {
@@ -2252,7 +2245,7 @@ impl RefFlow<'_, '_> {
                 let stored = self
                     .ctx
                     .annotations
-                    .all(|facts| &facts.static_method_dispatch, sc.id)
+                    .static_dispatches(sc.id)
                     .flat_map(|d| self.mangled_stored(&d.function_ref))
                     .collect();
                 Some(ResolvedCall { stored, args })
@@ -2659,7 +2652,7 @@ impl AstVisitor for PurityWalker<'_> {
                     let func_refs: Vec<FunctionRef> = self
                         .annotations
                         .into_iter()
-                        .flat_map(|ann| ann.all(|facts| &facts.static_method_dispatch, call.id))
+                        .flat_map(|ann| ann.static_dispatches(call.id))
                         .map(|dispatch| dispatch.function_ref.clone())
                         .collect();
                     for func_ref in func_refs {
@@ -2679,7 +2672,7 @@ impl AstVisitor for PurityWalker<'_> {
                 let func_refs: Vec<FunctionRef> = self
                     .annotations
                     .into_iter()
-                    .flat_map(|ann| ann.all(|facts| &facts.static_method_dispatch, static_call.id))
+                    .flat_map(|ann| ann.static_dispatches(static_call.id))
                     .map(|dispatch| dispatch.function_ref.clone())
                     .collect();
                 for func_ref in func_refs {

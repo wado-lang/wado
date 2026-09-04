@@ -642,11 +642,14 @@ count taken from a first-match lookup beside a parameter list taken from a
 unique-match one, so an overloaded `from` was checked against whichever impl
 the index held first.
 
-Both are closed where they were found, but the shape survives: `call.rs`,
-`method_call.rs` and `method_lookup.rs` each still assemble the callee's
-parameter list themselves, and nothing in a signature says which of the two
-questions — "what does this name declare" and "which declaration does this
-call select" — a given lookup answers.
+Both are closed where they were found. The three static spellings —
+`Type::method`, `Type::<T>::method`, `ns::Type::method` — now share one
+`check_static_call_args`, and one lookup answers what a static declares. The
+shape survives elsewhere: 19 sites across 6 files emit
+`ArgumentCountMismatch`, and only 3 of them go through that shared check. The
+rest assemble the callee's parameter list themselves, and nothing in a
+signature says which of the two questions — "what does this name declare" and
+"which declaration does this call select" — a given lookup answers.
 
 Closing it: one `check_args(sig, args, spans)` every call path calls, fed by
 one lookup that returns a selected signature or says it selected none. The
