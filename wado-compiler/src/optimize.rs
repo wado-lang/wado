@@ -187,15 +187,15 @@ pub fn optimize(
                 // so 16 costs it least while still buying the serde rows.
                 // Below 13 every row is worse.
                 //
-                // Those figures are a *uniform* raise, which is no longer what
-                // this number does: `inline::net_cost` subtracts the call site a
-                // splice removes, so the gate is `gross - (CALL + params) <= 16`
-                // and a four-parameter callee is admitted at gross 22. That is
-                // not the regime above — json-catalog ser measured +11.9% on
-                // release under it, where a uniform 20 cost it 8.2% — because
-                // the credit is proportional to what calling costs rather than
-                // flat. The constant itself has not been re-swept since; 16 is
-                // inherited, not re-derived.
+                // Those figures come from raising the threshold uniformly, which
+                // is not what this number does any more. `inline::net_cost`
+                // subtracts the call site a splice removes, so the gate reads
+                // `gross - (CALL + params) <= 16` and a four-parameter callee is
+                // admitted at gross 22. The credit is proportional to what
+                // calling costs rather than flat, so that is not the regime the
+                // figures describe: json-catalog ser measured +11.9% on release
+                // under it, where a uniform 20 cost it 8.2%. 16 is inherited
+                // from the sweep above and has not been re-derived since.
                 inline_threshold: inline_threshold.unwrap_or(16),
                 inline_growth,
                 cap_is_defect: opt_iterations.is_none(),

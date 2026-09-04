@@ -216,15 +216,14 @@ control for it — even on the machine that produced it; a HEAD build has measur
 A/B a float-format change on `fts`, not on a serialize benchmark that dilutes it.
 
 **A dev-build A/B is only valid where the dev build is.** The inflation §1
-describes does not merely over-weight a profile, it flips an A/B verdict: dev
-runs the wasmtime runtime, GC and allocator at dev speed, so a row bound by
-allocation reads a different winner. json-canada matched release to under 2% and
-made an 8-second stdlib loop possible — it is store- and compute-bound — while
-on the same change dev called syntax-highlight -1.2% where release said **+1.4%**,
-and cbor-canada/cbor-twitter deserialize -2.9%/-1.2% where release said +0.3%.
-Every row that moved is a deserialize or a CST build, which is what allocates. So
-iterate on dev, and settle any row whose work is building an object graph on
-release before believing it.
+describes does not just over-weight a profile, it flips an A/B verdict. Dev runs
+the wasmtime runtime, GC and allocator at dev speed, so a row bound by allocation
+reads a different winner. json-canada is store- and compute-bound: it matched
+release to under 2% and made an 8-second stdlib loop possible. On the same change
+dev called syntax-highlight -1.2% where release said **+1.4%**, and cbor-canada
+and cbor-twitter deserialize -2.9% and -1.2% where release said +0.3%. Every row
+that moved is a deserialize or a CST build, which is what allocates. Iterate on
+dev, then settle any row whose work is building an object graph on release.
 
 ### A/B-ing a compiler change
 

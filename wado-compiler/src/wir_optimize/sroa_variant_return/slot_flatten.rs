@@ -343,11 +343,10 @@ fn body_calls_any(instr: &WirInstr, ids: &IndexSet<u32>) -> bool {
 /// one that loses, cbor-twitter, decodes `User` and `Status` at 307 and 186. The
 /// cut sits between them — see the WEP for the measurements.
 ///
-/// One caller over the cut declines the callee for *all* of them, not just that
-/// site: the slot is part of the result signature, so it is flattened everywhere
-/// or nowhere. What keeps that from being blunt is monomorphization —
-/// `next_field<S>` is a distinct callee per struct, so a rule that has to answer
-/// per callee still lands per decoded type.
+/// One caller over the cut declines the callee for all of them, not just that
+/// site, because the slot is part of the result signature. Monomorphization is
+/// what keeps that from being blunt: `next_field<S>` is a distinct callee per
+/// struct, so a rule answering per callee still lands per decoded type.
 const MAX_CALLER_LOCALS: usize = 128;
 
 /// Phase 2: keep candidates whose every call site consumes the slot cleanly.
@@ -360,9 +359,7 @@ pub(super) fn validate_slot_sites(
     // that references no candidate skips both the map build and the scan below.
     let cand_ids: IndexSet<u32> = cands.iter().map(|c| c.func_id_index).collect();
     // `(def_use, declared locals)` for exactly those functions, both taken once
-    // per function rather than once per candidate that lands in it. The local
-    // count comes from `declared_locals`, the emitter's authority on what a
-    // function holds, so the cut below is read in the unit the emitter allocates.
+    // per function rather than once per candidate that lands in it.
     let sites: Vec<Option<(LocalDefUse, usize)>> = module
         .functions
         .iter()

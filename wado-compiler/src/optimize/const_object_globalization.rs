@@ -116,67 +116,37 @@ impl CandidateKind {
     }
 }
 
-/// Rewrite `&(S { f: v, .. }.f)` to `&v` wherever the struct is a literal and
-/// every non-projected field is pure, so the `&` wraps the aggregate itself.
+/// Rewrite `&(S { f: v, .. }.f)` to `&v`, so the `&` wraps the aggregate itself.
 ///
 /// [`CandidateKind::InlineRef`] asks the `&`'s operand to be a constant
-/// *aggregate*; a projection of one is not, and the borrowed field is then
-/// rebuilt at every use. The shape is what a string-literal pattern becomes once
-/// `String^Eq::eq` inlines: lowering hands the callee `&"alpha"`, and splicing it
-/// leaves `&(String { repr: packed"alpha", .. }.repr)` as the byte-compare's
-/// argument, costing the literal the globalization it had while the call stood.
+/// *aggregate*, and a projection of one is not, so the borrowed field is rebuilt
+/// at every use. A string-literal pattern wears that shape once `String^Eq::eq`
+/// inlines: lowering hands the callee `&"alpha"` and splicing it leaves
+/// `&(String { repr: packed"alpha", .. }.repr)`.
 ///
-/// `const_folding`'s `project_struct_literal` folds the same shape inside the
-/// fixed point, but reaches it through the engine's parent map, which by then
-/// names a node the tree has replaced: the edit lands on an orphan and the live
-/// projection survives. Doing it here, over the arena, is what the recognizer
-/// below actually sees.
+/// `const_folding::project_struct_literal` reaches the same shape through the
+/// engine and does not stick (#1963); over the arena it does.
 fn deref_const_field_borrows(project: &mut NirPackage) {
     for func_rc in &project.functions {
         let mut func = func_rc.borrow_mut();
         let Some(body) = func.body.as_mut() else {
             continue;
         };
-        let mut edits: Vec<(ExprId, Operand)> = Vec::new();
-        for node in super::arena_query::reachable_nodes(body) {
-            let NodeRef::Expr(id) = node else { continue };
-            let ExprKind::Unary {
-                op: NirUnaryOp::Ref,
-                expr: Operand::Expr(inner),
-            } = &body.exprs[id].kind
-            else {
-                continue;
-            };
-            let ExprKind::FieldAccess {
-                expr: Operand::Expr(recv),
-                field_name,
-                ..
-            } = &body.exprs[*inner].kind
-            else {
-                continue;
-            };
-            let (recv, field_name) = (*recv, field_name.clone());
-            let ExprKind::StructLiteral { fields, .. } = &body.exprs[recv].kind else {
-                continue;
-            };
-            let Some(proj) = fields
-                .iter()
-                .find(|f| f.name == field_name)
-                .map(|f| f.value)
-            else {
-                continue;
-            };
-            // A sibling with an observable effect has to keep the struct so its
-            // evaluation survives; a pure one goes with it.
-            if fields
-                .iter()
-                .filter(|f| f.name != field_name)
-                .any(|f| !super::arena_query::is_pure_operand(body, f.value))
-            {
-                continue;
-            }
-            edits.push((id, proj));
-        }
+        let edits: Vec<(ExprId, Operand)> = super::arena_query::reachable_nodes(body)
+            .into_iter()
+            .filter_map(|node| {
+                let NodeRef::Expr(id) = node else { return None };
+                let ExprKind::Unary {
+                    op: NirUnaryOp::Ref,
+                    expr: Operand::Expr(inner),
+                } = &body.exprs[id].kind
+                else {
+                    return None;
+                };
+                let proj = super::arena_query::projected_const_field(body, *inner)?;
+                Some((id, proj))
+            })
+            .collect();
         for (id, proj) in edits {
             body.exprs[id].kind = ExprKind::Unary {
                 op: NirUnaryOp::Ref,

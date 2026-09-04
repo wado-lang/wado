@@ -221,19 +221,8 @@ impl<'a> CostWalk<'a> {
     }
 
     /// Price a call to a callee this pass will splice at what the splice costs,
-    /// rather than at the ABI edge.
-    ///
-    /// [`weight::CALL`] is what a call that *stays* a call costs. A callee whose
-    /// own callees are all inline candidates is a driver: as written it reads as
-    /// a handful of ABI edges and comes in cheap, and what the caller actually
-    /// receives is every one of those bodies. `i64::fmt_decimal` is three such
-    /// calls — two of them loops — so it prices around a dozen and splices into
-    /// `JsonSerializer::serialize_i64` as the whole integer-writing path,
-    /// costing json-catalog serialize 6.9%.
-    ///
-    /// One level of lookahead, off prices taken as written, so there is no
-    /// recursion here: the pass runs to a fixed point, and a driver whose own
-    /// callees are spliced in a later round is re-read then.
+    /// rather than at the ABI edge. See [`CostWalk::call_price`]; the table
+    /// itself is built in [`inline_functions`].
     fn splicing(mut self, spliced: &'a [usize]) -> Self {
         self.spliced = spliced;
         self
@@ -244,25 +233,24 @@ impl<'a> CostWalk<'a> {
         self.block(self.body.root, &mut SeenValues::default())
     }
 
-    /// What a call to `callee` costs this body: the body it splices, when
-    /// [`CostWalk::splicing`] says this pass will splice it, and the ABI edge
-    /// otherwise.
+    /// What a call to `callee` costs this body: the body it splices, when the
+    /// table says this pass will splice it, and the ABI edge otherwise.
     ///
-    /// A site handing the callee *any* constant is charged the edge regardless.
-    /// `CborSerializer::serialize_f64` is what this defends:
-    /// `push_be(buf, bits, 8)` spins a loop the literal 8 unrolls, so the loop
-    /// the table priced is not what the caller receives, and charging it costs
-    /// cbor-canada serialize 24%.
+    /// [`weight::CALL`] is what a call that *stays* a call costs. A driver — a
+    /// callee built out of other inline candidates — reads as a handful of ABI
+    /// edges and comes in cheap, while what its caller receives is every one of
+    /// those bodies. `i64::fmt_decimal` is three such calls, two of them loops,
+    /// and splicing it put the whole integer-writing path into
+    /// `JsonSerializer::serialize_i64` for -6.9% on json-catalog serialize.
     ///
-    /// It is a proxy, and a loose one: `is_operand_constant` covers `null`,
-    /// `false` and a radix argument as readily as a loop bound, so one
-    /// literal-defaulted parameter switches the lookahead off for that callee
-    /// everywhere. The precise question — does the fold this constant licenses
-    /// delete a loop — is what [`fold_drops_loop`] answers, but it reads a
-    /// [`ConstView`] over the *callee's* parameters rather than one call site's
-    /// arguments, so using it here means building that view per site. The
-    /// benchmarks were taken under the proxy; tightening it is a measured change,
-    /// not a cleanup.
+    /// A site handing the callee *any* constant is charged the edge regardless,
+    /// because the constant may unroll the loop the table priced:
+    /// `push_be(buf, bits, 8)` in `CborSerializer::serialize_f64` is that shape,
+    /// and charging it costs cbor-canada serialize 24%. The precise question —
+    /// does the fold this constant licenses delete a loop — is
+    /// [`fold_drops_loop`], but that reads a [`ConstView`] over the *callee's*
+    /// parameters rather than one site's arguments, so `null`, `false` and a
+    /// radix argument all switch the lookahead off here too.
     fn call_price(&self, callee: FuncId, args: &[ArenaCallArg]) -> usize {
         if args.iter().any(|a| self.arg_is_constant(a.expr)) {
             return weight::CALL;
@@ -1018,30 +1006,29 @@ struct Verdict {
     hold: bool,
 }
 
-/// Whether this pass declines `func` outright, before any price is taken.
-///
-/// The `spliced` lookahead table reads this too, so it cannot charge a caller
-/// for a body that will stay a call. `#[inline(always)]` overrides the
-/// `Never`-return gate, which is why that one is not unconditional here.
+/// Whether this pass declines `func` outright, before any price is taken. The
+/// `spliced` lookahead table reads it too, so the table cannot charge a caller
+/// for a body that will stay a call.
 fn splice_barred(
     func: &NirFunction,
     recursive_functions: &IndexSet<FuncId>,
     type_table: &TypeTable,
 ) -> bool {
-    // A CM binding is an ABI bridge between Wado GC types and CM linear memory
-    // and must remain a separate function. A recursive callee is barred ahead of
-    // the `#[inline(always)]` short-circuit: splicing a recursive call only
-    // exposes the next one, so an unconditional force would expand without bound
-    // over the fixed point (a compiler stack overflow at higher iteration
-    // counts). It is keyed on `FuncId` — the identity the recursive set is built
-    // on — so a cross-module recursive function is not missed.
+    // A CM binding is an ABI bridge between Wado GC types and CM linear memory,
+    // and has to stay a function of its own.
     if func.inline_hint == InlineHint::Never || func.is_cm_binding {
         return true;
     }
+    // Recursion is barred ahead of the `#[inline(always)]` short-circuit below:
+    // splicing a recursive call only exposes the next one, so a force would
+    // expand without bound over the fixed point (a compiler stack overflow at
+    // higher iteration counts). Keyed on `FuncId`, the identity the recursive set
+    // is built on, so a cross-module recursive function is not missed.
     if func.id.is_some_and(|id| recursive_functions.contains(&id)) {
         return true;
     }
     // A `!`-returning body is an error/abort path: never hot, nothing to gain.
+    // `#[inline(always)]` overrides this one, which is why it is not a bare test.
     func.inline_hint != InlineHint::Always && type_table.is_never(func.return_type)
 }
 
@@ -1484,25 +1471,23 @@ pub fn inline_functions(
 
     let type_table = project.type_table.borrow();
     // What a call to each function costs a caller that splices it, for
-    // `CostWalk::splicing`. Read as written — calls priced as ABI edges — so
-    // this is one level of lookahead and cannot recurse. A function this pass
-    // leaves alone keeps `0`, which prices its call as the edge it stays, and
-    // `splice_barred` / `effective_threshold` are read here so the table follows
-    // `classify_callee`'s answers rather than its own.
+    // `CostWalk::splicing`. Every price here is read as written, with calls
+    // charged as ABI edges, so the table is one level of lookahead and cannot
+    // recurse. A function this pass leaves alone keeps `0`, and it reads
+    // `splice_barred` / `effective_threshold` so it agrees with `classify_callee`
+    // on which those are.
     //
-    // The two can still part on one shape, by construction: the admission test
-    // here reads the gross price, while `classify_callee` reads the price this
-    // very table produces. A driver whose own loopy callees push it over the
-    // threshold is declined there and still charged to its callers here. Closing
-    // that means a second lookahead level; the entries below are what this one
-    // was measured at.
+    // The two still part on one shape. This admission test reads the gross
+    // price, while `classify_callee` reads the price this table produces, so a
+    // driver that its own loopy callees push over the threshold is declined
+    // there and charged to its callers here. Closing that takes a second
+    // lookahead level.
     //
     // Only a callee carrying a loop is priced this way. A loop is what the model
-    // already charges most to splice, because it is a region of its own in the
-    // caller; charging every inlinable callee its whole body instead prices a
-    // driver by its post-inlining size against a threshold calibrated on
-    // as-written ones, and suppresses inlining the CBOR serializers need —
-    // cbor-canada serialize -29%.
+    // charges most to splice, being a region of its own in the caller. Pricing
+    // every inlinable callee by its whole body instead judges a driver by its
+    // post-inlining size against a threshold calibrated on as-written ones, and
+    // that suppresses inlining the CBOR serializers need.
     let spliced: Vec<usize> = project
         .functions
         .iter()

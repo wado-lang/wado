@@ -63,21 +63,21 @@ reason is the same each time.
 | one call returning the two bounds                | 88      | 7.88       | **0.818**   |
 | pin the rare arm out of line (shrinks the above) | 113     | 7.46       | 0.833       |
 
-Every arm but the first does strictly less work than base — fewer calls, fewer
-mask computations — and every one of them is **slower than base**. So "fewer
-instructions" does not predict the outcome here at all. What separates the arm
-that wins is that it is the only one with _no call left on the hot path_: the
-saving is the call boundary itself (argument setup, the multivalue return, and
-the registers that cannot stay live across it), not the two mask computations,
-which are worth nothing. The three-scaling arm additionally does a third wide
-multiply that `short` does not need — a shortest representation at full width
-has `dmin == dmax`, so canada only ever needs two.
+Every arm but the first makes fewer calls and fewer mask computations than base,
+and every one of them is **slower than base**. So "fewer instructions" does not
+predict the outcome here at all. The arm that wins is the only one with _no call
+left on the hot path_. What it saves is the call boundary itself — argument
+setup, the multivalue return, the registers that cannot stay live across it — and
+not the two mask computations, which are worth nothing. The three-scaling arm
+also does a third wide multiply `short` does not need: a shortest representation
+at full width has `dmin == dmax`, so canada only ever needs two.
 
 Two traps worth naming. `inline_cost` prices a callee **as written**, so a
 helper that reads as "a mask and three calls" comes in under budget and is
-pulled into `short` together with all three bodies — `#[inline(never)]` is the
-only way to hold such a helper out of line, and it is not a claim against the
-cost model. And a size-matched control does not falsify a placement story:
+pulled into `short` together with all three bodies. `#[inline(never)]` is the
+only way to hold such a helper out of line, and reaching for it there is not a
+claim against the cost model. And a size-matched control does not falsify a
+placement story:
 padding `short` with a dead branch grew the _wasm_ by 196 bytes against the real
 change's 205 and left twitter at exactly 0.820 all three rounds, because a
 compare-and-jump is nothing in machine code next to three inlined `uscale`
@@ -106,7 +106,7 @@ outlining the correction arm; these three did not:
   ser, on a function the de path never calls. Pure placement.
 - **Returning the two bracketing scalings together** (`uscale_bounds`), to shrink
   `short` from three calls to two rather than grow it. The inliner takes it
-  anyway — a single-site candidate is charged nothing — so `short` grew from 87
+  anyway, a single-site candidate being charged nothing, so `short` grew from 87
   to 113 dump lines regardless.
 
 Generalizes: at this scale module layout outweighs the instruction saving, in
