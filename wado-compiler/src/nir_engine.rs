@@ -80,15 +80,6 @@ fn arena_slot<'a, T>(
     }
 }
 
-/// Extend a per-node buffer to cover `len` nodes, leaving what is already there
-/// alone — the epoch stamp is what makes an older session's entry absent, so a
-/// session never has to clear one.
-fn grow<T: Copy + Default>(v: &mut Vec<T>, len: usize) {
-    if v.len() < len {
-        v.resize(len, T::default());
-    }
-}
-
 /// Mutable counterpart of [`arena_slot`].
 fn arena_slot_mut<'a, T>(
     node: NodeRef,
@@ -105,13 +96,8 @@ fn arena_slot_mut<'a, T>(
     }
 }
 
-/// A parent edge, stamped with the session that wrote it. The parent and
-/// in-worklist maps are indexed by arena position, and the arena never compacts
-/// — after a round of inlining and rewriting it runs far ahead of the live tree
-/// [`Engine::build_indices`] walks — so clearing them per session would cost
-/// more than the walk they serve. A slot left by an older session reads as
-/// absent instead, which is what lets [`EngineBuffers::reset_for`] grow the maps
-/// without touching what is already there.
+/// A parent edge and the session that wrote it. Older stamps read as absent, so
+/// a session starts by bumping the stamp rather than by clearing the map.
 #[derive(Clone, Copy, Default)]
 struct ParentSlot {
     epoch: u64,
@@ -127,9 +113,8 @@ struct ParentSlot {
 /// allocations keeps the optimizer off the global allocator's hot path.
 #[derive(Default)]
 pub struct EngineBuffers {
-    /// This session's stamp. Bumped by [`Self::reset_for`]; a parent or
-    /// in-worklist slot carrying an older one is absent. `0` is no session, so a
-    /// freshly grown slot starts absent. See [`ParentSlot`].
+    /// This session's stamp, bumped by [`Self::reset_for`]. `0` is no session,
+    /// so a freshly grown slot starts absent. See [`ParentSlot`].
     epoch: u64,
     expr_parent: Vec<ParentSlot>,
     stmt_parent: Vec<ParentSlot>,
@@ -153,8 +138,7 @@ pub struct EngineBuffers {
     /// `enqueue`/`pop` run on nearly every rewrite edit, the engine's hottest
     /// path, so a `NodeRef`-keyed `IndexSet` here would pay a hash + probe on
     /// every one of them instead of a plain array index. A node is queued while
-    /// its slot holds the current [`Self::epoch`], so these need no per-session
-    /// clear either.
+    /// its slot holds the current [`Self::epoch`].
     expr_queued: Vec<u64>,
     stmt_queued: Vec<u64>,
     block_queued: Vec<u64>,
@@ -165,11 +149,22 @@ pub struct EngineBuffers {
     elided_locals: Vec<u32>,
 }
 
+/// Extend a per-node map to cover `len` nodes, leaving the entries already there
+/// for the session stamp to rule absent.
+fn grow<T: Copy + Default>(v: &mut Vec<T>, len: usize) {
+    if v.len() < len {
+        v.resize(len, T::default());
+    }
+}
+
 impl EngineBuffers {
-    /// Clear every buffer and size the parent / queued-bit / use-index maps to
-    /// `body`'s current node and local counts, readying them for a fresh
-    /// session. Capacity is retained, so a reused `EngineBuffers` allocates
-    /// only when a body is larger than any seen before.
+    /// Ready the buffers for a fresh session over `body`: bump the stamp, then
+    /// extend the parent, in-worklist and use-index maps to cover its counts.
+    ///
+    /// The maps are indexed by arena position, and the arena never compacts.
+    /// After a round of inlining it runs far ahead of the live tree
+    /// [`Engine::build_indices`] walks, so clearing the maps would cost more
+    /// than the walk they serve. The stamp rules the leftovers absent instead.
     fn reset_for(&mut self, body: &Body, local_count: usize) {
         self.epoch += 1;
         grow(&mut self.expr_parent, body.exprs.len());
@@ -233,8 +228,8 @@ impl EngineBuffers {
         ) = if value { epoch } else { 0 };
     }
 
-    /// The parent edge this session recorded for `node`, or `None` for the body
-    /// root and for a node no session of this stamp reached.
+    /// The parent this session recorded for `node`, or `None` for the body root
+    /// and for a node it never reached.
     fn parent(&self, node: NodeRef) -> Option<NodeRef> {
         let slot = arena_slot(
             node,
@@ -246,7 +241,7 @@ impl EngineBuffers {
         (slot.epoch == self.epoch).then_some(slot.parent).flatten()
     }
 
-    /// Record `node`'s parent edge under this session's stamp.
+    /// Record `node`'s parent for this session.
     fn set_parent(&mut self, node: NodeRef, parent: Option<NodeRef>) {
         let epoch = self.epoch;
         *arena_slot_mut(
@@ -258,10 +253,9 @@ impl EngineBuffers {
         ) = ParentSlot { epoch, parent };
     }
 
-    /// Cover a node the session just allocated. The maps are grown and never
-    /// truncated, so a body smaller than an earlier one leaves entries behind
-    /// and a push would land at the wrong index. The reach is read off the id
-    /// rather than passed in, so no caller can name the wrong arena's length.
+    /// Cover a node the session just allocated. The maps are never truncated, so
+    /// a body smaller than an earlier one leaves entries behind them and a push
+    /// would land past the new node rather than on it.
     fn note_alloc(&mut self, node: NodeRef) {
         match node {
             NodeRef::Expr(id) => {
@@ -2175,13 +2169,9 @@ mod tests {
         );
     }
 
-    /// One `EngineBuffers` is lent to every session of a pass, and the parent /
-    /// in-worklist maps it owns are grown but never cleared or truncated. The
-    /// epoch stamp is what keeps one session out of the next, and every other
-    /// test builds a fresh `EngineBuffers` — so this is the only place the reuse
-    /// the design rests on is exercised: a second, smaller body must not read
-    /// the first body's parent edge at the same arena index, and an `alloc_*`
-    /// must land in its own slot rather than past the entries left behind.
+    /// The stamp is what keeps one session's maps out of the next, and every
+    /// other test builds a fresh `EngineBuffers` — so this is the only place the
+    /// reuse it exists for is exercised.
     #[test]
     fn a_reused_engine_buffers_keeps_one_sessions_maps_out_of_the_next() {
         let mut buffers = EngineBuffers::default();

@@ -886,9 +886,6 @@ fn propagate_at_root(
         substitute_promoted_reads(engine, &substitutions);
         let root = engine.body.root;
         apply_in_block(engine, root, &substitutions, &dead_locals);
-        // Report the bindings this round propagated away rather than walking the
-        // body to check them here: the audit is `Body::surviving_read` either
-        // way, and reporting pays one walk per session instead of one per round.
         for &local in &dead_locals {
             engine.note_elided_local(local);
         }

@@ -528,31 +528,26 @@ fn run_optimization_passes(
         // already processed at their current revision, and reports its own
         // per-function changes.
         //
-        // The round is skipped here, not inside the pass: a pass builds its
-        // whole-program state — method catalogs, callee maps, effect summaries,
-        // alias tables, call-site censuses — before it reaches its first
-        // function, and that setup outweighs the per-function work once the
-        // gate has drained. Owning the skip at the schedule is what keeps a
-        // pass from forgetting it. An empty gate means no function changed
-        // since this pass last ran, so the round it skips is one that would
-        // rebuild the same state and rewrite nothing.
+        // A drained column skips the round at the schedule, not inside the
+        // pass. A pass builds its whole-program state before it reaches its
+        // first function, and a drained column means no function changed since
+        // it last ran, so that round would rebuild the state and rewrite
+        // nothing.
         macro_rules! gated {
+            (@run $name:expr, $id:expr, $pass:expr) => {
+                run_pass($name, project, profiler, |p| {
+                    gate.any_pending($id, p.functions.len()) && $pass(p, &mut gate)
+                })
+            };
             ($name:expr, $id:expr, $pass:expr) => {{
-                record!(
-                    $name,
-                    run_pass($name, project, profiler, |p| {
-                        gate.any_pending($id, p.functions.len()) && $pass(p, &mut gate)
-                    })
-                );
+                record!($name, gated!(@run $name, $id, $pass));
             }};
         }
         // Reports changes to the gate but not to `iter_changed` — must never
         // keep the loop alive on its own.
         macro_rules! gate_only {
             ($name:expr, $id:expr, $pass:expr) => {{
-                run_pass($name, project, profiler, |p| {
-                    gate.any_pending($id, p.functions.len()) && $pass(p, &mut gate)
-                });
+                gated!(@run $name, $id, $pass);
             }};
         }
         // Container SROA must run before inline in each iteration: inline
@@ -652,7 +647,9 @@ fn run_optimization_passes(
         // sessions (`prune_template_block_wrappers` / `prune_constant_branches`).
         // After `const_fold`, so a caller's config struct literal already holds
         // folded constants; inside the loop, so the next iteration prunes the
-        // clone's dead branches and reaches one call deeper.
+        // clone's dead branches and reaches one call deeper. Not `gated!`: it
+        // owns no column, since a summary taken before a callee gained a write
+        // would license an unsound substitution (see its module doc).
         record!(
             "nir/param_spec",
             run_pass("nir/param_spec", project, profiler, |p| {
