@@ -2855,7 +2855,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             blanket_type_param: None,
             blanket_binder: None,
             blanket_bounds: None,
-            bound_depth: 0,
             impl_struct_name: struct_name.to_string(),
             impl_struct_fq: self.tysys.fq_receiver_head(base_type_id),
             is_blanket_ref_impl: false,

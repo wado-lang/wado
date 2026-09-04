@@ -64,6 +64,15 @@ pub(super) fn type_param_defaults_of(params: &[ast::GenericParam]) -> Vec<Option
 }
 
 impl StructFieldInfo {
+    /// Whether `Default` derives from the field defaults alone: every field
+    /// declares one, and there is a field. A generic struct does not: a default
+    /// is elaborated against the declaration, not an instance.
+    pub(super) fn auto_derives_default(&self) -> bool {
+        !self.fields.is_empty()
+            && self.type_param_type_ids.is_empty()
+            && self.field_defaults.iter().all(Option::is_some)
+    }
+
     /// Whether a reflection written in `module` can enumerate every field
     /// (WEP 2026-06-13, Visibility).
     pub(super) fn fields_visible_from(&self, module: &ModuleSource) -> bool {
@@ -424,6 +433,16 @@ pub enum TypeError {
         receiver: String,
         /// The receiver-parameter bounds of each blanket, in declaration order.
         bounds: Vec<String>,
+        span: Span,
+    },
+
+    /// An impl applies, and the calling module has imported none of the traits
+    /// that would answer: the scope gate of WEP 2026-09-01. Names each trait,
+    /// since importing one is the fix.
+    TraitNotImported {
+        method: String,
+        receiver: String,
+        traits: Vec<String>,
         span: Span,
     },
 
@@ -1297,6 +1316,23 @@ impl TypeError {
                         .map(|b| format!("'{b}'"))
                         .collect::<Vec<_>>()
                         .join(" and "),
+                ),
+                *span,
+            ),
+            TypeError::TraitNotImported {
+                method,
+                receiver,
+                traits,
+                span,
+            } => (
+                Code::TypeMismatch,
+                format!(
+                    "{} is not imported here: '{receiver}' has '{method}' through it; import the trait to call it",
+                    traits
+                        .iter()
+                        .map(|t| format!("'{t}'"))
+                        .collect::<Vec<_>>()
+                        .join(" or "),
                 ),
                 *span,
             ),
@@ -2545,10 +2581,6 @@ pub(super) struct TraitMethodMatch {
     /// The receiver parameter's bounds as source writes them (`T: Limit`) —
     /// what an ambiguity names two blankets by, neither having a name.
     pub(super) blanket_bounds: Option<String>,
-    /// How far down the receiver's newtype chain this impl's target bounds
-    /// hold: 0 at the receiver itself, 1 at its base. Rank 1 of the selection
-    /// order (`docs/wep-2026-09-01-trait-resolution.md`).
-    pub(super) bound_depth: usize,
     /// The struct name that actually has the trait impl (may differ from the
     /// receiver's struct name when the impl was found through the newtype chain).
     /// Written form — the impl-index key.

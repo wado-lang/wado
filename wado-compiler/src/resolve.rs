@@ -253,8 +253,6 @@ impl Resolutions {
             .copied()
     }
 
-    /// Whether `def` is reachable from `module` under any name at all.
-    ///
     /// Every declaration `module` may name — what each name it can write
     /// reaches, through the one scope order: its `use` imports, then its own
     /// (including what its `pub use` re-exports reach), then the prelude's.

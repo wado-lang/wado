@@ -1,0 +1,44 @@
+#![TODO]
+// A receiver typed by a projection (`X::Item` under `X: Holder`) satisfies the
+// bounds the trait declares on the associated type, so the value blanket over
+// `Display` is selected for `it.show()`. Its body is then instantiated at the
+// projection's base `H` rather than at `H::Item`, and `${*self}` reports that
+// `H` is not `Display` (wado-lang/wado#1961).
+
+trait Show {
+    fn show(&self) -> String;
+}
+
+impl<T: Display> Show for T {
+    fn show(&self) -> String {
+        return `<${*self}>`;
+    }
+}
+
+trait Holder {
+    type Item: Display;
+    fn item(&self) -> Self::Item;
+}
+
+struct H {
+    v: i32,
+}
+
+impl Holder for H {
+    type Item = i32;
+    fn item(&self) -> i32 {
+        return self.v;
+    }
+}
+
+fn shown<X: Holder>(h: &X) -> String {
+    let it = h.item();
+    return it.show();
+}
+
+test "a projection receiver reaches a blanket over the assoc's bound" {
+    assert shown(&H { v: 3 }) == "<3>";
+}
+
+__DATA__
+{"test": {}}

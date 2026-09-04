@@ -38,6 +38,15 @@ pub enum SolverType {
         inner: Box<SolverType>,
     },
     Tuple(Vec<SolverType>),
+    /// An associated type of a rigid parameter, `X::Item` under `X: Holder`:
+    /// a type of its own, satisfying the bounds the trait declares on it
+    /// ([`TraitDef::assoc_bounds`]). A projection on a concrete type is
+    /// normalized to the impl's binding before it reaches the solver.
+    Projection {
+        base: Box<SolverType>,
+        trait_: TraitDeclId,
+        assoc: AssocId,
+    },
 }
 
 /// An associated type of a trait: `Mul::Output`.
@@ -61,18 +70,21 @@ impl SolverType {
         match self {
             Self::Param(_) | Self::Pack(_) => pred(self),
             Self::Decl(_, inner) | Self::Tuple(inner) => inner.iter().any(|t| t.mentions(pred)),
-            Self::Ref { inner, .. } => inner.mentions(pred),
+            Self::Ref { inner, .. } | Self::Projection { base: inner, .. } => inner.mentions(pred),
         }
     }
 
-    /// Whether `self` or a type within it is an instance of `head`.
+    /// Whether `self` or a type within it instantiates a declaration
+    /// satisfying `pred`.
     #[must_use]
-    pub fn mentions_head(&self, head: TypeDeclId) -> bool {
+    pub fn mentions_decl(&self, pred: &dyn Fn(TypeDeclId) -> bool) -> bool {
         match self {
             Self::Param(_) | Self::Pack(_) => false,
-            Self::Decl(id, inner) => *id == head || inner.iter().any(|t| t.mentions_head(head)),
-            Self::Tuple(inner) => inner.iter().any(|t| t.mentions_head(head)),
-            Self::Ref { inner, .. } => inner.mentions_head(head),
+            Self::Decl(id, inner) => pred(*id) || inner.iter().any(|t| t.mentions_decl(pred)),
+            Self::Tuple(inner) => inner.iter().any(|t| t.mentions_decl(pred)),
+            Self::Ref { inner, .. } | Self::Projection { base: inner, .. } => {
+                inner.mentions_decl(pred)
+            }
         }
     }
 
@@ -96,6 +108,15 @@ impl SolverType {
             Self::Ref { is_mut, inner } => Self::Ref {
                 is_mut: *is_mut,
                 inner: Box::new(inner.map_params(arg)?),
+            },
+            Self::Projection {
+                base,
+                trait_,
+                assoc,
+            } => Self::Projection {
+                base: Box::new(base.map_params(arg)?),
+                trait_: *trait_,
+                assoc: *assoc,
             },
         })
     }
@@ -206,6 +227,9 @@ pub struct TraitDef {
     /// supertrait's methods are not among them: an implementor writes a
     /// separate impl for each trait.
     pub methods: Vec<MethodId>,
+    /// The bounds it declares on each associated type (`type Item: Display`),
+    /// which a [`SolverType::Projection`] of it satisfies.
+    pub assoc_bounds: IndexMap<AssocId, Vec<TraitDeclId>>,
 }
 
 /// What a module may name. A trait's methods are candidates only where its
@@ -302,7 +326,10 @@ impl Program {
             SolverType::Param(index) | SolverType::Pack(index) => {
                 (*index as usize) < def.params.len()
             }
-            SolverType::Decl(..) | SolverType::Tuple(_) | SolverType::Ref { .. } => true,
+            SolverType::Decl(..)
+            | SolverType::Tuple(_)
+            | SolverType::Ref { .. }
+            | SolverType::Projection { .. } => true,
         };
         let undeclared = |ty: &SolverType| ty.mentions(&|p| !declared(p));
         assert!(

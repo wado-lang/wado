@@ -54,9 +54,25 @@ pub(super) struct Lowering {
     /// share one id, which is what makes their collision one question.
     methods: IndexMap<String, u32>,
     /// The impl block each lowered impl came from, so a selection the compiler
-    /// made and one the solver made name the same thing. A derived, marker or
-    /// primitive impl is written by no block and is absent.
+    /// made and one the solver made name the same thing. A derived impl names
+    /// the blanket its body comes from; a primitive's impl, or a body the
+    /// compiler supplies with no blanket, is written by no block and is absent.
     impl_defs: IndexMap<ImplId, DefId>,
+    /// The `Reflect*`-bounded blanket a derived body comes from, by the trait
+    /// and the reflection kind it bounds on. Lookup collects that block for a
+    /// derived body, so a `Derived` impl is named to it.
+    derivation_source: IndexMap<(TraitDeclId, CompilerItem), DefId>,
+    /// Heads the program names but reads no members of: the anonymous head,
+    /// and a struct declared in a body, whose fields annotate resolves after
+    /// the program is built. `derive` never saw one, so the differential
+    /// skips a question mentioning it.
+    opaque_heads: IndexSet<TypeDeclId>,
+}
+
+/// The spelling a function type's head is keyed by. `fn mut` is a shape of its
+/// own, since a closure that may write its captures is not the other.
+fn fn_shape_name(is_mut: bool) -> &'static str {
+    if is_mut { "fn mut" } else { "fn" }
 }
 
 /// The id `key` has in `map`, minted at the next index when it has none.
@@ -84,10 +100,9 @@ impl Lowering {
             .expect("the anonymous head is interned before the program is read")
     }
 
-    /// The head a function type lowers under. `fn mut` is a shape of its own,
-    /// since a closure that may write its captures is not the other.
+    /// The head a function type lowers under.
     fn fn_shape(&mut self, is_mut: bool) -> TypeDeclId {
-        self.builtin(if is_mut { "fn mut" } else { "fn" })
+        self.builtin(fn_shape_name(is_mut))
     }
 
     fn trait_decl(&mut self, def: DefId) -> TraitDeclId {
@@ -113,6 +128,21 @@ impl Lowering {
 
     fn known_type(&self, key: &DeclKey) -> Option<TypeDeclId> {
         self.decls.get(key).map(|&i| TypeDeclId(i))
+    }
+
+    /// The declaration a trait id was given for. Every trait id is minted from
+    /// one, so a builtin key here is a lowering bug.
+    fn trait_def_of(&self, id: TraitDeclId) -> DefId {
+        let Some((DeclKey::Def(def), _)) = self.decls.get_index(id.0 as usize) else {
+            panic!("trait {id:?} was not minted from a declaration");
+        };
+        *def
+    }
+
+    fn known_assoc(&self, trait_: TraitDeclId, name: &str) -> Option<AssocId> {
+        self.assocs
+            .get(&(trait_, name.to_string()))
+            .map(|&i| AssocId(i))
     }
 
     fn known_module(&self, module: &ModuleSource) -> Option<ModuleId> {
@@ -319,17 +349,29 @@ impl Lowering {
                     .chain(std::iter::once(return_type))
                     .map(|&a| self.type_id(table, a, param))
                     .collect::<Option<Vec<_>>>()?;
-                decl(
-                    DeclKey::Builtin((if *is_mut { "fn mut" } else { "fn" }).to_string()),
-                    args,
-                )
+                decl(DeclKey::Builtin(fn_shape_name(*is_mut).to_string()), args)
             }
             // `impl Inspect for !` is written in the prelude, so the receiver
             // side names the same shape.
             ResolvedType::Never => decl(DeclKey::Builtin("!".to_string()), vec![]),
+            // A projection on a rigid parameter, satisfying what its trait
+            // declares of the associated type. One built under no trait names
+            // nothing the solver can read.
+            ResolvedType::AssocTypeProjection {
+                param_id,
+                assoc_name,
+                owning_trait,
+                ..
+            } => {
+                let trait_ = self.known_trait((*owning_trait)?)?;
+                Some(SolverType::Projection {
+                    base: Box::new(self.type_id(table, *param_id, param)?),
+                    trait_,
+                    assoc: self.known_assoc(trait_, assoc_name)?,
+                })
+            }
             ResolvedType::Reactive(_)
             | ResolvedType::InferVar(_)
-            | ResolvedType::AssocTypeProjection { .. }
             | ResolvedType::Unknown
             | ResolvedType::Error => None,
         }
@@ -447,6 +489,54 @@ pub(super) fn lower_impls<'a>(
     sources
 }
 
+/// Whether a newtype's base is boxed and replaced on assign, so a `&mut` cannot
+/// write through it (`is_ref_mut_identity`): a variant at any instantiation, a
+/// function, or a newtype of one.
+fn is_boxed_base(tysys: &TypeSystem, table: &TypeTable, base: &ResolvedType) -> bool {
+    match base {
+        ResolvedType::Variant { .. } | ResolvedType::Function { .. } => true,
+        ResolvedType::GenericInstance { def, .. } => tysys.all_variant_cases.contains_key(def),
+        ResolvedType::Newtype { base_type, .. } => {
+            is_boxed_base(tysys, table, &table.get(*base_type).clone())
+        }
+        ResolvedType::Primitive(_)
+        | ResolvedType::Unit
+        | ResolvedType::Never
+        | ResolvedType::Struct { .. }
+        | ResolvedType::Enum { .. }
+        | ResolvedType::Flags { .. }
+        | ResolvedType::Resource { .. }
+        | ResolvedType::GenericResource { .. }
+        | ResolvedType::BuiltinArray(_)
+        | ResolvedType::Ref(_)
+        | ResolvedType::MutRef(_)
+        | ResolvedType::TypeParam { .. }
+        | ResolvedType::TypePack { .. }
+        | ResolvedType::Reactive(_)
+        | ResolvedType::InferVar(_)
+        | ResolvedType::AssocTypeProjection { .. }
+        | ResolvedType::Unknown
+        | ResolvedType::Error => false,
+    }
+}
+
+/// Whether the compiler's derivation walk assumes a bound of `ty` that no
+/// impl states: of a receiver's own parameter with no bound, and of a pack's
+/// elements whatever the pack's bounds say (`[..T]: Ord` holds to it under
+/// `T: Inspect`). Where it does, the two paths read the receiver differently
+/// until derivation is answered by impls (`docs/wep-2026-09-01-trait-resolution.md`,
+/// "Derivation is still a query in the compiler").
+fn assumed_by_walk(env: &Env, ty: &SolverType) -> bool {
+    ty.mentions(&|p| match p {
+        SolverType::Param(i) => env.param_bounds[*i as usize].is_empty(),
+        SolverType::Pack(_) => true,
+        SolverType::Decl(..)
+        | SolverType::Ref { .. }
+        | SolverType::Tuple(_)
+        | SolverType::Projection { .. } => false,
+    })
+}
+
 /// The newtype declarations with their base types. A `flags` type sits in the
 /// same table and is not one.
 fn newtype_decls<'a>(
@@ -531,6 +621,17 @@ impl SolverBridge {
         program.tuple = lowering.tuple.map(|def| lowering.type_decl(def));
         Self::intern_declarations(tysys, &mut lowering);
         let derivation_sources = Self::derivation_sources(tysys);
+        for (&def, &kind) in &derivation_sources {
+            if let Some(trait_) = tysys
+                .trait_env
+                .impl_headers
+                .get(&def)
+                .and_then(|header| header.trait_ref)
+            {
+                let trait_ = lowering.trait_decl(trait_);
+                lowering.derivation_source.insert((trait_, kind), def);
+            }
+        }
         lower_impls(
             &mut lowering,
             &mut program,
@@ -538,7 +639,7 @@ impl SolverBridge {
                 .trait_env
                 .impl_headers
                 .iter()
-                .filter(|(def, _)| !derivation_sources.contains(*def)),
+                .filter(|(def, _)| !derivation_sources.contains_key(*def)),
             &tysys.resolutions,
         );
         Self::state_primitive_impls(tysys, &mut lowering, &mut program);
@@ -546,17 +647,22 @@ impl SolverBridge {
         Self::state_scopes(tysys, &mut lowering, &mut program);
         Self::state_newtype_bases(tysys, &table, &mut lowering, &mut program);
         Self::derive_all(tysys, &table, &mut lowering, &mut program);
+        Self::name_derived_impls(tysys, &mut lowering, &program);
         Self::state_reflect_facts(tysys, &table, &lowering, &mut program);
         Self::state_type_facts(tysys, &table, &lowering, &mut program);
         Self { program, lowering }
     }
 
-    /// The `Reflect*`-bounded value blankets of the structural traits: each is
-    /// the derived body's source, which [`derive`] answers for per declaration.
-    fn derivation_sources(tysys: &TypeSystem) -> IndexSet<DefId> {
-        let reflect: IndexSet<DefId> = Self::REFLECT
+    /// The `Reflect*`-bounded value blankets of the structural traits, each
+    /// with the reflection kind it bounds on: each is the derived body's source,
+    /// which [`derive`] answers for per declaration.
+    fn derivation_sources(tysys: &TypeSystem) -> IndexMap<DefId, CompilerItem> {
+        let reflect: IndexMap<DefId, CompilerItem> = Self::REFLECT
             .into_iter()
-            .filter_map(|kind| tysys.compiler_trait_def(kind.compiler_item()))
+            .filter_map(|kind| {
+                let item = kind.compiler_item();
+                Some((tysys.compiler_trait_def(item)?, item))
+            })
             .collect();
         Self::DERIVED
             .into_iter()
@@ -569,15 +675,50 @@ impl SolverBridge {
                     .into_iter()
                     .flatten()
             })
-            .filter(|blanket| {
-                blanket.receiver == BlanketReceiver::Value
-                    && blanket
-                        .bounds
-                        .iter()
-                        .any(|bound| bound.decl_ref.is_some_and(|decl| reflect.contains(&decl)))
+            .filter(|blanket| blanket.receiver == BlanketReceiver::Value)
+            .filter_map(|blanket| {
+                let kind = blanket
+                    .bounds
+                    .iter()
+                    .find_map(|bound| reflect.get(&bound.decl_ref?).copied())?;
+                Some((blanket.def, kind))
             })
-            .map(|blanket| blanket.def)
             .collect()
+    }
+
+    /// Name each derived impl, and each marker demanding one, to the blanket
+    /// lookup collects for its body: the source of its trait at the
+    /// declaration's reflection kind. A marker block declares no method, so
+    /// lookup never collects it. A trait the compiler derives without a blanket
+    /// (`Eq`, `Ord`) stays unnamed.
+    fn name_derived_impls(tysys: &TypeSystem, lowering: &mut Lowering, program: &Program) {
+        let kind_of = |def: DefId| {
+            if tysys.all_struct_fields.contains_key(&def) {
+                CompilerItem::ReflectStruct
+            } else if tysys.all_variant_cases.contains_key(&def) {
+                CompilerItem::ReflectVariant
+            } else if tysys.all_enum_cases.contains_key(&def) {
+                CompilerItem::ReflectEnum
+            } else if tysys.all_flags_cases.contains_key(&def) {
+                CompilerItem::ReflectFlags
+            } else {
+                CompilerItem::ReflectNewtype
+            }
+        };
+        for (&id, def) in &program.impls {
+            if !matches!(def.origin, ImplOrigin::Derived | ImplOrigin::Marker) {
+                continue;
+            }
+            let (Some(trait_), SolverType::Decl(head, _)) = (def.trait_, &def.target) else {
+                continue;
+            };
+            let Some((DeclKey::Def(decl), _)) = lowering.decls.get_index(head.0 as usize) else {
+                continue;
+            };
+            if let Some(&source) = lowering.derivation_source.get(&(trait_, kind_of(*decl))) {
+                lowering.impl_defs.insert(id, source);
+            }
+        }
     }
 
     /// Intern every declaration and module up front, so a query lowers without
@@ -595,7 +736,17 @@ impl SolverBridge {
         {
             lowering.type_decl(*def);
         }
-        lowering.anonymous_struct();
+        let anonymous = lowering.anonymous_struct();
+        lowering.opaque_heads.insert(anonymous);
+        // A struct declared in a body has its identity here and its fields
+        // only once annotate reaches the body.
+        let defs = tysys.resolutions.defs();
+        for def in defs.iter().filter(|&def| {
+            matches!(defs.kind(def), crate::defs::DefKind::Struct) && defs.is_function_local(def)
+        }) {
+            let head = lowering.type_decl(def);
+            lowering.opaque_heads.insert(head);
+        }
         for module in tysys.module_visible_types.keys() {
             lowering.module(module);
         }
@@ -619,8 +770,18 @@ impl SolverBridge {
                 .filter(|(op, _)| primitive_has_operator(name, *op))
                 .map(|(_, def)| *def);
             for trait_ in eq_ord.iter().copied().chain(carried) {
+                let trait_ = lowering.trait_decl(trait_);
+                // The prelude writes many of these pairs; one impl per pair,
+                // or every call on a primitive would rank `Duplicated`.
+                let written = program
+                    .impls
+                    .values()
+                    .any(|def| def.trait_ == Some(trait_) && def.target == target);
+                if written {
+                    continue;
+                }
                 program.push_impl(ImplDef {
-                    trait_: Some(lowering.trait_decl(trait_)),
+                    trait_: Some(trait_),
                     trait_args: vec![],
                     target: target.clone(),
                     params: vec![],
@@ -677,10 +838,24 @@ impl SolverBridge {
                 .map(|m| lowering.method(&m.name))
                 .collect();
             let id = lowering.trait_decl(trait_);
+            let assoc_bounds = header
+                .assoc_types
+                .iter()
+                .map(|assoc| {
+                    let bounds = assoc
+                        .bounds
+                        .iter()
+                        .filter_map(|b| b.resolved.or_else(|| tysys.resolutions.declared(b.id)))
+                        .map(|def| lowering.trait_decl(def))
+                        .collect();
+                    (lowering.assoc(id, &assoc.name), bounds)
+                })
+                .collect();
             let def = program.traits.entry(id).or_default();
             def.arg_defaults = defaults;
             def.on_ref = on_ref;
             def.methods = methods;
+            def.assoc_bounds = assoc_bounds;
         }
     }
 
@@ -872,6 +1047,7 @@ impl SolverBridge {
             trait_of(CompilerItem::Ref),
             trait_of(CompilerItem::RefMut),
         );
+        let tuple = program.tuple;
         let mut fact = |head: Option<TypeDeclId>, trait_: Option<TraitDeclId>| {
             if let (Some(head), Some(trait_)) = (head, trait_) {
                 program
@@ -893,10 +1069,7 @@ impl SolverBridge {
         // a default is elaborated against the declaration, not an instance.
         let default = trait_of(CompilerItem::Default);
         for (&def, info) in tysys.all_struct_fields.iter() {
-            if !info.fields.is_empty()
-                && info.type_param_type_ids.is_empty()
-                && info.field_defaults.iter().all(Option::is_some)
-            {
+            if info.auto_derives_default() {
                 fact(declared(def), default);
             }
         }
@@ -916,9 +1089,14 @@ impl SolverBridge {
             fact(head, ref_);
             fact(head, ref_mut);
         }
+        // A function value is a reference, and boxed like a variant, so a
+        // `&mut` cannot write through it (`is_ref_mut_identity`).
+        for is_mut in [false, true] {
+            let head = lowering.known_type(&DeclKey::Builtin(fn_shape_name(is_mut).to_string()));
+            fact(head, ref_);
+        }
         // A tuple is an instance of its own declaration and stands in for
         // itself through a reference, as the struct it is.
-        let tuple = lowering.tuple.map(|def| lowering.declared_type(def));
         fact(tuple, ref_);
         fact(tuple, ref_mut);
         // A newtype takes both from its base. An `enum`, `flags` or `resource`
@@ -929,7 +1107,7 @@ impl SolverBridge {
                 continue;
             }
             fact(declared(def), ref_);
-            if !matches!(resolved, ResolvedType::Variant { .. }) {
+            if !is_boxed_base(tysys, table, &resolved) {
                 fact(declared(def), ref_mut);
             }
         }
@@ -1048,24 +1226,12 @@ impl SolverBridge {
         let ty =
             self.lowering
                 .type_id(&tysys.type_table.borrow(), type_id, &param_index(&names))?;
-        // Two receivers the compiler still derives for and the solver does not,
-        // until derivation is answered by impls
-        // (`docs/wep-2026-09-01-trait-resolution.md`, "Derivation is still a
-        // query in the compiler"). The compiler's structural derivation asks a
-        // declaration's members under `Pi: Tr` for the declaration's own
-        // parameters, an assumption written in no bound list; a question
-        // reaching here carries only the bounds in scope, so a receiver
-        // mentioning a parameter with none reads differently on the two
-        // paths. The walk makes the same assumption of a pack's elements
-        // whatever the pack's bounds say (`[..T]: Ord` holds to it under
-        // `T: Inspect`). And an anonymous struct's shape is minted after the
-        // program was built, so `derive` never saw it.
-        let unbounded = |p: &SolverType| match p {
-            SolverType::Param(i) => env.param_bounds[*i as usize].is_empty(),
-            SolverType::Pack(_) => true,
-            SolverType::Decl(..) | SolverType::Ref { .. } | SolverType::Tuple(_) => false,
-        };
-        if ty.mentions(&unbounded) || ty.mentions_head(self.lowering.anonymous_head()) {
+        // Two receivers the compiler still derives for and the solver does not:
+        // one the walk assumes a bound of, and a head the program names without
+        // members, which `derive` never saw.
+        if assumed_by_walk(&env, &ty)
+            || ty.mentions_decl(&|h| self.lowering.opaque_heads.contains(&h))
+        {
             return None;
         }
         let module = self.lowering.known_module(scope.current_module_source)?;
@@ -1119,10 +1285,13 @@ impl SolverBridge {
         let ty =
             self.lowering
                 .type_id(&tysys.type_table.borrow(), type_id, &param_index(&names))?;
-        let ty = through_ref.map_or(ty.clone(), |is_mut| SolverType::Ref {
-            is_mut,
-            inner: Box::new(ty),
-        });
+        let ty = match through_ref {
+            Some(is_mut) => SolverType::Ref {
+                is_mut,
+                inner: Box::new(ty),
+            },
+            None => ty,
+        };
         let module = self.lowering.known_module(module)?;
         let mut found = candidates(&self.program, &env, &ty, method, module);
         if let Some(required) = required {
@@ -1135,7 +1304,14 @@ impl SolverBridge {
         };
         Some(match rank(&found.in_scope) {
             Selection::One(index) => Ordered::One(self.impl_def_of(found.in_scope[index].impl_)),
-            Selection::None if !found.out_of_scope.is_empty() => Ordered::OutOfScope,
+            Selection::None if !found.out_of_scope.is_empty() => Ordered::OutOfScope(
+                found
+                    .out_of_scope
+                    .iter()
+                    .map(|&trait_| self.lowering.trait_def_of(trait_))
+                    .collect(),
+            ),
+            Selection::None if assumed_by_walk(&env, &ty) => Ordered::Undecided,
             Selection::None => Ordered::Nothing,
             Selection::AmbiguousTraits(live) => Ordered::AmbiguousTraits(named(&live)),
             Selection::AmbiguousBlankets(live) => Ordered::AmbiguousBlankets(named(&live)),
@@ -1148,8 +1324,10 @@ impl SolverBridge {
         })
     }
 
-    /// The impl block a candidate names; `None` where a derived body answers
-    /// and no block was written, which is how a `TraitMethodMatch` says it too.
+    /// The impl block a candidate names: the one it was lowered from, or for a
+    /// derived body the `Reflect*` blanket lookup collects for it. `None` for a
+    /// body the compiler supplies with no block at all, which is how a
+    /// `TraitMethodMatch` says it too.
     fn impl_def_of(&self, impl_: ImplId) -> Option<DefId> {
         self.lowering.impl_defs.get(&impl_).copied()
     }
@@ -1201,7 +1379,8 @@ impl SolverBridge {
                     SolverType::Param(_)
                     | SolverType::Pack(_)
                     | SolverType::Ref { .. }
-                    | SolverType::Tuple(_) => String::new(),
+                    | SolverType::Tuple(_)
+                    | SolverType::Projection { .. } => String::new(),
                 };
                 (id, head, d)
             })
@@ -1224,9 +1403,15 @@ pub(super) enum Ordered {
     One(Option<DefId>),
     /// No impl applied at all.
     Nothing,
-    /// Impls applied and the call site had imported none of their traits. The
-    /// scope gate working, not a candidate lost.
-    OutOfScope,
+    /// No impl applied, and the receiver is one the compiler's derivation walk
+    /// assumes a bound of; what lookup collected stands, since the order has
+    /// no impl to read the assumption from ("Derivation is still a query in
+    /// the compiler").
+    Undecided,
+    /// Impls applied and the call site had imported none of their traits,
+    /// named here so the message can say which import would answer. The scope
+    /// gate working, not a candidate lost.
+    OutOfScope(Vec<DefId>),
     /// Several trait declarations declare the method; the call must name one.
     AmbiguousTraits(Vec<Option<DefId>>),
     /// Several impls of one trait, none written for the receiver.

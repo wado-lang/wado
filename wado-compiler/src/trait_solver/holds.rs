@@ -74,6 +74,23 @@ impl Query<'_> {
         {
             return Some(Holds::default());
         }
+        // A projection satisfies what its trait declares of the associated
+        // type, by the declaration alone.
+        if let SolverType::Projection {
+            trait_: of, assoc, ..
+        } = ty
+            && program
+                .traits
+                .get(of)
+                .and_then(|def| def.assoc_bounds.get(assoc))
+                .is_some_and(|bounds| {
+                    bounds
+                        .iter()
+                        .any(|&bound| program.bound_reaches(bound, trait_))
+                })
+        {
+            return Some(Holds::default());
+        }
         if let Some(head) = fact_head(program, ty)
             && let Some(fact) = program.facts.get(&(head, trait_))
             && fact
@@ -264,13 +281,16 @@ fn fact_head(program: &Program, ty: &SolverType) -> Option<TypeDeclId> {
     match ty {
         SolverType::Decl(head, _) => Some(*head),
         SolverType::Tuple(_) => program.tuple,
-        SolverType::Param(_) | SolverType::Pack(_) | SolverType::Ref { .. } => None,
+        SolverType::Param(_)
+        | SolverType::Pack(_)
+        | SolverType::Ref { .. }
+        | SolverType::Projection { .. } => None,
     }
 }
 
 /// The base a newtype receiver inherits from, at the receiver's own type
 /// arguments.
-fn newtype_base(program: &Program, ty: &SolverType) -> Option<SolverType> {
+pub(super) fn newtype_base(program: &Program, ty: &SolverType) -> Option<SolverType> {
     let SolverType::Decl(head, args) = ty else {
         return None;
     };
@@ -344,16 +364,20 @@ fn match_target(target: &SolverType, ty: &SolverType, bindings: &mut [Option<Bin
             bindings[*index as usize] = Some(Binding::Pack(ty_elems.clone()));
             true
         }
+        // A target never spells a projection; one reaches a target only
+        // through a parameter, above.
         (
             SolverType::Decl(_, _)
             | SolverType::Ref { .. }
             | SolverType::Tuple(_)
-            | SolverType::Pack(_),
+            | SolverType::Pack(_)
+            | SolverType::Projection { .. },
             SolverType::Decl(_, _)
             | SolverType::Param(_)
             | SolverType::Pack(_)
             | SolverType::Ref { .. }
-            | SolverType::Tuple(_),
+            | SolverType::Tuple(_)
+            | SolverType::Projection { .. },
         ) => false,
     }
 }

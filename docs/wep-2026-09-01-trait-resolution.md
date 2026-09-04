@@ -305,16 +305,18 @@ Program {
   impls:  ImplId      -> { trait_, trait_args, target, params: [{ bounds, pins }],
                            origin: Written | Derived | Marker }
   traits: TraitDeclId -> { supertraits, holds_for_all, arg_defaults, on_ref,
-                           methods: [MethodId] }
+                           methods: [MethodId], assoc_bounds: AssocId -> [TraitDeclId] }
   types:  TypeDeclId  -> { newtype_base }
   facts:  (TypeDeclId, TraitDeclId) -> { visible_from }
   assoc_bindings: (ImplId, AssocId) -> SolverType
   impl_methods:   ImplId -> [MethodId]
   scopes: ModuleId    -> { traits_in_scope }
+  tuple:  Option<TypeDeclId>
 }
 
 SolverType = Decl(TypeDeclId, [SolverType]) | Param(u32) | Pack(u32)
            | Ref { mut, inner } | Tuple([SolverType])
+           | Projection { base, trait_, assoc }
 ```
 
 A declaration's kind and members are read by `derive` alone and arrive as a
@@ -497,6 +499,29 @@ a dispatch never appears in an expression, so the check must count enabling a
 dispatch as a use. A check that reads the source alone will tell the programmer
 to delete the import that makes the module compile.
 
+### Scope gates method calls, not the bounds path
+
+A method call is gated: an impl that applies while its trait is unimported is
+reported as "not imported here", naming the trait
+(`trait_error_unimported_trait_method.wado`, `trait_error_unimported_blanket.wado`).
+A call through a bound is not: `T: Sub` still reaches `Base`'s methods with
+`Base` unnamed, since the bounds path resolves without the order (above).
+
+- [ ] Gate the bounds path on the supertrait's declaration being in scope
+      (`trait_error_unimported_supertrait_method.wado`).
+
+### A ref blanket never dispatches
+
+The order ranks `impl<T: Bound> Tr for &T` as the third candidate list, and
+`candidates` names one for a reference receiver. The compiler's collection still
+refuses it: the reference step adopts only concrete `&T` impls
+(`method_call.rs`, `is_blanket_ref_impl`), so the order's verdict is discarded
+and the call reports no method (`trait_ref_blanket_dispatch.wado`). The
+prelude's `Inspect for &T` works because the compiler answers that bound itself.
+
+- [ ] Collect a reference blanket as a match, or materialize the match from the
+      winning `ImplId` (above), which makes the collection moot.
+
 ### Two coherence rules still read the AST
 
 `coherence_errors` owns four rules and answers the duplicate pair and the
@@ -530,14 +555,23 @@ descents to tell a recursive type from an ungrounded cycle. The solver's
 skips, since only the compiler derives for them: one mentioning a type
 parameter with no bound, which the compiler's walk assumes `Pi: Tr` of; one
 mentioning a pack, whose elements the walk assumes the same of whatever the
-pack's bounds say (`[..T]: Ord` holds to it under `T: Inspect`); and an
-anonymous struct, whose shape a literal mints after the `Program` is built.
-What is left is the flip:
+pack's bounds say (`[..T]: Ord` holds to it under `T: Inspect`); and a head the
+program names without members — an anonymous struct, whose shape a literal
+mints after the `Program` is built, and a struct declared in a body, whose
+fields annotate resolves in that body. Such a head reaches a blanket whose bound
+holds of everything (`Inspect`) or an impl written for it, and no `Reflect*`
+fact or derived impl (`trait_local_struct_receiver_blanket.wado`). Selection
+meets the first of these too: a derived call on a receiver whose own parameter
+carries no bound (`p.serialize(s)` under `fn f<T>(p: &Pair<T>, ..)`) is one the
+order has no impl to answer, so it says so (`Ordered::Undecided`) and what the
+compiler's walk collected stands (`trait_derived_method_call.wado`). What is
+left is the flip:
 
 - [ ] Route the derived bodies through what `holds` reports instead of
       `record_bound_driven_synth_request_for`, and retire the member walk.
-- [ ] Derive for an anonymous struct's shape when it is minted, or lower the
-      literal's fields as the declaration `derive` reads.
+- [ ] State a late declaration's members when they are known — an anonymous
+      struct at its literal, a body-local struct at its statement — or lower
+      them as the declaration `derive` reads.
 
 ## Related WEPs
 

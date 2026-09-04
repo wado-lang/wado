@@ -609,10 +609,7 @@ impl TypeSystem {
         struct_name: &str,
     ) -> Option<TypeId> {
         let info = scope.struct_fields(struct_name)?;
-        if info.fields.is_empty() || !info.field_defaults.iter().all(Option::is_some) {
-            return None;
-        }
-        if !info.type_param_type_ids.is_empty() {
+        if !info.auto_derives_default() {
             return None;
         }
         Some(self.type_table.borrow().type_id_of_decl(info.defined_at))
@@ -1590,7 +1587,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         impl_ref: &ImplBlockRef,
         names_to_check: &[ImplTargetKey],
         receiver_type_id: Option<TypeId>,
-    ) -> Option<(String, crate::name::FqTypeName, bool, usize)> {
+    ) -> Option<(String, crate::name::FqTypeName, bool)> {
         let trait_env = Arc::clone(&self.tysys.trait_env);
         let header = impl_header(&trait_env, impl_ref);
         let impl_struct_name = self.get_type_name(&header.ty);
@@ -1610,20 +1607,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if !self.ref_impl_targets_receiver(&header.ty, receiver_type_id) {
             return None;
         }
-        let bound_depth =
-            self.blanket_target_bounds_depth(&header.ty, &header.type_params, receiver_type_id)?;
+        self.blanket_target_bounds_depth(&header.ty, &header.type_params, receiver_type_id)?;
         if !self.concrete_impl_matches_receiver(impl_ref, receiver_type_id) {
             return None;
         }
         // Qualified in the impl's own frame by the decl pass: the call site's
         // imports may name the same declaration differently, or not at all.
         let impl_struct_fq = self.impl_sig(impl_ref).target_fq.clone();
-        Some((
-            impl_struct_name,
-            impl_struct_fq,
-            is_blanket_type_param,
-            bound_depth,
-        ))
+        Some((impl_struct_name, impl_struct_fq, is_blanket_type_param))
     }
 
     /// For a reference-typed impl (`impl ... for &Container<T>`), whether its
@@ -1837,7 +1828,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let impl_refs = self.trait_method_candidates(&names_to_check, receiver_type_id);
 
         for impl_ref in &impl_refs {
-            let Some((impl_struct_name, impl_struct_fq, is_blanket_type_param, bound_depth)) =
+            let Some((impl_struct_name, impl_struct_fq, is_blanket_type_param)) =
                 self.candidate_matches_receiver(impl_ref, &names_to_check, receiver_type_id)
             else {
                 continue;
@@ -1847,7 +1838,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 impl_struct_name,
                 impl_struct_fq,
                 is_blanket_type_param,
-                bound_depth,
                 method_name,
                 receiver_type_args,
                 receiver_type_id,
@@ -1926,7 +1916,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         impl_struct_name: String,
         impl_struct_fq: crate::name::FqTypeName,
         is_blanket_type_param: bool,
-        bound_depth: usize,
         method_name: &str,
         receiver_type_args: Option<&[TypeId]>,
         receiver_type_id: Option<TypeId>,
@@ -2316,7 +2305,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 blanket_type_param: blanket_type_param.clone(),
                 blanket_binder: blanket_binder.clone(),
                 blanket_bounds: blanket_bounds.clone(),
-                bound_depth,
                 impl_struct_name: impl_struct_name.clone(),
                 impl_struct_fq: impl_struct_fq.clone(),
                 is_blanket_ref_impl,
@@ -2390,7 +2378,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     blanket_type_param,
                     blanket_binder,
                     blanket_bounds,
-                    bound_depth,
                     impl_struct_name,
                     impl_struct_fq,
                     is_blanket_ref_impl,
@@ -2406,7 +2393,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// Report rank 3 for one trait's value blankets: two the receiver satisfies
     /// with nothing ranking them (`docs/wep-2026-09-01-trait-resolution.md`).
-    /// Runs on the sorted list, so each trait's first candidate is its best.
+    /// Runs on what the order left standing, so every blanket here is tied.
     fn report_ambiguous_value_blankets(
         &mut self,
         found_traits: &[super::types::TraitMethodMatch],
@@ -2417,25 +2404,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             (crate::defs::DefId, Vec<TypeId>),
             Vec<&super::types::TraitMethodMatch>,
         > = IndexMap::default();
-        for m in found_traits {
+        for m in found_traits.iter().filter(|m| m.blanket_binder.is_some()) {
             by_trait
                 .entry((m.trait_decl, m.trait_args.clone()))
                 .or_default()
                 .push(m);
         }
-        for candidates in by_trait.values() {
-            let Some(best) = candidates.first().filter(|m| m.blanket_binder.is_some()) else {
-                continue;
-            };
-            // Locality grouping, which WEP 2026-09-01 removes ("Locality is
-            // still implemented").
-            let is_local = |m: &super::types::TraitMethodMatch| {
-                m.impl_module_source == self.current_module_source
-            };
-            let tied: Vec<&&super::types::TraitMethodMatch> = candidates
-                .iter()
-                .filter(|m| m.bound_depth == best.bound_depth && is_local(m) == is_local(best))
-                .collect();
+        for tied in by_trait.values() {
             let distinct: IndexSet<&crate::name::FqTypeName> = tied
                 .iter()
                 .filter_map(|m| m.blanket_binder.as_ref())
@@ -2444,7 +2419,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 continue;
             }
             let _ = self.emit(super::types::TypeError::AmbiguousValueBlankets {
-                trait_name: best.trait_name.to_display(),
+                trait_name: tied[0].trait_name.to_display(),
                 receiver: receiver_display.to_string(),
                 bounds: tied
                     .iter()
@@ -2512,7 +2487,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             | Ordered::AmbiguousBlankets(defs)
             | Ordered::Overloaded(defs)
             | Ordered::Duplicated(defs) => defs,
-            Ordered::Nothing | Ordered::OutOfScope => &[],
+            Ordered::Nothing | Ordered::OutOfScope(_) => &[],
+            Ordered::Undecided => return found_traits,
         };
         // Each match is moved out at most once, so two candidates of one impl
         // block cannot both answer for it.
@@ -2563,19 +2539,32 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             )
         };
         match &order {
-            Some(Ordered::Nothing) => debug_assert!(
+            Some(Ordered::Nothing) => assert!(
                 self.logger.has_errors() || found_traits.is_empty(),
                 "{}",
                 lost("lost an impl of")
             ),
-            None => debug_assert!(
+            None => assert!(
                 self.logger.has_errors() || found_traits.is_empty(),
                 "{}",
                 lost("cannot say the receiver of")
             ),
+            // The scope gate: an impl answers, and importing its trait is what
+            // the call is missing. A collected match still stands in, so the
+            // call does not also read as a missing method.
+            Some(Ordered::OutOfScope(traits)) => {
+                let defs = self.tysys.resolutions.defs();
+                let _ = self.emit(super::types::TypeError::TraitNotImported {
+                    method: method_name.to_string(),
+                    receiver: receiver_display.to_string(),
+                    traits: traits.iter().map(|&t| defs.name(t).to_string()).collect(),
+                    span,
+                });
+                return found_traits.into_iter().next();
+            }
             Some(
                 Ordered::One(_)
-                | Ordered::OutOfScope
+                | Ordered::Undecided
                 | Ordered::AmbiguousTraits(_)
                 | Ordered::AmbiguousBlankets(_)
                 | Ordered::Overloaded(_)
@@ -2583,7 +2572,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             ) => {}
         }
         found_traits = match order {
-            Some(order) => Self::narrow_to_order(found_traits, &order),
+            Some(order) => {
+                let named = !matches!(
+                    order,
+                    Ordered::Nothing | Ordered::OutOfScope(_) | Ordered::Undecided
+                );
+                let collected = found_traits.len();
+                let narrowed = Self::narrow_to_order(found_traits, &order);
+                // The order names an impl only through what lookup collected; a
+                // verdict keeping nothing of a non-empty list names one it did
+                // not, and would otherwise read as "no method found".
+                assert!(
+                    self.logger.has_errors() || !named || collected == 0 || !narrowed.is_empty(),
+                    "the order names {order:?} for `{receiver_display}`.{method_name}(), none of which lookup collected"
+                );
+                narrowed
+            }
             None => Vec::new(),
         };
         self.report_ambiguous_value_blankets(&found_traits, receiver_display, span);
@@ -2742,18 +2746,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         method_name: &str,
         span: Span,
     ) {
-        // Blanket candidates are excluded from the count, so two traits'
-        // blankets sharing a method name tie silently (WEP 2026-09-01, "Two
-        // traits' blankets sharing a method name are not reported").
-        // Selection is untouched — this decides only what is reported.
-        // The collision is counted on declarations, so two same-named traits
-        // from different modules still collide even though their spellings
-        // agree — identity is the declaration, not the name.
+        // A blanket joins the collision like any other candidate (WEP
+        // 2026-09-01, "Two traits, one method name"). The collision is counted
+        // on declarations, so two same-named traits from different modules
+        // still collide even though their spellings agree — identity is the
+        // declaration, not the name.
         let mut seen: IndexSet<crate::defs::DefId> = IndexSet::default();
-        for m in found_traits
-            .iter()
-            .filter(|m| m.blanket_type_param.is_none())
-        {
+        for m in found_traits {
             seen.insert(m.trait_decl);
         }
         if seen.len() < 2 {

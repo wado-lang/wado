@@ -2,7 +2,7 @@
 //! (`docs/wep-2026-09-01-trait-resolution.md`, "The candidates"). What picks
 //! between them is [`rank`](super::rank).
 
-use super::holds::impl_applies;
+use super::holds::{impl_applies, newtype_base};
 use super::program::{Env, MethodId, ModuleId, Program, SolverType, TraitDeclId};
 use super::rank::{Candidate, Generality};
 
@@ -89,17 +89,16 @@ fn chain(program: &Program, receiver: &SolverType) -> Vec<SolverType> {
         SolverType::Decl(..)
         | SolverType::Param(_)
         | SolverType::Pack(_)
-        | SolverType::Tuple(_) => (None, Some(receiver.clone())),
+        | SolverType::Tuple(_)
+        | SolverType::Projection { .. } => (None, Some(receiver.clone())),
     };
     let mut chain: Vec<SolverType> = Vec::new();
-    let mut seen: Vec<SolverType> = Vec::new();
     while let Some(ty) = level {
         // A newtype cycle is rejected where it is declared; refusing to walk one
         // twice keeps a malformed program from hanging the query.
-        if seen.contains(&ty) {
+        if chain.contains(&ty) {
             break;
         }
-        seen.push(ty.clone());
         level = newtype_base(program, &ty);
         if let Some(is_mut) = through_ref {
             chain.push(SolverType::Ref {
@@ -112,24 +111,15 @@ fn chain(program: &Program, receiver: &SolverType) -> Vec<SolverType> {
     chain
 }
 
-/// The base a newtype inherits impls from, at the newtype's own type arguments.
-fn newtype_base(program: &Program, ty: &SolverType) -> Option<SolverType> {
-    let SolverType::Decl(head, args) = ty else {
-        return None;
-    };
-    let base = program.types.get(head)?.newtype_base.as_ref()?;
-    Some(
-        base.map_params(&|i| args.get(i as usize).cloned())
-            .unwrap_or_else(|| panic!("{base:?} mentions a parameter {ty:?} has no argument for")),
-    )
-}
-
 /// How much of the general case a target covers: rank 2's question, read off
 /// the target alone.
 fn generality(target: &SolverType) -> Generality {
     match target {
         SolverType::Param(_) | SolverType::Pack(_) => Generality::Any,
-        SolverType::Decl(..) | SolverType::Ref { .. } | SolverType::Tuple(_) => {
+        SolverType::Decl(..)
+        | SolverType::Ref { .. }
+        | SolverType::Tuple(_)
+        | SolverType::Projection { .. } => {
             if target.mentions(&|_| true) {
                 Generality::Head
             } else {
