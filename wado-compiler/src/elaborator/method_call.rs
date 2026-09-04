@@ -3890,42 +3890,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // construction, or monomorph-info shaping. Recorded for every call this
         // path resolves: reify rebuilds the `Call` from this fact alone, so a
         // callee whose signature no lookup answers still needs the shape.
-        let dispatch = match &callee_sig {
-            Some(sig) => super::sem::types::StaticMethodDispatch::of_signature(
+        self.sem.types.static_method_dispatch.insert(
+            call_id,
+            super::sem::types::StaticMethodDispatch::of_signature(
                 method_ref.method_id,
                 func_ref,
                 vec![],
-                sig,
+                callee_sig.as_ref(),
                 true,
             ),
-            None => super::sem::types::StaticMethodDispatch {
-                method_def: method_ref.method_id,
-                function_ref: func_ref,
-                param_is_mut: self.lookup_static_method_param_is_mut(
-                    &actual_struct_name,
-                    method_name,
-                    receiver_key.as_ref(),
-                ),
-                type_args: vec![],
-                param_defaults: self.lookup_static_method_param_defaults(
-                    &actual_struct_name,
-                    method_name,
-                    receiver_key.as_ref(),
-                ),
-                param_types: self
-                    .lookup_static_method_param_types_keyed(
-                        &actual_struct_name,
-                        method_name,
-                        receiver_key.as_ref(),
-                    )
-                    .unwrap_or_default(),
-                self_in_args: false,
-            },
-        };
-        self.sem
-            .types
-            .static_method_dispatch
-            .insert(call_id, dispatch);
+        );
 
         return_type
     }

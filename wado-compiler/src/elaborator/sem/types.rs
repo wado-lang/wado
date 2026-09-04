@@ -653,10 +653,9 @@ pub(crate) struct StaticMethodDispatch {
     /// `method_info`, `monomorph_info` — as the elaborator constructed
     /// it after impl lookup and mangling.
     pub(crate) function_ref: crate::tir::FunctionRef,
-    /// Per-argument `is_mut` flag derived from the resolved parameter
-    /// signature (`lookup_static_method_param_is_mut_keyed`). Reify zips this
-    /// with the reified argument exprs to build [`crate::tir::CallArg`]s
-    /// with the same `is_mut` shape annotate produced.
+    /// Per-argument `is_mut` flag, from the callee's parameters. Reify zips it
+    /// with the reified argument exprs to build [`crate::tir::CallArg`]s with
+    /// the same `is_mut` shape annotate produced.
     pub(crate) param_is_mut: Vec<bool>,
     /// The exact `type_args` the production builder put on the resulting
     /// `TirExprKind::Call`. For a static method on a generic struct the
@@ -695,13 +694,29 @@ impl StaticMethodDispatch {
     /// carries a leading entry for it: spelled at the call site and never
     /// omitted, hence no default, and `mut` exactly when the method takes
     /// `&mut self`.
+    ///
+    /// `sig` is `None` for a callee no signature lookup answers — a trait static
+    /// on a primitive receiver, say. The lists are empty and reify reads the
+    /// call's own arguments; the fact is still recorded, because reify rebuilds
+    /// the `Call` from it and nothing else.
     pub(crate) fn of_signature(
         method_def: Option<crate::defs::DefId>,
         function_ref: FunctionRef,
         type_args: Vec<TypeId>,
-        sig: &crate::elaborator::sig::MethodSig,
+        sig: Option<&crate::elaborator::sig::MethodSig>,
         self_in_args: bool,
     ) -> Self {
+        let Some(sig) = sig else {
+            return Self {
+                method_def,
+                function_ref,
+                param_is_mut: Vec::new(),
+                type_args,
+                param_defaults: Vec::new(),
+                param_types: Vec::new(),
+                self_in_args: false,
+            };
+        };
         let receiver = self_in_args && sig.self_kind != ast::SelfKind::None;
         let values = sig.first_value_param().min(sig.decl.param_types.len());
         Self {
