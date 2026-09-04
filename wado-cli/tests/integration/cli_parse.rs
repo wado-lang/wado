@@ -578,6 +578,13 @@ fn test_with_parallel() {
 }
 
 #[test]
+fn test_parallel_is_capped() {
+    let parser = Parser::from_args(&["-p", "600", "a.wado"]);
+    let opts = wado_cli::test::parse_args(parser).unwrap();
+    assert_eq!(opts.jobs, wado_cli::test::MAX_JOBS);
+}
+
+#[test]
 fn test_parallel_invalid() {
     let parser = Parser::from_args(&["-p", "0", "a.wado"]);
     assert_err(

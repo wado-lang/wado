@@ -429,6 +429,12 @@ fn resolve_paths(paths: Vec<String>, extra_excludes: &[String]) -> Result<Vec<St
     Ok(resolved)
 }
 
+/// The ceiling on `--parallel`. A worker holds a stdlib snapshot and the memory
+/// under it, and every prewarm task holds a blocking-pool thread until the last
+/// one reaches the barrier, so the count has to stay well inside tokio's pool.
+/// No machine wants more than this.
+pub const MAX_JOBS: usize = 128;
+
 pub fn parse_args(mut parser: lexopt::Parser) -> Result<TestOptions, CliExit> {
     let usage = format_usage();
     let mut paths: Vec<String> = Vec::new();
@@ -543,10 +549,12 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<TestOptions, CliExit> {
     // Default to CPU count to saturate compile/execute. Load derives a
     // lower cap internally (Cranelift JIT is multi-threaded; see `run`).
     // `.max(2)` covers single-core environments.
-    let mut jobs = jobs.unwrap_or_else(|| {
-        let cpus = std::thread::available_parallelism().map_or(4, std::num::NonZero::get);
-        cpus.max(2)
-    });
+    let mut jobs = jobs
+        .unwrap_or_else(|| {
+            let cpus = std::thread::available_parallelism().map_or(4, std::num::NonZero::get);
+            cpus.max(2)
+        })
+        .min(MAX_JOBS);
 
     if matches!(profile, ProfileMode::Guest { .. }) {
         if no_run {
