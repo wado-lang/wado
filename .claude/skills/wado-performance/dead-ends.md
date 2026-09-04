@@ -28,15 +28,15 @@ no rebuild).
 
 Serialize, 7.65 ms/iter:
 
-| remove                                       | ms/iter | cost |
-| -------------------------------------------- | ------- | ---- |
-| — (baseline)                                  | 7.65    | —    |
-| every division in the digit loop              | 7.44    | 0.24 |
-| the decimal-point `array_copy` shift          | 7.28    | 0.37 |
-| `short()`, replaced by a constant             | 5.98    | 1.68 |
-| the digit loop, replaced by `array_fill`      | 5.77    | 1.90 |
-| all float formatting (19-byte `push_str`)     | 3.09    | 4.56 |
-| the float bytes entirely (traversal only)     | 1.58    | 6.07 |
+| remove                                    | ms/iter | cost |
+| ----------------------------------------- | ------- | ---- |
+| — (baseline)                              | 7.65    | —    |
+| every division in the digit loop          | 7.44    | 0.24 |
+| the decimal-point `array_copy` shift      | 7.28    | 0.37 |
+| `short()`, replaced by a constant         | 5.98    | 1.68 |
+| the digit loop, replaced by `array_fill`  | 5.77    | 1.90 |
+| all float formatting (19-byte `push_str`) | 3.09    | 4.56 |
+| the float bytes entirely (traversal only) | 1.58    | 6.07 |
 
 Deserialize, 10.96 ms/iter: `scanned_to_f64` → 0.0 costs 1.55 ms, and deleting
 `digits = digits * 10 + d` on top of that is free — the scan is bound by the
@@ -54,19 +54,19 @@ ser 2.3% — placement, on a hot path that never calls `short` (see the entry
 below). So: get the win without growing `short`. Four shapes, all worse, and the
 reason is the same each time.
 
-| arm                                            | `short` | canada ser | twitter ser |
-| ---------------------------------------------- | ------- | ---------- | ----------- |
-| base                                            | 87      | 7.59       | 0.821       |
-| inline `uscale` into `short` (what landed)      | 122     | **7.39**   | 0.837       |
-| share the mask, keep the three calls            | 89      | 7.70       | 0.835       |
-| one call returning all three scalings           | 86      | 7.81       | **0.814**   |
-| one call returning the two bounds               | 88      | 7.88       | **0.818**   |
-| pin the rare arm out of line (shrinks the above)| 113     | 7.46       | 0.833       |
+| arm                                              | `short` | canada ser | twitter ser |
+| ------------------------------------------------ | ------- | ---------- | ----------- |
+| base                                             | 87      | 7.59       | 0.821       |
+| inline `uscale` into `short` (what landed)       | 122     | **7.39**   | 0.837       |
+| share the mask, keep the three calls             | 89      | 7.70       | 0.835       |
+| one call returning all three scalings            | 86      | 7.81       | **0.814**   |
+| one call returning the two bounds                | 88      | 7.88       | **0.818**   |
+| pin the rare arm out of line (shrinks the above) | 113     | 7.46       | 0.833       |
 
 Every arm but the first does strictly less work than base — fewer calls, fewer
 mask computations — and every one of them is **slower than base**. So "fewer
 instructions" does not predict the outcome here at all. What separates the arm
-that wins is that it is the only one with *no call left on the hot path*: the
+that wins is that it is the only one with _no call left on the hot path_: the
 saving is the call boundary itself (argument setup, the multivalue return, and
 the registers that cannot stay live across it), not the two mask computations,
 which are worth nothing. The three-scaling arm additionally does a third wide
@@ -78,7 +78,7 @@ helper that reads as "a mask and three calls" comes in under budget and is
 pulled into `short` together with all three bodies — `#[inline(never)]` is the
 only way to hold such a helper out of line, and it is not a claim against the
 cost model. And a size-matched control does not falsify a placement story:
-padding `short` with a dead branch grew the *wasm* by 196 bytes against the real
+padding `short` with a dead branch grew the _wasm_ by 196 bytes against the real
 change's 205 and left twitter at exactly 0.820 all three rounds, because a
 compare-and-jump is nothing in machine code next to three inlined `uscale`
 bodies. Wasm bytes are not the unit the effect is measured in.
@@ -126,9 +126,9 @@ pair's two digits off `r` halves the chain and moves those two divisions off it.
 **5% slower**, three alternating pairs, ser 282.5/286.9/288.3 → 261.6/272.7/271.7
 MB/s. The chain was never the cost. Two ablations on the same loop say so:
 
-| `write_digits_at` variant                 | ser ms/iter |
-| ----------------------------------------- | ----------- |
-| today                                     | 7.65        |
+| `write_digits_at` variant                  | ser ms/iter |
+| ------------------------------------------ | ----------- |
+| today                                      | 7.65        |
 | `v & 7` / `v >> 1` (every division gone)   | 7.44        |
 | `array_fill` (whole loop gone, same bytes) | 5.77        |
 

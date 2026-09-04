@@ -592,6 +592,34 @@ A NIR analogue means a tree-shaped layout through `compute_layout`,
 one or two functions. This pass _declines_ the shape instead, which restores the
 WIR splits it had been displacing.
 
+### Known gap: `slot_flatten` declines a `?`-unwrapped slot, so every sequence element boxes its `Option`
+
+`DeserializeSeq::next_element` returns `Result<Option<T>, DeserializeError>`.
+Single-level SROA gives it `[i32, ref Option<T>, ref E]`, and for a scalar `T`
+that `ref Option<T>` is a real heap object — `Option<f64>` cannot erase to a
+nullable ref because `f64` is not a GC ref. So a `struct.new` lands on **every
+element of every sequence decode**, in JSON and CBOR alike, plus one more for the
+`None` at each sequence end.
+
+It is worth roughly **13% of json-canada deserialize**: tripling the allocation
+(returning the value through two extra identity `Some` hops) moved the row from
+10.27 to 12.98 ms/iter, so one allocation and its `ref.test`/`ref.cast` pair
+prices at ~1.35 ms of 10.27.
+
+`slot_flatten` is the pass for exactly this shape and it admits the function at
+phase 1. Phase 2 declines it: `classify_slot_consumer` → `find_unwrap_alias` →
+`then_is_pure_slot_copy` matches the `?`-unwrap then-arm only as `[single]` or as
+`[LocalSet t, LocalGet t]`, and the arm arrives as one `Seq([LocalSet, LocalGet])`
+node — the same shape, one level of nesting on.
+
+Closing it takes more than peeling that `Seq`. Peeling it admits the candidate,
+and the rewriter then emits invalid Wasm — "values remaining on stack at end of
+block" — on all six serde benchmarks, because the newly admitted sites are shapes
+`rewrite_unwrap_to_guard` and `expand_slot_binds` do not cover. This is the
+hazard `all_returns_decompose` already documents from the other side: the
+validator's coverage has to match the rewriter's, and here widening the validator
+alone is what breaks it. The work is in the rewriter.
+
 ### A settled binding is not a `mut` binding
 
 A `let mut t = f(x)` that nothing ever assigns is an immutable binding, and
