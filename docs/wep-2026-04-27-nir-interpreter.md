@@ -201,6 +201,13 @@ what looks important.
 - `mise run report-const-regions` counts the remarks over the benchmark and
   `wasm-size` corpora and the Wado packages.
 
+What the remark names is a call on the region's own path. A call under a
+`cold_path` marker is not one: `push` carries `grow` behind its capacity check,
+so a region filling a pre-sized container would name a call it never reaches and
+bury the one it does. Naming nothing is itself an answer — the fold is waiting
+on a value the engine cannot represent rather than a body it cannot run — and
+that is where the statement trace takes over.
+
 A count is worth nothing until something independent agrees with it. The
 formatting work is measured in bytes as well, which is what a census miscount
 cannot reach.
@@ -217,21 +224,27 @@ The census counts 55 surviving regions across 3 files:
 | it calls a function the engine cannot run | 4       |
 | `union_char_ranges` still runs            | 2       |
 
-All of it lives in two Gale-generated files and one benchmark, so a cause that
-appears only there is a Gale fact, not a language one — which is what the first
-stage has to settle before the counts can order anything else.
+All of it lives in two Gale-generated files and one benchmark. That distribution
+is not a Gale fact: both named callees return a `List<T>` and reproduce in
+twenty lines of ordinary Wado, so what generated code does is call the same
+missing capability often.
 
-### 1. The Gale callees
+### 1. The aggregate exit
 
-`push_encoded_ranges` (28) and `union_char_ranges` (2) are half of what is left
-and appear only in the two Gale-generated files.
+`push_encoded_ranges` (28) and `union_char_ranges` (2) are half of what is left,
+and both build a `List<CharRange>` from a constant. A `List<T>` filled by a loop
+and returned does not fold, whether `T` is a scalar or a struct, while the same
+program over a `String` does — the difference is that a `String`'s backing is a
+byte array the engine represents and can write back, and a `List<T>`'s is not.
 
-- [ ] Read the two bodies before deciding anything. Thirty regions in generated
-      code is either one missing capability repeated, or one generator shape that
-      is nobody's bug. The trace names them; the bodies say which.
+- [ ] A `List<T>` of scalars written back as
+      [`ArrayLiteral`](./wep-2026-05-31-nir-array-literal.md) and a plain struct
+      as `StructLiteral`, each needing its own answer to "is this already the
+      literal the rewrite writes" so the worklist still settles.
+- [ ] A destructuring `let`; a body containing one is abandoned.
 
-Done when the two are classified, and the roadmap below is reordered against
-what is left once a Gale fact is set aside.
+Done when a constant `List` result and a constant struct result reach the IR as
+literals, `Array::slice`'s computed bounds fold, and the corpus is recounted.
 
 ### 2. The stores the engine will not read
 
@@ -267,18 +280,7 @@ engine's notion of a place must be the one that WEP settles, not a second one.
 
 Done when `${'x'}` folds.
 
-### 4. The aggregate exit
-
-- [ ] A `List<T>` of scalars written back as
-      [`ArrayLiteral`](./wep-2026-05-31-nir-array-literal.md) and a plain struct
-      as `StructLiteral`, each needing its own answer to "is this already the
-      literal the rewrite writes" so the worklist still settles.
-- [ ] A destructuring `let`; a body containing one is abandoned.
-
-Done when a constant `List` result and a constant struct result reach the IR as
-literals, and `Array::slice`'s computed bounds fold.
-
-### 5. Format coverage to the budget
+### 4. Format coverage to the budget
 
 - [ ] The step budget is per function, and a formatting region spends a large
       share of it: seven constant templates in one body exhaust it and five stop
@@ -294,7 +296,7 @@ literals, and `Array::slice`'s computed bounds fold.
 Done when a recount shows no refusal reason left that the step budget does not
 explain.
 
-### 6. Mixed templates
+### 5. Mixed templates
 
 - [ ] The marked region-append primitive set and the derived-`fmt` admission
       rule, per "Fold the region, not the call".
@@ -304,7 +306,7 @@ constant parts as literals. The census counts no such template, since a region
 reading a runtime local is not reported; sizing this needs a count of its own,
 and a small one demotes the stage to a known gap.
 
-### 7. The remaining refusals
+### 6. The remaining refusals
 
 Each is a small, local refusal the census does not count, so each needs a reason
 of its own to be worth the code.

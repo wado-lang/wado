@@ -563,4 +563,44 @@ export fn run() with Stdout {
         remarks[0].contains("fmt_into"),
         "the remark should name the float formatter: {remarks:?}"
     );
+    assert!(
+        !remarks[0].contains("grow"),
+        "the buffer's cold reshape is not what the fold waits on: {remarks:?}"
+    );
+}
+
+#[test]
+fn a_list_region_blames_no_call() {
+    // A `List<T>` the engine cannot represent stops the fold, and no call on the
+    // path is to blame: `push` inlines away and what it leaves is `grow` on a
+    // cold path the frame never reaches. Naming that would send the reader after
+    // the wrong thing, so the remark says there is nothing to name.
+    let remarks = const_region_remarks(
+        r#"
+use { println, Stdout } from "core:cli";
+
+fn table() -> List<i32> {
+    let mut out: List<i32> = List::<i32>::with_capacity(8);
+    let mut i = 0;
+    while i < 4 {
+        out.push(i * 2);
+        i += 1;
+    }
+    return out;
+}
+
+export fn run() with Stdout {
+    println(`n=${table().len()}`);
+}
+"#,
+    );
+
+    assert!(
+        remarks.iter().any(|r| r.contains("no call on its path")),
+        "expected the no-call cause, got {remarks:?}"
+    );
+    assert!(
+        remarks.iter().all(|r| !r.contains("grow")),
+        "a cold-path call should not be named: {remarks:?}"
+    );
 }

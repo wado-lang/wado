@@ -10,6 +10,7 @@
 
 use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
+use crate::niri::{CtfeBuiltin, CtfeBuiltinMap};
 use crate::nir::{FunctionRef, NirUnaryOp};
 use crate::nir_arena::{Body, ExprId, ExprKind, NodeRef};
 use crate::nir_package::NirPackage;
@@ -478,12 +479,10 @@ pub fn collect_const_region_remarks(package: &NirPackage) -> Vec<Remark> {
             if region.refusal == Some(crate::niri::RegionRefusal::OuterWrite) {
                 continue;
             }
-            let surviving = surviving_calls(body, region.expr, &names);
-            if surviving.is_empty() {
-                continue;
-            }
-            let cause = match region.refusal {
-                None => format!(
+            let surviving = surviving_calls(body, region.expr, &names, &ctfe_builtins);
+            let cause = match (region.refusal, surviving.is_empty()) {
+                (Some(refusal), _) => refusal.describe().to_string(),
+                (None, false) => format!(
                     "{} still runs here",
                     surviving
                         .iter()
@@ -491,7 +490,10 @@ pub fn collect_const_region_remarks(package: &NirPackage) -> Vec<Remark> {
                         .collect::<Vec<_>>()
                         .join(", ")
                 ),
-                Some(refusal) => refusal.describe().to_string(),
+                // Nothing on the path to blame, so what the fold waits on is a
+                // value the engine cannot represent. `ctfe_stmt` names the
+                // statement; the remark can only say to go look.
+                (None, true) => "no call on its path explains it".to_string(),
             };
             remarks.push(Remark {
                 message: format!("this block computes a constant at run time: {cause}"),
@@ -507,21 +509,54 @@ pub fn collect_const_region_remarks(package: &NirPackage) -> Vec<Remark> {
 /// under the names their authors wrote. Each is one the engine was free to run
 /// and did not, so together they say what the fold waits on — `fmt_decimal` says
 /// integer formatting, `grow` says a buffer the frame cannot reshape.
-fn surviving_calls(body: &Body, region: ExprId, names: &[Option<String>]) -> Vec<String> {
+///
+/// A call under a `cold_path` marker is not one of them. `push` carries `grow`
+/// behind its capacity check, so a region filling a pre-sized container would
+/// name `grow` while never reaching it — the call is in the block, not on the
+/// path, and naming it buries the callee that is.
+///
+/// Empty means no call explains the region, which is its own answer: what the
+/// fold waits on is a value the engine cannot represent rather than a body it
+/// cannot run. `WADO_TRACE=ctfe_stmt` is what names the statement then.
+fn surviving_calls(
+    body: &Body,
+    region: ExprId,
+    names: &[Option<String>],
+    ctfe_builtins: &CtfeBuiltinMap,
+) -> Vec<String> {
     use cranelift_entity::EntityRef;
     let mut out: Vec<String> = Vec::new();
-    let mut stack = vec![NodeRef::Expr(region)];
-    while let Some(node) = stack.pop() {
-        if let NodeRef::Expr(e) = node
+    let mut stack = vec![(NodeRef::Expr(region), false)];
+    while let Some((node, in_cold)) = stack.pop() {
+        let in_cold = in_cold || block_is_cold(body, node, ctfe_builtins);
+        if !in_cold
+            && let NodeRef::Expr(e) = node
             && let ExprKind::Call { func_id, .. } = &body.exprs[e].kind
             && let Some(Some(name)) = names.get(func_id.index())
             && !out.contains(name)
         {
             out.push(name.clone());
         }
-        body.for_each_child(node, |c| stack.push(c));
+        body.for_each_child(node, |c| stack.push((c, in_cold)));
     }
     out
+}
+
+/// Whether `node` is a block the program itself marks unlikely, which the
+/// optimizer spells as a `cold_path` call among its statements.
+fn block_is_cold(body: &Body, node: NodeRef, ctfe_builtins: &CtfeBuiltinMap) -> bool {
+    let NodeRef::Block(b) = node else {
+        return false;
+    };
+    body.blocks[b].stmts.iter().any(|s| {
+        let crate::nir_arena::StmtKind::Expr(op) = &body.stmts[*s].kind else {
+            return false;
+        };
+        op.as_expr().is_some_and(|e| {
+            matches!(&body.exprs[e].kind, ExprKind::Call { func_id, .. }
+                if ctfe_builtins.get(func_id) == Some(&CtfeBuiltin::ColdPath))
+        })
+    })
 }
 
 /// Display name per `func_id`, for the functions a compile-time frame can run.
