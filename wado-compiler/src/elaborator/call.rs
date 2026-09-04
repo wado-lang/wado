@@ -556,11 +556,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         // First, determine expected parameter types to handle coercion.
-        let (mut param_types, callee_slots) = self.lookup_function_signature(
+        let signature = self.lookup_function_signature(
             effective_name,
             receiver_site,
             callee_kind.callee_site(),
         );
+        let signature_known = signature.is_some();
+        let (mut param_types, callee_slots) = signature.unwrap_or_default();
         // The declaration's own frame, before instantiation replaces its slots
         // with inference variables. Inferred type arguments substitute into
         // these, not into the variables.
@@ -768,7 +770,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let method_def = self
                         .locate_static_method_impl(prefix, suffix, arg_hint.as_deref(), None)
                         .and_then(|r| r.method_id)
-                        .or_else(|| self.static_method_decl_at(receiver_site, prefix, suffix));
+                        .or_else(|| self.qualified_method_decl_at(receiver_site, prefix, suffix));
                     if let Some(method_def) = method_def {
                         self.record_reference_to_decl(suffix_seg.id, method_def);
                     }
@@ -907,17 +909,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // i32/f64, so re-coerce once the substitution is known. A
                 // non-generic call is checked too, or a mismatch only shows at
                 // codegen, as an invalid module rather than at its own span.
-                let mut raw_param_types = self.lookup_static_method_param_types(prefix, suffix);
-                let qualified_sig = self.static_method_sig(prefix, suffix);
-                // Written qualified, an instance method takes its receiver as
-                // the first argument — the one position the shared lookup
-                // leaves out, every other caller holding it separately.
-                if let Some(sig) = &qualified_sig
-                    && sig.self_kind != ast::SelfKind::None
-                    && let Some(&receiver) = sig.decl.param_types.first()
-                {
-                    raw_param_types.insert(0, receiver);
-                }
+                let raw_param_types = self
+                    .qualified_call_param_types(prefix, suffix)
+                    .unwrap_or_default();
                 let substituted: Vec<TypeId> =
                     if method_type_args.is_empty() && impl_type_args_inferred.is_empty() {
                         raw_param_types
@@ -930,18 +924,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             .collect()
                     };
                 self.recoerce_literal_args(&call.args, &mut args, &substituted);
-                // Per-argument checking alone passes a call with too few
-                // arguments — the loop below simply does not reach them, and a
-                // qualified instance method whose receiver was dropped then
-                // reaches codegen as an invalid module.
-                // A defaulted parameter may be omitted here and is filled at
-                // reify, so only a signature without defaults has a count to
-                // check. Without this, a call missing its receiver passes and
-                // reaches codegen as an invalid module.
-                let counts_are_fixed = qualified_sig
-                    .as_ref()
-                    .is_some_and(|sig| sig.params.iter().all(|p| p.default.is_none()));
-                if counts_are_fixed && !substituted.is_empty() && args.len() != substituted.len() {
+                // Per-argument checking alone passes a call of the wrong length:
+                // the loop below reaches neither a missing argument nor a
+                // surplus one, and the call reaches codegen as an invalid
+                // module. `Self::arg_count_fits` is the same rule the other
+                // static spellings check.
+                //
+                // From the same lookup `raw_param_types` came from, so the two
+                // cannot disagree: an overloaded name yields no signature here,
+                // and so no count to check — the overload path picks the impl
+                // by argument, and reports its own mismatch.
+                let optional = self
+                    .unique_qualified_method_sig(prefix, suffix)
+                    .map(|sig| sig.params.iter().filter(|p| p.default.is_some()).count());
+                if let Some(optional) = optional
+                    && !Self::arg_count_fits(args.len(), substituted.len(), optional)
+                {
                     let _ = self.emit(TypeError::ArgumentCountMismatch {
                         expected: substituted.len(),
                         found: args.len(),
@@ -1283,7 +1281,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                 defs,
                                 self.qualified_owner_decl(ident)?,
                             );
-                            self.static_method_decl_id(&receiver, method_name)
+                            self.qualified_method_decl_id(&receiver, method_name)
                         })
                     {
                         self.record_reference_to_decl(method_seg.id, method_def);
@@ -1358,11 +1356,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         method_name,
                         ns_key.as_ref(),
                     );
-                    let param_types = self.lookup_static_method_param_types_keyed(
+                    let declared_params = self.lookup_static_method_param_types_keyed(
                         type_name,
                         method_name,
                         ns_key.as_ref(),
                     );
+                    let declares_params = declared_params.is_some();
+                    let param_types = declared_params.unwrap_or_default();
                     let checked: Vec<TypeId> = if method_type_args.is_empty() {
                         param_types.clone()
                     } else {
@@ -1372,14 +1372,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             .collect()
                     };
                     self.recoerce_literal_args(&call.args, &mut args, &checked);
-                    for (i, arg) in args.iter().enumerate() {
-                        if let Some(&expected) = checked.get(i) {
-                            self.typecheck(
-                                *arg,
-                                expected,
-                                call.args.get(i).map_or(call.span, ast::Expr::span),
-                            );
-                        }
+                    // The same check the bare `Type::method` spelling gets: a
+                    // count is only skipped where no signature answered.
+                    let arg_spans: Vec<crate::Span> =
+                        call.args.iter().map(ast::Expr::span).collect();
+                    if declares_params
+                        && !self.check_static_call_args(
+                            &checked,
+                            &args,
+                            &arg_spans,
+                            &param_defaults,
+                            call.span,
+                        )
+                    {
+                        return TypeTable::ERROR;
                     }
 
                     let key = call.id;
@@ -1431,14 +1437,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             // Effect operations - pass through to codegen. This covers
             // `Stdout::write()`, etc. Effects/resources have no static-method
-            // registration to check against above, so validate `prefix`
-            // against the declared effect/resource indices directly; a
-            // `prefix` that names neither leaves `callee_opt` `None` so the
-            // caller falls through to the standard "unknown function" error
-            // instead of deferring an unvalidated call to codegen, where it
-            // would panic instead of failing cleanly.
+            // registration to check against above, so validate both halves of
+            // the path against the declaration directly: `prefix` must name an
+            // effect/resource and `suffix` an operation it declares. Either
+            // half unanswered leaves `callee_opt` `None` so the caller falls
+            // through to the standard "unknown function" error instead of
+            // deferring an unvalidated call to codegen, where it would panic
+            // instead of failing cleanly.
             else if let Some(decl) =
                 self.effect_or_resource_decl_at(ident.segments.first().map(|seg| seg.id))
+                && self
+                    .tysys
+                    .signatures
+                    .resource_method_sig(decl, suffix)
+                    .is_some()
             {
                 // Signature resolution, the effect check, dispatch and WIR all
                 // key on the declaration's name; an alias must not split them.
@@ -1589,7 +1601,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 ctx,
             );
         }
-        if !check_param_types.is_empty() && args.len() != check_param_types.len() {
+        if signature_known && args.len() != check_param_types.len() {
             let _ = self.emit(TypeError::ArgumentCountMismatch {
                 expected: check_param_types.len(),
                 found: args.len(),
@@ -1800,36 +1812,37 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .unwrap_or(TypeTable::UNIT)
     }
 
-    /// Look up a callee's declared parameter types *and* the slots they
-    /// mention, by the effective callee name (after any `Self::` / `T::`
-    /// prefix rewriting performed by [`Self::classify_call_callee`]).
+    /// A callee's declared parameter types and the slots they mention, by the
+    /// effective callee name (after [`Self::classify_call_callee`]'s `Self::` /
+    /// `T::` rewriting). One lookup answers both: a parameter type is usable as
+    /// an argument's expected type only once its slots are instantiated, and a
+    /// rigid slot is opaque — a literal checked against one can only be
+    /// rejected. Written qualified, an instance method's receiver is one of the
+    /// parameters, since the call writes it as the first argument.
     ///
-    /// Both halves come from one lookup because the call site needs both: a
-    /// parameter type is usable as an argument's expected type only once its
-    /// slots are instantiated, and a rigid slot is opaque — a literal checked
-    /// against one can only be rejected. An effect operation reports no slots;
-    /// it infers through its own path.
+    /// `None` is a callee this lookup could not find, which an empty parameter
+    /// list does not say: a callee declaring no parameters has a count to check
+    /// like any other.
     pub(super) fn lookup_function_signature(
         &mut self,
         name: &str,
         receiver_site: Option<ast::AstId>,
         callee_site: Option<ast::AstId>,
-    ) -> (Vec<TypeId>, Vec<TypeId>) {
+    ) -> Option<(Vec<TypeId>, Vec<TypeId>)> {
         // Check for qualified name (Type::method or Effect::operation)
         if let Some(pos) = name.find("::") {
             let prefix = &name[..pos];
             let suffix = &name[pos + 2..];
             // Check if it's a static method
             if self.is_static_method(prefix, suffix) {
-                // The parameter types come back in the declaration's own
-                // frame, slots and all, so the call site has the same reason
-                // to instantiate them as it does for a free function.
-                let params = self.lookup_static_method_param_types(prefix, suffix);
-                let slots = self
-                    .static_method_sig(prefix, suffix)
-                    .map(|sig| sig.decl.type_params.iter().map(|(_, id)| *id).collect())
-                    .unwrap_or_default();
-                return (params, slots);
+                // One signature answers both halves: the slots this use site
+                // instantiates and the parameters it checks against. The
+                // parameter types come back in the declaration's own frame, so
+                // the call site has the same reason to instantiate them as it
+                // does for a free function.
+                let sig = self.unique_qualified_method_sig(prefix, suffix)?;
+                let slots = sig.decl.type_params.iter().map(|(_, id)| *id).collect();
+                return Some((sig.decl.param_types, slots));
             }
 
             // Builtin functions resolve through the `core:builtin` module,
@@ -1839,16 +1852,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 && let Some(def) = self.decl_in_module(&ModuleSource::builtin(), suffix)
                 && let Some(sig) = self.tysys.signatures.function_sig(def)
             {
-                return (
+                return Some((
                     sig.decl.param_types.clone(),
                     sig.decl.type_params.iter().map(|(_, id)| *id).collect(),
-                );
+                ));
             }
 
             if let Some(decl) = self.effect_or_resource_decl_at(receiver_site)
                 && let Some((params, _)) = self.resolve_effect_op_signature(decl, suffix)
             {
-                return (params, Vec::new());
+                return Some((params, Vec::new()));
             }
 
             // A namespace member's signature lives in that module, which no
@@ -1860,10 +1873,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 if let Some(def) = self.decl_in_module(&ns_source, suffix)
                     && let Some(sig) = self.tysys.signatures.function_sig(def)
                 {
-                    return (
+                    return Some((
                         sig.decl.param_types.clone(),
                         sig.decl.type_params.iter().map(|(_, id)| *id).collect(),
-                    );
+                    ));
                 }
                 // `is_static_method` above declines the `ns::Type::method`
                 // shape, so the receiver resolves through the namespace instead.
@@ -1872,29 +1885,26 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 {
                     let ns_key =
                         trait_env::ImplTargetKey::of_decl(self.tysys.resolutions.defs(), def);
-                    let params = self.lookup_static_method_param_types_keyed(
+                    if let Some(params) = self.lookup_static_method_param_types_keyed(
                         type_name,
                         method_name,
                         Some(&ns_key),
-                    );
-                    if !params.is_empty() {
+                    ) {
                         let slots = self.lookup_static_method_slots(method_name, &ns_key);
-                        return (params, slots);
+                        return Some((params, slots));
                     }
                 }
             }
-            return (Vec::new(), Vec::new());
+            return None;
         }
 
         // One read for this module's functions, its imports under either
         // spelling, and a default expression's callee scope.
-        let Some(sig) = callee_site.and_then(|site| self.free_function_sig_at(site)) else {
-            return (Vec::new(), Vec::new());
-        };
-        (
+        let sig = callee_site.and_then(|site| self.free_function_sig_at(site))?;
+        Some((
             sig.decl.param_types.clone(),
             sig.decl.type_params.iter().map(|(_, id)| *id).collect(),
-        )
+        ))
     }
 
     /// Fill missing trailing arguments from the callee's declared defaults,
@@ -2268,7 +2278,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         method_type_args: &[TypeId],
         span: crate::token::Span,
     ) {
-        let Some(sig) = self.static_method_sig(prefix, suffix) else {
+        let Some(sig) = self.qualified_method_sig(prefix, suffix) else {
             return;
         };
         let (declaring_slots, method_slots) = (sig.declaring_type_params(), sig.own_type_params());
@@ -2652,7 +2662,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         args: &[TypeId],
         expected_type: Option<TypeId>,
     ) -> (Vec<TypeId>, Vec<TypeId>) {
-        let Some(sig) = self.static_method_sig(struct_name, method_name) else {
+        let Some(sig) = self.qualified_method_sig(struct_name, method_name) else {
             return (vec![], vec![]);
         };
         if sig.decl.type_params.is_empty() {
@@ -2660,12 +2670,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         let all_param_ids: Vec<TypeId> = sig.decl.type_params.iter().map(|(_, id)| *id).collect();
-        let first_value = sig.first_value_param().min(sig.decl.param_types.len());
-        let resolved_param_types = &sig.decl.param_types[first_value..];
         let decl_return_type = sig.decl.return_type;
 
+        // `args` are the arguments as written, so they begin with the receiver
+        // when the method declares one. Dropping it here would slide every pair
+        // one position left and solve each slot from the wrong argument.
         let mut infer = InferCtx::new(&self.tysys.type_table, all_param_ids.clone());
-        for (i, (param_type, arg)) in resolved_param_types.iter().zip(args.iter()).enumerate() {
+        for (i, (param_type, arg)) in sig.decl.param_types.iter().zip(args.iter()).enumerate() {
             if Self::is_literal_number_arg(raw_args.get(i)) {
                 infer.add_deferred(*param_type, *arg);
             } else {
@@ -2732,10 +2743,30 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .find(|e| e.name == method_name)
     }
 
-    /// The canonical signature of the receiver-less method `method_name` on
-    /// `struct_name`, declared by an `impl` block or a `resource`. Both callers
-    /// hold a name split out of a mangled spelling, so there is no site to take.
-    pub(super) fn static_method_sig(
+    /// [`Self::qualified_method_sig`] where the name resolves to exactly one
+    /// declaration. An overloaded name (several `From` impls on one target)
+    /// answers `None`: the call site chooses among the candidates by argument,
+    /// so committing to the first indexed one would decide the overload here.
+    /// Both kinds of declaration count, or a name carried by one static and one
+    /// instance method reads as unique and the two never meet to be compared.
+    pub(super) fn unique_qualified_method_sig(
+        &self,
+        struct_name: &str,
+        method_name: &str,
+    ) -> Option<MethodSig> {
+        let key = self.impl_target(struct_name);
+        let mut declared = self.qualified_method_decl_ids(&key, method_name);
+        if declared.next().is_some() && declared.next().is_some() {
+            return None;
+        }
+        self.qualified_method_sig(struct_name, method_name)
+    }
+
+    /// The canonical signature `struct_name::method_name` names, receiver-less
+    /// or instance: the spelling admits both, and a call site instantiates its
+    /// slots from whichever it names. Callers hold a name split out of a mangled
+    /// spelling, so there is no reference site to take.
+    pub(super) fn qualified_method_sig(
         &self,
         struct_name: &str,
         method_name: &str,
@@ -2756,13 +2787,47 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .resource_method_sig(*decl_id, method_name)
                 .cloned();
         }
+        // One name over several impls is an overload only an argument
+        // separates, so a single signature is not this lookup's to pick.
+        let mut declared = self
+            .impl_method_decl_ids(&key, method_name)
+            .filter_map(|def| self.tysys.signatures.method_sig(def).cloned());
+        if let Some(sig) = declared.next()
+            && declared.next().is_none()
+        {
+            return Some(sig);
+        }
         // The qualified form disambiguates a colliding name, so it reaches an
         // inherited method too.
         let ImplTargetKey::Decl(def) = key else {
             return None;
         };
+        // A resource declares its own statics whether or not the static index
+        // classified them, so the signature table answers directly for the
+        // ones it did not.
+        if let Some(sig) = self.tysys.signatures.resource_method_sig(def, method_name)
+            && sig.self_kind == ast::SelfKind::None
+        {
+            return Some(sig.clone());
+        }
         self.resource_instance_method(def, method_name)
             .map(|(_, sig)| sig)
+    }
+
+    /// The parameter types a `Type::method(...)` call's arguments check against:
+    /// the declaration's whole list, since the spelling writes the receiver as
+    /// the first argument when the method declares one. An overloaded name
+    /// answers `None` — its call site picks the impl by argument, and coercing
+    /// toward the first indexed one would decide that here.
+    pub(super) fn qualified_call_param_types(
+        &mut self,
+        struct_name: &str,
+        method_name: &str,
+    ) -> Option<Vec<TypeId>> {
+        if let Some(sig) = self.unique_qualified_method_sig(struct_name, method_name) {
+            return Some(sig.decl.param_types);
+        }
+        self.lookup_static_method_param_types_keyed(struct_name, method_name, None)
     }
 
     /// `Type::method()` reaching a value blanket's static, which is indexed

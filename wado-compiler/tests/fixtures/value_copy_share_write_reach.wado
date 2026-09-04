@@ -1,0 +1,138 @@
+// What a write reaches, for the read-only share (WEP 2026-05-21). In each case
+// something writes the storage a binding was read out of while the binding can
+// still read it, so the binding keeps its copy. `value_copy_share_on_liveness`
+// is the counterpart, where the write reaches nothing that is read again.
+
+struct Inner {
+    a: List<i32>,
+}
+
+struct Outer {
+    inner: Inner,
+}
+
+struct Held {
+    r: &mut Inner,
+}
+
+struct HeldOuter {
+    r: &mut Outer,
+}
+
+// The handle outlives the call, so what the callee writes through it is the
+// whole of what it was handed rather than any field it names.
+fn stash(i: &mut Inner) -> Held with stores[i] {
+    return Held { r: i };
+}
+
+impl Outer {
+    fn stash_self(&mut self) -> HeldOuter with stores[self] {
+        return HeldOuter { r: self };
+    }
+}
+
+fn through_a_stashed_argument(o: &mut Outer) -> i32 {
+    let snap = o.inner.a;
+    let h = stash(&mut o.inner);
+    h.r.a.push(9);
+    return snap.len();
+}
+
+fn through_a_stashed_receiver(o: &mut Outer) -> i32 {
+    let snap = o.inner.a;
+    let h = o.stash_self();
+    h.r.inner.a.push(9);
+    return snap.len();
+}
+
+fn mutate(i: &mut Inner) {
+    i.a.push(9);
+}
+
+fn writes_inner(o: &mut Outer) {
+    mutate(&mut o.inner);
+}
+
+// The write reaches `inner` through a field of a plain local, not a reference
+// parameter, closing over `writes_inner` to learn that `mutate` writes it.
+fn through_a_call_field(o: &mut Outer) -> i32 {
+    let snap = o.inner.a;
+    writes_inner(o);
+    return snap.len();
+}
+
+struct Cell {
+    v: i32,
+}
+
+fn bump_via_index(arr: &mut Array<Cell>) {
+    let r = builtin::array_get_ref_mut(arr, 0);
+    r.v = r.v + 1;
+}
+
+// An index off the root itself leaves no field selector naming the array's own
+// type. The write must still be flagged against the array, not only against the
+// element type it drills into.
+fn through_an_indexed_element(arr: &mut Array<Cell>) -> i32 {
+    let snap = builtin::array_get_value(arr, 0);
+    bump_via_index(arr);
+    return snap.v;
+}
+
+struct Counter {
+    n: i32,
+}
+
+struct Pair {
+    c: Counter,
+}
+
+// The write is reached through a `continue`. What runs next is the loop head, so
+// `snap` is read again; the loop's exit set says it is dead.
+fn across_a_continue(p: &mut Pair) -> i32 {
+    let snap = p.c;
+    let mut acc = 0;
+    let mut i = 0;
+    while i < 3 {
+        acc = acc + snap.n;
+        i = i + 1;
+        p.c.n = 9;
+        continue;
+    }
+    return acc;
+}
+
+export fn run() {
+    let mut o = Outer { inner: Inner { a: [1] } };
+    let stashed_arg = through_a_stashed_argument(&mut o);
+    let after_arg = o.inner.a.len();
+    assert stashed_arg == 1;
+    assert after_arg == 2;
+
+    let mut o2 = Outer { inner: Inner { a: [1] } };
+    let stashed_recv = through_a_stashed_receiver(&mut o2);
+    let after_recv = o2.inner.a.len();
+    assert stashed_recv == 1;
+    assert after_recv == 2;
+
+    let mut p = Pair { c: Counter { n: 0 } };
+    let looped = across_a_continue(&mut p);
+    assert looped == 0;
+    assert p.c.n == 9;
+
+    let mut o3 = Outer { inner: Inner { a: [1] } };
+    let field_write = through_a_call_field(&mut o3);
+    assert field_write == 1;
+    assert o3.inner.a.len() == 2;
+
+    let mut c: Array<Cell> = builtin::array_new(1);
+    builtin::array_set(&mut c, 0, Cell { v: 1 });
+    let via_index = through_an_indexed_element(&mut c);
+    assert via_index == 1;
+    assert builtin::array_get_value(&c, 0).v == 2;
+}
+
+__DATA__
+{
+    "stdout": ""
+}

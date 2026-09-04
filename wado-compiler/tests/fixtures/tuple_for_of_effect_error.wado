@@ -1,0 +1,26 @@
+// A method call inside the body a tuple for-of unrolls is dispatched once per
+// element; the effect check must read every element's dispatch, not only the
+// module's own walk.
+
+use { println, Stdout } from "core:cli";
+
+struct P { v: i32 }
+
+impl P {
+    fn show(&self) with Stdout {
+        println(`${self.v}`);
+    }
+}
+
+fn body() {
+    for let v of [P { v: 1 }, P { v: 2 }] {
+        v.show();
+    }
+}
+
+export fn run() {
+    body();
+}
+
+__DATA__
+{"compile_error": "missing effect 'Stdout' required by 'show'"}

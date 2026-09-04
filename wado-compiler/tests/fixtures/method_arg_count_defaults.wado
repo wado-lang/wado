@@ -1,0 +1,34 @@
+// Arity on a method counts a defaulted parameter as optional, not as
+// required, and still rejects one argument past the declared list.
+
+use { println, Stdout } from "core:cli";
+
+struct P {
+    v: i32,
+}
+
+impl P {
+    fn add(&self, a: i32, b: i32 = 5) -> i32 {
+        return a + b + self.v;
+    }
+}
+
+trait Adder {
+    fn plus(&self, a: i32) -> i32;
+}
+
+impl Adder for P {
+    fn plus(&self, a: i32) -> i32 {
+        return a + self.v;
+    }
+}
+
+export fn run() with Stdout {
+    let p = P { v: 10 };
+    println(`${p.add(1)}`);
+    println(`${p.add(1, 2)}`);
+    println(`${p.plus(1)}`);
+}
+
+__DATA__
+{"stdout": "16\n13\n11\n"}

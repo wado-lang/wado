@@ -1,0 +1,55 @@
+// An unlabeled `break` out of a nested loop syncs when it diverges.
+//
+// The break is recorded rather than committed on the spot, so what makes it
+// sound is the convergence sync `walk_nested_loop` splices in afterwards. The
+// break leaves at `ScalarOnly`, its scalar write being the statement before it.
+// The fall-through leaves at `FieldOnly`, since `bump` mutates the field
+// through `&mut`. So the join is `FieldOnly` and the outer read after the loop
+// re-reads the field. Without the sync, that read sees what `bump` left and the
+// `s.pos + 2` is lost.
+
+struct S {
+    pos: i32,
+    pad: i32,
+}
+
+#[inline(never)]
+fn bump(s: &mut S) {
+    s.pos = s.pos + 100;
+}
+
+export fn run() {
+    let mut s = S { pos: 0, pad: 0 };
+    let mut sink = 0;
+    // Outer HFS loop: four direct `s.pos` accesses in its own body, which is
+    // what the candidate threshold counts (a nested loop's do not).
+    for let mut o = 0; o < 3; o += 1 {
+        sink = sink + s.pos;
+        s.pos = s.pos + 1;
+        sink = sink + s.pos;
+        for let mut k = 0; k < 4; k += 1 {
+            s.pos = s.pos + 2;
+            if s.pos > 40 {
+                break;
+            }
+            bump(&mut s);
+        }
+        sink = sink + s.pos;
+    }
+    // o=0: sink 0; pos 1; sink 1.
+    //   k=0: pos 3, bump 103. k=1: pos 105 > 40, break.
+    //   sink 1+105=106.
+    // o=1: sink 211; pos 106; sink 317.
+    //   k=0: pos 108 > 40, break.
+    //   sink 317+108=425.
+    // o=2: sink 533; pos 109; sink 642.
+    //   k=0: pos 111 > 40, break.
+    //   sink 642+111=753.
+    assert s.pos == 111, `s.pos corrupted: ${s.pos} (want 111)`;
+    assert sink == 753, `sink corrupted: ${sink} (want 753)`;
+}
+
+__DATA__
+{
+    "stdout": ""
+}

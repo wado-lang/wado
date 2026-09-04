@@ -12,7 +12,7 @@
 // - Request.set_scheme → Ok
 // - Request.set_authority → Ok
 
-use { Request, Response, ErrorCode, Fields, FieldName, FieldValue, Method, Scheme, RequestOptions, Trailers } from "wasi:http";
+use { Request, Response, ErrorCode, Fields, Headers, FieldName, FieldValue, Method, Scheme, RequestOptions, Trailers } from "wasi:http";
 use { Client } from "wasi:http/client.wado";
 use { Duration } from "wasi:clocks";
 
@@ -24,7 +24,7 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode>
     let _ = opts.set_connect_timeout(Option::<Duration>::Some(5000000000));
 
     // Create outgoing request with options (no body stream for now)
-    let req_headers = Fields::new();
+    let req_headers = Headers::new();
     let _ = req_headers.append("content-type" as FieldName, "text/plain".bytes().collect() as FieldValue);
     let [trailers_future, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
     let [out_req, _req_future] = Request::new(
@@ -101,7 +101,7 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode>
     // Build response
     let [resp_trailers_future, resp_trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
     let [resp_rx, resp_tx] = Stream::<u8>::new();
-    let resp_headers = Fields::new();
+    let resp_headers = Headers::new();
     let [response, _tx_future] = Response::new(resp_headers, Option::<Stream<u8>>::Some(resp_rx), resp_trailers_future);
 
     task return Result::<Response, ErrorCode>::Ok(response);

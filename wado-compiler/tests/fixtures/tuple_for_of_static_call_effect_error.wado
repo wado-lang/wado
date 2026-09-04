@@ -1,0 +1,30 @@
+// `Type::method(…)` inside the body a tuple `for-of` unrolls records one
+// dispatch per element. The effect check read only the module's own walk, so
+// the call escaped it entirely while the identical call outside the loop was
+// reported.
+
+use { println, Stdout } from "core:cli";
+
+struct P {
+    v: i32,
+}
+
+impl P {
+    fn go(n: i32) -> i32 with Stdout {
+        println(`${n}`);
+        return n;
+    }
+}
+
+fn body() {
+    for let v of [1, 2] {
+        let _ = P::go(v);
+    }
+}
+
+export fn run() {
+    body();
+}
+
+__DATA__
+{"compile_error": "missing effect 'Stdout' required by 'P::go'"}

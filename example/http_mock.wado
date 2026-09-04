@@ -14,7 +14,7 @@
 //! Run the tests with `wado test example/http_mock.wado`, or serve for real
 //! with `wado serve example/http_mock.wado`.
 
-use { Request, Response, ErrorCode, Fields, FieldName, FieldValue, Trailers, StatusCode } from "wasi:http";
+use { Request, Response, ErrorCode, Fields, Headers, FieldName, FieldValue, Trailers, StatusCode } from "wasi:http";
 use { Client } from "wasi:http";
 
 // A tiny gateway: `/status` reports the upstream health-check status in an
@@ -29,7 +29,7 @@ fn gateway(req: Request) -> Response with Client {
     }
 
     let [trailers_rx, _trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
-    let [out_req, _req_future] = Request::new(Fields::new(), null, trailers_rx, null);
+    let [out_req, _req_future] = Request::new(Headers::new(), null, trailers_rx, null);
     out_req.set_authority(Option::<String>::Some("upstream.internal"));
     out_req.set_path_with_query(Option::<String>::Some("/health"));
 
@@ -45,7 +45,7 @@ fn gateway(req: Request) -> Response with Client {
 }
 
 fn respond(status: StatusCode, headers: List<[String, String]>) -> Response {
-    let fields = Fields::new();
+    let fields = Headers::new();
     for let [name, value] of headers {
         let _ = fields.append(name as FieldName, value.bytes().collect() as FieldValue);
     }
@@ -93,7 +93,7 @@ impl Client for DeadUpstream {
 // received from the network.
 fn get(path: String) -> Request {
     let [trailers_rx, _trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
-    let [req, _req_future] = Request::new(Fields::new(), null, trailers_rx, null);
+    let [req, _req_future] = Request::new(Headers::new(), null, trailers_rx, null);
     req.set_path_with_query(Option::<String>::Some(path));
     return req;
 }

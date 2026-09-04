@@ -1,22 +1,20 @@
 # wado-compiler
 
-The Wado compiler crate: frontend, IR pipeline, optimizer, and codegen. The NIR
-optimizer has its own guide: [`docs/optimizer.md`](../docs/optimizer.md).
+The Wado compiler crate. The NIR optimizer has its own guide:
+[`docs/optimizer.md`](../docs/optimizer.md).
 
 ## Rules
 
-- `codegen.rs` emits the `Package` as is; it knows nothing of the earlier phases.
-- Name mangling and monomorphization go through `name.rs`. No other component knows a name format.
+- `src/codegen.rs` emits the `Package` as is; it knows nothing of the earlier
+  phases.
+- Only `src/name.rs` knows a name format. Mangling and monomorphization go
+  through it.
 - A declaration is identified by its `DefId`, never by its name — see
   [WEP: Declaration Identity](../docs/wep-2026-08-12-declaration-identity.md).
-- Walk IR through the visitor utilities, not by hand, and answer a question
-  once: one resolver total over the IR, rather than partial walkers, which
-  multiply until each misses a different shape.
-- Take a finding one altitude up: it names a line, so ask whether that shape
-  occurs elsewhere in the IR before fixing there.
+- Walk IR through the visitor utilities, and answer a question with one resolver
+  over the IR rather than partial walkers, which each miss a different shape.
 - Optimize as far as correctness allows. A conservatism is a claim about
-  precision: measure what it buys before keeping it, and drop the ones that buy
-  nothing.
+  precision: measure what it buys, and drop the ones that buy nothing.
 - Escalate the test scope as the work matures: `cargo check` while iterating,
   `mise run test` during development, `mise run test-wado` when wrapping up.
 - This crate must compile for `wasm32-unknown-unknown` (checked in CI). Keep
@@ -24,14 +22,15 @@ optimizer has its own guide: [`docs/optimizer.md`](../docs/optimizer.md).
 
 ## Standard Libraries
 
-`lib/core/` and `lib/wasi/` are embedded by `include_str!` in `src/stdlib.rs` —
-editing one has no effect until the crate is rebuilt. `lib/wasi/` and
-`lib/core/kiln/` are generated from WIT: read `wado-from-idl/AGENTS.md` first.
+`src/stdlib.rs` lists `lib/core/` and `lib/wasi/`. A dev build reads them from
+disk, so editing one takes effect on the next `wado` run with no rebuild. A
+release build embeds them, as does any `wasm32` build, which has no filesystem.
+`lib/wasi/` and `lib/core/kiln/` are generated from WIT: read
+`wado-from-idl/AGENTS.md` first.
 
-`src/stdlib.rs` names no `_test.wado`, so the white-box tests beside a stdlib
-module are **not** embedded. `wado test lib/core/prelude/fpfmt_test.wado` reads
-one from disk and runs in seconds, so iterate there and spend the rebuild only
-on the module it tests.
+`builtin::select` returns one of its operands rather than a copy, so write the
+`if` for `i128`, `u128` and any composite: `src/optimize/select_lowering.rs`
+rewrites what qualifies and refuses the rest on that ground.
 
 ## E2E Tests
 

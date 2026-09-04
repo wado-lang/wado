@@ -1642,7 +1642,7 @@ fn describe_sites(source: &str, sites: &[Site]) -> String {
 /// source instead of inferred from a line and column.
 ///
 /// ```sh
-/// WADO_EMI_FILTER=if_merged cargo test --test emi -- --ignored --nocapture dump_mutants
+/// WADO_EMI_FILTER=if_expression cargo test --test emi -- --ignored --nocapture dump_mutants
 /// ```
 #[test]
 #[ignore = "inspection aid — writes files, asserts nothing"]

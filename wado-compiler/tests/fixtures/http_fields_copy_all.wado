@@ -1,10 +1,10 @@
 // HTTP Fields.copy_all() test
 // Tests enumerating all entries in a Fields using copy_all().
 
-use { Request, Response, ErrorCode, Fields, FieldName, FieldValue, Trailers } from "wasi:http";
+use { Request, Response, ErrorCode, Fields, Headers, FieldName, FieldValue, Trailers } from "wasi:http";
 
 export async fn handle(request: Request) -> Result<Response, ErrorCode> {
-    let fields = Fields::new();
+    let fields = Headers::new();
 
     let v1: List<u8> = [97 as u8]; // "a"
     let v2: List<u8> = [98 as u8]; // "b"

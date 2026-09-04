@@ -49,6 +49,17 @@ The design, its soundness invariants, the standing "do not reintroduce" rules, a
 
 ## NIR passes
 
+`peephole` is not a pass. It is the one engine session per function that the
+position-flexible rules share, each on the same worklist instead of a walk of
+its own. It hosts `aggregate_forward`, `const_branch_prune`, the env-free half
+of `const_folding`, `drop_value`, `elide_box_local`, `elide_local`,
+`if_chain_to_match`, `labeled_block_fusion`, `match_to_switch`, `ref_elim`,
+`slot_temp_sroa`, `string_push`, and `tuple_projection`. It runs twice per
+fixed-point iteration, before and after `inline`, so each rule sees the
+instruction window the other exposes. `match_to_switch` and `if_chain_to_match`
+run only before; `ref_elim`, `elide_box_local`, `slot_temp_sroa`, and
+`drop_value` run only after.
+
 Allocation and aggregate:
 
 - `inline` — replace calls to small, non-recursive functions with their body; reference parameters and receivers inline too. `#[inline]` raises the budget 5x, `#[inline(always)]` forces it, `#[inline(never)]` and cold call sites opt out. A callee over budget as written is re-read under the constants its callers pass. `--optimize-inline-growth` additionally caps what the pass adds to the whole unit; no level sets it.
@@ -70,6 +81,8 @@ Variant and reference:
 - `labeled_block_fusion` — delete the intermediate an inlined `?` helper leaves at its consumer, threading each producer directly to the value it yields. Recognises the `Option`/`Result` and the `[tag, slots…]` `sroa_variant_return` leaves in its place.
 - `slot_temp_sroa` — decompose the aggregate temp an inlined helper leaves where fusion cannot relocate the consumer into the block, as in the value-producing `let x = f()?` or a two-armed `get_pow10`. Each projected slot gets a local declared ahead of the block, so its definition dominates every read, and the exits assign it instead of building the aggregate. Takes the `[tag, slots…]` tuple `sroa_variant_return` leaves, a struct literal whose reads cover every field, and an exit handing over the aggregate rather than its fields, which it binds and projects.
 - `ref_elim` — drop reference bindings read only via field access, rewriting each read to the source; a shared borrow of a pure aggregate substitutes the aggregate so its projections fold.
+- `aggregate_forward` — deliver a freshly built aggregate to its consumer directly, so the binding `sroa` sees is the literal. `?` leaves two hops in the way. `sroa_variant_return` puts a `Result`-returning call into slots, so an always-succeeding inlined callee builds the `Ok` only for the caller to open it again and re-bind the payload. Neither hop is elidable alone: `elide_local` wants a local nobody reads, and `copy_prop` will not propagate into one later written.
+- `tuple_projection` — `[a, b, c].1` → `b`. A tuple literal has no identity, so a field read of one built in place is that element; the unselected elements are dropped, so each must be deletable.
 
 Scalar and dataflow:
 
@@ -90,7 +103,7 @@ Loop and field:
 - `condition_implication` — eliminate bounds/range checks implied false by a dominating loop guard, `if`, short-circuit, or early-exit; drop a constant-bounded index check; and, in a forward pass, drop a redundant re-check when an earlier access already proved the same index in bounds. Subsumes WIR bounds-check elimination.
 - `loop_version_bce` — split a loop into a checks-deleted fast path and an unchanged slow path when a bound relation holds by per-iteration transitivity; a simple fill loop further collapses to `array.fill`.
 - `tmpl_hoist` — hoist a template string's backing buffer out of a loop and reuse it when the result does not escape the iteration. It recognises an expansion by the label `synthesis::template` stamps on it, which is why `const_branch_prune` leaves that block un-flattened until the fixpoint ends.
-- `field_scalarize` — shadow hot GC fields in scalar locals across a loop, with dataflow-driven write-back and re-read.
+- `field_scalarize` — shadow hot GC fields in scalar locals across a loop, with dataflow-driven write-back and re-read. A nested loop is inside that scope rather than an exit from it: only the candidates a call in its body reaches are committed before it and re-read after, and an unlabeled `break` out of it joins the loop's other exits instead of committing every scalar on the spot. A bit-buffer refill loop reaches nothing and so syncs nothing, which is 6% of `core:zlib`'s inflate.
 
 Whole-program and backend:
 
@@ -135,6 +148,8 @@ Branch hints are transparent annotations on `if`/`br_if` conditions: a pass look
 ## Shared facilities
 
 - `mod_ref.rs` — a conservative mod/ref summary backing the move-safety predicates (`may_clobber`, `can_move_past`).
+- `alias.rs` — per-function alias analysis feeding the value-graph builder. One body walk serves both the alias analysis and the mutable-escape scan; `builder_alias_sets` finishes the syntactic mutation set into `mut_escaped`, which is what bounds each pass's heap-write invalidation.
+- `gate.rs` — the per-function dirty-set gate. Its design is the WEP's.
 - `arena_query.rs` — shared arena queries (purity and trap classification, mutation and place-root checks, break-target search, the promoted-read queries). The census walk itself is on `Body`, memoized per session by the engine.
 - `nir_visitor.rs` — the shared pre/post-order visitor traits.
 

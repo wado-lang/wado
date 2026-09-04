@@ -1,0 +1,22 @@
+// A defaulted parameter makes a call shorter than the declared list valid, not
+// a longer one. Written qualified the receiver is the first argument, so `add`
+// takes two or three, and a fourth is an argument nothing checks and reify
+// drops — along with whatever its expression did.
+
+struct P {
+    v: i32,
+}
+
+impl P {
+    fn add(&self, a: i32, b: i32 = 5) -> i32 {
+        return a + b + self.v;
+    }
+}
+
+export fn run() {
+    let p = P { v: 10 };
+    let _ = P::add(&p, 1, 2, 3);
+}
+
+__DATA__
+{"compile_error": "expected 3 arguments, found 4"}

@@ -49,15 +49,15 @@ pub(super) fn int_literal_repr(lit: &ast::LiteralExpr) -> Option<&str> {
     }
 }
 
-/// An integer literal standing as an operand, bare or negated — the shape
-/// reify re-types to a cast's target width.
-fn int_literal_operand(expr: &Expr) -> Option<(&ast::LiteralExpr, &str)> {
-    let lit = match expr {
-        Expr::Literal(lit) => lit,
-        Expr::Unary(unary) => negated_literal(unary)?,
+/// An integer literal standing as a cast operand, bare or negated, and which of
+/// the two it was — the shape reify re-types to the cast's target width.
+pub(super) fn int_literal_cast_operand(expr: &Expr) -> Option<(&ast::LiteralExpr, &str, bool)> {
+    let (lit, negated) = match expr {
+        Expr::Literal(lit) => (lit, false),
+        Expr::Unary(unary) => (negated_literal(unary)?, true),
         _ => return None,
     };
-    int_literal_repr(lit).map(|repr| (lit, repr))
+    int_literal_repr(lit).map(|repr| (lit, repr, negated))
 }
 
 /// The literal `-NUM` negates, which both range checks read as one literal so
@@ -3548,8 +3548,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // `as` the way to write a bit pattern (`0xFF as i8`) and how a literal
         // reaches a target wider than `i32` (`65 as i128`). It never lands on
         // `i32`, so the defaulted range check must not judge it.
-        let source_type = match int_literal_operand(&cast.expr) {
-            Some((lit, repr)) => {
+        let source_type = match int_literal_cast_operand(&cast.expr) {
+            Some((lit, repr, _)) => {
                 self.check_int_literal_parses(repr, lit.span);
                 self.record_expression_type(cast.expr.id(), TypeTable::I32);
                 self.record_expression_type(lit.id, TypeTable::I32);
@@ -5195,6 +5195,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         caller_id: crate::ast::AstId,
     ) -> TypeId {
         let tt = self.tysys.type_table.borrow();
+        // Reify reads the names below back as written, so an unsolved type
+        // would mangle into a callee no monomorphization produces.
+        assert!(
+            !tt.contains_infer_var(target_type) && !tt.contains_infer_var(from_type),
+            "`From` conversion recorded over an unsolved type"
+        );
         let target_name = tt.type_name(target_type);
         let from_name = tt.fq_type_name(from_type);
         let from_trait_name = tt.compiler_trait_fq(crate::compiler_item::CompilerItem::From);

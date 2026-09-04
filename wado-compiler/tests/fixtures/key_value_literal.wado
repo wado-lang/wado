@@ -1,0 +1,168 @@
+// A user type receiving the `{ key: value }` literal. Coercion goes through
+// `From<Array<[String, V]>>` (WEP 2026-08-24), so a type needs only that impl —
+// no builder protocol — and a type carrying both `From<Array<[String, T]>>` and
+// `From<Array<T>>` takes the pair impl for `{ … }` and the other for `[ … ]`.
+
+struct FrozenMap<V> {
+    keys: List<String>,
+    values: List<V>,
+}
+
+impl FrozenMap<V> {
+    fn len(&self) -> i32 {
+        return self.keys.len();
+    }
+
+    fn get(&self, key: String) -> Option<V> {
+        let mut i = 0;
+        while i < self.keys.len() {
+            if self.keys[i] == key {
+                return Option::<V>::Some(self.values[i]);
+            }
+            i += 1;
+        }
+        return null;
+    }
+}
+
+impl From<Array<[String, V]>> for FrozenMap<V> {
+    fn from(entries: Array<[String, V]>) -> FrozenMap<V> {
+        let mut keys: List<String> = [];
+        let mut values: List<V> = [];
+        for let [key, value] of entries {
+            keys.push(key);
+            values.push(value);
+        }
+        return FrozenMap { keys, values };
+    }
+}
+
+struct EitherBag<T> {
+    keys: List<String>,
+    values: List<T>,
+}
+
+impl EitherBag<T> {
+    fn len(&self) -> i32 {
+        return self.values.len();
+    }
+
+    fn get_by_index(&self, i: i32) -> T {
+        return self.values[i];
+    }
+
+    fn get_by_key(&self, key: String) -> Option<T> {
+        let mut i = 0;
+        while i < self.keys.len() {
+            if self.keys[i] == key {
+                return Option::<T>::Some(self.values[i]);
+            }
+            i += 1;
+        }
+        return null;
+    }
+
+    fn is_named(&self) -> bool {
+        return self.keys.len() > 0;
+    }
+}
+
+impl From<Array<[String, T]>> for EitherBag<T> {
+    fn from(entries: Array<[String, T]>) -> EitherBag<T> {
+        let mut keys: List<String> = [];
+        let mut values: List<T> = [];
+        for let [key, value] of entries {
+            keys.push(key);
+            values.push(value);
+        }
+        return EitherBag { keys, values };
+    }
+}
+
+impl From<Array<T>> for EitherBag<T> {
+    fn from(elements: Array<T>) -> EitherBag<T> {
+        let mut values = List::<T>::with_capacity(elements.len());
+        for let element of elements {
+            values.push(element);
+        }
+        return EitherBag { keys: [], values };
+    }
+}
+
+// A blanket impl whose bound projects an associated type of the type parameter
+// (`T::Value`) compiles and dispatches. These two traits are this fixture's
+// own — literal coercion has no builder protocol to test.
+
+trait KeyValueLiteralBuilder {
+    type Value;
+    type Output;
+
+    fn new_literal(capacity: i32) -> Self;
+    fn insert_literal(&mut self, key: String, value: Self::Value);
+    fn build(&self) -> Self::Output;
+}
+
+trait KeyValueLiteral {
+    type Value;
+    type Builder;
+}
+
+impl<T: KeyValueLiteralBuilder<Output = T>> KeyValueLiteral for T {
+    type Value = T::Value;
+    type Builder = T;
+}
+
+struct BuiltBag<V> {
+    keys: List<String>,
+    values: List<V>,
+}
+
+impl KeyValueLiteralBuilder for BuiltBag<V> {
+    type Value = V;
+    type Output = BuiltBag<V>;
+
+    fn new_literal(capacity: i32) -> BuiltBag<V> {
+        return BuiltBag { keys: [], values: [] };
+    }
+
+    fn insert_literal(&mut self, key: String, value: V) {
+        self.keys.push(key);
+        self.values.push(value);
+    }
+
+    fn build(&self) -> BuiltBag<V> {
+        return *self;
+    }
+}
+
+test "one From impl is enough for an immutable target" {
+    let m: FrozenMap<i32> = { x: 10, y: 20, z: 30 };
+    assert m.len() == 3;
+    assert m.get("x") matches { Some(v) && v == 10 };
+    assert m.get("y") matches { Some(v) && v == 20 };
+    assert m.get("z") matches { Some(v) && v == 30 };
+    let m2 = { a: 1, b: 2 } as FrozenMap<i32>;
+    assert m2.len() == 2;
+}
+
+test "a type accepting both literal forms picks by element shape" {
+    let named: EitherBag<i32> = { x: 10, y: 20, z: 30 };
+    assert named.len() == 3;
+    assert named.is_named();
+    assert named.get_by_key("y") matches { Some(v) && v == 20 };
+
+    let indexed: EitherBag<i32> = [100, 200, 300];
+    assert indexed.len() == 3;
+    assert !indexed.is_named();
+    assert indexed.get_by_index(0) == 100;
+    assert indexed.get_by_index(2) == 300;
+}
+
+test "a blanket impl bound on the parameter's associated type" {
+    let mut b = BuiltBag::<i32>::new_literal(2);
+    b.insert_literal("x", 1);
+    b.insert_literal("y", 2);
+    let bag = b.build();
+    assert bag.keys.len() == 2;
+    assert bag.values[0] == 1;
+}

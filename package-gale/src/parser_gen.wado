@@ -1281,16 +1281,26 @@ fn gen_scan_multi_alt(
         } else {
             w.else_begin(&`else if ${cond}`);
         }
-        gen_scan_partition_body(w, &groups_alts[g], unguarded_idx, scan_alts, ctx, plan, base_name);
+        gen_scan_partition_body(
+            w,
+            &groups_alts[g],
+            unguarded_idx,
+            scan_alts,
+            ctx,
+            plan,
+            base_name,
+            &groups_tokens[g],
+        );
     }
 
     if unguarded_idx.len() > 0 {
         let empty_alts: List<i32> = [];
+        let no_guard: List<String> = [];
         if first_branch {
-            gen_scan_partition_body(w, &empty_alts, unguarded_idx, scan_alts, ctx, plan, base_name);
+            gen_scan_partition_body(w, &empty_alts, unguarded_idx, scan_alts, ctx, plan, base_name, &no_guard);
         } else {
             w.else_begin(&"else");
-            gen_scan_partition_body(w, &empty_alts, unguarded_idx, scan_alts, ctx, plan, base_name);
+            gen_scan_partition_body(w, &empty_alts, unguarded_idx, scan_alts, ctx, plan, base_name, &no_guard);
             w.end();
         }
     } else if !first_branch {
@@ -1331,24 +1341,23 @@ fn gen_scan_partition_body(
     ctx: &mut GenContext,
     plan: &ScanAltPlan,
     base_name: &String,
+    guard_tokens: &List<String>,
 ) {
     let total = guarded_alts.len() + unguarded_alts.len();
     if total == 1 {
-        let i = if guarded_alts.len() == 1 { guarded_alts[0] } else { unguarded_alts[0] };
+        let guarded = guarded_alts.len() == 1;
+        let i = if guarded { guarded_alts[0] } else { unguarded_alts[0] };
         if plan.is_hoisted(i) {
             w.line(&`pos = ${scan_alt_helper_name(base_name, i)}(tokens, start${follow_sep(ctx.emit_follow())});`);
             w.line(&"if pos >= 0 { break scan_alts; }");
             w.line(&"return -1;");
             return;
         }
-        let label = `try_${i}`;
-        w.line(&"pos = start;");
-        w.begin(&`${label}:`);
         let body = &scan_alts[i];
-        gen_scan_op_elements_in_block(w, &body.elements, 0, body.elements.len(), ctx, &label);
-        w.line(&"break scan_alts;");
-        w.end();
-        w.line(&"return -1;");
+        let skip = guarded && guard_implies_first_token(body, guard_tokens);
+        if gen_scan_alt_candidate(w, i, body, skip, ctx, &"break scan_alts;") {
+            w.line(&"return -1;");
+        }
         return;
     }
     // Longest-match tournament (see the function doc): try each from
@@ -1358,29 +1367,94 @@ fn gen_scan_partition_body(
     for let i of guarded_alts {
         all_idx.push(*i);
     }
+    let guarded_count = all_idx.len();
     for let i of unguarded_alts {
         all_idx.push(*i);
     }
-    for let i of &all_idx {
-        if plan.is_hoisted(*i) {
+    for let mut k = 0; k < all_idx.len(); k += 1 {
+        let i = all_idx[k];
+        if plan.is_hoisted(i) {
             w.line(
-                &`let try_${*i}_end = ${scan_alt_helper_name(base_name, *i)}(tokens, start${follow_sep(
+                &`let try_${i}_end = ${scan_alt_helper_name(base_name, i)}(tokens, start${follow_sep(
                     ctx.emit_follow(),
                 )});`,
             );
-            w.line(&`if try_${*i}_end > best \{ best = try_${*i}_end; \}`);
+            w.line(&`if try_${i}_end > best \{ best = try_${i}_end; \}`);
             continue;
         }
-        let label = `try_${*i}`;
-        w.line(&"pos = start;");
-        w.begin(&`${label}:`);
-        let body = &scan_alts[*i];
-        gen_scan_op_elements_in_block(w, &body.elements, 0, body.elements.len(), ctx, &label);
-        w.line(&"if pos > best { best = pos; }");
-        w.end();
+        let body = &scan_alts[i];
+        let skip = k < guarded_count && guard_implies_first_token(body, guard_tokens);
+        let _ = gen_scan_alt_candidate(w, i, body, skip, ctx, &"if pos > best { best = pos; }");
     }
     w.line(&"if best >= 0 { pos = best; break scan_alts; }");
     w.line(&"return -1;");
+}
+
+/// The partition guard already tested `alt_kind` against what the alt's
+/// first element would test again, so that re-test is dead. The guard reads
+/// the token at `start` (`TK_EOF` when there is none), so a guard set
+/// without `TK_EOF` implies `start < tokens.len()`; a single-token guard
+/// matching the leading `Token` element implies its kind check too. A rule
+/// call, a wildcard, or a many-token guard decides nothing — only a single
+/// matching `Token` does.
+///
+/// Sound only for an alt the guard actually selected: an unguarded alt rides
+/// along in every partition, and a hoisted one is reached from several.
+fn guard_implies_first_token(body: &ScanBody, guard_tokens: &List<String>) -> bool {
+    if guard_tokens.len() != 1 || guard_tokens[0] == "TK_EOF" || body.elements.is_empty() {
+        return false;
+    }
+    if let Token(t) = &body.elements[0] {
+        if t.kind != guard_tokens[0] {
+            return false;
+        }
+        return body.elements.len() == 1 || scan_element_can_fail(&body.elements[1]);
+    }
+    return false;
+}
+
+/// Whether the element emits a failure branch, so a `try_` label around it has
+/// a reader. A repeat or a group may emit none, and a label nothing breaks to
+/// does not compile.
+fn scan_element_can_fail(se: &ScanElement) -> bool {
+    return se matches { Token(_) | RuleCall(_) | Wildcard | Excluded(_) };
+}
+
+/// Emits one alt as a scan candidate, ending in `commit_stmt`. A single-alt
+/// partition calls this once; a longest-match tournament calls it once per
+/// candidate.
+///
+/// When `skip` holds and the alt is just the token the guard already
+/// matched, the `try_` block collapses to `pos = start + 1;` then
+/// `commit_stmt`. `pos` is scratch state every candidate overwrites before
+/// its own attempt, including one that loses, so committing it
+/// unconditionally here is sound.
+///
+/// Returns whether the full `try_<i>:` block was emitted. A caller with its
+/// own fallthrough statement (the single-alt path's `return -1;`) must skip
+/// it when this returns false — the shortcut already committed
+/// unconditionally, making it unreachable.
+fn gen_scan_alt_candidate(
+    w: &mut CodeWriter,
+    i: i32,
+    body: &ScanBody,
+    skip: bool,
+    ctx: &mut GenContext,
+    commit_stmt: &String,
+) -> bool {
+    if skip && body.elements.len() == 1 {
+        w.line(&"pos = start + 1;");
+        w.line(commit_stmt);
+        return false;
+    }
+    let label = `try_${i}`;
+    w.line(&if skip { "pos = start + 1;" } else { "pos = start;" });
+    w.begin(&`${label}:`);
+    let from = if skip { 1 } else { 0 };
+    gen_scan_op_elements_in_block(w, &body.elements, from, body.elements.len(), ctx, &label);
+    w.line(commit_stmt);
+    w.end();
+    return true;
 }
 
 /// Op-driven alt-scan walker. Passes `i32::MAX` as the

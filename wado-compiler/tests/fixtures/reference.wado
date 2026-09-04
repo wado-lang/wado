@@ -1,0 +1,689 @@
+// References: `&T` and `&mut T` over primitives, strings, structs, lists,
+// tuples and variants — reading through one, writing through one, aliasing,
+// returning one, and capturing one in a closure.
+//
+// CLI world: the printed sequence is what pins the write-back order.
+use { println, Stdout } from "core:cli";
+
+// --- references to primitives, and deref-assign ---
+
+// ref_primitive_basic
+fn increment_i32(x: &mut i32) {
+    *x = *x + 1;
+}
+
+fn read_i32(x: &i32) -> i32 {
+    return *x;
+}
+
+// ref_primitive
+fn read_value(x: &i32) -> i32 {
+    return *x;
+}
+
+fn get_and_modify(x: &mut i32) -> i32 {
+    let original = *x;
+    *x = 999;
+    return original;
+}
+
+fn set_i64(r: &mut i64, v: i64) {
+    *r = v;
+}
+
+fn set_f64(r: &mut f64, v: f64) {
+    *r = v;
+}
+
+fn set_bool(r: &mut bool, v: bool) {
+    *r = v;
+}
+
+fn read_i64(r: &i64) -> i64 {
+    return *r;
+}
+
+fn read_f64(r: &f64) -> f64 {
+    return *r;
+}
+
+fn read_bool(r: &bool) -> bool {
+    return *r;
+}
+
+// ref_deref
+struct DerefPoint {
+    x: i32,
+    y: i32,
+}
+
+fn replace(s: &mut String) {
+    *s = "goodbye";
+}
+
+fn reset_point(p: &mut DerefPoint) {
+    *p = DerefPoint { x: 0, y: 0 };
+}
+
+fn maybe_read(r: &Option<i32>) -> String {
+    if let Some(v) = *r {
+        return `some(${v})`;
+    }
+    return "none";
+}
+
+// ref_swap
+fn swap(a: &mut i32, b: &mut i32) {
+    let tmp = *a;
+    *a = *b;
+    *b = tmp;
+}
+
+// ref_tuple_basic
+fn modify_tuple(t: &mut [i32, i32]) {
+    t.0 = 100;
+}
+
+// ref_pass_through
+fn add_one(r: &mut i32) {
+    *r = *r + 1;
+}
+
+fn add_two(r: &mut i32) {
+    add_one(r);
+    add_one(r);
+}
+
+fn add_four(r: &mut i32) {
+    add_two(r);
+    add_two(r);
+}
+
+fn read_and_format(r: &i32) -> String {
+    return `value=${*r}`;
+}
+
+fn print_via(r: &i32) with Stdout {
+    let s = read_and_format(r);
+    println(s);
+}
+
+// ref_return
+fn get_first(arr: &List<i32>) -> &i32 {
+    return &arr[0];
+}
+
+fn make_ref() -> &i32 {
+    let x = 42;
+    return &x;
+}
+
+fn ref_primitive_basic() with Stdout {
+    let mut a = 10;
+    println(`${read_i32(&a)}`);
+    increment_i32(&mut a);
+    println(`${a}`);
+}
+
+fn ref_primitive_read() with Stdout {
+    let a = 42;
+    println(`${read_value(&a)}`);
+}
+
+fn ref_primitive_semantic() with Stdout {
+    let mut a = 42;
+    let result = get_and_modify(&mut a);
+    println(`original=${result}`);
+    println(`modified=${a}`);
+}
+
+fn ref_primitive_types() with Stdout {
+    let mut a: i64 = 100 as i64;
+    println(`i64: ${read_i64(&a)}`);
+    set_i64(&mut a, 200 as i64);
+    println(`i64: ${a}`);
+
+    let mut b: f64 = 3.14;
+    println(`f64: ${read_f64(&b)}`);
+    set_f64(&mut b, 2.718);
+    println(`f64: ${b}`);
+
+    let mut c = true;
+    println(`bool: ${read_bool(&c)}`);
+    set_bool(&mut c, false);
+    println(`bool: ${c}`);
+}
+
+fn ref_deref_assign_string() with Stdout {
+    let mut greeting = "hello";
+    println(greeting);
+
+    replace(&mut greeting);
+    println(greeting);
+}
+
+fn ref_deref_assign_struct() with Stdout {
+    let mut p = DerefPoint { x: 10, y: 20 };
+    println(`${p.x},${p.y}`);
+
+    reset_point(&mut p);
+    println(`${p.x},${p.y}`);
+}
+
+fn ref_deref_assign_variant() with Stdout {
+    let a: Option<i32> = Option::<i32>::Some(42);
+    let b: Option<i32> = null;
+
+    println(maybe_read(&a));
+    println(maybe_read(&b));
+
+    let mut c: Option<i32> = Option::<i32>::Some(10);
+    println(maybe_read(&c));
+
+    let cr = &mut c;
+    *cr = null;
+    println(maybe_read(&c));
+}
+
+fn ref_deref_reassign() with Stdout {
+    let mut original = 42;
+    let r = &mut original;
+
+    let val = *r;
+    *r = val * 2 + 1;
+    println(`modified: ${original}`);
+
+    let val2 = *r;
+    let r2 = &val2;
+    *r = 0;
+    println(`original: ${original}`);
+    println(`copy: ${*r2}`);
+}
+
+fn ref_alias_mut() with Stdout {
+    let mut x = 0;
+    let r1 = &mut x;
+    let r2 = &mut x;
+
+    *r1 = 10;
+    println(`after r1: ${x}`);
+
+    *r2 = 20;
+    println(`after r2: ${x}`);
+
+    *r1 = *r1 + *r2 + 5;
+    println(`final: ${x}`);
+}
+
+fn ref_swap_test() with Stdout {
+    let mut x = 1;
+    let mut y = 2;
+    println(`before: ${x}, ${y}`);
+
+    swap(&mut x, &mut y);
+    println(`after: ${x}, ${y}`);
+}
+
+fn ref_reassign_test() with Stdout {
+    let mut a = 10;
+    let mut b = 20;
+
+    let mut r = &a;
+    println(`${*r}`);
+
+    r = &b;
+    println(`${*r}`);
+
+    let mut mr = &mut a;
+    *mr = 100;
+    mr = &mut b;
+    *mr = 200;
+
+    println(`${a}`);
+    println(`${b}`);
+}
+
+fn ref_tuple_basic_test() with Stdout {
+    let mut pair: [i32, i32] = [1, 2];
+    let before = pair.0;
+    println(`before: ${before}`);
+    modify_tuple(&mut pair);
+    let after = pair.0;
+    println(`after: ${after}`);
+}
+
+fn ref_pass_through_test() with Stdout {
+    let mut n = 0;
+    add_four(&mut n);
+    print_via(&n);
+}
+
+fn ref_return_test() with Stdout {
+    let nums: List<i32> = [42, 99, 7];
+    let first = get_first(&nums);
+    println(`${*first}`);
+}
+
+fn ref_return_local() with Stdout {
+    let r = make_ref();
+    println(`${*r}`);
+}
+
+// --- mutable references: lists, strings, loops and nested writes ---
+
+// ref_mut
+fn append_elements(arr: &mut List<i32>) {
+    arr.push(4);
+    arr.push(5);
+}
+
+fn double_all(arr: &mut List<i32>) {
+    for let mut i = 0; i < arr.len(); i += 1 {
+        arr[i] = arr[i] * 2;
+    }
+}
+
+fn append_world(s: &mut String) {
+    s.push_str(&", World!");
+}
+
+fn append_twice(s: &mut String, suffix: String) {
+    s.push_str(&suffix);
+    s.push_str(&suffix);
+}
+
+// ref_loop_mut
+fn accumulate(target: &mut i32, n: i32) {
+    for let mut i = 0; i < n; i += 1 {
+        *target = *target + i;
+    }
+}
+
+// ref_conditional_mut
+fn clamp(r: &mut i32, min: i32, max: i32) {
+    if *r < min {
+        *r = min;
+    } else if *r > max {
+        *r = max;
+    }
+}
+
+// ref_mut_while_condition
+fn advance(pos: &mut i32) {
+    *pos += 1;
+}
+
+// ref_nested_mut_write
+struct Inner {
+    value: i32,
+}
+
+struct Middle {
+    inner: Inner,
+    label: String,
+}
+
+struct Outer {
+    middle: Middle,
+    id: i32,
+}
+
+fn set_inner_value(o: &mut Outer, v: i32) {
+    o.middle.inner.value = v;
+}
+
+fn set_label(o: &mut Outer, s: String) {
+    o.middle.label = s;
+}
+
+fn get_inner_value(o: &Outer) -> i32 {
+    return o.middle.inner.value;
+}
+
+// ref_mut_array_append_complex
+fn process(arr: &mut List<u8>, input: &List<u8>, count: i32) {
+    let mut i = 0;
+    while i < count {
+        let val = input[i];
+        if val < 128 {
+            arr.push(val);
+        } else {
+            let dist = (val - 128) as i32;
+            let src = arr.len() - dist;
+            arr.push(arr[src]);
+            arr.push(arr[src + 1]);
+        }
+        i += 1;
+    }
+}
+
+fn ref_mut_array_ops() with Stdout {
+    let mut nums: List<i32> = [1, 2, 3];
+    println(`len: ${nums.len()}`);
+
+    append_elements(&mut nums);
+    println(`len: ${nums.len()}`);
+
+    double_all(&mut nums);
+    for let mut i = 0; i < nums.len(); i += 1 {
+        println(`${nums[i]}`);
+    }
+}
+
+fn ref_mut_string() with Stdout {
+    let mut msg = "Hello";
+    append_world(&mut msg);
+    println(msg);
+
+    let mut s = "a";
+    append_twice(&mut s, "b");
+    println(s);
+}
+
+fn ref_loop_mut_test() with Stdout {
+    let mut sum = 0;
+
+    accumulate(&mut sum, 5);
+    println(`sum 0..4: ${sum}`);
+
+    let mut count = 0;
+    let r = &mut count;
+    while *r < 5 {
+        *r = *r + 1;
+    }
+    println(`count: ${count}`);
+}
+
+fn ref_conditional_mut_test() with Stdout {
+    let mut a = 50;
+    clamp(&mut a, 0, 100);
+    println(`clamped 50: ${a}`);
+
+    let mut b = -10;
+    clamp(&mut b, 0, 100);
+    println(`clamped -10: ${b}`);
+
+    let mut c = 200;
+    clamp(&mut c, 0, 100);
+    println(`clamped 200: ${c}`);
+}
+
+fn ref_mut_while_condition_test() with Stdout {
+    let mut pos = 0;
+    while pos < 3 {
+        advance(&mut pos);
+    }
+    println(`pos: ${pos}`);
+}
+
+fn ref_nested_mut_write_test() with Stdout {
+    let mut data = Outer {
+        middle: Middle {
+            inner: Inner { value: 0 },
+            label: "initial",
+        },
+        id: 1,
+    };
+
+    println(`before: ${get_inner_value(&data)}, ${data.middle.label}`);
+
+    set_inner_value(&mut data, 42);
+    set_label(&mut data, "updated");
+
+    println(`after: ${get_inner_value(&data)}, ${data.middle.label}`);
+}
+
+fn ref_mut_array_append_complex_test() with Stdout {
+    let mut out: List<u8> = [];
+    let input: List<u8> = [65, 66, 67, 130];
+    process(&mut out, &input, 4);
+    println(`len: ${out.len()}`);
+    for let mut i = 0; i < out.len(); i += 1 {
+        println(`${out[i]}`);
+    }
+}
+
+// --- references into structs, lists and closures, and the edge cases ---
+
+// ref_struct_basic
+struct BasicPoint {
+    x: i32,
+    y: i32,
+}
+
+fn print_basic_point(p: &BasicPoint) with Stdout {
+    println(`${p.x},${p.y}`);
+}
+
+// ref_struct
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+fn move_point(p: &mut Point) {
+    p.x = p.x + 10;
+    p.y = p.y + 20;
+}
+
+struct FlatInner {
+    value: i32,
+}
+
+struct FlatOuter {
+    inner: FlatInner,
+}
+
+fn get_flat_value(o: &FlatOuter) -> i32 {
+    return o.inner.value;
+}
+
+fn set_flat_value(o: &mut FlatOuter, v: i32) {
+    o.inner.value = v;
+}
+
+struct User {
+    name: String,
+    age: i32,
+}
+
+fn rename(user: &mut User, new_name: String) {
+    user.name = new_name;
+}
+
+fn birthday(user: &mut User) {
+    user.age = user.age + 1;
+}
+
+// ref_array
+fn modify_array(arr: &mut List<i32>) {
+    arr[0] = 100;
+}
+
+// ref_closure
+fn apply_to_ref(r: &i32, f: fn(&i32) -> i32) -> i32 {
+    return f(r);
+}
+
+fn modify_via_closure(r: &mut i32, f: fn(&mut i32)) {
+    f(r);
+}
+
+// ref_method_receivers
+struct Counter {
+    value: i32,
+}
+
+impl Counter {
+    fn get(&self) -> i32 {
+        return self.value;
+    }
+
+    fn increment(&mut self) {
+        self.value = self.value + 1;
+    }
+
+    fn new(v: i32) -> Counter {
+        return Counter { value: v };
+    }
+}
+
+// ref_edge
+fn increment(x: &mut i32) {
+    *x = *x + 1;
+}
+
+fn ref_struct_basic_test() with Stdout {
+    let p = BasicPoint { x: 10, y: 20 };
+    print_basic_point(&p);
+}
+
+fn ref_struct_mut() with Stdout {
+    let mut p = Point { x: 1, y: 2 };
+    move_point(&mut p);
+    println(`${p.x},${p.y}`);
+}
+
+fn ref_struct_nested() with Stdout {
+    let mut o = FlatOuter { inner: FlatInner { value: 42 } };
+    println(`${get_flat_value(&o)}`);
+    set_flat_value(&mut o, 100);
+    println(`${get_flat_value(&o)}`);
+}
+
+fn ref_struct_string_field() with Stdout {
+    let mut u = User { name: "Alice", age: 30 };
+    println(`${u.name}, ${u.age}`);
+
+    rename(&mut u, "Bob");
+    birthday(&mut u);
+    println(`${u.name}, ${u.age}`);
+}
+
+fn ref_array_basic() with Stdout {
+    let mut nums: List<i32> = [1, 2, 3];
+    let before = nums[0];
+    println(`before: ${before}`);
+    modify_array(&mut nums);
+    let after = nums[0];
+    println(`after: ${after}`);
+}
+
+fn ref_array_ref_element() with Stdout {
+    let mut arr: List<i32> = [10, 20, 30];
+
+    let r = &arr[1];
+    println(`ref element: ${*r}`);
+
+    arr[1] = 999;
+    println(`arr[1]: ${arr[1]}`);
+    println(`ref still: ${*r}`);
+}
+
+fn ref_closure_capture() with Stdout {
+    let x = 42;
+    let result = apply_to_ref(&x, |r: &i32| *r * 2);
+    println(`doubled: ${result}`);
+
+    let multiplier = 3;
+    let result2 = apply_to_ref(&x, |r: &i32| *r * multiplier);
+    println(`tripled: ${result2}`);
+}
+
+fn ref_closure_mut_param() with Stdout {
+    let mut y = 10;
+    modify_via_closure(&mut y, |r: &mut i32| {
+        *r = *r + 5;
+    });
+
+    println(`modified: ${y}`);
+}
+
+fn ref_method_receivers_test() with Stdout {
+    let mut c = Counter::new(0);
+
+    println(`get: ${c.get()}`);
+
+    c.increment();
+    c.increment();
+    c.increment();
+    println(`after increment: ${c.get()}`);
+}
+
+fn ref_edge_coercion() with Stdout {
+    let mut a = 42;
+    let result = read_value(&mut a);
+    println(`${result}`);
+}
+
+fn ref_edge_double_deref() with Stdout {
+    let mut a = 42;
+    let mut r = &mut a;
+    let rr = &mut r;
+    **rr = 99;
+    println(`${a}`);
+}
+
+fn ref_edge_multi_mut() with Stdout {
+    let mut a = 10;
+    increment(&mut a);
+    increment(&mut a);
+    increment(&mut a);
+    println(`${a}`);
+}
+
+fn ref_edge_nested() with Stdout {
+    let mut a = 42;
+    let r = &mut a;
+    let rr = &r;
+    println(`${**rr}`);
+}
+
+fn ref_edge_temp() with Stdout {
+    let r = &(1 + 2);
+    println(`${*r}`);
+}
+
+export fn run() with Stdout {
+    ref_primitive_basic();
+    ref_primitive_read();
+    ref_primitive_semantic();
+    ref_primitive_types();
+    ref_deref_assign_string();
+    ref_deref_assign_struct();
+    ref_deref_assign_variant();
+    ref_deref_reassign();
+    ref_alias_mut();
+    ref_swap_test();
+    ref_reassign_test();
+    ref_tuple_basic_test();
+    ref_pass_through_test();
+    ref_return_test();
+    ref_return_local();
+
+    ref_mut_array_ops();
+    ref_mut_string();
+    ref_loop_mut_test();
+    ref_conditional_mut_test();
+    ref_mut_while_condition_test();
+    ref_nested_mut_write_test();
+    ref_mut_array_append_complex_test();
+
+    ref_struct_basic_test();
+    ref_struct_mut();
+    ref_struct_nested();
+    ref_struct_string_field();
+    ref_array_basic();
+    ref_array_ref_element();
+    ref_closure_capture();
+    ref_closure_mut_param();
+    ref_method_receivers_test();
+    ref_edge_coercion();
+    ref_edge_double_deref();
+    ref_edge_multi_mut();
+    ref_edge_nested();
+    ref_edge_temp();
+}
+
+__DATA__
+{"stdout": "10\n11\n42\noriginal=42\nmodified=999\ni64: 100\ni64: 200\nf64: 3.14\nf64: 2.718\nbool: true\nbool: false\nhello\ngoodbye\n10,20\n0,0\nsome(42)\nnone\nsome(10)\nnone\nmodified: 85\noriginal: 0\ncopy: 85\nafter r1: 10\nafter r2: 20\nfinal: 45\nbefore: 1, 2\nafter: 2, 1\n10\n20\n100\n200\nbefore: 1\nafter: 100\nvalue=4\n42\n42\nlen: 3\nlen: 5\n2\n4\n6\n8\n10\nHello, World!\nabb\nsum 0..4: 10\ncount: 5\nclamped 50: 50\nclamped -10: 0\nclamped 200: 100\npos: 3\nbefore: 0, initial\nafter: 42, updated\nlen: 5\n65\n66\n67\n66\n67\n10,20\n11,22\n42\n100\nAlice, 30\nBob, 31\nbefore: 1\nafter: 100\nref element: 20\narr[1]: 999\nref still: 20\ndoubled: 84\ntripled: 126\nmodified: 15\nget: 0\nafter increment: 3\n42\n99\n13\n42\n3\n"}

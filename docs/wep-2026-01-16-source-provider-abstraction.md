@@ -20,7 +20,7 @@ This creates several limitations:
 5. **Security concerns**: Compiler core has unrestricted filesystem access
 6. **Diagnostics coupling**: Error messages are directly printed to stderr, making it difficult to integrate with IDEs or collect errors programmatically
 
-However, the compiler already handles standard library (`core:*`, `wasi:*`) modules via compile-time embedding using `include_str!`, which works well and should be preserved.
+However, the compiler already resolves standard library (`core:*`, `wasi:*`) modules itself, without the host, which works well and should be preserved.
 
 ## Decision
 
@@ -69,7 +69,7 @@ pub struct Diagnostic {
 
 | Responsibility                        | Owner                                  |
 | ------------------------------------- | -------------------------------------- |
-| Standard library (`core:*`, `wasi:*`) | Compiler (embedded via `include_str!`) |
+| Standard library (`core:*`, `wasi:*`) | Compiler (`stdlib::get_stdlib_module`) |
 | User code (`./`, `../`)               | CompilerHost (`load_source`)           |
 | Path normalization                    | Compiler (before `load_source()` call) |
 | Circular dependency detection         | Compiler                               |

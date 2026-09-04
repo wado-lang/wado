@@ -1522,18 +1522,11 @@ fn scan_expr_atom(tokens: &Array<i32>, pos: i32) -> i32 {
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
         if alt_kind == TK_ID {
-            pos = start;
-            try_0: {
-                if pos >= tokens.len() || tokens[pos] != TK_ID { break try_0; }
-                pos += 1;
-                break scan_alts;
-            }
-            return -1;
+            pos = start + 1;
+            break scan_alts;
         } else if alt_kind == TK_LIT_NOT {
-            pos = start;
+            pos = start + 1;
             try_1: {
-                if pos >= tokens.len() || tokens[pos] != TK_LIT_NOT { break try_1; }
-                pos += 1;
                 pos = scan_expr(tokens, pos, 0);
                 if pos < 0 { break try_1; }
                 break scan_alts;

@@ -1,0 +1,22 @@
+// A method call is checked against its signature's arity like every other
+// call. Too few arguments left the missing parameter unbound and reached
+// codegen as invalid Wasm; too many were dropped silently, along with
+// whatever the discarded argument expressions did.
+
+struct P {
+    v: i32,
+}
+
+impl P {
+    fn add(&self, a: i32, b: i32) -> i32 {
+        return a + b + self.v;
+    }
+}
+
+export fn run() {
+    let p = P { v: 10 };
+    let _ = p.add(1);
+}
+
+__DATA__
+{"compile_error": "expected 2 arguments, found 1"}

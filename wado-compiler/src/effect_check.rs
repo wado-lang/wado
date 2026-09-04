@@ -1019,11 +1019,17 @@ impl SemEffectWalker<'_> {
         &self,
         binding: &crate::ast::EffectHandlerBinding,
     ) -> Vec<EffectRef> {
-        if let Some(facts) = self
+        // One fact per walk that reached the binding. A handler installed in a
+        // tuple `for-of` body is bound once per element, and an effect only
+        // some elements grant does not cover the body — so the grant is what
+        // every walk agrees on.
+        let mut granted: Option<Vec<EffectRef>> = None;
+        for facts in self
             .annotations
-            .and_then(|a| a.handler_bindings.get(&binding.id))
+            .into_iter()
+            .flat_map(|a| a.all(|f| &f.handler_bindings, binding.id))
         {
-            return facts
+            let walk: Vec<EffectRef> = facts
                 .effects
                 .iter()
                 .map(|entry| EffectRef::Concrete {
@@ -1032,6 +1038,13 @@ impl SemEffectWalker<'_> {
                 })
                 .filter(|effect| self.index.closure.contains_key(effect))
                 .collect();
+            granted = Some(match granted {
+                None => walk,
+                Some(prev) => prev.into_iter().filter(|e| walk.contains(e)).collect(),
+            });
+        }
+        if let Some(granted) = granted {
+            return granted;
         }
         binding
             .effect
@@ -1169,18 +1182,24 @@ impl AstVisitor for SemEffectWalker<'_> {
         // `.next()` calls that have no source call id, so they record no
         // `method_dispatch` fact for `visit_expr` to consult. Check their
         // declared effects here from the recorded `for_of_iterator` fact.
-        if let Stmt::ForOf(for_of) = stmt
-            && let Some(info) = self
+        // One fact per walk that reached the loop: an inner `for-of` inside a
+        // tuple `for-of` body is walked once per outer element.
+        if let Stmt::ForOf(for_of) = stmt {
+            let iterators: Vec<crate::elaborator::sem::types::ForOfIteratorInfo> = self
                 .annotations
-                .and_then(|ann| ann.for_of_iterator.get(&for_of.id))
-        {
-            for func_ref in [&info.into_iter, &info.next] {
-                let effects = self.index.method_effects(func_ref);
-                let callee = func_ref
-                    .method_info
-                    .as_ref()
-                    .map_or(func_ref.name.as_str(), |m| m.method_name.as_str());
-                self.report_missing(&effects, callee, for_of.span);
+                .into_iter()
+                .flat_map(|ann| ann.all(|facts| &facts.for_of_iterator, for_of.id))
+                .cloned()
+                .collect();
+            for info in &iterators {
+                for func_ref in [&info.into_iter, &info.next] {
+                    let effects = self.index.method_effects(func_ref);
+                    let callee = func_ref
+                        .method_info
+                        .as_ref()
+                        .map_or(func_ref.name.as_str(), |m| m.method_name.as_str());
+                    self.report_missing(&effects, callee, for_of.span);
+                }
             }
         }
         ast::walk_stmt(self, stmt);
@@ -1206,29 +1225,33 @@ impl AstVisitor for SemEffectWalker<'_> {
                 } else {
                     None
                 };
+                let dispatches: Vec<(FunctionRef, bool)> = self
+                    .annotations
+                    .into_iter()
+                    .flat_map(|ann| ann.static_dispatches(call.id))
+                    .map(|dispatch| (dispatch.function_ref.clone(), dispatch.self_in_args))
+                    .collect();
                 if let Some((def, effects, name)) = free {
                     let params = self.index.fn_params.get(&def).cloned().unwrap_or_default();
                     let resolved = self.resolve_effect_params(&effects, &params, false, &call.args);
                     self.report_missing(&resolved, &name, call.span);
-                } else if let Some((func_ref, self_in_args)) = self
-                    .annotations
-                    .and_then(|ann| ann.static_method_dispatch.get(&call.id))
-                    .map(|dispatch| (dispatch.function_ref.clone(), dispatch.self_in_args))
-                {
+                } else if !dispatches.is_empty() {
                     let receiver_site = match &call.callee {
                         Expr::Ident(ident) => ident.segments.first().map(|seg| seg.id),
                         _ => None,
                     };
-                    let mut effects = self.method_effects(&func_ref);
-                    effects.extend(self.effect_op_requirement(&func_ref, receiver_site));
-                    let params = self.method_param_types(&func_ref);
-                    // A qualified (UFCS) call spells the receiver as its
-                    // first argument, so the args already align with the
-                    // callee's full parameter list — no self skip.
-                    let is_method = func_ref.method_info.is_some() && !self_in_args;
-                    let resolved =
-                        self.resolve_effect_params(&effects, &params, is_method, &call.args);
-                    self.report_missing(&resolved, callee_name(&call.callee), call.span);
+                    for (func_ref, self_in_args) in dispatches {
+                        let mut effects = self.method_effects(&func_ref);
+                        effects.extend(self.effect_op_requirement(&func_ref, receiver_site));
+                        let params = self.method_param_types(&func_ref);
+                        // A qualified (UFCS) call spells the receiver as its
+                        // first argument, so the args already align with the
+                        // callee's full parameter list — no self skip.
+                        let is_method = func_ref.method_info.is_some() && !self_in_args;
+                        let resolved =
+                            self.resolve_effect_params(&effects, &params, is_method, &call.args);
+                        self.report_missing(&resolved, callee_name(&call.callee), call.span);
+                    }
                 } else if let Some(callee_type) = self.indirect_callee_type(call) {
                     // Indirect call: the callee is a function-typed value (a
                     // closure or `fn(...)` parameter). Its type carries the
@@ -1241,8 +1264,8 @@ impl AstVisitor for SemEffectWalker<'_> {
                 }
             }
             Expr::MethodCall(method_call) => {
-                let call_key = method_call.id;
-                if let Some(dispatch) = self.sem.method_dispatch_at(call_key) {
+                let sem = self.sem;
+                for dispatch in sem.method_dispatches_at(method_call.id) {
                     let func_ref = dispatch.function_ref.clone();
                     let mut effects = self.method_effects(&func_ref);
                     effects.extend(self.effect_op_requirement(&func_ref, None));
@@ -1253,12 +1276,13 @@ impl AstVisitor for SemEffectWalker<'_> {
                 }
             }
             Expr::StaticMethodCall(static_call) => {
-                let call_key = static_call.id;
-                if let Some((func_ref, self_in_args)) = self
+                let dispatches: Vec<(FunctionRef, bool)> = self
                     .annotations
-                    .and_then(|ann| ann.static_method_dispatch.get(&call_key))
+                    .into_iter()
+                    .flat_map(|ann| ann.static_dispatches(static_call.id))
                     .map(|dispatch| (dispatch.function_ref.clone(), dispatch.self_in_args))
-                {
+                    .collect();
+                for (func_ref, self_in_args) in dispatches {
                     let mut effects = self.method_effects(&func_ref);
                     effects.extend(self.effect_op_requirement(&func_ref, None));
                     let params = self.method_param_types(&func_ref);
@@ -2035,15 +2059,12 @@ fn resolve_returned_args<'e>(
             {
                 return Some(ReturnedCall { returned, args });
             }
-            if let Some(func_ref) = annotations
-                .static_method_dispatch
-                .get(&call.id)
-                .map(|d| &d.function_ref)
-            {
-                return Some(ReturnedCall {
-                    returned: mangled(func_ref),
-                    args,
-                });
+            let returned: IndexSet<u32> = annotations
+                .static_dispatches(call.id)
+                .flat_map(|d| mangled(&d.function_ref))
+                .collect();
+            if !returned.is_empty() {
+                return Some(ReturnedCall { returned, args });
             }
             if let Some(callee_ty) = expr_type_of(&call.callee, sem) {
                 let returned = match sem.types.get(callee_ty) {
@@ -2061,18 +2082,17 @@ fn resolve_returned_args<'e>(
             let mut args: Vec<&Expr> = vec![&mc.receiver];
             args.extend(mc.args.iter());
             let returned = sem
-                .method_dispatch_at(mc.id)
-                .map(|d| mangled(&d.function_ref))
-                .unwrap_or_default();
+                .method_dispatches_at(mc.id)
+                .flat_map(|d| mangled(&d.function_ref))
+                .collect();
             Some(ReturnedCall { returned, args })
         }
         Expr::StaticMethodCall(sc) => {
             let args: Vec<&Expr> = sc.args.iter().collect();
             let returned = annotations
-                .static_method_dispatch
-                .get(&sc.id)
-                .map(|d| mangled(&d.function_ref))
-                .unwrap_or_default();
+                .static_dispatches(sc.id)
+                .flat_map(|d| mangled(&d.function_ref))
+                .collect();
             Some(ReturnedCall { returned, args })
         }
         _ => None,
@@ -2188,17 +2208,14 @@ impl RefFlow<'_, '_> {
                         args,
                     });
                 }
-                if let Some(func_ref) = self
+                let stored: Vec<u32> = self
                     .ctx
                     .annotations
-                    .static_method_dispatch
-                    .get(&call.id)
-                    .map(|d| &d.function_ref)
-                {
-                    return Some(ResolvedCall {
-                        stored: self.mangled_stored(func_ref),
-                        args,
-                    });
+                    .static_dispatches(call.id)
+                    .flat_map(|d| self.mangled_stored(&d.function_ref))
+                    .collect();
+                if !stored.is_empty() {
+                    return Some(ResolvedCall { stored, args });
                 }
                 if let Some(callee_ty) = expr_type_of(&call.callee, self.ctx.sem) {
                     let stored = match self.ctx.sem.types.get(callee_ty) {
@@ -2218,9 +2235,9 @@ impl RefFlow<'_, '_> {
                 let stored = self
                     .ctx
                     .sem
-                    .method_dispatch_at(mc.id)
-                    .map(|d| self.mangled_stored(&d.function_ref))
-                    .unwrap_or_default();
+                    .method_dispatches_at(mc.id)
+                    .flat_map(|d| self.mangled_stored(&d.function_ref))
+                    .collect();
                 Some(ResolvedCall { stored, args })
             }
             Expr::StaticMethodCall(sc) => {
@@ -2228,10 +2245,9 @@ impl RefFlow<'_, '_> {
                 let stored = self
                     .ctx
                     .annotations
-                    .static_method_dispatch
-                    .get(&sc.id)
-                    .map(|d| self.mangled_stored(&d.function_ref))
-                    .unwrap_or_default();
+                    .static_dispatches(sc.id)
+                    .flat_map(|d| self.mangled_stored(&d.function_ref))
+                    .collect();
                 Some(ResolvedCall { stored, args })
             }
             _ => None,
@@ -2347,37 +2363,44 @@ impl RefFlow<'_, '_> {
     /// Reject a named-function reference argument whose declared `stores`
     /// exceeds the functor parameter's declared `stores`.
     fn check_functor_coercion(&mut self, call: &ast::CallExpr) {
-        let Some(param_types) = self.ctx.annotations.call_param_types.get(&call.id) else {
-            return;
-        };
-        for (arg, &param_type) in call.args.iter().zip(param_types.iter()) {
-            let ResolvedType::Function {
-                stores: expected, ..
-            } = self.ctx.sem.types.get(param_type)
-            else {
-                continue;
-            };
-            let Expr::Ident(ident) = arg else {
-                continue;
-            };
-            let Some(declared) = self
-                .ctx
-                .sem
-                .referenced_symbol(ident.id)
-                .and_then(|def| self.ctx.oracle.fn_stores.get(&def))
-            else {
-                continue;
-            };
-            for pos in declared {
-                if !expected.contains(pos) {
-                    self.out.push(StoresError {
-                        message: format!(
-                            "function '{}' stores parameter {pos} but is passed where a functor that stores nothing at that position is expected",
-                            ident.name
-                        ),
-                        span: arg.span(),
-                        module: self.ctx.module.clone(),
-                    });
+        // One list per walk that reached the call; a functor argument has to
+        // satisfy every one of them.
+        let per_walk: Vec<Vec<TypeId>> = self
+            .ctx
+            .annotations
+            .all(|facts| &facts.call_param_types, call.id)
+            .cloned()
+            .collect();
+        for param_types in &per_walk {
+            for (arg, &param_type) in call.args.iter().zip(param_types.iter()) {
+                let ResolvedType::Function {
+                    stores: expected, ..
+                } = self.ctx.sem.types.get(param_type)
+                else {
+                    continue;
+                };
+                let Expr::Ident(ident) = arg else {
+                    continue;
+                };
+                let Some(declared) = self
+                    .ctx
+                    .sem
+                    .referenced_symbol(ident.id)
+                    .and_then(|def| self.ctx.oracle.fn_stores.get(&def))
+                else {
+                    continue;
+                };
+                for pos in declared {
+                    if !expected.contains(pos) {
+                        self.out.push(StoresError {
+                            message: format!(
+                                "function '{}' stores parameter {pos} but is passed where a functor that stores nothing at that position is expected",
+                                ident.name
+                            ),
+                            span: arg.span(),
+                            module: self.ctx.module.clone(),
+                        });
+                    }
                 }
             }
         }
@@ -2625,27 +2648,34 @@ impl AstVisitor for PurityWalker<'_> {
                 };
                 if let Some((effects, name)) = free {
                     self.flag_if_effectful(&effects, &name, call.span);
-                } else if let Some(func_ref) = self
-                    .annotations
-                    .and_then(|ann| ann.static_method_dispatch.get(&call.id))
-                    .map(|dispatch| dispatch.function_ref.clone())
-                {
-                    let effects = self.index.method_effects(&func_ref);
-                    self.flag_if_effectful(&effects, callee_name(&call.callee), call.span);
+                } else {
+                    let func_refs: Vec<FunctionRef> = self
+                        .annotations
+                        .into_iter()
+                        .flat_map(|ann| ann.static_dispatches(call.id))
+                        .map(|dispatch| dispatch.function_ref.clone())
+                        .collect();
+                    for func_ref in func_refs {
+                        let effects = self.index.method_effects(&func_ref);
+                        self.flag_if_effectful(&effects, callee_name(&call.callee), call.span);
+                    }
                 }
             }
             Expr::MethodCall(method_call) => {
-                if let Some(dispatch) = self.sem.method_dispatch_at(method_call.id) {
+                let sem = self.sem;
+                for dispatch in sem.method_dispatches_at(method_call.id) {
                     let effects = self.index.method_effects(&dispatch.function_ref);
                     self.flag_if_effectful(&effects, &method_call.method, method_call.span);
                 }
             }
             Expr::StaticMethodCall(static_call) => {
-                if let Some(func_ref) = self
+                let func_refs: Vec<FunctionRef> = self
                     .annotations
-                    .and_then(|ann| ann.static_method_dispatch.get(&static_call.id))
+                    .into_iter()
+                    .flat_map(|ann| ann.static_dispatches(static_call.id))
                     .map(|dispatch| dispatch.function_ref.clone())
-                {
+                    .collect();
+                for func_ref in func_refs {
                     let effects = self.index.method_effects(&func_ref);
                     self.flag_if_effectful(&effects, &static_call.method, static_call.span);
                 }

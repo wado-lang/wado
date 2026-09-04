@@ -173,6 +173,11 @@ struct TestSpec {
     #[serde(default)]
     compile_errors_contains: Vec<String>,
 
+    /// Substrings no error diagnostic may contain. One fault is one
+    /// diagnostic, so this pins the follow-on a recovery path used to add.
+    #[serde(default)]
+    compile_errors_not_contains: Vec<String>,
+
     /// Preopened directories, each `[template, guest_path]`. Every preopen is a
     /// fresh temp dir (see `prepare_preopened_dirs`). `template` seeds it:
     /// `""` for empty scratch, or a workspace-relative path to copy in.
@@ -773,6 +778,13 @@ fn run_normal_test(
         assert!(
             errors.iter().any(|e| e.contains(expected)),
             "[{test_id}] expected an error containing {expected:?}\n  errors: {errors:?}"
+        );
+    }
+
+    for unexpected in &spec.compile_errors_not_contains {
+        assert!(
+            !errors.iter().any(|e| e.contains(unexpected)),
+            "[{test_id}] error must not contain {unexpected:?}\n  errors: {errors:?}"
         );
     }
 

@@ -1,67 +1,160 @@
-use { println, Stdout } from "core:cli";
+// Labeled blocks: scoping, `break LABEL` from any depth, the block as a value
+// expression, the trailing statement as a branch, and the label namespace.
 
+global mut CALLS: i32 = 0;
 
-// from labeled_block_basic.wado
-fn labeled_block_basic() with Stdout {
-    let x = 10;
+struct Inner {
+    pub f: i32,
+}
 
-    // Labeled block creates a new scope with shadowing
-    scope: {
-        let x = 20;  // shadows outer x
-        println(`x in scope: ${x}`);
+struct Outer {
+    pub inner: Inner,
+    pub pad: i32,
+}
+
+fn note() {
+    CALLS += 1;
+}
+
+fn opaque_bool(n: i32) -> bool {
+    if n <= 0 {
+        return true;
     }
+    return opaque_bool(n - 1);
+}
 
-    // Outer x is unchanged
-    println(`x after scope: ${x}`);
+fn pick_option(c: bool) -> Option<i32> {
+    let result = lbl: {
+        if c {
+            break lbl: null;
+        }
+        break lbl: Option::Some(5);
+    };
+    return result;
+}
 
-    // Nested labeled blocks
+fn tail_null(c: bool) -> Option<i32> {
+    let v = blk: {
+        if c {
+            break blk: Option::Some(1);
+        }
+        null
+    };
+    return v;
+}
+
+fn find(grid: List<List<i32>>, needle: i32) -> [i32, i32] {
+    let mut hit = [-9, -9];
+    search: {
+        for let r of 0..<grid.len() {
+            for let c of 0..<grid[r].len() {
+                if grid[r][c] == needle {
+                    hit = [r, c];
+                    break search;
+                }
+            }
+        }
+        hit = [-1, -1];
+    }
+    assert hit.0 != -9;
+    return hit;
+}
+
+fn field_write(c: bool, d: bool) -> i32 {
+    let mut o = Outer { inner: Inner { f: 1 }, pad: 0 };
+    let a = o.inner.f;
+    if c {
+        lbl: {
+            if d {
+                o.inner.f = 9;
+                break lbl;
+            } else {
+                break lbl;
+            }
+        }
+    }
+    return a * 10 + o.inner.f;
+}
+
+fn field_write_single_arm(c: bool) -> i32 {
+    let mut o = Outer { inner: Inner { f: 1 }, pad: 0 };
+    let a = o.inner.f;
+    if c {
+        lbl: {
+            o.inner.f = 9;
+            break lbl;
+        }
+    }
+    return a * 10 + o.inner.f;
+}
+
+// A `loop` whose body uses a labeled block and breaks to *that* label still
+// diverges from the function's perspective. The flow analyser tracks labels
+// introduced inside the loop body in a shadowing stack, so the labeled break
+// is not mistaken for an escape and no `MissingReturn` is reported.
+fn forever_via_inner_break() -> i32 {
+    loop {
+        scope: {
+            break scope: 1;
+        }
+    }
+}
+
+test "a labeled block opens a scope" {
+    let x = 10;
+    let mut inner_x = 0;
+    scope: {
+        let x = 20;
+        inner_x = x;
+    }
+    assert inner_x == 20;
+    assert x == 10;
+}
+
+test "labeled blocks nest" {
+    let mut sum = 0;
+    let mut outer_a = 0;
     outer: {
         let a = 1;
         inner: {
             let b = 2;
-            let sum = a + b;
-            println(`a + b = ${sum}`);
+            sum = a + b;
         }
-        // b is not visible here
-        println(`a = ${a}`);
+        outer_a = a;
     }
-
-    println("labeled block tests passed");
+    assert sum == 3;
+    assert outer_a == 1;
 }
 
-// from labeled_block_break_label.wado
-fn labeled_block_break_label() with Stdout {
+test "break leaves the block" {
     let mut count = 0;
     outer: {
         count = 1;
         if count == 1 {
             break outer;
         }
-        count = 2;  // Should not reach here
+        count = 2;
     }
     assert count == 1;
-    println("ok");
 }
 
-// from labeled_block_expr_nested.wado
-fn labeled_block_expr_nested() with Stdout {
-    let result = outer: {
-        let x = inner: {
-            break inner: 10;
-        };
-        break outer: x * 2;
-    };
-
-
-    // x is 10, now break outer with x * 2
-
-
-    assert result == 20;
-    println("ok");
+test "break leaves every enclosing labeled block at once" {
+    let mut result = 0;
+    outer: {
+        result = 1;
+        inner: {
+            result = 2;
+            if result == 2 {
+                break outer;
+            }
+            result = 3;
+        }
+        result = 4;
+    }
+    assert result == 2;
 }
 
-// from labeled_block_expr_simple.wado
-fn labeled_block_expr_simple() with Stdout {
+test "a block in expression position carries a value" {
     let result = compute: {
         let a = 10;
         let b = 20;
@@ -70,14 +163,20 @@ fn labeled_block_expr_simple() with Stdout {
         }
         break compute: 0;
     };
-
-
     assert result == 30;
-    println("ok");
 }
 
-// from labeled_block_expr_value.wado
-fn labeled_block_expr_value() with Stdout {
+test "nested value blocks" {
+    let result = outer: {
+        let x = inner: {
+            break inner: 10;
+        };
+        break outer: x * 2;
+    };
+    assert result == 20;
+}
+
+test "a value break out of a loop, with a fallback break" {
     let x = foo: {
         for let item of [5, 6, 7] as List<i32> {
             if item % 2 == 0 {
@@ -86,59 +185,306 @@ fn labeled_block_expr_value() with Stdout {
         }
         break foo: -1;
     };
-
-
-    // fallback if no even number found
-
-    println(`x=${x}`);
+    assert x == 6;
 }
 
-// from labeled_block_in_loop.wado
-fn labeled_block_in_loop() with Stdout {
+test "a labeled block inside a loop skips the rest of one iteration" {
     let mut sum = 0;
     for let mut i = 0; i < 3; i += 1 {
         search: {
             if i == 1 {
-                break search;  // Skip this iteration's search block
+                break search;
             }
             sum += i * 10;
         }
         sum += 1;
     }
-    // i=0: sum = 0 + 0*10 + 1 = 1
-    // i=1: sum = 1 + 1 = 2 (search block skipped)
-    // i=2: sum = 2 + 2*10 + 1 = 23
+    // i=0 adds 0+1, i=1 adds 1 (block skipped), i=2 adds 20+1.
     assert sum == 23;
-    println("ok");
 }
 
-// from labeled_block_nested.wado
-fn labeled_block_nested() with Stdout {
-    let mut result = 0;
-    outer: {
-        result = 1;
-        inner: {
-            result = 2;
-            if result == 2 {
-                break outer;  // Break out of both blocks
-            }
-            result = 3;  // Should not reach here
+test "break values coerce to the use site's expected type" {
+    let wide: i64 = compute: {
+        if true {
+            break compute: 10;
         }
-        result = 4;  // Should not reach here
+        break compute: 20;
+    };
+    assert wide == 10;
+
+    // With no annotation, breaks of the same type still unify.
+    let same = pick: {
+        if false {
+            break pick: 1;
+        }
+        break pick: 2;
+    };
+    assert same == 2;
+}
+
+test "a null break takes its Option inner type from a sibling break" {
+    // The unresolved `Option<UNKNOWN>` used to reach WIR translation and
+    // crash the compiler.
+    assert pick_option(false) matches { Some(5) };
+    assert pick_option(true) matches { None };
+}
+
+test "a null tail resolves against the block's unified type" {
+    // With no expectation at the use site, a `null` tail has only the block's
+    // type to resolve its `Option<T>`; without it the tail reified to a bare
+    // nullref and the module failed validation.
+    assert tail_null(builtin::black_box(true)) matches { Some(1) };
+    assert tail_null(builtin::black_box(false)) matches { None };
+}
+
+test "a reused label binds to the innermost block carrying it" {
+    let r = lbl: {
+        let inner = lbl: {
+            break lbl: 1;
+        };
+        break lbl: inner + 10;
+    };
+    assert r == 11;
+}
+
+test "an inner statement block of the same name catches its own break" {
+    // The inner block is in statement position, which used to keep no
+    // break-type frame: its valueless `break blk` was attributed to the outer
+    // block *expression*, which then rejected its own `i32` value as `()`.
+    let c = builtin::black_box(true);
+    let mut inner_ran = 0;
+    let v = blk: {
+        blk: {
+            if c {
+                break blk;
+            }
+            inner_ran = 1;
+        }
+        break blk: 42;
+    };
+    assert v == 42;
+    assert inner_ran == 0;
+}
+
+test "the inner block runs on to its end when no break is taken" {
+    let c = builtin::black_box(false);
+    let mut inner_ran = 0;
+    let v = blk: {
+        blk: {
+            if c {
+                break blk;
+            }
+            inner_ran = 1;
+        }
+        break blk: 42;
+    };
+    assert v == 42;
+    assert inner_ran == 1;
+}
+
+test "a contextual keyword is a label" {
+    // A label is any name an expression may start with — what `as_ident_name`
+    // defines, every contextual keyword included.
+    let c = builtin::black_box(true);
+    let mut reached = 0;
+    of: {
+        if c {
+            break of;
+        }
+        reached += 1;
     }
-    assert result == 2;
-    println("ok");
+    from: {
+        if c {
+            break from;
+        }
+        reached += 1;
+    }
+    extends: {
+        if c {
+            break extends;
+        }
+        reached += 1;
+    }
+    type: {
+        if c {
+            break type;
+        }
+        reached += 1;
+    }
+    assert reached == 0;
+
+    let v = flags: {
+        if c {
+            break flags: 1;
+        }
+        break flags: 2;
+    };
+    assert v == 1;
 }
 
-export fn run() with Stdout {
-    labeled_block_basic();
-    labeled_block_break_label();
-    labeled_block_expr_nested();
-    labeled_block_expr_simple();
-    labeled_block_expr_value();
-    labeled_block_in_loop();
-    labeled_block_nested();
+// Wado has no loop labels: a labeled block around a loop nest is how one
+// `break` leaves every loop in it.
+
+test "a labeled break leaves every enclosing loop" {
+    // The needle repeats in a later row, so a break that left only the inner
+    // loop would overwrite the first hit with the second.
+    let grid: List<List<i32>> = [[1, 2], [3, 4], [5, 4]];
+    let [r, c] = find(grid, 4);
+    assert r == 1;
+    assert c == 1;
 }
 
-__DATA__
-{"stdout": "x in scope: 20\nx after scope: 10\na + b = 3\na = 1\nlabeled block tests passed\nok\nok\nok\nx=6\nok\nok\n"}
+test "the tail runs only when no break was taken" {
+    let grid: List<List<i32>> = [[1, 2], [3, 4]];
+    let [r, c] = find(grid, 9);
+    assert r == -1;
+    assert c == -1;
+}
+
+test "a value-carrying break leaves the loop nest too" {
+    let grid: List<List<i32>> = [[1, 3], [8, 5]];
+    let first_even = find_even: {
+        for let row of grid {
+            for let x of row {
+                if x % 2 == 0 {
+                    break find_even: x;
+                }
+            }
+        }
+        -1
+    };
+    assert first_even == 8;
+}
+
+// The path that reaches the end of a labeled block yields its trailing
+// statement's value, so that tail is one of the block's branches: it types the
+// block when no `break` does, and agrees with the breaks when they do.
+
+test "the tail types a labeled block with no break" {
+    let v = blk: {
+        let base = 40;
+        base + 2
+    };
+    assert v == 42;
+}
+
+test "the tail is the value when no break is taken" {
+    let c = false;
+    let v = blk: {
+        if c {
+            break blk: 1
+        }
+        2
+    };
+    assert v == 2;
+}
+
+test "a break wins over the tail on the path that takes it" {
+    let c = true;
+    let v = blk: {
+        if c {
+            break blk: 1
+        }
+        2
+    };
+    assert v == 1;
+}
+
+// Unit is a value like any other, so a labeled block yielding it is not a
+// special case. A tail that is not a value yields `()`, and `break LABEL: ()`
+// is another spelling of `break LABEL`.
+
+test "a block whose tail is not a value yields unit" {
+    CALLS = 0;
+    let v: () = blk: {
+        note();
+    };
+    assert CALLS == 1;
+    assert `${v}` == "()";
+}
+
+test "a valueless break and a unit break agree" {
+    let c = builtin::black_box(true);
+    let v: () = blk: {
+        if c {
+            break blk;
+        }
+        break blk: ();
+    };
+    assert `${v}` == "()";
+}
+
+test "an unlabeled break may spell its unit" {
+    let mut n = 0;
+    loop {
+        n += 1;
+        if n == 3 {
+            break ();
+        }
+    }
+    assert n == 3;
+}
+
+// A trailing loop that only a `break LABEL` leaves has no path to the tail, so
+// the block's value comes from the breaks alone. Counting the unreachable tail
+// as a `()` branch rejected the loop-that-computes-a-value, which is the shape
+// Wado offers in place of a `loop` expression.
+
+test "a value comes out of a trailing `loop`" {
+    let mut i = builtin::black_box(0);
+    let v = blk: {
+        loop {
+            i += 1;
+            if i > 4 {
+                break blk: i * 10;
+            }
+        }
+    };
+    assert v == 50;
+}
+
+test "a trailing `while true` is a loop too" {
+    let mut i = builtin::black_box(0);
+    let v: i64 = blk: {
+        while true {
+            i += 1;
+            if i == 3 {
+                break blk: 7;
+            }
+        }
+    };
+    assert v == 7;
+}
+
+test "a terminating loop leaves a unit tail" {
+    let mut seen = 0;
+    let v: () = blk: {
+        for let x of 0..<3 {
+            seen += x;
+            if seen > 100 {
+                break blk;
+            }
+        }
+    };
+    assert seen == 3;
+    assert `${v}` == "()";
+}
+
+test "a self-breaking block's field writes survive the fall-through join" {
+    // The fall-through analyses (the ValueGraph heap join, const_folding's
+    // field-env join) must not classify a self-breaking arm as diverging:
+    // that drops the arm's field writes from the join and a later read folds
+    // to the stale pre-branch value (11 instead of 19 at -O1+).
+    let t = opaque_bool(3);
+    assert field_write(t, t) == 19;
+    assert field_write(t, !t) == 11;
+    assert field_write(!t, t) == 11;
+    assert field_write_single_arm(t) == 19;
+    assert field_write_single_arm(!t) == 11;
+}
+
+test "a loop leaving only via an inner labeled break still diverges" {
+    // Naming it is the whole test: the function must compile, and the
+    // reference keeps it off the dead-code path.
+    let _ = forever_via_inner_break;
+}

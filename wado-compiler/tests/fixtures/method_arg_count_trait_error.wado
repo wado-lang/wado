@@ -1,0 +1,23 @@
+// The trait-method path reaches the same arity check as an inherent one.
+
+trait Adder {
+    fn plus(&self, a: i32) -> i32;
+}
+
+struct P {
+    v: i32,
+}
+
+impl Adder for P {
+    fn plus(&self, a: i32) -> i32 {
+        return a + self.v;
+    }
+}
+
+export fn run() {
+    let p = P { v: 1 };
+    let _ = p.plus(1, 2, 3);
+}
+
+__DATA__
+{"compile_error": "expected 1 arguments, found 3"}

@@ -1120,6 +1120,7 @@ i32::from_str_radix(&"1010", 2)         // Result<i32, ParseIntError> (radix 2..
 i32::from_str_range(&"xyz42abc", 3, 5)  // parse a byte range without substring alloc
 
 i32::min(a, b)  i32::max(a, b)
+i32::clamp(v, lo, hi)                 // traps when lo > hi
 
 // char classification and conversion
 let code = 'A' as i32;                // 65
@@ -1296,11 +1297,11 @@ export fn run() with Stdout {
 `handle(request)` is the entry point for `wasi:http/service`. It must be `async` because HTTP handlers use the Component Model async calling convention:
 
 ```wado
-use { Request, Response, ErrorCode, Fields, Trailers } from "wasi:http";
+use { Request, Response, ErrorCode, Headers, Trailers } from "wasi:http";
 
 export async fn handle(request: Request) -> Result<Response, ErrorCode> {
     let [trailers_rx, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
-    let headers = Fields::new();
+    let headers = Headers::new();
     let [response, _tx_future] = Response::new(headers, null, trailers_rx);
 
     // task return: delivers result without ending the function

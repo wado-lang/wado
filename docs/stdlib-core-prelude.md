@@ -1217,6 +1217,10 @@ Encodes this character as UTF-8, returning the bytes.
 
 #### `pub fn min(a: i8, b: i8) -> i8`
 
+#### `pub fn clamp(value: i8, low: i8, high: i8) -> i8`
+
+`value` confined to `low..=high`. Traps when `low > high`.
+
 #### `pub fn to_string(&self) -> String`
 
 #### `pub fn from_str_hex(s: &String) -> Result<i8, ParseIntError>`
@@ -1300,6 +1304,10 @@ Encodes this character as UTF-8, returning the bytes.
 #### `pub fn max(a: u8, b: u8) -> u8`
 
 #### `pub fn min(a: u8, b: u8) -> u8`
+
+#### `pub fn clamp(value: u8, low: u8, high: u8) -> u8`
+
+`value` confined to `low..=high`. Traps when `low > high`.
 
 #### `pub fn is_ascii_digit(&self) -> bool`
 
@@ -1423,6 +1431,10 @@ Checks that two bytes are an ASCII case-insensitive match.
 
 #### `pub fn min(a: i16, b: i16) -> i16`
 
+#### `pub fn clamp(value: i16, low: i16, high: i16) -> i16`
+
+`value` confined to `low..=high`. Traps when `low > high`.
+
 #### `pub fn to_string(&self) -> String`
 
 #### `pub fn from_str_hex(s: &String) -> Result<i16, ParseIntError>`
@@ -1511,6 +1523,10 @@ Checks that two bytes are an ASCII case-insensitive match.
 
 #### `pub fn min(a: u16, b: u16) -> u16`
 
+#### `pub fn clamp(value: u16, low: u16, high: u16) -> u16`
+
+`value` confined to `low..=high`. Traps when `low > high`.
+
 #### `pub fn to_string(&self) -> String`
 
 #### `pub fn from_str_hex(s: &String) -> Result<u16, ParseIntError>`
@@ -1590,6 +1606,10 @@ Checks that two bytes are an ASCII case-insensitive match.
 #### `pub fn max(a: i32, b: i32) -> i32`
 
 #### `pub fn min(a: i32, b: i32) -> i32`
+
+#### `pub fn clamp(value: i32, low: i32, high: i32) -> i32`
+
+`value` confined to `low..=high`. Traps when `low > high`.
 
 #### `pub fn clz(x: i32) -> i32`
 
@@ -1699,6 +1719,10 @@ Counts the number of set bits (population count).
 
 #### `pub fn min(a: u32, b: u32) -> u32`
 
+#### `pub fn clamp(value: u32, low: u32, high: u32) -> u32`
+
+`value` confined to `low..=high`. Traps when `low > high`.
+
 #### `pub fn to_string(&self) -> String`
 
 #### `pub fn from_str_hex(s: &String) -> Result<u32, ParseIntError>`
@@ -1790,6 +1814,10 @@ Counts the number of set bits (population count).
 #### `pub fn max(a: i64, b: i64) -> i64`
 
 #### `pub fn min(a: i64, b: i64) -> i64`
+
+#### `pub fn clamp(value: i64, low: i64, high: i64) -> i64`
+
+`value` confined to `low..=high`. Traps when `low > high`.
 
 #### `pub fn clz(x: i64) -> i64`
 
@@ -1910,6 +1938,10 @@ Counts the number of set bits (population count).
 #### `pub fn max(a: u64, b: u64) -> u64`
 
 #### `pub fn min(a: u64, b: u64) -> u64`
+
+#### `pub fn clamp(value: u64, low: u64, high: u64) -> u64`
+
+`value` confined to `low..=high`. Traps when `low > high`.
 
 #### `pub fn to_string(&self) -> String`
 
@@ -2067,6 +2099,11 @@ Minimum of two values
 #### `pub fn max(x: f32, y: f32) -> f32`
 
 Maximum of two values
+
+#### `pub fn clamp(x: f32, low: f32, high: f32) -> f32`
+
+`x` confined to `low..=high`. A NaN `x` stays NaN; a NaN bound traps,
+as `low > high` does.
 
 #### `pub fn copysign(x: f32, y: f32) -> f32`
 
@@ -2323,6 +2360,11 @@ Minimum of two values
 #### `pub fn max(x: f64, y: f64) -> f64`
 
 Maximum of two values
+
+#### `pub fn clamp(x: f64, low: f64, high: f64) -> f64`
+
+`x` confined to `low..=high`. A NaN `x` stays NaN; a NaN bound traps,
+as `low > high` does.
 
 #### `pub fn copysign(x: f64, y: f64) -> f64`
 
@@ -2788,6 +2830,18 @@ Creates a zero u128
 
 Creates a u128 with value 1
 
+#### `pub fn max(a: u128, b: u128) -> u128`
+
+The larger of two values.
+
+#### `pub fn min(a: u128, b: u128) -> u128`
+
+The smaller of two values.
+
+#### `pub fn clamp(value: u128, low: u128, high: u128) -> u128`
+
+`value` confined to `low..=high`. Traps when `low > high`.
+
 #### `pub fn low(&self) -> u64`
 
 Gets the low 64 bits
@@ -2980,6 +3034,18 @@ Creates a zero i128
 #### `pub fn one() -> i128`
 
 Creates an i128 with value 1
+
+#### `pub fn max(a: i128, b: i128) -> i128`
+
+The larger of two values.
+
+#### `pub fn min(a: i128, b: i128) -> i128`
+
+The smaller of two values.
+
+#### `pub fn clamp(value: i128, low: i128, high: i128) -> i128`
+
+`value` confined to `low..=high`. Traps when `low > high`.
 
 #### `pub fn low(&self) -> u64`
 
@@ -3764,6 +3830,16 @@ Returns an iterator over substrings split by the given separator.
 #### `pub fn splitn(&self, n: i32, sep: String) -> StrSplitNIter with stores[self]`
 
 Returns an iterator over at most `n` substrings split by the given separator.
+
+#### `pub fn split_once(&self, sep: String) -> Option<[String, String]>`
+
+Splits at the first `sep` into the parts before and after it, or None
+when `sep` does not occur.
+
+#### `pub fn rsplit_once(&self, sep: String) -> Option<[String, String]>`
+
+Splits at the last `sep` into the parts before and after it, or None
+when `sep` does not occur.
 
 #### `pub fn split_whitespace(&self) -> StrSplitWhitespaceIter with stores[self]`
 

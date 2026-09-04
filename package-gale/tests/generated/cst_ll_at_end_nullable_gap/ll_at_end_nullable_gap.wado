@@ -2359,20 +2359,16 @@ fn scan_x(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLO
     scan_alts: {
         if alt_kind == TK_LIT_A {
             let mut best: i32 = -1;
-            pos = start;
+            pos = start + 1;
             try_1: {
-                if pos >= tokens.len() || tokens[pos] != TK_LIT_A { break try_1; }
-                pos += 1;
                 if pos >= tokens.len() || tokens[pos] != TK_LIT_B { break try_1; }
                 pos += 1;
                 if pos >= tokens.len() || tokens[pos] != TK_LIT_C { break try_1; }
                 pos += 1;
                 if pos > best { best = pos; }
             }
-            pos = start;
+            pos = start + 1;
             try_0: {
-                if pos >= tokens.len() || tokens[pos] != TK_LIT_A { break try_0; }
-                pos += 1;
                 if pos >= tokens.len() || tokens[pos] != TK_LIT_B { break try_0; }
                 pos += 1;
                 if pos > best { best = pos; }

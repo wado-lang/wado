@@ -1303,6 +1303,11 @@ struct WalkCtx<'a> {
     /// (`ScalarOnly`-entry) candidate pays no write-back on a
     /// `continue` back-edge.
     loop_entry_stack: Vec<ScalarStates>,
+    /// Break sites per enclosing nested loop, innermost last. An unlabeled
+    /// `break` inside one lands back in the enclosing loop body rather than
+    /// leaving the HFS scope, so `walk_nested_loop` joins it with that loop's
+    /// other exits instead of committing every scalar on the spot.
+    loop_breaks: Vec<Vec<BreakRecord>>,
     /// Whether anything walked so far in the current statement (relative
     /// to the active sync sink) may have modified a candidate's scalar
     /// or field. While false, a sync stmt may be hoisted to the sink
@@ -1374,6 +1379,7 @@ fn process_loop_body(
         temp_pool: IndexMap::default(),
         label_breaks: IndexMap::default(),
         loop_entry_stack: vec![entry.clone()],
+        loop_breaks: Vec::new(),
         interior_effects: false,
     };
     walk_block(body, block, &mut states, &mut ctx);
@@ -1872,31 +1878,33 @@ fn walk_stmt(
             if let Some(v) = value {
                 walk_operand(body, v, states, true, out, ctx);
             }
-            // Unlabeled `break` leaves the HFS scope, so `ScalarOnly`
-            // candidates must be committed inline. A labeled break is only
-            // recorded — committing on every one over-syncs gale's hot loops —
-            // so `walk_labeled_block` JOINs the sites and syncs only the ones
-            // that diverge.
+            // A break that lands inside the HFS scope is only recorded, and the
+            // join that owns it syncs the sites that diverge: a registered
+            // label belongs to `walk_labeled_block`, an unlabeled break out of
+            // a nested loop to `walk_nested_loop`. Committing at every break
+            // instead over-syncs gale's hot loops. Anything else leaves the
+            // scope, and an empty `loop_breaks` is what says so.
             let registered_label = label
                 .as_ref()
                 .filter(|l| ctx.label_breaks.contains_key(*l))
                 .cloned();
-            if let Some(l) = registered_label {
-                let record = BreakRecord {
+            let join_site = match registered_label {
+                Some(l) => ctx.label_breaks.get_mut(&l),
+                None if label.is_none() => ctx.loop_breaks.last_mut(),
+                None => None,
+            };
+            if let Some(site) = join_site {
+                site.push(BreakRecord {
                     states: states.clone(),
                     block,
                     stmt: sid,
-                };
-                ctx.label_breaks
-                    .get_mut(&l)
-                    .expect("checked contains_key above")
-                    .push(record);
+                });
                 out.push(sid);
             } else {
-                // An unlabeled break, or one to a label enclosing the loop:
-                // both escape the HFS scope like `return`. Commit `ScalarOnly`
-                // candidates, hoisting the break value into a temp when its own
-                // walk transitioned one (same hazard as `Return`).
+                // Out of the HFS loop itself, or to a label enclosing it: both
+                // escape like `return`. Commit `ScalarOnly` candidates, hoisting
+                // the break value into a temp when its own walk transitioned one
+                // (same hazard as `Return`).
                 if let Some(break_value) =
                     value.filter(|_| states.contains(&CanonState::ScalarOnly))
                 {
@@ -2094,19 +2102,44 @@ fn walk_nested_loop(
     ctx: &mut WalkCtx,
     span: crate::token::Span,
 ) {
-    // Pre-recurse: commit any `ScalarOnly` outer candidate so inner
-    // reads (and a nested HFS's pre-load) observe an up-to-date field.
+    // Commit a reached `ScalarOnly` candidate so inner reads (and a nested
+    // HFS's pre-load) observe an up-to-date field. An unreached one keeps its
+    // scalar canonical across the loop, so it stays `ScalarOnly` — the weaker
+    // claim, which only ever asks for more write-backs later.
+    //
+    // `Both` weakens the same way only when the body writes the candidate,
+    // which is what would otherwise drive the back edge back to `Both` every
+    // iteration. One the body never writes cannot leave `Both` at all, so
+    // weakening it would buy nothing and cost the next call that wants the
+    // field a write-back.
+    let reached = loop_body_call_reach(body, block, ctx);
+    let mut body_accesses: IndexMap<(u32, u32), FieldAccessInfo> = IndexMap::default();
+    count_field_accesses_in_block(body, block, &mut body_accesses, ctx.type_table);
     for i in 0..ctx.candidates.len() {
-        if states[i] == CanonState::ScalarOnly {
-            let stmt = make_write_back_stmt(body, &ctx.candidates[i], span);
-            out.push(stmt);
-            states[i] = CanonState::Both;
+        let c = &ctx.candidates[i];
+        match states[i] {
+            CanonState::ScalarOnly if reached.contains(&i) => {
+                let stmt = make_write_back_stmt(body, c, span);
+                out.push(stmt);
+                states[i] = CanonState::Both;
+            }
+            CanonState::Both if !reached.contains(&i) => {
+                let written = body_accesses
+                    .get(&(c.local_index, c.field_index))
+                    .is_some_and(|info| info.write_count > 0);
+                if written {
+                    states[i] = CanonState::ScalarOnly;
+                }
+            }
+            _ => {}
         }
     }
     let entry_states = states.clone();
     let mut body_exit_states = states.clone();
     ctx.loop_entry_stack.push(entry_states.clone());
+    ctx.loop_breaks.push(Vec::new());
     walk_block(body, block, &mut body_exit_states, ctx);
+    let break_records = ctx.loop_breaks.pop().expect("loop breaks pushed above");
     ctx.loop_entry_stack.pop().expect("loop entry pushed above");
     // Snapshot for post-loop JOIN before we overwrite body_exit with
     // the body-end sync.
@@ -2124,17 +2157,63 @@ fn walk_nested_loop(
             body.blocks[block].stmts.push(stmt);
         }
     }
-    // Post-loop state: JOIN(entry_states, body_exit_pre_sync), demoting
-    // `ScalarOnly` to `FieldOnly`. Every exit leaves the field canonical —
-    // including the zero-iteration path, which has no slot for convergence
-    // sync — so a `ScalarOnly` join would let a later read trust a stale scalar.
+    // Post-loop state: JOIN over every exit — the zero-iteration path (which
+    // leaves at `entry`), the fall-through, and each recorded `break`. A
+    // `ScalarOnly` join is demoted to `FieldOnly` unless every exit already
+    // agrees on it: the zero-iteration path has no slot for convergence sync,
+    // so over a field-canonical entry the join would let a later read trust a
+    // stale scalar. Once they agree there is nothing to converge, and demoting
+    // would only buy a re-read of a field the loop never wrote.
+    let mut exits = Vec::with_capacity(2 + break_records.len());
     for i in 0..states.len() {
-        let joined = pick_join_target_for_candidate(&[entry_states[i], body_exit_pre_sync[i]]);
-        states[i] = match joined {
-            CanonState::ScalarOnly => CanonState::FieldOnly,
+        exits.clear();
+        exits.push(entry_states[i]);
+        exits.push(body_exit_pre_sync[i]);
+        exits.extend(break_records.iter().map(|r| r.states[i]));
+        let converged = exits.iter().all(|s| *s == CanonState::ScalarOnly);
+        states[i] = match pick_join_target_for_candidate(&exits) {
+            CanonState::ScalarOnly if !converged => CanonState::FieldOnly,
             other => other,
         };
     }
+    for record in &break_records {
+        insert_convergence_before_break(body, record, states, ctx, span);
+    }
+}
+
+/// Candidates a call inside `block` can observe through the struct, as the
+/// union of every call's [`CallFieldEffects`]. Nothing else in a loop body
+/// reaches one: a direct access is rewritten to the scalar, and an escaping
+/// address disqualified the candidate at selection.
+fn loop_body_call_reach(body: &Body, block: BlockId, ctx: &WalkCtx) -> IndexSet<usize> {
+    struct Collect<'a, 'b> {
+        ctx: &'a WalkCtx<'b>,
+        reached: IndexSet<usize>,
+    }
+    impl NirRefVisitor for Collect<'_, '_> {
+        fn visit_node(&mut self, body: &Body, node: NodeRef) {
+            if let NodeRef::Expr(e) = node
+                && matches!(
+                    body.exprs[e].kind,
+                    ExprKind::Call { .. }
+                        | ExprKind::CmRawCall { .. }
+                        | ExprKind::IndirectCall { .. }
+                )
+            {
+                let effects = compute_call_field_effects(body, e, self.ctx);
+                self.reached.extend(effects.read_required);
+                self.reached.extend(effects.mutated);
+                self.reached.extend(effects.scalar_mutated);
+            }
+            self.walk_node(body, node);
+        }
+    }
+    let mut collect = Collect {
+        ctx,
+        reached: IndexSet::default(),
+    };
+    collect.visit_node(body, NodeRef::Block(block));
+    collect.reached
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -174,14 +174,20 @@ impl NirPackage {
     /// the call node carries no `FunctionRef`. O(functions); a pass computes it
     /// once before its per-function loop.
     pub fn pure_builtin_callee_ids(&self) -> IndexSet<FuncId> {
+        let type_table = self.type_table.borrow();
         self.functions
             .iter()
             .filter_map(|f| {
                 let f = f.borrow();
                 let descriptor = FunctionRef::from_resolved(&f, f.module_source.clone());
-                let is_pure_builtin = descriptor.builtin_name().is_some()
-                    || descriptor.monomorphized_builtin_name().is_some();
-                is_pure_builtin.then(|| f.id.expect("func_id assigned at lower"))
+                // An intrinsic below the field layer, a value-copy helper, or a
+                // bodied function that never returns. Bodied only: an extern
+                // stub's `return_type` is not an id this table resolves.
+                let writes_no_slot = descriptor.builtin_name().is_some()
+                    || descriptor.monomorphized_builtin_name().is_some()
+                    || f.is_value_copy()
+                    || (f.body.is_some() && type_table.is_never(f.return_type));
+                writes_no_slot.then(|| f.id.expect("func_id assigned at lower"))
             })
             .collect()
     }
