@@ -72,12 +72,13 @@ not the two mask computations, which are worth nothing. The three-scaling arm
 also does a third wide multiply `short` does not need: a shortest representation
 at full width has `dmin == dmax`, so canada only ever needs two.
 
-Two traps worth naming. `inline_cost` prices a callee **as written**, so a
-helper that reads as "a mask and three calls" comes in under budget and is
-pulled into `short` together with all three bodies. `#[inline(never)]` is the
-only way to hold such a helper out of line, and reaching for it there is not a
-claim against the cost model. And a size-matched control does not falsify a
-placement story:
+Two traps worth naming. A call is charged the ABI edge unless the callee carries
+a loop this pass will splice, and what the threshold judges is that price **less
+the call site it replaces**, so a helper that reads as "a mask and three calls"
+comes in under budget and is pulled into `short` together with all three bodies.
+`#[inline(never)]` is the only way to hold such a helper out of line, and
+reaching for it there is not a claim against the cost model. And a size-matched
+control does not falsify a placement story:
 padding `short` with a dead branch grew the _wasm_ by 196 bytes against the real
 change's 205 and left twitter at exactly 0.820 all three rounds, because a
 compare-and-jump is nothing in machine code next to three inlined `uscale`
@@ -89,12 +90,15 @@ it moves them in opposite directions.
 
 ## Three ways to get `uscale` inlined (2026-09-04)
 
-`uscale` costs 21 against the -O2 budget of 16, so `short` pays three calls per
-conversion, each recomputing the same `(1 << (s & 63)) - 1`. Raising the
-threshold to 22 buys json-canada ser 7% — the whole of the -O3 gain on this row
-— so the question is only how to admit it without the global bloat the
-2026-08-27 entry rules out. What landed was hoisting the mask to `short` and
-outlining the correction arm; these three did not:
+`uscale` grosses 21 against the -O2 budget of 16, and its four parameters make
+the call site it replaces worth 6, so `net_cost` puts it at 15 and `short`
+carries all three scalings inline. That is the json-canada ser 7% — the whole of
+the -O3 gain on this row — that raising the threshold to 22 also buys, without
+the global bloat the 2026-08-27 entry rules out.
+
+The three arms below were measured while `short` still paid three calls per
+conversion, each recomputing the same `(1 << (s & 63)) - 1`. Each fails for a
+reason that does not turn on how `uscale` is admitted:
 
 - **`builtin::cold_path()` in `uscale`'s exactness arm.** Prices the function by
   its fast path and gets it inlined everywhere. json-canada ser +3.4%, de +2.7%
@@ -106,8 +110,9 @@ outlining the correction arm; these three did not:
   ser, on a function the de path never calls. Pure placement.
 - **Returning the two bracketing scalings together** (`uscale_bounds`), to shrink
   `short` from three calls to two rather than grow it. The inliner takes it
-  anyway, a single-site candidate being charged nothing, so `short` grew from 87
-  to 113 dump lines regardless.
+  anyway — the threshold admits it on its own price, and the growth budget, where
+  a single-site candidate does cost nothing, never gets to veto it — so `short`
+  grew from 87 to 113 dump lines regardless.
 
 Generalizes: at this scale module layout outweighs the instruction saving, in
 both directions. Growing `short` moved json-twitter serialize 2–5% on a hot path
