@@ -1,7 +1,7 @@
 //! The editor's view of a bad inline `options` table: a typo squiggles the key
 //! that is wrong, with no `wado compile` and no generator run in between.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use wado_lsp::{Diagnostic, Engine, FilesystemCompilerHost, Severity};
 
@@ -48,10 +48,15 @@ struct Fixture {
     source: String,
 }
 
-/// A workspace whose consumer names its generator by `module`. `package` writes
+fn build(module: &str, options_table: &str, package: bool) -> Fixture {
+    let (tmp, app) = workspace(package);
+    write_entry(tmp, &app, consumer(module, options_table))
+}
+
+/// An app package and its generator, as `(tempdir, app dir)`. `package` writes
 /// the generator as a `[build-dependencies]` package next door; otherwise it is
 /// a bare `gen.wado` beside the consumer.
-fn build(module: &str, options_table: &str, package: bool) -> Fixture {
+fn workspace(package: bool) -> (tempfile::TempDir, PathBuf) {
     let tmp = tempfile::tempdir().unwrap();
     let root = tmp.path();
     let app = root.join("app");
@@ -83,7 +88,7 @@ fn build(module: &str, options_table: &str, package: bool) -> Fixture {
     .unwrap();
     std::fs::write(app.join("src/schema.idl"), "anything\n").unwrap();
 
-    write_entry(tmp, &app, consumer(module, options_table))
+    (tmp, app)
 }
 
 fn write_entry(tmp: tempfile::TempDir, app: &Path, source: String) -> Fixture {
@@ -200,16 +205,14 @@ fn a_broken_generator_reports_nothing_on_the_consumer() {
     );
 }
 
-/// Two clauses through one generator describe it once and still answer for
-/// themselves: the shared descriptor must not cost the second clause its
-/// diagnostic, nor move it onto the first clause's key.
+/// The descriptor is shared across clauses; the diagnostics are not. Neither
+/// clause loses its error, and neither lands on the other's key.
 #[test]
 fn two_clauses_through_one_generator_each_get_their_own_error() {
-    let fixture = build("./gen.wado", "{ verbose: true }", false);
-    let app = fixture.root.path().join("app");
+    let (tmp, app) = workspace(false);
     std::fs::write(app.join("src/other.idl"), "anything\n").unwrap();
     let fixture = write_entry(
-        fixture.root,
+        tmp,
         &app,
         r#"use { greeting } from "./schema.idl" with {
     generator: { module: "./gen.wado", options: { verbsoe: true } },

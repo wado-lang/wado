@@ -19,11 +19,9 @@ use wado_manifest::DependencySource;
 use crate::DiagnosticCollector;
 
 /// Validate every invocation's options and emit each complaint through `host`.
-/// A no-op for a generator the LSP cannot read in source.
 ///
-/// Describing a generator means analyzing its whole source, so each distinct
-/// entry file is described once and every clause naming it shares the verdict —
-/// several `use` clauses through one generator is the ordinary case.
+/// Describing a generator analyzes its whole source, so each entry file is
+/// described once and every clause naming it answers from that verdict.
 pub(super) async fn check_all<H: CompilerHost>(
     invocations: &[Invocation],
     manifest_root: &Path,
@@ -35,8 +33,7 @@ pub(super) async fn check_all<H: CompilerHost>(
             continue;
         };
         if !described.contains_key(&entry) {
-            let descriptor = descriptor_of(&entry, host).await;
-            described.insert(entry.clone(), descriptor);
+            described.insert(entry.clone(), descriptor_of(&entry, host).await);
         }
         let Some(descriptor) = described[&entry].as_ref() else {
             continue;

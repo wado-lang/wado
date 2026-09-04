@@ -41,13 +41,19 @@ impl<'a> Site<'a> {
         }
     }
 
-    fn blame(self, span: Span) -> Option<DiagnosticSpan> {
-        Some(DiagnosticSpan::from_span(&span, Some(self.file)))
+    /// An error about this site, blamed on its own key.
+    fn error(self, message: String) -> Diagnostic {
+        self.error_at(self.span, message)
     }
 
-    /// The diagnostic span for this site's own key.
-    fn here(self) -> Option<DiagnosticSpan> {
-        self.blame(self.span)
+    /// An error about this site, blamed on the key at `span`.
+    fn error_at(self, span: Span, message: String) -> Diagnostic {
+        Diagnostic {
+            severity: Severity::Error,
+            code: Code::GeneratorOptionsInvalid,
+            message,
+            span: Some(DiagnosticSpan::from_span(&span, Some(self.file))),
+        }
     }
 }
 
@@ -86,15 +92,10 @@ pub fn validate(
         None => &empty,
         Some(AttrValue::Object(obj)) => obj,
         Some(other) => {
-            diagnostics.push(Diagnostic {
-                severity: Severity::Error,
-                code: Code::GeneratorOptionsInvalid,
-                message: format!(
-                    "kiln: expected options table, got {}",
-                    attr_value_kind(other)
-                ),
-                span: root.here(),
-            });
+            diagnostics.push(root.error(format!(
+                "kiln: expected options table, got {}",
+                attr_value_kind(other)
+            )));
             return Err(diagnostics);
         }
     };
@@ -164,12 +165,10 @@ fn check_value(
         }
         (OptionsType::F32 | OptionsType::F64, AttrValue::Float(f)) => {
             if !f.is_finite() {
-                diagnostics.push(Diagnostic {
-                    severity: Severity::Error,
-                    code: Code::GeneratorOptionsInvalid,
-                    message: format!("kiln: `{}` float value must be finite, got {f}", site.path),
-                    span: site.here(),
-                });
+                diagnostics.push(site.error(format!(
+                    "kiln: `{}` float value must be finite, got {f}",
+                    site.path
+                )));
                 return None;
             }
             Some(CanonicalValue::F64(*f))
@@ -182,16 +181,11 @@ fn check_value(
             if variants.iter().any(|v| v == s) {
                 Some(CanonicalValue::Enum(s.clone()))
             } else {
-                diagnostics.push(Diagnostic {
-                    severity: Severity::Error,
-                    code: Code::GeneratorOptionsInvalid,
-                    message: format!(
-                        "kiln: `{}` expected one of {name}::{{{}}}, got \"{s}\"",
-                        site.path,
-                        variants.join(", ")
-                    ),
-                    span: site.here(),
-                });
+                diagnostics.push(site.error(format!(
+                    "kiln: `{}` expected one of {name}::{{{}}}, got \"{s}\"",
+                    site.path,
+                    variants.join(", ")
+                )));
                 None
             }
         }
@@ -255,12 +249,10 @@ fn descriptor_validate_object(
     }
     for (key, entry) in obj {
         if !descriptor.fields.iter().any(|f| &f.name == key) {
-            diagnostics.push(Diagnostic {
-                severity: Severity::Error,
-                code: Code::GeneratorOptionsInvalid,
-                message: format!("kiln: unknown options field `{}.{key}`", site.path),
-                span: site.blame(entry.key_span),
-            });
+            diagnostics.push(site.error_at(
+                entry.key_span,
+                format!("kiln: unknown options field `{}.{key}`", site.path),
+            ));
             any_error = true;
         }
     }
@@ -281,16 +273,11 @@ fn apply_default(
     if matches!(field.ty, OptionsType::List(_)) {
         return Some(CanonicalValue::List(Vec::new()));
     }
-    diagnostics.push(Diagnostic {
-        severity: Severity::Error,
-        code: Code::GeneratorOptionsInvalid,
-        message: format!(
-            "kiln: required options field `{}` of type {} is missing",
-            site.path,
-            field.ty.describe()
-        ),
-        span: site.here(),
-    });
+    diagnostics.push(site.error(format!(
+        "kiln: required options field `{}` of type {} is missing",
+        site.path,
+        field.ty.describe()
+    )));
     None
 }
 
@@ -300,17 +287,12 @@ fn push_mismatch(
     ty: &OptionsType,
     supplied: &AttrValue,
 ) {
-    diagnostics.push(Diagnostic {
-        severity: Severity::Error,
-        code: Code::GeneratorOptionsInvalid,
-        message: format!(
-            "kiln: `{}` expected {}, got {}",
-            site.path,
-            ty.describe(),
-            attr_value_kind(supplied)
-        ),
-        span: site.here(),
-    });
+    diagnostics.push(site.error(format!(
+        "kiln: `{}` expected {}, got {}",
+        site.path,
+        ty.describe(),
+        attr_value_kind(supplied)
+    )));
 }
 
 fn attr_value_kind(v: &AttrValue) -> &'static str {

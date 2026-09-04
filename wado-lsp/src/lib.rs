@@ -718,11 +718,8 @@ impl Default for Engine {
 /// emission to an inner host, while also capturing every emitted
 /// diagnostic into an internal buffer. Forwarding preserves the inner
 /// host's side effects (logging, error counting) so wrapping is
-/// observationally invisible to it.
-///
-/// [`DiagnosticCollector::silencing`] drops that forwarding, for a compile
-/// run on the side whose diagnostics belong to neither the open document nor
-/// the user (see [`kiln::options`]).
+/// observationally invisible to it — unless it was built by
+/// [`DiagnosticCollector::silencing`].
 pub(crate) struct DiagnosticCollector<'a, H> {
     inner: &'a H,
     diagnostics: std::sync::Mutex<Vec<CompilerDiagnostic>>,
@@ -809,7 +806,7 @@ impl<H: CompilerHost> CompilerHost for DiagnosticCollector<'_, H> {
 /// discovery between parse and load so the entry AST is shared instead
 /// of parsed twice.
 ///
-/// `override_invocations` short-circuits kiln *discovery*: a runtime-backed
+/// `override_invocations` short-circuits kiln discovery: a runtime-backed
 /// host (native `wado-cli`) supplies an [`InvocationIndex`] it built by
 /// running the generators, and it is used verbatim. When `None`, the
 /// consume-only on-disk discovery runs instead. Either way the clause and
