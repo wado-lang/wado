@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1788550199063,
+  "lastUpdate": 1788564266609,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -53297,6 +53297,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/3873186e9beeba1b5f146b81bf12554c566fc9dd"
         },
         "date": 1788550198102,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 2013,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6560,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18891,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 288497,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "c9c8c47cd05c82876409d36a7c70cdc423af21ae",
+          "message": "Merge pull request #1966 from wado-lang/claude/gale-o3-ci-performance-618uhz\n\nperf(optimizer): skip drained pass rounds, stamp session buffers, hold the allocator's pages",
+          "timestamp": "2026-09-05T08:10:21+09:00",
+          "tree_id": "50e62a0fcead21a4c20a06017dfdc917606f656e",
+          "url": "https://github.com/wado-lang/wado/commit/c9c8c47cd05c82876409d36a7c70cdc423af21ae"
+        },
+        "date": 1788564266227,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
