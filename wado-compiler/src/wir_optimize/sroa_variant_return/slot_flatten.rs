@@ -342,6 +342,12 @@ fn body_calls_any(instr: &WirInstr, ids: &IndexSet<u32>) -> bool {
 /// benchmark that gains here decodes through callers of at most 93 locals; the
 /// one that loses, cbor-twitter, decodes `User` and `Status` at 307 and 186. The
 /// cut sits between them — see the WEP for the measurements.
+///
+/// One caller over the cut declines the callee for *all* of them, not just that
+/// site: the slot is part of the result signature, so it is flattened everywhere
+/// or nowhere. What keeps that from being blunt is monomorphization —
+/// `next_field<S>` is a distinct callee per struct, so a rule that has to answer
+/// per callee still lands per decoded type.
 const MAX_CALLER_LOCALS: usize = 128;
 
 /// Phase 2: keep candidates whose every call site consumes the slot cleanly.

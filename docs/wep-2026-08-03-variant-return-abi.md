@@ -623,14 +623,16 @@ live across the call, so it answers to the same rule SROA width does: past the
 register file, a value live across a call is a spill slot reloaded at every call
 boundary, and the allocation removed does not price it.
 
-`MAX_CALLER_LOCALS` declines a call site in a function already holding more
-locals than that. The benchmarks separate cleanly on it: every row that gains
-decodes through callers of at most 93 locals — cbor-canada at 40 for +20.1%,
-cbor-catalog and json-catalog at 93 for +19.5% and +9.9% — while cbor-twitter
-decodes `User` and `Status` at 307 and 186, and flattening those cost it 6.3%.
-Declining them leaves that row flat and every gain intact. `next_field<S>` is
-monomorphized per struct, so this reads as a per-callee rule and acts as a
-per-caller one.
+`MAX_CALLER_LOCALS` declines the callee when any call site sits in a function
+already holding more locals than that — all of them or none, since the slot is
+part of the result signature. The benchmarks separate cleanly on it: every row
+that gains decodes through callers of at most 93 locals — cbor-canada at 40 for
++20.1%, cbor-catalog and json-catalog at 93 for +19.5% and +9.9% — while
+cbor-twitter decodes `User` and `Status` at 307 and 186, and flattening those
+cost it 6.3%. Declining them leaves that row flat and every gain intact. What
+keeps the all-or-nothing from being blunt is monomorphization: `next_field<S>` is
+a distinct callee per struct, so a rule that has to answer per callee still lands
+per decoded type.
 
 ### A settled binding is not a `mut` binding
 

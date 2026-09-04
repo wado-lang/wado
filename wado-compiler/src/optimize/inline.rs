@@ -248,12 +248,21 @@ impl<'a> CostWalk<'a> {
     /// [`CostWalk::splicing`] says this pass will splice it, and the ABI edge
     /// otherwise.
     ///
-    /// A site handing the callee a constant is charged the edge regardless. That
-    /// is the shape whose loop the callee's own folding deletes — the reading
-    /// [`fold_drops_loop`] already takes — so what the caller receives is not the
-    /// loop the table priced. `CborSerializer::serialize_f64` is the case:
-    /// `push_be(buf, bits, 8)` spins a loop the literal 8 unrolls, and charging
-    /// it costs cbor-canada serialize 24%.
+    /// A site handing the callee *any* constant is charged the edge regardless.
+    /// `CborSerializer::serialize_f64` is what this defends:
+    /// `push_be(buf, bits, 8)` spins a loop the literal 8 unrolls, so the loop
+    /// the table priced is not what the caller receives, and charging it costs
+    /// cbor-canada serialize 24%.
+    ///
+    /// It is a proxy, and a loose one: `is_operand_constant` covers `null`,
+    /// `false` and a radix argument as readily as a loop bound, so one
+    /// literal-defaulted parameter switches the lookahead off for that callee
+    /// everywhere. The precise question — does the fold this constant licenses
+    /// delete a loop — is what [`fold_drops_loop`] answers, but it reads a
+    /// [`ConstView`] over the *callee's* parameters rather than one call site's
+    /// arguments, so using it here means building that view per site. The
+    /// benchmarks were taken under the proxy; tightening it is a measured change,
+    /// not a cleanup.
     fn call_price(&self, callee: FuncId, args: &[ArenaCallArg]) -> usize {
         if args.iter().any(|a| self.arg_is_constant(a.expr)) {
             return weight::CALL;
