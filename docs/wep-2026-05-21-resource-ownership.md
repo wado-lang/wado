@@ -554,20 +554,7 @@ Verified against the tree.
       `if c.pos == 0 { … } else { out.push(c) }` still moves `c`.
 - [x] Representative move / copy / share decisions pinned as e2e fixtures
       (`pattern_temp_no_alias`, over syntactic position × writability × binding
-<<<<<<< HEAD
       kind; `closure_capture`, `scalar_read_before_move`).
-- [ ] Key sharing on liveness rather than on the whole body, as _Sharing_ states.
-      The share analysis is a forward walk with no liveness and no control flow,
-      so a write anywhere refuses the binding.
-||||||| 99bf8511a
-      kind; `closure_capture_move`, `closure_confinement`,
-      `scalar_read_before_move`).
-- [ ] Key sharing on liveness rather than on the whole body, as _Sharing_ states.
-      The share analysis is a forward walk with no liveness and no control flow,
-      so a write anywhere refuses the binding.
-=======
-      kind; `closure_capture_move`, `closure_confinement`,
-      `scalar_read_before_move`).
 - [x] Sharing is keyed on liveness rather than on the whole body, as _Sharing_
       states: share collection runs inside the move analysis's backward walk, so
       a write refuses a binding only where that binding's storage is still
@@ -578,7 +565,6 @@ Verified against the tree.
       to `place::is_reference`, which reads both spellings. A raw `Ref` / `MutRef`
       test minted no owned scrutinee temp and the binding aliased the caller's
       payload.
->>>>>>> origin/main
 - [ ] Drive the helper seed from declared types rather than from expressions.
       Predicting the temps pattern lowering mints is what the current seed does,
       and each shape it misses is a copy the fold cannot emit.

@@ -438,75 +438,6 @@ Gated behind measurement; see Not equality saturation.
 
 Each was built, verified, and reverted. Do not retry as-is.
 
-<<<<<<< HEAD
-- **Incremental ValueGraph rebuild.** Reuse a parked graph's unchanged prefix and
-  re-walk only the disturbed region. Correct (verified by a build-both-ways
-  oracle) but it fired on ~0.15 % of builds on the large workload and 0 % on the
-  small ones: the only clean pass adjacency was spoiled by non-journaling passes
-  between handoffs, and `inline` restructures bodies wholesale every iteration.
-  Raising the fire rate needs the single-worklist architecture, which subsumes
-  the whole mechanism.
-- **A richer graph cache** (`vg_cache` / `carry_vg_cache`). Caps low for the same
-  reason: it rebuilds whenever a pass changes a function, which is the common
-  case. Deleted.
-- **Pooling the graph builder's output maps.** The build is compute-bound (walk +
-  hash-cons + flow joins), not allocation-bound; measured no improvement.
-- **Promoting induction-variable `Local` reads to source-bearing opaques.** That
-  resolver keyed one `ValueId` per local index (the builder instead mints one
-  per assignment), so the id spanned every version of the local, and an
-  induction variable has one per iteration. Traps `closure_capture`.
-- **Freezing a local-naming value before the structural passes.** The early
-  freeze is sound because a frozen value survives `inline` and `sroa` copying the
-  operand around — true of a constant, which means the same thing wherever it
-  lands, false of a value naming a local, because those passes renumber locals
-  and splice a callee body into a caller, re-contextualizing the slot underneath
-  the value. `String::substr_bytes`'s parameters, frozen early and inlined into
-  `trim_start`'s loop, read back as an iteration's worth of values and trap with
-  "allocation size too large". The invariant is now explicit at the freeze
-  decision: early plants only context-free values.
-- **A query-time entry-`FieldAccess` materialiser.** Miscompiled ~165 fixtures:
-  reference and aggregate fields change copy / alias semantics.
-- **Keeping caller values across a loop-free-but-impure inline.** Over-merges two
-  reads of a `&mut` parameter.
-- **Dropping the promoted-read census memo on every edit.** The obvious
-  invalidation rule, and measurably worse than no memo: a whole-body walk per
-  rewrite where the per-block recomputation it replaced at least amortised over
-  a block. Only holding an empty memo across edits pays.
-||||||| 99bf8511a
-- **Incremental ValueGraph rebuild.** Reuse a parked graph's unchanged prefix and
-  re-walk only the disturbed region. Correct (verified by a build-both-ways
-  oracle) but it fired on ~0.15 % of builds on the large workload and 0 % on the
-  small ones: the only clean pass adjacency was spoiled by non-journaling passes
-  between handoffs, and `inline` restructures bodies wholesale every iteration.
-  Raising the fire rate needs the single-worklist architecture, which subsumes
-  the whole mechanism.
-- **A richer graph cache** (`vg_cache` / `carry_vg_cache`). Caps low for the same
-  reason: it rebuilds whenever a pass changes a function, which is the common
-  case. Deleted.
-- **Pooling the graph builder's output maps.** The build is compute-bound (walk +
-  hash-cons + flow joins), not allocation-bound; measured no improvement.
-- **Promoting induction-variable `Local` reads to source-bearing opaques.** That
-  resolver keyed one `ValueId` per local index (the builder instead mints one
-  per assignment), so the id spanned every version of the local, and an
-  induction variable has one per iteration. Traps `closure_for_loop_mutation`.
-- **Freezing a local-naming value before the structural passes.** The early
-  freeze is sound because a frozen value survives `inline` and `sroa` copying the
-  operand around — true of a constant, which means the same thing wherever it
-  lands, false of a value naming a local, because those passes renumber locals
-  and splice a callee body into a caller, re-contextualizing the slot underneath
-  the value. `String::substr_bytes`'s parameters, frozen early and inlined into
-  `trim_start`'s loop, read back as an iteration's worth of values and trap with
-  "allocation size too large". The invariant is now explicit at the freeze
-  decision: early plants only context-free values.
-- **A query-time entry-`FieldAccess` materialiser.** Miscompiled ~165 fixtures:
-  reference and aggregate fields change copy / alias semantics.
-- **Keeping caller values across a loop-free-but-impure inline.** Over-merges two
-  reads of a `&mut` parameter.
-- **Dropping the promoted-read census memo on every edit.** The obvious
-  invalidation rule, and measurably worse than no memo: a whole-body walk per
-  rewrite where the per-block recomputation it replaced at least amortised over
-  a block. Only holding an empty memo across edits pays.
-=======
 - Incremental ValueGraph rebuild. Reuse a parked graph's unchanged prefix and
   re-walk only the disturbed region. It was correct, verified by a
   build-both-ways oracle, and fired on 0.15 % of builds on the large workload
@@ -522,7 +453,7 @@ Each was built, verified, and reverted. Do not retry as-is.
 - Promoting induction-variable local reads to source-bearing opaques. That
   resolver keyed one `ValueId` per local, where the builder mints one per
   assignment, so the id spanned every version of the local, and an induction
-  variable has one per iteration. Traps `closure_for_loop_mutation`.
+  variable has one per iteration. Traps `closure_capture`.
 - Freezing a local-naming value before the structural passes. The early freeze
   is sound because a frozen value survives inlining and SROA copying the operand
   around. That is true of a constant, which means the same thing wherever it
@@ -541,7 +472,6 @@ Each was built, verified, and reverted. Do not retry as-is.
   rule, and measurably worse than no memo: a whole-body walk per rewrite, where
   the per-block recomputation it replaced at least amortised over a block. Only
   holding an empty memo across edits pays.
->>>>>>> origin/main
 
 A value's identity is sound only when an operand the edits maintain carries it,
 or when the query itself proves the leaf has a single version. It is never
