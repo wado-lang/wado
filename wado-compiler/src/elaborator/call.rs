@@ -2771,16 +2771,26 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         struct_name: &str,
         method_name: &str,
     ) -> Option<MethodSig> {
-        let key = self.impl_target(struct_name);
+        self.qualified_method_sig_keyed(&self.impl_target(struct_name), method_name)
+    }
+
+    /// [`Self::qualified_method_sig`] for a caller that already resolved its
+    /// receiver. Deriving a second key from the bare name answers from another
+    /// vantage than the one the call resolved at.
+    pub(super) fn qualified_method_sig_keyed(
+        &self,
+        key: &ImplTargetKey,
+        method_name: &str,
+    ) -> Option<MethodSig> {
         let trait_env = &self.tysys.trait_env;
         if let Some(entry) = trait_env
             .static_method_index
-            .get(&key)
+            .get(key)
             .and_then(|methods| methods.iter().find(|e| e.name == method_name))
         {
             return self.tysys.signatures.method_sig(entry.method_id).cloned();
         }
-        if let Some((_, _, decl_id, _)) = trait_env.resource_static(&key, method_name) {
+        if let Some((_, _, decl_id, _)) = trait_env.resource_static(key, method_name) {
             return self
                 .tysys
                 .signatures
@@ -2790,7 +2800,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // One name over several impls is an overload only an argument
         // separates, so a single signature is not this lookup's to pick.
         let mut declared = self
-            .impl_method_decl_ids(&key, method_name)
+            .impl_method_decl_ids(key, method_name)
             .filter_map(|def| self.tysys.signatures.method_sig(def).cloned());
         if let Some(sig) = declared.next()
             && declared.next().is_none()
@@ -2799,7 +2809,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         // The qualified form disambiguates a colliding name, so it reaches an
         // inherited method too.
-        let ImplTargetKey::Decl(def) = key else {
+        let &ImplTargetKey::Decl(def) = key else {
             return None;
         };
         // A resource declares its own statics whether or not the static index

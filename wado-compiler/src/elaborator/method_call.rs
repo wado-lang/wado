@@ -2243,9 +2243,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         )
         .with_type_args(&impl_only_type_arg_names, &method_type_arg_names);
 
-        // Propagate #[cm("...")] from resource static methods for CM binding synthesis.
+        // The `#[cm("...")]` import the callee binds, read off the signature
+        // this call resolved to, keyed by the receiver it resolved at. An index
+        // of receiver-less methods answers for one kind of method only, and an
+        // instance one written `Type::<T>::op(&x)` then lost its binding and
+        // left reify emitting a call to a name nothing declares.
         let cm_owner = self.tysys.type_table.borrow().nominal_def(target_type_id);
-        method_info.cm_name = self.lookup_resource_static_cm(cm_owner, &static_call.method);
+        method_info.cm_name = cm_owner
+            .map(|def| {
+                crate::elaborator::trait_env::ImplTargetKey::of_decl(
+                    self.tysys.resolutions.defs(),
+                    def,
+                )
+            })
+            .and_then(|key| self.qualified_method_sig_keyed(&key, &static_call.method))
+            .and_then(|sig| sig.cm_name);
 
         // The selection covers trait impls only; an inherent static has none
         // and reaches the index instead.
@@ -2595,25 +2607,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 })
             })
             .map(|(blanket, _)| blanket)
-    }
-
-    /// Look up `#[cm("...")]` for a static (no-self) method on the resource
-    /// `def` declares.
-    fn lookup_resource_static_cm(
-        &self,
-        def: Option<crate::defs::DefId>,
-        method_name: &str,
-    ) -> Option<String> {
-        let key = crate::elaborator::trait_env::ImplTargetKey::of_decl(
-            self.tysys.resolutions.defs(),
-            def?,
-        );
-        let (_, _, decl_id, _) = self.tysys.trait_env.resource_static(&key, method_name)?;
-        self.tysys
-            .signatures
-            .resource_method_sig(*decl_id, method_name)?
-            .cm_name
-            .clone()
     }
 
     /// Check if a static method exists directly for a given type name (no newtype fallback).
