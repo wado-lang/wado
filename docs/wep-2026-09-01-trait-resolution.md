@@ -123,6 +123,13 @@ Without this gate a library's new blanket reaches every receiver in the program
 and silently changes what downstream calls mean. Scope confines it to the
 modules that imported the trait.
 
+An unused-trait-import warning belongs to
+[Unused Diagnostics](./wep-2026-05-16-unused-diagnostics.md) rather than here,
+with one constraint this decision imposes on it: a trait imported only to enable
+a dispatch never appears in an expression, so the check must count enabling a
+dispatch as a use. A check that reads the source alone will tell the programmer
+to delete the import that makes the module compile.
+
 Lookup keeps searching outside the scope, for the diagnostic alone. When the
 scoped candidates are empty and the unscoped ones are not, the call is an error
 naming the trait that would have answered and the import that would enable it:
@@ -415,7 +422,9 @@ The remaining ways are read off a type, and each goes where it belongs:
   field has a default, which a generic one does not get, since a default is
   elaborated against the declaration; and `Ref` — whether a reference stands in
   for the type — with `RefMut` the same minus a variant, whose case a write
-  could change. A reference satisfies `Ref` and `RefMut` of itself, which is the
+  could change, and a function. Each is stated by the compiler's own predicate,
+  asked through a type standing for the head, so the fact and the query cannot
+  drift. A reference satisfies `Ref` and `RefMut` of itself, which is the
   reference flag above rather than a fact.
 
 A fact is keyed by the declaration a type instantiates, and a tuple is an
@@ -461,12 +470,13 @@ a question the solver answers is asserted against the compiler's own path in
 debug builds over every fixture before the compiler's path is retired. `holds`
 still runs that way beside `type_implements_trait`.
 
-What the order can decide is bounded by what the lowering states, and a shape it
-cannot say is an impl the search never sees. Lookup collecting a match means an
-impl applied, so the order finding no candidate at all — every impl out of scope
-being its own answer — means the lowering lost one. That is an assertion in
-selection, over a program no error has already rejected, so such a loss names
-the impl rather than reading as a missing method.
+Selection has one candidate set. The order names the impls that answer — each a
+block, or for a derived body the `Reflect*` blanket it comes from — and lookup
+reads the `TraitMethodMatch` off those blocks and nothing else; it enumerates no
+impl the order will discard. A named block declares the method, or its trait
+does, so it yields a match, and one that yields none is an assertion in every
+profile. A receiver the lowering cannot say — one still carrying an inference
+variable, or an error — has no trait method, as no impl can be written for it.
 
 ## Consequences
 
@@ -481,23 +491,16 @@ the order, and keeps the ones it names.
 
 ## Known gaps
 
-### Selection collects, the order decides
+### The walk still collects for one receiver
 
-Selection asks `candidates` and `rank` and keeps the matches the order names;
-it has no rule of its own. The compiler still collects the matches: a
-`TraitMethodMatch` carries the `MethodInfo` the rest of elaboration needs, and
-rebuilding that from an `ImplId` is a different job from deciding which impl
-runs.
+Where the order finds no impl for a receiver the compiler's derivation walk
+assumes a bound of (below), it answers `Undecided`, and lookup falls back to its
+own collection (`collect_by_walk`): every impl on the newtype chain plus the
+value blankets whose bounds the walk says hold. That collection, and the
+applicability checks it carries, exist for this verdict alone.
 
-- [ ] Materialize a `TraitMethodMatch` from the winning `ImplId`, so lookup
-      stops walking the impl index for candidates the order will discard.
-
-An unused-trait-import warning belongs to
-[Unused Diagnostics](./wep-2026-05-16-unused-diagnostics.md) rather than here,
-with one constraint this decision imposes on it: a trait imported only to enable
-a dispatch never appears in an expression, so the check must count enabling a
-dispatch as a use. A check that reads the source alone will tell the programmer
-to delete the import that makes the module compile.
+- [ ] Delete `collect_by_walk` once the derivation walk and the solver agree on
+      a bound of a rigid parameter (below).
 
 ### Scope gates method calls, not the bounds path
 

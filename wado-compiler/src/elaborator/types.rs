@@ -2562,10 +2562,6 @@ pub(super) struct TraitMethodMatch {
     /// The matched trait's declaration key, resolved from the impl's own
     /// module — two same-named traits from different modules stay distinct.
     pub(super) trait_decl: crate::defs::DefId,
-    /// The impl block this match came from. `None` where no block was written
-    /// and a derived body answers. What the selection differential compares on
-    /// (`docs/wep-2026-09-01-trait-resolution.md`).
-    pub(super) impl_def: Option<crate::defs::DefId>,
     /// The impl's trait type arguments as resolved types (empty for a trait
     /// with none). Two matches agreeing on `trait_decl` but not here are one
     /// trait at different argument lists — an overload set.

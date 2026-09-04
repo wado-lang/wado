@@ -1821,12 +1821,154 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // argument list at hand.
         probe: Option<&mut ArgProbe<'_>>,
     ) -> Option<super::types::TraitMethodMatch> {
+        use super::solver_bridge::Ordered;
         use super::types::TraitMethodMatch;
-        let mut found_traits: Vec<TraitMethodMatch> = Vec::new();
 
+        let receiver_display = type_key
+            .display_name(self.tysys.resolutions.defs())
+            .to_string();
+        // The order names the impls; the matches are read off those blocks and
+        // nothing else (`docs/wep-2026-09-01-trait-resolution.md`).
+        let order = self.order_for_call(type_key, receiver_type_id, method_name, required_trait);
+        let named: &[Option<crate::defs::DefId>] = match &order {
+            Some(Ordered::One(def)) => std::slice::from_ref(def),
+            Some(
+                Ordered::AmbiguousTraits(defs)
+                | Ordered::AmbiguousBlankets(defs)
+                | Ordered::Overloaded(defs)
+                | Ordered::Duplicated(defs),
+            ) => defs,
+            // The scope gate: an impl answers, and importing its trait is what
+            // the call is missing. One of them stands in below, so the call
+            // does not also read as a missing method.
+            Some(Ordered::OutOfScope { traits, impls }) => {
+                let defs = self.tysys.resolutions.defs();
+                let _ = self.emit(super::types::TypeError::TraitNotImported {
+                    method: method_name.to_string(),
+                    receiver: receiver_display.clone(),
+                    traits: traits.iter().map(|&t| defs.name(t).to_string()).collect(),
+                    span,
+                });
+                impls
+            }
+            Some(Ordered::Nothing) | None => &[],
+            // The receiver is one the compiler's derivation walk assumes a
+            // bound of, which no impl states, so the walk collects
+            // ("Derivation is still a query in the compiler").
+            Some(Ordered::Undecided) => {
+                let mut found = self.collect_by_walk(
+                    type_key,
+                    method_name,
+                    receiver_type_args,
+                    receiver_type_id,
+                );
+                if let Some(wanted) = required_trait {
+                    found.retain(|m| {
+                        crate::resolve::Resolution::Def(m.trait_decl) == wanted.decl
+                            && wanted
+                                .args
+                                .as_ref()
+                                .is_none_or(|args| &m.trait_args == args)
+                    });
+                }
+                return self.select_trait_match(found, method_name, &receiver_display, span, probe);
+            }
+        };
+        let mut found_traits: Vec<TraitMethodMatch> = self.materialize_matches(
+            named,
+            type_key,
+            method_name,
+            receiver_type_args,
+            receiver_type_id,
+        );
+        // A named block declares the method, or its trait does, so it yields a
+        // match; none means the block and the lowering disagree on the name.
+        assert!(
+            self.logger.has_errors() || named.is_empty() || !found_traits.is_empty(),
+            "the order names {order:?} for `{receiver_display}`.{method_name}(), and none yields a match"
+        );
+        // A turbofish on a qualified call pins one argument list; the trait
+        // itself the order already kept to.
+        if let Some(args) = required_trait.and_then(|wanted| wanted.args.as_ref()) {
+            found_traits.retain(|m| &m.trait_args == args);
+        }
+        self.select_trait_match(found_traits, method_name, &receiver_display, span, probe)
+    }
+
+    /// The matches the named impls yield for `method_name`: read off each
+    /// block, or for a body the compiler supplies with no block (`None`), off
+    /// the derived template.
+    fn materialize_matches(
+        &mut self,
+        named: &[Option<crate::defs::DefId>],
+        type_key: &ImplTargetKey,
+        method_name: &str,
+        receiver_type_args: Option<&[TypeId]>,
+        receiver_type_id: Option<TypeId>,
+    ) -> Vec<super::types::TraitMethodMatch> {
+        let mut found = Vec::new();
+        // An impl the order names at two levels of the chain is one block.
+        let mut seen: IndexSet<Option<crate::defs::DefId>> = IndexSet::default();
+        for def in named.iter().filter(|def| seen.insert(**def)) {
+            match def {
+                Some(def) => {
+                    let impl_ref = ImplBlockRef(*def);
+                    let trait_env = Arc::clone(&self.tysys.trait_env);
+                    let header = impl_header(&trait_env, &impl_ref);
+                    let impl_struct_name = self.get_type_name(&header.ty);
+                    let is_blanket_type_param = matches!(
+                        &header.ty,
+                        Type::Named(named) if !self.tysys.is_known_type_name(&named.name)
+                    );
+                    // Qualified in the impl's own frame by the decl pass: the
+                    // call site's imports may name the same declaration
+                    // differently, or not at all.
+                    let impl_struct_fq = self.impl_sig(&impl_ref).target_fq.clone();
+                    found.extend(self.collect_trait_method_matches_from_impl(
+                        &impl_ref,
+                        impl_struct_name,
+                        impl_struct_fq,
+                        is_blanket_type_param,
+                        method_name,
+                        receiver_type_args,
+                        receiver_type_id,
+                    ));
+                }
+                // A template is registered under its mangled head, so the
+                // probe is in that namespace, not the declaration one.
+                None => {
+                    if let Some(recv_id) = receiver_type_id {
+                        found.extend(
+                            self.try_auto_derived_method_match(
+                                type_key
+                                    .receiver(self.tysys.resolutions.defs())
+                                    .head_key()
+                                    .as_mangled_str(),
+                                method_name,
+                                recv_id,
+                            ),
+                        );
+                    }
+                }
+            }
+        }
+        found
+    }
+
+    /// The compiler's own collection: every impl on the receiver's newtype
+    /// chain, plus the value blankets whose bounds the derivation walk says the
+    /// receiver satisfies. What answers a receiver the order cannot
+    /// (`Ordered::Undecided`), until derivation is answered by impls.
+    fn collect_by_walk(
+        &mut self,
+        type_key: &ImplTargetKey,
+        method_name: &str,
+        receiver_type_args: Option<&[TypeId]>,
+        receiver_type_id: Option<TypeId>,
+    ) -> Vec<super::types::TraitMethodMatch> {
+        let mut found_traits = Vec::new();
         let names_to_check = self.newtype_chain(type_key);
         let impl_refs = self.trait_method_candidates(&names_to_check, receiver_type_id);
-
         for impl_ref in &impl_refs {
             let Some((impl_struct_name, impl_struct_fq, is_blanket_type_param)) =
                 self.candidate_matches_receiver(impl_ref, &names_to_check, receiver_type_id)
@@ -1843,67 +1985,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 receiver_type_id,
             ));
         }
-
-        // A qualified call already said which trait it means, so the candidates
-        // from every other trait are not competitors — dropping them here is
-        // what keeps `select_trait_match` from reporting an ambiguity the call
-        // site has resolved by naming one.
-        if let Some(wanted) = required_trait {
-            found_traits.retain(|m| {
-                crate::resolve::Resolution::Def(m.trait_decl) == wanted.decl
-                    && wanted
-                        .args
-                        .as_ref()
-                        .is_none_or(|args| &m.trait_args == args)
-            });
-        }
-
-        let receiver_display = type_key
-            .display_name(self.tysys.resolutions.defs())
-            .to_string();
-        let order = self.order_for_call(type_key, receiver_type_id, method_name, required_trait);
-        if let Some(m) = self.select_trait_match(
-            found_traits,
-            order,
-            method_name,
-            &receiver_display,
-            span,
-            probe,
-        ) {
-            return Some(m);
-        }
-
-        // Auto-derived Eq / Ord: no user-written impl exists, but the type
-        // satisfies the field-wise / case-wise eligibility rules and
-        // `synthesis::traits` will emit a body. Synthesize a `TraitMethodMatch`
-        // so method-call resolution (and everything downstream of it) sees
-        // the same view of "does this type have `.eq` / `.cmp`?" that
-        // operator dispatch gets via `find_eq_trait_impl` / `find_ord_trait_impl`.
-        // A qualified call that names some *other* trait (`Same::eq(&a, &b)`)
-        // must not be answered by the derived prelude trait.
-        if let Some(recv_id) = receiver_type_id
-            && required_trait.is_none_or(|wanted| {
-                self.tysys
-                    .auto_derive_by_method(method_name)
-                    .is_some_and(|(item, _, _)| {
-                        self.tysys.compiler_trait_def(item).is_some_and(|decl| {
-                            crate::resolve::Resolution::Def(decl) == wanted.decl
-                        })
-                    })
-            })
-        {
-            // A template is registered under its mangled head, so the probe
-            // is in that namespace, not the declaration one.
-            return self.try_auto_derived_method_match(
-                type_key
-                    .receiver(self.tysys.resolutions.defs())
-                    .head_key()
-                    .as_mangled_str(),
-                method_name,
-                recv_id,
-            );
-        }
-        None
+        found_traits
     }
 
     /// Project one candidate trait impl into 0+ [`TraitMethodMatch`]es: set up
@@ -2281,7 +2363,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     &scope.tysys.resolutions,
                 ),
                 trait_decl,
-                impl_def: Some(impl_ref.0),
                 trait_args: trait_args.clone(),
                 method_info: MethodInfo {
                     method_def: Some(method_sig.def),
@@ -2345,7 +2426,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         &scope.tysys.resolutions,
                     ),
                     trait_decl,
-                    impl_def: Some(impl_ref.0),
                     trait_args: trait_args.clone(),
                     method_info: MethodInfo {
                         method_def: Some(default_method.sig.def),
@@ -2472,124 +2552,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         )
     }
 
-    /// The matches the order left standing, in the order it named them. A
-    /// verdict naming impls keeps exactly those; one naming none empties the
-    /// list, which is how the scope gate and "no impl applied" reach the
-    /// caller.
-    fn narrow_to_order(
-        found_traits: Vec<super::types::TraitMethodMatch>,
-        order: &super::solver_bridge::Ordered,
-    ) -> Vec<super::types::TraitMethodMatch> {
-        use super::solver_bridge::Ordered;
-        let named: &[Option<crate::defs::DefId>] = match order {
-            Ordered::One(def) => std::slice::from_ref(def),
-            Ordered::AmbiguousTraits(defs)
-            | Ordered::AmbiguousBlankets(defs)
-            | Ordered::Overloaded(defs)
-            | Ordered::Duplicated(defs) => defs,
-            Ordered::Nothing | Ordered::OutOfScope(_) => &[],
-            Ordered::Undecided => return found_traits,
-        };
-        // Each match is moved out at most once, so two candidates of one impl
-        // block cannot both answer for it.
-        let mut left: Vec<Option<super::types::TraitMethodMatch>> =
-            found_traits.into_iter().map(Some).collect();
-        named
-            .iter()
-            .filter_map(|def| {
-                let at = left
-                    .iter()
-                    .position(|m| m.as_ref().is_some_and(|m| m.impl_def == *def))?;
-                left[at].take()
-            })
-            .collect()
-    }
-
-    /// Choose the winning match. The order decides
-    /// (`docs/wep-2026-09-01-trait-resolution.md`): what it names is kept, in
-    /// the order it named it, and the argument and ambiguity reporting below
-    /// runs over that.
+    /// Choose the winning match among what the order named, in the order it
+    /// named them (`docs/wep-2026-09-01-trait-resolution.md`): the argument
+    /// and ambiguity reporting below runs over that.
     fn select_trait_match(
         &mut self,
         mut found_traits: Vec<super::types::TraitMethodMatch>,
-        order: Option<super::solver_bridge::Ordered>,
         method_name: &str,
         receiver_display: &str,
         span: Span,
         probe: Option<&mut ArgProbe<'_>>,
     ) -> Option<super::types::TraitMethodMatch> {
-        use super::solver_bridge::Ordered;
-        // Two invariants of a well-formed program, each a shape the lowering
-        // has to say. An impl a reported error already rejected — one whose
-        // target determines none of its parameters, say — is refused by the
-        // order and by nothing else, so neither holds once an error is out.
-        //
-        // A collected match means an impl applied. So the order seeing no
-        // candidate at all means the lowering never stated that impl, and the
-        // order being unable to say the receiver at all means it never stated
-        // a shape an impl was written for. Either would otherwise read as "no
-        // method found".
-        let lost = |what: &str| {
-            format!(
-                "the lowering {what} `{receiver_display}`.{method_name}(), which lookup found: {:?}",
-                found_traits
-                    .iter()
-                    .map(|m| (&m.impl_module_source, m.impl_def))
-                    .collect::<Vec<_>>()
-            )
-        };
-        match &order {
-            Some(Ordered::Nothing) => assert!(
-                self.logger.has_errors() || found_traits.is_empty(),
-                "{}",
-                lost("lost an impl of")
-            ),
-            None => assert!(
-                self.logger.has_errors() || found_traits.is_empty(),
-                "{}",
-                lost("cannot say the receiver of")
-            ),
-            // The scope gate: an impl answers, and importing its trait is what
-            // the call is missing. A collected match still stands in, so the
-            // call does not also read as a missing method.
-            Some(Ordered::OutOfScope(traits)) => {
-                let defs = self.tysys.resolutions.defs();
-                let _ = self.emit(super::types::TypeError::TraitNotImported {
-                    method: method_name.to_string(),
-                    receiver: receiver_display.to_string(),
-                    traits: traits.iter().map(|&t| defs.name(t).to_string()).collect(),
-                    span,
-                });
-                return found_traits.into_iter().next();
-            }
-            Some(
-                Ordered::One(_)
-                | Ordered::Undecided
-                | Ordered::AmbiguousTraits(_)
-                | Ordered::AmbiguousBlankets(_)
-                | Ordered::Overloaded(_)
-                | Ordered::Duplicated(_),
-            ) => {}
-        }
-        found_traits = match order {
-            Some(order) => {
-                let named = !matches!(
-                    order,
-                    Ordered::Nothing | Ordered::OutOfScope(_) | Ordered::Undecided
-                );
-                let collected = found_traits.len();
-                let narrowed = Self::narrow_to_order(found_traits, &order);
-                // The order names an impl only through what lookup collected; a
-                // verdict keeping nothing of a non-empty list names one it did
-                // not, and would otherwise read as "no method found".
-                assert!(
-                    self.logger.has_errors() || !named || collected == 0 || !narrowed.is_empty(),
-                    "the order names {order:?} for `{receiver_display}`.{method_name}(), none of which lookup collected"
-                );
-                narrowed
-            }
-            None => Vec::new(),
-        };
         self.report_ambiguous_value_blankets(&found_traits, receiver_display, span);
         // WEP 2026-07-31: one trait declaration at several argument lists —
         // the arguments choose. The overload set is the concrete candidates of

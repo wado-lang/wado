@@ -1141,11 +1141,15 @@ impl TypeSystem {
     /// place rather than replaced on assign (WEP 2026-01-20). `variant` and `fn`
     /// are `Ref` but boxed (replace-on-assign), so a `&mut` cannot write through
     /// them; every other `Ref` type qualifies. A `Newtype` follows its base.
-    pub(super) fn is_ref_mut_identity(&self, scope: &TypeLookup, resolved: &ResolvedType) -> bool {
+    pub(super) fn is_ref_mut_identity(
+        &self,
+        is_variant: &dyn Fn(DefId) -> bool,
+        resolved: &ResolvedType,
+    ) -> bool {
         match resolved {
             ResolvedType::Variant { .. } | ResolvedType::Function { .. } => false,
             ResolvedType::GenericInstance { def, .. } => {
-                if scope.variant_cases_of(*def).is_some() {
+                if is_variant(*def) {
                     false
                 } else {
                     self.is_ref_identity(resolved)
@@ -1153,7 +1157,7 @@ impl TypeSystem {
             }
             ResolvedType::Newtype { base_type, .. } => {
                 let base = self.type_table.borrow().get(*base_type).clone();
-                self.is_ref_mut_identity(scope, &base)
+                self.is_ref_mut_identity(is_variant, &base)
             }
             _ => self.is_ref_identity(resolved),
         }
@@ -1235,7 +1239,8 @@ impl TypeSystem {
         }
 
         if on_bound == Some(OnBoundTrait::RefMut) {
-            return self.is_ref_mut_identity(scope, resolved);
+            return self
+                .is_ref_mut_identity(&|def| scope.variant_cases_of(def).is_some(), resolved);
         }
 
         let is_eq = on_bound == Some(OnBoundTrait::Eq);
@@ -2847,8 +2852,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // Auto-derived `Eq` / `Ord` take no type arguments.
             trait_name: trait_fq,
             trait_decl,
-            // Auto-derived: `synthesis::traits` emits the body, no block exists.
-            impl_def: None,
             trait_args: vec![],
             method_info,
             impl_module_source,

@@ -59,7 +59,9 @@ fn generic_function_key(
 }
 
 use crate::flat_package::FlatPackage;
-use crate::tir::{ResolvedType, TirFunction, TirModule, TirStruct, TypeId, TypeTable};
+use crate::tir::{
+    MonomorphInfo, ResolvedType, TirFunction, TirModule, TirStruct, TypeId, TypeTable,
+};
 
 use state::Monomorphizer;
 
@@ -145,19 +147,24 @@ fn write_back(flat: &mut FlatPackage, temp_module: TirModule) {
     // registries downstream, and the survivor then drives codegen for both call
     // sites — surfacing several phases later as a confusing
     // `expected (ref $type), found (ref $type)`. Catch it at its origin.
-    let mut seen_functions: IndexMap<(ModuleSource, String), ()> = IndexMap::default();
+    let mut seen_functions: IndexMap<
+        (ModuleSource, String),
+        (Option<crate::defs::DefId>, Option<MonomorphInfo>),
+    > = IndexMap::default();
     for func_rc in &flat.functions {
         let f = func_rc.borrow();
         let key = (f.module_source.clone(), f.name.clone());
-        assert!(
-            seen_functions.insert(key, ()).is_none(),
-            "duplicate function `{}` in module `{}` after monomorphization. \
-             `module_source` is the canonical namespace; two functions with \
-             the same mangled name landing in the same module indicate a \
-             synthesis or monomorphization bug.",
-            f.name,
-            f.module_source
-        );
+        let this = (f.def_id, f.monomorph_info.clone());
+        if let Some(first) = seen_functions.insert(key, this.clone()) {
+            panic!(
+                "duplicate function `{}` in module `{}` after monomorphization: \
+                 first from {first:?}, then from {this:?}. `module_source` is the \
+                 canonical namespace; two functions with the same mangled name \
+                 landing in the same module indicate a synthesis or \
+                 monomorphization bug.",
+                f.name, f.module_source
+            );
+        }
     }
 
     // Strip effect params from all functions. Effect params have been validated by the
@@ -488,6 +495,7 @@ impl Monomorphizer {
             );
             if !new_structs.is_empty() {
                 made_progress = true;
+                self.alias_canonical_keys(&mut module.type_table.borrow_mut());
             }
             module.structs.extend(new_structs);
 

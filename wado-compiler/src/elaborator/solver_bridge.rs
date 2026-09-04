@@ -9,9 +9,9 @@ use crate::module_source::ModuleSource;
 use crate::name::is_builtin_shape_name;
 use crate::tir::{PrimitiveType, ResolvedType, TypeId, TypeTable};
 use crate::trait_solver::{
-    ArgDefault, AssocId, Declaration, Env, Fact, ImplDef, ImplId, ImplOrigin, MethodId, ModuleId,
-    ModuleScope, ParamDef, Pin, Program, RefRule, Selection, SolverType, TraitDeclId, TypeDeclId,
-    TypeDef, candidates, derive, holds, rank,
+    ArgDefault, AssocId, Candidate, Declaration, Env, Fact, ImplDef, ImplId, ImplOrigin, MethodId,
+    ModuleId, ModuleScope, ParamDef, Pin, Program, RefRule, Selection, SolverType, TraitDeclId,
+    TypeDeclId, TypeDef, candidates, derive, holds, rank,
 };
 
 use super::trait_env::{BlanketReceiver, ImplHeader};
@@ -489,34 +489,72 @@ pub(super) fn lower_impls<'a>(
     sources
 }
 
-/// Whether a newtype's base is boxed and replaced on assign, so a `&mut` cannot
-/// write through it (`is_ref_mut_identity`): a variant at any instantiation, a
-/// function, or a newtype of one.
-fn is_boxed_base(tysys: &TypeSystem, table: &TypeTable, base: &ResolvedType) -> bool {
-    match base {
-        ResolvedType::Variant { .. } | ResolvedType::Function { .. } => true,
-        ResolvedType::GenericInstance { def, .. } => tysys.all_variant_cases.contains_key(def),
-        ResolvedType::Newtype { base_type, .. } => {
-            is_boxed_base(tysys, table, &table.get(*base_type).clone())
+/// A type standing for a lowered head, for what the compiler reads off a type
+/// rather than off an impl. `None` for a head that is no type (a trait), or
+/// whose type is minted after the program is built (a body-local struct).
+fn representative(
+    tysys: &TypeSystem,
+    table: &TypeTable,
+    tuple: Option<DefId>,
+    key: &DeclKey,
+) -> Option<ResolvedType> {
+    use crate::defs::DefKind;
+    match key {
+        // The tuple declaration registers no type of its own; an instance of
+        // it is what a tuple type is.
+        DeclKey::Def(def) if Some(*def) == tuple => Some(ResolvedType::GenericInstance {
+            def: *def,
+            type_args: Vec::new(),
+        }),
+        DeclKey::Def(def) => {
+            let defs = tysys.resolutions.defs();
+            match defs.kind(*def) {
+                DefKind::Struct
+                | DefKind::Enum
+                | DefKind::Flags
+                | DefKind::Variant
+                | DefKind::Newtype
+                | DefKind::BuiltinType
+                | DefKind::Resource => table
+                    .type_of_symbol(&defs.ast_id(*def))
+                    .map(|id| table.get(id).clone()),
+                DefKind::Function
+                | DefKind::Effect
+                | DefKind::Trait
+                | DefKind::Impl
+                | DefKind::Method
+                | DefKind::World
+                | DefKind::Global
+                | DefKind::Variable
+                | DefKind::Field
+                | DefKind::EnumCase
+                | DefKind::VariantCase
+                | DefKind::FlagsMember => None,
+            }
         }
-        ResolvedType::Primitive(_)
-        | ResolvedType::Unit
-        | ResolvedType::Never
-        | ResolvedType::Struct { .. }
-        | ResolvedType::Enum { .. }
-        | ResolvedType::Flags { .. }
-        | ResolvedType::Resource { .. }
-        | ResolvedType::GenericResource { .. }
-        | ResolvedType::BuiltinArray(_)
-        | ResolvedType::Ref(_)
-        | ResolvedType::MutRef(_)
-        | ResolvedType::TypeParam { .. }
-        | ResolvedType::TypePack { .. }
-        | ResolvedType::Reactive(_)
-        | ResolvedType::InferVar(_)
-        | ResolvedType::AssocTypeProjection { .. }
-        | ResolvedType::Unknown
-        | ResolvedType::Error => false,
+        DeclKey::Builtin(name) => {
+            if let Some(id) = TypeTable::primitive_by_name(name) {
+                return Some(table.get(id).clone());
+            }
+            if name == TypeTable::UNIT_TYPE_NAME {
+                Some(ResolvedType::Unit)
+            } else if name == "!" {
+                Some(ResolvedType::Never)
+            } else if name == TypeTable::ARRAY_TYPE_NAME {
+                Some(ResolvedType::BuiltinArray(TypeTable::UNIT))
+            } else if name == fn_shape_name(false) || name == fn_shape_name(true) {
+                Some(ResolvedType::Function {
+                    is_mut: name == fn_shape_name(true),
+                    params: Vec::new(),
+                    return_type: TypeTable::UNIT,
+                    effects: Vec::new(),
+                    stores: Vec::new(),
+                })
+            } else {
+                None
+            }
+        }
+        DeclKey::AnonymousStruct => None,
     }
 }
 
@@ -1047,7 +1085,6 @@ impl SolverBridge {
             trait_of(CompilerItem::Ref),
             trait_of(CompilerItem::RefMut),
         );
-        let tuple = program.tuple;
         let mut fact = |head: Option<TypeDeclId>, trait_: Option<TraitDeclId>| {
             if let (Some(head), Some(trait_)) = (head, trait_) {
                 program
@@ -1074,41 +1111,32 @@ impl SolverBridge {
             }
         }
 
-        // `Ref` is whether a reference to a type stands in for the type itself.
-        // `RefMut` is the same, minus the shapes a mutable reference cannot
-        // stand in for — a variant, whose case a write could change.
-        for &def in tysys.all_struct_fields.keys() {
-            fact(declared(def), ref_);
-            fact(declared(def), ref_mut);
-        }
-        for &def in tysys.all_variant_cases.keys() {
-            fact(declared(def), ref_);
-        }
-        for name in [TypeTable::ARRAY_TYPE_NAME, "i128", "u128"] {
-            let head = lowering.known_type(&DeclKey::Builtin(name.to_string()));
-            fact(head, ref_);
-            fact(head, ref_mut);
-        }
-        // A function value is a reference, and boxed like a variant, so a
-        // `&mut` cannot write through it (`is_ref_mut_identity`).
-        for is_mut in [false, true] {
-            let head = lowering.known_type(&DeclKey::Builtin(fn_shape_name(is_mut).to_string()));
-            fact(head, ref_);
-        }
-        // A tuple is an instance of its own declaration and stands in for
-        // itself through a reference, as the struct it is.
-        fact(tuple, ref_);
-        fact(tuple, ref_mut);
-        // A newtype takes both from its base. An `enum`, `flags` or `resource`
-        // has neither, so nothing is stated for one.
-        for (def, base) in newtype_decls(tysys, table) {
-            let resolved = table.get(base).clone();
-            if !tysys.is_ref_identity(&resolved) {
-                continue;
+        // `Ref` and `RefMut` are what `is_ref_identity` and
+        // `is_ref_mut_identity` read off a type. Each head is asked through a
+        // type standing for it, so the two paths share the one predicate; a
+        // head standing for no type (a trait, a head whose type is minted
+        // later) states nothing.
+        let is_variant = |def: DefId| tysys.all_variant_cases.contains_key(&def);
+        for (key, &id) in &lowering.decls {
+            let (is_ref, is_ref_mut) = match key {
+                DeclKey::Def(_) | DeclKey::Builtin(_) => {
+                    let Some(shape) = representative(tysys, table, lowering.tuple, key) else {
+                        continue;
+                    };
+                    (
+                        tysys.is_ref_identity(&shape),
+                        tysys.is_ref_mut_identity(&is_variant, &shape),
+                    )
+                }
+                // A literal's shape is a struct, which both predicates read as
+                // `Struct { .. }`; none is minted when the program is built.
+                DeclKey::AnonymousStruct => (true, true),
+            };
+            if is_ref {
+                fact(Some(TypeDeclId(id)), ref_);
             }
-            fact(declared(def), ref_);
-            if !is_boxed_base(tysys, table, &resolved) {
-                fact(declared(def), ref_mut);
+            if is_ref_mut {
+                fact(Some(TypeDeclId(id)), ref_mut);
             }
         }
     }
@@ -1297,6 +1325,16 @@ impl SolverBridge {
         if let Some(required) = required {
             found.in_scope.retain(|c| c.trait_ == required);
         }
+        // The caller asks a reference receiver in two passes — its `&T` impls
+        // first, the pointee's after (`method_call.rs`) — so the reference pass
+        // is answered from the reference level alone.
+        if through_ref.is_some() {
+            let on_ref = |c: &Candidate| {
+                matches!(self.program.impls[&c.impl_].target, SolverType::Ref { .. })
+            };
+            found.in_scope.retain(on_ref);
+            found.out_of_scope.retain(on_ref);
+        }
         let named = |live: &[usize]| {
             live.iter()
                 .map(|&i| self.impl_def_of(found.in_scope[i].impl_))
@@ -1304,13 +1342,23 @@ impl SolverBridge {
         };
         Some(match rank(&found.in_scope) {
             Selection::One(index) => Ordered::One(self.impl_def_of(found.in_scope[index].impl_)),
-            Selection::None if !found.out_of_scope.is_empty() => Ordered::OutOfScope(
-                found
-                    .out_of_scope
-                    .iter()
-                    .map(|&trait_| self.lowering.trait_def_of(trait_))
-                    .collect(),
-            ),
+            Selection::None if !found.out_of_scope.is_empty() => {
+                let mut traits: Vec<DefId> = Vec::new();
+                for c in &found.out_of_scope {
+                    let trait_ = self.lowering.trait_def_of(c.trait_);
+                    if !traits.contains(&trait_) {
+                        traits.push(trait_);
+                    }
+                }
+                Ordered::OutOfScope {
+                    traits,
+                    impls: found
+                        .out_of_scope
+                        .iter()
+                        .map(|c| self.impl_def_of(c.impl_))
+                        .collect(),
+                }
+            }
             Selection::None if assumed_by_walk(&env, &ty) => Ordered::Undecided,
             Selection::None => Ordered::Nothing,
             Selection::AmbiguousTraits(live) => Ordered::AmbiguousTraits(named(&live)),
@@ -1408,10 +1456,14 @@ pub(super) enum Ordered {
     /// no impl to read the assumption from ("Derivation is still a query in
     /// the compiler").
     Undecided,
-    /// Impls applied and the call site had imported none of their traits,
-    /// named here so the message can say which import would answer. The scope
-    /// gate working, not a candidate lost.
-    OutOfScope(Vec<DefId>),
+    /// Impls applied and the call site had imported none of their traits. The
+    /// scope gate working, not a candidate lost: the message names the traits
+    /// an import would choose between, and one of the impls stands in so the
+    /// call does not also read as a missing method.
+    OutOfScope {
+        traits: Vec<DefId>,
+        impls: Vec<Option<DefId>>,
+    },
     /// Several trait declarations declare the method; the call must name one.
     AmbiguousTraits(Vec<Option<DefId>>),
     /// Several impls of one trait, none written for the receiver.

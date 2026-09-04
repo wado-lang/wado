@@ -13,10 +13,10 @@ pub struct Candidates {
     /// What [`rank`](super::rank::rank) orders: the impls of a trait the call
     /// site can name.
     pub in_scope: Vec<Candidate>,
-    /// The traits that would have answered had the call site imported them,
-    /// collected only where `in_scope` came out empty. The caller turns one
-    /// into the "not imported here" message rather than a candidate.
-    pub out_of_scope: Vec<TraitDeclId>,
+    /// The candidates that would have answered had the call site imported
+    /// their traits, kept only where `in_scope` came out empty. The caller
+    /// names their traits in the "not imported here" message.
+    pub out_of_scope: Vec<Candidate>,
 }
 
 /// Every impl that could answer a call of `method` on `receiver` made in
@@ -54,20 +54,19 @@ pub fn candidates(
             let Some(trait_args) = impl_applies(program, env, scope, impl_, def, ty) else {
                 continue;
             };
-            if !in_scope.contains(&trait_) {
-                if !found.out_of_scope.contains(&trait_) {
-                    found.out_of_scope.push(trait_);
-                }
-                continue;
-            }
-            found.in_scope.push(Candidate {
+            let candidate = Candidate {
                 impl_,
                 trait_,
                 trait_args,
                 depth,
                 generality: generality(&def.target),
                 is_variadic: is_variadic(&def.target),
-            });
+            };
+            if in_scope.contains(&trait_) {
+                found.in_scope.push(candidate);
+            } else if !found.out_of_scope.iter().any(|c| c.impl_ == impl_) {
+                found.out_of_scope.push(candidate);
+            }
         }
     }
     if !found.in_scope.is_empty() {
@@ -175,6 +174,11 @@ mod tests {
 
     fn ask(program: &Program, receiver: &SolverType) -> Candidates {
         candidates(program, &Env::default(), receiver, M, HERE)
+    }
+
+    /// The traits the out-of-scope candidates would have answered through.
+    fn out_of_scope(found: &Candidates) -> Vec<TraitDeclId> {
+        found.out_of_scope.iter().map(|c| c.trait_).collect()
     }
 
     /// The winner's impl, so a test states the answer rather than an index.
@@ -503,7 +507,7 @@ mod tests {
         let p = program(Builder::default().concrete(TR, decl(POINT)));
         let found = candidates(&p, &Env::default(), &decl(POINT), M, ELSEWHERE);
         assert_eq!(found.in_scope, vec![]);
-        assert_eq!(found.out_of_scope, vec![TR]);
+        assert_eq!(out_of_scope(&found), vec![TR]);
     }
 
     /// The recovery path: the unscoped search runs for the diagnostic alone, so
@@ -523,7 +527,7 @@ mod tests {
         );
         let found = ask(&p, &decl(POINT));
         assert_eq!(selected(&found), Some(ImplId(0)));
-        assert_eq!(found.out_of_scope, vec![]);
+        assert_eq!(out_of_scope(&found), vec![]);
     }
 
     /// A module that imported nothing sees nothing, and the recovery path names
@@ -537,7 +541,7 @@ mod tests {
         );
         let found = candidates(&p, &Env::default(), &decl(POINT), M, ModuleId(7));
         assert_eq!(found.in_scope, vec![]);
-        assert_eq!(found.out_of_scope, vec![TR, OTHER]);
+        assert_eq!(out_of_scope(&found), vec![TR, OTHER]);
     }
 
     /// A variadic impl's target is the bare `[..T]`, which rank 0 reads.
