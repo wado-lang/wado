@@ -1810,20 +1810,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .unwrap_or(TypeTable::UNIT)
     }
 
-    /// Look up a callee's declared parameter types *and* the slots they
-    /// mention, by the effective callee name (after any `Self::` / `T::`
-    /// prefix rewriting performed by [`Self::classify_call_callee`]).
-    ///
-    /// Both halves come from one lookup because the call site needs both: a
-    /// parameter type is usable as an argument's expected type only once its
-    /// slots are instantiated, and a rigid slot is opaque — a literal checked
-    /// against one can only be rejected. An effect operation reports no slots;
-    /// it infers through its own path.
+    /// A callee's declared parameter types and the slots they mention, by the
+    /// effective callee name (after [`Self::classify_call_callee`]'s `Self::` /
+    /// `T::` rewriting). One lookup answers both: a parameter type is usable as
+    /// an argument's expected type only once its slots are instantiated, and a
+    /// rigid slot is opaque — a literal checked against one can only be
+    /// rejected. Written qualified, an instance method's receiver is one of the
+    /// parameters, since the call writes it as the first argument.
     ///
     /// `None` is a callee this lookup could not find, which an empty parameter
     /// list does not say: a callee declaring no parameters has a count to check
-    /// like any other, and reading the two alike is what let an argument
-    /// written at one be dropped along with its side effect.
+    /// like any other.
     pub(super) fn lookup_function_signature(
         &mut self,
         name: &str,
@@ -1842,10 +1839,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // the call site has the same reason to instantiate them as it
                 // does for a free function.
                 let sig = self.unique_qualified_method_sig(prefix, suffix)?;
-                return Some((
-                    sig.decl.param_types.clone(),
-                    sig.decl.type_params.iter().map(|(_, id)| *id).collect(),
-                ));
+                let slots = sig.decl.type_params.iter().map(|(_, id)| *id).collect();
+                return Some((sig.decl.param_types, slots));
             }
 
             // Builtin functions resolve through the `core:builtin` module,
@@ -2811,13 +2806,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// The parameter types a `Type::method(...)` call's arguments check against:
     /// the declaration's whole list, since the spelling writes the receiver as
-    /// the first argument when the method declares one.
+    /// the first argument when the method declares one. An overloaded name
+    /// answers `None` — its call site picks the impl by argument, and coercing
+    /// toward the first indexed one would decide that here.
     pub(super) fn qualified_call_param_types(
         &mut self,
         struct_name: &str,
         method_name: &str,
     ) -> Option<Vec<TypeId>> {
-        if let Some(sig) = self.qualified_method_sig(struct_name, method_name) {
+        if let Some(sig) = self.unique_qualified_method_sig(struct_name, method_name) {
             return Some(sig.decl.param_types);
         }
         self.lookup_static_method_param_types_keyed(struct_name, method_name, None)

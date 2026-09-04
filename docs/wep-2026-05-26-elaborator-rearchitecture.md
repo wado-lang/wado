@@ -312,8 +312,8 @@ Every convergence below was forced by a defect where two of them disagreed:
   a receiver-less method and an instance one whose receiver the call passes as
   its first argument, and only the static-method index holds the first kind.
   Sites that ended their own ladder at that index left the instance method with
-  no use→def edge, no return type and no instantiation: liveness dropped the
-  callee reify then emitted a call to, the call site typed as `unknown`, and a
+  no use→def edge, no return type and no instantiation. Liveness dropped the
+  callee reify then emitted a call to. The call site typed as `unknown`. A
   generic one reached WIR under a name monomorphization never generated.
 - How many of a callee's parameters a call's arguments cover — the call syntax,
   not the signature. Written qualified, an instance method's receiver is the

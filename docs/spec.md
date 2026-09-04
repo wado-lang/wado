@@ -4770,6 +4770,7 @@ A default is a handler body, so it runs in the outer scope like every other one 
 Beyond a name, parameters and a return type, an operation declares nothing else. Each of these is a compile error, for the reason given:
 
 - a body on an operation a Component Model import backs (one carrying `#[cm(...)]`, and every `resource` method) — its no-handler case is the CM adapter, so the body could never run;
+- a `resource` method with no `#[cm(...)]` — with no body either, it names nothing a call to it could reach;
 - a body on an `async` operation — its call site is typed as an `AsyncCall`, which a plain body does not produce;
 - a `self` receiver — an operation is called as `Effect::op(args)`, with no receiver to bind it to;
 - a parameter default — a call site is a dispatch wrapper, which takes the arguments as declared;
@@ -5307,11 +5308,15 @@ An extern-handle is a copyable value — assigning or passing one leaves the ori
 ```wado
 #[cm("web:dom/event-target", type = "extern-handle")]
 resource EventTarget {
+    #[cm("web:dom/event-target#add-event-listener")]
+    #[cm_params("self", "kind")]
     fn add_event_listener(&self, kind: String);
 }
 
 #[cm("web:dom/node", type = "extern-handle")]
 resource Node extends EventTarget {
+    #[cm("web:dom/node#text-content")]
+    #[cm_params("self")]
     fn text_content(&self) -> Option<String>;
 }
 
