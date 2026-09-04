@@ -392,11 +392,9 @@ fn future_write_payload(tt: &TypeTable, expr: &TirExpr) -> Option<TypeId> {
     if func.method_info.as_ref().and_then(|m| m.cm_name.as_deref()) != Some("future-write") {
         return None;
     }
-    let mut recv = receiver.type_id;
-    while let ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) = tt.get(recv) {
-        recv = *inner;
-    }
-    tt.generic_type_args(recv)?.first().copied()
+    tt.generic_type_args(tt.peel_refs(receiver.type_id))?
+        .first()
+        .copied()
 }
 
 /// The `__cm_future_write_*` helper name for a payload type.
@@ -1225,13 +1223,9 @@ fn record_stream_read_element(tt: &TypeTable, expr: &TirExpr) -> Option<TypeId> 
 /// the call returns: monomorphize replaces a `StreamChunk<T>` with a struct.
 fn stream_receiver_element(tt: &TypeTable, expr: &TirExpr) -> Option<TypeId> {
     let (receiver, _) = expr.kind.call_receiver()?;
-    let mut recv = receiver.type_id;
-    while let ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) = tt.get(recv) {
-        recv = *inner;
-    }
     // `type MyStream = Stream<u8>` names the same stream; the payload paths peel
     // it too, so a newtype receiver must answer with the element, not nothing.
-    let recv = crate::component_model::peel_newtypes(tt, recv);
+    let recv = crate::component_model::peel_newtypes(tt, tt.peel_refs(receiver.type_id));
     tt.generic_type_args(recv)?.first().copied()
 }
 
@@ -1656,15 +1650,6 @@ fn synthesize_stream_read_value_func(elem_type_id: TypeId, ctx: &SynthCtx) -> Ti
     )
 }
 
-/// Whether a `#[cm]` member's call carries the handle it operates on as
-/// `args[0]`. Only a constructor does not, and casting its first *value*
-/// argument to a handle would corrupt it.
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum CmReceiver {
-    Handle,
-    None,
-}
-
 /// Dispatch target for a rewritten CM resource method call.
 #[derive(Clone)]
 enum BindingTarget {
@@ -1676,57 +1661,41 @@ enum BindingTarget {
     Entry(String),
 }
 
-/// The [`cm_binding_function`] entries written for a `u8` element. The rewriter
-/// checks the element rather than trusting that a wider one was parameterized.
-const U8_STREAM_BINDINGS: &[&str] = &[
-    "stream-drop-readable",
-    "stream-drop-writable",
-    "stream-cancel-read",
-    "stream-cancel-write",
-    "stream-read",
-    "stream-write",
-    "stream-write-raw",
-];
+/// The `core:rt` binding a CM member needs beyond its canonical import: one
+/// that moves a payload across the boundary, or reads back what the canonical
+/// only signals. Naming these is a compiler decision, so it is listed; what a
+/// name means is [`CanonicalIntrinsic`]'s to say.
+fn internal_cm_binding(cm_name: &str) -> Option<&'static str> {
+    Some(match cm_name {
+        "stream-read" => "cm_stream_read_u8",
+        "stream-write" => "cm_stream_write_u8",
+        "stream-write-raw" => "cm_stream_write_raw_u8",
+        "error-context-new" => "cm_error_context_new",
+        "error-context-debug-message" => "cm_error_context_debug_message",
+        "waitable-set-wait" => "cm_waitable_set_wait",
+        "waitable-set-poll" => "cm_waitable_set_poll",
+        // Void canonical; the binding returns the handle as a `Waitable`.
+        "waitable-join" => "cm_waitable_join",
+        _ => return None,
+    })
+}
 
 /// `None` for a method not handled here — it falls through to WIR translate.
-fn cm_binding_function(cm_name: &str) -> Option<(BindingTarget, CmReceiver)> {
-    use BindingTarget::{Canonical, Internal};
-    use CanonicalIntrinsic as C;
-    use CmReceiver::{Handle, None as NoHandle};
-    // Every stream arm below is `U8_STREAM_BINDINGS`, gated by the caller.
-    let u8_stream = CmStreamPayload::U8;
-    Some(match cm_name {
-        // Simple drops → direct CmRawCall (non-parameterized)
-        "stream-drop-readable" => (Canonical(C::StreamDropReadable(u8_stream)), Handle),
-        "stream-drop-writable" => (Canonical(C::StreamDropWritable(u8_stream)), Handle),
-        "waitable-set-drop" => (Canonical(C::WaitableSetDrop), Handle),
-        "subtask-drop" => (Canonical(C::SubtaskDrop), Handle),
-        "error-context-drop" => (Canonical(C::ErrorContextDrop), Handle),
-
-        // Simple cancel → direct CmRawCall (non-parameterized)
-        "stream-cancel-read" => (Canonical(C::StreamCancelRead(u8_stream)), Handle),
-        "stream-cancel-write" => (Canonical(C::StreamCancelWrite(u8_stream)), Handle),
-        "subtask-cancel" => (Canonical(C::SubtaskCancel), Handle),
-
-        // Future drops/cancels are parameterized by payload type — leave for WIR translate
-
-        // waitable-join: void canonical, returns the handle as Waitable
-        "waitable-join" => (Internal("cm_waitable_join"), Handle),
-
-        // Simple constructors → direct CmRawCall (returns i32 handle)
-        "waitable-set-new" => (Canonical(C::WaitableSetNew), NoHandle),
-
-        // Complex operations → internal binding functions
-        "stream-read" => (Internal("cm_stream_read_u8"), Handle),
-        "stream-write" => (Internal("cm_stream_write_u8"), Handle),
-        "stream-write-raw" => (Internal("cm_stream_write_raw_u8"), Handle),
-        "error-context-new" => (Internal("cm_error_context_new"), NoHandle),
-        "error-context-debug-message" => (Internal("cm_error_context_debug_message"), Handle),
-        "waitable-set-wait" => (Internal("cm_waitable_set_wait"), Handle),
-        "waitable-set-poll" => (Internal("cm_waitable_set_poll"), Handle),
-
-        _ => return Option::None,
-    })
+/// Every stream name reaching this point names a `u8` element, which the
+/// caller checks; a bare future name carries no payload and so parses to
+/// nothing, the parameterized paths above having taken the ones that do.
+fn cm_binding_function(cm_name: &str) -> Option<BindingTarget> {
+    if let Some(binding) = internal_cm_binding(cm_name) {
+        return Some(BindingTarget::Internal(binding));
+    }
+    let intrinsic = CanonicalIntrinsic::from_import_name(cm_name)?;
+    // A constructor hands back both ends packed in an i64, so the canonical
+    // alone is not the binding: `rewrite_cm_new` splits the pair.
+    let is_pair = matches!(
+        intrinsic,
+        CanonicalIntrinsic::StreamNew(_) | CanonicalIntrinsic::FutureNew(_)
+    );
+    (!is_pair).then_some(BindingTarget::Canonical(intrinsic))
 }
 
 /// Rewrite all #[cm("...")] resource method calls in the project.
@@ -1818,12 +1787,7 @@ impl TirMutVisitor for CmMethodRewriter<'_> {
             && let Some(payload_type_id) = future_write_payload(self.tt, expr)
         {
             let func_name = future_write_func_name(self.tt, payload_type_id);
-            rewrite_cm_call(
-                expr,
-                BindingTarget::Entry(func_name),
-                self.entry_source,
-                CmReceiver::Handle,
-            );
+            self.rewrite_call(expr, BindingTarget::Entry(func_name));
             return;
         }
         // Scalar / structural stream writes call a generated per-element binding;
@@ -1832,24 +1796,14 @@ impl TirMutVisitor for CmMethodRewriter<'_> {
             && let Some(elem_type_id) = stream_write_value_element(self.tt, expr)
         {
             let func_name = stream_write_func_name(self.tt, elem_type_id);
-            rewrite_cm_call(
-                expr,
-                BindingTarget::Entry(func_name),
-                self.entry_source,
-                CmReceiver::Handle,
-            );
+            self.rewrite_call(expr, BindingTarget::Entry(func_name));
             return;
         }
         // Future reads call a generated per-payload binding function.
         if cm_name == "future-read" {
             if let Some((payload_type_id, _)) = future_read_payload(self.tt, expr) {
                 let func_name = future_read_func_name(self.tt, payload_type_id);
-                rewrite_cm_call(
-                    expr,
-                    BindingTarget::Entry(func_name),
-                    self.entry_source,
-                    CmReceiver::Handle,
-                );
+                self.rewrite_call(expr, BindingTarget::Entry(func_name));
             }
             return;
         }
@@ -1857,12 +1811,7 @@ impl TirMutVisitor for CmMethodRewriter<'_> {
         // WASI-record reads fall through to the `__cm_stream_read_<record>` path.
         if let Some(elem_type_id) = stream_read_value_element(self.tt, expr) {
             let func_name = stream_read_value_func_name(self.tt, elem_type_id);
-            rewrite_cm_call(
-                expr,
-                BindingTarget::Entry(func_name),
-                self.entry_source,
-                CmReceiver::Handle,
-            );
+            self.rewrite_call(expr, BindingTarget::Entry(func_name));
             return;
         }
         // WASI-record stream reads call a generated binding function.
@@ -1871,12 +1820,7 @@ impl TirMutVisitor for CmMethodRewriter<'_> {
         {
             let elem_name = self.tt.base_type_name(elem_type_id);
             let func_name = record_stream_read_func_name(&elem_name);
-            rewrite_cm_call(
-                expr,
-                BindingTarget::Entry(func_name),
-                self.entry_source,
-                CmReceiver::Handle,
-            );
+            self.rewrite_call(expr, BindingTarget::Entry(func_name));
             return;
         }
         // Stream ops on a non-u8 element, and future drop / cancel: parameterized
@@ -1885,67 +1829,69 @@ impl TirMutVisitor for CmMethodRewriter<'_> {
             parameterize_stream_cm_name(&cm_name, expr, self.tt, self.cm_interface_registry)
                 .or_else(|| parameterize_future_cm_name(&cm_name, expr, self.tt));
         if let Some(intrinsic) = parameterized {
-            rewrite_cm_call(
-                expr,
-                BindingTarget::Canonical(intrinsic),
-                self.entry_source,
-                CmReceiver::Handle,
-            );
+            self.rewrite_call(expr, BindingTarget::Canonical(intrinsic));
             return;
         }
         // Everything above is what parameterizes a wider element, so what is
         // left of the stream surface is the hand-written `u8` path: an element
         // that got here unparameterized stays unbound and is reported.
-        if U8_STREAM_BINDINGS.contains(&cm_name.as_str())
+        if cm_name.starts_with("stream-")
             && !stream_receiver_element(self.tt, expr)
                 .is_some_and(|e| crate::component_model::is_u8_stream_element(self.tt, e))
         {
             return;
         }
         // Look up the binding function for everything else.
-        let Some((target, receiver_kind)) = cm_binding_function(&cm_name) else {
+        let Some(target) = cm_binding_function(&cm_name) else {
             // Not handled by synthesis yet — falls through to WIR translate.
             return;
         };
-        rewrite_cm_call(expr, target, self.entry_source, receiver_kind);
+        self.rewrite_call(expr, target);
     }
 }
 
-/// Rewrite a CM call — `recv.method(args)` or `Type::method(args)` — to a
-/// builtin/internal call. Where the member takes one, the handle is `args[0]`
-/// whichever spelling wrote the call, and is cast to the i32 the canonical
-/// import takes. Read off `has_receiver` instead, only dot syntax was cast.
-fn rewrite_cm_call(
-    expr: &mut TirExpr,
-    target: BindingTarget,
-    entry_source: &ModuleSource,
-    receiver_kind: CmReceiver,
-) {
-    let TirExprKind::Call { args, .. } = &mut expr.kind else {
-        return;
-    };
-    let mut taken_args: Vec<TirExpr> = std::mem::take(args).into_iter().map(|a| a.expr).collect();
-    if receiver_kind == CmReceiver::Handle
-        && let Some(receiver) = taken_args.first_mut()
-    {
-        let taken = std::mem::replace(
-            receiver,
-            TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, synth_span()),
-        );
-        *receiver = cast(taken, TypeTable::I32);
+impl CmMethodRewriter<'_> {
+    /// Rewrite a CM call — `recv.method(args)` or `Type::method(args)` — to a
+    /// builtin/internal call. A member operating on a handle takes it as
+    /// `args[0]` whichever spelling wrote the call, and the canonical import
+    /// takes that handle as an `i32`; a constructor's first argument is a value
+    /// (`ErrorContext::new(message)`), so what is cast is what is a handle.
+    fn rewrite_call(&self, expr: &mut TirExpr, target: BindingTarget) {
+        let TirExprKind::Call { args, .. } = &mut expr.kind else {
+            return;
+        };
+        let mut taken_args: Vec<TirExpr> =
+            std::mem::take(args).into_iter().map(|a| a.expr).collect();
+        if let Some(handle) = taken_args.first_mut()
+            && is_cm_handle(self.tt, handle.type_id)
+        {
+            let taken = std::mem::replace(
+                handle,
+                TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, synth_span()),
+            );
+            *handle = cast(taken, TypeTable::I32);
+        }
+
+        *expr = match target {
+            BindingTarget::Canonical(intrinsic) => {
+                cm_canonical_call(intrinsic, taken_args, expr.type_id)
+            }
+            BindingTarget::Internal(name) => internal_call(name, taken_args, expr.type_id),
+            BindingTarget::Entry(name) => {
+                entry_call(&name, taken_args, expr.type_id, self.entry_source.clone())
+            }
+        };
     }
+}
 
-    let new_expr = match target {
-        BindingTarget::Canonical(intrinsic) => {
-            cm_canonical_call(intrinsic, taken_args, expr.type_id)
-        }
-        BindingTarget::Internal(name) => internal_call(name, taken_args, expr.type_id),
-        BindingTarget::Entry(name) => {
-            entry_call(&name, taken_args, expr.type_id, entry_source.clone())
-        }
-    };
-
-    *expr = new_expr;
+/// Whether a type is a resource handle — what a canonical import takes as an
+/// `i32`, and `type MyStream = Stream<u8>` names one too.
+fn is_cm_handle(tt: &TypeTable, type_id: TypeId) -> bool {
+    let peeled = crate::component_model::peel_newtypes(tt, tt.peel_refs(type_id));
+    matches!(
+        tt.get(peeled),
+        ResolvedType::Resource { .. } | ResolvedType::GenericResource { .. }
+    )
 }
 
 /// Rewrite a `Future::<T>::new()` / `Stream::<T>::new()` static call into
@@ -1994,6 +1940,17 @@ fn rewrite_cm_new(expr: &mut TirExpr, tt: &TypeTable, is_future: bool) {
     );
 }
 
+/// Drop and cancel are the canonical import itself, so parameterizing the name
+/// by the receiver's payload is the whole binding. Read and write move a
+/// payload and need a generated one, so they are bound before this is reached.
+fn is_drop_or_cancel(cm_name: &str) -> bool {
+    let (_, op) = cm_name.split_once('-').unwrap_or_default();
+    matches!(
+        op,
+        "drop-readable" | "drop-writable" | "cancel-read" | "cancel-write"
+    )
+}
+
 /// The future drop / cancel intrinsic for `cm_name`, parameterized by the
 /// receiver's payload.
 fn parameterize_future_cm_name(
@@ -2001,21 +1958,15 @@ fn parameterize_future_cm_name(
     expr: &TirExpr,
     tt: &TypeTable,
 ) -> Option<CanonicalIntrinsic> {
-    let make = match cm_name {
-        "future-drop-readable" => CanonicalIntrinsic::FutureDropReadable,
-        "future-drop-writable" => CanonicalIntrinsic::FutureDropWritable,
-        "future-cancel-read" => CanonicalIntrinsic::FutureCancelRead,
-        "future-cancel-write" => CanonicalIntrinsic::FutureCancelWrite,
-        _ => return None,
-    };
-    let (receiver, _) = expr.kind.call_receiver()?;
-    let mut type_id = receiver.type_id;
-    while let ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) = tt.get(type_id) {
-        type_id = *inner;
+    if !is_drop_or_cancel(cm_name) {
+        return None;
     }
-    let payload_tid = *tt.generic_type_args(type_id)?.first()?;
+    let (receiver, _) = expr.kind.call_receiver()?;
+    let payload_tid = *tt
+        .generic_type_args(tt.peel_refs(receiver.type_id))?
+        .first()?;
     let payload = crate::component_model::classify_future_payload(tt, payload_tid);
-    Some(make(payload))
+    CanonicalIntrinsic::future_op(cm_name, payload)
 }
 
 /// The stream drop / cancel intrinsic for `cm_name`, parameterized by the
@@ -2029,21 +1980,18 @@ fn parameterize_stream_cm_name(
     tt: &TypeTable,
     cm_interface_registry: &CmInterfaceRegistry,
 ) -> Option<CanonicalIntrinsic> {
-    let make = match cm_name {
-        "stream-drop-readable" => CanonicalIntrinsic::StreamDropReadable,
-        "stream-drop-writable" => CanonicalIntrinsic::StreamDropWritable,
-        "stream-cancel-read" => CanonicalIntrinsic::StreamCancelRead,
-        "stream-cancel-write" => CanonicalIntrinsic::StreamCancelWrite,
-        _ => return None,
-    };
-    if let Some(elem) = stream_receiver_element(tt, expr) {
-        // The same predicate the payload classification uses: a `type MyByte =
-        // u8` stream must not drop under one canonical and read under another.
-        if !crate::component_model::is_u8_stream_element(tt, elem) {
-            let elem_name = tt.base_type_name(elem);
-            if let Some(payload) = crate::component_model::cm_payload_type_from_type_id(tt, elem) {
-                return Some(make(CmStreamPayload::Value(payload)));
-            }
+    if !is_drop_or_cancel(cm_name) {
+        return None;
+    }
+    let elem = stream_receiver_element(tt, expr)?;
+    // The same predicate the payload classification uses: a `type MyByte = u8`
+    // stream must not drop under one canonical and read under another.
+    if crate::component_model::is_u8_stream_element(tt, elem) {
+        return None;
+    }
+    let elem_name = tt.base_type_name(elem);
+    let payload = crate::component_model::cm_payload_type_from_type_id(tt, elem).map_or_else(
+        || {
             // The element's declaring interface keys the CM-name lookup. Its
             // `module_source` is the loader identity (a `.wado` path); the
             // registry bridges it to the versioned `#[cm(...)]` key.
@@ -2054,10 +2002,11 @@ fn parameterize_stream_cm_name(
                 .as_deref()
                 .and_then(|source| registered_cm_name(&elem_name, source, cm_interface_registry))
                 .unwrap_or_else(|| pascal_to_kebab(&elem_name));
-            return Some(make(CmStreamPayload::Record(cm_elem)));
-        }
-    }
-    None
+            CmStreamPayload::Record(cm_elem)
+        },
+        CmStreamPayload::Value,
+    );
+    CanonicalIntrinsic::stream_op(cm_name, payload)
 }
 
 /// Look up the canonical `#[cm("…")]` CM name for a Wado type declared in the
@@ -2088,4 +2037,110 @@ fn pascal_to_kebab(name: &str) -> String {
         s.push(c.to_ascii_lowercase());
         s
     })
+}
+
+#[cfg(test)]
+mod cm_binding_tests {
+    use super::*;
+
+    /// What each Component Model primitive binds to. The table is the
+    /// specification; [`cm_binding_function`] derives it rather than listing it.
+    /// `None` is left to a caller above it: the constructors to `rewrite_cm_new`,
+    /// the payload-carrying futures to the parameterized paths, and the task
+    /// and context builtins to WIR translate.
+    const EXPECTED: &[(&str, Option<&str>)] = &[
+        ("future-new", None),
+        ("future-read", None),
+        ("future-write", None),
+        ("future-cancel-read", None),
+        ("future-cancel-write", None),
+        ("future-drop-readable", None),
+        ("future-drop-writable", None),
+        ("stream-new", None),
+        ("stream-read", Some("internal cm_stream_read_u8")),
+        ("stream-write", Some("internal cm_stream_write_u8")),
+        ("stream-write-raw", Some("internal cm_stream_write_raw_u8")),
+        ("stream-cancel-read", Some("canonical stream-cancel-read")),
+        ("stream-cancel-write", Some("canonical stream-cancel-write")),
+        (
+            "stream-drop-readable",
+            Some("canonical stream-drop-readable"),
+        ),
+        (
+            "stream-drop-writable",
+            Some("canonical stream-drop-writable"),
+        ),
+        ("waitable-set-new", Some("canonical waitable-set-new")),
+        ("waitable-set-wait", Some("internal cm_waitable_set_wait")),
+        ("waitable-set-poll", Some("internal cm_waitable_set_poll")),
+        ("waitable-set-drop", Some("canonical waitable-set-drop")),
+        ("waitable-join", Some("internal cm_waitable_join")),
+        ("subtask-drop", Some("canonical subtask-drop")),
+        ("subtask-cancel", Some("canonical subtask-cancel")),
+        ("error-context-new", Some("internal cm_error_context_new")),
+        (
+            "error-context-debug-message",
+            Some("internal cm_error_context_debug_message"),
+        ),
+        ("error-context-drop", Some("canonical error-context-drop")),
+        ("backpressure-inc", None),
+        ("backpressure-dec", None),
+        ("context-get", None),
+        ("context-set", None),
+        ("task-cancel", None),
+    ];
+
+    fn binding_of(cm_name: &str) -> Option<String> {
+        Some(match cm_binding_function(cm_name)? {
+            BindingTarget::Canonical(i) => format!("canonical {}", i.import_name()),
+            BindingTarget::Internal(n) => format!("internal {n}"),
+            BindingTarget::Entry(n) => format!("entry {n}"),
+        })
+    }
+
+    /// Every `#[cm("…")]` the prelude declares on a Component Model primitive.
+    /// Reading them from the source is what makes the test notice a new one.
+    fn declared_primitives() -> Vec<String> {
+        let source = crate::stdlib::all_core_modules()
+            .iter()
+            .find(|(import, _)| *import == "core:prelude/types.wado")
+            .expect("the prelude declares the Component Model primitives")
+            .1;
+        source
+            .match_indices("#[cm(\"")
+            .filter_map(|(i, m)| source[i + m.len()..].split('"').next())
+            .map(str::to_string)
+            .collect()
+    }
+
+    /// Both directions, so a scan that found nothing fails rather than passes.
+    #[test]
+    fn the_declared_primitives_are_exactly_the_specified_ones() {
+        let declared = declared_primitives();
+        let specified: Vec<&str> = EXPECTED.iter().map(|(n, _)| *n).collect();
+        let undeclared: Vec<&&str> = specified
+            .iter()
+            .filter(|n| !declared.iter().any(|d| d == *n))
+            .collect();
+        let unspecified: Vec<&String> = declared
+            .iter()
+            .filter(|d| !specified.contains(&d.as_str()))
+            .collect();
+        assert!(
+            undeclared.is_empty() && unspecified.is_empty(),
+            "`EXPECTED` states a binding for every declared primitive and no other; \
+             not declared: {undeclared:?}, binding unstated: {unspecified:?}"
+        );
+    }
+
+    #[test]
+    fn primitives_bind_as_specified() {
+        for (name, expected) in EXPECTED {
+            assert_eq!(
+                binding_of(name).as_deref(),
+                *expected,
+                "binding of `{name}`"
+            );
+        }
+    }
 }

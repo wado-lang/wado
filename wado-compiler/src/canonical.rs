@@ -292,6 +292,37 @@ impl CanonicalIntrinsic {
         })
     }
 
+    /// The stream intrinsic a payload-less base name denotes, at `payload`.
+    /// The one place that maps a `stream-*` name to its variant: parsing an
+    /// import name and parameterizing a call site both read it here.
+    pub fn stream_op(base: &str, payload: CmStreamPayload) -> Option<Self> {
+        Some(match base {
+            "stream-new" => Self::StreamNew(payload),
+            "stream-read" => Self::StreamRead(payload),
+            "stream-write" => Self::StreamWrite(payload),
+            "stream-drop-readable" => Self::StreamDropReadable(payload),
+            "stream-drop-writable" => Self::StreamDropWritable(payload),
+            "stream-cancel-read" => Self::StreamCancelRead(payload),
+            "stream-cancel-write" => Self::StreamCancelWrite(payload),
+            _ => return None,
+        })
+    }
+
+    /// The future intrinsic a payload-less base name denotes, at `payload`.
+    /// The `stream_op` counterpart.
+    pub fn future_op(base: &str, payload: CmFuturePayload) -> Option<Self> {
+        Some(match base {
+            "future-new" => Self::FutureNew(payload),
+            "future-read" => Self::FutureRead(payload),
+            "future-write" => Self::FutureWrite(payload),
+            "future-drop-readable" => Self::FutureDropReadable(payload),
+            "future-drop-writable" => Self::FutureDropWritable(payload),
+            "future-cancel-read" => Self::FutureCancelRead(payload),
+            "future-cancel-write" => Self::FutureCancelWrite(payload),
+            _ => return None,
+        })
+    }
+
     pub fn future_payload(&self) -> Option<CmFuturePayload> {
         match self {
             Self::FutureNew(p)
@@ -330,16 +361,7 @@ fn parse_stream_intrinsic(name: &str) -> Option<CanonicalIntrinsic> {
     } else {
         (name, CmStreamPayload::U8)
     };
-    Some(match base {
-        "stream-new" => CanonicalIntrinsic::StreamNew(payload),
-        "stream-read" => CanonicalIntrinsic::StreamRead(payload),
-        "stream-write" => CanonicalIntrinsic::StreamWrite(payload),
-        "stream-drop-readable" => CanonicalIntrinsic::StreamDropReadable(payload),
-        "stream-drop-writable" => CanonicalIntrinsic::StreamDropWritable(payload),
-        "stream-cancel-read" => CanonicalIntrinsic::StreamCancelRead(payload),
-        "stream-cancel-write" => CanonicalIntrinsic::StreamCancelWrite(payload),
-        _ => return None,
-    })
+    CanonicalIntrinsic::stream_op(base, payload)
 }
 
 /// A suffix-less name carries no payload, so it does not parse — unlike the
@@ -358,16 +380,7 @@ fn parse_future_intrinsic(name: &str) -> Option<CanonicalIntrinsic> {
             (b, payload)
         }
     };
-    Some(match base {
-        "future-new" => CanonicalIntrinsic::FutureNew(payload),
-        "future-read" => CanonicalIntrinsic::FutureRead(payload),
-        "future-write" => CanonicalIntrinsic::FutureWrite(payload),
-        "future-drop-readable" => CanonicalIntrinsic::FutureDropReadable(payload),
-        "future-drop-writable" => CanonicalIntrinsic::FutureDropWritable(payload),
-        "future-cancel-read" => CanonicalIntrinsic::FutureCancelRead(payload),
-        "future-cancel-write" => CanonicalIntrinsic::FutureCancelWrite(payload),
-        _ => return None,
-    })
+    CanonicalIntrinsic::future_op(base, payload)
 }
 
 fn format_stream_name(base: &str, payload: &CmStreamPayload) -> String {
