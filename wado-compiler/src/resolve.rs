@@ -262,16 +262,14 @@ impl Resolutions {
     /// instead would put both in scope at once, which no name ever resolves to.
     #[must_use]
     pub fn decls_in_scope(&self, module: &ModuleSource) -> crate::hashmap::IndexSet<DefId> {
-        let tier = |t: &IndexMap<ModuleSource, IndexMap<String, DefId>>| {
+        let names = |t: &IndexMap<ModuleSource, IndexMap<String, DefId>>| {
             t.get(module)
-                .into_iter()
-                .flatten()
-                .map(|(name, _)| name.clone())
-                .collect::<Vec<_>>()
+                .map(|m| m.keys().cloned().collect::<Vec<_>>())
+                .unwrap_or_default()
         };
-        tier(&self.scopes.imports)
+        names(&self.scopes.imports)
             .into_iter()
-            .chain(tier(&self.scopes.own))
+            .chain(names(&self.scopes.own))
             .chain(self.scopes.prelude.keys().cloned())
             .filter_map(|name| self.scopes.resolve(module, &name))
             .collect()

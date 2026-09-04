@@ -3666,6 +3666,18 @@ impl TypeTable {
         }
     }
 
+    /// Whether a receiver of type `id` names no dispatch head until
+    /// substitution, which is what
+    /// [`crate::name::LocalMethodName::is_type_param_receiver`] marks.
+    pub fn receiver_head_awaits_substitution(&self, id: TypeId) -> bool {
+        matches!(
+            self.get(id),
+            ResolvedType::TypeParam { .. }
+                | ResolvedType::TypePack { .. }
+                | ResolvedType::AssocTypeProjection { .. }
+        )
+    }
+
     /// Whether `id` (recursively) mentions an associated-type projection
     /// (`I::Item`), i.e. still needs a bound's impl to become concrete.
     pub fn contains_assoc_type_projection(&self, id: TypeId) -> bool {

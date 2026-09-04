@@ -1,9 +1,7 @@
-#![TODO]
-// A receiver typed by a projection (`X::Item` under `X: Holder`) satisfies the
-// bounds the trait declares on the associated type, so the value blanket over
-// `Display` is selected for `it.show()`. Its body is then instantiated at the
-// projection's base `H` rather than at `H::Item`, and `${*self}` reports that
-// `H` is not `Display` (wado-lang/wado#1961).
+// `X::Item` under `X: Holder` carries the bounds the trait declares on the
+// associated type, so the value blanket over `Display` answers `it.show()`. The
+// blanket is keyed by the receiver it serves, so its body instantiates at
+// `H::Item`, not at the projection's base `H`.
 
 trait Show {
     fn show(&self) -> String;

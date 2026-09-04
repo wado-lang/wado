@@ -1302,8 +1302,12 @@ impl SolverBridge {
         };
         let module = self.lowering.known_module(module)?;
         let mut found = candidates(&self.program, &env, &ty, method, module);
+        // Both sets: an out-of-scope candidate of another trait would otherwise
+        // stand in for the named one, asking for an import that cannot make the
+        // named trait apply.
         if let Some(required) = required {
             found.in_scope.retain(|c| c.trait_ == required);
+            found.out_of_scope.retain(|c| c.trait_ == required);
         }
         // The caller asks a reference receiver in two passes — its `&T` impls
         // first, the pointee's after (`method_call.rs`) — so the reference pass
