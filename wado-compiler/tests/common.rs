@@ -291,27 +291,26 @@ pub fn runtime() -> PooledRuntime {
 /// A closure a compile worker runs, having captured its own result channel.
 type CompileJob = Box<dyn FnOnce() + Send>;
 
-/// The workers not currently running a job, most recently used last.
-static IDLE_COMPILE_WORKERS: OnceLock<Mutex<Vec<std::sync::mpsc::Sender<CompileJob>>>> =
-    OnceLock::new();
+/// The handle a job is queued through; dropping every clone ends the thread.
+type CompileWorker = std::sync::mpsc::Sender<CompileJob>;
 
-fn idle_compile_workers() -> &'static Mutex<Vec<std::sync::mpsc::Sender<CompileJob>>> {
-    IDLE_COMPILE_WORKERS.get_or_init(Default::default)
+/// The workers not currently running a job, most recently used last.
+static IDLE_COMPILE_WORKERS: OnceLock<Mutex<Vec<CompileWorker>>> = OnceLock::new();
+
+fn idle_compile_workers() -> std::sync::MutexGuard<'static, Vec<CompileWorker>> {
+    IDLE_COMPILE_WORKERS
+        .get_or_init(Default::default)
+        .lock()
+        .expect("compile worker pool is not poisoned")
 }
 
 /// Take a compile worker, spawning one if none is idle.
 ///
 /// A compile seeds from a thread-local stdlib snapshot that is not cheap to
-/// build, and libtest gives each test its own thread: compiling on the test's
-/// own thread builds one snapshot per fixture and drops it. A worker keeps its
-/// snapshot for the rest of the run, and is spawned on demand so the pool
-/// settles at the runner's concurrency.
-fn take_compile_worker() -> std::sync::mpsc::Sender<CompileJob> {
-    if let Some(worker) = idle_compile_workers()
-        .lock()
-        .expect("compile worker pool is not poisoned")
-        .pop()
-    {
+/// build, and libtest gives each test its own thread. A worker keeps its
+/// snapshot for the rest of the run.
+fn take_compile_worker() -> CompileWorker {
+    if let Some(worker) = idle_compile_workers().pop() {
         return worker;
     }
 
@@ -344,10 +343,7 @@ fn on_compile_worker<R: Send + 'static>(f: impl FnOnce() -> R + Send + 'static) 
         // thread's snapshot in a state every later compile here would seed
         // from, so drop the sender and let the thread end with it.
         if outcome.is_ok() {
-            idle_compile_workers()
-                .lock()
-                .expect("compile worker pool is not poisoned")
-                .push(returning);
+            idle_compile_workers().push(returning);
         }
         let _ = sender.send(outcome);
     });
@@ -369,7 +365,7 @@ fn on_compile_worker<R: Send + 'static>(f: impl FnOnce() -> R + Send + 'static) 
 }
 
 /// The text a panic payload carries, for the two shapes `panic!` produces.
-/// [`None`] for anything else — a `panic_any` sentinel such as [`TodoResolved`].
+/// [`None`] for anything else, such as the `panic_any` sentinel [`TodoResolved`].
 pub fn panic_message(payload: &(dyn std::any::Any + Send)) -> Option<&str> {
     payload
         .downcast_ref::<String>()
@@ -379,9 +375,8 @@ pub fn panic_message(payload: &(dyn std::any::Any + Send)) -> Option<&str> {
 
 /// What a fixture compile carries back off the worker.
 ///
-/// [`wado_compiler::CompileResult`] is `!Send` — its AST and WIT snapshot hold
-/// `Rc`s — so the worker keeps it and returns only what a fixture asserts on,
-/// the WIR already unparsed.
+/// [`wado_compiler::CompileResult`] is `!Send`, its AST and WIT snapshot holding
+/// `Rc`s, so the worker keeps it and returns only what a fixture asserts on.
 pub struct CompiledFixture {
     /// The component bytes, or the compile error as the fixture would print it.
     pub wasm: Result<Vec<u8>, String>,

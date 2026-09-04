@@ -430,9 +430,7 @@ fn resolve_paths(paths: Vec<String>, extra_excludes: &[String]) -> Result<Vec<St
 }
 
 /// The ceiling on `--parallel`. A worker holds a stdlib snapshot and the memory
-/// under it, and every prewarm task holds a blocking-pool thread until the last
-/// one reaches the barrier, so the count has to stay well inside tokio's pool.
-/// No machine wants more than this.
+/// under it, and the prewarm barrier needs every worker inside tokio's pool.
 pub const MAX_JOBS: usize = 128;
 
 pub fn parse_args(mut parser: lexopt::Parser) -> Result<TestOptions, CliExit> {
@@ -642,11 +640,11 @@ struct PipelineBudget {
 
 impl PipelineBudget {
     fn new(parallel_cap: usize, compile_jobs: usize, execute_jobs: usize) -> Self {
-        let cpu_cap = parallel_cap.max(1);
-        let modules_cap = compile_jobs.max(1) + execute_jobs.max(1);
+        // A zero-permit semaphore is a stage that never runs.
+        assert!(parallel_cap > 0 && compile_jobs > 0 && execute_jobs > 0);
         Self {
-            cpu: Arc::new(Semaphore::new(cpu_cap)),
-            modules: Arc::new(Semaphore::new(modules_cap)),
+            cpu: Arc::new(Semaphore::new(parallel_cap)),
+            modules: Arc::new(Semaphore::new(compile_jobs + execute_jobs)),
         }
     }
 }
@@ -2407,9 +2405,9 @@ pub async fn run(opts: TestOptions) -> Result<(), CliExit> {
     // load workers on top of internal Cranelift threading thrashes
     // more than it helps. The shared cpu semaphore enforces the
     // cross-stage total either way.
-    let compile_jobs = jobs.max(1);
+    let compile_jobs = jobs;
     let load_jobs = (jobs / 2).max(1);
-    let execute_jobs = jobs.max(1);
+    let execute_jobs = jobs;
 
     let total_files: usize = package_runs.iter().map(|r| r.paths.len()).sum();
 
