@@ -667,9 +667,11 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         self.qualified_method_decl_ids(receiver, method_name).next()
     }
 
-    /// Every declaration `receiver::method_name` can name, receiver-less ones
-    /// first. A caller that must choose reads them all rather than trusting the
-    /// order: one name over several impls is an overload, not a tiebreak.
+    /// Every declaration `receiver::method_name` can name, each once,
+    /// receiver-less ones first. A caller that must choose reads them all
+    /// rather than trusting the order: one name over several impls is an
+    /// overload, not a tiebreak. The two indexes overlap, and a declaration
+    /// counted twice reads as an overload of itself.
     pub(super) fn qualified_method_decl_ids(
         &self,
         receiver: &trait_env::ImplTargetKey,
@@ -678,13 +680,15 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         let statics = self
             .static_method_entries(receiver, method_name)
             .map(|e| e.method_id);
-        statics.chain(self.instance_method_decl_ids(receiver, method_name))
+        let mut seen = std::collections::HashSet::new();
+        statics
+            .chain(self.impl_method_decl_ids(receiver, method_name))
+            .filter(move |def| seen.insert(*def))
     }
 
-    /// The declarations of `method_name` on `receiver` that take a receiver,
-    /// over every impl block. Written qualified, such a method takes its
-    /// receiver as the call's first argument.
-    pub(in crate::elaborator) fn instance_method_decl_ids(
+    /// The declarations of `method_name` in `receiver`'s impl blocks, whether
+    /// or not they take a receiver.
+    pub(in crate::elaborator) fn impl_method_decl_ids(
         &self,
         receiver: &trait_env::ImplTargetKey,
         method_name: &str,

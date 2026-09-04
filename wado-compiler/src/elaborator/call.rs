@@ -2792,11 +2792,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         // One name over several impls is an overload only an argument
         // separates, so a single signature is not this lookup's to pick.
-        let mut instances = self
-            .instance_method_decl_ids(&key, method_name)
+        let mut declared = self
+            .impl_method_decl_ids(&key, method_name)
             .filter_map(|def| self.tysys.signatures.method_sig(def).cloned());
-        if let Some(sig) = instances.next()
-            && instances.next().is_none()
+        if let Some(sig) = declared.next()
+            && declared.next().is_none()
         {
             return Some(sig);
         }
