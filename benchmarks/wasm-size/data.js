@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1788487531518,
+  "lastUpdate": 1788494196772,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -53121,6 +53121,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/d694556d8927636e0bd1b7921e0fbc086e1fbc46"
         },
         "date": 1788487530728,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 2028,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6418,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18877,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 281425,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "02cda97c62507ffedc872634b3272eec2d0d1082",
+          "message": "Merge pull request #1960 from wado-lang/claude/e2e-fixtures-consolidation-xflvnw\n\nchore(e2e): consolidate the fixture corpus into named per-topic files",
+          "timestamp": "2026-09-04T12:43:39+09:00",
+          "tree_id": "dc08a90050863a68b34b3243893de238ee29dfe7",
+          "url": "https://github.com/wado-lang/wado/commit/02cda97c62507ffedc872634b3272eec2d0d1082"
+        },
+        "date": 1788494195852,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
