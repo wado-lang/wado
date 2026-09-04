@@ -310,11 +310,17 @@ Every convergence below was forced by a defect where two of them disagreed:
 - Which declarations `Type::method` can name — `qualified_method_decl_ids` for
   the declarations, `qualified_method_sig` for the signature. The spelling admits
   a receiver-less method and an instance one whose receiver the call passes as
-  its first argument, and only the static-method index holds the first kind.
-  Sites that ended their own ladder at that index left the instance method with
-  no use→def edge, no return type and no instantiation. Liveness dropped the
-  callee reify then emitted a call to. The call site typed as `unknown`. A
-  generic one reached WIR under a name monomorphization never generated.
+  its first argument, and the index behind it holds both. It held the first kind
+  alone, and every site that ended its ladder there answered for half the
+  spelling: the instance method got no use→def edge, no return type and no
+  instantiation. Liveness dropped the callee reify then emitted a call to. The
+  call site typed as `unknown`. A generic one reached WIR under a name
+  monomorphization never generated. Its `#[cm("…")]` binding went missing. Its
+  parameter facts came back empty, so the arity went unchecked and codegen bound
+  the receiver to the first value parameter. Its declared visibility was never
+  read, so a private method answered from another module. On a type imported by
+  name it did not resolve at all. `ImplMethodEntry::has_self` is the fact those
+  lookups filter on now, in place of an index that omitted them.
 - How many of a callee's parameters a call's arguments cover — the call syntax,
   not the signature. Written qualified, an instance method's receiver is the
   first argument, so `qualified_call_param_types` answers with the whole list;

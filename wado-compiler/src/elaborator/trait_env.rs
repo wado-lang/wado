@@ -564,36 +564,39 @@ pub(super) type EffectDeclIndex = IndexSet<DefId>;
 /// resource on its wrapper's `effects` list (resources are not effects).
 pub(super) type ResourceDeclIndex = IndexSet<DefId>;
 
-/// Pre-built index of static methods (no `self` parameter) from impl blocks.
-/// Key: canonical receiver [`DefId`] → list of
-/// A static (receiver-less) method reachable by name on a type.
+/// A method an impl block declares on a type, reachable by name.
 #[derive(Clone, Debug)]
-pub(super) struct StaticMethodEntry {
+pub(super) struct ImplMethodEntry {
     pub(super) name: String,
     /// The declaring module, and an inherent associated function's declared
     /// rung; `None` on a trait impl's.
     pub(super) module: ModuleSource,
     pub(super) inherent_visibility: Option<ast::Visibility>,
+    /// Whether the method declares a receiver. `Type::method` admits both
+    /// kinds, passing the receiver as its first argument; the dot spelling and
+    /// the associated-function lookups want the receiver-less ones alone.
+    pub(super) has_self: bool,
     /// The method itself: the key into the signature digest, which carries
     /// everything a lookup needs — resolved in the impl's own frame and its
     /// own module's perspective.
     pub(super) method_id: DefId,
 }
 
-/// Pre-built index of static methods, for O(1) lookup instead of a scan over
-/// every module.
+/// Every impl block's methods, for O(1) lookup instead of a scan over every
+/// module. It held the receiver-less ones alone until a qualified call to an
+/// instance method was found to have no rung of its own to answer from.
 ///
 /// Keyed by canonical declaration key rather than bare type name, so
 /// `impl Counter { fn make(...) }` in two modules with same-named
 /// `struct Counter` produces two buckets and `CounterA::make(...)` reaches the
 /// right one.
-pub(super) type StaticMethodIndex = IndexMap<ImplTargetKey, Vec<StaticMethodEntry>>;
+pub(super) type ImplMethodIndex = IndexMap<ImplTargetKey, Vec<ImplMethodEntry>>;
 
 /// Pre-built index of static methods from resource declarations.
 /// Key: canonical receiver [`DefId`] → `[(method_name, ModuleSource, owning
 /// resource declaration, method_index)]` — the resource, not the method, unlike
-/// [`StaticMethodEntry::method_id`]. Same disambiguation rationale as
-/// [`StaticMethodIndex`].
+/// [`ImplMethodEntry::method_id`]. Same disambiguation rationale as
+/// [`ImplMethodIndex`].
 pub(super) type ResourceStaticMethodIndex =
     IndexMap<ImplTargetKey, Vec<(String, ModuleSource, DefId, usize)>>;
 
@@ -813,9 +816,10 @@ pub struct TraitEnv {
     /// same-named traits, so one module's blanket answered the other's bound
     /// (WEP 2026-08-12).
     pub(super) blanket_impls: IndexMap<DefId, Vec<BlanketImpl>>,
-    /// `type_name` → `[(method_name, ModuleSource, item_ast_id, method_idx)]` for static methods.
-    pub(super) static_method_index: StaticMethodIndex,
-    /// `type_name` → `[(method_name, ModuleSource, item_ast_id, method_idx)]` for resource static methods.
+    /// Every impl block's methods, by receiver. See [`ImplMethodIndex`].
+    pub(super) impl_method_index: ImplMethodIndex,
+    /// A resource declaration's receiver-less methods, by receiver. Its
+    /// instance methods answer from the declaration itself.
     pub(super) resource_static_method_index: ResourceStaticMethodIndex,
     /// Where every non-blanket AST-level `impl` block lives, in both receiver
     /// namespaces. Built from the impl headers' resolved identities, so an
@@ -939,7 +943,7 @@ impl TraitEnv {
         // cannot vouch for the stdlib type it shadows.
         let mut type_decl_index: IndexSet<DefId> = IndexSet::default();
 
-        let mut static_method_index: StaticMethodIndex = IndexMap::default();
+        let mut impl_method_index: ImplMethodIndex = IndexMap::default();
         let mut resource_static_method_index: ResourceStaticMethodIndex = IndexMap::default();
 
         // Pass 1: walk every module's items to populate the
@@ -1206,49 +1210,29 @@ impl TraitEnv {
                         .entry(type_key.clone())
                         .or_default()
                         .push(impl_def);
-                    // Static methods on trait impl blocks (no `self`
-                    // parameter) join the same canonical bucket as
-                    // inherent statics. `f64::from_bits` and friends in
-                    // `core:prelude/int128.wado` flow through this path.
-                    let recv_key = type_key.clone();
-                    for method in &impl_block.methods {
-                        let has_self = method
-                            .params
-                            .iter()
-                            .any(|p| p.self_kind != ast::SelfKind::None);
-                        if !has_self {
-                            static_method_index
-                                .entry(recv_key.clone())
-                                .or_default()
-                                .push(StaticMethodEntry {
-                                    name: method.name.clone(),
-                                    module: module_source.clone(),
-                                    inherent_visibility: None,
-                                    method_id: defs.def_at(method.id),
-                                });
-                        }
-                    }
-                } else {
-                    // Inherent impl: already in `all_impl_index`; here only its
-                    // static methods need the dedicated index.
-                    let recv_key = type_key.clone();
-                    for method in &impl_block.methods {
-                        let has_self = method
-                            .params
-                            .iter()
-                            .any(|p| p.self_kind != ast::SelfKind::None);
-                        if !has_self {
-                            static_method_index
-                                .entry(recv_key.clone())
-                                .or_default()
-                                .push(StaticMethodEntry {
-                                    name: method.name.clone(),
-                                    module: module_source.clone(),
-                                    inherent_visibility: Some(method.visibility),
-                                    method_id: defs.def_at(method.id),
-                                });
-                        }
-                    }
+                }
+                // Every method the block declares, whichever kind of block it
+                // is: `Type::method` reaches an instance method too, passing
+                // the receiver as its first argument, and `has_self` is what
+                // the receiver-less lookups filter on. A trait impl's statics
+                // join the same canonical bucket as inherent ones —
+                // `f64::from_bits` and friends in `core:prelude/int128.wado`.
+                let is_trait_impl = impl_block.trait_type.is_some();
+                for method in &impl_block.methods {
+                    impl_method_index
+                        .entry(type_key.clone())
+                        .or_default()
+                        .push(ImplMethodEntry {
+                            name: method.name.clone(),
+                            module: module_source.clone(),
+                            // A trait impl's member takes the trait's reach.
+                            inherent_visibility: (!is_trait_impl).then_some(method.visibility),
+                            has_self: method
+                                .params
+                                .iter()
+                                .any(|p| p.self_kind != ast::SelfKind::None),
+                            method_id: defs.def_at(method.id),
+                        });
                 }
             }
         }
@@ -1329,7 +1313,7 @@ impl TraitEnv {
                 module_namespace_imports,
                 assoc_type_bound_index,
                 blanket_impls,
-                static_method_index,
+                impl_method_index,
                 resource_static_method_index,
                 trait_impl_modules,
                 concrete_trait_impl_modules,

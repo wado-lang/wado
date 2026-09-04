@@ -709,10 +709,21 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         &self,
         receiver: &trait_env::ImplTargetKey,
         method_name: &str,
-    ) -> impl Iterator<Item = &trait_env::StaticMethodEntry> {
+    ) -> impl Iterator<Item = &trait_env::ImplMethodEntry> {
+        self.impl_method_entries(receiver, method_name)
+            .filter(|e| !e.has_self)
+    }
+
+    /// Every declaration of `method_name` an impl block on `receiver` makes,
+    /// both kinds: `Type::method` is how the receiver-taking ones are named.
+    pub(in crate::elaborator) fn impl_method_entries(
+        &self,
+        receiver: &trait_env::ImplTargetKey,
+        method_name: &str,
+    ) -> impl Iterator<Item = &trait_env::ImplMethodEntry> {
         self.tysys
             .trait_env
-            .static_method_index
+            .impl_method_index
             .get(receiver)
             .into_iter()
             .flatten()

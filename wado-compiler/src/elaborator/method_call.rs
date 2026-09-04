@@ -1423,8 +1423,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Extract struct name AND canonical decl key for parameter type
         // lookup (follow newtypes to base). The canonical key disambiguates
-        // two modules' same-named structs whose static methods both live in
-        // the global `StaticMethodIndex`.
+        // two modules' same-named structs whose methods both live in the
+        // global `ImplMethodIndex`.
         let (struct_name_for_lookup, struct_key_for_lookup) =
             self.static_receiver_struct_key(target_type_id);
 
@@ -2533,19 +2533,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let Some(header) = self.tysys.trait_env.impl_headers.get(&b.def) else {
                     return false;
                 };
-                self.tysys
-                    .trait_env
-                    .static_method_index
-                    .get(&crate::elaborator::trait_env::ImplTargetKey::TypeParam(
+                self.static_method_entries(
+                    &crate::elaborator::trait_env::ImplTargetKey::TypeParam(
                         b.module.clone(),
                         b.param.clone(),
-                    ))
-                    .is_some_and(|entries| {
-                        entries.iter().any(|e| {
-                            e.name == method_name
-                                && header.methods.iter().any(|m| m.def == e.method_id)
-                        })
-                    })
+                    ),
+                    method_name,
+                )
+                .any(|e| header.methods.iter().any(|m| m.def == e.method_id))
             })
             // The trait comes off the impl's own header, so the blanket
             // index's bare-name key never reaches a mangled name.
@@ -3514,12 +3509,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return true;
         }
 
-        // O(1) lookup via pre-built static method index (impl blocks).
+        // O(1) lookup via the impl-method index, both kinds: the spelling names
+        // a receiver-taking method too, passing the receiver first.
         // Canonicalise so a same-named struct in another module doesn't
         // accidentally claim this name.
         let static_key = self.impl_target_at(site, struct_name);
-        if let Some(methods) = self.tysys.trait_env.static_method_index.get(&static_key)
-            && methods.iter().any(|e| e.name == method_name)
+        if self
+            .impl_method_entries(&static_key, method_name)
+            .next()
+            .is_some()
         {
             return true;
         }

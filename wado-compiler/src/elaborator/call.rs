@@ -2707,9 +2707,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let Some((struct_name, method_name)) = effective_name.rsplit_once("::") else {
             return;
         };
-        let Some((module, visibility)) = self.qualified_callee_reach(receiver, method_name) else {
+        let Some(entry) = self.static_method_entry(receiver, method_name) else {
             return;
         };
+        let (module, visibility) = (entry.module.clone(), entry.inherent_visibility);
         let owner = struct_name.to_string();
         self.check_inherent_member_visibility(
             visibility,
@@ -2722,46 +2723,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         );
     }
 
-    /// The module a qualified callee was declared in and the reach it declared,
-    /// `None` where the member does not decide its own — a trait impl's method
-    /// takes the trait's. The static-method index holds receiver-less methods
-    /// alone, so an instance method answers from its inherent impl block.
-    fn qualified_callee_reach(
-        &self,
-        receiver: &super::trait_env::ImplTargetKey,
-        method_name: &str,
-    ) -> Option<(ModuleSource, Option<crate::ast::Visibility>)> {
-        if let Some(entry) = self.static_method_entry(receiver, method_name) {
-            return Some((entry.module.clone(), entry.inherent_visibility));
-        }
-        let trait_env = &self.tysys.trait_env;
-        let defs = self.tysys.resolutions.defs();
-        trait_env
-            .all_impl_index
-            .get(receiver)?
-            .iter()
-            .find_map(|impl_def| {
-                let header = trait_env.impl_headers.get(impl_def)?;
-                header.trait_key.is_none().then_some(())?;
-                let method = self.tysys.declared_method(*impl_def, method_name)?;
-                Some((header.module.clone(), Some(defs.visibility(method))))
-            })
-    }
-
-    /// The static-method index entry `receiver::name` selects, for the
-    /// questions the signature alone cannot answer — which module declared it,
-    /// and at what visibility.
+    /// The impl-method index entry `receiver::name` selects, for the questions
+    /// the signature alone cannot answer — which module declared it, and at
+    /// what visibility. Both kinds of method, since both are named this way.
     pub(super) fn static_method_entry(
         &self,
         receiver: &super::trait_env::ImplTargetKey,
         method_name: &str,
-    ) -> Option<&super::trait_env::StaticMethodEntry> {
-        self.tysys
-            .trait_env
-            .static_method_index
-            .get(receiver)?
-            .iter()
-            .find(|e| e.name == method_name)
+    ) -> Option<&super::trait_env::ImplMethodEntry> {
+        self.impl_method_entries(receiver, method_name).next()
     }
 
     /// [`Self::qualified_method_sig`] where the name resolves to exactly one
@@ -2812,11 +2782,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         method_name: &str,
     ) -> Option<MethodSig> {
         let trait_env = &self.tysys.trait_env;
-        if let Some(entry) = trait_env
-            .static_method_index
-            .get(key)
-            .and_then(|methods| methods.iter().find(|e| e.name == method_name))
-        {
+        // Receiver-less first: an instance method reaches the impl ladder
+        // below, which declines an overloaded name rather than taking the
+        // first indexed one.
+        if let Some(entry) = self.static_method_entries(key, method_name).next() {
             return self.tysys.signatures.method_sig(entry.method_id).cloned();
         }
         if let Some((_, _, decl_id, _)) = trait_env.resource_static(key, method_name) {
