@@ -1552,7 +1552,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if has_type_args
                 && !param_types.is_empty()
                 && let Some(name) = struct_name_for_lookup.as_deref()
-                && let Some(sig) = self.static_method_sig(name, &static_call.method)
+                && let Some(sig) = self.qualified_method_sig(name, &static_call.method)
             {
                 let declaring_args: Vec<TypeId> = match &static_call.target_type {
                     ast::Type::Generic(g) => g.args.iter().map(|t| self.resolve_type(t)).collect(),
@@ -2186,7 +2186,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // taken from the signature rather than counted off the receiver.
         {
             let (decl_params, method_params) =
-                self.static_method_slot_params(&struct_name, &static_call.method);
+                self.qualified_method_slot_params(&struct_name, &static_call.method);
             let decl_args =
                 self.aligned_declaring_args(&struct_name, &static_call.method, &struct_type_args);
             let subst_ctx = SubstitutionContext::new()
@@ -2431,13 +2431,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// The declaring block's and the method's own type parameters for a
-    /// receiver-less method, split where its signature says they split.
-    fn static_method_slot_params(
+    /// qualified method, split where its signature says they split.
+    fn qualified_method_slot_params(
         &self,
         struct_name: &str,
         method_name: &str,
     ) -> (Vec<TypeId>, Vec<TypeId>) {
-        let Some(sig) = self.static_method_sig(struct_name, method_name) else {
+        let Some(sig) = self.qualified_method_sig(struct_name, method_name) else {
             return (vec![], vec![]);
         };
         let ids = |ps: &[(String, TypeId)]| ps.iter().map(|(_, id)| *id).collect();
@@ -2455,14 +2455,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         receiver_args: &[TypeId],
     ) -> Vec<TypeId> {
         let Some(slots) = self
-            .static_method_sig(struct_name, method_name)
+            .qualified_method_sig(struct_name, method_name)
             .and_then(|sig| sig.declaring_impl)
             .and_then(|id| self.tysys.signatures.impl_sig(id))
             .and_then(|impl_sig| impl_sig.spelled_slots(&self.tysys.type_table, receiver_args))
         else {
             return receiver_args.to_vec();
         };
-        let (decl_params, _) = self.static_method_slot_params(struct_name, method_name);
+        let (decl_params, _) = self.qualified_method_slot_params(struct_name, method_name);
         let table = self.tysys.type_table.borrow();
         decl_params
             .iter()

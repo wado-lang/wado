@@ -678,15 +678,24 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         let statics = self
             .static_method_entries(receiver, method_name)
             .map(|e| e.method_id);
-        let instances = self
-            .tysys
+        statics.chain(self.instance_method_decl_ids(receiver, method_name))
+    }
+
+    /// The declarations of `method_name` on `receiver` that take a receiver,
+    /// over every impl block. Written qualified, such a method takes its
+    /// receiver as the call's first argument.
+    pub(in crate::elaborator) fn instance_method_decl_ids(
+        &self,
+        receiver: &trait_env::ImplTargetKey,
+        method_name: &str,
+    ) -> impl Iterator<Item = crate::defs::DefId> {
+        self.tysys
             .trait_env
             .all_impl_index
             .get(receiver)
             .into_iter()
             .flatten()
-            .filter_map(|&impl_def| self.tysys.declared_method(impl_def, method_name));
-        statics.chain(instances)
+            .filter_map(|&impl_def| self.tysys.declared_method(impl_def, method_name))
     }
 
     /// The receiver-less declarations of `method_name` on `receiver`. Several

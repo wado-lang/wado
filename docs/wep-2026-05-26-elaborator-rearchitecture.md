@@ -307,12 +307,19 @@ Every convergence below was forced by a defect where two of them disagreed:
   it was written in.
   [`wep-2026-08-12-declaration-identity.md`](./wep-2026-08-12-declaration-identity.md)
   owns the identity model.
-- Which declarations `Type::method` can name — `qualified_method_decl_ids`. The
-  spelling admits a receiver-less method and an instance one whose receiver the
-  call passes as its first argument, and only the static-method index holds the
-  first kind. Three sites each ended their own ladder at that index, so the
-  instance method got no use→def edge and no return type: liveness dropped the
-  callee reify then emitted a call to, and the call site typed as `unknown`.
+- Which declarations `Type::method` can name — `qualified_method_decl_ids` for
+  the declarations, `qualified_method_sig` for the signature. The spelling admits
+  a receiver-less method and an instance one whose receiver the call passes as
+  its first argument, and only the static-method index holds the first kind.
+  Sites that ended their own ladder at that index left the instance method with
+  no use→def edge, no return type and no instantiation: liveness dropped the
+  callee reify then emitted a call to, the call site typed as `unknown`, and a
+  generic one reached WIR under a name monomorphization never generated.
+- How many of a callee's parameters a call's arguments cover — the call syntax,
+  not the signature. Written qualified, an instance method's receiver is the
+  first argument, so `qualified_call_param_types` answers with the whole list;
+  the method spelling holds the receiver separately, and there the value
+  parameters alone are the answer.
 - What a projection means in a frame — `frame_projection`, answering from the
   bindings a projection receiver carries and then from the enclosing bounds.
   Three implementations of this question disagreed, and the

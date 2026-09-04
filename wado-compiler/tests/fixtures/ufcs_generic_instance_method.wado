@@ -1,0 +1,26 @@
+// A generic instance method reached through the qualified spelling. Its type
+// arguments are inferred from the call, so the emitted name is the one
+// monomorphization generated. Written qualified, the receiver is the first
+// argument, and `T` comes from the second: a parameter list with the receiver
+// removed would slide the pairs left and solve `T` from `&P`.
+
+use { println, Stdout } from "core:cli";
+
+struct P {
+    v: i32,
+}
+
+impl P {
+    fn pick<T>(&self, x: T) -> T {
+        return x;
+    }
+}
+
+export fn run() with Stdout {
+    let p = P { v: 1 };
+    println(`${P::pick(&p, 42)}`);
+    println(P::pick(&p, "picked"));
+}
+
+__DATA__
+{"stdout": "42\npicked\n"}
