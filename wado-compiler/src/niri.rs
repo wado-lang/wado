@@ -351,7 +351,7 @@ pub fn region_queries(
     let mut stack = vec![crate::nir_arena::NodeRef::Block(body.root)];
     while let Some(node) = stack.pop() {
         if let crate::nir_arena::NodeRef::Expr(e) = node
-            && let Some((block, _)) = region::region_shape(body, e)
+            && let Some((block, _)) = region::region_shape(body, e, type_table)
         {
             let needs = region::region_needs(body, block, facts, type_table);
             out.push(RegionQuery {

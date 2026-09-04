@@ -171,79 +171,65 @@ Ordered by what the census counts, not by what this document guessed.
 - [x] A census over the benchmark and `wasm-size` corpora and the Wado packages
       (`mise run report-const-regions`).
 
-The census counts 134 surviving regions across 3 files:
+The census counts 55 surviving regions across 3 files:
 
 | Cause                                     | Regions |
 | ----------------------------------------- | ------- |
-| `panic` still runs                        | 79      |
 | `push_encoded_ranges` still runs          | 28      |
 | it writes a global                        | 19      |
 | `String::grow` still runs                 | 4       |
 | it calls a function the engine cannot run | 4       |
 | `union_char_ranges` still runs            | 2       |
 
-The first count this instrument produced was 2 788. Two separate bugs in the
-walk deciding what a frame needs accounted for 95 % of it, and both had the same
-shape: the walk failed to notice that the block reads the program’s runtime
-state, so a block that was never a constant was reported as one that failed to
-fold.
+The first count this instrument produced was 2 788. Three bugs in it accounted
+for 98 % of that, and all three had one shape: the walk called a block
+self-contained when it was not, or foldable when there was nothing to fold.
 
 - It returned on the first refusal, so a template with a runtime interpolation
-  and a `panic` inside blamed the panic’s global write. The walk now finishes:
-  the two answers are independent, and a block reading a runtime local was never
-  a constant whatever else is wrong with it. 2 788 to 152.
+  and a `panic` inside blamed the panic's global write. The two answers are
+  independent, so the walk now finishes and returns both. 2 788 to 152.
 - It counted only skeleton `Local` nodes, and a promoted operand is not a child,
   so a local read through the value pool was invisible. 152 to 134, and the files
-  carrying any region at all went from 15 to 3.
+  carrying any region at all from 15 to 3.
+- It refused a unit-typed block but not a diverging one, so the `else` of every
+  `let ... else { panic("…") }` — which builds a constant message and then never
+  returns — counted as a constant the fold had missed. 134 to 55, and the
+  `panic` cause, which had been the largest at 79, disappeared entirely.
 
-Neither bug could mis-fold: the frame seeds nothing for a local it never heard
-of, so the run abandons. They cost only the truth of the count, which is the
-whole product of this stage.
+None of the three could mis-fold: the frame seeds nothing for a local it never
+heard of, and a diverging block yields no value to write back. They cost only
+the truth of the count, which is the whole product of this stage.
 
-Three lessons the roadmap below is written under. An instrument that
+The lessons the roadmap below is written under. An instrument that
 short-circuits reports the first thing it noticed, not the thing that matters. A
 walk over the skeleton is not a walk over the program while pure values live in
-a pool beside it. And a count is worth nothing until something independent
-agrees with it: the formatting work is measured in bytes as well, which is why
-it survived both corrections. What is left lives almost entirely in two
-Gale-generated files, so a cause that appears only there is a Gale fact, not a
-language one.
+a pool beside it. A block that cannot yield a value is not a fold that was
+missed. And a count is worth nothing until something independent agrees with it
+— the formatting work is measured in bytes as well, which is why it survived all
+three corrections while the ordering built on the counts did not. What is left
+lives entirely in two Gale-generated files and one benchmark, so a cause that
+appears only there is a Gale fact, not a language one.
 
-### 2. `panic` on a statically dead path
+### 2. The Gale callees
 
-Half of what is left. A region that computes a constant but carries a `panic` —
-a bounds check, an `unreachable`, a `let else` — is refused for a call on a path
-the fold itself proves dead.
-
-- [ ] Let a frame carry a call it can prove unreached, rather than refusing the
-      region for it. What "proves" means is the question: the branch guarding
-      the panic folds, so the statement is unreachable in the frame's own
-      execution, and a frame that never steps through a statement has not
-      declined to perform it.
-
-Done when the largest bucket is gone and the corpus is recounted.
-
-### 3. The Gale callees
-
-`push_encoded_ranges` (28) and `union_char_ranges` (2) appear only in the two
-Gale-generated files, and `String::grow` (4) is the buffer reshape stage 4
-names.
+`push_encoded_ranges` (28) and `union_char_ranges` (2) are half of what is left,
+and they appear only in the two Gale-generated files.
 
 - [ ] Read the two callees before deciding anything. Thirty regions in generated
       code is either one missing capability repeated, or one generator shape that
       is nobody's bug. The trace names them; the bodies say which.
 
-### 4. What the engine cannot run, and the stores it will not read
+### 3. What the engine cannot run, and the stores it will not read
 
 - [ ] The 19 remaining global writes, which are the stores that fail the
-      materialization property of stage 5 — a global read somewhere that does
+      materialization property of stage 4 — a global read somewhere that does
       not store it.
 - [ ] The 4 unrunnable calls, split by why the callee is out: impure, generic,
       async, or bodiless. A genuinely impure callee is a correct refusal; a
       still-generic one after monomorphization is a bug. Four is small enough to
       read rather than count.
 
-### 5. A materializing global write is not a write
+### 4. A materializing global write is not a write
 
 The store [constant-object globalization](./wep-2026-05-31-const-object-globalization.md)
 leaves where it names a constant at a use site — `{ G = <const>; G }` — serves
@@ -269,10 +255,10 @@ smallest instance: `"true"` is globalized, and that alone stopped the fold.
       at instantiation.
 
 This stage is where the formatting shape needed it, which the byte counts in
-stage 6 record. Its share of the census is 19 regions, not the 1 353 the broken
+stage 5 record. Its share of the census is 19 regions, not the 1 353 the broken
 instrument reported.
 
-### 6. The frame owns storage
+### 5. The frame owns storage
 
 What the format work waited on. A unit-returning call whose writes land in a
 place the frame owns and a `&mut` argument written back on return were already
@@ -325,7 +311,7 @@ engine's notion of a place must be the one that WEP settles, not a second one.
 
 Done when `${'x'}` folds too.
 
-### 7. The aggregate exit
+### 6. The aggregate exit
 
 - [ ] A `List<T>` of scalars written back as
       [`ArrayLiteral`](./wep-2026-05-31-nir-array-literal.md) and a plain struct
@@ -336,7 +322,7 @@ Done when `${'x'}` folds too.
 Done when a constant `List` result and a constant struct result reach the IR as
 literals, and `Array::slice`'s computed bounds fold.
 
-### 8. Format coverage to the budget
+### 7. Format coverage to the budget
 
 - [x] Width, zero-pad, radix and `Inspect` fold, and needed nothing of their own:
       the frame runs each spec's body once it can hold the buffer.
@@ -355,7 +341,7 @@ literals, and `Array::slice`'s computed bounds fold.
 Done when a recount shows no refusal reason left that the step budget does not
 explain.
 
-### 9. Mixed templates
+### 8. Mixed templates
 
 - [ ] The marked region-append primitive set and the derived-`fmt` admission
       rule, per "Fold the region, not the call".
@@ -365,7 +351,7 @@ constant parts as literals. The census counts no such template yet, since a
 region reading a runtime local is not reported; sizing it needs a count of its
 own, and a small one demotes this stage to a known gap.
 
-### 10. The remaining refusals
+### 9. The remaining refusals
 
 Each is a small, local refusal the census does not count, so each needs a reason
 of its own to be worth the code.

@@ -574,7 +574,7 @@ impl Interpreter<'_> {
     /// value; both stay `Unevaluated`, and every consumer abandons the frame
     /// on a non-constant, so a partial execution is never observed.
     fn exec_value_block(&mut self, body: &mut Body, e: ExprId) -> Lattice {
-        let Some((block, _)) = value_block_shape(body, e) else {
+        let Some((block, _)) = value_block_shape(body, e, self.type_table) else {
             return Lattice::Unevaluated;
         };
         let flow = self.exec_block(body, block);
@@ -867,7 +867,7 @@ impl Interpreter<'_> {
     /// environment, sound because [`region_needs`] rejects write positions
     /// and reference-typed mentions, which also confines writes to the scratch.
     pub(super) fn try_region_fold(&mut self, body: &Body, e: ExprId) -> Option<Value> {
-        let (block, label) = region_shape(body, e)?;
+        let (block, label) = region_shape(body, e, self.type_table)?;
         if let Some(value) = self.frame.scratch_folds.get(&e) {
             return Some(value.clone());
         }

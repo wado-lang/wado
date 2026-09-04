@@ -31,12 +31,18 @@ fn write_targets(
 }
 
 /// The block behind a `Block` / `LabeledBlock` expression that can yield a
-/// value. A unit-typed block has no value to fold to, whatever its last
-/// statement computed — an inlined statement call leaves the callee's result
-/// there while the block stands where the program expects none — and the type
-/// is what says so.
-pub(super) fn value_block_shape(body: &Body, e: ExprId) -> Option<(BlockId, Option<&str>)> {
-    if body.exprs[e].type_id == TypeTable::UNIT {
+/// value. A block leaving nothing on the stack has no value to fold to,
+/// whatever its last statement computed, and the type is what says so. Unit is
+/// the inlined statement call, whose result stands where the program expects
+/// none; never is the `else` of a `let ... else { panic("…") }`, which builds a
+/// constant message and then diverges — a block whose fold was never available,
+/// rather than one the engine missed.
+pub(super) fn value_block_shape<'a>(
+    body: &'a Body,
+    e: ExprId,
+    type_table: &TypeTable,
+) -> Option<(BlockId, Option<&'a str>)> {
+    if type_table.is_stackless(body.exprs[e].type_id) {
         return None;
     }
     block_shape(body, e)
@@ -110,8 +116,12 @@ pub fn global_mention(body: &Body, e: ExprId) -> Option<super::GlobalKey> {
 /// is what keeps the attempt cheap on the blocks that are not regions. A
 /// materialization is refused for the opposite reason: it would fold, and the
 /// fold is the loss.
-pub(super) fn region_shape(body: &Body, e: ExprId) -> Option<(BlockId, Option<&str>)> {
-    let (block, label) = value_block_shape(body, e)?;
+pub(super) fn region_shape<'a>(
+    body: &'a Body,
+    e: ExprId,
+    type_table: &TypeTable,
+) -> Option<(BlockId, Option<&'a str>)> {
+    let (block, label) = value_block_shape(body, e, type_table)?;
     let stmts = &body.blocks[block].stmts;
     if stmts.len() < 2 {
         return None;
