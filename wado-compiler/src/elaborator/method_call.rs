@@ -1444,15 +1444,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             );
         }
 
-        // One signature answers every list this call checks and pads against,
-        // so none of them counts the receiver differently. The key comes from
-        // the resolved target type, so two modules' same-named structs each
-        // route to their own impl. `Type::<T>::op(&x)` writes the receiver
-        // first, which is what [`CalleeParams`] is told.
-        let callee_sig = struct_name_for_lookup.as_ref().and_then(|name| {
-            let key = self.static_receiver_key(name, struct_key_for_lookup.as_ref());
-            self.unique_qualified_method_sig_keyed(&key, &static_call.method)
-        });
+        // One signature answers every list this call checks and pads against, so
+        // none of them counts the receiver differently, at the receiver this
+        // call already resolved. `Type::<T>::op(&x)` writes the receiver first,
+        // which is what [`CalleeParams`] is told.
+        let callee_sig = static_receiver
+            .as_ref()
+            .and_then(|key| self.unique_qualified_method_sig_keyed(key, &static_call.method));
         let callee_params =
             super::sem::types::CalleeParams::of_signature(callee_sig.as_ref(), true);
         // Whether a signature answered at all. A variant case or a flags member
