@@ -171,32 +171,43 @@ Ordered by what the census counts, not by what this document guessed.
 - [x] A census over the benchmark and `wasm-size` corpora and the Wado packages
       (`mise run report-const-regions`).
 
-The census counts 152 surviving regions across 15 files:
+The census counts 134 surviving regions across 3 files:
 
 | Cause                                     | Regions |
 | ----------------------------------------- | ------- |
 | `panic` still runs                        | 79      |
 | `push_encoded_ranges` still runs          | 28      |
-| it calls a function the engine cannot run | 22      |
 | it writes a global                        | 19      |
 | `String::grow` still runs                 | 4       |
+| it calls a function the engine cannot run | 4       |
 | `union_char_ranges` still runs            | 2       |
 
-The first count this instrument produced was 2 788, and 95 % of it was an
-artifact of the instrument: the walk deciding what a frame needs returned on the
-first refusal, so a template with a runtime interpolation _and_ a `panic` inside
-reported the panic's global write as the reason it did not fold — a block that
-was never a constant to begin with. The walk now finishes and answers both
-questions, since they are independent and a block reading a runtime local was
-never a constant whatever else is wrong with it. `json_twitter` went from 23
-remarks to 1.
+The first count this instrument produced was 2 788. Two separate bugs in the
+walk deciding what a frame needs accounted for 95 % of it, and both had the same
+shape: the walk failed to notice that the block reads the program’s runtime
+state, so a block that was never a constant was reported as one that failed to
+fold.
 
-Two lessons the roadmap below is written under. An instrument that
-short-circuits reports the first thing it noticed, not the thing that matters,
-and a count is worth nothing until something independent agrees with it — the
-formatting work is measured in bytes as well, which is why it survived the
-correction. Two Gale-generated files still carry 89 % of the total, so a cause
-that appears only there is a Gale fact, not a language one.
+- It returned on the first refusal, so a template with a runtime interpolation
+  and a `panic` inside blamed the panic’s global write. The walk now finishes:
+  the two answers are independent, and a block reading a runtime local was never
+  a constant whatever else is wrong with it. 2 788 to 152.
+- It counted only skeleton `Local` nodes, and a promoted operand is not a child,
+  so a local read through the value pool was invisible. 152 to 134, and the files
+  carrying any region at all went from 15 to 3.
+
+Neither bug could mis-fold: the frame seeds nothing for a local it never heard
+of, so the run abandons. They cost only the truth of the count, which is the
+whole product of this stage.
+
+Three lessons the roadmap below is written under. An instrument that
+short-circuits reports the first thing it noticed, not the thing that matters. A
+walk over the skeleton is not a walk over the program while pure values live in
+a pool beside it. And a count is worth nothing until something independent
+agrees with it: the formatting work is measured in bytes as well, which is why
+it survived both corrections. What is left lives almost entirely in two
+Gale-generated files, so a cause that appears only there is a Gale fact, not a
+language one.
 
 ### 2. `panic` on a statically dead path
 
@@ -224,12 +235,13 @@ names.
 
 ### 4. What the engine cannot run, and the stores it will not read
 
-- [ ] The 22 unrunnable calls, split by why the callee is out: impure, generic,
-      async, or bodiless. A genuinely impure callee is a correct refusal; a
-      still-generic one after monomorphization is a bug.
 - [ ] The 19 remaining global writes, which are the stores that fail the
       materialization property of stage 5 — a global read somewhere that does
       not store it.
+- [ ] The 4 unrunnable calls, split by why the callee is out: impure, generic,
+      async, or bodiless. A genuinely impure callee is a correct refusal; a
+      still-generic one after monomorphization is a bug. Four is small enough to
+      read rather than count.
 
 ### 5. A materializing global write is not a write
 

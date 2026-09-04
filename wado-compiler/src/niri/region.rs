@@ -192,6 +192,7 @@ pub(super) fn region_needs(
     let mut declared = LocalSet::default();
     let mut seen = LocalSet::default();
     let mut mentioned: Vec<(u32, TypeId)> = Vec::new();
+    let mut promoted: Vec<u32> = Vec::new();
     let mut written = LocalSet::default();
     let mut stack = vec![NodeRef::Block(block)];
     while let Some(node) = stack.pop() {
@@ -224,9 +225,8 @@ pub(super) fn region_needs(
                     // A builtin never reaches NIR as a method call, so this is
                     // the only shape that may be one instead of a callee.
                     if let Some(callee) = facts.callees.and_then(|m| m.get(func_id)) {
-                        let accounted = CallSite::of(body, e).and_then(|site| {
-                            write_targets(body, &site, callee, &mut written)
-                        });
+                        let accounted = CallSite::of(body, e)
+                            .and_then(|site| write_targets(body, &site, callee, &mut written));
                         if accounted.is_none() {
                             refusal = refusal.or(Some(RegionRefusal::UnaccountableWrite));
                         }
@@ -240,8 +240,7 @@ pub(super) fn region_needs(
                                     .first()
                                     .and_then(|t| record_write(body, t.expr, &mut written));
                                 if written_place.is_none() {
-                                    refusal =
-                                        refusal.or(Some(RegionRefusal::UnaccountableWrite));
+                                    refusal = refusal.or(Some(RegionRefusal::UnaccountableWrite));
                                 }
                             }
                             Some(_) => {}
@@ -270,6 +269,24 @@ pub(super) fn region_needs(
             },
             NodeRef::Block(_) => {}
         }
+        // A promoted operand is not a child, so the walk above never reaches
+        // the locals its value names. Missing them does not mis-fold — the
+        // frame seeds nothing for a local it never heard of, so the run
+        // abandons — but it makes the block look self-contained when it reads
+        // the program's runtime state, and a remark believing that reports a
+        // constant that was never one.
+        body.for_each_operand(node, |op| {
+            let Operand::Value(v) = op else {
+                return;
+            };
+            let mut named = crate::hashmap::IndexSet::default();
+            body.values.collect_opaque_locals(v, &mut named);
+            for index in named {
+                if seen.insert(index) {
+                    promoted.push(index);
+                }
+            }
+        });
         body.for_each_child(node, |c| stack.push(c));
     }
     let mut out = Vec::new();
@@ -284,6 +301,23 @@ pub(super) fn region_needs(
         out.push(FreeRead {
             index,
             is_reference: type_table.is_reference_shaped(ty),
+        });
+    }
+    // A local reached only through a pool value carries no skeleton node to
+    // read a type off, and seeding one whose shape the frame cannot check
+    // would hand a value where the program holds an alias. Refused as a
+    // reference, which is what a seed of unknown shape is worth.
+    for index in promoted {
+        if declared.contains(index) {
+            continue;
+        }
+        if written.contains(index) {
+            refusal = refusal.or(Some(RegionRefusal::OuterWrite));
+            continue;
+        }
+        out.push(FreeRead {
+            index,
+            is_reference: true,
         });
     }
     RegionNeeds {
