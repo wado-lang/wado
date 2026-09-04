@@ -557,18 +557,19 @@ for tooling, docs, and diagnostics.
 
 Where the pieces live:
 
-- Grouping, ranking and the ambiguity reports: `select_trait_match`,
-  `report_trait_argument_ambiguity`, `report_cross_trait_ambiguity`
-  (`elaborator/method_lookup.rs`). Cross-trait collisions reuse the bounds
-  path's `AmbiguousTraitMethod` so the shape a collision arrives in does not
-  change the answer.
+- The overload set and its ambiguity report: `select_trait_match`,
+  `report_trait_argument_ambiguity` (`elaborator/method_lookup.rs`). Ranking and
+  the cross-trait collision belong to the order
+  ([WEP: Trait Resolution](./wep-2026-09-01-trait-resolution.md)), and
+  `report_cross_trait_ambiguity` names what it tied, reusing the bounds path's
+  `AmbiguousTraitMethod` so the shape a collision arrives in does not change the
+  answer.
 - Qualified calls: trait-head resolution in `resolve_static_method_call` — the
   branch where a head resolving to no type is otherwise an `UnknownFunction`
   error — binding the first argument as the receiver. `resolve_call` routes
   `Trait::method(recv, …)` to the method dispatcher ahead of its argument walk,
-  and `MethodCallInput::required_trait` constrains which impls may answer,
-  filtered in `find_trait_method_for_type_inner` before `select_trait_match`
-  sees the candidates. No parser change: both `Greet::greet(&p)` and
+  and `MethodCallInput::required_trait` constrains which impls may answer, which
+  the order keeps to. No parser change: both `Greet::greet(&p)` and
   `Take::<A>::take(&f, x)` already parse, and the AST retains the turbofish.
 - Conversions: `conversion_preselect` and `conversion_impl_survey`
   (`elaborator/method_call.rs`).

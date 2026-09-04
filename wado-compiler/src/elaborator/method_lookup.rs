@@ -1513,7 +1513,24 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if let Some(args) = required_trait.and_then(|wanted| wanted.args.as_ref()) {
             found_traits.retain(|m| &m.trait_args == args);
         }
-        self.select_trait_match(found_traits, method_name, &receiver_display, span, probe)
+        // Rank 3, which the order decided: the report only names what it found.
+        match &order {
+            Some(Ordered::AmbiguousBlankets(_)) => {
+                self.report_ambiguous_value_blankets(&found_traits, &receiver_display, span);
+            }
+            Some(Ordered::AmbiguousTraits(_)) => {
+                self.report_cross_trait_ambiguity(&found_traits, method_name, span);
+            }
+            Some(
+                Ordered::One(_)
+                | Ordered::Nothing
+                | Ordered::OutOfScope { .. }
+                | Ordered::Overloaded(_)
+                | Ordered::Duplicated(_),
+            )
+            | None => {}
+        }
+        self.select_trait_match(found_traits, method_name, span, probe)
     }
 
     /// The matches the named impls yield for `method_name`: read off each
@@ -1532,29 +1549,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let mut seen: IndexSet<Option<crate::defs::DefId>> = IndexSet::default();
         for def in named.iter().filter(|def| seen.insert(**def)) {
             match def {
-                Some(def) => {
-                    let impl_ref = ImplBlockRef(*def);
-                    let trait_env = Arc::clone(&self.tysys.trait_env);
-                    let header = impl_header(&trait_env, &impl_ref);
-                    let impl_struct_name = self.get_type_name(&header.ty);
-                    let is_blanket_type_param = matches!(
-                        &header.ty,
-                        Type::Named(named) if !self.tysys.is_known_type_name(&named.name)
-                    );
-                    // Qualified in the impl's own frame by the decl pass: the
-                    // call site's imports may name the same declaration
-                    // differently, or not at all.
-                    let impl_struct_fq = self.impl_sig(&impl_ref).target_fq.clone();
-                    found.extend(self.collect_trait_method_matches_from_impl(
-                        &impl_ref,
-                        impl_struct_name,
-                        impl_struct_fq,
-                        is_blanket_type_param,
-                        method_name,
-                        receiver_type_args,
-                        receiver_type_id,
-                    ));
-                }
+                Some(def) => found.extend(self.collect_trait_method_matches_from_impl(
+                    &ImplBlockRef(*def),
+                    method_name,
+                    receiver_type_args,
+                    receiver_type_id,
+                )),
                 // A template is registered under its mangled head, so the
                 // probe is in that namespace, not the declaration one.
                 None => {
@@ -1583,9 +1583,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     fn collect_trait_method_matches_from_impl(
         &mut self,
         impl_ref: &ImplBlockRef,
-        impl_struct_name: String,
-        impl_struct_fq: crate::name::FqTypeName,
-        is_blanket_type_param: bool,
         method_name: &str,
         receiver_type_args: Option<&[TypeId]>,
         receiver_type_id: Option<TypeId>,
@@ -1596,6 +1593,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Extract type param mappings from the impl header before mutating self.
         let trait_env = Arc::clone(&self.tysys.trait_env);
         let header = impl_header(&trait_env, impl_ref);
+        let impl_struct_name = self.get_type_name(&header.ty);
+        let is_blanket_type_param = matches!(
+            &header.ty,
+            Type::Named(named) if !self.tysys.is_known_type_name(&named.name)
+        );
+        // Qualified in the impl's own frame by the decl pass: the call site's
+        // imports may name the same declaration differently, or not at all.
+        let impl_struct_fq = self.impl_sig(impl_ref).target_fq.clone();
         // Track variadic type pack spreads: (pack_name, param_index)
         let mut variadic_pack_entry: Option<(String, u32)> = None;
         let impl_home = self.impl_block_module_source(impl_ref);
@@ -2059,43 +2064,33 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         found_traits
     }
 
-    /// Report rank 3 for one trait's value blankets: two the receiver satisfies
-    /// with nothing ranking them (`docs/wep-2026-09-01-trait-resolution.md`).
-    /// Runs on what the order left standing, so every blanket here is tied.
+    /// Name the value blankets among what the order tied at rank 3
+    /// (`docs/wep-2026-09-01-trait-resolution.md`). Only a value blanket has a
+    /// binder to name it by: a tie among impls with none — two variadic impls
+    /// of one trait — is coherence's, rejected where the second is written
+    /// (WEP 2026-03-14 §5 Rule 2).
     fn report_ambiguous_value_blankets(
         &mut self,
-        found_traits: &[super::types::TraitMethodMatch],
+        tied: &[super::types::TraitMethodMatch],
         receiver_display: &str,
         span: Span,
     ) {
-        let mut by_trait: IndexMap<
-            (crate::defs::DefId, Vec<TypeId>),
-            Vec<&super::types::TraitMethodMatch>,
-        > = IndexMap::default();
-        for m in found_traits.iter().filter(|m| m.blanket_binder.is_some()) {
-            by_trait
-                .entry((m.trait_decl, m.trait_args.clone()))
-                .or_default()
-                .push(m);
+        let binders: IndexSet<&crate::name::FqTypeName> = tied
+            .iter()
+            .filter_map(|m| m.blanket_binder.as_ref())
+            .collect();
+        if binders.len() < 2 {
+            return;
         }
-        for tied in by_trait.values() {
-            let distinct: IndexSet<&crate::name::FqTypeName> = tied
+        let _ = self.emit(super::types::TypeError::AmbiguousValueBlankets {
+            trait_name: tied[0].trait_name.to_display(),
+            receiver: receiver_display.to_string(),
+            bounds: tied
                 .iter()
-                .filter_map(|m| m.blanket_binder.as_ref())
-                .collect();
-            if distinct.len() < 2 {
-                continue;
-            }
-            let _ = self.emit(super::types::TypeError::AmbiguousValueBlankets {
-                trait_name: tied[0].trait_name.to_display(),
-                receiver: receiver_display.to_string(),
-                bounds: tied
-                    .iter()
-                    .filter_map(|m| m.blanket_bounds.clone())
-                    .collect(),
-                span,
-            });
-        }
+                .filter_map(|m| m.blanket_bounds.clone())
+                .collect(),
+            span,
+        });
     }
 
     /// What the order says about this call (`docs/wep-2026-09-01-trait-resolution.md`).
@@ -2140,24 +2135,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         )
     }
 
-    /// Choose the winning match among what the order named, in the order it
-    /// named them (`docs/wep-2026-09-01-trait-resolution.md`): the argument
-    /// and ambiguity reporting below runs over that.
+    /// The winner among the matches the order named: the call's arguments
+    /// choose within one trait's overload set (WEP 2026-07-31), and the first
+    /// match wins otherwise.
     fn select_trait_match(
         &mut self,
         mut found_traits: Vec<super::types::TraitMethodMatch>,
         method_name: &str,
-        receiver_display: &str,
         span: Span,
         probe: Option<&mut ArgProbe<'_>>,
     ) -> Option<super::types::TraitMethodMatch> {
-        self.report_ambiguous_value_blankets(&found_traits, receiver_display, span);
-        // WEP 2026-07-31: one trait declaration at several argument lists —
-        // the arguments choose. The overload set is the concrete candidates of
-        // one declaration; distinct traits never form an overload set, so a
-        // cross-trait collision falls through to its error untouched, and
-        // blanket candidates neither form nor defeat the set (they lose to any
-        // concrete impl regardless).
+        // The overload set is the concrete candidates of one declaration.
+        // Distinct traits never form one, and a blanket neither forms nor
+        // defeats one, having lost to every concrete impl already.
         let concrete: Vec<usize> = found_traits
             .iter()
             .enumerate()
@@ -2212,7 +2202,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         self.report_trait_argument_ambiguity(&found_traits, method_name, &classes, span);
-        self.report_cross_trait_ambiguity(&found_traits, method_name, span);
         // Still return a winner: reporting and then claiming the method is
         // missing would stack a second, wrong diagnostic on the same call.
         found_traits.into_iter().next()
@@ -2307,18 +2296,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         method_name: &str,
         span: Span,
     ) {
-        // A blanket joins the collision like any other candidate (WEP
-        // 2026-09-01, "Two traits, one method name"). The collision is counted
-        // on declarations, so two same-named traits from different modules
-        // still collide even though their spellings agree — identity is the
-        // declaration, not the name.
-        let mut seen: IndexSet<crate::defs::DefId> = IndexSet::default();
-        for m in found_traits {
-            seen.insert(m.trait_decl);
-        }
-        if seen.len() < 2 {
-            return;
-        }
+        // Named on declarations, so two same-named traits from different
+        // modules still collide even though their spellings agree — identity is
+        // the declaration, not the name.
+        let seen: IndexSet<crate::defs::DefId> =
+            found_traits.iter().map(|m| m.trait_decl).collect();
+        assert!(
+            seen.len() > 1,
+            "the order tied {} trait(s) declaring `{method_name}`",
+            seen.len()
+        );
         // Same-named declarations are qualified by their declaring module —
         // a bare `'Kind' and 'Kind'` names nothing the user can act on.
         let defs = self.tysys.resolutions.defs();

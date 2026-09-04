@@ -279,13 +279,13 @@ _different_ traits are the two-trait ambiguity above.
 ### Eligibility gates
 
 Ranking runs over candidates, and a bound that does not hold produces no
-candidate. A bound is read the same way wherever the impl puts its parameter —
-a type argument (`impl<T: B> Tr for List<T>`), a pointee (`impl<T: B> Tr for
-&T`), or a pack's elements (`impl<..T: B> Tr for [..T]`) — and a rigid type
-parameter satisfies it from the bounds in force on it and from nothing else. So
-`[..T]: Ord` does not hold of `[A, B]` under `A: Inspect, B: Inspect`, and the
-body that wants it says `A: Ord, B: Ord`
-(`trait_bound_on_rigid_param_is_checked.wado`,
+candidate. An impl's bound on its own parameter is read the same way wherever
+the impl puts that parameter: in a type argument (`impl<T: B> Tr for List<T>`),
+in a pointee (`impl<T: B> Tr for &T`), or in a pack's elements
+(`impl<..T: B> Tr for [..T]`). A rigid type parameter satisfies such a bound
+from the bounds in force on it and from nothing else. So `[..T]: Ord` does not
+hold of `[A, B]` under `A: Inspect, B: Inspect`, and the body that wants it
+says `A: Ord, B: Ord` (`trait_bound_on_rigid_param_is_checked.wado`,
 `trait_error_bound_missing_on_rigid_param.wado`).
 
 A marker on a generic declaration is the other question and keeps its own
@@ -485,13 +485,14 @@ a question the solver answers is asserted against the compiler's own path in
 debug builds over every fixture before the compiler's path is retired. `holds`
 still runs that way beside `type_implements_trait`.
 
-Selection has one candidate set. The order names the impls that answer — each a
-block, or for a derived body the `Reflect*` blanket it comes from — and lookup
-reads the `TraitMethodMatch` off those blocks and nothing else; it enumerates no
-impl the order will discard. A named block declares the method, or its trait
-does, so it yields a match, and one that yields none is an assertion in every
-profile. A receiver the lowering cannot say — one still carrying an inference
-variable, or an error — has no trait method, as no impl can be written for it.
+Selection has one candidate set. The order names the impls that answer, each an
+impl block, or for a derived body the `Reflect*` blanket it comes from. Lookup
+reads the `TraitMethodMatch` off those blocks and nothing else, so it enumerates
+no impl the order will discard. A named block declares the method, or its trait
+does, so it yields a match; one that yields none is an assertion in every
+profile. A receiver the lowering cannot say has no trait method, since no impl
+can be written for such a shape: one still carrying an inference variable, or an
+error.
 
 ## Consequences
 
@@ -500,9 +501,9 @@ missing rank is visible. Two calls that used to differ only by declaration order
 now either agree or report, and the report names an impl the programmer can
 write.
 
-This document states the order and `candidates` with `rank` implement it, so
-`select_trait_match` decides nothing of its own: it collects the matches, asks
-the order, and keeps the ones it names.
+This document states the order, and `candidates` with `rank` implement it.
+Method lookup decides nothing of its own: it asks the order, materializes a
+match from each impl the order names, and reports what the order tied.
 
 ## Known gaps
 

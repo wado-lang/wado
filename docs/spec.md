@@ -2824,13 +2824,13 @@ blanket impls. They are ranked:
 
 1. A variadic impl (`impl<..T> Tr for [..T]`) yields to a non-variadic one of
    the same trait at the same argument list.
-2. The newtype before its base — the search stops at the first level of the
+2. The newtype before its base. The search stops at the first level of the
    receiver's newtype chain that answers.
-3. Within one level, the impl naming the most of the receiver — one written for
-   the receiver (`impl Tag for Box_<i32>`) before one written for its head
-   (`impl<T> Tag for Box_<T>`) before a value blanket
-   (`impl<T: Bound> Tr for T`), which names only a condition the receiver meets.
-   See [Specific Impls Win](#specific-impls-win).
+3. Within one level, the impl that names more of the receiver. One written for
+   the receiver (`impl Tag for Box_<i32>`) comes first, then one written for its
+   head (`impl<T> Tag for Box_<T>`), then a value blanket
+   (`impl<T: Bound> Tr for T`). A blanket names no type at all, only a condition
+   the receiver meets. See [Specific Impls Win](#specific-impls-win).
 
 Where an impl was written is read at no rank, so a call means the same thing to
 every reader. Specificity is not a rank either: generality reads an impl's
@@ -2839,8 +2839,8 @@ than preferring the narrower one.
 
 ##### Ambiguity
 
-What the ranks leave tied is one of two errors, separate because the fix
-differs:
+Candidates the ranks cannot separate are an error. There are two of them,
+because the fix differs:
 
 - Two traits declaring the method name. They share no contract, so the call
   names one: `Alpha::describe(&x)`.

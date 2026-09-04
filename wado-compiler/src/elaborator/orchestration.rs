@@ -1671,10 +1671,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             }
             state.tysys.signatures = Rc::new(signatures);
         }
-        // Every declaration is resolved, so the solver can read them all at
-        // once. Built in every profile: selection asks the order, so a debug
-        // build that answered from it and a release build that fell back to the
-        // sort would compile the same program differently.
+        // Every declaration is resolved, so the solver reads them all at once.
+        // Selection asks it, so it is built in every profile.
         state.tysys.solver = Some(Rc::new(super::solver_bridge::SolverBridge::build(
             &state.tysys,
         )));
