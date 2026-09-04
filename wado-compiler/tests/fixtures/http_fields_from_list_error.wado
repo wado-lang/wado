@@ -3,7 +3,7 @@
 // Attempts to create Fields from a list with an invalid header name
 // containing a null byte, which should trigger HeaderError::InvalidSyntax.
 
-use { Request, Response, ErrorCode, Fields, FieldName, FieldValue, HeaderError, Trailers } from "wasi:http";
+use { Request, Response, ErrorCode, Fields, Headers, FieldName, FieldValue, HeaderError, Trailers } from "wasi:http";
 
 export async fn handle(request: Request) -> Result<Response, ErrorCode> {
     // Valid from_list → Ok
@@ -27,7 +27,7 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> {
 
     // Return success
     let [trailers_future, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
-    let resp_headers = Fields::new();
+    let resp_headers = Headers::new();
     let [response, _tx_future] = Response::new(resp_headers, null, trailers_future);
 
     task return Result::<Response, ErrorCode>::Ok(response);

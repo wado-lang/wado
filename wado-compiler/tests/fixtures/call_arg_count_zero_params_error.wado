@@ -1,0 +1,16 @@
+// A callee declaring no parameters has an argument count to check like any
+// other. The lookup that answers a call's parameter types reported "no
+// signature" and "no parameters" as the same empty list, so the arity check
+// skipped both — and an argument written at a zero-parameter call was dropped
+// along with whatever its expression did.
+
+fn get() -> i32 {
+    return 1;
+}
+
+export fn run() {
+    let _ = get(1, 2);
+}
+
+__DATA__
+{"compile_error": "expected 0 arguments, found 2"}

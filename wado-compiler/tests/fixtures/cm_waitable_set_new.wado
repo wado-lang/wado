@@ -1,7 +1,7 @@
 // WaitableSet creation and drop E2E test
 // Tests that WaitableSet::new() and WaitableSet::drop() work correctly.
 
-use { Request, Response, ErrorCode, Fields, Trailers } from "wasi:http";
+use { Request, Response, ErrorCode, Fields, Headers, Trailers } from "wasi:http";
 
 export async fn handle(request: Request) -> Result<Response, ErrorCode> with WaitableSet {
     // Create a waitable set
@@ -12,7 +12,7 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> with Wai
 
     // Return 200 OK
     let [trailers_future, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
-    let headers = Fields::new();
+    let headers = Headers::new();
     let [response, _tx_future] = Response::new(headers, null, trailers_future);
     task return Result::<Response, ErrorCode>::Ok(response);
     trailers_tx.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));

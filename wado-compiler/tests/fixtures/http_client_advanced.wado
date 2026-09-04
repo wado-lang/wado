@@ -8,11 +8,11 @@
 // - Reading upstream response status code (Response.get_status_code)
 // - Constructing aggregated response from multiple upstream responses
 
-use { Request, Response, ErrorCode, Fields, FieldName, FieldValue, Scheme, Trailers } from "wasi:http";
+use { Request, Response, ErrorCode, Fields, Headers, FieldName, FieldValue, Scheme, Trailers } from "wasi:http";
 use { Client } from "wasi:http/client.wado";
 
 fn send_request(path: String) -> Response with Client {
-    let headers = Fields::new();
+    let headers = Headers::new();
     let _ = headers.append("x-request-id" as FieldName, "req-123".bytes().collect() as FieldValue);
 
     let [trailers_future, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
@@ -75,7 +75,7 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode>
 
     let [resp_trailers_future, resp_trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
     let [resp_rx, resp_tx] = Stream::<u8>::new();
-    let resp_headers = Fields::new();
+    let resp_headers = Headers::new();
     let [response, _tx_future] = Response::new(resp_headers, Option::<Stream<u8>>::Some(resp_rx), resp_trailers_future);
 
     task return Result::<Response, ErrorCode>::Ok(response);

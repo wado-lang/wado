@@ -1,0 +1,13 @@
+// `ns::Type::method(…)` reaches its own arm in `resolve_call`, which read the
+// callee's parameter list but never its count. A nullary callee then accepted
+// arguments and dropped them, side effects and all.
+
+use m from "./sub/ns_static_arity_target.wado";
+
+export fn run() {
+    let p = m::P::make(1, 2);
+    let _ = p.v;
+}
+
+__DATA__
+{"compile_error": "expected 0 arguments, found 2"}

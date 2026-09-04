@@ -8,7 +8,7 @@
 // - fields.delete(name) - remove a header
 // - fields.clone() - deep copy fields
 
-use { Request, Response, ErrorCode, Fields, FieldName, FieldValue, HeaderError, Trailers } from "wasi:http";
+use { Request, Response, ErrorCode, Fields, Headers, FieldName, FieldValue, HeaderError, Trailers } from "wasi:http";
 
 export async fn handle(request: Request) -> Result<Response, ErrorCode> {
     // 1. Create empty Fields
@@ -51,7 +51,7 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> {
 
     // Return 200 OK
     let [trailers_future, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
-    let response_headers = Fields::new();
+    let response_headers = Headers::new();
     let [response, _tx_future] = Response::new(response_headers, null, trailers_future);
     task return Result::<Response, ErrorCode>::Ok(response);
     trailers_tx.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));

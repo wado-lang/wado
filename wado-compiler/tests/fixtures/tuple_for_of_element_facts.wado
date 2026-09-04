@@ -1,0 +1,63 @@
+// A tuple for-of body is walked once per element, and every fact it records
+// under a body node — the `?` operator's `From` conversion and a bare case's
+// owner among them — must be read back for that element, not the last one.
+
+struct E1 { n: i32 }
+struct E2 { n: i32 }
+struct Tagged { tag: i32 }
+
+impl From<E1> for Tagged {
+    fn from(e: E1) -> Tagged {
+        return Tagged { tag: 1 };
+    }
+}
+
+impl From<E2> for Tagged {
+    fn from(e: E2) -> Tagged {
+        return Tagged { tag: 2 };
+    }
+}
+
+fn first_failure(a: Result<i32, E1>, b: Result<i32, E2>) -> Result<i32, Tagged> {
+    for let r of [a, b] {
+        let _v = r?;
+    }
+    return Result::<i32, Tagged>::Ok(0);
+}
+
+fn tag_of(r: Result<i32, Tagged>) -> i32 {
+    return match r {
+        Ok(_) => 0,
+        Err(t) => t.tag,
+    };
+}
+
+test "each element's `?` converts through its own From impl" {
+    let e1: Result<i32, E1> = Result::<i32, E1>::Err(E1 { n: 1 });
+    let ok1: Result<i32, E1> = Result::<i32, E1>::Ok(1);
+    let e2: Result<i32, E2> = Result::<i32, E2>::Err(E2 { n: 2 });
+    assert tag_of(first_failure(e1, e2)) == 1;
+    assert tag_of(first_failure(ok1, e2)) == 2;
+}
+
+variant A { Hit(i32), Miss }
+variant B { Hit(i32), Miss }
+
+fn count_misses(a: A, b: B) -> i32 {
+    let mut n = 0;
+    for let v of [a, b] {
+        if v == Miss {
+            n = n + 1;
+        }
+    }
+    return n;
+}
+
+test "each element's bare case names its own owner" {
+    assert count_misses(A::Miss, B::Hit(1)) == 1;
+    assert count_misses(A::Hit(1), B::Miss) == 1;
+    assert count_misses(A::Miss, B::Miss) == 2;
+}
+
+__DATA__
+{"test": {}}

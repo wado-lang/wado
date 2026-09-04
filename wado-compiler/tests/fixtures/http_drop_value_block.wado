@@ -8,7 +8,7 @@
 // must instead bind the arm's value to a temporary, run the drop, then yield
 // the temporary — so `probe_count` is still `7` and `probe` is still freed.
 
-use { Request, Response, ErrorCode, Fields, FieldName, FieldValue, Method, Trailers } from "wasi:http";
+use { Request, Response, ErrorCode, Fields, Headers, FieldName, FieldValue, Method, Trailers } from "wasi:http";
 
 export async fn handle(request: Request) -> Result<Response, ErrorCode> {
     let probe_count = match request.get_method() {
@@ -27,7 +27,7 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> {
     assert probe_count == 7;
 
     let [trailers_future, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
-    let headers = Fields::new();
+    let headers = Headers::new();
     let [response, _tx_future] = Response::new(headers, null, trailers_future);
     task return Result::<Response, ErrorCode>::Ok(response);
     trailers_tx.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));

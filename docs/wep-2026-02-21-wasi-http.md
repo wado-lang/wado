@@ -64,7 +64,7 @@ Every successful response requires a trailers future:
 ```
 1. Create trailers future pair   Future::<Result<Option<Trailers>, ErrorCode>>::new()
                                  → [trailers_rx, trailers_tx]
-2. Create response headers       Fields::new()
+2. Create response headers       Headers::new()
 3. Construct response            Response::new(headers, null, trailers_rx)
                                  → [response, _body_done_future]
 4. Deliver response              task return Ok(response)

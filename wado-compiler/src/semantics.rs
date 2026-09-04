@@ -12,7 +12,7 @@ use crate::component_model::CmInterfaceRegistry;
 use crate::elaborator::Elaborator;
 use crate::elaborator::orchestration::AnnotateState;
 use crate::elaborator::sem::{Fact, FactKind, ModuleSemantics};
-use crate::hashmap::IndexMap;
+use crate::hashmap::{IndexMap, IndexSet};
 use crate::loader;
 use crate::logger::Logger;
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
@@ -257,13 +257,32 @@ impl Semantics {
     }
 
     /// The `fact` recorded for `id`, read from the module [`Self::fact_home`]
-    /// routes it to. `None` when no walk recorded one.
+    /// routes it to. `None` when no walk recorded one; the first walk's where
+    /// several did ([`Self::facts_at`]).
     fn fact_at<V>(&self, fact: Fact<V>, id: AstId) -> Option<&V> {
-        let home = *self.fact_home.get(&(id, fact.kind))? as usize;
-        let (_source, sem) = self.state.as_ref()?.module_semantics.get_index(home)?;
-        let found = (fact.map)(sem).get(&id);
+        self.facts_at(fact, id).next()
+    }
+
+    /// Every value recorded for `fact` at `id`, from the module
+    /// [`Self::fact_home`] routes it to: one for a binding, and for a body fact
+    /// one per walk that reached the node — the module's own, then each
+    /// element's of a tuple `for-of` whose unrolled body holds the node.
+    fn facts_at<V>(&self, fact: Fact<V>, id: AstId) -> impl Iterator<Item = &V> {
+        let home = self.fact_home.get(&(id, fact.kind)).copied();
+        let sem = home
+            .and_then(|home| {
+                self.state
+                    .as_ref()?
+                    .module_semantics
+                    .get_index(home as usize)
+            })
+            .map(|(_source, sem)| sem);
+        let mut found = sem
+            .into_iter()
+            .flat_map(move |sem| fact.all(sem, id))
+            .peekable();
         debug_assert!(
-            found.is_some(),
+            home.is_none() || found.peek().is_some(),
             "fact_home routed {id:?}/{:?} to a module that does not hold it",
             fact.kind
         );
@@ -271,19 +290,20 @@ impl Semantics {
     }
 
     /// Every entry [`Self::fact_at`] would answer with — iteration through the
-    /// same routing, so a shadowed entry no query returns is left out.
+    /// same routing, so a shadowed entry no query returns is left out, and a
+    /// node several walks reached appears once, with the first walk's value.
     fn iter_live<V>(&self, fact: Fact<V>) -> impl Iterator<Item = (AstId, &V)> {
+        let mut seen: IndexSet<AstId> = IndexSet::default();
         self.state
             .as_ref()
             .into_iter()
             .flat_map(|state| state.module_semantics.values().enumerate())
             .flat_map(move |(home, sem)| {
                 let home = u32::try_from(home).expect("module count fits in u32");
-                (fact.map)(sem)
-                    .iter()
-                    .filter(move |(id, _)| self.fact_home.get(&(**id, fact.kind)) == Some(&home))
-                    .map(|(id, value)| (*id, value))
+                fact.entries(sem)
+                    .filter(move |(id, _)| self.fact_home.get(&(*id, fact.kind)) == Some(&home))
             })
+            .filter(move |(id, _)| seen.insert(*id))
     }
 
     /// Symbol for the given key, or `None` if the key does not refer to a
@@ -404,7 +424,19 @@ impl Semantics {
         &self,
         id: AstId,
     ) -> Option<&crate::elaborator::sem::types::MethodDispatch> {
-        self.fact_at(ModuleSemantics::METHOD_DISPATCH, id)
+        self.method_dispatches_at(id).next()
+    }
+
+    /// Every dispatch recorded for the method call at `id`: one, or one per
+    /// element for a call in the body a tuple `for-of` unrolls, where each
+    /// element's receiver may select a different method. A check that must
+    /// hold for the call reads them all; [`Self::method_dispatch_at`] answers
+    /// the first.
+    pub(crate) fn method_dispatches_at(
+        &self,
+        id: AstId,
+    ) -> impl Iterator<Item = &crate::elaborator::sem::types::MethodDispatch> {
+        self.facts_at(ModuleSemantics::METHOD_DISPATCH, id)
     }
 
     /// Stable public view onto the recorded method-dispatch decision:
@@ -435,13 +467,14 @@ impl Semantics {
     }
 
     /// Whether the method call at `id` takes its receiver `self` by value,
-    /// transferring ownership. False for a `&self` / `&mut self` receiver, a
-    /// static call, or any call site with no recorded dispatch. The resource
-    /// move check uses this to treat the receiver as consumed.
+    /// transferring ownership — in any of its recorded dispatches. False for
+    /// a `&self` / `&mut self` receiver, a static call, or any call site with
+    /// no recorded dispatch. The resource move check uses this to treat the
+    /// receiver as consumed.
     #[must_use]
     pub fn method_call_consumes_receiver(&self, id: AstId) -> bool {
-        self.method_dispatch_at(id)
-            .is_some_and(|dispatch| dispatch.consumes_self)
+        self.method_dispatches_at(id)
+            .any(|dispatch| dispatch.consumes_self)
     }
 
     /// Iterate every recorded method-dispatch decision keyed by the

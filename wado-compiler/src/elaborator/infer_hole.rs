@@ -440,119 +440,79 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// Substitute `subst` through one `TypeAnnotations` fact bundle.
-    ///
-    /// Every fact kind that can hold a `TypeId` has one substitution below, so
-    /// the per-iteration overlays — which hold the same kinds — sweep by
-    /// calling the same ones rather than by a second hand-kept list that
-    /// falls behind this one.
+    /// Substitute `subst` through one `TypeAnnotations` fact bundle: the
+    /// declaration-level maps, then every walk's body facts through
+    /// [`Self::sweep_body_facts`].
     fn sweep_type_annotations(
         tt: &mut TypeTable,
         types: &mut super::sem::TypeAnnotations,
         subst: &IndexMap<InferVarId, TypeId>,
     ) {
-        sub_map(tt, &mut types.expression_types, subst);
-        sub_map(tt, &mut types.local_types, subst);
-        sub_map(tt, &mut types.let_annotated_types, subst);
         sub_map(tt, &mut types.fn_return_types, subst);
         sub_map(tt, &mut types.function_task_returns, subst);
-        sub_vec_map(tt, &mut types.call_param_types, subst);
         sub_vec_map(tt, &mut types.fn_param_types, subst);
         sub_vec_map(tt, &mut types.struct_field_types, subst);
-        for gi in types.generic_instantiations.values_mut() {
+        for i in types.impl_facts.values_mut() {
+            sub_vec(tt, &mut i.trait_type_args, subst);
+        }
+        Self::sweep_body_facts(tt, &mut types.body, subst);
+        for overlays in types.tuple_overlays.values_mut() {
+            for overlay in overlays.iter_mut().flatten() {
+                Self::sweep_body_facts(tt, overlay, subst);
+            }
+        }
+    }
+
+    /// Every body fact kind that can hold a `TypeId` has one substitution
+    /// below; the module's own walk and each unrolled tuple `for-of` element
+    /// hold the same kinds and sweep through the same list.
+    fn sweep_body_facts(
+        tt: &mut TypeTable,
+        facts: &mut super::sem::types::BodyFacts,
+        subst: &IndexMap<InferVarId, TypeId>,
+    ) {
+        sub_map(tt, &mut facts.expression_types, subst);
+        sub_map(tt, &mut facts.local_types, subst);
+        sub_map(tt, &mut facts.let_annotated_types, subst);
+        sub_vec_map(tt, &mut facts.call_param_types, subst);
+        for gi in facts.generic_instantiations.values_mut() {
             sub_generic_instantiation(tt, gi, subst);
         }
-        for md in types.method_dispatch.values_mut() {
+        for md in facts.method_dispatch.values_mut() {
             sub_method_dispatch(tt, md, subst);
         }
-        for sd in types.static_method_dispatch.values_mut() {
+        for sd in facts.static_method_dispatch.values_mut() {
             sub_static_dispatch(tt, sd, subst);
         }
-        for c in types.coercions.values_mut() {
+        for c in facts.coercions.values_mut() {
             c.target_type = sub(tt, c.target_type, subst);
         }
-        for od in types
+        for od in facts
             .operator_dispatch
             .values_mut()
-            .chain(types.index_assign_dispatch.values_mut())
+            .chain(facts.index_assign_dispatch.values_mut())
         {
             sub_operator_dispatch(tt, od, subst);
         }
-        for f in types.for_of_iterator.values_mut() {
+        for f in facts.for_of_iterator.values_mut() {
             sub_for_of(tt, f, subst);
         }
-        for cc in types.closure_captures.values_mut() {
+        for cc in facts.closure_captures.values_mut() {
             sub_closure_captures(tt, cc, subst);
         }
-        for h in types.handler_bindings.values_mut() {
+        for h in facts.handler_bindings.values_mut() {
             h.handler_type = sub(tt, h.handler_type, subst);
             for e in &mut h.effects {
                 sub_vec(tt, &mut e.trait_type_args, subst);
             }
         }
-        for i in types.impl_facts.values_mut() {
-            sub_vec(tt, &mut i.trait_type_args, subst);
-        }
-        for sc in types.sequence_coercions.values_mut() {
+        for sc in facts.sequence_coercions.values_mut() {
             sub_sequence_coercion(tt, sc, subst);
         }
-        for kv in types.key_value_coercions.values_mut() {
+        for kv in facts.key_value_coercions.values_mut() {
             sub_key_value_coercion(tt, kv, subst);
         }
-        for call in types.literal_conversions.values_mut() {
-            sub_literal_from_call(tt, call, subst);
-        }
-        for overlays in types.tuple_overlays.values_mut() {
-            for overlay in overlays.iter_mut().flatten() {
-                Self::sweep_element_overlay(tt, overlay, subst);
-            }
-        }
-    }
-
-    /// [`Self::sweep_type_annotations`] for a per-iteration overlay, which
-    /// holds the same fact kinds for the nodes one unrolled tuple `for-of`
-    /// iteration rebinds.
-    fn sweep_element_overlay(
-        tt: &mut TypeTable,
-        overlay: &mut super::sem::types::ElementOverlay,
-        subst: &IndexMap<InferVarId, TypeId>,
-    ) {
-        sub_map(tt, &mut overlay.expression_types, subst);
-        sub_map(tt, &mut overlay.local_types, subst);
-        sub_map(tt, &mut overlay.let_annotated_types, subst);
-        sub_vec_map(tt, &mut overlay.call_param_types, subst);
-        for gi in overlay.generic_instantiations.values_mut() {
-            sub_generic_instantiation(tt, gi, subst);
-        }
-        for md in overlay.method_dispatch.values_mut() {
-            sub_method_dispatch(tt, md, subst);
-        }
-        for sd in overlay.static_method_dispatch.values_mut() {
-            sub_static_dispatch(tt, sd, subst);
-        }
-        for c in overlay.coercions.values_mut() {
-            c.target_type = sub(tt, c.target_type, subst);
-        }
-        for od in overlay
-            .operator_dispatch
-            .values_mut()
-            .chain(overlay.index_assign_dispatch.values_mut())
-        {
-            sub_operator_dispatch(tt, od, subst);
-        }
-        for f in overlay.for_of_iterator.values_mut() {
-            sub_for_of(tt, f, subst);
-        }
-        for cc in overlay.closure_captures.values_mut() {
-            sub_closure_captures(tt, cc, subst);
-        }
-        for sc in overlay.sequence_coercions.values_mut() {
-            sub_sequence_coercion(tt, sc, subst);
-        }
-        for kv in overlay.key_value_coercions.values_mut() {
-            sub_key_value_coercion(tt, kv, subst);
-        }
-        for call in overlay.literal_conversions.values_mut() {
+        for call in facts.literal_conversions.values_mut() {
             sub_literal_from_call(tt, call, subst);
         }
     }

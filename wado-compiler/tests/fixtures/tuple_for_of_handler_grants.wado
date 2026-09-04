@@ -1,0 +1,34 @@
+// A handler installed inside the body a tuple `for-of` unrolls is bound once
+// per element, so its grant is recorded per walk. Reading only the module's
+// own walk found no binding and rejected a program the same loop over a
+// `List` accepts.
+
+use { println, Stdout } from "core:cli";
+
+interface A {
+    fn a_op() -> i32;
+}
+
+struct H {}
+
+impl A for H {
+    fn a_op() -> i32 {
+        return 1;
+    }
+}
+
+fn use_a() -> i32 with A {
+    return A::a_op();
+}
+
+export fn run() with Stdout {
+    let mut h = H {};
+    for let v of [10, 20] {
+        with &mut h do {
+            println(`${use_a() + v}`);
+        }
+    }
+}
+
+__DATA__
+{"stdout": "11\n21\n"}

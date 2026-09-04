@@ -1,0 +1,22 @@
+// A resource operation's `#[cm(...)]` import is read off the signature the call
+// resolved to, so the qualified spelling of an inherited *instance* method
+// keeps it. Read from a receiver-less index instead, the binding was lost and
+// the call reached WIR naming a function no module holds.
+
+#[cm("web:dom/event-target", type = "extern-handle")]
+resource EventTarget {
+    #[cm("web:dom/event-target#tag")]
+    #[cm_params("self")]
+    fn tag(&self) -> String;
+}
+
+#[cm("web:dom/node", type = "extern-handle")]
+resource Node extends EventTarget {}
+
+export fn run() with EventTarget {
+    let n = 1 as Node;
+    let _ = EventTarget::tag(&n);
+}
+
+__DATA__
+{"compile_error": "binds `web:dom/event-target#tag`, which no bundled interface declares"}
