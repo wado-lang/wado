@@ -608,19 +608,13 @@ fn run_optimization_passes(
         // `inline` self-reports the callers it modified to the gate (no
         // `bump_all`); it only mutates caller bodies, so the gated passes need
         // re-examine just those (and their neighbours).
-        record!(
-            "nir/inline",
-            run_pass("nir/inline", project, profiler, |p| {
-                gate.any_pending(GatedPass::Inline, p.functions.len())
-                    && inline_functions(
-                        p,
-                        config.inline_threshold,
-                        &mut inline_budget,
-                        &mut gate,
-                        &mut descriptor_cache,
-                    )
-            })
-        );
+        gated!("nir/inline", GatedPass::Inline, |p, g| inline_functions(
+            p,
+            config.inline_threshold,
+            &mut inline_budget,
+            g,
+            &mut descriptor_cache,
+        ));
         // Peephole engine, post-inline run. `elide_local` runs again over
         // inline's freshly dead bindings. No `MatchToSwitchRule` — the
         // pre-inline run lowered every reachable `Match` already.
@@ -649,13 +643,9 @@ fn run_optimization_passes(
         // collapse — where the env-free half runs in `nir/peephole`. It absorbs
         // `field_forward`, which used to alternate one statement per round and
         // left `-O3` non-convergent. No `cse` pass: hash-consing already shares.
-        record!(
-            "nir/const_fold",
-            run_pass("nir/const_fold", project, profiler, |p| {
-                gate.any_pending(GatedPass::ConstFold, p.functions.len())
-                    && fold_constants(p, &mut gate, &mut const_fold_cache)
-            })
-        );
+        gated!("nir/const_fold", GatedPass::ConstFold, |p, g| {
+            fold_constants(p, g, &mut const_fold_cache)
+        });
         // Trivial-block / dead-statement pruning moved into the pre-inline
         // `nir/peephole` run above; the post-loop `branch_prune_final` and the
         // post-globalization `const_fold_post_global` keep their own engine
@@ -670,7 +660,11 @@ fn run_optimization_passes(
             })
         );
         gated!("nir/licm", GatedPass::Licm, apply_licm);
-        gated!("nir/tmpl_hoist", GatedPass::TmplHoist, hoist_template_buffers);
+        gated!(
+            "nir/tmpl_hoist",
+            GatedPass::TmplHoist,
+            hoist_template_buffers
+        );
         profiler.span_end(&format!("nir/iteration {}", i + 1));
         crate::compiler_trace!(
             "opt_loop",

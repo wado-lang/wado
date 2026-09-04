@@ -260,24 +260,25 @@ impl EngineBuffers {
 
     /// Cover a node the session just allocated. The maps are grown and never
     /// truncated, so a body smaller than an earlier one leaves entries behind
-    /// and a push would land at the wrong index.
-    fn note_alloc(&mut self, node: NodeRef, arena_len: usize) {
+    /// and a push would land at the wrong index. The reach is read off the id
+    /// rather than passed in, so no caller can name the wrong arena's length.
+    fn note_alloc(&mut self, node: NodeRef) {
         match node {
-            NodeRef::Expr(_) => {
-                grow(&mut self.expr_parent, arena_len);
-                grow(&mut self.expr_queued, arena_len);
+            NodeRef::Expr(id) => {
+                grow(&mut self.expr_parent, id.index() + 1);
+                grow(&mut self.expr_queued, id.index() + 1);
             }
-            NodeRef::Stmt(_) => {
-                grow(&mut self.stmt_parent, arena_len);
-                grow(&mut self.stmt_queued, arena_len);
+            NodeRef::Stmt(id) => {
+                grow(&mut self.stmt_parent, id.index() + 1);
+                grow(&mut self.stmt_queued, id.index() + 1);
             }
-            NodeRef::Block(_) => {
-                grow(&mut self.block_parent, arena_len);
-                grow(&mut self.block_queued, arena_len);
+            NodeRef::Block(id) => {
+                grow(&mut self.block_parent, id.index() + 1);
+                grow(&mut self.block_queued, id.index() + 1);
             }
-            NodeRef::Pat(_) => {
-                grow(&mut self.pat_parent, arena_len);
-                grow(&mut self.pat_queued, arena_len);
+            NodeRef::Pat(id) => {
+                grow(&mut self.pat_parent, id.index() + 1);
+                grow(&mut self.pat_queued, id.index() + 1);
             }
         }
         self.set_parent(node, None);
@@ -1270,8 +1271,7 @@ impl<'a> Engine<'a> {
             type_id,
             span,
         });
-        let arena_len = self.body.exprs.len();
-        self.buf.note_alloc(NodeRef::Expr(id), arena_len);
+        self.buf.note_alloc(NodeRef::Expr(id));
         self.census_note_node_operands(NodeRef::Expr(id));
         let mut children = Vec::new();
         self.body
@@ -1302,8 +1302,7 @@ impl<'a> Engine<'a> {
     /// Edit API: allocate a fresh statement node.
     pub fn alloc_stmt(&mut self, kind: StmtKind, span: Span) -> StmtId {
         let id = self.body.stmts.push(StmtNode { kind, span });
-        let arena_len = self.body.stmts.len();
-        self.buf.note_alloc(NodeRef::Stmt(id), arena_len);
+        self.buf.note_alloc(NodeRef::Stmt(id));
         self.census_note_node_operands(NodeRef::Stmt(id));
         let mut children = Vec::new();
         self.body
@@ -1324,8 +1323,7 @@ impl<'a> Engine<'a> {
     /// Edit API: allocate a fresh block node from a statement list.
     pub fn alloc_block(&mut self, stmts: Vec<StmtId>, span: Span) -> BlockId {
         let id = self.body.blocks.push(BlockNode { stmts, span });
-        let arena_len = self.body.blocks.len();
-        self.buf.note_alloc(NodeRef::Block(id), arena_len);
+        self.buf.note_alloc(NodeRef::Block(id));
         self.census_note_structure();
         let kids: Vec<StmtId> = self.body.blocks[id].stmts.clone();
         for s in kids {
@@ -1338,8 +1336,7 @@ impl<'a> Engine<'a> {
     /// Edit API: allocate a fresh pattern node.
     pub fn alloc_pat(&mut self, kind: PatKind, span: Span) -> PatId {
         let id = self.body.pats.push(PatNode { kind, span });
-        let arena_len = self.body.pats.len();
-        self.buf.note_alloc(NodeRef::Pat(id), arena_len);
+        self.buf.note_alloc(NodeRef::Pat(id));
         self.census_note_node_operands(NodeRef::Pat(id));
         let mut children = Vec::new();
         self.body
@@ -2176,6 +2173,60 @@ mod tests {
             popped,
             vec![NodeRef::Block(new_block), NodeRef::Pat(new_pat)]
         );
+    }
+
+    /// One `EngineBuffers` is lent to every session of a pass, and the parent /
+    /// in-worklist maps it owns are grown but never cleared or truncated. The
+    /// epoch stamp is what keeps one session out of the next, and every other
+    /// test builds a fresh `EngineBuffers` — so this is the only place the reuse
+    /// the design rests on is exercised: a second, smaller body must not read
+    /// the first body's parent edge at the same arena index, and an `alloc_*`
+    /// must land in its own slot rather than past the entries left behind.
+    #[test]
+    fn a_reused_engine_buffers_keeps_one_sessions_maps_out_of_the_next() {
+        let mut buffers = EngineBuffers::default();
+        let mut locals: Vec<NirLocal> = Vec::new();
+
+        // Session 1 over `{ let x = 1 + 2; return x; }`. Every node is
+        // reachable, so the walk stamps a parent into expr slot 0.
+        let mut big = Body::empty();
+        let one = lit(&mut big, 1);
+        let two = lit(&mut big, 2);
+        let add = bin(&mut big, one, NirBinaryOp::Add, two);
+        let let_stmt = let_x(&mut big, add, false);
+        let ret = ret_x(&mut big);
+        big.root = big.blocks.push(BlockNode {
+            stmts: vec![let_stmt, ret],
+            span: Span::default(),
+        });
+        {
+            let eng = Engine::new(&mut big, &mut buffers, &mut locals);
+            assert_eq!(
+                eng.parent_of(NodeRef::Expr(add)),
+                Some(NodeRef::Stmt(let_stmt))
+            );
+        }
+
+        // Session 2, same buffers, over a smaller body whose only expression is
+        // an orphan the walk never reaches — and it occupies the very slot
+        // session 1 stamped.
+        let mut small = mk_body(|_| Vec::new());
+        let orphan = e(&mut small, ExprKind::Dead);
+        assert_eq!(orphan, add, "the two bodies must collide on expr slot 0");
+        let mut eng = Engine::new(&mut small, &mut buffers, &mut locals);
+        assert_eq!(eng.parent_of(NodeRef::Expr(orphan)), None);
+
+        // Drain the root block seeded at construction, then mint a node while
+        // the maps still run ahead of this body: it must be unparented and
+        // queued exactly once, not inherit slot 1 from session 1's `return x`.
+        while eng.pop().is_some() {}
+        let fresh = eng.alloc_expr(ExprKind::Dead, TypeTable::UNIT, Span::default());
+        assert_eq!(eng.parent_of(NodeRef::Expr(fresh)), None);
+        let mut popped = Vec::new();
+        while let Some(n) = eng.pop() {
+            popped.push(n);
+        }
+        assert_eq!(popped, vec![NodeRef::Expr(fresh)]);
     }
 
     /// `uses_entry` grows `EngineBuffers::uses` on demand for a local

@@ -71,10 +71,14 @@ pub(super) fn run_peephole(
     } else {
         GatedPass::PeepholePost
     };
-    // Once for the run. The schedule enters this pass only with a non-empty
-    // gate, so there is a body to visit.
-    let effects =
-        super::mod_ref::compute_fn_effects(&project.functions, &project.builtin_registry);
+    debug_assert!(
+        gate.any_pending(gated_pass, len),
+        "[NIR] run_peephole entered with a drained gate: the whole-program setup \
+         above would be built for a run that visits no function. The schedule \
+         (`gated!` in `optimize.rs`) owns that skip."
+    );
+    // Once for the run — the assert above is what says there is a body to visit.
+    let effects = super::mod_ref::compute_fn_effects(&project.functions, &project.builtin_registry);
     gate.run_gated(gated_pass, len, |fid| {
         let mut func = project.functions[fid.index()].borrow_mut();
         // `stores_aliased_locals` is per-function, so the ref-elimination rule is
