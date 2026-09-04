@@ -301,15 +301,11 @@ fn idle_compile_workers() -> &'static Mutex<Vec<std::sync::mpsc::Sender<CompileJ
 
 /// Take a compile worker, spawning one if none is idle.
 ///
-/// The stdlib snapshot each compile seeds from — the elaborated `core:*`
-/// closure — is thread-local and takes ~200 ms to build, because `Semantics`
-/// is `!Send`. libtest gives each test its own thread, so compiling on the
-/// test's own thread builds a snapshot per fixture and drops it: over the e2e
-/// corpus that is thousands of builds serving one compile each. A worker keeps
-/// its snapshot for the rest of the run.
-///
-/// Spawned on demand rather than up front, so the pool settles at the runner's
-/// concurrency and no worker builds a snapshot it will not reuse.
+/// A compile seeds from a thread-local stdlib snapshot that is not cheap to
+/// build, and libtest gives each test its own thread: compiling on the test's
+/// own thread builds one snapshot per fixture and drops it. A worker keeps its
+/// snapshot for the rest of the run, and is spawned on demand so the pool
+/// settles at the runner's concurrency.
 fn take_compile_worker() -> std::sync::mpsc::Sender<CompileJob> {
     if let Some(worker) = idle_compile_workers()
         .lock()
@@ -344,11 +340,15 @@ fn on_compile_worker<R: Send + 'static>(f: impl FnOnce() -> R + Send + 'static) 
     let job: CompileJob = Box::new(move || {
         let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(f));
         // Idle again before the caller wakes, so a caller that compiles twice
-        // in a row reuses this worker instead of spawning a cold one.
-        idle_compile_workers()
-            .lock()
-            .expect("compile worker pool is not poisoned")
-            .push(returning);
+        // in a row reuses this worker. Not after a panic: the unwind left this
+        // thread's snapshot in a state every later compile here would seed
+        // from, so drop the sender and let the thread end with it.
+        if outcome.is_ok() {
+            idle_compile_workers()
+                .lock()
+                .expect("compile worker pool is not poisoned")
+                .push(returning);
+        }
         let _ = sender.send(outcome);
     });
     worker
@@ -356,8 +356,25 @@ fn on_compile_worker<R: Send + 'static>(f: impl FnOnce() -> R + Send + 'static) 
         .expect("a compile worker outlives the job handed to it");
     match receiver.recv().expect("a compile worker answers every job") {
         Ok(value) => value,
-        Err(payload) => std::panic::resume_unwind(payload),
+        Err(payload) => {
+            // libtest captures output per thread, so the worker's own panic
+            // message landed on stderr under no test. Re-panicking files it
+            // under the failing one.
+            if let Some(message) = panic_message(payload.as_ref()) {
+                panic!("compile worker panicked: {message}");
+            }
+            std::panic::resume_unwind(payload)
+        }
     }
+}
+
+/// The text a panic payload carries, for the two shapes `panic!` produces.
+/// [`None`] for anything else — a `panic_any` sentinel such as [`TodoResolved`].
+pub fn panic_message(payload: &(dyn std::any::Any + Send)) -> Option<&str> {
+    payload
+        .downcast_ref::<String>()
+        .map(String::as_str)
+        .or_else(|| payload.downcast_ref::<&str>().copied())
 }
 
 /// What a fixture compile carries back off the worker.
@@ -368,7 +385,7 @@ fn on_compile_worker<R: Send + 'static>(f: impl FnOnce() -> R + Send + 'static) 
 pub struct CompiledFixture {
     /// The component bytes, or the compile error as the fixture would print it.
     pub wasm: Result<Vec<u8>, String>,
-    /// Unparsed WIR, present when the caller asked for it.
+    /// The WIR unparsed to text, when the compile was asked to retain it.
     pub wir_text: Option<String>,
     pub warnings: Vec<String>,
     pub errors: Vec<String>,

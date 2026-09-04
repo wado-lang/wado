@@ -2286,16 +2286,6 @@ async fn run_one_package(
 /// distinct threads; those same threads are then reused for the
 /// `spawn_blocking` compile tasks scheduled by [`run_compile_stage`],
 /// turning each first-compile from a cold miss into a cache hit.
-/// How many workers are worth prewarming for `total_files` of compile work.
-///
-/// A worker builds its snapshot on the first compile it takes, so warming more
-/// workers than there are files leaves snapshots nothing will ever use — and
-/// each one costs a build and a few hundred MB. `wado test <one file>` used to
-/// warm one per core.
-fn prewarm_workers(compile_jobs: usize, total_files: usize) -> usize {
-    compile_jobs.min(total_files).max(1)
-}
-
 async fn prewarm_stdlib_snapshot_on_workers(parallelism: usize) {
     let parallelism = parallelism.max(1);
     let barrier = Arc::new(std::sync::Barrier::new(parallelism));
@@ -2329,6 +2319,15 @@ async fn prewarm_stdlib_snapshot_on_workers(parallelism: usize) {
     for handle in handles {
         let _ = handle.await;
     }
+}
+
+/// How many workers are worth prewarming for `total_files` of compile work.
+///
+/// A worker builds its snapshot on the first compile it takes, so warming more
+/// workers than there are files leaves snapshots nothing will ever use, each
+/// costing a build and the memory to hold it.
+fn prewarm_workers(compile_jobs: usize, total_files: usize) -> usize {
+    compile_jobs.min(total_files).max(1)
 }
 
 /// Report the source files that changed while the run was in progress, and
@@ -2406,13 +2405,8 @@ pub async fn run(opts: TestOptions) -> Result<(), CliExit> {
 
     let total_files: usize = package_runs.iter().map(|r| r.paths.len()).sum();
 
-    // Prewarm the stdlib snapshot on the worker threads before stage 1 starts.
-    // Each worker would otherwise build the snapshot on its first compile and
-    // steal that time from the first batch of compiles; running the builds in
-    // parallel up-front amortises the cost and leaves the tokio blocking-pool
-    // threads in the steady state that the compile stage's `spawn_blocking`
-    // tasks can re-use.
     prewarm_stdlib_snapshot_on_workers(prewarm_workers(compile_jobs, total_files)).await;
+
     let reporter: Arc<dyn TestReporter> = match format {
         TestFormat::Verbose => Arc::new(VerboseReporter::new(overall_start)),
         TestFormat::Heartbeat => Arc::new(HeartbeatReporter::new(overall_start, total_files)),

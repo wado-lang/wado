@@ -672,11 +672,7 @@ fn run_fixture_test_with_opt(fixture_path: &Path, source: &str, opt_level: OptLe
                 if let Some(resolved) = err.downcast_ref::<common::TodoResolved>() {
                     panic!("{}", resolved.0);
                 }
-                let msg = err
-                    .downcast_ref::<String>()
-                    .map(String::as_str)
-                    .or_else(|| err.downcast_ref::<&str>().copied())
-                    .unwrap_or("(unknown panic)");
+                let msg = common::panic_message(err.as_ref()).unwrap_or("(unknown panic)");
                 eprintln!("[{test_id}] #![TODO] module pending: {msg}");
                 return;
             }
@@ -815,7 +811,6 @@ fn run_normal_test(
         }
     }
 
-    // No compile error expected - compilation must succeed
     let wasm = wasm.unwrap_or_else(|e| {
         panic!("[{test_id}] compilation failed: {e}");
     });
@@ -884,8 +879,7 @@ fn run_normal_test(
         verify_result(&result, spec, test_id, opt_level);
     }
 
-    // Verify WIR pattern expectations (if any for this optimization level)
-    if let Some(wir_text) = &wir_text {
+    if let Some(wir_text) = wir_text {
         let (expect, not_expect) = spec.wir_expectations(opt_level);
         let opt_name = common::opt_level_name(opt_level);
 
