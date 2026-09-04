@@ -3,34 +3,39 @@
 ## Context
 
 The optimizer reduces what the source made constant to the value it denotes.
-Three mechanisms now do parts of that job, and they were one mechanism when this
-WEP was first written.
+Three mechanisms share that job.
 
-- The hash-cons pool folds pure scalar arithmetic at intern time
-  (`ValuePool::binary_folded` and its siblings), holding the invariant that no
-  node in the pool is a foldable constant. It arrived with
-  [the two-tier optimizer](./wep-2026-06-05-nir-optimizer-architecture.md).
+- The hash-cons pool folds pure scalar arithmetic at intern time, holding the
+  invariant that no node in the pool is a foldable constant.
 - The `ValueGraph` carries everything flow-sensitive: reaching definitions,
   branch merges, loop and heap-write invalidation, field store-to-load seeding.
 - `niri` runs bodies. A callee's body against constant arguments, or a
   self-contained region against an environment the walker can prove.
 
-So `niri` is not "the engine that answers what a NIR expression evaluates to";
-the pool answers that for arithmetic. `niri` is the compile-time executor, and
-its unit of work is a frame with a heap of its own. Its `lattice` layer, which
-re-derives scalar folding over skeleton `ExprId`s, is what remains of the older
+So `niri` is not the engine that answers what a NIR expression evaluates to; the
+pool answers that for arithmetic. `niri` is the compile-time executor, and its
+unit of work is a frame with a heap of its own. Its lattice layer, which
+re-derives scalar folding over skeleton expressions, is what remains of an older
 framing and shrinks to a pool bridge as
 [pure node kinds leave the skeleton](./wep-2026-06-05-nir-optimizer-architecture.md).
 
-The measured prize is compile-time string formatting. Every `${}` over
-constants, every `to_string()` on a literal and every constant `assert` message
-used to reach the end of the optimizer as a buffer allocation, a `Formatter` and
-a digit-count and division loop per evaluation, plus the formatting code kept
-alive in the binary — 877 bytes at `-Os` for one constant integer interpolation
-over the same program written with the literal. Integers, `bool`, width,
-zero-pad, radix and `Inspect` now fold to that literal and cost about 20 bytes;
-`char` and floats do not yet. What the roadmap does with the rest is ordered
-against a census of the corpus, not against this document's guesses.
+The prize is compile-time string formatting. Every `${}` over constants, every
+`to_string()` on a literal and every constant `assert` message otherwise reaches
+the end of the optimizer as a buffer allocation, a `Formatter` and a digit-count
+and division loop per evaluation, plus the formatting code kept alive in the
+binary. Measured at `-Os` against the same program written with the literal,
+which costs 3 312 bytes:
+
+| Interpolation                    | Cost   | Over the literal |
+| -------------------------------- | ------ | ---------------- |
+| `${"y"}`, `${42}`, `${42:?}`     | ~3 335 | ~20              |
+| `${true}`, `${7:04}`, `${255:x}` | ~3 340 | ~30              |
+| `${'x'}`                         | 3 724  | 412              |
+| `${3.5}`                         | 13 274 | 9 962            |
+
+The first two rows fold to the literal. `char` and floats do not, and the
+roadmap is ordered against a census of the corpus rather than against this
+document's guesses.
 
 ## Decision
 
@@ -92,10 +97,12 @@ global's separately known fields, such as a sequence global's length; and a
 global whose value is not in its slot but in the assignment that fills it, which
 is what an extracted initializer and body globalization leave behind. Nothing is
 read off a local or global something writes through — `global` without `mut`
-forbids reassignment, not in-place mutation. A borrow denotes its referent, and
-which locals carry one is decided once per body over the whole arena, so a read
-folds through a binding an in-place rewrite displaced, and an index more than one
-binder names carries nothing.
+forbids reassignment, not in-place mutation. A borrow denotes its referent,
+whether the binding is mutable or not: what makes an alias safe is that nothing
+displaces it, which holds of a `let mut` nothing reassigns. Which locals carry
+one is decided once per body over the whole arena, so a read folds through a
+binding an in-place rewrite displaced, and an index more than one binder names
+carries nothing.
 
 Control flow: a constant `if` condition collapses to the chosen arm, and a
 side-effect-free condition whose arms denote the same constant collapses to it. A
@@ -113,7 +120,8 @@ since the work budget bounds it. A statement counts as executed only when
 everything it evaluates lands on a constant, so an unfolded call, a global write
 or a would-be trap leaves work undone and stepping past it would drop it. A
 result that may carry the caller's storage is withheld, though the writes still
-land.
+land — a unit-returning call runs for its writes, and a `&mut` argument is
+written back on return.
 
 Sequences: the array backing a `String` or a `List` is a value, built from a
 byte-string literal or a fully-constant array literal, up to a maximum length
@@ -122,14 +130,38 @@ the value where it lies rather than rebuilding the container around it, so
 filling a sequence is not quadratic in its length, and the backing is shared
 until something writes it.
 
-Regions: a self-contained block — one that builds its value in locals of its own,
-reads and writes only those, and yields the result — runs as a frame the engine
-starts from scratch. Self-containment is decided before the run, since the run
-copies the enclosing body while the checks only walk the block; what that gives
-up is a mention on a statically dead path, which no scan can tell from a live
-one. An outer local the region only reads is seeded from the walker's environment
-when it is constant there; a write position or a reference-typed mention refuses
-the region instead.
+### Regions
+
+A self-contained block — one that builds its value in locals of its own, reads
+and writes only those, and yields the result — runs as a frame the engine starts
+from scratch. This is what folds a constant string template to the literal the
+source could have written.
+
+Self-containment is decided before the run, since the run copies the enclosing
+body while the checks only walk the block; what that gives up is a mention on a
+statically dead path, which no scan can tell from a live one. An outer local the
+region only reads is seeded from the walker's environment when it is constant
+there; a write position or a reference-typed mention refuses the region instead.
+
+Two shapes are not regions, and both look like one.
+
+- A block that leaves nothing on the Wasm stack. Unit is the inlined statement
+  call, whose result stands where the program expects none. Never is the `else`
+  of a `let ... else { panic("…") }`, which builds a constant message and then
+  diverges. Neither has a value to fold to.
+- The `{ G = <const>; G }` pair
+  [constant-object globalization](./wep-2026-05-31-const-object-globalization.md)
+  leaves where it names a constant at a use site. Folding it writes the literal
+  back over the naming construct and undoes the sharing globalization arranged.
+
+The store inside that pair is nonetheless not a write the region is refused for,
+when every mention of the global in the package is one half of such a pair.
+Folding a region carrying one deletes the store and the only read it serves
+together, so no read is left depending on a store that went away. The condition
+is that property, not a count of stores: inlining copies the pair, so two sites
+are as safe as one, while a global with a single store and a distant read is not
+safe at all. It lives in `niri` rather than in the globalization pass, which
+cannot know whether the region around its store will fold.
 
 ### Fold the region, not the call
 
@@ -153,23 +185,27 @@ particular `fmt` body does is then derived: run it against a buffer the engine
 built, and admit the result when every buffer access went through a marked
 primitive or landed inside a region one just returned.
 
+### How a missed fold is found
+
+Three instruments, and the roadmap is ordered by what they count rather than by
+what looks important.
+
+- A remark, over the [remarks](./wep-2026-06-03-optimizer-remarks.md)
+  infrastructure, names a block that computes a constant at run time and what
+  stopped it: the calls that survived inside it, or the fact that refused it as a
+  frame. It fires from the final IR, never from a refusal a pass recorded, so it
+  retires itself as the fold reaches each shape.
+- `WADO_TRACE=ctfe_call` names what each declined call wanted that the frame
+  could not give; `ctfe_stmt` names the statement a frame abandoned at. The
+  remark reports the region, the traces the call and the statement inside it.
+- `mise run report-const-regions` counts the remarks over the benchmark and
+  `wasm-size` corpora and the Wado packages.
+
+A count is worth nothing until something independent agrees with it. The
+formatting work is measured in bytes as well, which is what a census miscount
+cannot reach.
+
 ## Roadmap
-
-Ordered by what the census counts, not by what this document guessed.
-
-### 1. Say why a fold did not happen
-
-- [x] A remark, over the [remarks](./wep-2026-06-03-optimizer-remarks.md)
-      infrastructure, naming a block that computes a constant at run time and
-      what stopped it — the calls that survived inside it, or the fact that
-      refused it as a frame. Read off the final IR, so it retires itself as the
-      fold reaches each shape.
-- [x] `WADO_TRACE=ctfe_call`, which names what each declined call wanted that the
-      frame could not give, and `ctfe_stmt`, which names the statement a frame
-      abandoned at. The remark reports the region; the traces report the call and
-      the statement inside it.
-- [x] A census over the benchmark and `wasm-size` corpora and the Wado packages
-      (`mise run report-const-regions`).
 
 The census counts 55 surviving regions across 3 files:
 
@@ -181,120 +217,40 @@ The census counts 55 surviving regions across 3 files:
 | it calls a function the engine cannot run | 4       |
 | `union_char_ranges` still runs            | 2       |
 
-The first count this instrument produced was 2 788. Three bugs in it accounted
-for 98 % of that, and all three had one shape: the walk called a block
-self-contained when it was not, or foldable when there was nothing to fold.
+All of it lives in two Gale-generated files and one benchmark, so a cause that
+appears only there is a Gale fact, not a language one — which is what the first
+stage has to settle before the counts can order anything else.
 
-- It returned on the first refusal, so a template with a runtime interpolation
-  and a `panic` inside blamed the panic's global write. The two answers are
-  independent, so the walk now finishes and returns both. 2 788 to 152.
-- It counted only skeleton `Local` nodes, and a promoted operand is not a child,
-  so a local read through the value pool was invisible. 152 to 134, and the files
-  carrying any region at all from 15 to 3.
-- It refused a unit-typed block but not a diverging one, so the `else` of every
-  `let ... else { panic("…") }` — which builds a constant message and then never
-  returns — counted as a constant the fold had missed. 134 to 55, and the
-  `panic` cause, which had been the largest at 79, disappeared entirely.
+### 1. The Gale callees
 
-None of the three could mis-fold: the frame seeds nothing for a local it never
-heard of, and a diverging block yields no value to write back. They cost only
-the truth of the count, which is the whole product of this stage.
+`push_encoded_ranges` (28) and `union_char_ranges` (2) are half of what is left
+and appear only in the two Gale-generated files.
 
-The lessons the roadmap below is written under. An instrument that
-short-circuits reports the first thing it noticed, not the thing that matters. A
-walk over the skeleton is not a walk over the program while pure values live in
-a pool beside it. A block that cannot yield a value is not a fold that was
-missed. And a count is worth nothing until something independent agrees with it
-— the formatting work is measured in bytes as well, which is why it survived all
-three corrections while the ordering built on the counts did not. What is left
-lives entirely in two Gale-generated files and one benchmark, so a cause that
-appears only there is a Gale fact, not a language one.
-
-### 2. The Gale callees
-
-`push_encoded_ranges` (28) and `union_char_ranges` (2) are half of what is left,
-and they appear only in the two Gale-generated files.
-
-- [ ] Read the two callees before deciding anything. Thirty regions in generated
+- [ ] Read the two bodies before deciding anything. Thirty regions in generated
       code is either one missing capability repeated, or one generator shape that
       is nobody's bug. The trace names them; the bodies say which.
 
-### 3. What the engine cannot run, and the stores it will not read
+Done when the two are classified, and the roadmap below is reordered against
+what is left once a Gale fact is set aside.
+
+### 2. The stores the engine will not read
 
 - [ ] The 19 remaining global writes, which are the stores that fail the
-      materialization property of stage 4 — a global read somewhere that does
-      not store it.
+      materialization property: a global read somewhere that does not store it.
+      Whether that set has a shape of its own, or is a tail of unrelated cases,
+      decides whether there is a mechanism here at all.
 - [ ] The 4 unrunnable calls, split by why the callee is out: impure, generic,
       async, or bodiless. A genuinely impure callee is a correct refusal; a
       still-generic one after monomorphization is a bug. Four is small enough to
       read rather than count.
 
-### 4. A materializing global write is not a write
+### 3. The frame owns storage
 
-The store [constant-object globalization](./wep-2026-05-31-const-object-globalization.md)
-leaves where it names a constant at a use site — `{ G = <const>; G }` — serves
-the read two statements below it and nothing else. `` `v=${true}` `` is the
-smallest instance: `"true"` is globalized, and that alone stopped the fold.
+`` `${'x'}` `` still leaves `Formatter::pad` standing where `` `${true}` `` no
+longer does, and the remark does not yet separate the two. That is the last
+non-float interpolation paying for its formatter.
 
-- [x] Read such a store through instead of refusing it. The condition is a
-      property, not a count: every mention of the global in the package is one
-      half of such a pair. Folding a region carrying one then deletes the store
-      and the only read it serves together, and no read anywhere is left
-      depending on a store that went away. A count would have been wrong twice
-      over — inlining copies the pair, so two sites are as safe as one, and a
-      global with a single store and a distant read is not safe at all.
-- [x] The answer lives in `niri`, since the globalization pass cannot know
-      whether the region around its store will fold, and the engine already
-      reads a global out of the assignment that fills it.
-- [x] A materialization is not itself a region. `{ G = v; G }` is two statements
-      ending in an expression, so it answers the region shape, and admitting the
-      store made the pair fold to the literal — writing the constant back over
-      the naming construct and undoing the sharing globalization had arranged.
-      What the pair is has one recognizer, in `region`, and both consumers ask
-      it. A folded template is globalized afterwards, so it is still built once
-      at instantiation.
-
-This stage is where the formatting shape needed it, which the byte counts in
-stage 5 record. Its share of the census is 19 regions, not the 1 353 the broken
-instrument reported.
-
-### 5. The frame owns storage
-
-What the format work waited on. A unit-returning call whose writes land in a
-place the frame owns and a `&mut` argument written back on return were already
-implemented; what was missing was that the buffer a template builds is threaded
-through a `let mut` holding a `&mut` of itself, and neither the frame nor the
-analysis deciding what a frame can track would call that an alias.
-
-- [x] A `let mut` binding a borrow resolves to a place alias when nothing
-      reassigns the local. An immutable binding always did; what makes it safe is
-      that nothing displaces it, which is equally true of a mutable local nothing
-      reassigns — and `sroa_param` spells its scalarized `&mut` field that way.
-- [x] The same predicate in `Reached::record_alias_borrows`. The two must agree:
-      a borrow the frame resolves to an alias but the walk counts as a clobber
-      leaves the frame holding no value for the place it just aliased, which is
-      what abandoned every template at its first append.
-
-Measured at `-Os` against the same program written with the literal, which costs
-3 312 bytes:
-
-| Interpolation | Before | After  |
-| ------------- | ------ | ------ |
-| `${42}`       | 4 189  | 3 328  |
-| `${7:04}`     | 4 455  | 3 337  |
-| `${255:x}`    | 3 853  | 3 330  |
-| `${42:?}`     | 4 189  | 3 328  |
-| `${true}`     | 3 799  | 3 337  |
-| `${'x'}`      | 3 724  | 3 724  |
-| `${3.5}`      | 13 267 | 13 267 |
-
-A constant integer interpolation costs 16 bytes over the literal, down from 877.
-What is left:
-
-- [ ] `char`, which still leaves `Formatter::pad` standing where `bool` no longer
-      does, so the two differ in something the remark does not yet separate.
-- [ ] Floats, whose `fpfmt` is the whole of the 10 000 bytes and is stage 6's
-      budget question, not this stage's.
+- [ ] What distinguishes the `char` path from the `bool` one.
 - [ ] A place-valued field, so an aggregate can carry a reference. Today such an
       aggregate is not a constant, since a field holding the referent's value
       would take a write meant for the referent; what it needs to hold is the
@@ -309,9 +265,9 @@ Upstream: the `stores`-gated temp and write-back carve-outs and divergences D1�
 in [Reference Representation](./wep-2026-06-13-reference-representation.md). The
 engine's notion of a place must be the one that WEP settles, not a second one.
 
-Done when `${'x'}` folds too.
+Done when `${'x'}` folds.
 
-### 6. The aggregate exit
+### 4. The aggregate exit
 
 - [ ] A `List<T>` of scalars written back as
       [`ArrayLiteral`](./wep-2026-05-31-nir-array-literal.md) and a plain struct
@@ -322,36 +278,33 @@ Done when `${'x'}` folds too.
 Done when a constant `List` result and a constant struct result reach the IR as
 literals, and `Array::slice`'s computed bounds fold.
 
-### 7. Format coverage to the budget
+### 5. Format coverage to the budget
 
-- [x] Width, zero-pad, radix and `Inspect` fold, and needed nothing of their own:
-      the frame runs each spec's body once it can hold the buffer.
-- [ ] The step budget is per function and a formatting region spends a large
-      share of it. Seven constant templates in one body exhaust it and five of
-      them stop folding; four all fold. Whether that is a budget to raise, a cost
-      to cut, or a limit to document is what a corpus recount answers — real code
-      spreads templates over functions, and the fixture had to.
+- [ ] The step budget is per function, and a formatting region spends a large
+      share of it: seven constant templates in one body exhaust it and five stop
+      folding, where four all fold. Whether that is a budget to raise, a cost to
+      cut, or a limit to document is what a recount answers.
 - [ ] Floats. `fpfmt` is the largest size prize by an order of magnitude and the
       largest engine cost, so the order is the engine's, not the payoff's; if it
       overruns the budget it becomes a known gap rather than a reason to raise
       the budget.
-- [ ] A `wasm-size` and `benchmark` run recording what the folds bought beyond
-      the single-interpolation measurements in stage 6.
+- [ ] A `wasm-size` and `benchmark` run, recording what the folds buy on whole
+      programs rather than on one interpolation.
 
 Done when a recount shows no refusal reason left that the step budget does not
 explain.
 
-### 8. Mixed templates
+### 6. Mixed templates
 
 - [ ] The marked region-append primitive set and the derived-`fmt` admission
       rule, per "Fold the region, not the call".
 
 Done when a template mixing constant and runtime interpolations emits the
-constant parts as literals. The census counts no such template yet, since a
-region reading a runtime local is not reported; sizing it needs a count of its
-own, and a small one demotes this stage to a known gap.
+constant parts as literals. The census counts no such template, since a region
+reading a runtime local is not reported; sizing this needs a count of its own,
+and a small one demotes the stage to a known gap.
 
-### 9. The remaining refusals
+### 7. The remaining refusals
 
 Each is a small, local refusal the census does not count, so each needs a reason
 of its own to be worth the code.
@@ -362,15 +315,15 @@ of its own to be worth the code.
       a direct call, so neither inlining nor CTFE reaches through it.
 - [ ] Guards decided when the engine is only asked what an expression denotes.
 
-### Validation, from the first engine change onward
+### Validation, alongside every stage
 
 - [ ] A fold / no-fold differential oracle in the
       [fuzzer](./wep-2026-08-19-compiler-fuzzing.md): compile each corpus fixture
-      with and without `nir/const_fold` and compare observable behaviour.
+      with and without constant folding and compare observable behaviour.
 
 A wrong constant is a silent miscompile — no trap, no diagnostic, a different
-answer. Fixtures cover the shapes we thought of; the differential covers the
-ones we did not, and it is the safety net every stage above leans on.
+answer. Fixtures cover the shapes we thought of; the differential covers the ones
+we did not, and it is the safety net every stage above leans on.
 
 ## Known gaps
 
@@ -383,11 +336,11 @@ per call against `niri`'s µs, amortized through a module cache.
 
 Closing it takes: a route through the compiler host, since `wado-compiler` must
 compile to `wasm32-unknown-unknown` and cannot link a runtime, as Kiln generator
-execution already does; a resolution of the async boundary, since
-`CompilerHost::run_generator` is async and the optimizer's fixed-point loop is
-not; an answer to the circularity of needing a compiled module to evaluate a call
-made while compiling; and a module-cache lifetime, per `compile` invocation or
-per process.
+execution already does; a resolution of the async boundary, since the host's
+generator entry point is async and the optimizer's fixed-point loop is not; an
+answer to the circularity of needing a compiled module to evaluate a call made
+while compiling; and a module-cache lifetime, per `compile` invocation or per
+process.
 
 Unowned because the demand is not visible. No benchmark, stdlib path or corpus
 program exhibits recursion over constants, and
@@ -403,8 +356,7 @@ runtime trap inside an unfolded body stays observable.
 ### Comparing two literal strings as a guard
 
 It reaches the engine as a guard over a method call on references. `niri` folds a
-constant string comparison in value position today; the guard position does not
-reduce.
+constant string comparison in value position; the guard position does not reduce.
 
 ### Unrolling a loop in the caller
 
