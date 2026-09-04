@@ -1061,10 +1061,8 @@ fn blanket_method_call_info(
     })
 }
 
-/// Build a `LocalMethodName` for a concrete (post-mono) type.
-///
-/// Extracts the base name from the resolved type and applies type args
-/// for parameterized types like `GenericInstance`, etc.
+/// The `LocalMethodName` a receiver of `type_id` dispatches under. A head that
+/// still awaits substitution is left for monomorphization to re-derive.
 fn method_name_for_type(
     type_id: TypeId,
     trait_name: &crate::name::FqTraitName,
@@ -1087,31 +1085,18 @@ fn method_name_for_type(
         .with_struct_type_args(&arg_names);
     }
     let resolved = tt_ref.get(type_id).clone();
-    match resolved {
+    let head = match resolved {
         ResolvedType::TypeParam { ref name, .. } | ResolvedType::TypePack { ref name, .. } => {
-            let mut info = LocalMethodName::new(
-                FqTypeName::binder(name),
-                Some(trait_name.clone()),
-                method_name.to_string(),
-            );
-            info.is_type_param_receiver = true;
-            info
+            FqTypeName::binder(name)
         }
-        ResolvedType::Function { .. } => {
-            // A `fn(..)` receiver is named by the type itself, the same
-            // spelling its dispatch stubs are registered under.
-            LocalMethodName::new(
-                tt_ref.fn_receiver_name(&resolved),
-                Some(trait_name.clone()),
-                method_name.to_string(),
-            )
-        }
-        _ => LocalMethodName::new(
-            tt_ref.fq_base_type_name(type_id),
-            Some(trait_name.clone()),
-            method_name.to_string(),
-        ),
-    }
+        // A `fn(..)` receiver is named by the type itself, the same spelling
+        // its dispatch stubs are registered under.
+        ResolvedType::Function { .. } => tt_ref.fn_receiver_name(&resolved),
+        _ => tt_ref.fq_base_type_name(type_id),
+    };
+    let mut info = LocalMethodName::new(head, Some(trait_name.clone()), method_name.to_string());
+    info.is_type_param_receiver = tt_ref.receiver_head_awaits_substitution(type_id);
+    info
 }
 
 fn trait_impl_module(

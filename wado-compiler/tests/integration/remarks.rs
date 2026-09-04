@@ -368,7 +368,9 @@ fn a_copy_in_another_module_of_the_entry_package_is_remarked() {
     // is the program's own cost, and the remark must name that module's file —
     // a span carries no filename of its own.
     // `seed` keeps the list out of reach of constant folding, which would
-    // otherwise evaluate the whole helper away and leave no copy to report.
+    // otherwise evaluate the whole helper away and leave no copy to report, and
+    // `#[inline(never)]` keeps the copy in the local module at all: spliced into
+    // `run`, it is the entry file's copy and this test has no subject.
     let remarks = remarks_across_modules(
         r#"
 use { println, Stdout, Environment, args } from "core:cli";
@@ -381,6 +383,7 @@ export fn run() with (Stdout, Environment) {
         &[(
             "./helper.wado",
             r#"
+#[inline(never)]
 pub fn grow(seed: i32) -> i32 {
     let a: List<i32> = [seed, seed + 1];
     let mut b = a;

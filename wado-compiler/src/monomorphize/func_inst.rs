@@ -3567,6 +3567,10 @@ impl Monomorphizer {
             };
             let blanket_impl_args = match projected {
                 Some(args) if has_projected => args,
+                // A value blanket is keyed by the receiver it serves. The
+                // enclosing function's arguments name that only where the
+                // receiver is its first parameter, never for `X::Item`.
+                _ if blanket.is_some() => vec![recv_inner],
                 _ => type_args,
             };
             Some(MonomorphInfo {

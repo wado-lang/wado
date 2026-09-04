@@ -473,13 +473,16 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 tp.name.clone(),
                 BinderInScope::declared(idx, resolved_arg, tp.id),
             );
-            if !tp.bounds.is_empty() {
+            // An `fn` bound is realised in the argument itself and names no
+            // trait, as `register_generic_params` reads it.
+            let bounds = tp.real_bounds();
+            if !bounds.is_empty() {
                 self.annotate_ctx
                     .trait_ctx
                     .type_param_bounds
                     .entry(tp.name.clone())
                     .or_default()
-                    .extend(tp.bounds.clone());
+                    .extend(bounds);
             }
         }
     }

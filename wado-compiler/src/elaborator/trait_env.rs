@@ -2511,18 +2511,6 @@ fn check_all_orphan_rules(
     violations
 }
 
-/// The declaration name an `impl` header writes its target as.
-///
-/// An AST header carries no module, so this cannot produce a qualified
-/// receiver — compare it against [`name::Receiver::decl_key`], which is the
-/// same namespace, never against `head_key`.
-pub(super) fn receiver_decl_key(ty: &ast::Type) -> String {
-    match name::RefKind::from_ast(ty) {
-        Some(kind) => kind.prefix().to_string(),
-        None => get_type_name_static(ty),
-    }
-}
-
 /// Invert the declaration indexes into declared name → declarations, name-keyed
 /// maps first so source order is kept, and each declaration landing once — a
 /// duplicate would make a caller taking the unique answer see two.

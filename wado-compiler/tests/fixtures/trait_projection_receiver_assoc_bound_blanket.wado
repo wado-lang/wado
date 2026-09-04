@@ -1,0 +1,42 @@
+// `X::Item` under `X: Holder` carries the bounds the trait declares on the
+// associated type, so the value blanket over `Display` answers `it.show()`. The
+// blanket is keyed by the receiver it serves, so its body instantiates at
+// `H::Item`, not at the projection's base `H`.
+
+trait Show {
+    fn show(&self) -> String;
+}
+
+impl<T: Display> Show for T {
+    fn show(&self) -> String {
+        return `<${*self}>`;
+    }
+}
+
+trait Holder {
+    type Item: Display;
+    fn item(&self) -> Self::Item;
+}
+
+struct H {
+    v: i32,
+}
+
+impl Holder for H {
+    type Item = i32;
+    fn item(&self) -> i32 {
+        return self.v;
+    }
+}
+
+fn shown<X: Holder>(h: &X) -> String {
+    let it = h.item();
+    return it.show();
+}
+
+test "a projection receiver reaches a blanket over the assoc's bound" {
+    assert shown(&H { v: 3 }) == "<3>";
+}
+
+__DATA__
+{"test": {}}

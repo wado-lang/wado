@@ -1,0 +1,49 @@
+// An impl's bound on its own parameter is checked wherever the impl is
+// considered, whatever the argument is. A rigid type parameter answers a bound
+// from the bounds in force on it and from nothing else. A body carrying the
+// bound reaches the impl; a body without it does not
+// (WEP 2026-02-07, WEP 2026-09-01).
+
+trait Tag {
+    fn tag(&self) -> String;
+}
+
+impl Tag for i32 {
+    fn tag(&self) -> String {
+        return `i${*self}`;
+    }
+}
+
+impl<..T: Tag> Tag for [..T] {
+    fn tag(&self) -> String {
+        let mut out = "";
+        for let [_i, element] of self.enumerate() {
+            out = out + element.tag();
+        }
+        return out;
+    }
+}
+
+struct Pair<A, B> {
+    a: A,
+    b: B,
+}
+
+// The bound is carried, so the tuple impl applies to `[A, B]` here.
+fn tagged<A: Tag, B: Tag>(p: &Pair<A, B>) -> String {
+    let both = [p.a, p.b];
+    return both.tag();
+}
+
+test "a tuple of bounded parameters reaches the variadic impl" {
+    let p = Pair { a: 1, b: 2 };
+    assert tagged(&p) == "i1i2";
+}
+
+test "a concrete tuple reaches it too" {
+    let t = [3, 4];
+    assert t.tag() == "i3i4";
+}
+
+__DATA__
+{"test": {}}

@@ -14,6 +14,10 @@ struct State {
     data: List<i32>,
 }
 
+// HFS is a `&mut` parameter's pass, so the subject has to stay a call: spliced
+// into `run`, `state` is a local struct and `sroa_local` scalarizes it away
+// before HFS is ever asked.
+#[inline(never)]
 fn process(state: &mut State) {
     loop {
         if state.counter >= state.limit {

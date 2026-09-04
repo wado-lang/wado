@@ -26,17 +26,20 @@ pub(super) struct StructInstState {
 
 /// Tracks function monomorphization state
 pub(super) struct FuncInstState {
-    /// Map from canonicalised `InstantiationKey` to the mangled function
-    /// name. Keys are canonicalised by [`Monomorphizer::canonicalize_key`]
-    /// before insert/lookup so that pre-/post-substitution `TypeId`
-    /// variants of the same logical type collapse onto a single entry.
+    /// Map from `InstantiationKey` to the mangled function name. A key is
+    /// stored as it was asked and, once the structs it names are instantiated,
+    /// under its rewritten form too ([`Monomorphizer::alias_canonical_keys`]),
+    /// so pre- and post-substitution `TypeId`s of one type reach one entry.
     pub instantiated: IndexMap<InstantiationKey, String>,
-    /// The mangled names present in [`Self::instantiated`], for O(1)
-    /// name-membership during blanket dedup (`instantiated` is grow-only, so
-    /// this stays a faithful mirror of its value set).
+    /// The mangled names present in [`Self::instantiated`], which a blanket
+    /// instance is deduped on (`instantiated` is grow-only, so this stays a
+    /// faithful mirror of its value set).
     pub instantiated_names: IndexSet<String>,
-    /// Work queue of pending function instantiations. Holds canonicalised
-    /// keys.
+    /// The `(module, mangled name)` pairs queued so far: the identity of every
+    /// other instance, since two keys can name one body.
+    pub instantiated_homes: IndexSet<(ModuleSource, String)>,
+    /// Work queue of pending function instantiations, each a key of
+    /// [`Self::instantiated`].
     pub pending: Vec<InstantiationKey>,
     /// Project-wide trait knowledge inherited from the package. Used by
     /// receiver-substitution and comparison-lowering paths to find the
@@ -196,6 +199,7 @@ impl Monomorphizer {
             functions: FuncInstState {
                 instantiated: IndexMap::default(),
                 instantiated_names: IndexSet::default(),
+                instantiated_homes: IndexSet::default(),
                 pending: Vec::new(),
                 trait_env,
                 templates: Rc::new(IndexMap::default()),
@@ -289,11 +293,10 @@ impl Monomorphizer {
         names.contains(&self.method_instantiation_name(&base_key, type_table))
     }
 
-    /// Queue a function instantiation unless already queued, deduping on the full
-    /// `InstantiationKey` alone. With faithful Ref/MutRef mangling and
-    /// `TypeRewriter`'s post-monomorphisation rewrite of every reachable
-    /// `TypeId`, every site arrives with canonicalised args — which makes
-    /// `function_id_for` injective, as DCE's position-based retain asserts.
+    /// Queue a function instantiation unless its body is already queued. Two
+    /// dispatch sites can derive distinct-but-equivalent `TypeId`s for one
+    /// argument (a `GenericInstance` and the `Struct` it became), so the body
+    /// is identified by its mangled name rather than by the key.
     pub fn try_queue_function(
         &mut self,
         key: InstantiationKey,
@@ -306,11 +309,12 @@ impl Monomorphizer {
         if self.concrete_impl_owns_name(&key, &mangled_name, type_table) {
             return false;
         }
-        // A blanket instance reaches one function from two dispatch sites whose
-        // derived args can be distinct-but-equivalent `TypeId`s, so the keys
-        // differ while the mangled name matches; dedup on the name, either body
-        // being complete. Only a *universal* `&T` blanket qualifies for the ref
-        // case, or a newtype-peeled `&^Trait` shape impl would dedup wrongly.
+        // A blanket instance is one body wherever it is asked from, queued
+        // under the blanket's home module: a request under another module
+        // is dropped, and its call site reaches the body through
+        // `lookup_instantiation_with_trait_fallback`. Only a *universal* `&T`
+        // blanket qualifies for the ref case, or a newtype-peeled `&^Trait`
+        // shape impl would dedup wrongly.
         let is_ref_universal_blanket = key.impl_type_args.len() == 1
             && key.method_info.as_ref().is_some_and(|i| {
                 i.ref_receiver().is_some_and(|ref_kind| {
@@ -322,16 +326,20 @@ impl Monomorphizer {
                 })
             });
         let is_blanket_key = key.impl_type_args.len() == 2 || is_ref_universal_blanket;
-        // A deduped blanket key is intentionally dropped without an
-        // `instantiated` entry: a call site that re-derives it misses the
-        // literal lookup and resolves through
-        // `lookup_instantiation_with_trait_fallback`'s blanket-module fallback,
-        // which finds the single queued instance under the blanket's home
-        // module. `instantiated_names` gives this membership test O(1) instead
-        // of scanning every queued name.
         if is_blanket_key && self.functions.instantiated_names.contains(&mangled_name) {
             return false;
         }
+        // Any other instance is one body per module, the module being part of
+        // its identity: `&List<T>`'s and `&Array<T>`'s impls of one trait
+        // mangle alike under the collapsed `&` head and live in two modules.
+        // A second key under the body's own module — a `GenericInstance` and
+        // the `Struct` it became — is an alias of that body.
+        let home = (key.module_source.clone(), mangled_name.clone());
+        if self.functions.instantiated_homes.contains(&home) {
+            self.functions.instantiated.insert(key, mangled_name);
+            return false;
+        }
+        self.functions.instantiated_homes.insert(home);
         self.functions
             .instantiated_names
             .insert(mangled_name.clone());
@@ -340,6 +348,37 @@ impl Monomorphizer {
             .insert(key.clone(), mangled_name);
         self.functions.pending.push(key);
         true
+    }
+
+    /// Index every queued instance under its canonical key as well. A struct
+    /// instantiation maps a `GenericInstance` to the `Struct` it became, and a
+    /// call site collected after that rewrite asks with the `Struct` form while
+    /// one collected before asked with the other; both must reach the one body.
+    pub fn alias_canonical_keys(&mut self, type_table: &mut TypeTable) {
+        let entries: Vec<(InstantiationKey, String)> = self
+            .functions
+            .instantiated
+            .iter()
+            .map(|(key, name)| (key.clone(), name.clone()))
+            .collect();
+        for (key, name) in entries {
+            let impl_type_args = key
+                .impl_type_args
+                .iter()
+                .map(|&t| self.rewrite_type_id(t, type_table))
+                .collect();
+            let method_type_args = key
+                .method_type_args
+                .iter()
+                .map(|&t| self.rewrite_type_id(t, type_table))
+                .collect();
+            let canonical = InstantiationKey {
+                impl_type_args,
+                method_type_args,
+                ..key
+            };
+            self.functions.instantiated.entry(canonical).or_insert(name);
+        }
     }
 
     /// Generate a monomorphized struct name: `Box` + `[i32]` → `"Box<i32>"`.

@@ -116,7 +116,49 @@ impl CandidateKind {
     }
 }
 
+/// Rewrite `&(S { f: v, .. }.f)` to `&v`, putting the constant aggregate
+/// directly under the `&`.
+///
+/// [`CandidateKind::InlineRef`] asks the `&`'s operand to be a constant
+/// *aggregate*, and a projection of one is not, so the borrowed field is rebuilt
+/// at every use. A string-literal pattern wears that shape once `String^Eq::eq`
+/// inlines: lowering hands the callee `&"alpha"` and splicing it leaves
+/// `&(String { repr: packed"alpha", .. }.repr)`.
+///
+/// `const_folding::project_struct_literal` reaches the same shape through the
+/// engine, where the redirect does not stick (#1963).
+fn deref_const_field_borrows(project: &mut NirPackage) {
+    for func_rc in &project.functions {
+        let mut func = func_rc.borrow_mut();
+        let Some(body) = func.body.as_mut() else {
+            continue;
+        };
+        let edits: Vec<(ExprId, Operand)> = super::arena_query::reachable_nodes(body)
+            .into_iter()
+            .filter_map(|node| {
+                let NodeRef::Expr(id) = node else { return None };
+                let ExprKind::Unary {
+                    op: NirUnaryOp::Ref,
+                    expr: Operand::Expr(inner),
+                } = &body.exprs[id].kind
+                else {
+                    return None;
+                };
+                let proj = super::arena_query::projected_const_field(body, *inner)?;
+                Some((id, proj))
+            })
+            .collect();
+        for (id, proj) in edits {
+            body.exprs[id].kind = ExprKind::Unary {
+                op: NirUnaryOp::Ref,
+                expr: proj,
+            };
+        }
+    }
+}
+
 pub fn globalize_const_objects(project: &mut NirPackage) -> bool {
+    deref_const_field_borrows(project);
     let type_table = project.type_table.clone();
     // One id serves every instantiation — the hoisted type rides the call node.
     let is_uninitialized = project.intern_extern(&crate::nir::FunctionRef {

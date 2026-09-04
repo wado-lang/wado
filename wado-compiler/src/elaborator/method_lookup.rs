@@ -12,7 +12,7 @@ use crate::compiler_host::CompilerHost;
 use crate::compiler_item::CompilerItem;
 use crate::defs::DefId;
 use crate::module_source::ModuleSource;
-use crate::name::{LocalMethodName, MethodName, RefKind};
+use crate::name::{LocalMethodName, MethodName};
 use crate::tir::{FunctionRef, ResolvedType, TypeId, TypeTable};
 use crate::token::Span;
 
@@ -609,10 +609,7 @@ impl TypeSystem {
         struct_name: &str,
     ) -> Option<TypeId> {
         let info = scope.struct_fields(struct_name)?;
-        if info.fields.is_empty() || !info.field_defaults.iter().all(Option::is_some) {
-            return None;
-        }
-        if !info.type_param_type_ids.is_empty() {
+        if !info.auto_derives_default() {
             return None;
         }
         Some(self.type_table.borrow().type_id_of_decl(info.defined_at))
@@ -1445,370 +1442,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         );
     }
 
-    /// The typed receiver chain: `type_key` plus the newtype/flags base heads
-    /// reachable from it. A reference head has no newtype base, so it is
-    /// returned as a singleton; a named head walks its newtype chain via
-    /// [`Self::newtype_chain_names`]. Each base is re-canonicalised, since a
-    /// newtype's base may be declared in another module.
-    fn newtype_chain(&self, type_key: &ImplTargetKey) -> Vec<ImplTargetKey> {
-        let Some(name) = type_key.type_name(self.tysys.resolutions.defs()) else {
-            return vec![type_key.clone()];
-        };
-        // The head keeps the caller's key; each base is keyed from the
-        // `TypeId` the chain walk already holds, since a base declared in
-        // another module cannot be recovered from its name alone.
-        let mut chain = vec![type_key.clone()];
-        chain.extend(
-            self.newtype_chain_bases(name)
-                .into_iter()
-                .map(|(base_id, base_name)| match base_id {
-                    Some(id) => self.impl_target_of(id, &crate::name::DeclName::new(&base_name)),
-                    None => self.impl_target(&base_name),
-                }),
-        );
-        chain
-    }
-
-    /// `struct_name` plus the base names of its newtype chain
-    /// (`type Alias = Base` → `Base`, `Flags` → `u32`), so a trait impl on a
-    /// base type is reachable through the alias.
-    fn newtype_chain_names(&self, struct_name: &str) -> Vec<String> {
-        std::iter::once(struct_name.to_string())
-            .chain(
-                self.newtype_chain_bases(struct_name)
-                    .into_iter()
-                    .map(|(_, name)| name),
-            )
-            .collect()
-    }
-
-    /// The newtype chain's bases, each with the `TypeId` it was reached
-    /// through. `Flags` widens to `u32`, which is a primitive rather than a
-    /// type in the table, so it carries no id.
-    fn newtype_chain_bases(&self, struct_name: &str) -> Vec<(Option<TypeId>, String)> {
-        let mut bases = Vec::new();
-        if let Some(newtype_id) = self.lookup_newtype(struct_name) {
-            let mut current = newtype_id;
-            loop {
-                match self.tysys.type_table.borrow().get(current).clone() {
-                    ResolvedType::Newtype { base_type, .. } => {
-                        let base_name = match self.tysys.type_table.borrow().get(base_type).clone()
-                        {
-                            ResolvedType::GenericInstance { def, .. }
-                            | ResolvedType::GenericResource { def, .. } => {
-                                self.tysys.type_table.borrow().def_name(def).to_string()
-                            }
-                            ResolvedType::BuiltinArray(_) => TypeTable::ARRAY_TYPE_NAME.to_string(),
-                            _ => self.tysys.type_table.borrow().type_name(base_type),
-                        };
-                        bases.push((Some(base_type), base_name));
-                        current = base_type;
-                    }
-                    ResolvedType::Flags { .. } => {
-                        bases.push((None, "u32".to_string()));
-                        break;
-                    }
-                    _ => break,
-                }
-            }
-        }
-        bases
-    }
-
-    /// Every trait impl on one of `names_to_check`, plus blanket impls
-    /// (`impl<T: Bound> Trait for T`) whose bound the receiver satisfies.
-    fn trait_method_candidates(
-        &mut self,
-        names_to_check: &[ImplTargetKey],
-        receiver_type_id: Option<TypeId>,
-    ) -> Vec<ImplBlockRef> {
-        // Collect lightweight impl block references (avoiding deep clones).
-        let mut impl_refs = self.collect_trait_impl_refs_multi(names_to_check);
-
-        // Blanket impl fallback: check `impl<T: Bound> Trait for T` where the receiver
-        // type satisfies the bound.  e.g., `impl<I: Iterator> IntoIterator for I` matches
-        // any concrete type that implements Iterator. Snapshot the value blankets
-        // (block, bound names) so the per-bound checks below borrow `self`
-        // without holding a `trait_env` borrow.
-        let value_blankets: Vec<(DefId, Vec<super::trait_env::BlanketBound>)> = self
-            .tysys
-            .trait_env
-            .blanket_impls
-            .values()
-            .flatten()
-            .filter(|b| b.receiver == super::trait_env::BlanketReceiver::Value)
-            .map(|b| (b.def, b.bounds.clone()))
-            .collect();
-        let type_lookup = self.type_lookup();
-        for (blanket, bounds) in &value_blankets {
-            // Gate on all bounds. The receiver-`TypeId` check is preferred:
-            // it recognises synthesized bounds (`ReflectStruct`, `Default`) with no
-            // explicit `impl`, which the name-based lookup misses. A viable
-            // blanket must survive to the authoritative `candidate_matches_receiver`.
-            let bounds_satisfied = bounds.iter().all(|bound| {
-                let Some(bound_def) = bound.decl_ref else {
-                    return false;
-                };
-                if let Some(rt) = receiver_type_id
-                    && self.tysys.type_implements_trait(
-                        &self.annotate_ctx,
-                        &type_lookup,
-                        rt,
-                        bound_def,
-                    )
-                {
-                    return true;
-                }
-                names_to_check.iter().any(|target| {
-                    self.tysys.find_trait_impl_for_subject(
-                        &self.annotate_ctx,
-                        &type_lookup,
-                        receiver_type_id,
-                        &target.receiver(self.tysys.resolutions.defs()),
-                        bound_def,
-                        super::trait_query::NewtypePeel::Follow,
-                    )
-                })
-            });
-            // The bound holding is not the whole condition: a blanket pinning
-            // an associated type to its receiver (`T: Mul<Output = T>`) does
-            // not apply to one that widens.
-            if bounds_satisfied
-                && self
-                    .tysys
-                    .blanket_assoc_constraints_hold(receiver_type_id, bounds)
-            {
-                impl_refs.push(ImplBlockRef(*blanket));
-            }
-        }
-        impl_refs
-    }
-
-    /// Whether a candidate impl applies to the receiver. Returns its receiver
-    /// name, whether it is a blanket type-param impl, and the newtype-chain
-    /// depth its target bounds hold at, or `None` to skip.
-    fn candidate_matches_receiver(
-        &mut self,
-        impl_ref: &ImplBlockRef,
-        names_to_check: &[ImplTargetKey],
-        receiver_type_id: Option<TypeId>,
-    ) -> Option<(String, crate::name::FqTypeName, bool, usize)> {
-        let trait_env = Arc::clone(&self.tysys.trait_env);
-        let header = impl_header(&trait_env, impl_ref);
-        let impl_struct_name = self.get_type_name(&header.ty);
-        let impl_key = super::trait_env::receiver_decl_key(&header.ty);
-        // Accept if the type matches by name, or if it's a blanket impl type parameter.
-        let is_blanket_type_param =
-            matches!(&header.ty, Type::Named(named) if !self.tysys.is_known_type_name(&named.name));
-        // Head comparison: the chain's targets are canonical, while this key
-        // comes straight off the impl's own AST.
-        if !names_to_check
-            .iter()
-            .any(|target| target.receiver(self.tysys.resolutions.defs()).decl_key() == impl_key)
-            && !is_blanket_type_param
-        {
-            return None;
-        }
-        if !self.ref_impl_targets_receiver(&header.ty, receiver_type_id) {
-            return None;
-        }
-        let bound_depth =
-            self.blanket_target_bounds_depth(&header.ty, &header.type_params, receiver_type_id)?;
-        if !self.concrete_impl_matches_receiver(impl_ref, receiver_type_id) {
-            return None;
-        }
-        // Qualified in the impl's own frame by the decl pass: the call site's
-        // imports may name the same declaration differently, or not at all.
-        let impl_struct_fq = self.impl_sig(impl_ref).target_fq.clone();
-        Some((
-            impl_struct_name,
-            impl_struct_fq,
-            is_blanket_type_param,
-            bound_depth,
-        ))
-    }
-
-    /// For a reference-typed impl (`impl ... for &Container<T>`), whether its
-    /// inner outer name matches the receiver's. `candidate_matches_receiver`'s
-    /// name match only sees `"&"` / `"&mut"` (`get_type_name` collapses every
-    /// reference to that literal), so without this check every ref impl would
-    /// match any `&T` receiver. Blanket `impl<T: Bound> Trait for &T` (inner is
-    /// a bare type-param name) is exempt — soundness handled by the bound check.
-    /// Returns `true` (keep) for any non-reference impl.
-    fn ref_impl_targets_receiver(&self, impl_ty: &Type, receiver_type_id: Option<TypeId>) -> bool {
-        if RefKind::from_ast(impl_ty).is_none() {
-            return true;
-        }
-        let Some(rt) = receiver_type_id else {
-            return true;
-        };
-        let impl_inner_outer = match impl_ty {
-            Type::Reference(inner) | Type::MutReference(inner) => match inner.as_ref() {
-                Type::Generic(g) => Some(g.name.clone()),
-                Type::Named(named) if self.tysys.is_known_type_name(&named.name) => {
-                    Some(named.name.clone())
-                }
-                _ => None, // blanket `&T` form — handled by the bound check
-            },
-            _ => None,
-        };
-        let Some(impl_inner) = impl_inner_outer else {
-            return true;
-        };
-        let receiver_outer = match self.tysys.type_table.borrow().get(rt) {
-            ResolvedType::GenericInstance { .. }
-            | ResolvedType::Struct { .. }
-            | ResolvedType::Enum { .. }
-            | ResolvedType::Resource { .. }
-            | ResolvedType::GenericResource { .. }
-            | ResolvedType::Newtype { .. }
-            | ResolvedType::Flags { .. }
-            | ResolvedType::Variant { .. } => self
-                .tysys
-                .type_table
-                .borrow()
-                .nominal_head(rt)
-                .map(|(n, _)| n)
-                .unwrap_or_default(),
-            ResolvedType::Primitive(p) => p.as_str().to_string(),
-            // The raw GC array's outer constructor is "Array", so a `&Array<T>`
-            // ref impl (`impl Trait for &Array<T>`) matches a `&Array<_>` receiver.
-            ResolvedType::BuiltinArray(_) => TypeTable::ARRAY_TYPE_NAME.to_string(),
-            // Receivers with no nominal outer name (`TypeParam`, `Unknown`, …)
-            // reach here, e.g. `&T`. The empty sentinel never equals the
-            // non-empty `impl_inner`, so the ref impl is not matched.
-            _ => String::new(),
-        };
-        if impl_inner != receiver_outer
-            && matches!(
-                self.tysys.type_table.borrow().get(rt),
-                ResolvedType::Newtype { .. }
-            )
-        {
-            return self
-                .newtype_chain_names(&receiver_outer)
-                .contains(&impl_inner);
-        }
-        impl_inner == receiver_outer
-    }
-
-    /// How far down the receiver's newtype chain a blanket impl's target bounds
-    /// first hold — rank 1 of the selection order
-    /// (`docs/wep-2026-09-01-trait-resolution.md`). `None` when they never do;
-    /// `Some(0)` for a non-blanket impl.
-    fn blanket_target_bounds_depth(
-        &self,
-        impl_ty: &Type,
-        impl_type_params: &[ast::GenericParam],
-        receiver_type_id: Option<TypeId>,
-    ) -> Option<usize> {
-        let impl_ty_name = super::trait_env::get_type_name_static(impl_ty);
-        let Some(param) = impl_type_params
-            .iter()
-            .find(|tp| tp.name == impl_ty_name && !tp.bounds.is_empty())
-        else {
-            return Some(0);
-        };
-        let rt = receiver_type_id?;
-        // A bound naming no resolvable declaration constrains nothing.
-        let bound_defs: Vec<_> = param
-            .bounds
-            .iter()
-            .filter_map(|bound| self.bound_trait_def(bound.id))
-            .collect();
-        let type_lookup = self.type_lookup();
-        self.receiver_newtype_levels(rt)
-            .into_iter()
-            .position(|level| {
-                bound_defs.iter().all(|&bound_def| {
-                    self.tysys.type_implements_trait_here(
-                        &self.annotate_ctx,
-                        &type_lookup,
-                        level,
-                        bound_def,
-                    )
-                })
-            })
-    }
-
-    /// The receiver's type and each newtype base under it, nearest first. The
-    /// index into this is the peel depth a blanket's bounds are ranked by.
-    fn receiver_newtype_levels(&self, receiver_type_id: TypeId) -> Vec<TypeId> {
-        let mut levels = vec![receiver_type_id];
-        let mut current = receiver_type_id;
-        while let ResolvedType::Newtype { base_type, .. } =
-            self.tysys.type_table.borrow().get(current).clone()
-        {
-            levels.push(base_type);
-            current = base_type;
-        }
-        levels
-    }
-
-    /// Whether a concrete `impl Trait for <NamedType>` really targets the
-    /// receiver. `candidate_matches_receiver`'s bare-name check accepts every
-    /// same-named impl, so resolve each impl's receiver in its own module and
-    /// compare `TypeId`s along the newtype chain. A `TypeParam`-bearing impl is
-    /// exempt; a concrete `impl X for List<u8>` is checked, or `List<i32>` matches.
-    fn concrete_impl_matches_receiver(
-        &mut self,
-        impl_ref: &ImplBlockRef,
-        receiver_type_id: Option<TypeId>,
-    ) -> bool {
-        let Some(receiver) = receiver_type_id else {
-            return true;
-        };
-        let trait_env = Arc::clone(&self.tysys.trait_env);
-        let header = impl_header(&trait_env, impl_ref);
-        // Which target positions are slots is `is_impl_target_param`'s
-        // question, asked in the impl's *own* module — the same call
-        // `enter_impl_frame` makes when it binds them. Asking it any other way
-        // (a module-agnostic "is this a known type name?") disagrees with the
-        // frame exactly when a target argument names a type the impl's module
-        // cannot see, and the target then carries a slot this filter believes
-        // is concrete.
-        let impl_module = self.impl_block_module_source(impl_ref);
-        let is_target_slot = |name: &str| {
-            self.tysys
-                .is_impl_target_param(&impl_module, &header.type_params, name)
-        };
-        let is_blanket_tp = matches!(&header.ty, Type::Named(n) if is_target_slot(&n.name));
-        let generic_is_parametric = matches!(&header.ty, Type::Generic(g)
-            if g.args.iter().any(|a| matches!(a, Type::Named(n) if is_target_slot(&n.name))));
-        let skip_filter = !header.is_concrete()
-            || is_blanket_tp
-            || matches!(&header.ty, Type::Reference(_) | Type::MutReference(_))
-            || generic_is_parametric;
-        if skip_filter {
-            return true;
-        }
-        // Every abstract target shape is now behind `skip_filter`, so the
-        // block's own `Self` is a concrete receiver this impl demands.
-        let impl_recv_id = self.impl_sig(impl_ref).self_type;
-        debug_assert!(
-            !self
-                .tysys
-                .type_table
-                .borrow()
-                .contains_type_param(impl_recv_id),
-            "a slot-carrying impl target reached the concrete-receiver filter"
-        );
-        let tt = self.tysys.type_table.borrow();
-        let target = tt.peel_refs(impl_recv_id);
-        let mut current = tt.peel_refs(receiver);
-        loop {
-            if current == target {
-                return true;
-            }
-            match tt.get(current) {
-                ResolvedType::Newtype { base_type, .. } => {
-                    current = tt.peel_refs(*base_type);
-                }
-                _ => return false,
-            }
-        }
-    }
-
     /// Find a trait method for a given type and method name, for when an
     /// inherent method is not found.
     ///
@@ -1832,84 +1465,117 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // argument list at hand.
         probe: Option<&mut ArgProbe<'_>>,
     ) -> Option<super::types::TraitMethodMatch> {
+        use super::solver_bridge::Ordered;
         use super::types::TraitMethodMatch;
-        let mut found_traits: Vec<TraitMethodMatch> = Vec::new();
-
-        let names_to_check = self.newtype_chain(type_key);
-        let impl_refs = self.trait_method_candidates(&names_to_check, receiver_type_id);
-
-        for impl_ref in &impl_refs {
-            let Some((impl_struct_name, impl_struct_fq, is_blanket_type_param, bound_depth)) =
-                self.candidate_matches_receiver(impl_ref, &names_to_check, receiver_type_id)
-            else {
-                continue;
-            };
-            found_traits.extend(self.collect_trait_method_matches_from_impl(
-                impl_ref,
-                impl_struct_name,
-                impl_struct_fq,
-                is_blanket_type_param,
-                bound_depth,
-                method_name,
-                receiver_type_args,
-                receiver_type_id,
-            ));
-        }
-
-        // A qualified call already said which trait it means, so the candidates
-        // from every other trait are not competitors — dropping them here is
-        // what keeps `select_trait_match` from reporting an ambiguity the call
-        // site has resolved by naming one.
-        if let Some(wanted) = required_trait {
-            found_traits.retain(|m| {
-                crate::resolve::Resolution::Def(m.trait_decl) == wanted.decl
-                    && wanted
-                        .args
-                        .as_ref()
-                        .is_none_or(|args| &m.trait_args == args)
-            });
-        }
 
         let receiver_display = type_key
             .display_name(self.tysys.resolutions.defs())
             .to_string();
-        if let Some(m) =
-            self.select_trait_match(found_traits, method_name, &receiver_display, span, probe)
-        {
-            return Some(m);
+        // The order names the impls; the matches are read off those blocks and
+        // nothing else (`docs/wep-2026-09-01-trait-resolution.md`).
+        let order = self.order_for_call(type_key, receiver_type_id, method_name, required_trait);
+        let named: &[Option<crate::defs::DefId>] = match &order {
+            Some(Ordered::One(def)) => std::slice::from_ref(def),
+            Some(
+                Ordered::AmbiguousTraits(defs)
+                | Ordered::AmbiguousBlankets(defs)
+                | Ordered::Overloaded(defs)
+                | Ordered::Duplicated(defs),
+            ) => defs,
+            // The scope gate: an impl answers, and importing its trait is what
+            // the call is missing. One of them stands in below, so the call
+            // does not also read as a missing method.
+            Some(Ordered::OutOfScope { traits, impls }) => {
+                let defs = self.tysys.resolutions.defs();
+                let _ = self.emit(super::types::TypeError::TraitNotImported {
+                    method: method_name.to_string(),
+                    receiver: receiver_display.clone(),
+                    traits: traits.iter().map(|&t| defs.name(t).to_string()).collect(),
+                    span,
+                });
+                impls
+            }
+            Some(Ordered::Nothing) | None => &[],
+        };
+        let mut found_traits: Vec<TraitMethodMatch> = self.materialize_matches(
+            named,
+            type_key,
+            method_name,
+            receiver_type_args,
+            receiver_type_id,
+        );
+        // A named block declares the method, or its trait does, so it yields a
+        // match; none means the block and the lowering disagree on the name.
+        assert!(
+            self.logger.has_errors() || named.is_empty() || !found_traits.is_empty(),
+            "the order names {order:?} for `{receiver_display}`.{method_name}(), and none yields a match"
+        );
+        // A turbofish on a qualified call pins one argument list; the trait
+        // itself the order already kept to.
+        if let Some(args) = required_trait.and_then(|wanted| wanted.args.as_ref()) {
+            found_traits.retain(|m| &m.trait_args == args);
         }
+        // Rank 3, which the order decided: the report only names what it found.
+        match &order {
+            Some(Ordered::AmbiguousBlankets(_)) => {
+                self.report_ambiguous_value_blankets(&found_traits, &receiver_display, span);
+            }
+            Some(Ordered::AmbiguousTraits(_)) => {
+                self.report_cross_trait_ambiguity(&found_traits, method_name, span);
+            }
+            Some(
+                Ordered::One(_)
+                | Ordered::Nothing
+                | Ordered::OutOfScope { .. }
+                | Ordered::Overloaded(_)
+                | Ordered::Duplicated(_),
+            )
+            | None => {}
+        }
+        self.select_trait_match(found_traits, method_name, span, probe)
+    }
 
-        // Auto-derived Eq / Ord: no user-written impl exists, but the type
-        // satisfies the field-wise / case-wise eligibility rules and
-        // `synthesis::traits` will emit a body. Synthesize a `TraitMethodMatch`
-        // so method-call resolution (and everything downstream of it) sees
-        // the same view of "does this type have `.eq` / `.cmp`?" that
-        // operator dispatch gets via `find_eq_trait_impl` / `find_ord_trait_impl`.
-        // A qualified call that names some *other* trait (`Same::eq(&a, &b)`)
-        // must not be answered by the derived prelude trait.
-        if let Some(recv_id) = receiver_type_id
-            && required_trait.is_none_or(|wanted| {
-                self.tysys
-                    .auto_derive_by_method(method_name)
-                    .is_some_and(|(item, _, _)| {
-                        self.tysys.compiler_trait_def(item).is_some_and(|decl| {
-                            crate::resolve::Resolution::Def(decl) == wanted.decl
-                        })
-                    })
-            })
-        {
-            // A template is registered under its mangled head, so the probe
-            // is in that namespace, not the declaration one.
-            return self.try_auto_derived_method_match(
-                type_key
-                    .receiver(self.tysys.resolutions.defs())
-                    .head_key()
-                    .as_mangled_str(),
-                method_name,
-                recv_id,
-            );
+    /// The matches the named impls yield for `method_name`: read off each
+    /// block, or for a body the compiler supplies with no block (`None`), off
+    /// the derived template.
+    fn materialize_matches(
+        &mut self,
+        named: &[Option<crate::defs::DefId>],
+        type_key: &ImplTargetKey,
+        method_name: &str,
+        receiver_type_args: Option<&[TypeId]>,
+        receiver_type_id: Option<TypeId>,
+    ) -> Vec<super::types::TraitMethodMatch> {
+        let mut found = Vec::new();
+        // An impl the order names at two levels of the chain is one block.
+        let mut seen: IndexSet<Option<crate::defs::DefId>> = IndexSet::default();
+        for def in named.iter().filter(|def| seen.insert(**def)) {
+            match def {
+                Some(def) => found.extend(self.collect_trait_method_matches_from_impl(
+                    &ImplBlockRef(*def),
+                    method_name,
+                    receiver_type_args,
+                    receiver_type_id,
+                )),
+                // A template is registered under its mangled head, so the
+                // probe is in that namespace, not the declaration one.
+                None => {
+                    if let Some(recv_id) = receiver_type_id {
+                        found.extend(
+                            self.try_auto_derived_method_match(
+                                type_key
+                                    .receiver(self.tysys.resolutions.defs())
+                                    .head_key()
+                                    .as_mangled_str(),
+                                method_name,
+                                recv_id,
+                            ),
+                        );
+                    }
+                }
+            }
         }
-        None
+        found
     }
 
     /// Project one candidate trait impl into 0+ [`TraitMethodMatch`]es: set up
@@ -1919,10 +1585,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     fn collect_trait_method_matches_from_impl(
         &mut self,
         impl_ref: &ImplBlockRef,
-        impl_struct_name: String,
-        impl_struct_fq: crate::name::FqTypeName,
-        is_blanket_type_param: bool,
-        bound_depth: usize,
         method_name: &str,
         receiver_type_args: Option<&[TypeId]>,
         receiver_type_id: Option<TypeId>,
@@ -1933,6 +1595,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Extract type param mappings from the impl header before mutating self.
         let trait_env = Arc::clone(&self.tysys.trait_env);
         let header = impl_header(&trait_env, impl_ref);
+        let impl_struct_name = self.get_type_name(&header.ty);
+        let is_blanket_type_param = matches!(
+            &header.ty,
+            Type::Named(named) if !self.tysys.is_known_type_name(&named.name)
+        );
+        // Qualified in the impl's own frame by the decl pass: the call site's
+        // imports may name the same declaration differently, or not at all.
+        let impl_struct_fq = self.impl_sig(impl_ref).target_fq.clone();
         // Track variadic type pack spreads: (pack_name, param_index)
         let mut variadic_pack_entry: Option<(String, u32)> = None;
         let impl_home = self.impl_block_module_source(impl_ref);
@@ -2311,11 +1981,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 blanket_type_param: blanket_type_param.clone(),
                 blanket_binder: blanket_binder.clone(),
                 blanket_bounds: blanket_bounds.clone(),
-                bound_depth,
                 impl_struct_name: impl_struct_name.clone(),
                 impl_struct_fq: impl_struct_fq.clone(),
                 is_blanket_ref_impl,
-                is_variadic_impl: variadic_pack_entry.is_some(),
             });
             method_found = true;
         }
@@ -2385,11 +2053,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     blanket_type_param,
                     blanket_binder,
                     blanket_bounds,
-                    bound_depth,
                     impl_struct_name,
                     impl_struct_fq,
                     is_blanket_ref_impl,
-                    is_variadic_impl: variadic_pack_entry.is_some(),
                 });
             }
         }
@@ -2400,134 +2066,90 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         found_traits
     }
 
-    /// Report rank 3 for one trait's value blankets: two the receiver satisfies
-    /// with nothing ranking them (`docs/wep-2026-09-01-trait-resolution.md`).
-    /// Runs on the sorted list, so each trait's first candidate is its best.
+    /// Name the value blankets among what the order tied at rank 3
+    /// (`docs/wep-2026-09-01-trait-resolution.md`). Only a value blanket has a
+    /// binder to name it by: a tie among impls with none — two variadic impls
+    /// of one trait — is coherence's, rejected where the second is written
+    /// (WEP 2026-03-14 §5 Rule 2).
     fn report_ambiguous_value_blankets(
         &mut self,
-        found_traits: &[super::types::TraitMethodMatch],
+        tied: &[super::types::TraitMethodMatch],
         receiver_display: &str,
         span: Span,
     ) {
-        let mut by_trait: IndexMap<
-            (crate::defs::DefId, Vec<TypeId>),
-            Vec<&super::types::TraitMethodMatch>,
-        > = IndexMap::default();
-        for m in found_traits {
-            by_trait
-                .entry((m.trait_decl, m.trait_args.clone()))
-                .or_default()
-                .push(m);
+        let binders: IndexSet<&crate::name::FqTypeName> = tied
+            .iter()
+            .filter_map(|m| m.blanket_binder.as_ref())
+            .collect();
+        if binders.len() < 2 {
+            return;
         }
-        for candidates in by_trait.values() {
-            let Some(best) = candidates.first().filter(|m| m.blanket_binder.is_some()) else {
-                continue;
-            };
-            // Locality grouping, which WEP 2026-09-01 removes ("Locality is
-            // still implemented").
-            let is_local = |m: &super::types::TraitMethodMatch| {
-                m.impl_module_source == self.current_module_source
-            };
-            let tied: Vec<&&super::types::TraitMethodMatch> = candidates
+        let _ = self.emit(super::types::TypeError::AmbiguousValueBlankets {
+            trait_name: tied[0].trait_name.to_display(),
+            receiver: receiver_display.to_string(),
+            bounds: tied
                 .iter()
-                .filter(|m| m.bound_depth == best.bound_depth && is_local(m) == is_local(best))
-                .collect();
-            let distinct: IndexSet<&crate::name::FqTypeName> = tied
-                .iter()
-                .filter_map(|m| m.blanket_binder.as_ref())
-                .collect();
-            if distinct.len() < 2 {
-                continue;
-            }
-            let _ = self.emit(super::types::TypeError::AmbiguousValueBlankets {
-                trait_name: best.trait_name.to_display(),
-                receiver: receiver_display.to_string(),
-                bounds: tied
-                    .iter()
-                    .filter_map(|m| m.blanket_bounds.clone())
-                    .collect(),
-                span,
-            });
-        }
+                .filter_map(|m| m.blanket_bounds.clone())
+                .collect(),
+            span,
+        });
     }
 
-    /// Choose the winning match: drop a trait's variadic impl when that same
-    /// trait also has a non-variadic one (coherence Rule 1, WEP 2026-03-14 §5),
-    /// prefer a trait impl in the current module, dedup `(trait, module)`
-    /// pairs, take the first remaining.
+    /// What the order says about this call (`docs/wep-2026-09-01-trait-resolution.md`).
+    /// `None` only where the lowering cannot say the receiver, and no impl can
+    /// be written for such a shape either — which `select_trait_match` asserts.
+    fn order_for_call(
+        &self,
+        type_key: &ImplTargetKey,
+        receiver_type_id: Option<TypeId>,
+        method_name: &str,
+        required_trait: Option<&super::types::RequiredTrait>,
+    ) -> Option<super::solver_bridge::Ordered> {
+        let bridge = self.tysys.solver.as_ref()?;
+        let required = match required_trait.map(|r| r.decl) {
+            Some(crate::resolve::Resolution::Def(def)) => Some(def),
+            // A qualified trait that resolved to nothing is already reported.
+            Some(
+                crate::resolve::Resolution::Binder(_) | crate::resolve::Resolution::Unresolved,
+            ) => {
+                return None;
+            }
+            None => None,
+        };
+        // A reference receiver arrives peeled, its `&` carried by `type_key`.
+        // The order reads the reference as a level of the receiver's chain, so
+        // it has to be put back.
+        let through_ref = match type_key {
+            ImplTargetKey::Ref(kind) => Some(*kind == crate::name::RefKind::Mut),
+            ImplTargetKey::Decl(_)
+            | ImplTargetKey::Undeclared(..)
+            | ImplTargetKey::TypeParam(..)
+            | ImplTargetKey::Builtin(_) => None,
+        };
+        bridge.select(
+            &self.tysys,
+            &self.annotate_ctx,
+            &self.current_module_source,
+            receiver_type_id?,
+            through_ref,
+            method_name,
+            required,
+        )
+    }
+
+    /// The winner among the matches the order named: the call's arguments
+    /// choose within one trait's overload set (WEP 2026-07-31), and the first
+    /// match wins otherwise.
     fn select_trait_match(
         &mut self,
         mut found_traits: Vec<super::types::TraitMethodMatch>,
         method_name: &str,
-        receiver_display: &str,
         span: Span,
         probe: Option<&mut ArgProbe<'_>>,
     ) -> Option<super::types::TraitMethodMatch> {
-        // Rank 0: a variadic impl yields to a non-variadic one of the same
-        // trait (WEP 2026-03-14 §5 Rule 1). Scoped to one trait, so it must not
-        // outrank locality between traits — a foreign blanket `impl<T> A for T`
-        // would otherwise beat a local `impl<..T> B for [..T]`.
-        let traits_with_non_variadic: IndexSet<(crate::defs::DefId, Vec<TypeId>)> = found_traits
-            .iter()
-            .filter(|m| !m.is_variadic_impl)
-            .map(|m| (m.trait_decl, m.trait_args.clone()))
-            .collect();
-        found_traits.retain(|m| {
-            !m.is_variadic_impl
-                || !traits_with_non_variadic.contains(&(m.trait_decl, m.trait_args.clone()))
-        });
-
-        // Concrete over blanket, then bound depth, then local over foreign.
-        // WEP 2026-09-01 states depth first and no locality; both are its
-        // known gaps. Sorted BEFORE dedup_by, which only removes adjacent
-        // duplicates.
-        let current_module = &self.current_module_source;
-        found_traits.sort_by(|a, b| {
-            let a_concrete = a.blanket_type_param.is_none();
-            let b_concrete = b.blanket_type_param.is_none();
-            let a_local = &a.impl_module_source == current_module;
-            let b_local = &b.impl_module_source == current_module;
-            b_concrete
-                .cmp(&a_concrete)
-                .then(a.bound_depth.cmp(&b.bound_depth))
-                .then(b_local.cmp(&a_local))
-        });
-        self.report_ambiguous_value_blankets(&found_traits, receiver_display, span);
-        found_traits.dedup_by(|a, b| {
-            a.trait_decl == b.trait_decl
-                && a.trait_args == b.trait_args
-                && a.impl_module_source == b.impl_module_source
-        });
-
-        // The only place scope is consulted until WEP 2026-09-01's scope gate
-        // lands. Distinct same-name declarations tie-break on scope: a same-named
-        // foreign trait the calling module never imported is not a competitor
-        // (`cross_module_same_name_foreign_impl.wado` — each module's
-        // `s.shout()` dispatches to the `Loud` in scope there). Only when
-        // several colliding declarations are in scope does the cross-trait
-        // ambiguity below stand.
-        let distinct: IndexSet<crate::defs::DefId> = found_traits
-            .iter()
-            .filter(|m| m.blanket_type_param.is_none())
-            .map(|m| m.trait_decl)
-            .collect();
-        if distinct.len() > 1 {
-            let visible: IndexSet<crate::defs::DefId> = distinct
-                .iter()
-                .filter(|d| self.trait_decl_in_scope(**d))
-                .copied()
-                .collect();
-            if visible.len() == 1 {
-                found_traits
-                    .retain(|m| m.blanket_type_param.is_some() || visible.contains(&m.trait_decl));
-            }
-        }
-        // WEP 2026-07-31: one trait declaration at several argument lists —
-        // the arguments choose. The overload set is the concrete candidates of
-        // one declaration; distinct traits never form an overload set, so a
-        // cross-trait collision falls through to its error untouched, and
-        // blanket candidates neither form nor defeat the set (they lose to any
-        // concrete impl regardless).
+        // The overload set is the concrete candidates of one declaration.
+        // Distinct traits never form one, and a blanket neither forms nor
+        // defeats one, having lost to every concrete impl already.
         let concrete: Vec<usize> = found_traits
             .iter()
             .enumerate()
@@ -2582,7 +2204,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         self.report_trait_argument_ambiguity(&found_traits, method_name, &classes, span);
-        self.report_cross_trait_ambiguity(&found_traits, method_name, span);
         // Still return a winner: reporting and then claiming the method is
         // missing would stack a second, wrong diagnostic on the same call.
         found_traits.into_iter().next()
@@ -2677,23 +2298,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         method_name: &str,
         span: Span,
     ) {
-        // Blanket candidates are excluded from the count, so two traits'
-        // blankets sharing a method name tie silently (WEP 2026-09-01, "Two
-        // traits' blankets sharing a method name are not reported").
-        // Selection is untouched — this decides only what is reported.
-        // The collision is counted on declarations, so two same-named traits
-        // from different modules still collide even though their spellings
-        // agree — identity is the declaration, not the name.
-        let mut seen: IndexSet<crate::defs::DefId> = IndexSet::default();
-        for m in found_traits
-            .iter()
-            .filter(|m| m.blanket_type_param.is_none())
-        {
-            seen.insert(m.trait_decl);
-        }
-        if seen.len() < 2 {
-            return;
-        }
+        // Named on declarations, so two same-named traits from different
+        // modules still collide even though their spellings agree — identity is
+        // the declaration, not the name.
+        let seen: IndexSet<crate::defs::DefId> =
+            found_traits.iter().map(|m| m.trait_decl).collect();
+        assert!(
+            seen.len() > 1,
+            "the order tied {} trait(s) declaring `{method_name}`",
+            seen.len()
+        );
         // Same-named declarations are qualified by their declaring module —
         // a bare `'Kind' and 'Kind'` names nothing the user can act on.
         let defs = self.tysys.resolutions.defs();

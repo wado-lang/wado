@@ -1007,12 +1007,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .collect();
 
         // Build method_info with base struct name, then apply impl and method type args
-        let is_type_param_receiver = matches!(
-            self.tysys.type_table.borrow().get(base_type_id),
-            ResolvedType::TypeParam { .. }
-                | ResolvedType::TypePack { .. }
-                | ResolvedType::AssocTypeProjection { .. }
-        );
+        let is_type_param_receiver = self
+            .tysys
+            .type_table
+            .borrow()
+            .receiver_head_awaits_substitution(base_type_id);
         let base_receiver = match matched_ref_kind {
             Some(kind) => Receiver::Ref(kind),
             None => Receiver::Type(base_struct_name.clone()),

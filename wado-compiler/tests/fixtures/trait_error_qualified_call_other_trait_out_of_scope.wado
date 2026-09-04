@@ -1,0 +1,21 @@
+// A trait-qualified call names one trait, and only impls of that trait may
+// answer it. `Loud` is out of scope here and its impl declares `shout`, but the
+// call wrote `Amplify`, so importing `Loud` is not what it is missing
+// (WEP 2026-09-01, "Scope").
+
+use { Speaker } from "./sub/trait_scope_lib.wado";
+
+trait Amplify {
+    fn shout(&self) -> String;
+}
+
+export fn run() {
+    let s = Speaker { id: 3 };
+    assert Amplify::shout(&s) == "speaker:3";
+}
+
+__DATA__
+{
+  "compile_error": "no method 'shout' found on type 'Speaker'",
+  "compile_errors_not_contains": ["'Loud' is not imported here"]
+}

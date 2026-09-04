@@ -4113,7 +4113,7 @@ fn decompose_type_for_method_name(
             let args = fq.args().to_vec();
             (
                 Receiver::Type(fq.head_only()),
-                matches!(resolved, ResolvedType::TypeParam { .. }),
+                tt.receiver_head_awaits_substitution(type_id),
                 args,
             )
         }

@@ -383,6 +383,30 @@ pub(super) fn is_pure_operand(body: &Body, op: Operand) -> bool {
     op.as_expr().is_none_or(|e| is_pure_expr(body, e))
 }
 
+/// What `S { f: v, .. }.f` at `field_access` projects, when the receiver is the
+/// literal itself and every other field is pure — so dropping the struct with it
+/// discards no side effect.
+pub(super) fn projected_const_field(body: &Body, field_access: ExprId) -> Option<Operand> {
+    let ExprKind::FieldAccess {
+        expr, field_name, ..
+    } = &body.exprs[field_access].kind
+    else {
+        return None;
+    };
+    let ExprKind::StructLiteral { fields, .. } = &body.exprs[expr.as_expr()?].kind else {
+        return None;
+    };
+    let mut projected = None;
+    for f in fields {
+        if f.name == *field_name {
+            projected = Some(f.value);
+        } else if !is_pure_operand(body, f.value) {
+            return None;
+        }
+    }
+    projected
+}
+
 /// True when the expression has no observable effect *and cannot trap* — the
 /// predicate for a pass that *deletes* an expression, where dropping a `100 / x`
 /// would erase a trap the program is entitled to. [`is_pure_expr`] stays

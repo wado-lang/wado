@@ -909,56 +909,16 @@ impl ConstFoldVisitor<'_> {
         }
     }
 
-    /// Fold `Struct { f: v, .. }.f` into `v` when the construction is
-    /// immediate (the `FieldAccess` receiver is the literal itself) and every
-    /// non-projected field is a pooled value, so dropping the struct discards
-    /// no side effect. After copy-prop substitutes a pure single-field box
-    /// literal into its sole `.field` use this is the fold that removes the
-    /// otherwise-dead `struct.new` (issue: operand-promotion missed-opt).
+    /// Fold `Struct { f: v, .. }.f` into `v`. After copy-prop substitutes a pure
+    /// single-field box literal into its sole `.field` use this is what removes
+    /// the otherwise-dead `struct.new` (issue: operand-promotion missed-opt).
+    ///
+    /// Reports the redirect the engine made, which for this shape is not yet the
+    /// same as the projection going away — see #1963.
     fn project_struct_literal(&mut self, engine: &mut Engine, e: ExprId) -> bool {
-        let ExprKind::FieldAccess {
-            expr: recv,
-            field_name,
-            ..
-        } = &engine.body.exprs[e].kind
-        else {
+        let Some(proj) = super::arena_query::projected_const_field(engine.body, e) else {
             return false;
         };
-        let (recv, field_name) = (*recv, field_name.clone());
-        let Some(recv_e) = recv.as_expr() else {
-            return false;
-        };
-        // Split the projected field from its siblings within the struct-literal
-        // borrow. `Operand` is `Copy`, so collecting the siblings carries no
-        // `String` clone; the names themselves are only needed for the equality
-        // test here, not afterwards.
-        let mut projected = None;
-        let siblings: Vec<Operand> = {
-            let ExprKind::StructLiteral { fields, .. } = &engine.body.exprs[recv_e].kind else {
-                return false;
-            };
-            let mut siblings = Vec::with_capacity(fields.len().saturating_sub(1));
-            for f in fields {
-                if f.name == field_name {
-                    projected = Some(f.value);
-                } else {
-                    siblings.push(f.value);
-                }
-            }
-            siblings
-        };
-        let Some(proj) = projected else {
-            return false;
-        };
-        // A non-projected sibling with an observable effect must keep the struct
-        // so its evaluation is preserved. A pure sibling (e.g. a `PackedArray`
-        // repr) is dropped with the struct.
-        if siblings
-            .iter()
-            .any(|op| !super::arena_query::is_pure_operand(engine.body, *op))
-        {
-            return false;
-        }
         engine.redirect_expr(e, proj)
     }
 

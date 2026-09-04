@@ -17,6 +17,11 @@ pub struct TraitDeclId(pub u32);
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 pub struct ImplId(pub u32);
 
+/// A method name, interned across the program: two traits declaring `describe`
+/// share one id, which is what makes their collision one question.
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+pub struct MethodId(pub u32);
+
 /// A type as selection reads it. A parameter is its position, so two targets
 /// equal here are one `(Trait, Type)` pair.
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
@@ -33,6 +38,15 @@ pub enum SolverType {
         inner: Box<SolverType>,
     },
     Tuple(Vec<SolverType>),
+    /// An associated type of a rigid parameter, `X::Item` under `X: Holder`:
+    /// a type of its own, satisfying the bounds the trait declares on it
+    /// ([`TraitDef::assoc_bounds`]). A projection on a concrete type is
+    /// normalized to the impl's binding before it reaches the solver.
+    Projection {
+        base: Box<SolverType>,
+        trait_: TraitDeclId,
+        assoc: AssocId,
+    },
 }
 
 /// An associated type of a trait: `Mul::Output`.
@@ -56,7 +70,21 @@ impl SolverType {
         match self {
             Self::Param(_) | Self::Pack(_) => pred(self),
             Self::Decl(_, inner) | Self::Tuple(inner) => inner.iter().any(|t| t.mentions(pred)),
-            Self::Ref { inner, .. } => inner.mentions(pred),
+            Self::Ref { inner, .. } | Self::Projection { base: inner, .. } => inner.mentions(pred),
+        }
+    }
+
+    /// Whether `self` or a type within it instantiates a declaration
+    /// satisfying `pred`.
+    #[must_use]
+    pub fn mentions_decl(&self, pred: &dyn Fn(TypeDeclId) -> bool) -> bool {
+        match self {
+            Self::Param(_) | Self::Pack(_) => false,
+            Self::Decl(id, inner) => pred(*id) || inner.iter().any(|t| t.mentions_decl(pred)),
+            Self::Tuple(inner) => inner.iter().any(|t| t.mentions_decl(pred)),
+            Self::Ref { inner, .. } | Self::Projection { base: inner, .. } => {
+                inner.mentions_decl(pred)
+            }
         }
     }
 
@@ -80,6 +108,15 @@ impl SolverType {
             Self::Ref { is_mut, inner } => Self::Ref {
                 is_mut: *is_mut,
                 inner: Box::new(inner.map_params(arg)?),
+            },
+            Self::Projection {
+                base,
+                trait_,
+                assoc,
+            } => Self::Projection {
+                base: Box::new(base.map_params(arg)?),
+                trait_: *trait_,
+                assoc: *assoc,
             },
         })
     }
@@ -186,6 +223,24 @@ pub struct TraitDef {
     /// Per type parameter, its declared default, if any. A bound spells no
     /// arguments (WEP 2026-07-31), so it asks for the trait at its defaults.
     pub arg_defaults: Vec<Option<ArgDefault>>,
+    /// The methods it declares, which is what a call site matches on. A
+    /// supertrait's methods are not among them: an implementor writes a
+    /// separate impl for each trait.
+    pub methods: Vec<MethodId>,
+    /// The bounds it declares on each associated type (`type Item: Display`),
+    /// which a [`SolverType::Projection`] of it satisfies.
+    pub assoc_bounds: IndexMap<AssocId, Vec<TraitDeclId>>,
+}
+
+/// What a module may name. A trait's methods are candidates only where its
+/// declaration is in scope, so a module absent from
+/// [`Program::scopes`](Program) reaches no trait at all.
+#[derive(Clone, PartialEq, Eq, Debug, Default)]
+pub struct ModuleScope {
+    /// Declared in the module, imported by name or by alias, re-exported to it
+    /// through `pub use`, or one of the prelude's. Where an impl was written
+    /// does not enter: impls stay globally visible.
+    pub traits_in_scope: Vec<TraitDeclId>,
 }
 
 /// A type declaration, reduced to what `holds` reads of it at a query. Its
@@ -242,10 +297,22 @@ pub struct Program {
     /// Each impl's `type X = …;` bindings, spelled with the impl's own
     /// parameters. What a [`Pin`] is checked against.
     pub assoc_bindings: IndexMap<ImplId, Vec<(AssocId, SolverType)>>,
+    /// The methods each impl block's body declares. One its trait does not
+    /// declare — a helper the bodies call on `self` — is a candidate through
+    /// that impl alone.
+    pub impl_methods: IndexMap<ImplId, Vec<MethodId>>,
+    /// What each module may name, which gates the candidates of a call made
+    /// there.
+    pub scopes: IndexMap<ModuleId, ModuleScope>,
+    /// The declaration a tuple instantiates. An impl spells a tuple `[..T]`, so
+    /// both sides lower to [`SolverType::Tuple`] rather than to a `Decl`, and a
+    /// fact stated of that declaration needs this to reach an instance.
+    pub tuple: Option<TypeDeclId>,
 }
 
 /// The bounds in force where a question was asked: a generic body's `T: Tr`
-/// holds by its signature, not by any impl. Indexed by [`SolverType::Param`].
+/// holds by its signature, not by any impl. Indexed by [`SolverType::Param`]
+/// and [`SolverType::Pack`], a pack's bound holding of each element.
 #[derive(Clone, PartialEq, Eq, Debug, Default)]
 pub struct Env {
     pub param_bounds: Vec<Vec<TraitDeclId>>,
@@ -259,7 +326,10 @@ impl Program {
             SolverType::Param(index) | SolverType::Pack(index) => {
                 (*index as usize) < def.params.len()
             }
-            SolverType::Decl(..) | SolverType::Tuple(_) | SolverType::Ref { .. } => true,
+            SolverType::Decl(..)
+            | SolverType::Tuple(_)
+            | SolverType::Ref { .. }
+            | SolverType::Projection { .. } => true,
         };
         let undeclared = |ty: &SolverType| ty.mentions(&|p| !declared(p));
         assert!(

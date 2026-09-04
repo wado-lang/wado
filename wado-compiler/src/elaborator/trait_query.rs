@@ -652,7 +652,9 @@ impl TypeSystem {
         trait_: DefId,
         expected: bool,
     ) {
-        if !ctx.trait_check_stack.borrow().is_empty() {
+        // The solver is built in every profile, since selection asks it, but
+        // this check is a differential and stays a debug-build cost.
+        if !cfg!(debug_assertions) || !ctx.trait_check_stack.borrow().is_empty() {
             return;
         }
         let Some(bridge) = self.solver.as_ref() else {
@@ -1080,6 +1082,13 @@ impl TypeSystem {
                 self.type_implements_trait(ctx, scope, TypeTable::U32, trait_)
             }
             nominal => {
+                // A marker on a generic declaration (`impl<T> Eq for Pair<T>;`)
+                // asks whether the *declaration* derives, and its body is
+                // emitted per instantiation: a member that is one of the
+                // declaration's own parameters is that instantiation's to
+                // answer (WEP 2026-06-25). Not the receiver-versus-impl-bound
+                // question `enforce_impl_type_arg_bounds` asks, which admits no
+                // such deferral.
                 self.walk_structural_derive_members(scope, nominal, tr, &mut |_, member| {
                     matches!(
                         self.type_table.borrow().get(member),
@@ -1139,11 +1148,15 @@ impl TypeSystem {
     /// place rather than replaced on assign (WEP 2026-01-20). `variant` and `fn`
     /// are `Ref` but boxed (replace-on-assign), so a `&mut` cannot write through
     /// them; every other `Ref` type qualifies. A `Newtype` follows its base.
-    pub(super) fn is_ref_mut_identity(&self, scope: &TypeLookup, resolved: &ResolvedType) -> bool {
+    pub(super) fn is_ref_mut_identity(
+        &self,
+        is_variant: &dyn Fn(DefId) -> bool,
+        resolved: &ResolvedType,
+    ) -> bool {
         match resolved {
             ResolvedType::Variant { .. } | ResolvedType::Function { .. } => false,
             ResolvedType::GenericInstance { def, .. } => {
-                if scope.variant_cases_of(*def).is_some() {
+                if is_variant(*def) {
                     false
                 } else {
                     self.is_ref_identity(resolved)
@@ -1151,7 +1164,7 @@ impl TypeSystem {
             }
             ResolvedType::Newtype { base_type, .. } => {
                 let base = self.type_table.borrow().get(*base_type).clone();
-                self.is_ref_mut_identity(scope, &base)
+                self.is_ref_mut_identity(is_variant, &base)
             }
             _ => self.is_ref_identity(resolved),
         }
@@ -1233,7 +1246,8 @@ impl TypeSystem {
         }
 
         if on_bound == Some(OnBoundTrait::RefMut) {
-            return self.is_ref_mut_identity(scope, resolved);
+            return self
+                .is_ref_mut_identity(&|def| scope.variant_cases_of(def).is_some(), resolved);
         }
 
         let is_eq = on_bound == Some(OnBoundTrait::Eq);
@@ -1855,15 +1869,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.decl_key_or_local(written)
     }
 
-    /// Whether the trait declaration `decl` is in scope in the current frame:
-    /// declared by the current module, or reachable from it under any name.
-    /// Ties between same-named foreign declarations break on this.
-    pub(super) fn trait_decl_in_scope(&self, decl: crate::defs::DefId) -> bool {
-        self.tysys
-            .resolutions
-            .in_scope(&self.current_module_source, decl)
-    }
-
     /// Whether the trait `key` names declares `method_name`. The cheap form of
     /// [`Self::trait_method_of`], for counting candidates without cloning each
     /// one's declaration.
@@ -2220,10 +2225,6 @@ impl TypeSystem {
             // type_args[0] is the inner type T.
             if let Some(bounds) = bounds_map.get(inner_name)
                 && let Some(&type_arg) = type_args.first()
-                && !matches!(
-                    self.type_table.borrow().get(type_arg),
-                    ResolvedType::TypeParam { .. }
-                )
             {
                 for &bound in bounds {
                     if !self.type_implements_trait(ctx, scope, type_arg, bound) {
@@ -2244,12 +2245,6 @@ impl TypeSystem {
                     continue;
                 };
                 for &type_arg in type_args {
-                    if matches!(
-                        self.type_table.borrow().get(type_arg),
-                        ResolvedType::TypeParam { .. } | ResolvedType::TypePack { .. }
-                    ) {
-                        continue;
-                    }
                     for &bound in bounds {
                         if !self.type_implements_trait(ctx, scope, type_arg, bound) {
                             return false;
@@ -2860,11 +2855,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             blanket_type_param: None,
             blanket_binder: None,
             blanket_bounds: None,
-            bound_depth: 0,
             impl_struct_name: struct_name.to_string(),
             impl_struct_fq: self.tysys.fq_receiver_head(base_type_id),
             is_blanket_ref_impl: false,
-            is_variadic_impl: false,
         })
     }
 }
