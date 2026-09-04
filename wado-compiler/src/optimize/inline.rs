@@ -836,15 +836,27 @@ fn written_locals(body: &Body) -> IndexSet<u32> {
         let NodeRef::Expr(e) = node else {
             continue;
         };
-        let root = match &body.exprs[e].kind {
-            ExprKind::Assign { target, .. } => place_root_local(body, *target),
+        match &body.exprs[e].kind {
+            ExprKind::Assign { target, .. } => {
+                written.extend(place_root_local(body, *target));
+            }
             ExprKind::Unary {
                 op: NirUnaryOp::MutRef,
                 expr: inner,
-            } => inner.as_expr().and_then(|x| place_root_local(body, x)),
-            _ => None,
-        };
-        written.extend(root);
+            } => {
+                written.extend(inner.as_expr().and_then(|x| place_root_local(body, x)));
+            }
+            // A `&mut` argument is the callee's write. A `&mut` parameter passed
+            // on wears no `MutRef` of its own — it is already a reference, so it
+            // reaches the next call as a bare place and only `is_mut` says so.
+            // `args[0]` carries a method's `&mut self` the same way.
+            ExprKind::Call { args, .. } => {
+                for arg in args.iter().filter(|a| a.is_mut) {
+                    written.extend(arg.expr.as_expr().and_then(|x| place_root_local(body, x)));
+                }
+            }
+            _ => {}
+        }
     }
     written
 }

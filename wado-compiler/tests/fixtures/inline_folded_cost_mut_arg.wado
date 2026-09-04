@@ -1,0 +1,65 @@
+// A parameter handed out mutably at a call is not the caller's constant.
+//
+// `pick` is over the -O2 budget as written, so it is priced a second time on
+// the optimistic reading that every parameter arrives constant. That reading
+// decides `s.n == 0` and prunes the arm holding the loop, so it says splicing
+// `pick` deletes a loop — and a callee that would delete a loop is held back
+// from receiving any inlining of its own.
+//
+// `bump` writes through `s`, and a `&mut` parameter passed on wears no `&mut`
+// of its own: it reaches the call as a bare place, and only the argument's
+// mutability says a write happened. Read that, and the branch is undecided,
+// the loop stays, and `step` is small enough to splice into `pick`.
+//
+// `#[inline(never)]` keeps the write in `bump`. Spliced, it would leave an
+// assignment in `pick` that the plain scan for writes already catches.
+
+use { println, Stdout, Environment, args } from "core:cli";
+
+struct S {
+    n: i32,
+}
+
+fn step(acc: i32, i: i32, seed: i32) -> i32 {
+    return ((acc * 31 + i) ^ ((acc + seed) >> 3)) + i * 13;
+}
+
+#[inline(never)]
+fn bump(s: &mut S, seed: i32) {
+    s.n = seed & 7;
+}
+
+fn pick(s: &mut S, seed: i32) -> i32 {
+    bump(s, seed);
+    if s.n == 0 {
+        return 0;
+    } else {
+        let mut acc = 0;
+        for let mut i = 0; i < s.n; i += 1 {
+            acc = step(acc, i, seed);
+            if acc < 0 {
+                acc = -acc;
+            }
+            acc = acc * 7 + 3;
+            acc = acc ^ (acc >> 5);
+        }
+        return acc;
+    }
+}
+
+export fn run() with (Stdout, Environment) {
+    let seed = args().len() as i32;
+    let mut a = S { n: 0 };
+    let mut b = S { n: 0 };
+    let mut c = S { n: 0 };
+    let total = pick(&mut a, seed) + pick(&mut b, seed + 1) + pick(&mut c, seed + 2);
+    println(`${total}`);
+}
+
+__DATA__
+{
+    "stdout": "746\n",
+    "wir_not_expect:O2": [
+        "\"inline_folded_cost_mut_arg.wado/step\"("
+    ]
+}
