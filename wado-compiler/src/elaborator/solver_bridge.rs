@@ -223,16 +223,35 @@ impl Lowering {
         let decl = |key: DeclKey, args: Vec<SolverType>| {
             self.known_type(&key).map(|id| SolverType::Decl(id, args))
         };
+        // A pack spliced into a tuple is the pack; a mapped one (`R[F := F_i]`
+        // per element) is a shape the solver has no way to say.
+        let tuple_elem = |a: TypeId| {
+            let ResolvedType::TypePack {
+                name,
+                index,
+                mapped_elem,
+            } = table.get(a)
+            else {
+                return self.type_id(table, a, param);
+            };
+            match mapped_elem {
+                None => param(name, *index).map(SolverType::Pack),
+                Some(_) => None,
+            }
+        };
         let instance = |def: DefId, type_args: &[TypeId]| {
+            if self.tuple == Some(def) {
+                let elems = type_args
+                    .iter()
+                    .map(|&a| tuple_elem(a))
+                    .collect::<Option<Vec<_>>>()?;
+                return Some(SolverType::Tuple(elems));
+            }
             let args = type_args
                 .iter()
                 .map(|&a| self.type_id(table, a, param))
                 .collect::<Option<Vec<_>>>()?;
-            if self.tuple == Some(def) {
-                Some(SolverType::Tuple(args))
-            } else {
-                decl(DeclKey::Def(def), args)
-            }
+            decl(DeclKey::Def(def), args)
         };
         match table.get(id) {
             ResolvedType::Primitive(p) => decl(DeclKey::Builtin(p.as_str().to_string()), vec![]),
@@ -277,6 +296,18 @@ impl Lowering {
                 inner: Box::new(self.type_id(table, *inner, param)?),
             }),
             ResolvedType::TypeParam { name, index } => param(name, *index).map(SolverType::Param),
+            // Outside a tuple, a pack stands for one of its elements: a rigid
+            // type carrying the pack's bounds, at the pack's slot. A mapped
+            // one is `R` at that element.
+            ResolvedType::TypePack {
+                name,
+                index,
+                mapped_elem: None,
+            } => param(name, *index).map(SolverType::Param),
+            ResolvedType::TypePack {
+                mapped_elem: Some(mapped),
+                ..
+            } => self.type_id(table, *mapped, param),
             ResolvedType::Function {
                 is_mut,
                 params,
@@ -298,7 +329,6 @@ impl Lowering {
             ResolvedType::Never => decl(DeclKey::Builtin("!".to_string()), vec![]),
             ResolvedType::Reactive(_)
             | ResolvedType::InferVar(_)
-            | ResolvedType::TypePack { .. }
             | ResolvedType::AssocTypeProjection { .. }
             | ResolvedType::Unknown
             | ResolvedType::Error => None,
@@ -1026,8 +1056,10 @@ impl SolverBridge {
         // parameters, an assumption written in no bound list; a question
         // reaching here carries only the bounds in scope, so a receiver
         // mentioning a parameter with none reads differently on the two
-        // paths. And an anonymous struct's shape is minted after the program
-        // was built, so `derive` never saw it.
+        // paths. The walk makes the same assumption of a pack's elements
+        // whatever the pack's bounds say (`[..T]: Ord` holds to it under
+        // `T: Inspect`). And an anonymous struct's shape is minted after the
+        // program was built, so `derive` never saw it.
         let unbounded = |p: &SolverType| match p {
             SolverType::Param(i) => env.param_bounds[*i as usize].is_empty(),
             SolverType::Pack(_) => true,

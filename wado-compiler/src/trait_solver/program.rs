@@ -287,7 +287,8 @@ pub struct Program {
 }
 
 /// The bounds in force where a question was asked: a generic body's `T: Tr`
-/// holds by its signature, not by any impl. Indexed by [`SolverType::Param`].
+/// holds by its signature, not by any impl. Indexed by [`SolverType::Param`]
+/// and [`SolverType::Pack`], a pack's bound holding of each element.
 #[derive(Clone, PartialEq, Eq, Debug, Default)]
 pub struct Env {
     pub param_bounds: Vec<Vec<TraitDeclId>>,

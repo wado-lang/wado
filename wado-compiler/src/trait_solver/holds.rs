@@ -64,7 +64,9 @@ impl Query<'_> {
         if matches!(ty, SolverType::Ref { .. }) && on_ref == RefRule::Always {
             return Some(Holds::default());
         }
-        if let SolverType::Param(index) = ty
+        // A pack's bound holds of each element, so an element in a variadic
+        // body answers from the pack's slot.
+        if let SolverType::Param(index) | SolverType::Pack(index) = ty
             && let Some(bounds) = self.env.param_bounds.get(*index as usize)
             && bounds
                 .iter()
@@ -423,6 +425,25 @@ mod tests {
             Some(Holds::default())
         );
         assert_eq!(holds(&p, &e, &SolverType::Param(0), BETA, HERE), None);
+    }
+
+    /// A pack's bound holds of each element, so inside a variadic body the
+    /// pack's own tuple satisfies an impl bounding its elements.
+    #[test]
+    fn a_bound_in_force_answers_for_a_packs_elements() {
+        let p = Builder::default()
+            .bounded(
+                BETA,
+                SolverType::Tuple(vec![SolverType::Pack(0)]),
+                vec![ALPHA],
+            )
+            .build();
+        let own = SolverType::Tuple(vec![SolverType::Pack(0)]);
+        assert_eq!(
+            holds(&p, &env(vec![vec![ALPHA]]), &own, BETA, HERE),
+            Some(Holds::default())
+        );
+        assert_eq!(holds(&p, &env(vec![vec![]]), &own, BETA, HERE), None);
     }
 
     #[test]

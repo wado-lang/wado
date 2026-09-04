@@ -326,7 +326,10 @@ pipeline.
 
 A query carries an environment beside the program: the bounds in force where the
 question was asked. A generic body's `T: Tr` holds because its own signature says
-so, not because any impl exists, so no query can answer from `Program` alone.
+so, not because any impl exists, so no query can answer from `Program` alone. A
+pack's bound holds of each element, so a variadic body's `..T: Tr` answers for
+the pack and for one element of it alike — an element reads as a rigid
+parameter at the pack's slot (`trait_variadic_body_pack_element_receiver.wado`).
 This is rustc's `ParamEnv`. It is a parameter from the start because the
 annotate-time `Scope` it replaces is mutable state threaded through the
 elaborator, which is hard to retrofit.
@@ -523,9 +526,11 @@ asks the full question of each, and the recursion guard counts the member
 descents to tell a recursive type from an ungrounded cycle. The solver's
 `derive` runs beside it: every declaration is lowered and derived when the
 `Program` is built, and `holds` answers under the differential against
-`type_implements_trait` over every fixture. Two receivers the differential
+`type_implements_trait` over every fixture. Three receivers the differential
 skips, since only the compiler derives for them: one mentioning a type
-parameter with no bound, which the compiler's walk assumes `Pi: Tr` of, and an
+parameter with no bound, which the compiler's walk assumes `Pi: Tr` of; one
+mentioning a pack, whose elements the walk assumes the same of whatever the
+pack's bounds say (`[..T]: Ord` holds to it under `T: Inspect`); and an
 anonymous struct, whose shape a literal mints after the `Program` is built.
 What is left is the flip:
 
