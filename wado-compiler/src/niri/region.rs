@@ -77,18 +77,52 @@ pub(super) fn region_shape(body: &Body, e: ExprId) -> Option<(BlockId, Option<&s
     }
 }
 
-/// The outer locals `block` only reads — the seeds a region frame needs — or
-/// `None` for anything that disqualifies it: an unrunnable call, a global write,
-/// a reference-typed outer local, or a write whose place is an outer local or
-/// roots in no local at all (unaccountable, not absent). A write is an `Assign`
-/// target, a `&mut` borrow, or a `&mut` parameter per the callee's signature —
-/// the signature being the only reliable witness.
+/// Why a block cannot run as a region frame. The fold only needs to know that
+/// it cannot; a remark reporting a region that survived to the final IR needs
+/// to say which fact stopped it, so the answer carries the reason rather than
+/// collapsing to an absence.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RegionRefusal {
+    /// A write to a module-scope global, whose lifetime outlives the frame.
+    GlobalWrite,
+    /// A call through a closure or across the CM boundary — no body to run.
+    OpaqueCall,
+    /// A call to a function a compile-time frame cannot run: impure, generic,
+    /// async, or bodiless.
+    UnrunnableCall,
+    /// A write whose place roots in no local, so the frame cannot say what it
+    /// lands on. Unaccountable, not absent.
+    UnaccountableWrite,
+    /// A write to a local declared outside the block, which the frame does not
+    /// own.
+    OuterWrite,
+}
+
+impl RegionRefusal {
+    /// The refusal as a remark reads it, completing "this block computes a
+    /// constant at run time: …".
+    #[must_use]
+    pub fn describe(self) -> &'static str {
+        match self {
+            Self::GlobalWrite => "it writes a global",
+            Self::OpaqueCall => "it calls through a closure or the component boundary",
+            Self::UnrunnableCall => "it calls a function the engine cannot run",
+            Self::UnaccountableWrite => "it writes a place no local roots",
+            Self::OuterWrite => "it writes a local it does not own",
+        }
+    }
+}
+
+/// The outer locals `block` only reads — the seeds a region frame needs — or the
+/// fact that disqualifies it. A write is an `Assign` target, a `&mut` borrow, or
+/// a `&mut` parameter per the callee's signature — the signature being the only
+/// reliable witness.
 pub(super) fn region_free_reads(
     body: &Body,
     block: BlockId,
     facts: ProgramFacts<'_>,
     type_table: &TypeTable,
-) -> Option<Vec<FreeRead>> {
+) -> Result<Vec<FreeRead>, RegionRefusal> {
     fn record_write(body: &Body, op: Operand, written: &mut LocalSet) -> Option<()> {
         written.insert(write_root_local(body, op)?);
         Some(())
@@ -111,18 +145,27 @@ pub(super) fn region_free_reads(
                 }
             }
             NodeRef::Expr(e) => match &body.exprs[e].kind {
-                ExprKind::GlobalVarSet { .. }
-                | ExprKind::IndirectCall { .. }
-                | ExprKind::CmRawCall { .. } => return None,
+                ExprKind::GlobalVarSet { .. } => return Err(RegionRefusal::GlobalWrite),
+                ExprKind::IndirectCall { .. } | ExprKind::CmRawCall { .. } => {
+                    return Err(RegionRefusal::OpaqueCall);
+                }
                 ExprKind::Call { func_id, args, .. } => {
                     // A builtin never reaches NIR as a method call, so this is
                     // the only shape that may be one instead of a callee.
                     if let Some(callee) = facts.callees.and_then(|m| m.get(func_id)) {
-                        let site = CallSite::of(body, e)?;
-                        write_targets(body, &site, callee, &mut written)?;
-                    } else if facts.ctfe_builtins.and_then(|m| m.get(func_id))?.is_write() {
-                        let target = args.first()?;
-                        record_write(body, target.expr, &mut written)?;
+                        let site =
+                            CallSite::of(body, e).ok_or(RegionRefusal::UnaccountableWrite)?;
+                        write_targets(body, &site, callee, &mut written)
+                            .ok_or(RegionRefusal::UnaccountableWrite)?;
+                    } else if facts
+                        .ctfe_builtins
+                        .and_then(|m| m.get(func_id))
+                        .ok_or(RegionRefusal::UnrunnableCall)?
+                        .is_write()
+                    {
+                        let target = args.first().ok_or(RegionRefusal::UnaccountableWrite)?;
+                        record_write(body, target.expr, &mut written)
+                            .ok_or(RegionRefusal::UnaccountableWrite)?;
                     }
                 }
                 ExprKind::Local { index, .. } => {
@@ -131,13 +174,15 @@ pub(super) fn region_free_reads(
                     }
                 }
                 ExprKind::Assign { target, .. } => {
-                    record_write(body, Operand::Expr(*target), &mut written)?;
+                    record_write(body, Operand::Expr(*target), &mut written)
+                        .ok_or(RegionRefusal::UnaccountableWrite)?;
                 }
                 ExprKind::Unary {
                     op: NirUnaryOp::MutRef,
                     expr,
                 } => {
-                    record_write(body, *expr, &mut written)?;
+                    record_write(body, *expr, &mut written)
+                        .ok_or(RegionRefusal::UnaccountableWrite)?;
                 }
                 _ => {}
             },
@@ -151,14 +196,14 @@ pub(super) fn region_free_reads(
             continue;
         }
         if written.contains(index) {
-            return None;
+            return Err(RegionRefusal::OuterWrite);
         }
         out.push(FreeRead {
             index,
             is_reference: type_table.is_reference_shaped(ty),
         });
     }
-    Some(out)
+    Ok(out)
 }
 
 /// A local a region reads without declaring, and whether it names a reference.

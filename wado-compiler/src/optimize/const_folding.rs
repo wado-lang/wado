@@ -23,8 +23,8 @@ use crate::nir_arena::{
 use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
 use crate::niri::{
-    BorrowRoot, CalleeMap, CtfeBuiltin, CtfeBuiltinMap, EditSink, GlobalEnv, GlobalFieldEnv,
-    GlobalKey, Interpreter, Lattice, is_ctfe_runnable,
+    BorrowRoot, CalleeMap, CtfeBuiltinMap, EditSink, GlobalEnv, GlobalFieldEnv, GlobalKey,
+    Interpreter, Lattice, build_callee_map, build_ctfe_builtin_map,
 };
 use crate::tir::{PrimitiveType, ResolvedType, TypeId, TypeTable};
 
@@ -248,66 +248,6 @@ impl EditSink for EngineSink<'_, '_> {
     fn set_block_stmts(&mut self, block: crate::nir_arena::BlockId, stmts: Vec<StmtId>) {
         self.engine.set_block_stmts(block, stmts);
     }
-}
-
-/// Pre-build the [`CalleeMap`] from every function a compile-time frame can run
-/// in
-/// `project`. The map stores `Rc<RefCell<NirFunction>>` handles
-/// aliased with `project.functions`, so rebuilding the map every
-/// optimizer iteration costs only refcount bumps. The key shape
-/// `(module_source, full_name)` mirrors what `try_call_fold`
-/// synthesises from a `Call` node's `FunctionRef`.
-pub(super) fn build_callee_map(project: &NirPackage) -> CalleeMap {
-    let mut map = CalleeMap::default();
-    for func_rc in &project.functions {
-        let func = func_rc.borrow();
-        if !is_ctfe_runnable(&func) {
-            continue;
-        }
-        let Some(id) = func.id else {
-            continue;
-        };
-        drop(func);
-        map.insert(id, crate::niri::Callee::new(func_rc.clone()));
-    }
-    map
-}
-
-/// Which callee ids are the builtins the engine evaluates.
-///
-/// `array_get_value` is generic, but a builtin is declared once and shared by every
-/// instantiation — the type arguments ride on the call, not on a monomorphized
-/// callee record — so the name is read off whichever of the two forms the
-/// callee has.
-pub(super) fn build_ctfe_builtin_map(project: &NirPackage) -> CtfeBuiltinMap {
-    let mut map = CtfeBuiltinMap::default();
-    for func_rc in &project.functions {
-        let func = func_rc.borrow();
-        let Some(id) = func.id else {
-            continue;
-        };
-        let descriptor = crate::nir::FunctionRef::from_resolved(&func, func.module_source.clone());
-        let Some(name) = descriptor
-            .builtin_name()
-            .or_else(|| descriptor.monomorphized_builtin_name())
-        else {
-            continue;
-        };
-        let builtin = match name.as_str() {
-            "builtin::array_get_value" | "builtin::array_get_value_u8" => CtfeBuiltin::ArrayGet,
-            "builtin::array_len" => CtfeBuiltin::ArrayLen,
-            "builtin::array_new" => CtfeBuiltin::ArrayNew,
-            "builtin::array_set" | "builtin::array_set_u8" => CtfeBuiltin::ArraySet,
-            "builtin::array_copy" => CtfeBuiltin::ArrayCopy,
-            "builtin::array_clone_prefix" => CtfeBuiltin::ArrayClonePrefix,
-            "builtin::cold_path" => CtfeBuiltin::ColdPath,
-            "builtin::select" => CtfeBuiltin::Select,
-            "builtin::i32_as_char" => CtfeBuiltin::I32AsChar,
-            _ => continue,
-        };
-        map.insert(id, builtin);
-    }
-    map
 }
 
 /// Pre-build the [`GlobalEnv`] from every global in `project`, reducing each

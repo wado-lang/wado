@@ -459,3 +459,112 @@ export fn run(args: List<String>) with Stdout {
         "a parameter outside a scrutinee should not be remarked, got {remarks:?}"
     );
 }
+
+/// Compile `source` at `-O2` and return the `remark:` diagnostics naming a
+/// region that stayed at run time.
+fn const_region_remarks(source: &str) -> Vec<String> {
+    remarks_for(source)
+        .into_iter()
+        .filter(|r| r.contains("computes a constant at run time"))
+        .collect()
+}
+
+#[test]
+fn a_constant_integer_interpolation_is_remarked() {
+    // Every interpolation is constant, so the whole template denotes a literal,
+    // yet it reaches the final IR as a buffer and a `fmt_decimal` call.
+    let remarks = const_region_remarks(
+        r#"
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    println(`n=${42}`);
+}
+"#,
+    );
+
+    assert_eq!(remarks.len(), 1, "expected one remark, got {remarks:?}");
+    assert!(
+        remarks[0].contains("fmt_decimal"),
+        "the remark should name the call that did not fold: {remarks:?}"
+    );
+    assert!(
+        remarks[0].starts_with("5:"),
+        "the remark should point at the template on line 5: {remarks:?}"
+    );
+}
+
+#[test]
+fn a_constant_string_interpolation_is_not_remarked() {
+    // A `String` interpolation folds to a literal today, so nothing survives to
+    // report. This is the test that retires itself as coverage grows.
+    let remarks = const_region_remarks(
+        r#"
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    println(`s=${"y"}`);
+}
+"#,
+    );
+
+    assert!(remarks.is_empty(), "unexpected remarks: {remarks:?}");
+}
+
+#[test]
+fn a_runtime_interpolation_is_not_remarked() {
+    // The region reads a local the optimizer cannot know, so it is not a
+    // constant the engine failed to reach — it is a template that has to run.
+    let remarks = const_region_remarks(
+        r#"
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let n = builtin::black_box(42);
+    println(`n=${n}`);
+}
+"#,
+    );
+
+    assert!(remarks.is_empty(), "unexpected remarks: {remarks:?}");
+}
+
+#[test]
+fn a_constant_bool_interpolation_names_the_global_write() {
+    // `"true"` is globalized, and the lazy initializer the globalization leaves
+    // puts a global write inside the template region. That is what stops the
+    // fold, not the value model, so the remark says so rather than naming a
+    // call.
+    let remarks = const_region_remarks(
+        r#"
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    println(`v=${true}`);
+}
+"#,
+    );
+
+    assert_eq!(remarks.len(), 1, "expected one remark, got {remarks:?}");
+    assert!(
+        remarks[0].contains("it writes a global"),
+        "the remark should name the refusal: {remarks:?}"
+    );
+}
+
+#[test]
+fn a_template_buffers_inner_block_is_not_remarked() {
+    // Every template region contains inner blocks that write the buffer their
+    // parent owns. Reporting those would bury the one region worth reporting.
+    let remarks = const_region_remarks(
+        r#"
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    println(`v=${42}`);
+}
+"#,
+    );
+
+    assert_eq!(remarks.len(), 1, "expected one remark, got {remarks:?}");
+}

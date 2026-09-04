@@ -647,6 +647,14 @@ impl Interpreter<'_> {
         Some((site.func_id, site.operands().map(|(_, op)| op).collect()))
     }
 
+    /// Record why a call was not run, and refuse it. Every refusal above the
+    /// expensive half goes through here, so `WADO_TRACE=ctfe_call` lists what
+    /// each declined call wanted that the frame could not give.
+    fn decline(&self, key: &CalleeKey, why: &str) -> Option<CallRun> {
+        crate::compiler_trace!("ctfe_call", "{key:?}: {why}");
+        None
+    }
+
     /// Run a call in a compile-time frame: bind the parameters, execute the body,
     /// and report both the returned value and what it leaves in each `&mut`
     /// parameter. `may_write` is the caller's promise to apply the write-backs;
@@ -664,11 +672,11 @@ impl Interpreter<'_> {
             return None;
         }
         if !may_write && callee.params.iter().any(|p| p.is_mut_ref) {
-            return None;
+            return self.decline(&key, "writes a &mut parameter at value position");
         }
         let callee_body = callee.body.as_ref()?;
         if self.step_budget == 0 {
-            return None;
+            return self.decline(&key, "step budget exhausted");
         }
         let returns_unit = callee.return_type == TypeTable::UNIT;
         // A callee returning a reference yields an alias into the caller's
@@ -685,18 +693,25 @@ impl Interpreter<'_> {
         for (arg, param) in args.iter().zip(&callee.params) {
             let place = self.frame_place_of(body, *arg);
             let value = if param.is_mut_ref {
-                let (root, path) = place.clone()?;
-                let value = self.place_value(root, &path)?;
+                let Some((root, path)) = place.clone() else {
+                    return self.decline(&key, "a &mut argument names no frame place");
+                };
+                let Some(value) = self.place_value(root, &path) else {
+                    return self.decline(&key, "a &mut argument's place holds no constant");
+                };
                 targets.push((param.local_index, root, path));
                 value
             } else {
-                self.shared_ref_arg_value(body, *arg)?
+                match self.shared_ref_arg_value(body, *arg) {
+                    Some(value) => value,
+                    None => return self.decline(&key, "an argument is not constant"),
+                }
             };
             places.extend(place);
             bound.push((param.local_index, value));
         }
         if aliased_write_targets(&targets, &places) {
-            return None;
+            return self.decline(&key, "two arguments reach one place");
         }
         // A result may embed a parameter's storage — `Formatter::new(&mut buf)`
         // returns a `Formatter` holding that borrow, and `stores[p]` declares
@@ -714,6 +729,7 @@ impl Interpreter<'_> {
         if self.call_missed(key, may_write, &args) {
             return None;
         }
+        crate::compiler_trace!("ctfe_call", "{key:?}: running");
         self.charge(1)?;
         self.call_stack.push(key);
         let mut scratch = callee_body.nodes_only_clone();
@@ -723,6 +739,7 @@ impl Interpreter<'_> {
         self.swap_frame(caller);
         self.call_stack.pop();
         if run.is_none() {
+            crate::compiler_trace!("ctfe_call", "{key:?}: body did not reach a value");
             self.record_call_miss(key, may_write, args);
         }
         run.map(|run| {
@@ -790,7 +807,7 @@ impl Interpreter<'_> {
         if self.frame.region_misses.contains(&e) {
             return None;
         }
-        let free = region_free_reads(body, block, self.facts, self.type_table)?;
+        let free = region_free_reads(body, block, self.facts, self.type_table).ok()?;
         let mut seeds: Vec<(u32, Value)> = Vec::with_capacity(free.len());
         for read in free {
             let index = read.index;

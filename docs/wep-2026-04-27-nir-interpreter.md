@@ -155,27 +155,88 @@ primitive or landed inside a region one just returned.
 
 ## Roadmap
 
-Ordered. Each stage says what finishing it means.
+Ordered by what the census counts, not by what this document guessed.
 
 ### 1. Say why a fold did not happen
 
-- [ ] A remark, over the [remarks](./wep-2026-06-03-optimizer-remarks.md)
-      infrastructure, naming why a region or a call did not fold: a runtime
-      interpolation, an exhausted budget, a refused aggregate, an unowned place,
-      an undecided pattern.
-- [ ] A census of the benchmarks, `wasm-size` corpus and stdlib by that reason.
+- [x] A remark, over the [remarks](./wep-2026-06-03-optimizer-remarks.md)
+      infrastructure, naming a block that computes a constant at run time and
+      what stopped it — the calls that survived inside it, or the fact that
+      refused it as a frame. Read off the final IR, so it retires itself as the
+      fold reaches each shape.
+- [x] `WADO_TRACE=ctfe_call`, which names what each declined call wanted that the
+      frame could not give. The remark reports the region; the trace reports the
+      call inside it.
+- [x] A census over the benchmark and `wasm-size` corpora and the Wado packages
+      (`mise run report-const-regions`).
 
-Done when the refusal reasons are counted, and every stage below is ordered
-against those counts rather than against this document.
+The census found 2 788 surviving regions across 20 files, and it reorders
+everything below:
 
-### 2. The frame owns storage
+| Cause                                     | Regions |
+| ----------------------------------------- | ------- |
+| it writes a global                        | 1 353   |
+| it calls a function the engine cannot run | 1 074   |
+| it writes a place no local roots          | 246     |
+| a named call still runs (`panic`, others) | 113     |
+| it calls through a closure or CM          | 4       |
 
-One capability with three faces, and the measured blocker for every constant
-interpolation that is not already a `String`. `` `c=${'x'}` `` leaves a
-`Formatter { …, buf: __local }` literal in the WIR because a field holding a
-place is not a value the engine can represent; `` `b=${true}` `` leaves
-`Formatter::pad`, a unit-returning `&mut self` method; `` `n=${42}` `` leaves
-both, through `fmt_decimal`'s `&mut Formatter` parameter.
+Two files of Gale-generated code carry 92 % of the total, so the ordering was
+checked against hand-written corpora separately: `json_twitter`, `zlib_bench`
+and `sqlite_parse` are dominated by the global write, `package-marl` by the
+unrunnable call. The two together are about 95 % everywhere.
+
+What that overturns: the format-coverage work this WEP was ordered around is the
+fourth-largest bucket, at roughly 4 %. The value model is not what most regions
+wait on. The two mechanisms below are, and neither was in this document.
+
+### 2. A materializing global write is not a write
+
+Half the surviving regions contain a `GlobalVarSet`, and a region carrying one
+is refused whole. Almost all of them are the lazy initializer
+[constant-object globalization](./wep-2026-05-31-const-object-globalization.md)
+leaves behind: the region assigns a constant to a global and reads it straight
+back, which is a materialization the frame could read through rather than a
+write to program state. `` `v=${true}` `` is the smallest instance — `"true"`
+is globalized, and that alone stops the fold.
+
+- [ ] Decide when such a write can be read through rather than refused. The
+      soundness question is whether the region is the global's only initializer,
+      since folding the region away deletes the assignment; a global another site
+      also fills, or reads before this one runs, is not one to read through.
+- [ ] Whether the answer belongs in `niri` or in the globalization pass, which
+      could leave a shape the engine already reads. The pass knows which globals
+      it minted and where; the engine would have to re-derive it.
+
+Done when the census's largest bucket is gone and the corpus is recounted.
+
+### 3. Which functions the engine cannot run, and why
+
+A third of the surviving regions call something outside the callee map: impure,
+generic, async, or bodiless. Which of those it is decides whether there is
+anything to do — a genuinely impure callee is a correct refusal, a
+still-generic one after monomorphization is a bug, and `panic` (79 regions) is a
+cold path a region could carry rather than be refused for.
+
+- [ ] Break the bucket down by why the callee is out: the trace names the call,
+      but a region refused before `run_call` never reaches it.
+- [ ] `panic` on a statically dead path, which is what a bounds check inside a
+      folded region leaves.
+
+Done when the bucket is split into what is a correct refusal and what is work,
+and the work is a stage of its own.
+
+### 4. The frame owns storage
+
+What the format work waits on, and about 4 % of the census — small, but it is
+what turns a constant interpolation into a literal. `` `c=${'x'}` `` and
+`` `n=${42}` `` leave `Formatter::pad` and `i32::fmt_decimal` standing; one
+constant integer interpolation costs 599 bytes at `-Os`, and `${3.5}` costs
+about 10 000, since `fpfmt` stays in the binary.
+
+A unit-returning call whose writes land in a place the frame owns, and a `&mut`
+argument written back on return, are already implemented — `exec_call_stmt` runs
+one and `run_call` applies the write-backs. What is left:
 
 - [ ] A place-valued field, so an aggregate can carry a reference. Today such an
       aggregate is not a constant, since a field holding the referent's value
@@ -183,23 +244,18 @@ both, through `fmt_decimal`'s `&mut Formatter` parameter.
       place the frame already names elsewhere. The refusal is whole-value, so a
       scalar field naming no storage is refused with the rest, which is why
       `Array::slice`'s computed bounds stop folding.
-- [ ] A call that returns nothing but whose every write lands in a place the
-      frame owns, which is what lets a builder-style helper run.
-- [ ] Method calls, excluded today because a `&mut self` receiver mutates through
-      the call. Unnecessary for a receiver the frame owns, which the store can
-      update.
-- [ ] A `&mut` argument writing back into the caller frame's place on return.
-      Without it a buffer that grows still abandons the evaluation, because
-      `grow` reshapes the caller's container from a frame of its own.
+- [ ] `String::grow`, which reshapes the caller's container from a frame of its
+      own and so abandons the evaluation whenever a buffer outgrows its
+      reservation.
 
 Upstream: the `stores`-gated temp and write-back carve-outs and divergences D1–D6
 in [Reference Representation](./wep-2026-06-13-reference-representation.md). The
 engine's notion of a place must be the one that WEP settles, not a second one.
 
-Done when `${true}`, `${'x'}` and `${42}` fold to literals at `-O2` and the 599
-bytes go away.
+Done when `${'x'}` and `${42}` fold to literals at `-O2` and the 599 bytes go
+away.
 
-### 3. The aggregate exit
+### 5. The aggregate exit
 
 - [ ] A `List<T>` of scalars written back as
       [`ArrayLiteral`](./wep-2026-05-31-nir-array-literal.md) and a plain struct
@@ -210,29 +266,32 @@ bytes go away.
 Done when a constant `List` result and a constant struct result reach the IR as
 literals, and `Array::slice`'s computed bounds fold.
 
-### 4. Format coverage to the budget
+### 6. Format coverage to the budget
 
 - [ ] Width, zero-pad and radix specs, then `Inspect`, then floats. Each step
       measures what it spends against the step budget; if `fpfmt` overruns it,
-      floats become a known gap rather than a reason to raise the budget.
-- [ ] A `wasm-size` and `benchmark` run recording what stages 2–4 bought.
+      floats become a known gap rather than a reason to raise the budget. Floats
+      carry the largest size prize and the largest engine cost, so the order is
+      the engine's, not the payoff's.
+- [ ] A `wasm-size` and `benchmark` run recording what stages 2–6 bought.
 
-Done when the corpus census from stage 1 shows no refusal reason left that the
-step budget does not explain.
+Done when a recount shows no refusal reason left that the step budget does not
+explain.
 
-### 5. Mixed templates
+### 7. Mixed templates
 
 - [ ] The marked region-append primitive set and the derived-`fmt` admission
       rule, per "Fold the region, not the call".
 
 Done when a template mixing constant and runtime interpolations emits the
-constant parts as literals. Sized by stage 1's count of such templates; if that
-count is small, this stage is demoted to a known gap.
+constant parts as literals. The census counts no such template yet, since a
+region reading a runtime local is not reported; sizing it needs a count of its
+own, and a small one demotes this stage to a known gap.
 
-### 6. The remaining refusals
+### 8. The remaining refusals
 
-Each is a small, local refusal, and stage 1's census decides whether any is worth
-the code.
+Each is a small, local refusal the census does not count, so each needs a reason
+of its own to be worth the code.
 
 - [ ] A `switch` with a constant scrutinee. A switch is formed before inlining,
       so a scrutinee inlining makes constant survives untouched.
@@ -240,7 +299,7 @@ the code.
       a direct call, so neither inlining nor CTFE reaches through it.
 - [ ] Guards decided when the engine is only asked what an expression denotes.
 
-### Validation, from stage 2 onward
+### Validation, from the first engine change onward
 
 - [ ] A fold / no-fold differential oracle in the
       [fuzzer](./wep-2026-08-19-compiler-fuzzing.md): compile each corpus fixture

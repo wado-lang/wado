@@ -12,7 +12,7 @@ use crate::nir_package::NirPackage;
 
 use super::aggregate_forward::AggregateForwardRule;
 use super::const_branch_prune::{BranchPruneRule, PruneMode};
-use super::const_folding::{ConstFoldRule, build_callee_map, build_ctfe_builtin_map};
+use super::const_folding::ConstFoldRule;
 use super::drop_value::DropValueRule;
 use super::elide_box_local::build_elide_box_local;
 use super::elide_local::ElideRule;
@@ -23,6 +23,7 @@ use super::match_to_switch::MatchToSwitchRule;
 use super::ref_elim::build_ref_elim;
 use super::string_push::{AppendFuseRule, ConstAsciiPushRule, ShortPushStrRule, resolve_ctx};
 use super::tuple_projection::TupleProjectionRule;
+use crate::niri::{build_callee_map, build_ctfe_builtin_map};
 
 /// Run the unified peephole rule set over every function body. Returns whether
 /// any rule fired. Gated: skips functions unchanged since this pass last ran.

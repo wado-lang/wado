@@ -439,3 +439,101 @@ fn branch_gate(body: &Body, node: NodeRef) -> Option<(crate::nir_arena::Operand,
         NodeRef::Block(_) | NodeRef::Pat(_) => None,
     }
 }
+
+/// Report each compile-time region that reached the final IR: a block building
+/// its value in locals of its own, reading nothing outside itself, and yielding
+/// the result. Everything in such a block is compile-time known, so the value it
+/// yields is a constant the program computes at run time.
+///
+/// The fact is read off the final IR, never off a refusal the engine recorded,
+/// so the remark retires itself the moment the fold reaches the shape. A region
+/// that does read something outside itself is a template that has to run, and is
+/// not reported.
+pub fn collect_const_region_remarks(package: &NirPackage) -> Vec<Remark> {
+    let callees = crate::niri::build_callee_map(package);
+    let ctfe_builtins = crate::niri::build_ctfe_builtin_map(package);
+    let names = ctfe_runnable_names(package);
+    let type_table_ref = package.type_table.borrow();
+    let type_table: &TypeTable = &type_table_ref;
+
+    let mut remarks = Vec::new();
+    for func_rc in &package.functions {
+        let func = func_rc.borrow();
+        if !func.module_source.is_entry_package() {
+            continue;
+        }
+        let Some(body) = &func.body else {
+            continue;
+        };
+        for region in crate::niri::region_queries(body, &callees, &ctfe_builtins, type_table) {
+            // A region reading an outer local is a template that has to run:
+            // what it yields is not a constant, so there is nothing to report.
+            if matches!(&region.seeds, Ok(seeds) if !seeds.is_empty()) {
+                continue;
+            }
+            // An inner block writing the buffer its parent owns is how a
+            // template is built, not a fold that was missed. The parent is the
+            // region worth reporting, and it is reported on its own.
+            if region.seeds == Err(crate::niri::RegionRefusal::OuterWrite) {
+                continue;
+            }
+            let surviving = surviving_calls(body, region.expr, &names);
+            if surviving.is_empty() {
+                continue;
+            }
+            let cause = match region.seeds {
+                Ok(_) => format!(
+                    "{} still runs here",
+                    surviving
+                        .iter()
+                        .map(|n| format!("`{n}`"))
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                ),
+                Err(refusal) => refusal.describe().to_string(),
+            };
+            remarks.push(Remark {
+                message: format!("this block computes a constant at run time: {cause}"),
+                module: func.module_source.clone(),
+                span: body.exprs[region.expr].span,
+            });
+        }
+    }
+    remarks
+}
+
+/// The functions still called inside `region`, deduplicated and in walk order,
+/// under the names their authors wrote. Each is one the engine was free to run
+/// and did not, so together they say what the fold waits on — `fmt_decimal` says
+/// integer formatting, `grow` says a buffer the frame cannot reshape.
+fn surviving_calls(body: &Body, region: ExprId, names: &[Option<String>]) -> Vec<String> {
+    use cranelift_entity::EntityRef;
+    let mut out: Vec<String> = Vec::new();
+    let mut stack = vec![NodeRef::Expr(region)];
+    while let Some(node) = stack.pop() {
+        if let NodeRef::Expr(e) = node
+            && let ExprKind::Call { func_id, .. } = &body.exprs[e].kind
+            && let Some(Some(name)) = names.get(func_id.index())
+            && !out.contains(name)
+        {
+            out.push(name.clone());
+        }
+        body.for_each_child(node, |c| stack.push(c));
+    }
+    out
+}
+
+/// Display name per `func_id`, for the functions a compile-time frame can run.
+/// `None` for every other id — a builtin, an impure callee — so a call to one is
+/// not named as work the engine declined.
+fn ctfe_runnable_names(package: &NirPackage) -> Vec<Option<String>> {
+    package
+        .functions
+        .iter()
+        .map(|f| {
+            let f = f.borrow();
+            crate::niri::is_ctfe_runnable(&f)
+                .then(|| crate::name::diagnostic_function_name(&f.name).to_string())
+        })
+        .collect()
+}

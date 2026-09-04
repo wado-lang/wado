@@ -7,11 +7,12 @@
 use crate::const_eval::Value;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
-use crate::nir::{NirFunction, NirUnaryOp};
+use crate::nir::{FunctionRef, NirFunction, NirUnaryOp};
 use crate::nir_arena::{
     BlockId, BlockNode, Body, ExprId, ExprKind, ExprNode, LocalSet, Operand, PatId, PatKind,
     StmtId, StmtKind, StmtNode,
 };
+use crate::nir_package::NirPackage;
 use crate::nir_value_graph::ValueKind;
 use crate::tir::{TypeId, TypeTable};
 
@@ -134,6 +135,7 @@ mod trackability;
 
 pub use callee::{Callee, CalleeKey, CalleeMap};
 use pattern::PatternMatch;
+pub use region::RegionRefusal;
 pub(crate) use rewrite::guard_declares_locals;
 use trackability::Trackability;
 
@@ -205,6 +207,66 @@ impl EditSink for BodySink<'_> {
     }
 }
 
+/// Pre-build the [`CalleeMap`] from every function a compile-time frame can run
+/// in
+/// `project`. The map stores `Rc<RefCell<NirFunction>>` handles
+/// aliased with `project.functions`, so rebuilding the map every
+/// optimizer iteration costs only refcount bumps. The key shape
+/// `(module_source, full_name)` mirrors what `try_call_fold`
+/// synthesises from a `Call` node's `FunctionRef`.
+pub(crate) fn build_callee_map(project: &NirPackage) -> CalleeMap {
+    let mut map = CalleeMap::default();
+    for func_rc in &project.functions {
+        let func = func_rc.borrow();
+        if !is_ctfe_runnable(&func) {
+            continue;
+        }
+        let Some(id) = func.id else {
+            continue;
+        };
+        drop(func);
+        map.insert(id, Callee::new(func_rc.clone()));
+    }
+    map
+}
+
+/// Which callee ids are the builtins the engine evaluates.
+///
+/// `array_get_value` is generic, but a builtin is declared once and shared by every
+/// instantiation — the type arguments ride on the call, not on a monomorphized
+/// callee record — so the name is read off whichever of the two forms the
+/// callee has.
+pub(crate) fn build_ctfe_builtin_map(project: &NirPackage) -> CtfeBuiltinMap {
+    let mut map = CtfeBuiltinMap::default();
+    for func_rc in &project.functions {
+        let func = func_rc.borrow();
+        let Some(id) = func.id else {
+            continue;
+        };
+        let descriptor = FunctionRef::from_resolved(&func, func.module_source.clone());
+        let Some(name) = descriptor
+            .builtin_name()
+            .or_else(|| descriptor.monomorphized_builtin_name())
+        else {
+            continue;
+        };
+        let builtin = match name.as_str() {
+            "builtin::array_get_value" | "builtin::array_get_value_u8" => CtfeBuiltin::ArrayGet,
+            "builtin::array_len" => CtfeBuiltin::ArrayLen,
+            "builtin::array_new" => CtfeBuiltin::ArrayNew,
+            "builtin::array_set" | "builtin::array_set_u8" => CtfeBuiltin::ArraySet,
+            "builtin::array_copy" => CtfeBuiltin::ArrayCopy,
+            "builtin::array_clone_prefix" => CtfeBuiltin::ArrayClonePrefix,
+            "builtin::cold_path" => CtfeBuiltin::ColdPath,
+            "builtin::select" => CtfeBuiltin::Select,
+            "builtin::i32_as_char" => CtfeBuiltin::I32AsChar,
+            _ => continue,
+        };
+        map.insert(id, builtin);
+    }
+    map
+}
+
 /// Whether a compile-time frame can run `func`'s body: pure, and concrete —
 /// `type_params` and `impl_type_params` empty, since CTFE runs after
 /// monomorphization.
@@ -237,6 +299,49 @@ pub fn is_ctfe_eligible(func: &NirFunction) -> bool {
     func.return_type != crate::tir::TypeTable::UNIT
         && func.stores.is_empty()
         && is_ctfe_runnable(func)
+}
+
+/// A region-shaped block and what a frame would need to run it: the outer locals
+/// it reads, or the fact that disqualifies it. No free reads and no refusal mean
+/// the block depends on nothing outside itself, so every value in it is
+/// compile-time known and it denotes a constant — whether or not the engine
+/// reached one.
+pub struct RegionQuery {
+    pub expr: ExprId,
+    pub seeds: Result<Vec<u32>, RegionRefusal>,
+}
+
+/// Every region-shaped block in `body`, in walk order. Both the fold, which runs
+/// one as a frame, and the remark, which reports one that survived to the final
+/// IR, ask here rather than each deciding region shape for itself.
+#[must_use]
+pub fn region_queries(
+    body: &Body,
+    callees: &CalleeMap,
+    ctfe_builtins: &CtfeBuiltinMap,
+    type_table: &TypeTable,
+) -> Vec<RegionQuery> {
+    let facts = ProgramFacts {
+        callees: Some(callees),
+        ctfe_builtins: Some(ctfe_builtins),
+        globals: None,
+        global_fields: None,
+    };
+    let mut out = Vec::new();
+    let mut stack = vec![crate::nir_arena::NodeRef::Block(body.root)];
+    while let Some(node) = stack.pop() {
+        if let crate::nir_arena::NodeRef::Expr(e) = node
+            && let Some((block, _)) = region::region_shape(body, e)
+        {
+            out.push(RegionQuery {
+                expr: e,
+                seeds: region::region_free_reads(body, block, facts, type_table)
+                    .map(|free| free.into_iter().map(|r| r.index).collect()),
+            });
+        }
+        body.for_each_child(node, |c| stack.push(c));
+    }
+    out
 }
 
 /// Everything the engine knows about the body it is walking, which is
