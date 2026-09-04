@@ -2723,15 +2723,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         );
     }
 
-    /// The impl-method index entry `receiver::name` selects, for the questions
-    /// the signature alone cannot answer — which module declared it, and at
-    /// what visibility. Both kinds of method, since both are named this way.
+    /// The index entry for the declaration `receiver::method_name` names, for
+    /// the questions the signature alone cannot answer — which module declared
+    /// it, and at what visibility. Which declaration that is comes from
+    /// [`Self::qualified_method_decl_ids`], never from whichever entry the
+    /// name was indexed under first: a trait impl's same-named method declares
+    /// no reach of its own, so reading it skipped the check the shadowing
+    /// inherent one owed.
     pub(super) fn static_method_entry(
         &self,
         receiver: &super::trait_env::ImplTargetKey,
         method_name: &str,
     ) -> Option<&super::trait_env::ImplMethodEntry> {
-        self.impl_method_entries(receiver, method_name).next()
+        let named = self
+            .qualified_method_decl_ids(receiver, method_name)
+            .next()?;
+        self.impl_method_entries(receiver, method_name)
+            .find(|entry| entry.method_id == named)
     }
 
     /// [`Self::qualified_method_sig`] where the name resolves to exactly one

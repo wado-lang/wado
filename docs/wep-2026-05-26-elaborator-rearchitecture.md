@@ -321,6 +321,15 @@ Every convergence below was forced by a defect where two of them disagreed:
   read, so a private method answered from another module. On a type imported by
   name it did not resolve at all. `ImplMethodEntry::has_self` is the fact those
   lookups filter on now, in place of an index that omitted them.
+
+  A type head names the type's own method, so an inherent declaration shadows a
+  trait impl's of the same name, as dot syntax already resolved it; the trait's
+  is named `Trait::method`. Counted together they read as an overload, which
+  every lookup that must commit to one declaration declines — no signature, no
+  use→def edge, and the callee dropped from a call WIR still emitted. Shadowing
+  is what leaves at most one declaration that states a reach of its own, so the
+  visibility ladder reads the one the spelling names rather than whichever
+  entry the name was indexed under first.
 - How many of a callee's parameters a call's arguments cover — the call syntax,
   not the signature. Written qualified, an instance method's receiver is the
   first argument, so `qualified_call_param_types` answers with the whole list;

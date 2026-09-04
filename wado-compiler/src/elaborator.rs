@@ -687,19 +687,35 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     }
 
     /// The declarations of `method_name` in `receiver`'s impl blocks, whether
-    /// or not they take a receiver.
+    /// or not they take a receiver. An inherent one shadows a trait impl's, as
+    /// dot syntax resolves it: a type head names the type's own method, and the
+    /// trait's is named `Trait::method`.
     pub(in crate::elaborator) fn impl_method_decl_ids(
         &self,
         receiver: &trait_env::ImplTargetKey,
         method_name: &str,
     ) -> impl Iterator<Item = crate::defs::DefId> {
-        self.tysys
-            .trait_env
+        let trait_env = &self.tysys.trait_env;
+        let declared: Vec<(bool, crate::defs::DefId)> = trait_env
             .all_impl_index
             .get(receiver)
             .into_iter()
             .flatten()
-            .filter_map(|&impl_def| self.tysys.declared_method(impl_def, method_name))
+            .filter_map(|&impl_def| {
+                let inherent = trait_env
+                    .impl_headers
+                    .get(&impl_def)
+                    .is_some_and(|header| header.trait_key.is_none());
+                Some((inherent, self.tysys.declared_method(impl_def, method_name)?))
+            })
+            .collect();
+        // Unshadowed, the two kinds read as an overload, and every lookup that
+        // must commit to one declaration declined.
+        let shadows = declared.iter().any(|(inherent, _)| *inherent);
+        declared
+            .into_iter()
+            .filter(move |(inherent, _)| *inherent || !shadows)
+            .map(|(_, def)| def)
     }
 
     /// The receiver-less declarations of `method_name` on `receiver`. Several
