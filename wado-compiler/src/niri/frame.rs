@@ -14,7 +14,7 @@ use crate::tir::TypeTable;
 
 use super::callee::{CallSite, CalleeKey};
 use super::place::{borrowed_place_operand, place_aliased_by_another, place_of};
-use super::region::{block_shape, region_free_reads, region_shape, value_block_shape};
+use super::region::{block_shape, region_needs, region_shape, value_block_shape};
 use super::trackability::Trackability;
 use super::{CallRun, CtfeBuiltin, FrameState, Interpreter, Lattice};
 
@@ -864,7 +864,7 @@ impl Interpreter<'_> {
     /// The constant a self-contained region denotes, run as its own frame: one
     /// building its value in locals of its own is as self-contained as a call
     /// body. An outer local it only reads is seeded from the walker's
-    /// environment, sound because [`region_free_reads`] rejects write positions
+    /// environment, sound because [`region_needs`] rejects write positions
     /// and reference-typed mentions, which also confines writes to the scratch.
     pub(super) fn try_region_fold(&mut self, body: &Body, e: ExprId) -> Option<Value> {
         let (block, label) = region_shape(body, e)?;
@@ -877,9 +877,12 @@ impl Interpreter<'_> {
         if self.frame.region_misses.contains(&e) {
             return None;
         }
-        let free = region_free_reads(body, block, self.facts, self.type_table).ok()?;
-        let mut seeds: Vec<(u32, Value)> = Vec::with_capacity(free.len());
-        for read in free {
+        let needs = region_needs(body, block, self.facts, self.type_table);
+        if needs.refusal.is_some() {
+            return None;
+        }
+        let mut seeds: Vec<(u32, Value)> = Vec::with_capacity(needs.free_reads.len());
+        for read in needs.free_reads {
             let index = read.index;
             if self.frame.alias_involves(index) {
                 crate::compiler_trace!("region_seed", "region {e:?}: local {index} is aliased");

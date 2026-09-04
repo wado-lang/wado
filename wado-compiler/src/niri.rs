@@ -316,13 +316,18 @@ pub fn is_ctfe_eligible(func: &NirFunction) -> bool {
 }
 
 /// A region-shaped block and what a frame would need to run it: the outer locals
-/// it reads, or the fact that disqualifies it. No free reads and no refusal mean
-/// the block depends on nothing outside itself, so every value in it is
-/// compile-time known and it denotes a constant — whether or not the engine
-/// reached one.
+/// it reads, and the fact that disqualifies it, if any. No free reads and no
+/// refusal mean the block depends on nothing outside itself, so every value in
+/// it is compile-time known and it denotes a constant — whether or not the
+/// engine reached one.
+///
+/// Both answers, because a block reading a runtime local was never a constant
+/// whatever else is wrong with it, and a refusal alone cannot say which case a
+/// block is.
 pub struct RegionQuery {
     pub expr: ExprId,
-    pub seeds: Result<Vec<u32>, RegionRefusal>,
+    pub free_reads: Vec<u32>,
+    pub refusal: Option<RegionRefusal>,
 }
 
 /// Every region-shaped block in `body`, in walk order. Both the fold, which runs
@@ -348,10 +353,11 @@ pub fn region_queries(
         if let crate::nir_arena::NodeRef::Expr(e) = node
             && let Some((block, _)) = region::region_shape(body, e)
         {
+            let needs = region::region_needs(body, block, facts, type_table);
             out.push(RegionQuery {
                 expr: e,
-                seeds: region::region_free_reads(body, block, facts, type_table)
-                    .map(|free| free.into_iter().map(|r| r.index).collect()),
+                free_reads: needs.free_reads.into_iter().map(|r| r.index).collect(),
+                refusal: needs.refusal,
             });
         }
         body.for_each_child(node, |c| stack.push(c));

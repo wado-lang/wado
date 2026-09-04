@@ -467,22 +467,23 @@ pub fn collect_const_region_remarks(package: &NirPackage) -> Vec<Remark> {
         };
         for region in crate::niri::region_queries(body, &callees, &ctfe_builtins, type_table) {
             // A region reading an outer local is a template that has to run:
-            // what it yields is not a constant, so there is nothing to report.
-            if matches!(&region.seeds, Ok(seeds) if !seeds.is_empty()) {
+            // what it yields is not a constant, so there is nothing to report,
+            // whatever else in it the engine also cannot do.
+            if !region.free_reads.is_empty() {
                 continue;
             }
             // An inner block writing the buffer its parent owns is how a
             // template is built, not a fold that was missed. The parent is the
             // region worth reporting, and it is reported on its own.
-            if region.seeds == Err(crate::niri::RegionRefusal::OuterWrite) {
+            if region.refusal == Some(crate::niri::RegionRefusal::OuterWrite) {
                 continue;
             }
             let surviving = surviving_calls(body, region.expr, &names);
             if surviving.is_empty() {
                 continue;
             }
-            let cause = match region.seeds {
-                Ok(_) => format!(
+            let cause = match region.refusal {
+                None => format!(
                     "{} still runs here",
                     surviving
                         .iter()
@@ -490,7 +491,7 @@ pub fn collect_const_region_remarks(package: &NirPackage) -> Vec<Remark> {
                         .collect::<Vec<_>>()
                         .join(", ")
                 ),
-                Err(refusal) => refusal.describe().to_string(),
+                Some(refusal) => refusal.describe().to_string(),
             };
             remarks.push(Remark {
                 message: format!("this block computes a constant at run time: {cause}"),

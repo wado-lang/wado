@@ -171,43 +171,80 @@ Ordered by what the census counts, not by what this document guessed.
 - [x] A census over the benchmark and `wasm-size` corpora and the Wado packages
       (`mise run report-const-regions`).
 
-The census found 2 788 surviving regions across 20 files, and it reorders
-everything below:
+The census counts 152 surviving regions across 15 files:
 
 | Cause                                     | Regions |
 | ----------------------------------------- | ------- |
-| it writes a global                        | 1 353   |
-| it calls a function the engine cannot run | 1 074   |
-| it writes a place no local roots          | 246     |
-| a named call still runs (`panic`, others) | 113     |
-| it calls through a closure or CM          | 4       |
+| `panic` still runs                        | 79      |
+| `push_encoded_ranges` still runs          | 28      |
+| it calls a function the engine cannot run | 22      |
+| it writes a global                        | 19      |
+| `String::grow` still runs                 | 4       |
+| `union_char_ranges` still runs            | 2       |
 
-Two files of Gale-generated code carry 92 % of the total, so the ordering was
-checked against hand-written corpora separately: `json_twitter`, `zlib_bench`
-and `sqlite_parse` are dominated by the global write, `package-marl` by the
-unrunnable call. The two together are about 95 % everywhere.
+The first count this instrument produced was 2 788, and 95 % of it was an
+artifact of the instrument: the walk deciding what a frame needs returned on the
+first refusal, so a template with a runtime interpolation *and* a `panic` inside
+reported the panic's global write as the reason it did not fold — a block that
+was never a constant to begin with. The walk now finishes and answers both
+questions, since they are independent and a block reading a runtime local was
+never a constant whatever else is wrong with it. `json_twitter` went from 23
+remarks to 1.
 
-What that overturns: the format-coverage work this WEP was ordered around is the
-fourth-largest bucket, at roughly 4 %. The value model is not what most regions
-wait on. The two mechanisms below are, and neither was in this document.
+Two lessons the roadmap below is written under. An instrument that
+short-circuits reports the first thing it noticed, not the thing that matters,
+and a count is worth nothing until something independent agrees with it — the
+formatting work is measured in bytes as well, which is why it survived the
+correction. Two Gale-generated files still carry 89 % of the total, so a cause
+that appears only there is a Gale fact, not a language one.
 
-### 2. A materializing global write is not a write
+### 2. `panic` on a statically dead path
 
-Half the surviving regions contain a `GlobalVarSet`, and a region carrying one
-is refused whole. Almost all of them are the lazy initializer
-[constant-object globalization](./wep-2026-05-31-const-object-globalization.md)
-leaves behind: the region assigns a constant to a global and reads it straight
-back, which is a materialization the frame could read through rather than a
-write to program state. `` `v=${true}` `` is the smallest instance — `"true"`
-is globalized, and that alone stops the fold.
+Half of what is left. A region that computes a constant but carries a `panic` —
+a bounds check, an `unreachable`, a `let else` — is refused for a call on a path
+the fold itself proves dead.
+
+- [ ] Let a frame carry a call it can prove unreached, rather than refusing the
+      region for it. What "proves" means is the question: the branch guarding
+      the panic folds, so the statement is unreachable in the frame's own
+      execution, and a frame that never steps through a statement has not
+      declined to perform it.
+
+Done when the largest bucket is gone and the corpus is recounted.
+
+### 3. The Gale callees
+
+`push_encoded_ranges` (28) and `union_char_ranges` (2) appear only in the two
+Gale-generated files, and `String::grow` (4) is the buffer reshape stage 4
+names.
+
+- [ ] Read the two callees before deciding anything. Thirty regions in generated
+      code is either one missing capability repeated, or one generator shape that
+      is nobody's bug. The trace names them; the bodies say which.
+
+### 4. What the engine cannot run, and the stores it will not read
+
+- [ ] The 22 unrunnable calls, split by why the callee is out: impure, generic,
+      async, or bodiless. A genuinely impure callee is a correct refusal; a
+      still-generic one after monomorphization is a bug.
+- [ ] The 19 remaining global writes, which are the stores that fail the
+      materialization property of stage 5 — a global read somewhere that does
+      not store it.
+
+### 5. A materializing global write is not a write
+
+The store [constant-object globalization](./wep-2026-05-31-const-object-globalization.md)
+leaves where it names a constant at a use site — `{ G = <const>; G }` — serves
+the read two statements below it and nothing else. `` `v=${true}` `` is the
+smallest instance: `"true"` is globalized, and that alone stopped the fold.
 
 - [x] Read such a store through instead of refusing it. The condition is a
       property, not a count: every mention of the global in the package is one
-      half of a `{ G = v; G }` pair. Folding a region carrying one then deletes
-      the store and the only read it serves together, and no read anywhere is
-      left depending on a store that went away. A count would have been wrong
-      twice over — inlining copies the pair, so two sites are as safe as one,
-      and a global with a single store and a distant read is not safe at all.
+      half of such a pair. Folding a region carrying one then deletes the store
+      and the only read it serves together, and no read anywhere is left
+      depending on a store that went away. A count would have been wrong twice
+      over — inlining copies the pair, so two sites are as safe as one, and a
+      global with a single store and a distant read is not safe at all.
 - [x] The answer lives in `niri`, since the globalization pass cannot know
       whether the region around its store will fold, and the engine already
       reads a global out of the assignment that fills it.
@@ -216,30 +253,14 @@ is globalized, and that alone stops the fold.
       store made the pair fold to the literal — writing the constant back over
       the naming construct and undoing the sharing globalization had arranged.
       What the pair is has one recognizer, in `region`, and both consumers ask
-      it: the store inside a larger region is readable, the pair alone is not a
-      region. A folded template is globalized afterwards, so it is still built
-      once at instantiation.
-- [ ] Recount the corpus, now that the bucket has moved.
+      it. A folded template is globalized afterwards, so it is still built once
+      at instantiation.
 
-Done when the corpus is recounted and the bucket has moved.
+This stage is where the formatting shape needed it, which the byte counts in
+stage 6 record. Its share of the census is 19 regions, not the 1 353 the broken
+instrument reported.
 
-### 3. Which functions the engine cannot run, and why
-
-A third of the surviving regions call something outside the callee map: impure,
-generic, async, or bodiless. Which of those it is decides whether there is
-anything to do — a genuinely impure callee is a correct refusal, a
-still-generic one after monomorphization is a bug, and `panic` (79 regions) is a
-cold path a region could carry rather than be refused for.
-
-- [ ] Break the bucket down by why the callee is out: the trace names the call,
-      but a region refused before `run_call` never reaches it.
-- [ ] `panic` on a statically dead path, which is what a bounds check inside a
-      folded region leaves.
-
-Done when the bucket is split into what is a correct refusal and what is work,
-and the work is a stage of its own.
-
-### 4. The frame owns storage
+### 6. The frame owns storage
 
 What the format work waited on. A unit-returning call whose writes land in a
 place the frame owns and a `&mut` argument written back on return were already
@@ -292,7 +313,7 @@ engine's notion of a place must be the one that WEP settles, not a second one.
 
 Done when `${'x'}` folds too.
 
-### 5. The aggregate exit
+### 7. The aggregate exit
 
 - [ ] A `List<T>` of scalars written back as
       [`ArrayLiteral`](./wep-2026-05-31-nir-array-literal.md) and a plain struct
@@ -303,7 +324,7 @@ Done when `${'x'}` folds too.
 Done when a constant `List` result and a constant struct result reach the IR as
 literals, and `Array::slice`'s computed bounds fold.
 
-### 6. Format coverage to the budget
+### 8. Format coverage to the budget
 
 - [x] Width, zero-pad, radix and `Inspect` fold, and needed nothing of their own:
       the frame runs each spec's body once it can hold the buffer.
@@ -316,12 +337,13 @@ literals, and `Array::slice`'s computed bounds fold.
       largest engine cost, so the order is the engine's, not the payoff's; if it
       overruns the budget it becomes a known gap rather than a reason to raise
       the budget.
-- [ ] A `wasm-size` and `benchmark` run recording what stages 2–6 bought.
+- [ ] A `wasm-size` and `benchmark` run recording what the folds bought beyond
+      the single-interpolation measurements in stage 6.
 
 Done when a recount shows no refusal reason left that the step budget does not
 explain.
 
-### 7. Mixed templates
+### 9. Mixed templates
 
 - [ ] The marked region-append primitive set and the derived-`fmt` admission
       rule, per "Fold the region, not the call".
@@ -331,7 +353,7 @@ constant parts as literals. The census counts no such template yet, since a
 region reading a runtime local is not reported; sizing it needs a count of its
 own, and a small one demotes this stage to a known gap.
 
-### 8. The remaining refusals
+### 10. The remaining refusals
 
 Each is a small, local refusal the census does not count, so each needs a reason
 of its own to be worth the code.

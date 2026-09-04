@@ -169,20 +169,26 @@ impl RegionRefusal {
     }
 }
 
-/// The outer locals `block` only reads — the seeds a region frame needs — or the
-/// fact that disqualifies it. A write is an `Assign` target, a `&mut` borrow, or
-/// a `&mut` parameter per the callee's signature — the signature being the only
-/// reliable witness.
-pub(super) fn region_free_reads(
+/// What a frame would need to run `block`: the outer locals it only reads, and
+/// the first fact that disqualifies it, if any. A write is an `Assign` target, a
+/// `&mut` borrow, or a `&mut` parameter per the callee's signature — the
+/// signature being the only reliable witness.
+///
+/// The walk finishes even once a refusal is found, because the two answers are
+/// independent and a caller may want either. Returning on the first refusal
+/// hides the reads discovered after it, and a block reading a runtime local was
+/// never a constant whatever else is wrong with it.
+pub(super) fn region_needs(
     body: &Body,
     block: BlockId,
     facts: ProgramFacts<'_>,
     type_table: &TypeTable,
-) -> Result<Vec<FreeRead>, RegionRefusal> {
+) -> RegionNeeds {
     fn record_write(body: &Body, op: Operand, written: &mut LocalSet) -> Option<()> {
         written.insert(write_root_local(body, op)?);
         Some(())
     }
+    let mut refusal: Option<RegionRefusal> = None;
     let mut declared = LocalSet::default();
     let mut seen = LocalSet::default();
     let mut mentioned: Vec<(u32, TypeId)> = Vec::new();
@@ -208,29 +214,38 @@ pub(super) fn region_free_reads(
                 } => {
                     let key = (module_source.clone(), name.clone());
                     if !facts.materializes(&key) {
-                        return Err(RegionRefusal::GlobalWrite);
+                        refusal = refusal.or(Some(RegionRefusal::GlobalWrite));
                     }
                 }
                 ExprKind::IndirectCall { .. } | ExprKind::CmRawCall { .. } => {
-                    return Err(RegionRefusal::OpaqueCall);
+                    refusal = refusal.or(Some(RegionRefusal::OpaqueCall));
                 }
                 ExprKind::Call { func_id, args, .. } => {
                     // A builtin never reaches NIR as a method call, so this is
                     // the only shape that may be one instead of a callee.
                     if let Some(callee) = facts.callees.and_then(|m| m.get(func_id)) {
-                        let site =
-                            CallSite::of(body, e).ok_or(RegionRefusal::UnaccountableWrite)?;
-                        write_targets(body, &site, callee, &mut written)
-                            .ok_or(RegionRefusal::UnaccountableWrite)?;
-                    } else if facts
-                        .ctfe_builtins
-                        .and_then(|m| m.get(func_id))
-                        .ok_or(RegionRefusal::UnrunnableCall)?
-                        .is_write()
-                    {
-                        let target = args.first().ok_or(RegionRefusal::UnaccountableWrite)?;
-                        record_write(body, target.expr, &mut written)
-                            .ok_or(RegionRefusal::UnaccountableWrite)?;
+                        let accounted = CallSite::of(body, e).and_then(|site| {
+                            write_targets(body, &site, callee, &mut written)
+                        });
+                        if accounted.is_none() {
+                            refusal = refusal.or(Some(RegionRefusal::UnaccountableWrite));
+                        }
+                    } else {
+                        match facts.ctfe_builtins.and_then(|m| m.get(func_id)) {
+                            None => {
+                                refusal = refusal.or(Some(RegionRefusal::UnrunnableCall));
+                            }
+                            Some(builtin) if builtin.is_write() => {
+                                let written_place = args
+                                    .first()
+                                    .and_then(|t| record_write(body, t.expr, &mut written));
+                                if written_place.is_none() {
+                                    refusal =
+                                        refusal.or(Some(RegionRefusal::UnaccountableWrite));
+                                }
+                            }
+                            Some(_) => {}
+                        }
                     }
                 }
                 ExprKind::Local { index, .. } => {
@@ -239,15 +254,17 @@ pub(super) fn region_free_reads(
                     }
                 }
                 ExprKind::Assign { target, .. } => {
-                    record_write(body, Operand::Expr(*target), &mut written)
-                        .ok_or(RegionRefusal::UnaccountableWrite)?;
+                    if record_write(body, Operand::Expr(*target), &mut written).is_none() {
+                        refusal = refusal.or(Some(RegionRefusal::UnaccountableWrite));
+                    }
                 }
                 ExprKind::Unary {
                     op: NirUnaryOp::MutRef,
                     expr,
                 } => {
-                    record_write(body, *expr, &mut written)
-                        .ok_or(RegionRefusal::UnaccountableWrite)?;
+                    if record_write(body, *expr, &mut written).is_none() {
+                        refusal = refusal.or(Some(RegionRefusal::UnaccountableWrite));
+                    }
                 }
                 _ => {}
             },
@@ -261,14 +278,25 @@ pub(super) fn region_free_reads(
             continue;
         }
         if written.contains(index) {
-            return Err(RegionRefusal::OuterWrite);
+            refusal = refusal.or(Some(RegionRefusal::OuterWrite));
+            continue;
         }
         out.push(FreeRead {
             index,
             is_reference: type_table.is_reference_shaped(ty),
         });
     }
-    Ok(out)
+    RegionNeeds {
+        free_reads: out,
+        refusal,
+    }
+}
+
+/// What running `block` as a frame would take. A region with no refusal and no
+/// free reads depends on nothing outside itself, so it denotes a constant.
+pub(super) struct RegionNeeds {
+    pub(super) free_reads: Vec<FreeRead>,
+    pub(super) refusal: Option<RegionRefusal>,
 }
 
 /// A local a region reads without declaring, and whether it names a reference.
