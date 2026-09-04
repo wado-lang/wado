@@ -118,11 +118,20 @@ pub fn compute_receiver_alias(
     project: &FlatPackage,
     call_graph: &CallGraph,
     return_paths: &super::place::ReturnPaths,
+    type_table: &TypeTable,
 ) -> FuncKeySet {
     let mut set = FuncKeySet::default();
     call_graph.solve(project, |id| {
         let func = project.functions[id as usize].borrow();
         if set.contains(&func.module_source, &func.name) {
+            return false;
+        }
+        // A `Copy`-shaped return (an `i32` count, say) carries no storage of
+        // its own to alias: a caller that reads it gets an independent value,
+        // not a projection whose conflicts need tracking.
+        if !super::place::is_reference(func.return_type, type_table)
+            && !super::needs_value_copy(func.return_type, type_table)
+        {
             return false;
         }
         let Some(body) = &func.body else { return false };

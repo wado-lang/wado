@@ -28220,10 +28220,8 @@ fn scan_charset(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY
     scan_alts: {
         if alt_kind == TK_Charset {
             let mut best: i32 = -1;
-            pos = start;
+            pos = start + 1;
             try_0: {
-                if pos >= tokens.len() || tokens[pos] != TK_Charset { break try_0; }
-                pos += 1;
                 pos = scan_ws(tokens, pos, &FOLLOW_MASK_1);
                 if pos < 0 { break try_0; }
                 if pos >= tokens.len() || tokens[pos] != TK_String_ { break try_0; }
@@ -28236,10 +28234,8 @@ fn scan_charset(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY
                 if pos < 0 { break try_0; }
                 if pos > best { best = pos; }
             }
-            pos = start;
+            pos = start + 1;
             try_1: {
-                if pos >= tokens.len() || tokens[pos] != TK_Charset { break try_1; }
-                pos += 1;
                 pos = scan_ws(tokens, pos, &FOLLOW_MASK_1);
                 if pos < 0 { break try_1; }
                 if pos >= tokens.len() || tokens[pos] != TK_String_ { break try_1; }
@@ -28264,10 +28260,8 @@ fn scan_imports(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY
     scan_alts: {
         if alt_kind == TK_Import {
             let mut best: i32 = -1;
-            pos = start;
+            pos = start + 1;
             try_0: {
-                if pos >= tokens.len() || tokens[pos] != TK_Import { break try_0; }
-                pos += 1;
                 pos = scan_ws(tokens, pos, &FOLLOW_MASK_3);
                 if pos < 0 { break try_0; }
                 let gp_8 = pos;
@@ -28303,10 +28297,8 @@ fn scan_imports(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY
                 if pos < 0 { break try_0; }
                 if pos > best { best = pos; }
             }
-            pos = start;
+            pos = start + 1;
             try_1: {
-                if pos >= tokens.len() || tokens[pos] != TK_Import { break try_1; }
-                pos += 1;
                 pos = scan_ws(tokens, pos, &FOLLOW_MASK_3);
                 if pos < 0 { break try_1; }
                 let gp_9 = pos;
@@ -28340,10 +28332,8 @@ fn scan_imports(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY
                 if pos < 0 { break try_1; }
                 if pos > best { best = pos; }
             }
-            pos = start;
+            pos = start + 1;
             try_2: {
-                if pos >= tokens.len() || tokens[pos] != TK_Import { break try_2; }
-                pos += 1;
                 pos = scan_ws(tokens, pos, &FOLLOW_MASK_3);
                 if pos < 0 { break try_2; }
                 let gp_10 = pos;
@@ -28375,10 +28365,8 @@ fn scan_imports(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY
                 if pos < 0 { break try_2; }
                 if pos > best { best = pos; }
             }
-            pos = start;
+            pos = start + 1;
             try_3: {
-                if pos >= tokens.len() || tokens[pos] != TK_Import { break try_3; }
-                pos += 1;
                 pos = scan_ws(tokens, pos, &FOLLOW_MASK_3);
                 if pos < 0 { break try_3; }
                 let gp_11 = pos;
@@ -28424,10 +28412,8 @@ fn scan_namespace_(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EM
     scan_alts: {
         if alt_kind == TK_Namespace {
             let mut best: i32 = -1;
-            pos = start;
+            pos = start + 1;
             try_0: {
-                if pos >= tokens.len() || tokens[pos] != TK_Namespace { break try_0; }
-                pos += 1;
                 pos = scan_ws(tokens, pos, &EMPTY_FOLLOW);
                 if pos < 0 { break try_0; }
                 if pos < tokens.len() && _kind_set_3(tokens[pos]) {
@@ -28475,10 +28461,8 @@ fn scan_namespace_(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EM
                 if pos < 0 { break try_0; }
                 if pos > best { best = pos; }
             }
-            pos = start;
+            pos = start + 1;
             try_1: {
-                if pos >= tokens.len() || tokens[pos] != TK_Namespace { break try_1; }
-                pos += 1;
                 pos = scan_ws(tokens, pos, &EMPTY_FOLLOW);
                 if pos < 0 { break try_1; }
                 if pos < tokens.len() && _kind_set_3(tokens[pos]) {
@@ -28853,40 +28837,32 @@ fn scan_combinator(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EM
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
         if alt_kind == TK_Plus {
-            pos = start;
+            pos = start + 1;
             try_0: {
-                if pos >= tokens.len() || tokens[pos] != TK_Plus { break try_0; }
-                pos += 1;
                 pos = scan_ws(tokens, pos, follow);
                 if pos < 0 { break try_0; }
                 break scan_alts;
             }
             return -1;
         } else if alt_kind == TK_Greater {
-            pos = start;
+            pos = start + 1;
             try_1: {
-                if pos >= tokens.len() || tokens[pos] != TK_Greater { break try_1; }
-                pos += 1;
                 pos = scan_ws(tokens, pos, follow);
                 if pos < 0 { break try_1; }
                 break scan_alts;
             }
             return -1;
         } else if alt_kind == TK_Tilde {
-            pos = start;
+            pos = start + 1;
             try_2: {
-                if pos >= tokens.len() || tokens[pos] != TK_Tilde { break try_2; }
-                pos += 1;
                 pos = scan_ws(tokens, pos, follow);
                 if pos < 0 { break try_2; }
                 break scan_alts;
             }
             return -1;
         } else if alt_kind == TK_Space {
-            pos = start;
+            pos = start + 1;
             try_3: {
-                if pos >= tokens.len() || tokens[pos] != TK_Space { break try_3; }
-                pos += 1;
                 pos = scan_ws(tokens, pos, follow);
                 if pos < 0 { break try_3; }
                 break scan_alts;
@@ -29628,13 +29604,8 @@ fn scan_negation_arg(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &
             if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if alt_kind == TK_Hash {
-            pos = start;
-            try_2: {
-                if pos >= tokens.len() || tokens[pos] != TK_Hash { break try_2; }
-                pos += 1;
-                break scan_alts;
-            }
-            return -1;
+            pos = start + 1;
+            break scan_alts;
         } else if alt_kind == TK_Dot {
             pos = start;
             try_3: {
@@ -29672,40 +29643,32 @@ fn scan_operator_(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMP
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
         if alt_kind == TK_Divide {
-            pos = start;
+            pos = start + 1;
             try_0: {
-                if pos >= tokens.len() || tokens[pos] != TK_Divide { break try_0; }
-                pos += 1;
                 pos = scan_ws(tokens, pos, follow);
                 if pos < 0 { break try_0; }
                 break scan_alts;
             }
             return -1;
         } else if alt_kind == TK_Comma {
-            pos = start;
+            pos = start + 1;
             try_1: {
-                if pos >= tokens.len() || tokens[pos] != TK_Comma { break try_1; }
-                pos += 1;
                 pos = scan_ws(tokens, pos, follow);
                 if pos < 0 { break try_1; }
                 break scan_alts;
             }
             return -1;
         } else if alt_kind == TK_Space {
-            pos = start;
+            pos = start + 1;
             try_2: {
-                if pos >= tokens.len() || tokens[pos] != TK_Space { break try_2; }
-                pos += 1;
                 pos = scan_ws(tokens, pos, follow);
                 if pos < 0 { break try_2; }
                 break scan_alts;
             }
             return -1;
         } else if alt_kind == TK_Equal {
-            pos = start;
+            pos = start + 1;
             try_3: {
-                if pos >= tokens.len() || tokens[pos] != TK_Equal { break try_3; }
-                pos += 1;
                 pos = scan_ws(tokens, pos, follow);
                 if pos < 0 { break try_3; }
                 break scan_alts;
@@ -29734,30 +29697,24 @@ fn scan_property_(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMP
             }
             return -1;
         } else if alt_kind == TK_Variable {
-            pos = start;
+            pos = start + 1;
             try_1: {
-                if pos >= tokens.len() || tokens[pos] != TK_Variable { break try_1; }
-                pos += 1;
                 pos = scan_ws(tokens, pos, follow);
                 if pos < 0 { break try_1; }
                 break scan_alts;
             }
             return -1;
         } else if alt_kind == TK_Multiply {
-            pos = start;
+            pos = start + 1;
             try_2: {
-                if pos >= tokens.len() || tokens[pos] != TK_Multiply { break try_2; }
-                pos += 1;
                 pos = scan_ident(tokens, pos, follow);
                 if pos < 0 { break try_2; }
                 break scan_alts;
             }
             return -1;
         } else if alt_kind == TK_Underscore {
-            pos = start;
+            pos = start + 1;
             try_3: {
-                if pos >= tokens.len() || tokens[pos] != TK_Underscore { break try_3; }
-                pos += 1;
                 pos = scan_ident(tokens, pos, follow);
                 if pos < 0 { break try_3; }
                 break scan_alts;
@@ -30111,20 +30068,16 @@ fn scan_term(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FO
             if pos >= 0 { break scan_alts; }
             return -1;
         } else if alt_kind == TK_String_ {
-            pos = start;
+            pos = start + 1;
             try_3: {
-                if pos >= tokens.len() || tokens[pos] != TK_String_ { break try_3; }
-                pos += 1;
                 pos = scan_ws(tokens, pos, follow);
                 if pos < 0 { break try_3; }
                 break scan_alts;
             }
             return -1;
         } else if alt_kind == TK_UnicodeRange {
-            pos = start;
+            pos = start + 1;
             try_4: {
-                if pos >= tokens.len() || tokens[pos] != TK_UnicodeRange { break try_4; }
-                pos += 1;
                 pos = scan_ws(tokens, pos, follow);
                 if pos < 0 { break try_4; }
                 break scan_alts;
@@ -30456,10 +30409,8 @@ fn scan_any_(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FO
             if pos >= 0 { break scan_alts; }
             return -1;
         } else if alt_kind == TK_String_ {
-            pos = start;
+            pos = start + 1;
             try_5: {
-                if pos >= tokens.len() || tokens[pos] != TK_String_ { break try_5; }
-                pos += 1;
                 pos = scan_ws(tokens, pos, follow);
                 if pos < 0 { break try_5; }
                 break scan_alts;
@@ -30476,60 +30427,48 @@ fn scan_any_(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FO
             }
             return -1;
         } else if alt_kind == TK_Hash {
-            pos = start;
+            pos = start + 1;
             try_7: {
-                if pos >= tokens.len() || tokens[pos] != TK_Hash { break try_7; }
-                pos += 1;
                 pos = scan_ws(tokens, pos, follow);
                 if pos < 0 { break try_7; }
                 break scan_alts;
             }
             return -1;
         } else if alt_kind == TK_UnicodeRange {
-            pos = start;
+            pos = start + 1;
             try_8: {
-                if pos >= tokens.len() || tokens[pos] != TK_UnicodeRange { break try_8; }
-                pos += 1;
                 pos = scan_ws(tokens, pos, follow);
                 if pos < 0 { break try_8; }
                 break scan_alts;
             }
             return -1;
         } else if alt_kind == TK_Includes {
-            pos = start;
+            pos = start + 1;
             try_9: {
-                if pos >= tokens.len() || tokens[pos] != TK_Includes { break try_9; }
-                pos += 1;
                 pos = scan_ws(tokens, pos, follow);
                 if pos < 0 { break try_9; }
                 break scan_alts;
             }
             return -1;
         } else if alt_kind == TK_DashMatch {
-            pos = start;
+            pos = start + 1;
             try_10: {
-                if pos >= tokens.len() || tokens[pos] != TK_DashMatch { break try_10; }
-                pos += 1;
                 pos = scan_ws(tokens, pos, follow);
                 if pos < 0 { break try_10; }
                 break scan_alts;
             }
             return -1;
         } else if alt_kind == TK_Colon {
-            pos = start;
+            pos = start + 1;
             try_11: {
-                if pos >= tokens.len() || tokens[pos] != TK_Colon { break try_11; }
-                pos += 1;
                 pos = scan_ws(tokens, pos, follow);
                 if pos < 0 { break try_11; }
                 break scan_alts;
             }
             return -1;
         } else if alt_kind == TK_Function_ {
-            pos = start;
+            pos = start + 1;
             try_12: {
-                if pos >= tokens.len() || tokens[pos] != TK_Function_ { break try_12; }
-                pos += 1;
                 pos = scan_ws(tokens, pos, &EMPTY_FOLLOW);
                 if pos < 0 { break try_12; }
                 while pos < tokens.len() && _kind_set_23(tokens[pos]) {
@@ -30568,10 +30507,8 @@ fn scan_any_(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FO
             }
             return -1;
         } else if alt_kind == TK_OpenParen {
-            pos = start;
+            pos = start + 1;
             try_13: {
-                if pos >= tokens.len() || tokens[pos] != TK_OpenParen { break try_13; }
-                pos += 1;
                 pos = scan_ws(tokens, pos, &EMPTY_FOLLOW);
                 if pos < 0 { break try_13; }
                 while pos < tokens.len() && _kind_set_23(tokens[pos]) {
@@ -30610,10 +30547,8 @@ fn scan_any_(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FO
             }
             return -1;
         } else if alt_kind == TK_OpenBracket {
-            pos = start;
+            pos = start + 1;
             try_14: {
-                if pos >= tokens.len() || tokens[pos] != TK_OpenBracket { break try_14; }
-                pos += 1;
                 pos = scan_ws(tokens, pos, &EMPTY_FOLLOW);
                 if pos < 0 { break try_14; }
                 while pos < tokens.len() && _kind_set_23(tokens[pos]) {
@@ -30712,40 +30647,32 @@ fn scan_unused(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_
             }
             return -1;
         } else if alt_kind == TK_AtKeyword {
-            pos = start;
+            pos = start + 1;
             try_1: {
-                if pos >= tokens.len() || tokens[pos] != TK_AtKeyword { break try_1; }
-                pos += 1;
                 pos = scan_ws(tokens, pos, follow);
                 if pos < 0 { break try_1; }
                 break scan_alts;
             }
             return -1;
         } else if alt_kind == TK_SemiColon {
-            pos = start;
+            pos = start + 1;
             try_2: {
-                if pos >= tokens.len() || tokens[pos] != TK_SemiColon { break try_2; }
-                pos += 1;
                 pos = scan_ws(tokens, pos, follow);
                 if pos < 0 { break try_2; }
                 break scan_alts;
             }
             return -1;
         } else if alt_kind == TK_Cdo {
-            pos = start;
+            pos = start + 1;
             try_3: {
-                if pos >= tokens.len() || tokens[pos] != TK_Cdo { break try_3; }
-                pos += 1;
                 pos = scan_ws(tokens, pos, follow);
                 if pos < 0 { break try_3; }
                 break scan_alts;
             }
             return -1;
         } else if alt_kind == TK_Cdc {
-            pos = start;
+            pos = start + 1;
             try_4: {
-                if pos >= tokens.len() || tokens[pos] != TK_Cdc { break try_4; }
-                pos += 1;
                 pos = scan_ws(tokens, pos, follow);
                 if pos < 0 { break try_4; }
                 break scan_alts;
@@ -31008,10 +30935,8 @@ fn scan_supports_condition_in_parens(tokens: &Array<i32>, pos: i32, follow: &Lis
     scan_alts: {
         if alt_kind == TK_OpenParen {
             let mut best: i32 = -1;
-            pos = start;
+            pos = start + 1;
             try_0: {
-                if pos >= tokens.len() || tokens[pos] != TK_OpenParen { break try_0; }
-                pos += 1;
                 pos = scan_ws(tokens, pos, &FOLLOW_MASK_16);
                 if pos < 0 { break try_0; }
                 pos = scan_supports_condition(tokens, pos, &EMPTY_FOLLOW);
@@ -31247,10 +31172,8 @@ fn scan_url(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOL
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
         if alt_kind == TK_Url_ {
-            pos = start;
+            pos = start + 1;
             try_0: {
-                if pos >= tokens.len() || tokens[pos] != TK_Url_ { break try_0; }
-                pos += 1;
                 pos = scan_ws(tokens, pos, &FOLLOW_MASK_1);
                 if pos < 0 { break try_0; }
                 if pos >= tokens.len() || tokens[pos] != TK_String_ { break try_0; }
@@ -31263,13 +31186,8 @@ fn scan_url(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOL
             }
             return -1;
         } else if alt_kind == TK_Url {
-            pos = start;
-            try_1: {
-                if pos >= tokens.len() || tokens[pos] != TK_Url { break try_1; }
-                pos += 1;
-                break scan_alts;
-            }
-            return -1;
+            pos = start + 1;
+            break scan_alts;
         } else {
             return -1;
         }
@@ -31481,10 +31399,8 @@ fn scan_calc_value(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EM
             if pos >= 0 { break scan_alts; }
             return -1;
         } else if alt_kind == TK_OpenParen {
-            pos = start;
+            pos = start + 1;
             try_4: {
-                if pos >= tokens.len() || tokens[pos] != TK_OpenParen { break try_4; }
-                pos += 1;
                 pos = scan_ws(tokens, pos, &FOLLOW_MASK_24);
                 if pos < 0 { break try_4; }
                 pos = scan_calc_sum(tokens, pos, &FOLLOW_MASK_12);
@@ -31835,13 +31751,8 @@ fn scan_font_family_name(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>>
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
         if alt_kind == TK_String_ {
-            pos = start;
-            try_0: {
-                if pos >= tokens.len() || tokens[pos] != TK_String_ { break try_0; }
-                pos += 1;
-                break scan_alts;
-            }
-            return -1;
+            pos = start + 1;
+            break scan_alts;
         } else if _kind_set_3(alt_kind) {
             pos = start;
             try_1: {

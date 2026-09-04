@@ -1,0 +1,41 @@
+// A known callee's write is asked about the field it actually reaches, not the
+// whole argument it was projected through (WEP 2026-05-21, "Sharing"). A local
+// owns its own place regardless of how its value started — a struct literal,
+// same as a reference parameter — so a call through a field of it still gets
+// the precise, per-field answer once the callee's own writes are known.
+//
+// `value_copy_share_write_reach` pins the counterpart, where the callee's
+// write does reach the field and the copy is kept.
+
+struct Inner {
+    a: List<i32>,
+}
+
+struct Outer {
+    inner: Inner,
+}
+
+fn noop(i: &mut Inner) {
+    let _ = i.a.len();
+}
+
+fn touches_inner(o: &mut Outer) {
+    noop(&mut o.inner);
+}
+
+fn read_then_call() -> i32 {
+    let mut owner = Outer { inner: Inner { a: [1, 2] } };
+    let snap = owner.inner.a;
+    touches_inner(&mut owner);
+    return snap.len();
+}
+
+export fn run() {
+    assert read_then_call() == 2;
+}
+
+__DATA__
+{
+    "stdout": "",
+    "wir_not_expect:O0": ["$value_copy$"]
+}

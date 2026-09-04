@@ -210,6 +210,7 @@ pub fn build(
     mut_escaped: &crate::hashmap::IndexSet<u32>,
     pure_calls: &crate::hashmap::IndexSet<ExprId>,
     pure_builtin_callees: &crate::hashmap::IndexSet<FuncId>,
+    receiver_immutable_calls: &crate::hashmap::IndexSet<ExprId>,
     type_table: Option<&crate::tir::TypeTable>,
 ) -> ValueGraphBuild {
     // Build into the body's own pool: take it out as the seed (so a promoted
@@ -221,6 +222,8 @@ pub fn build(
         let mut b = Builder::new(&*body, aliased, untrackable, mut_escaped, type_table, seed);
         b.pure_calls.clone_from(pure_calls);
         b.pure_builtin_callees.clone_from(pure_builtin_callees);
+        b.receiver_immutable_calls
+            .clone_from(receiver_immutable_calls);
         b.seed_params(param_locals);
         b.walk_block(body.root);
         (b.pool, b.loop_entry_values)
@@ -467,11 +470,13 @@ struct Builder<'a> {
     /// `ExprId` indices of calls that mutate no caller local. See
     /// [`BuildConfig::pure_calls`].
     pure_calls: crate::hashmap::IndexSet<ExprId>,
-    /// [`FuncId`]s of pure builtin intrinsics (`array_get_value`, `array_len`, …): a
-    /// call to one writes no heap, so a loop body that only calls such
-    /// intrinsics does not invalidate forwarded field versions. Empty is
-    /// conservative (every call is a heap write). See [`is_builtin_pure_call`].
+    /// Callees that write no tracked `(root, field)` slot: an intrinsic below
+    /// the field layer, a value-copy helper, or a bodied function that never
+    /// returns. Empty is conservative.
     pure_builtin_callees: crate::hashmap::IndexSet<FuncId>,
+    /// Calls whose callee cannot write through the receiver, so a loop does not
+    /// borrow it. Empty is conservative.
+    receiver_immutable_calls: crate::hashmap::IndexSet<ExprId>,
 }
 
 impl<'a> Builder<'a> {
@@ -506,6 +511,7 @@ impl<'a> Builder<'a> {
             stmt_entry_version: IndexMap::default(),
             pure_calls: crate::hashmap::IndexSet::default(),
             pure_builtin_callees: crate::hashmap::IndexSet::default(),
+            receiver_immutable_calls: crate::hashmap::IndexSet::default(),
         }
     }
 
@@ -681,6 +687,15 @@ impl<'a> Builder<'a> {
                 expr.as_expr().and_then(|e| self.receiver_root(e))
             }
             _ => None,
+        }
+    }
+
+    /// The per-call verdicts, as the loop summary reads them.
+    fn call_facts(&self) -> CallFacts<'_> {
+        CallFacts {
+            pure_builtin: &self.pure_builtin_callees,
+            pure: &self.pure_calls,
+            receiver_immutable: &self.receiver_immutable_calls,
         }
     }
 
@@ -885,7 +900,7 @@ impl<'a> Builder<'a> {
                     if let Some(re) = right.as_expr() {
                         let eff = collect_node_heap_effects(
                             self.body,
-                            &self.pure_builtin_callees,
+                            &self.call_facts(),
                             NodeRef::Expr(re),
                         );
                         self.apply_loop_heap_effects(&eff);
@@ -1794,8 +1809,7 @@ impl<'a> Builder<'a> {
     /// pre-loop version, so a store before a builtin-only loop still forwards.
     fn walk_loop(&mut self, body_block: crate::nir_arena::BlockId) {
         let writes = writes_of_block(self.body, body_block, &mut self.block_writes);
-        let heap_effects =
-            collect_loop_heap_effects(self.body, &self.pure_builtin_callees, body_block);
+        let heap_effects = collect_loop_heap_effects(self.body, &self.call_facts(), body_block);
         // Snapshot before the reassigned-local opaques below overwrite the
         // written locals' pre-loop values.
         self.fresh_invalidations.clear();
@@ -1863,6 +1877,15 @@ impl<'a> Builder<'a> {
         }
         if eff.has_external_writes {
             self.heap_state.bump_escaped();
+        } else if eff.has_pure_calls {
+            // A pure call still reaches the `untrackable` locals; bump those
+            // alone, as `bump_call_effects` does for one call.
+            for i in 0..self.mut_escaped_sorted.len() {
+                let l = self.mut_escaped_sorted[i];
+                if self.untrackable.contains(&l) {
+                    self.heap_state.bump_local(l);
+                }
+            }
         }
     }
 
@@ -1920,6 +1943,17 @@ fn block_breaks_to_node(body: &Body, node: NodeRef, label: &str) -> bool {
         .any(|c| block_breaks_to_node(body, c, label))
 }
 
+/// The per-call verdicts the loop summary reads, bundled so it asks the same
+/// questions [`Builder::bump_call_effects`] asks of one call.
+struct CallFacts<'a> {
+    /// Builtin intrinsics operating below the struct-field layer.
+    pure_builtin: &'a crate::hashmap::IndexSet<FuncId>,
+    /// Calls that mutate no caller local.
+    pure: &'a crate::hashmap::IndexSet<ExprId>,
+    /// Calls whose callee cannot write through the receiver.
+    receiver_immutable: &'a crate::hashmap::IndexSet<ExprId>,
+}
+
 /// A loop body's heap-write effects, used to invalidate exactly the fields a
 /// loop may mutate (mirrors `const_folding`'s `LoopWriteEffects`). Reassigned
 /// locals are handled separately by `walk_loop`'s `Opaque` reassignment.
@@ -1930,10 +1964,12 @@ struct LoopHeapEffects {
     /// `&mut local`, `&mut local.field`, a `&mut` call arg, or a method
     /// receiver — the callee may store through the reference.
     mut_borrowed: crate::hashmap::IndexSet<u32>,
-    /// A non-builtin call, indirect / CM call, or opaque-target store
-    /// (`(*p).f`, `arr[i]`, deep field) that may mutate aliased state from
-    /// outside the straight-line walk.
+    /// An impure call, indirect or CM call, or opaque-target store that may
+    /// mutate aliased state.
     has_external_writes: bool,
+    /// A pure call, which still reaches the `untrackable` locals. Kept apart so
+    /// a loop of pure calls skips the set-wide bump.
+    has_pure_calls: bool,
 }
 
 /// True when `func_id` is a builtin / monomorphized-builtin intrinsic that
@@ -1961,44 +1997,40 @@ fn root_local_of(body: &Body, op: Operand) -> Option<u32> {
 
 fn collect_loop_heap_effects(
     body: &Body,
-    pure_builtin_callees: &crate::hashmap::IndexSet<FuncId>,
+    facts: &CallFacts<'_>,
     block: BlockId,
 ) -> LoopHeapEffects {
-    collect_node_heap_effects(body, pure_builtin_callees, NodeRef::Block(block))
+    collect_node_heap_effects(body, facts, NodeRef::Block(block))
 }
 
 /// The heap-write effects of a node's subtree, so a caller can invalidate
 /// exactly what it writes rather than `bump_all`. Used by `walk_loop` (body
 /// block) and the short-circuit arm (conditional rhs).
-fn collect_node_heap_effects(
-    body: &Body,
-    pure_builtin_callees: &crate::hashmap::IndexSet<FuncId>,
-    node: NodeRef,
-) -> LoopHeapEffects {
+fn collect_node_heap_effects(body: &Body, facts: &CallFacts<'_>, node: NodeRef) -> LoopHeapEffects {
     let mut eff = LoopHeapEffects::default();
-    collect_loop_heap_node(body, pure_builtin_callees, node, &mut eff);
+    collect_loop_heap_node(body, facts, node, &mut eff);
     eff
 }
 
 fn collect_loop_heap_node(
     body: &Body,
-    pure_builtin_callees: &crate::hashmap::IndexSet<FuncId>,
+    facts: &CallFacts<'_>,
     node: NodeRef,
     eff: &mut LoopHeapEffects,
 ) {
     if let NodeRef::Expr(e) = node {
-        record_loop_heap_write(body, pure_builtin_callees, e, eff);
+        record_loop_heap_write(body, facts, e, eff);
     }
     let mut kids = Vec::new();
     body.for_each_child(node, |c| kids.push(c));
     for c in kids {
-        collect_loop_heap_node(body, pure_builtin_callees, c, eff);
+        collect_loop_heap_node(body, facts, c, eff);
     }
 }
 
 fn record_loop_heap_write(
     body: &Body,
-    pure_builtin_callees: &crate::hashmap::IndexSet<FuncId>,
+    facts: &CallFacts<'_>,
     e: ExprId,
     eff: &mut LoopHeapEffects,
 ) {
@@ -2051,10 +2083,16 @@ fn record_loop_heap_write(
             has_receiver,
             ..
         } => {
+            // A receiver is borrowed unless the callee cannot write through it.
+            // The verdict already accounts for a declared `&mut self`, so it
+            // replaces `arg.is_mut` for that slot rather than joining it.
+            let receiver_borrowed = *has_receiver && !facts.receiver_immutable.contains(&e);
             for (i, arg) in args.iter().enumerate() {
-                // A receiver is borrowed for the whole call whether or not the
-                // method declares `&mut self` — the callee reaches its storage.
-                let borrowed = arg.is_mut || (*has_receiver && i == 0);
+                let borrowed = if *has_receiver && i == 0 {
+                    receiver_borrowed
+                } else {
+                    arg.is_mut
+                };
                 if borrowed
                     && let Some(ExprKind::Local { index, .. }) =
                         arg.expr.as_expr().map(|ae| &body.exprs[ae].kind)
@@ -2062,8 +2100,14 @@ fn record_loop_heap_write(
                     eff.mut_borrowed.insert(*index);
                 }
             }
-            if !is_builtin_pure_call(pure_builtin_callees, *func_id) {
-                eff.has_external_writes = true;
+            // A builtin writes no tracked slot; a pure call writes no escaped
+            // slot but reaches the `untrackable` ones; anything else is opaque.
+            if !is_builtin_pure_call(facts.pure_builtin, *func_id) {
+                if facts.pure.contains(&e) {
+                    eff.has_pure_calls = true;
+                } else {
+                    eff.has_external_writes = true;
+                }
             }
         }
         ExprKind::IndirectCall { .. } | ExprKind::CmRawCall { .. } => {
@@ -2283,6 +2327,155 @@ mod tests {
         b
     }
 
+    /// Owns the sets a [`CallFacts`] borrows, so a test can name just the
+    /// verdict it is about and leave the rest at their conservative empty.
+    #[derive(Default)]
+    struct TestFacts {
+        builtin: crate::hashmap::IndexSet<FuncId>,
+        pure: crate::hashmap::IndexSet<ExprId>,
+        immutable: crate::hashmap::IndexSet<ExprId>,
+    }
+
+    impl TestFacts {
+        fn pure(calls: &[ExprId]) -> Self {
+            Self {
+                pure: calls.iter().copied().collect(),
+                ..Self::default()
+            }
+        }
+
+        fn immutable(calls: &[ExprId]) -> Self {
+            Self {
+                immutable: calls.iter().copied().collect(),
+                ..Self::default()
+            }
+        }
+
+        fn facts(&self) -> CallFacts<'_> {
+            CallFacts {
+                pure_builtin: &self.builtin,
+                pure: &self.pure,
+                receiver_immutable: &self.immutable,
+            }
+        }
+    }
+
+    /// `self.m()` as the sole statement of a block, `self` being local 0.
+    fn receiver_call_block(body: &mut Body) -> (BlockId, ExprId) {
+        receiver_call_block_with(body, false)
+    }
+
+    /// Like [`receiver_call_block`], with the receiver argument's declared
+    /// `is_mut` (a `&mut self` method's own parameter type) as given.
+    fn receiver_call_block_with(body: &mut Body, receiver_is_mut: bool) -> (BlockId, ExprId) {
+        use crate::nir::{FuncId, NirLocal};
+        use crate::nir_arena::{ArenaCallArg, BlockNode, ExprNode, StmtNode};
+        use crate::token::Span;
+        let span = Span::new(0, 0, 0, 0);
+        body.locals = vec![NirLocal {
+            name: "self".to_string(),
+            type_id: TypeTable::I32,
+            is_mut: false,
+        }];
+        let recv = body.exprs.push(ExprNode {
+            kind: ExprKind::Local {
+                index: 0,
+                name: "self".to_string(),
+            },
+            type_id: TypeTable::I32,
+            span,
+        });
+        let call = body.exprs.push(ExprNode {
+            kind: ExprKind::Call {
+                func_id: FuncId::from_u32(0),
+                type_args: vec![],
+                args: vec![ArenaCallArg {
+                    expr: Operand::Expr(recv),
+                    is_mut: receiver_is_mut,
+                }],
+                has_receiver: true,
+            },
+            type_id: TypeTable::I32,
+            span,
+        });
+        let stmt = body.stmts.push(StmtNode {
+            kind: StmtKind::Expr(Operand::Expr(call)),
+            span,
+        });
+        let block = body.blocks.push(BlockNode {
+            stmts: vec![stmt],
+            span,
+        });
+        (block, call)
+    }
+
+    /// A callee that cannot write through the receiver does not borrow it for
+    /// the loop; an unknown callee still does.
+    #[test]
+    fn receiver_immutable_call_does_not_borrow_its_receiver() {
+        let mut body = Body::empty();
+        let (block, call) = receiver_call_block(&mut body);
+        let facts = TestFacts::immutable(&[call]);
+
+        let eff = collect_loop_heap_effects(&body, &facts.facts(), block);
+        assert!(
+            !eff.mut_borrowed.contains(&0),
+            "a callee that cannot write through the receiver does not borrow it"
+        );
+
+        // Unknown callee: the conservative mark stays.
+        let none = TestFacts::default();
+        let eff = collect_loop_heap_effects(&body, &none.facts(), block);
+        assert!(eff.mut_borrowed.contains(&0));
+    }
+
+    /// A method declared `&mut self` still does not borrow its receiver once
+    /// the verdict proves the body never writes through it: the declared
+    /// mutability alone must not override a proven-safe verdict.
+    #[test]
+    fn receiver_immutable_call_does_not_borrow_a_declared_mut_receiver() {
+        let mut body = Body::empty();
+        let (block, call) = receiver_call_block_with(&mut body, true);
+        let facts = TestFacts::immutable(&[call]);
+
+        let eff = collect_loop_heap_effects(&body, &facts.facts(), block);
+        assert!(
+            !eff.mut_borrowed.contains(&0),
+            "a proven-immutable receiver is not borrowed even when declared `&mut self`"
+        );
+    }
+
+    /// Receiver immutability says nothing about the other arguments, so it does
+    /// not clear the external-writes fallback; only the purity verdict may.
+    #[test]
+    fn receiver_immutable_call_still_reports_external_writes() {
+        let mut body = Body::empty();
+        let (block, call) = receiver_call_block(&mut body);
+        let facts = TestFacts::immutable(&[call]);
+
+        let eff = collect_loop_heap_effects(&body, &facts.facts(), block);
+        assert!(eff.has_external_writes);
+    }
+
+    /// A pure call sets no external write, and still reaches the `untrackable`
+    /// locals.
+    #[test]
+    fn pure_call_in_a_loop_writes_no_escaped_state() {
+        let mut body = Body::empty();
+        let (block, call) = receiver_call_block(&mut body);
+        let facts = TestFacts::pure(&[call]);
+
+        let eff = collect_loop_heap_effects(&body, &facts.facts(), block);
+        assert!(
+            !eff.has_external_writes,
+            "a call that mutates no caller local writes no escaped state"
+        );
+        assert!(
+            eff.has_pure_calls,
+            "it still reaches the untrackable locals no argument list names"
+        );
+    }
+
     #[test]
     fn cse_independent_of_mut_escaped_iteration_order() {
         use crate::hashmap::IndexSet;
@@ -2301,6 +2494,7 @@ mod tests {
                 mut_escaped,
                 &no_calls,
                 &no_callees,
+                &no_calls,
                 None,
             );
             body.values.values

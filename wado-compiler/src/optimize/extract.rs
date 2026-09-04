@@ -1,5 +1,5 @@
 //! Extraction: materialize pure values from the live `ValueGraph` back into the
-//! `SkelTree`, walking the skeleton and lowering each pure operand to its
+//! skeleton arena, walking it and lowering each pure operand to its
 //! hash-consed [`ValueId`]'s concrete form. Constants are always cheaper to
 //! rematerialize than to share, so they need no cost decision.
 //! [`extract_const`] is the shared primitive, used by `store_load_forward`.
@@ -334,13 +334,13 @@ pub(super) fn freeze_pure_arith(
         // *immutable*-`&`-escaped local (licm's `&config`) is stable and its field
         // constant freezes soundly. Keep a copy before `set_alias_sets` moves it.
         let mut_escaped_leaf = mut_escaped.clone();
-        let pure_calls =
-            super::alias::pure_calls(body, &type_table, &first_param_types, &call_immutability);
+        let verdicts =
+            super::alias::call_verdicts(body, &type_table, &first_param_types, &call_immutability);
         let mut engine = Engine::new(body, &mut buffers, locals);
         engine.set_alias_sets(aliased, untrackable, mut_escaped);
         engine.set_value_graph_type_table(&type_table);
         engine.set_param_locals(param_locals);
-        engine.set_pure_calls(pure_calls);
+        engine.set_call_verdicts(verdicts.pure, verdicts.receiver_immutable);
         engine.set_pure_builtin_callees(&pure_builtin_callees);
 
         // Locals a frozen value may not name, from the same predicate that
@@ -405,7 +405,7 @@ pub(super) fn freeze_pure_arith(
                 changed |=
                     apply_field_materialise(&mut engine, rep, &ids, id_ty, &param_set, &found);
             } else {
-                changed |= apply_value_freeze(&mut engine, rep, &ids, id_ty, &param_set, phase);
+                changed |= apply_value_freeze(&mut engine, rep, &ids, id_ty, &param_set);
             }
         }
     }
@@ -435,14 +435,12 @@ struct FreezeCtx<'a> {
     include_fields: bool,
 }
 
-/// Where a freeze sits relative to the passes that relocate operands, which is
-/// what the anchor rule turns on (WEP: NIR Optimizer Architecture).
+/// Where a freeze sits relative to the passes that relocate operands. There is
+/// no in-loop phase; the WEP records why.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(super) enum FreezePhase {
     /// Before the loop. Plants context-free values only.
     Early,
-    /// Inside the loop, so `inline` and `sroa` still follow.
-    InLoop,
     /// After the loop. Nothing relocates an operand from here on.
     Terminal,
 }
@@ -655,7 +653,6 @@ fn apply_value_freeze(
     ids: &[ExprId],
     id_ty: crate::tir::TypeId,
     param_set: &crate::hashmap::IndexSet<u32>,
-    phase: FreezePhase,
 ) -> bool {
     let mut leaves = crate::hashmap::IndexSet::default();
     engine.body.values.collect_opaque_locals(rep, &mut leaves);
@@ -669,13 +666,7 @@ fn apply_value_freeze(
                 .iter()
                 .all(|&l| leaf_available_at(engine, l, s, param_set))
         });
-    // The anchor rule: with relocation still to come, a value naming a source
-    // local is only sound anchored in an `_av`.
-    let must_anchor = phase == FreezePhase::InLoop && !leaves.is_empty();
     let materialize = shareable && anchorable;
-    if must_anchor && !materialize {
-        return false;
-    }
     let mut changed = false;
     if materialize {
         let (anchor, block) = point.expect("`anchorable` holds only with a point");

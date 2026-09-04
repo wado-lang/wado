@@ -1639,10 +1639,8 @@ fn scan_stat(tokens: &Array<i32>, pos: i32) -> i32 {
             return -1;
         } else if alt_kind == TK_ID {
             let mut best: i32 = -1;
-            pos = start;
+            pos = start + 1;
             try_1: {
-                if pos >= tokens.len() || tokens[pos] != TK_ID { break try_1; }
-                pos += 1;
                 if pos >= tokens.len() || tokens[pos] != TK_LIT_EQ { break try_1; }
                 pos += 1;
                 pos = scan_expr(tokens, pos, 0);
@@ -1656,13 +1654,8 @@ fn scan_stat(tokens: &Array<i32>, pos: i32) -> i32 {
             if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if alt_kind == TK_NEWLINE {
-            pos = start;
-            try_2: {
-                if pos >= tokens.len() || tokens[pos] != TK_NEWLINE { break try_2; }
-                pos += 1;
-                break scan_alts;
-            }
-            return -1;
+            pos = start + 1;
+            break scan_alts;
         } else {
             return -1;
         }
@@ -1676,26 +1669,14 @@ fn scan_expr_atom(tokens: &Array<i32>, pos: i32) -> i32 {
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
         if alt_kind == TK_INT {
-            pos = start;
-            try_0: {
-                if pos >= tokens.len() || tokens[pos] != TK_INT { break try_0; }
-                pos += 1;
-                break scan_alts;
-            }
-            return -1;
+            pos = start + 1;
+            break scan_alts;
         } else if alt_kind == TK_ID {
-            pos = start;
-            try_1: {
-                if pos >= tokens.len() || tokens[pos] != TK_ID { break try_1; }
-                pos += 1;
-                break scan_alts;
-            }
-            return -1;
+            pos = start + 1;
+            break scan_alts;
         } else if alt_kind == TK_LIT_LPAREN {
-            pos = start;
+            pos = start + 1;
             try_2: {
-                if pos >= tokens.len() || tokens[pos] != TK_LIT_LPAREN { break try_2; }
-                pos += 1;
                 pos = scan_expr(tokens, pos, 0);
                 if pos < 0 { break try_2; }
                 if pos >= tokens.len() || tokens[pos] != TK_LIT_RPAREN { break try_2; }

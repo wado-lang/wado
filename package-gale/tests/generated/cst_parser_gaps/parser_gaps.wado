@@ -1656,10 +1656,8 @@ fn scan_not_stmt(tokens: &Array<i32>, pos: i32) -> i32 {
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
         if alt_kind == TK_NOT {
-            pos = start;
+            pos = start + 1;
             try_0: {
-                if pos >= tokens.len() || tokens[pos] != TK_NOT { break try_0; }
-                pos += 1;
                 if pos >= tokens.len() || tokens[pos] == TK_EOF || tokens[pos] == TK_ITEM { break try_0; }
                 pos += 1;
                 if pos >= tokens.len() || tokens[pos] != TK_SEMI { break try_0; }
@@ -1668,10 +1666,8 @@ fn scan_not_stmt(tokens: &Array<i32>, pos: i32) -> i32 {
             }
             return -1;
         } else if alt_kind == TK_SET {
-            pos = start;
+            pos = start + 1;
             try_1: {
-                if pos >= tokens.len() || tokens[pos] != TK_SET { break try_1; }
-                pos += 1;
                 if pos >= tokens.len() || tokens[pos] == TK_EOF || tokens[pos] == TK_ITEM || tokens[pos] == TK_NUMBER { break try_1; }
                 pos += 1;
                 if pos >= tokens.len() || tokens[pos] != TK_SEMI { break try_1; }

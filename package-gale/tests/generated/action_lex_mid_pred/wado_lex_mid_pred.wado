@@ -1582,29 +1582,14 @@ fn scan_s(tokens: &Array<i32>, pos: i32) -> i32 {
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
         if alt_kind == TK_KW {
-            pos = start;
-            try_0: {
-                if pos >= tokens.len() || tokens[pos] != TK_KW { break try_0; }
-                pos += 1;
-                break scan_alts;
-            }
-            return -1;
+            pos = start + 1;
+            break scan_alts;
         } else if alt_kind == TK_NG {
-            pos = start;
-            try_1: {
-                if pos >= tokens.len() || tokens[pos] != TK_NG { break try_1; }
-                pos += 1;
-                break scan_alts;
-            }
-            return -1;
+            pos = start + 1;
+            break scan_alts;
         } else if alt_kind == TK_ID {
-            pos = start;
-            try_2: {
-                if pos >= tokens.len() || tokens[pos] != TK_ID { break try_2; }
-                pos += 1;
-                break scan_alts;
-            }
-            return -1;
+            pos = start + 1;
+            break scan_alts;
         } else {
             return -1;
         }

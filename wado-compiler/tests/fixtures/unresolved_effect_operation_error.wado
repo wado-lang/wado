@@ -1,0 +1,16 @@
+// The sibling of `unresolved_qualified_call_error`: `Prefix` does name a
+// declared effect, but `Prefix::name` names no operation on it. Validating
+// only the prefix left the call deferred to codegen unvalidated, where WIR
+// build panicked on a `Call` resolving to no callee. Both halves of the path
+// are now checked against the declaration.
+
+interface Sensor {
+    fn read() -> i32;
+}
+
+export fn run() with Sensor {
+    let x = Sensor::write(1);
+}
+
+__DATA__
+{"compile_error": "unknown function 'Sensor::write'"}
