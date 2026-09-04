@@ -324,6 +324,17 @@ when the binding is live there and the two places may alias; the same write
 elsewhere in the body does not. Without liveness a deserializer deep-copies a
 field it read before any `&mut self` call runs.
 
+Live means the storage is still readable, not that the local still is. A match
+arm binding is its scrutinee's storage under a second name, and a `let` out of a
+projection is its root's, so the live set at a write is closed over what each
+live local took its value out of. Reading the local alone calls the storage dead
+while a binding is still looking at it, which shares across the write.
+
+A `break` resumes at the loop's exit and a `continue` at its head, so the two
+read different live sets. Answering both with the exit set drops every
+loop-carried reader, and a write reached through a `continue` then looks
+unobserved.
+
 Two kinds of write reach different storage. `p.f = x` points `p.f` elsewhere, so
 a reference already taken out of `p.f` keeps what it has, and only a write
 _inside_ that storage disturbs it. And a place repointed after a binding read it
@@ -331,15 +342,50 @@ hands that binding the only reference to what the place held — the `take` /
 `drain` / `snapshot` idiom — so the binding may leave the function though it was
 read out of a place the caller still owns.
 
+`*p = v` repoints nothing when the referent is an aggregate. The write is
+expanded field by field into the storage the caller holds, so everything read out
+of `*p` sees it. Only a boxed borrow replaces a slot, and one predicate decides
+which of the two an assignment is.
+
+A move also hands storage on, so a binding the fold will move out of cannot share
+it. Two reads are such a move: a value read of the binding, and a place-level
+move of a field out of it. A binding with neither is handed nowhere, so refusing
+it a share on move-eligibility alone costs a copy that defends nothing.
+
 A `match` over a place needs no temp of its own: the arms project the place
 where it lies and each binding asks the fold for itself. Only a non-place
 scrutinee is hoisted for `labeled_block_fusion`, whose temp the fold defends.
 
 What a call writes is read off the callee rather than assumed: `modref.rs`
 collects each function's writes as fields of the type carrying them and closes
-them over the call graph, so a read of one field survives a `&mut self` call
-that writes another. A callee with no body reaches only the `&mut` arguments it
-is handed; anything this cannot name writes everything.
+them over the call graph, so a read of one field survives a call that writes
+another. The receiver is one such handle and every other `&mut` the call is
+given is another, and the callee's own answer covers them alike. A callee with no
+body reaches only the `&mut` arguments it is handed; anything this cannot name
+writes everything.
+
+Some handles the walk loses: one stored into an aggregate, and one given to a
+callee with no body. Each writes the whole of what it was handed. That answer is
+its own, never a field index standing for every field, because a caller comparing
+paths cannot tell such an index from one naming a real field. It reads the two as
+disjoint and ignores the very write it was told about. One function mints the key
+both sides compare (`place::field_owner`), so what a callee records and what a
+caller looks up cannot drift.
+
+An `Index` or a `Variant` step names no type of its own, so a `Field` past one
+answers for the element rather than for the container the caller holds. A path
+reached through either writes the whole of what its root was lent. Keying it by
+the element's field alone leaves a caller holding the container nothing to match,
+and it shares storage the call goes on to write.
+
+Handing the source root to a new owner costs the binding its share on the same
+terms. That owner may write what the binding aliases, so the read matters where
+the binding's storage is still read afterwards, and nowhere else.
+
+A `List` or a `String` copy right-sizes its backing storage to the current
+length, which a share skips. Capacity is not part of the value, but `capacity()`
+reads it, so a binding whose own capacity is read keeps its copy. One that never
+asks observes no difference and shares.
 
 Every analysis here asks one resolver what an expression names (`place.rs`).
 Its answer separates a value of its own from a place the walk cannot follow, so
@@ -510,9 +556,16 @@ Verified against the tree.
       (`pattern_temp_no_alias`, over syntactic position × writability × binding
       kind; `closure_capture_move`, `closure_confinement`,
       `scalar_read_before_move`).
-- [ ] Key sharing on liveness rather than on the whole body, as _Sharing_ states.
-      The share analysis is a forward walk with no liveness and no control flow,
-      so a write anywhere refuses the binding.
+- [x] Sharing is keyed on liveness rather than on the whole body, as _Sharing_
+      states: share collection runs inside the move analysis's backward walk, so
+      a write refuses a binding only where that binding's storage is still
+      readable. The live set is closed over what each live local took its value
+      out of, an arm binding being its scrutinee's storage under a second name.
+- [x] A `&mut` to a variant or a primitive is a `Box<T>` by the time pattern
+      lowering runs, so the writability question a by-value arm binding asks goes
+      to `place::is_reference`, which reads both spellings. A raw `Ref` / `MutRef`
+      test minted no owned scrutinee temp and the binding aliased the caller's
+      payload.
 - [ ] Drive the helper seed from declared types rather than from expressions.
       Predicting the temps pattern lowering mints is what the current seed does,
       and each shape it misses is a copy the fold cannot emit.

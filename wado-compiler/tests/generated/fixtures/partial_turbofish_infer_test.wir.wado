@@ -3595,29 +3595,28 @@ fn "core:cbor/core:cbor/CborDeserializer^core:serde/Deserializer::deserialize_i3
     let arg: u64;
     let __qm_v_10: ref "core:prelude/int128.wado//i128";
     let __qm_e_11: ref "core:serde//DeserializeError";
-    let v_12: ref "core:prelude/int128.wado//i128";
-    let __m0: ref "core:prelude/int128.wado//i128";
-    let __sroa_slot_27: i32;
-    let __sroa_slot_28: u8;
-    let __sroa_slot_29: ref null "core:serde//DeserializeError";
-    let _av_30: i32;
-    start = builtin::i64_extend_i32_s(local.tee _av_30(self.pos));
-    major = (local.tee b(__sroa_slot_27 = 0; __sroa_slot_28 = 0; __sroa_slot_29 = ref.null none; __inline_core_cbor_CborDeserializer__peek_byte_0: block {
-        if @unlikely(_av_30 >= (self.input.end - self.input.start)) {
+    let v: ref "core:prelude/int128.wado//i128";
+    let __sroa_slot_26: i32;
+    let __sroa_slot_27: u8;
+    let __sroa_slot_28: ref null "core:serde//DeserializeError";
+    let _av_29: i32;
+    start = builtin::i64_extend_i32_s(local.tee _av_29(self.pos));
+    major = (local.tee b(__sroa_slot_26 = 0; __sroa_slot_27 = 0; __sroa_slot_28 = ref.null none; __inline_core_cbor_CborDeserializer__peek_byte_0: block {
+        if @unlikely(_av_29 >= (self.input.end - self.input.start)) {
             cold_path;
-            __sroa_slot_27 = 1;
-            __sroa_slot_28 = 0;
-            __sroa_slot_29 = ref.as_non_null("core:serde/core:serde/DeserializeError::eof"(builtin::i64_extend_i32_s(self.pos)));
+            __sroa_slot_26 = 1;
+            __sroa_slot_27 = 0;
+            __sroa_slot_28 = ref.as_non_null("core:serde/core:serde/DeserializeError::eof"(builtin::i64_extend_i32_s(self.pos)));
             break __inline_core_cbor_CborDeserializer__peek_byte_0;
         }
-        __sroa_slot_27 = 0;
-        __sroa_slot_28 = builtin::array_get_value<u8>(self.input.repr, self.input.start + self.pos);
-        __sroa_slot_29 = ref.null none;
+        __sroa_slot_26 = 0;
+        __sroa_slot_27 = builtin::array_get_value<u8>(self.input.repr, self.input.start + self.pos);
+        __sroa_slot_28 = ref.null none;
         break __inline_core_cbor_CborDeserializer__peek_byte_0;
-    }; let __match_scrut_0: i32; __match_scrut_0 = __sroa_slot_27; (if __match_scrut_0 == 0 -> u8 {
-        __sroa_slot_28;
+    }; let __match_scrut_0: i32; __match_scrut_0 = __sroa_slot_26; (if __match_scrut_0 == 0 -> u8 {
+        __sroa_slot_27;
     } else if @unlikely(__match_scrut_0 == 1) -> u8 {
-        __qm_e_3 = ref.as_non_null(__sroa_slot_29);
+        __qm_e_3 = ref.as_non_null(__sroa_slot_28);
         cold_path;
         return 1, 0, __qm_e_3;
     } else {
@@ -3656,7 +3655,7 @@ fn "core:cbor/core:cbor/CborDeserializer^core:serde/Deserializer::deserialize_i3
     let __vr_16_mv_1: ref null "core:prelude/int128.wado//i128";
     let __vr_16_mv_2: ref null "core:serde//DeserializeError";
     multivalue_bind [__vr_16_mv_0, __vr_16_mv_1, __vr_16_mv_2] = "core:cbor/core:cbor/CborDeserializer::read_signed_i128"(self);
-    v_12 = (if __vr_16_mv_0 == 0 -> ref "core:prelude/int128.wado//i128" {
+    v = (if __vr_16_mv_0 == 0 -> ref "core:prelude/int128.wado//i128" {
         __qm_v_10 = ref.as_non_null(__vr_16_mv_1);
         __qm_v_10;
     } else if @unlikely(__vr_16_mv_0 == 1) -> ref "core:prelude/int128.wado//i128" {
@@ -3666,15 +3665,15 @@ fn "core:cbor/core:cbor/CborDeserializer^core:serde/Deserializer::deserialize_i3
     } else {
         unreachable;
     });
-    if @unlikely(__m0 = struct.new "core:prelude/int128.wado//i128" { low: v_12.low, high: v_12.high }; (if "core:prelude/int128.wado/core:prelude/int128.wado/i128^core:prelude/traits.wado/Ord::cmp"(global:core:cbor::__const_obj_19, __m0) != 2 -> i32 {
-        "core:prelude/int128.wado/core:prelude/int128.wado/i128^core:prelude/traits.wado/Ord::cmp"(__m0, global:core:cbor::__const_obj_18) != 2;
+    if @unlikely((if "core:prelude/int128.wado/core:prelude/int128.wado/i128^core:prelude/traits.wado/Ord::cmp"(global:core:cbor::__const_obj_19, v) != 2 -> i32 {
+        "core:prelude/int128.wado/core:prelude/int128.wado/i128^core:prelude/traits.wado/Ord::cmp"(v, global:core:cbor::__const_obj_18) != 2;
     } else {
         0;
     }) == 0) {
         cold_path;
         return 1, 0, "core:serde/core:serde/DeserializeError::overflow"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("value out of range for i32"), used: 26 }, start);
     }
-    return 0, builtin::i32_wrap_i64(v_12.low), ref.null none;
+    return 0, builtin::i32_wrap_i64(v.low), ref.null none;
 }
 
 fn "core:cbor/core:cbor/CborDeserializer^core:serde/Deserializer::deserialize_string"(self) {

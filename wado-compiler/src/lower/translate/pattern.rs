@@ -1,6 +1,7 @@
 use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::lower::plan::value_copy::funcset::FuncKeySet;
+use crate::lower::plan::value_copy::place;
 use crate::module_source::ModuleSource;
 use crate::name::{FqTypeName, LocalMethodName};
 use crate::tir::FunctionRef;
@@ -1746,10 +1747,8 @@ impl<'a> PatternLowerer<'a> {
                 op: TirUnaryOp::Ref | TirUnaryOp::MutRef | TirUnaryOp::Deref,
                 expr: inner,
             } => {
-                matches!(
-                    type_table.get(inner.type_id),
-                    ResolvedType::Ref(_) | ResolvedType::MutRef(_)
-                ) || self.place_is_writable(inner, type_table)
+                place::is_reference(inner.type_id, type_table)
+                    || self.place_is_writable(inner, type_table)
             }
             // `xs[0]` is `xs.index_value(0)` by now, and such an accessor hands
             // back a piece of its receiver.

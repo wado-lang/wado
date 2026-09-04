@@ -109,15 +109,14 @@ fn "template_inspect_default_cap.wado/run"() with Stdout {
     let __local_8: ref "core:prelude/string.wado//String";
     let new_used: i32;
     let start_16: i32;
-    let handle_30: i32;
-    let packed_39: i64;
-    let rx_40: i32;
-    let tx_41: i32;
-    let handle_49: i32;
-    let packed_58: i64;
-    let rx_59: i32;
-    let tx_60: i32;
-    let __sroa_disp_used: i32;
+    let handle_29: i32;
+    let packed_38: i64;
+    let rx_39: i32;
+    let tx_40: i32;
+    let handle_48: i32;
+    let packed_57: i64;
+    let rx_58: i32;
+    let tx_59: i32;
     __inline___initialize_modules_0: block {
         break_if __inline___initialize_modules_0 @likely(global:template_inspect_default_cap.wado::__modules_initialized);
         cold_path;
@@ -141,31 +140,22 @@ fn "template_inspect_default_cap.wado/run"() with Stdout {
             continue l1;
         };
     };
-    let __array_clone_src_1: ref Array<u8>;
-    __array_clone_src_1 = s.repr;
-    let __array_clone_len_3: i32;
-    __array_clone_len_3 = s.used;
-    let __array_clone_dst_2: ref Array<u8>;
-    __array_clone_dst_2 = builtin::array_new<u8>(__array_clone_len_3);
-    builtin::array_copy<u8>(__array_clone_dst_2, 0, __array_clone_src_1, 0, __array_clone_len_3);
-    drop(__array_clone_dst_2);
-    __sroa_disp_used = s.used;
     __local_4_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     "core:prelude/format.wado/core:prelude/string.wado/String^core:prelude/traits.wado/Inspect::inspect$spec0$scalar"(s, __local_4_4);
     __local_6 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(__sroa_disp_used, __local_6);
-    rx_40 = builtin::i32_wrap_i64(local.tee packed_39("wasi/stream-new"()));
-    tx_41 = builtin::i32_wrap_i64(packed_39 >> 32_i64);
-    handle_30 = "template_inspect_default_cap.wado/__cm_binding__Stdout_write_via_stream"(rx_40);
-    "core:rt/write_string_to_stream"(tx_41, __local_6, 1);
-    "wasi/future-drop-readable:transmission-cli"(handle_30);
+    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(s.used, __local_6);
+    rx_39 = builtin::i32_wrap_i64(local.tee packed_38("wasi/stream-new"()));
+    tx_40 = builtin::i32_wrap_i64(packed_38 >> 32_i64);
+    handle_29 = "template_inspect_default_cap.wado/__cm_binding__Stdout_write_via_stream"(rx_39);
+    "core:rt/write_string_to_stream"(tx_40, __local_6, 1);
+    "wasi/future-drop-readable:transmission-cli"(handle_29);
     __local_8 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(__local_4_4.used, __local_8);
-    rx_59 = builtin::i32_wrap_i64(local.tee packed_58("wasi/stream-new"()));
-    tx_60 = builtin::i32_wrap_i64(packed_58 >> 32_i64);
-    handle_49 = "template_inspect_default_cap.wado/__cm_binding__Stdout_write_via_stream"(rx_59);
-    "core:rt/write_string_to_stream"(tx_60, __local_8, 1);
-    "wasi/future-drop-readable:transmission-cli"(handle_49);
+    rx_58 = builtin::i32_wrap_i64(local.tee packed_57("wasi/stream-new"()));
+    tx_59 = builtin::i32_wrap_i64(packed_57 >> 32_i64);
+    handle_48 = "template_inspect_default_cap.wado/__cm_binding__Stdout_write_via_stream"(rx_58);
+    "core:rt/write_string_to_stream"(tx_59, __local_8, 1);
+    "wasi/future-drop-readable:transmission-cli"(handle_48);
 }
 
 fn "template_inspect_default_cap.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
