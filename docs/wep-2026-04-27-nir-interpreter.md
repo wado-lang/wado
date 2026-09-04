@@ -184,7 +184,7 @@ The census counts 152 surviving regions across 15 files:
 
 The first count this instrument produced was 2 788, and 95 % of it was an
 artifact of the instrument: the walk deciding what a frame needs returned on the
-first refusal, so a template with a runtime interpolation *and* a `panic` inside
+first refusal, so a template with a runtime interpolation _and_ a `panic` inside
 reported the panic's global write as the reason it did not fold — a block that
 was never a constant to begin with. The walk now finishes and answers both
 questions, since they are independent and a block reading a runtime local was
