@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1788516806785,
+  "lastUpdate": 1788532327491,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -53209,6 +53209,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/ec9ad47c18da3b01b1d592a025acefeeeeab943f"
         },
         "date": 1788516805875,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 2028,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6418,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18877,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 281425,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "bdeeb7bad9fe8eeaca87ead8459db4a2ff5d1b6b",
+          "message": "Merge pull request #1964 from wado-lang/claude/trait-resolution-docs-tests-2b3eug\n\nfeat(elaborator): trait selection is one written order, decided by the solver",
+          "timestamp": "2026-09-04T23:18:33+09:00",
+          "tree_id": "c1389540404ec2d51a1c98fb992f8c70dc5101f5",
+          "url": "https://github.com/wado-lang/wado/commit/bdeeb7bad9fe8eeaca87ead8459db4a2ff5d1b6b"
+        },
+        "date": 1788532326698,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
