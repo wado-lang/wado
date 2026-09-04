@@ -338,7 +338,7 @@ pub(crate) struct Reify<'a, H: CompilerHost> {
     /// overlay above the outer one, so inner-body nodes shadow correctly while
     /// outer-body nodes fall through to the outer overlay. See
     /// [`Self::reify_tuple_for_of`].
-    pub(crate) tuple_overlay_stack: Vec<super::sem::types::BodyFacts>,
+    pub(crate) tuple_overlay_stack: Vec<&'a super::sem::types::BodyFacts>,
     /// Per-`ForOfStmt` visit counter. Annotate records one overlay set per
     /// *instantiation* of a tuple for-of in walk order; reify increments
     /// this each time it reifies the same `for_of.id` so it consumes the
@@ -540,6 +540,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         self.tuple_overlay_stack
             .iter()
             .rev()
+            .copied()
             .chain(std::iter::once(&self.sem.types.body))
             .find_map(|facts| map(facts).get(&id).cloned())
     }
@@ -3990,24 +3991,24 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // element's overlay is pushed onto `tuple_overlay_stack` while its
         // binding and body are reified so the `ann_*` accessors see the
         // right per-element facts instead of the truncated base maps.
-        let instantiation: Vec<super::sem::types::BodyFacts> = {
+        // Borrowed, not copied: an overlay is 20 maps and reify only reads it.
+        let instantiation: &'a [super::sem::types::BodyFacts] = {
+            let sem: &'a ModuleSemantics = self.sem;
             let for_of_key = for_of.id;
             let visit = self.tuple_overlay_visits.entry(for_of_key).or_insert(0);
             let k = *visit;
             *visit += 1;
-            self.sem
-                .types
+            sem.types
                 .tuple_overlays
                 .get(&for_of_key)
                 .and_then(|insts| insts.get(k))
-                .cloned()
-                .unwrap_or_default()
+                .map_or(&[], Vec::as_slice)
         };
 
         for (i, &elem_type) in elems.iter().enumerate() {
             ctx.enter_scope();
             if let Some(overlay) = instantiation.get(i) {
-                self.tuple_overlay_stack.push(overlay.clone());
+                self.tuple_overlay_stack.push(overlay);
             }
 
             let temp_ref = TirExpr::new(

@@ -5195,6 +5195,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         caller_id: crate::ast::AstId,
     ) -> TypeId {
         let tt = self.tysys.type_table.borrow();
+        // Reify reads the names below back as written, so an unsolved type
+        // would mangle into a callee no monomorphization produces.
+        assert!(
+            !tt.contains_infer_var(target_type) && !tt.contains_infer_var(from_type),
+            "`From` conversion recorded over an unsolved type"
+        );
         let target_name = tt.type_name(target_type);
         let from_name = tt.fq_type_name(from_type);
         let from_trait_name = tt.compiler_trait_fq(crate::compiler_item::CompilerItem::From);
