@@ -1656,6 +1656,15 @@ fn synthesize_stream_read_value_func(elem_type_id: TypeId, ctx: &SynthCtx) -> Ti
     )
 }
 
+/// Whether a `#[cm]` member's call carries the handle it operates on as
+/// `args[0]`. Only a constructor does not, and casting its first *value*
+/// argument to a handle would corrupt it.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum CmReceiver {
+    Handle,
+    None,
+}
+
 /// Dispatch target for a rewritten CM resource method call.
 #[derive(Clone)]
 enum BindingTarget {
@@ -1680,42 +1689,43 @@ const U8_STREAM_BINDINGS: &[&str] = &[
 ];
 
 /// `None` for a method not handled here — it falls through to WIR translate.
-fn cm_binding_function(cm_name: &str) -> Option<BindingTarget> {
+fn cm_binding_function(cm_name: &str) -> Option<(BindingTarget, CmReceiver)> {
     use BindingTarget::{Canonical, Internal};
     use CanonicalIntrinsic as C;
+    use CmReceiver::{Handle, None as NoHandle};
     // Every stream arm below is `U8_STREAM_BINDINGS`, gated by the caller.
     let u8_stream = CmStreamPayload::U8;
     Some(match cm_name {
         // Simple drops → direct CmRawCall (non-parameterized)
-        "stream-drop-readable" => Canonical(C::StreamDropReadable(u8_stream)),
-        "stream-drop-writable" => Canonical(C::StreamDropWritable(u8_stream)),
-        "waitable-set-drop" => Canonical(C::WaitableSetDrop),
-        "subtask-drop" => Canonical(C::SubtaskDrop),
-        "error-context-drop" => Canonical(C::ErrorContextDrop),
+        "stream-drop-readable" => (Canonical(C::StreamDropReadable(u8_stream)), Handle),
+        "stream-drop-writable" => (Canonical(C::StreamDropWritable(u8_stream)), Handle),
+        "waitable-set-drop" => (Canonical(C::WaitableSetDrop), Handle),
+        "subtask-drop" => (Canonical(C::SubtaskDrop), Handle),
+        "error-context-drop" => (Canonical(C::ErrorContextDrop), Handle),
 
         // Simple cancel → direct CmRawCall (non-parameterized)
-        "stream-cancel-read" => Canonical(C::StreamCancelRead(u8_stream)),
-        "stream-cancel-write" => Canonical(C::StreamCancelWrite(u8_stream)),
-        "subtask-cancel" => Canonical(C::SubtaskCancel),
+        "stream-cancel-read" => (Canonical(C::StreamCancelRead(u8_stream)), Handle),
+        "stream-cancel-write" => (Canonical(C::StreamCancelWrite(u8_stream)), Handle),
+        "subtask-cancel" => (Canonical(C::SubtaskCancel), Handle),
 
         // Future drops/cancels are parameterized by payload type — leave for WIR translate
 
         // waitable-join: void canonical, returns the handle as Waitable
-        "waitable-join" => Internal("cm_waitable_join"),
+        "waitable-join" => (Internal("cm_waitable_join"), Handle),
 
         // Simple constructors → direct CmRawCall (returns i32 handle)
-        "waitable-set-new" => Canonical(C::WaitableSetNew),
+        "waitable-set-new" => (Canonical(C::WaitableSetNew), NoHandle),
 
         // Complex operations → internal binding functions
-        "stream-read" => Internal("cm_stream_read_u8"),
-        "stream-write" => Internal("cm_stream_write_u8"),
-        "stream-write-raw" => Internal("cm_stream_write_raw_u8"),
-        "error-context-new" => Internal("cm_error_context_new"),
-        "error-context-debug-message" => Internal("cm_error_context_debug_message"),
-        "waitable-set-wait" => Internal("cm_waitable_set_wait"),
-        "waitable-set-poll" => Internal("cm_waitable_set_poll"),
+        "stream-read" => (Internal("cm_stream_read_u8"), Handle),
+        "stream-write" => (Internal("cm_stream_write_u8"), Handle),
+        "stream-write-raw" => (Internal("cm_stream_write_raw_u8"), Handle),
+        "error-context-new" => (Internal("cm_error_context_new"), NoHandle),
+        "error-context-debug-message" => (Internal("cm_error_context_debug_message"), Handle),
+        "waitable-set-wait" => (Internal("cm_waitable_set_wait"), Handle),
+        "waitable-set-poll" => (Internal("cm_waitable_set_poll"), Handle),
 
-        _ => return None,
+        _ => return Option::None,
     })
 }
 
@@ -1808,7 +1818,12 @@ impl TirMutVisitor for CmMethodRewriter<'_> {
             && let Some(payload_type_id) = future_write_payload(self.tt, expr)
         {
             let func_name = future_write_func_name(self.tt, payload_type_id);
-            rewrite_cm_call(expr, BindingTarget::Entry(func_name), self.entry_source);
+            rewrite_cm_call(
+                expr,
+                BindingTarget::Entry(func_name),
+                self.entry_source,
+                CmReceiver::Handle,
+            );
             return;
         }
         // Scalar / structural stream writes call a generated per-element binding;
@@ -1817,14 +1832,24 @@ impl TirMutVisitor for CmMethodRewriter<'_> {
             && let Some(elem_type_id) = stream_write_value_element(self.tt, expr)
         {
             let func_name = stream_write_func_name(self.tt, elem_type_id);
-            rewrite_cm_call(expr, BindingTarget::Entry(func_name), self.entry_source);
+            rewrite_cm_call(
+                expr,
+                BindingTarget::Entry(func_name),
+                self.entry_source,
+                CmReceiver::Handle,
+            );
             return;
         }
         // Future reads call a generated per-payload binding function.
         if cm_name == "future-read" {
             if let Some((payload_type_id, _)) = future_read_payload(self.tt, expr) {
                 let func_name = future_read_func_name(self.tt, payload_type_id);
-                rewrite_cm_call(expr, BindingTarget::Entry(func_name), self.entry_source);
+                rewrite_cm_call(
+                    expr,
+                    BindingTarget::Entry(func_name),
+                    self.entry_source,
+                    CmReceiver::Handle,
+                );
             }
             return;
         }
@@ -1832,7 +1857,12 @@ impl TirMutVisitor for CmMethodRewriter<'_> {
         // WASI-record reads fall through to the `__cm_stream_read_<record>` path.
         if let Some(elem_type_id) = stream_read_value_element(self.tt, expr) {
             let func_name = stream_read_value_func_name(self.tt, elem_type_id);
-            rewrite_cm_call(expr, BindingTarget::Entry(func_name), self.entry_source);
+            rewrite_cm_call(
+                expr,
+                BindingTarget::Entry(func_name),
+                self.entry_source,
+                CmReceiver::Handle,
+            );
             return;
         }
         // WASI-record stream reads call a generated binding function.
@@ -1841,7 +1871,12 @@ impl TirMutVisitor for CmMethodRewriter<'_> {
         {
             let elem_name = self.tt.base_type_name(elem_type_id);
             let func_name = record_stream_read_func_name(&elem_name);
-            rewrite_cm_call(expr, BindingTarget::Entry(func_name), self.entry_source);
+            rewrite_cm_call(
+                expr,
+                BindingTarget::Entry(func_name),
+                self.entry_source,
+                CmReceiver::Handle,
+            );
             return;
         }
         // Stream ops on a non-u8 element, and future drop / cancel: parameterized
@@ -1850,7 +1885,12 @@ impl TirMutVisitor for CmMethodRewriter<'_> {
             parameterize_stream_cm_name(&cm_name, expr, self.tt, self.cm_interface_registry)
                 .or_else(|| parameterize_future_cm_name(&cm_name, expr, self.tt));
         if let Some(intrinsic) = parameterized {
-            rewrite_cm_call(expr, BindingTarget::Canonical(intrinsic), self.entry_source);
+            rewrite_cm_call(
+                expr,
+                BindingTarget::Canonical(intrinsic),
+                self.entry_source,
+                CmReceiver::Handle,
+            );
             return;
         }
         // Everything above is what parameterizes a wider element, so what is
@@ -1863,27 +1903,31 @@ impl TirMutVisitor for CmMethodRewriter<'_> {
             return;
         }
         // Look up the binding function for everything else.
-        let Some(target) = cm_binding_function(&cm_name) else {
+        let Some((target, receiver_kind)) = cm_binding_function(&cm_name) else {
             // Not handled by synthesis yet — falls through to WIR translate.
             return;
         };
-        rewrite_cm_call(expr, target, self.entry_source);
+        rewrite_cm_call(expr, target, self.entry_source, receiver_kind);
     }
 }
 
 /// Rewrite a CM call — `recv.method(args)` or `Type::method(args)` — to a
-/// builtin/internal call. An instance method's receiver is `args[0]`, cast to
-/// i32: the resource handle the canonical import takes.
-fn rewrite_cm_call(expr: &mut TirExpr, target: BindingTarget, entry_source: &ModuleSource) {
-    let TirExprKind::Call {
-        args, has_receiver, ..
-    } = &mut expr.kind
-    else {
+/// builtin/internal call. Where the member takes one, the handle is `args[0]`
+/// whichever spelling wrote the call, and is cast to the i32 the canonical
+/// import takes. Read off `has_receiver` instead, only dot syntax was cast.
+fn rewrite_cm_call(
+    expr: &mut TirExpr,
+    target: BindingTarget,
+    entry_source: &ModuleSource,
+    receiver_kind: CmReceiver,
+) {
+    let TirExprKind::Call { args, .. } = &mut expr.kind else {
         return;
     };
-    let has_receiver = *has_receiver;
     let mut taken_args: Vec<TirExpr> = std::mem::take(args).into_iter().map(|a| a.expr).collect();
-    if has_receiver && let Some(receiver) = taken_args.first_mut() {
+    if receiver_kind == CmReceiver::Handle
+        && let Some(receiver) = taken_args.first_mut()
+    {
         let taken = std::mem::replace(
             receiver,
             TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, synth_span()),
