@@ -354,7 +354,7 @@ impl CliGeneratorProvider {
                     // every build since build/kiln is gitignored, so the O2
                     // compile cost is repaid many times over by faster generation.
                     opt_level: wado_compiler::OptLevel::O2,
-                    target_world: Some("core:kiln/generator".to_string()),
+                    target_world: Some(crate::build_dep::GENERATOR_WORLD_FQ.to_string()),
                     skip_validation: false,
                     log_level: Some(LogLevel::Warn),
                     ..CompilerOptions::default()

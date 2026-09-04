@@ -4,9 +4,8 @@
 //! Returns a [`CanonicalValue`] tree whose shape mirrors the descriptor, so
 //! the downstream encoder in [`crate::kiln::cache`] can walk the pair in
 //! lock-step. All diagnostics are batched: a single malformed table surfaces
-//! every mismatched / missing / unknown field at once, each pointing at the
-//! key it names — or, where the offender has no key of its own, at the key
-//! that owns it ([`OptionsAnchor`]).
+//! every mismatched / missing / unknown field at once, each on the key it
+//! names, or on the key that owns it ([`OptionsAnchor`]).
 
 use crate::ast::{AttrObject, AttrValue};
 use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
@@ -14,12 +13,10 @@ use crate::token::Span;
 
 use super::options::{CanonicalValue, OptionsDescriptor, OptionsField, OptionsType};
 
-/// Where the options table was written, so every diagnostic can point at a
-/// key instead of at the start of the document.
-///
-/// `span` is what a diagnostic with no key of its own — a missing required
-/// field, a list element, an `options` value that is not a table — is blamed
-/// on: the `options:` key, or the `use` clause when the clause wrote none.
+/// Where the options table was written. `span` takes the blame for a
+/// diagnostic with no key of its own — a missing field, a list element, a
+/// non-table `options`: the `options:` key, or the whole `use` clause when the
+/// clause wrote no options at all.
 #[derive(Debug, Clone, Copy)]
 pub struct OptionsAnchor<'a> {
     pub file: &'a str,
@@ -44,7 +41,6 @@ impl<'a> Site<'a> {
         }
     }
 
-    /// The diagnostic span for `span`, in this site's file.
     fn blame(self, span: Span) -> Option<DiagnosticSpan> {
         Some(DiagnosticSpan::from_span(&span, Some(self.file)))
     }

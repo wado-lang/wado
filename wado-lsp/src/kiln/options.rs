@@ -1,17 +1,9 @@
-//! Typed check of an inline `with { generator: { options: … } }` table against
-//! the generator's `pub struct Options`.
+//! Checks an inline `with { generator: { options: … } }` table against the
+//! generator's `pub struct Options`, read from the generator's source.
 //!
-//! The LSP cannot run a generator, but it does not need to: the descriptor is a
-//! property of the generator's *source*, which the host can read and the
-//! frontend can analyze. So the editor reports an unknown, missing or
-//! mistyped option on the key that is wrong, without a `wado compile` in
-//! between.
-//!
-//! A generator whose source the LSP cannot reach — a registry
-//! `[build-dependencies]` component, an unreadable package — yields no
-//! descriptor and therefore no verdict: saying nothing is right, since the
-//! options may well be correct. `wado check` resolves those components and
-//! reports them.
+//! No generator runs: the descriptor is a property of that source. A generator
+//! the host cannot read in source yields no descriptor and no verdict, since
+//! the options may well be correct. `wado check` reports those.
 
 use std::path::{Path, PathBuf};
 
@@ -50,16 +42,13 @@ pub(super) async fn check<H: CompilerHost>(
     }
 }
 
-/// The generator's entry `.wado` file, absolute. Mirrors the rewrites
-/// `wado-cli` performs before its pipeline runs: a `module:` naming a package
-/// directory — inline or through a path `[build-dependencies]` entry —
-/// resolves to that package's `[world]."core:kiln/generator"` entry.
+/// The generator's entry `.wado` file, absolute, resolved as `wado-cli`
+/// resolves it before its pipeline runs.
 ///
-/// Joined plainly, not through [`super::safe_join`]: that sandbox is for paths
-/// a *cache artifact* names, which the LSP must not follow out of the
-/// workspace. These paths the user wrote in their own source and manifest —
-/// `../gen` is an ordinary sibling package — and the loader already follows the
-/// same spellings for a plain `use`.
+/// Joined plainly, not through [`super::safe_join`]: that sandbox is for the
+/// paths a cache artifact names. These the user wrote in their own source and
+/// manifest, where `../gen` is an ordinary sibling package, and the loader
+/// follows the same spellings for a plain `use`.
 async fn generator_entry<H: CompilerHost>(
     invocation: &Invocation,
     manifest_root: &Path,
@@ -68,10 +57,7 @@ async fn generator_entry<H: CompilerHost>(
     match &invocation.module {
         GeneratorModule::LocalPath(path) => {
             let abs = manifest_root.join(path.as_str());
-            match package_generator_entry(&abs, host).await {
-                Some(entry) => Some(entry),
-                None => Some(abs),
-            }
+            Some(package_generator_entry(&abs, host).await.unwrap_or(abs))
         }
         GeneratorModule::Spec(spec) => {
             let manifest = read_manifest(manifest_root, host).await?;
@@ -85,8 +71,7 @@ async fn generator_entry<H: CompilerHost>(
 }
 
 /// `pkg_dir`'s `[world]."core:kiln/generator"` entry, absolute. `None` when
-/// `pkg_dir` is not a package directory (an inline `module:` naming a file
-/// takes that path) or declares no generator world.
+/// `pkg_dir` is a file rather than a package, or declares no generator world.
 async fn package_generator_entry<H: CompilerHost>(pkg_dir: &Path, host: &H) -> Option<PathBuf> {
     let manifest = read_manifest(pkg_dir, host).await?;
     Some(pkg_dir.join(manifest.world_entry(GENERATOR_WORLD_FQ)?))
@@ -102,12 +87,11 @@ async fn read_manifest<H: CompilerHost>(dir: &Path, host: &H) -> Option<wado_man
     crate::host::discovery::resolve_member_manifest(dir, &content).ok()
 }
 
-/// Analyze the generator's source and describe its `Options` struct.
+/// Analyze the generator's source, under the generator world as `wado compile`
+/// analyzes it, and describe its `Options` struct.
 ///
-/// The analysis runs under the generator world, exactly as `wado compile`
-/// analyzes it, and through a silencing host: the generator's own diagnostics
-/// belong to its own file, and a span-less one would otherwise surface at the
-/// top of the consumer the user is editing.
+/// The host is silenced: the generator's own diagnostics belong to its own
+/// file, and a span-less one would surface at the top of the open document.
 async fn descriptor_of<H: CompilerHost>(entry: &Path, host: &H) -> Option<OptionsDescriptor> {
     let filename = entry.display().to_string();
     let source = String::from_utf8(host.load_source(&filename).await.ok()?).ok()?;

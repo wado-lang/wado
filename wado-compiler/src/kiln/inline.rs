@@ -289,8 +289,6 @@ fn lower_inline(
         }
     };
 
-    // A diagnostic about `options` that names no key of its own points at the
-    // `options:` key, or at the whole clause when none was written.
     let options_entry = cfg.get("options");
     let options_span = options_entry.map_or(use_decl.span, |entry| entry.key_span);
     let options = if let Some(module) = module.as_ref() {

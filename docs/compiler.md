@@ -316,17 +316,17 @@ Kiln is the compiler's mechanism for turning any input file — a schema (`.prot
 
 The compiler-side pieces live in `src/kiln/`:
 
-| Module             | Concern                                                                              |
-| ------------------ | ------------------------------------------------------------------------------------ |
-| `invocation.rs`    | Canonical `Invocation` representation (declaration site + options + input paths)     |
-| `inline.rs`        | Collects inline `use … with { generator: … }` invocations (`InvocationIndex`)        |
-| `plan.rs`          | DAG + topological sort of invocations; rejects cycles                                |
-| `cache.rs`         | Cache-key composition over inputs, options, and the generator's identity hash        |
-| `header.rs`        | Generated-file `#![generated]` header emission and parsing                           |
-| `metadata.rs`      | Persisted per-invocation cache state (`<primary>.kiln.json`)                         |
-| `options.rs`       | Extracts an `OptionsDescriptor` from a generator's `pub struct Options`              |
-| `options_check.rs` | Validates user-supplied options against the descriptor                               |
-| `import_check.rs`  | Refuses `wasi:*` imports inside generator packages; injects the `Request<T>` adapter |
+| Module             | Concern                                                                                                               |
+| ------------------ | --------------------------------------------------------------------------------------------------------------------- |
+| `invocation.rs`    | Canonical `Invocation` representation (declaration site + options + input paths), and the `module:` specifier grammar |
+| `inline.rs`        | Collects inline `use … with { generator: … }` invocations (`InvocationIndex`)                                         |
+| `plan.rs`          | DAG + topological sort of invocations; rejects cycles                                                                 |
+| `cache.rs`         | Cache-key composition over inputs, options, and the generator's identity hash                                         |
+| `header.rs`        | Generated-file `#![generated]` header emission and parsing                                                            |
+| `metadata.rs`      | Persisted per-invocation cache state (`<primary>.kiln.json`)                                                          |
+| `options.rs`       | Extracts an `OptionsDescriptor` from a generator's `pub struct Options`                                               |
+| `options_check.rs` | Validates user-supplied options against the descriptor                                                                |
+| `import_check.rs`  | Refuses `wasi:*` imports inside generator packages; injects the `Request<T>` adapter                                  |
 
 The pipeline driver (`run_generator`, file persistence, cache-state handling) lives in `wado-cli`; `wado-compiler` exports only the pure-data pieces above so it stays `wasm32-unknown-unknown`-clean.
 

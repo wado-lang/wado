@@ -1,15 +1,5 @@
-//! The editor's view of a bad inline `options` table.
-//!
-//! The LSP cannot run a generator, but the `Options` struct it validates
-//! against is a property of the generator's *source*, which the host can read.
-//! So a typo in `with { generator: { options: … } }` squiggles the key that is
-//! wrong, in the file the user is editing — not line 1, and not only under
-//! `wado check`.
-//!
-//! Both spellings of a reachable generator are covered: an inline
-//! `module: "./gen.wado"` path, and a `lib:` `[build-dependencies]` nickname
-//! whose entry is a path package. A registry generator has no source to read
-//! and is skipped, silently — `wado check` still reports it.
+//! The editor's view of a bad inline `options` table: a typo squiggles the key
+//! that is wrong, with no `wado compile` and no generator run in between.
 
 use wado_lsp::{Diagnostic, Engine, FilesystemCompilerHost, Severity};
 
@@ -116,36 +106,28 @@ fn options_errors(diags: &[Diagnostic]) -> Vec<&Diagnostic> {
         .collect()
 }
 
-/// LSP ranges are 0-based, so line 5 column 20 of the source is `(4, 19)`.
-fn at(d: &Diagnostic) -> (u32, u32) {
-    (d.range.start.line, d.range.start.character)
+/// The one options error whose message contains `needle`, and the 0-based
+/// `(line, character)` it squiggles. Line 5 column 20 is `(4, 19)`.
+fn error_at(diags: &[Diagnostic], needle: &str) -> (u32, u32) {
+    let found = options_errors(diags)
+        .into_iter()
+        .find(|d| d.message.contains(needle))
+        .unwrap_or_else(|| panic!("expected an options error matching {needle:?}, got {diags:#?}"));
+    assert_eq!(found.severity, Severity::Error);
+    (found.range.start.line, found.range.start.character)
 }
 
 #[test]
 fn unknown_key_squiggles_the_key() {
     let fixture = build("./gen.wado", "{ verbsoe: false }", false);
     let diags = diagnostics(&fixture);
-    let errors = options_errors(&diags);
 
-    let unknown = errors
-        .iter()
-        .find(|d| {
-            d.message
-                .contains("unknown options field `options.verbsoe`")
-        })
-        .unwrap_or_else(|| panic!("expected an unknown-field error, got {diags:#?}"));
-    assert_eq!(unknown.severity, Severity::Error);
-    assert_eq!(at(unknown), (4, 19));
-
-    let missing = errors
-        .iter()
-        .find(|d| {
-            d.message
-                .contains("required options field `options.verbose`")
-        })
-        .unwrap_or_else(|| panic!("expected a missing-field error, got {diags:#?}"));
     assert_eq!(
-        at(missing),
+        error_at(&diags, "unknown options field `options.verbsoe`"),
+        (4, 19)
+    );
+    assert_eq!(
+        error_at(&diags, "required options field `options.verbose`"),
         (4, 8),
         "a missing field blames the options key"
     );
@@ -156,14 +138,10 @@ fn build_dependency_generator_is_read_from_its_package() {
     let fixture = build("lib:gen", "{ verbsoe: false }", true);
     let diags = diagnostics(&fixture);
 
-    let unknown = options_errors(&diags)
-        .into_iter()
-        .find(|d| {
-            d.message
-                .contains("unknown options field `options.verbsoe`")
-        })
-        .unwrap_or_else(|| panic!("expected an unknown-field error, got {diags:#?}"));
-    assert_eq!(at(unknown), (4, 19));
+    assert_eq!(
+        error_at(&diags, "unknown options field `options.verbsoe`"),
+        (4, 19)
+    );
 }
 
 #[test]
@@ -171,14 +149,10 @@ fn a_wrong_type_squiggles_its_own_key() {
     let fixture = build("./gen.wado", "{ verbose: 1 }", false);
     let diags = diagnostics(&fixture);
 
-    let mismatch = options_errors(&diags)
-        .into_iter()
-        .find(|d| {
-            d.message
-                .contains("`options.verbose` expected bool, got integer")
-        })
-        .unwrap_or_else(|| panic!("expected a type-mismatch error, got {diags:#?}"));
-    assert_eq!(at(mismatch), (4, 19));
+    assert_eq!(
+        error_at(&diags, "`options.verbose` expected bool, got integer"),
+        (4, 19)
+    );
 }
 
 #[test]

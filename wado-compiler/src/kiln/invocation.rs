@@ -14,7 +14,6 @@ pub const GENERATOR_WORLD_FQ: &str = "core:kiln/generator";
 /// pinned `@version`, and an optional `/submodule` path. The coordinate and
 /// version never contain `/`, so the first `/` starts the submodule; the `@`
 /// split only applies to a segment carrying a `:`.
-#[derive(Debug, PartialEq, Eq)]
 pub struct SpecParts<'a> {
     pub key: &'a str,
     pub version: Option<&'a str>,
@@ -210,10 +209,9 @@ pub struct Invocation {
     /// by `options_canonical` alone.
     pub raw_options: Option<crate::ast::AttrValue>,
     /// Span of the inline `options:` key, or of the whole `use` clause when
-    /// the clause wrote none. The driver's typed-encode pass re-validates
-    /// `raw_options` long after the AST is gone, and anchors on this whatever
-    /// diagnostic names no key of its own. Diagnostics only; excluded from
-    /// [`Invocation::identity_tuple`].
+    /// the clause wrote none: what the driver blames when it re-validates
+    /// `raw_options`, long after the AST is gone. Diagnostics only; excluded
+    /// from [`Invocation::identity_tuple`].
     pub options_span: crate::token::Span,
 }
 

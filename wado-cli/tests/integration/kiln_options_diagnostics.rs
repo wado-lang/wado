@@ -1,10 +1,5 @@
-//! End-to-end: an options diagnostic points at the offending key.
-//!
-//! The typed check runs in the driver, long after the AST is gone, so the
-//! spans it reports come from the key spans the parser recorded on the
-//! `with { generator: { options: … } }` clause. The language service reaches
-//! the same verdict without running the generator at all, by reading its
-//! `Options` struct from source — `query diagnostics` is that path.
+//! End-to-end: an options diagnostic points at the offending key, from the
+//! driver under `check` and from the language service under `query`.
 
 use predicates::prelude::*;
 use std::fs;
@@ -88,9 +83,9 @@ export fn run() with Stdout {{
     app
 }
 
-/// A misspelled key squiggles the key itself (line 5, column 20), and the
-/// required field it failed to spell falls back to the `options:` key that
-/// owns the table (line 5, column 9) — neither lands on line 1.
+/// A misspelled key squiggles the key itself (line 5, column 20). The required
+/// field it failed to spell falls back to the `options:` key that owns the
+/// table (line 5, column 9). Neither lands on line 1.
 #[test]
 fn options_diagnostics_point_at_the_offending_key() {
     let tmp = tempfile::tempdir().unwrap();

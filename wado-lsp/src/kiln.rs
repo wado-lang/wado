@@ -1,14 +1,10 @@
-//! The Kiln pre-pass for one document: its inline `with { generator }` clauses,
-//! what they say about their options, and the consume-only invocation index
-//! LSP queries resolve generated symbols through (WEP 2026-04-12
-//! §"Consume-only mode").
+//! The Kiln pre-pass for one document: collect its inline `with { generator }`
+//! clauses, check their options ([`options`]), and resolve the consume-only
+//! invocation index (WEP 2026-04-12 §"Consume-only mode").
 //!
 //! No LSP host can run a generator component, so it cannot re-derive the hashes
 //! `<output_dir>/<primary>.kiln.json` records. Redirects therefore trust that
 //! artifact and fire on any drift; verifying drift is `wado check`'s job.
-//!
-//! What a generator's *source* says is another matter: [`options`] reads it to
-//! check the clause's `options` table, which needs no generator run.
 
 mod options;
 
@@ -19,15 +15,13 @@ use wado_compiler::kiln::metadata::{METADATA_VERSION, Metadata, metadata_filenam
 use wado_compiler::kiln::{InvocationIndex, InvocationPath, collect_inline_invocations};
 use wado_compiler::{Code, CompilerHost, Diagnostic, DiagnosticSpan, Severity};
 
-/// Run the Kiln pre-pass for the entry document: collect its inline clauses,
-/// check each one's `options` against the generator's `Options` struct, and
-/// return the redirect index the loader then resolves `use … from "<schema>"`
-/// through.
+/// The redirect index the loader resolves `use … from "<schema>"` through,
+/// with every clause and its options checked along the way.
 ///
 /// `override_index` is the index a runtime-backed host built by actually
-/// running the generators. It replaces the consume-only on-disk discovery, but
-/// not the clause and options checks: those describe the source the user is
-/// editing, so they hold whoever produced the index.
+/// running the generators. It replaces the on-disk discovery, but not the
+/// checks: those describe the source the user is editing, so they hold
+/// whoever produced the index.
 ///
 /// **Contract**: `entry_filename` and `entry_ast` must be the same filename and
 /// bytes the caller then passes to `wado_compiler::load` — otherwise the

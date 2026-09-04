@@ -805,7 +805,11 @@ fn build_dep_generator_local_path(
 fn package_generator_entry(pkg_dir: &Path) -> Option<String> {
     let manifest_text = fs::read_to_string(pkg_dir.join("wado.toml")).ok()?;
     let manifest = crate::manifest::resolve_manifest(pkg_dir, &manifest_text).ok()?;
-    Some(manifest.world_entry("core:kiln/generator")?.to_string())
+    Some(
+        manifest
+            .world_entry(crate::build_dep::GENERATOR_WORLD_FQ)?
+            .to_string(),
+    )
 }
 
 /// Empty in-memory `wado.toml` manifest used as a fallback when the

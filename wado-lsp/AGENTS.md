@@ -73,12 +73,12 @@ that it resolves to its parameter binding and colours as a parameter.
 pre-pass (`kiln::prepare_invocations`) interleaved between parse and
 load. A runtime-backed host that already ran the generators can
 instead supply a precomputed `InvocationIndex` via
-`open_document_with_invocations`; when present it replaces the
-consume-only on-disk _discovery_ (native `wado query` does this — see
-the Kiln WEP), but not the pre-pass's checks on the source: a
-malformed clause and a bad `options` table are reported either way.
-`update_document` drops an injected index with the snapshot, so a
-changed document falls back to consume-only.
+`open_document_with_invocations`. When present it replaces the
+consume-only on-disk discovery (native `wado query` does this — see
+the Kiln WEP). It does not replace the pre-pass's checks on the
+source: a malformed clause and a bad `options` table are reported
+either way. `update_document` drops an injected index with the
+snapshot, so a changed document falls back to consume-only.
 The snapshot is built on first query and shared across back-to-back
 queries on the same document version; `update_document` /
 `close_document` invalidates it. The negotiated `PositionEncoding`
