@@ -284,6 +284,135 @@ pub fn runtime() -> PooledRuntime {
     })))
 }
 
+// ---------------------------------------------------------------------------
+// Compile worker pool
+// ---------------------------------------------------------------------------
+
+/// A closure a compile worker runs, having captured its own result channel.
+type CompileJob = Box<dyn FnOnce() + Send>;
+
+/// The workers not currently running a job, most recently used last.
+static IDLE_COMPILE_WORKERS: OnceLock<Mutex<Vec<std::sync::mpsc::Sender<CompileJob>>>> =
+    OnceLock::new();
+
+fn idle_compile_workers() -> &'static Mutex<Vec<std::sync::mpsc::Sender<CompileJob>>> {
+    IDLE_COMPILE_WORKERS.get_or_init(Default::default)
+}
+
+/// Take a compile worker, spawning one if none is idle.
+///
+/// The stdlib snapshot each compile seeds from — the elaborated `core:*`
+/// closure — is thread-local and takes ~200 ms to build, because `Semantics`
+/// is `!Send`. libtest gives each test its own thread, so compiling on the
+/// test's own thread builds a snapshot per fixture and drops it: over the e2e
+/// corpus that is thousands of builds serving one compile each. A worker keeps
+/// its snapshot for the rest of the run.
+///
+/// Spawned on demand rather than up front, so the pool settles at the runner's
+/// concurrency and no worker builds a snapshot it will not reuse.
+fn take_compile_worker() -> std::sync::mpsc::Sender<CompileJob> {
+    if let Some(worker) = idle_compile_workers()
+        .lock()
+        .expect("compile worker pool is not poisoned")
+        .pop()
+    {
+        return worker;
+    }
+
+    let (sender, receiver) = std::sync::mpsc::channel::<CompileJob>();
+    std::thread::Builder::new()
+        .name("wado-compile".to_string())
+        // The compiler is recursive-descent end to end, and a deep fixture
+        // overflows a default stack; `wado-cli` gives its compile threads the
+        // same 64 MiB.
+        .stack_size(64 * 1024 * 1024)
+        .spawn(move || {
+            while let Ok(job) = receiver.recv() {
+                job();
+            }
+        })
+        .expect("compile worker spawns");
+    sender
+}
+
+/// Run `f` on a compile worker and hand back what it returned, re-raising a
+/// panic on the calling thread so libtest still attributes it to the test.
+fn on_compile_worker<R: Send + 'static>(f: impl FnOnce() -> R + Send + 'static) -> R {
+    let worker = take_compile_worker();
+    let returning = worker.clone();
+    let (sender, receiver) = std::sync::mpsc::channel();
+    let job: CompileJob = Box::new(move || {
+        let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(f));
+        // Idle again before the caller wakes, so a caller that compiles twice
+        // in a row reuses this worker instead of spawning a cold one.
+        idle_compile_workers()
+            .lock()
+            .expect("compile worker pool is not poisoned")
+            .push(returning);
+        let _ = sender.send(outcome);
+    });
+    worker
+        .send(job)
+        .expect("a compile worker outlives the job handed to it");
+    match receiver.recv().expect("a compile worker answers every job") {
+        Ok(value) => value,
+        Err(payload) => std::panic::resume_unwind(payload),
+    }
+}
+
+/// What a fixture compile carries back off the worker.
+///
+/// [`wado_compiler::CompileResult`] is `!Send` — its AST and WIT snapshot hold
+/// `Rc`s — so the worker keeps it and returns only what a fixture asserts on,
+/// the WIR already unparsed.
+pub struct CompiledFixture {
+    /// The component bytes, or the compile error as the fixture would print it.
+    pub wasm: Result<Vec<u8>, String>,
+    /// Unparsed WIR, present when the caller asked for it.
+    pub wir_text: Option<String>,
+    pub warnings: Vec<String>,
+    pub errors: Vec<String>,
+}
+
+/// Compile a fixture on a compile worker, unparsing its WIR there when
+/// [`wado_compiler::CompilerOptions::retain_wir`] asked for it.
+pub fn compile_fixture_on_worker(
+    path: PathBuf,
+    source: String,
+    options: wado_compiler::CompilerOptions,
+    env: indexmap::IndexMap<String, String>,
+    dependencies: indexmap::IndexMap<String, String>,
+) -> CompiledFixture {
+    let unparse_wir = options.retain_wir;
+    on_compile_worker(move || {
+        let CapturedCompile {
+            result,
+            warnings,
+            errors,
+        } = compile_capturing_diagnostics(&path, &source, options, None, env, dependencies);
+        let (wasm, wir_text) = match result {
+            Ok(compiled) => {
+                let wir_text = unparse_wir.then(|| {
+                    wado_compiler::wir_unparse::unparse_wir(
+                        compiled
+                            .wir_package
+                            .as_ref()
+                            .expect("retain_wir keeps the WIR package"),
+                    )
+                });
+                (Ok(compiled.wasm), wir_text)
+            }
+            Err(error) => (Err(error.to_string()), None),
+        };
+        CompiledFixture {
+            wasm,
+            wir_text,
+            warnings,
+            errors,
+        }
+    })
+}
+
 /// Shared wasmtime Engine for all tests (initialized once)
 static ENGINE: OnceLock<Engine> = OnceLock::new();
 

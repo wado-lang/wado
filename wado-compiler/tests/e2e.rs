@@ -704,8 +704,6 @@ fn run_normal_test(
         None
     };
 
-    // Use CompilerOptions to pass the target world through
-    let has_wir = spec.has_wir_expectations(opt_level);
     // Default to debug allocator in e2e tests to catch use-after-free bugs,
     // unless the fixture explicitly overrides it.
     let allocator = Some(
@@ -734,7 +732,7 @@ fn run_normal_test(
         opt_level,
         target_world,
         skip_validation: false,
-        retain_wir: has_wir,
+        retain_wir: spec.has_wir_expectations(opt_level),
         allocator,
         param_overrides: spec
             .params
@@ -745,15 +743,15 @@ fn run_normal_test(
         ..Default::default()
     };
 
-    let common::CapturedCompile {
-        result: compile_result,
+    let common::CompiledFixture {
+        wasm,
+        wir_text,
         warnings,
         errors,
-    } = common::compile_capturing_diagnostics(
-        fixture_path,
-        source,
+    } = common::compile_fixture_on_worker(
+        fixture_path.to_path_buf(),
+        source.to_string(),
         options,
-        None,
         spec.param_env.clone(),
         spec.dependencies.clone(),
     );
@@ -790,9 +788,8 @@ fn run_normal_test(
 
     // Handle expected compile errors (works for any world)
     if let Some(expected_error) = &spec.compile_error {
-        match compile_result {
-            Err(e) => {
-                let error_msg = e.to_string();
+        match wasm {
+            Err(error_msg) => {
                 assert!(
                     error_msg.contains(expected_error),
                     "[{test_id}] compile error mismatch:\n  expected to contain: {expected_error}\n  actual error: {error_msg}"
@@ -819,7 +816,7 @@ fn run_normal_test(
     }
 
     // No compile error expected - compilation must succeed
-    let compile_result = compile_result.unwrap_or_else(|e| {
+    let wasm = wasm.unwrap_or_else(|e| {
         panic!("[{test_id}] compilation failed: {e}");
     });
 
@@ -833,13 +830,13 @@ fn run_normal_test(
             .map(|s| s.to_string_lossy().into_owned())
             .unwrap_or_else(|| "unknown".to_string());
         let opt_name = common::opt_level_name(opt_level);
-        keep_wasm_artifacts(&dir, &fixture_name, opt_name, &compile_result.wasm, test_id);
+        keep_wasm_artifacts(&dir, &fixture_name, opt_name, &wasm, test_id);
     }
 
     // Dispatch to the appropriate runner based on world
     if let Some(http_spec) = &spec.http_service {
         match run_http_request(
-            compile_result.wasm,
+            wasm,
             &http_spec.request,
             spec.outgoing_mocks.clone(),
             spec.tls_mocks.clone(),
@@ -861,7 +858,7 @@ fn run_normal_test(
         }
     } else if spec.test_world.is_some() {
         let result = common::run_test_world(
-            &compile_result.wasm,
+            &wasm,
             test_id,
             spec.outgoing_mocks.clone(),
             spec.tls_mocks.clone(),
@@ -875,7 +872,7 @@ fn run_normal_test(
         // a `TempDir` deletes it from disk.
         let (dirs, _temp_dirs) = prepare_preopened_dirs(&spec.preopened_dirs, test_id);
         let result = common::run_wasm_with_full_options(
-            compile_result.wasm,
+            wasm,
             &dirs,
             spec.stdin.as_deref(),
             spec.outgoing_mocks.clone(),
@@ -888,13 +885,7 @@ fn run_normal_test(
     }
 
     // Verify WIR pattern expectations (if any for this optimization level)
-    if has_wir {
-        let wir_package = compile_result
-            .wir_package
-            .as_ref()
-            .expect("wir_package should be retained when retain_wir is set");
-        let wir_text = wado_compiler::wir_unparse::unparse_wir(wir_package);
-
+    if let Some(wir_text) = &wir_text {
         let (expect, not_expect) = spec.wir_expectations(opt_level);
         let opt_name = common::opt_level_name(opt_level);
 
