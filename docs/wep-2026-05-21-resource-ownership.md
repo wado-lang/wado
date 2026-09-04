@@ -554,8 +554,7 @@ Verified against the tree.
       `if c.pos == 0 { … } else { out.push(c) }` still moves `c`.
 - [x] Representative move / copy / share decisions pinned as e2e fixtures
       (`pattern_temp_no_alias`, over syntactic position × writability × binding
-      kind; `closure_capture_move`, `closure_confinement`,
-      `scalar_read_before_move`).
+      kind; `closure_capture`, `scalar_read_before_move`).
 - [x] Sharing is keyed on liveness rather than on the whole body, as _Sharing_
       states: share collection runs inside the move analysis's backward walk, so
       a write refuses a binding only where that binding's storage is still

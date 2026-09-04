@@ -2765,37 +2765,30 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 if let Some(tir) = self.try_reify_int128_cast(cast, target_type, ctx) {
                     return tir;
                 }
-                // `expr as Ty` — emit `Cast` with the recorded target type, and
-                // re-type a numeric-literal operand to the target width.
-                // annotate propagates the target to a *direct* literal operand
-                // but not through a `Neg`, so `-9e15 as i64` would otherwise
-                // emit an `i32.const` that truncates before the cast widens.
+                // `expr as Ty` — emit `Cast` with the recorded target type,
+                // re-typing the same integer literal operand `resolve_cast`
+                // left out of the defaulted range check. annotate propagates
+                // that target to a direct literal operand but not through a
+                // `Neg`, so `-9e15 as i64` would otherwise emit an `i32.const`
+                // that truncates before the cast widens.
                 let target_is_int = self.tysys.type_table.borrow().is_integer(target_type);
-                let is_number_lit = |e: &ast::Expr| matches!(e, ast::Expr::Literal(l) if matches!(l.value, ast::Literal::Number(_)));
-                let inner = if target_is_int && is_number_lit(&cast.expr) {
-                    let ast::Expr::Literal(lit) = &cast.expr else {
-                        unreachable!()
-                    };
-                    self.reify_literal(lit, target_type, ctx)
-                } else if target_is_int
-                    && let ast::Expr::Unary(u) = &cast.expr
-                    && u.op == ast::UnaryOp::Neg
-                    && is_number_lit(&u.expr)
-                {
-                    let ast::Expr::Literal(lit) = &u.expr else {
-                        unreachable!()
-                    };
-                    let lit_tir = self.reify_literal(lit, target_type, ctx);
-                    TirExpr::new(
-                        TirExprKind::Unary {
-                            op: crate::tir::TirUnaryOp::Neg,
-                            expr: Box::new(lit_tir),
-                        },
-                        target_type,
-                        span,
-                    )
-                } else {
-                    self.reify_expr(&cast.expr, ctx, None)
+                let inner = match super::expr::int_literal_cast_operand(&cast.expr) {
+                    Some((lit, _, negated)) if target_is_int => {
+                        let lit_tir = self.reify_literal(lit, target_type, ctx);
+                        if negated {
+                            TirExpr::new(
+                                TirExprKind::Unary {
+                                    op: crate::tir::TirUnaryOp::Neg,
+                                    expr: Box::new(lit_tir),
+                                },
+                                target_type,
+                                span,
+                            )
+                        } else {
+                            lit_tir
+                        }
+                    }
+                    _ => self.reify_expr(&cast.expr, ctx, None),
                 };
                 TirExpr::new(
                     TirExprKind::Cast {
@@ -9343,11 +9336,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         };
 
         // Literal operand: `1042 as u128`.
-        if let ast::Expr::Literal(ast::LiteralExpr {
-            value: ast::Literal::Number(repr),
-            ..
-        }) = &cast.expr
-            && !super::util::is_float_only_literal(repr)
+        if let ast::Expr::Literal(lit) = &cast.expr
+            && let Some(repr) = super::expr::int_literal_repr(lit)
         {
             let parsed = if name.decl_name() == "u128" {
                 super::util::parse_u128_literal(repr).map(|v| v as i128)

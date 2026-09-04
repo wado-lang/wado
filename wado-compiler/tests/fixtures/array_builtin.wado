@@ -1,0 +1,154 @@
+// `Array<T>`, the fixed-size builtin: element-wise `Eq` / `Ord`, formatting
+// through the template traits, and implementing a trait with an associated
+// type. Every instantiation resolves to `ResolvedType::BuiltinArray`, which is
+// where each of these once fell over.
+
+trait Sized2 {
+    type Elem;
+
+    fn count(&self) -> i32;
+    fn at(&self, index: i32) -> Self::Elem;
+
+    fn head(&self) -> Option<Self::Elem> {
+        if self.count() == 0 {
+            return null;
+        }
+        return Option::Some(self.at(0));
+    }
+}
+
+impl<T> Sized2 for Array<T> {
+    type Elem = T;
+
+    fn count(&self) -> i32 {
+        return self.len();
+    }
+
+    fn at(&self, index: i32) -> T {
+        return builtin::array_get_value(self, index);
+    }
+}
+
+fn total<S: Sized2<Elem = i32>>(s: &S) -> i32 {
+    if let Some(v) = s.head() {
+        return v;
+    }
+    return 0;
+}
+
+fn make(a: i32, b: i32, c: i32) -> Array<i32> {
+    let mut arr: Array<i32> = Array::new(3);
+    arr[0] = a;
+    arr[1] = b;
+    arr[2] = c;
+    return arr;
+}
+
+// `Array<T>` compares element-wise, like `List<T>`. `binop_operand_requires_trait`
+// did not classify `BuiltinArray` as trait-dispatched, so `a == b` fell through
+// to the scalar path and `wir_build` panicked with "`Eq` has no scalar lowering
+// for BuiltinArray" — and there was no `Eq` / `Ord` impl to dispatch to.
+
+test "equal contents compare equal" {
+    let a: Array<i32> = Array::filled(3, 7);
+    let b: Array<i32> = Array::filled(3, 7);
+    assert a == b;
+    assert !(a != b);
+}
+
+test "a differing element compares unequal" {
+    let mut a: Array<i32> = Array::filled(3, 7);
+    let b: Array<i32> = Array::filled(3, 7);
+    a[1] = 8;
+    assert a != b;
+    assert !(a == b);
+}
+
+test "a differing length compares unequal" {
+    let a: Array<i32> = Array::filled(2, 7);
+    let b: Array<i32> = Array::filled(3, 7);
+    assert a != b;
+}
+
+test "equality is by value, not by backing identity" {
+    let a: Array<String> = Array::filled(2, "x");
+    let b = a;
+    assert a == b;
+}
+
+test "ordering is lexicographic" {
+    let mut a: Array<i32> = Array::filled(3, 1);
+    let mut b: Array<i32> = Array::filled(3, 1);
+    b[2] = 2;
+    assert a < b;
+    assert b > a;
+    assert a <= b;
+    assert !(a >= b);
+    a[0] = 9;
+    assert a > b;
+}
+
+test "a prefix orders before a longer array" {
+    let short: Array<i32> = Array::filled(2, 1);
+    let long: Array<i32> = Array::filled(3, 1);
+    assert short < long;
+    assert long > short;
+}
+
+test "equal arrays order as equal" {
+    let a: Array<i32> = Array::filled(3, 4);
+    let b: Array<i32> = Array::filled(3, 4);
+    assert a <= b;
+    assert a >= b;
+    assert !(a < b);
+    assert !(a > b);
+}
+
+// Template dispatch must mangle `Array<T>` under the base name `Array`, not
+// the full `Array<i32>` — which trips `LocalMethodName::new`'s
+// no-type-params invariant.
+
+test "inspect and display an Array" {
+    let arr = make(1, 2, 3);
+    assert `${arr:?}` == "[1, 2, 3]";
+    assert `${arr}` == "[1, 2, 3]";
+    let empty: Array<i32> = Array::new(0);
+    assert `${empty:?}` == "[]";
+}
+
+test "pretty-print an Array" {
+    let arr = make(1, 2, 3);
+    assert `${arr:#?}` == "[
+  1,
+  2,
+  3,
+]";
+}
+
+// `Array<T>` is declared definitionless (`type Array<T>;`, the `array` compiler
+// item) and every instantiation resolves to a `BuiltinArray`, which
+// `decl_of_type` did not name back to that declaration and
+// `resolve_generic_assoc_type_mono` did not accept, so `Self::Elem` on an
+// `Array<T>` receiver never resolved.
+
+test "an Array implements a trait with an associated type" {
+    let a: Array<i32> = Array::filled(3, 7);
+    assert a.count() == 3;
+    assert a.at(1) == 7;
+    assert a.head() matches { Some(v) && v == 7 };
+}
+
+test "the associated type follows the element type" {
+    let s: Array<String> = Array::filled(2, "wado");
+    assert s.head() matches { Some(v) && v == "wado" };
+}
+
+test "an empty Array takes the default method's early return" {
+    let e: Array<i32> = Array::new(0);
+    assert e.head() matches { None };
+}
+
+test "the associated type is reachable through a bound" {
+    let a: Array<i32> = Array::filled(2, 4);
+    assert total(&a) == 4;
+}

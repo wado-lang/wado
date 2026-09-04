@@ -1,0 +1,577 @@
+// Where a numeric or compound literal takes its type from: a parameter, a
+// return type, the other operand, a field, a `let` annotation, a turbofish, or
+// a sibling branch of the same `if` / `match`.
+
+fn take_i64(x: i64) -> i64 {
+    return x;
+}
+
+fn take_u64(x: u64) -> u64 {
+    return x;
+}
+
+fn take_i8(x: i8) -> i8 {
+    return x;
+}
+
+fn take_u8(x: u8) -> u8 {
+    return x;
+}
+
+fn ret_i64() -> i64 {
+    return 42;
+}
+
+fn ret_u64() -> u64 {
+    return 100;
+}
+
+fn ret_i8() -> i8 {
+    return 10;
+}
+
+fn ret_u8() -> u8 {
+    return 200;
+}
+
+fn identity<T>(v: T) -> T {
+    return v;
+}
+
+fn is_zero(x: u64) -> bool {
+    return x == 0;
+}
+
+fn id_list(v: List<u16>) -> List<u16> {
+    return v;
+}
+
+fn id_opt(v: Option<u64>) -> Option<u64> {
+    return v;
+}
+
+fn select(cond: bool) -> i64 {
+    let x: i64 = if cond {
+        -1;
+    } else {
+        0;
+    };
+    return x;
+}
+
+struct Counter {
+    value: u64,
+}
+
+impl Counter {
+    fn new(initial: u64) -> Counter {
+        return Counter { value: initial };
+    }
+
+    fn add(&self, amount: u64) -> Counter {
+        return Counter { value: self.value + amount };
+    }
+
+    fn get(&self) -> u64 {
+        return self.value;
+    }
+}
+
+struct HiLo {
+    hi: i64,
+    lo: u64,
+}
+
+struct Point64 {
+    x: i64,
+    y: i64,
+}
+
+struct SmallInts {
+    a: u8,
+    b: i8,
+    c: u8,
+    d: i8,
+}
+
+struct BigInts {
+    a: u128,
+    b: i128,
+}
+
+fn match_u64(n: i32) -> u64 {
+    return match n {
+        0 => 1,
+        1 => 10,
+        _ => 0,
+    };
+}
+
+fn match_i64(n: i32) -> i64 {
+    return match n {
+        0 => -1,
+        1 => -100,
+        _ => 0,
+    };
+}
+
+fn match_u8(n: i32) -> u8 {
+    return match n {
+        0 => 1,
+        1 => 255,
+        _ => 0,
+    };
+}
+
+fn match_i8(n: i32) -> i8 {
+    return match n {
+        0 => -1,
+        1 => -128,
+        _ => 0,
+    };
+}
+
+test "literal coerces to the parameter type" {
+    assert take_i64(42) == 42 as i64;
+    assert take_u64(100) == 100 as u64;
+    assert take_i8(10) == 10 as i8;
+    assert take_u8(200) == 200 as u8;
+}
+
+test "literal coerces to the return type" {
+    assert ret_i64() == 42 as i64;
+    assert ret_u64() == 100 as u64;
+    assert ret_i8() == 10 as i8;
+    assert ret_u8() == 200 as u8;
+}
+
+test "literal coerces to the let annotation" {
+    let a: i8 = 42;
+    let b: i16 = 1000;
+    let c: i32 = 100000;
+    let d: i64 = 10000000000;
+    let e: u8 = 200;
+    let f: u16 = 50000;
+    let g: u32 = 3000000000;
+    let h: u64 = 10000000000000000000;
+    assert a == 42 as i8;
+    assert b == 1000 as i16;
+    assert c == 100000;
+    assert d == 10000000000 as i64;
+    assert e == 200 as u8;
+    assert f == 50000 as u16;
+    assert g == 3000000000 as u32;
+    assert h == 10000000000000000000 as u64;
+}
+
+test "literal coerces to a method argument" {
+    let c = Counter::new(0);
+    assert c.get() == 0 as u64;
+    assert Counter::new(42).get() == 42 as u64;
+    assert c.add(10).get() == 10 as u64;
+}
+
+test "literal coerces to the other operand of an arithmetic op" {
+    let x: i64 = 1000000000000;
+    let y: u64 = 10000000000000000000;
+    // Literals on the right coerce to the left operand's type, and vice versa.
+    assert x + 42 == 1000000000042 as i64;
+    assert y * 2 == 1553255926290448384 as u64;
+    assert 100 + x == 1000000000100 as i64;
+    assert 3 * y == 11553255926290448384 as u64;
+}
+
+test "literal coerces to the other operand for i128 and u128" {
+    let u: u128 = 1000;
+    let i: i128 = -500;
+    assert u + 42 == 1042 as u128;
+    assert 42 + u == 1042 as u128;
+    assert i + 100 == -400 as i128;
+    assert 100 + i == -400 as i128;
+    assert u - 100 == 900 as u128;
+    assert 2000 - u == 1000 as u128;
+    assert i - 100 == -600 as i128;
+    assert 100 - i == 600 as i128;
+    assert u * 3 == 3000 as u128;
+    assert 3 * u == 3000 as u128;
+    assert i * 2 == -1000 as i128;
+    assert 2 * i == -1000 as i128;
+}
+
+test "literal coerces to the other operand of a bitwise op" {
+    let x_u64: u64 = 0xFF00;
+    let x_i64: i64 = 0xFF;
+    let x_u8: u8 = 0xAB;
+    let x_i8: i8 = 0x7F;
+
+    assert x_u64 & 0xFF == 0 as u64;
+    assert x_i64 & 0x0F == 0x0F as i64;
+    assert x_u8 & 0x0F == 0x0B as u8;
+    assert x_i8 & 0x70 == 0x70 as i8;
+    assert 0xFF & x_u64 == 0 as u64;
+    assert 0x0F & x_i64 == 0x0F as i64;
+    assert 0x0F & x_u8 == 0x0B as u8;
+    assert 0x70 & x_i8 == 0x70 as i8;
+
+    assert x_u64 | 0xFF == 0xFFFF as u64;
+    assert x_i64 | 0x100 == 0x1FF as i64;
+    assert 0xFF | x_u64 == 0xFFFF as u64;
+    assert 0x100 | x_i64 == 0x1FF as i64;
+
+    assert x_u64 ^ 0xFFFF == 0x00FF as u64;
+    assert x_i64 ^ 0xFF == 0 as i64;
+    assert 0xFFFF ^ x_u64 == 0x00FF as u64;
+    assert 0xFF ^ x_i64 == 0 as i64;
+
+    // A hex literal wider than i32 still lands on u64.
+    let mask: u64 = 0x8000000000000000;
+    assert mask & 0x8000000000000000 == 0x8000000000000000 as u64;
+    assert 0x8000000000000000 & mask == 0x8000000000000000 as u64;
+}
+
+test "literal coerces to the other operand of a bitwise op for i128 and u128" {
+    let u: u128 = 0xFF00;
+    let i: i128 = 0xFF;
+
+    assert u & 0xFF == 0 as u128;
+    assert 0xFF & u == 0 as u128;
+    assert i & 0x0F == 0x0F as i128;
+    assert 0x0F & i == 0x0F as i128;
+
+    assert u | 0xFF == 0xFFFF as u128;
+    assert 0xFF | u == 0xFFFF as u128;
+    assert i | 0x100 == 0x1FF as i128;
+    assert 0x100 | i == 0x1FF as i128;
+
+    assert u ^ 0xFFFF == 0x00FF as u128;
+    assert 0xFFFF ^ u == 0x00FF as u128;
+    assert i ^ 0xFF == 0 as i128;
+    assert 0xFF ^ i == 0 as i128;
+}
+
+test "literal coerces to the other operand of a comparison" {
+    let x_u64: u64 = 100;
+    let x_i64: i64 = -50;
+    let x_u8: u8 = 42;
+    let x_i8: i8 = -10;
+
+    assert x_u64 == 100;
+    assert x_i64 == -50;
+    assert x_u8 == 42;
+    assert x_i8 == -10;
+    assert 100 == x_u64;
+    assert -50 == x_i64;
+    assert 42 == x_u8;
+    assert -10 == x_i8;
+
+    assert x_u64 != 99;
+    assert x_i64 != 0;
+    assert 99 != x_u64;
+    assert 0 != x_i64;
+
+    assert x_u64 < 101;
+    assert x_i64 < 0;
+    assert 99 < x_u64;
+    assert -51 < x_i64;
+    assert x_u8 < 43;
+    assert 41 < x_u8;
+    assert x_i8 < 0;
+    assert -11 < x_i8;
+
+    assert x_u64 > 99;
+    assert x_i64 > -51;
+    assert 101 > x_u64;
+    assert 0 > x_i64;
+    assert x_u8 > 41;
+    assert 43 > x_u8;
+    assert x_i8 > -11;
+    assert 0 > x_i8;
+
+    assert x_u64 <= 100;
+    assert x_u64 <= 101;
+    assert x_i64 <= -50;
+    assert 100 <= x_u64;
+    assert 99 <= x_u64;
+    assert -51 <= x_i64;
+
+    assert x_u64 >= 100;
+    assert x_u64 >= 99;
+    assert x_i64 >= -51;
+    assert 100 >= x_u64;
+    assert 101 >= x_u64;
+    assert 0 >= x_i64;
+
+    assert is_zero(0);
+    assert !is_zero(1);
+}
+
+test "literal coerces to the other operand of a comparison for i128 and u128" {
+    let u: u128 = 1000;
+    let i: i128 = -500;
+
+    assert u == 1000;
+    assert 1000 == u;
+    assert i == -500;
+    assert -500 == i;
+    assert u != 999;
+    assert 999 != u;
+    assert i != 0;
+    assert 0 != i;
+    assert u < 1001;
+    assert 999 < u;
+    assert i < 0;
+    assert -501 < i;
+    assert u > 999;
+    assert 1001 > u;
+    assert i > -501;
+    assert 0 > i;
+    assert u <= 1000;
+    assert 1000 <= u;
+    assert i <= -500;
+    assert -500 <= i;
+    assert u >= 1000;
+    assert 1000 >= u;
+    assert i >= -500;
+    assert -500 >= i;
+}
+
+test "literal coerces in a chained comparison" {
+    let x_u64: u64 = 50;
+    let x_i64: i64 = -5;
+    let x_u8: u8 = 128;
+    let x_i8: i8 = -10;
+
+    assert 0 < x_u64 < 100;
+    assert -10 < x_i64 < 0;
+    assert 100 < x_u8 < 200;
+    assert -20 < x_i8 < 0;
+
+    assert 50 <= x_u64 <= 50;
+    assert -5 <= x_i64 <= -5;
+    assert 128 <= x_u8 <= 128;
+    assert -10 <= x_i8 <= -10;
+
+    assert 0 < x_u64 <= 50;
+    assert -10 < x_i64 <= -5;
+    assert 50 <= x_u64 < 100;
+    assert -5 <= x_i64 < 0;
+
+    assert 100 > x_u64 > 0;
+    assert 0 > x_i64 > -10;
+
+    assert !(0 < x_u64 < 10);
+    assert !(0 < x_i64);
+}
+
+test "literal coerces to a struct field type" {
+    let pm = HiLo { hi: 0x1234_5678_9abc_def0, lo: 0xe8cd3796329f1bac };
+    assert `${pm.hi}` == "1311768467463790320";
+    assert `${pm.lo}` == "16775125305258875820";
+
+    let p = Point64 { x: -100, y: 200 };
+    assert p.x == -100 as i64;
+    assert p.y == 200 as i64;
+
+    let s = SmallInts { a: 255, b: -128, c: 0, d: 127 };
+    assert s.a == 255 as u8;
+    assert s.b == -128 as i8;
+    assert s.c == 0 as u8;
+    assert s.d == 127 as i8;
+
+    let b = BigInts { a: 42, b: -100 };
+    assert b.a == 42 as u128;
+    assert b.b == -100 as i128;
+    let x: u128 = 12345;
+    let y: i128 = -67890;
+    assert x == 12345 as u128;
+    assert y == -67890 as i128;
+}
+
+test "literal coerces to a match arm's declared type" {
+    assert match_u64(0) == 1 as u64;
+    assert match_u64(1) == 10 as u64;
+    assert match_i64(0) == -1 as i64;
+    assert match_i64(1) == -100 as i64;
+    assert match_u8(0) == 1 as u8;
+    assert match_u8(1) == 255 as u8;
+    assert match_i8(0) == -1 as i8;
+    assert match_i8(1) == -128 as i8;
+}
+
+test "literal coerces to an if branch's declared type" {
+    assert select(true) == -1 as i64;
+    assert select(false) == 0 as i64;
+}
+
+test "the i32 default range check takes its boundary from the expectation" {
+    // `-2147483648` is only in range because `-NUM` is checked as one literal;
+    // the bare `2147483648` is not, which `coerce_invalid_default_i32_*` pins.
+    let lo = -2147483648;
+    let hi = 2147483647;
+    assert lo == -2147483648;
+    assert hi == 2147483647;
+    // The turbofish supplies the expectation; resolving the operand on its own
+    // would judge `4294967296` against the `i32` default. The negated form
+    // takes its range from the same expectation.
+    assert identity::<i64>(4294967296) == 4294967296 as i64;
+    assert identity::<i64>(-4294967296) == -4294967296 as i64;
+}
+
+test "i64 and u64 associated constants" {
+    assert `${i64::MAX}` == "9223372036854775807";
+    assert `${i64::MIN}` == "-9223372036854775808";
+    assert `${u64::MAX}` == "18446744073709551615";
+    assert `${u64::MIN}` == "0";
+}
+
+// A numeric literal in one `match` arm / `if` branch adopts the concrete
+// numeric type fixed by a sibling branch, exactly as `let x: T = <branch>`
+// would — no `as` cast needed.
+
+test "match arm literal adopts u64 sibling" {
+    let opt: Option<u64> = Option::Some(5);
+    let v = match opt { Some(id) => id, None => 0 };
+    assert v == 5;
+}
+
+test "match arm literal adopts i64 sibling" {
+    let opt: Option<i64> = Option::Some(5);
+    let v = match opt { Some(x) => x, None => 0 };
+    assert v == 5;
+}
+
+test "match arm literal adopts i128 sibling" {
+    let opt: Option<i128> = Option::Some(5);
+    let v = match opt { Some(x) => x, None => 0 };
+    assert v == 5;
+}
+
+test "match arm literal adopts f64 sibling" {
+    let opt: Option<f64> = Option::Some(2.5);
+    let v = match opt { Some(x) => x, None => 0 };
+    assert v == 2.5;
+}
+
+test "match arm negated literal adopts i64 sibling" {
+    let opt: Option<i64> = Option::Some(5);
+    let v = match opt { Some(x) => x, None => -1 };
+    assert v == 5;
+}
+
+test "match arm literal in a block tail" {
+    let opt: Option<u64> = null;
+    let v = match opt { Some(x) => x, None => { 0 } };
+    assert v == 0;
+}
+
+test "if-else literal adopts the typed branch (either side)" {
+    let a: u64 = 7;
+    let x = if true { a } else { 0 };
+    let y = if false { 0 } else { a };
+    assert x == 7;
+    assert y == 7;
+}
+
+test "else-if chain literal adopts the typed branch" {
+    let a: u64 = 7;
+    let x = if a == 1 { a } else if a == 7 { 0 } else { 1 };
+    let y = if false { 0 } else if false { 1 } else { a };
+    assert x == 0;
+    assert y == 7;
+}
+
+test "else-if chain of literals adopts a cast branch" {
+    let b: u8 = 5;
+    let v = if b < 3 {
+        (b - 1) as u32
+    } else if b < 10 {
+        (b - 2) as u32 + 26
+    } else if b == 30 {
+        62
+    } else {
+        63
+    };
+    assert v == 29;
+}
+
+// A literal arm holds `i32` only for want of a sibling saying otherwise, so
+// which arm comes first cannot decide the match's type.
+test "match literal arm adopts the typed arm from either position" {
+    let a: u64 = 18446744073709551615;
+    let k = 1;
+    let v = match k { 1 => 0, _ => a };
+    let w = match k { 1 => a, _ => 0 };
+    assert v == 0;
+    assert w == 18446744073709551615;
+}
+
+test "a braced literal arm adopts the typed arm before it" {
+    let a: u64 = 18446744073709551615;
+    let k = 2;
+    let v = match k { 1 => { 0 }, _ => a };
+    assert v == 18446744073709551615;
+}
+
+test "match arm whose body is an else-if chain of literals" {
+    let opt: Option<i64> = null;
+    let v = match opt { Some(x) => x, None => if true { 0 } else { 1 } };
+    assert v == 0;
+}
+
+// A trailing `if` / `match` statement is the block's value as much as a
+// trailing expression is, so `else { if … }` retargets like `else if …`.
+test "a braced else holding an if reaches the literals inside it" {
+    let a: i64 = 3;
+    let v = if a == 1 { a } else { if true { 0 } else { 1 } };
+    assert v == 0;
+}
+
+test "a braced else holding a match reaches the literals inside it" {
+    let a: u64 = 7;
+    let k = 1;
+    let v = if a == 1 { a } else { match k { 1 => 0, _ => 2 } };
+    assert v == 0;
+}
+
+test "a match arm block holding an if reaches the literals inside it" {
+    let opt: Option<i64> = null;
+    let v = match opt { Some(x) => x, None => { if true { 0 } else { 1 } } };
+    assert v == 0;
+}
+
+test "if let literal adopts the typed branch" {
+    let opt: Option<u64> = Option::Some(9);
+    let v = if let Some(x) = opt { x } else { 0 };
+    let w = if let Some(_) = opt { 0 } else { 9 as u64 };
+    assert v == 9;
+    assert w == 0;
+}
+
+test "rhs compound literal coerces to lhs type" {
+    let xs: List<u8> = [1, 2, 3];
+    assert xs == [1, 2, 3];
+    let empty: List<u8> = [];
+    assert empty == [];
+    let o: Option<u32> = Option::Some(5);
+    assert o == Option::Some(5);
+    let r: Result<u32, String> = Result::Ok(7);
+    assert r == Result::Ok(7);
+}
+
+test "lhs compound literal coerces to rhs type" {
+    let xs: List<u8> = [1, 2, 3];
+    assert [1, 2, 3] == xs;
+    let empty: List<u8> = [];
+    assert [] == empty;
+    let o: Option<u32> = Option::Some(5);
+    assert Option::Some(5) == o;
+    let r: Result<u32, String> = Result::Ok(7);
+    assert Result::Ok(7) == r;
+}
+
+test "call result type flows into the literal operand" {
+    assert id_list([10, 20]) == [10, 20];
+    assert [10, 20] == id_list([10, 20]);
+    assert id_opt(Option::Some(3)) == Option::Some(3);
+    assert Option::Some(3) == id_opt(Option::Some(3));
+}

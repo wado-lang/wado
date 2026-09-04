@@ -1,0 +1,372 @@
+// Trait bounds: on a function's type parameter, on a struct's, on an `impl`
+// block, and the propagation that makes a container satisfy a bound because its
+// element does. See docs/wep-2026-02-07-trait-bounds.md.
+
+struct Pair<T> {
+    first: T,
+    second: T,
+}
+
+impl<T: Eq> Eq for Pair<T> {
+    fn eq(&self, other: &Self) -> bool {
+        return self.first == other.first && self.second == other.second;
+    }
+}
+
+impl<T: Ord> Ord for Pair<T> {
+    fn cmp(&self, other: &Self) -> Ordering {
+        let c = self.first.cmp(&other.first);
+        if let Equal = c {
+            return self.second.cmp(&other.second);
+        }
+        return c;
+    }
+}
+
+trait Printable {
+    fn print(&self) -> String;
+}
+
+struct StringWrapper {
+    value: String,
+}
+
+impl Printable for StringWrapper {
+    fn print(&self) -> String {
+        return self.value;
+    }
+}
+
+// The field's type must satisfy the bound.
+struct PrintBox<T: Printable> {
+    item: T,
+}
+
+fn max<T: Ord>(a: T, b: T) -> T {
+    if a > b {
+        return a;
+    }
+    return b;
+}
+
+fn smaller<T: Ord>(a: T, b: T) -> T {
+    if a < b {
+        return a;
+    }
+    return b;
+}
+
+struct Wrapper<T> {
+    value: T,
+}
+
+impl<T> Wrapper<T> {
+    fn get(&self) -> T {
+        return self.value;
+    }
+}
+
+// Only reachable when `T: Ord`.
+impl<T: Ord> Wrapper<T> {
+    fn is_greater_than(&self, other: &Wrapper<T>) -> bool {
+        return self.value > other.value;
+    }
+}
+
+trait Stringify {
+    fn to_str(&self) -> String;
+}
+
+impl Stringify for i32 {
+    fn to_str(&self) -> String {
+        return `${*self}`;
+    }
+}
+
+fn stringify<T: Stringify>(x: T) -> String {
+    return x.to_str();
+}
+
+trait ToNum {
+    fn to_num(&self) -> i32;
+}
+
+impl ToNum for i32 {
+    fn to_num(&self) -> i32 {
+        return *self;
+    }
+}
+
+impl ToNum for bool {
+    fn to_num(&self) -> i32 {
+        if *self {
+            return 1;
+        }
+        return 0;
+    }
+}
+
+fn sum_nums<T: ToNum>(a: T, b: T) -> i32 {
+    return a.to_num() + b.to_num();
+}
+
+trait Named {
+    fn name(&self) -> String;
+}
+
+trait Scored {
+    fn score(&self) -> i32;
+}
+
+struct Player {
+    player_name: String,
+    player_score: i32,
+}
+
+impl Named for Player {
+    fn name(&self) -> String {
+        return self.player_name;
+    }
+}
+
+impl Scored for Player {
+    fn score(&self) -> i32 {
+        return self.player_score;
+    }
+}
+
+fn describe_player<T: Named + Scored>(x: &T) -> String {
+    return `${x.name()}: ${x.score()}`;
+}
+
+trait Describe {
+    fn describe(&self) -> String;
+}
+
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+impl Describe for Point {
+    fn describe(&self) -> String {
+        return `(${self.x}, ${self.y})`;
+    }
+}
+
+impl Describe for i32 {
+    fn describe(&self) -> String {
+        return `int:${*self}`;
+    }
+}
+
+fn show<T: Describe>(x: T) -> String {
+    return x.describe();
+}
+
+trait Drawable {
+    fn draw(&self) -> String;
+}
+
+trait Clickable {
+    fn on_click(&self) -> String;
+}
+
+struct Button {
+    label: String,
+}
+
+impl Drawable for Button {
+    fn draw(&self) -> String {
+        return `[${self.label}]`;
+    }
+}
+
+impl Clickable for Button {
+    fn on_click(&self) -> String {
+        return `clicked ${self.label}`;
+    }
+}
+
+struct Widget<T: Drawable + Clickable> {
+    item: T,
+}
+
+trait Describable {
+    fn describe(&self) -> String;
+}
+
+struct DescBox<T: Describable> {
+    inner: T,
+}
+
+impl Describable for i32 {
+    fn describe(&self) -> String {
+        return `${*self}`;
+    }
+}
+
+// `DescBox<T: Describable>` is itself `Describable`, so it may nest.
+impl<T: Describable> Describable for DescBox<T> {
+    fn describe(&self) -> String {
+        return `DescBox(${self.inner.describe()})`;
+    }
+}
+
+struct EqContainer<T: Eq> {
+    item: T,
+}
+
+trait Resettable {
+    fn reset(&mut self);
+}
+
+struct Counter {
+    count: i32,
+}
+
+impl Resettable for Counter {
+    fn reset(&mut self) {
+        self.count = 0;
+    }
+}
+
+fn reset_it<T: Resettable>(item: &mut T) {
+    item.reset();
+}
+
+trait Measurable {
+    fn measure(&self) -> i32;
+}
+
+struct Size {
+    width: i32,
+    height: i32,
+}
+
+impl Measurable for Size {
+    fn measure(&self) -> i32 {
+        return self.width * self.height;
+    }
+}
+
+fn measure_ref<T: Measurable>(item: &T) -> i32 {
+    return item.measure();
+}
+
+struct Holder<T> {
+    items: List<T>,
+}
+
+impl Holder<T: Ord> {
+    fn min(&self) -> T {
+        let mut m = self.items[0];
+        for let mut i = 1; i < self.items.len(); i += 1 {
+            if self.items[i] < m {
+                m = self.items[i];
+            }
+        }
+        return m;
+    }
+}
+
+test "a bound on a function's type parameter" {
+    assert max::<i32>(3, 7) == 7;
+    assert smaller::<i32>(10, 5) == 5;
+    assert smaller::<String>("apple", "banana") == "apple";
+}
+
+test "a bound on a struct's type parameter" {
+    let c = PrintBox { item: StringWrapper { value: "hello" } };
+    assert c.item.print() == "hello";
+}
+
+test "a bounded impl block adds methods only where the bound holds" {
+    let a = Wrapper { value: 10 };
+    let b = Wrapper { value: 20 };
+    assert a.get() == 10;
+    assert b.is_greater_than(&a);
+}
+
+test "a trait method called on a type parameter" {
+    assert stringify::<i32>(42) == "42";
+    assert sum_nums::<i32>(10, 20) == 30;
+    assert sum_nums::<bool>(true, false) == 1;
+    assert show::<Point>(Point { x: 1, y: 2 }) == "(1, 2)";
+    assert show::<i32>(42) == "int:42";
+}
+
+test "several bounds on one type parameter" {
+    let p = Player { player_name: "Alice", player_score: 100 };
+    assert describe_player::<Player>(&p) == "Alice: 100";
+    let w = Widget { item: Button { label: "OK" } };
+    assert w.item.draw() == "[OK]";
+    assert w.item.on_click() == "clicked OK";
+}
+
+test "a bounded impl for a trait, used through the operators" {
+    let a = Pair { first: 1, second: 2 };
+    let b = Pair { first: 1, second: 3 };
+    assert a < b;
+    assert a == a;
+}
+
+test "the bound propagates through a container" {
+    // `List<i32>` implements `Eq` because `i32` does, so `List<List<i32>>` does
+    // too.
+    let a: List<List<i32>> = [[1, 2], [3, 4]];
+    let b: List<List<i32>> = [[1, 2], [3, 4]];
+    assert a == b;
+
+    // `Pair<i32>` implements `Eq` because `i32` does, which is what
+    // `EqContainer<T: Eq>` needs.
+    let c = EqContainer { item: Pair { first: 1, second: 2 } };
+    assert c.item == Pair { first: 1, second: 2 };
+}
+
+test "a bounded wrapper satisfies its own bound, so it nests" {
+    let w1 = DescBox { inner: 42 };
+    let w2 = DescBox { inner: w1 };
+    assert w2.inner.describe() == "DescBox(42)";
+}
+
+test "Option and Result derive Eq from their payloads" {
+    let none_a: Option<i32> = null;
+    let none_b: Option<i32> = null;
+    assert none_a == none_b;
+    let one: Option<i32> = Option::<i32>::Some(1);
+    let two: Option<i32> = Option::<i32>::Some(2);
+    assert one != two;
+    let same: Option<i32> = Option::<i32>::Some(1);
+    assert one == same;
+    assert one != none_a;
+
+    let ok_a: Result<i32, String> = Result::<i32, String>::Ok(42);
+    let ok_b: Result<i32, String> = Result::<i32, String>::Ok(42);
+    let err_a: Result<i32, String> = Result::<i32, String>::Err("fail");
+    let err_b: Result<i32, String> = Result::<i32, String>::Err("fail");
+    assert ok_a == ok_b;
+    assert ok_a != err_a;
+    assert err_a == err_b;
+}
+
+test "a bound satisfied through a reference parameter" {
+    let s = Size { width: 3, height: 4 };
+    assert measure_ref::<Size>(&s) == 12;
+    let mut c = Counter { count: 42 };
+    reset_it::<Counter>(&mut c);
+    assert c.count == 0;
+}
+
+test "a bound on the impl block of a container's element" {
+    let h = Holder { items: [5, 3, 8, 1, 4] as List<i32> };
+    assert h.min() == 1;
+}
+
+test "a list of references" {
+    let a = 10;
+    let b = 20;
+    let arr: List<&i32> = [&a, &b];
+    assert *arr[0] == 10;
+    assert *arr[1] == 20;
+}

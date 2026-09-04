@@ -1,0 +1,277 @@
+// `if` as a statement and as an expression: else-if chains, block-bodied
+// branches, `if let` with chains and guards, and a diverging branch.
+
+variant IfMode {
+    Decimal,
+    Exp,
+}
+
+variant Pick {
+    A,
+    B,
+}
+
+fn classify(n: i32) -> String {
+    if n < 0 {
+        return "negative";
+    } else if n == 0 {
+        return "zero";
+    } else if n < 10 {
+        return "small";
+    } else if n < 100 {
+        return "medium";
+    } else {
+        return "large";
+    }
+}
+
+fn compute_mode(mode: IfMode, precision: i32, exp_est: i32) -> i32 {
+    let n = if mode matches { Decimal } {
+        let base = precision + 1;
+        let adjusted = base + exp_est;
+        if exp_est >= 0 {
+            adjusted;
+        } else {
+            base;
+        }
+    } else {
+        precision + 1;
+    };
+    return n;
+}
+
+fn compute_pick(mode: Pick, x: i32) -> i32 {
+    let n = if mode matches { A } {
+        let a = x * 2;
+        a;
+    } else {
+        x + 1;
+    };
+    return n;
+}
+
+fn compute_block(x: i32) -> i32 {
+    let result = if x > 0 {
+        let a = x * 2;
+        let b = a + 1;
+        b;
+    } else {
+        let c = x * 3;
+        c;
+    };
+    return result;
+}
+
+fn unwrap_or(opt: Option<i32>, default: i32) -> i32 {
+    return if let Some(x) = opt { x } else { default };
+}
+
+fn classify_opt(opt: Option<i32>) -> String {
+    let label = if let Some(n) = opt {
+        if n > 0 { "positive" } else { "non-positive" }
+    } else {
+        "none"
+    };
+    return label;
+}
+
+fn nested_opt(outer: Option<Option<i32>>) -> i32 {
+    return if let Some(inner) = outer {
+        if let Some(v) = inner { v } else { -1 }
+    } else {
+        -2
+    };
+}
+
+fn make_opt() -> Option<&i32> {
+    let x = 1;
+    return Option::Some(&x);
+}
+
+test "else-if chain" {
+    assert classify(-5) == "negative";
+    assert classify(0) == "zero";
+    assert classify(5) == "small";
+    assert classify(50) == "medium";
+    assert classify(500) == "large";
+}
+
+test "if as an expression" {
+    let x = if true {
+        42;
+    } else {
+        0;
+    };
+    assert x == 42;
+    let y = if false {
+        100;
+    } else {
+        200;
+    };
+    assert y == 200;
+}
+
+test "else-if chain as an expression" {
+    let n = 25;
+    let x = if n < 10 {
+        1;
+    } else if n < 20 {
+        2;
+    } else if n < 30 {
+        3;
+    } else {
+        4;
+    };
+    assert x == 3;
+    let y = if n == 25 {
+        100;
+    } else if n == 24 {
+        200;
+    } else {
+        300;
+    };
+    assert y == 100;
+}
+
+test "a branch body may bind locals before its value" {
+    assert compute_mode(IfMode::Decimal, 2, 3) == 6;
+    assert compute_mode(IfMode::Decimal, 2, -1) == 3;
+    assert compute_mode(IfMode::Exp, 2, 3) == 3;
+    assert compute_pick(Pick::A, 5) == 10;
+    assert compute_pick(Pick::B, 5) == 6;
+    assert compute_block(5) == 11;
+    assert compute_block(-2) == -6;
+}
+
+test "if let with a guard" {
+    let mut seen: List<String> = [];
+    if let x = 10 && x > 5 {
+        seen.push(`x = ${x}`);
+    }
+    let val = 3;
+    if let x = val && x > 5 {
+        seen.push("big");
+    } else {
+        seen.push(`small: ${val}`);
+    }
+    if let mut x = 5 && x > 0 {
+        x = x + 1;
+        seen.push(`${x}`);
+    }
+    assert seen == ["x = 10", "small: 3", "6"];
+}
+
+test "if let chains" {
+    let opt = Option::<i32>::Some(42);
+    let mut seen: List<String> = [];
+    if let Some(x) = opt && x > 10 {
+        seen.push(`big: ${x}`);
+    }
+    let a = Option::<i32>::Some(10);
+    let b = Option::<i32>::Some(20);
+    if let Some(x) = a && let Some(y) = b {
+        seen.push(`${x} ${y}`);
+    }
+    if let Some(x) = a && let Some(y) = b && x + y > 25 {
+        seen.push(`sum ok: ${x + y}`);
+    }
+    assert seen == ["big: 42", "10 20", "sum ok: 30"];
+}
+
+test "a boolean may precede the let in a chain" {
+    let opt = Option::<i32>::Some(5);
+    let flag = true;
+    let mut seen: List<String> = [];
+    if flag && let Some(x) = opt {
+        seen.push(`flag and x=${x}`);
+    }
+    assert seen == ["flag and x=5"];
+}
+
+test "if let chain over nested options" {
+    let outer: Option<Option<i32>> = Option::Some(Option::Some(99));
+    let mut seen: List<String> = [];
+    if let Some(inner) = outer && let Some(n) = inner {
+        seen.push(`nested: ${n}`);
+    }
+    let outer2: Option<Option<i32>> = Option::Some(null);
+    if let Some(inner2) = outer2 && let Some(n2) = inner2 {
+        seen.push(`should not run: ${n2}`);
+    } else {
+        seen.push("inner none");
+    }
+    assert seen == ["nested: 99", "inner none"];
+}
+
+test "a parenthesised boolean in an if let chain" {
+    let opt = Option::<i32>::Some(5);
+    let flag1 = true;
+    let flag2 = true;
+    let mut seen: List<String> = [];
+    if let Some(x) = opt && (flag1 && flag2) {
+        seen.push(`paren: x=${x}`);
+    }
+    if let Some(x) = opt && (flag1 && false) {
+        seen.push(`should not run: ${x}`);
+    } else {
+        seen.push("paren false");
+    }
+    assert seen == ["paren: x=5", "paren false"];
+}
+
+test "if let as an expression" {
+    assert unwrap_or(Option::Some(42), 0) == 42;
+    assert unwrap_or(null, 99) == 99;
+    assert classify_opt(Option::Some(5)) == "positive";
+    assert classify_opt(Option::Some(-3)) == "non-positive";
+    assert classify_opt(null) == "none";
+    assert nested_opt(Option::Some(Option::Some(7))) == 7;
+    assert nested_opt(Option::Some(null)) == -1;
+    assert nested_opt(null) == -2;
+}
+
+test "a diverging branch takes the other branch's type" {
+    let t = builtin::black_box(true);
+    let a: i32 = if t {
+        1;
+    } else {
+        panic("unreachable");
+    };
+    assert a == 1;
+    let b: i32 = if !t {
+        panic("unreachable");
+    } else {
+        2;
+    };
+    assert b == 2;
+    let c = if t {
+        3;
+    } else {
+        panic("unreachable");
+    };
+    assert c == 3;
+    let d = if !t {
+        panic("unreachable");
+    } else {
+        4;
+    };
+    assert d == 4;
+    let e: i32 = if t {
+        5;
+    } else {
+        unreachable();
+    };
+    assert e == 5;
+}
+
+test "if let over a call returning Option<&T>, bound by let" {
+    // At -O2 only, this panicked in codegen with "WIR pipeline generated
+    // invalid core Wasm module" (validation: expected a type but nothing on
+    // stack).
+    let n = if let Some(_) = make_opt() {
+        1;
+    } else {
+        0;
+    };
+    assert n == 1;
+}

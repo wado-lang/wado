@@ -1,78 +1,162 @@
-use { println, Stdout } from "core:cli";
+// Match ergonomics: a `&T` / `&mut T` scrutinee matches against the inner
+// type and its bindings carry the reference, and a `mut` binding is a copy the
+// scrutinee never sees.
 
-// from match_ergonomics_match.wado
 enum Color {
     Red,
     Green,
     Blue,
 }
 
-// from match_ergonomics_if_let.wado
-fn match_ergonomics_if_let() with Stdout {
-    // if let on &Option<T>: x binds as &i32
-    let opt: Option<i32> = Option::<i32>::Some(42);
-    let ro = &opt;
-    if let Some(x) = ro {
-        // x is &i32 — dereference to use
-        assert *x == 42;
-        println(`got: ${*x}`);
-    }
-
-    // if let None on &Option<T>
-    let none_opt: Option<i32> = null;
-    let rn = &none_opt;
-    if let None = rn {
-        println("got none");
-    }
-
-    // matches on &Option<T>
-    let is_some = ro matches { Some(_) };
-    assert is_some == true;
-
-    let is_none = rn matches { Some(_) };
-    assert is_none == false;
-
-    println("ok");
+variant Counter {
+    Value(i32),
+    Empty,
 }
 
-// from match_ergonomics_match.wado
-fn match_ergonomics_match() with Stdout {
-    // Match on &enum — enum patterns have no bindings, works directly
-    let c = Color::Red;
-    let rc = &c;
-    let name = match rc {
-        Red => "red",
-        Green => "green",
-        Blue => "blue",
-    };
-    assert name == "red";
+struct Hits {
+    hits: List<i32>,
+}
 
-    // Match on &Option<T> — x binds as &i32
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+test "if let over a reference binds references" {
     let opt: Option<i32> = Option::<i32>::Some(42);
     let ro = &opt;
-    let val = match ro {
-        Some(x) => *x,
-        None => 0,
-    };
-    assert val == 42;
+    let mut got = 0;
+    if let Some(x) = ro {
+        got = *x;
+    }
+    assert got == 42;
 
-    // Match on &i32 with guards
+    let none_opt: Option<i32> = null;
+    let rn = &none_opt;
+    let mut saw_none = false;
+    if let None = rn {
+        saw_none = true;
+    }
+    assert saw_none;
+
+    assert ro matches { Some(_) };
+    assert !(rn matches { Some(_) });
+}
+
+test "match over a reference" {
+    // Enum patterns bind nothing, so a `&enum` matches directly.
+    let c = Color::Red;
+    let rc = &c;
+    assert match rc { Red => "red", Green => "green", Blue => "blue" } == "red";
+
+    // `&Option<T>` binds `x` as `&i32`.
+    let opt: Option<i32> = Option::<i32>::Some(42);
+    let ro = &opt;
+    assert match ro { Some(x) => *x, None => 0 } == 42;
+
+    // `&i32` with guards.
     let x = 50;
     let rx = &x;
-    let label = match rx {
+    assert match rx {
         _ && *rx > 100 => "large",
         _ && *rx > 10 => "medium",
         _ => "small",
+    } == "medium";
+}
+
+// A `&mut` scrutinee gives its bindings `&mut`, and one onto a non-scalar
+// writes through. A scalar binding is refused on both the `let` and the
+// `match` path — Wasm GC has no interior pointer to one, so it would reference
+// a copy (see `compile_errors.rs`).
+
+test "a &mut scrutinee writes through in if let" {
+    let mut opt = Option::<Hits>::Some(Hits { hits: [1] });
+    let rmo = &mut opt;
+    if let Some(c) = rmo {
+        c.hits.push(2);
+    }
+    if let Some(c) = &opt {
+        assert c.hits.len() == 2;
+    }
+}
+
+test "a &mut scrutinee writes through in match" {
+    let mut opt = Option::<Hits>::Some(Hits { hits: [10] });
+    let rmo = &mut opt;
+    let val = match rmo {
+        Some(c) => {
+            c.hits.push(20);
+            c.hits.len()
+        },
+        None => 0,
     };
-    assert label == "medium";
-
-    println("ok");
+    assert val == 2;
+    if let Some(c) = &opt {
+        assert c.hits.len() == 2;
+    }
 }
 
-export fn run() with Stdout {
-    match_ergonomics_if_let();
-    match_ergonomics_match();
+test "a let destructure of a reference binds references" {
+    let p = Point { x: 10, y: 20 };
+    let { x, y } = &p;
+    assert *x == 10;
+    assert *y == 20;
+
+    let t = [10, 20];
+    let [a, b] = &t;
+    assert *a == 10;
+    assert *b == 20;
 }
 
-__DATA__
-{"stdout": "got: 42\ngot none\nok\nok\n"}
+test "the destructured value stays writable through its own name" {
+    let mut p = Point { x: 10, y: 20 };
+    let { x, y } = &p;
+    assert *x == 10;
+    assert *y == 20;
+    p.x = 100;
+    assert p.x == 100;
+}
+
+test "a mut binding copies: an i32" {
+    let opt = Option::<i32>::Some(10);
+    if let Some(mut x) = opt {
+        x += 5;
+        assert x == 15;
+    }
+    if let Some(orig) = opt {
+        assert orig == 10;
+    }
+
+    let c = Counter::Value(100);
+    let result = match c {
+        Value(mut n) => {
+            n *= 2;
+            n
+        },
+        Empty => 0,
+    };
+    assert result == 200;
+    if let Value(orig) = c {
+        assert orig == 100;
+    }
+}
+
+test "a mut binding copies: a String and a List" {
+    let opt_str = Option::<String>::Some("hello");
+    if let Some(mut s) = opt_str {
+        s.push_str(&" world");
+        assert s == "hello world";
+    }
+    if let Some(orig) = opt_str {
+        assert orig == "hello";
+    }
+
+    let opt_arr = Option::<List<i32>>::Some([1, 2, 3] as List<i32>);
+    if let Some(mut arr) = opt_arr {
+        arr.push(4);
+        assert arr.len() == 4;
+    }
+    if let Some(orig) = opt_arr {
+        assert orig.len() == 3;
+    }
+}

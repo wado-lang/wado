@@ -1,0 +1,184 @@
+// The `${expr:[[fill]align][sign][#][0][width][.precision]type}` specifier:
+// every shape the grammar accepts, and what each field renders.
+
+test "fill and alignment" {
+    let n = 42;
+    assert `${n:*^7}` == "**42***";
+    assert `${n:<5}|` == "42   |";
+    assert `${n:>5}` == "   42";
+    // `-` is a fill character, not a sign: only `+` is a sign.
+    assert `${n:-<4}` == "42--";
+}
+
+test "sign, zero pad, radix and kind" {
+    let n = 42;
+    assert `${n:+}` == "+42";
+    assert `${n:05}` == "00042";
+    assert `${n:#06x}` == "0x002a";
+    assert `${n:b}` == "101010";
+    assert `${n:o}` == "52";
+    assert `${n:X}` == "2A";
+    // `#` prefixes the radix, `0x` for both hex cases as Rust does.
+    assert `${n:#X}` == "0x2A";
+}
+
+test "a bare # sets the alternate flag on the same Display" {
+    assert `${42:#}` == "42";
+    assert `${3.5:#}` == "3.5";
+    assert `${"s":#}` == "s";
+}
+
+test "fixed point and precision" {
+    let pi = 3.14159;
+    // `f` is fixed-point: it renders through Display, which honours precision.
+    assert `${pi:.2f}` == "3.14";
+    assert `${pi:.2}` == "3.14";
+    // A leading `0` is the zero-pad flag, not a width of zero.
+    assert `${pi:0.2f}` == "3.14";
+}
+
+test "whitespace around the specifier is trimmed" {
+    let n = 42;
+    assert `${ n : 5 }` == "   42";
+}
+
+// `${x:e}` / `${x:E}` on integers, matching Rust: the mantissa drops trailing
+// zeros, or carries `precision + 1` digits rounded half to even.
+
+test "integer exponent form" {
+    assert `${0:e}` == "0e0";
+    assert `${1:e}` == "1e0";
+    assert `${10:e}` == "1e1";
+    assert `${1200:e}` == "1.2e3";
+    assert `${12345:e}` == "1.2345e4";
+    assert `${-42:e}` == "-4.2e1";
+    assert `${12345:E}` == "1.2345E4";
+}
+
+test "precision fixes the mantissa width" {
+    assert `${12345:.0e}` == "1e4";
+    assert `${12345:.2e}` == "1.23e4";
+    assert `${12345:.6e}` == "1.234500e4";
+    assert `${0:.3e}` == "0.000e0";
+}
+
+test "exponent mantissa ties round to even, and a carry moves a decade" {
+    assert `${15:.0e}` == "2e1";
+    assert `${25:.0e}` == "2e1";
+    assert `${35:.0e}` == "4e1";
+    assert `${45:.0e}` == "4e1";
+    assert `${1250:.1e}` == "1.2e3";
+    assert `${1350:.1e}` == "1.4e3";
+    assert `${1251:.1e}` == "1.3e3";
+    assert `${99:.0e}` == "1e2";
+    assert `${9999:.2e}` == "1.00e4";
+}
+
+test "sign, width and zero padding apply to the exponent form" {
+    assert `${12345:+10.2e}` == "   +1.23e4";
+    assert `${-1200:>10e}` == "    -1.2e3";
+    assert `${-1200:012e}` == "-0000001.2e3";
+}
+
+test "the exponent form covers every width, MIN included" {
+    // Negating MIN needs the unsigned magnitude.
+    let min32: i32 = -2147483648;
+    assert `${min32:e}` == "-2.147483648e9";
+    let max64: u64 = 18446744073709551615;
+    assert `${max64:e}` == "1.8446744073709551615e19";
+    let min128: i128 = -170141183460469231731687303715884105728;
+    assert `${min128:e}` == "-1.70141183460469231731687303715884105728e38";
+    let max128: u128 = 340282366920938463463374607431768211455;
+    assert `${max128:.3e}` == "3.403e38";
+    let small: i8 = 5;
+    assert `${small:e}` == "5e0";
+    let byte: u8 = 255;
+    assert `${byte:e}` == "2.55e2";
+}
+
+// Width counts characters, and the fill character is written whole. Width once
+// compared against the byte length, so a CJK value was never padded, and the
+// padding fast path truncated the fill to its first byte — `${3.5:€>8}` wrote
+// raw 0xac bytes into a String.
+
+test "width counts characters, not bytes" {
+    // "あい" is two characters, six bytes.
+    assert `${"あい":>6}` == "    あい";
+    assert `${"あい":^7}` == "  あい   ";
+}
+
+test "a multi-byte fill survives every padding path" {
+    assert `${3.5:あ>8}` == "あああああ3.5";
+    assert `${42:€>8}` == "€€€€€€42";
+    assert `${12345:あ>8}` == "あああ12345";
+    assert `${'z':あ<6}` == "zあああああ";
+    assert `${true:あ^7}` == "あtrueああ";
+    assert `${"ab":あ>8}` == "ああああああab";
+    assert `${1200.0:あ>6e}` == "あ1.2e3";
+    assert `${42:あ>#8x}` == "ああああ0x2a";
+}
+
+test "zero padding goes after the sign" {
+    assert `${-3.5:08}` == "-00003.5";
+    assert `${3.5:+08}` == "+00003.5";
+    assert `${-3.5:08.3}` == "-003.500";
+    assert `${-1200.0:012e}` == "-0000001.2e3";
+    assert `${-42:08}` == "-0000042";
+    // The `0` flag wins over an explicit fill and alignment.
+    assert `${-42:*<08}` == "-0000042";
+}
+
+// Precision is a max length for String and List:
+// - Display (`{s:.N}`) truncates to N characters with no marker.
+// - Inspect (`{s:.N?}`) truncates to the same N and appends `...` outside the
+//   quotes when truncation happened.
+// - List Inspect (`{a:.N?}`) keeps at most N elements and appends `, ...`.
+
+test "precision truncates a string" {
+    let s = "hello world";
+    assert `${s:.5}` == "hello";
+    assert `${s:.5?}` == `"hello"...`;
+    assert `${s:.20}` == "hello world";
+    assert `${s:.20?}` == `"hello world"`;
+}
+
+test "precision truncates a list" {
+    let a: List<i32> = [1, 2, 3, 4, 5];
+    assert `${a:.3?}` == "[1, 2, 3, ...]";
+    assert `${a:.10?}` == "[1, 2, 3, 4, 5]";
+    assert `${a:.3}` == "[1, 2, 3]";
+}
+
+test "Inspect caps a sequence at DEFAULT_SEQ_LIMIT" {
+    // Display is never capped, so a 300-char string renders in full. Inspect
+    // falls back to DEFAULT_SEQ_LIMIT (256), so the output is `"` + 256 chars
+    // + `"` + `...` = 261 bytes.
+    let mut s = "";
+    for let mut i = 0; i < 300; i += 1 {
+        s.push('a');
+    }
+    assert `${s}`.len() == 300;
+    assert `${s:?}`.len() == 261;
+}
+
+test "an unset specifier field keeps its sentinel" {
+    // A spec that sets any field makes `synthesis::template` build the
+    // `Formatter` literal itself rather than call `Formatter::new`, filling
+    // every unset field from `compiler_item::FormatterField`'s constants.
+    // Those repeat `Formatter::NO_WIDTH` / `PRECISION_DEFAULT`; this fails if
+    // the copies drift.
+    let mut s = "";
+    for let mut i = 0; i < 300; i += 1 {
+        s.push('a');
+    }
+    // Width set, precision not: Inspect still applies DEFAULT_SEQ_LIMIT. A
+    // precision of 0 would truncate to nothing; PRECISION_INFINITE would
+    // render all 300.
+    assert `${s:<1?}`.len() == 261;
+    // Precision set, width not: no padding may appear. A width of 0 or -1 both
+    // mean "no minimum"; anything positive would pad.
+    assert `[${3.14159:.2}]` == "[3.14]";
+    // Both unset except the fill-bearing alignment: the width sentinel still
+    // disables padding, so the fill character never appears.
+    assert `[${7:*^}]` == "[7]";
+}

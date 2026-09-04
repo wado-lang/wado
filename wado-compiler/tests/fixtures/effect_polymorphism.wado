@@ -1,0 +1,162 @@
+// Effect polymorphism: `<effect E>` on a free function, a method and a nested
+// call, with `E` inferred from the function-typed arguments at each call site —
+// including the union of two effects and the empty effect.
+//
+// CLI world, because the effects under test are `Stdout` and `Stderr`
+// themselves: what is printed, and to which stream, is the assertion.
+use { println, eprintln, Stdout, Stderr } from "core:cli";
+
+fn make_printer() -> fn() with Stdout with Stdout {
+    return || { println("hello from closure"); };
+}
+
+fn caller(f: fn() with Stdout) with Stdout {
+    f();
+}
+
+fn wrapper<effect E>(f: fn() with E) with E {
+    f();
+}
+
+fn apply<T, effect E>(f: fn(T) -> T with E, x: T) -> T with E {
+    return f(x);
+}
+
+fn chained<effect E>(f: fn(i32) -> i32 with E) -> i32 with E {
+    let result = apply(f, 10);
+    return result;
+}
+
+struct Runner {}
+
+impl Runner {
+    fn run_with<effect E>(&self, f: fn() with E) with E {
+        f();
+    }
+}
+
+fn inner<effect F>(f: fn() with F) with F {
+    f();
+}
+
+fn outer<effect E>(f: fn() with E) with E {
+    inner(f);
+}
+
+fn combine<effect E>(f: fn() with E, g: fn() with E) with E {
+    f();
+    g();
+}
+
+fn transform<T, effect E>(
+    f: fn(T) -> T with E,
+    g: fn(T) -> T with E,
+    x: T,
+) -> T with E {
+    let y = f(x);
+    return g(y);
+}
+
+fn effect_import_demo() with Stdout {
+    println("Hello from imported Stdout!");
+}
+
+fn effect_import_aliasing() with Stdout {
+    println("Aliased import works!");
+    println("Direct import also works!");
+}
+
+fn effect_indirect_call() with Stdout {
+    let f = make_printer();
+    f();
+    caller(f);
+}
+
+fn effect_poly_basic() with Stdout {
+    wrapper(|| { println("hello from wrapper"); });
+    let result = apply(|x: i32| x + 1, 41);
+    println(`result: ${result}`);
+    let result2 = apply(|x: i32| {
+        println(`applying to ${x}`);
+        return x * 2;
+    }, 21);
+    println(`result2: ${result2}`);
+}
+
+fn effect_poly_chain() with Stdout {
+    let result = chained(|x: i32| {
+        println(`got ${x}`);
+        return x + 1;
+    });
+    println(`result: ${result}`);
+}
+
+fn effect_poly_method() with Stdout {
+    let r = Runner {};
+    r.run_with(|| { println("method effect poly"); });
+}
+
+fn effect_poly_nested() with Stdout {
+    outer(|| { println("nested effect polymorphism"); });
+    println("done");
+}
+
+fn effect_no_effect() with Stdout {
+    let result = apply(|x: i32| x * 2, 21);
+    assert result == 42;
+    wrapper(|| { assert 1 + 1 == 2; });
+    println("no_effect ok");
+}
+
+fn effect_poly_multi() with (Stdout, Stderr) {
+    wrapper(|| { println("stdout effect"); });
+    wrapper(|| { eprintln("stderr effect"); });
+    wrapper(|| {
+        println("both stdout");
+        eprintln("both stderr");
+    });
+    println("done");
+}
+
+fn effect_poly_multi_param() with (Stdout, Stderr) {
+    combine(
+        || { println("from f"); },
+        || { eprintln("from g"); },
+    );
+    combine(
+        || { println("effectful"); },
+        || { },
+    );
+    combine(|| { }, || { });
+    let result = transform(
+        |x: i32| {
+            println(`step1: ${x}`);
+            return x + 1;
+        },
+        |x: i32| {
+            eprintln(`step2: ${x}`);
+            return x * 2;
+        },
+        10,
+    );
+    println(`result: ${result}`);
+}
+
+export fn run() with (Stdout, Stderr) {
+    effect_import_demo();
+    effect_import_aliasing();
+    effect_indirect_call();
+    effect_poly_basic();
+    effect_poly_chain();
+    effect_poly_method();
+    effect_poly_nested();
+    effect_no_effect();
+    effect_poly_multi();
+    effect_poly_multi_param();
+}
+
+__DATA__
+{
+    "stdout": "Hello from imported Stdout!\nAliased import works!\nDirect import also works!\nhello from closure\nhello from closure\nhello from wrapper\nresult: 42\napplying to 21\nresult2: 42\ngot 10\nresult: 11\nmethod effect poly\nnested effect polymorphism\ndone\nno_effect ok\nstdout effect\nboth stdout\ndone\nfrom f\neffectful\nstep1: 10\nresult: 22\n",
+    "stderr_contains": ["stderr effect", "both stderr", "from g", "step2: 11"]
+}

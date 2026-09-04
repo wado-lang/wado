@@ -83,7 +83,7 @@ impl FormatterField {
     /// What an unset field carries. These repeat `impl Formatter`'s Wado-side
     /// constants of the same name, because template expansion writes the struct
     /// literal itself instead of calling `Formatter::new`; the e2e fixture
-    /// `template_formatter_sentinels.wado` fails if the copies drift.
+    /// `template_format_spec.wado` fails if the copies drift.
     ///
     /// `NO_WIDTH` is `Formatter::NO_WIDTH`: no minimum width, so every padding
     /// path is a no-op.

@@ -11,7 +11,7 @@
 //! [`crate::compiler_item::SeqField`] and [`FormatterField`] rather than
 //! spelling it out twice. `Formatter`'s sentinels are the one exception —
 //! repeated in Rust, and pinned by the e2e fixture
-//! `template_formatter_sentinels.wado`.
+//! `template_format_spec.wado`.
 
 use std::cell::RefCell;
 use std::rc::Rc;

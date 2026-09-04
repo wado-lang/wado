@@ -83,7 +83,7 @@ subtracting byte offsets.
 
 `synthesis::template` writes `Formatter` literals directly instead of calling
 `new`, so it repeats the sentinel constants; the e2e fixture
-`template_formatter_sentinels.wado` fails if the two copies drift.
+`template_format_spec.wado` fails if the two copies drift.
 
 `String::push_display` (the `PushDisplay` trait) writes one `Display` value into
 a `String` in place, skipping the temporary a `` `${value}` `` template would

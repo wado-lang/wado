@@ -1,0 +1,663 @@
+// Closures: creating and calling one, passing and returning one, capture and
+// mutation, and the nested / iterator / sort-comparator uses.
+use { println, Stdout } from "core:cli";
+
+// --- creating, calling, passing and returning ---
+
+struct ClosurePoint {
+    x: i32,
+    y: i32,
+}
+
+struct ClosureBox<T> {
+    value: T,
+}
+
+impl<T> ClosureBox<T> {
+    fn apply(&self, f: fn(T) -> T) -> T {
+        return f(self.value);
+    }
+}
+
+struct Transform {
+    dummy: i32,
+}
+
+impl Transform {
+    fn apply_static(value: i32, f: fn(i32) -> i32) -> i32 {
+        return f(value);
+    }
+}
+
+fn for_each_item(items: List<i32>, f: fn(i32) -> i32) -> List<i32> {
+    let mut result: List<i32> = [];
+    for let item of items {
+        result.push(f(item));
+    }
+    return result;
+}
+
+fn combine(x: i32, f: fn(i32) -> i32, g: fn(i32) -> i32) -> i32 {
+    return g(f(x));
+}
+
+fn call_twice(f: fn() -> i32) -> i32 {
+    return f() + f();
+}
+
+fn call_and_get_bool(f: fn() -> bool) -> bool {
+    return f();
+}
+
+fn make_adder(n: i32) -> fn(i32) -> i32 {
+    return |x: i32| x + n;
+}
+
+fn make_multiplier(factor: i32) -> fn(i32) -> i32 {
+    return |x: i32| x * factor;
+}
+
+test "closure call basic" {
+    let add_one = |x: i32| x + 1;
+    let result = add_one(5);
+    assert result == 6;
+}
+
+test "closure call multi args" {
+    let add = |a: i32, b: i32| a + b;
+    let mul = |x: i32, y: i32| x * y;
+    let result = add(mul(2, 3), mul(4, 5));
+    assert result == 26;
+}
+
+test "closure call multiple" {
+    let double = |x: i32| x * 2;
+    let a = double(3);
+    let b = double(5);
+    let c = double(7);
+    assert a == 6;
+    assert b == 10;
+    assert c == 14;
+}
+
+test "closure create only" {
+    let a = 10;
+    let f = |x: i32| x + a;
+    // f is created but not called - just verify no crash
+    assert a == 10;
+}
+
+test "closure fn param capture" {
+    let b = ClosureBox { value: 5 };
+    let multiplier = 3;
+    let result = b.apply(|x: i32| x * multiplier);
+    assert result == 15;
+}
+
+test "closure fn param effectful" {
+    let items: List<i32> = [1, 2, 3];
+    let result = for_each_item(items, |x: i32| x * 10);
+    assert result[0] == 10;
+    assert result[1] == 20;
+    assert result[2] == 30;
+}
+
+test "closure fn param multiple" {
+    let result = combine(5, |x: i32| x + 1, |x: i32| x * 2);
+    assert result == 12;
+}
+
+test "closure fn param no args" {
+    let value = 21;
+    let result = call_twice(|| value);
+    assert result == 42;
+
+    let flag = true;
+    let b = call_and_get_bool(|| flag);
+    assert b == true;
+}
+
+test "closure fn param static method" {
+    let result = Transform::apply_static(5, |x: i32| x * 3);
+    assert result == 15;
+}
+
+test "closure fn param on generic struct" {
+    let b = ClosureBox { value: 5 };
+    let result = b.apply(|x: i32| x * 2);
+    assert result == 10;
+}
+
+test "closure no params expression body" {
+    let get_value = || 42;
+    assert get_value() == 42;
+}
+
+test "closure no params block body" {
+    let greet = || {
+        return "hello";
+    };
+    assert greet() == "hello";
+}
+
+test "closure no params capture" {
+    let x = 10;
+    let get_x = || x;
+    assert get_x() == 10;
+}
+
+test "closure no params logical or" {
+    let a = false || true;
+    assert a == true;
+
+    let b = false;
+    let get_value = || 42;
+    let c = b || get_value() > 0;
+    assert c == true;
+}
+
+test "closure return bool" {
+    let is_even = |x: i32| x % 2 == 0;
+    assert is_even(4) == true;
+    assert is_even(7) == false;
+}
+
+test "closure return i64" {
+    let to_i64 = |x: i32| x as i64 * 1000000000 as i64;
+    let big = to_i64(5);
+    assert big == 5000000000 as i64;
+}
+
+test "closure struct literal return" {
+    let make_point = |x: i32, y: i32| ClosurePoint { x, y };
+    let p: ClosurePoint = make_point(10, 20);
+    assert p.x == 10;
+    assert p.y == 20;
+}
+
+test "closure function factory" {
+    let add5 = make_adder(5);
+    let triple = make_multiplier(3);
+
+    assert add5(3) == 8;
+    assert triple(4) == 12;
+    assert add5(triple(2)) == 11;
+}
+// --- capture and mutation ---
+
+struct CapturePoint {
+    x: i32,
+    y: i32,
+}
+
+fn apply_with_offset(x: i32, offset: i32) -> i32 {
+    let add_offset = |v: i32| v + offset;
+    return add_offset(x);
+}
+
+fn clamp(value: i32, min_val: i32, max_val: i32) -> i32 {
+    let is_above_min = |v: i32| v >= min_val;
+    let is_below_max = |v: i32| v <= max_val;
+    if !is_above_min(value) {
+        return min_val;
+    }
+    if !is_below_max(value) {
+        return max_val;
+    }
+    return value;
+}
+
+fn scale_and_add(items: List<i32>, scale: i32, base: i32) -> i32 {
+    let mut total = 0;
+    let transform = |x: i32| x * scale + base;
+    for let item of items {
+        total += transform(item);
+    }
+    return total;
+}
+
+fn call_fn(f: fn(i32) -> i32, x: i32) -> i32 {
+    return f(x);
+}
+
+test "capture fn param" {
+    let r1 = apply_with_offset(5, 10);
+    assert r1 == 15;
+
+    assert clamp(15, 0, 10) == 10;
+    assert clamp(5, 0, 10) == 5;
+    assert clamp(-5, 0, 10) == 0;
+
+    let items: List<i32> = [1, 2, 3];
+    let r5 = scale_and_add(items, 2, 1);
+    assert r5 == 15;
+}
+
+test "capture multiple" {
+    let a = 10;
+    let b = 20;
+    let c = 30;
+    let sum = || a + b + c;
+    assert sum() == 60;
+
+    let first = 1;
+    let second = 2;
+    let third = 3;
+    let format_all = || `${first},${second},${third}`;
+    assert format_all() == "1,2,3";
+
+    let x = 100;
+    let y = 200;
+    let get_x = || x;
+    let get_y = || y;
+    let get_sum = || x + y;
+    assert get_x() == 100;
+    assert get_y() == 200;
+    assert get_sum() == 300;
+}
+
+test "capture string" {
+    let greeting = "Hello";
+    let get_greeting = || greeting;
+    assert get_greeting() == "Hello";
+
+    let name = "world";
+    let make_msg = || `${greeting}, ${name}!`;
+    assert make_msg() == "Hello, world!";
+
+    let status = "ok";
+    let is_ok = || status == "ok";
+    assert is_ok() == true;
+}
+
+test "capture struct" {
+    let p = CapturePoint { x: 3, y: 4 };
+    let get_x = || p.x;
+    let get_y = || p.y;
+    let sum_coords = || p.x + p.y;
+    let manhattan = || {
+        let dx = p.x;
+        let dy = p.y;
+        return dx + dy;
+    };
+
+    assert get_x() == 3;
+    assert get_y() == 4;
+    assert sum_coords() == 7;
+    assert manhattan() == 7;
+
+    let q = CapturePoint { x: 10, y: 20 };
+    let get_qx = || q.x;
+    let get_qy = || q.y;
+    assert get_qx() == 10;
+    assert get_qy() == 20;
+}
+
+test "mutable capture" {
+    let mut count = 0;
+    let mut inc = || {
+        count += 1;
+    };
+
+    inc();
+    inc();
+    inc();
+    assert count == 3;
+}
+
+test "shared mutable state" {
+    let mut count = 0;
+    let mut inc = || {
+        count += 1;
+    };
+
+    let get = || count;
+
+    inc();
+    inc();
+    assert get() == 2;
+
+    inc();
+    assert get() == 3;
+}
+
+test "block body" {
+    let compute = |x: i32| {
+        let doubled = x * 2;
+        let tripled = x * 3;
+        return doubled + tripled;
+    };
+
+    assert compute(3) == 15;
+    assert compute(4) == 20;
+    assert compute(5) == 25;
+}
+
+test "block for" {
+    let factorial = |n: i32| {
+        let mut result = 1;
+        for let mut i = 1; i <= n; i = i + 1 {
+            result = result * i;
+        }
+        return result;
+    };
+
+    assert factorial(5) == 120;
+    assert factorial(3) == 6;
+    assert factorial(4) == 24;
+}
+
+test "block if" {
+    let max_of_three = |a: i32, b: i32, c: i32| {
+        let max_ab = if a > b {
+            a;
+        } else {
+            b;
+        };
+        let result = if max_ab > c {
+            max_ab;
+        } else {
+            c;
+        };
+        return result;
+    };
+
+    assert max_of_three(1, 5, 3) == 5;
+    assert max_of_three(10, 2, 8) == 10;
+    assert max_of_three(4, 7, 9) == 9;
+}
+
+test "block multi types" {
+    let mixed = |n: i32| {
+        let a: i64 = n as i64 * 1000000000 as i64;
+        let b: f64 = n as f64 * 1.5;
+        let c: bool = n > 0;
+        let d: i32 = if c {
+            n * 2;
+        } else {
+            0;
+        };
+        return d;
+    };
+
+    assert mixed(5) == 10;
+    assert mixed(-3) == 0;
+    assert mixed(7) == 14;
+}
+
+test "block nested" {
+    let compute = |x: i32| {
+        let a = x * 2;
+        scope: {
+            let b = a + 1;
+            let c = b * 3;
+            scope: {
+                let d = c - 5;
+                return d;
+            }
+        }
+    };
+
+    assert compute(3) == 16;
+    assert compute(5) == 28;
+}
+
+test "block while" {
+    let sum_to_n = |n: i32| {
+        let mut sum = 0;
+        let mut i = 1;
+        while i <= n {
+            sum = sum + i;
+            i = i + 1;
+        }
+        return sum;
+    };
+
+    assert sum_to_n(5) == 15;
+    assert sum_to_n(10) == 55;
+    assert sum_to_n(3) == 6;
+}
+
+test "closure in loop" {
+    let double = |x: i32| x * 2;
+
+    let mut sum = 0;
+    for let mut i = 1; i <= 5; i += 1 {
+        sum += double(i);
+    }
+    assert sum == 30;
+}
+
+test "loop scope c-style for" {
+    let mut closures: List<fn(i32) -> i32> = [];
+
+    for let mut i = 0; i < 5; i += 1 {
+        let get_i = |_: i32| i;
+        closures.push(get_i);
+    }
+
+    assert call_fn(closures[0], 0) == 0;
+    assert call_fn(closures[1], 0) == 1;
+    assert call_fn(closures[2], 0) == 2;
+    assert call_fn(closures[3], 0) == 3;
+    assert call_fn(closures[4], 0) == 4;
+}
+
+test "loop scope for-of" {
+    let items: List<i32> = [10, 20, 30, 40, 50];
+    let mut closures: List<fn(i32) -> i32> = [];
+
+    for let item of items {
+        let get_item = |_: i32| item;
+        closures.push(get_item);
+    }
+
+    assert call_fn(closures[0], 0) == 10;
+    assert call_fn(closures[1], 0) == 20;
+    assert call_fn(closures[2], 0) == 30;
+    assert call_fn(closures[3], 0) == 40;
+    assert call_fn(closures[4], 0) == 50;
+}
+// --- nested closures, iterator adapters, and sort comparators ---
+
+struct Pair<T> {
+    a: T,
+    b: T,
+}
+
+impl<T> Pair<T> {
+    fn pick_by(&self, cmp: fn(&T, &T) -> bool) -> T {
+        if cmp(&self.a, &self.b) {
+            return self.a;
+        }
+        return self.b;
+    }
+
+    fn pick_smaller(&self) -> T {
+        return self.pick_by(|x: &T, y: &T| *x < *y);
+    }
+}
+
+fn make_nested_adder(n: i32) -> fn(i32) -> i32 {
+    return |x: i32| x + n;
+}
+
+fn make_nested_multiplier(n: i32) -> fn(i32) -> i32 {
+    return |x: i32| x * n;
+}
+
+fn apply_twice(f: fn(i32) -> i32, x: i32) -> i32 {
+    return f(f(x));
+}
+
+test "nested basic" {
+    let add5 = make_nested_adder(5);
+    assert add5(10) == 15;
+
+    let mul3 = make_nested_multiplier(3);
+    assert mul3(7) == 21;
+}
+
+test "nested apply twice" {
+    let add3 = make_nested_adder(3);
+    let result = apply_twice(add3, 10);
+    assert result == 16;
+}
+
+test "nested compose" {
+    let add1 = make_nested_adder(1);
+    let mul2 = make_nested_multiplier(2);
+    let result = mul2(add1(5));
+    assert result == 12;
+}
+
+test "nested capture in branch" {
+    let x = 10;
+    let y = 20;
+    let pick = |use_x: bool| {
+        if use_x {
+            return x;
+        }
+        return y;
+    };
+    assert pick(true) == 10;
+    assert pick(false) == 20;
+}
+
+test "nested counter" {
+    let mut count = 0;
+    let mut inc = || { count += 1; return count; };
+    let a = inc();
+    let b = inc();
+    let c = inc();
+    assert a == 1;
+    assert b == 2;
+    assert c == 3;
+}
+
+test "iterator chain" {
+    let nums: List<i32> = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+
+    let result = nums.iter_value().filter(|x: i32| x % 2 == 0).map(|x: i32| x * x).collect();
+    assert result[0] == 4;
+    assert result[1] == 16;
+    assert result[2] == 36;
+    assert result[3] == 64;
+    assert result[4] == 100;
+    assert result.len() == 5;
+
+    let sum = nums.iter_value().map(|x: i32| x * 2).fold(0, |acc: i32, x: i32| acc + x);
+    assert sum == 110;
+}
+
+test "iterator filter" {
+    let nums: List<i32> = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+
+    let evens = nums.iter_value().filter(|x: i32| x % 2 == 0).collect();
+    assert evens.len() == 5;
+    assert evens[0] == 2;
+    assert evens[4] == 10;
+
+    let threshold = 5;
+    let large = nums.iter_value().filter(|x: i32| x > threshold).collect();
+    assert large.len() == 5;
+    assert large[0] == 6;
+    assert large[4] == 10;
+}
+
+test "iterator fold" {
+    let nums: List<i32> = [1, 2, 3, 4, 5];
+
+    let sum = nums.iter_value().fold(0, |acc: i32, x: i32| acc + x);
+    assert sum == 15;
+
+    let product = nums.iter_value().fold(1, |acc: i32, x: i32| acc * x);
+    assert product == 120;
+
+    let max = nums.iter_value().fold(i32::MIN, |acc: i32, x: i32| {
+        if x > acc {
+            return x;
+        }
+        return acc;
+    });
+    assert max == 5;
+
+    let count = nums.iter_value().fold(0, |acc: i32, x: i32| {
+        if x > 2 {
+            return acc + 1;
+        }
+        return acc;
+    });
+    assert count == 3;
+}
+
+test "iterator map" {
+    let nums: List<i32> = [1, 2, 3, 4, 5];
+
+    let doubled = nums.iter_value().map(|x: i32| x * 2).collect();
+    assert doubled[0] == 2;
+    assert doubled[4] == 10;
+
+    let factor = 3;
+    let tripled = nums.iter_value().map(|x: i32| x * factor).collect();
+    assert tripled[0] == 3;
+    assert tripled[4] == 15;
+}
+
+test "sort_by ascending" {
+    let mut nums: List<i32> = [5, 3, 8, 1, 9, 2, 7, 4, 6];
+
+    nums.sort_by(|a: &i32, b: &i32| {
+        if *a < *b {
+            return Ordering::Less;
+        }
+        if *a > *b {
+            return Ordering::Greater;
+        }
+        return Ordering::Equal;
+    });
+
+    assert nums[0] == 1;
+    assert nums[1] == 2;
+    assert nums[8] == 9;
+}
+
+test "sort_by descending" {
+    let mut nums: List<i32> = [5, 3, 8, 1, 9, 2, 7, 4, 6];
+
+    nums.sort_by(|a: &i32, b: &i32| {
+        if *a > *b {
+            return Ordering::Less;
+        }
+        if *a < *b {
+            return Ordering::Greater;
+        }
+        return Ordering::Equal;
+    });
+
+    assert nums[0] == 9;
+    assert nums[1] == 8;
+    assert nums[8] == 1;
+}
+
+test "sorted_by" {
+    let original: List<i32> = [3, 1, 4, 1, 5, 9, 2, 6];
+    let asc = original.sorted_by(|a: &i32, b: &i32| {
+        if *a < *b {
+            return Ordering::Less;
+        }
+        if *a > *b {
+            return Ordering::Greater;
+        }
+        return Ordering::Equal;
+    });
+    assert asc[0] == 1;
+    assert asc[1] == 1;
+    assert asc[7] == 9;
+}
+
+test "generic method delegation" {
+    let p = Pair { a: 10, b: 3 };
+    let result = p.pick_smaller();
+    assert result == 3;
+}
