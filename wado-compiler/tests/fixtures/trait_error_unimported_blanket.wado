@@ -1,11 +1,8 @@
-#![TODO]
 // A blanket is scoped like any other candidate. Neither `Tagged` nor `Marked`
-// is imported here, so `42.tag()` must not resolve at all.
-//
-// Today both blankets reach every `Display` receiver and collection order picks
-// one, so swapping the two `use` lines changes what this program prints. That
-// is the silent cross-trait tie the scope gate removes rather than reports
-// (WEP 2026-09-01, "Scope is decided and not implemented").
+// is imported here, so `42.tag()` does not resolve: both blankets apply, and
+// the message names the two traits an import would choose between. Without
+// the gate, collection order would pick one, and swapping the two `use` lines
+// would change what this program prints (WEP 2026-09-01, "Scope").
 
 use { tagged_version } from "./sub/trait_scope_blanket_tagged.wado";
 use { marked_version } from "./sub/trait_scope_blanket_marked.wado";

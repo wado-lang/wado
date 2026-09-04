@@ -879,17 +879,10 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
             .as_ref()
             .and_then(crate::resolve::head_site)
             .and_then(|site| scope.tysys.resolutions.declared(site));
-        let self_type = scope
-            .annotate_ctx
-            .trait_ctx
-            .self_type
-            .expect("entering an impl frame binds Self to the target");
-
         let impl_def = scope.def_at(impl_block.id);
         scope.sem.decls.impl_sigs.insert(
             impl_def,
             super::sig::ImplSig {
-                self_type,
                 target_type_args,
                 trait_type_args,
                 associated_types,

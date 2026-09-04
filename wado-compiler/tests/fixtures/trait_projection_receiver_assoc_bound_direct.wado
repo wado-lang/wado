@@ -1,0 +1,31 @@
+// `X::Item` under `X: Holder` names no dispatch head until `X` is substituted.
+// The `Display` bound the trait declares on `Item` holds there, so `${it}`
+// reaches `i32`'s `Display` rather than an unresolved `X::Item^Display::fmt`.
+
+trait Holder {
+    type Item: Display;
+    fn item(&self) -> Self::Item;
+}
+
+struct H {
+    v: i32,
+}
+
+impl Holder for H {
+    type Item = i32;
+    fn item(&self) -> i32 {
+        return self.v;
+    }
+}
+
+fn shown<X: Holder>(h: &X) -> String {
+    let it = h.item();
+    return `<${it}>`;
+}
+
+test "a projection receiver formats through the bound on the associated type" {
+    assert shown(&H { v: 3 }) == "<3>";
+}
+
+__DATA__
+{"test": {}}

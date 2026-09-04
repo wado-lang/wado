@@ -1,0 +1,37 @@
+// In generic code `&T` is a borrow of a `T`, so `${v:?}` renders the pointee
+// rather than the `&`-prefixing ref blanket. A reference over a projection
+// (`&X::Item`) reads the same way: the interpolated value is derefed before the
+// callee is named, so both reach `i32`'s `Inspect` and neither prints `&`.
+
+trait Holder {
+    type Item: Inspect;
+    fn item_ref(&self) -> &Self::Item;
+}
+
+struct H {
+    v: i32,
+}
+
+impl Holder for H {
+    type Item = i32;
+    fn item_ref(&self) -> &i32 {
+        return &self.v;
+    }
+}
+
+fn via_projection<X: Holder>(h: &X) -> String {
+    let r = h.item_ref();
+    return `${r:?}`;
+}
+
+fn via_param<T: Inspect>(v: &T) -> String {
+    return `${v:?}`;
+}
+
+test "a reference over a projection debug-formats as its pointee" {
+    assert via_param(&3) == "3";
+    assert via_projection(&H { v: 3 }) == "3";
+}
+
+__DATA__
+{"test": {}}

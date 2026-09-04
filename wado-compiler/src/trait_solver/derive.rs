@@ -20,7 +20,8 @@ pub fn derive(program: &mut Program, trait_: TraitDeclId, declarations: &[Declar
             SolverType::Param(_)
             | SolverType::Pack(_)
             | SolverType::Ref { .. }
-            | SolverType::Tuple(_) => None,
+            | SolverType::Tuple(_)
+            | SolverType::Projection { .. } => None,
         })
         .collect();
     let mut standing: Vec<(&Declaration, ImplId, Env)> = Vec::new();

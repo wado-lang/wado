@@ -80,7 +80,8 @@ fn is_unbounded_value_blanket(def: &ImplDef) -> bool {
         SolverType::Decl(..)
         | SolverType::Pack(_)
         | SolverType::Ref { .. }
-        | SolverType::Tuple(_) => false,
+        | SolverType::Tuple(_)
+        | SolverType::Projection { .. } => false,
     }
 }
 

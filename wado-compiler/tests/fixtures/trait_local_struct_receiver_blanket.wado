@@ -1,0 +1,23 @@
+// A struct declared inside a body is a declaration like any other: a value
+// blanket answers for it where its bound holds (WEP 2026-09-01).
+
+trait Show {
+    fn show(&self) -> String;
+}
+
+impl<T: Inspect> Show for T {
+    fn show(&self) -> String {
+        return `<${*self:?}>`;
+    }
+}
+
+test "a body-local struct reaches a value blanket" {
+    struct Local {
+        v: i32,
+    }
+    let l = Local { v: 3 };
+    assert l.show() == "<Local { v: 3 }>";
+}
+
+__DATA__
+{"test": {}}

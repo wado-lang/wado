@@ -25,6 +25,15 @@ pub(super) fn concrete(trait_: TraitDeclId, target: SolverType) -> ImplDef {
     }
 }
 
+/// `def` with `count` unbounded type parameters, so its target may mention
+/// them: the `impl<T> Tag for Box_<T>` written for a head.
+pub(super) fn generic(count: usize, def: ImplDef) -> ImplDef {
+    ImplDef {
+        params: vec![ParamDef::default(); count],
+        ..def
+    }
+}
+
 /// `impl<T: bounds> trait_ for target`, where `target` mentions `T` as
 /// parameter 0.
 pub(super) fn bounded(
