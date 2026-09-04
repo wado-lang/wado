@@ -180,6 +180,9 @@ struct CostWalk<'a> {
     /// The constants this walk prices the body under, or `None` to price it as
     /// written. See [`ConstView`].
     consts: Option<&'a ConstView<'a>>,
+    /// Per-callee price to charge a call, indexed by `FuncId`; `0` for one this
+    /// pass will leave as a call. See [`CostWalk::splicing`].
+    spliced: &'a [usize],
 }
 
 /// What the caller's constant arguments make of a callee's body: which of its
@@ -207,6 +210,7 @@ impl<'a> CostWalk<'a> {
             descriptors,
             price,
             consts: None,
+            spliced: &[],
         }
     }
 
@@ -216,9 +220,54 @@ impl<'a> CostWalk<'a> {
         self
     }
 
+    /// Price a call to a callee this pass will splice at what the splice costs,
+    /// rather than at the ABI edge.
+    ///
+    /// [`weight::CALL`] is what a call that *stays* a call costs. A callee whose
+    /// own callees are all inline candidates is a driver: as written it reads as
+    /// a handful of ABI edges and comes in cheap, and what the caller actually
+    /// receives is every one of those bodies. `i64::fmt_decimal` is three such
+    /// calls — two of them loops — so it prices around a dozen and splices into
+    /// `JsonSerializer::serialize_i64` as the whole integer-writing path,
+    /// costing json-catalog serialize 6.9%.
+    ///
+    /// One level of lookahead, off prices taken as written, so there is no
+    /// recursion here: the pass runs to a fixed point, and a driver whose own
+    /// callees are spliced in a later round is re-read then.
+    fn splicing(mut self, spliced: &'a [usize]) -> Self {
+        self.spliced = spliced;
+        self
+    }
+
     /// What the whole body costs at this walk's price.
     fn whole_body(&self) -> usize {
         self.block(self.body.root, &mut SeenValues::default())
+    }
+
+    /// What a call to `callee` costs this body: the body it splices, when
+    /// [`CostWalk::splicing`] says this pass will splice it, and the ABI edge
+    /// otherwise.
+    ///
+    /// A site handing the callee a constant is charged the edge regardless. That
+    /// is the shape whose loop the callee's own folding deletes — the reading
+    /// [`fold_drops_loop`] already takes — so what the caller receives is not the
+    /// loop the table priced. `CborSerializer::serialize_f64` is the case:
+    /// `push_be(buf, bits, 8)` spins a loop the literal 8 unrolls, and charging
+    /// it costs cbor-canada serialize 24%.
+    fn call_price(&self, callee: FuncId, args: &[ArenaCallArg]) -> usize {
+        if args.iter().any(|a| self.arg_is_constant(a.expr)) {
+            return weight::CALL;
+        }
+        let spliced = self.spliced.get(callee.index()).copied().unwrap_or(0);
+        spliced.max(weight::CALL)
+    }
+
+    /// Whether an argument is a compile-time constant as written.
+    fn arg_is_constant(&self, op: Operand) -> bool {
+        match op {
+            Operand::Value(v) => self.body.values.kind(v).is_operand_constant(),
+            Operand::Expr(_) => false,
+        }
     }
 
     /// Whether `op` is a constant once the caller's constant arguments are
@@ -506,11 +555,11 @@ impl<'a> CostWalk<'a> {
 
             // A call is an ABI edge, not an operation — unless the compile-time
             // engine runs it on constant arguments, leaving a literal.
-            ExprKind::Call { args, .. } => {
+            ExprKind::Call { func_id, args, .. } => {
                 if self.folds(Operand::Expr(id)) {
                     return 0;
                 }
-                weight::CALL
+                self.call_price(*func_id, args)
                     + args
                         .iter()
                         .map(|a| self.operand(a.expr, seen))
@@ -612,9 +661,17 @@ fn arity_excess(len: usize) -> usize {
 /// Two is what a binary — the widest fixed-arity node — already takes free.
 const FREE_ARITY: usize = 2;
 
-/// The inline cost of a function body, in the unit [`weight`] defines.
-fn inline_cost(body: &Body, type_table: &TypeTable, descriptors: &[FunctionRef]) -> usize {
-    CostWalk::new(body, type_table, descriptors, Price::Hot).whole_body()
+/// The inline cost of a function body, in the unit [`weight`] defines. `spliced`
+/// prices its calls — see [`CostWalk::splicing`]; empty prices them as ABI edges.
+fn inline_cost(
+    body: &Body,
+    type_table: &TypeTable,
+    descriptors: &[FunctionRef],
+    spliced: &[usize],
+) -> usize {
+    CostWalk::new(body, type_table, descriptors, Price::Hot)
+        .splicing(spliced)
+        .whole_body()
 }
 
 /// What one copy of `body` occupies, cold paths included — the quantity the
@@ -671,9 +728,11 @@ fn inline_cost_folded(
     type_table: &TypeTable,
     descriptors: &[FunctionRef],
     view: &ConstView<'_>,
+    spliced: &[usize],
 ) -> usize {
     CostWalk::new(body, type_table, descriptors, Price::Hot)
         .under(view)
+        .splicing(spliced)
         .whole_body()
 }
 
@@ -958,6 +1017,7 @@ fn classify_callee(
     descriptors: &[FunctionRef],
     foldable: &[bool],
     loopy: &[bool],
+    spliced: &[usize],
 ) -> Verdict {
     // #[inline(never)] unconditionally prevents inlining
     if func.inline_hint == InlineHint::Never {
@@ -1014,7 +1074,7 @@ fn classify_callee(
     };
 
     let params = func.params.len();
-    let plain = inline_cost(body, type_table, descriptors);
+    let plain = inline_cost(body, type_table, descriptors, spliced);
     if net_cost(plain, params) <= effective_threshold {
         return Verdict {
             hot: plain,
@@ -1026,7 +1086,7 @@ fn classify_callee(
     // Over budget as written, but the caller's constants may still fold it
     // under. `(fits, drops a loop)` for one reading of the body.
     let weigh = |view: &ConstView<'_>| {
-        let folded = inline_cost_folded(body, type_table, descriptors, view);
+        let folded = inline_cost_folded(body, type_table, descriptors, view, spliced);
         if net_cost(folded, params) > effective_threshold {
             return (false, false);
         }
@@ -1401,6 +1461,38 @@ pub fn inline_functions(
     let mut priced: Vec<Candidate> = Vec::new();
 
     let type_table = project.type_table.borrow();
+    // What a call to each function costs a caller that splices it, for
+    // `CostWalk::splicing`. Read as written — calls priced as ABI edges — so
+    // this is one level of lookahead and cannot recurse. A function the
+    // threshold would leave alone keeps `0`, which prices its call as the edge
+    // it stays.
+    //
+    // Only a callee carrying a loop is priced this way. A loop is what the model
+    // already charges most to splice, because it is a region of its own in the
+    // caller; charging every inlinable callee its whole body instead prices a
+    // driver by its post-inlining size against a threshold calibrated on
+    // as-written ones, and suppresses inlining the CBOR serializers need —
+    // cbor-canada serialize -29%.
+    let spliced: Vec<usize> = project
+        .functions
+        .iter()
+        .enumerate()
+        .map(|(i, f)| {
+            let func = f.borrow();
+            let Some(body) = func.body.as_ref() else {
+                return 0;
+            };
+            if !loopy.get(i).copied().unwrap_or(false) {
+                return 0;
+            }
+            let gross = inline_cost(body, &type_table, descriptors, &[]);
+            if net_cost(gross, func.params.len()) <= inline_threshold {
+                gross
+            } else {
+                0
+            }
+        })
+        .collect();
     for func_rc in &project.functions {
         let func = func_rc.borrow();
         let size = match func.body.as_ref() {
@@ -1425,6 +1517,7 @@ pub fn inline_functions(
             descriptors,
             &foldable,
             &loopy,
+            &spliced,
         );
         if verdict.hold
             && let Some(id) = func.id
