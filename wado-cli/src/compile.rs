@@ -1303,6 +1303,7 @@ mod kiln_dir_module_tests {
             output_dir: InvocationPath::normalize("build"),
             options: wado_compiler::kiln::CanonicalOptions::default(),
             raw_options: None,
+            options_span: wado_compiler::Span::default(),
         }
     }
 

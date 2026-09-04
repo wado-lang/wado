@@ -144,6 +144,7 @@ fn invocation(
         output_dir: InvocationPath::normalize(output_dir),
         options: wado_compiler::kiln::CanonicalOptions::default(),
         raw_options: None,
+        options_span: wado_compiler::Span::default(),
     }
 }
 
@@ -399,6 +400,7 @@ fn pipeline_invocations_feed_compiler_options_for_use_redirect() {
         output_dir: InvocationPath::normalize("build/kiln/kiln-abc12345"),
         options: wado_compiler::kiln::CanonicalOptions::default(),
         raw_options: None,
+        options_span: wado_compiler::Span::default(),
     };
 
     let generated_content = "pub fn greet() {}\n";
@@ -461,6 +463,7 @@ fn inline_invocation_populates_invocation_index_for_redirect() {
         output_dir: InvocationPath::normalize("build/kiln/kiln-deadbeef"),
         options: wado_compiler::kiln::CanonicalOptions::default(),
         raw_options: None,
+        options_span: wado_compiler::Span::default(),
     };
 
     let host = StubHost::new(

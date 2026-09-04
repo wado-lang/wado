@@ -169,6 +169,12 @@ pub struct Invocation {
     /// Excluded from [`Invocation::identity_tuple`] — equivalence is decided
     /// by `options_canonical` alone.
     pub raw_options: Option<crate::ast::AttrValue>,
+    /// Span of the inline `options:` key, or of the whole `use` clause when
+    /// the clause wrote none. The driver's typed-encode pass re-validates
+    /// `raw_options` long after the AST is gone, and anchors on this whatever
+    /// diagnostic names no key of its own. Diagnostics only; excluded from
+    /// [`Invocation::identity_tuple`].
+    pub options_span: crate::token::Span,
 }
 
 impl Invocation {
@@ -247,6 +253,7 @@ mod tests {
             output_dir: InvocationPath::normalize("build/kiln/a"),
             options: crate::kiln::options_check::CanonicalOptions::default(),
             raw_options: None,
+            options_span: crate::token::Span::default(),
         };
         let inv_b = Invocation {
             decl_site: DeclSite {

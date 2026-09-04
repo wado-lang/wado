@@ -25,5 +25,5 @@ pub use invocation::{DeclSite, GeneratorModule, GeneratorSpec, Invocation, Invoc
 pub use options::{
     CanonicalValue, OptionsDescriptor, OptionsField, OptionsType, extract_options_descriptor,
 };
-pub use options_check::{CanonicalOptions, validate as validate_options};
+pub use options_check::{CanonicalOptions, OptionsAnchor, validate as validate_options};
 pub use plan::{Plan, PlanError, build_plan, depends_on};
