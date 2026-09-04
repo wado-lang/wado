@@ -87,6 +87,9 @@ struct PendingProjection {
     /// The `(owner, field)` pairs the argument's path projects through, added
     /// together once the condition below is met.
     fields: Vec<(TypeId, u32)>,
+    /// A whole-root write to add instead, for a path with no field-typed key
+    /// of its own — reached only through an `Index` or `Variant` step.
+    whole: Option<TypeId>,
     /// The type handed to `callee`; its writes are asked about this type.
     handed: TypeId,
     callee: (ModuleSource, String),
@@ -153,6 +156,9 @@ pub fn compute_mod_ref(
                 });
                 if hits {
                     merged.fields.extend(p.fields.iter().copied());
+                    if let Some(whole) = p.whole {
+                        merged.whole.insert(whole);
+                    }
                 }
             }
             if per_func.get(module, name) != Some(&merged) {
@@ -287,27 +293,39 @@ impl Walker<'_> {
         };
         // Same rule as `record`: an `Index` or `Variant` step leaves no
         // caller-visible key of its own, so a `Field` past one cannot stand
-        // in for it — fall through to the whole-root write below.
+        // in for it. Defer a whole-root write instead of a field-precise
+        // one — like any other pending effect, only once the callee is
+        // known to write, so a no-op callee costs no share.
         let field_addressable = !place
             .selectors
             .iter()
             .any(|s| matches!(s, Selector::Index | Selector::Variant(_)));
-        let fields: Vec<(TypeId, u32)> = if field_addressable {
-            place
-                .selectors
-                .iter()
-                .filter_map(|s| match s {
-                    Selector::Field { owner, index } => Some((*owner, *index)),
-                    Selector::Variant(_) | Selector::Index => None,
-                })
-                .collect()
-        } else {
-            Vec::new()
-        };
+        if !field_addressable {
+            if let Some(lent) = self.resolver.lent(place.root)
+                && lent != field_owner(handed, self.type_table)
+            {
+                self.pending.push(PendingProjection {
+                    fields: Vec::new(),
+                    whole: Some(lent),
+                    handed: field_owner(handed, self.type_table),
+                    callee,
+                });
+            }
+            return;
+        }
+        let fields: Vec<(TypeId, u32)> = place
+            .selectors
+            .iter()
+            .filter_map(|s| match s {
+                Selector::Field { owner, index } => Some((*owner, *index)),
+                Selector::Variant(_) | Selector::Index => None,
+            })
+            .collect();
         if !fields.is_empty() {
             if self.reachable_from_caller(names) {
                 self.pending.push(PendingProjection {
                     fields,
+                    whole: None,
                     handed: field_owner(handed, self.type_table),
                     callee,
                 });

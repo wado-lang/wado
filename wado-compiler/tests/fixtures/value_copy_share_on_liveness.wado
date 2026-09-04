@@ -52,6 +52,26 @@ fn rebind_releases_storage() -> i32 {
     return before + r[0] + p[0];
 }
 
+struct Cell {
+    v: i32,
+}
+
+// `read_only` writes nothing, so the deferred whole-root write `touch` would
+// add for it never lands: an index step off a lent root still costs no share
+// when the callee it is handed to turns out not to write.
+fn read_only(c: &mut Cell) -> i32 {
+    return c.v;
+}
+
+fn touch(arr: &mut Array<Cell>) -> i32 {
+    let r = builtin::array_get_ref_mut(arr, 0);
+    return read_only(r);
+}
+
+fn cell_value(arr: &Array<Cell>) -> i32 {
+    return builtin::array_get_value(arr, 0).v;
+}
+
 export fn run() {
     let mut s = Store { rows: [[1, 2, 3]] };
     let n = s.len_then_mutate();
@@ -65,6 +85,13 @@ export fn run() {
 
     let released = rebind_releases_storage();
     assert released == 5;
+
+    let mut c: Array<Cell> = builtin::array_new(1);
+    builtin::array_set(&mut c, 0, Cell { v: 1 });
+    let shared = c;
+    let seen = touch(&mut c);
+    assert seen == 1;
+    assert cell_value(&shared) == 1;
 }
 
 __DATA__

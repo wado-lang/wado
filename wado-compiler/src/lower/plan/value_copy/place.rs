@@ -466,13 +466,20 @@ impl TirRefVisitor for BindingCollector<'_, '_> {
     fn visit_stmt(&mut self, stmt: &TirStmt) {
         match &stmt.kind {
             TirStmtKind::Let {
-                local_index, value, ..
+                local_index,
+                type_id,
+                value,
+                ..
             } => {
-                // A reference-typed RHS redirects reads through this local to
-                // its referent; any other local owns its own storage, so it
-                // stays its own place even when the value it starts with came
-                // from elsewhere.
-                let names = if is_reference(value.type_id, self.resolver.type_table) {
+                // A reference-typed local redirects reads through it to its
+                // referent; any other local owns its own storage, so it stays
+                // its own place even when the value it starts with came from
+                // elsewhere. Keyed on the local's own declared type, not the
+                // initializer's — a payload projected out of a generic
+                // associated type can still carry the unresolved projection
+                // as its own `type_id` where the local's declared type is
+                // already the monomorphized reference.
+                let names = if is_reference(*type_id, self.resolver.type_table) {
                     self.resolver.names(value)
                 } else {
                     Names::Place(Place::local(*local_index))
