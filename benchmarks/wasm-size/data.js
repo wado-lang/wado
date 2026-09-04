@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1788532327491,
+  "lastUpdate": 1788550199063,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -53273,6 +53273,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 281425,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "3873186e9beeba1b5f146b81bf12554c566fc9dd",
+          "message": "Merge pull request #1965 from wado-lang/perf-json-canada\n\nperf(optimizer): price a splice by what it replaces",
+          "timestamp": "2026-09-05T04:16:26+09:00",
+          "tree_id": "6d9fa3b0777b04a51e5ecfbe32b1a4281e4f4e3e",
+          "url": "https://github.com/wado-lang/wado/commit/3873186e9beeba1b5f146b81bf12554c566fc9dd"
+        },
+        "date": 1788550198102,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 2013,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6560,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18891,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 288497,
             "unit": "bytes"
           }
         ]
