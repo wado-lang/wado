@@ -53,15 +53,70 @@ pub(super) fn block_shape(body: &Body, e: ExprId) -> Option<(BlockId, Option<&st
     }
 }
 
+/// The global a block materializes: exactly `{ G = v; G }`, the second
+/// statement reading what the first wrote. The shape
+/// [constant-object globalization] leaves where it names a constant at a use
+/// site.
+///
+/// Two consumers, one recognizer. A store in this shape serves the read below it
+/// and nothing else, so a region carrying one may still run; and the block
+/// itself is not a region, since folding it would write the literal over the
+/// naming construct and undo the sharing globalization arranged.
+///
+/// [constant-object globalization]: ../docs/wep-2026-05-31-const-object-globalization.md
+#[must_use]
+pub fn materialization_pair(body: &Body, block: BlockId) -> Option<super::GlobalKey> {
+    let [set, get] = body.blocks[block].stmts.as_slice() else {
+        return None;
+    };
+    let (StmtKind::Expr(set), StmtKind::Expr(get)) =
+        (&body.stmts[*set].kind, &body.stmts[*get].kind)
+    else {
+        return None;
+    };
+    let ExprKind::GlobalVarSet {
+        module_source,
+        name,
+        ..
+    } = &body.exprs[set.as_expr()?].kind
+    else {
+        return None;
+    };
+    let read = global_mention(body, get.as_expr()?)?;
+    (read == (module_source.clone(), name.clone())).then_some(read)
+}
+
+/// The global an expression names, whether it reads or writes it.
+#[must_use]
+pub fn global_mention(body: &Body, e: ExprId) -> Option<super::GlobalKey> {
+    match &body.exprs[e].kind {
+        ExprKind::GlobalVarGet {
+            module_source,
+            name,
+        }
+        | ExprKind::GlobalVarSet {
+            module_source,
+            name,
+            ..
+        } => Some((module_source.clone(), name.clone())),
+        _ => None,
+    }
+}
+
 /// The value block behind a region-shaped expression: enough statements to be
 /// worth running, ending on a statement that produces the value.
 ///
 /// A single-statement block is the lattice projection's case. Refusing it here
-/// is what keeps the attempt cheap on the blocks that are not regions.
+/// is what keeps the attempt cheap on the blocks that are not regions. A
+/// materialization is refused for the opposite reason: it would fold, and the
+/// fold is the loss.
 pub(super) fn region_shape(body: &Body, e: ExprId) -> Option<(BlockId, Option<&str>)> {
     let (block, label) = value_block_shape(body, e)?;
     let stmts = &body.blocks[block].stmts;
     if stmts.len() < 2 {
+        return None;
+    }
+    if materialization_pair(body, block).is_some() {
         return None;
     }
     match &body.stmts[*stmts.last()?].kind {

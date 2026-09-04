@@ -149,7 +149,7 @@ mod trackability;
 
 pub use callee::{Callee, CalleeKey, CalleeMap};
 use pattern::PatternMatch;
-pub use region::RegionRefusal;
+pub use region::{RegionRefusal, global_mention, materialization_pair};
 pub(crate) use rewrite::guard_declares_locals;
 use trackability::Trackability;
 

@@ -22,15 +22,15 @@ re-derives scalar folding over skeleton `ExprId`s, is what remains of the older
 framing and shrinks to a pool bridge as
 [pure node kinds leave the skeleton](./wep-2026-06-05-nir-optimizer-architecture.md).
 
-The measured prize is compile-time string formatting, and it is almost entirely
-unclaimed. At `-O2`, `` `s=${"y"}` `` folds to a literal; `` `n=${42}` ``,
-`` `b=${true}` ``, `` `c=${'x'}` ``, `` `${7:04}` `` and `(123).to_string()` all
-reach the end of the optimizer as a buffer allocation, a `Formatter` and a
-digit-count and division loop per evaluation. One constant integer interpolation
-costs 599 bytes over the same program written with the literal — 2 012 to 2 611
-at `-Os` on a hello-world — plus the formatting code kept alive in the binary.
-Every `${}` over constants, every `to_string()` on a literal and every constant
-`assert` message pays it.
+The measured prize is compile-time string formatting. Every `${}` over
+constants, every `to_string()` on a literal and every constant `assert` message
+used to reach the end of the optimizer as a buffer allocation, a `Formatter` and
+a digit-count and division loop per evaluation, plus the formatting code kept
+alive in the binary — 877 bytes at `-Os` for one constant integer interpolation
+over the same program written with the literal. Integers, `bool`, width,
+zero-pad, radix and `Inspect` now fold to that literal and cost about 20 bytes;
+`char` and floats do not yet. What the roadmap does with the rest is ordered
+against a census of the corpus, not against this document's guesses.
 
 ## Decision
 
@@ -211,10 +211,15 @@ is globalized, and that alone stops the fold.
 - [x] The answer lives in `niri`, since the globalization pass cannot know
       whether the region around its store will fold, and the engine already
       reads a global out of the assignment that fills it.
-- [ ] Recount the corpus. The refusal is gone — `` `v=${true}` `` now reports
-      the call still standing rather than the store — but the regions it
-      unblocked move into the next bucket rather than folding, so the census
-      measures stage 3's size, not this stage's win.
+- [x] A materialization is not itself a region. `{ G = v; G }` is two statements
+      ending in an expression, so it answers the region shape, and admitting the
+      store made the pair fold to the literal — writing the constant back over
+      the naming construct and undoing the sharing globalization had arranged.
+      What the pair is has one recognizer, in `region`, and both consumers ask
+      it: the store inside a larger region is readable, the pair alone is not a
+      region. A folded template is globalized afterwards, so it is still built
+      once at instantiation.
+- [ ] Recount the corpus, now that the bucket has moved.
 
 Done when the corpus is recounted and the bucket has moved.
 
@@ -236,25 +241,41 @@ and the work is a stage of its own.
 
 ### 4. The frame owns storage
 
-What the format work waits on, and about 4 % of the census — small, but it is
-what turns a constant interpolation into a literal. `` `c=${'x'}` `` and
-`` `n=${42}` `` leave `Formatter::pad` and `i32::fmt_decimal` standing; one
-constant integer interpolation costs 599 bytes at `-Os`, and `${3.5}` costs
-about 10 000, since `fpfmt` stays in the binary.
-
-A unit-returning call whose writes land in a place the frame owns, and a `&mut`
-argument written back on return, are already implemented — `exec_call_stmt` runs
-one and `run_call` applies the write-backs. What is left:
+What the format work waited on. A unit-returning call whose writes land in a
+place the frame owns and a `&mut` argument written back on return were already
+implemented; what was missing was that the buffer a template builds is threaded
+through a `let mut` holding a `&mut` of itself, and neither the frame nor the
+analysis deciding what a frame can track would call that an alias.
 
 - [x] A `let mut` binding a borrow resolves to a place alias when nothing
-      reassigns the local. Only an immutable binding did, and the buffer a
-      template threads through `sroa_param`'s scalarized field is spelled
-      `let mut`.
-- [ ] The buffer a region builds is `clobbered` by its own `&mut` borrow, so the
-      frame holds no value for it and abandons at the first append —
-      `WADO_TRACE=ctfe_stmt` names the statement. A borrow the frame itself
-      performs is not a write the frame cannot see, so what `Reached` covers is
-      what to settle, and every stage below waits on it.
+      reassigns the local. An immutable binding always did; what makes it safe is
+      that nothing displaces it, which is equally true of a mutable local nothing
+      reassigns — and `sroa_param` spells its scalarized `&mut` field that way.
+- [x] The same predicate in `Reached::record_alias_borrows`. The two must agree:
+      a borrow the frame resolves to an alias but the walk counts as a clobber
+      leaves the frame holding no value for the place it just aliased, which is
+      what abandoned every template at its first append.
+
+Measured at `-Os` against the same program written with the literal, which costs
+3 312 bytes:
+
+| Interpolation | Before | After  |
+| ------------- | ------ | ------ |
+| `${42}`       | 4 189  | 3 328  |
+| `${7:04}`     | 4 455  | 3 337  |
+| `${255:x}`    | 3 853  | 3 330  |
+| `${42:?}`     | 4 189  | 3 328  |
+| `${true}`     | 3 799  | 3 337  |
+| `${'x'}`      | 3 724  | 3 724  |
+| `${3.5}`      | 13 267 | 13 267 |
+
+A constant integer interpolation costs 16 bytes over the literal, down from 877.
+What is left:
+
+- [ ] `char`, which still leaves `Formatter::pad` standing where `bool` no longer
+      does, so the two differ in something the remark does not yet separate.
+- [ ] Floats, whose `fpfmt` is the whole of the 10 000 bytes and is stage 6's
+      budget question, not this stage's.
 - [ ] A place-valued field, so an aggregate can carry a reference. Today such an
       aggregate is not a constant, since a field holding the referent's value
       would take a write meant for the referent; what it needs to hold is the
@@ -269,8 +290,7 @@ Upstream: the `stores`-gated temp and write-back carve-outs and divergences D1�
 in [Reference Representation](./wep-2026-06-13-reference-representation.md). The
 engine's notion of a place must be the one that WEP settles, not a second one.
 
-Done when `${'x'}` and `${42}` fold to literals at `-O2` and the 599 bytes go
-away.
+Done when `${'x'}` folds too.
 
 ### 5. The aggregate exit
 
@@ -285,11 +305,17 @@ literals, and `Array::slice`'s computed bounds fold.
 
 ### 6. Format coverage to the budget
 
-- [ ] Width, zero-pad and radix specs, then `Inspect`, then floats. Each step
-      measures what it spends against the step budget; if `fpfmt` overruns it,
-      floats become a known gap rather than a reason to raise the budget. Floats
-      carry the largest size prize and the largest engine cost, so the order is
-      the engine's, not the payoff's.
+- [x] Width, zero-pad, radix and `Inspect` fold, and needed nothing of their own:
+      the frame runs each spec's body once it can hold the buffer.
+- [ ] The step budget is per function and a formatting region spends a large
+      share of it. Seven constant templates in one body exhaust it and five of
+      them stop folding; four all fold. Whether that is a budget to raise, a cost
+      to cut, or a limit to document is what a corpus recount answers — real code
+      spreads templates over functions, and the fixture had to.
+- [ ] Floats. `fpfmt` is the largest size prize by an order of magnitude and the
+      largest engine cost, so the order is the engine's, not the payoff's; if it
+      overruns the budget it becomes a known gap rather than a reason to raise
+      the budget.
 - [ ] A `wasm-size` and `benchmark` run recording what stages 2–6 bought.
 
 Done when a recount shows no refusal reason left that the step budget does not

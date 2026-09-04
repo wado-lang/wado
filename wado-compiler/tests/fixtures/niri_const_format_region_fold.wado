@@ -1,0 +1,69 @@
+// A template whose interpolations are all constant folds to the literal the
+// source could have written, so the formatting machinery leaves the binary.
+//
+// Two facts together get here. The store constant-object globalization leaves
+// at a use site (`{ G = "true"; G }`) serves the read below it and nothing
+// else, so it does not refuse the region as a global write. And the buffer the
+// region builds is bound to a `let mut` holding a `&mut` of itself, which the
+// frame resolves to a place alias — the analysis deciding what a frame can
+// track agrees, so the buffer keeps its value across the appends.
+//
+// One template per function because the step budget is per function: seven in
+// one body exhausts it and five of them stop folding. Each folded literal is
+// then globalized, so it is built once at instantiation rather than per call.
+// The runtime output is what proves the folded bytes are the right ones.
+
+use { println, Stdout } from "core:cli";
+
+fn plain() -> String {
+    return `i=${42}`;
+}
+
+fn boolean() -> String {
+    return `b=${true}`;
+}
+
+fn negative() -> String {
+    return `neg=${-7}`;
+}
+
+fn zero_padded() -> String {
+    return `pad=${7:04}`;
+}
+
+fn hex() -> String {
+    return `hex=${255:x}`;
+}
+
+fn inspected() -> String {
+    return `dbg=${42:?}`;
+}
+
+// A runtime interpolation still formats, so what the folds drop is dropped
+// only where nothing reaches it.
+fn runtime(n: i32) -> String {
+    return `${n}`;
+}
+
+export fn run() with Stdout {
+    println(plain());
+    println(boolean());
+    println(negative());
+    println(zero_padded());
+    println(hex());
+    println(inspected());
+    println(runtime(builtin::black_box(13)));
+}
+
+__DATA__
+{
+    "stdout": "i=42\nb=true\nneg=-7\npad=0007\nhex=ff\ndbg=42\n13\n",
+    "wir_expect:O2": [
+        "array.new_fixed<u8>(105, 61, 52, 50)",
+        "array.new_fixed<u8>(98, 61, 116, 114, 117, 101)",
+        "array.new_fixed<u8>(110, 101, 103, 61, 45, 55)",
+        "array.new_fixed<u8>(112, 97, 100, 61, 48, 48, 48, 55)",
+        "array.new_fixed<u8>(104, 101, 120, 61, 102, 102)",
+        "array.new_fixed<u8>(100, 98, 103, 61, 52, 50)"
+    ]
+}

@@ -470,9 +470,9 @@ fn const_region_remarks(source: &str) -> Vec<String> {
 }
 
 #[test]
-fn a_constant_integer_interpolation_is_remarked() {
-    // Every interpolation is constant, so the whole template denotes a literal,
-    // yet it reaches the final IR as a buffer and a `fmt_decimal` call.
+fn a_constant_integer_interpolation_folds() {
+    // Every interpolation is constant, so the whole template denotes a literal
+    // and the buffer, the `Formatter` and `fmt_decimal` all leave with it.
     let remarks = const_region_remarks(
         r#"
 use { println, Stdout } from "core:cli";
@@ -483,15 +483,7 @@ export fn run() with Stdout {
 "#,
     );
 
-    assert_eq!(remarks.len(), 1, "expected one remark, got {remarks:?}");
-    assert!(
-        remarks[0].contains("fmt_decimal"),
-        "the remark should name the call that did not fold: {remarks:?}"
-    );
-    assert!(
-        remarks[0].starts_with("5:"),
-        "the remark should point at the template on line 5: {remarks:?}"
-    );
+    assert!(remarks.is_empty(), "unexpected remarks: {remarks:?}");
 }
 
 #[test]
@@ -545,30 +537,30 @@ export fn run() with Stdout {
 "#,
     );
 
-    assert_eq!(remarks.len(), 1, "expected one remark, got {remarks:?}");
     assert!(
-        !remarks[0].contains("it writes a global"),
-        "a materializing store should not refuse the region: {remarks:?}"
-    );
-    assert!(
-        remarks[0].contains("Formatter::pad"),
-        "the remark should name the call still standing: {remarks:?}"
+        remarks.is_empty(),
+        "the store should not refuse the region: {remarks:?}"
     );
 }
 
 #[test]
 fn a_template_buffers_inner_block_is_not_remarked() {
     // Every template region contains inner blocks that write the buffer their
-    // parent owns. Reporting those would bury the one region worth reporting.
+    // parent owns. Reporting those would bury the region worth reporting, so a
+    // template that does not fold leaves exactly one remark.
     let remarks = const_region_remarks(
         r#"
 use { println, Stdout } from "core:cli";
 
 export fn run() with Stdout {
-    println(`v=${42}`);
+    println(`v=${3.5}`);
 }
 "#,
     );
 
     assert_eq!(remarks.len(), 1, "expected one remark, got {remarks:?}");
+    assert!(
+        remarks[0].contains("fmt_into"),
+        "the remark should name the float formatter: {remarks:?}"
+    );
 }

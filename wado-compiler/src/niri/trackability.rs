@@ -88,15 +88,25 @@ impl Reached {
     /// and a read projects that value rather than a copy. Frame-only, like the
     /// write accounting — an ordinary walk resolves no aliases.
     fn record_alias_borrows(&mut self, body: &Body) {
+        let reassigned = reassigned_locals(body);
         for s in reachable_stmts(body) {
             let StmtKind::Let {
                 value,
-                is_mut: false,
+                is_mut,
+                local_index,
                 ..
             } = &body.stmts[s].kind
             else {
                 continue;
             };
+            // The same predicate the frame binds an alias under: a `let mut`
+            // nothing reassigns cannot be displaced, so it names one place for
+            // the whole body. The two must agree — a borrow the frame resolves
+            // to an alias but this walk counts as a clobber leaves the frame
+            // holding no value for the place it just aliased.
+            if *is_mut && reassigned.contains(*local_index) {
+                continue;
+            }
             let Some((is_mut, inner)) = borrowed_place_operand(body, *value) else {
                 continue;
             };

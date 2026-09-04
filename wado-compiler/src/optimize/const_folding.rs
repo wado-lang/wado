@@ -25,6 +25,7 @@ use crate::nir_package::NirPackage;
 use crate::niri::{
     BorrowRoot, CalleeMap, CtfeBuiltinMap, EditSink, GlobalEnv, GlobalFieldEnv, GlobalKey,
     Interpreter, Lattice, MaterializingGlobals, build_callee_map, build_ctfe_builtin_map,
+    global_mention, materialization_pair,
 };
 use crate::tir::{PrimitiveType, ResolvedType, TypeId, TypeTable};
 
@@ -489,45 +490,6 @@ fn materializing_globals(project: &NirPackage) -> MaterializingGlobals {
     }
     paired.retain(|key| !loose.contains(key));
     paired
-}
-
-/// The global a block materializes: exactly `{ G = v; G }`, the second
-/// statement reading what the first wrote.
-fn materialization_pair(body: &Body, block: BlockId) -> Option<GlobalKey> {
-    let [set, get] = body.blocks[block].stmts.as_slice() else {
-        return None;
-    };
-    let (StmtKind::Expr(set), StmtKind::Expr(get)) =
-        (&body.stmts[*set].kind, &body.stmts[*get].kind)
-    else {
-        return None;
-    };
-    let ExprKind::GlobalVarSet {
-        module_source,
-        name,
-        ..
-    } = &body.exprs[set.as_expr()?].kind
-    else {
-        return None;
-    };
-    let read = global_mention(body, get.as_expr()?)?;
-    (read == (module_source.clone(), name.clone())).then_some(read)
-}
-
-/// The global an expression names, whether it reads or writes it.
-fn global_mention(body: &Body, e: ExprId) -> Option<GlobalKey> {
-    match &body.exprs[e].kind {
-        ExprKind::GlobalVarGet {
-            module_source,
-            name,
-        }
-        | ExprKind::GlobalVarSet {
-            module_source,
-            name,
-            ..
-        } => Some((module_source.clone(), name.clone())),
-        _ => None,
-    }
 }
 
 /// Whether `e` is `&GLOBAL` — a shared borrow of a whole global, not of a part

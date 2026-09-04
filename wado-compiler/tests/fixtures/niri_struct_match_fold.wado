@@ -1,6 +1,9 @@
 // A constant struct scrutinee picks its match arm at compile time. The
 // elaborator moves a pattern's literal fields into the arm guard, so this
 // folds only if the engine evaluates the guard under the pattern's bindings.
+//
+// The chosen arm's value is not in the WIR either: the template around it folds
+// too, so what reaches the binary is the rendered string.
 
 use { println, Stdout } from "core:cli";
 
@@ -22,6 +25,6 @@ export fn run() with Stdout {
 __DATA__
 {
     "stdout": "1013\n",
-    "wir_expect:O2": ["1013"],
+    "wir_expect:O2": ["array.new_fixed<u8>(49, 48, 49, 51)"],
     "wir_not_expect:O2": ["1009", "1019"]
 }
