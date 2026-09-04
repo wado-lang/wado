@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1788494196772,
+  "lastUpdate": 1788516806785,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -53165,6 +53165,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/02cda97c62507ffedc872634b3272eec2d0d1082"
         },
         "date": 1788494195852,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 2028,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6418,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18877,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 281425,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "ec9ad47c18da3b01b1d592a025acefeeeeab943f",
+          "message": "Merge pull request #1962 from wado-lang/claude/elabolator-refactoring-by6txy\n\nfix(elaborator): answer a call's callee from one lookup, over every walk",
+          "timestamp": "2026-09-04T18:59:54+09:00",
+          "tree_id": "50f71880773f2306d3104bc8c4145087f801d000",
+          "url": "https://github.com/wado-lang/wado/commit/ec9ad47c18da3b01b1d592a025acefeeeeab943f"
+        },
+        "date": 1788516805875,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
