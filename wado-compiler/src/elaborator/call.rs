@@ -2802,6 +2802,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let ImplTargetKey::Decl(def) = key else {
             return None;
         };
+        // A resource declares its own statics whether or not the static index
+        // classified them, so the signature table answers directly for the
+        // ones it did not.
+        if let Some(sig) = self.tysys.signatures.resource_method_sig(def, method_name)
+            && sig.self_kind == ast::SelfKind::None
+        {
+            return Some(sig.clone());
+        }
         self.resource_instance_method(def, method_name)
             .map(|(_, sig)| sig)
     }
