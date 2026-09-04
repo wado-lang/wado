@@ -77,12 +77,13 @@ a loop this pass will splice, and what the threshold judges is that price **less
 the call site it replaces**, so a helper that reads as "a mask and three calls"
 comes in under budget and is pulled into `short` together with all three bodies.
 `#[inline(never)]` is the only way to hold such a helper out of line, and
-reaching for it there is not a claim against the cost model. And a size-matched
-control does not falsify a placement story:
-padding `short` with a dead branch grew the _wasm_ by 196 bytes against the real
-change's 205 and left twitter at exactly 0.820 all three rounds, because a
-compare-and-jump is nothing in machine code next to three inlined `uscale`
-bodies. Wasm bytes are not the unit the effect is measured in.
+reaching for it there is not a claim against the cost model.
+
+A size-matched control does not falsify a placement story either. Padding `short`
+with a dead branch grew the _wasm_ by 196 bytes against the real change's 205 and
+left twitter at exactly 0.820 all three rounds, because a compare-and-jump is
+nothing in machine code next to three inlined `uscale` bodies. Wasm bytes are not
+the unit the effect is measured in.
 
 Generalizes: canada's gain and twitter's loss are one phenomenon, not two. The
 only lever that moves either is whether `short` carries the scaling inline, and
@@ -92,8 +93,8 @@ it moves them in opposite directions.
 
 `uscale` grosses 21 against the -O2 budget of 16, and its four parameters make
 the call site it replaces worth 6, so `net_cost` puts it at 15 and `short`
-carries all three scalings inline. That is the json-canada ser 7% — the whole of
-the -O3 gain on this row — that raising the threshold to 22 also buys, without
+carries all three scalings inline. That buys json-canada ser 7%, the whole of the
+-O3 gain on this row. Raising the threshold to 22 buys the same 7%, along with
 the global bloat the 2026-08-27 entry rules out.
 
 The three arms below were measured while `short` still paid three calls per
@@ -109,15 +110,15 @@ reason that does not turn on how `uscale` is admitted:
   under budget). json-canada de **-2.4%** on its own and nothing measurable on
   ser, on a function the de path never calls. Pure placement.
 - **Returning the two bracketing scalings together** (`uscale_bounds`), to shrink
-  `short` from three calls to two rather than grow it. The inliner takes it
-  anyway — the threshold admits it on its own price, and the growth budget, where
-  a single-site candidate does cost nothing, never gets to veto it — so `short`
-  grew from 87 to 113 dump lines regardless.
+  `short` from three calls to two rather than grow it. The threshold admits it on
+  its own price, and the growth budget, where a single-site candidate costs
+  nothing, never gets to veto it. `short` grew from 87 to 113 dump lines
+  regardless.
 
 Generalizes: at this scale module layout outweighs the instruction saving, in
 both directions. Growing `short` moved json-twitter serialize 2–5% on a hot path
 that is byte-identical bar block-label numbering. So hash the wasm of every row
-first and only measure the ones that differ — three of the five float-touching
+first and only measure the ones that differ. Three of the five float-touching
 benchmarks came out byte-identical, which retires their readings outright and is
 the only reason the surviving numbers mean anything.
 
@@ -145,10 +146,9 @@ pacing.
 
 Generalizes: on a GC-array-backed `String` the digit loop's cost is the one
 `array.set` per byte, which no digit-generation scheme removes. Ablate the
-arithmetic before optimizing it — this is the same finding as the 2026-08-16
-entry below, reached from the opposite direction (a 17-digit chain rather than a
-short one), so the digit count is not the variable that makes it come out
-differently.
+arithmetic before optimizing it. This is the same finding as the 2026-08-16 entry
+below, reached from the opposite direction — a 17-digit chain rather than a short
+one — so the digit count is not what makes it come out differently.
 
 ## i64 divisions in integer formatting (2026-08-16)
 

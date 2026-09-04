@@ -236,11 +236,10 @@ impl<'a> CostWalk<'a> {
     /// What a call to `callee` costs this body: the body it splices, when the
     /// table says this pass will splice it, and the ABI edge otherwise.
     ///
-    /// [`weight::CALL`] is what a call that *stays* a call costs. A driver — a
-    /// callee built out of other inline candidates — reads as a handful of ABI
-    /// edges and comes in cheap, while what its caller receives is every one of
-    /// those bodies. `i64::fmt_decimal` is three such calls, two of them loops,
-    /// and splicing it put the whole integer-writing path into
+    /// [`weight::CALL`] is what a call that *stays* a call costs. The driver it
+    /// describes comes in cheap on its own edges, while its caller receives every
+    /// one of the bodies behind them. `i64::fmt_decimal` is three such calls, two
+    /// of them loops, and splicing it put the whole integer-writing path into
     /// `JsonSerializer::serialize_i64` for -6.9% on json-catalog serialize.
     ///
     /// A site handing the callee *any* constant is charged the edge regardless,
@@ -248,9 +247,9 @@ impl<'a> CostWalk<'a> {
     /// `push_be(buf, bits, 8)` in `CborSerializer::serialize_f64` is that shape,
     /// and charging it costs cbor-canada serialize 24%. The precise question —
     /// does the fold this constant licenses delete a loop — is
-    /// [`fold_drops_loop`], but that reads a [`ConstView`] over the *callee's*
-    /// parameters rather than one site's arguments, so `null`, `false` and a
-    /// radix argument all switch the lookahead off here too.
+    /// [`fold_drops_loop`], but it reads a [`ConstView`] over the *callee's*
+    /// parameters, not one site's arguments, so `null`, `false` and a radix
+    /// argument all switch the lookahead off too.
     fn call_price(&self, callee: FuncId, args: &[ArenaCallArg]) -> usize {
         if args.iter().any(|a| self.arg_is_constant(a.expr)) {
             return weight::CALL;
@@ -709,13 +708,11 @@ pub(super) fn call_site_size(param_count: usize) -> usize {
 /// less the call site it replaces.
 ///
 /// The threshold bounds the caller's *increase*, so this is the quantity it
-/// judges. Comparing `gross` against it instead measures the body against zero,
-/// which prices every callee as if calling it were free and so under-inlines by
-/// exactly the arity: a four-parameter callee whose call site costs six is worth
-/// six more instructions than a nullary one of the same size.
-/// [`call_site_size`] is the same trade [`super::cold_outline`] already makes in
-/// the other direction, weighing a region against the call that would replace
-/// it.
+/// judges. Comparing `gross` against it prices every callee as if calling it
+/// were free, and so under-inlines by exactly the arity: a four-parameter callee
+/// whose call site costs six is worth six more instructions than a nullary one
+/// of the same size. [`super::cold_outline`] makes the same trade in the other
+/// direction, weighing a region against the call that would replace it.
 fn net_cost(gross: usize, param_count: usize) -> usize {
     gross.saturating_sub(call_site_size(param_count))
 }
@@ -1473,19 +1470,18 @@ pub fn inline_functions(
     // What a call to each function costs a caller that splices it, for
     // `CostWalk::splicing`. Every price here is read as written, with calls
     // charged as ABI edges, so the table is one level of lookahead and cannot
-    // recurse. A function this pass leaves alone keeps `0`, and it reads
-    // `splice_barred` / `effective_threshold` so it agrees with `classify_callee`
-    // on which those are.
+    // recurse. It keeps `0` for a function this pass leaves alone, reading
+    // `splice_barred` / `effective_threshold` so it agrees with
+    // `classify_callee` on which those are.
     //
-    // The two still part on one shape. This admission test reads the gross
-    // price, while `classify_callee` reads the price this table produces, so a
-    // driver that its own loopy callees push over the threshold is declined
-    // there and charged to its callers here. Closing that takes a second
-    // lookahead level.
+    // The two disagree on one shape: this admission test reads the gross price,
+    // while `classify_callee` reads the price this table produces, so a driver
+    // that its own loopy callees push over the threshold is declined there and
+    // charged to its callers here. Closing that takes a second lookahead level.
     //
     // Only a callee carrying a loop is priced this way. A loop is what the model
     // charges most to splice, being a region of its own in the caller. Pricing
-    // every inlinable callee by its whole body instead judges a driver by its
+    // every inlinable callee by its whole body judges a driver by its
     // post-inlining size against a threshold calibrated on as-written ones, and
     // that suppresses inlining the CBOR serializers need.
     let spliced: Vec<usize> = project

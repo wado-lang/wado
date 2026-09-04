@@ -1,5 +1,5 @@
 // Test: a variant return whose payload is itself a variant is scalarized at
-// both levels — nothing of `Result<Result<i64, i32>, OuterErr>` is boxed.
+// both levels, leaving nothing of `Result<Result<i64, i32>, OuterErr>` boxed.
 //
 // `Cursor::step` returns `Result<Result<i64, i32>, OuterErr>` (the serde
 // `next_element<Result>` shape). `optimize::sroa_variant_return` flattens the

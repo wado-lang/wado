@@ -116,7 +116,8 @@ impl CandidateKind {
     }
 }
 
-/// Rewrite `&(S { f: v, .. }.f)` to `&v`, so the `&` wraps the aggregate itself.
+/// Rewrite `&(S { f: v, .. }.f)` to `&v`, putting the constant aggregate
+/// directly under the `&`.
 ///
 /// [`CandidateKind::InlineRef`] asks the `&`'s operand to be a constant
 /// *aggregate*, and a projection of one is not, so the borrowed field is rebuilt
@@ -125,7 +126,7 @@ impl CandidateKind {
 /// `&(String { repr: packed"alpha", .. }.repr)`.
 ///
 /// `const_folding::project_struct_literal` reaches the same shape through the
-/// engine and does not stick (#1963); over the arena it does.
+/// engine, where the redirect does not stick (#1963).
 fn deref_const_field_borrows(project: &mut NirPackage) {
     for func_rc in &project.functions {
         let mut func = func_rc.borrow_mut();

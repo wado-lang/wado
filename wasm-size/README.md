@@ -23,8 +23,8 @@ Compares WebAssembly binary sizes across different languages.
 
 Measured 2026-09-04 with rustc 1.98.0, Zig 0.16.0, Moonbit 0.1.20260807, and
 wasi-sdk 33.0. Sizes are toolchain- but not host-dependent, so a row whose
-toolchain has not moved does not need remeasuring — only the `wado` rows have
-since 2026-08-31.
+toolchain has not moved does not need remeasuring. Since 2026-08-31 only the
+`wado` rows have moved.
 
 ### hello_world
 

@@ -212,8 +212,8 @@ fn then_is_pure_slot_copy(then_body: &[WirInstr], slot_local: &str, def_use: &Lo
             _ => false,
         }
     }
-    // The arm can arrive as one `Seq` node rather than as two statements of the
-    // body slice — same shape, one level of nesting on.
+    // The arm can arrive as one `Seq` node, one level of nesting on from the
+    // statement forms below.
     if let [WirInstr::Seq(inner)] = then_body {
         return then_is_pure_slot_copy(inner, slot_local, def_use);
     }
@@ -336,17 +336,16 @@ fn body_calls_any(instr: &WirInstr, ids: &IndexSet<u32>) -> bool {
 /// paying there.
 ///
 /// Splicing the slot trades one heap object for `layout.len()` more values live
-/// across the call. That is the trade SROA width already answers for elsewhere:
-/// past the register file, values live across a call are spill slots reloaded at
-/// every call boundary, and the allocation removed does not price them. Every
-/// benchmark that gains here decodes through callers of at most 93 locals; the
-/// one that loses, cbor-twitter, decodes `User` and `Status` at 307 and 186. The
-/// cut sits between them — see the WEP for the measurements.
+/// across the call. Past the register file those are spill slots reloaded at
+/// every call boundary, which the removed allocation does not pay for. Every
+/// benchmark that gains decodes through callers of at most 93 locals; the one
+/// that loses, cbor-twitter, decodes `User` and `Status` at 307 and 186. The cut
+/// sits between them — the WEP holds the measurements.
 ///
-/// One caller over the cut declines the callee for all of them, not just that
-/// site, because the slot is part of the result signature. Monomorphization is
-/// what keeps that from being blunt: `next_field<S>` is a distinct callee per
-/// struct, so a rule answering per callee still lands per decoded type.
+/// One caller over the cut declines the callee at every site, because the slot
+/// is part of the result signature. Monomorphization keeps that from being
+/// blunt: `next_field<S>` is a distinct callee per struct, so answering per
+/// callee still lands per decoded type.
 const MAX_CALLER_LOCALS: usize = 128;
 
 /// Phase 2: keep candidates whose every call site consumes the slot cleanly.
@@ -358,8 +357,7 @@ pub(super) fn validate_slot_sites(
     // so build it lazily for exactly those — the common leaf/stdlib function
     // that references no candidate skips both the map build and the scan below.
     let cand_ids: IndexSet<u32> = cands.iter().map(|c| c.func_id_index).collect();
-    // `(def_use, declared locals)` for exactly those functions, both taken once
-    // per function rather than once per candidate that lands in it.
+    // Taken once per function, not once per candidate landing in it.
     let sites: Vec<Option<(LocalDefUse, usize)>> = module
         .functions
         .iter()
@@ -735,13 +733,11 @@ fn expand_slot_binds(
 /// The `?` desugar nests the error test as an `else if` carrying the binding's
 /// type. Once the binding is gone the outer `if` is a statement, and an inner
 /// arm still declaring a result leaves its value on the stack — "values
-/// remaining on stack at end of block". Only a node that diverges is touched,
-/// and a diverging one produces no value to begin with, so clearing the
-/// declaration is what makes the type match what the arm actually does.
+/// remaining on stack at end of block". Clearing it is safe because a diverging
+/// node produces no value to declare.
 ///
-/// `Seq` is peeled for the same reason [`then_is_pure_slot_copy`] peels it: the
-/// arm can arrive one level of nesting on, and `always_diverges` sees through
-/// that, so stopping here would clear nothing and emit the invalid block.
+/// `Seq` is peeled because `always_diverges` sees through it, so stopping at one
+/// would clear nothing.
 fn drop_tail_result(body: &mut [WirInstr]) {
     let Some(last) = body.last_mut() else {
         return;

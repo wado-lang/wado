@@ -1,11 +1,11 @@
 // Test: a variant return whose payload is itself a variant is scalarized at
-// both levels — nothing of `Result<Option<i64>, StepErr>` is boxed.
+// both levels, leaving nothing of `Result<Option<i64>, StepErr>` boxed.
 //
 // `Cursor::step` returns `Result<Option<i64>, StepErr>` (the serde
 // `next_element<scalar>` shape). `optimize::sroa_variant_return` flattens the
 // outer variant to `[outer_disc, ref Option<i64>, ref StepErr]` and leaves the
-// inner `Option<i64>` as one slot — a real heap object, since `i64` is not a GC
-// ref and cannot erase to a nullable one.
+// inner `Option<i64>` as one slot, still a real heap object: `i64` is not a GC
+// ref, so the slot cannot erase to a nullable one.
 //
 // `wir_optimize`'s `slot_flatten` then splits that slot into
 // `[inner_disc, i64]` against the `?`-unwrap at the call site, so `step`
