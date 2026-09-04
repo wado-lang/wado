@@ -1,0 +1,394 @@
+// Structs: declaration and construction, generic and bounded fields, inherent
+// methods, and destructuring in every position that takes a pattern.
+
+// --- declaration, construction and methods ---
+
+struct SPoint {
+    x: i32,
+    y: i32,
+}
+
+struct WithUnit {
+    x: i32,
+    nothing: (),
+    y: i32,
+}
+
+struct SBox<T> {
+    value: T,
+}
+
+struct SContainer {
+    box_int: SBox<i32>,
+}
+
+trait SPrintable {
+    fn to_string(&self) -> String;
+}
+
+impl SPrintable for i32 {
+    fn to_string(&self) -> String {
+        return `${*self}`;
+    }
+}
+
+struct SWrapper<T: SPrintable> {
+    value: T,
+}
+
+struct SWrapContainer {
+    wrapped: SWrapper<i32>,
+}
+
+fn create_point(x: i32, y: i32) -> SPoint {
+    return SPoint { x: x, y: y };
+}
+
+fn point_sum(p: SPoint) -> i32 {
+    return p.x + p.y;
+}
+
+fn create_container() -> SContainer {
+    return SContainer { box_int: SBox { value: 42 } };
+}
+
+test "basic" {
+    let p = SPoint { x: 10, y: 20 };
+    assert p.x == 10;
+    assert p.y == 20;
+}
+
+test "mut" {
+    let mut p = SPoint { x: 10, y: 20 };
+    assert p.x == 10;
+    p.x = 100;
+    p.y = 200;
+    assert p.x == 100;
+    assert p.y == 200;
+}
+
+test "implicit basic" {
+    let p: SPoint = { x: 1, y: 2 };
+    assert p.x == 1;
+    assert p.y == 2;
+}
+
+test "implicit shorthand" {
+    let x = 10;
+    let y = 20;
+    let p: SPoint = { x, y };
+    assert p.x == 10;
+    assert p.y == 20;
+}
+
+test "param and return" {
+    let p = create_point(17, 25);
+    assert point_sum(p) == 42;
+}
+
+test "unit field" {
+    let s = WithUnit { x: 10, nothing: (), y: 20 };
+    assert s.x == 10;
+    assert s.y == 20;
+    let u: () = s.nothing;
+    assert s.x + s.y == 30;
+    let mut m = WithUnit { x: 1, nothing: (), y: 2 };
+    m.x = 100;
+    m.nothing = ();
+    m.y = 200;
+    assert m.x == 100;
+    assert m.y == 200;
+}
+
+test "generic field" {
+    let c = create_container();
+    assert c.box_int.value == 42;
+}
+
+test "trait bound generic" {
+    let c = SWrapContainer { wrapped: SWrapper { value: 42 } };
+    assert c.wrapped.value == 42;
+}
+
+impl SPoint {
+    pub fn sum(&self) -> i32 {
+        return self.x + self.y;
+    }
+}
+
+struct SCircle {
+    radius: f64,
+}
+
+impl SCircle {
+    pub fn diameter(&self) -> f64 {
+        return self.radius * 2.0;
+    }
+}
+
+struct SCounter {
+    value: i32,
+    step: i32,
+}
+
+impl SCounter {
+    pub fn get(&self) -> i32 {
+        return self.value;
+    }
+    pub fn get_step(&self) -> i32 {
+        return self.step;
+    }
+    pub fn double(&self) -> i32 {
+        return self.value * 2;
+    }
+    pub fn add_step(&self) -> i32 {
+        return self.value + self.step;
+    }
+}
+
+struct SRectangle {
+    width: i32,
+    height: i32,
+}
+
+impl SRectangle {
+    pub fn area(&self) -> i32 {
+        return self.width * self.height;
+    }
+}
+
+test "impl basic" {
+    let p = SPoint { x: 10, y: 20 };
+    assert p.sum() == 30;
+}
+
+test "impl f64 fields" {
+    let c = SCircle { radius: 5.0 };
+    assert c.diameter() == 10.0;
+}
+
+test "impl multiple methods" {
+    let c = SCounter { value: 10, step: 3 };
+    assert c.get() == 10;
+    assert c.get_step() == 3;
+    assert c.double() == 20;
+    assert c.add_step() == 13;
+}
+
+test "impl two structs" {
+    let p = SPoint { x: 3, y: 4 };
+    let r = SRectangle { width: 5, height: 6 };
+    assert p.sum() == 7;
+    assert r.area() == 30;
+}
+
+global MY_CONST: i32 = 0;
+global ANOTHER: i32 = 1;
+global TypeLike: i32 = 2;
+
+fn dispatch(x: i32) -> i32 {
+    let mut result = -1;
+    if x == MY_CONST {
+        result = 100;
+    } else if x == ANOTHER {
+        result = 200;
+    } else if x == TypeLike {
+        result = 300;
+    }
+    return result;
+}
+
+test "literal restrict condition" {
+    assert dispatch(0) == 100;
+    assert dispatch(1) == 200;
+    assert dispatch(2) == 300;
+    assert dispatch(3) == -1;
+}
+
+// --- destructuring ---
+
+struct SDPoint {
+    x: i32,
+    y: i32,
+}
+
+struct SDLine {
+    start: SDPoint,
+    end: SDPoint,
+}
+
+struct SDPerson {
+    name: String,
+    age: i32,
+    email: String,
+}
+
+struct SDIntPair {
+    label: String,
+    value: i32,
+}
+
+struct SDBoolPair {
+    label: String,
+    flag: bool,
+}
+
+struct SDCharPair {
+    label: String,
+    ch: char,
+}
+
+struct SDStringPair {
+    first: String,
+    second: String,
+}
+
+test "destructure a struct, named and unnamed" {
+    let p = SDPoint { x: 10, y: 20 };
+    let { x, y } = p;
+    assert `${x}, ${y}` == "10, 20";
+    let SDPoint { x: a, y: b } = p;
+    assert `${a}, ${b}` == "10, 20";
+    let { x: x2, .. } = p;
+    assert x2 == 10;
+    let mut { x: mx, y: my } = p;
+    mx += 1;
+    my += 2;
+    assert `${mx}, ${my}` == "11, 22";
+}
+
+test "destructure in a for-of binding" {
+    let points: List<SDPoint> = [
+        SDPoint { x: 1, y: 2 },
+        SDPoint { x: 3, y: 4 },
+        SDPoint { x: 5, y: 6 },
+    ];
+    let mut sums: List<i32> = [];
+    for let { x, y } of points {
+        sums.push(x + y);
+    }
+    assert sums == [3, 7, 11];
+    let mut products: List<i32> = [];
+    for let { x: a, y: b } of points {
+        products.push(a * b);
+    }
+    assert products == [2, 12, 30];
+}
+
+test "destructure in an if let" {
+    let p = SDPoint { x: 5, y: 15 };
+    let mut out: List<String> = [];
+    if let { x, y } = p {
+        out.push(`${x}, ${y}`);
+    }
+    if let SDPoint { x, y } = p {
+        out.push(`${x + y}`);
+    }
+    let person = SDPerson { name: "Alice", age: 30, email: "alice@test.com" };
+    if let { name, .. } = person {
+        out.push(name);
+    }
+    if let { x: a, y: b } = p {
+        out.push(`${a * b}`);
+    }
+    assert out == ["5, 15", "20", "Alice", "75"];
+}
+
+test "destructure a nested struct" {
+    let line = SDLine {
+        start: SDPoint { x: 1, y: 2 },
+        end: SDPoint { x: 3, y: 4 },
+    };
+    let { start: { x: x1, y: y1 }, end: { x: x2, y: y2 } } = line;
+    assert `${x1}, ${y1}, ${x2}, ${y2}` == "1, 2, 3, 4";
+    let { start: { x, .. }, .. } = line;
+    assert x == 1;
+}
+
+test "rename a field while destructuring" {
+    let p = SDPoint { x: 10, y: 20 };
+    let { x: horizontal, y: vertical } = p;
+    assert `${horizontal}, ${vertical}` == "10, 20";
+    let { x, y: vertical2 } = p;
+    assert `${x}, ${vertical2}` == "10, 20";
+    let person = SDPerson { name: "Alice", age: 30, email: "alice@example.com" };
+    let { name: n, .. } = person;
+    assert n == "Alice";
+    let SDPoint { x: a, y: b } = p;
+    assert `${a}, ${b}` == "10, 20";
+}
+
+test "a wildcard discards a field" {
+    let p = SDPoint { x: 10, y: 20 };
+    let { x, y: _ } = p;
+    assert x == 10;
+    let { x: _, y } = p;
+    assert y == 20;
+    let person = SDPerson { name: "Bob", age: 25, email: "bob@example.com" };
+    let { name, age: _, email: _ } = person;
+    assert name == "Bob";
+    let { name: _, age, email: _ } = person;
+    assert age == 25;
+}
+
+test "destructure in a match arm, with a guard" {
+    let p = SDPoint { x: 10, y: 20 };
+    assert match p {
+        { x, y } && x > 0 && y > 0 => "positive",
+        { x, .. } && x > 0 => "positive x",
+        _ => "other",
+    } == "positive";
+    assert match p {
+        SDPoint { x, y } && x + y > 25 => "large",
+        SDPoint { x, y } => "small",
+    } == "large";
+    assert match p {
+        { x: h, y: v } && h == v => `equal: ${h}`,
+        { x: h, y: v } => `${h}, ${v}`,
+    } == "10, 20";
+}
+
+test "destructure inside the matches operator" {
+    let p = SDPoint { x: 10, y: 20 };
+    assert p matches { { x, y } && x > 0 };
+    assert p matches { SDPoint { x, y } && x + y > 25 };
+    let person = SDPerson { name: "Alice", age: 30, email: "alice@test.com" };
+    assert person matches { { age, .. } && age >= 18 };
+    assert !(p matches { { x, y } && x == 0 && y == 0 });
+}
+
+test "a literal in a field position" {
+    let ip = SDIntPair { label: "int", value: 42 };
+    assert match ip {
+        SDIntPair { label, value: 42 } => `matched int: ${label}`,
+        _ => "no match",
+    } == "matched int: int";
+
+    let bp = SDBoolPair { label: "bool", flag: true };
+    assert match bp {
+        SDBoolPair { label, flag: true } => `matched bool: ${label}`,
+        SDBoolPair { label, flag: false } => `not matched: ${label}`,
+    } == "matched bool: bool";
+
+    let cp = SDCharPair { label: "char", ch: 'Z' };
+    assert match cp {
+        SDCharPair { label, ch: 'Z' } => `matched char: ${label}`,
+        _ => "no match",
+    } == "matched char: char";
+
+    let sp = SDStringPair { first: "hello", second: "world" };
+    assert match sp {
+        SDStringPair { first, second: "world" } => `matched string: ${first}`,
+        _ => "no match",
+    } == "matched string: hello";
+
+    let ip2 = SDIntPair { label: "test", value: 0 };
+    let mut hit = "";
+    if let SDIntPair { label, value: 0 } = ip2 {
+        hit = label;
+    }
+    assert hit == "test";
+
+    let bp2 = SDBoolPair { label: "check", flag: false };
+    assert bp2 matches { SDBoolPair { flag: false, .. } };
+}

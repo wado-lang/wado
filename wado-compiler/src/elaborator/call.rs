@@ -1447,14 +1447,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             // Effect operations - pass through to codegen. This covers
             // `Stdout::write()`, etc. Effects/resources have no static-method
-            // registration to check against above, so validate `prefix`
-            // against the declared effect/resource indices directly; a
-            // `prefix` that names neither leaves `callee_opt` `None` so the
-            // caller falls through to the standard "unknown function" error
-            // instead of deferring an unvalidated call to codegen, where it
-            // would panic instead of failing cleanly.
+            // registration to check against above, so validate both halves of
+            // the path against the declaration directly: `prefix` must name an
+            // effect/resource and `suffix` an operation it declares. Either
+            // half unanswered leaves `callee_opt` `None` so the caller falls
+            // through to the standard "unknown function" error instead of
+            // deferring an unvalidated call to codegen, where it would panic
+            // instead of failing cleanly.
             else if let Some(decl) =
                 self.effect_or_resource_decl_at(ident.segments.first().map(|seg| seg.id))
+                && self
+                    .tysys
+                    .signatures
+                    .resource_method_sig(decl, suffix)
+                    .is_some()
             {
                 // Signature resolution, the effect check, dispatch and WIR all
                 // key on the declaration's name; an alias must not split them.

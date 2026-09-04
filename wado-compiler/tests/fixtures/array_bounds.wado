@@ -1,36 +1,127 @@
-use { println, Stdout } from "core:cli";
+// Bounds checks on list access, and the shapes whose check the optimizer can
+// drop. The WIR counts live in `tests/integration/redundant_bce.rs`; these pin
+// the runtime results across optimization levels.
 
-
-// from array_bounds_check.wado
-fn array_bounds_check() with Stdout {
-    let mut arr: List<i32> = [10, 20, 30];
-
-    // Read in-bounds
-    println(`${arr[0]}, ${arr[1]}, ${arr[2]}`);
-
-    // Write in-bounds
-    arr[1] = 99;
-    println(`${arr[1]}`);
+#[inline(never)]
+fn top(stack: &List<i32>) -> i32 {
+    if stack.len() > 0 {
+        return stack[stack.len() - 1];
+    }
+    return -1;
 }
 
-// from array_bounds_elim_redundant.wado
-fn array_bounds_elim_redundant() with Stdout {
+#[inline(never)]
+fn second_last(stack: &List<i32>) -> i32 {
+    if stack.len() > 1 {
+        return stack[stack.len() - 2];
+    }
+    return -1;
+}
+
+#[inline(never)]
+fn bump(end: &mut List<i32>, child: i32, parent: i32) {
+    if end[child] > end[parent] {
+        end[parent] = end[child];
+    }
+}
+
+fn fill_to(xs: &mut List<i32>, limit: i32) {
+    for let mut i = 0; i <= limit; i += 1 {
+        xs[i] = 1;
+    }
+}
+
+fn total(xs: &List<i32>) -> i32 {
+    let mut sum = 0;
+    for let x of *xs {
+        sum += x;
+    }
+    return sum;
+}
+
+test "in-bounds read and write" {
+    let mut arr: List<i32> = [10, 20, 30];
+    assert `${arr[0]}, ${arr[1]}, ${arr[2]}` == "10, 20, 30";
+    arr[1] = 99;
+    assert arr[1] == 99;
+}
+
+test "a constant index into a known-size list" {
+    let arr: List<i32> = [10, 20, 30];
+    assert arr[0] == 10;
+    assert arr[1] == 20;
+    assert arr[2] == 30;
+
+    let a: List<i32> = [1, 2];
+    let b: List<i32> = [10, 20, 30, 40];
+    assert a[0] == 1;
+    assert a[1] == 2;
+    assert b[0] == 10;
+    assert b[3] == 40;
+}
+
+test "write then read at a constant index" {
+    let mut arr: List<i32> = [0, 0, 0];
+    arr[0] = 42;
+    arr[1] = 99;
+    arr[2] = 7;
+    assert arr[0] == 42;
+    assert arr[1] == 99;
+    assert arr[2] == 7;
+}
+
+test "a repeated index is checked once" {
     let arr: List<i32> = [10, 20, 30];
     let mut sum = 0;
     for let mut i = 0; i < arr.len(); i += 1 {
-        // Two accesses with same index — second check should be eliminated
         let a = arr[i];
         let b = arr[i];
         sum += a + b;
     }
     assert sum == 120;
-    println(`${sum}`);
 }
 
-export fn run() with Stdout {
-    array_bounds_check();
-    array_bounds_elim_redundant();
+test "`arr[arr.len() - k]` is unconditionally in bounds" {
+    let s: List<i32> = [3, 7, 4];
+    assert top(&s) == 4;
+    assert second_last(&s) == 7;
+    // The empty-list path is never reached through the index.
+    let e: List<i32> = [];
+    assert top(&e) == -1;
+    assert second_last(&e) == -1;
 }
 
-__DATA__
-{"stdout": "10, 20, 30\n99\n120\n"}
+test "an index checked by the condition is not re-checked in the body" {
+    let mut e: List<i32> = [5, 9, 2, 7];
+    bump(&mut e, 0, 2);
+    assert e[2] == 5;
+    bump(&mut e, 1, 3);
+    assert e[3] == 9;
+    // The no-op branch (9 < 2 is false) leaves e[0] alone.
+    bump(&mut e, 2, 0);
+    assert e[0] == 5;
+}
+
+test "a `<=` loop guard over a list of `limit + 1`" {
+    let limit = 10;
+    let mut arr = List::<i32>::filled(limit + 1, 0);
+    for let mut i = 0; i <= limit; i += 1 {
+        arr[i] = i * i;
+    }
+    let mut sum = 0;
+    for let mut i = 0; i <= limit; i += 1 {
+        sum += arr[i];
+    }
+    assert sum == 385;
+}
+
+test "loop-versioned elimination at its boundaries" {
+    // A zero-iteration loop must leave the list and every local untouched —
+    // the fill idiom guards its one-shot `array.fill` on loop entry — and
+    // `limit == used - 1` is the exact-fit fast path.
+    let mut xs = List::<i32>::filled(4, 0);
+    fill_to(&mut xs, -1);
+    assert total(&xs) == 0;
+    fill_to(&mut xs, 3);
+    assert total(&xs) == 4;
+}

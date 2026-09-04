@@ -31,7 +31,6 @@ use {
 } from "core:prelude/slice.wado";
 use { RangeExclusive, RangeInclusive } from "core:prelude/range.wado";
 use { Formatter } from "core:prelude/format.wado";
-use { i32_clamp, i32_min } from "core:rt";
 
 /// Fixed-length GC array — the builtin storage primitive. Declared
 /// definition-less; its storage and instructions live in the compiler.
@@ -200,7 +199,7 @@ impl<T: Ord> Ord for Array<T> {
     pub fn cmp(&self, other: &Self) -> Ordering {
         let len = builtin::array_len(self);
         let other_len = builtin::array_len(other);
-        let min_len = i32_min(len, other_len);
+        let min_len = i32::min(len, other_len);
         for let mut i = 0; i < min_len; i += 1 {
             let a = builtin::array_get_value(self, i);
             let b = builtin::array_get_value(other, i);

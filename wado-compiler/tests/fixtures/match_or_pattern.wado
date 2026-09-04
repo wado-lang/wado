@@ -1,0 +1,223 @@
+// Or-patterns: over enum cases, variant cases with and without bindings,
+// literals, ranges, and nested inside a struct or tuple pattern.
+
+enum Color {
+    Red,
+    Green,
+    Blue,
+}
+
+enum Direction {
+    North,
+    South,
+    East,
+    West,
+}
+
+variant Shape {
+    Circle(f64),
+    Square(f64),
+    Triangle(f64),
+    Point,
+}
+
+variant Expr {
+    Num(i32),
+    Neg(i32),
+    Zero,
+}
+
+struct P {
+    x: i32,
+    y: i32,
+}
+
+fn describe_color(c: Color) -> String {
+    return match c {
+        Red | Blue => "cool",
+        Green => "warm",
+    };
+}
+
+fn is_horizontal(d: Direction) -> bool {
+    return match d {
+        East | West => true,
+        North | South => false,
+    };
+}
+
+fn describe_direction(d: Direction) -> String {
+    return match d {
+        North | South => "vertical",
+        East | West => "horizontal",
+    };
+}
+
+fn classify_int(n: i32) -> String {
+    return match n {
+        1 | 2 | 3 => "low",
+        4 | 5 | 6 => "mid",
+        _ => "high",
+    };
+}
+
+fn is_round_or_square(s: Shape) -> bool {
+    return s matches { Circle(_) | Square(_) };
+}
+
+fn is_sized(s: Shape) -> bool {
+    if let Circle(_) | Square(_) = s {
+        return true;
+    }
+    return false;
+}
+
+fn abs_value(e: Expr) -> i32 {
+    return match e {
+        Num(n) | Neg(n) => {
+            if n < 0 {
+                return -n;
+            }
+            return n;
+        },
+        Zero => 0,
+    };
+}
+
+fn get_value(e: Expr) -> i32 {
+    if let Num(n) | Neg(n) = e {
+        return n;
+    }
+    return 0;
+}
+
+fn is_reserved(name: &String) -> bool {
+    return match *name {
+        "alpha" | "beta" => true,
+        _ => false,
+    };
+}
+
+fn classify_char(c: char) -> i32 {
+    return match c {
+        '0'..='9' | 'a'..='f' => 1,
+        _ => 0,
+    };
+}
+
+fn or_in_struct(p: P) -> i32 {
+    return match p {
+        { x: 1 | 2, y } => y,
+        _ => -1,
+    };
+}
+
+fn or_in_tuple(pair: [i32, i32]) -> i32 {
+    return match pair {
+        [1 | 3, v] => v,
+        _ => -1,
+    };
+}
+
+fn inclusive_range_in_struct(p: P) -> i32 {
+    return match p {
+        { x: 10..=20, y } => y,
+        _ => -1,
+    };
+}
+
+fn exclusive_range_in_tuple(pair: [i32, i32]) -> i32 {
+    return match pair {
+        [10..<20, v] => v,
+        _ => -1,
+    };
+}
+
+fn char_range_in_tuple(pair: [char, i32]) -> i32 {
+    return match pair {
+        ['a'..='f', v] => v,
+        _ => -1,
+    };
+}
+
+test "or-pattern over enum cases" {
+    assert describe_color(Color::Red) == "cool";
+    assert describe_color(Color::Blue) == "cool";
+    assert describe_color(Color::Green) == "warm";
+
+    assert is_horizontal(Direction::East);
+    assert is_horizontal(Direction::West);
+    assert !is_horizontal(Direction::North);
+    assert !is_horizontal(Direction::South);
+    assert describe_direction(Direction::North) == "vertical";
+    assert describe_direction(Direction::East) == "horizontal";
+}
+
+test "or-pattern over literals" {
+    assert classify_int(1) == "low";
+    assert classify_int(3) == "low";
+    assert classify_int(4) == "mid";
+    assert classify_int(6) == "mid";
+    assert classify_int(7) == "high";
+}
+
+test "or-pattern over variant cases, no bindings" {
+    assert is_round_or_square(Shape::Circle(1.0));
+    assert is_round_or_square(Shape::Square(2.0));
+    assert !is_round_or_square(Shape::Triangle(3.0));
+    assert is_sized(Shape::Circle(1.0));
+    assert is_sized(Shape::Square(2.0));
+    assert !is_sized(Shape::Point);
+}
+
+test "or-pattern alternatives binding the same name" {
+    assert abs_value(Expr::Num(5)) == 5;
+    assert abs_value(Expr::Neg(-3)) == 3;
+    assert abs_value(Expr::Zero) == 0;
+    assert get_value(Expr::Num(42)) == 42;
+    assert get_value(Expr::Neg(-5)) == -5;
+    assert get_value(Expr::Zero) == 0;
+}
+
+test "or-pattern over string literals" {
+    // Pattern lowering rewrites a string-literal or-pattern into `String::eq`
+    // guards against freshly-synthesised literals, which string collection has
+    // to register in the data section — so it must run after pattern lowering.
+    // The scrutinee is built without writing the literals as expressions, so
+    // the pattern-synthesised ones are their only occurrence; unregistered,
+    // they alias data segment 0 and the match silently misbehaves.
+    let mut s = String::with_capacity(4);
+    s.push('b');
+    s.push('e');
+    s.push('t');
+    s.push('a');
+    assert is_reserved(&s);
+}
+
+test "a range is an or-pattern alternative" {
+    assert classify_char('3') == 1;
+    assert classify_char('c') == 1;
+    assert classify_char('x') == 0;
+    assert 'B' matches { 'A'..='Z' | '_' };
+}
+
+// An or-pattern or a range nested inside a struct / tuple pattern: the
+// or-pattern panicked the refutable-extraction lowering ("unsupported nested
+// pattern"), and a nested range was dropped from it altogether — no condition
+// was emitted, so the arm matched whatever the field held.
+
+test "or-pattern nested in a struct or tuple pattern" {
+    assert or_in_struct(P { x: 2, y: 7 }) == 7;
+    assert or_in_struct(P { x: 5, y: 7 }) == -1;
+    assert or_in_tuple([3, 9]) == 9;
+    assert or_in_tuple([4, 9]) == -1;
+}
+
+test "range nested in a struct or tuple pattern" {
+    assert inclusive_range_in_struct(P { x: 20, y: 8 }) == 8;
+    assert inclusive_range_in_struct(P { x: 21, y: 8 }) == -1;
+    assert exclusive_range_in_tuple([19, 5]) == 5;
+    assert exclusive_range_in_tuple([20, 5]) == -1;
+    assert char_range_in_tuple(['c', 6]) == 6;
+    assert char_range_in_tuple(['z', 6]) == -1;
+}

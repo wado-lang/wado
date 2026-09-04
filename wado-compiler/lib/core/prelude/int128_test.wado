@@ -963,3 +963,40 @@ test "u128 to_string round-trips through from_str" {
         assert u128::from_str(&v.to_string()) matches { Ok(p) && p == v };
     }
 }
+
+test "u128 min and max" {
+    let a: u128 = 50;
+    let b: u128 = 100;
+    assert u128::min(a, b) == a;
+    assert u128::max(a, b) == b;
+    assert u128::min(b, a) == a;
+    assert u128::max(a, a) == a;
+}
+
+test "i128 min and max span the sign boundary" {
+    let neg: i128 = -100;
+    let pos: i128 = 100;
+    assert i128::min(neg, pos) == neg;
+    assert i128::max(neg, pos) == pos;
+}
+
+test "u128 clamp confines a value to the range" {
+    let low: u128 = 10;
+    let high: u128 = 20;
+    assert u128::clamp(5, low, high) == low;
+    assert u128::clamp(15, low, high) == 15;
+    assert u128::clamp(25, low, high) == high;
+}
+
+test "i128 clamp confines a value to the range" {
+    let low: i128 = -10;
+    let high: i128 = 10;
+    assert i128::clamp(-20, low, high) == low;
+    assert i128::clamp(0, low, high) == 0;
+    assert i128::clamp(20, low, high) == high;
+}
+
+#[expect_trap]
+test "an empty i128 clamp range is refused" {
+    let _ = i128::clamp(0, 10, -10);
+}

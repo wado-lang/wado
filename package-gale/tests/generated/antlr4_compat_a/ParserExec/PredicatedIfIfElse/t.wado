@@ -1589,13 +1589,8 @@ fn scan_stmt(tokens: &Array<i32>, pos: i32) -> i32 {
             }
             return -1;
         } else if alt_kind == TK_ID {
-            pos = start;
-            try_1: {
-                if pos >= tokens.len() || tokens[pos] != TK_ID { break try_1; }
-                pos += 1;
-                break scan_alts;
-            }
-            return -1;
+            pos = start + 1;
+            break scan_alts;
         } else {
             return -1;
         }

@@ -1,0 +1,67 @@
+// Closures stored in globals: calling one, reassigning one, and formatting
+// both closure IR shapes.
+//
+// Closure construction is not a Wasm constant expression, so the slot starts
+// as `ref.null` and `__initialize_module` writes the real value. The WIR-level
+// global type stayed non-nullable for a closure-typed global (closure types
+// lower to `WirType::AbstractRef`, which the lazy-init nullability widening
+// only covered for `WirType::Ref`), so the placeholder failed validation with
+// "expected (ref struct), found nullref".
+
+global ADD100: fn(i32) -> i32 = |z: i32| z + 100;
+global mut STEP: fn(i32) -> i32 = |z: i32| z * 2;
+global mut CB: fn(i32) -> i32 = |x: i32| x * 10;
+
+global mut COUNTER: i32 = 0;
+global TICK: fn mut () -> i32 = || {
+    COUNTER = COUNTER + 1;
+    return COUNTER;
+};
+
+// A capturing closure is a different IR shape (non-empty env) and reaches its
+// global through a non-const initializer, so it stays a lazy
+// `__initialize_module` assignment.
+global ADD_N: fn(i32) -> i32 = make_adder(42);
+
+fn make_adder(n: i32) -> fn(i32) -> i32 {
+    return |z: i32| z + n;
+}
+
+fn apply(f: fn(i32) -> i32, x: i32) -> i32 {
+    return f(x);
+}
+
+test "a bare call on a closure global lowers to an indirect call" {
+    // The callee is a value of function type, so a named-function lookup would
+    // error with "unknown function".
+    assert ADD100(5) == 105;
+}
+
+test "a closure global is callable after lazy init, and reassignable" {
+    assert apply(CB, 5) == 50;
+    CB = |y: i32| y + 100;
+    assert apply(CB, 5) == 105;
+    STEP = |z: i32| z + 1;
+    assert STEP(5) == 6;
+}
+
+test "a capturing closure global keeps its state" {
+    COUNTER = 0;
+    assert TICK() == 1;
+    assert TICK() == 2;
+}
+
+test "formatting a non-capturing closure global" {
+    // At -O2 `wir/promote_const_global_inits` bakes the empty-env canonical
+    // value — the `ref.func` vtable wrappers included — into the global's
+    // eager `init`. WIR DCE must root and remap those `ref.func`s from the
+    // global initializer, or the wrappers are pruned and codegen emits a
+    // dangling function index.
+    assert `${ADD100:?}` == "|i32| -> i32";
+    assert `${ADD100:#?}` == "|z: i32| (z + 100)";
+}
+
+test "formatting a capturing closure global" {
+    assert `${ADD_N:?}` == "|i32| -> i32";
+    assert `${ADD_N:#?}` == "|z: i32| captures[n] (z + n)";
+}

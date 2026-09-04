@@ -1,0 +1,419 @@
+// `match` as a statement and an expression: guards, `return` from an arm, the
+// never type, block-bodied arms, destructuring, `break` out of an enclosing
+// loop, and the arm-type join at a statement-position match.
+
+enum Foo {
+    A,
+    B,
+    C,
+}
+
+enum Mode {
+    Fill,
+    Process,
+    Done,
+}
+
+enum State {
+    S0,
+    S1,
+    S2,
+    S3,
+    S4,
+    S5,
+    S6,
+    S7,
+    S8,
+    S9,
+    Done,
+    Bad,
+}
+
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+struct S {
+    a: i32,
+}
+
+variant Tree {
+    Leaf(i32),
+    Node([i32, i32]),
+    Empty,
+}
+
+fn helper() -> i32 {
+    return 42;
+}
+
+fn classify(n: i32) -> String {
+    match n {
+        x && x > 0 => { return "positive"; },
+        x && x < 0 => { return "negative"; },
+        _ => { return "zero"; },
+    }
+}
+
+fn first_non_negative(a: i32, b: i32) -> i32 {
+    let result: i32 = match a >= 0 {
+        true => a,
+        false => { return b; },
+    };
+    return result;
+}
+
+fn classify_nested(x: i32) -> String {
+    return match x {
+        _ && x > 0 => {
+            if x > 10 {
+                "big"
+            } else {
+                "small"
+            }
+        },
+        _ => "zero",
+    };
+}
+
+fn classify_builder(x: i32) -> String {
+    return match x {
+        _ && x > 0 => {
+            if x > 10 {
+                let mut s = String::with_capacity(8);
+                s.push_str(&"big");
+                s
+            } else {
+                "small"
+            }
+        },
+        _ => "zero",
+    };
+}
+
+fn lookup(key: String) -> String {
+    return match key {
+        "a" => "alpha",
+        "b" => "beta",
+        _ => {
+            return "unknown";
+        },
+    };
+}
+
+fn classify_by_return(n: i32) -> String {
+    let label = match n {
+        1 => {
+            return "one";
+        },
+        2 => {
+            return "two";
+        },
+        _ => "other",
+    };
+    return label;
+}
+
+fn classify_wide(n: i64) -> i32 {
+    return match n {
+        -5000000000000000000 => 1,
+        5000000000000000000 => 2,
+        0 => 3,
+        1 => 4,
+        2 => 5,
+        3 => 6,
+        4 => 7,
+        5 => 8,
+        _ => 0,
+    };
+}
+
+fn drive_modes() -> i32 {
+    let mut mode = Mode::Fill;
+    let mut leave = false;
+    let mut result = 0;
+    while !leave {
+        match mode {
+            Fill => {
+                let mut i = 0;
+                loop {
+                    if i >= 3 {
+                        break;
+                    }
+                    result += 1;
+                    i += 1;
+                }
+                mode = Mode::Process;
+            },
+            Process => {
+                // This arm's `break` must leave the `while`, not just the match.
+                let mut i = 0;
+                while i < 5 {
+                    if i == 2 {
+                        leave = true;
+                        break;
+                    }
+                    result += 10;
+                    i += 1;
+                }
+                if leave {
+                    break;
+                }
+                // Unreachable once `leave` is set.
+                result += 1000;
+                mode = Mode::Done;
+            },
+            Done => {
+                leave = true;
+            },
+            _ => {
+                leave = true;
+            },
+        };
+    }
+    return result;
+}
+
+fn drive_states() -> i32 {
+    let mut state = State::S0;
+    let mut leave = false;
+    let mut result = 0;
+    while !leave {
+        match state {
+            S0 => { result += 1; state = State::S1; },
+            S1 => { result += 2; state = State::S2; },
+            S2 => { result += 3; state = State::S3; },
+            S3 => { result += 4; state = State::S4; },
+            S4 => { result += 5; state = State::S5; },
+            S5 => {
+                // Deep in the if-else chain: the `break` must leave the
+                // `while`, not a match if-else.
+                let mut i = 0;
+                while i < 3 {
+                    if i == 1 {
+                        leave = true;
+                        break;
+                    }
+                    result += 100;
+                    i += 1;
+                }
+                if leave {
+                    break;
+                }
+                result += 9999;
+                state = State::S6;
+            },
+            S6 => { result += 7; state = State::S7; },
+            S7 => { result += 8; state = State::S8; },
+            S8 => { result += 9; state = State::S9; },
+            S9 => { result += 10; state = State::Done; },
+            Done => { leave = true; },
+            _ => { leave = true; },
+        };
+    }
+    return result;
+}
+
+test "match on an Option" {
+    let some_val: Option<i32> = Option::<i32>::Some(42);
+    let none_val: Option<i32> = null;
+    let x = match some_val {
+        Some(v) => v * 2,
+        None => 0,
+    };
+    assert x == 84;
+    let y = match none_val {
+        Some(v) => v * 2,
+        None => -1,
+    };
+    assert y == -1;
+}
+
+test "a binding pattern with a guard" {
+    assert classify(1) == "positive";
+    assert classify(-1) == "negative";
+    assert classify(0) == "zero";
+}
+
+test "match on string literals" {
+    let text = "hello";
+    let result = match text {
+        "hello" => 1,
+        "world" => 2,
+        _ => 0,
+    };
+    assert result == 1;
+    let other = "other";
+    let result2 = match other {
+        "hello" => 1,
+        "world" => 2,
+        _ => 0,
+    };
+    assert result2 == 0;
+}
+
+test "a diverging arm takes the other arms' type" {
+    let a: Option<i32> = Option::<i32>::Some(1);
+    let x: i32 = match a {
+        Some(v) => v,
+        None => panic("unreachable"),
+    };
+    assert x == 1;
+    let b: Option<i32> = Option::<i32>::Some(2);
+    let y: i32 = match b {
+        None => panic("unreachable"),
+        Some(v) => v,
+    };
+    assert y == 2;
+}
+
+test "an arm that returns from the enclosing function" {
+    assert first_non_negative(5, 10) == 5;
+    assert first_non_negative(-1, 10) == 10;
+    assert lookup("a") == "alpha";
+    assert lookup("b") == "beta";
+    assert lookup("z") == "unknown";
+    assert classify_by_return(1) == "one";
+    assert classify_by_return(2) == "two";
+    assert classify_by_return(3) == "other";
+}
+
+test "an arm body is a block whose value is its tail" {
+    assert classify_nested(5) == "small";
+    assert classify_nested(15) == "big";
+    assert classify_nested(0) == "zero";
+    assert classify_builder(5) == "small";
+    assert classify_builder(15) == "big";
+    assert classify_builder(0) == "zero";
+}
+
+test "struct destructuring" {
+    let p = Point { x: 5, y: 10 };
+    let { x, y } = p;
+    assert x == 5;
+    assert y == 10;
+    let { x: a, y: b } = p;
+    assert a == 5;
+    assert b == 10;
+}
+
+test "match on a variant with guards" {
+    let trees: List<Tree> = [
+        Tree::Leaf(1),
+        Tree::Node([10, 20]),
+        Tree::Empty,
+        Tree::Leaf(99),
+    ];
+    let mut out: List<String> = [];
+    for let tree of trees {
+        out.push(match tree {
+            Leaf(n) && n < 10 => `small leaf(${n})`,
+            Leaf(n) => `leaf(${n})`,
+            Node(pair) => `node(${pair.0},${pair.1})`,
+            Empty => "empty",
+        });
+    }
+    assert out == ["small leaf(1)", "node(10,20)", "empty", "leaf(99)"];
+}
+
+test "match in a loop" {
+    let items: List<Option<i32>> = [
+        Option::Some(1),
+        null,
+        Option::Some(3),
+        null,
+        Option::Some(5),
+    ];
+    let mut sum = 0;
+    for let item of items {
+        match item {
+            Some(n) => { sum += n; },
+            None => {},
+        };
+    }
+    assert sum == 9;
+}
+
+test "if let with and without an else" {
+    let values: List<Option<i32>> = [Option::Some(10), null, Option::Some(30)];
+    let mut out: List<String> = [];
+    for let v of values {
+        if let Some(n) = v {
+            out.push(`got ${n}`);
+        } else {
+            out.push("nothing");
+        }
+    }
+    assert out == ["got 10", "nothing", "got 30"];
+}
+
+// `break` inside a match arm: match compilation generates nested
+// `WirInstr::If` without pushing label entries, so the `break` computed the
+// wrong branch depth.
+
+test "break in a match arm leaves the enclosing while" {
+    assert drive_modes() == 23;
+}
+
+test "break in a match arm deep in a long if-else chain" {
+    assert drive_states() == 115;
+}
+
+test "a match spanning wider than i64 does not overflow the range analysis" {
+    assert classify_wide(-5000000000000000000) == 1;
+    assert classify_wide(5000000000000000000) == 2;
+    assert classify_wide(3) == 6;
+    assert classify_wide(99) == 0;
+}
+
+// In statement position a match's arms may disagree on their body type: the
+// elaborator pins the match to `Unit`, and the WIR builder drops each non-unit
+// arm value so the join point's stack is empty. Without that, an
+// `(if (result i32) …)` whose `_ => {}` branch left nothing on the stack
+// reached `wasmparser` as an invalid module.
+
+test "a statement-position match whose arms disagree on their type" {
+    let x = Foo::A;
+    match x {
+        A => {
+            helper();
+        },
+        _ => {},
+    }
+}
+
+test "`;` stays a separator, not a discard marker" {
+    // A bare expression body, a block ending in an expression with `;`, and
+    // one without: all three arms have type i32 in Wado.
+    match Foo::A {
+        A => helper(),
+        _ => {},
+    }
+    match Foo::A {
+        A => { helper(); },
+        _ => {},
+    }
+    match Foo::A {
+        A => { helper() },
+        _ => {},
+    }
+}
+
+test "an arm discarding a struct field inside a while" {
+    // `let _ = expr;` once lowered to `TirStmtKind::Expr(expr)`, losing the
+    // discard: the block elaborator read it as the trailing expression and
+    // typed the arm — and the match — as `i32`.
+    let mut i = 0;
+    while i < 2 {
+        match i {
+            0 => {
+                let s = S { a: 1 };
+                let _ = s.a;
+            },
+            _ => {},
+        }
+        i += 1;
+    }
+    assert i == 2;
+}

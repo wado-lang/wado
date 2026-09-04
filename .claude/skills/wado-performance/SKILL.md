@@ -230,6 +230,39 @@ mise run benchmark-all > h1.log 2>&1  # …and so on, 3 each
 node benchmark/ab.ts --base b1.log b2.log b3.log --head h1.log h2.log h3.log
 ```
 
+**Hash the wasm before you time anything.** Compile every benchmark under both
+compilers and compare. A row whose bytes are identical cannot have moved, so
+whatever the suite says about it is the host. That is a stronger check than
+timing, and it leaves only the few rows that differ to measure. A
+`field_scalarize` fix came out byte-identical on all but three benchmarks. The
+suite had meanwhile called `fts` 6.9% SLOWER with non-overlapping ranges; the
+identical SHA-256 retired that reading outright.
+
+Gate the compare on each compiler's exit status, not on its output file. A
+compile that failed leaves the previous round's file in place, and comparing
+those reads as "identical". That is the one answer this check must never give by
+accident. Drop the schema modules, which are no world entry point, and give
+`http_routing` the world it targets. Every remaining benchmark must compile, so
+a `FAILED` row is one to go and read, and it carries the diagnostic explaining
+it. `wado compile` reports on stderr even when it succeeds, so its output is
+held back and printed with the failure, which keeps the sweep's own lines
+readable.
+
+```sh
+for f in benchmark/*/*.wado; do
+  case "$f" in *_schema.wado) continue ;; esac
+  world=""
+  case "$f" in */http_routing/*) world="--world wasi:http/service" ;; esac
+  "$base" compile -O2 $world -o /tmp/b.wasm "$f" > /tmp/cc.log 2>&1 \
+    || { echo "FAILED  $f"; cat /tmp/cc.log; continue; }
+  target/release/wado compile -O2 $world -o /tmp/h.wasm "$f" > /tmp/cc.log 2>&1 \
+    || { echo "FAILED  $f"; cat /tmp/cc.log; continue; }
+  cmp -s /tmp/b.wasm /tmp/h.wasm || echo "DIFFERS $f"
+done
+```
+
+Then time only the rows that differ, back to back, and read the rest as unmoved.
+
 `ab.ts` decides each row by whether the arms' `[min, max]` overlap, not by the
 delta: on a 5 ms benchmark a 6% gap between bests sits inside one arm's own
 spread. **Read the reference rows first** — C, Rust and JavaScript run the same
