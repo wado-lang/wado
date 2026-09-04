@@ -3855,17 +3855,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // each other and with where the receiver sits.
         let callee_sig = self.qualified_method_sig(&actual_struct_name, method_name);
 
-        // Propagate #[cm("...")] from resource static methods. A method the
-        // *resource* declares names it as its own owner; one an `impl` block
-        // declares owns to the block, which names no resource, so the spelling
-        // answers there as it did before impl methods were identified.
-        let defs = self.tysys.resolutions.defs();
-        let cm_owner = method_ref
-            .method_id
-            .and_then(|method| defs.parent(method))
-            .filter(|owner| defs.kind(*owner) == crate::defs::DefKind::Resource)
-            .or_else(|| self.decl_key_or_local(&actual_struct_name));
-        let cm_name = self.lookup_resource_static_cm(cm_owner, method_name);
+        // The `#[cm("...")]` import the callee binds, read off the same
+        // signature. A static-only index answers for one kind of method, and an
+        // instance one reached qualified then lost its binding and left reify
+        // emitting a call to a name nothing declares.
+        let cm_name = callee_sig.as_ref().and_then(|sig| sig.cm_name.clone());
 
         let StaticMethodRef {
             module: struct_module,
