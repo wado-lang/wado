@@ -368,22 +368,6 @@ test "u64 narrows in a digit loop" {
     assert digits[4] == 1;
 }
 
-test "wide to narrow casts" {
-    assert 255 as u64 as i32 == 255;
-    assert 1000 as u64 as u32 == 1000 as u32;
-    assert 42 as i64 as i32 == 42;
-    assert 100 as i64 as u32 == 100 as u32;
-}
-
-test "widening and float casts" {
-    assert 42 as f64 == 42.0;
-    assert 3.99 as i32 == 3;
-    let small: i8 = 127;
-    assert small as i32 == 127;
-    let u: u32 = 255;
-    assert u as i64 == 255 as i64;
-}
-
 test "compound assignment" {
     let mut x = 10;
     x += 5;

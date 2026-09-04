@@ -70,6 +70,23 @@ test "a negative i64 narrows by taking the low bits" {
     assert bx.value as u16 == 65535 as u16;
 }
 
+test "widening keeps the value" {
+    assert 42 as f64 == 42.0;
+    let small: i8 = 127;
+    assert small as i32 == 127;
+    let u: u32 = 255;
+    assert u as i64 == 255 as i64;
+}
+
+test "a chained literal cast applies each step" {
+    // The literal is re-typed to the first target, so the second cast narrows
+    // that width rather than the defaulted `i32`.
+    assert 255 as u64 as i32 == 255;
+    assert 1000 as u64 as u32 == 1000 as u32;
+    assert 42 as i64 as i32 == 42;
+    assert 100 as i64 as u32 == 100 as u32;
+}
+
 test "a float literal cast to an integer converts, not re-types" {
     // Reify re-typed any numeric literal operand of an integer-targeted cast
     // so `-9e15 as i64` would not truncate through `i32` before widening. A

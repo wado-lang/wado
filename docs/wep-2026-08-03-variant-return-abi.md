@@ -174,10 +174,9 @@ and to a one-element vector otherwise, and a multi-field case is one slot
 holding a tuple ref (`Shape::Rectangle([f64, f64])` becomes
 `payload_0: ref "tuple//[f64, f64]"`,
 `tests/generated/fixtures/assert_inspect_matches.wir.wado:61`). So
-`MAX_SHARED_RESULT_FIELDS = 4` and the `1 + max_payload_count > 4` guard in
-`layout.rs` can never bind, and
-its `payload_{j}` loops are dead generality. The NIR layout must not carry them
-forward.
+`MAX_SHARED_RESULT_FIELDS = 4`, and the `1 + max_payload_count > 4` guard in
+`layout.rs` can never bind. Its `payload_{j}` loops are dead generality, and the
+NIR layout must not carry them forward.
 
 ### The pass: `nir/sroa_variant_return`
 

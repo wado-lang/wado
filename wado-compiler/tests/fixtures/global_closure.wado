@@ -37,13 +37,12 @@ test "a bare call on a closure global lowers to an indirect call" {
     assert ADD100(5) == 105;
 }
 
-test "a mutable closure global can be reassigned" {
-    STEP = |z: i32| z + 1;
-    assert STEP(5) == 6;
-    CB = |x: i32| x * 10;
+test "a closure global is callable after lazy init, and reassignable" {
     assert apply(CB, 5) == 50;
     CB = |y: i32| y + 100;
     assert apply(CB, 5) == 105;
+    STEP = |z: i32| z + 1;
+    assert STEP(5) == 6;
 }
 
 test "a capturing closure global keeps its state" {
