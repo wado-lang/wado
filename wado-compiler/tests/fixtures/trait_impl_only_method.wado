@@ -1,0 +1,45 @@
+// A trait impl may declare a method the trait does not: a helper the impl's
+// own bodies call on `self`. It is a candidate through that impl alone, so no
+// other impl of the trait answers for the name (WEP 2026-09-01, "The
+// candidates").
+
+trait Greet {
+    fn greet(&self) -> String;
+}
+
+struct Person {
+    name: String,
+}
+
+struct Robot {
+    id: i32,
+}
+
+impl Greet for Person {
+    fn greet(&self) -> String {
+        return self.salute("Hello");
+    }
+
+    fn salute(&self, word: String) -> String {
+        return `${word}, ${self.name}`;
+    }
+}
+
+impl Greet for Robot {
+    fn greet(&self) -> String {
+        return `unit ${self.id}`;
+    }
+}
+
+test "a helper declared in the impl answers for self" {
+    let p = Person { name: "Ada" };
+    assert p.greet() == "Hello, Ada";
+}
+
+test "the helper reaches no other impl of the trait" {
+    let r = Robot { id: 7 };
+    assert r.greet() == "unit 7";
+}
+
+__DATA__
+{"test": {}}

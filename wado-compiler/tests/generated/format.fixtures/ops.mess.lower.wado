@@ -717,27 +717,9 @@ pub struct "IterFilter<core:prelude/string.wado/StrUtf8ByteIter>" {
     pub pred: fn mut(u8) -> bool,
 }
 
-pub struct "SliceRefIter<u8>" {
-    repr: &Array<u8>,
-    index: i32,
-    end: i32,
-}
-
 pub struct "SliceValueIter<u8>" {
     repr: &Array<u8>,
     index: i32,
-    end: i32,
-}
-
-pub struct "SliceValueIter<i32>" {
-    repr: &Array<i32>,
-    index: i32,
-    end: i32,
-}
-
-pub struct "Slice<i32>" {
-    repr: &Array<i32>,
-    start: i32,
     end: i32,
 }
 
@@ -819,38 +801,6 @@ pub struct "StructField<core:prelude/types.wado/StreamChunk<u8>,core:prelude/lis
     is_secret: bool,
 }
 
-pub struct "StructField<core:prelude/slice.wado/Slice<i32>,i32>" {
-    index: i32,
-    field_name: String,
-    wire_override: Option<String>,
-    has_default: bool,
-    is_secret: bool,
-}
-
-pub struct "StructField<core:prelude/slice.wado/Slice<i32>,&Array<i32>>" {
-    index: i32,
-    field_name: String,
-    wire_override: Option<String>,
-    has_default: bool,
-    is_secret: bool,
-}
-
-pub struct "StructField<core:prelude/slice.wado/SliceValueIter<i32>,i32>" {
-    index: i32,
-    field_name: String,
-    wire_override: Option<String>,
-    has_default: bool,
-    is_secret: bool,
-}
-
-pub struct "StructField<core:prelude/slice.wado/SliceValueIter<i32>,&Array<i32>>" {
-    index: i32,
-    field_name: String,
-    wire_override: Option<String>,
-    has_default: bool,
-    is_secret: bool,
-}
-
 pub struct "StructField<core:prelude/slice.wado/SliceValueIter<u8>,i32>" {
     index: i32,
     field_name: String,
@@ -860,22 +810,6 @@ pub struct "StructField<core:prelude/slice.wado/SliceValueIter<u8>,i32>" {
 }
 
 pub struct "StructField<core:prelude/slice.wado/SliceValueIter<u8>,&Array<u8>>" {
-    index: i32,
-    field_name: String,
-    wire_override: Option<String>,
-    has_default: bool,
-    is_secret: bool,
-}
-
-pub struct "StructField<core:prelude/slice.wado/SliceRefIter<u8>,i32>" {
-    index: i32,
-    field_name: String,
-    wire_override: Option<String>,
-    has_default: bool,
-    is_secret: bool,
-}
-
-pub struct "StructField<core:prelude/slice.wado/SliceRefIter<u8>,&Array<u8>>" {
     index: i32,
     field_name: String,
     wire_override: Option<String>,
@@ -1827,10 +1761,6 @@ pub struct "Box<core:prelude/types.wado/Option<core:prelude/string.wado/StrUtf8B
 
 pub struct "Box<core:prelude/types.wado/Option<fn mut(u8)->bool>>" {
     value: Option<fn mut(u8) -> bool>,
-}
-
-pub struct "Box<core:prelude/types.wado/Option<&Array<i32>>>" {
-    value: Option<&Array<i32>>,
 }
 
 pub struct "Box<core:prelude/types.wado/Option<core:prelude/list.wado/List<u8>>>" {
@@ -11588,18 +11518,6 @@ pub fn "core:prelude/format.wado/Alignment^core:prelude/traits.wado/Reflect::wir
     return CaseStyle::Identity;
 }
 
-pub fn "core:prelude/format.wado/Alignment^core:prelude/traits.wado/Ord::cmp"(self: Box<core:prelude/format.wado/Alignment>, other: Box<core:prelude/format.wado/Alignment>) -> Ordering {
-    let a: Alignment = self.value;
-    let b: Alignment = other.value;
-    if (a < b) {
-        return Ordering::Less;
-    }
-    if (a > b) {
-        return Ordering::Greater;
-    }
-    return Ordering::Equal;
-}
-
 pub fn "fn mut(char)->bool^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(char)->bool>, f: &mut Formatter);
 
 pub fn "fn mut(u8)->()^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(u8)->()>, f: &mut Formatter);
@@ -12757,21 +12675,6 @@ pub fn "$field_get$core:prelude/traits.wado/IterFilter<core:prelude/string.wado/
     };
 }
 
-pub fn "$field_get$core:prelude/slice.wado/SliceRefIter<u8>$&Array<u8>"(v: &SliceRefIter<u8>, index: i32) -> &Array<u8> {
-    return match index {
-        0 => v.repr,
-        _ => core::builtin::unreachable(),
-    };
-}
-
-pub fn "$field_get$core:prelude/slice.wado/SliceRefIter<u8>$i32"(v: &SliceRefIter<u8>, index: i32) -> i32 {
-    return match index {
-        1 => v.index,
-        2 => v.end,
-        _ => core::builtin::unreachable(),
-    };
-}
-
 pub fn "$field_get$core:prelude/slice.wado/SliceValueIter<u8>$&Array<u8>"(v: &SliceValueIter<u8>, index: i32) -> &Array<u8> {
     return match index {
         0 => v.repr,
@@ -12782,36 +12685,6 @@ pub fn "$field_get$core:prelude/slice.wado/SliceValueIter<u8>$&Array<u8>"(v: &Sl
 pub fn "$field_get$core:prelude/slice.wado/SliceValueIter<u8>$i32"(v: &SliceValueIter<u8>, index: i32) -> i32 {
     return match index {
         1 => v.index,
-        2 => v.end,
-        _ => core::builtin::unreachable(),
-    };
-}
-
-pub fn "$field_get$core:prelude/slice.wado/SliceValueIter<i32>$&Array<i32>"(v: &SliceValueIter<i32>, index: i32) -> &Array<i32> {
-    return match index {
-        0 => v.repr,
-        _ => core::builtin::unreachable(),
-    };
-}
-
-pub fn "$field_get$core:prelude/slice.wado/SliceValueIter<i32>$i32"(v: &SliceValueIter<i32>, index: i32) -> i32 {
-    return match index {
-        1 => v.index,
-        2 => v.end,
-        _ => core::builtin::unreachable(),
-    };
-}
-
-pub fn "$field_get$core:prelude/slice.wado/Slice<i32>$&Array<i32>"(v: &Slice<i32>, index: i32) -> &Array<i32> {
-    return match index {
-        0 => v.repr,
-        _ => core::builtin::unreachable(),
-    };
-}
-
-pub fn "$field_get$core:prelude/slice.wado/Slice<i32>$i32"(v: &Slice<i32>, index: i32) -> i32 {
-    return match index {
-        1 => v.start,
         2 => v.end,
         _ => core::builtin::unreachable(),
     };
@@ -16389,44 +16262,6 @@ pub fn "$case_construct$core:prelude/types.wado/Option<fn mut(u8)->bool>$()"(pay
 }
 
 pub fn "$variant_tag$core:prelude/types.wado/Option<fn mut(u8)->bool>"(self: Box<core:prelude/types.wado/Option<fn mut(u8)->bool>>) -> i32 {
-    return __variant_tag(self.value);
-}
-
-pub fn "$case_extract$core:prelude/types.wado/Option<&Array<i32>>$&Array<i32>"(v: Box<core:prelude/types.wado/Option<&Array<i32>>>, index: i32) -> &Array<i32> {
-    if (__variant_tag(v.value) != index) {
-        core::builtin::unreachable();
-    };
-    return match index {
-        0 => __variant_payload(v.value, case=0),
-        _ => core::builtin::unreachable(),
-    };
-}
-
-pub fn "$case_construct$core:prelude/types.wado/Option<&Array<i32>>$&Array<i32>"(payload: &Array<i32>, index: i32) -> Option<&Array<i32>> {
-    return match index {
-        0 => Option<&Array<i32>>::Some(payload),
-        _ => core::builtin::unreachable(),
-    };
-}
-
-pub fn "$case_extract$core:prelude/types.wado/Option<&Array<i32>>$()"(v: Box<core:prelude/types.wado/Option<&Array<i32>>>, index: i32) {
-    if (__variant_tag(v.value) != index) {
-        core::builtin::unreachable();
-    };
-    return match index {
-        1 => __variant_payload(v.value, case=1),
-        _ => core::builtin::unreachable(),
-    };
-}
-
-pub fn "$case_construct$core:prelude/types.wado/Option<&Array<i32>>$()"(payload: (), index: i32) -> Option<&Array<i32>> {
-    return match index {
-        1 => Option<&Array<i32>>::None,
-        _ => core::builtin::unreachable(),
-    };
-}
-
-pub fn "$variant_tag$core:prelude/types.wado/Option<&Array<i32>>"(self: Box<core:prelude/types.wado/Option<&Array<i32>>>) -> i32 {
     return __variant_tag(self.value);
 }
 

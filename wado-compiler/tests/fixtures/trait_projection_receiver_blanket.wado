@@ -1,0 +1,20 @@
+// A receiver mentioning an associated-type projection (`List<I::Item>` under
+// `I: Iterator`) lowers with the projection as a type of its own, so the impl
+// written for the head answers for it (WEP 2026-09-01).
+
+fn count<I: Iterator>(mut it: I) -> i32 {
+    let xs: List<I::Item> = it.collect();
+    let mut n = 0;
+    for let _x of &xs {
+        n += 1;
+    }
+    return n;
+}
+
+test "a projection inside a receiver's arguments lowers with it" {
+    let xs: List<i32> = [1, 2, 3];
+    assert count(xs.into_iter()) == 3;
+}
+
+__DATA__
+{"test": {}}

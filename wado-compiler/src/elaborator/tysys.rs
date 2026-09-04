@@ -58,7 +58,9 @@ pub(crate) struct TypeSystem {
     /// across every per-module elaborator via `Arc`.
     pub(crate) trait_env: Arc<TraitEnv>,
     /// The solver's view of the program, built once every declaration is
-    /// resolved; `None` until then (WEP 2026-09-01, "How the order is guaranteed").
+    /// resolved and `None` until then. Selection asks it in every profile, so
+    /// that a debug and a release build cannot choose different impls
+    /// (WEP 2026-09-01).
     pub(crate) solver: Option<Rc<super::solver_bridge::SolverBridge>>,
 
     /// Registries the elaborator queries. The Component-Model

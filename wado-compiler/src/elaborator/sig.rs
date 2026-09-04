@@ -357,9 +357,6 @@ impl TraitSig {
 /// method it declares, and a use site reads them without naming a method.
 #[derive(Clone, Debug)]
 pub(crate) struct ImplSig {
-    /// The impl target as the block's own frame resolved it — `Self` inside
-    /// the block. Carries the block's slots where the target is generic.
-    pub(crate) self_type: TypeId,
     /// The impl target's type arguments (`K`, `V` in `impl … for Map<K, V>`).
     /// A slot appears as its own `TypeParam` / `TypePack`, so aligning a
     /// receiver's arguments against this list says which slot each fills.
@@ -622,7 +619,6 @@ mod tests {
     fn partially_concrete_impl(table: &RefCell<TypeTable>) -> ImplSig {
         let v = table.borrow_mut().make_type_param("V".to_string(), 1);
         ImplSig {
-            self_type: TypeTable::UNKNOWN,
             target_type_args: vec![TypeTable::U8, v],
             trait_type_args: vec![TypeTable::I32],
             associated_types: [("Output".to_string(), v)].into_iter().collect(),

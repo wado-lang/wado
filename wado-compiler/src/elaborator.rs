@@ -680,7 +680,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         let statics = self
             .static_method_entries(receiver, method_name)
             .map(|e| e.method_id);
-        let mut seen = std::collections::HashSet::new();
+        let mut seen = crate::hashmap::IndexSet::default();
         statics
             .chain(self.impl_method_decl_ids(receiver, method_name))
             .filter(move |def| seen.insert(*def))
