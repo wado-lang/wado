@@ -78,17 +78,16 @@ import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-read
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
 global mut global:bug_float_to_int_cast_fold.wado::__modules_initialized: bool = 0;
-global global:core:prelude/primitive.wado::__const_obj_3: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
+global global:bug_float_to_int_cast_fold.wado::__const_obj_0: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(52, 52), used: 2 };
+global global:bug_float_to_int_cast_fold.wado::__const_obj_1: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(50, 49, 52, 55, 52, 56, 51, 54, 52, 55), used: 10 };
+global global:bug_float_to_int_cast_fold.wado::__const_obj_2: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(45, 55), used: 2 };
+global global:core:prelude/primitive.wado::__const_obj_7: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
 
 fn "bug_float_to_int_cast_fold.wado/to_u8"(f) {
     return builtin::i32_trunc_f64_u(f) & 255;
 }
 
 fn "bug_float_to_int_cast_fold.wado/run"() with Stdout {
-    let __local_0: ref "core:prelude/string.wado//String";
-    let __local_2: ref "core:prelude/string.wado//String";
-    let __local_4_4: ref "core:prelude/string.wado//String";
-    let __local_6: ref "core:prelude/string.wado//String";
     let __local_8: ref "core:prelude/string.wado//String";
     let handle_13: i32;
     let packed_21: i64;
@@ -117,33 +116,25 @@ fn "bug_float_to_int_cast_fold.wado/run"() with Stdout {
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:bug_float_to_int_cast_fold.wado::__modules_initialized = 1;
     };
-    __local_0 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(44, __local_0);
     rx_22 = builtin::i32_wrap_i64(local.tee packed_21("wasi/stream-new"()));
     tx_23 = builtin::i32_wrap_i64(packed_21 >> 32_i64);
     handle_13 = "bug_float_to_int_cast_fold.wado/__cm_binding__Stdout_write_via_stream"(rx_22);
-    "core:rt/write_string_to_stream"(tx_23, __local_0, 1);
+    "core:rt/write_string_to_stream"(tx_23, global:bug_float_to_int_cast_fold.wado::__const_obj_0, 1);
     "wasi/future-drop-readable:transmission-cli"(handle_13);
-    __local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(-7, __local_2);
     rx_40 = builtin::i32_wrap_i64(local.tee packed_39("wasi/stream-new"()));
     tx_41 = builtin::i32_wrap_i64(packed_39 >> 32_i64);
     handle_31 = "bug_float_to_int_cast_fold.wado/__cm_binding__Stdout_write_via_stream"(rx_40);
-    "core:rt/write_string_to_stream"(tx_41, __local_2, 1);
+    "core:rt/write_string_to_stream"(tx_41, global:bug_float_to_int_cast_fold.wado::__const_obj_2, 1);
     "wasi/future-drop-readable:transmission-cli"(handle_31);
-    __local_4_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(2147483647, __local_4_4);
     rx_58 = builtin::i32_wrap_i64(local.tee packed_57("wasi/stream-new"()));
     tx_59 = builtin::i32_wrap_i64(packed_57 >> 32_i64);
     handle_49 = "bug_float_to_int_cast_fold.wado/__cm_binding__Stdout_write_via_stream"(rx_58);
-    "core:rt/write_string_to_stream"(tx_59, __local_4_4, 1);
+    "core:rt/write_string_to_stream"(tx_59, global:bug_float_to_int_cast_fold.wado::__const_obj_1, 1);
     "wasi/future-drop-readable:transmission-cli"(handle_49);
-    __local_6 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(44, __local_6);
     rx_76 = builtin::i32_wrap_i64(local.tee packed_75("wasi/stream-new"()));
     tx_77 = builtin::i32_wrap_i64(packed_75 >> 32_i64);
     handle_67 = "bug_float_to_int_cast_fold.wado/__cm_binding__Stdout_write_via_stream"(rx_76);
-    "core:rt/write_string_to_stream"(tx_77, __local_6, 1);
+    "core:rt/write_string_to_stream"(tx_77, global:bug_float_to_int_cast_fold.wado::__const_obj_0, 1);
     "wasi/future-drop-readable:transmission-cli"(handle_67);
     __local_8 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(local.tee self_91("bug_float_to_int_cast_fold.wado/to_u8"(-1)), __local_8);
@@ -307,7 +298,7 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(self, f) {
         };
         break __inline_count_digits_u64_1: n;
     };
-    offset_5 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write$spec0$scalar"(f, is_negative, global:core:prelude/primitive.wado::__const_obj_3, digit_count_4);
+    offset_5 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write$spec0$scalar"(f, is_negative, global:core:prelude/primitive.wado::__const_obj_7, digit_count_4);
     arr = f.repr;
     pos = offset_5 + digit_count_4;
     t_15 = abs_val;
