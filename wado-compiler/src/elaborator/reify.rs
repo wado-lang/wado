@@ -5264,10 +5264,20 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let unique_id = ctx.next_local;
         let mut stmts: Vec<TirStmt> = Vec::new();
         let mut fields: Vec<TirStructField> = Vec::new();
-        let holes = tagged.template.interpolations();
-        for (k, (expr, &hole_ty)) in holes.zip(&hole_types).enumerate() {
-            let mut value = self.reify_expr(expr, ctx, None);
-            if !self.is_place_for_hole(expr, ctx) {
+        let holes: Vec<&ast::Expr> = tagged.template.interpolations().collect();
+        let values: Vec<TirExpr> = holes
+            .iter()
+            .map(|expr| self.reify_expr(expr, ctx, None))
+            .collect();
+        // A place is read where it stands only while nothing between there and
+        // the call can write it. The struct literal is built after every
+        // hoisted hole has run, so a place followed by a hole that is not one
+        // is read too late and must be bound at its own position instead.
+        let last_hoisted = values.iter().rposition(|v| !Self::is_place_hole(v));
+        for (k, ((expr, mut value), &hole_ty)) in
+            holes.iter().zip(values).zip(&hole_types).enumerate()
+        {
+            if last_hoisted.is_some_and(|last| k <= last) {
                 let name = format!("__hole_{unique_id}_{k}");
                 let local_index = ctx.add_local(name.clone(), hole_ty, false, None);
                 stmts.push(TirStmt::new(
@@ -5321,11 +5331,15 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             template_ty,
             span,
         );
+        // The template is the tag's one written argument; a trailing parameter
+        // with a default is filled here, as it is for a spelled call.
+        let mut args = vec![CallArg::new(literal, false)];
+        self.reify_pad_dispatch_defaults(&tagged.tag, &mut args, &dispatch, span, ctx);
         let call = TirExpr::new(
             TirExprKind::Call {
                 type_args: dispatch.type_args,
                 func: Box::new(dispatch.function_ref),
-                args: vec![CallArg::new(literal, false)],
+                args,
                 has_receiver: false,
             },
             recorded_type,
@@ -5354,21 +5368,20 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         )
     }
 
-    /// Whether a hole expression names storage the template literal can read
-    /// or borrow in situ: a local, a parameter, a global, or a field chain
-    /// rooted at one. Anything else is evaluated once into a temporary.
-    fn is_place_for_hole(&self, expr: &ast::Expr, ctx: &FunctionContext) -> bool {
-        match expr {
-            ast::Expr::Ident(ident) => {
-                !ident.name.contains("::")
-                    && (ctx.lookup(&ident.name).is_some()
-                        || self
-                            .sem
-                            .decls
-                            .lookup_global(&ident.name, &self.current_module_source)
-                            .is_some())
+    /// Whether a reified hole names storage the template literal can read or
+    /// borrow in situ: a local, a parameter, a global, or a field or element
+    /// chain rooted at one. Anything else computes a value, which the literal
+    /// reads once from a temporary instead.
+    ///
+    /// Decided on the reified value rather than the hole's spelling, so it
+    /// answers by what the hole *is* — resolution already settled that — and
+    /// not by a name looked up a second time.
+    fn is_place_hole(value: &TirExpr) -> bool {
+        match &value.kind {
+            TirExprKind::Local { .. } | TirExprKind::GlobalVarGet { .. } => true,
+            TirExprKind::FieldAccess { expr, .. } | TirExprKind::Index { expr, .. } => {
+                Self::is_place_hole(expr)
             }
-            ast::Expr::FieldAccess(f) => self.is_place_for_hole(&f.expr, ctx),
             _ => false,
         }
     }
@@ -7752,6 +7765,36 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// Pad missing trailing positional args with the callee's
     /// declared defaults. Mirrors `Elaborator::pad_args_with_defaults`
     /// Only bare-ident free functions have defaults.
+    /// Pad `args` with the defaults the call omitted, for either shape a
+    /// dispatch names: a free function's parameter list, or a static method's
+    /// own. Neither answers for the other, so both are asked.
+    fn reify_pad_dispatch_defaults(
+        &mut self,
+        callee: &ast::Expr,
+        args: &mut Vec<crate::tir::CallArg>,
+        dispatch: &crate::elaborator::sem::types::StaticMethodDispatch,
+        span: crate::token::Span,
+        ctx: &mut FunctionContext,
+    ) {
+        self.reify_pad_args_with_defaults(
+            callee,
+            args,
+            &dispatch.param_types,
+            &dispatch.function_ref.module_source.clone(),
+            &dispatch.function_ref.name.clone(),
+            ctx,
+        );
+        let module = dispatch.function_ref.module_source.clone();
+        self.reify_apply_param_defaults(
+            args,
+            &dispatch.param_defaults,
+            &dispatch.param_types,
+            &module,
+            span,
+            ctx,
+        );
+    }
+
     fn reify_pad_args_with_defaults(
         &mut self,
         callee: &ast::Expr,
@@ -8030,25 +8073,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     CallArg::new(arg, is_mut)
                 })
                 .collect();
-            self.reify_pad_args_with_defaults(
-                &call.callee,
-                &mut arg_exprs,
-                &dispatch.param_types,
-                &dispatch.function_ref.module_source,
-                &dispatch.function_ref.name,
-                ctx,
-            );
-            // A `::`-qualified `Type::method()` is a static-method dispatch, so
-            // the free-function pad above finds nothing; apply its own defaults.
-            let smc_module = dispatch.function_ref.module_source.clone();
-            self.reify_apply_param_defaults(
-                &mut arg_exprs,
-                &dispatch.param_defaults,
-                &dispatch.param_types,
-                &smc_module,
-                span,
-                ctx,
-            );
+            self.reify_pad_dispatch_defaults(&call.callee, &mut arg_exprs, &dispatch, span, ctx);
             // Type args: replay exactly what the production builder put on
             // the `Call`. This already folds in any explicit turbofish and,
             // crucially, carries only the method-level type args — a generic

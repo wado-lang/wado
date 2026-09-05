@@ -1208,51 +1208,9 @@ impl AstVisitor for SemEffectWalker<'_> {
     fn visit_expr(&mut self, expr: &Expr) {
         match expr {
             Expr::Call(call) => {
-                // Free calls resolve through `references` on the callee
-                // identifier. `Type::method(...)` / `Self::method(...)` parse as
-                // a `Call` with a path callee whose identifier has no free-
-                // function reference; they resolve through
-                // `static_method_dispatch` keyed by the call id. (Free
-                // functions also appear in `static_method_dispatch`, so try
-                // `references` first — it is the authoritative free-call edge.)
-                let free = if let Expr::Ident(ident) = &call.callee {
-                    self.sem.referenced_symbol(ident.id).and_then(|def| {
-                        self.index
-                            .fn_effects
-                            .get(&def)
-                            .map(|effects| (def, effects.clone(), ident.name.clone()))
-                    })
-                } else {
-                    None
-                };
-                let dispatches: Vec<(FunctionRef, bool)> = self
-                    .annotations
-                    .into_iter()
-                    .flat_map(|ann| ann.static_dispatches(call.id))
-                    .map(|dispatch| (dispatch.function_ref.clone(), dispatch.self_in_args))
-                    .collect();
-                if let Some((def, effects, name)) = free {
-                    let params = self.index.fn_params.get(&def).cloned().unwrap_or_default();
-                    let resolved = self.resolve_effect_params(&effects, &params, false, &call.args);
-                    self.report_missing(&resolved, &name, call.span);
-                } else if !dispatches.is_empty() {
-                    let receiver_site = match &call.callee {
-                        Expr::Ident(ident) => ident.segments.first().map(|seg| seg.id),
-                        _ => None,
-                    };
-                    for (func_ref, self_in_args) in dispatches {
-                        let mut effects = self.method_effects(&func_ref);
-                        effects.extend(self.effect_op_requirement(&func_ref, receiver_site));
-                        let params = self.method_param_types(&func_ref);
-                        // A qualified (UFCS) call spells the receiver as its
-                        // first argument, so the args already align with the
-                        // callee's full parameter list — no self skip.
-                        let is_method = func_ref.method_info.is_some() && !self_in_args;
-                        let resolved =
-                            self.resolve_effect_params(&effects, &params, is_method, &call.args);
-                        self.report_missing(&resolved, callee_name(&call.callee), call.span);
-                    }
-                } else if let Some(callee_type) = self.indirect_callee_type(call) {
+                if !self.check_call_effects(&call.callee, call.id, &call.args, call.span)
+                    && let Some(callee_type) = self.indirect_callee_type(call)
+                {
                     // Indirect call: the callee is a function-typed value (a
                     // closure or `fn(...)` parameter). Its type carries the
                     // effects it performs when invoked.
@@ -1262,6 +1220,11 @@ impl AstVisitor for SemEffectWalker<'_> {
                         self.report_missing(&effects, "(indirect call)", call.span);
                     }
                 }
+            }
+            // A tag call is a call: annotate records its callee under the
+            // template's own id, so the same lookup answers for it.
+            Expr::TaggedTemplate(tagged) => {
+                self.check_call_effects(&tagged.tag, tagged.id, &[], tagged.span);
             }
             Expr::MethodCall(method_call) => {
                 let sem = self.sem;
@@ -1326,6 +1289,65 @@ impl AstVisitor for SemEffectWalker<'_> {
 impl SemEffectWalker<'_> {
     fn method_param_types(&self, func_ref: &FunctionRef) -> Vec<TypeId> {
         self.index.method_param_types(func_ref)
+    }
+
+    /// Report the effects the callee named at `id` performs. `false` when
+    /// nothing names it, which for a spelled call means an indirect one.
+    ///
+    /// A free call resolves through `references` on the callee identifier.
+    /// `Type::method(...)` / `Self::method(...)` parse as a `Call` with a path
+    /// callee whose identifier has no free-function reference; they resolve
+    /// through `static_method_dispatch` keyed by the call id. (Free functions
+    /// also appear there, so `references` is tried first — it is the
+    /// authoritative free-call edge.)
+    fn check_call_effects(
+        &mut self,
+        callee: &Expr,
+        id: crate::ast::AstId,
+        args: &[Expr],
+        span: crate::token::Span,
+    ) -> bool {
+        let free = if let Expr::Ident(ident) = callee {
+            self.sem.referenced_symbol(ident.id).and_then(|def| {
+                self.index
+                    .fn_effects
+                    .get(&def)
+                    .map(|effects| (def, effects.clone(), ident.name.clone()))
+            })
+        } else {
+            None
+        };
+        if let Some((def, effects, name)) = free {
+            let params = self.index.fn_params.get(&def).cloned().unwrap_or_default();
+            let resolved = self.resolve_effect_params(&effects, &params, false, args);
+            self.report_missing(&resolved, &name, span);
+            return true;
+        }
+        let dispatches: Vec<(FunctionRef, bool)> = self
+            .annotations
+            .into_iter()
+            .flat_map(|ann| ann.static_dispatches(id))
+            .map(|dispatch| (dispatch.function_ref.clone(), dispatch.self_in_args))
+            .collect();
+        if dispatches.is_empty() {
+            return false;
+        }
+        let receiver_site = match callee {
+            Expr::Ident(ident) => ident.segments.first().map(|seg| seg.id),
+            _ => None,
+        };
+        for (func_ref, self_in_args) in dispatches {
+            let mut effects = self.method_effects(&func_ref);
+            effects.extend(self.effect_op_requirement(&func_ref, receiver_site));
+            let params = self.method_param_types(&func_ref);
+            // A qualified (UFCS) call spells the receiver as its first
+            // argument, so the args already align with the callee's full
+            // parameter list — no self skip.
+            let is_method = func_ref.method_info.is_some() && !self_in_args;
+            let resolved = self.resolve_effect_params(&effects, &params, is_method, args);
+            self.report_missing(&resolved, callee_name(callee), span);
+        }
+        true
     }
 
     /// Type of an indirect call's callee, preferring the enclosing function's

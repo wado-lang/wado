@@ -846,7 +846,6 @@ fn build_formatter_literal(
     )
 }
 
-/// Strip all `Ref` and `MutRef` wrappers from a type, returning the inner type.
 /// The type an interpolation dispatches its format trait on. Refs are
 /// irrelevant to which trait renders the value, except under `Inspect`, where
 /// `&x` renders as `&42` through the ref blanket.
@@ -862,6 +861,7 @@ fn interpolation_dispatch_type(
     }
 }
 
+/// Strip all `Ref` and `MutRef` wrappers from a type, returning the inner type.
 fn strip_refs(type_id: TypeId, tt: &Rc<RefCell<TypeTable>>) -> TypeId {
     let mut current = type_id;
     loop {

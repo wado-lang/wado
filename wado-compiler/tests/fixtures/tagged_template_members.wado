@@ -15,16 +15,6 @@ fn describe<T: ReflectTemplate<Holes = [..V]>, ..V>(t: T) -> String {
     return out;
 }
 
-fn raw<T: ReflectTemplate<Holes = [..V]>, ..V>(t: T) -> String {
-    let mut out = "";
-    for let h of ReflectTemplate::<T>::members() {
-        out.push_str(&h.raw());
-        h.fmt(&t, &mut Formatter::new(&mut out));
-    }
-    out.push_str(&ReflectTemplate::<T>::raw_tail());
-    return out;
-}
-
 struct Pt {
     x: i32,
     y: i32,
@@ -35,7 +25,7 @@ export fn run() with Stdout {
     let n = builtin::black_box(255);
     let p = Pt { x: 1, y: 2 };
     println(describe`a\t${pi:.2}b\n${n:#x}c${p:?}`);
-    println(raw`x\t${n}\n`);
+    println(String::raw`x\t${n}\n`);
     println(describe`no holes\n`);
 }
 

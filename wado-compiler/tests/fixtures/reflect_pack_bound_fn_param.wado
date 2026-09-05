@@ -1,0 +1,35 @@
+// A pack projected off an associated type is bound-checked against its own
+// parameter. The pairing walks the dense type-argument space, which drops
+// effect *and* `fn`-bound parameters, so a `fn`-bound parameter declared
+// before the subject does not shift every later bound onto the wrong argument.
+use { println, Stdout } from "core:cli";
+
+trait Marker {
+    fn mark(&self) -> String;
+}
+
+impl Marker for i32 {
+    fn mark(&self) -> String {
+        return `i${*self}`;
+    }
+}
+
+fn walk<G: fn(i32) -> i32, S: ReflectStruct<FieldTypes = [..F]>, ..F: Marker>(g: G, v: &S) -> String {
+    let mut out = "";
+    for let f of ReflectStruct::<S>::members() {
+        out.push_str(&f.get(v).mark());
+    }
+    return `${g(1)}:${out}`;
+}
+
+struct Pair {
+    a: i32,
+    b: i32,
+}
+
+export fn run() with Stdout {
+    println(walk(|x| x + 1, &Pair { a: 3, b: 4 }));
+}
+
+__DATA__
+{"stdout": "2:i3i4\n"}

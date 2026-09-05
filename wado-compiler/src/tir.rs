@@ -826,6 +826,8 @@ pub struct TypeTable {
     anon_structs: Vec<AnonEntry>,
     /// Dedup for the above: the same shape in the same module is one id.
     anon_struct_index: IndexMap<(ModuleSource, AnonShape), AnonStructId>,
+    /// Every mangle handed out, so a template shape's hash cannot name two.
+    anon_struct_mangles: IndexSet<(ModuleSource, String)>,
     /// `(WIT name, generated module)` of each type declaration, for
     /// [`Self::cm_decl_in`]. Built with [`Self::attach_defs`], so it answers at
     /// any point in the pipeline rather than only after a declaration's type is
@@ -960,6 +962,7 @@ impl TypeTable {
             variant_case_index: IndexMap::default(),
             anon_structs: Vec::new(),
             anon_struct_index: IndexMap::default(),
+            anon_struct_mangles: IndexSet::default(),
             decl_index: IndexMap::default(),
             extern_handle_resources: IndexSet::default(),
             resource_parents: IndexMap::default(),
@@ -1318,7 +1321,16 @@ impl TypeTable {
             return id;
         }
         let id = AnonStructId(u32::try_from(self.anon_structs.len()).expect("anon struct space"));
-        let mangle = self.render_shape(&key.1, &|tt, ty| tt.mangle_type_arg_for_generic(ty));
+        let mut mangle = self.render_shape(&key.1, &|tt, ty| tt.mangle_type_arg_for_generic(ty));
+        // A template shape renders as a hash of its text, so two shapes can
+        // collide; the mangle is the whole identity of a shape, and sharing
+        // one would give both the other's bridges. Widen the loser instead.
+        while !self
+            .anon_struct_mangles
+            .insert((key.0.clone(), mangle.clone()))
+        {
+            mangle.push('_');
+        }
         self.anon_structs.push(AnonEntry {
             module: key.0.clone(),
             shape: key.1.clone(),

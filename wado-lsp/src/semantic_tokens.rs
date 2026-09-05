@@ -1340,6 +1340,23 @@ mod tests {
         );
     }
 
+    /// A tag is the function the template calls, so it colours as one. The
+    /// backtick must be adjacent: with a gap the name is an ordinary variable
+    /// and the template a separate literal, which is what the parser reads too.
+    #[test]
+    fn template_tag_is_a_function() {
+        let tagged = "fn run() {\n    let a = sql`x`;\n}\n";
+        assert_eq!(
+            kind_of(&compute(tagged, None), tagged, 1, "sql"),
+            token_type::FUNCTION,
+        );
+        let gapped = "fn run() {\n    let a = sql `x`;\n}\n";
+        assert_eq!(
+            kind_of(&compute(gapped, None), gapped, 1, "sql"),
+            token_type::VARIABLE,
+        );
+    }
+
     /// `b'0'` lexes as its own token kind, which the literal arm did not
     /// list — so it fell through to punctuation and went uncoloured.
     #[test]

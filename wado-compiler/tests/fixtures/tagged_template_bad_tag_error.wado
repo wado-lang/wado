@@ -1,0 +1,11 @@
+// A tag names a function or a static method. A variant case, a closure-typed
+// binding and an abstract `T::method` are paths too, but none of them is a
+// call reify can build the template into (WEP 2026-01-10, Known gaps).
+export fn run() {
+    let case = Option::Some`x`;
+    let f = |t: i32| t;
+    let closure = f`y`;
+}
+
+__DATA__
+{"compile_error": "a template tag must name a function or a static method"}

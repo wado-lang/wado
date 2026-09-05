@@ -2273,44 +2273,24 @@ impl TypeSystem {
 
 impl<H: CompilerHost> Elaborator<'_, H> {
     /// Check trait bounds on a generic function's type arguments.
-    /// Looks up the function's type params and validates bounds against the provided type args.
+    ///
+    /// A type argument list is dense: an effect parameter and a `fn`-bound one
+    /// hold no slot in it (see [`ast::GenericParam::is_real_type_param`], the
+    /// filter inference and projection pair by). Zipping the declared list
+    /// instead would shift every parameter after one of those onto the next
+    /// argument's bounds.
     pub(super) fn check_function_type_arg_bounds(
         &mut self,
         callee: &CalleeRef,
         type_args: &[TypeId],
         span: Span,
     ) {
-        let type_params = self.lookup_function_type_params(callee);
+        let type_params: Vec<ast::GenericParam> = self
+            .lookup_function_type_params(callee)
+            .into_iter()
+            .filter(ast::GenericParam::is_real_type_param)
+            .collect();
         self.enforce_type_arg_bounds(&type_params, type_args, span);
-    }
-
-    /// Enforce the bounds of the type arguments an associated-type projection
-    /// just made concrete: those parametric in `before` and concrete in
-    /// `after`. Every other argument was checked before the projection, so
-    /// asking it again would report a failure twice.
-    pub(super) fn check_projected_type_arg_bounds(
-        &mut self,
-        callee: &CalleeRef,
-        before: &[TypeId],
-        after: &[TypeId],
-        span: Span,
-    ) {
-        let type_params = self.lookup_function_type_params(callee);
-        let tt = self.tysys.type_table.clone();
-        // An effect param holds no type-arg slot, so the pairing is dense.
-        let (params, args): (Vec<ast::GenericParam>, Vec<TypeId>) = type_params
-            .iter()
-            .filter(|p| !p.is_effect)
-            .zip(after.iter().copied())
-            .enumerate()
-            .filter(|(i, (_, arg))| {
-                let tt = tt.borrow();
-                before.get(*i).is_some_and(|&b| tt.contains_type_param(b))
-                    && !tt.contains_type_param(*arg)
-            })
-            .map(|(_, (param, arg))| (param.clone(), arg))
-            .unzip();
-        self.enforce_type_arg_bounds(&params, &args, span);
     }
 
     /// The single enforcement of trait bounds on a generic decl's type args,

@@ -172,10 +172,16 @@ __tagged: {
 
 `id` is an `i32`, so its hole holds the value; `user.name` is a `String`, so
 its hole holds the handle. A hole that is a place — a local, a global, a field
-path rooted at one — is read or borrowed where it stands. Any other hole
-expression is evaluated once, left to right, into a local of the block, which
-the literal then reads or borrows. The holes are evaluated before the tag is
-called and in source order, the same order an untagged template evaluates them.
+or element path rooted at one — is read or borrowed where it stands. Any other
+hole expression is evaluated once into a local of the block, which the literal
+then reads or borrows.
+
+The holes are evaluated in source order, the order an untagged template
+evaluates them, and the literal is built after the last of them. So a place is
+read in situ only while nothing after it can write it: a place followed by a
+hole that is not one is bound at its own position too, and the tag sees the
+value the place held there. That is what holds `` format`${a} ${bump(&mut a)}` ``
+to what `` `${a} ${bump(&mut a)}` `` renders.
 
 The struct literal is the only place the synthesized type is built. Passing it
 by value copies scalars and handles; the storage behind a hole is never copied,
@@ -543,6 +549,11 @@ synthesis and the fold; then the prelude tags and fixtures.
 - A tag with a turbofish (`` f::<T>`…` ``): the bare-turbofish path leaves the
   identifier's span at the name, so adjacency fails and the site is a syntax
   error. Nothing needs it yet.
+- A tag that is not a function or a static method — a variant case, a
+  closure-typed binding, an abstract `T::method` — is a diagnostic. Each
+  resolves through a call path that records no dispatch, so reify has nothing
+  to rebuild. `T::method` is the one worth opening: it needs that path to
+  carry the typed argument and record a dispatch of its own.
 - The monomorphization-time diagnostics the variadic WEP lists — call site,
   element index, body location — are what a failing tag body reports through,
   and are still open there.
