@@ -187,15 +187,21 @@ The third, later the same day, is the parser's: every `_kind_set_*` is
 up — an indirect branch on a data-dependent key, 4.5% self in `_kind_set_4`
 alone — and `nir/match_to_bitset` now makes it a branch-free mask test
 (`_kind_set_37` is one unsigned compare, its members being contiguous). The
-functions then inline at every site. Four alternating pairs, ranges disjoint:
+functions then inline at every site. Whole branch against `origin/main`, four
+alternating pairs, ranges disjoint:
 
-| ms/iter          | before      | after       |
+| ms/iter          | main        | branch      |
 | ---------------- | ----------- | ----------- |
-| syntax-highlight | 1.443–1.517 | 1.338–1.364 |
-| sqlite-parse     | 1.150–1.160 | 1.037–1.127 |
+| syntax-highlight | 1.535–1.576 | 1.199–1.291 |
+| sqlite-parse     | 1.137–1.166 | 0.940–0.989 |
 
 That retires the "multi-token guard re-test" item below as a cost: the
 re-tested `_kind_set_37` is now a subtract and a compare.
+
+The generated lexer's char classes are the same shape and were the review's
+finding: a range member (`'0'..='9'`) was refused at first, so `latn_match`
+and the first-char dispatch kept their cascades. They lower now too, which is
+where sqlite-parse's share of the gain comes from.
 
 Still on the table in the highlight half: `HighlightVisitor::new` re-resolves a
 fully static mapping on every call — ~170 `capture_id_of` scans and the
