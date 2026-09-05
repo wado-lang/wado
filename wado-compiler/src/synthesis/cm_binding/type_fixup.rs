@@ -402,7 +402,10 @@ fn fixup_types_in_block(
     }
 }
 
-/// Fix up an expression in a Let statement that might hold adapter intermediate values.
+/// Fix up an expression in a Let statement that might hold adapter intermediate
+/// values: a method-call result, or the initial value of the lifted result — a
+/// `ref.null` for a nullable-ref `Option`, a `None` construct for a GC-variant
+/// one (`Option<Element>`, whose payload is a handle).
 fn fixup_adapter_let(
     expr: &mut TirExpr,
     local_index: u32,
@@ -412,26 +415,19 @@ fn fixup_adapter_let(
     locals: &mut [TirLocal],
 ) {
     let should_fix = expr.type_id == TypeTable::I32 || expr.type_id == old_type;
-    match &mut expr.kind {
-        TirExprKind::Call { func, .. } if func.method_info.is_some() => {
-            if should_fix {
-                expr.type_id = new_type;
-                *let_type_id = new_type;
-                if (local_index as usize) < locals.len() {
-                    locals[local_index as usize].type_id = new_type;
-                }
-            }
-        }
-        TirExprKind::Null => {
-            if should_fix {
-                expr.type_id = new_type;
-                *let_type_id = new_type;
-                if (local_index as usize) < locals.len() {
-                    locals[local_index as usize].type_id = new_type;
-                }
-            }
-        }
-        _ => {}
+    let holds_intermediate = match &expr.kind {
+        TirExprKind::Call { func, .. } => func.method_info.is_some(),
+        TirExprKind::Null | TirExprKind::VariantConstruct { .. } => true,
+        _ => false,
+    };
+    if !(should_fix && holds_intermediate) {
+        return;
+    }
+    fixup_variant_construct(expr, old_type, new_type);
+    expr.type_id = new_type;
+    *let_type_id = new_type;
+    if (local_index as usize) < locals.len() {
+        locals[local_index as usize].type_id = new_type;
     }
 }
 

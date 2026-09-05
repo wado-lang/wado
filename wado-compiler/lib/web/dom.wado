@@ -1,55 +1,1055 @@
+#![generated(by = "wado-from-idl", sources = ["wado-compiler/lib/web/dom.webidl.json"])]
 #![stdlib("web:dom")]
 
-/// The DOM entry points, which hand out the first handle.
-#[cm("web:dom/global")]
-pub interface Dom {
-    #[cm("web:dom/global#document")]
-    fn document() -> Document;
+#[cm("web:dom/event-target", type = "extern-handle")]
+pub resource EventTarget {
+    #[cm("web:dom/event-target#new")]
+    fn new() -> EventTarget;
+    #[cm("web:dom/event-target#dispatch-event")]
+    #[cm_params("self", "event")]
+    fn dispatch_event(&self, event: Event) -> bool;
 }
 
 #[cm("web:dom/event", type = "extern-handle")]
 pub resource Event {
     #[cm("web:dom/event#new")]
-    #[cm_params("event-type")]
-    fn new(event_type: String) -> Event;
-}
-
-#[cm("web:dom/event-target", type = "extern-handle")]
-pub resource EventTarget {
-    #[cm("web:dom/event-target#dispatch-event")]
-    #[cm_params("self", "event")]
-    fn dispatch_event(&self, event: &Event) -> bool;
+    #[cm_params("type")]
+    fn new(type_: String) -> Event;
+    #[cm("web:dom/event#type")]
+    #[cm_params("self")]
+    fn type_(&self) -> String;
+    #[cm("web:dom/event#target")]
+    #[cm_params("self")]
+    fn target(&self) -> Option<EventTarget>;
+    #[cm("web:dom/event#src-element")]
+    #[cm_params("self")]
+    fn src_element(&self) -> Option<EventTarget>;
+    #[cm("web:dom/event#current-target")]
+    #[cm_params("self")]
+    fn current_target(&self) -> Option<EventTarget>;
+    #[cm("web:dom/event#event-phase")]
+    #[cm_params("self")]
+    fn event_phase(&self) -> u16;
+    #[cm("web:dom/event#stop-propagation")]
+    #[cm_params("self")]
+    fn stop_propagation(&self);
+    #[cm("web:dom/event#cancel-bubble")]
+    #[cm_params("self")]
+    fn cancel_bubble(&self) -> bool;
+    #[cm("web:dom/event#set-cancel-bubble")]
+    #[cm_params("self", "value")]
+    fn set_cancel_bubble(&self, value: bool);
+    #[cm("web:dom/event#stop-immediate-propagation")]
+    #[cm_params("self")]
+    fn stop_immediate_propagation(&self);
+    #[cm("web:dom/event#bubbles")]
+    #[cm_params("self")]
+    fn bubbles(&self) -> bool;
+    #[cm("web:dom/event#cancelable")]
+    #[cm_params("self")]
+    fn cancelable(&self) -> bool;
+    #[cm("web:dom/event#return-value")]
+    #[cm_params("self")]
+    fn return_value(&self) -> bool;
+    #[cm("web:dom/event#set-return-value")]
+    #[cm_params("self", "value")]
+    fn set_return_value(&self, value: bool);
+    #[cm("web:dom/event#prevent-default")]
+    #[cm_params("self")]
+    fn prevent_default(&self);
+    #[cm("web:dom/event#default-prevented")]
+    #[cm_params("self")]
+    fn default_prevented(&self) -> bool;
+    #[cm("web:dom/event#composed")]
+    #[cm_params("self")]
+    fn composed(&self) -> bool;
+    #[cm("web:dom/event#is-trusted")]
+    #[cm_params("self")]
+    fn is_trusted(&self) -> bool;
+    #[cm("web:dom/event#time-stamp")]
+    #[cm_params("self")]
+    fn time_stamp(&self) -> f64;
+    #[cm("web:dom/event#init-event")]
+    #[cm_params("self", "type", "bubbles", "cancelable")]
+    fn init_event(&self, type_: String, bubbles: Option<bool>, cancelable: Option<bool>);
 }
 
 #[cm("web:dom/node", type = "extern-handle")]
 pub resource Node extends EventTarget {
+    #[cm("web:dom/node#node-type")]
+    #[cm_params("self")]
+    fn node_type(&self) -> u16;
+    #[cm("web:dom/node#node-name")]
+    #[cm_params("self")]
+    fn node_name(&self) -> String;
+    #[cm("web:dom/node#base-uri")]
+    #[cm_params("self")]
+    fn base_uri(&self) -> String;
+    #[cm("web:dom/node#is-connected")]
+    #[cm_params("self")]
+    fn is_connected(&self) -> bool;
+    #[cm("web:dom/node#owner-document")]
+    #[cm_params("self")]
+    fn owner_document(&self) -> Option<Document>;
+    #[cm("web:dom/node#get-root-node")]
+    #[cm_params("self")]
+    fn get_root_node(&self) -> Node;
+    #[cm("web:dom/node#parent-node")]
+    #[cm_params("self")]
+    fn parent_node(&self) -> Option<Node>;
+    #[cm("web:dom/node#parent-element")]
+    #[cm_params("self")]
+    fn parent_element(&self) -> Option<Element>;
+    #[cm("web:dom/node#has-child-nodes")]
+    #[cm_params("self")]
+    fn has_child_nodes(&self) -> bool;
+    #[cm("web:dom/node#first-child")]
+    #[cm_params("self")]
+    fn first_child(&self) -> Option<Node>;
+    #[cm("web:dom/node#last-child")]
+    #[cm_params("self")]
+    fn last_child(&self) -> Option<Node>;
+    #[cm("web:dom/node#previous-sibling")]
+    #[cm_params("self")]
+    fn previous_sibling(&self) -> Option<Node>;
+    #[cm("web:dom/node#next-sibling")]
+    #[cm_params("self")]
+    fn next_sibling(&self) -> Option<Node>;
+    #[cm("web:dom/node#node-value")]
+    #[cm_params("self")]
+    fn node_value(&self) -> Option<String>;
+    #[cm("web:dom/node#set-node-value")]
+    #[cm_params("self", "value")]
+    fn set_node_value(&self, value: Option<String>);
     #[cm("web:dom/node#text-content")]
     #[cm_params("self")]
-    fn text_content(&self) -> String;
+    fn text_content(&self) -> Option<String>;
     #[cm("web:dom/node#set-text-content")]
     #[cm_params("self", "value")]
-    fn set_text_content(&self, value: String);
+    fn set_text_content(&self, value: Option<String>);
+    #[cm("web:dom/node#normalize")]
+    #[cm_params("self")]
+    fn normalize(&self);
+    #[cm("web:dom/node#clone-node")]
+    #[cm_params("self", "subtree")]
+    fn clone_node(&self, subtree: Option<bool>) -> Node;
+    #[cm("web:dom/node#is-equal-node")]
+    #[cm_params("self", "other-node")]
+    fn is_equal_node(&self, other_node: Option<Node>) -> bool;
+    #[cm("web:dom/node#is-same-node")]
+    #[cm_params("self", "other-node")]
+    fn is_same_node(&self, other_node: Option<Node>) -> bool;
+    #[cm("web:dom/node#compare-document-position")]
+    #[cm_params("self", "other")]
+    fn compare_document_position(&self, other: Node) -> u16;
+    #[cm("web:dom/node#contains")]
+    #[cm_params("self", "other")]
+    fn contains(&self, other: Option<Node>) -> bool;
+    #[cm("web:dom/node#lookup-prefix")]
+    #[cm_params("self", "namespace")]
+    fn lookup_prefix(&self, namespace: Option<String>) -> Option<String>;
+    #[cm("web:dom/node#lookup-namespace-uri")]
+    #[cm_params("self", "prefix")]
+    fn lookup_namespace_uri(&self, prefix: Option<String>) -> Option<String>;
+    #[cm("web:dom/node#is-default-namespace")]
+    #[cm_params("self", "namespace")]
+    fn is_default_namespace(&self, namespace: Option<String>) -> bool;
+    #[cm("web:dom/node#insert-before")]
+    #[cm_params("self", "node", "child")]
+    fn insert_before(&self, node: Node, child: Option<Node>) -> Node;
     #[cm("web:dom/node#append-child")]
+    #[cm_params("self", "node")]
+    fn append_child(&self, node: Node) -> Node;
+    #[cm("web:dom/node#replace-child")]
+    #[cm_params("self", "node", "child")]
+    fn replace_child(&self, node: Node, child: Node) -> Node;
+    #[cm("web:dom/node#remove-child")]
     #[cm_params("self", "child")]
-    fn append_child(&self, child: &Node) -> Node;
+    fn remove_child(&self, child: Node) -> Node;
 }
 
 #[cm("web:dom/element", type = "extern-handle")]
 pub resource Element extends Node {
+    #[cm("web:dom/element#namespace-uri")]
+    #[cm_params("self")]
+    fn namespace_uri(&self) -> Option<String>;
+    #[cm("web:dom/element#prefix")]
+    #[cm_params("self")]
+    fn prefix(&self) -> Option<String>;
+    #[cm("web:dom/element#local-name")]
+    #[cm_params("self")]
+    fn local_name(&self) -> String;
+    #[cm("web:dom/element#tag-name")]
+    #[cm_params("self")]
+    fn tag_name(&self) -> String;
     #[cm("web:dom/element#id")]
     #[cm_params("self")]
     fn id(&self) -> String;
     #[cm("web:dom/element#set-id")]
     #[cm_params("self", "value")]
     fn set_id(&self, value: String);
-    #[cm("web:dom/element#tag-name")]
+    #[cm("web:dom/element#class-name")]
     #[cm_params("self")]
-    fn tag_name(&self) -> String;
+    fn class_name(&self) -> String;
+    #[cm("web:dom/element#set-class-name")]
+    #[cm_params("self", "value")]
+    fn set_class_name(&self, value: String);
+    #[cm("web:dom/element#slot")]
+    #[cm_params("self")]
+    fn slot(&self) -> String;
+    #[cm("web:dom/element#set-slot")]
+    #[cm_params("self", "value")]
+    fn set_slot(&self, value: String);
+    #[cm("web:dom/element#has-attributes")]
+    #[cm_params("self")]
+    fn has_attributes(&self) -> bool;
+    #[cm("web:dom/element#get-attribute")]
+    #[cm_params("self", "qualified-name")]
+    fn get_attribute(&self, qualified_name: String) -> Option<String>;
+    #[cm("web:dom/element#get-attribute-ns")]
+    #[cm_params("self", "namespace", "local-name")]
+    fn get_attribute_ns(&self, namespace: Option<String>, local_name: String) -> Option<String>;
+    #[cm("web:dom/element#set-attribute")]
+    #[cm_params("self", "qualified-name", "value")]
+    fn set_attribute(&self, qualified_name: String, value: String);
+    #[cm("web:dom/element#set-attribute-ns")]
+    #[cm_params("self", "namespace", "qualified-name", "value")]
+    fn set_attribute_ns(&self, namespace: Option<String>, qualified_name: String, value: String);
+    #[cm("web:dom/element#remove-attribute")]
+    #[cm_params("self", "qualified-name")]
+    fn remove_attribute(&self, qualified_name: String);
+    #[cm("web:dom/element#remove-attribute-ns")]
+    #[cm_params("self", "namespace", "local-name")]
+    fn remove_attribute_ns(&self, namespace: Option<String>, local_name: String);
+    #[cm("web:dom/element#toggle-attribute")]
+    #[cm_params("self", "qualified-name", "force")]
+    fn toggle_attribute(&self, qualified_name: String, force: Option<bool>) -> bool;
+    #[cm("web:dom/element#has-attribute")]
+    #[cm_params("self", "qualified-name")]
+    fn has_attribute(&self, qualified_name: String) -> bool;
+    #[cm("web:dom/element#has-attribute-ns")]
+    #[cm_params("self", "namespace", "local-name")]
+    fn has_attribute_ns(&self, namespace: Option<String>, local_name: String) -> bool;
+    #[cm("web:dom/element#closest")]
+    #[cm_params("self", "selectors")]
+    fn closest(&self, selectors: String) -> Option<Element>;
+    #[cm("web:dom/element#matches")]
+    #[cm_params("self", "selectors")]
+    fn matches_(&self, selectors: String) -> bool;
+    #[cm("web:dom/element#webkit-matches-selector")]
+    #[cm_params("self", "selectors")]
+    fn webkit_matches_selector(&self, selectors: String) -> bool;
+    #[cm("web:dom/element#insert-adjacent-element")]
+    #[cm_params("self", "where", "element")]
+    fn insert_adjacent_element(&self, where: String, element: Element) -> Option<Element>;
+    #[cm("web:dom/element#insert-adjacent-text")]
+    #[cm_params("self", "where", "data")]
+    fn insert_adjacent_text(&self, where: String, data: String);
+    #[cm("web:dom/element#set-html")]
+    #[cm_params("self", "html")]
+    fn set_html(&self, html: String);
+    #[cm("web:dom/element#set-html-unsafe")]
+    #[cm_params("self", "html")]
+    fn set_html_unsafe(&self, html: String);
+    #[cm("web:dom/element#get-html")]
+    #[cm_params("self")]
+    fn get_html(&self) -> String;
+    #[cm("web:dom/element#inner-html")]
+    #[cm_params("self")]
+    fn inner_html(&self) -> String;
+    #[cm("web:dom/element#set-inner-html")]
+    #[cm_params("self", "value")]
+    fn set_inner_html(&self, value: String);
+    #[cm("web:dom/element#outer-html")]
+    #[cm_params("self")]
+    fn outer_html(&self) -> String;
+    #[cm("web:dom/element#set-outer-html")]
+    #[cm_params("self", "value")]
+    fn set_outer_html(&self, value: String);
+    #[cm("web:dom/element#insert-adjacent-html")]
+    #[cm_params("self", "position", "string")]
+    fn insert_adjacent_html(&self, position: String, string: String);
+    #[cm("web:dom/element#first-element-child")]
+    #[cm_params("self")]
+    fn first_element_child(&self) -> Option<Element>;
+    #[cm("web:dom/element#last-element-child")]
+    #[cm_params("self")]
+    fn last_element_child(&self) -> Option<Element>;
+    #[cm("web:dom/element#child-element-count")]
+    #[cm_params("self")]
+    fn child_element_count(&self) -> u32;
+    #[cm("web:dom/element#prepend")]
+    #[cm_params("self")]
+    fn prepend(&self);
+    #[cm("web:dom/element#append")]
+    #[cm_params("self")]
+    fn append(&self);
+    #[cm("web:dom/element#replace-children")]
+    #[cm_params("self")]
+    fn replace_children(&self);
+    #[cm("web:dom/element#move-before")]
+    #[cm_params("self", "node", "child")]
+    fn move_before(&self, node: Node, child: Option<Node>);
+    #[cm("web:dom/element#query-selector")]
+    #[cm_params("self", "selectors")]
+    fn query_selector(&self, selectors: String) -> Option<Element>;
+    #[cm("web:dom/element#previous-element-sibling")]
+    #[cm_params("self")]
+    fn previous_element_sibling(&self) -> Option<Element>;
+    #[cm("web:dom/element#next-element-sibling")]
+    #[cm_params("self")]
+    fn next_element_sibling(&self) -> Option<Element>;
+    #[cm("web:dom/element#before")]
+    #[cm_params("self")]
+    fn before(&self);
+    #[cm("web:dom/element#after")]
+    #[cm_params("self")]
+    fn after(&self);
+    #[cm("web:dom/element#replace-with")]
+    #[cm_params("self")]
+    fn replace_with(&self);
+    #[cm("web:dom/element#remove")]
+    #[cm_params("self")]
+    fn remove(&self);
+}
+
+#[cm("web:dom/html-element", type = "extern-handle")]
+pub resource HtmlElement extends Element {
+    #[cm("web:dom/html-element#title")]
+    #[cm_params("self")]
+    fn title(&self) -> String;
+    #[cm("web:dom/html-element#set-title")]
+    #[cm_params("self", "value")]
+    fn set_title(&self, value: String);
+    #[cm("web:dom/html-element#lang")]
+    #[cm_params("self")]
+    fn lang(&self) -> String;
+    #[cm("web:dom/html-element#set-lang")]
+    #[cm_params("self", "value")]
+    fn set_lang(&self, value: String);
+    #[cm("web:dom/html-element#translate")]
+    #[cm_params("self")]
+    fn translate(&self) -> bool;
+    #[cm("web:dom/html-element#set-translate")]
+    #[cm_params("self", "value")]
+    fn set_translate(&self, value: bool);
+    #[cm("web:dom/html-element#dir")]
+    #[cm_params("self")]
+    fn dir(&self) -> String;
+    #[cm("web:dom/html-element#set-dir")]
+    #[cm_params("self", "value")]
+    fn set_dir(&self, value: String);
+    #[cm("web:dom/html-element#inert")]
+    #[cm_params("self")]
+    fn inert(&self) -> bool;
+    #[cm("web:dom/html-element#set-inert")]
+    #[cm_params("self", "value")]
+    fn set_inert(&self, value: bool);
+    #[cm("web:dom/html-element#click")]
+    #[cm_params("self")]
+    fn click(&self);
+    #[cm("web:dom/html-element#access-key")]
+    #[cm_params("self")]
+    fn access_key(&self) -> String;
+    #[cm("web:dom/html-element#set-access-key")]
+    #[cm_params("self", "value")]
+    fn set_access_key(&self, value: String);
+    #[cm("web:dom/html-element#access-key-label")]
+    #[cm_params("self")]
+    fn access_key_label(&self) -> String;
+    #[cm("web:dom/html-element#draggable")]
+    #[cm_params("self")]
+    fn draggable(&self) -> bool;
+    #[cm("web:dom/html-element#set-draggable")]
+    #[cm_params("self", "value")]
+    fn set_draggable(&self, value: bool);
+    #[cm("web:dom/html-element#spellcheck")]
+    #[cm_params("self")]
+    fn spellcheck(&self) -> bool;
+    #[cm("web:dom/html-element#set-spellcheck")]
+    #[cm_params("self", "value")]
+    fn set_spellcheck(&self, value: bool);
+    #[cm("web:dom/html-element#writing-suggestions")]
+    #[cm_params("self")]
+    fn writing_suggestions(&self) -> String;
+    #[cm("web:dom/html-element#set-writing-suggestions")]
+    #[cm_params("self", "value")]
+    fn set_writing_suggestions(&self, value: String);
+    #[cm("web:dom/html-element#autocapitalize")]
+    #[cm_params("self")]
+    fn autocapitalize(&self) -> String;
+    #[cm("web:dom/html-element#set-autocapitalize")]
+    #[cm_params("self", "value")]
+    fn set_autocapitalize(&self, value: String);
+    #[cm("web:dom/html-element#autocorrect")]
+    #[cm_params("self")]
+    fn autocorrect(&self) -> bool;
+    #[cm("web:dom/html-element#set-autocorrect")]
+    #[cm_params("self", "value")]
+    fn set_autocorrect(&self, value: bool);
+    #[cm("web:dom/html-element#inner-text")]
+    #[cm_params("self")]
+    fn inner_text(&self) -> String;
+    #[cm("web:dom/html-element#set-inner-text")]
+    #[cm_params("self", "value")]
+    fn set_inner_text(&self, value: String);
+    #[cm("web:dom/html-element#outer-text")]
+    #[cm_params("self")]
+    fn outer_text(&self) -> String;
+    #[cm("web:dom/html-element#set-outer-text")]
+    #[cm_params("self", "value")]
+    fn set_outer_text(&self, value: String);
+    #[cm("web:dom/html-element#show-popover")]
+    #[cm_params("self")]
+    fn show_popover(&self);
+    #[cm("web:dom/html-element#hide-popover")]
+    #[cm_params("self")]
+    fn hide_popover(&self);
+    #[cm("web:dom/html-element#toggle-popover")]
+    #[cm_params("self", "options")]
+    fn toggle_popover(&self, options: Option<bool>) -> bool;
+    #[cm("web:dom/html-element#popover")]
+    #[cm_params("self")]
+    fn popover(&self) -> Option<String>;
+    #[cm("web:dom/html-element#set-popover")]
+    #[cm_params("self", "value")]
+    fn set_popover(&self, value: Option<String>);
+    #[cm("web:dom/html-element#heading-offset")]
+    #[cm_params("self")]
+    fn heading_offset(&self) -> u32;
+    #[cm("web:dom/html-element#set-heading-offset")]
+    #[cm_params("self", "value")]
+    fn set_heading_offset(&self, value: u32);
+    #[cm("web:dom/html-element#heading-reset")]
+    #[cm_params("self")]
+    fn heading_reset(&self) -> bool;
+    #[cm("web:dom/html-element#set-heading-reset")]
+    #[cm_params("self", "value")]
+    fn set_heading_reset(&self, value: bool);
+    #[cm("web:dom/html-element#content-editable")]
+    #[cm_params("self")]
+    fn content_editable(&self) -> String;
+    #[cm("web:dom/html-element#set-content-editable")]
+    #[cm_params("self", "value")]
+    fn set_content_editable(&self, value: String);
+    #[cm("web:dom/html-element#enter-key-hint")]
+    #[cm_params("self")]
+    fn enter_key_hint(&self) -> String;
+    #[cm("web:dom/html-element#set-enter-key-hint")]
+    #[cm_params("self", "value")]
+    fn set_enter_key_hint(&self, value: String);
+    #[cm("web:dom/html-element#is-content-editable")]
+    #[cm_params("self")]
+    fn is_content_editable(&self) -> bool;
+    #[cm("web:dom/html-element#input-mode")]
+    #[cm_params("self")]
+    fn input_mode(&self) -> String;
+    #[cm("web:dom/html-element#set-input-mode")]
+    #[cm_params("self", "value")]
+    fn set_input_mode(&self, value: String);
+    #[cm("web:dom/html-element#nonce")]
+    #[cm_params("self")]
+    fn nonce(&self) -> String;
+    #[cm("web:dom/html-element#set-nonce")]
+    #[cm_params("self", "value")]
+    fn set_nonce(&self, value: String);
+    #[cm("web:dom/html-element#autofocus")]
+    #[cm_params("self")]
+    fn autofocus(&self) -> bool;
+    #[cm("web:dom/html-element#set-autofocus")]
+    #[cm_params("self", "value")]
+    fn set_autofocus(&self, value: bool);
+    #[cm("web:dom/html-element#tab-index")]
+    #[cm_params("self")]
+    fn tab_index(&self) -> i32;
+    #[cm("web:dom/html-element#set-tab-index")]
+    #[cm_params("self", "value")]
+    fn set_tab_index(&self, value: i32);
+    #[cm("web:dom/html-element#focus")]
+    #[cm_params("self")]
+    fn focus(&self);
+    #[cm("web:dom/html-element#blur")]
+    #[cm_params("self")]
+    fn blur(&self);
+}
+
+#[cm("web:dom/html-input-element", type = "extern-handle")]
+pub resource HtmlInputElement extends HtmlElement {
+    #[cm("web:dom/html-input-element#accept")]
+    #[cm_params("self")]
+    fn accept(&self) -> String;
+    #[cm("web:dom/html-input-element#set-accept")]
+    #[cm_params("self", "value")]
+    fn set_accept(&self, value: String);
+    #[cm("web:dom/html-input-element#alpha")]
+    #[cm_params("self")]
+    fn alpha(&self) -> bool;
+    #[cm("web:dom/html-input-element#set-alpha")]
+    #[cm_params("self", "value")]
+    fn set_alpha(&self, value: bool);
+    #[cm("web:dom/html-input-element#alt")]
+    #[cm_params("self")]
+    fn alt(&self) -> String;
+    #[cm("web:dom/html-input-element#set-alt")]
+    #[cm_params("self", "value")]
+    fn set_alt(&self, value: String);
+    #[cm("web:dom/html-input-element#autocomplete")]
+    #[cm_params("self")]
+    fn autocomplete(&self) -> String;
+    #[cm("web:dom/html-input-element#set-autocomplete")]
+    #[cm_params("self", "value")]
+    fn set_autocomplete(&self, value: String);
+    #[cm("web:dom/html-input-element#default-checked")]
+    #[cm_params("self")]
+    fn default_checked(&self) -> bool;
+    #[cm("web:dom/html-input-element#set-default-checked")]
+    #[cm_params("self", "value")]
+    fn set_default_checked(&self, value: bool);
+    #[cm("web:dom/html-input-element#checked")]
+    #[cm_params("self")]
+    fn checked(&self) -> bool;
+    #[cm("web:dom/html-input-element#set-checked")]
+    #[cm_params("self", "value")]
+    fn set_checked(&self, value: bool);
+    #[cm("web:dom/html-input-element#color-space")]
+    #[cm_params("self")]
+    fn color_space(&self) -> String;
+    #[cm("web:dom/html-input-element#set-color-space")]
+    #[cm_params("self", "value")]
+    fn set_color_space(&self, value: String);
+    #[cm("web:dom/html-input-element#dir-name")]
+    #[cm_params("self")]
+    fn dir_name(&self) -> String;
+    #[cm("web:dom/html-input-element#set-dir-name")]
+    #[cm_params("self", "value")]
+    fn set_dir_name(&self, value: String);
+    #[cm("web:dom/html-input-element#disabled")]
+    #[cm_params("self")]
+    fn disabled(&self) -> bool;
+    #[cm("web:dom/html-input-element#set-disabled")]
+    #[cm_params("self", "value")]
+    fn set_disabled(&self, value: bool);
+    #[cm("web:dom/html-input-element#form-action")]
+    #[cm_params("self")]
+    fn form_action(&self) -> String;
+    #[cm("web:dom/html-input-element#set-form-action")]
+    #[cm_params("self", "value")]
+    fn set_form_action(&self, value: String);
+    #[cm("web:dom/html-input-element#form-enctype")]
+    #[cm_params("self")]
+    fn form_enctype(&self) -> String;
+    #[cm("web:dom/html-input-element#set-form-enctype")]
+    #[cm_params("self", "value")]
+    fn set_form_enctype(&self, value: String);
+    #[cm("web:dom/html-input-element#form-method")]
+    #[cm_params("self")]
+    fn form_method(&self) -> String;
+    #[cm("web:dom/html-input-element#set-form-method")]
+    #[cm_params("self", "value")]
+    fn set_form_method(&self, value: String);
+    #[cm("web:dom/html-input-element#form-no-validate")]
+    #[cm_params("self")]
+    fn form_no_validate(&self) -> bool;
+    #[cm("web:dom/html-input-element#set-form-no-validate")]
+    #[cm_params("self", "value")]
+    fn set_form_no_validate(&self, value: bool);
+    #[cm("web:dom/html-input-element#form-target")]
+    #[cm_params("self")]
+    fn form_target(&self) -> String;
+    #[cm("web:dom/html-input-element#set-form-target")]
+    #[cm_params("self", "value")]
+    fn set_form_target(&self, value: String);
+    #[cm("web:dom/html-input-element#height")]
+    #[cm_params("self")]
+    fn height(&self) -> u32;
+    #[cm("web:dom/html-input-element#set-height")]
+    #[cm_params("self", "value")]
+    fn set_height(&self, value: u32);
+    #[cm("web:dom/html-input-element#indeterminate")]
+    #[cm_params("self")]
+    fn indeterminate(&self) -> bool;
+    #[cm("web:dom/html-input-element#set-indeterminate")]
+    #[cm_params("self", "value")]
+    fn set_indeterminate(&self, value: bool);
+    #[cm("web:dom/html-input-element#max")]
+    #[cm_params("self")]
+    fn max(&self) -> String;
+    #[cm("web:dom/html-input-element#set-max")]
+    #[cm_params("self", "value")]
+    fn set_max(&self, value: String);
+    #[cm("web:dom/html-input-element#max-length")]
+    #[cm_params("self")]
+    fn max_length(&self) -> i32;
+    #[cm("web:dom/html-input-element#set-max-length")]
+    #[cm_params("self", "value")]
+    fn set_max_length(&self, value: i32);
+    #[cm("web:dom/html-input-element#min")]
+    #[cm_params("self")]
+    fn min(&self) -> String;
+    #[cm("web:dom/html-input-element#set-min")]
+    #[cm_params("self", "value")]
+    fn set_min(&self, value: String);
+    #[cm("web:dom/html-input-element#min-length")]
+    #[cm_params("self")]
+    fn min_length(&self) -> i32;
+    #[cm("web:dom/html-input-element#set-min-length")]
+    #[cm_params("self", "value")]
+    fn set_min_length(&self, value: i32);
+    #[cm("web:dom/html-input-element#multiple")]
+    #[cm_params("self")]
+    fn multiple(&self) -> bool;
+    #[cm("web:dom/html-input-element#set-multiple")]
+    #[cm_params("self", "value")]
+    fn set_multiple(&self, value: bool);
+    #[cm("web:dom/html-input-element#name")]
+    #[cm_params("self")]
+    fn name(&self) -> String;
+    #[cm("web:dom/html-input-element#set-name")]
+    #[cm_params("self", "value")]
+    fn set_name(&self, value: String);
+    #[cm("web:dom/html-input-element#pattern")]
+    #[cm_params("self")]
+    fn pattern(&self) -> String;
+    #[cm("web:dom/html-input-element#set-pattern")]
+    #[cm_params("self", "value")]
+    fn set_pattern(&self, value: String);
+    #[cm("web:dom/html-input-element#placeholder")]
+    #[cm_params("self")]
+    fn placeholder(&self) -> String;
+    #[cm("web:dom/html-input-element#set-placeholder")]
+    #[cm_params("self", "value")]
+    fn set_placeholder(&self, value: String);
+    #[cm("web:dom/html-input-element#read-only")]
+    #[cm_params("self")]
+    fn read_only(&self) -> bool;
+    #[cm("web:dom/html-input-element#set-read-only")]
+    #[cm_params("self", "value")]
+    fn set_read_only(&self, value: bool);
+    #[cm("web:dom/html-input-element#required")]
+    #[cm_params("self")]
+    fn required(&self) -> bool;
+    #[cm("web:dom/html-input-element#set-required")]
+    #[cm_params("self", "value")]
+    fn set_required(&self, value: bool);
+    #[cm("web:dom/html-input-element#size")]
+    #[cm_params("self")]
+    fn size(&self) -> u32;
+    #[cm("web:dom/html-input-element#set-size")]
+    #[cm_params("self", "value")]
+    fn set_size(&self, value: u32);
+    #[cm("web:dom/html-input-element#src")]
+    #[cm_params("self")]
+    fn src(&self) -> String;
+    #[cm("web:dom/html-input-element#set-src")]
+    #[cm_params("self", "value")]
+    fn set_src(&self, value: String);
+    #[cm("web:dom/html-input-element#step")]
+    #[cm_params("self")]
+    fn step(&self) -> String;
+    #[cm("web:dom/html-input-element#set-step")]
+    #[cm_params("self", "value")]
+    fn set_step(&self, value: String);
+    #[cm("web:dom/html-input-element#type")]
+    #[cm_params("self")]
+    fn type_(&self) -> String;
+    #[cm("web:dom/html-input-element#set-type")]
+    #[cm_params("self", "value")]
+    fn set_type_(&self, value: String);
+    #[cm("web:dom/html-input-element#default-value")]
+    #[cm_params("self")]
+    fn default_value(&self) -> String;
+    #[cm("web:dom/html-input-element#set-default-value")]
+    #[cm_params("self", "value")]
+    fn set_default_value(&self, value: String);
+    #[cm("web:dom/html-input-element#value")]
+    #[cm_params("self")]
+    fn value(&self) -> String;
+    #[cm("web:dom/html-input-element#set-value")]
+    #[cm_params("self", "value")]
+    fn set_value(&self, value: String);
+    #[cm("web:dom/html-input-element#value-as-number")]
+    #[cm_params("self")]
+    fn value_as_number(&self) -> f64;
+    #[cm("web:dom/html-input-element#set-value-as-number")]
+    #[cm_params("self", "value")]
+    fn set_value_as_number(&self, value: f64);
+    #[cm("web:dom/html-input-element#width")]
+    #[cm_params("self")]
+    fn width(&self) -> u32;
+    #[cm("web:dom/html-input-element#set-width")]
+    #[cm_params("self", "value")]
+    fn set_width(&self, value: u32);
+    #[cm("web:dom/html-input-element#step-up")]
+    #[cm_params("self", "n")]
+    fn step_up(&self, n: Option<i32>);
+    #[cm("web:dom/html-input-element#step-down")]
+    #[cm_params("self", "n")]
+    fn step_down(&self, n: Option<i32>);
+    #[cm("web:dom/html-input-element#will-validate")]
+    #[cm_params("self")]
+    fn will_validate(&self) -> bool;
+    #[cm("web:dom/html-input-element#validation-message")]
+    #[cm_params("self")]
+    fn validation_message(&self) -> String;
+    #[cm("web:dom/html-input-element#check-validity")]
+    #[cm_params("self")]
+    fn check_validity(&self) -> bool;
+    #[cm("web:dom/html-input-element#report-validity")]
+    #[cm_params("self")]
+    fn report_validity(&self) -> bool;
+    #[cm("web:dom/html-input-element#set-custom-validity")]
+    #[cm_params("self", "error")]
+    fn set_custom_validity(&self, error: String);
+    #[cm("web:dom/html-input-element#select")]
+    #[cm_params("self")]
+    fn select(&self);
+    #[cm("web:dom/html-input-element#selection-start")]
+    #[cm_params("self")]
+    fn selection_start(&self) -> Option<u32>;
+    #[cm("web:dom/html-input-element#set-selection-start")]
+    #[cm_params("self", "value")]
+    fn set_selection_start(&self, value: Option<u32>);
+    #[cm("web:dom/html-input-element#selection-end")]
+    #[cm_params("self")]
+    fn selection_end(&self) -> Option<u32>;
+    #[cm("web:dom/html-input-element#set-selection-end")]
+    #[cm_params("self", "value")]
+    fn set_selection_end(&self, value: Option<u32>);
+    #[cm("web:dom/html-input-element#selection-direction")]
+    #[cm_params("self")]
+    fn selection_direction(&self) -> Option<String>;
+    #[cm("web:dom/html-input-element#set-selection-direction")]
+    #[cm_params("self", "value")]
+    fn set_selection_direction(&self, value: Option<String>);
+    #[cm("web:dom/html-input-element#set-selection-range")]
+    #[cm_params("self", "start", "end", "direction")]
+    fn set_selection_range(&self, start: u32, end: u32, direction: Option<String>);
+    #[cm("web:dom/html-input-element#show-picker")]
+    #[cm_params("self")]
+    fn show_picker(&self);
+    #[cm("web:dom/html-input-element#align")]
+    #[cm_params("self")]
+    fn align(&self) -> String;
+    #[cm("web:dom/html-input-element#set-align")]
+    #[cm_params("self", "value")]
+    fn set_align(&self, value: String);
+    #[cm("web:dom/html-input-element#use-map")]
+    #[cm_params("self")]
+    fn use_map(&self) -> String;
+    #[cm("web:dom/html-input-element#set-use-map")]
+    #[cm_params("self", "value")]
+    fn set_use_map(&self, value: String);
+    #[cm("web:dom/html-input-element#popover-target-element")]
+    #[cm_params("self")]
+    fn popover_target_element(&self) -> Option<Element>;
+    #[cm("web:dom/html-input-element#set-popover-target-element")]
+    #[cm_params("self", "value")]
+    fn set_popover_target_element(&self, value: Option<Element>);
+    #[cm("web:dom/html-input-element#popover-target-action")]
+    #[cm_params("self")]
+    fn popover_target_action(&self) -> String;
+    #[cm("web:dom/html-input-element#set-popover-target-action")]
+    #[cm_params("self", "value")]
+    fn set_popover_target_action(&self, value: String);
 }
 
 #[cm("web:dom/document", type = "extern-handle")]
 pub resource Document extends Node {
+    #[cm("web:dom/document#new")]
+    fn new() -> Document;
+    #[cm("web:dom/document#url")]
+    #[cm_params("self")]
+    fn url(&self) -> String;
+    #[cm("web:dom/document#document-uri")]
+    #[cm_params("self")]
+    fn document_uri(&self) -> String;
+    #[cm("web:dom/document#compat-mode")]
+    #[cm_params("self")]
+    fn compat_mode(&self) -> String;
+    #[cm("web:dom/document#character-set")]
+    #[cm_params("self")]
+    fn character_set(&self) -> String;
+    #[cm("web:dom/document#charset")]
+    #[cm_params("self")]
+    fn charset(&self) -> String;
+    #[cm("web:dom/document#input-encoding")]
+    #[cm_params("self")]
+    fn input_encoding(&self) -> String;
+    #[cm("web:dom/document#content-type")]
+    #[cm_params("self")]
+    fn content_type(&self) -> String;
+    #[cm("web:dom/document#document-element")]
+    #[cm_params("self")]
+    fn document_element(&self) -> Option<Element>;
     #[cm("web:dom/document#create-element")]
-    #[cm_params("self", "local-name")]
-    fn create_element(&self, local_name: String) -> Element;
+    #[cm_params("self", "local-name", "options")]
+    fn create_element(&self, local_name: String, options: Option<String>) -> Element;
+    #[cm("web:dom/document#create-element-ns")]
+    #[cm_params("self", "namespace", "qualified-name", "options")]
+    fn create_element_ns(&self, namespace: Option<String>, qualified_name: String, options: Option<String>) -> Element;
+    #[cm("web:dom/document#import-node")]
+    #[cm_params("self", "node", "options")]
+    fn import_node(&self, node: Node, options: Option<bool>) -> Node;
+    #[cm("web:dom/document#adopt-node")]
+    #[cm_params("self", "node")]
+    fn adopt_node(&self, node: Node) -> Node;
+    #[cm("web:dom/document#create-event")]
+    #[cm_params("self", "interface")]
+    fn create_event(&self, interface_: String) -> Event;
+    #[cm("web:dom/document#parse-html-unsafe")]
+    #[cm_params("html")]
+    fn parse_html_unsafe(html: String) -> Document;
+    #[cm("web:dom/document#parse-html")]
+    #[cm_params("html")]
+    fn parse_html(html: String) -> Document;
+    #[cm("web:dom/document#domain")]
+    #[cm_params("self")]
+    fn domain(&self) -> String;
+    #[cm("web:dom/document#set-domain")]
+    #[cm_params("self", "value")]
+    fn set_domain(&self, value: String);
+    #[cm("web:dom/document#referrer")]
+    #[cm_params("self")]
+    fn referrer(&self) -> String;
+    #[cm("web:dom/document#cookie")]
+    #[cm_params("self")]
+    fn cookie(&self) -> String;
+    #[cm("web:dom/document#set-cookie")]
+    #[cm_params("self", "value")]
+    fn set_cookie(&self, value: String);
+    #[cm("web:dom/document#last-modified")]
+    #[cm_params("self")]
+    fn last_modified(&self) -> String;
+    #[cm("web:dom/document#title")]
+    #[cm_params("self")]
+    fn title(&self) -> String;
+    #[cm("web:dom/document#set-title")]
+    #[cm_params("self", "value")]
+    fn set_title(&self, value: String);
+    #[cm("web:dom/document#dir")]
+    #[cm_params("self")]
+    fn dir(&self) -> String;
+    #[cm("web:dom/document#set-dir")]
+    #[cm_params("self", "value")]
+    fn set_dir(&self, value: String);
+    #[cm("web:dom/document#body")]
+    #[cm_params("self")]
+    fn body(&self) -> Option<HtmlElement>;
+    #[cm("web:dom/document#set-body")]
+    #[cm_params("self", "value")]
+    fn set_body(&self, value: Option<HtmlElement>);
+    #[cm("web:dom/document#open")]
+    #[cm_params("self", "unused1", "unused2")]
+    fn open(&self, unused1: Option<String>, unused2: Option<String>) -> Document;
+    #[cm("web:dom/document#close")]
+    #[cm_params("self")]
+    fn close(&self);
+    #[cm("web:dom/document#write")]
+    #[cm_params("self")]
+    fn write(&self);
+    #[cm("web:dom/document#writeln")]
+    #[cm_params("self")]
+    fn writeln(&self);
+    #[cm("web:dom/document#has-focus")]
+    #[cm_params("self")]
+    fn has_focus(&self) -> bool;
+    #[cm("web:dom/document#design-mode")]
+    #[cm_params("self")]
+    fn design_mode(&self) -> String;
+    #[cm("web:dom/document#set-design-mode")]
+    #[cm_params("self", "value")]
+    fn set_design_mode(&self, value: String);
+    #[cm("web:dom/document#exec-command")]
+    #[cm_params("self", "command-id", "show-ui", "value")]
+    fn exec_command(&self, command_id: String, show_ui: Option<bool>, value: Option<String>) -> bool;
+    #[cm("web:dom/document#query-command-enabled")]
+    #[cm_params("self", "command-id")]
+    fn query_command_enabled(&self, command_id: String) -> bool;
+    #[cm("web:dom/document#query-command-indeterm")]
+    #[cm_params("self", "command-id")]
+    fn query_command_indeterm(&self, command_id: String) -> bool;
+    #[cm("web:dom/document#query-command-state")]
+    #[cm_params("self", "command-id")]
+    fn query_command_state(&self, command_id: String) -> bool;
+    #[cm("web:dom/document#query-command-supported")]
+    #[cm_params("self", "command-id")]
+    fn query_command_supported(&self, command_id: String) -> bool;
+    #[cm("web:dom/document#query-command-value")]
+    #[cm_params("self", "command-id")]
+    fn query_command_value(&self, command_id: String) -> String;
+    #[cm("web:dom/document#hidden")]
+    #[cm_params("self")]
+    fn hidden(&self) -> bool;
+    #[cm("web:dom/document#fg-color")]
+    #[cm_params("self")]
+    fn fg_color(&self) -> String;
+    #[cm("web:dom/document#set-fg-color")]
+    #[cm_params("self", "value")]
+    fn set_fg_color(&self, value: String);
+    #[cm("web:dom/document#link-color")]
+    #[cm_params("self")]
+    fn link_color(&self) -> String;
+    #[cm("web:dom/document#set-link-color")]
+    #[cm_params("self", "value")]
+    fn set_link_color(&self, value: String);
+    #[cm("web:dom/document#vlink-color")]
+    #[cm_params("self")]
+    fn vlink_color(&self) -> String;
+    #[cm("web:dom/document#set-vlink-color")]
+    #[cm_params("self", "value")]
+    fn set_vlink_color(&self, value: String);
+    #[cm("web:dom/document#alink-color")]
+    #[cm_params("self")]
+    fn alink_color(&self) -> String;
+    #[cm("web:dom/document#set-alink-color")]
+    #[cm_params("self", "value")]
+    fn set_alink_color(&self, value: String);
+    #[cm("web:dom/document#bg-color")]
+    #[cm_params("self")]
+    fn bg_color(&self) -> String;
+    #[cm("web:dom/document#set-bg-color")]
+    #[cm_params("self", "value")]
+    fn set_bg_color(&self, value: String);
+    #[cm("web:dom/document#clear")]
+    #[cm_params("self")]
+    fn clear(&self);
+    #[cm("web:dom/document#capture-events")]
+    #[cm_params("self")]
+    fn capture_events(&self);
+    #[cm("web:dom/document#release-events")]
+    #[cm_params("self")]
+    fn release_events(&self);
+    #[cm("web:dom/document#get-element-by-id")]
+    #[cm_params("self", "element-id")]
+    fn get_element_by_id(&self, element_id: String) -> Option<Element>;
+    #[cm("web:dom/document#active-element")]
+    #[cm_params("self")]
+    fn active_element(&self) -> Option<Element>;
+    #[cm("web:dom/document#first-element-child")]
+    #[cm_params("self")]
+    fn first_element_child(&self) -> Option<Element>;
+    #[cm("web:dom/document#last-element-child")]
+    #[cm_params("self")]
+    fn last_element_child(&self) -> Option<Element>;
+    #[cm("web:dom/document#child-element-count")]
+    #[cm_params("self")]
+    fn child_element_count(&self) -> u32;
+    #[cm("web:dom/document#prepend")]
+    #[cm_params("self")]
+    fn prepend(&self);
+    #[cm("web:dom/document#append")]
+    #[cm_params("self")]
+    fn append(&self);
+    #[cm("web:dom/document#replace-children")]
+    #[cm_params("self")]
+    fn replace_children(&self);
+    #[cm("web:dom/document#move-before")]
+    #[cm_params("self", "node", "child")]
+    fn move_before(&self, node: Node, child: Option<Node>);
+    #[cm("web:dom/document#query-selector")]
+    #[cm_params("self", "selectors")]
+    fn query_selector(&self, selectors: String) -> Option<Element>;
+    #[cm("web:dom/document#create-ns-resolver")]
+    #[cm_params("self", "node-resolver")]
+    fn create_ns_resolver(&self, node_resolver: Node) -> Node;
+}
+
+#[cm("web:dom/window", type = "extern-handle")]
+pub resource Window extends EventTarget {
+    #[cm("web:dom/window#event")]
+    #[cm_params("self")]
+    fn event(&self) -> Option<Event>;
+    #[cm("web:dom/window#document")]
+    #[cm_params("self")]
+    fn document(&self) -> Document;
+    #[cm("web:dom/window#name")]
+    #[cm_params("self")]
+    fn name(&self) -> String;
+    #[cm("web:dom/window#set-name")]
+    #[cm_params("self", "value")]
+    fn set_name(&self, value: String);
+    #[cm("web:dom/window#status")]
+    #[cm_params("self")]
+    fn status(&self) -> String;
+    #[cm("web:dom/window#set-status")]
+    #[cm_params("self", "value")]
+    fn set_status(&self, value: String);
+    #[cm("web:dom/window#close")]
+    #[cm_params("self")]
+    fn close(&self);
+    #[cm("web:dom/window#closed")]
+    #[cm_params("self")]
+    fn closed(&self) -> bool;
+    #[cm("web:dom/window#stop")]
+    #[cm_params("self")]
+    fn stop(&self);
+    #[cm("web:dom/window#focus")]
+    #[cm_params("self")]
+    fn focus(&self);
+    #[cm("web:dom/window#blur")]
+    #[cm_params("self")]
+    fn blur(&self);
+    #[cm("web:dom/window#length")]
+    #[cm_params("self")]
+    fn length(&self) -> u32;
+    #[cm("web:dom/window#frame-element")]
+    #[cm_params("self")]
+    fn frame_element(&self) -> Option<Element>;
+    #[cm("web:dom/window#origin-agent-cluster")]
+    #[cm_params("self")]
+    fn origin_agent_cluster(&self) -> bool;
+    #[cm("web:dom/window#confirm")]
+    #[cm_params("self", "message")]
+    fn confirm(&self, message: Option<String>) -> bool;
+    #[cm("web:dom/window#prompt")]
+    #[cm_params("self", "message", "default")]
+    fn prompt(&self, message: Option<String>, default: Option<String>) -> Option<String>;
+    #[cm("web:dom/window#print")]
+    #[cm_params("self")]
+    fn print(&self);
+    #[cm("web:dom/window#capture-events")]
+    #[cm_params("self")]
+    fn capture_events(&self);
+    #[cm("web:dom/window#release-events")]
+    #[cm_params("self")]
+    fn release_events(&self);
+    #[cm("web:dom/window#origin")]
+    #[cm_params("self")]
+    fn origin(&self) -> String;
+    #[cm("web:dom/window#is-secure-context")]
+    #[cm_params("self")]
+    fn is_secure_context(&self) -> bool;
+    #[cm("web:dom/window#cross-origin-isolated")]
+    #[cm_params("self")]
+    fn cross_origin_isolated(&self) -> bool;
+    #[cm("web:dom/window#btoa")]
+    #[cm_params("self", "data")]
+    fn btoa(&self, data: String) -> String;
+    #[cm("web:dom/window#atob")]
+    #[cm_params("self", "data")]
+    fn atob(&self, data: String) -> String;
+    #[cm("web:dom/window#set-timeout")]
+    #[cm_params("self", "handler", "timeout")]
+    fn set_timeout(&self, handler: String, timeout: Option<i32>) -> i32;
+    #[cm("web:dom/window#clear-timeout")]
+    #[cm_params("self", "id")]
+    fn clear_timeout(&self, id: Option<i32>);
+    #[cm("web:dom/window#set-interval")]
+    #[cm_params("self", "handler", "timeout")]
+    fn set_interval(&self, handler: String, timeout: Option<i32>) -> i32;
+    #[cm("web:dom/window#clear-interval")]
+    #[cm_params("self", "id")]
+    fn clear_interval(&self, id: Option<i32>);
+    #[cm("web:dom/window#cancel-animation-frame")]
+    #[cm_params("self", "handle")]
+    fn cancel_animation_frame(&self, handle: u32);
+}
+
+/// The DOM entry points, which hand out the first handle.
+#[cm("web:dom/global")]
+pub interface Dom {
+    #[cm("web:dom/global#window")]
+    fn window() -> Window;
+    #[cm("web:dom/global#document")]
+    fn document() -> Document;
 }

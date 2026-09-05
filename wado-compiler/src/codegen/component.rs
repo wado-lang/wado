@@ -2676,31 +2676,42 @@ fn generate_cm_imports(
                                 &named.name,
                             )
                             .is_some());
-                        let val_type = if is_component_import || is_struct || is_local_newtype {
-                            let resource_exports: IndexMap<&str, u32> = own_resource_type_indices
-                                .iter()
-                                .map(|(k, &v)| (k.as_str(), v))
-                                .collect();
-                            let mut sink = crate::component_model::InstanceSink {
-                                it: &mut instance_type,
-                                next_idx: &mut local_type_idx,
-                            };
-                            shared_type_gen.ast_type_to_cm(
-                                &mut sink,
-                                &resolved_ty,
-                                &project.cm_interface_registry,
-                                &resource_exports,
-                            )
-                        } else {
-                            wado_type_to_cm_val_type(
-                                ty,
-                                stream_type_idx,
-                                result_param_type_idx,
-                                &enum_export_indices,
-                                &flags_export_indices,
-                                &borrow_resource_type_indices,
-                            )
+                        // So does a composite (`Option<T>`, `List<T>`, a tuple):
+                        // `wado_type_to_cm_val_type` spells only the flat shapes
+                        // and the pre-defined `Stream` / `Result` params.
+                        let is_composite = match &resolved_ty {
+                            Type::Generic(g) => g.name != "Stream" && g.name != "Result",
+                            Type::Tuple(_) => true,
+                            _ => false,
                         };
+                        let val_type =
+                            if is_component_import || is_struct || is_local_newtype || is_composite
+                            {
+                                let resource_exports: IndexMap<&str, u32> =
+                                    own_resource_type_indices
+                                        .iter()
+                                        .map(|(k, &v)| (k.as_str(), v))
+                                        .collect();
+                                let mut sink = crate::component_model::InstanceSink {
+                                    it: &mut instance_type,
+                                    next_idx: &mut local_type_idx,
+                                };
+                                shared_type_gen.ast_type_to_cm(
+                                    &mut sink,
+                                    &resolved_ty,
+                                    &project.cm_interface_registry,
+                                    &resource_exports,
+                                )
+                            } else {
+                                wado_type_to_cm_val_type(
+                                    ty,
+                                    stream_type_idx,
+                                    result_param_type_idx,
+                                    &enum_export_indices,
+                                    &flags_export_indices,
+                                    &borrow_resource_type_indices,
+                                )
+                            };
                         (cm_name.clone(), val_type)
                     })
                     .collect();

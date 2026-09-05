@@ -25,8 +25,8 @@ The Wado compiler crate. The NIR optimizer has its own guide:
 `src/stdlib.rs` lists `lib/core/` and `lib/wasi/`. A dev build reads them from
 disk, so editing one takes effect on the next `wado` run with no rebuild. A
 release build embeds them, as does any `wasm32` build, which has no filesystem.
-`lib/wasi/` and `lib/core/kiln/` are generated from WIT: read
-`wado-from-idl/AGENTS.md` first.
+`lib/wasi/` and `lib/core/kiln/` are generated from WIT, `lib/web/` from a
+WebIDL snapshot: read `wado-from-idl/AGENTS.md` first.
 
 `builtin::select` returns one of its operands rather than a copy, so write the
 `if` for `i128`, `u128` and any composite: `src/optimize/select_lowering.rs`

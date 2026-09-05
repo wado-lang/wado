@@ -44,6 +44,8 @@ fn require_path(parser: &mut lexopt::Parser) -> PathBuf {
 
 struct Cli {
     wit_dir: Option<PathBuf>,
+    /// A `WebIDL` snapshot (`scripts/webidl/snapshot.mjs`) to generate from.
+    webidl: Option<PathBuf>,
     output_dir: Option<PathBuf>,
     package: Option<String>,
     package_name: String,
@@ -59,6 +61,7 @@ fn print_usage() {
     eprintln!();
     eprintln!("Filter mode (default): Reads WIT from stdin, writes Wado to stdout.");
     eprintln!("Directory mode: Use --wit-dir and --output-dir to batch process files.");
+    eprintln!("WebIDL mode: Use --webidl and --output-dir to generate a web:* package.");
     eprintln!();
     eprintln!("Usage: wado-from-idl [options]");
     eprintln!();
@@ -67,7 +70,10 @@ fn print_usage() {
         "  --wit-dir <DIR>           Directory containing WIT files (enables directory mode)"
     );
     eprintln!(
-        "  --output-dir <DIR>        Output directory for generated Wado files (required with --wit-dir)"
+        "  --webidl <FILE>           WebIDL snapshot JSON written by scripts/webidl/snapshot.mjs"
+    );
+    eprintln!(
+        "  --output-dir <DIR>        Output directory for generated Wado files (required with --wit-dir / --webidl)"
     );
     eprintln!(
         "  --package <NAME>          Only generate for specific package (e.g., \"cli\", \"filesystem\")"
@@ -82,6 +88,7 @@ fn print_usage() {
 fn parse_args() -> Cli {
     let mut cli = Cli {
         wit_dir: None,
+        webidl: None,
         output_dir: None,
         package: None,
         package_name: "wasi".to_string(),
@@ -99,6 +106,7 @@ fn parse_args() -> Cli {
                 process::exit(0);
             }
             Long("wit-dir") => cli.wit_dir = Some(require_path(&mut parser)),
+            Long("webidl") => cli.webidl = Some(require_path(&mut parser)),
             Long("output-dir") => cli.output_dir = Some(require_path(&mut parser)),
             Long("package") => cli.package = Some(require_string(&mut parser)),
             Long("package-name") => cli.package_name = require_string(&mut parser),
@@ -118,6 +126,14 @@ fn parse_args() -> Cli {
 
 fn main() -> Result<()> {
     let cli = parse_args();
+
+    if let Some(ref webidl) = cli.webidl {
+        let output_dir = cli
+            .output_dir
+            .as_ref()
+            .context("--output-dir is required when using --webidl")?;
+        return run_webidl_mode(webidl, output_dir);
+    }
 
     if let Some(ref wit_dir) = cli.wit_dir {
         // Directory mode
@@ -301,6 +317,38 @@ fn run_directory_mode(
         }
     }
 
+    Ok(())
+}
+
+/// Generate `<output-dir>/<package>.wado` from a `WebIDL` snapshot: one module
+/// per package, since its resources reference each other in both directions.
+fn run_webidl_mode(snapshot_path: &Path, output_dir: &Path) -> Result<()> {
+    let json = fs::read_to_string(snapshot_path)
+        .with_context(|| format!("Failed to read {}", snapshot_path.display()))?;
+    let snapshot: wado_from_idl::webidl::Snapshot = serde_json::from_str(&json)
+        .with_context(|| format!("Failed to parse {}", snapshot_path.display()))?;
+    let base_dir = std::env::current_dir()?;
+    let source = snapshot_path
+        .strip_prefix(&base_dir)
+        .unwrap_or(snapshot_path)
+        .display()
+        .to_string();
+    let (code, skipped) = wado_from_idl::webidl::generate(&snapshot, &source)?;
+
+    fs::create_dir_all(output_dir)
+        .with_context(|| format!("Failed to create directory {}", output_dir.display()))?;
+    let output_path = output_dir.join(format!("{}.wado", snapshot.package));
+    fs::write(&output_path, code)
+        .with_context(|| format!("Failed to write {}", output_path.display()))?;
+
+    for line in &skipped {
+        eprintln!("Skipped: {line}");
+    }
+    eprintln!(
+        "Generated: {} ({} members skipped)",
+        output_path.display(),
+        skipped.len()
+    );
     Ok(())
 }
 

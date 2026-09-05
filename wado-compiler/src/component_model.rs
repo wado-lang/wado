@@ -693,11 +693,17 @@ impl CmFunctionInfo {
         false
     }
 
-    /// Check if a parameter type requires Memory + Realloc in canon lower.
+    /// Check if a parameter type requires Memory + Realloc in canon lower: a
+    /// string, a list or a stream anywhere in it — `option<string>` lowers its
+    /// payload into linear memory as a bare string does.
     fn type_requires_memory(ty: &Type) -> bool {
         match ty {
-            Type::Generic(g) => matches!(g.name.as_str(), "Stream" | "List"),
+            Type::Generic(g) => {
+                matches!(g.name.as_str(), "Stream" | "List")
+                    || g.args.iter().any(Self::type_requires_memory)
+            }
             Type::Named(named) => named.name == "String",
+            Type::Tuple(elems) => elems.iter().any(Self::type_requires_memory),
             _ => false,
         }
     }

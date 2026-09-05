@@ -457,6 +457,25 @@ cargo run -p wado-from-idl -- \
 find wado-compiler/lib/wasi -type f -name '*.wado' -exec cargo run -p wado-cli -- format -w {} +
 """
 
+[tasks.update-webidl-snapshot]
+description = "Re-snapshot the WebIDL slice from @webref/idl (network) into lib/web/dom.webidl.json"
+run = """
+#!/usr/bin/env bash
+set -xe -o pipefail
+cd scripts/webidl && npm install && cd ../..
+node scripts/webidl/snapshot.mjs wado-compiler/lib/web/dom.webidl.json
+"""
+
+[tasks.update-stdlib-web]
+description = "Regenerate the web:dom stdlib from the vendored WebIDL snapshot"
+run = """
+#!/usr/bin/env bash
+set -xe -o pipefail
+cargo run -p wado-from-idl -- \
+    --webidl wado-compiler/lib/web/dom.webidl.json \
+    --output-dir wado-compiler/lib/web
+"""
+
 [tasks.update-stdlib-kiln]
 description = "Regenerate core:kiln stdlib submodules from WIT file (facade is hand-written)"
 run = """
