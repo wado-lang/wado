@@ -109,6 +109,16 @@ pub enum IdlTypeInner {
     Types(Vec<IdlType>),
 }
 
+/// Which way a value crosses the boundary. It decides whether collapsing a
+/// union to its one expressible constituent is lossless: on the way in the
+/// dropped constituents are types the slice cannot build, on the way out they
+/// are values the host may hand back.
+#[derive(Clone, Copy, PartialEq)]
+enum Flow {
+    In,
+    Out,
+}
+
 /// The generated module, and every member the slice could not express.
 #[derive(Debug)]
 pub struct WebIdlOutput {
@@ -337,18 +347,19 @@ impl Lowering<'_> {
                 if special == "static" {
                     return vec![Err((getter, "static attribute".to_string()))];
                 }
-                let ty = match self.lower_type(idl_type) {
-                    Ok(ty) => ty,
-                    Err(reason) => return vec![Err((getter, reason))],
-                };
                 let kebab = to_kebab_case(name);
-                let mut out = vec![Ok(function(
-                    getter,
-                    format!("{path}#{kebab}"),
-                    vec![self_param(iface)],
-                    Some(ty.clone()),
-                ))];
-                if !readonly {
+                let mut out = vec![match self.lower_type(idl_type, Flow::Out) {
+                    Ok(ty) => Ok(function(
+                        getter,
+                        format!("{path}#{kebab}"),
+                        vec![self_param(iface)],
+                        Some(ty),
+                    )),
+                    Err(reason) => Err((getter, reason)),
+                }];
+                // `Flow::In` admits everything `Flow::Out` does, so a setter
+                // that fails here fails for the reason the getter just gave.
+                if let Some(Ok(ty)) = (!readonly).then(|| self.lower_type(idl_type, Flow::In)) {
                     let value = WadoParam {
                         name: "value".to_string(),
                         ty,
@@ -423,7 +434,7 @@ impl Lowering<'_> {
         let return_type = match return_type {
             None => Some(WadoType::Named(to_upper_camel_case(iface))),
             Some(ty) if is_undefined(ty) => None,
-            Some(ty) => match self.lower_type(ty) {
+            Some(ty) => match self.lower_type(ty, Flow::Out) {
                 Ok(ty) => Some(ty),
                 Err(reason) => return skip(reason),
             },
@@ -433,7 +444,7 @@ impl Lowering<'_> {
             if arg.variadic {
                 return skip(format!("`{}`: variadic", arg.name));
             }
-            let ty = match self.lower_type(&arg.idl_type) {
+            let ty = match self.lower_type(&arg.idl_type, Flow::In) {
                 Ok(ty) => ty,
                 // A trailing optional the slice cannot express is left to
                 // its WebIDL default; a required one takes the member with it.
@@ -453,23 +464,29 @@ impl Lowering<'_> {
 
     /// The Wado type of a `WebIDL` type, or why the slice has none. A union is
     /// the one constituent the slice can express; `undefined` in it means nullable.
-    fn lower_type(&self, ty: &IdlType) -> std::result::Result<WadoType, String> {
+    fn lower_type(&self, ty: &IdlType, flow: Flow) -> std::result::Result<WadoType, String> {
         if !ty.generic.is_empty() {
             return Err(format!("`{}<…>`", ty.generic));
         }
         let (inner, nullable) = match &ty.inner {
-            IdlTypeInner::Name(name) => (self.lower_name(name)?, ty.nullable),
+            IdlTypeInner::Name(name) => (self.lower_name(name, flow)?, ty.nullable),
             IdlTypeInner::Types(constituents) => {
                 let mut expressible = Vec::new();
                 let mut reasons = Vec::new();
                 for constituent in constituents.iter().filter(|c| !is_undefined(c)) {
-                    match self.lower_type(constituent) {
+                    match self.lower_type(constituent, flow) {
                         Ok(ty) => expressible.push(ty),
                         Err(reason) => reasons.push(reason),
                     }
                 }
                 match expressible.len() {
-                    1 => (),
+                    1 if reasons.is_empty() || flow == Flow::In => (),
+                    1 => {
+                        return Err(format!(
+                            "union narrowed in a result: {}",
+                            reasons.join("; ")
+                        ));
+                    }
                     0 => return Err(format!("union: {}", reasons.join("; "))),
                     n => return Err(format!("union of {n} expressible types")),
                 }
@@ -480,7 +497,7 @@ impl Lowering<'_> {
         Ok(optional(inner, nullable))
     }
 
-    fn lower_name(&self, name: &str) -> std::result::Result<WadoType, String> {
+    fn lower_name(&self, name: &str, flow: Flow) -> std::result::Result<WadoType, String> {
         Ok(match name {
             "boolean" => WadoType::Bool,
             "byte" => WadoType::I8,
@@ -497,7 +514,7 @@ impl Lowering<'_> {
             "undefined" => return Err("`undefined` outside a return type".to_string()),
             _ if self.slice.contains(name) => WadoType::Named(to_upper_camel_case(name)),
             _ => match self.typedefs.get(name) {
-                Some(target) => return self.lower_type(target),
+                Some(target) => return self.lower_type(target, flow),
                 None => return Err(format!("`{name}` is outside the slice")),
             },
         })
@@ -544,7 +561,7 @@ impl Lowering<'_> {
                 readonly: true,
                 ..
             } = member
-                && let Ok(WadoType::Named(ty)) = self.lower_type(idl_type)
+                && let Ok(WadoType::Named(ty)) = self.lower_type(idl_type, Flow::Out)
                 && ty != global_type
             {
                 let wado_name = to_wado_identifier(name);

@@ -358,7 +358,7 @@ fn union(members: &[String], nullable: bool) -> String {
 }
 
 #[test]
-fn a_union_collapses_to_its_one_expressible_constituent() {
+fn a_union_collapses_only_where_the_guest_supplies_the_value() {
     let mut defs = chain();
     defs.interfaces.push(partial(
         "Element",
@@ -389,15 +389,17 @@ fn a_union_collapses_to_its_one_expressible_constituent() {
         ],
     ));
     let (code, skipped) = defs.generate();
-    assert!(code.contains("fn inner_html(&self) -> String;"), "{code}");
+    // A `TrustedHTML` the slice cannot build is nothing lost on the way in.
     assert!(
         code.contains("fn set_inner_html(&self, value: String);"),
         "{code}"
     );
+    // `undefined` is the nullability marker, not a dropped constituent.
     assert!(code.contains("fn event(&self) -> Option<Node>;"), "{code}");
     assert_eq!(
         skipped,
         [
+            "Element.inner_html: union narrowed in a result: `TrustedHTML` is outside the slice",
             "Element.hidden: union of 2 expressible types",
             "Element.script: union: `HTMLScriptElement` is outside the slice; `SVGScriptElement` is outside the slice",
         ]
