@@ -9,18 +9,18 @@ import { join } from "node:path";
 import { type HookPayload, invokesSkill, readPayload } from "./skill-invocation.mts";
 
 const REMINDER =
-  "This branch has not been distilled. Run the `distill` skill over the whole branch" +
-  " — reuse what exists, drop duplication, dead code and wasted work, turn invariants into" +
-  " asserts, delete the comments the code already speaks — then commit what it changes.";
+  "This branch has not been distilled. Run the `distill` skill over the whole branch," +
+  " then commit what it changes.";
 
 export type State = "unset" | "asked" | "done";
 export type Action = "record-done" | "ask" | "ignore";
 
-export function decide(payload: HookPayload, state: State, hasWork: boolean): Action {
+// `hasWork` is a thunk: only a Stop that reaches the last test pays for it.
+export function decide(payload: HookPayload, state: State, hasWork: () => boolean): Action {
   if (invokesSkill(payload, "distill")) return "record-done";
   if (payload?.hook_event_name !== "Stop") return "ignore";
-  if (payload.stop_hook_active || state !== "unset" || !hasWork) return "ignore";
-  return "ask";
+  if (payload.stop_hook_active || state !== "unset") return "ignore";
+  return hasWork() ? "ask" : "ignore";
 }
 
 const git = (...args: string[]) => execFileSync("git", args, { encoding: "utf8" }).trim();
@@ -53,9 +53,10 @@ function hasCommittedWork(): boolean {
 
 if (import.meta.main) {
   const payload = await readPayload();
-  const isStop = payload.hook_event_name === "Stop";
-  // Every prompt and every skill call reaches here; only these two touch git.
-  if (!payload.session_id || (!isStop && !invokesSkill(payload, "distill"))) process.exit(0);
+  // Every prompt and every skill call reaches here, so ask the decision itself,
+  // under the inputs most favourable to acting, before spending a git spawn.
+  const couldAct = decide(payload, "unset", () => true) !== "ignore";
+  if (!payload.session_id || !couldAct) process.exit(0);
 
   let path: string;
   try {
@@ -63,7 +64,7 @@ if (import.meta.main) {
   } catch {
     process.exit(0); // Not a repository: nothing to distill.
   }
-  const action = decide(payload, readState(path), isStop && hasCommittedWork());
+  const action = decide(payload, readState(path), hasCommittedWork);
   if (action === "record-done") writeFileSync(path, "done");
   if (action === "ask") {
     writeFileSync(path, "asked");
