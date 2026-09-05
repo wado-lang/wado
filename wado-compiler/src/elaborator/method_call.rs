@@ -3501,22 +3501,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         struct_name: &str,
         method_name: &str,
     ) -> bool {
-        let mangled_name = MethodName::format_local(
-            &self.qualified_receiver_name(struct_name),
-            None,
-            method_name,
-        );
-
-        // Check if it's registered in function_return_types (static methods are registered there)
-        if self
-            .sem
-            .decls
-            .function_return_types
-            .contains_key(&mangled_name)
-        {
-            return true;
-        }
-
         // O(1) lookup via the impl-method index, both kinds: the spelling names
         // a receiver-taking method too, passing the receiver first.
         // Canonicalise so a same-named struct in another module doesn't
