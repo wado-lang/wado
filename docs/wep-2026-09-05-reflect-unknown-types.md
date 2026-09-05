@@ -395,25 +395,6 @@ one back is the harder half, since a structural type has no `AstId` for
 - [ ] Decide what `wado query "core:prelude#&Point"` answers — the target's
       declaration, a synthesized view, or a diagnostic naming the limit.
 
-### `i128` has two spellings, and reflection would make that observable
-
-The user-facing `i128` / `u128` are prelude `#[compiler_item]` structs of two
-64-bit limbs, and `PrimitiveType::I128` / `U128` exist beside them, interned at
-table init as `TypeTable::I128` / `U128` and matched in 17 files. Both lower to
-the same code today, so which one a phase holds has never been observable. A
-classification over `ResolvedType` makes it observable: the primitive spelling
-would answer `Primitive` for a type this WEP puts in `Struct`, so the same
-source type could be classified two ways.
-
-Removing the duplicate is an independent refactor rather than this WEP's to
-carry — the two spellings predate it — and closing this gap is what that
-refactor does.
-
-- [ ] Retire `PrimitiveType::I128` / `U128`, leaving the prelude structs as the
-      only spelling.
-- [ ] Until then, key the classification on the surface type the program names,
-      and assert the primitive spelling never reaches it.
-
 ## Related WEPs
 
 - [Library-Defined Derivation over `Reflect*`](./wep-2026-06-13-reflect-derivation.md) — the three planes and the traits this WEP reaches
