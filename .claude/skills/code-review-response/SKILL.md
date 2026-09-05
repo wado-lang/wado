@@ -1,6 +1,6 @@
 ---
 name: code-review-response
-description: "How to answer code review feedback — a human reviewer, CodeRabbit, or any review bot. Verify each finding before acting, fix only what is real, put design decisions to the user, then run /distill. Invoke when responding to review comments on a pull request."
+description: "How to answer code review feedback — a human reviewer, CodeRabbit, or any review bot. Verify each finding before acting, fix only what is real, put design decisions to the user, then run /distill. Invoke when responding to review comments on a pull request, or to the findings of a /code-review run."
 ---
 
 # Answering a code review
