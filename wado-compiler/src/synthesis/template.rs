@@ -216,7 +216,12 @@ pub fn synthesize_hole_fmt_helpers(
             .collect()
     };
     for (struct_type, holes, span) in targets {
-        let helper = build_hole_fmt_helper(struct_type, &holes, span, &ctx);
+        let mut helper = build_hole_fmt_helper(struct_type, &holes, span, &ctx);
+        // The index is a constant at every site `Hole::fmt` reaches after
+        // `members()` folds, so the splice keeps one arm; as a call it would
+        // keep the whole dispatch, and its arms are what the threshold
+        // refuses.
+        helper.inline_hint = crate::tir::InlineHint::Always;
         module.functions.push(Rc::new(RefCell::new(helper)));
     }
 }

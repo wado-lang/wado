@@ -1573,7 +1573,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // `fn f<T, I: Iterator<Item = T>>`). The bounds check above
             // registered the owner's associated types, so this can now
             // project them.
+            let before = type_args.clone();
             self.infer_type_args_from_assoc_bounds(&callee, &mut type_args);
+            // A projected argument was still parametric at the check above,
+            // which skips such an argument; its bounds are asked now that it
+            // is concrete — `..V: ToSqlParam` on a pack read off `Holes`.
+            self.check_projected_type_arg_bounds(&callee, &before, &type_args, call.span);
         }
 
         // Defer (mint holes) or report uninferred type params.

@@ -2284,6 +2284,33 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.enforce_type_arg_bounds(&type_params, type_args, span);
     }
 
+    /// Enforce the bounds of the type arguments an associated-type projection
+    /// just made concrete: those parametric in `before` and concrete in
+    /// `after`. Every other argument was checked before the projection, so
+    /// asking it again would report a failure twice.
+    pub(super) fn check_projected_type_arg_bounds(
+        &mut self,
+        callee: &CalleeRef,
+        before: &[TypeId],
+        after: &[TypeId],
+        span: Span,
+    ) {
+        let type_params = self.lookup_function_type_params(callee);
+        let tt = self.tysys.type_table.clone();
+        let (params, args): (Vec<ast::GenericParam>, Vec<TypeId>) = type_params
+            .iter()
+            .zip(after.iter().copied())
+            .enumerate()
+            .filter(|(i, (_, arg))| {
+                let tt = tt.borrow();
+                before.get(*i).is_some_and(|&b| tt.contains_type_param(b))
+                    && !tt.contains_type_param(*arg)
+            })
+            .map(|(_, (param, arg))| (param.clone(), arg))
+            .unzip();
+        self.enforce_type_arg_bounds(&params, &args, span);
+    }
+
     /// The single enforcement of trait bounds on a generic decl's type args,
     /// shared by every generic-call kind so the rule cannot drift. Enforces only
     /// fully concrete args: a still-parametric arg is forwarded from the caller
