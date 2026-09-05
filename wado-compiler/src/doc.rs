@@ -864,16 +864,19 @@ pub fn extract_stdlib_doc_with(module_name: &str, include_private: bool) -> Opti
 
 /// Collect source paths from `pub use { ... } from "source"` declarations.
 fn collect_pub_use_sources(module: &Module) -> Vec<String> {
-    let mut sources = Vec::new();
+    let mut sources = IndexSet::default();
     for item in &module.items {
         if let Item::Use(u) = item
             && u.visibility.is_public()
             && !u.items.iter().any(|i| matches!(i, UseItem::Wildcard))
         {
-            sources.push(u.source.clone());
+            // A module re-exported by two statements is still one module, and
+            // the names are collected across all of them; walking it twice
+            // would publish every item it names twice.
+            sources.insert(u.source.clone());
         }
     }
-    sources
+    sources.into_iter().collect()
 }
 
 /// Collect item names from `pub use { Name1, Name2 } from "..."` declarations.
