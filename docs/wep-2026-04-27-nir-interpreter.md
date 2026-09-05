@@ -23,15 +23,16 @@ The prize is compile-time string formatting. An interpolation that does not fold
 costs a buffer allocation, a `Formatter`, and a digit-count and division loop on
 every evaluation, and it keeps the formatting code alive in the binary. Every
 `${}` over constants, every `to_string()` on a literal and every constant
-`assert` message pays that. Measured at `-Os` against the same program written
-with the literal, which costs 3 312 bytes:
+`assert` message pays that. Measured at `-Os` on a program that prints one
+interpolation, against the same program printing the literal, which costs
+2 012 bytes:
 
 | Interpolation                    | Cost   | Over the literal |
 | -------------------------------- | ------ | ---------------- |
-| `${"y"}`, `${42}`, `${42:?}`     | ~3 335 | ~20              |
-| `${true}`, `${7:04}`, `${255:x}` | ~3 340 | ~30              |
-| `${'x'}`                         | 3 724  | 412              |
-| `${3.5}`                         | 13 274 | 9 962            |
+| `${"y"}`, `${42}`, `${42:?}`     | ~2 030 | ~18              |
+| `${255:x}`, `${7:04}`, `${true}` | ~2 035 | ~23              |
+| `${'x'}`                         | 2 355  | 343              |
+| `${3.5}`                         | 6 269  | 4 257            |
 
 The first two rows fold to the literal; `char` and floats do not. The roadmap is
 ordered against a census of the corpus rather than against this document's
@@ -53,15 +54,13 @@ bodies.
 
 The boundary against the `ValueGraph` is load-bearing: `niri` once carried its
 own per-local field map, and that map was retired once the `ValueGraph` covered
-the same ground. A proposal to teach `niri` about control flow between statements
-is a
-sign the fact belongs on the other side of the line.
+the same ground. A proposal to teach `niri` about control flow between
+statements is a sign the fact belongs on the other side of the line.
 
 The line does not forbid a store over the values the engine itself built. Inside
 a frame `niri` executes statements in order, so a value the frame built, which
 nothing outside it reaches, can be written through and read back. The program's
-heap stays the `ValueGraph`'s; the engine's own is
-the engine's.
+heap stays the `ValueGraph`'s; the engine's own is the engine's.
 
 ### Effects are the purity gate
 
@@ -110,8 +109,7 @@ side-effect-free condition whose arms denote the same constant collapses to it. 
 constant `match` scrutinee selects the first arm that provably matches. A
 provably exhaustive match whose arms all denote one constant collapses to it,
 since exhaustiveness is what keeps the implicit no-match trap alive. Patterns
-decided:
-wildcard, binding, integer / bool / char literal, range, or-patterns,
+decided: wildcard, binding, integer / bool / char literal, range, or-patterns,
 constant-valued, struct, and exact-arity tuple.
 
 Calls: a free call runs at compile time when its arguments are all constant and
@@ -240,6 +238,11 @@ and returned does not fold, whether `T` is a scalar or a struct, while the same
 program over a `String` does. A `String`'s backing is a byte array the engine
 represents and can write back, and a `List<T>`'s is not.
 
+What stops is the list, not everything that touches one. A scalar the engine
+projects out of it still folds, so `` `${table().len()}` `` reaches the IR as the
+rendered literal while `` `${table():?}` ``, which needs the list itself, does
+not.
+
 - [ ] A `List<T>` of scalars written back as
       [`ArrayLiteral`](./wep-2026-05-31-nir-array-literal.md) and a plain struct
       as `StructLiteral`, each needing its own answer to "is this already the
@@ -262,9 +265,9 @@ literals, `Array::slice`'s computed bounds fold, and the corpus is recounted.
 
 ### 3. The frame owns storage
 
-`` `${'x'}` `` still leaves `Formatter::pad` standing where `` `${true}` `` no
-longer does, and the remark does not yet separate the two. That is the last
-non-float interpolation paying for its formatter.
+`` `${'x'}` `` still leaves `Formatter::pad` standing, which the remark names,
+where `` `${true}` `` folds and reports nothing. That is the last non-float
+interpolation paying for its formatter.
 
 - [ ] What distinguishes the `char` path from the `bool` one.
 - [ ] A place-valued field, so an aggregate can carry a reference. Today such an
