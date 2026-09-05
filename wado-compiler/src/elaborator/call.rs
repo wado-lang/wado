@@ -2725,21 +2725,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// The index entry for the declaration `receiver::method_name` names, for
     /// the questions the signature alone cannot answer — which module declared
-    /// it, and at what visibility. Which declaration that is comes from
-    /// [`Self::qualified_method_decl_ids`], never from whichever entry the
-    /// name was indexed under first: a trait impl's same-named method declares
-    /// no reach of its own, so reading it skipped the check the shadowing
-    /// inherent one owed.
+    /// it, and at what visibility. The spelling's own first answer, never
+    /// whichever entry the name was indexed under first: a trait impl's
+    /// same-named method declares no reach of its own, so reading it skipped
+    /// the check the shadowing inherent one owed.
     pub(super) fn static_method_entry(
         &self,
         receiver: &super::trait_env::ImplTargetKey,
         method_name: &str,
     ) -> Option<&super::trait_env::ImplMethodEntry> {
-        let named = self
-            .qualified_method_decl_ids(receiver, method_name)
-            .next()?;
-        self.impl_method_entries(receiver, method_name)
-            .find(|entry| entry.method_id == named)
+        self.impl_method_entries(receiver, method_name).next()
     }
 
     /// [`Self::qualified_method_sig`] where the name resolves to exactly one
@@ -2806,7 +2801,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // One name over several impls is an overload only an argument
         // separates, so a single signature is not this lookup's to pick.
         let mut declared = self
-            .impl_method_decl_ids(key, method_name)
+            .qualified_method_decl_ids(key, method_name)
             .filter_map(|def| self.tysys.signatures.method_sig(def).cloned());
         if let Some(sig) = declared.next()
             && declared.next().is_none()

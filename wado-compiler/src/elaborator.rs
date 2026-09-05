@@ -682,47 +682,17 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         self.qualified_method_decl_ids(receiver, method_name).next()
     }
 
-    /// Every declaration `receiver::method_name` can name, each once,
-    /// receiver-less ones first. A caller that must choose reads them all
-    /// rather than trusting the order: one name over several impls is an
-    /// overload, not a tiebreak. The two indexes overlap, and a declaration
-    /// counted twice reads as an overload of itself.
+    /// Every declaration `receiver::method_name` can name, in
+    /// [`Self::impl_method_entries`]' order. A caller that must choose reads
+    /// them all rather than trusting it: one name over several impls is an
+    /// overload, not a tiebreak.
     pub(super) fn qualified_method_decl_ids(
         &self,
         receiver: &trait_env::ImplTargetKey,
         method_name: &str,
     ) -> impl Iterator<Item = crate::defs::DefId> {
-        let statics = self
-            .static_method_entries(receiver, method_name)
-            .map(|e| e.method_id);
-        let mut seen = crate::hashmap::IndexSet::default();
-        statics
-            .chain(self.impl_method_decl_ids(receiver, method_name))
-            .filter(move |def| seen.insert(*def))
-    }
-
-    /// The declarations of `method_name` in `receiver`'s impl blocks, whether
-    /// or not they take a receiver, shadowed by [`shadow_trait_impls`].
-    pub(in crate::elaborator) fn impl_method_decl_ids(
-        &self,
-        receiver: &trait_env::ImplTargetKey,
-        method_name: &str,
-    ) -> impl Iterator<Item = crate::defs::DefId> {
-        let trait_env = &self.tysys.trait_env;
-        let declared: Vec<(bool, crate::defs::DefId)> = trait_env
-            .all_impl_index
-            .get(receiver)
-            .into_iter()
-            .flatten()
-            .filter_map(|&impl_def| {
-                let inherent = trait_env
-                    .impl_headers
-                    .get(&impl_def)
-                    .is_some_and(|header| header.trait_key.is_none());
-                Some((inherent, self.tysys.declared_method(impl_def, method_name)?))
-            })
-            .collect();
-        shadow_trait_impls(declared, |(inherent, _)| *inherent).map(|(_, def)| def)
+        self.impl_method_entries(receiver, method_name)
+            .map(|entry| entry.method_id)
     }
 
     /// The receiver-less declarations of `method_name` on `receiver`. Several
@@ -738,9 +708,11 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     }
 
     /// Every declaration of `method_name` an impl block on `receiver` makes,
-    /// both kinds: `Type::method` is how the receiver-taking ones are named.
-    /// Shadowed by [`shadow_trait_impls`], as [`Self::impl_method_decl_ids`] is:
-    /// a rule one of the two ladders keeps is a rule the spelling does not have.
+    /// both kinds, shadowed by [`shadow_trait_impls`] and receiver-less first.
+    ///
+    /// The one walk behind every qualified lookup. Two of them read two
+    /// indexes, and each rule one of them kept was a rule the spelling did not
+    /// have.
     pub(in crate::elaborator) fn impl_method_entries(
         &self,
         receiver: &trait_env::ImplTargetKey,
@@ -755,7 +727,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             .flatten()
             .filter(|e| e.name == method_name)
             .collect();
-        shadow_trait_impls(named, |e| e.is_inherent())
+        let mut shadowed: Vec<&trait_env::ImplMethodEntry> =
+            shadow_trait_impls(named, |e| e.is_inherent()).collect();
+        // An associated function answers first, as it did while the two walks
+        // were chained. Stable, so declaration order decides within each kind.
+        shadowed.sort_by_key(|e| e.has_self);
+        shadowed.into_iter()
     }
 
     /// Whether an inherent impl on `receiver` declares `method_name`, of either
