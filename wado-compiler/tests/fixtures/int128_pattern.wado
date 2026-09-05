@@ -1,7 +1,6 @@
-// Wado has no 128-bit compare, so every wide-int pattern lowers to an `Eq` /
-// `Ord` call. Once only the whole pattern of a `match`, and only a plain
-// literal, got that: a range arm took the wrong branch and a literal nested in
-// a tuple ICE'd.
+// Wasm has no 128-bit compare, so every wide-int pattern lowers to an `Eq` /
+// `Ord` call: a literal or a range, at the top of a `match` or nested inside a
+// tuple, under `if let` or `matches`, with or without a guard.
 
 test "i128 range pattern" {
     let x: i128 = 3;
