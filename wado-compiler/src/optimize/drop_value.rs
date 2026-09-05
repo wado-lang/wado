@@ -37,6 +37,7 @@ impl Rule for DropValueRule {
                 continue;
             };
             let span = engine.body.stmts[s].span;
+            crate::compiler_trace!("drop_value", "strip {label}");
             strip_exits(engine, block, &label);
             new_stmts.push(engine.alloc_stmt(StmtKind::LabeledBlock { label, block }, span));
             changed = true;

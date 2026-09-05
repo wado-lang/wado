@@ -973,17 +973,36 @@ pub(super) fn block_yields_value(engine: &Engine, block: BlockId) -> bool {
     node_yields_value(engine, NodeRef::Block(block))
 }
 
+/// Whether `op` is the operand slot `node` sits in.
+fn operand_is(op: Operand, node: NodeRef) -> bool {
+    matches!((op.as_expr(), node), (Some(e), NodeRef::Expr(n)) if e == n)
+}
+
 fn node_yields_value(engine: &Engine, node: NodeRef) -> bool {
     let Some(parent) = engine.parent_of(node) else {
         return false;
     };
     match parent {
         NodeRef::Expr(pe) => match &engine.body.exprs[pe].kind {
-            ExprKind::Block(_)
-            | ExprKind::LabeledBlock { .. }
-            | ExprKind::If { .. }
-            | ExprKind::Match { .. }
-            | ExprKind::Switch { .. } => node_yields_value(engine, NodeRef::Expr(pe)),
+            ExprKind::Block(_) | ExprKind::LabeledBlock { .. } => {
+                node_yields_value(engine, NodeRef::Expr(pe))
+            }
+            // What a branching construct tests is read whatever the construct
+            // itself yields; only what it selects among inherits its position.
+            // A scrutinee read as a branch is what strips an `if` condition of
+            // its value and leaves the branch reading nothing.
+            ExprKind::If { condition, .. } => {
+                operand_is(*condition, node) || node_yields_value(engine, NodeRef::Expr(pe))
+            }
+            ExprKind::Switch { scrutinee, .. } => {
+                operand_is(*scrutinee, node) || node_yields_value(engine, NodeRef::Expr(pe))
+            }
+            // A `Match` holds its arm bodies as operands too, so the tested
+            // operand is whatever is not one of them — the scrutinee or a guard.
+            ExprKind::Match { arms, .. } => {
+                !arms.iter().any(|arm| operand_is(arm.body, node))
+                    || node_yields_value(engine, NodeRef::Expr(pe))
+            }
             _ => true,
         },
         NodeRef::Stmt(ps) => match &engine.body.stmts[ps].kind {
