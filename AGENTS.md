@@ -65,8 +65,7 @@ mise run report-wasm-size  # measures the size of the generated Wasm files and r
 - Add a new integration test to `tests/integration/` and declare it in that directory's `main.rs`. A file dropped directly in `tests/` becomes its own target, and each one statically links the compiler and wasmtime for another ~150 MB.
 - Use the `rust` skill when writing Rust.
 - Use the `wado` skill when writing Wado code or designing Wado language features.
-- Use the `code-review-response` skill when answering review comments, and when
-  answering the findings of a `/code-review` run.
+- Use the `code-review-response` skill when answering review comments, and when answering the findings of a `/code-review` run.
 
 ## The Wado Language
 

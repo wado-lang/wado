@@ -24,7 +24,7 @@ nor what you have already answered. Neither is evidence of anything.
 ## Fix the class, not the finding
 
 A finding points at one site. Before fixing it, raise the altitude: what class of
-defect is this, and where else does the class hold? Fix what admits the class —
+defect is this, and where else does the class hold? Fix what admits the class:
 the missing invariant, the type that allows the state, the call site nobody has
 to remember. A patch at the site the reviewer named leaves the rest of the class
 in the tree.
