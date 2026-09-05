@@ -1,4 +1,6 @@
-// `match` / `matches` over immutable integer-global constants lowers to a `br_table`.
+// `match` / `matches` over immutable integer-global constants reads them as the
+// literals they hold: the set is a contiguous run, so the test is one unsigned
+// range compare rather than twelve global reads.
 
 use { println, Stdout } from "core:cli";
 
@@ -15,7 +17,6 @@ global K9: i32 = 33;
 global K10: i32 = 34;
 global K11: i32 = 35;
 
-// Twelve cases, the width at which `match_to_switch` takes a `br_table`.
 fn is_kw(k: i32) -> bool {
     return k matches { K0 | K1 | K2 | K3 | K4 | K5 | K6 | K7 | K8 | K9 | K10 | K11 };
 }
@@ -33,5 +34,6 @@ export fn run() with Stdout {
 __DATA__
 {
     "stdout": "12\n",
-    "wir_expect:O2": ["br_table"]
+    "wir_expect:O2": ["(i - 24) <u 12"],
+    "wir_not_expect:O2": ["K0", "br_table"]
 }

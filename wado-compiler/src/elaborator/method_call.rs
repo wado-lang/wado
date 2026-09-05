@@ -1267,6 +1267,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 call_id,
                 super::sem::types::StaticMethodDispatch {
                     method_def: dispatched.method_def,
+                    defaults_module: function_ref.module_source.clone(),
                     function_ref,
                     param_is_mut,
                     type_args,
@@ -2255,6 +2256,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             key,
             super::sem::types::StaticMethodDispatch {
                 method_def: selected.as_ref().and_then(|r| r.method_id),
+                defaults_module: func_ref.module_source.clone(),
                 function_ref: func_ref,
                 param_is_mut,
                 type_args: method_type_args,
@@ -2357,6 +2359,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             call_id,
             super::sem::types::StaticMethodDispatch {
                 method_def: self.tysys.declared_method(blanket_def, method),
+                defaults_module: func_ref.module_source.clone(),
                 function_ref: func_ref,
                 param_is_mut: Vec::new(),
                 type_args: method_type_args.to_vec(),

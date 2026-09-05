@@ -1,0 +1,50 @@
+// Test: a callee held for a fold that never comes still receives inlining.
+//
+// `lookup` is over the `-O2` budget as written, and a constant `kind` would
+// fold the branch over it and delete the scan loop. So the inliner holds it,
+// splicing nothing into it, to keep that admission open for the constants a
+// later round may bring. No call site ever passes one, so once the loop has
+// converged with the hold in place there is nothing left to wait for: the
+// hold is released, and `List::len` and the by-reference iterator inline into
+// `lookup` like any other function's callees.
+
+struct Table {
+    ids: List<i32>,
+    defaults: List<i32>,
+}
+
+fn lookup(t: &Table, kind: i32) -> i32 {
+    if kind >= 0 && kind < t.ids.len() {
+        for let id of &t.ids {
+            if *id == kind {
+                return kind * 2;
+            }
+        }
+    }
+    if kind >= 0 && kind < t.defaults.len() {
+        return t.defaults[kind];
+    }
+    return -1;
+}
+
+export fn run() {
+    let t = Table {
+        ids: [builtin::black_box(5), 1, 7],
+        defaults: [10, 20, 30],
+    };
+    assert lookup(&t, builtin::black_box(1)) == 2;
+    assert lookup(&t, builtin::black_box(2)) == 30;
+    assert lookup(&t, builtin::black_box(9)) == -1;
+}
+
+__DATA__
+{
+    "stdout": "",
+    "wir_expect:O2": [
+        "\"inline_hold_released.wado/lookup\"("
+    ],
+    "wir_not_expect:O2": [
+        "List<i32>::len\"(",
+        "Iterator::next\"("
+    ]
+}

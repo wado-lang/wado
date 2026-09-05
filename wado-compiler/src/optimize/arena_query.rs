@@ -13,7 +13,9 @@ use crate::nir::{NirBinaryOp, NirUnaryOp};
 use crate::nir_arena::{
     BlockId, Body, ExprId, ExprKind, NodeRef, Operand, PatId, PatKind, StmtId, StmtKind,
 };
+use crate::nir_engine::Engine;
 use crate::nir_value_graph::{OpaqueSource, ValueId, ValueKind};
+use crate::tir::TypeTable;
 
 /// Every block reachable from the body root, in DFS pop order (a block precedes
 /// the blocks nested under it). The NIR block graph is a tree, so no visited set
@@ -960,4 +962,71 @@ pub(super) fn locals_possibly_mutated(
         body.for_each_child(n, |c| stack.push(c));
     }
     out
+}
+
+/// Whether WIR will expect a value from `block`'s tail. Walks the parent map,
+/// which is bounded by tree depth.
+pub(super) fn block_yields_value(engine: &Engine, block: BlockId) -> bool {
+    node_yields_value(engine, NodeRef::Block(block))
+}
+
+/// Whether `op` is the operand slot `node` sits in.
+fn operand_is(op: Operand, node: NodeRef) -> bool {
+    matches!((op.as_expr(), node), (Some(e), NodeRef::Expr(n)) if e == n)
+}
+
+fn node_yields_value(engine: &Engine, node: NodeRef) -> bool {
+    let Some(parent) = engine.parent_of(node) else {
+        return false;
+    };
+    // WIR sizes a value region from the owning expression's own type, so a
+    // branch of a non-unit one yields whether or not anything reads it. A
+    // unit-typed owner still yields where its own position recovers a value,
+    // which is what the walk answers.
+    let inherits = |pe| {
+        engine.body.exprs[pe].type_id != TypeTable::UNIT
+            || node_yields_value(engine, NodeRef::Expr(pe))
+    };
+    match parent {
+        NodeRef::Expr(pe) => match &engine.body.exprs[pe].kind {
+            ExprKind::Block(_) | ExprKind::LabeledBlock { .. } => inherits(pe),
+            // What a branching construct tests is read whatever the construct
+            // yields; only what it selects among inherits its position. A
+            // scrutinee read as a branch is what strips an `if` condition of
+            // its value and leaves the branch reading nothing.
+            ExprKind::If { condition, .. } => operand_is(*condition, node) || inherits(pe),
+            ExprKind::Switch { scrutinee, .. } => operand_is(*scrutinee, node) || inherits(pe),
+            // A `Match` holds its arm bodies as operands too, so the tested
+            // operand is whatever is not one of them — the scrutinee or a guard.
+            ExprKind::Match { arms, .. } => {
+                !arms.iter().any(|arm| operand_is(arm.body, node)) || inherits(pe)
+            }
+            _ => true,
+        },
+        NodeRef::Stmt(ps) => match &engine.body.stmts[ps].kind {
+            StmtKind::Let { .. }
+            | StmtKind::LetDestructure { .. }
+            | StmtKind::Return { value: Some(_) }
+            | StmtKind::Break { value: Some(_), .. } => true,
+            StmtKind::Expr(_) => node_yields_value(engine, NodeRef::Stmt(ps)),
+            StmtKind::If { .. } => match node {
+                NodeRef::Expr(_) => true,
+                NodeRef::Block(_) => node_yields_value(engine, NodeRef::Stmt(ps)),
+                NodeRef::Stmt(_) | NodeRef::Pat(_) => false,
+            },
+            StmtKind::Loop { .. }
+            | StmtKind::LabeledBlock { .. }
+            | StmtKind::Break { value: None, .. }
+            | StmtKind::Return { value: None }
+            | StmtKind::Continue => false,
+        },
+        NodeRef::Block(pb) => {
+            let NodeRef::Stmt(s) = node else {
+                return false;
+            };
+            engine.body.blocks[pb].stmts.last() == Some(&s)
+                && node_yields_value(engine, NodeRef::Block(pb))
+        }
+        NodeRef::Pat(_) => false,
+    }
 }

@@ -1,0 +1,16 @@
+// The declaration checks an operation's default against the type argument a
+// caller gets by default. `T` is `i32` here, and `i32` admits `0`.
+
+#[cm("web:demo/buf", type = "extern-handle")]
+resource Buf<T = i32> {
+    #[cm("web:demo/buf#put")]
+    #[cm_params("self", "v")]
+    fn put(&self, v: T = 0);
+}
+
+export fn run() {}
+
+__DATA__
+{
+    "stdout": ""
+}

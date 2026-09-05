@@ -8078,7 +8078,49 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     CallArg::new(arg, is_mut)
                 })
                 .collect();
+<<<<<<< HEAD
             self.reify_pad_dispatch_defaults(&call.callee, &mut arg_exprs, &dispatch, span, ctx);
+||||||| 78596fa89
+            self.reify_pad_args_with_defaults(
+                &call.callee,
+                &mut arg_exprs,
+                &dispatch.param_types,
+                &dispatch.function_ref.module_source,
+                &dispatch.function_ref.name,
+                ctx,
+            );
+            // A `::`-qualified `Type::method()` is a static-method dispatch, so
+            // the free-function pad above finds nothing; apply its own defaults.
+            let smc_module = dispatch.function_ref.module_source.clone();
+            self.reify_apply_param_defaults(
+                &mut arg_exprs,
+                &dispatch.param_defaults,
+                &dispatch.param_types,
+                &smc_module,
+                span,
+                ctx,
+            );
+=======
+            self.reify_pad_args_with_defaults(
+                &call.callee,
+                &mut arg_exprs,
+                &dispatch.param_types,
+                &dispatch.function_ref.module_source,
+                &dispatch.function_ref.name,
+                ctx,
+            );
+            // A `::`-qualified `Type::method()` or `Effect::op()` is not a free
+            // function, so the pad above finds nothing; apply its own defaults.
+            let smc_module = dispatch.defaults_module.clone();
+            self.reify_apply_param_defaults(
+                &mut arg_exprs,
+                &dispatch.param_defaults,
+                &dispatch.param_types,
+                &smc_module,
+                span,
+                ctx,
+            );
+>>>>>>> origin/main
             // Type args: replay exactly what the production builder put on
             // the `Call`. This already folds in any explicit turbofish and,
             // crucially, carries only the method-level type args — a generic

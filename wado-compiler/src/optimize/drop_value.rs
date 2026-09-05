@@ -19,13 +19,11 @@ impl Rule for DropValueRule {
     fn apply_block(&self, engine: &mut Engine, id: BlockId) -> bool {
         let stmts = engine.body.blocks[id].stmts.clone();
         let last = stmts.last().copied();
-        // Only a statement something follows is discarded, plus the root block's
-        // tail, which `translate_block` lowers with no value at all. WIR decides
-        // "value region" by a block expression's own type, not by whether
-        // anything reads the enclosing construct, so a `match` arm whose result
-        // is dropped still expects its last statement to leave a value.
-        let is_root = id == engine.body.root;
-        let discarded = |s: StmtId| Some(s) != last || is_root;
+        // WIR gives a block a value region exactly when something reads its
+        // value, so that is what decides the tail; everything before it is
+        // discarded either way.
+        let tail_discarded = !arena_query::block_yields_value(engine, id);
+        let discarded = |s: StmtId| Some(s) != last || tail_discarded;
         let mut changed = false;
         let mut new_stmts = Vec::with_capacity(stmts.len());
         for s in stmts {
@@ -37,6 +35,7 @@ impl Rule for DropValueRule {
                 continue;
             };
             let span = engine.body.stmts[s].span;
+            crate::compiler_trace!("drop_value", "strip {label}");
             strip_exits(engine, block, &label);
             new_stmts.push(engine.alloc_stmt(StmtKind::LabeledBlock { label, block, role }, span));
             changed = true;

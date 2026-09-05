@@ -30,6 +30,7 @@ mod labeled_block_fusion;
 mod let_block_flatten;
 mod licm;
 mod loop_version_bce;
+mod match_to_bitset;
 mod match_to_switch;
 mod mod_ref;
 pub(crate) mod multi_value_return;
@@ -504,6 +505,9 @@ fn run_optimization_passes(
     // Held across the loop: the budget anchors on the unit as the loop found it,
     // so what the rounds add together stays bounded. See `InlineBudget`.
     let mut inline_budget = inline::InlineBudget::new(config.inline_growth);
+    // Also held across the loop: released once the loop has converged with
+    // functions still held, which is when a hold can no longer pay.
+    let mut inline_holds = inline::InlineHolds::default();
     // Dense `Match` → `Switch` in global initializer bodies. Functions are
     // lowered by `MatchToSwitchRule` inside the unified peephole session; the
     // function-level loop never mutates global initializer bodies, so a single
@@ -523,8 +527,14 @@ fn run_optimization_passes(
     // What changed in the iteration just run, and so the convergence flag:
     // empty ends the loop, non-empty after it names what held the loop open.
     let mut iter_changed: Vec<&'static str> = Vec::new();
-    for i in 0..config.iterations {
-        profiler.span_start(&format!("nir/iteration {}", i + 1));
+    let mut i = 0;
+    // The cap sizes one convergence. Releasing the inline holds opens a second
+    // run, which gets the cap again: a program that takes most of it to
+    // converge once would otherwise hit it on the rounds the release adds.
+    let mut limit = config.iterations;
+    while i < limit {
+        i += 1;
+        profiler.span_start(&format!("nir/iteration {i}"));
         iter_changed.clear();
         macro_rules! record {
             ($name:expr, $c:expr) => {{
@@ -616,6 +626,7 @@ fn run_optimization_passes(
             p,
             config.inline_threshold,
             &mut inline_budget,
+            &mut inline_holds,
             g,
             &mut descriptor_cache,
         ));
@@ -671,18 +682,19 @@ fn run_optimization_passes(
             GatedPass::TmplHoist,
             hoist_template_buffers
         );
-        profiler.span_end(&format!("nir/iteration {}", i + 1));
+        profiler.span_end(&format!("nir/iteration {i}"));
         crate::compiler_trace!(
             "opt_loop",
-            "iter {:>3}: changed_by = [{}]",
-            i + 1,
+            "iter {i:>3}: changed_by = [{}]",
             iter_changed.join(", ")
         );
         if iter_changed.is_empty() {
-            profiler.debug(&format!(
-                "NIR optimizer converged after {} iteration(s)",
-                i + 1
-            ));
+            if inline_holds.release(&mut gate) {
+                crate::compiler_trace!("opt_loop", "iter {i:>3}: inline holds released");
+                limit = i + config.iterations;
+                continue;
+            }
+            profiler.debug(&format!("NIR optimizer converged after {i} iteration(s)"));
             break;
         }
     }
@@ -690,10 +702,16 @@ fn run_optimization_passes(
         profiler.debug(&report);
     }
     if !iter_changed.is_empty() {
+        // A run that stopped before the release still holds its callees, and
+        // each kept every call it makes. Nothing downstream would say so.
+        let held = match inline_holds.still_held() {
+            0 => String::new(),
+            n => format!("; {n} function(s) still held by the inliner"),
+        };
         let report = format!(
-            "NIR optimizer hit the {}-iteration cap without converging; still changing: [{}]",
-            config.iterations,
-            iter_changed.join(", ")
+            "NIR optimizer hit the {limit}-iteration cap without converging; \
+             still changing: [{}]{held}",
+            iter_changed.join(", "),
         );
         profiler.debug(&report);
         // A pass reported a change it did not make, or is taking one step per

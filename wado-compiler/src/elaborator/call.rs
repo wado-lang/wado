@@ -1432,6 +1432,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         key,
                         super::sem::types::StaticMethodDispatch {
                             method_def: method_ref.method_id,
+                            defaults_module: func_ref.module_source.clone(),
                             function_ref: func_ref,
                             param_is_mut,
                             type_args: vec![],
@@ -1631,12 +1632,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .map(|&param| self.tysys.substitute_type_params(param, &type_args))
                 .collect()
         };
+        // Looked up before padding and recorded below, so reify pads from the
+        // same defaults, in the same scope, rather than re-deriving them.
+        let (param_defaults, defaults_module) =
+            self.lookup_function_param_defaults(&call.callee, ctx);
         if !check_param_types.is_empty() && args.len() < check_param_types.len() {
-            self.pad_args_with_defaults(
-                &call.callee,
+            self.apply_param_defaults(
                 &call.args,
                 &mut args,
                 &check_param_types,
+                &param_defaults,
+                defaults_module.clone(),
                 ctx,
             );
         }
@@ -1697,10 +1703,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // A free function, whose spelled callee already records the
                 // edge; this fact exists for reify's `FunctionRef` shape.
                 method_def: None,
+                defaults_module: defaults_module.unwrap_or_else(|| func_ref.module_source.clone()),
                 function_ref: func_ref,
                 param_is_mut,
                 type_args: type_args.clone(),
-                param_defaults: vec![],
+                param_defaults,
                 param_types: check_param_types,
                 self_in_args: false,
             },
@@ -1943,11 +1950,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ))
     }
 
-    /// Fill missing trailing arguments from the callee's declared defaults,
-    /// resolving each in the caller's context. A default may name an earlier
-    /// parameter (`fn rect(w, h = w)`), so param-name idents in its cloned AST
-    /// are substituted with the caller's argument AST before resolution. A
-    /// position with no declared default is left for the arity check.
+    /// [`Self::apply_param_defaults`] against the callee's own declaration, for
+    /// a caller with no use for the defaults beyond the padding.
     pub(super) fn pad_args_with_defaults(
         &mut self,
         callee: &Expr,
@@ -1957,6 +1961,30 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ctx: &mut FunctionContext,
     ) {
         let (defaults, callee_module) = self.lookup_function_param_defaults(callee, ctx);
+        self.apply_param_defaults(
+            call_args_ast,
+            args,
+            param_types,
+            &defaults,
+            callee_module,
+            ctx,
+        );
+    }
+
+    /// Fill missing trailing arguments from `defaults`, resolving each in the
+    /// caller's context. A default may name an earlier parameter (`fn rect(w, h
+    /// = w)`), so param-name idents in its cloned AST are substituted with the
+    /// caller's argument AST before resolution. A position with no declared
+    /// default is left for the arity check.
+    pub(super) fn apply_param_defaults(
+        &mut self,
+        call_args_ast: &[Expr],
+        args: &mut Vec<TypeId>,
+        param_types: &[TypeId],
+        defaults: &[(String, Option<Expr>)],
+        callee_module: Option<ModuleSource>,
+        ctx: &mut FunctionContext,
+    ) {
         if defaults.is_empty() {
             return;
         }
@@ -2023,6 +2051,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
         if let Some(defaults) = ctx.closure_defaults.get(&ident.name) {
             return (defaults.clone(), None);
+        }
+        // `Effect::op(args)` reads its defaults off the operation's own
+        // declaration, the same place `resolve_effect_op_signature` reads the
+        // parameter types the padding fills.
+        if let [receiver, method] = ident.segments.as_slice()
+            && let Some(decl) = self.effect_or_resource_decl_at(Some(receiver.id))
+            && let Some(sig) = self
+                .tysys
+                .signatures
+                .resource_method_sig(decl, &method.name)
+        {
+            let defaults = crate::elaborator::sig::Param::named_defaults(&sig.params);
+            let module = self.tysys.resolutions.defs().module(sig.def).clone();
+            return (defaults, Some(module));
         }
         let Some(def) = self.free_function_at(ident.id) else {
             return (Vec::new(), None);
@@ -3125,6 +3167,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .iter()
                 .map(|t| self.tysys.type_table.borrow().fq_type_name(*t))
                 .collect();
+            // The defaults below are the trait's, so they resolve in its own
+            // module. The `FunctionRef` names the caller's, because the mangled
+            // callee is minted per instantiation.
+            let trait_module = found_trait.module().cloned();
             let mut method_info = LocalMethodName::new(
                 self.binder_in_scope(type_param_name),
                 Some(found_trait),
@@ -3178,6 +3224,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 key,
                 super::sem::types::StaticMethodDispatch {
                     method_def: method_info_result.method_def,
+                    defaults_module: trait_module.unwrap_or_else(|| func_ref.module_source.clone()),
                     function_ref: func_ref,
                     param_is_mut: vec![false; args.len()],
                     type_args: vec![],

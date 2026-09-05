@@ -1,0 +1,25 @@
+// A trait-declared default is materialized where a bound-qualified call omits
+// the argument, but resolves in the module that declares the trait.
+
+use { Make } from "./sub/trait_static_default_lib.wado";
+
+struct Marker {}
+
+impl Make for Marker {
+    fn make(n: i32) -> i32 {
+        return n * 2;
+    }
+}
+
+fn twice<T: Make>() -> i32 {
+    return T::make();
+}
+
+export fn run() {
+    assert twice::<Marker>() == 14;
+}
+
+__DATA__
+{
+    "stdout": ""
+}
