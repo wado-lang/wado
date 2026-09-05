@@ -384,7 +384,7 @@ fn decode_surrogate_pair(high: u16, low: u16) -> u32 {
 
 /// Parse an unsigned integer literal into a u128 value.
 /// Supports decimal, hex, binary, octal, and scientific notation (e.g., "1e10").
-pub(super) fn parse_u128_literal(repr: &str) -> Result<u128, String> {
+pub(crate) fn parse_u128_literal(repr: &str) -> Result<u128, String> {
     let clean = normalize_numeric_literal(repr);
 
     if let Some(hex) = clean.strip_prefix("0x") {
@@ -415,7 +415,7 @@ pub(super) fn parse_u128_literal(repr: &str) -> Result<u128, String> {
 /// Parse a signed integer literal into an i128 value.
 /// Supports decimal, hex, binary, octal, and scientific notation.
 /// For non-negative values, delegates to `parse_u128_literal` with an i128 range check.
-pub(super) fn parse_i128_literal(repr: &str) -> Result<i128, String> {
+pub(crate) fn parse_i128_literal(repr: &str) -> Result<i128, String> {
     let clean = normalize_numeric_literal(repr);
 
     if clean.starts_with('-') {

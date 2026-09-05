@@ -16,8 +16,6 @@ use crate::tir::{
 };
 use crate::token::Span;
 
-use crate::lower::wide_int_literal::{create_i128_literal, create_u128_literal};
-
 // `extract` and `build_initialize_modules` are the two halves of
 // the global-initializer planner. They run at different points in
 // `super::plan` (extract before boxing, build_initialize_modules
@@ -97,14 +95,6 @@ fn default_value_for_type(type_id: TypeId, type_table: &TypeTable, span: Span) -
                 type_id,
                 span,
             ),
-            crate::tir::PrimitiveType::I128 | crate::tir::PrimitiveType::U128 => {
-                // i128/u128 need special handling - call from_i64(0) / from_u64(0)
-                if matches!(prim, crate::tir::PrimitiveType::I128) {
-                    create_i128_literal(0, type_id, type_table, span)
-                } else {
-                    create_u128_literal(0, type_id, type_table, span)
-                }
-            }
             crate::tir::PrimitiveType::F32 => TirExpr::new(
                 TirExprKind::FloatLiteral {
                     value: 0.0,

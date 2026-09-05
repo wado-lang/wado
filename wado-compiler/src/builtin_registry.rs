@@ -7,6 +7,7 @@ use crate::hashmap::IndexMap;
 use std::cell::RefCell;
 
 use crate::ast::{CmBoundary, Function, Type};
+use crate::compiler_item::CompilerItem;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
 
 /// Information about a builtin function
@@ -175,12 +176,20 @@ impl BuiltinRegistry {
                     "i16" => TypeTable::I16,
                     "i32" => TypeTable::I32,
                     "i64" => TypeTable::I64,
-                    "i128" => TypeTable::I128,
+                    // `i128` / `u128` are prelude struct declarations, which
+                    // `core:builtin` imports like any other module's type —
+                    // this arm is what honours that import, since the name is
+                    // matched before the import list is consulted.
+                    "i128" => type_table
+                        .borrow_mut()
+                        .make_compiler_struct(CompilerItem::I128),
+                    "u128" => type_table
+                        .borrow_mut()
+                        .make_compiler_struct(CompilerItem::U128),
                     "u8" => TypeTable::U8,
                     "u16" => TypeTable::U16,
                     "u32" => TypeTable::U32,
                     "u64" => TypeTable::U64,
-                    "u128" => TypeTable::U128,
                     "f32" => TypeTable::F32,
                     "f64" => TypeTable::F64,
                     "bool" => TypeTable::BOOL,

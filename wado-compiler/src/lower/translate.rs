@@ -1206,7 +1206,13 @@ impl FunctionTranslator<'_, '_> {
         // `i64` must not collide).
         use crate::nir_value_graph::ValueKind;
         let vk = match &expr.kind {
-            TirExprKind::IntLiteral { value, .. } => Some(ValueKind::Int(*value, expr.type_id)),
+            // A wide int is a struct, not a pool scalar, and `u64` could not
+            // hold it anyway: fall through so `convert_expr` builds the
+            // constructor call.
+            TirExprKind::IntLiteral { value, .. } => self
+                .wide_int_of(expr.type_id)
+                .is_none()
+                .then_some(ValueKind::Int(*value, expr.type_id)),
             TirExprKind::FloatLiteral { value, .. } => {
                 Some(ValueKind::Float(value.to_bits(), expr.type_id))
             }
@@ -1246,6 +1252,14 @@ impl FunctionTranslator<'_, '_> {
             }
             None => Operand::Expr(self.convert_expr(expr)),
         }
+    }
+
+    /// Which wide-integer struct `type_id` is; `None` for every other type.
+    fn wide_int_of(
+        &self,
+        type_id: crate::tir::TypeId,
+    ) -> Option<crate::compiler_item::CompilerItem> {
+        self.base.type_table.borrow().wide_int_item(type_id)
     }
 
     fn convert_expr(&self, expr: &TirExpr) -> ExprId {
@@ -1313,6 +1327,36 @@ impl FunctionTranslator<'_, '_> {
                 expr.span,
             );
             return self.convert_expr(&block_expr);
+        }
+        // A wide int (`i128` / `u128`) is a struct: an integer literal of one
+        // is its constructor call, and a comparison is a call into its `Eq` /
+        // `Ord` impl. Pattern lowering builds the scalar forms — it holds the
+        // type table immutably and so cannot intern either call — and this is
+        // where every pattern position passes through, whatever nests it.
+        if let TirExprKind::IntLiteral { repr, .. } = &expr.kind
+            && let Some(item) = self.wide_int_of(expr.type_id)
+        {
+            let literal = crate::lower::wide_int_literal::literal_from_repr(
+                item,
+                repr,
+                expr.type_id,
+                &self.base.type_table.borrow(),
+                expr.span,
+            );
+            return self.convert_expr(&literal);
+        }
+        if let TirExprKind::Binary { left, op, right } = &expr.kind
+            && let Some(item) = self.wide_int_of(left.type_id)
+            && let Some(call) = crate::lower::wide_int_literal::compare(
+                item,
+                *op,
+                left,
+                right,
+                &self.base.type_table,
+                expr.span,
+            )
+        {
+            return self.convert_expr(&call);
         }
         // `Closure` → raw `StructLiteral` (specialisable) or
         // `ClosureToCanonical` wrap (otherwise). The body is never

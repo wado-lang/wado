@@ -225,17 +225,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             | PrimitiveType::I16
                             | PrimitiveType::I32
                             | PrimitiveType::I64
-                            | PrimitiveType::I128
                             | PrimitiveType::U8
                             | PrimitiveType::U16
                             | PrimitiveType::U32
                             | PrimitiveType::U64
-                            | PrimitiveType::U128
                             | PrimitiveType::F32
                             | PrimitiveType::F64
                     ) // The wide integers are struct-backed in the prelude, so
                       // their base never reads as a `Primitive`.
-                ) || matches!(tt.base_type_name(base).as_str(), "i128" | "u128")
+                ) || tt.wide_int_item(base).is_some()
             }
             ArgClass::FloatLit => matches!(
                 tt.get(tt.representation_head(param)),

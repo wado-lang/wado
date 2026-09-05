@@ -6,7 +6,7 @@ use crate::ast::{
     TaskReturnStmt, Type, WhileStmt,
 };
 use crate::compiler_host::CompilerHost;
-use crate::tir::{PrimitiveType, ResolvedType, TirPattern, TypeId, TypeTable};
+use crate::tir::{ResolvedType, TirPattern, TypeId, TypeTable};
 use crate::token::Span;
 
 use super::Elaborator;
@@ -2046,20 +2046,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         scrutinee_type: TypeId,
         span: Span,
     ) {
-        let scrutinee_resolved = self.tysys.type_table.borrow().get(scrutinee_type).clone();
-        let is_unsigned = matches!(
-            scrutinee_resolved,
-            ResolvedType::Primitive(
-                PrimitiveType::U8
-                    | PrimitiveType::U16
-                    | PrimitiveType::U32
-                    | PrimitiveType::U64
-                    | PrimitiveType::U128
-            )
-        ) || matches!(
-            scrutinee_resolved,
-            ResolvedType::Struct { def, .. } if self.tysys.type_table.borrow().struct_head_name(def) == "u128"
-        );
+        let is_unsigned = self
+            .tysys
+            .type_table
+            .borrow()
+            .is_unsigned_int(scrutinee_type);
 
         let start_val = self.pattern_to_i128(start, is_unsigned);
         let end_val = self.pattern_to_i128(end, is_unsigned);
@@ -2794,7 +2785,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// resource / newtype): a type with no sound `&mut` element write-back.
     fn is_replace_on_assign_element(&self, type_id: TypeId) -> bool {
         match self.tysys.type_table.borrow().get(type_id).clone() {
-            ResolvedType::Primitive(p) => !matches!(p, PrimitiveType::I128 | PrimitiveType::U128),
+            ResolvedType::Primitive(_) => true,
             ResolvedType::Enum { .. }
             | ResolvedType::Variant { .. }
             | ResolvedType::Flags { .. }

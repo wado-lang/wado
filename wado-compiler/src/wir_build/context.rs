@@ -725,9 +725,6 @@ impl<'a> WirContext<'a> {
                 PrimitiveType::U16 => WirType::U16,
                 PrimitiveType::U32 => WirType::U32,
                 PrimitiveType::U64 => WirType::U64,
-                PrimitiveType::I128 | PrimitiveType::U128 => {
-                    panic!("i128/u128 not yet supported in WIR")
-                }
                 PrimitiveType::F32 => WirType::F32,
                 PrimitiveType::F64 => WirType::F64,
                 PrimitiveType::V128 => WirType::V128,

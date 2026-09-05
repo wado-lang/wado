@@ -1,13 +1,21 @@
-//! Shared TIR builders for `i128` / `u128` literals, at the `lower::` top level
-//! for its two callers either side of the planner / translator boundary, which
-//! must produce identical `Call` shapes for the optimizer and `wir_build` to
-//! match on. A value fitting 64 bits emits `from_i64` / `from_u64`, anything
-//! wider `from_pair(lo, hi)` — the elaborator's own split for source literals.
+//! Shared TIR builders for `i128` / `u128` values, at the `lower::` top level
+//! for callers either side of the planner / translator boundary, which must
+//! produce identical `Call` shapes for the optimizer and `wir_build` to match
+//! on. A literal fitting 64 bits emits `from_i64` / `from_u64`, anything wider
+//! `from_pair(lo, hi)` — the elaborator's own split for source literals. Both
+//! types are prelude structs, so a comparison is a call into their `Eq` / `Ord`
+//! impls: Wasm has no 128-bit compare and no scalar lowering exists.
+
+use std::cell::RefCell;
+use std::rc::Rc;
 
 use crate::compiler_item::CompilerItem;
 use crate::module_source::ModuleSource;
 use crate::name::{FqTypeName, LocalMethodName};
-use crate::tir::{CallArg, FunctionRef, TirExpr, TirExprKind, TypeId, TypeTable};
+use crate::tir::{
+    CallArg, FunctionRef, ResolvedType, TirBinaryOp, TirExpr, TirExprKind, TirUnaryOp, TypeId,
+    TypeTable,
+};
 use crate::token::Span;
 
 /// Snapshot of a wide-int constructor's registry coordinates, taken
@@ -56,9 +64,7 @@ impl WideIntCtor {
         match (self, args) {
             (Self::FromI64, [value]) => i128::from(value.cast_signed()),
             (Self::FromU64, [value]) => i128::from(*value),
-            (Self::FromPair, [low, high]) => {
-                (i128::from(*high) << 64) | i128::from(*low)
-            }
+            (Self::FromPair, [low, high]) => (i128::from(*high) << 64) | i128::from(*low),
             _ => panic!("wide-int constructor {self:?} takes a different argument count"),
         }
     }
@@ -95,6 +101,155 @@ pub(crate) fn classify_ctor(type_table: &TypeTable, mangled: &str) -> Option<Wid
         }
     }
     None
+}
+
+/// A literal of the wide-integer type `item` carrying the bit pattern `bits`.
+/// Reads the pattern as signed or unsigned per `item`, so the two constructor
+/// families are picked by the type rather than by the caller.
+pub(crate) fn create_literal(
+    item: CompilerItem,
+    bits: i128,
+    type_id: TypeId,
+    type_table: &TypeTable,
+    span: Span,
+) -> TirExpr {
+    match item {
+        CompilerItem::I128 => create_i128_literal(bits, type_id, type_table, span),
+        CompilerItem::U128 => create_u128_literal(bits.cast_unsigned(), type_id, type_table, span),
+        other => panic!("{other} is not a wide-integer type"),
+    }
+}
+
+/// A literal of the wide-integer type `item` read from a source-form integer
+/// spelling. An [`TirExprKind::IntLiteral`] truncates its value to `u64` and
+/// keeps the full spelling in `repr`, so `repr` is the only operand wide enough
+/// to recover a 128-bit value from.
+pub(crate) fn literal_from_repr(
+    item: CompilerItem,
+    repr: &str,
+    type_id: TypeId,
+    type_table: &TypeTable,
+    span: Span,
+) -> TirExpr {
+    use crate::elaborator::util::{parse_i128_literal, parse_u128_literal};
+    let bits = match item {
+        CompilerItem::I128 => parse_i128_literal(repr),
+        CompilerItem::U128 => parse_u128_literal(repr).map(u128::cast_signed),
+        other => panic!("{other} is not a wide-integer type"),
+    };
+    let bits =
+        bits.unwrap_or_else(|e| panic!("a wide-int literal reaching `lower` parses: {repr}: {e}"));
+    create_literal(item, bits, type_id, type_table, span)
+}
+
+/// `left <op> right` for the wide-integer type `item`, as the call into its
+/// `Eq` / `Ord` impl that answers the same question. `None` for an operator
+/// neither trait covers.
+pub(crate) fn compare(
+    item: CompilerItem,
+    op: TirBinaryOp,
+    left: &TirExpr,
+    right: &TirExpr,
+    type_table: &Rc<RefCell<TypeTable>>,
+    span: Span,
+) -> Option<TirExpr> {
+    let ord_op = match op {
+        TirBinaryOp::Lt => Some(crate::ast::BinaryOp::Lt),
+        TirBinaryOp::Gt => Some(crate::ast::BinaryOp::Gt),
+        TirBinaryOp::LtEq => Some(crate::ast::BinaryOp::LtEq),
+        TirBinaryOp::GtEq => Some(crate::ast::BinaryOp::GtEq),
+        TirBinaryOp::Eq | TirBinaryOp::NotEq => None,
+        _ => return None,
+    };
+    let (trait_item, method, result_type) = match ord_op {
+        Some(_) => (
+            CompilerItem::Ord,
+            "cmp",
+            type_table
+                .borrow_mut()
+                .make_compiler_enum(CompilerItem::Ordering),
+        ),
+        None => (CompilerItem::Eq, "eq", TypeTable::BOOL),
+    };
+    let call = trait_method_call(
+        item,
+        trait_item,
+        method,
+        left,
+        right,
+        result_type,
+        type_table,
+        span,
+    );
+    Some(match (ord_op, op) {
+        (Some(ord_op), _) => {
+            crate::elaborator::reify::ord_bool_from_cmp(call, ord_op, span, type_table)
+        }
+        (None, TirBinaryOp::NotEq) => TirExpr::new(
+            TirExprKind::Unary {
+                op: TirUnaryOp::Not,
+                expr: Box::new(call),
+            },
+            TypeTable::BOOL,
+            span,
+        ),
+        (None, _) => call,
+    })
+}
+
+/// `<item>^<trait_item>::<method>(&left, &right)`. Both operands go by
+/// reference because that is how the prelude declares every `Eq` / `Ord`
+/// method.
+#[allow(clippy::too_many_arguments)]
+fn trait_method_call(
+    item: CompilerItem,
+    trait_item: CompilerItem,
+    method: &str,
+    left: &TirExpr,
+    right: &TirExpr,
+    result_type: TypeId,
+    type_table: &Rc<RefCell<TypeTable>>,
+    span: Span,
+) -> TirExpr {
+    let by_ref = |expr: &TirExpr| {
+        let ref_type = type_table
+            .borrow_mut()
+            .intern(ResolvedType::Ref(expr.type_id));
+        TirExpr::new(
+            TirExprKind::Unary {
+                op: TirUnaryOp::Ref,
+                expr: Box::new(expr.clone()),
+            },
+            ref_type,
+            span,
+        )
+    };
+    let receiver = by_ref(left);
+    let arg = by_ref(right);
+    let (trait_name, struct_name, module_source) = {
+        let tt = type_table.borrow();
+        (
+            tt.compiler_trait_fq(trait_item),
+            tt.compiler_struct_fq_name(item),
+            tt.compiler_items().require_struct(item).0.clone(),
+        )
+    };
+    let method_info = LocalMethodName::new(struct_name, Some(trait_name), method.to_string());
+    TirExpr::new(
+        TirExprKind::method_call(
+            Box::new(receiver),
+            FunctionRef {
+                module_source,
+                name: method_info.to_mangled_name(),
+                monomorph_info: None,
+                method_info: Some(method_info),
+            },
+            vec![],
+            vec![CallArg::new(arg, false)],
+        ),
+        result_type,
+        span,
+    )
 }
 
 /// Create an i128 literal TIR expression that evaluates to `value`.

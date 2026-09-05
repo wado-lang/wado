@@ -1109,7 +1109,7 @@ fn map_primitive(p: PrimitiveType) -> Result<Type, WitEmitError> {
         PrimitiveType::F64 => Type::F64,
         PrimitiveType::Bool => Type::Bool,
         PrimitiveType::Char => Type::Char,
-        PrimitiveType::I128 | PrimitiveType::U128 | PrimitiveType::V128 => {
+        PrimitiveType::V128 => {
             return Err(WitEmitError::UnrepresentableType {
                 description: format!("`{}` has no WIT representation", p.as_str()),
             });

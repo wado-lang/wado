@@ -1127,7 +1127,7 @@ The table below is the Wado↔CM correspondence, read in both directions: Wado�
 | `char`                    | `i32`                        | `char`                               | Unicode scalar value                                                     |
 | `i8`, `i16`, `i32`, `i64` | `i32`, `i32`, `i32`, `i64`   | `s8`, `s16`, `s32`, `s64`            | Signed integers                                                          |
 | `u8`, `u16`, `u32`, `u64` | `i32`, `i32`, `i32`, `i64`   | `u8`, `u16`, `u32`, `u64`            | Unsigned integers                                                        |
-| `i128`, `u128`            | `i64` pair (Wide Arithmetic) | `tuple<s64, s64>`, `tuple<u64, u64>` | 128-bit integers                                                         |
+| `i128`, `u128`            | GC `struct {u64, i64/u64}`   | `record { low, high }`               | 128-bit integers — prelude structs, so they cross as their own record    |
 | `f32`, `f64`              | `f32`, `f64`                 | `f32`, `f64`                         | Floating point                                                           |
 | `String`                  | GC `array i8` (UTF-8)        | `string`                             | UTF-8 string, GC-managed internally                                      |
 | `List<T>`                 | GC `array T`                 | `list<T>`                            | Dynamic array, GC-managed internally                                     |
@@ -1221,6 +1221,10 @@ Available operations:
 | Comparison | `==`, `!=`, `<`, `<=`, `>`, `>=`                               |
 | Bitwise    | `&`, `\|`, `^`, `~`, `<<`, `>>`                                |
 | Conversion | `from_u64()`, `from_i64()`, `low()`, `high()`, `as`, `TryFrom` |
+
+Literal and range patterns work on them wherever a pattern may appear, nested
+ones included (`match [x, y] { [1..=5, _] => … }`); each lowers to the same `Eq`
+/ `Ord` calls the corresponding comparison does.
 
 `as` casts follow Rust semantics in both directions:
 

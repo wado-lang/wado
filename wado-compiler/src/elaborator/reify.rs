@@ -9982,7 +9982,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         span: crate::token::Span,
         ctx: &mut FunctionContext,
     ) -> Option<TirPattern> {
-        use crate::tir::{ResolvedType, TirExpr, TirExprKind, TirLiteralPattern};
+        use crate::tir::{TirExpr, TirExprKind, TirLiteralPattern};
 
         let AssocConstSig {
             module: const_module,
@@ -9998,19 +9998,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         });
         match &resolved.kind {
             TirExprKind::IntLiteral { repr, .. } => {
-                let is_unsigned = matches!(
-                    self.tysys.type_table.borrow().get(scrutinee_type),
-                    ResolvedType::Primitive(
-                        crate::tir::PrimitiveType::U8
-                            | crate::tir::PrimitiveType::U16
-                            | crate::tir::PrimitiveType::U32
-                            | crate::tir::PrimitiveType::U64
-                            | crate::tir::PrimitiveType::U128
-                    ),
-                ) || matches!(
-                    self.tysys.type_table.borrow().get(scrutinee_type),
-                    ResolvedType::Struct { def, .. } if self.tysys.type_table.borrow().struct_head_name(*def) == "u128",
-                );
+                let is_unsigned = self
+                    .tysys
+                    .type_table
+                    .borrow()
+                    .is_unsigned_int(scrutinee_type);
                 if is_unsigned {
                     if let Ok(v) = super::util::parse_u128_literal(repr) {
                         return Some(TirPattern::Literal(TirLiteralPattern::U128(v)));
@@ -10294,7 +10286,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 }
             }
             ast::Pattern::Literal(lit) => {
-                use crate::tir::{PrimitiveType, ResolvedType, TirLiteralPattern};
+                use crate::tir::TirLiteralPattern;
                 // Mirror `Elaborator::resolve_if_pattern_inner`'s literal
                 // arm: wide-int literals follow the
                 // scrutinee's signedness (a `u128` scrutinee must compare
@@ -10303,19 +10295,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 // string literals decode their escapes. `null` on a
                 // variant scrutinee with a `None` case lowers to that
                 // case.
-                let scrutinee_is_unsigned = {
-                    let resolved = self.tysys.type_table.borrow().get(scrutinee_type).clone();
-                    matches!(
-                        resolved,
-                        ResolvedType::Primitive(
-                            PrimitiveType::U8
-                                | PrimitiveType::U16
-                                | PrimitiveType::U32
-                                | PrimitiveType::U64
-                                | PrimitiveType::U128
-                        )
-                    ) || matches!(resolved, ResolvedType::Struct { def, .. } if self.tysys.type_table.borrow().struct_head_name(def) == "u128")
-                };
+                let scrutinee_is_unsigned = self
+                    .tysys
+                    .type_table
+                    .borrow()
+                    .is_unsigned_int(scrutinee_type);
                 let int_pattern = |value: u128| {
                     if scrutinee_is_unsigned {
                         TirLiteralPattern::U128(value)
@@ -10522,20 +10506,14 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 start, end, kind, ..
             } => {
                 use crate::ast::RangeKind;
-                use crate::tir::{PrimitiveType, ResolvedType};
                 let inclusive = matches!(kind, RangeKind::Inclusive);
                 let start_val = self.pattern_endpoint_value(start, ctx);
                 let end_val = self.pattern_endpoint_value(end, ctx);
-                let is_unsigned = matches!(
-                    self.tysys.type_table.borrow().get(scrutinee_type),
-                    ResolvedType::Primitive(
-                        PrimitiveType::U8
-                            | PrimitiveType::U16
-                            | PrimitiveType::U32
-                            | PrimitiveType::U64
-                            | PrimitiveType::U128,
-                    )
-                );
+                let is_unsigned = self
+                    .tysys
+                    .type_table
+                    .borrow()
+                    .is_unsigned_int(scrutinee_type);
                 TirPattern::Range {
                     start: start_val,
                     end: end_val,
@@ -11166,7 +11144,7 @@ fn build_int128_from_intermediate(
 /// `Ordering` variant against the one that makes the operator true:
 /// `<` → `cmp == Less`, `>` → `cmp == Greater`,
 /// `<=` → `cmp != Greater`, `>=` → `cmp != Less`.
-fn ord_bool_from_cmp(
+pub(crate) fn ord_bool_from_cmp(
     cmp_call: TirExpr,
     op: ast::BinaryOp,
     span: crate::token::Span,

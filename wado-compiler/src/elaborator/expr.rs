@@ -2935,20 +2935,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// True when the scrutinee is an unsigned integer type (governs literal
-    /// parsing). Mirrors the `is_unsigned` check in `resolve_if_pattern_inner`.
     fn exh_is_unsigned(&self, scrutinee_type: TypeId) -> bool {
-        let resolved = self.tysys.type_table.borrow().get(scrutinee_type).clone();
-        matches!(
-            resolved,
-            ResolvedType::Primitive(
-                crate::tir::PrimitiveType::U8
-                    | crate::tir::PrimitiveType::U16
-                    | crate::tir::PrimitiveType::U32
-                    | crate::tir::PrimitiveType::U64
-                    | crate::tir::PrimitiveType::U128
-            )
-        ) || matches!(resolved, ResolvedType::Struct { def, .. } if self.tysys.type_table.borrow().struct_head_name(def) == "u128")
+        self.tysys
+            .type_table
+            .borrow()
+            .is_unsigned_int(scrutinee_type)
     }
 
     fn exh_literal(&self, lit: &Literal, scrutinee_type: TypeId) -> ExhPattern {

@@ -831,8 +831,7 @@ enum SlotShape {
 ///
 /// `None` means the payload has no result-vector representation: a
 /// function-typed payload is an abstract `structref` (which the WIR layout
-/// rejects for the same reason), `v128` has no NIR literal to pad with, and
-/// `i128` / `u128` never reach WIR as primitives at all.
+/// rejects for the same reason), and `v128` has no NIR literal to pad with.
 fn slot_shape(payload: TypeId, type_table: &TypeTable) -> Option<SlotShape> {
     match type_table.get(payload) {
         ResolvedType::Unit => Some(SlotShape::Absent),
@@ -848,7 +847,7 @@ fn slot_shape(payload: TypeId, type_table: &TypeTable) -> Option<SlotShape> {
             PrimitiveType::F32 | PrimitiveType::F64 => Some(SlotShape::Direct(Pad::Float(payload))),
             PrimitiveType::Bool => Some(SlotShape::Direct(Pad::Bool)),
             PrimitiveType::Char => Some(SlotShape::Direct(Pad::Char)),
-            PrimitiveType::V128 | PrimitiveType::I128 | PrimitiveType::U128 => None,
+            PrimitiveType::V128 => None,
         },
         ResolvedType::Enum { .. }
         | ResolvedType::Flags { .. }
