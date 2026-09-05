@@ -2579,32 +2579,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .map(|(blanket, _)| blanket)
     }
 
-    /// Check if a static method exists directly for a given type name (no newtype fallback).
+    /// Whether an impl block on `struct_name` itself declares a receiver-less
+    /// `method_name` — what decides whether a newtype answers or its base does,
+    /// so no newtype fallback here. A map of mangled names answered first and
+    /// held the whole module's methods, receiver-taking ones included, so the
+    /// newtype's own name claimed a call only its base declares a static for.
     fn has_static_method_direct(&self, struct_name: &str, method_name: &str) -> bool {
-        let qualified = self.qualified_receiver_name(struct_name);
-        let mangled = MethodName::format_local(&qualified, None, method_name);
-        if self.sem.decls.function_return_types.contains_key(&mangled) {
-            return true;
-        }
-        // Also check with trait-qualified name
-        if let Some(trait_name) = self.find_static_method_trait(struct_name, method_name) {
-            let trait_mangled =
-                MethodName::format_local(&qualified, Some(&trait_name), method_name);
-            if self
-                .sem
-                .decls
-                .function_return_types
-                .contains_key(&trait_mangled)
-            {
-                return true;
-            }
-        }
-        // Every impl block on the type, inherent and trait alike.
-        let keys = self
-            .tysys
-            .trait_env
-            .all_impl_keys(&self.impl_target(struct_name));
-        self.keys_declare_static_method(&keys, method_name)
+        self.static_method_entries(&self.impl_target(struct_name), method_name)
+            .next()
+            .is_some()
     }
 
     /// Look up static method return type based on struct name and method name
