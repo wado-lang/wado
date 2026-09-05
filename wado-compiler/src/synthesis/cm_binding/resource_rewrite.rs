@@ -1655,27 +1655,29 @@ fn synthesize_stream_read_value_func(elem_type_id: TypeId, ctx: &SynthCtx) -> Ti
 enum BindingTarget {
     /// Direct `CmRawCall` to the canonical Wasm import (simple operations).
     Canonical(CanonicalIntrinsic),
-    /// Call to an `internal.wado` binding function (complex operations).
-    Internal(&'static str),
+    /// Call to a `core:rt` binding function (complex operations).
+    Internal(crate::compiler_item::CompilerItem),
     /// Call to a synthesized binding function in the entry module.
     Entry(String),
 }
 
 /// The `core:rt` binding a CM member needs beyond its canonical import: one
 /// that moves a payload, or reads back what the canonical only signals. Which
-/// binding is a compiler decision, so it is listed; what a name *means* is
-/// [`CanonicalIntrinsic`]'s to say.
-fn internal_cm_binding(cm_name: &str) -> Option<&'static str> {
+/// binding is a compiler decision, so it is listed; the binding names itself,
+/// as `#[compiler_item]` binds it in `rt.wado`.
+fn internal_cm_binding(cm_name: &str) -> Option<crate::compiler_item::CompilerItem> {
     Some(match cm_name {
-        "stream-read" => "cm_stream_read_u8",
-        "stream-write" => "cm_stream_write_u8",
-        "stream-write-raw" => "cm_stream_write_raw_u8",
-        "error-context-new" => "cm_error_context_new",
-        "error-context-debug-message" => "cm_error_context_debug_message",
-        "waitable-set-wait" => "cm_waitable_set_wait",
-        "waitable-set-poll" => "cm_waitable_set_poll",
+        "stream-read" => crate::compiler_item::CompilerItem::CmStreamReadU8,
+        "stream-write" => crate::compiler_item::CompilerItem::CmStreamWriteU8,
+        "stream-write-raw" => crate::compiler_item::CompilerItem::CmStreamWriteRawU8,
+        "error-context-new" => crate::compiler_item::CompilerItem::CmErrorContextNew,
+        "error-context-debug-message" => {
+            crate::compiler_item::CompilerItem::CmErrorContextDebugMessage
+        }
+        "waitable-set-wait" => crate::compiler_item::CompilerItem::CmWaitableSetWait,
+        "waitable-set-poll" => crate::compiler_item::CompilerItem::CmWaitableSetPoll,
         // Void canonical; the binding returns the handle as a `Waitable`.
-        "waitable-join" => "cm_waitable_join",
+        "waitable-join" => crate::compiler_item::CompilerItem::CmWaitableJoin,
         _ => return None,
     })
 }
@@ -1873,7 +1875,9 @@ impl CmMethodRewriter<'_> {
             BindingTarget::Canonical(intrinsic) => {
                 cm_canonical_call(intrinsic, taken_args, expr.type_id)
             }
-            BindingTarget::Internal(name) => internal_call(name, taken_args, expr.type_id),
+            BindingTarget::Internal(item) => {
+                internal_call(item.attr_name(), taken_args, expr.type_id)
+            }
             BindingTarget::Entry(name) => {
                 entry_call(&name, taken_args, expr.type_id, self.entry_source.clone())
             }

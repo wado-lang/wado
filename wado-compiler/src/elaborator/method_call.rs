@@ -1447,7 +1447,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             param_defaults: static_method_defaults,
             mut param_types,
             self_in_args,
-        } = super::sem::types::CalleeParams::of_signature(callee_sig.as_ref(), true);
+        } = super::sem::types::CalleeParams::of_signature(callee_sig.as_ref());
         // Whether a signature answered at all. A variant case or a flags member
         // reaches this path with no signature behind it, and its own arm below
         // owns its argument count; only a declared callee has one to check here.
@@ -3705,7 +3705,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 func_ref,
                 vec![],
                 callee_sig.as_ref(),
-                true,
             ),
         );
 

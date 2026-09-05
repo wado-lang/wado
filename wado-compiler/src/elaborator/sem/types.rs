@@ -695,23 +695,20 @@ pub(crate) struct CalleeParams {
 }
 
 impl CalleeParams {
-    /// `self_in_args` is the spelling's claim that the receiver is written as
-    /// the first argument, which holds only where the callee declares one.
-    /// Every list then carries a leading entry for it: spelled at the call site
-    /// and never omitted, hence no default, and `mut` exactly when the method
-    /// takes `&mut self`.
+    /// The qualified spelling writes the receiver as the first argument, so
+    /// every list leads with an entry for it where the callee declares one:
+    /// spelled at the call site and never omitted, hence no default, and `mut`
+    /// exactly when the method takes `&mut self`. Only that spelling reaches
+    /// here, which is why the receiver is the signature's fact alone.
     ///
     /// `sig` is `None` for a callee no signature lookup answers — a trait static
     /// on a primitive receiver, say. The lists are empty and a consumer reads
     /// the call's own arguments instead.
-    pub(crate) fn of_signature(
-        sig: Option<&crate::elaborator::sig::MethodSig>,
-        self_in_args: bool,
-    ) -> Self {
+    pub(crate) fn of_signature(sig: Option<&crate::elaborator::sig::MethodSig>) -> Self {
         let Some(sig) = sig else {
             return Self::default();
         };
-        let receiver = self_in_args && sig.self_kind != ast::SelfKind::None;
+        let receiver = sig.self_kind != ast::SelfKind::None;
         let values = sig.first_value_param().min(sig.decl.param_types.len());
         Self {
             param_is_mut: receiver
@@ -743,9 +740,8 @@ impl StaticMethodDispatch {
         function_ref: FunctionRef,
         type_args: Vec<TypeId>,
         sig: Option<&crate::elaborator::sig::MethodSig>,
-        self_in_args: bool,
     ) -> Self {
-        let params = CalleeParams::of_signature(sig, self_in_args);
+        let params = CalleeParams::of_signature(sig);
         Self {
             method_def,
             function_ref,

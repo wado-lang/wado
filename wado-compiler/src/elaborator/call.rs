@@ -1340,7 +1340,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         param_defaults,
                         param_types,
                         self_in_args,
-                    } = super::sem::types::CalleeParams::of_signature(callee_sig.as_ref(), true);
+                    } = super::sem::types::CalleeParams::of_signature(callee_sig.as_ref());
 
                     let func_ref = FunctionRef {
                         module_source: struct_module,
