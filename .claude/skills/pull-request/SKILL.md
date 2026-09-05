@@ -64,5 +64,10 @@ the description is broken, and never rewrite prose to work around it.
 
 ## After opening & Periodic status checks
 
+Subscribe to the PR with `subscribe_pr_activity`. Handle every event it
+delivers; skipping one is a decision you state.
+
 Check mergeability (`mergeable_state`). If conflicting, resolve it with the
 `git-upstream-sync` skill.
+
+Answer a review, human or bot, with the `code-review-response` skill.

@@ -1,6 +1,6 @@
 ---
 name: code-review-response
-description: "How to answer code review feedback — a human reviewer, CodeRabbit, or any review bot. Verify each finding before acting, fix only what is real, put design decisions to the user, then run /distill. Invoke when responding to review comments on a pull request."
+description: "How to answer code review feedback — a human reviewer, CodeRabbit, or any review bot. Verify each finding before acting, fix only what is real, put design decisions to the user, then run /distill. Invoke when responding to review comments on a pull request, or to the findings of a /code-review run."
 ---
 
 # Answering a code review
@@ -20,6 +20,14 @@ that. Record which of these each finding was:
 
 A severity label and an aggregate "merge risk" verdict track neither the truth
 nor what you have already answered. Neither is evidence of anything.
+
+## Fix the class, not the finding
+
+A finding points at one site. Before fixing it, raise the altitude: what class of
+defect is this, and where else does the class hold? Fix what admits the class:
+the missing invariant, the type that allows the state, the call site nobody has
+to remember. A patch at the site the reviewer named leaves the rest of the class
+in the tree.
 
 ## Tests are held to a higher bar
 
@@ -45,4 +53,6 @@ is the whole branch, as always, not the fixes alone.
 ## Report
 
 One comment on the pull request: what was fixed, and what was skipped with its
-reason. The skips are half the answer, not an omission from it.
+reason. The skips are half the answer, not an omission from it. A review that
+arrived outside a pull request, `/code-review` among them, is reported the same
+way in the session.
