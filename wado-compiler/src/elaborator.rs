@@ -2102,6 +2102,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         &effect_decl.methods,
                         crate::elaborator::item::OperationOwner::Interface,
                     );
+                    self.resolve_operation_param_defaults(&[], &effect_decl.methods);
                     // An operation's default body is walked as the function
                     // reify will emit it as, so its facts land under the same
                     // `AstId` every other function's do.
@@ -2115,6 +2116,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         &resource_decl.name,
                         &resource_decl.methods,
                         crate::elaborator::item::OperationOwner::Resource,
+                    );
+                    self.resolve_operation_param_defaults(
+                        &resource_decl.type_params,
+                        &resource_decl.methods,
                     );
                 }
                 // Other items will be added as needed

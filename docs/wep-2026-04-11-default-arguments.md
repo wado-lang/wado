@@ -254,6 +254,22 @@ export fn configure(name: String, debug: bool) {
 }
 ```
 
+#### Operations on an `interface` or a `resource`
+
+An operation may declare a parameter default, and a call that omits the argument
+is desugared at the call site like any other. What the operation dispatches to —
+a Component Model import for a `#[cm]` operation, a dispatch wrapper for an
+effect operation — receives the full argument list and never sees a default.
+This is the opposite direction from `export fn` above: the signature the CM ABI
+fixes is the callee's, and the default lives entirely on the caller's side of
+it. It is what lets a WebIDL `optional` argument carry its declared default (see
+[WebIDL Binding Generator](./wep-2026-04-01-tide.md)).
+
+The default resolves in the module that declares the operation, so it may name
+that module's private items. Liveness seeds the operation for that reason: the
+call that materializes the default is minted at each call site, and nothing in
+the declaring module's AST references what the default reaches.
+
 ### Struct Field Defaults
 
 Struct fields may have default values:

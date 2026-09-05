@@ -1887,7 +1887,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .find(|p| p.self_kind != ast::SelfKind::None)
                 })
                 .flatten();
-            let rejections: [(Option<Span>, &'static str); 7] = [
+            let rejections: [(Option<Span>, &'static str); 6] = [
                 (
                     method.body.as_ref().filter(|_| cm_backed).map(|b| b.span),
                     "cannot carry a default implementation: a Component Model import backs it, \
@@ -1902,15 +1902,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     receiver.map(|p| p.span),
                     "cannot take a `self` receiver: an operation is called as \
                      `Effect::op(args)`, with no receiver to bind it to",
-                ),
-                (
-                    method
-                        .params
-                        .iter()
-                        .find(|p| p.default.is_some())
-                        .map(|p| p.span),
-                    "cannot give a parameter a default: an operation's call site is a dispatch \
-                     wrapper, which takes the arguments as declared",
                 ),
                 (
                     (!method.effects.is_empty()).then_some(method.span),
@@ -1943,6 +1934,43 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     detail,
                     span,
                 });
+            }
+        }
+    }
+
+    /// Walk each operation's parameter defaults in the declaring scope, the way
+    /// [`Self::resolve_function`] walks a free function's. A call site re-emits
+    /// the default from the AST, so this is what records the expression types it
+    /// reads back and the use→def edges that keep the items a default names
+    /// alive.
+    pub(super) fn resolve_operation_param_defaults(
+        &mut self,
+        type_params: &[ast::GenericParam],
+        methods: &[ast::Function],
+    ) {
+        if !methods
+            .iter()
+            .any(|m| m.params.iter().any(|p| p.default.is_some()))
+        {
+            return;
+        }
+        let mut scope = self.enter_inherited_type_param_scope();
+        scope.annotate_ctx.trait_ctx.type_params.clear();
+        scope.register_generic_params(type_params, 0);
+        for method in methods {
+            // Only the earlier parameters are in scope, as in a free function's
+            // signature; the receiver is never one of them.
+            let mut ctx = FunctionContext::new(TypeTable::UNIT, method.name.clone());
+            for param in &method.params {
+                if param.self_kind != SelfKind::None {
+                    continue;
+                }
+                let type_id = scope.resolve_type(&param.ty);
+                if let Some(default_ast) = &param.default {
+                    let resolved = scope.resolve_expr(default_ast, &mut ctx, Some(type_id));
+                    scope.typecheck(resolved, type_id, default_ast.span());
+                }
+                ctx.add_local_at(param.name.clone(), type_id, param.is_mut, None, param.span);
             }
         }
     }

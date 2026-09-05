@@ -1,0 +1,10 @@
+// An operation's default resolves in this module, so it reaches `who`, which
+// nothing here exports and no caller can name.
+
+fn who() -> String {
+    return "world";
+}
+
+pub interface Greet {
+    fn hello(name: String = who()) -> String;
+}

@@ -658,3 +658,18 @@ fn extends_stays_usable_as_an_identifier() {
     let d = diagnostics(source);
     assert!(d.is_empty(), "`extends` is contextual, got {d:?}");
 }
+
+/// A resource operation takes a parameter default: it is desugared at the call
+/// site, which the Component Model import behind the operation never sees. This
+/// is what lets a WebIDL `optional` argument carry its declared default.
+#[test]
+fn a_resource_operation_takes_a_parameter_default() {
+    let source = "#[cm(\"web:dom/element\", type = \"extern-handle\")]\n\
+         resource Element {\n    fn poke(&self, n: i32 = 7);\n}\n\
+         export fn run() {}\n";
+    let d = diagnostics(source);
+    assert!(
+        d.is_empty(),
+        "a default on an operation is allowed, got {d:?}"
+    );
+}

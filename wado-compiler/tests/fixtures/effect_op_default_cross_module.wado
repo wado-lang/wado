@@ -1,0 +1,26 @@
+// An effect operation's default is materialized at the call site but resolves
+// in the declaring module, so it may name that module's private items — which
+// nothing else reaches, and liveness would otherwise drop.
+
+use { Greet } from "./sub/effect_op_default_lib.wado";
+
+struct Mock {}
+
+impl Greet for Mock {
+    fn hello(&mut self, name: String) -> String {
+        resume `hello, ${name}`
+    }
+}
+
+export fn run() {
+    let mut h = Mock {};
+    with &mut h do {
+        assert Greet::hello() == "hello, world";
+        assert Greet::hello(`wado`) == "hello, wado";
+    }
+}
+
+__DATA__
+{
+    "stdout": ""
+}

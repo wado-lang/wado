@@ -185,19 +185,10 @@ pub(crate) fn compute(
                     }
                 }
                 Item::Interface(interface_decl) => {
-                    // An operation's default body is a root: the only call
-                    // to it is the dispatch wrapper synthesis emits later, so
-                    // nothing in the AST references it. Unseeded, the body and
-                    // everything only it reaches are dead, and reify drops a
-                    // callee the synthesized call still names.
-                    for method in &interface_decl.methods {
-                        if method.body.is_none() {
-                            continue;
-                        }
-                        let key = method.id;
-                        graph.add_function_edges(method, references, &key);
-                        graph.seed_world(key);
-                    }
+                    seed_operations(&mut graph, &interface_decl.methods, references);
+                }
+                Item::Resource(resource_decl) => {
+                    seed_operations(&mut graph, &resource_decl.methods, references);
                 }
                 Item::Test(test) => {
                     // Test blocks are roots of the `T` (test-reachable) closure
@@ -222,6 +213,24 @@ pub(crate) fn compute(
         &mut liveness.moved_spans,
     );
     liveness
+}
+
+/// Seed each operation of an `interface` / `resource` that reaches code nothing
+/// in the AST names.
+///
+/// A default body's only call is the dispatch wrapper synthesis emits later; a
+/// parameter default is materialized by reify at every call that omits the
+/// argument. Unseeded, either one and everything only it reaches are dead, and
+/// reify drops a callee the materialized call still names.
+fn seed_operations(graph: &mut Graph, methods: &[Function], references: &References<'_>) {
+    for method in methods {
+        if method.body.is_none() && !method.params.iter().any(|p| p.default.is_some()) {
+            continue;
+        }
+        let key = method.id;
+        graph.add_function_edges(method, references, &key);
+        graph.seed_world(key);
+    }
 }
 
 /// The use→def edges liveness walks. A trait's default body is walked once per

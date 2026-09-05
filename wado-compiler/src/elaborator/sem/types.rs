@@ -671,6 +671,11 @@ pub(crate) struct StaticMethodDispatch {
     /// used by reify to pad trailing arguments the call omitted. Empty when
     /// the method declares no defaults (or for variant / builtin dispatches).
     pub(crate) param_defaults: Vec<(String, Option<crate::ast::Expr>)>,
+    /// The module a default in [`Self::param_defaults`] resolves in — the
+    /// callee's own lexical scope. Usually `function_ref.module_source`, but an
+    /// effect operation's callee module is the synthetic namespace dispatch is
+    /// named in, not the module that declares the operation.
+    pub(crate) defaults_module: crate::module_source::ModuleSource,
     /// The callee's resolved parameter types in declaration order, which reify
     /// needs to type a default it materializes — a default on a trait method
     /// has no body for annotate to walk, so nothing recorded its type.
@@ -706,6 +711,7 @@ impl StaticMethodDispatch {
         sig: Option<&crate::elaborator::sig::MethodSig>,
         self_in_args: bool,
     ) -> Self {
+        let defaults_module = function_ref.module_source.clone();
         let Some(sig) = sig else {
             return Self {
                 method_def,
@@ -713,6 +719,7 @@ impl StaticMethodDispatch {
                 param_is_mut: Vec::new(),
                 type_args,
                 param_defaults: Vec::new(),
+                defaults_module,
                 param_types: Vec::new(),
                 self_in_args: false,
             };
@@ -733,6 +740,7 @@ impl StaticMethodDispatch {
                 .into_iter()
                 .chain(crate::elaborator::sig::Param::named_defaults(&sig.params))
                 .collect(),
+            defaults_module,
             param_types: if receiver {
                 sig.decl.param_types.clone()
             } else {

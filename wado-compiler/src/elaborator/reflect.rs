@@ -317,6 +317,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // Reflection dispatches to an impl the reflect-bridge
                 // synthesis mints; there is no declaration to name.
                 method_def: None,
+                defaults_module: function_ref.module_source.clone(),
                 function_ref,
                 param_is_mut,
                 param_types: Vec::new(),
