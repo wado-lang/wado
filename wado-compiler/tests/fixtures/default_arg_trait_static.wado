@@ -1,5 +1,5 @@
 //! Regression (issue #1977): a `trait` static's parameter default is declared
-//! on the trait, so the `impl`'s own signature carries none. Every
+//! on the trait, so the `impl`'s signature carries none. Every
 //! `Type::method()` spelling read that signature and rejected an omitted
 //! argument for arity instead of padding it.
 
@@ -42,8 +42,6 @@ impl Make for Boxed<i32> {
     }
 }
 
-// The trait is declared in another module, and this impl renames the
-// parameter: the default is filled by position, not by name.
 impl Tag for Marker {
     fn tagged(k: i32) -> i32 {
         return k * 2;
@@ -51,13 +49,16 @@ impl Tag for Marker {
 }
 
 test "trait static fills omitted defaults" {
-    assert Marker::tagged() == 6;
-    assert Marker::tagged(5) == 10;
     assert Marker::made() == 1;
     assert Marker::made(7) == 8;
     assert Marker::pair(3) == 6;
     assert Marker::pair(3, 4) == 12;
     assert Marker::twice() == 6;
+}
+
+test "a cross-module trait's default reaches a renamed parameter" {
+    assert Marker::tagged() == 6;
+    assert Marker::tagged(5) == 10;
 }
 
 test "trait static on a generic target fills omitted defaults" {

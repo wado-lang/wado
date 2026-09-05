@@ -115,16 +115,10 @@ impl Signatures {
         self.data_sections.get(module).map(String::as_str)
     }
 
-    /// Give every trait-`impl` method the parameter defaults its trait
-    /// declares. Only the trait may declare one (WEP 2026-04-11), so the impl's
-    /// own signature carries none, and a call site reading that signature —
-    /// every `Type::method()` spelling does — sees each parameter as required.
-    /// Filled here, once every module's declarations are assembled, because the
-    /// trait may be declared in another module than the impl.
-    ///
-    /// By position, not by name: a default is spelled by omitting a trailing
-    /// argument, so position is what a call site fills, and an impl is free to
-    /// rename what it takes.
+    /// Give every trait-`impl` method the parameter defaults its trait declares.
+    /// They are copied by position, which is what a call site fills when it
+    /// omits a trailing argument, so an impl may rename what it takes. Filled
+    /// here rather than in the decl pass: the trait may be declared elsewhere.
     pub(crate) fn inherit_trait_param_defaults(&mut self, defs: &crate::defs::DefTable) {
         let inherited: Vec<(crate::defs::DefId, Vec<Option<crate::ast::Expr>>)> = self
             .method_sigs
@@ -212,7 +206,8 @@ pub(crate) struct Param {
     pub(crate) name: String,
     pub(crate) is_mut: bool,
     /// Irreducibly AST — re-resolved per call site under the callee's scope
-    /// (WEP 2026-04-11).
+    /// (WEP 2026-04-11). An impl of a trait declares none of its own:
+    /// [`Signatures::inherit_trait_param_defaults`] fills in the trait's.
     pub(crate) default: Option<crate::ast::Expr>,
 }
 

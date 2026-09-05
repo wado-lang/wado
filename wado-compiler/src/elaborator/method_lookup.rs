@@ -1925,8 +1925,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             let param_is_mut = crate::elaborator::sig::Param::is_mut_flags(&method_sig.params);
             let param_names = crate::elaborator::sig::Param::names(&method_sig.params);
-            // Already the trait's, whichever declaration wrote them: assembly
-            // gives a trait-impl method its trait's defaults (WEP 2026-04-11).
             let param_defaults = crate::elaborator::sig::Param::defaults(&method_sig.params);
             found_traits.push(TraitMethodMatch {
                 trait_name: scope.tysys.trait_env.fq_trait_named_by_impl(
