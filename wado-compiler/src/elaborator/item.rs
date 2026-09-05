@@ -1071,7 +1071,7 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
         }
     }
 }
-impl<H: CompilerHost> Elaborator<'_, H> {
+impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// Substitute a signature's own defaulted type parameters into `ty`.
     ///
     /// A parameter without a default is left alone: it is opaque, and the
@@ -1510,15 +1510,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .expect("the decl pass records every interface / resource declaration's operations")
     }
 
-    /// Resolve a `trait` declaration in its own frame and record it.
-    ///
-    /// `Self` takes slot 0 and the trait's own type parameters follow, so a
-    /// method signature naming `Self`, `Self::Assoc` or the trait's `T` is
-    /// abstract over exactly those slots. An `impl` reads a method back by
-    /// filling slot 0 with its target and the rest with its trait arguments
-    /// — the same instantiation every other declaration uses, instead of
-    /// re-resolving the trait's method AST in the impl's perspective.
-    pub(super) fn resolve_trait_decl(&mut self, trait_decl: &ast::TraitDecl) {
+    /// The scope a `trait`'s methods resolve in: `Self` as slot 0, bounded by
+    /// the trait itself, then the trait's own type parameters. Returned with
+    /// the `Self` slot and the first slot a method's own parameters may take.
+    fn enter_trait_scope(
+        &mut self,
+        trait_decl: &ast::TraitDecl,
+    ) -> (TypeParamScope<'_, 'a, H>, TypeId, u32) {
         let mut scope = self.enter_inherited_type_param_scope();
         scope.annotate_ctx.trait_ctx.type_params.clear();
         scope.annotate_ctx.trait_ctx.assoc_type_bindings.clear();
@@ -1549,6 +1547,46 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         );
         scope.annotate_ctx.trait_ctx.self_type = Some(self_slot);
         let next_slot = scope.register_generic_params(&trait_decl.type_params, 1);
+        (scope, self_slot, next_slot)
+    }
+
+    /// [`Self::resolve_operation_param_defaults`] for a `trait`'s methods, whose
+    /// scope binds `Self` as a slot rather than a concrete type.
+    pub(super) fn resolve_trait_param_defaults(&mut self, trait_decl: &ast::TraitDecl) {
+        if !declares_a_default(&trait_decl.methods) {
+            return;
+        }
+        let (mut scope, _, next_slot) = self.enter_trait_scope(trait_decl);
+        scope.sem.decls.clear_fn_local_items();
+        for method in &trait_decl.methods {
+            let mut method_scope = scope.enter_inherited_type_param_scope();
+            method_scope
+                .annotate_ctx
+                .trait_ctx
+                .install_effect_params(&method.type_params);
+            method_scope.register_generic_params(&method.type_params, next_slot);
+            // Both frames are in scope for a default, so both supply the type
+            // argument a caller gets by default, in declaration-slot order.
+            let type_params: Vec<ast::GenericParam> = trait_decl
+                .type_params
+                .iter()
+                .chain(&method.type_params)
+                .cloned()
+                .collect();
+            method_scope.check_param_defaults(method, &type_params);
+        }
+    }
+
+    /// Resolve a `trait` declaration in its own frame and record it.
+    ///
+    /// `Self` takes slot 0 and the trait's own type parameters follow, so a
+    /// method signature naming `Self`, `Self::Assoc` or the trait's `T` is
+    /// abstract over exactly those slots. An `impl` reads a method back by
+    /// filling slot 0 with its target and the rest with its trait arguments
+    /// — the same instantiation every other declaration uses, instead of
+    /// re-resolving the trait's method AST in the impl's perspective.
+    pub(super) fn resolve_trait_decl(&mut self, trait_decl: &ast::TraitDecl) {
+        let (mut scope, self_slot, next_slot) = self.enter_trait_scope(trait_decl);
 
         let decl_slots: Vec<(String, TypeId)> = std::iter::once(("Self".to_string(), self_slot))
             .chain(trait_decl.type_params.iter().filter_map(|tp| {
@@ -1660,26 +1698,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .insert(trait_def, super::sig::TraitSig { module, methods });
     }
 
-    /// Lower an effect or resource declaration's method list to [`TirEffectOp`]s,
-    /// with the enclosing type-param scope set up first so a generic resource's
-    /// signatures can mention `T`. `resource_self` marks a resource decl, whose
-    /// `&self` shorthand becomes a real parameter at index 0 to match
-    /// `__cm_binding__<R>_<op>(self, args)`; an effect decl takes no receiver.
-    pub(super) fn resolve_effect_ops(
+    /// The scope an `interface` / `resource` declaration's operations resolve
+    /// in: its type parameters, and for a resource `Self` bound to the declaring
+    /// resource. That `Self` type comes back too, because it is the receiver's.
+    ///
+    /// It is constructed after the type params are in scope, so a generic
+    /// resource's `GenericResource` instance can reference its own `TypeParam`s
+    /// (which gap-2 substitution then specialises per impl-block instantiation).
+    /// A non-generic resource is a plain `Resource { def }`.
+    fn enter_operation_scope(
         &mut self,
         type_params: &[ast::GenericParam],
-        methods: &[ast::Function],
         resource_self: Option<crate::defs::DefId>,
-    ) -> Vec<TirEffectOp> {
+    ) -> (TypeParamScope<'_, 'a, H>, Option<TypeId>) {
         let mut scope = self.enter_inherited_type_param_scope();
         scope.annotate_ctx.trait_ctx.type_params.clear();
         scope.register_generic_params(type_params, 0);
-
-        // Construct the resource's `Self` type after type params are in
-        // scope, so a generic resource's `GenericResource` instance can
-        // reference its own `TypeParam`s (which gap-2 substitution then
-        // specialises per impl-block instantiation). For non-generic
-        // resources this is just a plain `Resource { def }`.
         let self_type: Option<TypeId> = resource_self.map(|def| {
             if type_params.iter().any(|p| !p.is_effect) {
                 let type_arg_ids: Vec<TypeId> = type_params
@@ -1705,10 +1739,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 scope.tysys.type_table.borrow_mut().make_resource(def)
             }
         });
-        // `Self` in a resource method names the declaring resource.
         if self_type.is_some() {
             scope.annotate_ctx.trait_ctx.self_type = self_type;
         }
+        (scope, self_type)
+    }
+
+    /// Lower an effect or resource declaration's method list to [`TirEffectOp`]s.
+    /// `resource_self` marks a resource decl, whose `&self` shorthand becomes a
+    /// real parameter at index 0 to match `__cm_binding__<R>_<op>(self, args)`;
+    /// an effect decl takes no receiver.
+    pub(super) fn resolve_effect_ops(
+        &mut self,
+        type_params: &[ast::GenericParam],
+        methods: &[ast::Function],
+        resource_self: Option<crate::defs::DefId>,
+    ) -> Vec<TirEffectOp> {
+        let (mut scope, self_type) = self.enter_operation_scope(type_params, resource_self);
 
         let decl_slots: Vec<(String, TypeId)> = scope
             .annotate_ctx
@@ -1882,7 +1929,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .find(|p| p.self_kind != ast::SelfKind::None)
                 })
                 .flatten();
-            let rejections: [(Option<Span>, &'static str); 7] = [
+            let rejections: [(Option<Span>, &'static str); 6] = [
                 (
                     method.body.as_ref().filter(|_| cm_backed).map(|b| b.span),
                     "cannot carry a default implementation: a Component Model import backs it, \
@@ -1897,15 +1944,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     receiver.map(|p| p.span),
                     "cannot take a `self` receiver: an operation is called as \
                      `Effect::op(args)`, with no receiver to bind it to",
-                ),
-                (
-                    method
-                        .params
-                        .iter()
-                        .find(|p| p.default.is_some())
-                        .map(|p| p.span),
-                    "cannot give a parameter a default: an operation's call site is a dispatch \
-                     wrapper, which takes the arguments as declared",
                 ),
                 (
                     (!method.effects.is_empty()).then_some(method.span),
@@ -1939,6 +1977,47 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     span,
                 });
             }
+        }
+    }
+
+    /// Check one method's parameter defaults against their parameter types, with
+    /// the earlier parameters in scope and `type_params`' own defaults applied.
+    fn check_param_defaults(&mut self, method: &ast::Function, type_params: &[ast::GenericParam]) {
+        let mut ctx = FunctionContext::new(TypeTable::UNIT, method.name.clone());
+        for param in &method.params {
+            if param.self_kind != SelfKind::None {
+                continue;
+            }
+            let type_id = self.resolve_type(&param.ty);
+            if let Some(default_ast) = &param.default {
+                let expected = self.apply_type_param_defaults(type_params, type_id);
+                let resolved = self.resolve_expr(default_ast, &mut ctx, Some(expected));
+                self.typecheck(resolved, expected, default_ast.span());
+            }
+            ctx.add_local_at(param.name.clone(), type_id, param.is_mut, None, param.span);
+        }
+    }
+
+    /// Walk each operation's parameter defaults in the declaring scope, the way
+    /// [`Self::resolve_function`] walks a free function's. A call site re-emits
+    /// the default from the AST, and reads back what this walk records: the
+    /// default's expression types, and the use→def edges that keep what it names
+    /// alive.
+    pub(super) fn resolve_operation_param_defaults(
+        &mut self,
+        type_params: &[ast::GenericParam],
+        methods: &[ast::Function],
+        resource_self: Option<crate::defs::DefId>,
+    ) {
+        if !declares_a_default(methods) {
+            return;
+        }
+        let (mut scope, _) = self.enter_operation_scope(type_params, resource_self);
+        // A default names no function-local item, and the table holds whatever
+        // the last body walked left behind.
+        scope.sem.decls.clear_fn_local_items();
+        for method in methods {
+            scope.check_param_defaults(method, type_params);
         }
     }
 
@@ -2801,6 +2880,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // satisfies the signature.
         Some(placeholder_function(func.name.clone(), func.span))
     }
+}
+
+/// Whether any of `methods` gives a parameter a default.
+fn declares_a_default(methods: &[ast::Function]) -> bool {
+    methods
+        .iter()
+        .any(|m| m.params.iter().any(|p| p.default.is_some()))
 }
 
 /// Which declaration an operation belongs to. A resource's operations are

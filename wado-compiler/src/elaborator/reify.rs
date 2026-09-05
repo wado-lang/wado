@@ -7891,9 +7891,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 &dispatch.function_ref.name,
                 ctx,
             );
-            // A `::`-qualified `Type::method()` is a static-method dispatch, so
-            // the free-function pad above finds nothing; apply its own defaults.
-            let smc_module = dispatch.function_ref.module_source.clone();
+            // A `::`-qualified `Type::method()` or `Effect::op()` is not a free
+            // function, so the pad above finds nothing; apply its own defaults.
+            let smc_module = dispatch.defaults_module.clone();
             self.reify_apply_param_defaults(
                 &mut arg_exprs,
                 &dispatch.param_defaults,

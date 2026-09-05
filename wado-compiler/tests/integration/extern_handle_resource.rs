@@ -658,3 +658,29 @@ fn extends_stays_usable_as_an_identifier() {
     let d = diagnostics(source);
     assert!(d.is_empty(), "`extends` is contextual, got {d:?}");
 }
+
+/// A resource operation takes a parameter default. The call site desugars it,
+/// so the Component Model import behind the operation never sees one, which is
+/// what lets a `WebIDL` `optional` argument carry its declared default.
+#[test]
+fn a_resource_operation_takes_a_parameter_default() {
+    let source = "#[cm(\"web:dom/element\", type = \"extern-handle\")]\n\
+         resource Element {\n    fn poke(&self, n: i32 = 7);\n}\n\
+         export fn run() {}\n";
+    let d = diagnostics(source);
+    assert!(
+        d.is_empty(),
+        "a default on an operation is allowed, got {d:?}"
+    );
+}
+
+/// A parameter default does not change the scope its siblings resolve in:
+/// `Self` still names the declaring resource.
+#[test]
+fn a_defaulted_operation_keeps_self_in_scope() {
+    let source = "#[cm(\"web:dom/element\", type = \"extern-handle\")]\n\
+         resource Element {\n    fn attach(&self, other: Self, n: i32 = 7);\n}\n\
+         export fn run() {}\n";
+    let d = diagnostics(source);
+    assert!(d.is_empty(), "`Self` resolves beside a default, got {d:?}");
+}

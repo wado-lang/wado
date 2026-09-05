@@ -1,0 +1,14 @@
+// An operation's default is checked against its parameter type where it is
+// declared, the same as a free function's.
+interface Greet {
+    fn hello(name: String = 42) -> String;
+}
+
+export fn run() {
+    let _ = Greet::hello();
+}
+
+__DATA__
+{
+    "compile_error": "type mismatch"
+}
