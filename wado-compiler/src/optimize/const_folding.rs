@@ -23,8 +23,9 @@ use crate::nir_arena::{
 use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
 use crate::niri::{
-    BorrowRoot, CalleeMap, CtfeBuiltin, CtfeBuiltinMap, EditSink, GlobalEnv, GlobalFieldEnv,
-    GlobalKey, Interpreter, Lattice, is_ctfe_runnable,
+    BorrowRoot, CalleeMap, CtfeBuiltinMap, EditSink, GlobalEnv, GlobalFieldEnv, GlobalKey,
+    Interpreter, Lattice, MaterializingGlobals, build_callee_map, build_ctfe_builtin_map,
+    materializing_globals,
 };
 use crate::tir::{PrimitiveType, ResolvedType, TypeId, TypeTable};
 
@@ -136,8 +137,11 @@ fn new_visitor<'a>(
     };
     visitor.interpreter.with_callees(&maps.callees);
     visitor.interpreter.with_ctfe_builtins(&maps.ctfe_builtins);
-    visitor.interpreter.with_globals(&globals.values);
-    visitor.interpreter.with_global_fields(&globals.fields);
+    visitor
+        .interpreter
+        .with_globals(&globals.values)
+        .with_global_fields(&globals.fields)
+        .with_materializing_globals(&globals.materializing);
     visitor
 }
 
@@ -148,6 +152,7 @@ fn fold_function(
     type_table: &TypeTable,
 ) -> bool {
     let mut func = func_rc.borrow_mut();
+    crate::compiler_trace!("region_seed", "folding {}", func.name);
     let NirFunction { body, locals, .. } = &mut *func;
     let Some(body) = body.as_mut() else {
         return false;
@@ -248,66 +253,6 @@ impl EditSink for EngineSink<'_, '_> {
     fn set_block_stmts(&mut self, block: crate::nir_arena::BlockId, stmts: Vec<StmtId>) {
         self.engine.set_block_stmts(block, stmts);
     }
-}
-
-/// Pre-build the [`CalleeMap`] from every function a compile-time frame can run
-/// in
-/// `project`. The map stores `Rc<RefCell<NirFunction>>` handles
-/// aliased with `project.functions`, so rebuilding the map every
-/// optimizer iteration costs only refcount bumps. The key shape
-/// `(module_source, full_name)` mirrors what `try_call_fold`
-/// synthesises from a `Call` node's `FunctionRef`.
-pub(super) fn build_callee_map(project: &NirPackage) -> CalleeMap {
-    let mut map = CalleeMap::default();
-    for func_rc in &project.functions {
-        let func = func_rc.borrow();
-        if !is_ctfe_runnable(&func) {
-            continue;
-        }
-        let Some(id) = func.id else {
-            continue;
-        };
-        drop(func);
-        map.insert(id, crate::niri::Callee::new(func_rc.clone()));
-    }
-    map
-}
-
-/// Which callee ids are the builtins the engine evaluates.
-///
-/// `array_get_value` is generic, but a builtin is declared once and shared by every
-/// instantiation — the type arguments ride on the call, not on a monomorphized
-/// callee record — so the name is read off whichever of the two forms the
-/// callee has.
-pub(super) fn build_ctfe_builtin_map(project: &NirPackage) -> CtfeBuiltinMap {
-    let mut map = CtfeBuiltinMap::default();
-    for func_rc in &project.functions {
-        let func = func_rc.borrow();
-        let Some(id) = func.id else {
-            continue;
-        };
-        let descriptor = crate::nir::FunctionRef::from_resolved(&func, func.module_source.clone());
-        let Some(name) = descriptor
-            .builtin_name()
-            .or_else(|| descriptor.monomorphized_builtin_name())
-        else {
-            continue;
-        };
-        let builtin = match name.as_str() {
-            "builtin::array_get_value" | "builtin::array_get_value_u8" => CtfeBuiltin::ArrayGet,
-            "builtin::array_len" => CtfeBuiltin::ArrayLen,
-            "builtin::array_new" => CtfeBuiltin::ArrayNew,
-            "builtin::array_set" | "builtin::array_set_u8" => CtfeBuiltin::ArraySet,
-            "builtin::array_copy" => CtfeBuiltin::ArrayCopy,
-            "builtin::array_clone_prefix" => CtfeBuiltin::ArrayClonePrefix,
-            "builtin::cold_path" => CtfeBuiltin::ColdPath,
-            "builtin::select" => CtfeBuiltin::Select,
-            "builtin::i32_as_char" => CtfeBuiltin::I32AsChar,
-            _ => continue,
-        };
-        map.insert(id, builtin);
-    }
-    map
 }
 
 /// Pre-build the [`GlobalEnv`] from every global in `project`, reducing each
@@ -422,6 +367,9 @@ fn const_seq_len(body: &Body, e: ExprId) -> Option<i32> {
 /// `GlobalVarSet`, so reading that store back is what lets it fold. A store's
 /// value is body content still being reduced, hence rebuilt per pass.
 struct GlobalView {
+    /// See [`MaterializingGlobals`]. Derived per call, since it reads body
+    /// contents, which the count-keyed [`ConstFoldCache`] does not track.
+    materializing: MaterializingGlobals,
     /// What each global holds. Seeded from [`FoldMaps::declared_globals`]; a
     /// global every store of which is the same constant overrides its
     /// placeholder's `NonConst`.
@@ -434,6 +382,7 @@ struct GlobalView {
 
 fn build_global_view(project: &NirPackage, type_table: &TypeTable, maps: &FoldMaps) -> GlobalView {
     let mut view = GlobalView {
+        materializing: materializing_globals(project),
         values: maps.declared_globals.clone(),
         fields: GlobalFieldEnv::default(),
     };

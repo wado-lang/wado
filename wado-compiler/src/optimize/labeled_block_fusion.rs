@@ -11,7 +11,8 @@
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::nir::{NirLiteralPattern, NirLocal};
 use crate::nir_arena::{
-    ArmData, BlockId, Body, ExprId, ExprKind, NodeRef, Operand, PatKind, StmtId, StmtKind,
+    ArmData, BlockId, BlockRole, Body, ExprId, ExprKind, NodeRef, Operand, PatKind, StmtId,
+    StmtKind,
 };
 use crate::nir_engine::{Engine, Rule};
 use crate::nir_value_graph::ValueKind;
@@ -1216,12 +1217,14 @@ fn perform_fusion(
         .as_expr()
         .expect("guarded by check_fusion_preconditions");
     let ExprKind::LabeledBlock {
-        block: lb_block, ..
+        block: lb_block,
+        role,
+        ..
     } = &engine.body.exprs[lv].kind
     else {
         unreachable!("guarded by check_fusion_preconditions")
     };
-    let lb_block = *lb_block;
+    let (lb_block, role) = (*lb_block, *role);
 
     // Extract the then/else blocks from the consumer statement.
     let (then_block, else_block) = match &engine.body.stmts[if_s].kind {
@@ -1279,6 +1282,7 @@ fn perform_fusion(
         StmtKind::LabeledBlock {
             label: fused_label,
             block: fused_body,
+            role,
         },
         span,
     );
@@ -1490,9 +1494,9 @@ fn transform_lb_stmt(engine: &mut Engine, s: StmtId, f: &Fusion, out: &mut Vec<S
             Shape::Blocks(v)
         }
         StmtKind::Loop { body: b } => Shape::Blocks(vec![*b]),
-        StmtKind::LabeledBlock { label: l, block } if l != f.orig_label => {
-            Shape::Blocks(vec![*block])
-        }
+        StmtKind::LabeledBlock {
+            label: l, block, ..
+        } if l != f.orig_label => Shape::Blocks(vec![*block]),
         _ => Shape::Other,
     };
     match shape {
@@ -2178,6 +2182,10 @@ fn perform_threading(engine: &mut Engine, match_id: ExprId, plan: ThreadPlan) {
     );
     // Move the scrutinee's LabeledBlock kind onto the match node, killing the
     // vacated node first so the block is never double-claimed.
+    let role = match &engine.body.exprs[plan.scrut].kind {
+        ExprKind::LabeledBlock { role, .. } => *role,
+        _ => BlockRole::Plain,
+    };
     engine.replace_expr_kind(plan.scrut, ExprKind::Dead);
     engine.replace_expr_kind(
         match_id,
@@ -2185,6 +2193,7 @@ fn perform_threading(engine: &mut Engine, match_id: ExprId, plan: ThreadPlan) {
             label: fused_label,
             block: plan.lb_block,
             result_type: plan.result_type,
+            role,
         },
     );
 }
@@ -2484,6 +2493,7 @@ struct SlotTempSroa {
     temp_local: u32,
     label: String,
     lb_block: BlockId,
+    role: BlockRole,
     /// Statements a `Block` wrapper ran before the labeled block, hoisted out.
     lead: Vec<StmtId>,
     /// Projected slots in field order, each with the local that replaces it.
@@ -2555,12 +2565,13 @@ fn plan_slot_temp_sroa(
     let ExprKind::LabeledBlock {
         label,
         block: lb_block,
+        role,
         ..
     } = &body.exprs[lb_expr].kind
     else {
         return None;
     };
-    let (label, lb_block) = (label.clone(), *lb_block);
+    let (label, lb_block, role) = (label.clone(), *lb_block, *role);
 
     // The block's value must arrive through `break L:` exits the transform can
     // reach, so the tail has to terminate rather than fall through with one.
@@ -2640,6 +2651,7 @@ fn plan_slot_temp_sroa(
         temp_local,
         label,
         lb_block,
+        role,
         lead,
         slots,
         names: reads.slot_names,
@@ -2757,6 +2769,7 @@ fn perform_slot_temp_sroa(
         StmtKind::LabeledBlock {
             label: plan.label,
             block: plan.lb_block,
+            role: plan.role,
         },
         span,
     );
@@ -2826,7 +2839,7 @@ fn scalarize_stmt(engine: &mut Engine, s: StmtId, plan: &SlotTempSroa, out: &mut
         // for the shadowing case rather than descending. Rewriting those breaks
         // here would scalarize exits that are not ours, which is why
         // `scalarize_expr` skips the same shape.
-        StmtKind::LabeledBlock { label, block } => {
+        StmtKind::LabeledBlock { label, block, .. } => {
             if label != &plan.label {
                 let block = *block;
                 scalarize_exits(engine, block, plan);

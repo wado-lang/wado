@@ -99,6 +99,7 @@ impl Interpreter<'_> {
     fn commit_fold<S: EditSink>(&mut self, sink: &mut S, e: ExprId, value: Value) -> bool {
         let node_type = sink.body().exprs[e].type_id;
         if self.type_table.is_reference_shaped(node_type) {
+            crate::compiler_trace!("region_seed", "commit {e:?}: refused, reference-shaped");
             return false;
         }
         if value.is_scalar() {
@@ -110,9 +111,15 @@ impl Interpreter<'_> {
         }
         let consumes = consumes_its_source(&sink.body().exprs[e].kind);
         if !consumes && !self.is_worth_materializing(sink.body(), e) {
+            crate::compiler_trace!("region_seed", "commit {e:?}: not worth materializing");
             return false;
         }
         let committed = self.materialize_seq_via(sink, e, &value);
+        crate::compiler_trace!(
+            "region_seed",
+            "commit {e:?} ({}): aggregate materialize -> {committed} (consumes={consumes})",
+            self.type_table.type_name(node_type)
+        );
         if consumes {
             self.frame.scratch_folds.insert(e, value);
         }
@@ -172,9 +179,14 @@ impl Interpreter<'_> {
     /// `Chunk { data, tag }` the literal would read `tag` as a length.
     fn materialize_seq_via<S: EditSink>(&self, sink: &mut S, e: ExprId, value: &Value) -> bool {
         let Value::Aggregate { type_id, .. } = value else {
+            crate::compiler_trace!(
+                "region_seed",
+                "materialize {e:?}: value is not an aggregate"
+            );
             return false;
         };
         if !self.type_table.is_seq_container(*type_id) {
+            crate::compiler_trace!("region_seed", "materialize {e:?}: not a seq container");
             return false;
         }
         // The literal is written over `e` but typed from the value, and
@@ -183,33 +195,65 @@ impl Interpreter<'_> {
         // fields under that node's type. A node yielding nothing can hold
         // neither.
         if sink.body().exprs[e].type_id != *type_id {
+            crate::compiler_trace!(
+                "region_seed",
+                "materialize {e:?}: node type {} != value type {}",
+                self.type_table.type_name(sink.body().exprs[e].type_id),
+                self.type_table.type_name(*type_id)
+            );
             return false;
         }
         let Some(Value::Seq { elements, .. }) = value.field(SeqField::Backing.index()) else {
+            crate::compiler_trace!("region_seed", "materialize {e:?}: backing is not a seq");
             return false;
         };
         let Some((used, PrimitiveType::I32)) =
             value.field(SeqField::Len.index()).and_then(Value::as_int)
         else {
+            crate::compiler_trace!(
+                "region_seed",
+                "materialize {e:?}: len is not an i32: {:?}",
+                value.field(SeqField::Len.index())
+            );
             return false;
         };
-        let Ok(used) = usize::try_from(used) else {
+        // `Value::Int` holds the sign-extended bit pattern, so a negative length
+        // reads as a huge `u64` until it is decoded at its own width.
+        let Ok(used) = usize::try_from(used as i32) else {
+            crate::compiler_trace!("region_seed", "materialize {e:?}: negative len {used}");
             return false;
         };
         if used == 0 || used > elements.len() {
+            crate::compiler_trace!(
+                "region_seed",
+                "materialize {e:?}: used {used} of {} elements",
+                elements.len()
+            );
             return false;
         }
         let mut bytes = Vec::with_capacity(used);
         for element in &elements[..used] {
             let Some((byte, PrimitiveType::U8)) = element.as_int() else {
+                crate::compiler_trace!(
+                    "region_seed",
+                    "materialize {e:?}: element is not a u8: {element:?}"
+                );
                 return false;
             };
             let Ok(byte) = u8::try_from(byte) else {
+                crate::compiler_trace!(
+                    "region_seed",
+                    "materialize {e:?}: element out of a byte's range: {byte}"
+                );
                 return false;
             };
             bytes.push(byte);
         }
         let Some(backing_type) = self.type_table.find_builtin_array(TypeTable::U8) else {
+            crate::compiler_trace!(
+                "region_seed",
+                "materialize {e:?}: no Array<u8> type interned"
+            );
             return false;
         };
         let span = sink.body().exprs[e].span;

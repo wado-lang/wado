@@ -82,7 +82,9 @@ pub use compiler_host::{
     KILN_GENERATOR_WIT, LogLevel, Severity, SourceError,
 };
 pub use logger::{Bail, Logger};
-pub use remarks::{Remark, collect_param_gate_remarks, collect_value_copy_remarks};
+pub use remarks::{
+    Remark, collect_const_region_remarks, collect_param_gate_remarks, collect_value_copy_remarks,
+};
 pub use semantics::{
     Cursor, Definition, Semantics, SymbolResolveError, lex_error_diagnostic,
     parse_error_diagnostic, semantics, semantics_for_world, semantics_of,
@@ -1596,7 +1598,8 @@ fn compile_after_load<H: CompilerHost>(
     if logger.would_log(compiler_host::Severity::Info) {
         let residual = remarks::collect_value_copy_remarks(&nir)
             .into_iter()
-            .chain(remarks::collect_param_gate_remarks(&nir));
+            .chain(remarks::collect_param_gate_remarks(&nir))
+            .chain(remarks::collect_const_region_remarks(&nir));
         for remark in residual {
             // `source_path` is empty for a synthetic entry name (`<stdin>`),
             // so the entry point keeps the caller's filename.

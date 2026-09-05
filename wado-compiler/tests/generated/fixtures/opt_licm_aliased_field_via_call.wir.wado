@@ -111,7 +111,7 @@ fn "opt_licm_aliased_field_via_call.wado/__cm_binding__Stdout_write_via_stream"(
 
 fn "opt_licm_aliased_field_via_call.wado/__cm_export__run"() {
     let n: ref "opt_licm_aliased_field_via_call.wado//Node";
-    let __r: ref "core:prelude/string.wado//String";
+    let __local_1: ref "core:prelude/string.wado//String";
     let handle: i32;
     let self_12: i32;
     let packed: i64;
@@ -130,12 +130,12 @@ fn "opt_licm_aliased_field_via_call.wado/__cm_export__run"() {
         global:opt_licm_aliased_field_via_call.wado::__modules_initialized = 1;
     };
     n = struct.new "opt_licm_aliased_field_via_call.wado//Node" { value: 0, tag: 0 };
-    __r = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(local.tee self_12("opt_licm_aliased_field_via_call.wado/f"(n, n)), __r);
+    __local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
+    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(local.tee self_12("opt_licm_aliased_field_via_call.wado/f"(n, n)), __local_1);
     rx_15 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_16 = builtin::i32_wrap_i64(packed >> 32_i64);
     handle = "opt_licm_aliased_field_via_call.wado/__cm_binding__Stdout_write_via_stream"(rx_15);
-    "core:rt/write_string_to_stream"(tx_16, __r, 1);
+    "core:rt/write_string_to_stream"(tx_16, __local_1, 1);
     "wasi/future-drop-readable:transmission-cli"(handle);
     "wasi/task-return"(0);
 }

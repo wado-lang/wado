@@ -88,7 +88,7 @@ fn "enum_mut_ref_deref_assign.wado/__cm_binding__Stdout_write_via_stream"(data) 
 
 fn "enum_mut_ref_deref_assign.wado/__cm_export__run"() {
     let c_0: ref "core:prelude/types.wado//Box<enum_mut_ref_deref_assign.wado/Color>";
-    let __r: ref "core:prelude/string.wado//String";
+    let __local_2: ref "core:prelude/string.wado//String";
     let handle: i32;
     let c_13: "enum_mut_ref_deref_assign.wado//enum:Color";
     let self_14: i32;
@@ -109,17 +109,17 @@ fn "enum_mut_ref_deref_assign.wado/__cm_export__run"() {
     };
     c_0 = struct.new "core:prelude/types.wado//Box<enum_mut_ref_deref_assign.wado/Color>" { value: 0 };
     c_0.value = 2;
-    __r = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
+    __local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     c_13 = c_0.value;
     "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(local.tee self_14((if c_13 == 0 -> i32 {
         1;
     } else {
         select i32(c_13 == 1, 2, 3);
-    })), __r);
+    })), __local_2);
     rx_17 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_18 = builtin::i32_wrap_i64(packed >> 32_i64);
     handle = "enum_mut_ref_deref_assign.wado/__cm_binding__Stdout_write_via_stream"(rx_17);
-    "core:rt/write_string_to_stream"(tx_18, __r, 1);
+    "core:rt/write_string_to_stream"(tx_18, __local_2, 1);
     "wasi/future-drop-readable:transmission-cli"(handle);
     "wasi/task-return"(0);
 }

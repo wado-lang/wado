@@ -151,7 +151,7 @@ fn "closure_effect_generic.wado/run"() with Stdout {
     let f_10: ref struct;
     let item_19: i32;
     let item_30: i32;
-    let __r: ref "core:prelude/string.wado//String";
+    let __local_2: ref "core:prelude/string.wado//String";
     let handle: i32;
     let packed: i64;
     let rx_47: i32;
@@ -193,12 +193,12 @@ fn "closure_effect_generic.wado/run"() with Stdout {
             break_if b3 __sroa___iter_2_index_62 >= 3;
             item_30 = builtin::array_get_value<i32>(__sroa___iter_2_repr_61, __sroa___iter_2_index_62);
             __sroa___iter_2_index_62 = __sroa___iter_2_index_62 + 1;
-            __r = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-            "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(item_30, __r);
+            __local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
+            "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(item_30, __local_2);
             rx_47 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
             tx_48 = builtin::i32_wrap_i64(packed >> 32_i64);
             handle = "closure_effect_generic.wado/__cm_binding__Stdout_write_via_stream"(rx_47);
-            "core:rt/write_string_to_stream"(tx_48, __r, 1);
+            "core:rt/write_string_to_stream"(tx_48, __local_2, 1);
             "wasi/future-drop-readable:transmission-cli"(handle);
             continue l4;
         };

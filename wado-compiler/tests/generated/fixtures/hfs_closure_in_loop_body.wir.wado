@@ -108,7 +108,7 @@ fn "hfs_closure_in_loop_body.wado/__cm_binding__Stdout_write_via_stream"(data) w
 
 fn "hfs_closure_in_loop_body.wado/__cm_export__run"() {
     let p: ref "hfs_closure_in_loop_body.wado//Pair";
-    let __r: ref "core:prelude/string.wado//String";
+    let __local_1: ref "core:prelude/string.wado//String";
     let handle: i32;
     let self_12: i32;
     let packed: i64;
@@ -127,12 +127,12 @@ fn "hfs_closure_in_loop_body.wado/__cm_export__run"() {
         global:hfs_closure_in_loop_body.wado::__modules_initialized = 1;
     };
     p = struct.new "hfs_closure_in_loop_body.wado//Pair" { x: 10, y: 20 };
-    __r = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(local.tee self_12("hfs_closure_in_loop_body.wado/build"(p)), __r);
+    __local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
+    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(local.tee self_12("hfs_closure_in_loop_body.wado/build"(p)), __local_1);
     rx_15 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_16 = builtin::i32_wrap_i64(packed >> 32_i64);
     handle = "hfs_closure_in_loop_body.wado/__cm_binding__Stdout_write_via_stream"(rx_15);
-    "core:rt/write_string_to_stream"(tx_16, __r, 1);
+    "core:rt/write_string_to_stream"(tx_16, __local_1, 1);
     "wasi/future-drop-readable:transmission-cli"(handle);
     "wasi/task-return"(0);
 }

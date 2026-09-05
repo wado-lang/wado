@@ -119,8 +119,8 @@ fn "inspect_unit_ref_field.wado/__cm_binding__Stdout_write_via_stream"(data) wit
 
 fn "inspect_unit_ref_field.wado/__cm_export__run"() {
     let h: ref "inspect_unit_ref_field.wado//Holder<&()>";
-    let __r: ref "core:prelude/string.wado//String";
-    let __f: ref "core:prelude/format.wado//Formatter";
+    let __local_2: ref "core:prelude/string.wado//String";
+    let __local_3: ref "core:prelude/format.wado//Formatter";
     let handle: i32;
     let packed: i64;
     let rx_12: i32;
@@ -138,13 +138,13 @@ fn "inspect_unit_ref_field.wado/__cm_export__run"() {
         global:inspect_unit_ref_field.wado::__modules_initialized = 1;
     };
     h = struct.new "inspect_unit_ref_field.wado//Holder<&()>" { tag: 7 };
-    __r = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-    __f = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __r };
-    "core:prelude/traits.wado/inspect_unit_ref_field.wado/Holder<&()>^core:prelude/traits.wado/Inspect::inspect$spec0"(h, __f);
+    __local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
+    __local_3 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_2 };
+    "core:prelude/traits.wado/inspect_unit_ref_field.wado/Holder<&()>^core:prelude/traits.wado/Inspect::inspect$spec0"(h, __local_3);
     rx_12 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_13 = builtin::i32_wrap_i64(packed >> 32_i64);
     handle = "inspect_unit_ref_field.wado/__cm_binding__Stdout_write_via_stream"(rx_12);
-    "core:rt/write_string_to_stream"(tx_13, __r, 1);
+    "core:rt/write_string_to_stream"(tx_13, __local_2, 1);
     "wasi/future-drop-readable:transmission-cli"(handle);
     "wasi/task-return"(0);
 }

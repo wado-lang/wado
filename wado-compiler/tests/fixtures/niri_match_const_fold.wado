@@ -1,8 +1,12 @@
-// Verify that niri's Stage 2.5 match-fold collapses a constant-scrutinee
-// `match` into the chosen arm body. We use prime-number arm bodies
-// unlikely to appear in stdlib WIR, so a `wir_not_expect` check on the
-// "wrong" arms confirms the match was actually folded away (rather
-// than left as an if-chain that O2 happens to dead-code-eliminate).
+// Verify that niri's match-fold collapses a constant-scrutinee `match` into the
+// chosen arm body. We use prime-number arm bodies unlikely to appear in stdlib
+// WIR, so a `wir_not_expect` check on the "wrong" arms confirms the match was
+// actually folded away (rather than left as an if-chain that O2 happens to
+// dead-code-eliminate).
+//
+// The chosen arm's value is not in the WIR either, and that is the stronger
+// result: the template around it folds too, so what reaches the binary is the
+// rendered string and the integer never needs to exist.
 
 use { println, Stdout } from "core:cli";
 
@@ -18,6 +22,6 @@ export fn run() with Stdout {
 __DATA__
 {
     "stdout": "1013\n",
-    "wir_expect:O2": ["1013"],
+    "wir_expect:O2": ["array.new_fixed<u8>(49, 48, 49, 51)"],
     "wir_not_expect:O2": ["1009", "1019"]
 }

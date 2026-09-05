@@ -128,7 +128,7 @@ fn "impl_param_constrained_by_predicate.wado/__cm_binding__Stdout_write_via_stre
 }
 
 fn "impl_param_constrained_by_predicate.wado/__cm_export__run"() {
-    let __r: ref "core:prelude/string.wado//String";
+    let __local_0: ref "core:prelude/string.wado//String";
     let handle: i32;
     let packed: i64;
     let rx_10: i32;
@@ -145,12 +145,12 @@ fn "impl_param_constrained_by_predicate.wado/__cm_export__run"() {
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:impl_param_constrained_by_predicate.wado::__modules_initialized = 1;
     };
-    __r = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-    "core:prelude/traits.wado/impl_param_constrained_by_predicate.wado/Point^core:prelude/traits.wado/Inspect::inspect$spec0$scalar"(struct.new "impl_param_constrained_by_predicate.wado//Point" { x: 1, y: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97), used: 1 } }, __r);
+    __local_0 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
+    "core:prelude/traits.wado/impl_param_constrained_by_predicate.wado/Point^core:prelude/traits.wado/Inspect::inspect$spec0$scalar"(struct.new "impl_param_constrained_by_predicate.wado//Point" { x: 1, y: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97), used: 1 } }, __local_0);
     rx_10 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_11 = builtin::i32_wrap_i64(packed >> 32_i64);
     handle = "impl_param_constrained_by_predicate.wado/__cm_binding__Stdout_write_via_stream"(rx_10);
-    "core:rt/write_string_to_stream"(tx_11, __r, 1);
+    "core:rt/write_string_to_stream"(tx_11, __local_0, 1);
     "wasi/future-drop-readable:transmission-cli"(handle);
     "wasi/task-return"(0);
 }
