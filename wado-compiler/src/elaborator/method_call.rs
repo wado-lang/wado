@@ -109,6 +109,9 @@ pub(super) struct MethodSignatureFacts {
     pub param_defaults: Vec<Option<ast::Expr>>,
     pub param_types: Vec<TypeId>,
     pub self_kind: ast::SelfKind,
+    /// The scope `param_defaults` resolve in, where the selected method is not
+    /// the declaration that wrote them.
+    pub defaults_module: Option<ModuleSource>,
 }
 
 impl MethodCallOutcome {
@@ -535,6 +538,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             param_names,
             consumes_self,
             inherent_visibility,
+            defaults_module,
         } = if let Some(info) = method_info {
             info
         } else {
@@ -563,6 +567,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 param_names: vec![],
                 consumes_self: false,
                 inherent_visibility: None,
+                defaults_module: None,
             }
         };
 
@@ -637,9 +642,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // parameter values and type-parameter defaults alike — resolve in,
         // since a default may name a type the call site cannot (WEP
         // 2026-04-11). The chain `method_module_source` takes below, without
-        // its inherited-owner steps.
-        let callee_module = trait_impl_module_source
+        // its inherited-owner steps. A default the method did not write itself
+        // — a trait's, on an impl of it — names its own declaring module.
+        let callee_module = defaults_module
             .clone()
+            .or_else(|| trait_impl_module_source.clone())
             .or_else(|| inherent_impl_module.clone())
             .unwrap_or_else(|| struct_module.clone());
 
@@ -1093,6 +1100,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             param_defaults: param_defaults.clone(),
             param_types: expected_param_types.clone(),
             self_kind,
+            defaults_module: defaults_module.clone(),
         });
         let dispatch = if method_found {
             self.record_method_dispatch(
@@ -1267,7 +1275,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 call_id,
                 super::sem::types::StaticMethodDispatch {
                     method_def: dispatched.method_def,
-                    defaults_module: function_ref.module_source.clone(),
+                    defaults_module: sig
+                        .defaults_module
+                        .unwrap_or_else(|| function_ref.module_source.clone()),
                     function_ref,
                     param_is_mut,
                     type_args,
@@ -1448,6 +1458,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             param_defaults: static_method_defaults,
             mut param_types,
             self_in_args,
+            defaults_module,
         } = super::sem::types::CalleeParams::of_signature(callee_sig.as_ref());
         // Whether a signature answered at all. A variant case or a flags member
         // reaches this path with no signature behind it, and its own arm below
@@ -1475,10 +1486,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         // The module those defaults were written in, so their bodies answer to
-        // it rather than to this call site.
-        let static_method_module = static_receiver.as_ref().and_then(|receiver| {
-            self.static_method_entry(receiver, &static_call.method)
-                .map(|e| e.module.clone())
+        // it rather than to this call site. The signature answers for a default
+        // its own declaration did not write — a trait's, on an impl's method.
+        let static_method_module = defaults_module.or_else(|| {
+            static_receiver.as_ref().and_then(|receiver| {
+                self.static_method_entry(receiver, &static_call.method)
+                    .map(|e| e.module.clone())
+            })
         });
 
         // For generic variant constructors (e.g., Option::<List<u8>>::Some([])),
@@ -2150,7 +2164,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 &static_call.method,
                 static_call.id,
                 &method_type_args,
-                &static_method_defaults,
                 &args,
                 &arg_spans,
                 static_call.span,
@@ -2284,7 +2297,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         method: &str,
         call_id: AstId,
         method_type_args: &[TypeId],
-        static_method_defaults: &[(String, Option<ast::Expr>)],
         args: &[TypeId],
         arg_spans: &[Span],
         span: Span,
@@ -2300,12 +2312,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let template_name = MethodName::format_local(&binder, Some(&trait_name), method);
         // The blanket's own declaration of the method: its bucket is keyed by
         // the receiver *param*, which no name written at a call site reaches.
+        let method_def = self.tysys.declared_method(blanket_def, method);
+        // Its defaults come from the template's signature: no receiver-keyed
+        // lookup reaches a blanket, so the call site brings none.
+        let template = method_def.and_then(|def| self.tysys.signatures.method_sig(def).cloned());
+        let static_method_defaults = template
+            .as_ref()
+            .map(|sig| super::sig::Param::named_defaults(&sig.params))
+            .unwrap_or_default();
         let method_ref = StaticMethodRef::new(
             blanket_module.clone(),
             blanket_param.clone(),
             method.to_string(),
             Some(trait_name.clone()),
-            self.tysys.declared_method(blanket_def, method),
+            method_def,
         );
         let template_return = self.lookup_static_method_return_type(&method_ref, &binder);
         if template_return == TypeTable::UNKNOWN {
@@ -2326,7 +2346,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             method,
             receiver_type_id,
         );
-        if !self.check_static_call_args(&param_types, args, arg_spans, static_method_defaults, span)
+        if !self.check_static_call_args(&param_types, args, arg_spans, &static_method_defaults, span)
         {
             return Some(TypeTable::ERROR);
         }
@@ -2361,12 +2381,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.sem.types.static_method_dispatch.insert(
             call_id,
             super::sem::types::StaticMethodDispatch {
-                method_def: self.tysys.declared_method(blanket_def, method),
-                defaults_module: func_ref.module_source.clone(),
+                method_def,
+                defaults_module: template
+                    .and_then(|sig| sig.defaults_module)
+                    .unwrap_or_else(|| func_ref.module_source.clone()),
                 function_ref: func_ref,
                 param_is_mut: Vec::new(),
                 type_args: method_type_args.to_vec(),
-                param_defaults: static_method_defaults.to_vec(),
+                param_defaults: static_method_defaults,
                 param_types,
                 self_in_args: false,
             },

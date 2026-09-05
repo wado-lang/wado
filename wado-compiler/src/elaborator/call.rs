@@ -1387,6 +1387,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         param_defaults,
                         param_types,
                         self_in_args,
+                        defaults_module,
                     } = super::sem::types::CalleeParams::of_signature(callee_sig.as_ref());
 
                     let func_ref = FunctionRef {
@@ -1432,7 +1433,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         key,
                         super::sem::types::StaticMethodDispatch {
                             method_def: method_ref.method_id,
-                            defaults_module: func_ref.module_source.clone(),
+                            defaults_module: defaults_module
+                                .unwrap_or_else(|| func_ref.module_source.clone()),
                             function_ref: func_ref,
                             param_is_mut,
                             type_args: vec![],
@@ -2971,7 +2973,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             receiver_ty,
             method,
             call_id,
-            &[],
             &[],
             args,
             &arg_spans,

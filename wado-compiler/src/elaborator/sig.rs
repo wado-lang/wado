@@ -115,28 +115,36 @@ impl Signatures {
         self.data_sections.get(module).map(String::as_str)
     }
 
-    /// Give every trait-`impl` method the parameter defaults its trait declares.
-    /// They are copied by position, which is what a call site fills when it
-    /// omits a trailing argument, so an impl may rename what it takes. Filled
-    /// here rather than in the decl pass: the trait may be declared elsewhere.
+    /// Make a trait-`impl` method's parameters say what its trait declared:
+    /// the names and the defaults, by position, since only the trait may
+    /// declare a default (WEP 2026-04-11) and a default may name an earlier
+    /// parameter by the name the trait gave it. Filled here rather than in the
+    /// decl pass, because the trait may be declared in another module.
     pub(crate) fn inherit_trait_param_defaults(&mut self, defs: &crate::defs::DefTable) {
-        let inherited: Vec<(crate::defs::DefId, Vec<Option<crate::ast::Expr>>)> = self
+        let inherited: Vec<(crate::defs::DefId, ModuleSource, Vec<Param>)> = self
             .method_sigs
             .values()
             .filter(|sig| !sig.params.is_empty())
             .filter_map(|sig| {
                 let trait_decl = self.impl_sig(sig.declaring_impl?)?.trait_decl?;
-                let declared = self.trait_sig(trait_decl)?.method(defs.name(sig.def))?;
-                Some((sig.def, Param::defaults(&declared.sig.params)))
+                let declaring = self.trait_sig(trait_decl)?;
+                let declared = declaring.method(defs.name(sig.def))?;
+                Some((
+                    sig.def,
+                    declaring.module.clone(),
+                    declared.sig.params.clone(),
+                ))
             })
             .collect();
-        for (def, defaults) in inherited {
+        for (def, module, declared) in inherited {
             let sig = self
                 .method_sigs
                 .get_mut(&def)
                 .expect("every key was just read from this map");
-            for (param, default) in sig.params.iter_mut().zip(defaults) {
-                param.default = default;
+            sig.defaults_module = Some(module);
+            for (param, declared) in sig.params.iter_mut().zip(declared) {
+                param.name = declared.name;
+                param.default = declared.default;
             }
         }
     }
@@ -196,6 +204,11 @@ pub(crate) struct MethodSig {
     /// Canonical name from `#[cm("…")]`, resolved at the declaration.
     pub(crate) cm_name: Option<String>,
     pub(crate) is_async: bool,
+    /// Where [`Self::params`]' defaults were written, when that is not this
+    /// declaration's own module: a trait's, for the methods implementing it.
+    /// A default resolves in the scope that wrote it, so a call site pads from
+    /// here rather than from the module it reached the callee through.
+    pub(crate) defaults_module: Option<ModuleSource>,
 }
 
 /// What a declaration says about one parameter beyond its type. One record
@@ -207,7 +220,8 @@ pub(crate) struct Param {
     pub(crate) is_mut: bool,
     /// Irreducibly AST — re-resolved per call site under the callee's scope
     /// (WEP 2026-04-11). An impl of a trait declares none of its own:
-    /// [`Signatures::inherit_trait_param_defaults`] fills in the trait's.
+    /// [`Signatures::inherit_trait_param_defaults`] fills in the trait's, in
+    /// [`MethodSig::defaults_module`]'s scope.
     pub(crate) default: Option<crate::ast::Expr>,
 }
 

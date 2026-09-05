@@ -1279,6 +1279,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         .iter()
                         .find_map(crate::ast::Attribute::cm_identifier),
                     is_async: method.is_async,
+                    // A trait impl's are the trait's, filled once every
+                    // module's declarations are assembled.
+                    defaults_module: None,
                 },
             );
         }
@@ -1680,6 +1683,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             .iter()
                             .find_map(crate::ast::Attribute::cm_identifier),
                         is_async: method.is_async,
+                        defaults_module: None,
                     },
                     default_body: method
                         .body
@@ -1889,6 +1893,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     own_params: Vec::new(),
                     cm_name: cm_name.clone(),
                     is_async: method.is_async,
+                    defaults_module: None,
                 },
             );
 

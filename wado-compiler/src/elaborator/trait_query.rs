@@ -2146,10 +2146,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 method_own_params: sig.own_params.clone(),
                 impl_module: None,
                 from_concrete_impl: false,
-                param_defaults: sig.params.iter().map(|p| p.default.clone()).collect(),
+                param_defaults: super::sig::Param::defaults(&sig.params),
                 param_names: super::sig::Param::names(&sig.params),
                 consumes_self: sig.self_kind == ast::SelfKind::Value,
                 inherent_visibility: None,
+                defaults_module: sig.defaults_module.clone(),
             },
         ))
     }
@@ -2848,6 +2849,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             from_concrete_impl: false,
             consumes_self: false,
             inherent_visibility: None,
+            defaults_module: None,
         };
         // The receiver's declaration names the module the derived impl belongs
         // to; `auto_derive_eligible_kind` above already established it is one.

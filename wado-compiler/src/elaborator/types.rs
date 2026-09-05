@@ -2100,6 +2100,10 @@ pub(super) struct MethodInfo {
     /// An inherent member's declared rung. `None` where the member does not
     /// decide its own reach: trait impls, resource methods, builtins.
     pub(super) inherent_visibility: Option<crate::ast::Visibility>,
+    /// Where [`Self::param_defaults`] were written, when that is not the
+    /// selected method's own module — the trait a `impl` implements declares
+    /// them (WEP 2026-04-11), and a default resolves in the scope that wrote it.
+    pub(super) defaults_module: Option<ModuleSource>,
 }
 
 /// Labeled block expression target for tracking break types

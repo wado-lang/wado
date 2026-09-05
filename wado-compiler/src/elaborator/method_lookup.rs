@@ -714,6 +714,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             param_names: vec![],
                             consumes_self: false,
                             inherent_visibility: None,
+                            defaults_module: None,
                         });
                     }
                     if method_name == "zip" {
@@ -757,6 +758,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             param_names: vec![],
                             consumes_self: false,
                             inherent_visibility: None,
+                            defaults_module: None,
                         });
                     }
                     (
@@ -1017,6 +1019,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             param_names: super::sig::Param::names(&sig.params),
             consumes_self: sig.self_kind == ast::SelfKind::Value,
             inherent_visibility: Some(method_header.visibility),
+            defaults_module: sig.defaults_module.clone(),
         })
     }
 
@@ -1136,6 +1139,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             param_names: super::sig::Param::names(&sig.params),
             consumes_self: sig.self_kind == ast::SelfKind::Value,
             inherent_visibility: None,
+            defaults_module: sig.defaults_module.clone(),
         })
     }
 
@@ -1957,6 +1961,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     param_names,
                     consumes_self: self_kind == ast::SelfKind::Value,
                     inherent_visibility: None,
+                    defaults_module: method_sig.defaults_module.clone(),
                 },
                 impl_module_source: impl_module_source.clone(),
                 blanket_type_param: blanket_type_param.clone(),
@@ -1973,8 +1978,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // declaration for a default method with that name
         if !method_found {
             let trait_name_base = scope.get_type_name(&trait_type_for_name);
-            if let Some(default_method) = scope
-                .trait_sig_by_name(&trait_name_base)
+            let declaring = scope.trait_sig_by_name(&trait_name_base);
+            let trait_module = declaring.map(|sig| sig.module.clone());
+            if let Some(default_method) = declaring
                 .and_then(|sig| sig.method(method_name))
                 .filter(|m| m.default_body.is_some())
                 .cloned()
@@ -2018,17 +2024,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         method_own_params: default_method.sig.own_params.clone(),
                         impl_module: Some(impl_module_source.clone()),
                         from_concrete_impl: impl_is_concrete,
-                        param_defaults: default_method
-                            .sig
-                            .params
-                            .iter()
-                            .map(|p| p.default.clone())
-                            .collect(),
+                        param_defaults: crate::elaborator::sig::Param::defaults(
+                            &default_method.sig.params,
+                        ),
                         param_names: crate::elaborator::sig::Param::names(
                             &default_method.sig.params,
                         ),
                         consumes_self: self_kind == ast::SelfKind::Value,
                         inherent_visibility: None,
+                        // The body and its defaults are the trait's, so both
+                        // resolve where the trait wrote them.
+                        defaults_module: trait_module,
                     },
                     impl_module_source,
                     blanket_type_param,
@@ -2899,6 +2905,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             param_names: method_param_names,
             consumes_self: _,
             inherent_visibility,
+            // Reify pads this path's defaults under the caller, as it does for
+            // every `MethodDispatch`; no perspective swap reads a module here.
+            defaults_module: _,
         } = method_info?;
 
         // Only use IndexMut if the method requires &mut self

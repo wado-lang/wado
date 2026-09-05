@@ -1,6 +1,10 @@
 // The trait half of `default_arg_trait_static.wado`: a default declared in
-// another module than the impl.
+// another module than the impl, naming an item only this module can see.
+
+fn origin() -> i32 {
+    return 3;
+}
 
 pub trait Tag {
-    fn tagged(n: i32 = 3) -> i32;
+    fn tagged(n: i32 = origin()) -> i32;
 }
