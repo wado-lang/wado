@@ -449,3 +449,19 @@ a : ('x' 'y' | 'x' 'z')? 'p'
 
     assert !str_contains(&report, &"Consume(TK_LIT_Y)"), report;
 }
+
+test "render_dump walks a multi-token repeat body reached through an opaque rule-ref" {
+    // `p` sees `t` and `q` as opaque rule-refs and expands them. Inside `t`
+    // the walk used to step past `(ID '::')*` as one token, so `ID` at depth
+    // 1 was claimed for `t` and `'::'` for `q` alone — committing `a matches`
+    // to `t` and `a :: b` to `q`. Neither token separates the alts here.
+    let g = "grammar R;
+p : t | q ;
+t : (ID '::')* ID '`' ;
+q : ID ('::' ID)* ;
+ID : [a-z]+ ;";
+    let p = section_of(&dump_source(&g), &"p");
+
+    assert !str_contains(&p, &"Leaf(alt 0)"), p;
+    assert !str_contains(&p, &"Leaf(alt 1)"), p;
+}
