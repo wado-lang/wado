@@ -1349,7 +1349,9 @@ fn generate_read_helper(
     members: &[&ReadBridgeMember],
     span: Span,
 ) -> TirFunction {
-    let value_type = members[0].value_type;
+    // The group erases to one type, so any member names the answer. Holding
+    // that value by handle is per member: a newtype does, its base does not.
+    let answer_type = members[0].value_type;
     let cases: Vec<(String, u32)> = members.iter().map(|m| (m.name.clone(), m.index)).collect();
     let dispatch = case_index_dispatch(
         local_expr(1, "index", TypeTable::I32, span),
@@ -1368,13 +1370,13 @@ fn generate_read_helper(
                 member.field_type,
                 span,
             );
-            if member.field_type == value_type {
+            if member.field_type == member.value_type {
                 access
             } else {
-                deref_expr(access, value_type, span)
+                deref_expr(access, member.value_type, span)
             }
         },
-        value_type,
+        answer_type,
         span,
     );
 
@@ -1400,7 +1402,7 @@ fn generate_read_helper(
     make_synthetic_free_function(
         helper_name,
         params,
-        value_type,
+        answer_type,
         TirBlock::new(
             vec![TirStmt::new(
                 TirStmtKind::Return {

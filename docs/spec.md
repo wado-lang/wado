@@ -2337,11 +2337,12 @@ with the literal text around them, instead of a rendered `String`:
 
 ```wado
 let q = sql`SELECT * FROM users WHERE id = ${id} AND name = ${user.name}`;
-let s = String::raw`C:\path\${name}`;   // backslashes kept
+let s = String::raw`${dir}\bin\run.exe`;   // backslashes kept
 ```
 
 The tag is a function name or a static method path, with no whitespace before
-the backtick. The literal is lexed exactly as an untagged template.
+the backtick. The literal is lexed exactly as an untagged template, so every
+escape must still be one the lexer knows even where the tag preserves it.
 
 A tag is an ordinary function whose one parameter is bound by `ReflectTemplate`,
 the reflected kind of a template literal. The compiler synthesizes one anonymous

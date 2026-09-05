@@ -1,0 +1,34 @@
+// A read bridge groups its members by the *erased* value type, so a newtype and
+// its base share one helper. The dereference is a property of each member's own
+// field, not of the group: reading `f64` through a group whose first member is
+// `Meters` must still read the field directly.
+use { println, Stdout } from "core:cli";
+
+type Meters = f64;
+
+struct Span {
+    len: Meters,
+    raw: f64,
+}
+
+fn holes<T: ReflectTemplate<Holes = [..V]>, ..V: Display>(t: T) -> String {
+    let mut out = "";
+    for let h of ReflectTemplate::<T>::members() {
+        out.push_str(&`${h.get(&t)};`);
+    }
+    return out;
+}
+
+export fn run() with Stdout {
+    let m: Meters = builtin::black_box(2.5);
+    let s = Span { len: m, raw: builtin::black_box(1.5) };
+    let mut fields = "";
+    for let f of ReflectStruct::<Span>::members() {
+        fields.push_str(&`${f.get(&s)};`);
+    }
+    println(fields);
+    println(holes`${m}${builtin::black_box(0.5)}`);
+}
+
+__DATA__
+{"stdout": "2.5;1.5;\n2.5;0.5;\n"}

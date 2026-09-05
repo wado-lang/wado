@@ -48,7 +48,7 @@ cost what the untagged one costs.
 
 ```wado
 let q = sql`SELECT * FROM users WHERE id = ${id} AND name = ${user.name}`;
-let s = String::raw`C:\path\${name}`;
+let s = String::raw`${dir}\bin\run.exe`;
 ```
 
 A tag is a path expression — a function name or a static method path — written
@@ -61,10 +61,11 @@ The template body is lexed exactly as an untagged one: `${expr}` and
 `${expr:spec}` holes, `{` and `}` literal, `\$` the only escape a hole needs.
 The tag changes nothing about how the literal reads, only about what it means.
 
-A tag is an ordinary function — any effects, any return type — that takes one
-argument satisfying `ReflectTemplate`. Nothing about being a tag appears on the
-declaration; a function is a tag because a call site wrote it before a
-backtick.
+A tag is an ordinary function — any effects, any return type — whose first
+parameter is satisfied by `ReflectTemplate`. The template is its one written
+argument, and ordinary call resolution fills the trailing parameters that
+declare a default. Nothing about being a tag appears on the declaration; a
+function is a tag because a call site wrote it before a backtick.
 
 ### The template type
 

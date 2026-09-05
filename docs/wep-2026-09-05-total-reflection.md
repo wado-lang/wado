@@ -285,6 +285,7 @@ fn describe<T: Reflect>(v: &T) -> String {
         variant(CasePayloads = [..P]) => return live_case_of(v),
         enum | flags => return Reflect::<T>::type_name(),
         newtype(Base = B) => return describe(&B::from(*v)),
+        template(Holes = [..V]) => return Reflect::<T>::type_name(),
         resource | array | primitive | unit | never | tuple | reference
             | function | opaque => return Reflect::<T>::type_name(),
     }

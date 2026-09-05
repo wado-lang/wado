@@ -4,7 +4,10 @@
 //! sugar is already desugared.
 
 use std::cell::RefCell;
+use std::fmt::Write;
 use std::rc::Rc;
+
+use sha2::Digest;
 
 use crate::canonical::CmCallTarget;
 use crate::compiler_item::CompilerItem;
@@ -1389,6 +1392,14 @@ impl TypeTable {
         shape: &AnonShape,
         field_type: &dyn Fn(&Self, TypeId) -> String,
     ) -> String {
+        fn digest_len(h: &mut sha2::Sha256, n: usize) {
+            h.update((n as u64).to_le_bytes());
+        }
+        fn digest_str(h: &mut sha2::Sha256, s: &str) {
+            digest_len(h, s.len());
+            h.update(s.as_bytes());
+        }
+
         match shape {
             AnonShape::Synthetic(name) => name.clone(),
             AnonShape::Fields(fields) => {
@@ -1398,22 +1409,34 @@ impl TypeTable {
                     .collect();
                 format!("__anon_{{{}}}", parts.join(","))
             }
-            // The literal text is arbitrary, so the name is a hash of the
-            // shape, its hole types rendered through `field_type`.
+            // The literal text is arbitrary, so the name is a digest of the
+            // shape, its hole types rendered through `field_type`. It names a
+            // compiled artifact, so no Rust release may move it, and every
+            // piece goes in length-prefixed so no two shapes encode alike.
             AnonShape::Template(shape) => {
-                use std::hash::{Hash, Hasher};
-                let mut hasher = std::collections::hash_map::DefaultHasher::new();
-                shape.segments.hash(&mut hasher);
-                for hole in &shape.holes {
-                    field_type(self, hole.ty).hash(&mut hasher);
-                    hole.spec.hash(&mut hasher);
-                    hole.source.hash(&mut hasher);
+                let mut h = sha2::Sha256::new();
+                digest_len(&mut h, shape.segments.len());
+                for segment in &shape.segments {
+                    digest_str(&mut h, segment);
                 }
-                format!(
-                    "{}{:016x}",
-                    crate::name::TEMPLATE_SHAPE_PREFIX,
-                    hasher.finish()
-                )
+                digest_len(&mut h, shape.holes.len());
+                for hole in &shape.holes {
+                    digest_str(&mut h, &field_type(self, hole.ty));
+                    match &hole.spec {
+                        Some(spec) => {
+                            h.update([1u8]);
+                            digest_str(&mut h, spec);
+                        }
+                        None => h.update([0u8]),
+                    }
+                    digest_str(&mut h, &hole.source);
+                }
+                let bytes: [u8; 32] = h.finalize().into();
+                let mut mangle = crate::name::TEMPLATE_SHAPE_PREFIX.to_string();
+                for b in &bytes[..8] {
+                    let _ = write!(mangle, "{b:02x}");
+                }
+                mangle
             }
         }
     }
