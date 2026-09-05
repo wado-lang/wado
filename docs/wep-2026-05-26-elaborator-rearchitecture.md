@@ -330,10 +330,17 @@ Every convergence below was forced by a defect where two of them disagreed:
   is what leaves at most one declaration that states a reach of its own, so the
   visibility ladder reads the one the spelling names rather than whichever
   entry the name was indexed under first. It is one rule, `shadow_trait_impls`,
-  over every ladder the spelling reaches: the impl-block walk, the method index
-  the associated-function lookups read, and the trait-impl selection that mangles
-  the call. Applied to one of them, a receiver-less method still answered from
-  the trait impl the signature and the reach were never read off.
+  in one walk, `impl_method_entries`, and every lookup over the spelling's
+  declared methods is a projection of it. Applied to one ladder alone, a
+  receiver-less method still answered from the trait impl the signature and the
+  reach were never read off.
+
+  The trait-impl selection that mangles the call is a different question and
+  keeps its own walk: which trait impl _block_ the argument picks, a block that
+  declares no method of the name included — `impl Factory for Wrap<T> {}` still
+  answers `Wrap::make()` with the trait's default. A method index cannot hold
+  that block, so the selection consults the resolver for the one fact it shares,
+  whether an inherent declaration shadows the name, and declines where one does.
 
 - How many of a callee's parameters a call's arguments cover — the call syntax,
   not the signature. Written qualified, an instance method's receiver is the

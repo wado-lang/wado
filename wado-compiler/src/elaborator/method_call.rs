@@ -2807,7 +2807,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// The *trait* impl blocks a receiver written `struct_name` reaches,
-    /// current-module-first, with the declared name their heads must spell.
+    /// current-module-first — every block whose head names the receiver's
+    /// declaration, whether or not it declares the method asked about: a block
+    /// that overrides nothing still answers with the trait's default.
     ///
     /// A receiver reaches two namespaces: its declaration, and an impl binding
     /// the name as its own type parameter (`impl<V: Bound> Trait for V`), which
@@ -2817,7 +2819,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &self,
         struct_name: &str,
         target_hint: Option<&ImplTargetKey>,
-    ) -> (Vec<crate::defs::DefId>, String) {
+    ) -> Vec<crate::defs::DefId> {
         let defs = self.tysys.resolutions.defs();
         let target = self.static_receiver_key(struct_name, target_hint);
         let declared_name = target.type_name(defs).unwrap_or(struct_name).to_string();
@@ -2836,7 +2838,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .copied()
             .collect();
         keys.extend(declared.iter().filter(|k| !is_current(k)).copied());
-        (keys, declared_name)
+        keys.retain(|key| {
+            let header = &env.impl_headers[key];
+            header.trait_type.is_some()
+                && self.impl_head_decl_name(header, defs.module(*key)) == declared_name
+        });
+        keys
     }
 
     /// The return type every method the qualified spelling can name agrees on,
@@ -3092,16 +3099,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .to_string();
         let mut candidates: Vec<ConversionCandidate> = Vec::new();
         let mut has_blanket = false;
-        let (impl_defs, declared_name) = self.trait_impls_for_receiver(struct_name, target_hint);
-        for impl_def in impl_defs {
+        for impl_def in self.trait_impls_for_receiver(struct_name, target_hint) {
             let header = &self.tysys.trait_env.impl_headers[&impl_def];
             let module = self.tysys.resolutions.defs().module(impl_def).clone();
-            let Some(trait_type) = header.trait_type.as_ref() else {
-                continue;
-            };
+            let trait_type = header
+                .trait_type
+                .as_ref()
+                .expect("trait_impls_for_receiver yields trait impls alone");
             let base = super::trait_env::get_type_name_static(trait_type);
-            if self.impl_head_decl_name(header, &module) != declared_name
-                || (base != from_trait_name && base != "TryFrom")
+            if (base != from_trait_name && base != "TryFrom")
                 || !header.methods.iter().any(|m| m.name == method_name)
             {
                 continue;
@@ -3204,7 +3210,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if self.has_inherent_impl_method(&receiver, method_name) {
             return None;
         }
-        let (impl_defs, declared_name) = self.trait_impls_for_receiver(struct_name, target_hint);
+        let impl_defs = self.trait_impls_for_receiver(struct_name, target_hint);
         let from_trait_name = self
             .tysys
             .type_table
@@ -3308,9 +3314,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                           impl_module: &ModuleSource|
          -> Option<(crate::name::FqTraitName, crate::defs::DefId)> {
             let trait_type = header.trait_type.as_ref()?;
-            if self.impl_head_decl_name(header, impl_module) != declared_name
-                || !matches_arg_type(trait_type, &header.ty, impl_module, &header.type_params)
-            {
+            if !matches_arg_type(trait_type, &header.ty, impl_module, &header.type_params) {
                 return None;
             }
             for method in header.methods.iter().filter(|m| m.name == method_name) {
