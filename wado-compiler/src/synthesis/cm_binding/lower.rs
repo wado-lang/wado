@@ -628,7 +628,7 @@ pub(super) fn synthesize_lower_list_to_buffer(
 ) -> (Vec<TirStmt>, u32, u32) {
     let names = &ctx.names;
     let list_type_id = value.type_id;
-    let elem_resolved = ctx.cm_interface_registry.resolve_type(elem_type);
+    let elem_resolved = ctx.cm_interface_registry.value_type(elem_type);
 
     let elem_size = crate::component_model::cm_size_with_registry_scoped(
         &elem_resolved,
@@ -852,7 +852,7 @@ pub(super) fn synthesize_flatten_value_to_flat_args(
     ctx: &LowerContext<'_>,
 ) {
     let names = &ctx.names;
-    let resolved = ctx.cm_interface_registry.resolve_type(ty);
+    let resolved = ctx.cm_interface_registry.value_type(ty);
     match &resolved {
         // String → cm_lower_string → packed i64 → (ptr, len)
         Type::Named(n) if n.name == names.string => {
@@ -1204,7 +1204,7 @@ pub(super) fn flatten_cm_record_fields(
     ctx: &LowerContext<'_>,
 ) {
     for (field_idx, (wado_name, _, field_ty)) in fields.iter().enumerate() {
-        let resolved_field = ctx.cm_interface_registry.resolve_type(field_ty);
+        let resolved_field = ctx.cm_interface_registry.value_type(field_ty);
         let field_type_id = {
             let mut tt = ctx.type_table.borrow_mut();
             cm_type_to_type_id(
@@ -1574,7 +1574,7 @@ pub(super) fn synthesize_lower_wasi_type_to_memory(
     ctx: &LowerContext<'_>,
 ) -> Vec<TirStmt> {
     let names = &ctx.names;
-    let resolved = ctx.cm_interface_registry.resolve_type(ty);
+    let resolved = ctx.cm_interface_registry.value_type(ty);
     match &resolved {
         Type::Named(n) => {
             // CM record lowering: store each field at its offset, keyed on the
@@ -1591,7 +1591,7 @@ pub(super) fn synthesize_lower_wasi_type_to_memory(
             }) {
                 let resolved_fields: Vec<(String, Type)> = fields
                     .iter()
-                    .map(|(wn, _, ft)| (wn.clone(), ctx.cm_interface_registry.resolve_type(ft)))
+                    .map(|(wn, _, ft)| (wn.clone(), ctx.cm_interface_registry.value_type(ft)))
                     .collect();
                 let offsets = cm_abi::layout_fields_with_registry_scoped(
                     resolved_fields.iter().map(|(_, ty)| ty),
@@ -1658,7 +1658,7 @@ pub(super) fn synthesize_lower_wasi_type_to_memory(
             synthesize_lower_tuple(elems, value, addr, next_local, locals, ctx)
         }
         Type::Generic(g) if g.name == names.option && g.args.len() == 1 => {
-            let inner = ctx.cm_interface_registry.resolve_type(&g.args[0]);
+            let inner = ctx.cm_interface_registry.value_type(&g.args[0]);
             let mut stmts = Vec::new();
             synthesize_lower_option_to_memory(
                 &inner, value, addr, next_local, &mut stmts, locals, ctx,
@@ -1669,8 +1669,8 @@ pub(super) fn synthesize_lower_wasi_type_to_memory(
             synthesize_lower_list_to_memory(&g.args[0], value, addr, next_local, locals, ctx)
         }
         Type::Generic(g) if g.name == names.result && g.args.len() == 2 => {
-            let ok = ctx.cm_interface_registry.resolve_type(&g.args[0]);
-            let err = ctx.cm_interface_registry.resolve_type(&g.args[1]);
+            let ok = ctx.cm_interface_registry.value_type(&g.args[0]);
+            let err = ctx.cm_interface_registry.value_type(&g.args[1]);
             let mut stmts = Vec::new();
             synthesize_lower_result_to_memory(
                 &ok, &err, value, addr, next_local, &mut stmts, locals, ctx,

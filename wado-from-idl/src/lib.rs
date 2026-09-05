@@ -4,6 +4,7 @@ pub mod codegen;
 pub mod ir;
 pub mod naming;
 pub mod transform;
+pub mod webidl;
 
 pub use codegen::WadoCodeGenerator;
 pub use ir::WadoModule;

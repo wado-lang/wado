@@ -212,18 +212,12 @@ distinct fact rather than a different spelling. `TypeInfo` carries it: the
 declaration's name and module, plus the instantiation's type arguments, each
 itself a `TypeInfo`.
 
-```wado
-/// Sealed: fields private, minted only by `type_info()`, and not itself
-/// reflectable.
-pub struct TypeInfo { … }
-
-impl TypeInfo {
-    pub fn name(&self) -> String;              // "Pair"
-    pub fn module(&self) -> String;            // "core:collections" / "./pair.wado"
-    pub fn type_args(&self) -> List<TypeInfo>; // [String, i32] for Pair<String,i32>
-    pub fn canonical_name(&self) -> String;    // "\"./pair.wado\"#Pair<String,i32>"
-}
-```
+`TypeInfo` is a sealed variant, one case per kind, and
+[Total Reflection](./wep-2026-09-05-total-reflection.md) owns its shape: the
+name, module and type arguments this section describes are what a declaration's
+case carries, and a type with no declaration to name — a reference, a function
+type — carries its components instead. Sealed as everything here is: a program
+reads a case and mints none, and `TypeInfo` is not itself reflectable.
 
 Identity sits on the root rather than on each kind. A kind bound gates a name
 behind [Visibility](#visibility), so a type whose fields are private
@@ -234,7 +228,8 @@ T` cannot do — a constrained type may be a newtype or a struct wrapper, and
 `Reflect` admits both.
 
 `type_name()` sits beside `type_info()` on the root: the allocation-free
-shorthand serde's `begin_struct` calls, answering `type_info().name()`.
+shorthand serde's `begin_struct` calls, answering the declaration name
+`type_info()` carries.
 
 The parts are the identity; `canonical_name()` renders them in the canonical
 register of [Symbol Notation](./wep-2026-06-14-symbol-notation.md) (`MODULE`
@@ -247,24 +242,13 @@ compiler renders internally; a type with none is written bare.
 
 ### What can be named
 
-The types `Reflect` is synthesized for: the five kinds, and the tuple family,
-which is the one still to come (Known gaps).
-Naming an unnameable type is therefore an unsatisfied `T: Reflect`, reason-chained
-like any other bound, rather than a special case buried in an intrinsic.
-
-A tuple is anonymous, but the prelude's `pub type [...T];` owns the family
-([Variadic Type Parameters](./wep-2026-03-14-variadic-type-parameters.md) §3)
-and that anchor is its identity: module `core:prelude`, name `[..]`, elements as
-type arguments — a generic struct's family-plus-arguments split. Only the
-rendering differs, the arguments sitting between the brackets:
-`core:prelude#[i32,String]`, and `core:prelude#()` for the family at arity zero.
-
-A resource, a function type, and a reference carry no `Reflect` impl, rather
-than a name the design invents. A resource's identity is a Component Model
-coordinate (`wasi:io/streams.input-stream`), not a module symbol, so it waits on
-the CM naming rules; the structural types have no owning declaration at all. No
-consumer needs them — a schema library inlines a tuple's schema and never keys a
-handle.
+Every type. `Reflect` is total, and which case answers for each is
+[Total Reflection](./wep-2026-09-05-total-reflection.md)'s table. A tuple is
+anonymous but its family is not — the prelude's `internal type [..T];` owns it
+([Variadic Type Parameters](./wep-2026-03-14-variadic-type-parameters.md) §3),
+so its identity is the family plus the elements as type arguments, rendered
+`core:prelude#[i32,String]`. `()` is the unit type rather than that family at
+arity zero, and answers for itself.
 
 ### Cost and shape
 
@@ -430,18 +414,20 @@ nothing else yet does.
   comment lives in the `TriviaMap` that `wado doc` reads — so closing this is
   plumbing that string through `TirField` into the synthesized member, beside
   the wire-name override that already travels that path.
-- `TypeInfo` is designed above and unimplemented: the root answers `type_name()`
-  but not yet `type_info()`, so an instantiation cannot be told from its
-  declaration. Nothing in the tree needs a new mechanism — it is a sealed handle
-  minted like a member, and it rides the root's resolution path — but the body is
+- `TypeInfo` is unimplemented: the root answers `type_name()` but not yet
+  `type_info()`, so an instantiation cannot be told from its declaration.
+  Nothing in the tree needs a new mechanism — it is a sealed value minted like a
+  member, and it rides the root's resolution path — but the body is
   per-instantiation, so it follows `type_name()`'s synthesis, where the resolved
-  subject already carries the three facts it needs (its base name, module, and
-  type arguments). The tuple family and `()` join the nameable set with it;
-  today only the five synthesized kinds carry the root.
+  subject already carries the facts a declaration's case needs (its base name,
+  module, and type arguments). Making the root total lands with it: today only
+  the five synthesized kinds carry it. Both are
+  [Total Reflection](./wep-2026-09-05-total-reflection.md)'s to close.
 
 ## Related WEPs
 
 - [Variadic Type Parameters](./wep-2026-03-14-variadic-type-parameters.md)
+- [Total Reflection — `TypeInfo` and `match type`](./wep-2026-09-05-total-reflection.md)
 - [Struct Walkability — Field Walks over `ReflectStruct` and `#[secret]` Fields](./wep-2026-07-10-struct-walkability.md)
 - [Jade — JSON Schema for Wado](./wep-2026-06-13-jade.md)
 - [Serialization and Deserialization (Serde)](./wep-2026-02-28-serde.md)

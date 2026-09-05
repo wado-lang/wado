@@ -571,7 +571,7 @@ impl ModRef {
                     self.control.join(Control::NonLocal);
                 }
             }
-            StmtKind::LabeledBlock { label, block } => {
+            StmtKind::LabeledBlock { label, block, .. } => {
                 // Push the label so an enclosed `break label;` resolves
                 // here (its NonLocal stays inside). Control stays Linear:
                 // whether or not a captured break fires, the block always
@@ -1812,6 +1812,7 @@ mod tests {
                     label: "L".to_string(),
                     block,
                     result_type: ty(),
+                    role: crate::nir_arena::BlockRole::Plain,
                 },
             );
             let_stmt(b, 5, lb)
@@ -1831,6 +1832,7 @@ mod tests {
                     label: "L".to_string(),
                     block,
                     result_type: ty(),
+                    role: crate::nir_arena::BlockRole::Plain,
                 },
             );
             let_stmt(b, 5, lb)

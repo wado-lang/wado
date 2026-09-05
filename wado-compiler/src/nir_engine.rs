@@ -1528,10 +1528,12 @@ impl<'a> Engine<'a> {
                 label,
                 block,
                 result_type,
+                role,
             } => ExprKind::LabeledBlock {
                 label,
                 block: self.clone_block(block),
                 result_type,
+                role,
             },
             ExprKind::VariantTag { expr } => ExprKind::VariantTag {
                 expr: self.clone_operand(expr),
@@ -1610,9 +1612,10 @@ impl<'a> Engine<'a> {
                 value: value.map(|e| self.clone_operand(e)),
             },
             StmtKind::Continue => StmtKind::Continue,
-            StmtKind::LabeledBlock { label, block } => StmtKind::LabeledBlock {
+            StmtKind::LabeledBlock { label, block, role } => StmtKind::LabeledBlock {
                 label,
                 block: self.clone_block(block),
+                role,
             },
             StmtKind::LetDestructure {
                 pattern,

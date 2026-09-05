@@ -22,8 +22,8 @@ use wado_compiler::nir::{
     NirUnaryOp, ReturnAbi,
 };
 use wado_compiler::nir_arena::{
-    ArenaStructField, ArenaStructPatternField, ArmData, BlockId, BlockNode, Body, ExprId, ExprKind,
-    ExprNode, Operand, PatId, PatKind, PatNode, StmtId, StmtKind, StmtNode,
+    ArenaStructField, ArenaStructPatternField, ArmData, BlockId, BlockNode, BlockRole, Body,
+    ExprId, ExprKind, ExprNode, Operand, PatId, PatKind, PatNode, StmtId, StmtKind, StmtNode,
 };
 use wado_compiler::nir_value_graph::ValueKind;
 use wado_compiler::niri::{
@@ -5073,6 +5073,7 @@ fn labeled_block_stmt_b(label: &str, stmts: Vec<StmtBuild>) -> StmtBuild {
             StmtKind::LabeledBlock {
                 label: label.clone(),
                 block,
+                role: BlockRole::of_label(&label),
             },
         )
     })
@@ -7366,6 +7367,7 @@ fn labeled_block_expr_of(label: &'static str, stmts: Vec<StmtBuild>, type_id: Ty
                 label: label.to_string(),
                 block,
                 result_type: type_id,
+                role: BlockRole::of_label(label),
             },
             type_id,
         ))

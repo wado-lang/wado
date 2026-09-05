@@ -90,7 +90,7 @@ fn "cse_short_circuit_no_trap.wado/__cm_binding__Stdout_write_via_stream"(data) 
 }
 
 fn "cse_short_circuit_no_trap.wado/__cm_export__run"() {
-    let __r: ref "core:prelude/string.wado//String";
+    let __local_0: ref "core:prelude/string.wado//String";
     let handle: i32;
     let n: i32;
     let i: i32;
@@ -111,7 +111,7 @@ fn "cse_short_circuit_no_trap.wado/__cm_export__run"() {
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:cse_short_circuit_no_trap.wado::__modules_initialized = 1;
     };
-    __r = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
+    __local_0 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(local.tee self_15(n = "cse_short_circuit_no_trap.wado/opaque"(5); i = 0; sum = 0; b1: block {
         l2: loop {
             break_if b1 (if i < n -> i32 {
@@ -123,11 +123,11 @@ fn "cse_short_circuit_no_trap.wado/__cm_export__run"() {
             i = i + 1;
             continue l2;
         };
-    }; sum), __r);
+    }; sum), __local_0);
     rx_18 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_19 = builtin::i32_wrap_i64(packed >> 32_i64);
     handle = "cse_short_circuit_no_trap.wado/__cm_binding__Stdout_write_via_stream"(rx_18);
-    "core:rt/write_string_to_stream"(tx_19, __r, 1);
+    "core:rt/write_string_to_stream"(tx_19, __local_0, 1);
     "wasi/future-drop-readable:transmission-cli"(handle);
     "wasi/task-return"(0);
 }

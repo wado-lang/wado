@@ -27,9 +27,9 @@ use crate::nir::{
     NirVariantCase, NirVariantDecl,
 };
 use crate::nir_arena::{
-    ArenaCallArg, ArenaStructField, ArenaStructPatternField, ArmData, BlockId, BlockNode, Body,
-    ExprBody, ExprId, ExprKind, ExprNode, Operand, PatId, PatKind, PatNode, StmtId, StmtKind,
-    StmtNode,
+    ArenaCallArg, ArenaStructField, ArenaStructPatternField, ArmData, BlockId, BlockNode,
+    BlockRole, Body, ExprBody, ExprId, ExprKind, ExprNode, Operand, PatId, PatKind, PatNode,
+    StmtId, StmtKind, StmtNode,
 };
 use crate::nir_package::NirPackage;
 use crate::tir;
@@ -1168,6 +1168,7 @@ impl FunctionTranslator<'_, '_> {
             TirStmtKind::LabeledBlock { label, block } => StmtKind::LabeledBlock {
                 label: label.clone(),
                 block: self.convert_block(block),
+                role: BlockRole::of_label(label),
             },
             TirStmtKind::LetDestructure {
                 pattern,
@@ -1691,6 +1692,7 @@ impl FunctionTranslator<'_, '_> {
                 label: label.clone(),
                 block: self.convert_block(block),
                 result_type: *result_type,
+                role: BlockRole::of_label(label),
             },
             TirExprKind::VariantTag { expr } => ExprKind::VariantTag {
                 expr: self.convert_operand(expr),

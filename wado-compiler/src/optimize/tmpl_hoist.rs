@@ -5,9 +5,9 @@
 //! [`EscapeScan`] and [`template_buf_escapes`] decide. Runs as a [`Rule`].
 //!
 //! The block comes from `synthesis::template`, whose module docs list the names
-//! the two sides share. Recognition spells none of them out: the label goes
-//! through [`crate::name::is_template_block`], the callees through their
-//! [`CompilerItem`], the fields through [`SeqField`] / [`FormatterField`].
+//! the two sides share. Recognition spells none of them out: the block through
+//! its [`BlockRole`], the callees through their [`CompilerItem`], the fields
+//! through [`SeqField`] / [`FormatterField`].
 
 use std::cell::{Cell, RefCell};
 
@@ -15,7 +15,8 @@ use crate::compiler_item::{CompilerItem, FormatterField, SeqField};
 use crate::hashmap::IndexSet;
 use crate::nir::{FuncId, FunctionRef, NirFunction, NirUnaryOp};
 use crate::nir_arena::{
-    ArenaStructField, BlockId, Body, ExprId, ExprKind, NodeRef, Operand, StmtId, StmtKind,
+    ArenaStructField, BlockId, BlockRole, Body, ExprId, ExprKind, NodeRef, Operand, StmtId,
+    StmtKind,
 };
 use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
@@ -640,16 +641,17 @@ fn transform_stmt(
         && let Some(ve) = value.as_expr()
     {
         let tmpl_block = match &engine.body.exprs[ve].kind {
-            ExprKind::LabeledBlock { label, block, .. }
-                if crate::name::is_template_block(label) =>
-            {
-                Some(*block)
-            }
+            ExprKind::LabeledBlock {
+                label,
+                block,
+                role: BlockRole::Template,
+                ..
+            } => Some((label.clone(), *block)),
             _ => None,
         };
-        if let Some(tb) = tmpl_block
+        if let Some((tb_label, tb)) = tmpl_block
             && !escaping_locals.contains(&local_index)
-            && let Some(candidate) = extract_tmpl_candidate(engine.body, tb, idents)
+            && let Some(candidate) = extract_tmpl_candidate(engine.body, tb, &tb_label, idents)
             && !template_buf_escapes(engine.body, tb, candidate.buf_local_index)
         {
             transform_tmpl_block(engine, tb, &candidate, hoist_stmts, type_table, idents);
@@ -808,6 +810,7 @@ fn transform_expr(
 fn extract_tmpl_candidate(
     body: &Body,
     block: BlockId,
+    label: &str,
     idents: &TmplIdents,
 ) -> Option<TmplCandidate> {
     // First statement must be: let mut __r = ...
@@ -888,18 +891,16 @@ fn extract_tmpl_candidate(
             _ => return None,
         };
 
-    // Last statement must be: break __tmpl: __r
+    // Last statement must be: break <this block>: __r
     let last_stmt = *body.blocks[block].stmts.last()?;
     match &body.stmts[last_stmt].kind {
         StmtKind::Break {
-            label: Some(label),
+            label: Some(exit),
             value: Some(val),
-        } if crate::name::is_template_block(label) => {
-            match val.as_expr().map(|ve| &body.exprs[ve].kind) {
-                Some(ExprKind::Local { index, .. }) if *index == buf_local_index => {}
-                _ => return None,
-            }
-        }
+        } if exit == label => match val.as_expr().map(|ve| &body.exprs[ve].kind) {
+            Some(ExprKind::Local { index, .. }) if *index == buf_local_index => {}
+            _ => return None,
+        },
         _ => return None,
     }
 

@@ -5,23 +5,32 @@
 //! removes (scalarizes / elides) is not.
 
 use crate::common::{InMemoryHost, runtime};
-use wado_compiler::{CompilerOptions, OptLevel};
+use wado_compiler::{CompilerOptions, OptLevel, Severity};
 
-/// Compile `source` at `-O2` and return the `remark:` diagnostics as
+/// Compile `source` under `options` and return the `remark:` diagnostics as
 /// `"line:col message"` strings.
-fn remarks_for(source: &str) -> Vec<String> {
+///
+/// The compile is asserted: a source that fails to compile emits no remark
+/// either, which would pass an "is empty" expectation for the wrong reason.
+fn remarks_under(source: &str, options: CompilerOptions) -> Vec<String> {
     let host = InMemoryHost::new();
-    let options = CompilerOptions {
-        opt_level: OptLevel::O2,
-        ..CompilerOptions::default()
-    };
-    let _ = runtime().block_on(wado_compiler::compile_with_options(
+    let compiled = runtime().block_on(wado_compiler::compile_with_options(
         source,
         &host,
         Some("test.wado"),
         options,
     ));
-    host.diagnostics()
+    let diagnostics = host.diagnostics();
+    let errors: Vec<&str> = diagnostics
+        .iter()
+        .filter(|d| matches!(d.severity, Severity::Error | Severity::Fatal))
+        .map(|d| d.message.as_str())
+        .collect();
+    assert!(
+        compiled.is_ok() && errors.is_empty(),
+        "the source must compile: {errors:?}"
+    );
+    diagnostics
         .into_iter()
         .filter(|d| d.message.starts_with("remark:"))
         .map(|d| {
@@ -33,6 +42,17 @@ fn remarks_for(source: &str) -> Vec<String> {
             format!("{loc} {}", d.message)
         })
         .collect()
+}
+
+/// [`remarks_under`] at `-O2`.
+fn remarks_for(source: &str) -> Vec<String> {
+    remarks_under(
+        source,
+        CompilerOptions {
+            opt_level: OptLevel::O2,
+            ..CompilerOptions::default()
+        },
+    )
 }
 
 #[test]
@@ -130,37 +150,20 @@ export fn run() with Stdout {
     );
 }
 
-/// Compile `source` at `-O2` with `-D` overrides and return the `remark:`
-/// diagnostics as `"line:col message"` strings.
+/// [`remarks_under`] at `-O2` with `-D` overrides.
 fn remarks_for_params(source: &str, overrides: &[(&str, &str)]) -> Vec<String> {
-    let host = InMemoryHost::new();
     let mut param_overrides = wado_compiler::hashmap::IndexMap::default();
     for (k, v) in overrides {
         param_overrides.insert((*k).to_string(), (*v).to_string());
     }
-    let options = CompilerOptions {
-        opt_level: OptLevel::O2,
-        param_overrides,
-        ..CompilerOptions::default()
-    };
-    let _ = runtime().block_on(wado_compiler::compile_with_options(
+    remarks_under(
         source,
-        &host,
-        Some("test.wado"),
-        options,
-    ));
-    host.diagnostics()
-        .into_iter()
-        .filter(|d| d.message.starts_with("remark:"))
-        .map(|d| {
-            let loc = d
-                .span
-                .as_ref()
-                .map(|s| format!("{}:{}", s.line, s.column))
-                .unwrap_or_default();
-            format!("{loc} {}", d.message)
-        })
-        .collect()
+        CompilerOptions {
+            opt_level: OptLevel::O2,
+            param_overrides,
+            ..CompilerOptions::default()
+        },
+    )
 }
 
 #[test]
@@ -441,7 +444,7 @@ export fn run() with Stdout {
 #[test]
 fn param_used_outside_a_gate_is_not_remarked() {
     // Printing a parameter is an ordinary use of its value. The read survives
-    // by design, and the branch it sits under is decided by something else.
+    // by design, and the branch it sits under reads the parameter not at all.
     let remarks = remarks_for_params(
         r#"
 use { println, Stdout } from "core:cli";
@@ -449,8 +452,8 @@ use { println, Stdout } from "core:cli";
 #[param(name = "log.level")]
 global LOG_LEVEL: String = "trace";
 
-export fn run(args: List<String>) with Stdout {
-    if args.len() > 0 {
+export fn run() with Stdout {
+    if builtin::black_box(true) {
         println(LOG_LEVEL);
     }
 }
@@ -460,5 +463,186 @@ export fn run(args: List<String>) with Stdout {
     assert!(
         !remarks.iter().any(|r| r.contains("compile-time parameter")),
         "a parameter outside a scrutinee should not be remarked, got {remarks:?}"
+    );
+}
+
+/// Compile `source` at `-O2` and return the `remark:` diagnostics naming a
+/// region that stayed at run time.
+fn const_region_remarks(source: &str) -> Vec<String> {
+    remarks_for(source)
+        .into_iter()
+        .filter(|r| r.contains("computes a constant at run time"))
+        .collect()
+}
+
+#[test]
+fn a_constant_integer_interpolation_folds() {
+    // Every interpolation is constant, so the whole template denotes a literal
+    // and the buffer, the `Formatter` and `fmt_decimal` all leave with it.
+    let remarks = const_region_remarks(
+        r#"
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    println(`n=${42}`);
+}
+"#,
+    );
+
+    assert!(remarks.is_empty(), "unexpected remarks: {remarks:?}");
+}
+
+#[test]
+fn a_constant_string_interpolation_is_not_remarked() {
+    // A `String` interpolation folds to a literal, so nothing survives to
+    // report.
+    let remarks = const_region_remarks(
+        r#"
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    println(`s=${"y"}`);
+}
+"#,
+    );
+
+    assert!(remarks.is_empty(), "unexpected remarks: {remarks:?}");
+}
+
+#[test]
+fn a_runtime_interpolation_is_not_remarked() {
+    // The region reads a local the optimizer cannot know, so it is a template
+    // that has to run, not a constant the engine failed to reach.
+    let remarks = const_region_remarks(
+        r#"
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let n = builtin::black_box(42);
+    println(`n=${n}`);
+}
+"#,
+    );
+
+    assert!(remarks.is_empty(), "unexpected remarks: {remarks:?}");
+}
+
+#[test]
+fn a_materializing_global_store_does_not_refuse_a_region() {
+    // `"true"` is globalized, and the store the globalization leaves at the use
+    // site sits inside the template region. That store serves the read two
+    // statements below it and nothing else, so it is not a write the region is
+    // refused for and the template folds to the literal.
+    let remarks = const_region_remarks(
+        r#"
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    println(`v=${true}`);
+}
+"#,
+    );
+
+    assert!(
+        remarks.is_empty(),
+        "the store should not refuse the region: {remarks:?}"
+    );
+}
+
+#[test]
+fn a_surviving_region_is_not_blamed_for_a_materializing_store() {
+    // The store globalization leaves is exempt for the fold, so a region that
+    // carries one and survives anyway must be blamed for whatever actually
+    // stopped it. Reporting the store instead sends the reader after a write the
+    // engine was never refusing, and files the region under the wrong cause.
+    //
+    // Three interpolations is what it takes to survive: one folds.
+    let remarks = const_region_remarks(
+        r#"
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let w = 1024;
+    let h = 768;
+    println(`mandelbrot ${w}x${h}, max_iter=${256}`);
+}
+"#,
+    );
+
+    assert_eq!(remarks.len(), 1, "expected one remark, got {remarks:?}");
+    assert!(
+        !remarks[0].contains("writes a global"),
+        "the materializing store is not what stopped it: {remarks:?}"
+    );
+    assert!(
+        remarks[0].contains("fmt_decimal"),
+        "the surviving formatter is: {remarks:?}"
+    );
+}
+
+#[test]
+fn a_template_buffers_inner_block_is_not_remarked() {
+    // Every template region contains inner blocks that write the buffer their
+    // parent owns. Reporting those would bury the region worth reporting, so a
+    // template that does not fold leaves exactly one remark.
+    let remarks = const_region_remarks(
+        r#"
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    println(`v=${3.5}`);
+}
+"#,
+    );
+
+    assert_eq!(remarks.len(), 1, "expected one remark, got {remarks:?}");
+    assert!(
+        remarks[0].contains("fmt_into"),
+        "the remark should name the float formatter: {remarks:?}"
+    );
+    assert!(
+        !remarks[0].contains("grow"),
+        "the buffer's cold reshape is not what the fold waits on: {remarks:?}"
+    );
+}
+
+#[test]
+fn a_list_region_blames_no_call() {
+    // Inspecting the list needs the `List<T>` itself, which the engine cannot
+    // write back, so the fold stops on a value rather than on a body. No call on
+    // the inner region's path is to blame: `push` inlines away and what it
+    // leaves is `grow` on a cold path the frame never reaches. Naming that would
+    // send the reader after the wrong thing, so the remark says there is nothing
+    // to name.
+    //
+    // `${table().len()}` would not do: the length is a scalar the engine
+    // projects out of the list, so that whole template folds.
+    let remarks = const_region_remarks(
+        r#"
+use { println, Stdout } from "core:cli";
+
+fn table() -> List<i32> {
+    let mut out: List<i32> = List::<i32>::with_capacity(8);
+    let mut i = 0;
+    while i < 4 {
+        out.push(i * 2);
+        i += 1;
+    }
+    return out;
+}
+
+export fn run() with Stdout {
+    println(`n=${table():?}`);
+}
+"#,
+    );
+
+    assert!(
+        remarks.iter().any(|r| r.contains("no call on its path")),
+        "expected the no-call cause, got {remarks:?}"
+    );
+    assert!(
+        remarks.iter().all(|r| !r.contains("grow")),
+        "a cold-path call should not be named: {remarks:?}"
     );
 }

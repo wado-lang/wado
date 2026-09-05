@@ -101,6 +101,21 @@ pub fn display_function_name(name: &str) -> String {
     }
 }
 
+/// The name a diagnostic shows for a function: `String::grow` for
+/// `core:prelude/string.wado/String::grow$scalar`. A clone's suffix names no
+/// function an author wrote, and the span already carries the module path.
+///
+/// An effect default spells its interface with the same separator and is left
+/// to [`display_function_name`].
+#[must_use]
+pub fn diagnostic_function_name(name: &str) -> &str {
+    if name.starts_with(EFFECT_DEFAULT_PREFIX) {
+        return name;
+    }
+    let unqualified = name.rsplit('/').next().unwrap_or(name);
+    unqualified.split('$').next().unwrap_or(unqualified)
+}
+
 /// The name of a `param_spec` clone: the original's name plus the clone's
 /// ordinal among that callee's specializations. Unique package-wide, since the
 /// original's name already is.
@@ -239,8 +254,9 @@ pub fn is_reserved_label(label: &str) -> bool {
 pub const TEMPLATE_BLOCK_LABEL: &str = "__tmpl";
 
 /// Whether `label` marks the block an expanded template string breaks out of.
-/// Shared by the producer (`synthesis::template`) and the two optimizer passes
-/// that key on it, rather than each re-comparing the constant.
+/// Shared by the producer (`synthesis::template`) and lowering, which reads it
+/// once into [`crate::nir_arena::BlockRole`]. Passes ask the node from there —
+/// a label is a name, and gets rewritten.
 #[must_use]
 pub fn is_template_block(label: &str) -> bool {
     label == TEMPLATE_BLOCK_LABEL

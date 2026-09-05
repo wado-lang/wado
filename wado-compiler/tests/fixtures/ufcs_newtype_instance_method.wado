@@ -1,0 +1,35 @@
+// A newtype answers a qualified call where its own impl declares the name, of
+// either kind. Asked of the receiver-less declarations alone, a newtype's
+// instance method is invisible and the call falls through to the base, which
+// declares no `tag`: liveness drops a callee that WIR still emits.
+
+use { println, Stdout } from "core:cli";
+
+type Meters = i32;
+
+impl Meters {
+    fn tag(&self) -> i32 {
+        return 7;
+    }
+}
+
+flags Perms {
+    Read,
+    Write,
+}
+
+impl Perms {
+    fn count(&self) -> i32 {
+        return 5;
+    }
+}
+
+export fn run() with Stdout {
+    let m: Meters = 3;
+    println(`${Meters::tag(&m)}`);
+    let p = Perms::Read;
+    println(`${Perms::count(&p)}`);
+}
+
+__DATA__
+{"stdout": "7\n5\n"}

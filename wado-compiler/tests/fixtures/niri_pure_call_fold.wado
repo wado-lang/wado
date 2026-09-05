@@ -4,6 +4,9 @@
 // fact that `count_to_zero(0)` becomes a constant in the WIR is
 // attributable to niri (the const-cond `if` collapses, so the
 // else-arm's recursive call is never reached).
+//
+// The integer is not in the WIR either: the template around it folds too, so
+// what reaches the binary is the rendered string.
 
 use { println, Stdout } from "core:cli";
 
@@ -18,6 +21,6 @@ export fn run() with Stdout {
 __DATA__
 {
     "stdout": "9941\n",
-    "wir_expect:O2": ["9941"],
-    "wir_not_expect:O2": ["count_to_zero"]
+    "wir_expect:O2": ["array.new_fixed<u8>(57, 57, 52, 49)"],
+    "wir_not_expect:O2": ["count_to_zero", "9941"]
 }

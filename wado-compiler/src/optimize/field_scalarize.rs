@@ -1835,6 +1835,7 @@ fn walk_stmt(
         StmtKind::LabeledBlock {
             label,
             block: inner,
+            ..
         } => {
             let (label, inner) = (label.clone(), *inner);
             walk_labeled_block(body, &label, inner, states, ctx);

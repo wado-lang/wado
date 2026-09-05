@@ -48,15 +48,13 @@ type "functype//core:rt/write_string_to_stream" = fn(i32, ref "core:prelude/stri
 
 type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(17)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(18)
+type "functype//core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_raw_all" = fn(i32, ref "core:prelude/slice.wado//Slice<u8>") -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(18)
 
-type "functype//core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_raw_all" = fn(i32, ref "core:prelude/slice.wado//Slice<u8>") -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(19)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(19)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(20)
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(20)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(21)
-
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(22)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(21)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -72,27 +70,15 @@ import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-read
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
 global mut global:inspect_fn_cross_module.wado::__modules_initialized: bool = 0;
-global mut global:inspect_fn_cross_module.wado::__const_obj_2: ref null Array<u8> = ref.null none;
-global global:inspect_fn_cross_module.wado::__const_obj_3: ref null Array<u8> = array.new_fixed<u8>(102, 114, 111, 109, 32, 109, 97, 105, 110, 58, 32);
-global mut global:inspect_fn_cross_module.wado::__const_obj_4: ref null Array<u8> = ref.null none;
-global global:inspect_fn_cross_module.wado::__const_obj_5: ref null Array<u8> = array.new_fixed<u8>(102, 114, 111, 109, 32, 104, 101, 108, 112, 101, 114, 58, 32);
+global global:inspect_fn_cross_module.wado::__const_obj_1: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(102, 114, 111, 109, 32, 109, 97, 105, 110, 58, 32, 124, 105, 51, 50, 124, 32, 45, 62, 32, 105, 51, 50), used: 23 };
+global global:inspect_fn_cross_module.wado::__const_obj_2: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(102, 114, 111, 109, 32, 104, 101, 108, 112, 101, 114, 58, 32, 124, 105, 51, 50, 124, 32, 45, 62, 32, 98, 111, 111, 108), used: 26 };
 
 fn "inspect_fn_cross_module.wado/run"() with Stdout {
-    let __local_1_1: ref "core:prelude/string.wado//String";
-    let __local_1_4: ref "core:prelude/string.wado//String";
     let handle_9: i32;
-    let new_used_19: i32;
-    let start_20: i32;
-    let new_used_46: i32;
-    let start_47: i32;
     let packed_49: i64;
     let rx_50: i32;
     let tx_51: i32;
     let handle_59: i32;
-    let new_used_69: i32;
-    let start_70: i32;
-    let new_used_96: i32;
-    let start_97: i32;
     let packed_99: i64;
     let rx_100: i32;
     let tx_101: i32;
@@ -102,55 +88,15 @@ fn "inspect_fn_cross_module.wado/run"() with Stdout {
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:inspect_fn_cross_module.wado::__modules_initialized = 1;
     };
-    __local_1_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(29), used: 0 };
-    new_used_19 = 0 + 13;
-    if @unlikely(new_used_19 > builtin::array_len(__local_1_4.repr)) {
-        cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(__local_1_4, new_used_19);
-    }
-    start_20 = __local_1_4.used;
-    __local_1_4.used = new_used_19;
-    builtin::array_copy<u8>(__local_1_4.repr, start_20, global:inspect_fn_cross_module.wado::__const_obj_5, 0, 13);
-    if ref.is_null(global:inspect_fn_cross_module.wado::__const_obj_4) {
-        global:inspect_fn_cross_module.wado::__const_obj_4 = array.new_data<u8>("|i32| -> bool");
-    }
-    new_used_46 = __local_1_4.used + 13;
-    if @unlikely(new_used_46 > builtin::array_len(__local_1_4.repr)) {
-        cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(__local_1_4, new_used_46);
-    }
-    start_47 = __local_1_4.used;
-    __local_1_4.used = new_used_46;
-    builtin::array_copy<u8>(__local_1_4.repr, start_47, global:inspect_fn_cross_module.wado::__const_obj_4, 0, 13);
     rx_50 = builtin::i32_wrap_i64(local.tee packed_49("wasi/stream-new"()));
     tx_51 = builtin::i32_wrap_i64(packed_49 >> 32_i64);
     handle_9 = "inspect_fn_cross_module.wado/__cm_binding__Stdout_write_via_stream"(rx_50);
-    "core:rt/write_string_to_stream"(tx_51, __local_1_4, 1);
+    "core:rt/write_string_to_stream"(tx_51, global:inspect_fn_cross_module.wado::__const_obj_2, 1);
     "wasi/future-drop-readable:transmission-cli"(handle_9);
-    __local_1_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(27), used: 0 };
-    new_used_69 = 0 + 11;
-    if @unlikely(new_used_69 > builtin::array_len(__local_1_1.repr)) {
-        cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(__local_1_1, new_used_69);
-    }
-    start_70 = __local_1_1.used;
-    __local_1_1.used = new_used_69;
-    builtin::array_copy<u8>(__local_1_1.repr, start_70, global:inspect_fn_cross_module.wado::__const_obj_3, 0, 11);
-    if ref.is_null(global:inspect_fn_cross_module.wado::__const_obj_2) {
-        global:inspect_fn_cross_module.wado::__const_obj_2 = array.new_data<u8>("|i32| -> i32");
-    }
-    new_used_96 = __local_1_1.used + 12;
-    if @unlikely(new_used_96 > builtin::array_len(__local_1_1.repr)) {
-        cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(__local_1_1, new_used_96);
-    }
-    start_97 = __local_1_1.used;
-    __local_1_1.used = new_used_96;
-    builtin::array_copy<u8>(__local_1_1.repr, start_97, global:inspect_fn_cross_module.wado::__const_obj_2, 0, 12);
     rx_100 = builtin::i32_wrap_i64(local.tee packed_99("wasi/stream-new"()));
     tx_101 = builtin::i32_wrap_i64(packed_99 >> 32_i64);
     handle_59 = "inspect_fn_cross_module.wado/__cm_binding__Stdout_write_via_stream"(rx_100);
-    "core:rt/write_string_to_stream"(tx_101, __local_1_1, 1);
+    "core:rt/write_string_to_stream"(tx_101, global:inspect_fn_cross_module.wado::__const_obj_1, 1);
     "wasi/future-drop-readable:transmission-cli"(handle_59);
 }
 
@@ -188,23 +134,6 @@ fn "core:rt/write_string_to_stream"(tx, message, add_newline) {
 fn "core:prelude/fpfmt.wado/__initialize_module"() {
 }
 
-fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_capacity) {
-    let capacity: i32;
-    let new_capacity: i32;
-    let new_repr: ref Array<u8>;
-    let a_7: i32;
-    let a_9: i32;
-    capacity = builtin::array_len(self.repr);
-    if min_capacity <= capacity {
-        return;
-    }
-    a_9 = capacity * 2;
-    a_7 = select i32(a_9 > min_capacity, a_9, min_capacity);
-    new_repr = builtin::array_new<u8>(local.tee new_capacity(select i32(a_7 > 8, a_7, 8)));
-    builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
-    self.repr = new_repr;
-}
-
 fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_raw_all"(self, data) {
     let repr_2: ref Array<u8>;
     let end_3: i32;
@@ -232,14 +161,14 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
     end_3 = _av_50 + (_av_51 - _av_50);
     offset = data.start;
     block {
-        l10: loop {
+        l3: loop {
             __sroa_data_start = offset;
-            ptr_14 = builtin::i32_wrap_i64(local.tee packed_13(len_23 = end_3 - __sroa_data_start; ptr_24 = "mem/realloc"(0, 0, 1, len_23); i = 0; b11: block {
-                l12: loop {
-                    break_if b11 i >= len_23;
+            ptr_14 = builtin::i32_wrap_i64(local.tee packed_13(len_23 = end_3 - __sroa_data_start; ptr_24 = "mem/realloc"(0, 0, 1, len_23); i = 0; b4: block {
+                l5: loop {
+                    break_if b4 i >= len_23;
                     builtin::store_u8(ptr_24 + i, builtin::array_get_value_u8(repr_2, __sroa_data_start + i));
                     i = i + 1;
-                    continue l12;
+                    continue l5;
                 };
             }; builtin::i64_extend_i32_s(ptr_24) | (builtin::i64_extend_i32_s(len_23) << 32_i64)));
             raw_len = builtin::i32_wrap_i64(packed_13 >> 32_i64);
@@ -271,7 +200,7 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
             if select i32(select i32(written_16.result != 0, 1, written_16.count <= 0), 1, offset >= end_3) {
                 return written_16.result;
             }
-            continue l10;
+            continue l3;
         };
     };
 }

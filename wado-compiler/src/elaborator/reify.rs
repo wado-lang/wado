@@ -8596,8 +8596,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // `monomorph_info.method_type_args` is zeroed by design).
         let type_args = dispatch.method_type_args.clone();
 
-        // Per-arg `is_mut` comes from the recorded `MethodDispatch`
-        // (drained from `lookup_method_param_is_mut` at annotate time).
+        // Per-arg `is_mut` comes from the recorded `MethodDispatch`, off the
+        // signature of the method annotate dispatched to.
         // Zip with the AST args so call sites with fewer args than
         // declared (a Stage-5 recovery shape) still produce the
         // right is_mut for the args we have.

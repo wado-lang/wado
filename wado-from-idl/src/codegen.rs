@@ -190,12 +190,22 @@ impl WadoCodeGenerator {
 
     fn write_resource(&mut self, resource: &WadoResource) {
         self.write_doc_comment(resource.doc_comment.as_ref());
-        self.writeln(&format!("#[cm(\"{}\")]", resource.cm_attr));
+        let backing = if resource.extern_handle {
+            ", type = \"extern-handle\""
+        } else {
+            ""
+        };
+        self.writeln(&format!("#[cm(\"{}\"{backing})]", resource.cm_attr));
+        let extends = resource
+            .extends
+            .as_ref()
+            .map(|parent| format!(" extends {parent}"))
+            .unwrap_or_default();
 
         if resource.methods.is_empty() {
-            self.writeln(&format!("pub resource {};", resource.name));
+            self.writeln(&format!("pub resource {}{extends};", resource.name));
         } else {
-            self.writeln(&format!("pub resource {} {{", resource.name));
+            self.writeln(&format!("pub resource {}{extends} {{", resource.name));
             self.indent += 1;
 
             for method in &resource.methods {

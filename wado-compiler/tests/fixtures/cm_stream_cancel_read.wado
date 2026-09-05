@@ -1,0 +1,21 @@
+// The canonical's core type is the canonical's to give. A cancel answers with
+// the `u32` its copy ended on, and `fn cancel_read(&self)` states no result, so
+// a core import typed from the call site asked for `(param i32)` where the
+// component provides `(param i32) (result i32)`, and the module failed to
+// validate.
+//
+// Cancelling with no read in progress traps, which is what reaching the trap
+// pins: the module validated and ran.
+
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let [rx, tx] = Stream::<u8>::new();
+    println(`built`);
+    rx.cancel_read();
+    rx.drop();
+    tx.drop();
+}
+
+__DATA__
+{"stdout": "built\n", "trapped": true}

@@ -5,7 +5,9 @@
 //! unified [`super::peephole`] session; the two standalone entries keep theirs.
 
 use crate::nir::NirFunction;
-use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, NodeRef, Operand, StmtId, StmtKind};
+use crate::nir_arena::{
+    BlockId, BlockRole, Body, ExprId, ExprKind, NodeRef, Operand, StmtId, StmtKind,
+};
 use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
 
@@ -13,11 +15,19 @@ use super::arena_query::has_break_to;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(super) enum PruneMode {
-    /// Run inside the optimizer fixpoint loop — preserve `__tmpl:` blocks
-    /// for `tmpl_hoist`.
+    /// Run inside the optimizer fixpoint loop — leave template blocks standing.
     Fixpoint,
     /// Final cleanup after the fixpoint converges.
     PostFixpoint,
+}
+
+impl PruneMode {
+    /// Whether a block in this role may be flattened away. A template block
+    /// stands until the fixpoint converges: `tmpl_hoist` rewrites it, and the
+    /// constant-region fold runs it as a frame of its own.
+    fn may_flatten(self, role: BlockRole) -> bool {
+        self == Self::PostFixpoint || role != BlockRole::Template
+    }
 }
 
 /// Prune constant branches and simplify trivial blocks in all functions.
@@ -27,7 +37,7 @@ pub fn prune_constant_branches(project: &mut NirPackage) -> bool {
     run_rule(project, PruneMode::Fixpoint)
 }
 
-/// Final post-fixpoint pass that flattens any `__tmpl:` wrappers.
+/// Final post-fixpoint pass that flattens the template wrappers left standing.
 pub fn prune_template_block_wrappers(project: &mut NirPackage) -> bool {
     run_rule(project, PruneMode::PostFixpoint)
 }
@@ -52,9 +62,8 @@ fn run_rule(project: &mut NirPackage, mode: PruneMode) -> bool {
     changed
 }
 
-/// Engine rule for constant branch pruning. `mode` controls whether `__tmpl:`
-/// labeled blocks are preserved (`Fixpoint`, for `tmpl_hoist`) or flattened
-/// (`PostFixpoint`).
+/// Engine rule for constant branch pruning. `mode` decides what
+/// [`PruneMode::may_flatten`] allows.
 pub(super) struct BranchPruneRule {
     mode: PruneMode,
 }
@@ -116,10 +125,13 @@ fn prune_expr_local(engine: &mut Engine, id: ExprId, mode: PruneMode) -> bool {
     }
 
     // (C3) `label: { stmts...; break label: val; }` → `{ stmts...; val }`.
-    if let ExprKind::LabeledBlock { label, block, .. } = &engine.body.exprs[id].kind {
+    if let ExprKind::LabeledBlock {
+        label, block, role, ..
+    } = &engine.body.exprs[id].kind
+    {
         let label = label.clone();
-        let block = *block;
-        let go = (mode == PruneMode::PostFixpoint || !crate::name::is_template_block(&label))
+        let (block, role) = (*block, *role);
+        let go = mode.may_flatten(role)
             && engine.body.blocks[block].stmts.last().is_some_and(|&last| {
                 matches!(
                     &engine.body.stmts[last].kind,
@@ -171,11 +183,13 @@ fn prune_expr_local(engine: &mut Engine, id: ExprId, mode: PruneMode) -> bool {
     }
 
     // Single-`break` labeled block delivering a value.
-    if let ExprKind::LabeledBlock { label, block, .. } = &engine.body.exprs[id].kind {
+    if let ExprKind::LabeledBlock {
+        label, block, role, ..
+    } = &engine.body.exprs[id].kind
+    {
         let label = label.clone();
-        let block = *block;
-        let single_break = (mode == PruneMode::PostFixpoint
-            || !crate::name::is_template_block(&label))
+        let (block, role) = (*block, *role);
+        let single_break = mode.may_flatten(role)
             && engine.body.blocks[block].stmts.len() == 1
             && matches!(
                 &engine.body.stmts[engine.body.blocks[block].stmts[0]].kind,
@@ -219,12 +233,14 @@ fn is_tail_break_only_labeled_block(body: &Body, stmt: StmtId, mode: PruneMode) 
     let StmtKind::LabeledBlock {
         label,
         block: inner,
+        role,
+        ..
     } = &body.stmts[stmt].kind
     else {
         return false;
     };
     let inner = *inner;
-    if mode == PruneMode::Fixpoint && crate::name::is_template_block(label) {
+    if !mode.may_flatten(*role) {
         return false;
     }
     let Some(&last) = body.blocks[inner].stmts.last() else {
@@ -254,17 +270,23 @@ fn ends_with_terminator_stmt(body: &Body, stmts: &[StmtId]) -> bool {
     )
 }
 
-fn unused_label_flattenable(body: &Body, label: &str, inner: BlockId, mode: PruneMode) -> bool {
-    (mode == PruneMode::PostFixpoint || !crate::name::is_template_block(label))
+fn unused_label_flattenable(
+    body: &Body,
+    label: &str,
+    inner: BlockId,
+    role: BlockRole,
+    mode: PruneMode,
+) -> bool {
+    mode.may_flatten(role)
         && (body.blocks[inner].stmts.is_empty() || !block_has_break_to(body, inner, label))
 }
 
 fn stmt_dominated(body: &Body, stmt: StmtId, mode: PruneMode) -> bool {
     let base = match &body.stmts[stmt].kind {
         StmtKind::If { .. } => is_empty_if(body, stmt),
-        StmtKind::LabeledBlock { label, block } => {
-            unused_label_flattenable(body, label, *block, mode)
-        }
+        StmtKind::LabeledBlock {
+            label, block, role, ..
+        } => unused_label_flattenable(body, label, *block, *role, mode),
         StmtKind::Expr(e)
             if e.as_value().is_some_and(|v| {
                 matches!(body.values.kind(v), crate::nir_value_graph::ValueKind::Unit)
@@ -274,9 +296,9 @@ fn stmt_dominated(body: &Body, stmt: StmtId, mode: PruneMode) -> bool {
         }
         StmtKind::Expr(e) => match e.as_expr().map(|e| &body.exprs[e].kind) {
             Some(ExprKind::Block(_)) => true,
-            Some(ExprKind::LabeledBlock { label, block, .. }) => {
-                unused_label_flattenable(body, label, *block, mode)
-            }
+            Some(ExprKind::LabeledBlock {
+                label, block, role, ..
+            }) => unused_label_flattenable(body, label, *block, *role, mode),
             _ => false,
         },
         _ => false,
@@ -356,10 +378,12 @@ fn eliminate_dead_stmts(engine: &mut Engine, block: BlockId, mode: PruneMode) ->
         if let StmtKind::LabeledBlock {
             label,
             block: inner,
+            role,
+            ..
         } = &engine.body.stmts[stmt].kind
         {
-            let inner = *inner;
-            if unused_label_flattenable(engine.body, label, inner, mode) {
+            let (inner, role) = (*inner, *role);
+            if unused_label_flattenable(engine.body, label, inner, role, mode) {
                 let inner_stmts = engine.body.blocks[inner].stmts.clone();
                 if ends_with_terminator_stmt(engine.body, &inner_stmts) {
                     terminated = true;
@@ -413,9 +437,10 @@ fn eliminate_dead_stmts(engine: &mut Engine, block: BlockId, mode: PruneMode) ->
             && let ExprKind::LabeledBlock {
                 label,
                 block: inner,
+                role,
                 ..
             } = &engine.body.exprs[*e].kind
-            && unused_label_flattenable(engine.body, label, *inner, mode)
+            && unused_label_flattenable(engine.body, label, *inner, *role, mode)
         {
             let inner = *inner;
             let inner_stmts = engine.body.blocks[inner].stmts.clone();

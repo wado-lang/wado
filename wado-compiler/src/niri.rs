@@ -7,11 +7,12 @@
 use crate::const_eval::Value;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
-use crate::nir::{NirFunction, NirUnaryOp};
+use crate::nir::{FunctionRef, NirFunction, NirUnaryOp};
 use crate::nir_arena::{
-    BlockId, BlockNode, Body, ExprId, ExprKind, ExprNode, LocalSet, Operand, PatId, PatKind,
-    StmtId, StmtKind, StmtNode,
+    BlockId, BlockNode, Body, ExprId, ExprKind, ExprNode, LocalSet, NodeRef, Operand, PatId,
+    PatKind, StmtId, StmtKind, StmtNode,
 };
+use crate::nir_package::NirPackage;
 use crate::nir_value_graph::ValueKind;
 use crate::tir::{TypeId, TypeTable};
 
@@ -113,6 +114,13 @@ pub type GlobalKey = (ModuleSource, String);
 /// same convention as an un-bound local.
 pub type GlobalEnv = IndexMap<GlobalKey, Lattice>;
 
+/// Globals whose every read is the tail of a `{ G = v; G }` block, so folding a
+/// region carrying one deletes the store and the only read it serves together.
+///
+/// A property, not a count: inlining copies the pair, so two sites are as safe
+/// as one, and a global read anywhere else would be left reading `null`.
+pub type MaterializingGlobals = IndexSet<GlobalKey>;
+
 /// Known constant field values of module-scope globals, keyed by global then
 /// field name. It knows fields no initializer shows — such as the length body
 /// globalization records for a hoisted sequence.
@@ -134,6 +142,7 @@ mod trackability;
 
 pub use callee::{Callee, CalleeKey, CalleeMap};
 use pattern::PatternMatch;
+pub use region::RegionRefusal;
 pub(crate) use rewrite::guard_declares_locals;
 use trackability::Trackability;
 
@@ -205,6 +214,62 @@ impl EditSink for BodySink<'_> {
     }
 }
 
+/// The [`CalleeMap`] over every function in `project` a compile-time frame can
+/// run. Its handles alias `project.functions`, so rebuilding it every optimizer
+/// iteration costs only refcount bumps.
+pub(crate) fn build_callee_map(project: &NirPackage) -> CalleeMap {
+    let mut map = CalleeMap::default();
+    for func_rc in &project.functions {
+        let func = func_rc.borrow();
+        if !is_ctfe_runnable(&func) {
+            continue;
+        }
+        let Some(id) = func.id else {
+            continue;
+        };
+        drop(func);
+        map.insert(id, Callee::new(func_rc.clone()));
+    }
+    map
+}
+
+/// Which callee ids are the builtins the engine evaluates.
+///
+/// `array_get_value` is generic, but a builtin is declared once and shared by every
+/// instantiation — the type arguments ride on the call, not on a monomorphized
+/// callee record — so the name is read off whichever of the two forms the
+/// callee has.
+pub(crate) fn build_ctfe_builtin_map(project: &NirPackage) -> CtfeBuiltinMap {
+    let mut map = CtfeBuiltinMap::default();
+    for func_rc in &project.functions {
+        let func = func_rc.borrow();
+        let Some(id) = func.id else {
+            continue;
+        };
+        let descriptor = FunctionRef::from_resolved(&func, func.module_source.clone());
+        let Some(name) = descriptor
+            .builtin_name()
+            .or_else(|| descriptor.monomorphized_builtin_name())
+        else {
+            continue;
+        };
+        let builtin = match name.as_str() {
+            "builtin::array_get_value" | "builtin::array_get_value_u8" => CtfeBuiltin::ArrayGet,
+            "builtin::array_len" => CtfeBuiltin::ArrayLen,
+            "builtin::array_new" => CtfeBuiltin::ArrayNew,
+            "builtin::array_set" | "builtin::array_set_u8" => CtfeBuiltin::ArraySet,
+            "builtin::array_copy" => CtfeBuiltin::ArrayCopy,
+            "builtin::array_clone_prefix" => CtfeBuiltin::ArrayClonePrefix,
+            "builtin::cold_path" => CtfeBuiltin::ColdPath,
+            "builtin::select" => CtfeBuiltin::Select,
+            "builtin::i32_as_char" => CtfeBuiltin::I32AsChar,
+            _ => continue,
+        };
+        map.insert(id, builtin);
+    }
+    map
+}
+
 /// Whether a compile-time frame can run `func`'s body: pure, and concrete —
 /// `type_params` and `impl_type_params` empty, since CTFE runs after
 /// monomorphization.
@@ -237,6 +302,102 @@ pub fn is_ctfe_eligible(func: &NirFunction) -> bool {
     func.return_type != crate::tir::TypeTable::UNIT
         && func.stores.is_empty()
         && is_ctfe_runnable(func)
+}
+
+/// Derive the [`MaterializingGlobals`] set: pair a global on every block that
+/// materializes it, and drop it again on any mention outside one. One derivation
+/// for the fold and the remark alike, which must agree on what a store means.
+#[must_use]
+pub fn materializing_globals(project: &NirPackage) -> MaterializingGlobals {
+    let mut paired = MaterializingGlobals::default();
+    let mut loose: IndexSet<GlobalKey> = IndexSet::default();
+    let mut visit = |body: &Body| {
+        let mut stack = vec![(NodeRef::Block(body.root), None::<GlobalKey>)];
+        while let Some((node, enclosing)) = stack.pop() {
+            let enclosing = match node {
+                NodeRef::Block(b) => match region::materialization_pair(body, b) {
+                    Some(key) => {
+                        paired.insert(key.clone());
+                        Some(key)
+                    }
+                    None => enclosing,
+                },
+                _ => enclosing,
+            };
+            // A mention of some *other* global inside a pair block is a plain
+            // read, so the pair says nothing about it.
+            if let NodeRef::Expr(e) = node
+                && let Some(key) = region::global_mention(body, e)
+                && enclosing.as_ref() != Some(&key)
+            {
+                loose.insert(key);
+            }
+            body.for_each_child(node, |c| stack.push((c, enclosing.clone())));
+        }
+    };
+    for func_rc in &project.functions {
+        if let Some(body) = func_rc.borrow().body.as_ref() {
+            visit(body);
+        }
+    }
+    for global in &project.globals {
+        if let Some(declared) = global.init.declared() {
+            visit(declared.body());
+        }
+    }
+    paired.retain(|key| !loose.contains(key));
+    paired
+}
+
+/// A region-shaped block and what a frame would need to run it. Reaching no
+/// outer local and meeting no refusal means it denotes a constant, whether or
+/// not the engine reached one.
+pub struct RegionQuery {
+    pub expr: ExprId,
+    /// Reads a local declared outside the block, so it is not a constant at all.
+    pub reads_outer: bool,
+    /// Writes one, which marks it as part of a larger region rather than one of
+    /// its own. Carried apart from `refusal`, which keeps whichever fact the
+    /// walk met first and can name something else.
+    pub writes_outer: bool,
+    pub refusal: Option<RegionRefusal>,
+}
+
+/// Every region-shaped block in `body`, in walk order, for a caller reporting on
+/// regions rather than running them. It asks what the fold asks, so a remark
+/// never decides region shape for itself.
+#[must_use]
+pub fn region_queries(
+    body: &Body,
+    callees: &CalleeMap,
+    ctfe_builtins: &CtfeBuiltinMap,
+    materializing: &MaterializingGlobals,
+    type_table: &TypeTable,
+) -> Vec<RegionQuery> {
+    let facts = ProgramFacts {
+        callees: Some(callees),
+        ctfe_builtins: Some(ctfe_builtins),
+        globals: None,
+        global_fields: None,
+        materializing: Some(materializing),
+    };
+    let mut out = Vec::new();
+    let mut stack = vec![NodeRef::Block(body.root)];
+    while let Some(node) = stack.pop() {
+        if let NodeRef::Expr(e) = node
+            && let Some((block, _)) = region::region_shape(body, e, type_table)
+        {
+            let needs = region::region_needs(body, block, facts, type_table);
+            out.push(RegionQuery {
+                expr: e,
+                reads_outer: !needs.free_reads.is_empty(),
+                writes_outer: needs.writes_outer,
+                refusal: needs.refusal,
+            });
+        }
+        body.for_each_child(node, |c| stack.push(c));
+    }
+    out
 }
 
 /// Everything the engine knows about the body it is walking, which is
@@ -292,6 +453,14 @@ struct FrameState {
     /// the real body too: the worst an entry left over from a rewritten node
     /// can cost is a fold nobody attempts.
     region_misses: IndexSet<ExprId>,
+    /// What a materializing store bound in this frame, read back by the
+    /// `GlobalVarGet` it was emitted for. Per frame, like every other binding
+    /// here: the store and its reader are one block, so neither outlives the
+    /// frame that ran them.
+    materialized: IndexMap<GlobalKey, Value>,
+    /// See [`Trackability::reassigned`]. Read when a `let mut` binds a borrow,
+    /// to tell a binding that can be displaced from one that cannot.
+    reassigned: LocalSet,
 }
 
 /// What the engine knows beyond the body in front of it. Every field is
@@ -305,6 +474,16 @@ pub(crate) struct ProgramFacts<'a> {
     pub(crate) ctfe_builtins: Option<&'a CtfeBuiltinMap>,
     globals: Option<&'a GlobalEnv>,
     global_fields: Option<&'a GlobalFieldEnv>,
+    materializing: Option<&'a MaterializingGlobals>,
+}
+
+impl ProgramFacts<'_> {
+    /// Whether a store to this global materializes a value for its own reader.
+    /// Without the fact installed, no store does — absence costs folds, not
+    /// correctness.
+    pub(crate) fn materializes(&self, key: &GlobalKey) -> bool {
+        self.materializing.is_some_and(|m| m.contains(key))
+    }
 }
 
 /// Partial evaluator over the arena `Body`.
@@ -432,6 +611,16 @@ impl<'a> Interpreter<'a> {
     /// up.
     pub fn with_globals(&mut self, globals: &'a GlobalEnv) -> &mut Self {
         self.facts.globals = Some(globals);
+        self
+    }
+
+    /// Install the [`MaterializingGlobals`] set. Without it, a region carrying
+    /// any global store is refused.
+    pub fn with_materializing_globals(
+        &mut self,
+        materializing: &'a MaterializingGlobals,
+    ) -> &mut Self {
+        self.facts.materializing = Some(materializing);
         self
     }
 
@@ -563,6 +752,10 @@ impl<'a> Interpreter<'a> {
         let unbacked_aggregate = matches!(&lattice, Lattice::Const(v) if !v.is_scalar())
             && !self.frame.aggregate_locals.contains(index);
         let lattice = if unbacked_aggregate {
+            crate::compiler_trace!(
+                "region_seed",
+                "local {index} binds an aggregate the frame cannot track"
+            );
             Lattice::NonConst
         } else {
             lattice

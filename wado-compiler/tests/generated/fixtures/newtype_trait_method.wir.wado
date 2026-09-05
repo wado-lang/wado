@@ -82,7 +82,7 @@ fn "newtype_trait_method.wado/__cm_binding__Stdout_write_via_stream"(data) with 
 
 fn "newtype_trait_method.wado/__cm_export__run"() {
     let d: i32;
-    let __r: ref "core:prelude/string.wado//String";
+    let __local_2: ref "core:prelude/string.wado//String";
     let handle: i32;
     let packed: i64;
     let rx_17: i32;
@@ -100,12 +100,12 @@ fn "newtype_trait_method.wado/__cm_export__run"() {
         global:newtype_trait_method.wado::__modules_initialized = 1;
     };
     d = 10 + 20;
-    __r = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(d, __r);
+    __local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
+    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(d, __local_2);
     rx_17 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_18 = builtin::i32_wrap_i64(packed >> 32_i64);
     handle = "newtype_trait_method.wado/__cm_binding__Stdout_write_via_stream"(rx_17);
-    "core:rt/write_string_to_stream"(tx_18, __r, 1);
+    "core:rt/write_string_to_stream"(tx_18, __local_2, 1);
     "wasi/future-drop-readable:transmission-cli"(handle);
     "wasi/task-return"(0);
 }
