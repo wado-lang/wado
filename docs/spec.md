@@ -2345,9 +2345,10 @@ the backtick. The literal is lexed exactly as an untagged template.
 
 A tag is an ordinary function whose one parameter is bound by `ReflectTemplate`,
 the reflected kind of a template literal. The compiler synthesizes one type per
-template shape — its segments, specifiers and hole types — holding a reference
-per hole; the type is anonymous and reached only through the bound. The tag
-walks the holes with tuple `for-of`:
+template shape — its segments, specifiers and hole types — holding one field
+per hole, a handle for a heap value and the value itself for a scalar; the
+type is anonymous and reached only through the bound. The tag walks the holes
+with tuple `for-of`:
 
 ```wado
 fn sql<T: ReflectTemplate<Holes = [..V]>, ..V: ToSqlParam>(t: T) -> SqlQuery {
@@ -2356,7 +2357,7 @@ fn sql<T: ReflectTemplate<Holes = [..V]>, ..V: ToSqlParam>(t: T) -> SqlQuery {
     for let h of ReflectTemplate::<T>::members() {
         query.push_str(&h.lit());               // literal text before this hole
         query.push_str(&"?");
-        params.push(h.get(&t).to_sql_param());  // the value, by reference
+        params.push(h.get(&t).to_sql_param());  // the value, storage shared
     }
     query.push_str(&ReflectTemplate::<T>::tail());
     return SqlQuery { query, params };
@@ -2364,7 +2365,7 @@ fn sql<T: ReflectTemplate<Holes = [..V]>, ..V: ToSqlParam>(t: T) -> SqlQuery {
 ```
 
 A hole handle answers `lit()` / `raw()` (the preceding segment, escapes
-processed or preserved), `get(&t)` (the value, `&V`), `source()` (the
+processed or preserved), `get(&t)` (the value, `V`), `source()` (the
 expression text), `has_spec()`, and `fmt(&t, f)` (rendering as the untagged
 template would). Every answer but `get` and `fmt` is a constant, so after
 monomorphization the tag body is one constant append per segment and one typed
