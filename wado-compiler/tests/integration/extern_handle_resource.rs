@@ -661,7 +661,7 @@ fn extends_stays_usable_as_an_identifier() {
 
 /// A resource operation takes a parameter default: it is desugared at the call
 /// site, which the Component Model import behind the operation never sees. This
-/// is what lets a WebIDL `optional` argument carry its declared default.
+/// is what lets a `WebIDL` `optional` argument carry its declared default.
 #[test]
 fn a_resource_operation_takes_a_parameter_default() {
     let source = "#[cm(\"web:dom/element\", type = \"extern-handle\")]\n\
