@@ -1948,6 +1948,22 @@ impl TypeTable {
         self.compiler_items.trait_name(item)
     }
 
+    /// Which wide-integer prelude struct `type_id` is —
+    /// [`CompilerItem::I128`](crate::compiler_item::CompilerItem::I128),
+    /// [`CompilerItem::U128`](crate::compiler_item::CompilerItem::U128), or
+    /// `None` for every other type. `i128` and `u128` are declarations in
+    /// `core:prelude/int128.wado`, so a declaration identity is the whole
+    /// answer; a phase that spells the name instead answers differently for a
+    /// user type that shares it.
+    #[must_use]
+    pub fn wide_int_item(&self, type_id: TypeId) -> Option<crate::compiler_item::CompilerItem> {
+        use crate::compiler_item::CompilerItem;
+        let decl = self.decl_of_type(type_id)?;
+        [CompilerItem::I128, CompilerItem::U128]
+            .into_iter()
+            .find(|item| self.compiler_items.struct_decl(*item) == Some(decl))
+    }
+
     /// The compiler trait item as a mangled method name embeds it — named by
     /// the module that declares it.
     #[must_use]

@@ -35,6 +35,68 @@ fn ctor_ref(type_table: &TypeTable, owner: CompilerItem, ctor: CompilerItem) -> 
     }
 }
 
+/// Which wide-int constructor a call names, and how its arguments compose into
+/// the 128-bit pattern. [`classify_ctor`] recognises exactly the calls the
+/// builders below emit, so a consumer reading a wide-int literal back cannot
+/// drift from the producer.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(crate) enum WideIntCtor {
+    /// `i128::from_i64(v)` — sign-extends.
+    FromI64,
+    /// `u128::from_u64(v)` — zero-extends.
+    FromU64,
+    /// `<i128|u128>::from_pair(low, high)` — the halves verbatim.
+    FromPair,
+}
+
+impl WideIntCtor {
+    /// The 128-bit pattern `args` denote, in the callee's parameter order and
+    /// each read as the raw bits of its declared 64-bit parameter type.
+    pub(crate) fn compose(self, args: &[u64]) -> i128 {
+        match (self, args) {
+            (Self::FromI64, [value]) => i128::from(value.cast_signed()),
+            (Self::FromU64, [value]) => i128::from(*value),
+            (Self::FromPair, [low, high]) => {
+                (i128::from(*high) << 64) | i128::from(*low)
+            }
+            _ => panic!("wide-int constructor {self:?} takes a different argument count"),
+        }
+    }
+}
+
+/// The wide-int constructor `mangled` names, or `None` for any other callee.
+pub(crate) fn classify_ctor(type_table: &TypeTable, mangled: &str) -> Option<WideIntCtor> {
+    for (owner, ctor, kind) in [
+        (
+            CompilerItem::I128,
+            CompilerItem::I128FromI64,
+            WideIntCtor::FromI64,
+        ),
+        (
+            CompilerItem::U128,
+            CompilerItem::U128FromU64,
+            WideIntCtor::FromU64,
+        ),
+        (
+            CompilerItem::I128,
+            CompilerItem::I128FromPair,
+            WideIntCtor::FromPair,
+        ),
+        (
+            CompilerItem::U128,
+            CompilerItem::U128FromPair,
+            WideIntCtor::FromPair,
+        ),
+    ] {
+        let ctor = ctor_ref(type_table, owner, ctor);
+        let name = LocalMethodName::new(ctor.type_name, None, ctor.method_name);
+        if name.to_mangled_name() == mangled {
+            return Some(kind);
+        }
+    }
+    None
+}
+
 /// Create an i128 literal TIR expression that evaluates to `value`.
 pub(crate) fn create_i128_literal(
     value: i128,

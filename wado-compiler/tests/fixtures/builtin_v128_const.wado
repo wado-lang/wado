@@ -1,0 +1,29 @@
+/// `builtin::v128_const` takes its bit pattern as an `i128` literal, and `i128`
+/// is a prelude struct built by a constructor call — so WIR translation reads
+/// the constant back out of either that call or the struct literal the inliner
+/// leaves in its place. Matching only one shape ICE'd at some -O levels and not
+/// others.
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let zero = builtin::v128_const(0);
+    assert builtin::i32x4_extract_lane(0, zero) == 0;
+    assert builtin::i32x4_extract_lane(3, zero) == 0;
+
+    // Fits in 64 bits: `i128::from_i64` sign-extends into the high lanes.
+    let low = builtin::v128_const(-1);
+    assert builtin::i32x4_extract_lane(0, low) == -1;
+    assert builtin::i32x4_extract_lane(3, low) == -1;
+
+    // Wider than 64 bits: `i128::from_pair`, one distinct byte per lane.
+    let wide = builtin::v128_const(0x0f0e0d0c0b0a09080706050403020100);
+    assert builtin::i32x4_extract_lane(0, wide) == 0x03020100;
+    assert builtin::i32x4_extract_lane(1, wide) == 0x07060504;
+    assert builtin::i32x4_extract_lane(2, wide) == 0x0b0a0908;
+    assert builtin::i32x4_extract_lane(3, wide) == 0x0f0e0d0c;
+
+    println("ok");
+}
+
+__DATA__
+{"stdout": "ok\n"}
