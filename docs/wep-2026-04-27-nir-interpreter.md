@@ -219,11 +219,11 @@ cannot reach.
 
 ## Roadmap
 
-The census counts 1 198 surviving regions across 9 of 22 files:
+The census counts 1 041 surviving regions across 9 of 22 files:
 
 | Cause                                 | Regions |
 | ------------------------------------- | ------- |
-| no call on its path explains it       | 900     |
+| no call on its path explains it       | 753     |
 | it writes a global                    | 240     |
 | `push_encoded_ranges` still runs      | 34      |
 | it writes a place rooting in no local | 13      |
@@ -232,23 +232,24 @@ The census counts 1 198 surviving regions across 9 of 22 files:
 | `general_category_ranges` still runs  | 2       |
 | `i32::fmt_decimal` still runs         | 1       |
 
-Two Gale-generated files hold 1 120 of them. That concentration is not a Gale
+Two Gale-generated files hold 976 of them. That concentration is not a Gale
 fact: what generated code does is call the same missing capability often.
 
 The largest row is also the least specific. A region naming no call is waiting on
 a value the engine cannot represent rather than a body it cannot run. It says
 which instrument to reach for next, not which capability is missing, so only
-`ctfe_stmt` turns those 900 into work.
+`ctfe_stmt` turns those 753 into work.
 
 ### 1. The aggregate exit
 
-Every callee the census names builds a `List<T>` from a constant:
-`push_encoded_ranges` (34), `union_char_ranges` (4), `binary_property_ranges`
-(4), `general_category_ranges` (2). A `List<T>` region is also what the no-call
-row reports, so the census points at this one capability twice over, once by
-name and once by the silence. What those rows waited on was the exit: the engine
-represented the value all along and had nowhere to put it, a `String`'s backing
-being the one shape it could write back.
+The engine represented an aggregate all along and had nowhere to put it, a
+`String`'s backing being the one shape it could write back. The exit gave it
+one, and the recount says which half of the census that was: the silent row
+fell 900 → 753 and every named callee stayed where it was. So the four
+`List<T>` builders the census names — `push_encoded_ranges` (34),
+`union_char_ranges` (4), `binary_property_ranges` (4),
+`general_category_ranges` (2) — were never waiting on the write-back. They are
+calls the engine still declines to run, which is stages 2 and 3.
 
 #### What it writes
 
@@ -359,6 +360,7 @@ writer can emit. That one is stage 3's.
 - [x] The writer, reporting whether it changed the tree, and the identity,
       storage and budget gates.
 - [x] The leaf ceiling, swept against wasm size.
+- [x] The recount, above.
 - [ ] A destructuring `let`; a body containing one is abandoned.
 
 Done when a constant `List` result and a constant struct result reach the IR as
