@@ -438,19 +438,9 @@ fn build_global_view(project: &NirPackage, type_table: &TypeTable, maps: &FoldMa
     view
 }
 
-/// The globals whose every mention in the package sits inside a `{ G = v; G }`
-/// block — the shape constant-object globalization leaves where it names a
-/// constant at a use site.
-///
-/// A store to one of these serves the single read two statements below it and
-/// nothing else, so a region carrying the pair may run: folding the region
-/// takes the store and that read away together. A global mentioned anywhere
-/// else is left out, since some read would then depend on a store the fold
-/// deleted and would come back `null`.
-///
-/// The property is what to test, not a count of stores. Inlining copies the
-/// pair whole, so two sites are as safe as one, and a global with a single
-/// store and a distant read is not safe at all.
+/// Derive the [`MaterializingGlobals`] set: pair a global on every block that
+/// materializes it, and drop it again on any mention outside one. Global
+/// initializers are walked too, since a read there counts like any other.
 fn materializing_globals(project: &NirPackage) -> MaterializingGlobals {
     let mut paired = MaterializingGlobals::default();
     let mut loose: IndexSet<GlobalKey> = IndexSet::default();

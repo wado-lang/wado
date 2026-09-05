@@ -9,8 +9,8 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::nir::{FunctionRef, NirFunction, NirUnaryOp};
 use crate::nir_arena::{
-    BlockId, BlockNode, Body, ExprId, ExprKind, ExprNode, LocalSet, Operand, PatId, PatKind,
-    StmtId, StmtKind, StmtNode,
+    BlockId, BlockNode, Body, ExprId, ExprKind, ExprNode, LocalSet, NodeRef, Operand, PatId,
+    PatKind, StmtId, StmtKind, StmtNode,
 };
 use crate::nir_package::NirPackage;
 use crate::nir_value_graph::ValueKind;
@@ -114,18 +114,11 @@ pub type GlobalKey = (ModuleSource, String);
 /// same convention as an un-bound local.
 pub type GlobalEnv = IndexMap<GlobalKey, Lattice>;
 
-/// Globals whose every read is the tail of a `{ G = v; G }` block — the shape
-/// [constant-object globalization] leaves where it names a constant at a use
-/// site. Such a store materializes a value for its own reader rather than
-/// filling program state, so a frame may read through it and a region carrying
-/// one may run: folding the region deletes the store and the only read it
-/// serves together. A global read anywhere else is not in the set, since
-/// deleting a store it depends on would leave it reading `null`.
+/// Globals whose every read is the tail of a `{ G = v; G }` block, so folding a
+/// region carrying one deletes the store and the only read it serves together.
 ///
-/// The property survives inlining, which copies the pair whole. A count would
-/// not.
-///
-/// [constant-object globalization]: ../docs/wep-2026-05-31-const-object-globalization.md
+/// A property, not a count: inlining copies the pair, so two sites are as safe
+/// as one, and a global read anywhere else would be left reading `null`.
 pub type MaterializingGlobals = IndexSet<GlobalKey>;
 
 /// Known constant field values of module-scope globals, keyed by global then
@@ -221,13 +214,9 @@ impl EditSink for BodySink<'_> {
     }
 }
 
-/// Pre-build the [`CalleeMap`] from every function a compile-time frame can run
-/// in
-/// `project`. The map stores `Rc<RefCell<NirFunction>>` handles
-/// aliased with `project.functions`, so rebuilding the map every
-/// optimizer iteration costs only refcount bumps. The key shape
-/// `(module_source, full_name)` mirrors what `try_call_fold`
-/// synthesises from a `Call` node's `FunctionRef`.
+/// The [`CalleeMap`] over every function in `project` a compile-time frame can
+/// run. Its handles alias `project.functions`, so rebuilding it every optimizer
+/// iteration costs only refcount bumps.
 pub(crate) fn build_callee_map(project: &NirPackage) -> CalleeMap {
     let mut map = CalleeMap::default();
     for func_rc in &project.functions {
@@ -315,15 +304,12 @@ pub fn is_ctfe_eligible(func: &NirFunction) -> bool {
         && is_ctfe_runnable(func)
 }
 
-/// A region-shaped block and what a frame would need to run it: the outer locals
-/// it reads, and the fact that disqualifies it, if any. No free reads and no
-/// refusal mean the block depends on nothing outside itself, so every value in
-/// it is compile-time known and it denotes a constant — whether or not the
-/// engine reached one.
+/// A region-shaped block and what a frame would need to run it. No free reads
+/// and no refusal mean it depends on nothing outside itself, so it denotes a
+/// constant whether or not the engine reached one.
 ///
-/// Both answers, because a block reading a runtime local was never a constant
-/// whatever else is wrong with it, and a refusal alone cannot say which case a
-/// block is.
+/// Both answers, since a refusal alone cannot tell a block that was never a
+/// constant from one the fold missed.
 pub struct RegionQuery {
     pub expr: ExprId,
     pub free_reads: Vec<u32>,
@@ -348,9 +334,9 @@ pub fn region_queries(
         materializing: None,
     };
     let mut out = Vec::new();
-    let mut stack = vec![crate::nir_arena::NodeRef::Block(body.root)];
+    let mut stack = vec![NodeRef::Block(body.root)];
     while let Some(node) = stack.pop() {
-        if let crate::nir_arena::NodeRef::Expr(e) = node
+        if let NodeRef::Expr(e) = node
             && let Some((block, _)) = region::region_shape(body, e, type_table)
         {
             let needs = region::region_needs(body, block, facts, type_table);

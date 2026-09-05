@@ -68,7 +68,7 @@ pub(super) struct Reached {
 }
 
 impl Reached {
-    pub(super) fn in_frame(body: &Body, facts: ProgramFacts<'_>) -> Self {
+    pub(super) fn in_frame(body: &Body, facts: ProgramFacts<'_>, reassigned: &LocalSet) -> Self {
         let performed = performed_exprs(body);
         let mut reached = Self::collect(body, facts, &performed);
         for e in &performed {
@@ -78,7 +78,7 @@ impl Reached {
                 reached.place_assigns.insert(*e);
             }
         }
-        reached.record_alias_borrows(body);
+        reached.record_alias_borrows(body, reassigned);
         reached
     }
 
@@ -87,8 +87,7 @@ impl Reached {
     /// performed against the place's current value or abandons the evaluation,
     /// and a read projects that value rather than a copy. Frame-only, like the
     /// write accounting — an ordinary walk resolves no aliases.
-    fn record_alias_borrows(&mut self, body: &Body) {
-        let reassigned = reassigned_locals(body);
+    fn record_alias_borrows(&mut self, body: &Body, reassigned: &LocalSet) {
         for s in reachable_stmts(body) {
             let StmtKind::Let {
                 value,
@@ -99,11 +98,9 @@ impl Reached {
             else {
                 continue;
             };
-            // The same predicate the frame binds an alias under: a `let mut`
-            // nothing reassigns cannot be displaced, so it names one place for
-            // the whole body. The two must agree — a borrow the frame resolves
-            // to an alias but this walk counts as a clobber leaves the frame
-            // holding no value for the place it just aliased.
+            // The predicate the frame binds an alias under, and the two must
+            // agree: a borrow the frame aliases but this walk clobbers leaves
+            // the frame holding no value for the place it just aliased.
             if *is_mut && reassigned.contains(*local_index) {
                 continue;
             }
@@ -362,21 +359,6 @@ pub(super) fn aggregate_safe_locals(
 ///
 /// Reachable body only, as in [`aggregate_safe_locals`]. The arena keeps every
 /// node an in-place rewrite displaced, and one nothing refers to cannot run.
-/// Every local an `Assign` names as its whole target. A projection into one is
-/// a write through the binding, not a rebinding of it, so only a bare local
-/// counts.
-fn reassigned_locals(body: &Body) -> LocalSet {
-    let mut set = LocalSet::default();
-    for e in reachable_exprs(body) {
-        if let ExprKind::Assign { target, .. } = &body.exprs[e].kind
-            && let ExprKind::Local { index, .. } = &body.exprs[*target].kind
-        {
-            set.insert(*index);
-        }
-    }
-    set
-}
-
 pub(super) fn clobbered_locals(body: &Body, reached: &Reached, type_table: &TypeTable) -> LocalSet {
     fn disqualify(body: &Body, op: Operand, set: &mut LocalSet) {
         if let Some(index) = lvalue_root_local(body, op) {
@@ -437,6 +419,20 @@ pub(super) fn clobbered_locals(body: &Body, reached: &Reached, type_table: &Type
     set
 }
 
+/// Every local an `Assign` names as its whole target. A projection into one is a
+/// write through the binding, not a rebinding of it, so only a bare local counts.
+fn reassigned_locals(body: &Body) -> LocalSet {
+    let mut set = LocalSet::default();
+    for e in reachable_exprs(body) {
+        if let ExprKind::Assign { target, .. } = &body.exprs[e].kind
+            && let ExprKind::Local { index, .. } = &body.exprs[*target].kind
+        {
+            set.insert(*index);
+        }
+    }
+    set
+}
+
 /// The local a stored reference names. An aggregate holding one is a second
 /// holder of its object — a closure environment over a boxed local is the shape
 /// this reaches. A value element copies, so only a reference shape answers.
@@ -470,11 +466,12 @@ pub(super) struct Trackability {
 impl Trackability {
     /// For a compile-time frame, which performs the writes it walks.
     pub(super) fn in_frame(body: &Body, facts: ProgramFacts<'_>, type_table: &TypeTable) -> Self {
-        let reached = Reached::in_frame(body, facts);
+        let reassigned = reassigned_locals(body);
+        let reached = Reached::in_frame(body, facts, &reassigned);
         Self {
             aggregate_locals: aggregate_safe_locals(body, &reached, type_table),
             clobbered: clobbered_locals(body, &reached, type_table),
-            reassigned: reassigned_locals(body),
+            reassigned,
         }
     }
 

@@ -1,11 +1,5 @@
-// Census of the compile-time regions that reach the final IR, over the
-// benchmark and wasm-size corpora and the packages written in Wado.
-//
-// Each row is one `remark:` the compiler emits for a block that computes a
-// constant at run time (`remarks::collect_const_region_remarks`). The counts by
-// type are what orders the format-coverage work: an `i32` row is integer
-// formatting, an `f64` row is `fpfmt`. A corpus entry with no rows has nothing
-// left for the engine to reach.
+// Census of the compile-time regions that reach the final IR, over the benchmark
+// and wasm-size corpora and the packages written in Wado, grouped by cause.
 //
 // Usage: node scripts/const-region-census.mjs [--bin <wado>]
 

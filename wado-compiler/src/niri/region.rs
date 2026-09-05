@@ -35,8 +35,7 @@ fn write_targets(
 /// whatever its last statement computed, and the type is what says so. Unit is
 /// the inlined statement call, whose result stands where the program expects
 /// none; never is the `else` of a `let ... else { panic("…") }`, which builds a
-/// constant message and then diverges — a block whose fold was never available,
-/// rather than one the engine missed.
+/// constant message and then diverges.
 pub(super) fn value_block_shape<'a>(
     body: &'a Body,
     e: ExprId,
@@ -59,17 +58,11 @@ pub(super) fn block_shape(body: &Body, e: ExprId) -> Option<(BlockId, Option<&st
     }
 }
 
-/// The global a block materializes: exactly `{ G = v; G }`, the second
-/// statement reading what the first wrote. The shape
-/// [constant-object globalization] leaves where it names a constant at a use
-/// site.
+/// The global a block materializes: exactly `{ G = v; G }`, the shape
+/// constant-object globalization leaves where it names a constant at a use site.
 ///
-/// Two consumers, one recognizer. A store in this shape serves the read below it
-/// and nothing else, so a region carrying one may still run; and the block
-/// itself is not a region, since folding it would write the literal over the
-/// naming construct and undo the sharing globalization arranged.
-///
-/// [constant-object globalization]: ../docs/wep-2026-05-31-const-object-globalization.md
+/// One recognizer for two consumers, which must agree: the store inside the pair
+/// does not refuse the region around it, and the pair itself is not a region.
 #[must_use]
 pub fn materialization_pair(body: &Body, block: BlockId) -> Option<super::GlobalKey> {
     let [set, get] = body.blocks[block].stmts.as_slice() else {
@@ -225,11 +218,11 @@ pub(super) fn region_needs(
                 } => {
                     let key = (module_source.clone(), name.clone());
                     if !facts.materializes(&key) {
-                        refusal = refusal.or(Some(RegionRefusal::GlobalWrite));
+                        refusal.get_or_insert(RegionRefusal::GlobalWrite);
                     }
                 }
                 ExprKind::IndirectCall { .. } | ExprKind::CmRawCall { .. } => {
-                    refusal = refusal.or(Some(RegionRefusal::OpaqueCall));
+                    refusal.get_or_insert(RegionRefusal::OpaqueCall);
                 }
                 ExprKind::Call { func_id, args, .. } => {
                     // A builtin never reaches NIR as a method call, so this is
@@ -238,19 +231,19 @@ pub(super) fn region_needs(
                         let accounted = CallSite::of(body, e)
                             .and_then(|site| write_targets(body, &site, callee, &mut written));
                         if accounted.is_none() {
-                            refusal = refusal.or(Some(RegionRefusal::UnaccountableWrite));
+                            refusal.get_or_insert(RegionRefusal::UnaccountableWrite);
                         }
                     } else {
                         match facts.ctfe_builtins.and_then(|m| m.get(func_id)) {
                             None => {
-                                refusal = refusal.or(Some(RegionRefusal::UnrunnableCall));
+                                refusal.get_or_insert(RegionRefusal::UnrunnableCall);
                             }
                             Some(builtin) if builtin.is_write() => {
                                 let written_place = args
                                     .first()
                                     .and_then(|t| record_write(body, t.expr, &mut written));
                                 if written_place.is_none() {
-                                    refusal = refusal.or(Some(RegionRefusal::UnaccountableWrite));
+                                    refusal.get_or_insert(RegionRefusal::UnaccountableWrite);
                                 }
                             }
                             Some(_) => {}
@@ -264,7 +257,7 @@ pub(super) fn region_needs(
                 }
                 ExprKind::Assign { target, .. } => {
                     if record_write(body, Operand::Expr(*target), &mut written).is_none() {
-                        refusal = refusal.or(Some(RegionRefusal::UnaccountableWrite));
+                        refusal.get_or_insert(RegionRefusal::UnaccountableWrite);
                     }
                 }
                 ExprKind::Unary {
@@ -272,7 +265,7 @@ pub(super) fn region_needs(
                     expr,
                 } => {
                     if record_write(body, *expr, &mut written).is_none() {
-                        refusal = refusal.or(Some(RegionRefusal::UnaccountableWrite));
+                        refusal.get_or_insert(RegionRefusal::UnaccountableWrite);
                     }
                 }
                 _ => {}
@@ -280,11 +273,8 @@ pub(super) fn region_needs(
             NodeRef::Block(_) => {}
         }
         // A promoted operand is not a child, so the walk above never reaches
-        // the locals its value names. Missing them does not mis-fold — the
-        // frame seeds nothing for a local it never heard of, so the run
-        // abandons — but it makes the block look self-contained when it reads
-        // the program's runtime state, and a remark believing that reports a
-        // constant that was never one.
+        // the locals its value names. Missing them makes a block look
+        // self-contained while it reads the program's runtime state.
         body.for_each_operand(node, |op| {
             let Operand::Value(v) = op else {
                 return;
@@ -299,35 +289,25 @@ pub(super) fn region_needs(
         });
         body.for_each_child(node, |c| stack.push(c));
     }
+    let named = mentioned
+        .into_iter()
+        .map(|(index, ty)| (index, type_table.is_reference_shaped(ty)))
+        // A local reached only through a pool value carries no skeleton node to
+        // read a type off, so it is seeded as a reference: what a shape the
+        // frame cannot check is worth.
+        .chain(promoted.into_iter().map(|index| (index, true)));
     let mut out = Vec::new();
-    for (index, ty) in mentioned {
+    for (index, is_reference) in named {
         if declared.contains(index) {
             continue;
         }
         if written.contains(index) {
-            refusal = refusal.or(Some(RegionRefusal::OuterWrite));
+            refusal.get_or_insert(RegionRefusal::OuterWrite);
             continue;
         }
         out.push(FreeRead {
             index,
-            is_reference: type_table.is_reference_shaped(ty),
-        });
-    }
-    // A local reached only through a pool value carries no skeleton node to
-    // read a type off, and seeding one whose shape the frame cannot check
-    // would hand a value where the program holds an alias. Refused as a
-    // reference, which is what a seed of unknown shape is worth.
-    for index in promoted {
-        if declared.contains(index) {
-            continue;
-        }
-        if written.contains(index) {
-            refusal = refusal.or(Some(RegionRefusal::OuterWrite));
-            continue;
-        }
-        out.push(FreeRead {
-            index,
-            is_reference: true,
+            is_reference,
         });
     }
     RegionNeeds {

@@ -101,15 +101,12 @@ pub fn display_function_name(name: &str) -> String {
     }
 }
 
-/// The name a diagnostic shows for a function: what the author wrote, without
-/// the module path a method name carries and without the suffixes a
-/// specialization clone appends. `String::grow` for
-/// `core:prelude/string.wado/String::grow$scalar`.
+/// The name a diagnostic shows for a function: `String::grow` for
+/// `core:prelude/string.wado/String::grow$scalar`. A clone's suffix names no
+/// function an author wrote, and the span already carries the module path.
 ///
-/// The suffixes [`param_spec_name`] and [`sroa_param_name`] append name a clone
-/// no author wrote, so they mislead in a message; the module path is already in
-/// the span. An effect default spells its interface with the same separator and
-/// is left to [`display_function_name`].
+/// An effect default spells its interface with the same separator and is left
+/// to [`display_function_name`].
 #[must_use]
 pub fn diagnostic_function_name(name: &str) -> &str {
     if name.starts_with(EFFECT_DEFAULT_PREFIX) {

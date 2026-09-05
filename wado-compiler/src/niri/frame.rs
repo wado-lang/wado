@@ -225,12 +225,9 @@ impl Interpreter<'_> {
                 {
                     return Flow::Bail;
                 }
-                // A `let mut` binding a borrow aliases the same place an
-                // immutable one does. What makes the immutable case safe is
-                // that nothing displaces the binding, and a mutable local
-                // nothing reassigns is in the same position — which is what
-                // `sroa_param` mints for a scalarized `&mut` field, and what a
-                // constant template's buffer is threaded through.
+                // What makes an immutable binding of a borrow an alias is that
+                // nothing displaces it, which is equally true of a mutable
+                // local nothing reassigns.
                 if (!is_mut || !self.frame.reassigned.contains(index))
                     && let Some(named) = self.aliased_operand(body, value)
                 {
@@ -699,26 +696,30 @@ impl Interpreter<'_> {
         Some((site.func_id, site.operands().map(|(_, op)| op).collect()))
     }
 
-    /// Record why a call was not run, and refuse it. Every refusal above the
-    /// expensive half goes through here, so `WADO_TRACE=ctfe_call` lists what
-    /// each declined call wanted that the frame could not give.
-    fn decline(&self, key: &CalleeKey, why: &str) -> Option<CallRun> {
-        crate::compiler_trace!("ctfe_call", "{}: {why}", self.callee_name(key));
-        None
+    /// What `WADO_TRACE=ctfe_call` says about one call, under the name its
+    /// author wrote. A borrow already held — a self-call under the walker —
+    /// leaves the id, which is what the trace can still say about it.
+    fn trace_call(&self, key: &CalleeKey, what: &str) {
+        crate::compiler_trace!(
+            "ctfe_call",
+            "{}: {what}",
+            self.facts
+                .callees
+                .and_then(|m| m.get(key))
+                .and_then(|c| c.func.try_borrow().ok())
+                .map_or_else(
+                    || format!("{key:?}"),
+                    |f| crate::name::diagnostic_function_name(&f.name).to_string(),
+                )
+        );
     }
 
-    /// The declined callee under the name its author wrote, for the trace. A
-    /// borrow already held (a self-call under the walker) leaves the id, which
-    /// is what the trace can still say about it.
-    fn callee_name(&self, key: &CalleeKey) -> String {
-        self.facts
-            .callees
-            .and_then(|m| m.get(key))
-            .and_then(|c| c.func.try_borrow().ok())
-            .map_or_else(
-                || format!("{key:?}"),
-                |f| crate::name::diagnostic_function_name(&f.name).to_string(),
-            )
+    /// Trace why a call was not run, and refuse it. Every refusal above the
+    /// expensive half goes through here, so the trace lists what each declined
+    /// call wanted that the frame could not give.
+    fn decline(&self, key: &CalleeKey, why: &str) -> Option<CallRun> {
+        self.trace_call(key, why);
+        None
     }
 
     /// Run a call in a compile-time frame: bind the parameters, execute the body,
@@ -795,7 +796,7 @@ impl Interpreter<'_> {
         if self.call_missed(key, may_write, &args) {
             return None;
         }
-        crate::compiler_trace!("ctfe_call", "{}: running", self.callee_name(&key));
+        self.trace_call(&key, "running");
         self.charge(1)?;
         self.call_stack.push(key);
         let mut scratch = callee_body.nodes_only_clone();
@@ -805,11 +806,7 @@ impl Interpreter<'_> {
         self.swap_frame(caller);
         self.call_stack.pop();
         if run.is_none() {
-            crate::compiler_trace!(
-                "ctfe_call",
-                "{}: body did not reach a value",
-                self.callee_name(&key)
-            );
+            self.trace_call(&key, "body did not reach a value");
             self.record_call_miss(key, may_write, args);
         }
         run.map(|run| {

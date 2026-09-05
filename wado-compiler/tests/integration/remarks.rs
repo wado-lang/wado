@@ -488,8 +488,8 @@ export fn run() with Stdout {
 
 #[test]
 fn a_constant_string_interpolation_is_not_remarked() {
-    // A `String` interpolation folds to a literal today, so nothing survives to
-    // report. This is the test that retires itself as coverage grows.
+    // A `String` interpolation folds to a literal, so nothing survives to
+    // report.
     let remarks = const_region_remarks(
         r#"
 use { println, Stdout } from "core:cli";
@@ -526,7 +526,7 @@ fn a_materializing_global_store_does_not_refuse_a_region() {
     // `"true"` is globalized, and the store the globalization leaves at the use
     // site sits inside the template region. That store serves the read two
     // statements below it and nothing else, so it is not a write the region is
-    // refused for. What the remark reports is the call still standing.
+    // refused for and the template folds to the literal.
     let remarks = const_region_remarks(
         r#"
 use { println, Stdout } from "core:cli";
