@@ -90,8 +90,15 @@ pub variant TypeInfo {
     Resource(DeclInfo),
     Tuple(DeclInfo),
     Scalar(DeclInfo),
+    Array(TypeInfo),
     Reference { mutable: bool, target: TypeInfo },
-    Function { params: List<TypeInfo>, result: TypeInfo },
+    Function {
+        mutable: bool,                 // `fn mut(…)`
+        params: List<TypeInfo>,
+        result: TypeInfo,
+        effects: List<DeclInfo>,       // the `with E…` row: one interface each
+        stores: List<i32>,             // `stores[…]`, by parameter position
+    },
     Never,
 }
 
@@ -100,6 +107,12 @@ impl TypeInfo {
 }
 ```
 
+A function type is the whole signature or it is not the type: `fn mut(…)`
+differs from `fn(…)`, and `with (Stdout, Stderr)` and `stores[data]` are row
+members of the type the same way the parameters are. The effect row is where an
+`interface` enters the model — it is a declaration Wado names, so it reads as a
+`DeclInfo` like any other, and no separate identity is invented for it.
+
 Every case is positive: no arm means "something the design has no answer for".
 `TypeTable::reflect_kind` already computes the first five and answers `None`
 for the rest, which is the classification this WEP completes:
@@ -107,24 +120,38 @@ for the rest, which is the classification this WEP completes:
 | Type                                                      | Case        |
 | --------------------------------------------------------- | ----------- |
 | `struct` (anonymous included), `variant`, `enum`, `flags` | that case   |
+| `String`, `i128`, `u128` — prelude structs                | `Struct`    |
 | `type N = B`                                              | `Newtype`   |
 | the four sealed member handles                            | `Struct`    |
-| a resource                                                | `Resource`  |
+| a resource, `Future<T>` / `Stream<T>`                     | `Resource`  |
 | the tuple family, `()`                                    | `Tuple`     |
-| `i8`…`u128`, `f32`, `f64`, `bool`, `char`, `v128`         | `Scalar`    |
+| `i8`…`u64`, `f32`, `f64`, `bool`, `char`, `v128`          | `Scalar`    |
+| `Array<T>`                                                | `Array`     |
 | `&T` / `&mut T`                                           | `Reference` |
-| `fn(…) -> R`                                              | `Function`  |
+| `fn(…) -> R with E…`                                      | `Function`  |
 | `!`                                                       | `Never`     |
 
 The four member handles are `Struct` because the seal is on structure, not on
 identity: nothing may enumerate their fields, and `match type` is where that
 shows — they reach no `struct` arm. Naming them was never withheld.
 
-`Scalar` is deliberately coarse. Nothing yet reads a primitive's width or
-signedness through reflection, and a consumer that needs one today writes the
-per-type impl it already writes. Splitting it later is additive: an arm that
-matched `Scalar` keeps matching whatever replaces it only if the split is a
-sub-classification, which is the constraint any later refinement inherits.
+A type parameter, an inference variable, a pack and an associated-type
+projection carry no case: none survives monomorphization, which is where a
+`Reflect` subject is concrete. `Reactive<T>` is the same — a reactive binding is
+typed with its underlying value type, so the wrapper never reaches
+monomorphize.
+
+`Scalar` names the Wasm primitives, which is a fact about representation rather
+than about being a leaf. `String`, `i128` and `u128` read as scalars to a
+programmer and are prelude structs with private fields, so they land in
+`Struct` and, having no visible members downstream, cannot be opened there
+either. That gap between what `Scalar` covers and what a consumer means by
+"leaf" is recorded below.
+
+Within what it does cover, `Scalar` is deliberately coarse: nothing yet reads a
+primitive's width or signedness through reflection, and a consumer that needs
+one writes the per-type impl it already writes. Splitting it later is additive
+only as a sub-classification, which is the constraint any refinement inherits.
 
 A structural case keeps its components rather than rendering them away, which
 is why the flat "name + module + args" shape the earlier WEP sketched does not
@@ -169,11 +196,12 @@ A bound states a kind before the subject is known. The body states it after:
 ```wado
 fn describe<T: Reflect>(v: &T) -> String {
     match type T {
-        struct => return fields_of(v),
-        variant => return live_case_of(v),
+        struct([..F]) => return fields_of(v),
+        variant([..P]) => return live_case_of(v),
         enum | flags => return Reflect::<T>::type_name(),
         newtype => return describe(&B::from(*v)),
-        _ => return Reflect::<T>::type_name(),
+        tuple | scalar | array | reference | function | resource | never | opaque
+            => return Reflect::<T>::type_name(),
     }
 }
 ```
@@ -181,6 +209,21 @@ fn describe<T: Reflect>(v: &T) -> String {
 Each arm proves its kind's bound for its own body. `struct =>` elaborates under
 the hypothesis `T: ReflectStruct`, so `ReflectStruct::<T>::members()` resolves
 inside it and nowhere else.
+
+A `match type` is exhaustive and carries no `_`. Every case of `TypeInfo` is a
+kind of the type system itself, so a set that closes over them closes over
+everything a subject can be, and a wildcard would mostly hide the one thing
+worth reporting: a body that forgot a kind. The cost is that adding a kind to
+the language breaks every `match type` in the ecosystem — which is what adding
+a kind is.
+
+`opaque` is the arm exhaustiveness forces into existence, and it is not `_`
+renamed. The other arms carry a hypothesis their body relies on, so a subject
+that is a struct the site may not open — private members, or one of the sealed
+member handles — cannot enter `struct` without making that hypothesis false. It
+enters `opaque` instead: a named condition ("declared, not openable here"),
+where `type_info()` still reports what the type is. A future kind does not land
+there; it fails exhaustiveness, as intended.
 
 Three rules make it more than sugar over the five blankets:
 
@@ -288,29 +331,27 @@ boundary so the split is not rediscovered.
 
 ### The arm's pack binder has no spelling
 
-`struct([..F])` above is a sketch. Each kind binds a different association
-(`FieldTypes` / `CasePayloads` / `Members`), and an arm that needs no pack
-should not be made to write one.
+What the binder does is settled: the arm pushes `T: ReflectStruct<FieldTypes =
+[..F]>` with `..F` in scope for that arm's body, which is what
+`reflect_pack_bound_ty` reads and what every projection below it already
+serves. What it looks like is not. Three shapes, each with a cost:
 
-- [ ] Choose the spelling, and decide whether an arm may bind a pack bound
-      (`struct([..F: Serialize])`) or only the pack itself.
+- Positional, as above — `struct([..F])`. Shortest, and the association is
+  implied by the arm's kind, so `FieldTypes` / `CasePayloads` / `Members` never
+  appear. A reader cannot tell from the arm which association was bound.
+- Named — `struct(FieldTypes = [..F])`. Matches an impl header exactly, so a
+  derivation moved from a blanket into an arm reads the same. Verbose on the
+  arm that binds nothing.
+- Inferred — no binder, the pack implicit under a reserved name. Rejected on
+  sight: an implicitly-named type parameter is nothing else in the language.
 
-### Exhaustiveness
+Two questions ride on the choice. Whether an arm may bound the pack
+(`struct([..F: Serialize])`) or only bind it, leaving bounds to the callee it
+delegates to; and whether an arm that binds nothing may still be written
+`struct` bare — which it must, or every kind-only branch pays for a pack it
+never reads.
 
-Listing every kind makes adding one a breaking change across every derivation
-in the ecosystem, and the tuple family is already queued. Requiring `_` costs a
-line in the exhaustive case.
-
-- [ ] Decide whether `_` is mandatory.
-
-### Which arm an unopenable struct takes
-
-A struct whose members are not visible here cannot satisfy `ReflectStruct`, so
-it cannot reach a `struct` arm. Falling to `_` is consistent with the
-visibility gate and leaves `kind()` to report what it is; the alternative is a
-distinct arm naming the case.
-
-- [ ] Decide `_` versus a named arm.
+- [ ] Choose the spelling and answer both.
 
 ### The structural notation is unwritten and one-way
 
@@ -334,16 +375,21 @@ type, and the two do not render alike.
 - [ ] Decide whether `DeclInfo` on a resource reports the CM coordinate, the
       Wado symbol, or both.
 
-### `String` is a struct, not a `Scalar`
+### `Scalar` is representation, and a consumer means "leaf"
 
-`String` is a `pub struct` in the prelude, so it classifies as `Struct` and its
-private fields keep it out of the `struct` arm elsewhere — landing it in `_`
-while `i32` lands in `Scalar`. Every derivation writes `impl … for String`
-today, so nothing breaks, but a consumer reading the taxonomy will expect the
-two to agree.
+`String`, `i128` and `u128` are prelude structs, so they classify as `Struct`
+and reach `opaque` downstream, while `i32` reaches `scalar`. Nothing breaks —
+every derivation writes `impl … for String` — but the split a consumer wants is
+leaf versus aggregate, and `Scalar` is the Wasm primitives, which is a
+different line. The two arms it can land in already say "do not walk this", so
+the gap is in what the taxonomy communicates rather than in what it permits.
 
-- [ ] Decide whether `Scalar` is "primitive" or "primitive or so marked", and
-      if the latter, what marks it.
+Marking the three (`#[scalar]` on the declaration, folding them into `Scalar`)
+closes it, at the price of an attribute any type may claim, which moves a
+third-party type between arms.
+
+- [ ] Decide whether `Scalar` stays "a Wasm primitive" or becomes "primitive or
+      so marked", and if the latter, what marks it and who may.
 
 ### `Scalar` granularity
 
