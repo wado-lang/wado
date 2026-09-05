@@ -1670,6 +1670,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     sem.decls.current_module_globals.clone(),
                 );
             }
+            signatures.inherit_trait_param_defaults(state.tysys.resolutions.defs());
             state.tysys.signatures = Rc::new(signatures);
         }
         // Every declaration is resolved, so the solver reads them all at once.

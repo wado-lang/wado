@@ -1,0 +1,67 @@
+//! Regression (issue #1977): a `trait` static's parameter default is declared
+//! on the trait, so the `impl`'s own signature carries none. Every
+//! `Type::method()` spelling read that signature and rejected an omitted
+//! argument for arity instead of padding it.
+
+use { Tag } from "./sub/default_arg_trait_static_lib.wado";
+
+trait Make {
+    fn made(value: i32 = 0) -> i32;
+    fn pair(a: i32, b: i32 = 2) -> i32;
+}
+
+struct Marker {}
+
+impl Make for Marker {
+    fn made(value: i32) -> i32 {
+        return value + 1;
+    }
+
+    fn pair(a: i32, b: i32) -> i32 {
+        return a * b;
+    }
+}
+
+impl Marker {
+    fn twice() -> i32 {
+        return Self::made() + Self::made(4);
+    }
+}
+
+struct Boxed<T> {
+    value: T,
+}
+
+impl Make for Boxed<i32> {
+    fn made(value: i32) -> i32 {
+        return value + 10;
+    }
+
+    fn pair(a: i32, b: i32) -> i32 {
+        return a + b;
+    }
+}
+
+// The trait is declared in another module, and this impl renames the
+// parameter: the default is filled by position, not by name.
+impl Tag for Marker {
+    fn tagged(k: i32) -> i32 {
+        return k * 2;
+    }
+}
+
+test "trait static fills omitted defaults" {
+    assert Marker::tagged() == 6;
+    assert Marker::tagged(5) == 10;
+    assert Marker::made() == 1;
+    assert Marker::made(7) == 8;
+    assert Marker::pair(3) == 6;
+    assert Marker::pair(3, 4) == 12;
+    assert Marker::twice() == 6;
+}
+
+test "trait static on a generic target fills omitted defaults" {
+    assert Boxed::<i32>::made() == 10;
+    assert Boxed::<i32>::pair(1) == 3;
+    assert Boxed::<i32>::pair(1, 5) == 6;
+}

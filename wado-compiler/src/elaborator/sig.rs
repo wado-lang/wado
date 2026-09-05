@@ -114,6 +114,38 @@ impl Signatures {
     pub(crate) fn data_section(&self, module: &ModuleSource) -> Option<&str> {
         self.data_sections.get(module).map(String::as_str)
     }
+
+    /// Give every trait-`impl` method the parameter defaults its trait
+    /// declares. Only the trait may declare one (WEP 2026-04-11), so the impl's
+    /// own signature carries none, and a call site reading that signature —
+    /// every `Type::method()` spelling does — sees each parameter as required.
+    /// Filled here, once every module's declarations are assembled, because the
+    /// trait may be declared in another module than the impl.
+    ///
+    /// By position, not by name: a default is spelled by omitting a trailing
+    /// argument, so position is what a call site fills, and an impl is free to
+    /// rename what it takes.
+    pub(crate) fn inherit_trait_param_defaults(&mut self, defs: &crate::defs::DefTable) {
+        let inherited: Vec<(crate::defs::DefId, Vec<Option<crate::ast::Expr>>)> = self
+            .method_sigs
+            .values()
+            .filter(|sig| !sig.params.is_empty())
+            .filter_map(|sig| {
+                let trait_decl = self.impl_sig(sig.declaring_impl?)?.trait_decl?;
+                let declared = self.trait_sig(trait_decl)?.method(defs.name(sig.def))?;
+                Some((sig.def, Param::defaults(&declared.sig.params)))
+            })
+            .collect();
+        for (def, defaults) in inherited {
+            let sig = self
+                .method_sigs
+                .get_mut(&def)
+                .expect("every key was just read from this map");
+            for (param, default) in sig.params.iter_mut().zip(defaults) {
+                param.default = default;
+            }
+        }
+    }
 }
 
 /// A declaration's parameter and return types, resolved once in its declaring
@@ -185,6 +217,10 @@ pub(crate) struct Param {
 }
 
 impl Param {
+    pub(crate) fn defaults(params: &[Self]) -> Vec<Option<crate::ast::Expr>> {
+        params.iter().map(|p| p.default.clone()).collect()
+    }
+
     pub(crate) fn names(params: &[Self]) -> Vec<String> {
         params.iter().map(|p| p.name.clone()).collect()
     }

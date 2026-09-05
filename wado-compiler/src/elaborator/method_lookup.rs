@@ -1013,7 +1013,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             method_own_params: sig.own_params.clone(),
             impl_module: Some(self.impl_block_module_source(impl_ref)),
             from_concrete_impl: self.impl_is_concrete_instantiation(&header.ty),
-            param_defaults: sig.params.iter().map(|p| p.default.clone()).collect(),
+            param_defaults: super::sig::Param::defaults(&sig.params),
             param_names: super::sig::Param::names(&sig.params),
             consumes_self: sig.self_kind == ast::SelfKind::Value,
             inherent_visibility: Some(method_header.visibility),
@@ -1132,7 +1132,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             method_own_params: sig.own_params.clone(),
             impl_module: None,
             from_concrete_impl: false,
-            param_defaults: sig.params.iter().map(|p| p.default.clone()).collect(),
+            param_defaults: super::sig::Param::defaults(&sig.params),
             param_names: super::sig::Param::names(&sig.params),
             consumes_self: sig.self_kind == ast::SelfKind::Value,
             inherent_visibility: None,
@@ -1925,26 +1925,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             let param_is_mut = crate::elaborator::sig::Param::is_mut_flags(&method_sig.params);
             let param_names = crate::elaborator::sig::Param::names(&method_sig.params);
-            // Parameter defaults live on the trait declaration only (WEP
-            // 2026-04-11). Pull them from the trait's method, keyed by
-            // parameter name, instead of the impl's re-specified params.
-            let trait_name_base = scope.get_type_name(&trait_type_for_name);
-            let param_defaults: Vec<Option<ast::Expr>> = {
-                let trait_method_params = scope
-                    .trait_sig_by_name(&trait_name_base)
-                    .and_then(|sig| sig.method(method_name))
-                    .map(|method| method.sig.params.clone());
-                param_names
-                    .iter()
-                    .map(|name| {
-                        trait_method_params.as_ref().and_then(|tp| {
-                            tp.iter()
-                                .find(|p| &p.name == name)
-                                .and_then(|p| p.default.clone())
-                        })
-                    })
-                    .collect()
-            };
+            // Already the trait's, whichever declaration wrote them: assembly
+            // gives a trait-impl method its trait's defaults (WEP 2026-04-11).
+            let param_defaults = crate::elaborator::sig::Param::defaults(&method_sig.params);
             found_traits.push(TraitMethodMatch {
                 trait_name: scope.tysys.trait_env.fq_trait_named_by_impl(
                     crate::name::FqTraitName::declared(&defs, trait_decl).with_args(
