@@ -1,0 +1,20 @@
+#![TODO]
+// A generic static method reached through a namespace import never resolves:
+// the call is emitted under `<module>/Rec::count` and no instance is generated
+// for it, so lower reports `[WIR] unresolved Call`. The same method reached
+// through a named import (`use { Rec } from …`) works, and so does a free
+// function either way — only the namespaced static-method spelling breaks.
+//
+// Predates tagged templates, and is what stops a tag written as
+// `` ns::Sql::q`…` `` (WEP 2026-01-10).
+
+use lib from "./sub/reflect_pack_static_namespace_import_lib.wado";
+
+struct Pair {
+    a: i32,
+    b: i32,
+}
+
+test "a namespaced static method resolves" {
+    assert lib::Rec::count(&Pair { a: 1, b: 2 }) == 2;
+}

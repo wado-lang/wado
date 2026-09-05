@@ -1,0 +1,106 @@
+//! A query builder as a template tag.
+//!
+//! `sql` receives the template's holes in their own types — never a rendered
+//! string — so each one binds as a parameter while the literal text around
+//! them stays a constant. The bound `..V: ToParam` is what makes a hole of an
+//! unsupported type an error at the call site rather than inside the body.
+//!
+//!     wado run example/sql_tag.wado
+
+use { println, Stdout } from "core:cli";
+
+variant Param {
+    Int(i32),
+    Text(String),
+}
+
+trait ToParam {
+    fn to_param(&self) -> Param;
+}
+
+impl ToParam for i32 {
+    fn to_param(&self) -> Param {
+        return Param::Int(*self);
+    }
+}
+
+impl ToParam for String {
+    fn to_param(&self) -> Param {
+        return Param::Text(*self);
+    }
+}
+
+struct Query {
+    text: String,
+    params: List<Param>,
+}
+
+/// The query with every hole replaced by a `?`, and the holes themselves as
+/// parameters in source order.
+fn sql<T: ReflectTemplate<Holes = [..V]>, ..V: ToParam>(t: T) -> Query {
+    let mut text = "";
+    let mut params: List<Param> = [];
+    for let h of ReflectTemplate::<T>::members() {
+        text.push_str(&h.lit());
+        text.push_str(&"?");
+        params.push(h.get(&t).to_param());
+    }
+    text.push_str(&ReflectTemplate::<T>::tail());
+    return Query { text, params };
+}
+
+struct User {
+    name: String,
+    age: i32,
+}
+
+export fn run() with Stdout {
+    let id = 42;
+    let user = User { name: "Alice", age: 30 };
+    let q = sql`SELECT * FROM users WHERE id = ${id} AND name = ${user.name}`;
+    println(q.text);
+    println(`${q.params:?}`);
+    // A hole is read where it stands, so nothing it named was consumed.
+    println(`still ${user.name} ${id}`);
+
+    let none = sql`SELECT 1`;
+    println(`${none.text} ${none.params.len()}`);
+}
+
+test "a hole becomes a placeholder and a parameter" {
+    let id = 42;
+    let q = sql`SELECT * FROM users WHERE id = ${id}`;
+    assert q.text == "SELECT * FROM users WHERE id = ?";
+    assert q.params == [Param::Int(42)];
+}
+
+test "the holes keep their own types, in source order" {
+    let user = User { name: "Alice", age: 30 };
+    let q = sql`name = ${user.name} AND age = ${user.age}`;
+    assert q.text == "name = ? AND age = ?";
+    assert q.params == [
+        Param::Text("Alice"),
+        Param::Int(30),
+    ];
+}
+
+test "a template with no holes is its own text" {
+    let q = sql`SELECT 1`;
+    assert q.text == "SELECT 1";
+    assert q.params.is_empty();
+}
+
+test "two sites of one shape share the instantiation" {
+    let a = sql`id = ${1}`;
+    let b = sql`id = ${2}`;
+    assert a.text == b.text;
+    assert a.params == [Param::Int(1)];
+    assert b.params == [Param::Int(2)];
+}
+
+test "a hole is still usable after the call" {
+    let name = "Alice";
+    let q = sql`name = ${name}`;
+    assert q.params == [Param::Text("Alice")];
+    assert name == "Alice";
+}

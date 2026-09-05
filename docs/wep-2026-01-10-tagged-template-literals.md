@@ -554,6 +554,11 @@ synthesis and the fold; then the prelude tags and fixtures.
   resolves through a call path that records no dispatch, so reify has nothing
   to rebuild. `T::method` is the one worth opening: it needs that path to
   carry the typed argument and record a dispatch of its own.
+- A tag reached through a namespace import (`` ns::Sql::q`…` ``) or answered by
+  a blanket impl (`` i32::label`…` ``). Neither is a tagged-template gap: the
+  same static method fails the same way when spelled as a call, and both are
+  pinned as `#[TODO]` — `reflect_pack_static_namespace_import_todo.wado` and
+  `reflect_pack_blanket_static_todo.wado`.
 - The monomorphization-time diagnostics the variadic WEP lists — call site,
   element index, body location — are what a failing tag body reports through,
   and are still open there.
