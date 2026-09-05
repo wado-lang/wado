@@ -128,8 +128,13 @@ opt-level = 2
 debug-assertions = false
 overflow-checks = false
 
+# The compiler runs in every test and every `wado` invocation, so `2` buys about
+# a tenth off both. It costs nothing in the edit-test cycle: an incremental
+# rebuild is type-checking and test-binary linking, which measure the same at
+# `1` and `2`. The price is a from-scratch workspace build, about a third
+# slower. That is paid on `cargo clean` and a CI cache miss, never on an edit.
 [profile.dev.package.wado-compiler]
-opt-level = 1
+opt-level = 2
 
 [profile.dev.package.wado-dev-tools]
 opt-level = 1
@@ -165,9 +170,9 @@ debug = 2
 strip = false
 
 # `debugger` is `dev` with the debuginfo `dev` deliberately drops, for stepping
-# under rust-gdb. `dev` sets `debug = "line-tables-only"` and raises the
-# workspace crates to `opt-level = 1` to keep the edit-test cycle fast, which
-# together leave `info locals` / `info args` empty in every compiler frame.
+# under rust-gdb. `dev` sets `debug = "line-tables-only"` and optimizes the
+# workspace crates, which together leave `info locals` / `info args` empty in
+# every compiler frame.
 # This profile restores full DWARF and turns optimization off for the crates
 # being stepped through, at the cost of a slower binary. Build with
 # `cargo build --profile debugger --bin wado`; it lives in its own
