@@ -1,9 +1,8 @@
 // `Type::method` names the type's own method, so an inherent declaration
-// shadows a trait impl's of the same name — the rule dot syntax already
-// follows, and the trait's is named `Trait::method`. Counted as an overload
-// instead, every lookup that must commit to one declaration declined: no
-// signature, no use→def edge, and liveness dropped the callee reify then
-// emitted a call to.
+// shadows a trait impl's of the same name, as dot syntax already resolves it;
+// the trait's is named `Trait::method`. Counted as an overload instead, every
+// lookup that must commit to one declaration declined: no signature, no use→def
+// edge, and liveness dropped the callee reify then emitted a call to.
 //
 // Each declaration below is reached through one spelling only. Calling `q.tag()`
 // beside `Q::tag(&q)` keeps the inherent method alive by another edge and hides

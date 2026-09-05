@@ -695,11 +695,10 @@ pub(crate) struct CalleeParams {
 }
 
 impl CalleeParams {
-    /// The qualified spelling writes the receiver as the first argument, so
-    /// every list leads with an entry for it where the callee declares one:
-    /// spelled at the call site and never omitted, hence no default, and `mut`
-    /// exactly when the method takes `&mut self`. Only that spelling reaches
-    /// here, which is why the receiver is the signature's fact alone.
+    /// The qualified spelling, the only one reaching here, writes the receiver
+    /// as the first argument, so every list leads with an entry for it where
+    /// the callee declares one: never omitted, hence no default, and `mut`
+    /// exactly when the method takes `&mut self`.
     ///
     /// `sig` is `None` for a callee no signature lookup answers — a trait static
     /// on a primitive receiver, say. The lists are empty and a consumer reads

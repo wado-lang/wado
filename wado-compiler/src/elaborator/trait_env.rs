@@ -591,8 +591,7 @@ impl ImplMethodEntry {
 }
 
 /// Every impl block's methods, for O(1) lookup instead of a scan over every
-/// module. It held the receiver-less ones alone until a qualified call to an
-/// instance method was found to have no rung of its own to answer from.
+/// module.
 ///
 /// Keyed by canonical declaration key rather than bare type name, so
 /// `impl Counter { fn make(...) }` in two modules with same-named

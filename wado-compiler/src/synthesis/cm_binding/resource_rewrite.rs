@@ -1662,9 +1662,7 @@ enum BindingTarget {
 }
 
 /// The `core:rt` binding a CM member needs beyond its canonical import: one
-/// that moves a payload, or reads back what the canonical only signals. Which
-/// binding is a compiler decision, so it is listed; the binding names itself,
-/// as `#[compiler_item]` binds it in `rt.wado`.
+/// that moves a payload, or reads back what the canonical only signals.
 fn internal_cm_binding(cm_name: &str) -> Option<crate::compiler_item::CompilerItem> {
     Some(match cm_name {
         "stream-read" => crate::compiler_item::CompilerItem::CmStreamReadU8,
@@ -2099,18 +2097,29 @@ mod cm_binding_tests {
         })
     }
 
-    /// Every `#[cm("…")]` the prelude declares on a Component Model primitive.
-    /// Reading them from the source is what makes the test notice a new one.
+    /// Every `#[cm("…")]` the prelude declares on a resource method — the same
+    /// attribute reader the elaborator records `cm_name` from.
     fn declared_primitives() -> Vec<String> {
         let source = crate::stdlib::all_core_modules()
             .iter()
             .find(|(import, _)| *import == "core:prelude/types.wado")
             .expect("the prelude declares the Component Model primitives")
             .1;
-        source
-            .match_indices("#[cm(\"")
-            .filter_map(|(i, m)| source[i + m.len()..].split('"').next())
-            .map(str::to_string)
+        crate::parse(source)
+            .ast
+            .items
+            .iter()
+            .filter_map(|item| match item {
+                crate::ast::Item::Resource(decl) => Some(&decl.methods),
+                _ => None,
+            })
+            .flatten()
+            .filter_map(|method| {
+                method
+                    .attrs
+                    .iter()
+                    .find_map(crate::ast::Attribute::cm_identifier)
+            })
             .collect()
     }
 

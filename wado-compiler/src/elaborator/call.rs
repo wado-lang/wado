@@ -1326,11 +1326,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         trait_env::ImplTargetKey::of_decl(self.tysys.resolutions.defs(), def)
                     });
                     // One signature answers every list, at the receiver this
-                    // call resolved. Read apart, an instance method's defaults
-                    // came back empty and codegen bound the receiver to the
-                    // first value parameter. Reify replays the `Call` from what
-                    // is recorded below, so an empty list here is a call short
-                    // an argument, or padding left untyped.
+                    // call resolved. Reify replays the `Call` from what is
+                    // recorded below, so an empty list is a call short an
+                    // argument, or padding left untyped.
                     let callee_key = self.static_receiver_key(type_name, ns_key.as_ref());
                     let callee_sig =
                         self.unique_qualified_method_sig_keyed(&callee_key, method_name);
@@ -2714,11 +2712,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// The index entry for the declaration `receiver::method_name` names, for
-    /// the questions the signature alone cannot answer — which module declared
-    /// it, and at what visibility. The spelling's own first answer, never
-    /// whichever entry the name was indexed under first: a trait impl's
-    /// same-named method declares no reach of its own, so reading it skipped
-    /// the check the shadowing inherent one owed.
+    /// the questions the signature alone cannot answer: which module declared
+    /// it, and at what visibility.
     pub(super) fn static_method_entry(
         &self,
         receiver: &super::trait_env::ImplTargetKey,

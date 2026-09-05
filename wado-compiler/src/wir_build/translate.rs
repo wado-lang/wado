@@ -2749,9 +2749,8 @@ impl FunctionTranslator<'_, '_> {
                             vec![self.ctx.type_id_to_wir_type(self.type_table, expr.type_id)]
                         };
                     // The canonical's own result, where the declaring signature
-                    // states none. Typed from the call site alone, the import
-                    // the core module asks for is not the one the component
-                    // provides, and the module fails validation.
+                    // states none: the import must be the one the component
+                    // provides, not the one the call site would ask for.
                     if results.is_empty() && intrinsic.returns_discarded_result() {
                         results.push(WirType::I32);
                     }

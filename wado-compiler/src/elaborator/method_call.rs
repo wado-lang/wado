@@ -2571,10 +2571,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Whether an impl block on `struct_name` itself declares `method_name`, of
-    /// either kind — what decides whether a newtype answers a qualified call or
-    /// its base does, so no newtype fallback here. The spelling names both
-    /// kinds, and asked of the receiver-less ones alone it sent a newtype's own
-    /// instance method to a base that declares nothing of the name.
+    /// either kind, which decides whether a newtype answers a qualified call or
+    /// its base does. No newtype fallback here, for that reason.
     fn declares_method_directly(&self, struct_name: &str, method_name: &str) -> bool {
         self.impl_method_entries(&self.impl_target(struct_name), method_name)
             .next()
@@ -2594,10 +2592,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let method_name = method_ref.method_name.as_str();
         // The declaration the selection picked answers first: an overload's
         // members may return differently, and the pick is what the call's
-        // mangled name was built from. A map of mangled names stood here and
-        // held the current module's methods alone, so an imported callee fell
-        // through to the agreed-return rung, which declines a disagreeing
-        // overload.
+        // mangled name was built from.
         if let Some(sig) = method_ref
             .method_id
             .and_then(|def| self.tysys.signatures.method_sig(def))

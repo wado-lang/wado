@@ -669,8 +669,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
     /// Every declaration `receiver::method_name` can name, in
     /// [`Self::impl_method_entries`]' order. A caller that must choose reads
-    /// them all rather than trusting it: one name over several impls is an
-    /// overload, not a tiebreak.
+    /// them all: one name over several impls is an overload, not a tiebreak.
     pub(super) fn qualified_method_decl_ids(
         &self,
         receiver: &trait_env::ImplTargetKey,
@@ -697,10 +696,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     ///
     /// An inherent declaration shadows a trait impl's *of the same kind*, as
     /// dot syntax resolves it. Only same-kind declarations are alternatives for
-    /// one call: an associated function and a method taking a receiver are
-    /// reached by different argument lists, and shadowing across the two leaves
-    /// the associated function no spelling at all, `Trait::method()` having no
-    /// receiver to infer `Self` from.
+    /// one call: different argument lists reach them.
     pub(in crate::elaborator) fn impl_method_entries(
         &self,
         receiver: &trait_env::ImplTargetKey,

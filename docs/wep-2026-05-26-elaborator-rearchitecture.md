@@ -310,37 +310,29 @@ Every convergence below was forced by a defect where two of them disagreed:
 - Which declarations `Type::method` can name — `qualified_method_decl_ids` for
   the declarations, `qualified_method_sig` for the signature. The spelling admits
   a receiver-less method and an instance one whose receiver the call passes as
-  its first argument, and the index behind it holds both. It held the first kind
-  alone, and every site that ended its ladder there answered for half the
-  spelling: the instance method got no use→def edge, no return type and no
-  instantiation. Liveness dropped the callee reify then emitted a call to. The
-  call site typed as `unknown`. A generic one reached WIR under a name
-  monomorphization never generated. Its `#[cm("…")]` binding went missing. Its
-  parameter facts came back empty, so the arity went unchecked and codegen bound
-  the receiver to the first value parameter. Its declared visibility was never
-  read, so a private method answered from another module. On a type imported by
-  name it did not resolve at all. `ImplMethodEntry::has_self` is the fact those
-  lookups filter on now, in place of an index that omitted them.
+  its first argument, and the index behind it holds both. `ImplMethodEntry` is
+  what an entry holds, and `has_self` is the fact the receiver-less lookups
+  filter on. A site that ends its ladder short of one kind answers for half the
+  spelling, and the halves disagree.
 
   A type head names the type's own method, so an inherent declaration shadows a
-  trait impl's of the same name, as dot syntax already resolved it; the trait's
-  is named `Trait::method`. Counted together they read as an overload, which
-  every lookup that must commit to one declaration declines — no signature, no
-  use→def edge, and the callee dropped from a call WIR still emitted. Shadowing
-  is what leaves at most one declaration that states a reach of its own, so the
-  visibility ladder reads the one the spelling names rather than whichever
-  entry the name was indexed under first. It is one rule, `shadow_trait_impls`,
-  in one walk, `impl_method_entries`, and every lookup over the spelling's
-  declared methods is a projection of it. Applied to one ladder alone, a
-  receiver-less method still answered from the trait impl the signature and the
-  reach were never read off.
+  trait impl's of the same name, as dot syntax already resolves it; the trait's
+  is named `Trait::method`. The shadow is per kind. An associated function and a
+  method taking a receiver are not alternatives for one call, because different
+  argument lists reach them, and shadowing across the two would leave the
+  associated function no spelling at all: `Trait::method()` has no receiver to
+  infer `Self` from. `impl_method_entries` is the one walk that applies the
+  rule, and every lookup over the spelling's declared methods is a projection
+  of it.
 
   The trait-impl selection that mangles the call is a different question and
   keeps its own walk: which trait impl _block_ the argument picks, a block that
   declares no method of the name included — `impl Factory for Wrap<T> {}` still
   answers `Wrap::make()` with the trait's default. A method index cannot hold
   that block, so the selection consults the resolver for the one fact it shares,
-  whether an inherent declaration shadows the name, and declines where one does.
+  whether an inherent associated function shadows the name, and declines where
+  one does. It selects receiver-less methods alone, which is why that is the
+  kind it asks about.
 
 - How many of a callee's parameters a call's arguments cover — the call syntax,
   not the signature. Written qualified, an instance method's receiver is the

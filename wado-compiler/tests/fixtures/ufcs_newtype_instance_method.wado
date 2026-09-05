@@ -1,8 +1,7 @@
-// Whether a newtype answers a qualified call or its base does is whether the
-// newtype's own impl declares the name — either kind. Asked of the
-// receiver-less declarations alone, a newtype's instance method was invisible,
-// the call fell through to the base, and `i32` declares no `tag`: liveness
-// dropped a callee WIR still emitted.
+// A newtype answers a qualified call where its own impl declares the name, of
+// either kind. Asked of the receiver-less declarations alone, a newtype's
+// instance method is invisible and the call falls through to the base, which
+// declares no `tag`: liveness drops a callee WIR still emits.
 
 use { println, Stdout } from "core:cli";
 

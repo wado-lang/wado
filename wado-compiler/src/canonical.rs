@@ -292,10 +292,9 @@ impl CanonicalIntrinsic {
         })
     }
 
-    /// Whether the canonical returns a value the declaring signature discards.
-    /// A cancel answers with the `u32` its copy ended on, and `fn cancel_read(&self)`
-    /// states no result — so the core import's type is the canonical's to give,
-    /// not the call site's, and the caller drops what it does not read.
+    /// Whether the canonical returns a value the declaring signature discards:
+    /// a cancel answers with the `u32` its copy ended on, and
+    /// `fn cancel_read(&self)` states no result. The caller drops it.
     #[must_use]
     pub fn returns_discarded_result(&self) -> bool {
         matches!(
