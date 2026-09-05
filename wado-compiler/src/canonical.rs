@@ -292,6 +292,22 @@ impl CanonicalIntrinsic {
         })
     }
 
+    /// Whether the canonical returns a value the declaring signature discards.
+    /// A cancel answers with the `u32` its copy ended on, and `fn cancel_read(&self)`
+    /// states no result — so the core import's type is the canonical's to give,
+    /// not the call site's, and the caller drops what it does not read.
+    #[must_use]
+    pub fn returns_discarded_result(&self) -> bool {
+        matches!(
+            self,
+            Self::StreamCancelRead(_)
+                | Self::StreamCancelWrite(_)
+                | Self::FutureCancelRead(_)
+                | Self::FutureCancelWrite(_)
+                | Self::SubtaskCancel
+        )
+    }
+
     /// The stream intrinsic a payload-less base name denotes, at `payload`.
     /// The one place a `stream-*` name maps to its variant.
     pub fn stream_op(base: &str, payload: CmStreamPayload) -> Option<Self> {

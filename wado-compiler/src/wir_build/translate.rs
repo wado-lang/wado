@@ -2742,18 +2742,34 @@ impl FunctionTranslator<'_, '_> {
                                 .type_id_to_wir_type(self.type_table, self.operand_type_id(*a))
                         })
                         .collect();
-                    let results =
+                    let mut results =
                         if expr.type_id == TypeTable::UNIT || expr.type_id == TypeTable::NEVER {
                             vec![]
                         } else {
                             vec![self.ctx.type_id_to_wir_type(self.type_table, expr.type_id)]
                         };
+                    // The canonical's own result, where the declaring signature
+                    // states none. Typed from the call site alone, the import
+                    // the core module asks for is not the one the component
+                    // provides, and the module fails validation.
+                    if results.is_empty() && intrinsic.returns_discarded_result() {
+                        results.push(WirType::I32);
+                    }
                     self.ctx
                         .ensure_canonical(intrinsic.clone(), params, results)
                 };
-                WirInstr::Call {
+                let call = WirInstr::Call {
                     func_id,
                     args: translated_args,
+                };
+                if expr.type_id == TypeTable::UNIT
+                    && target
+                        .canonical()
+                        .is_some_and(crate::canonical::CanonicalIntrinsic::returns_discarded_result)
+                {
+                    WirInstr::Drop(Box::new(call))
+                } else {
+                    call
                 }
             }
 
