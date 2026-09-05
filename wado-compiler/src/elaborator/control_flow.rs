@@ -690,10 +690,9 @@ fn any_in_expr<P: AstTreeProbe>(ctx: CtrlFlowCtx<'_>, expr: &ast::Expr, probe: &
         }),
         ast::Expr::TaggedTemplate(t) => {
             any_in_expr(ctx, &t.tag, probe)
-                || t.template.parts.iter().any(|p| match p {
-                    ast::TemplatePart::Interpolation { expr, .. } => any_in_expr(ctx, expr, probe),
-                    ast::TemplatePart::String(_) => false,
-                })
+                || t.template
+                    .interpolations()
+                    .any(|expr| any_in_expr(ctx, expr, probe))
         }
         ast::Expr::WithHandler(wh) => {
             wh.handlers

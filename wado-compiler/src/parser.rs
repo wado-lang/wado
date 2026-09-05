@@ -7617,18 +7617,20 @@ mod tests {
         let Stmt::Let(a) = &body.stmts[0] else {
             panic!("expected a let");
         };
-        let Some(Expr::TaggedTemplate(tagged)) = &a.value else {
-            panic!("expected a tagged template, got {:?}", a.value);
+        let tag_name = |value: &Option<Expr>| {
+            let Some(Expr::TaggedTemplate(tagged)) = value else {
+                panic!("expected a tagged template, got {value:?}");
+            };
+            let Expr::Ident(ident) = &tagged.tag else {
+                panic!("expected a path tag, got {:?}", tagged.tag);
+            };
+            (ident.name.clone(), tagged.template.parts.len())
         };
-        assert_eq!(tagged.tag_ident().name, "sql");
-        assert_eq!(tagged.template.parts.len(), 3);
+        assert_eq!(tag_name(&a.value), ("sql".to_string(), 3));
         let Stmt::Let(b) = &body.stmts[1] else {
             panic!("expected a let");
         };
-        let Some(Expr::TaggedTemplate(tagged)) = &b.value else {
-            panic!("expected a tagged template, got {:?}", b.value);
-        };
-        assert_eq!(tagged.tag_ident().name, "String::raw");
+        assert_eq!(tag_name(&b.value), ("String::raw".to_string(), 1));
     }
 
     /// Whitespace or a comment between the path and the backtick is a gap:

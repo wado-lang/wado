@@ -2344,11 +2344,11 @@ The tag is a function name or a static method path, with no whitespace before
 the backtick. The literal is lexed exactly as an untagged template.
 
 A tag is an ordinary function whose one parameter is bound by `ReflectTemplate`,
-the reflected kind of a template literal. The compiler synthesizes one type per
-template shape — its segments, specifiers and hole types — holding one field
-per hole, a handle for a heap value and the value itself for a scalar; the
-type is anonymous and reached only through the bound. The tag walks the holes
-with tuple `for-of`:
+the reflected kind of a template literal. The compiler synthesizes one anonymous
+type per template shape (its segments, specifiers and hole types), with one
+field per hole: a handle for a heap value, the value itself for a scalar. The
+type is reached only through the bound. The tag walks the holes with tuple
+`for-of`:
 
 ```wado
 fn sql<T: ReflectTemplate<Holes = [..V]>, ..V: ToSqlParam>(t: T) -> SqlQuery {

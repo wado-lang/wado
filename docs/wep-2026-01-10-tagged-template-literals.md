@@ -378,11 +378,12 @@ introduces a mechanism; each item names the existing one it extends.
   the interning key, so two sites of one shape reach one `AnonStructId` through
   `intern_shape`, as struct literals do.
 - The struct's fields are derived from the shape: `h{k}` typed
-  `hole_field_ty(V_k)` — `&V_k` where `V_k` is not a box target, `V_k` where it
-  is. The box-target predicate moves out of `lower::plan::boxing`'s
-  `create_needed_box_types` into one `TypeTable::is_boxed_reference_target`,
-  which the boxing pass then consumes, so the two cannot drift — the single
-  predicate Reference Representation calls for.
+  `hole_field_type(V_k)`, which is `&V_k` where `V_k` is not a box target and
+  `V_k` where it is. The box-target predicate moves out of
+  `lower::plan::boxing`'s `create_needed_box_types` into one
+  `TypeTable::is_boxed_reference_target`, which the boxing pass then consumes,
+  so the two cannot drift. It is the single predicate Reference Representation
+  calls for.
 - `reflect_kind` answers `ReflectTemplate` for a `Struct { def: Anon(shape) }`
   whose shape is a template; `is_sealed_reflect_member` adds the `Hole` handle.
 - `anon_struct_mangle` renders a template shape under a `$tmpl` prefix over the
@@ -409,13 +410,13 @@ introduces a mechanism; each item names the existing one it extends.
 
 ### Parser and AST
 
-- `Expr::TaggedTemplate(Box<TaggedTemplateExpr { id, tag: IdentExpr, template:
-  TemplateStringExpr, span }>)`. A new variant rather than a field on
-  `TemplateStringExpr`: a tagged template is a call, and the arms that treat a
-  template as a string literal — overload classification's `ArgClass::StrLit`,
-  newtype literal coercion — must not see it. Every exhaustive match then names
-  the arm; the visitor walks the tag so hover, references and comment
-  attachment reach it.
+- `Expr::TaggedTemplate(Box<TaggedTemplateExpr { id, tag: Expr, template:
+  TemplateStringExpr, span }>)`, the tag always an `Expr::Ident`. A new variant
+  rather than a field on `TemplateStringExpr`: a tagged template is a call, and
+  the arms that treat a template as a string literal (overload classification's
+  `ArgClass::StrLit`, newtype literal coercion) must not see it. Every
+  exhaustive match then names the arm; the visitor walks the tag so hover,
+  references and comment attachment reach it.
 - `parse_postfix_expr` takes a `TemplateStringLit` arm: the receiver must be
   `Expr::Ident` and `expr.span().end == peek().span.start`. Whitespace and
   comments never reach the token stream, so a byte gap is the adjacency test. A
@@ -452,11 +453,11 @@ the tag's result type:
 
 ### Reify
 
-`reify_tagged_template` emits a labeled block: one `let __h{k}` per `Temp`
-hole in order, then the call the dispatch fact names — the `Call` shape
-`reify_call`'s static-dispatch arm builds, factored to take reified arguments —
-over a `StructLiteral` whose field `k` is the place or temp, borrowed when the
-field type is `&V_k`. The `TirStruct` reaches the module through the pending
+`reify_tagged_template` reifies each hole in order, binding one that is not a
+place to a `let __hole_{n}_{k}` local, and builds the `Call` the dispatch fact
+names over a `StructLiteral` whose field `k` is the place or local, borrowed
+when the field type is `&V_k`. With locals the call sits in a labeled block that
+breaks with its value. The `TirStruct` reaches the module through the pending
 list `reify` already drains.
 
 ### Reflect resolution (`elaborator/reflect.rs`, `solver_bridge.rs`, `trait_query.rs`)
@@ -464,7 +465,7 @@ list `reify` already drains.
 - `ReflectDispatch::Template`, a `TemplateMethods::resolve` reading the method
   names off the registry, and `is_reflect_template_trait_call`, wired into
   `reflect_dispatch_of` and `resolve_static_method_call`.
-- `reflect_template_subject` reads hole types off the shape. The concrete
+- `reflect_template_holes` reads hole types off the shape. The concrete
   resolver types `members()` as `payload_members_ty(ReflectTemplateHole, T,
   holes)` and `tail()` / `raw_tail()` as `String`. The generic resolver, for a
   body written against `T: ReflectTemplate<Holes = [..V]>`, types `members()`
@@ -472,9 +473,9 @@ list `reify` already drains.
   and `emit_missing_pack_bound` spells `Holes = [..V]`.
 - `concrete_reflect_assoc_type` gains the template arm, so a call site projects
   `Holes` and `Members` before synthesis has registered them.
-- `solver_bridge`: `ReflectTemplate` joins `REFLECT`; a template shape lowers
-  under its own `DeclKey::TemplateShape(AnonStructId)` head with no arguments,
-  and `state_reflect_facts` states it visible from every module.
+- `solver_bridge`: `ReflectTemplate` joins `REFLECT`; every template shape
+  lowers under the one `DeclKey::TemplateShape` head with its hole types as
+  the arguments, and `state_reflect_facts` states it visible from every module.
 - `trait_query`: `OnBoundTrait::ReflectTemplate`, `classify_on_bound_trait`,
   and `reflect_members_visible` answering true.
 - The seal list in `orchestration.rs` names `ReflectTemplate`.
@@ -485,20 +486,20 @@ list `reify` already drains.
   `generate_template_reflect_impls` instead of the struct kind. Per shape it
   emits `type_name` and `wire_name_policy` under the root, registers `Holes =
   [V_k]` and `Members = [Hole<T, V_k>]`, and emits `members()` through
-  `generate_reflect_member_tuple_fn` with one `Hole` literal per hole
-  (`lit` cooked through `unescape_template_string`, `raw` verbatim), plus
-  `tail()` and `raw_tail()` returning literals. The impl is recorded into
-  `TraitEnv` like the struct kind's.
+  `generate_template_members_fn` with one `Hole` literal per hole (`lit`
+  cooked through `unescape_template_string`, `raw` verbatim), plus `tail()`
+  and `raw_tail()` returning literals. The impl is recorded into `TraitEnv`
+  like the struct kind's.
 - Two bridges per shape, minted beside `generate_field_bridge_helpers`:
   `$hole_get$<shape>$<V>` (one per erased hole type, `match index` over the
   holes of that type, dereferencing a handle field) and `$hole_fmt$<shape>`
   (`match index`, each arm the interpolation `build_template_block` would emit
   for that hole: `trait_fmt_call` on the hole's value with the `Formatter`
-  `build_formatter_expr` builds over `f.buf`, or `f` itself when the specifier
-  sets no field). `$hole_fmt` is minted inline-always: its index is a constant
-  at every site `Hole::fmt` reaches once `members()` folds, so the splice keeps
-  one arm where a call would keep the whole dispatch, which the threshold
-  refuses.
+  `build_formatter_literal` builds over `f.buf`, or `f` itself when the
+  specifier sets no field). `$hole_fmt` is minted inline-always: its index is
+  a constant at every site `Hole::fmt` reaches once `members()` folds, so the
+  splice keeps one arm where a call would keep the whole dispatch, which the
+  threshold refuses.
 - `lower/translate.rs` folds `builtin::hole_get` / `hole_fmt` calls to the
   bridge names beside its `struct_field_get` arm; `name.rs` owns both names.
 - A template shape is never generic, so `reflect_bridge`'s post-monomorphization

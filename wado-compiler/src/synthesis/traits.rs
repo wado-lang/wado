@@ -1740,32 +1740,31 @@ fn generate_hole_bridge_helpers(
                 )],
                 span,
             );
+            let params = vec![
+                TirParam {
+                    name: "t".to_string(),
+                    type_id: ref_struct_type,
+                    local_index: 0,
+                    is_mut: false,
+                    is_mut_ref: false,
+                    span,
+                },
+                TirParam {
+                    name: "index".to_string(),
+                    type_id: TypeTable::I32,
+                    local_index: 1,
+                    is_mut: false,
+                    is_mut_ref: false,
+                    span,
+                },
+            ];
+            let locals = crate::synthesis::common::locals_from_params(&params);
             make_synthetic_free_function(
                 crate::name::hole_get_helper_name(&mangled_struct, mangled_hole),
-                vec![
-                    TirParam {
-                        name: "t".to_string(),
-                        type_id: ref_struct_type,
-                        local_index: 0,
-                        is_mut: false,
-                        is_mut_ref: false,
-                        span,
-                    },
-                    TirParam {
-                        name: "index".to_string(),
-                        type_id: TypeTable::I32,
-                        local_index: 1,
-                        is_mut: false,
-                        is_mut_ref: false,
-                        span,
-                    },
-                ],
+                params,
                 *hole_type,
                 body,
-                vec![
-                    param_local("t", ref_struct_type, false),
-                    param_local("index", TypeTable::I32, false),
-                ],
+                locals,
             )
         })
         .collect()
@@ -2200,7 +2199,7 @@ fn unreachable_call(result_type: TypeId, span: Span) -> TirExpr {
 
 /// Dispatch `match index { k => <arm(k)>, _ => unreachable() }` over the
 /// cases sharing one payload type.
-fn case_index_dispatch(
+pub(super) fn case_index_dispatch(
     index_expr: TirExpr,
     cases: &[(String, u32)],
     arm_body: impl Fn(&str, u32) -> TirExpr,

@@ -5264,10 +5264,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let unique_id = ctx.next_local;
         let mut stmts: Vec<TirStmt> = Vec::new();
         let mut fields: Vec<TirStructField> = Vec::new();
-        let holes = tagged.template.parts.iter().filter_map(|part| match part {
-            ast::TemplatePart::Interpolation { expr, .. } => Some(expr.as_ref()),
-            ast::TemplatePart::String(_) => None,
-        });
+        let holes = tagged.template.interpolations();
         for (k, (expr, &hole_ty)) in holes.zip(&hole_types).enumerate() {
             let mut value = self.reify_expr(expr, ctx, None);
             if !self.is_place_for_hole(expr, ctx) {

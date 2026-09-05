@@ -1272,18 +1272,6 @@ impl TypeTable {
         }
     }
 
-    /// Whether `id` denotes a tagged template literal's type.
-    #[must_use]
-    pub fn is_template_type(&self, id: TypeId) -> bool {
-        match self.get(id) {
-            ResolvedType::Struct {
-                def: StructDef::Anon(shape),
-                ..
-            } => self.template_shape(*shape).is_some(),
-            _ => false,
-        }
-    }
-
     /// The template shape a type denotes, or `None` where it is not one.
     #[must_use]
     pub fn template_shape_of_type(&self, id: TypeId) -> Option<&TemplateShape> {
@@ -1398,9 +1386,8 @@ impl TypeTable {
                     .collect();
                 format!("__anon_{{{}}}", parts.join(","))
             }
-            // A shape's literal text is arbitrary, so the name is its hash;
-            // the hole types are rendered through `field_type` so two shapes
-            // differing only in a type-parameter spelling still part.
+            // The literal text is arbitrary, so the name is a hash of the
+            // shape, its hole types rendered through `field_type`.
             AnonShape::Template(shape) => {
                 use std::hash::{Hash, Hasher};
                 let mut hasher = std::collections::hash_map::DefaultHasher::new();

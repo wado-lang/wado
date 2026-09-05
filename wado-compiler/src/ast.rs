@@ -838,10 +838,8 @@ pub fn walk_expr<V: AstVisitor>(v: &mut V, expr: &Expr) {
         }
         Expr::TaggedTemplate(t) => {
             v.visit_expr(&t.tag);
-            for part in &t.template.parts {
-                if let TemplatePart::Interpolation { expr, .. } = part {
-                    v.visit_expr(expr);
-                }
+            for expr in t.template.interpolations() {
+                v.visit_expr(expr);
             }
         }
         Expr::Cast(c) => {
@@ -2592,10 +2590,8 @@ impl Expr {
                 }
             }
             Expr::TaggedTemplate(t) => {
-                for part in &mut t.template.parts {
-                    if let TemplatePart::Interpolation { expr, .. } = part {
-                        expr.substitute_idents(subs);
-                    }
+                for expr in t.template.interpolations_mut() {
+                    expr.substitute_idents(subs);
                 }
             }
             Expr::TupleLiteral(t) => {
@@ -3131,26 +3127,31 @@ pub struct TemplateStringExpr {
     pub span: Span,
 }
 
+impl TemplateStringExpr {
+    /// The hole expressions, in source order.
+    pub fn interpolations(&self) -> impl Iterator<Item = &Expr> {
+        self.parts.iter().filter_map(|part| match part {
+            TemplatePart::Interpolation { expr, .. } => Some(expr.as_ref()),
+            TemplatePart::String(_) => None,
+        })
+    }
+
+    pub fn interpolations_mut(&mut self) -> impl Iterator<Item = &mut Expr> {
+        self.parts.iter_mut().filter_map(|part| match part {
+            TemplatePart::Interpolation { expr, .. } => Some(expr.as_mut()),
+            TemplatePart::String(_) => None,
+        })
+    }
+}
+
 /// A tagged template: `` sql`… ${x} …` ``. The tag is the path written
-/// directly before the backtick; the parser admits nothing else there, so it
-/// is always an [`Expr::Ident`].
+/// directly before the backtick; the parser admits only an [`Expr::Ident`].
 #[derive(Debug, Clone)]
 pub struct TaggedTemplateExpr {
     pub id: AstId,
     pub tag: Expr,
     pub template: TemplateStringExpr,
     pub span: Span,
-}
-
-impl TaggedTemplateExpr {
-    /// The tag as the path it is.
-    #[must_use]
-    pub fn tag_ident(&self) -> &IdentExpr {
-        let Expr::Ident(ident) = &self.tag else {
-            unreachable!("the parser admits only a path as a tag")
-        };
-        ident
-    }
 }
 
 /// A part of a template string - either a literal string or an interpolation

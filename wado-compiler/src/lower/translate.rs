@@ -1799,6 +1799,69 @@ impl FunctionTranslator<'_, '_> {
         }
     }
 
+    /// The type args a bridge marker names: the call's own, else the method's,
+    /// else the `impl`'s — at least `arity` of them.
+    fn marker_type_args<'m>(
+        type_args: &'m [tir::TypeId],
+        mi: Option<&'m tir::MonomorphInfo>,
+        arity: usize,
+        marker: &str,
+    ) -> &'m [tir::TypeId] {
+        let ta = if type_args.is_empty() {
+            let mi =
+                mi.unwrap_or_else(|| panic!("{marker} marker without type args or monomorph info"));
+            if mi.method_type_args.is_empty() {
+                &mi.impl_type_args
+            } else {
+                &mi.method_type_args
+            }
+        } else {
+            type_args
+        };
+        assert!(
+            ta.len() >= arity,
+            "{marker} marker expects {arity} type args, got {ta:?}"
+        );
+        ta
+    }
+
+    /// A call of the bridge helper `name`, homed where `head_ty` is declared,
+    /// with a marker's arguments.
+    fn bridge_call(
+        &self,
+        head_ty: tir::TypeId,
+        name: String,
+        args: &[CallArg],
+        marker: &str,
+    ) -> ExprKind {
+        let module_source = self
+            .base
+            .type_table
+            .borrow()
+            .nominal_head(head_ty)
+            .map(|(_, m)| m)
+            .unwrap_or_else(|| panic!("{marker} marker on a type with no declaration"));
+        let nir_func = nir::FunctionRef {
+            module_source,
+            name,
+            monomorph_info: None,
+            method_info: None,
+        };
+        let func_id = self.base.interner.borrow_mut().resolve(&nir_func);
+        ExprKind::Call {
+            func_id,
+            type_args: vec![],
+            args: args
+                .iter()
+                .map(|a| ArenaCallArg {
+                    expr: self.convert_specialized_arg_operand(&a.expr),
+                    is_mut: a.is_mut,
+                })
+                .collect(),
+            has_receiver: false,
+        }
+    }
+
     /// Rewrites the `Case<V, P>` bridge markers (WEP 2026-06-13 §3e):
     /// `builtin::variant_tag` becomes a direct tag read, and
     /// `builtin::variant_case_extract` / `_construct` become calls to the
@@ -1817,7 +1880,7 @@ impl FunctionTranslator<'_, '_> {
             // The `&V` receiver matches the marker's argument, so `discriminant`
             // is the single lowering for the tag read.
             let arg_ty = args[0].expr.type_id;
-            let (helper_name, helper_module) = {
+            let (helper_name, variant_ty) = {
                 let tt = self.base.type_table.borrow();
                 // The marker's `&T` argument may already be lowered to `Box<V>`.
                 let peeled = tt.peel_refs(arg_ty);
@@ -1846,10 +1909,6 @@ impl FunctionTranslator<'_, '_> {
                 // A plain variant carries the tag read as a trait method on its
                 // declaration. A generic one has no instantiated declaration,
                 // so it uses the per-instance helper minted post-monomorphize.
-                let module = tt
-                    .nominal_head(variant_ty)
-                    .map(|(_, m)| m)
-                    .unwrap_or_else(|| panic!("variant_tag marker on a non-variant type"));
                 let items = tt.compiler_items();
                 let name = match tt.get(variant_ty) {
                     tir::ResolvedType::GenericInstance { .. } => {
@@ -1865,136 +1924,42 @@ impl FunctionTranslator<'_, '_> {
                         ),
                     ),
                 };
-                (name, module)
+                (name, variant_ty)
             };
-            let nir_func = nir::FunctionRef {
-                module_source: helper_module,
-                name: helper_name,
-                monomorph_info: None,
-                method_info: None,
-            };
-            let func_id = self.base.interner.borrow_mut().resolve(&nir_func);
-            return Some(ExprKind::Call {
-                func_id,
-                type_args: vec![],
-                args: args
-                    .iter()
-                    .map(|a| ArenaCallArg {
-                        expr: self.convert_specialized_arg_operand(&a.expr),
-                        is_mut: a.is_mut,
-                    })
-                    .collect(),
-                has_receiver: false,
-            });
+            return Some(self.bridge_call(variant_ty, helper_name, args, "variant_tag"));
         }
 
         if matches_builtin(&func.name, mi, "struct_field_get") {
-            let (struct_ty, field_ty) = if type_args.len() == 2 {
-                (type_args[0], type_args[1])
-            } else {
-                let mi = mi.expect("struct_field_get marker without type args or monomorph info");
-                let ta = if mi.method_type_args.len() == 2 {
-                    &mi.method_type_args
-                } else {
-                    &mi.impl_type_args
-                };
-                assert!(
-                    ta.len() == 2,
-                    "struct_field_get marker expects [struct, field] type args, got {ta:?}"
-                );
-                (ta[0], ta[1])
-            };
-
-            let (helper_name, helper_module) = {
+            let ta = Self::marker_type_args(type_args, mi, 2, "struct_field_get");
+            let name = {
                 let tt = self.base.type_table.borrow();
-                let name = crate::name::field_get_helper_name(
-                    &tt.mangle_type_arg_unboxed(struct_ty),
-                    &tt.mangle_type_arg_unboxed(field_ty),
-                );
-                let module = tt
-                    .nominal_head(struct_ty)
-                    .map(|(_, m)| m)
-                    .unwrap_or_else(|| panic!("struct_field_get marker on a non-struct type"));
-                (name, module)
+                crate::name::field_get_helper_name(
+                    &tt.mangle_type_arg_unboxed(ta[0]),
+                    &tt.mangle_type_arg_unboxed(ta[1]),
+                )
             };
-
-            let nir_func = nir::FunctionRef {
-                module_source: helper_module,
-                name: helper_name,
-                monomorph_info: None,
-                method_info: None,
-            };
-            let func_id = self.base.interner.borrow_mut().resolve(&nir_func);
-            return Some(ExprKind::Call {
-                func_id,
-                type_args: vec![],
-                args: args
-                    .iter()
-                    .map(|a| ArenaCallArg {
-                        expr: self.convert_specialized_arg_operand(&a.expr),
-                        is_mut: a.is_mut,
-                    })
-                    .collect(),
-                has_receiver: false,
-            });
+            return Some(self.bridge_call(ta[0], name, args, "struct_field_get"));
         }
 
-        if matches_builtin(&func.name, mi, "hole_get")
-            || matches_builtin(&func.name, mi, "hole_fmt")
-        {
-            let is_get = matches_builtin(&func.name, mi, "hole_get");
-            // `hole_get<T, V>` names both; `hole_fmt<T>` names the shape only.
-            // Either way the marker's own type args come first, and the `Hole`
-            // impl's `[T, V]` stand in when the call carries none.
-            let (shape_ty, hole_ty) = if type_args.is_empty() {
-                let mi = mi.expect("hole marker without type args or monomorph info");
-                let ta = if mi.method_type_args.is_empty() {
-                    &mi.impl_type_args
-                } else {
-                    &mi.method_type_args
-                };
-                assert!(
-                    !ta.is_empty(),
-                    "hole marker expects the shape as its first type arg, got {ta:?}"
-                );
-                (ta[0], ta.get(1).copied())
-            } else {
-                (type_args[0], type_args.get(1).copied())
-            };
-            let (helper_name, helper_module) = {
+        // `hole_get<T, V>` names the shape and the hole type; `hole_fmt<T>`
+        // the shape only.
+        if matches_builtin(&func.name, mi, "hole_get") {
+            let ta = Self::marker_type_args(type_args, mi, 2, "hole_get");
+            let name = {
                 let tt = self.base.type_table.borrow();
-                let shape = tt.mangle_type_arg_unboxed(shape_ty);
-                let name = if is_get {
-                    let hole_ty = hole_ty.expect("hole_get names the hole type");
-                    crate::name::hole_get_helper_name(&shape, &tt.mangle_type_arg_unboxed(hole_ty))
-                } else {
-                    crate::name::hole_fmt_helper_name(&shape)
-                };
-                let module = tt
-                    .nominal_head(shape_ty)
-                    .map(|(_, m)| m)
-                    .unwrap_or_else(|| panic!("hole marker on a non-template type"));
-                (name, module)
+                crate::name::hole_get_helper_name(
+                    &tt.mangle_type_arg_unboxed(ta[0]),
+                    &tt.mangle_type_arg_unboxed(ta[1]),
+                )
             };
-            let nir_func = nir::FunctionRef {
-                module_source: helper_module,
-                name: helper_name,
-                monomorph_info: None,
-                method_info: None,
-            };
-            let func_id = self.base.interner.borrow_mut().resolve(&nir_func);
-            return Some(ExprKind::Call {
-                func_id,
-                type_args: vec![],
-                args: args
-                    .iter()
-                    .map(|a| ArenaCallArg {
-                        expr: self.convert_specialized_arg_operand(&a.expr),
-                        is_mut: a.is_mut,
-                    })
-                    .collect(),
-                has_receiver: false,
-            });
+            return Some(self.bridge_call(ta[0], name, args, "hole_get"));
+        }
+        if matches_builtin(&func.name, mi, "hole_fmt") {
+            let ta = Self::marker_type_args(type_args, mi, 1, "hole_fmt");
+            let name = crate::name::hole_fmt_helper_name(
+                &self.base.type_table.borrow().mangle_type_arg_unboxed(ta[0]),
+            );
+            return Some(self.bridge_call(ta[0], name, args, "hole_fmt"));
         }
 
         let helper_name_for: fn(&str, &str) -> String =
@@ -2006,57 +1971,15 @@ impl FunctionTranslator<'_, '_> {
                 return None;
             };
 
-        let (variant_ty, payload_ty) = if type_args.len() == 2 {
-            (type_args[0], type_args[1])
-        } else {
-            let mi = mi.expect("case bridge marker without type args or monomorph info");
-            let ta = if mi.method_type_args.len() == 2 {
-                &mi.method_type_args
-            } else {
-                &mi.impl_type_args
-            };
-            assert!(
-                ta.len() == 2,
-                "case bridge marker expects [variant, payload] type args, got {ta:?}"
-            );
-            (ta[0], ta[1])
-        };
-
-        let (helper_name, helper_module) = {
+        let ta = Self::marker_type_args(type_args, mi, 2, "case bridge");
+        let name = {
             let tt = self.base.type_table.borrow();
-            let name = helper_name_for(
-                &tt.mangle_type_arg_unboxed(variant_ty),
-                &tt.mangle_type_arg_unboxed(payload_ty),
-            );
-            // An instantiated generic variant stays spelled as a
-            // `GenericInstance`; its bridges are homed in the declaration's
-            // module.
-            let module = tt
-                .nominal_head(variant_ty)
-                .map(|(_, m)| m)
-                .unwrap_or_else(|| panic!("case bridge marker on a non-variant type"));
-            (name, module)
+            helper_name_for(
+                &tt.mangle_type_arg_unboxed(ta[0]),
+                &tt.mangle_type_arg_unboxed(ta[1]),
+            )
         };
-
-        let nir_func = nir::FunctionRef {
-            module_source: helper_module,
-            name: helper_name,
-            monomorph_info: None,
-            method_info: None,
-        };
-        let func_id = self.base.interner.borrow_mut().resolve(&nir_func);
-        Some(ExprKind::Call {
-            func_id,
-            type_args: vec![],
-            args: args
-                .iter()
-                .map(|a| ArenaCallArg {
-                    expr: self.convert_specialized_arg_operand(&a.expr),
-                    is_mut: a.is_mut,
-                })
-                .collect(),
-            has_receiver: false,
-        })
+        Some(self.bridge_call(ta[0], name, args, "case bridge"))
     }
 
     fn convert_pattern(&self, pattern: &TirPattern) -> PatId {

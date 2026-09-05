@@ -235,13 +235,9 @@ fn expr_references_var(expr: &Expr, name: &str) -> bool {
         }),
         Expr::TaggedTemplate(t) => {
             expr_references_var(&t.tag, name)
-                || t.template.parts.iter().any(|part| {
-                    if let crate::ast::TemplatePart::Interpolation { expr, .. } = part {
-                        expr_references_var(expr, name)
-                    } else {
-                        false
-                    }
-                })
+                || t.template
+                    .interpolations()
+                    .any(|expr| expr_references_var(expr, name))
         }
         Expr::TupleLiteral(t) => t.elements.iter().any(|e| expr_references_var(e, name)),
         Expr::TupleComprehension(c) => {
@@ -955,10 +951,8 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
 
             Expr::TaggedTemplate(tagged) => {
                 self.bind_expr(&tagged.tag)?;
-                for part in &tagged.template.parts {
-                    if let crate::ast::TemplatePart::Interpolation { expr, .. } = part {
-                        self.bind_expr(expr)?;
-                    }
+                for expr in tagged.template.interpolations() {
+                    self.bind_expr(expr)?;
                 }
             }
 

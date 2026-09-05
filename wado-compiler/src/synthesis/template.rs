@@ -24,6 +24,7 @@ use crate::elaborator::trait_env::{
 use crate::format_spec::{Align, FormatKind, TemplateFormatSpec};
 use crate::module_source::ModuleSource;
 use crate::name::{FqTypeName, LocalMethodName, RefKind};
+use crate::synthesis::common::{field_access, locals_from_params, make_synthetic_free_function};
 use crate::tir::{
     CallArg, FunctionRef, MonomorphInfo, ResolvedType, TirBlock, TirExpr, TirExprKind, TirLocal,
     TirModule, TirStmt, TirStmtKind, TirStructField, TirTemplatePart, TirUnaryOp, TypeId,
@@ -188,11 +189,7 @@ pub fn synthesize_hole_fmt_helpers(
         trait_env,
         names: &names,
     };
-    let targets: Vec<(
-        TypeId,
-        Vec<(u32, TypeId, TypeId, Option<TemplateFormatSpec>)>,
-        Span,
-    )> = {
+    let targets: Vec<(TypeId, Vec<HoleFmtArm>, Span)> = {
         let table = tt.borrow();
         module
             .structs
@@ -207,12 +204,14 @@ pub fn synthesize_hole_fmt_helpers(
                     .holes
                     .iter()
                     .zip(&s.fields)
-                    .map(|(hole, field)| {
-                        let spec = hole.spec.as_deref().map(|spec| {
+                    .map(|(hole, field)| HoleFmtArm {
+                        field_index: field.index,
+                        field_type: field.type_id,
+                        hole_type: hole.ty,
+                        spec: hole.spec.as_deref().map(|spec| {
                             crate::format_spec::parse(spec)
                                 .expect("the parser rejects a malformed format specifier")
-                        });
-                        (field.index, field.type_id, hole.ty, spec)
+                        }),
                     })
                     .collect();
                 Some((struct_type, holes, s.span))
@@ -230,14 +229,21 @@ pub fn synthesize_hole_fmt_helpers(
     }
 }
 
-/// Build one shape's `$hole_fmt` helper. `t` is local 0, `index` local 1 and
-/// `f` local 2; an arm reads hole `k` off `t`, dereferencing a handle-held
-/// field, and renders it as [`build_template_block`] renders an interpolation
-/// — the specifier's trait method on a `Formatter` over `f`'s buffer, or on
-/// `f` itself when the specifier sets no field.
+/// One arm of a shape's `$hole_fmt` helper: the field holding the hole, as
+/// the struct types it, and the hole's own type and specifier.
+struct HoleFmtArm {
+    field_index: u32,
+    field_type: TypeId,
+    hole_type: TypeId,
+    spec: Option<TemplateFormatSpec>,
+}
+
+/// Build one shape's `$hole_fmt` helper: `t` is local 0, `index` local 1 and
+/// `f` local 2; arm `k` renders hole `k` as [`build_template_block`] renders
+/// an interpolation.
 fn build_hole_fmt_helper(
     struct_type: TypeId,
-    holes: &[(u32, TypeId, TypeId, Option<TemplateFormatSpec>)],
+    holes: &[HoleFmtArm],
     span: Span,
     ctx: &TemplateCtx,
 ) -> crate::tir::TirFunction {
@@ -254,62 +260,59 @@ fn build_hole_fmt_helper(
             table.mangle_type_arg_for_generic(struct_type),
         )
     };
-    let f_local = || {
+    let local = |index: u32, name: &str, type_id: TypeId| {
         TirExpr::new(
             TirExprKind::Local {
-                index: 2,
-                name: "f".to_string(),
+                index,
+                name: name.to_string(),
             },
-            mut_ref_formatter,
+            type_id,
             span,
         )
     };
-    // `f.buf`: the caller's buffer, which a spec-carrying `Formatter` literal
-    // is built over.
+    let f_local = || local(2, "f", mut_ref_formatter);
+    // The caller's buffer, which a spec-carrying `Formatter` literal is built
+    // over.
     let f_buf = || {
-        TirExpr::new(
-            TirExprKind::FieldAccess {
-                expr: Box::new(f_local()),
-                field_index: FormatterField::Buf.index(),
-                field_name: FormatterField::Buf.field_name().to_string(),
-            },
+        field_access(
+            f_local(),
+            FormatterField::Buf.index(),
+            FormatterField::Buf.field_name(),
             mut_ref_string,
             span,
         )
     };
 
-    let mut arms: Vec<crate::tir::TirMatchArm> = holes
+    let cases: Vec<(String, u32)> = holes
         .iter()
-        .map(|(field_index, field_type, hole_type, spec)| {
-            let field = TirExpr::new(
-                TirExprKind::FieldAccess {
-                    expr: Box::new(TirExpr::new(
-                        TirExprKind::Local {
-                            index: 0,
-                            name: "t".to_string(),
-                        },
-                        ref_struct_type,
-                        span,
-                    )),
-                    field_index: *field_index,
-                    field_name: crate::tir::TemplateShape::field_name(*field_index as usize),
-                },
-                *field_type,
+        .map(|hole| {
+            (
+                crate::tir::TemplateShape::field_name(hole.field_index as usize),
+                hole.field_index,
+            )
+        })
+        .collect();
+    let dispatch = crate::synthesis::traits::case_index_dispatch(
+        local(1, "index", TypeTable::I32),
+        &cases,
+        |field_name, index| {
+            let hole = holes
+                .iter()
+                .find(|hole| hole.field_index == index)
+                .expect("every case is a hole");
+            let field = field_access(
+                local(0, "t", ref_struct_type),
+                index,
+                field_name,
+                hole.field_type,
                 span,
             );
-            let value = deref_to_inner(field, *hole_type, span);
-            let kind = spec.as_ref().map_or(FormatKind::Display, |spec| spec.kind);
-            let format_trait = ctx.names.format_trait(spec.as_ref());
-            // As `build_template_block`: the trait renders the referent, except
-            // under `Inspect`, where `&x` renders as `&42` through the ref
-            // blanket and the dispatch type keeps its refs.
-            let (value, dispatch_type) = if kind == FormatKind::Inspect {
-                (value, *hole_type)
-            } else {
-                let inner = strip_refs(*hole_type, ctx.tt);
-                (deref_to_inner(value, inner, span), inner)
-            };
-            let formatter = match spec.as_ref().filter(|s| s.needs_formatter_fields()) {
+            let value = deref_to_inner(field, hole.hole_type, span);
+            let kind = hole
+                .spec
+                .as_ref()
+                .map_or(FormatKind::Display, |spec| spec.kind);
+            let formatter = match hole.spec.as_ref().filter(|s| s.needs_formatter_fields()) {
                 Some(spec) => TirExpr::new(
                     TirExprKind::Unary {
                         op: TirUnaryOp::MutRef,
@@ -328,59 +331,19 @@ fn build_hole_fmt_helper(
                 None => f_local(),
             };
             let stmts = trait_fmt_call(
-                dispatch_type,
+                interpolation_dispatch_type(hole.hole_type, kind, ctx.tt),
                 value,
                 formatter,
                 kind,
-                format_trait,
+                ctx.names.format_trait(hole.spec.as_ref()),
                 span,
                 ctx,
             );
-            crate::tir::TirMatchArm {
-                pattern: crate::tir::TirPattern::Literal(crate::tir::TirLiteralPattern::I128(
-                    i128::from(*field_index),
-                )),
-                guard: None,
-                body: TirExpr::new(
-                    TirExprKind::Block(TirBlock::new(stmts, span)),
-                    TypeTable::UNIT,
-                    span,
-                ),
+            TirExpr::new(
+                TirExprKind::Block(TirBlock::new(stmts, span)),
+                TypeTable::UNIT,
                 span,
-            }
-        })
-        .collect();
-    arms.push(crate::tir::TirMatchArm {
-        pattern: crate::tir::TirPattern::Wildcard,
-        guard: None,
-        body: TirExpr::new(
-            TirExprKind::Call {
-                func: Box::new(FunctionRef {
-                    module_source: ModuleSource::builtin(),
-                    name: "unreachable".to_string(),
-                    monomorph_info: None,
-                    method_info: None,
-                }),
-                type_args: vec![],
-                args: vec![],
-                has_receiver: false,
-            },
-            TypeTable::UNIT,
-            span,
-        ),
-        span,
-    });
-    let dispatch = TirExpr::new(
-        TirExprKind::Match {
-            expr: Box::new(TirExpr::new(
-                TirExprKind::Local {
-                    index: 1,
-                    name: "index".to_string(),
-                },
-                TypeTable::I32,
-                span,
-            )),
-            arms,
+            )
         },
         TypeTable::UNIT,
         span,
@@ -394,20 +357,18 @@ fn build_hole_fmt_helper(
         is_mut_ref: false,
         span,
     };
-    crate::synthesis::common::make_synthetic_free_function(
+    let params = vec![
+        param("t", ref_struct_type, 0),
+        param("index", TypeTable::I32, 1),
+        param("f", mut_ref_formatter, 2),
+    ];
+    let locals = locals_from_params(&params);
+    make_synthetic_free_function(
         crate::name::hole_fmt_helper_name(&mangled_struct),
-        vec![
-            param("t", ref_struct_type, 0),
-            param("index", TypeTable::I32, 1),
-            param("f", mut_ref_formatter, 2),
-        ],
+        params,
         TypeTable::UNIT,
         body,
-        vec![
-            crate::synthesis::common::param_local("t", ref_struct_type, false),
-            crate::synthesis::common::param_local("index", TypeTable::I32, false),
-            crate::synthesis::common::param_local("f", mut_ref_formatter, false),
-        ],
+        locals,
     )
 }
 
@@ -562,9 +523,6 @@ fn build_template_block(
                 expr: resolved,
                 format_spec,
             } => {
-                // Ref level is irrelevant to which trait renders the value —
-                // except under `Inspect`, where `&x` renders as `&42` through
-                // the ref blanket, so the dispatch type keeps its refs.
                 let inner_type = strip_refs(resolved.type_id, tt);
                 let kind = format_spec
                     .as_ref()
@@ -620,12 +578,8 @@ fn build_template_block(
                     mut_ref_formatter,
                     span,
                 );
-                let dispatch_type = match kind {
-                    FormatKind::Inspect => resolved.type_id,
-                    _ => inner_type,
-                };
                 stmts.extend(trait_fmt_call(
-                    dispatch_type,
+                    interpolation_dispatch_type(resolved.type_id, kind, tt),
                     *resolved,
                     fmt_mut_ref,
                     kind,
@@ -893,6 +847,21 @@ fn build_formatter_literal(
 }
 
 /// Strip all `Ref` and `MutRef` wrappers from a type, returning the inner type.
+/// The type an interpolation dispatches its format trait on. Refs are
+/// irrelevant to which trait renders the value, except under `Inspect`, where
+/// `&x` renders as `&42` through the ref blanket.
+fn interpolation_dispatch_type(
+    type_id: TypeId,
+    kind: FormatKind,
+    tt: &Rc<RefCell<TypeTable>>,
+) -> TypeId {
+    if kind == FormatKind::Inspect {
+        type_id
+    } else {
+        strip_refs(type_id, tt)
+    }
+}
+
 fn strip_refs(type_id: TypeId, tt: &Rc<RefCell<TypeTable>>) -> TypeId {
     let mut current = type_id;
     loop {

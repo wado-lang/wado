@@ -1,11 +1,5 @@
-//! Annotation pass for tagged template literals (WEP 2026-01-10).
-//!
-//! A tagged template denotes a call of the tag on the anonymous type its
-//! shape mints. The body walk types the holes, interns the shape, mints the
-//! type on a first sighting, and resolves the tag as a one-argument call whose
-//! argument is that type — so the call's facts land under the template's
-//! `AstId` exactly as a spelled call's would, and reify rebuilds the `Call`
-//! from them.
+//! Annotation of a tagged template literal (WEP 2026-01-10): the tag called
+//! on the anonymous type the template's shape mints.
 
 use crate::ast;
 use crate::compiler_host::CompilerHost;
@@ -88,10 +82,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         sound.then_some(TemplateShape { segments, holes })
     }
 
-    /// Whether `ty` can be a hole of a shape. A shape is a type, so its holes
-    /// must be decided here: not an error (already reported), not an inference
-    /// variable nothing pinned, and not a type parameter — a shape generic
-    /// over the enclosing item's parameters is a known gap of the WEP.
+    /// Whether `ty` can be a hole of a shape: decided, and free of the
+    /// enclosing item's type parameters (a known gap of the WEP).
     fn hole_type_admissible(&mut self, ty: TypeId, span: crate::token::Span) -> bool {
         if ty == TypeTable::ERROR || ty == TypeTable::UNKNOWN {
             return false;
@@ -119,9 +111,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         true
     }
 
-    /// The anonymous type `shape` denotes, minted on the first sighting in this
-    /// module and reached from the interner after. A hole's field holds the
-    /// handle where a reference is one and the value where it would box.
+    /// The anonymous type `shape` denotes, minted on its first sighting in
+    /// this module.
     fn template_type_of(
         &mut self,
         shape: TemplateShape,
