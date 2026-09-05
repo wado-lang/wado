@@ -1,0 +1,17 @@
+// A template's type is minted per shape, so a hole cannot mention the
+// enclosing item's type parameter: the shape would have to be generic over
+// it. A known gap of WEP 2026-01-10, reported at the hole.
+fn tag<T: ReflectTemplate<Holes = [..V]>, ..V>(t: T) -> i32 {
+    return 1;
+}
+
+fn wrap<X>(x: X) -> i32 {
+    return tag`${x}`;
+}
+
+export fn run() {
+    let _ = wrap(1);
+}
+
+__DATA__
+{"compile_error": "a tagged template hole of type `X` mentions a type parameter"}

@@ -8,8 +8,8 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::name::mangle_generic_name;
 use crate::tir::{
-    MonomorphInfo, ResolvedType, TirBlock, TirExpr, TirExprKind, TirField, TirLocal,
-    TirPattern, TirStmt, TirStmtKind, TirStruct, TirStructField, TypeId, TypeTable,
+    MonomorphInfo, ResolvedType, TirBlock, TirExpr, TirExprKind, TirField, TirLocal, TirPattern,
+    TirStmt, TirStmtKind, TirStruct, TirStructField, TypeId, TypeTable,
 };
 use crate::token::Span;
 

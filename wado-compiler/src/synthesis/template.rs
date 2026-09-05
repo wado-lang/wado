@@ -188,7 +188,11 @@ pub fn synthesize_hole_fmt_helpers(
         trait_env,
         names: &names,
     };
-    let targets: Vec<(TypeId, Vec<(u32, TypeId, TypeId, Option<TemplateFormatSpec>)>, Span)> = {
+    let targets: Vec<(
+        TypeId,
+        Vec<(u32, TypeId, TypeId, Option<TemplateFormatSpec>)>,
+        Span,
+    )> = {
         let table = tt.borrow();
         module
             .structs
@@ -296,6 +300,15 @@ fn build_hole_fmt_helper(
             let value = deref_to_inner(field, *hole_type, span);
             let kind = spec.as_ref().map_or(FormatKind::Display, |spec| spec.kind);
             let format_trait = ctx.names.format_trait(spec.as_ref());
+            // As `build_template_block`: the trait renders the referent, except
+            // under `Inspect`, where `&x` renders as `&42` through the ref
+            // blanket and the dispatch type keeps its refs.
+            let (value, dispatch_type) = if kind == FormatKind::Inspect {
+                (value, *hole_type)
+            } else {
+                let inner = strip_refs(*hole_type, ctx.tt);
+                (deref_to_inner(value, inner, span), inner)
+            };
             let formatter = match spec.as_ref().filter(|s| s.needs_formatter_fields()) {
                 Some(spec) => TirExpr::new(
                     TirExprKind::Unary {
@@ -314,7 +327,15 @@ fn build_hole_fmt_helper(
                 ),
                 None => f_local(),
             };
-            let stmts = trait_fmt_call(*hole_type, value, formatter, kind, format_trait, span, ctx);
+            let stmts = trait_fmt_call(
+                dispatch_type,
+                value,
+                formatter,
+                kind,
+                format_trait,
+                span,
+                ctx,
+            );
             crate::tir::TirMatchArm {
                 pattern: crate::tir::TirPattern::Literal(crate::tir::TirLiteralPattern::I128(
                     i128::from(*field_index),

@@ -1465,8 +1465,10 @@ fn generate_template_reflect_impls(
     }
 
     let env = ReflectSynthEnv::resolve(&mut module.type_table.borrow_mut());
-    let (hole_struct_name, hole_struct_def) =
-        resolve_member_struct(&module.type_table.borrow(), CompilerItem::ReflectTemplateHole);
+    let (hole_struct_name, hole_struct_def) = resolve_member_struct(
+        &module.type_table.borrow(),
+        CompilerItem::ReflectTemplateHole,
+    );
     let (members_method, tail_method, raw_tail_method) = {
         let tt = module.type_table.borrow();
         let items = tt.compiler_items();
@@ -1509,7 +1511,12 @@ fn generate_template_reflect_impls(
                     (REFLECT_MEMBERS_ASSOC, members_tuple_type),
                 ],
             );
-            (struct_type, ref_struct_type, member_types, members_tuple_type)
+            (
+                struct_type,
+                ref_struct_type,
+                member_types,
+                members_tuple_type,
+            )
         };
 
         let display_name = module.type_table.borrow().struct_head_decl_name(target.def);
@@ -1690,8 +1697,10 @@ fn generate_hole_bridge_helpers(
     by_hole_type
         .iter()
         .map(|(mangled_hole, (hole_type, group))| {
-            let cases: Vec<(String, u32)> =
-                group.iter().map(|(name, index, _)| (name.clone(), *index)).collect();
+            let cases: Vec<(String, u32)> = group
+                .iter()
+                .map(|(name, index, _)| (name.clone(), *index))
+                .collect();
             let field_type_of = |name: &str| {
                 group
                     .iter()

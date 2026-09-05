@@ -1,0 +1,14 @@
+// `String::raw` is a tag: the segments with their escapes preserved, the
+// holes rendered as the untagged template renders them (WEP 2026-01-10).
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let name = builtin::black_box("cfg");
+    println(String::raw`dir\t${name}.txt\n`);
+    println(String::raw`no holes\t`);
+    assert String::raw`a\nb` == "a\\nb";
+    assert String::raw`a\nb`.len() == 4;
+}
+
+__DATA__
+{"stdout": "dir\\tcfg.txt\\n\nno holes\\t\n"}

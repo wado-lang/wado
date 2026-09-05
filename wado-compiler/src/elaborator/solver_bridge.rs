@@ -1042,7 +1042,11 @@ impl SolverBridge {
         // A literal's fields are all visible, from every module; so are a
         // template's holes.
         state(lowering.anonymous_head(), OnBoundTrait::ReflectStruct, None);
-        state(lowering.template_head(), OnBoundTrait::ReflectTemplate, None);
+        state(
+            lowering.template_head(),
+            OnBoundTrait::ReflectTemplate,
+            None,
+        );
         let of = |kind| move |def: &DefId| (*def, kind);
         let memberless = tysys
             .all_variant_cases

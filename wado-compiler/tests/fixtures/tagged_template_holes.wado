@@ -1,0 +1,49 @@
+// How a hole reaches the tag: a place is read where it stands, any other
+// expression once, in source order, before the tag runs; a handle-typed
+// hole shares its storage and a scalar one carries the value. Two sites of
+// one shape instantiate the tag once (WEP 2026-01-10).
+use { println, Stdout } from "core:cli";
+
+global mut ORDER: i32 = 0;
+
+fn mark(step: i32, value: String) -> String {
+    ORDER = ORDER * 10 + step;
+    return value;
+}
+
+fn count<T: ReflectTemplate<Holes = [..V]>, ..V: Display>(t: T) -> String {
+    let mut out = "";
+    let mut n = 0;
+    for let h of ReflectTemplate::<T>::members() {
+        h.fmt(&t, &mut Formatter::new(&mut out));
+        out.push_str(&"|");
+        n += 1;
+    }
+    return `${n}:${out}`;
+}
+
+struct Box {
+    label: String,
+    n: i32,
+}
+
+export fn run() with Stdout {
+    let s = builtin::black_box("shared");
+    let mut m = builtin::black_box(1);
+    let b = Box { label: "boxed", n: 7 };
+    // Holes evaluated left to right, once each, before the tag.
+    println(count`${mark(1, "a")} ${mark(2, "b")} ${s}`);
+    println(`order=${ORDER}`);
+    // A scalar hole holds the value the site read; the local is untouched.
+    let before = count`${m}`;
+    m += 1;
+    println(`${before} then ${m}`);
+    // Field chains are places too.
+    println(count`${b.label}${b.n}`);
+    // The same shape twice: one instantiation of `count` serves both.
+    println(count`${m} ${s}`);
+    println(count`${m} ${s}`);
+}
+
+__DATA__
+{"stdout": "3:a|b|shared|\norder=12\n1:1| then 2\n2:boxed|7|\n2:2|shared|\n2:2|shared|\n"}

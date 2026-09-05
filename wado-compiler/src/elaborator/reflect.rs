@@ -1103,8 +1103,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .borrow()
             .nominal_head(self_ty)
             .expect("a template shape is a struct and names its head");
-        let func_ref =
-            self.reflect_func_ref(self_ty, &base_name, &[], &trait_name, &method, module_source);
+        let func_ref = self.reflect_func_ref(
+            self_ty,
+            &base_name,
+            &[],
+            &trait_name,
+            &method,
+            module_source,
+        );
         self.record_reflect_dispatch(static_call.id, func_ref, Vec::new());
 
         return_type

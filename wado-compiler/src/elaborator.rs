@@ -71,10 +71,10 @@ pub(crate) fn build_func_index(items: &[Item]) -> IndexMap<String, usize> {
 }
 
 pub use types::TypeError;
-pub(crate) use util::unescape_template_string;
 use types::{
     EnumInfo, FlagsInfo, GenericNewtypeInfo, ResourceInfo, StructFieldInfo, TypeLookup, VariantInfo,
 };
+pub(crate) use util::unescape_template_string;
 
 pub struct Elaborator<'a, H: CompilerHost> {
     /// Pipeline-wide type knowledge: type arena, decl-interned type

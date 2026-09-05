@@ -1,0 +1,59 @@
+// A state carried across holes: `html` escapes each hole for the context the
+// literal text before it opened, an attribute or text, which is a local the
+// unrolled walk threads from hole to hole (WEP 2026-01-10).
+use { println, Stdout } from "core:cli";
+
+enum Context {
+    Text,
+    Attr,
+}
+
+fn advance(ctx: Context, lit: &String) -> Context {
+    let mut current = ctx;
+    for let c of lit.chars() {
+        if c == '"' {
+            current = match current {
+                Context::Text => Context::Attr,
+                Context::Attr => Context::Text,
+            };
+        }
+    }
+    return current;
+}
+
+fn escape(ctx: Context, value: &String, out: &mut String) {
+    for let c of value.chars() {
+        match c {
+            '<' => out.push_str(&"&lt;"),
+            '&' => out.push_str(&"&amp;"),
+            '"' => match ctx {
+                Context::Attr => out.push_str(&"&quot;"),
+                Context::Text => out.push(c),
+            },
+            _ => out.push(c),
+        }
+    }
+}
+
+fn html<T: ReflectTemplate<Holes = [..V]>, ..V: Display>(t: T) -> String {
+    let mut out = "";
+    let mut ctx = Context::Text;
+    for let h of ReflectTemplate::<T>::members() {
+        out.push_str(&h.lit());
+        ctx = advance(ctx, &h.lit());
+        let mut rendered = "";
+        h.fmt(&t, &mut Formatter::new(&mut rendered));
+        escape(ctx, &rendered, &mut out);
+    }
+    out.push_str(&ReflectTemplate::<T>::tail());
+    return out;
+}
+
+export fn run() with Stdout {
+    let title = builtin::black_box("say \"hi\" & <bye>");
+    let n = builtin::black_box(3);
+    println(html`<a title="${title}">${title} x${n}</a>`);
+}
+
+__DATA__
+{"stdout": "<a title=\"say &quot;hi&quot; &amp; &lt;bye>\">say \"hi\" &amp; &lt;bye> x3</a>\n"}

@@ -1939,15 +1939,14 @@ impl FunctionTranslator<'_, '_> {
             });
         }
 
-        if matches_builtin(&func.name, mi, "hole_get") || matches_builtin(&func.name, mi, "hole_fmt")
+        if matches_builtin(&func.name, mi, "hole_get")
+            || matches_builtin(&func.name, mi, "hole_fmt")
         {
             let is_get = matches_builtin(&func.name, mi, "hole_get");
             // `hole_get<T, V>` names both; `hole_fmt<T>` names the shape only.
             // Either way the marker's own type args come first, and the `Hole`
             // impl's `[T, V]` stand in when the call carries none.
-            let (shape_ty, hole_ty) = if !type_args.is_empty() {
-                (type_args[0], type_args.get(1).copied())
-            } else {
+            let (shape_ty, hole_ty) = if type_args.is_empty() {
                 let mi = mi.expect("hole marker without type args or monomorph info");
                 let ta = if mi.method_type_args.is_empty() {
                     &mi.impl_type_args
@@ -1959,6 +1958,8 @@ impl FunctionTranslator<'_, '_> {
                     "hole marker expects the shape as its first type arg, got {ta:?}"
                 );
                 (ta[0], ta.get(1).copied())
+            } else {
+                (type_args[0], type_args.get(1).copied())
             };
             let (helper_name, helper_module) = {
                 let tt = self.base.type_table.borrow();

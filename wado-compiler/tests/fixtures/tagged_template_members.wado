@@ -1,0 +1,43 @@
+// Every constant a hole handle answers: the segment before it cooked and raw,
+// the tail both ways, the hole's source text, its index, and whether it wrote
+// a specifier. `fmt` renders through the specifier as the untagged template
+// would, and a tag needs no bound to call it (WEP 2026-01-10).
+use { println, Stdout } from "core:cli";
+
+fn describe<T: ReflectTemplate<Holes = [..V]>, ..V>(t: T) -> String {
+    let mut out = "";
+    for let h of ReflectTemplate::<T>::members() {
+        out.push_str(&`[${h.index()} lit=${h.lit():?} raw=${h.raw():?} src=${h.source()} spec=${h.has_spec()} value=`);
+        h.fmt(&t, &mut Formatter::new(&mut out));
+        out.push_str(&"]");
+    }
+    out.push_str(&`[tail=${ReflectTemplate::<T>::tail():?} raw=${ReflectTemplate::<T>::raw_tail():?}]`);
+    return out;
+}
+
+fn raw<T: ReflectTemplate<Holes = [..V]>, ..V>(t: T) -> String {
+    let mut out = "";
+    for let h of ReflectTemplate::<T>::members() {
+        out.push_str(&h.raw());
+        h.fmt(&t, &mut Formatter::new(&mut out));
+    }
+    out.push_str(&ReflectTemplate::<T>::raw_tail());
+    return out;
+}
+
+struct Pt {
+    x: i32,
+    y: i32,
+}
+
+export fn run() with Stdout {
+    let pi = builtin::black_box(3.14159);
+    let n = builtin::black_box(255);
+    let p = Pt { x: 1, y: 2 };
+    println(describe`a\t${pi:.2}b\n${n:#x}c${p:?}`);
+    println(raw`x\t${n}\n`);
+    println(describe`no holes\n`);
+}
+
+__DATA__
+{"stdout": "[0 lit=\"a\\t\" raw=\"a\\\\t\" src=pi spec=true value=3.14][1 lit=\"b\\n\" raw=\"b\\\\n\" src=n spec=true value=0xff][2 lit=\"c\" raw=\"c\" src=p spec=true value=Pt { x: 1, y: 2 }][tail=\"\" raw=\"\"]\nx\\t255\\n\n[tail=\"no holes\\n\" raw=\"no holes\\\\n\"]\n"}

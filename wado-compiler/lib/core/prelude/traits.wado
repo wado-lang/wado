@@ -424,6 +424,19 @@ impl<T, V> Hole<T, V> {
     }
 }
 
+/// The tag an untagged template means: every hole rendered through its
+/// specifier into one buffer. `` format`x=${x}` `` is `` `x=${x}` ``.
+/// See WEP 2026-01-10.
+pub fn format<T: ReflectTemplate<Holes = [..V]>, ..V>(t: T) -> String {
+    let mut out = "";
+    for let h of ReflectTemplate::<T>::members() {
+        out.push_str(&h.lit());
+        h.fmt(&t, &mut Formatter::new(&mut out));
+    }
+    out.push_str(&ReflectTemplate::<T>::tail());
+    return out;
+}
+
 /// A field handle minted by `ReflectStruct::members()`: the field type `F` is
 /// static, and `get` reads the field's value out of a struct. See WEP 2026-06-13.
 #[compiler_item("struct_field")]

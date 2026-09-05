@@ -837,6 +837,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let holes = turbofish_holes(&call.type_args);
                     merge_turbofish_type_args(&mut method_type_args, &holes, &method_args);
                 }
+                // A method-level parameter bound only through another's
+                // associated type (`..V` off `Holes`) is projected once the
+                // owner is inferred, as the free-function path does; the
+                // bound check below then sees it concrete.
+                if !method_type_args.is_empty() {
+                    let mtype_params = self.lookup_static_method_type_params(prefix, suffix);
+                    self.project_assoc_bound_args(&mtype_params, &mut method_type_args);
+                }
                 // Record `[impl_args, method_args]` — the same order
                 // `lookup_static_method_param_types` substitutes in — since reify
                 // needs both halves to rebuild the mangled `__<Type>__<method>`.
@@ -2216,6 +2224,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .into_iter()
             .filter(super::super::ast::GenericParam::is_real_type_param)
             .collect();
+        self.project_assoc_bound_args(&params, type_args);
+    }
+
+    /// [`Self::infer_type_args_from_assoc_bounds`] over a declared parameter
+    /// list, for a static method (`String::raw<T: ReflectTemplate<Holes =
+    /// [..V]>, ..V>`), whose params come from its impl rather than a callee.
+    pub(super) fn project_assoc_bound_args(
+        &mut self,
+        params: &[ast::GenericParam],
+        type_args: &mut Vec<TypeId>,
+    ) {
         // A turbofish naming only the non-pack params (`parse::<Perms>()`,
         // where the subject appears solely in the return type) leaves the
         // trailing pack slot absent. Seed it with its declared, still-unbound
@@ -2231,7 +2250,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             };
             type_args.push(declared);
         }
-        self.resolve_assoc_bound_args(&params, type_args);
+        self.resolve_assoc_bound_args(params, type_args);
     }
 
     /// Report "cannot infer type parameter" at the call site rather than letting

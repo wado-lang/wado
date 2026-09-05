@@ -1,0 +1,30 @@
+// A pack bound on a free function's parameter projected from an associated
+// type — `..F` off `FieldTypes` — is enforced once the projection makes it
+// concrete. Regression: the bound check ran before the projection, saw a
+// still-parametric pack, and never asked again, so any struct satisfied
+// `..F: Marker`.
+trait Marker {
+    fn m(&self) -> i32;
+}
+
+impl Marker for i32 {
+    fn m(&self) -> i32 {
+        return *self;
+    }
+}
+
+fn walk<T: ReflectStruct<FieldTypes = [..F]>, ..F: Marker>(t: T) -> i32 {
+    return 1;
+}
+
+struct S {
+    a: i32,
+    b: String,
+}
+
+export fn run() {
+    let _ = walk(S { a: 1, b: "x" });
+}
+
+__DATA__
+{"compile_error": "type 'String' does not implement trait 'Marker' required by bound on 'F'"}

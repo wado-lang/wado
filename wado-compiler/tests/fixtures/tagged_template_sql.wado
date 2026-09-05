@@ -1,0 +1,65 @@
+// A tag receives the template's holes in their own types: `sql` binds each as
+// a parameter through a `ToParam` pack bound, and the literal text around
+// them as constants. The holes are read where they stand — `id` and
+// `user.name` are still usable after the call (WEP 2026-01-10).
+use { println, Stdout } from "core:cli";
+
+variant Param {
+    Int(i32),
+    Text(String),
+}
+
+trait ToParam {
+    fn to_param(&self) -> Param;
+}
+
+impl ToParam for i32 {
+    fn to_param(&self) -> Param {
+        return Param::Int(*self);
+    }
+}
+
+impl ToParam for String {
+    fn to_param(&self) -> Param {
+        return Param::Text(*self);
+    }
+}
+
+struct Query {
+    text: String,
+    params: List<Param>,
+}
+
+fn sql<T: ReflectTemplate<Holes = [..V]>, ..V: ToParam>(t: T) -> Query {
+    let mut text = "";
+    let mut params: List<Param> = [];
+    for let h of ReflectTemplate::<T>::members() {
+        text.push_str(&h.lit());
+        text.push_str(&"?");
+        params.push(h.get(&t).to_param());
+    }
+    text.push_str(&ReflectTemplate::<T>::tail());
+    return Query { text, params };
+}
+
+struct User {
+    name: String,
+    age: i32,
+}
+
+export fn run() with Stdout {
+    let id = builtin::black_box(42);
+    let user = User { name: builtin::black_box("Alice"), age: 30 };
+    let q = sql`SELECT * FROM users WHERE id = ${id} AND name = ${user.name}`;
+    println(q.text);
+    println(`${q.params:?}`);
+    println(`still ${user.name} ${id}`);
+    let none = sql`SELECT 1`;
+    println(`${none.text} ${none.params.len()}`);
+}
+
+__DATA__
+{
+    "stdout": "SELECT * FROM users WHERE id = ? AND name = ?\n[Param::Int(42), Param::Text(\"Alice\")]\nstill Alice 42\nSELECT 1 0\n",
+    "wir_not_expect:O2": ["$hole_get", "$hole_fmt", "members"]
+}

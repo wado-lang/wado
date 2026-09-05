@@ -375,6 +375,17 @@ impl TemplateShape {
     }
 }
 
+/// An interned shape with the mangle it was minted under. The mangle renders
+/// the shape's field types, and erasure later redirects a newtype among them
+/// to its base: rendering again would spell a different name from the one the
+/// `TirStruct` was registered under, so the name is fixed at interning.
+#[derive(Debug, Clone)]
+struct AnonEntry {
+    module: ModuleSource,
+    shape: AnonShape,
+    mangle: String,
+}
+
 /// What a struct type's head is.
 ///
 /// A struct literal with no type name has no declaration and no node to
@@ -812,7 +823,7 @@ pub struct TypeTable {
     /// terms; unit cases use `TypeTable::UNIT`.
     variant_case_index: IndexMap<crate::defs::DefId, Vec<(String, u32, TypeId)>>,
     /// Every struct shape the compiler minted, by [`AnonStructId`].
-    anon_structs: Vec<(ModuleSource, AnonShape)>,
+    anon_structs: Vec<AnonEntry>,
     /// Dedup for the above: the same shape in the same module is one id.
     anon_struct_index: IndexMap<(ModuleSource, AnonShape), AnonStructId>,
     /// `(WIT name, generated module)` of each type declaration, for
@@ -1255,7 +1266,7 @@ impl TypeTable {
     /// literal's or a synthetic one.
     #[must_use]
     pub fn template_shape(&self, id: AnonStructId) -> Option<&TemplateShape> {
-        match &self.anon_structs[id.0 as usize].1 {
+        match &self.anon_structs[id.0 as usize].shape {
             AnonShape::Template(shape) => Some(shape),
             AnonShape::Fields(_) | AnonShape::Synthetic(_) => None,
         }
@@ -1305,9 +1316,9 @@ impl TypeTable {
     pub fn is_boxed_reference_target(&self, ty: TypeId) -> bool {
         match self.get(ty) {
             ResolvedType::Primitive(p) => !matches!(p, PrimitiveType::I128 | PrimitiveType::U128),
-            ResolvedType::Enum { .. } | ResolvedType::Variant { .. } | ResolvedType::Function { .. } => {
-                true
-            }
+            ResolvedType::Enum { .. }
+            | ResolvedType::Variant { .. }
+            | ResolvedType::Function { .. } => true,
             ResolvedType::GenericInstance { def, .. } => self.find_variant_type(*def).is_some(),
             _ => false,
         }
@@ -1319,7 +1330,12 @@ impl TypeTable {
             return id;
         }
         let id = AnonStructId(u32::try_from(self.anon_structs.len()).expect("anon struct space"));
-        self.anon_structs.push(key.clone());
+        let mangle = self.render_shape(&key.1, &|tt, ty| tt.mangle_type_arg_for_generic(ty));
+        self.anon_structs.push(AnonEntry {
+            module: key.0.clone(),
+            shape: key.1.clone(),
+            mangle,
+        });
         self.anon_struct_index.insert(key, id);
         id
     }
@@ -1327,7 +1343,7 @@ impl TypeTable {
     /// The fields of an anonymous struct shape; empty for a synthetic one.
     #[must_use]
     pub fn anon_struct_fields(&self, id: AnonStructId) -> &[(String, TypeId)] {
-        match &self.anon_structs[id.0 as usize].1 {
+        match &self.anon_structs[id.0 as usize].shape {
             AnonShape::Fields(fields) => fields,
             AnonShape::Synthetic(_) | AnonShape::Template(_) => &[],
         }
@@ -1337,13 +1353,16 @@ impl TypeTable {
     /// wrote it and no field walk reads it.
     #[must_use]
     pub fn anon_struct_is_synthetic(&self, id: AnonStructId) -> bool {
-        matches!(self.anon_structs[id.0 as usize].1, AnonShape::Synthetic(_))
+        matches!(
+            self.anon_structs[id.0 as usize].shape,
+            AnonShape::Synthetic(_)
+        )
     }
 
     /// The module the shape was written in.
     #[must_use]
     pub fn anon_struct_module(&self, id: AnonStructId) -> &ModuleSource {
-        &self.anon_structs[id.0 as usize].0
+        &self.anon_structs[id.0 as usize].module
     }
 
     /// The spelling an anonymous struct shows a reader —
@@ -1351,23 +1370,26 @@ impl TypeTable {
     /// [`Self::anon_struct_mangle`] is what a key is built from.
     #[must_use]
     pub fn anon_struct_name(&self, id: AnonStructId) -> String {
-        self.render_anon_struct(id, &|tt, ty| tt.type_name(ty))
+        self.render_shape(&self.anon_structs[id.0 as usize].shape, &|tt, ty| {
+            tt.type_name(ty)
+        })
     }
 
     /// [`Self::anon_struct_name`] in the mangled namespace: every field type is
     /// module-qualified. A shape has no declaration, so its rendering *is* its
     /// identity, and an unqualified one collapses two shapes onto one helper.
+    /// Fixed when the shape is interned (see [`AnonEntry`]).
     #[must_use]
     pub fn anon_struct_mangle(&self, id: AnonStructId) -> String {
-        self.render_anon_struct(id, &|tt, ty| tt.mangle_type_arg_for_generic(ty))
+        self.anon_structs[id.0 as usize].mangle.clone()
     }
 
-    fn render_anon_struct(
+    fn render_shape(
         &self,
-        id: AnonStructId,
+        shape: &AnonShape,
         field_type: &dyn Fn(&Self, TypeId) -> String,
     ) -> String {
-        match &self.anon_structs[id.0 as usize].1 {
+        match shape {
             AnonShape::Synthetic(name) => name.clone(),
             AnonShape::Fields(fields) => {
                 let parts: Vec<String> = fields
@@ -1388,7 +1410,11 @@ impl TypeTable {
                     hole.spec.hash(&mut hasher);
                     hole.source.hash(&mut hasher);
                 }
-                format!("{}{:016x}", crate::name::TEMPLATE_SHAPE_PREFIX, hasher.finish())
+                format!(
+                    "{}{:016x}",
+                    crate::name::TEMPLATE_SHAPE_PREFIX,
+                    hasher.finish()
+                )
             }
         }
     }

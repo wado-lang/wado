@@ -122,7 +122,7 @@ fn class_of_capture(capture: &str) -> Class {
         "type" => Class::Type,
         "property" => Class::Property,
         "function.method" => Class::Method,
-        "variable" => Class::Name,
+        "function" | "variable" => Class::Name,
         other => panic!(
             "the highlight query emits capture '{other}', which this comparison has no class for"
         ),

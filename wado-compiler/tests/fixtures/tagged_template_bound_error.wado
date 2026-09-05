@@ -1,0 +1,23 @@
+// `..V: Marker` binds every hole type: a hole whose type lacks the impl is a
+// bound error at the site, naming the type (WEP 2026-01-10).
+trait Marker {
+    fn m(&self) -> i32;
+}
+
+impl Marker for i32 {
+    fn m(&self) -> i32 {
+        return *self;
+    }
+}
+
+fn tag<T: ReflectTemplate<Holes = [..V]>, ..V: Marker>(t: T) -> i32 {
+    return 1;
+}
+
+export fn run() {
+    let s = "x";
+    let _ = tag`${1} ${s}`;
+}
+
+__DATA__
+{"compile_error": "type 'String' does not implement trait 'Marker' required by bound on 'V'"}

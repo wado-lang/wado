@@ -151,7 +151,10 @@ reads `has_spec()`.
 The literal segments are the same string in two spellings; both are constants,
 and the one a tag never reads is dead code. That is the whole cooked-versus-raw
 mechanism: no mode, no marker type, and no inspection of the tag's signature.
-`String::raw` is a tag that reads `raw()` and `raw_tail()`.
+`String::raw` is a tag that reads `raw()` and `raw_tail()`. A raw segment is
+still a template segment, so it spells only the escapes the language has:
+`` String::raw`a\nb` `` is `a\nb` as written, and `\p` is the error it is in
+any template.
 
 ### Desugaring
 
@@ -352,7 +355,10 @@ solved better. Kept as an optimization opportunity, dropped as a promise.
 - Type checking of the walk body is at monomorphization, as it is for every
   pack walk. A pack bound (`..V: Trait`) makes the common failure a bound
   error at the call site; a failure inside the body needs the call-site,
-  element and body locations the variadic WEP already asks for.
+  element and body locations the variadic WEP already asks for. Enforcing
+  that bound closed a gap every projected pack had: the bound check ran
+  before the projection made the pack concrete and never asked again, so
+  `..F: Trait` off `FieldTypes` held for any struct.
 - The binary grows by one tag instantiation per template shape, as it would by
   inlining a builder at each site.
 
@@ -380,7 +386,11 @@ introduces a mechanism; each item names the existing one it extends.
 - `reflect_kind` answers `ReflectTemplate` for a `Struct { def: Anon(shape) }`
   whose shape is a template; `is_sealed_reflect_member` adds the `Hole` handle.
 - `anon_struct_mangle` renders a template shape under a `$tmpl` prefix over the
-  shape's hash, the spelling `Reflect::type_name()` then answers.
+  shape's hash, the spelling `Reflect::type_name()` then answers. The mangle is
+  fixed when the shape is interned: it renders the hole types, and erasure
+  later redirects a newtype among them to its base, so a second rendering
+  would name a struct WIR never registered — the same failure a struct literal
+  with a newtype field had.
 
 ### Prelude (`lib/core/prelude/traits.wado`, `lib/core/builtin.wado`)
 
@@ -429,16 +439,14 @@ the tag's result type:
    the `TirStruct` onto `pending_anonymous_structs` — the minting
    `resolve_anonymous_struct_literal` does, factored into one helper both call.
 3. Resolve the tag as a one-argument call whose argument type is known and has
-   no AST. `resolve_call` resolves arguments from the AST, so the tail it runs
-   after arguments are typed — signature lookup, instantiation, unification of
-   the parameter against the argument type, `infer_type_args_from_assoc_bounds`
-   (which is what projects `..V` from `Holes`), `check_function_type_arg_bounds`,
-   and the `StaticMethodDispatch` fact — is factored out and shared. A tag with
-   any other arity, or one that is not a function, is a diagnostic at the tag.
-4. Record `TaggedTemplateFacts { template_ty, holes: [HoleBinding] }`, each hole
-   `Place` (an identifier bound to a local, parameter or global, or a field
-   chain rooted at one) or `Temp`.
-5. Record the tag identifier's use→def edge.
+   no AST: `resolve_call_with_args` is `resolve_call` over arguments already
+   typed, keyed by the template's `AstId`, so signature lookup, instantiation,
+   the projection of `..V` from `Holes`, the bound check and the
+   `StaticMethodDispatch` fact are the ones a spelled call records. A tag of
+   any other arity, or one that is not a function, is that path's diagnostic.
+4. Record the template type under the template's `AstId`
+   (`tagged_templates`); place-ness is reify's to read off the AST.
+5. The tag identifier's use→def edge falls out of the call resolution.
 
 ### Reify
 
@@ -485,7 +493,10 @@ list `reify` already drains.
   (`match index`, each arm the interpolation `build_template_block` would emit
   for that hole: `trait_fmt_call` on the hole's value with the `Formatter`
   `build_formatter_expr` builds over `f.buf`, or `f` itself when the specifier
-  sets no field). Those two builders widen to `pub(super)`.
+  sets no field). `$hole_fmt` is minted inline-always: its index is a constant
+  at every site `Hole::fmt` reaches once `members()` folds, so the splice keeps
+  one arm where a call would keep the whole dispatch, which the threshold
+  refuses.
 - `lower/translate.rs` folds `builtin::hole_get` / `hole_fmt` calls to the
   bridge names beside its `struct_field_get` arm; `name.rs` owns both names.
 - A template shape is never generic, so `reflect_bridge`'s post-monomorphization

@@ -27,7 +27,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
 
         let template_ty = self.template_type_of(shape, tagged.id, tagged.span);
-        self.sem.types.tagged_templates.insert(tagged.id, template_ty);
+        self.sem
+            .types
+            .tagged_templates
+            .insert(tagged.id, template_ty);
 
         let call = ast::CallExpr {
             id: tagged.id,

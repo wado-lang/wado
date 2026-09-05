@@ -1,0 +1,17 @@
+// An anonymous struct's name renders its field types, and a newtype field is
+// redirected to its base when newtypes are erased before lowering. The name
+// is fixed when the shape is interned, so WIR finds the struct registered
+// under it. Regression: rendering again after erasure spelled `{v:f64}` for
+// a struct registered as `{v:Meters}`, and WIR reported it unregistered.
+use { println, Stdout } from "core:cli";
+
+type Meters = f64;
+
+export fn run() with Stdout {
+    let m: Meters = builtin::black_box(2.5);
+    let a = { v: m, n: 1 };
+    println(`${a.v} ${a.n}`);
+}
+
+__DATA__
+{"stdout": "2.5 1\n"}
