@@ -1749,13 +1749,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return return_type;
         }
 
-        // First, try local functions (entry point module)
-        if callee_module.is_entry_point()
-            && let Some(&return_type) = self.sem.decls.function_return_types.get(func_name)
-        {
-            return return_type;
-        }
-
         if let Some(def) = callee.def()
             && let Some(sig) = self.tysys.signatures.function_sig(def)
             && let Some(return_type) = sig.decl.return_type

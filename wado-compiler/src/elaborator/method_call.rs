@@ -3067,30 +3067,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// Whether any impl block among `keys` declares `method_name` taking no
-    /// receiver. Headers name the methods and the signature digest says
-    /// whether each takes `self`, so the question is answered without an
-    /// impl-block AST — and keyed canonically, so two modules' same-named
-    /// types cannot answer for each other.
-    fn keys_declare_static_method(&self, keys: &[crate::defs::DefId], method_name: &str) -> bool {
-        keys.iter().any(|key| {
-            self.tysys
-                .trait_env
-                .impl_headers
-                .get(key)
-                .into_iter()
-                .flat_map(|header| header.methods.iter())
-                .any(|m| {
-                    m.name == method_name
-                        && self
-                            .tysys
-                            .signatures
-                            .method_sig(m.def)
-                            .is_some_and(|sig| sig.self_kind == ast::SelfKind::None)
-                })
-        })
-    }
-
     /// Whether an inherent impl (`impl Type { … }`) declares a no-self method
     /// of this name. A conversion-call guard needs the distinction: a trait
     /// lookup returning `None` is a failure only when no inherent static can
@@ -3102,8 +3078,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         target_hint: Option<&ImplTargetKey>,
     ) -> bool {
         let target = self.static_receiver_key(struct_name, target_hint);
-        let keys = self.tysys.trait_env.inherent_impl_keys(&target);
-        self.keys_declare_static_method(&keys, method_name)
+        self.static_method_entries(&target, method_name)
+            .any(super::trait_env::ImplMethodEntry::is_inherent)
     }
 
     /// The argument preselect over a receiver's conversion impls: `Selected` and
@@ -3485,18 +3461,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .next()
             .is_some()
         {
-            return true;
-        }
-
-        // The index holds only what `TraitEnv::build` classified as a static
-        // method; ask the headers directly for the rest.
-        if self.keys_declare_static_method(
-            &self
-                .tysys
-                .trait_env
-                .all_impl_keys(&self.impl_target_at(site, struct_name)),
-            method_name,
-        ) {
             return true;
         }
 
