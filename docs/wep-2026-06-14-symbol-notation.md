@@ -86,6 +86,16 @@ target module's import graph.
       fails the query re-imports only the files that analyze on their own,
       dropping any that can't load (e.g. a compile-time-codegen module without a
       build cache).
+- [ ] Name a structural type. A primitive, a reference and a function type have
+      no module of their own, so `MODULE` is `core:prelude` and `SYMBOL` is the
+      surface spelling — `core:prelude#i32`, `core:prelude#&Point`,
+      `core:prelude#fn(i32) -> i32`, `core:prelude#[i32,String]`,
+      `core:prelude#!`. This is what a type argument already does one level
+      down (`core:collections#List<String>`), with the operator outermost.
+      `TypeInfo::canonical_name` is the first consumer
+      ([Reflection over an Unknown Type](./wep-2026-09-05-reflect-unknown-types.md)),
+      and it needs rendering alone; resolving one back has no `AstId` to land
+      on and is the open half.
 - [ ] Include doc-comment summaries in `hover` output.
 - [ ] `wado doc` anchors / type cross-links keyed by the notation.
 - [ ] Convert internal `name.rs` names back into this notation (so optimizer

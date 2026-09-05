@@ -1,4 +1,4 @@
-# WEP: Reflection over an Unknown Type — `TypeKind` and `match type`
+# WEP: Reflection over an Unknown Type — `TypeInfo` and `match type`
 
 ## Context
 
@@ -44,7 +44,7 @@ a name the author does not have.
   enum. Kind-agnostic and recursive, but metadata-only; it reaches values
   through raw pointers, which Wado has no counterpart for.
 - **bevy_reflect** (Rust) — `reflect_kind()` and a `ReflectRef` enum over
-  `dyn` handles. The kind query is this WEP's `TypeKind`; the `dyn` half needs
+  `dyn` handles. The kind query is this WEP's `TypeInfo`; the `dyn` half needs
   dynamic dispatch.
 - **Rust specialization** (RFC 1210) and its stable-Rust stand-in, dispatching
   on an associated "kind" type. That stand-in is the alternative rejected
@@ -59,42 +59,66 @@ the second such trait: `Inspect` already holds for all
 (`solver_bridge.rs`, `TraitDef::holds_for_all`), so a total root introduces no
 resolution shape the language does not have.
 
-`TypeKind` is what the root answers with:
+`TypeInfo` is what the root answers with, and it carries the classification
+rather than sitting beside one. There is no separate kind enum: a type is
+exactly one case, so the variant's own tag is the kind, and a second scalar
+spelling of it would be the parallel classification
+[Reflect Derivation](./wep-2026-06-13-reflect-derivation.md) refuses elsewhere.
 
 ```wado
-pub enum TypeKind {
-    Struct,
-    Variant,
-    Enum,
-    Flags,
-    Newtype,
-    Tuple,
-    Scalar,
-    Opaque,
-}
-
 internal trait Reflect {
-    fn kind() -> TypeKind;
+    fn type_info() -> TypeInfo;
     fn type_name() -> String;
     fn wire_name_policy() -> CaseStyle;
 }
+
+/// A declaration named with this instantiation's arguments.
+pub struct DeclInfo { … }
+
+impl DeclInfo {
+    pub fn name(&self) -> String;              // "Pair"
+    pub fn module(&self) -> String;            // "core:collections" / "./pair.wado"
+    pub fn type_args(&self) -> List<TypeInfo>; // [String, i32]
+}
+
+pub variant TypeInfo {
+    Struct(DeclInfo),
+    Variant(DeclInfo),
+    Enum(DeclInfo),
+    Flags(DeclInfo),
+    Newtype(DeclInfo),
+    Resource(DeclInfo),
+    Tuple(DeclInfo),
+    Scalar(DeclInfo),
+    Reference { mutable: bool, target: TypeInfo },
+    Function { params: List<TypeInfo>, result: TypeInfo },
+    Never,
+}
+
+impl TypeInfo {
+    pub fn canonical_name(&self) -> String;    // symbol notation, every case
+}
 ```
 
-`kind()` reads a compile-time fact, so it folds to a constant at each
-instantiation.
+Every case is positive: no arm means "something the design has no answer for".
+`TypeTable::reflect_kind` already computes the first five and answers `None`
+for the rest, which is the classification this WEP completes:
 
-The classification is total by construction — `TypeTable::reflect_kind` already
-computes the first five and answers `None` for everything else, which this WEP
-splits into the last three:
+| Type                                                      | Case        |
+| --------------------------------------------------------- | ----------- |
+| `struct` (anonymous included), `variant`, `enum`, `flags` | that case   |
+| `type N = B`                                              | `Newtype`   |
+| the four sealed member handles                            | `Struct`    |
+| a resource                                                | `Resource`  |
+| the tuple family, `()`                                    | `Tuple`     |
+| `i8`…`u128`, `f32`, `f64`, `bool`, `char`, `v128`         | `Scalar`    |
+| `&T` / `&mut T`                                           | `Reference` |
+| `fn(…) -> R`                                              | `Function`  |
+| `!`                                                       | `Never`     |
 
-| Type                                                      | Kind      |
-| --------------------------------------------------------- | --------- |
-| `struct` (anonymous included), `variant`, `enum`, `flags` | that kind |
-| `type N = B`                                              | `Newtype` |
-| the tuple family, `()`                                    | `Tuple`   |
-| `i8`…`u128`, `f32`, `f64`, `bool`, `char`, `v128`         | `Scalar`  |
-| a reference, a function type, a resource, `Never`         | `Opaque`  |
-| the four sealed member handles                            | `Opaque`  |
+The four member handles are `Struct` because the seal is on structure, not on
+identity: nothing may enumerate their fields, and `match type` is where that
+shows — they reach no `struct` arm. Naming them was never withheld.
 
 `Scalar` is deliberately coarse. Nothing yet reads a primitive's width or
 signedness through reflection, and a consumer that needs one today writes the
@@ -102,17 +126,41 @@ per-type impl it already writes. Splitting it later is additive: an arm that
 matched `Scalar` keeps matching whatever replaces it only if the split is a
 sub-classification, which is the constraint any later refinement inherits.
 
-`Opaque` is the honest arm, not a gap. A reference and a function type have no
-owning declaration, and a resource's identity is a Component Model coordinate
-rather than a module symbol, so the earlier WEP declined to invent names for
-them. Totality forces an answer only for `type_name()`, which renders the
-type's spelling (`&Point`, `fn(i32) -> i32`); `type_info()` is where the
-question actually bites, and it stays open below.
+A structural case keeps its components rather than rendering them away, which
+is why the flat "name + module + args" shape the earlier WEP sketched does not
+serve. `type_args()` returns `List<TypeInfo>`, so a type with no answer is not
+contained at the root — `Pair<&Point>` and `struct Handler { cb: fn(i32) -> i32 }`
+put one inside a tree a consumer is already walking. Totality is what keeps
+that tree readable end to end.
 
 The visibility gate is unchanged: it sits on the kind traits and never on the
 root ([Reflect Derivation](./wep-2026-06-13-reflect-derivation.md),
 Visibility). A total root is what that split already implied — a type's name is
 public the moment the type is.
+
+### Symbol notation names a structural type too
+
+[Symbol Notation](./wep-2026-06-14-symbol-notation.md) is `MODULE#SYMBOL`, and
+`canonical_name()` renders in its canonical register. A reference, a function
+type and a primitive have no module of their own, which is a gap in the
+notation rather than a reason for reflection to leave them unnamed: the module
+is `core:prelude`, and the symbol is the type's own surface spelling.
+
+```text
+core:prelude#i32
+core:prelude#&Point
+core:prelude#&mut Point
+core:prelude#fn(i32) -> i32
+core:prelude#[i32,String]
+core:prelude#()
+core:prelude#!
+```
+
+This is the rule the notation already follows one level down: a type argument
+renders as its surface spelling (`core:collections#List<String>`), not as a
+nested `MODULE#SYMBOL`. A structural type is the same shape with the operator
+outermost, and the tuple family's anchor — `core:prelude#[i32,String]`, the
+prelude's `pub type [...T];` — was already decided this way.
 
 ### `match type` — narrowing a subject to its kind
 
@@ -176,15 +224,15 @@ map under RAII and every existing projection path serves it unchanged.
 The two answer different questions, and the difference is load-bearing rather
 than an inconsistency to remove:
 
-- `kind()` — what the type **is**. A fact about the declaration, independent of
-  where it is asked.
-- `match type` — what the type may be **opened** as. Gated on visibility, so a
-  struct whose members are private elsewhere does not reach the `struct` arm
-  there.
+- `type_info()` — what the type is. A fact about the declaration, the same from
+  everywhere it is asked.
+- `match type` — what the type may be opened as. Gated on visibility and on the
+  member seal, so a struct whose members are private elsewhere, and a member
+  handle anywhere, reach no `struct` arm.
 
-A consumer composes the two: in the fallback arm, `kind()` still reports
+A consumer composes the two: in the fallback arm `type_info()` still answers
 `Struct`, so "a struct this module may not enumerate" is expressible. Neither
-construct can state it alone.
+construct states it alone.
 
 ### Rejected: dispatching on an associated kind type
 
@@ -222,6 +270,15 @@ reference and a function type have none, so the root's three methods are minted
 off a `TypeId` instead. The solver side already admits them —
 a primitive lowers to `DeclKey::Builtin(name)`, so the fact table can carry it.
 
+A `TypeInfo` is a tree where a kind enum would have been a scalar, and it costs
+nothing at a use site: it is a closed constant expression, so
+[Constant Object Globalization](./wep-2026-05-31-const-object-globalization.md)
+hoists it to a global and the call reads from there — the same treatment
+`members()` gets. Asking only for the case is therefore a load, not an
+allocation, which is what makes a separate scalar query unnecessary rather than
+merely redundant. `type_name()` stays beside it as the allocation-free
+shorthand serde's `begin_struct` calls.
+
 The value plane for an unknown type is unchanged and stays out of reflection: a
 uniform walk over an unknown _value_ is `core:value::Value` through
 `Serialize`, and reflection answers for the _type_. `docs/spec.md` states that
@@ -255,16 +312,27 @@ distinct arm naming the case.
 
 - [ ] Decide `_` versus a named arm.
 
-### `TypeInfo` has no answer for `Opaque`
+### The structural notation is unwritten and one-way
 
-[`TypeInfo`](./wep-2026-06-13-reflect-derivation.md) is a declaration name, a
-module and the instantiation's type arguments. A reference and a function type
-have no declaration and no module, and a resource's coordinate is not a module
-symbol. A total root asks the question the earlier WEP deferred.
+`core:prelude#&Point` and `core:prelude#fn(i32) -> i32` are decided above and
+implemented nowhere: `symbol_notation` parses and renders declaration symbols
+only. Rendering is what `canonical_name()` needs, and it comes first; resolving
+one back is the harder half, since a structural type has no `AstId` for
+`wado query` to land on and the notation "runs both ways" today.
 
-- [ ] Decide whether `TypeInfo` gains an opaque case, whether `module()`
-      becomes optional, or whether `type_info()` stays partial while
-      `type_name()` is total.
+- [ ] Render every `TypeInfo` case in `symbol_notation`.
+- [ ] Decide what `wado query "core:prelude#&Point"` answers — the target's
+      declaration, a synthesized view, or a diagnostic naming the limit.
+
+### A resource is named twice
+
+`Resource(DeclInfo)` names a resource by its Wado module symbol, which the
+compiler has (`ResolvedType::Resource` carries a `DefId`). Its Component Model
+coordinate (`wasi:io/streams.input-stream`) is a second identity for the same
+type, and the two do not render alike.
+
+- [ ] Decide whether `DeclInfo` on a resource reports the CM coordinate, the
+      Wado symbol, or both.
 
 ### `String` is a struct, not a `Scalar`
 
@@ -303,5 +371,6 @@ compiler it would be the parallel metadata list
 - [Variadic Type Parameters](./wep-2026-03-14-variadic-type-parameters.md) — the packs an arm binds, and `VariadicForOf`
 - [Trait Resolution](./wep-2026-09-01-trait-resolution.md) — why a root-bounded blanket beside the kind ones is rank 3
 - [Struct Walkability](./wep-2026-07-10-struct-walkability.md) — the visibility gate an arm inherits
+- [Symbol Notation](./wep-2026-06-14-symbol-notation.md) — the register `canonical_name()` renders, widened here to structural types
 - [Jade](./wep-2026-06-13-jade.md) — the consumer of the `Shape` gap
 - [Elaborator Architecture](./wep-2026-05-26-elaborator-rearchitecture.md) — where an arm's hypothesis and its expansion live
