@@ -1565,7 +1565,17 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 .trait_ctx
                 .install_effect_params(&method.type_params);
             method_scope.register_generic_params(&method.type_params, next_slot);
-            method_scope.check_param_defaults(method, &method.type_params);
+            // Both frames are in scope for a default, so both supply the type
+            // argument a caller gets by default, in declaration-slot order.
+            // Both frames are in scope for a default, so both supply the type
+            // argument a caller gets by default, in declaration-slot order.
+            let type_params: Vec<ast::GenericParam> = trait_decl
+                .type_params
+                .iter()
+                .chain(&method.type_params)
+                .cloned()
+                .collect();
+            method_scope.check_param_defaults(method, &type_params);
         }
     }
 

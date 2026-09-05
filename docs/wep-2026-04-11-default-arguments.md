@@ -269,9 +269,9 @@ what lets a WebIDL `optional` argument carry its declared default (see
 [WebIDL Binding Generator](./wep-2026-04-01-tide.md)).
 
 A default resolves in the module that declares the operation, so it may name
-that module's private items. Nothing in that module's AST references what the
-default reaches, because the call materializing it is minted at each call site.
-Liveness seeds the operation to keep that reachable.
+that module's private items. The call that materializes it is minted at each
+call site, so the declaring module holds the default expression but no call
+reaching it. Liveness seeds the operation itself to supply that edge.
 
 ### Struct Field Defaults
 

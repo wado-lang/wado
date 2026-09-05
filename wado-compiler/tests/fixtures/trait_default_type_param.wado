@@ -1,0 +1,24 @@
+// A trait method's default is checked against the type argument a caller gets
+// by default. The trait's own frame supplies it as much as the method's, so
+// `T` reads as `i32` here and admits `0`.
+
+trait Make<T = i32> {
+    fn made(value: T = 0) -> T;
+}
+
+struct Marker {}
+
+impl Make<i32> for Marker {
+    fn made(value: i32) -> i32 {
+        return value + 1;
+    }
+}
+
+export fn run() {
+    assert Marker::made(41) == 42;
+}
+
+__DATA__
+{
+    "stdout": ""
+}
