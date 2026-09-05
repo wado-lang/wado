@@ -23,23 +23,18 @@ So a derivation writes one blanket per kind, which is what `Inspect` and
 - Only a trait can dispatch. A free function cannot branch on the kind, so
   reflection is unreachable from ordinary code.
 - The framing common to every kind is written once per kind.
-- There is no last-resort arm. A receiver the kinds do not admit — members not
-  visible here, or a type outside the five kinds — produces no candidate rather
-  than falling through, and a `T: Reflect` blanket written beside the kind ones
-  reports at every receiver ([Trait Resolution](./wep-2026-09-01-trait-resolution.md),
-  rank 3 and its Known gap).
+- There is no last-resort arm. A receiver the kinds do not admit produces no
+  candidate rather than falling through, and a `T: Reflect` blanket written
+  beside the kind ones reports at every receiver
+  ([Trait Resolution](./wep-2026-09-01-trait-resolution.md), rank 3 and its
+  Known gap).
 - Each new kind rewrites every derivation. The tuple family is already queued.
-
-`Reflect` alone therefore answers a name and nothing else, and the friction is
-not that the value plane is static — it is that the structure plane is gated on
-a name the author does not have.
 
 ### Prior art
 
-- **Zig** — `switch (@typeInfo(T))` at comptime is the same shape as the
-  construct below, with one difference this WEP takes as a requirement: Zig
+- **Zig** — `switch (@typeInfo(T))` at comptime is the construct below. It
   checks the selected branch per instantiation, so an error in an unexercised
-  branch surfaces at a call site far from the code that is wrong.
+  branch surfaces at a distant call site. This WEP requires the opposite.
 - **facet** (Rust) — one `SHAPE` const per type, matched on a `Def` / `Type`
   enum. Kind-agnostic and recursive, but metadata-only; it reaches values
   through raw pointers, which Wado has no counterpart for.
@@ -129,10 +124,9 @@ pub enum PrimitiveKind {
 }
 ```
 
-`TypeInfo` keeps the seal the earlier WEP put on it: a program reads a case, and
-mints none. Every payload is a struct, since a Wado variant carries exactly one
-payload type per case — a reference and a function type each need several facts,
-so each gets a sealed struct rather than a shape the language does not have.
+`TypeInfo` keeps the seal the earlier WEP put on it: a program reads a case and
+mints none. A Wado case carries exactly one payload type, so a reference and a
+function type, each holding several facts, take a sealed struct.
 
 A function type is the whole signature or it is not the type: `fn mut(…)`
 differs from `fn(…)`, and `with (Stdout, Stderr)` and `stores[data]` are row
@@ -160,10 +154,10 @@ for the rest, which is the classification this WEP completes:
 | `fn(…) -> R with E…`                                      | `Function`  |
 
 `()` is the unit type, not the empty tuple, and the two are held apart
-everywhere else in the language — an impl for `[..T]` is never a candidate for
-it ([Trait Resolution](./wep-2026-09-01-trait-resolution.md)) — so it carries
-its own case rather than reading as a tuple of arity zero. Its declaration
-(`internal type ();`) sits beside the primitives' in the prelude, and `!`'s
+everywhere else in the language: an impl for `[..T]` is never a candidate for it
+([Trait Resolution](./wep-2026-09-01-trait-resolution.md)). So it carries its
+own case rather than reading as a tuple of arity zero, and its declaration
+`internal type ();` sits beside the primitives' in the prelude, with `!`'s
 beside it.
 
 A case carries a `DeclInfo` only where the declaration is not determined by the
@@ -195,31 +189,30 @@ each is a prelude struct — `i128` and `u128` are `#[compiler_item]` structs of
 two 64-bit limbs — with private fields, so they classify as `Struct` and, having
 no visible members downstream, cannot be opened there either.
 
-That they land in `opaque` rather than beside `i32` is not a question left
-unanswered. A coarser one — leaf or aggregate — is computed from these cases
-and never the reverse, so the split is the superset: merging `primitive` into a
-leaf case would lose the difference between `i32` and a struct this site may not
-open, which `type_info()` still reports as `Struct`. No consumer branches on the
-coarse question either, because reflection offers one action per side and only
-one of them: an aggregate is walked through the kind bound an arm proves, while
-reading a leaf's value needs a bound reflection never carries (`Display`,
-`Serialize`). `primitive` and `opaque` therefore admit the same body — delegate
-to a bound the signature already has, or name the type — and a predicate
-telling them apart would serve no branch.
+That they land in `opaque` rather than beside `i32` leaves nothing unanswered.
+The coarser question, leaf or aggregate, is computed from these cases and never
+the reverse, so this split is the superset: one leaf case would lose the
+difference between `i32` and a struct the site may not open, which `type_info()`
+still reports as `Struct`. Nor does any consumer branch on the coarse question,
+because reflection offers one action per side and carries only one. An aggregate
+is walked through the kind bound an arm proves; reading a leaf's value needs a
+bound reflection never has, like `Display` or `Serialize`. So `primitive` and
+`opaque` admit the same body, and a predicate telling them apart would serve no
+branch.
 
-A structural case keeps its components rather than rendering them away, which
-is why a flat "name + module + args" shape does not serve. `type_args()` returns
-`List<TypeInfo>`, so a type with no answer is not contained at the root —
-`Pair<&Point>` and `struct Handler { cb: fn(i32) -> i32 }` put one inside a tree
-a consumer is already walking. Totality is what keeps that tree readable end to
-end.
+A reference and a function type keep their components rather than rendering them
+away, which a flat "name + module + args" shape could not do. Totality is what
+makes that worth having: `type_args()` returns `List<TypeInfo>`, so a case with
+no answer would appear inside a tree a consumer is already walking, not at its
+root — `Pair<&Point>` and `struct Handler { cb: fn(i32) -> i32 }` each put one
+there.
 
 The visibility gate is unchanged: it sits on the kind traits and never on the
 root ([Reflect Derivation](./wep-2026-06-13-reflect-derivation.md),
 Visibility). A total root is what that split already implied — a type's name is
 public the moment the type is.
 
-### Symbol notation names a structural type too
+### Symbol notation names a reference and a function type
 
 [Symbol Notation](./wep-2026-06-14-symbol-notation.md) is `MODULE#SYMBOL`, and
 `canonical_name()` renders in its canonical register. Most cases already have a
@@ -227,13 +220,12 @@ module. A primitive, `()` and `!` are `internal type` declarations in
 `core:prelude` and resolve like any other name (`prelude/primitive.wado`,
 `trait_env.rs`'s `ImplTargetKey`); `Array<T>` is the prelude's
 `pub type Array<T>;`; and the tuple family is its `internal type [..T];`, whose
-arguments are the element types — the family-plus-arguments split a generic
+arguments are the element types, the family-plus-arguments split a generic
 struct has.
 
-Two shapes have no declaration at all — a function type and a reference — which
-is a gap in the notation rather than a reason for reflection to leave them
-unnamed. Their module is `core:prelude` and their symbol is the type's own
-surface spelling:
+A reference and a function type have no declaration at all. That is a gap in the
+notation rather than a reason for reflection to leave them unnamed: their module
+is `core:prelude` and their symbol is the type's own surface spelling.
 
 ```text
 core:prelude#i32
@@ -251,28 +243,27 @@ renders as its surface spelling (`core:prelude#List<String>`), not as a nested
 `MODULE#SYMBOL`. A structural type is the same shape with the operator
 outermost.
 
-That rendering is for a reader — a diagnostic, a dump, a doc anchor — and is not
+That rendering serves a reader — a diagnostic, a dump, a doc anchor — and is not
 a key. `&Point` renders the pointee bare, so two `Point` declarations in
-different modules produce one string; a registry or a `$defs` map keys on the
+different modules produce one string. A registry or a `$defs` map keys on the
 `TypeInfo` itself, which compares structurally over module, name and arguments
-and tells them apart. Reflection hands out identity as a value; the notation is
-how that value is spoken.
+and tells them apart.
 
 The identity a `DeclInfo` carries is the Wado module symbol, for every case
-alike. A resource and an interface each have a second one — the Component Model
-coordinate (`wasi:io/streams.input-stream`) — and reflection does not carry it,
-with no branch for the CM-backed cases. The friction is real and accepted: a
+alike. A resource and an interface each have a second one, the Component Model
+coordinate (`wasi:io/streams.input-stream`), and reflection carries neither it
+nor a branch for the cases that have one. The friction is real and accepted: a
 consumer keying a registry by CM coordinate cannot get there from `TypeInfo`,
 and a WASI type reads by the name its generated Wado module gives it. One
 identity of one shape is worth more than a second one only some types have.
 
 ### A `Shape` tree belongs to Jade
 
-A facet-style metadata tree — kind-agnostic, walking an unknown type to
-arbitrary depth through lazy `fn() -> Shape` edges — is what a schema library
-ultimately reads, and it is deliberately not here. Written over `match type` it
-is ordinary library code in `wado:jade`; synthesized in the compiler it would be
-a per-type metadata list beside `members()`, which
+A schema library ultimately reads a facet-style metadata tree: kind-agnostic,
+walking an unknown type to arbitrary depth through lazy `fn() -> Shape` edges.
+It is deliberately not here. Written over `match type` it is ordinary library
+code in `wado:jade`; synthesized in the compiler it would be a per-type metadata
+list beside `members()`, which
 [Reflect Derivation](./wep-2026-06-13-reflect-derivation.md) refuses.
 
 ### `match type` — narrowing a subject to its kind
@@ -292,16 +283,16 @@ fn describe<T: Reflect>(v: &T) -> String {
 }
 ```
 
-Each arm proves its kind's bound for its own body. `struct =>` elaborates under
-the hypothesis `T: ReflectStruct`, so `ReflectStruct::<T>::members()` resolves
-inside it and nowhere else.
+A kind arm proves its kind's bound for its own body. `struct =>` elaborates
+under the hypothesis `T: ReflectStruct`, so `ReflectStruct::<T>::members()`
+resolves inside it and nowhere else.
 
 Only the five kind traits have a hypothesis to push. The other arms name a
 classification with no trait behind it, so they add nothing to what `T: Reflect`
 already gives, and neither do they bind: an `array` arm cannot name its element
 type today (Known gaps). An alternation pushes what all its kinds share, which
-is nothing beyond the root, so `enum | flags` is the way to write one body for
-two kinds and `struct | variant` buys nothing over `opaque`.
+is nothing beyond the root, so `enum | flags` is how one body serves two kinds
+and `struct | variant` buys nothing over `opaque`.
 
 A `match type` is exhaustive and carries no `_`. Every case of `TypeInfo` is a
 kind of the type system itself, so a set that closes over them closes over
@@ -311,19 +302,19 @@ the language breaks every `match type` in the ecosystem — which is what adding
 a kind is.
 
 `opaque` is the arm exhaustiveness forces into existence, and it is not `_`
-renamed. The kind arms carry a hypothesis their body relies on, so a subject
-that is a struct the site may not open — private members, or one of the sealed
-member handles — cannot enter `struct` without making that hypothesis false. It
-enters `opaque` instead: a named condition ("declared, not openable here"),
-where `type_info()` still reports what the type is. A future kind does not land
-there; it fails exhaustiveness, as intended.
+renamed. A kind arm carries a hypothesis its body relies on, so a struct the
+site may not open — one with private members, or one of the sealed member
+handles — cannot enter `struct` without making that hypothesis false. It enters
+`opaque` instead, a named condition meaning "declared, not openable here", where
+`type_info()` still reports what the type is. A future kind does not land there;
+it fails exhaustiveness, as intended.
 
 Three rules make it more than sugar over the five blankets:
 
-Arms are checked once, at the definition, under the arm's own hypothesis —
-never per instantiation. This is the requirement Zig's comptime switch does not
-meet, and it is what keeps a diagnostic on the code that is wrong rather than
-on a caller that happens to reach it.
+Arms are checked once, at the definition, under the arm's own hypothesis, never
+per instantiation. This is the requirement Zig's comptime switch does not meet,
+and it keeps a diagnostic on the code that is wrong rather than on a caller that
+happens to reach it.
 
 The unselected arms are dropped at monomorphization, before substitution. The
 compiler has the shape for this: `VariadicForOf` is a TIR node elaborated once
@@ -355,11 +346,11 @@ match type T {
 The binder is spelled as an impl header spells it, association named, so a
 derivation moved from a blanket into an arm reads the same in both places. It
 binds a plain associated type (`Base = B`) the same way it binds a pack. An arm
-that reads neither writes neither — a kind-only branch pays nothing for what it
-never touches — and an arm binds without bounding: `..F: Serialize` belongs to
+that reads neither writes neither, so a kind-only branch pays nothing for what
+it never touches. And an arm binds without bounding: `..F: Serialize` belongs to
 the header of the function the arm delegates to, which keeps the arm about
-proving the kind. Both are revisitable; a derivation that turns out to need the
-bound on the arm is the reason to revisit.
+proving the kind. Both are revisitable, and a derivation that turns out to need
+the bound on the arm is the reason to revisit.
 
 The mechanism underneath is unchanged by the spelling: bounds in force are
 name-keyed in `annotate_ctx.trait_ctx.type_param_bounds`, which
@@ -384,9 +375,9 @@ construct states it alone.
 ### Rejected: dispatching on an associated kind type
 
 `Reflect` could carry `type Kind` (a marker per kind) and a derivation could
-delegate to a `KindOps<T, T::Kind>` whose per-kind impls carry the kind bounds
-— the stand-in Rust reaches for while specialization is unstable. It needs no
-new syntax, and one implication rule (`Reflect<Kind = StructKind>` ⟹
+delegate to a `KindOps<T, T::Kind>` whose per-kind impls carry the kind bounds.
+This is the stand-in Rust reaches for while specialization is unstable. It needs
+no new syntax, and one implication rule (`Reflect<Kind = StructKind>` ⟹
 `ReflectStruct`) would carry it.
 
 It is rejected because the scaffolding is per derivation: every consumer writes
