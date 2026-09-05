@@ -2259,7 +2259,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // The scope annotate resolved these defaults in, so reify
                 // resolves them in the same one.
                 defaults_module: static_method_module
-                    .clone()
                     .unwrap_or_else(|| func_ref.module_source.clone()),
                 function_ref: func_ref,
                 param_is_mut,
