@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1788572531413,
+  "lastUpdate": 1788607397537,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -53473,6 +53473,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/87b2c927067364baf531bcc4b29e9767c245b521"
         },
         "date": 1788572530794,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 2013,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6560,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18891,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 288497,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "bba5889816eb8c54851849622c7cff0f66f5c2a7",
+          "message": "Merge pull request #1971 from wado-lang/claude/tide-web-implementation-b9s979\n\nfeat(wado-from-idl): generate web:dom from a WebIDL snapshot (Tide M5)",
+          "timestamp": "2026-09-05T20:07:18+09:00",
+          "tree_id": "376b732b24952004374e79d82b2d575a8624ff5a",
+          "url": "https://github.com/wado-lang/wado/commit/bba5889816eb8c54851849622c7cff0f66f5c2a7"
+        },
+        "date": 1788607397206,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
