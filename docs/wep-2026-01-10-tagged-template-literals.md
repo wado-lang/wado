@@ -422,10 +422,12 @@ introduces a mechanism; each item names the existing one it extends.
   non-path receiver is a syntax error naming the rule; a gap falls through to
   the ordinary unexpected-token error.
 - `unparse` prints the tag then the template with nothing between, in both
-  printers. `Wado.g4` adds `exprPath templateString` to `primary`, ahead of the
-  bare path; the grammar cannot see the gap, so the whitespace case is a
-  `compile_error` fixture under `check-grammar`'s second invariant.
-  `Wado.highlights.scm` captures the tag path as `@function`.
+  printers. `Wado.g4` adds `taggedTemplate : (tagOwner '::')* tagName
+  templateString` to `primary` and `primaryNoStruct`; the grammar cannot see
+  the gap, so the whitespace case is a `compile_error` fixture under
+  `check-grammar`'s second invariant. `Wado.highlights.scm` captures `tagName`
+  as `@function`, and the LSP's call heuristic reads an adjacent template as a
+  call, so both sides colour the tag alike.
 
 ### Annotate (`elaborator/tagged_template.rs`)
 
@@ -508,11 +510,15 @@ list `reify` already drains.
   and `wir_expect:O2` holding the body to constant appends with no `$hole_get`
   call surviving.
 - `tagged_template_html.wado`: state carried across holes.
-- `tagged_template_raw.wado`, `tagged_template_source.wado`,
-  `tagged_template_no_holes.wado`, `tagged_template_shape_shared.wado` (two
-  sites, one instantiation).
+- `tagged_template_members.wado`: every `Hole` accessor and the tails, with
+  and without holes.
+- `tagged_template_holes.wado`: hole evaluation order and count, a scalar
+  hole's copy, a handle hole's sharing, two sites of one shape.
 - `tagged_template_format_equiv.wado`: `format` against the untagged form over
   the specifier matrix.
+- `tagged_template_string_raw.wado`: `String::raw` keeps escapes verbatim.
+- `anon_struct_newtype_field.wado`, `reflect_pack_bound_free_fn_error.wado`:
+  the two pre-existing defects the work surfaced, pinned.
 - Errors: a non-path tag, whitespace before the backtick, a tag of the wrong
   arity, an unsatisfied `..V` bound naming the hole type, a hole whose type
   mentions a type parameter.
