@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1788564266609,
+  "lastUpdate": 1788568110844,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -53341,6 +53341,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/c9c8c47cd05c82876409d36a7c70cdc423af21ae"
         },
         "date": 1788564266227,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 2013,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6560,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18891,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 288497,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "937ff00c9a9401b2a2251ed39cc0ba56c6c377c0",
+          "message": "Merge pull request #1967 from wado-lang/claude/kiln-options-diagnostic-spans-k8uilv\n\nfix(kiln): point every options diagnostic at the key it names",
+          "timestamp": "2026-09-05T09:10:17+09:00",
+          "tree_id": "d846fdcb3804a0ec84253401efe63387880a62c9",
+          "url": "https://github.com/wado-lang/wado/commit/937ff00c9a9401b2a2251ed39cc0ba56c6c377c0"
+        },
+        "date": 1788568109884,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
