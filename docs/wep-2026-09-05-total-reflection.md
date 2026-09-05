@@ -14,8 +14,9 @@ author cannot name:
 
 The value plane is inherently static: a bridge's result type is the member's,
 so a walk that does not know the type cannot receive the value. The structure
-plane is not — the compiler knows every type's kind — but it is reached only by
-naming that kind in a bound, and a bound is written before the subject is known.
+plane is not, since the compiler knows every type's kind. But it is reached only
+by naming that kind in a bound, and a bound is written before the subject is
+known.
 
 So a derivation writes one blanket per kind, which is what `Inspect` and
 `core:serde` do. That works and has four costs:
@@ -131,8 +132,8 @@ function type, each holding several facts, take a sealed struct.
 A function type is the whole signature or it is not the type: `fn mut(…)`
 differs from `fn(…)`, and `with (Stdout, Stderr)` and `stores[data]` are row
 members of the type the same way the parameters are. The effect row is where an
-`interface` enters the model — it is a declaration Wado names, so it reads as a
-`DeclInfo` like any other, and no separate identity is invented for it.
+`interface` enters the model. It is a declaration Wado names, so it reads as a
+`DeclInfo` like any other and needs no identity of its own.
 
 Every case is positive: no arm means "something the design has no answer for".
 `TypeTable::reflect_kind` already computes the first five and answers `None`
@@ -166,28 +167,27 @@ with no arguments, so the case is the identity and repeating it would be a
 second spelling; the rest carry theirs.
 
 The four member handles are `Struct` because the seal is on structure, not on
-identity: nothing may enumerate their fields, and `match type` is where that
-shows — they reach no `struct` arm. Naming them was never withheld.
+identity. Nothing may enumerate their fields, and `match type` is where that
+shows: they reach no `struct` arm. Naming them was never withheld.
 
 A type parameter, an inference variable, a pack and an associated-type
-projection carry no case: none survives monomorphization, which is where a
-`Reflect` subject is concrete. `Reactive<T>` is the same — a reactive binding is
-typed with its underlying value type, so the wrapper never reaches
-monomorphize.
+projection carry no case, since none survives monomorphization, which is where a
+`Reflect` subject is concrete. Nor does `Reactive<T>`: a reactive binding is
+typed with its underlying value type, so the wrapper never reaches monomorphize.
 
 `Primitive` is named for what it holds and carries the kind at the granularity
 the type system already has, so a consumer branches on `PrimitiveKind` rather
 than on a name string. The granularity sits in the case's payload, not in the
 case set, so `match type`'s arms are unaffected by it: one `primitive` arm, an
 ordinary `match` inside where a body cares. That placement is also why the kind
-is carried now rather than deferred — widening a case's payload later breaks
+is carried now rather than deferred. Widening a case's payload later breaks
 every pattern already written against it, so "add it when someone needs it" is
 not the free option it looks like.
 
-`String`, `i128` and `u128` read as primitives to a programmer and are none:
-each is a prelude struct — `i128` and `u128` are `#[compiler_item]` structs of
-two 64-bit limbs — with private fields, so they classify as `Struct` and, having
-no visible members downstream, cannot be opened there either.
+`String`, `i128` and `u128` read as primitives to a programmer and are none.
+Each is a prelude struct with private fields — `i128` and `u128` are
+`#[compiler_item]` structs of two 64-bit limbs — so they classify as `Struct`
+and, having no visible members downstream, cannot be opened there either.
 
 That they land in `opaque` rather than beside `i32` leaves nothing unanswered.
 The coarser question, leaf or aggregate, is computed from these cases and never
@@ -209,7 +209,7 @@ there.
 
 The visibility gate is unchanged: it sits on the kind traits and never on the
 root ([Reflect Derivation](./wep-2026-06-13-reflect-derivation.md),
-Visibility). A total root is what that split already implied — a type's name is
+Visibility). That split already implied a total root, since a type's name is
 public the moment the type is.
 
 ### Symbol notation names a reference and a function type
@@ -303,8 +303,8 @@ a kind is.
 
 `opaque` is the arm exhaustiveness forces into existence, and it is not `_`
 renamed. A kind arm carries a hypothesis its body relies on, so a struct the
-site may not open — one with private members, or one of the sealed member
-handles — cannot enter `struct` without making that hypothesis false. It enters
+site may not open (one with private members, or one of the sealed member
+handles) cannot enter `struct` without making that hypothesis false. It enters
 `opaque` instead, a named condition meaning "declared, not openable here", where
 `type_info()` still reports what the type is. A future kind does not land there;
 it fails exhaustiveness, as intended.
@@ -320,11 +320,10 @@ The unselected arms are dropped at monomorphization, before substitution. The
 compiler has the shape for this: `VariadicForOf` is a TIR node elaborated once
 generically and expanded against the concrete pack in `monomorphize/func_inst.rs`,
 and a `match type` node is expanded the same way against the concrete subject.
-The call it leaves behind is already a solved problem too — a
-`Reflect*` static call on a type parameter records a dispatch fact
-(`is_type_param_receiver`) that monomorphization redirects to the concrete
-type's synthesized impl, which is how `fn root_name_of<T: Reflect>()` works
-today (`reflect_root_type_name.wado`).
+The call it leaves behind is a solved problem too: a `Reflect*` static call on a
+type parameter records a dispatch fact (`is_type_param_receiver`) that
+monomorphization redirects to the concrete type's synthesized impl. That is how
+`fn root_name_of<T: Reflect>()` works today (`reflect_root_type_name.wado`).
 
 An arm binds what its kind's trait associates. The pack cannot be left to a
 helper function's header: a call site projects `[..F]` from the _concrete_
@@ -402,11 +401,10 @@ The LSP path stops after `liveness` and builds no TIR
 it never monomorphizes and every arm stays live in the editor. Hover inside an
 arm reports the hypothesis, not a selected instance.
 
-Minting `Reflect` for the two declaration-less shapes is new work. Today the
+Minting `Reflect` for a reference and a function type is new work. Today the
 impls are synthesized per TIR declaration in `synthesis/traits.rs`, which a
-primitive and the tuple family reach like any other prelude type; a reference
-and a function type have no declaration, so their root methods are minted off a
-`TypeId` instead.
+primitive and the tuple family reach like any other prelude type. Those two have
+no declaration, so their root methods are minted off a `TypeId` instead.
 
 A `TypeInfo` is a tree where a kind enum would have been a scalar, and it costs
 nothing at a use site: it is a closed constant expression, so
@@ -417,19 +415,19 @@ allocation, which is what makes a separate scalar query unnecessary rather than
 merely redundant. `type_name()` stays beside it as the allocation-free
 shorthand serde's `begin_struct` calls.
 
-The value plane for an unknown type is unchanged and stays out of reflection: a
-uniform walk over an unknown _value_ is `core:value::Value` through
-`Serialize`, and reflection answers for the _type_.
+The value plane stays out of reflection, as it was: a uniform walk over an
+unknown _value_ is `core:value::Value` through `Serialize`, and reflection
+answers for the _type_.
 
 ## Known gaps
 
-### The structural notation is unwritten and one-way
+### A reference and a function type have no notation yet
 
 `core:prelude#&Point` and `core:prelude#fn(i32) -> i32` are decided above and
 implemented nowhere: `symbol_notation` parses and renders declaration symbols
 only. Rendering is what `canonical_name()` needs, and it comes first; resolving
-one back is the harder half, since a structural type has no `AstId` for
-`wado query` to land on and the notation "runs both ways" today.
+one back is the harder half, since neither has an `AstId` for `wado query` to
+land on and the notation "runs both ways" today.
 
 - [ ] Render every `TypeInfo` case in `symbol_notation`.
 - [ ] Decide what `wado query "core:prelude#&Point"` answers — the target's
@@ -439,7 +437,7 @@ one back is the harder half, since a structural type has no `AstId` for
 
 The five kind traits give an arm its hypothesis and its associations. The other
 arms have neither, so an `array` arm cannot name its element type and a
-`function` arm cannot name a parameter's — a body that needs one reads
+`function` arm cannot name a parameter's. A body that needs one reads
 `type_info()` and gets a value, not a type it can call a bound method on.
 
 - [ ] Decide whether these arms bind (a second binder form, over the case's own
@@ -451,7 +449,7 @@ An anonymous struct classifies as `Struct`, and `DeclInfo` reports a
 declaration. It has none: the compiler keys it as `Undeclared(module, rendering)`
 (`trait_env.rs`), where the module is the one that wrote the literal and the
 name is the shape's rendering. Two literals of one shape are one type on
-purpose, so the pair is a sound identity — but it is not a declaration, and
+purpose, so that pair is a sound identity. It is still not a declaration, and
 nothing states how it renders in symbol notation.
 
 - [ ] State what `name()` and `module()` answer for an anonymous struct, and how
@@ -459,8 +457,8 @@ nothing states how it renders in symbol notation.
 
 ### The type/value split is unwritten
 
-Reflection answers for the type and `core:value::Value` for the value; that
-boundary is stated here and nowhere a reader of the language would look.
+Reflection answers for the type and `core:value::Value` for the value. The spec
+does not say so, and this WEP is not where a reader of the language will look.
 
 - [ ] State it in `docs/spec.md`, so it is not rediscovered as a missing
       reflection feature.
@@ -471,6 +469,6 @@ boundary is stated here and nowhere a reader of the language would look.
 - [Variadic Type Parameters](./wep-2026-03-14-variadic-type-parameters.md) — the packs an arm binds, and `VariadicForOf`
 - [Trait Resolution](./wep-2026-09-01-trait-resolution.md) — why a root-bounded blanket beside the kind ones is rank 3, and why `()` is not a tuple
 - [Struct Walkability](./wep-2026-07-10-struct-walkability.md) — the visibility gate an arm inherits
-- [Symbol Notation](./wep-2026-06-14-symbol-notation.md) — the register `canonical_name()` renders, widened here to the declaration-less shapes
+- [Symbol Notation](./wep-2026-06-14-symbol-notation.md) — the register `canonical_name()` renders, widened here to a reference and a function type
 - [Jade](./wep-2026-06-13-jade.md) — where the `Shape` tree is written
 - [Elaborator Architecture](./wep-2026-05-26-elaborator-rearchitecture.md) — where an arm's hypothesis and its expansion live

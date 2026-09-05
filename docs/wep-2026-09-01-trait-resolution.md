@@ -580,16 +580,16 @@ stands: a narrower impl binding an associated type differently is the
 specialization soundness question, which a rank would decide by accident.
 
 Reflection is the first pattern to pay for it. A derivation written over the
-kind traits has no last-resort arm — `impl<T: ReflectStruct>` beside an
-`impl<T: Reflect>` meant to catch everything else reports at every struct. So a
-receiver the kinds do not admit (members not visible here, or a kind the set
-does not cover) produces no candidate rather than falling through, and rank 2's
-escape — an impl written for the receiver — cannot serve a derivation whose
+kind traits has no last-resort arm: an `impl<T: Reflect>` meant to catch
+everything else reports at every struct, beside the `impl<T: ReflectStruct>`.
+So a receiver the kinds do not admit (members not visible here, or a kind the
+set does not cover) produces no candidate rather than falling through, and rank
+2's escape, an impl written for the receiver, cannot serve a derivation whose
 subject is unknown by construction.
 
-The reflection side is served without a rank, by a kind-narrowing construct
-proposed separately: one `impl<T: Reflect>` branching on the kind inside its
-body leaves no overlapping pair to break. This gap is therefore independent of
+[Total Reflection](./wep-2026-09-05-total-reflection.md) serves that side
+without a rank: one `impl<T: Reflect>` branching on the kind inside its body
+leaves no overlapping pair to break. This gap is therefore independent of
 reflection. Reopening it takes both of:
 
 - [ ] Answer what a caller sees when the narrower impl binds an associated type

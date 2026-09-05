@@ -87,17 +87,16 @@ target module's import graph.
       dropping any that can't load (e.g. a compile-time-codegen module without a
       build cache).
 - [ ] Name a reference and a function type. Alone among types they have no
-      declaration to name them — a primitive, `()`, `!`, `Array<T>` and the
-      tuple family are all prelude declarations — so `MODULE` is `core:prelude`
-      and `SYMBOL` is the surface spelling: `core:prelude#&Point`,
-      `core:prelude#&mut Point`, `core:prelude#fn(i32) -> i32`. This is what a
-      type argument already does one level down
-      (`core:prelude#List<String>`), with the operator outermost.
-      `TypeInfo::canonical_name` is the first consumer
-      ([Total Reflection](./wep-2026-09-05-total-reflection.md)), and it needs
-      rendering alone; resolving one back has no `AstId` to land on and is the
-      open half. The rendering is not a key either — `&Point` renders its
-      pointee bare, so two `Point` declarations collide in one string.
+      declaration to name them: a primitive, `()`, `!`, `Array<T>` and the tuple
+      family are all prelude declarations. So `MODULE` is `core:prelude` and
+      `SYMBOL` is the surface spelling — `core:prelude#&Point`,
+      `core:prelude#&mut Point`, `core:prelude#fn(i32) -> i32` — which is what
+      a type argument already does one level down (`core:prelude#List<String>`),
+      with the operator outermost. `TypeInfo::canonical_name` is the first
+      consumer ([Total Reflection](./wep-2026-09-05-total-reflection.md)) and
+      needs rendering alone; resolving one back has no `AstId` to land on and is
+      the open half. Nor is the rendering a key: `&Point` renders its pointee
+      bare, so two `Point` declarations collide in one string.
 - [ ] Include doc-comment summaries in `hover` output.
 - [ ] `wado doc` anchors / type cross-links keyed by the notation.
 - [ ] Convert internal `name.rs` names back into this notation (so optimizer
