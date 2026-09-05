@@ -2297,8 +2297,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) {
         let type_params = self.lookup_function_type_params(callee);
         let tt = self.tysys.type_table.clone();
+        // An effect param holds no type-arg slot, so the pairing is dense.
         let (params, args): (Vec<ast::GenericParam>, Vec<TypeId>) = type_params
             .iter()
+            .filter(|p| !p.is_effect)
             .zip(after.iter().copied())
             .enumerate()
             .filter(|(i, (_, arg))| {
