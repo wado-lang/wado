@@ -504,6 +504,9 @@ fn run_optimization_passes(
     // Held across the loop: the budget anchors on the unit as the loop found it,
     // so what the rounds add together stays bounded. See `InlineBudget`.
     let mut inline_budget = inline::InlineBudget::new(config.inline_growth);
+    // Also held across the loop: released once the loop has converged with
+    // functions still held, which is when a hold can no longer pay.
+    let mut inline_holds = inline::InlineHolds::default();
     // Dense `Match` → `Switch` in global initializer bodies. Functions are
     // lowered by `MatchToSwitchRule` inside the unified peephole session; the
     // function-level loop never mutates global initializer bodies, so a single
@@ -616,6 +619,7 @@ fn run_optimization_passes(
             p,
             config.inline_threshold,
             &mut inline_budget,
+            &mut inline_holds,
             g,
             &mut descriptor_cache,
         ));
@@ -679,6 +683,10 @@ fn run_optimization_passes(
             iter_changed.join(", ")
         );
         if iter_changed.is_empty() {
+            if inline_holds.release(&mut gate) {
+                crate::compiler_trace!("opt_loop", "iter {:>3}: inline holds released", i + 1);
+                continue;
+            }
             profiler.debug(&format!(
                 "NIR optimizer converged after {} iteration(s)",
                 i + 1

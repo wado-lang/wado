@@ -1,0 +1,32 @@
+// Test: a discarded value closing a statement's block keeps only its effects.
+// `xs.pop()` is the last statement of an `if` body and of a loop body; neither
+// construct yields a value, so the `Option` its inlined body builds on both
+// exits is dead there as much as in `let _ = xs.pop()`.
+
+use { println, Stdout } from "core:cli";
+
+fn drain(n: i32) -> i32 {
+    let mut xs: List<i32> = [];
+    for let mut i = 0; i < n; i += 1 {
+        xs.push(i);
+    }
+    if n > 3 {
+        xs.pop();
+    }
+    while xs.len() > 2 {
+        xs.pop();
+    }
+    return xs.len();
+}
+
+export fn run() with Stdout {
+    println(`${drain(builtin::black_box(5))}`);
+}
+
+__DATA__
+{
+    "stdout": "2\n",
+    "wir_not_expect:O2": [
+        "Option<i32>"
+    ]
+}

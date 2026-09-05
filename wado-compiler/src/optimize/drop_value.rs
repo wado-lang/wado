@@ -19,13 +19,16 @@ impl Rule for DropValueRule {
     fn apply_block(&self, engine: &mut Engine, id: BlockId) -> bool {
         let stmts = engine.body.blocks[id].stmts.clone();
         let last = stmts.last().copied();
-        // Only a statement something follows is discarded, plus the root block's
-        // tail, which `translate_block` lowers with no value at all. WIR decides
-        // "value region" by a block expression's own type, not by whether
-        // anything reads the enclosing construct, so a `match` arm whose result
-        // is dropped still expects its last statement to leave a value.
-        let is_root = id == engine.body.root;
-        let discarded = |s: StmtId| Some(s) != last || is_root;
+        // A statement something follows is discarded, and so is the tail of a
+        // block no expression owns: the root, which `translate_block` lowers
+        // with no value at all, and the body of a statement `if`, loop, or
+        // labeled block, which yields none. WIR decides "value region" by a
+        // block expression's own type, not by whether anything reads the
+        // enclosing construct, so a `match` arm whose result is dropped still
+        // expects its last statement to leave a value.
+        let tail_discarded = id == engine.body.root
+            || matches!(engine.parent_of(NodeRef::Block(id)), Some(NodeRef::Stmt(_)));
+        let discarded = |s: StmtId| Some(s) != last || tail_discarded;
         let mut changed = false;
         let mut new_stmts = Vec::with_capacity(stmts.len());
         for s in stmts {

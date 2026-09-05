@@ -1350,6 +1350,36 @@ pub(super) struct InlineBudget {
     declined: IndexMap<FuncId, Declined>,
 }
 
+/// The callees [`Verdict::hold`] keeps un-spliced-into, carried across rounds.
+///
+/// A hold is a bet on evidence a later round brings — the constants that would
+/// fold the loop out of the body. A loop that has converged with the hold still
+/// in place brings none, so the bet is settled: the function is never inlined
+/// on its folded price, and keeping it small buys nothing while every call it
+/// makes stays a call. [`InlineHolds::release`] then lets it receive inlining
+/// like any other function, and the loop runs on to settle what that opens.
+#[derive(Default)]
+pub(super) struct InlineHolds {
+    held: IndexSet<FuncId>,
+    released: bool,
+}
+
+impl InlineHolds {
+    /// Release every hold and mark the held functions for another round.
+    /// Returns whether there was anything to release; once released, the holds
+    /// stay released, so a second call after convergence is the loop's exit.
+    pub(super) fn release(&mut self, gate: &mut FunctionGate) -> bool {
+        if self.released || self.held.is_empty() {
+            return false;
+        }
+        self.released = true;
+        for &id in &self.held {
+            gate.mark_changed(id);
+        }
+        true
+    }
+}
+
 /// Below this the budget does not apply. A small package has no cliff to fall
 /// off — the absolute growth is bounded by how little there is to copy — and a
 /// percentage of a small baseline is too tight to inline anything at all.
@@ -1452,6 +1482,7 @@ pub fn inline_functions(
     project: &mut NirPackage,
     inline_threshold: usize,
     budget: &mut InlineBudget,
+    holds: &mut InlineHolds,
     gate: &mut FunctionGate,
     descriptor_cache: &mut super::dce::DescriptorCache,
 ) -> bool {
@@ -1503,7 +1534,7 @@ pub fn inline_functions(
         .collect();
 
     // Callees that must not receive inlining this round — see `Verdict::hold`.
-    let mut held: IndexSet<FuncId> = IndexSet::default();
+    holds.held.clear();
 
     // What the unit holds right now, and what each admitted candidate would add
     // to it. `Candidate::forced` marks the ones the budget may not turn down.
@@ -1589,9 +1620,10 @@ pub fn inline_functions(
             &written_by_func[i],
         );
         if verdict.hold
+            && !holds.released
             && let Some(id) = func.id
         {
-            held.insert(id);
+            holds.held.insert(id);
         }
         if verdict.inline {
             let id = func.id.expect("func_id assigned at lower");
@@ -1614,6 +1646,15 @@ pub fn inline_functions(
         }
     }
     drop(type_table);
+
+    crate::compiler_trace!("inline", "held: [{}]", {
+        holds
+            .held
+            .iter()
+            .map(|id| project.functions[id.index()].borrow().name.clone())
+            .collect::<Vec<_>>()
+            .join(", ")
+    });
 
     // What this round would add, and which callees dominate it. A candidate the
     // threshold admitted only because the cold discount put its hot path under
@@ -1677,7 +1718,7 @@ pub fn inline_functions(
 
     // Inline at call sites.
     for fid in gate.dirty_funcs(GatedPass::Inline, project.functions.len()) {
-        if held.contains(&fid) {
+        if holds.held.contains(&fid) {
             continue;
         }
         let caller_idx = fid.index();
