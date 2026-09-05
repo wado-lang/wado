@@ -60,8 +60,14 @@ fi
 # Extensionless executables only: leaving the .rlib / .rmeta keeps the eviction
 # to a relink. The fingerprint goes with the binary -- cargo reads freshness
 # there -- paired by the trailing hash, the crate name being spelled differently.
+#
+# The build lock does not reach this. Cargo drops it once everything is
+# compiled, and `cargo test` then spawns the binaries one at a time. Evicting
+# one it has already judged fresh makes that spawn fail outright rather than
+# rebuild. So any live cargo holds these back: none of them says which phase
+# it is in.
 evicted_bins=0
-if [ "$(avail)" -lt "$goal" ] && [ -d "$DEPS" ]; then
+if [ "$(avail)" -lt "$goal" ] && [ -d "$DEPS" ] && ! pgrep -x cargo >/dev/null; then
     while IFS=$'\t' read -r _ bin; do
         [ "$(avail)" -lt "$goal" ] || break
         hash=${bin##*-}

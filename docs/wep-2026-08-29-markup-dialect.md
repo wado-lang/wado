@@ -9,8 +9,8 @@ Wado has to emit HTML on two fronts and has a surface for neither.
   by [`core:router`](./wep-2026-05-06-core-router.md) returns HTML. Marl already
   exports `escape_text` / `escape_attr` for HTML-templating consumers; the
   consumer does not exist.
-- Client-side. [`web:dom`](./wep-2026-04-01-tide.md) is a 55-line seed — one
-  interface and five resources — and
+- Client-side. [`web:dom`](./wep-2026-04-01-tide.md) is eight resources
+  generated from a WebIDL slice, with no host to run against, and
   [Reactive Signals](./wep-2026-04-04-reactive-signals.md) is designed around a
   UI surface it does not have.
 

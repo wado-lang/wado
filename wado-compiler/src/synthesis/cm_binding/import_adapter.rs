@@ -295,7 +295,7 @@ fn synthesize_async_lift_function(
     }];
 
     let lifted = if let Some(return_type) = &func_info.return_type {
-        let resolved = cm_interface_registry.resolve_type(return_type);
+        let resolved = cm_interface_registry.value_type(return_type);
         let lift_ctx = LiftContext {
             cm_interface_registry,
             type_table,
@@ -1452,7 +1452,7 @@ impl<'a> AdapterBuilder<'a> {
         // The type argument T for AsyncCall<T> is the CM-level result type
         // (`func_info.return_type` stores the inner T); `()` for void async.
         let inner_type_id = if let Some(return_type) = &func_info.return_type {
-            let resolved = self.registry().resolve_type(return_type);
+            let resolved = self.registry().value_type(return_type);
             self.cm_type_id(&resolved)
         } else {
             TypeTable::UNIT
@@ -1529,7 +1529,7 @@ impl<'a> AdapterBuilder<'a> {
             .return_type
             .as_ref()
             .expect("outptr result implies a return type");
-        let resolved = self.registry().resolve_type(return_type);
+        let resolved = self.registry().value_type(return_type);
 
         // Inline lifting for all types, including list<T> which uses
         // List::<T>::with_capacity() and .push() with proper monomorphization info.
@@ -1580,7 +1580,7 @@ impl<'a> AdapterBuilder<'a> {
         return_type: &Type,
     ) -> TypeId {
         let registry = self.registry();
-        let resolved = registry.resolve_type(return_type);
+        let resolved = registry.value_type(return_type);
         let return_flat = registry.cm_flatten(&resolved);
         // Enums/newtypes flatten to a scalar and pass through; only a struct
         // that flattens to one core value must be rebuilt into its GC form.

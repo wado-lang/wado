@@ -219,16 +219,16 @@ fn full_scope_reconstructs_an_extern_handle_interface_per_wado_type() {
     let text = emit_scope(
         "use { Dom, Node } from \"web:dom\";\n\
          export fn run() with Dom {\n\
-             let el = Dom::document().create_element(\"div\");\n\
+             let el = Dom::document().create_element(\"div\", null);\n\
              el.set_id(\"app\");\n\
              let parent: Node = el;\n\
-             parent.append_child(&el);\n\
+             parent.append_child(el);\n\
          }",
         WitScope::Full,
     );
     assert!(text.contains("package web:dom {"), "\n{text}");
     assert!(
-        text.contains("append-child: func(self: u32, child: u32) -> u32;"),
+        text.contains("append-child: func(self: u32, node: u32) -> u32;"),
         "a handle is the same opaque u32 in every position\n{text}"
     );
     assert!(
