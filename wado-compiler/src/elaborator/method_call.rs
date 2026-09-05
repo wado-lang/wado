@@ -1945,7 +1945,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .expect("a newtype names a declaration");
 
                     // Check if the newtype itself has the static method
-                    if self.has_static_method_direct(&newtype_name, &static_call.method) {
+                    if self.declares_method_directly(&newtype_name, &static_call.method) {
                         let fq = self
                             .tysys
                             .type_table
@@ -2045,7 +2045,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .borrow()
                         .nominal_head(target_type_id)
                         .expect("a flags type names a declaration");
-                    if self.has_static_method_direct(&flags_name, &static_call.method) {
+                    if self.declares_method_directly(&flags_name, &static_call.method) {
                         let fq = self
                             .tysys
                             .type_table
@@ -2570,13 +2570,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .map(|(blanket, _)| blanket)
     }
 
-    /// Whether an impl block on `struct_name` itself declares a receiver-less
-    /// `method_name` — what decides whether a newtype answers or its base does,
-    /// so no newtype fallback here. A map of mangled names answered first and
-    /// held the whole module's methods, receiver-taking ones included, so the
-    /// newtype's own name claimed a call only its base declares a static for.
-    fn has_static_method_direct(&self, struct_name: &str, method_name: &str) -> bool {
-        self.static_method_entries(&self.impl_target(struct_name), method_name)
+    /// Whether an impl block on `struct_name` itself declares `method_name`, of
+    /// either kind — what decides whether a newtype answers a qualified call or
+    /// its base does, so no newtype fallback here. The spelling names both
+    /// kinds, and asked of the receiver-less ones alone it sent a newtype's own
+    /// instance method to a base that declares nothing of the name.
+    fn declares_method_directly(&self, struct_name: &str, method_name: &str) -> bool {
+        self.impl_method_entries(&self.impl_target(struct_name), method_name)
             .next()
             .is_some()
     }
@@ -3202,12 +3202,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         arg_type_name: Option<&str>,
         target_hint: Option<&ImplTargetKey>,
     ) -> Option<StaticMethodRef> {
-        // Only trait impls are searched below, so a shadowing inherent
-        // declaration is invisible here: selecting a trait impl would mangle
-        // the call to a body the spelling does not name, while every signature
-        // and visibility lookup answered from the inherent one.
-        let receiver = self.static_receiver_key(struct_name, target_hint);
-        if self.has_inherent_impl_method(&receiver, method_name) {
+        // Only trait impls are searched below, and only their receiver-less
+        // methods, so a shadowing inherent associated function is invisible
+        // here: selecting a trait impl would mangle the call to a body the
+        // spelling does not name, while every signature and visibility lookup
+        // answered from the inherent one.
+        if self.has_inherent_static_method(struct_name, method_name, target_hint) {
             return None;
         }
         let impl_defs = self.trait_impls_for_receiver(struct_name, target_hint);
@@ -3505,7 +3505,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self.lookup_newtype(struct_name)
         {
             // First check if the newtype itself has this static method
-            if self.has_static_method_direct(struct_name, method_name) {
+            if self.declares_method_directly(struct_name, method_name) {
                 (
                     struct_name.to_string(),
                     qualified_struct_name,

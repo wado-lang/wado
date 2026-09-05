@@ -69,21 +69,6 @@ pub(crate) fn build_func_index(items: &[Item]) -> IndexMap<String, usize> {
     index
 }
 
-/// A type head names the type's own method, so an inherent declaration shadows
-/// a trait impl's of the same name, as dot syntax resolves it; the trait's is
-/// named `Trait::method`. Unshadowed, the two read as an overload, which every
-/// lookup that must commit to one declaration declines — no signature, no
-/// use→def edge, and the callee dropped from a call WIR still emitted.
-fn shadow_trait_impls<T>(
-    declared: Vec<T>,
-    is_inherent: impl Fn(&T) -> bool,
-) -> impl Iterator<Item = T> {
-    let shadows = declared.iter().any(&is_inherent);
-    declared
-        .into_iter()
-        .filter(move |declaration| is_inherent(declaration) || !shadows)
-}
-
 pub use types::TypeError;
 use types::{
     EnumInfo, FlagsInfo, GenericNewtypeInfo, ResourceInfo, StructFieldInfo, TypeLookup, VariantInfo,
@@ -708,43 +693,43 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     }
 
     /// Every declaration of `method_name` an impl block on `receiver` makes,
-    /// both kinds, shadowed by [`shadow_trait_impls`] and receiver-less first.
+    /// receiver-less first — the one walk behind every qualified lookup.
     ///
-    /// The one walk behind every qualified lookup. Two of them read two
-    /// indexes, and each rule one of them kept was a rule the spelling did not
-    /// have.
+    /// An inherent declaration shadows a trait impl's *of the same kind*, as
+    /// dot syntax resolves it. Only same-kind declarations are alternatives for
+    /// one call: an associated function and a method taking a receiver are
+    /// reached by different argument lists, and shadowing across the two leaves
+    /// the associated function no spelling at all, `Trait::method()` having no
+    /// receiver to infer `Self` from.
     pub(in crate::elaborator) fn impl_method_entries(
         &self,
         receiver: &trait_env::ImplTargetKey,
         method_name: &str,
     ) -> impl Iterator<Item = &trait_env::ImplMethodEntry> {
-        let named: Vec<&trait_env::ImplMethodEntry> = self
+        let bucket: &[trait_env::ImplMethodEntry] = self
             .tysys
             .trait_env
             .impl_method_index
             .get(receiver)
-            .into_iter()
-            .flatten()
-            .filter(|e| e.name == method_name)
-            .collect();
-        let mut shadowed: Vec<&trait_env::ImplMethodEntry> =
-            shadow_trait_impls(named, |e| e.is_inherent()).collect();
-        // An associated function answers first, as it did while the two walks
-        // were chained. Stable, so declaration order decides within each kind.
-        shadowed.sort_by_key(|e| e.has_self);
-        shadowed.into_iter()
-    }
-
-    /// Whether an inherent impl on `receiver` declares `method_name`, of either
-    /// kind — the fact [`shadow_trait_impls`] filters on, for the ladders that
-    /// search the trait impls alone and would otherwise miss the shadow.
-    pub(in crate::elaborator) fn has_inherent_impl_method(
-        &self,
-        receiver: &trait_env::ImplTargetKey,
-        method_name: &str,
-    ) -> bool {
-        self.impl_method_entries(receiver, method_name)
-            .any(trait_env::ImplMethodEntry::is_inherent)
+            .map_or(&[], Vec::as_slice);
+        let named = move |entry: &&trait_env::ImplMethodEntry| entry.name == method_name;
+        let shadowed = |has_self: bool| {
+            bucket
+                .iter()
+                .any(|e| e.name == method_name && e.has_self == has_self && e.is_inherent())
+        };
+        let shadowed = [shadowed(false), shadowed(true)];
+        let survives = move |entry: &&trait_env::ImplMethodEntry| {
+            entry.is_inherent() || !shadowed[usize::from(entry.has_self)]
+        };
+        let of_kind = move |has_self: bool| {
+            bucket
+                .iter()
+                .filter(named)
+                .filter(survives)
+                .filter(move |e| e.has_self == has_self)
+        };
+        of_kind(false).chain(of_kind(true))
     }
 
     /// Build a [`control_flow::CtrlFlowCtx`] over the currently-active
