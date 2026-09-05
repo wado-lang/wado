@@ -31,11 +31,9 @@ fn write_targets(
 }
 
 /// The block behind a `Block` / `LabeledBlock` expression that can yield a
-/// value. A block leaving nothing on the stack has no value to fold to,
-/// whatever its last statement computed, and the type is what says so. Unit is
-/// the inlined statement call, whose result stands where the program expects
-/// none; never is the `else` of a `let ... else { panic("…") }`, which builds a
-/// constant message and then diverges.
+/// value. One leaving nothing on the stack has none to fold to, whatever its
+/// last statement computed: unit is an inlined statement call, never a
+/// `let ... else { panic("…") }` arm.
 pub(super) fn value_block_shape<'a>(
     body: &'a Body,
     e: ExprId,
@@ -135,10 +133,8 @@ pub(super) fn region_shape<'a>(
     }
 }
 
-/// Why a block cannot run as a region frame. The fold only needs to know that
-/// it cannot; a remark reporting a region that survived to the final IR needs
-/// to say which fact stopped it, so the answer carries the reason rather than
-/// collapsing to an absence.
+/// Why a block cannot run as a region frame. The fold needs only that it cannot;
+/// a remark on a region that survived needs to say which fact stopped it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RegionRefusal {
     /// A write to a module-scope global, whose lifetime outlives the frame.
@@ -173,14 +169,13 @@ impl RegionRefusal {
 }
 
 /// What a frame would need to run `block`: the outer locals it only reads, and
-/// the first fact that disqualifies it, if any. A write is an `Assign` target, a
-/// `&mut` borrow, or a `&mut` parameter per the callee's signature — the
-/// signature being the only reliable witness.
+/// the first fact that disqualifies it. A write is an `Assign` target, a `&mut`
+/// borrow, or a `&mut` parameter per the callee's signature, the signature being
+/// the only reliable witness.
 ///
-/// The walk finishes even once a refusal is found, because the two answers are
-/// independent and a caller may want either. Returning on the first refusal
-/// hides the reads discovered after it, and a block reading a runtime local was
-/// never a constant whatever else is wrong with it.
+/// The walk finishes past a refusal, since the two answers are independent:
+/// stopping there would hide the reads after it, and a block reading a runtime
+/// local was never a constant whatever else is wrong with it.
 pub(super) fn region_needs(
     body: &Body,
     block: BlockId,

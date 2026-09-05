@@ -12,7 +12,7 @@ use cranelift_entity::EntityRef;
 use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
 use crate::nir::{FunctionRef, NirUnaryOp};
-use crate::nir_arena::{Body, ExprId, ExprKind, NodeRef};
+use crate::nir_arena::{Body, ExprId, ExprKind, NodeRef, StmtKind};
 use crate::nir_package::NirPackage;
 use crate::niri::{
     CtfeBuiltin, CtfeBuiltinMap, build_callee_map, build_ctfe_builtin_map, is_ctfe_runnable,
@@ -465,14 +465,9 @@ pub fn collect_const_region_remarks(package: &NirPackage) -> Vec<Remark> {
             continue;
         };
         for region in region_queries(body, &callees, &ctfe_builtins, &materializing, type_table) {
-            // A region reading an outer local yields no constant, whatever else
-            // in it the engine also cannot do.
-            if !region.free_reads.is_empty() {
-                continue;
-            }
-            // An inner block writing the buffer its parent owns is how a
-            // template is built. The parent is reported on its own.
-            if region.writes_outer {
+            // Reading an outer local means no constant to miss; writing one
+            // means an inner block of a template, reported through its parent.
+            if region.reads_outer || region.writes_outer {
                 continue;
             }
             let surviving = surviving_calls(body, region.expr, &names, &ctfe_builtins);
@@ -534,7 +529,7 @@ fn block_is_cold(body: &Body, node: NodeRef, ctfe_builtins: &CtfeBuiltinMap) -> 
         return false;
     };
     body.blocks[b].stmts.iter().any(|s| {
-        let crate::nir_arena::StmtKind::Expr(op) = &body.stmts[*s].kind else {
+        let StmtKind::Expr(op) = &body.stmts[*s].kind else {
             return false;
         };
         op.as_expr().is_some_and(|e| {

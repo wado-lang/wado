@@ -142,7 +142,7 @@ mod trackability;
 
 pub use callee::{Callee, CalleeKey, CalleeMap};
 use pattern::PatternMatch;
-pub use region::{RegionRefusal, global_mention, materialization_pair};
+pub use region::RegionRefusal;
 pub(crate) use rewrite::guard_declares_locals;
 use trackability::Trackability;
 
@@ -305,11 +305,8 @@ pub fn is_ctfe_eligible(func: &NirFunction) -> bool {
 }
 
 /// Derive the [`MaterializingGlobals`] set: pair a global on every block that
-/// materializes it, and drop it again on any mention outside one. Global
-/// initializers are walked too, since a read there counts like any other.
-///
-/// One derivation for the fold and the remark alike: a remark deciding this for
-/// itself would blame a store the fold exempts.
+/// materializes it, and drop it again on any mention outside one. One derivation
+/// for the fold and the remark alike, which must agree on what a store means.
 #[must_use]
 pub fn materializing_globals(project: &NirPackage) -> MaterializingGlobals {
     let mut paired = MaterializingGlobals::default();
@@ -352,27 +349,23 @@ pub fn materializing_globals(project: &NirPackage) -> MaterializingGlobals {
     paired
 }
 
-/// A region-shaped block and what a frame would need to run it. No free reads
-/// and no refusal mean it depends on nothing outside itself, so it denotes a
-/// constant whether or not the engine reached one.
-///
-/// Both answers, since a refusal alone cannot tell a block that was never a
-/// constant from one the fold missed.
+/// A region-shaped block and what a frame would need to run it. Reaching no
+/// outer local and meeting no refusal means it denotes a constant, whether or
+/// not the engine reached one.
 pub struct RegionQuery {
     pub expr: ExprId,
-    pub free_reads: Vec<u32>,
-    pub refusal: Option<RegionRefusal>,
-    /// Whether the block writes a local declared outside it. Carried apart from
-    /// `refusal`, which holds whichever fact the walk met first: a block that
-    /// writes its parent's buffer *and* calls something unrunnable reports the
-    /// call, and a consumer asking "is this an inner block of a larger region"
-    /// would then miss it.
+    /// Reads a local declared outside the block, so it is not a constant at all.
+    pub reads_outer: bool,
+    /// Writes one, which marks it as part of a larger region rather than one of
+    /// its own. Carried apart from `refusal`, which keeps whichever fact the
+    /// walk met first and can name something else.
     pub writes_outer: bool,
+    pub refusal: Option<RegionRefusal>,
 }
 
-/// Every region-shaped block in `body`, in walk order. Both the fold, which runs
-/// one as a frame, and the remark, which reports one that survived to the final
-/// IR, ask here rather than each deciding region shape for itself.
+/// Every region-shaped block in `body`, in walk order, for a caller reporting on
+/// regions rather than running them. It asks what the fold asks, so a remark
+/// never decides region shape for itself.
 #[must_use]
 pub fn region_queries(
     body: &Body,
@@ -397,9 +390,9 @@ pub fn region_queries(
             let needs = region::region_needs(body, block, facts, type_table);
             out.push(RegionQuery {
                 expr: e,
-                free_reads: needs.free_reads.into_iter().map(|r| r.index).collect(),
-                refusal: needs.refusal,
+                reads_outer: !needs.free_reads.is_empty(),
                 writes_outer: needs.writes_outer,
+                refusal: needs.refusal,
             });
         }
         body.for_each_child(node, |c| stack.push(c));

@@ -137,10 +137,10 @@ fn new_visitor<'a>(
     };
     visitor.interpreter.with_callees(&maps.callees);
     visitor.interpreter.with_ctfe_builtins(&maps.ctfe_builtins);
-    visitor.interpreter.with_globals(&globals.values);
-    visitor.interpreter.with_global_fields(&globals.fields);
     visitor
         .interpreter
+        .with_globals(&globals.values)
+        .with_global_fields(&globals.fields)
         .with_materializing_globals(&globals.materializing);
     visitor
 }

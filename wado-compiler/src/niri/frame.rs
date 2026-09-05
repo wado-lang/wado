@@ -408,10 +408,8 @@ impl Interpreter<'_> {
     }
 
     /// Bind what a materializing store names, so the read it serves resolves
-    /// inside the frame. The frame performs no write: the store and its reader
-    /// leave together with the region that carries them, which is what
-    /// [`MaterializingGlobals`] establishes. Any other store outlives the frame
-    /// and bails.
+    /// inside the frame. No write is performed: the store and its reader leave
+    /// together with the region carrying them, per [`MaterializingGlobals`].
     ///
     /// [`MaterializingGlobals`]: super::MaterializingGlobals
     fn exec_global_materialize(
@@ -697,8 +695,7 @@ impl Interpreter<'_> {
     }
 
     /// What `WADO_TRACE=ctfe_call` says about one call, under the name its
-    /// author wrote. A borrow already held — a self-call under the walker —
-    /// leaves the id, which is what the trace can still say about it.
+    /// author wrote. A self-call already holds the borrow, so it leaves the id.
     fn trace_call(&self, key: &CalleeKey, what: &str) {
         crate::compiler_trace!(
             "ctfe_call",

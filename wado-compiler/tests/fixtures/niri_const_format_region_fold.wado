@@ -5,8 +5,8 @@
 // at a use site (`{ G = "true"; G }`) serves the read below it and nothing
 // else, so it does not refuse the region as a global write. And the buffer the
 // region builds is bound to a `let mut` holding a `&mut` of itself, which the
-// frame resolves to a place alias — the analysis deciding what a frame can
-// track agrees, so the buffer keeps its value across the appends.
+// frame resolves to a place alias. The analysis deciding what a frame can track
+// agrees, so the buffer keeps its value across the appends.
 //
 // One template per function because the step budget is per function: seven in
 // one body exhausts it and five of them stop folding. Each folded literal is

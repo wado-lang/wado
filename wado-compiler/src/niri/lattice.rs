@@ -676,7 +676,7 @@ impl Interpreter<'_> {
     pub(super) fn global_lattice(&self, module_source: &ModuleSource, name: &str) -> Lattice {
         let key = (module_source.clone(), name.to_string());
         // The frame's own materialization wins: it is what the store two
-        // statements up named, where the package-wide env speaks for the slot.
+        // statements up named, whereas the package-wide env speaks for the slot.
         if let Some(value) = self.frame.materialized.get(&key) {
             return Lattice::Const(value.clone());
         }

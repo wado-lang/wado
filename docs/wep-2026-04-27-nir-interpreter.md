@@ -231,17 +231,17 @@ Two Gale-generated files hold 1 064 of them. That concentration is not a Gale
 fact: what generated code does is call the same missing capability often.
 
 The largest row is also the least specific. A region naming no call is waiting on
-a value the engine cannot represent rather than a body it cannot run, so it says
-which instrument to reach for next — `ctfe_stmt` — not which capability is
-missing. Only the statement trace turns those 820 into work.
+a value the engine cannot represent rather than a body it cannot run. It says
+which instrument to reach for next, not which capability is missing, so only
+`ctfe_stmt` turns those 820 into work.
 
 ### 1. The aggregate exit
 
-Every callee the census names by name — `push_encoded_ranges` (34),
-`union_char_ranges` (4), `binary_property_ranges` (4),
-`general_category_ranges` (2) — builds a `List<T>` from a constant, and a
-`List<T>` region is also what the no-call row reports. The census points at this
-one capability twice over: once by name, once by the silence. A `List<T>` filled
+Every callee the census names builds a `List<T>` from a constant:
+`push_encoded_ranges` (34), `union_char_ranges` (4), `binary_property_ranges`
+(4), `general_category_ranges` (2). A `List<T>` region is also what the no-call
+row reports, so the census points at this one capability twice over, once by
+name and once by the silence. A `List<T>` filled
 by a loop and returned does not fold, whether `T` is a scalar or a struct, while
 the same program over a `String` does. A `String`'s backing is a byte array the
 engine represents and can write back, and a `List<T>`'s is not.
@@ -266,8 +266,8 @@ literals, `Array::slice`'s computed bounds fold, and the corpus is recounted.
       materialization property: a global read somewhere that does not store it.
       Whether that set has a shape of its own, or is a tail of unrelated cases,
       decides whether there is a mechanism here at all.
-- [ ] Whether an unrunnable callee — impure, generic, async or bodiless — still
-      refuses a region anywhere. The corpus now counts none, so this is a check
+- [ ] Whether an unrunnable callee still refuses a region anywhere: impure,
+      generic, async or bodiless. The corpus now counts none, so this is a check
       that the refusal has no cases left rather than a set to work through. A
       genuinely impure callee is a correct refusal; a still-generic one after
       monomorphization is a bug.

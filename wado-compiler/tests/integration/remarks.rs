@@ -505,8 +505,8 @@ export fn run() with Stdout {
 
 #[test]
 fn a_runtime_interpolation_is_not_remarked() {
-    // The region reads a local the optimizer cannot know, so it is not a
-    // constant the engine failed to reach — it is a template that has to run.
+    // The region reads a local the optimizer cannot know, so it is a template
+    // that has to run, not a constant the engine failed to reach.
     let remarks = const_region_remarks(
         r#"
 use { println, Stdout } from "core:cli";
