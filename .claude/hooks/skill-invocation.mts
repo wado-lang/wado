@@ -21,7 +21,9 @@ const named = (value: unknown): string | null =>
 export function invokesSkill(payload: HookPayload | null, skill: string): boolean {
   switch (payload?.hook_event_name) {
     case "UserPromptSubmit":
-      return named(TYPED.exec(String(payload.prompt ?? ""))?.[1]) === skill;
+      return (
+        typeof payload.prompt === "string" && named(TYPED.exec(payload.prompt)?.[1]) === skill
+      );
     case "PostToolUse":
       return payload.tool_name === "Skill" && named(payload.tool_input?.skill) === skill;
     default:

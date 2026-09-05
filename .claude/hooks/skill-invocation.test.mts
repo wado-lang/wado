@@ -27,7 +27,15 @@ test("a typed name ends at its word", () => {
 });
 
 test("a field of the wrong type names no skill", () => {
-  for (const payload of [called(7), called(null), called({ name: "distill" }), typed(7)]) {
+  // An array is the coercion trap: `String(["/distill"])` is `"/distill"`.
+  for (const payload of [
+    called(7),
+    called(null),
+    called({ name: "distill" }),
+    called(["distill"]),
+    typed(7),
+    typed(["/distill"]),
+  ]) {
     assert.equal(invokesSkill(payload, "distill"), false);
   }
 });
