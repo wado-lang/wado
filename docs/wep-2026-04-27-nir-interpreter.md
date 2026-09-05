@@ -344,6 +344,10 @@ literal is a thousand operands, which `array.new_fixed` packs into a data segmen
 only where the elements are primitive. So the writer counts the operands it would
 place, charging a byte sequence one, and refuses past `MAX_MATERIALIZED_LEAVES`.
 
+It is a safety valve rather than a tuning knob. Swept over the benchmark and
+`wasm-size` corpora, every ceiling from 16 up emits the same bytes on every
+program: what the exit writes there is many small values, not a few wide ones.
+
 #### What it does not reach
 
 The exit writes values; it does not produce them. A callee the engine never folds
@@ -354,10 +358,7 @@ writer can emit. That one is stage 3's.
 - [x] The `TypeId` → fields index on `ProgramFacts`.
 - [x] The writer, reporting whether it changed the tree, and the identity,
       storage and budget gates.
-- [ ] The leaf ceiling, from `mise run report-wasm-size` and the benchmark suite;
-      it starts at a round number nothing has measured. Whether it should rise
-      where the result is a `let` globalization can hoist — built once at
-      instantiation rather than at every evaluation — is open.
+- [x] The leaf ceiling, swept against wasm size.
 - [ ] A destructuring `let`; a body containing one is abandoned.
 
 Done when a constant `List` result and a constant struct result reach the IR as

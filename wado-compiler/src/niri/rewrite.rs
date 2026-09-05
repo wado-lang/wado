@@ -26,6 +26,10 @@ type LocalIndexSet = crate::hashmap::IndexSet<u32>;
 /// Widest literal tree the writer will emit, counted in the operands it would
 /// place. A value the engine holds is bounded per sequence and by nothing across
 /// nesting, and past this the loop that computes it is the smaller program.
+///
+/// A safety valve rather than a tuning knob: over the benchmark and `wasm-size`
+/// corpora every value written comes in under 16 operands, so any ceiling from
+/// there up emits the same bytes.
 const MAX_MATERIALIZED_LEAVES: usize = 1024;
 
 impl Interpreter<'_> {
