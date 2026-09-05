@@ -192,9 +192,8 @@ struct SwitchAnalysis {
     default_arm: Option<usize>,
 }
 
-/// The values one arm's pattern names, as `i64` keys. Shared with
-/// `match_to_bitset`, so the two rules read one literal the same way.
-pub(super) enum CaseKey {
+/// The values one arm's pattern names, as `i64` keys.
+enum CaseKey {
     Value(i64),
     /// Inclusive at both ends, `lo <= hi`.
     Range {
@@ -208,7 +207,7 @@ pub(super) enum CaseKey {
 /// which would need an arm-local `let` of the scrutinee; a literal past `i64`,
 /// where a wrapping cast would corrupt the range; an empty range; or any
 /// destructuring pattern.
-pub(super) fn case_key(pat: &PatKind) -> Option<CaseKey> {
+fn case_key(pat: &PatKind) -> Option<CaseKey> {
     Some(match pat {
         PatKind::Literal(NirLiteralPattern::I128(v)) => CaseKey::Value(i64::try_from(*v).ok()?),
         PatKind::Literal(NirLiteralPattern::U128(v)) => CaseKey::Value(i64::try_from(*v).ok()?),
@@ -256,9 +255,25 @@ pub(super) fn scrutinee_bits(scrutinee_type: &ResolvedType) -> Option<u32> {
     }
 }
 
-enum CaseSpec {
-    Value(i64),
-    Range { lo: i64, hi: i64 },
+/// One arm's values as `(arm index, lo, hi)`, inclusive at both ends.
+pub(super) type ArmSpan = (usize, i64, i64);
+
+/// The arms' spans up to the wildcard, and the wildcard's own index. `match`
+/// is first-match-wins, so the arms past a wildcard are dead and none is
+/// walked. `None` for a guard, or a pattern no key dispatch takes.
+pub(super) fn arm_spans(arms: &[ArmData], body: &Body) -> Option<(Vec<ArmSpan>, Option<usize>)> {
+    let mut spans = Vec::new();
+    for (i, arm) in arms.iter().enumerate() {
+        if arm.guard.is_some() {
+            return None;
+        }
+        match case_key(&body.pats[arm.pattern].kind)? {
+            CaseKey::Value(v) => spans.push((i, v, v)),
+            CaseKey::Range { lo, hi } => spans.push((i, lo, hi)),
+            CaseKey::Wildcard => return Some((spans, Some(i))),
+        }
+    }
+    Some((spans, None))
 }
 
 /// Analyze whether a `Match` can be rewritten into a `Switch`. Accepts
@@ -268,44 +283,15 @@ enum CaseSpec {
 fn analyze(scrutinee_type: &ResolvedType, arms: &[ArmData], body: &Body) -> Option<SwitchAnalysis> {
     scrutinee_bits(scrutinee_type)?;
 
-    let mut specs: Vec<(CaseSpec, usize)> = Vec::new();
-    let mut default_arm: Option<usize> = None;
-    let mut min_value = i64::MAX;
-    let mut max_value = i64::MIN;
-
-    for (arm_idx, arm) in arms.iter().enumerate() {
-        if arm.guard.is_some() {
-            return None;
-        }
-        let (lo, hi) = match case_key(&body.pats[arm.pattern].kind)? {
-            CaseKey::Value(v) => (v, v),
-            CaseKey::Range { lo, hi } => (lo, hi),
-            CaseKey::Wildcard => {
-                if default_arm.is_some() {
-                    return None;
-                }
-                default_arm = Some(arm_idx);
-                // `match` is first-match-wins, so a wildcard matches everything
-                // from this position on: every later arm is dead. Stop here —
-                // collecting their specs would route their values to their own
-                // arms instead of the wildcard default.
-                break;
-            }
-        };
-        min_value = min_value.min(lo);
-        max_value = max_value.max(hi);
-        specs.push((
-            if lo == hi {
-                CaseSpec::Value(lo)
-            } else {
-                CaseSpec::Range { lo, hi }
-            },
-            arm_idx,
-        ));
-    }
-
+    let (specs, default_arm) = arm_spans(arms, body)?;
     if specs.is_empty() {
         return None;
+    }
+    let mut min_value = i64::MAX;
+    let mut max_value = i64::MIN;
+    for &(_, lo, hi) in &specs {
+        min_value = min_value.min(lo);
+        max_value = max_value.max(hi);
     }
 
     let range = i128::from(max_value) - i128::from(min_value) + 1;
@@ -323,14 +309,10 @@ fn analyze(scrutinee_type: &ResolvedType, arms: &[ArmData], body: &Body) -> Opti
     // shared values once — a value covered twice must not inflate density.
     let range = range as usize;
     let mut offset_arm: Vec<Option<usize>> = vec![None; range];
-    for (spec, arm_idx) in &specs {
-        let (lo, hi) = match spec {
-            CaseSpec::Value(v) => (*v, *v),
-            CaseSpec::Range { lo, hi } => (*lo, *hi),
-        };
+    for &(arm_idx, lo, hi) in &specs {
         for v in lo..=hi {
             let offset = (v - min_value) as usize;
-            offset_arm[offset].get_or_insert(*arm_idx);
+            offset_arm[offset].get_or_insert(arm_idx);
         }
     }
 

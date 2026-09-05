@@ -10,7 +10,7 @@ use crate::nir_value_graph::ValueKind;
 use crate::tir::{TypeId, TypeTable};
 use crate::token::Span;
 
-use super::match_to_switch::{CaseKey, case_key, scrutinee_bits};
+use super::match_to_switch::{arm_spans, scrutinee_bits};
 use super::select_lowering::select_call;
 
 /// Below this many members a compare cascade is as cheap as the mask test.
@@ -44,13 +44,6 @@ struct Bitset {
     default: bool,
 }
 
-/// The values one arm names, and what it yields for them.
-struct ArmSpan {
-    lo: i64,
-    hi: i64,
-    yields: bool,
-}
-
 impl Rule for MatchToBitsetRule<'_> {
     fn apply_expr(&self, engine: &mut Engine, id: ExprId) -> bool {
         let ExprKind::Match {
@@ -81,35 +74,26 @@ impl Rule for MatchToBitsetRule<'_> {
 }
 
 fn analyze(arms: &[ArmData], body: &Body) -> Option<Bitset> {
-    // The arms past a wildcard are dead. A match without one is exhaustive, so
-    // every value has an arm and nothing reads the default.
-    let mut spans = Vec::new();
-    let mut default = None;
-    for arm in arms {
-        if arm.guard.is_some() {
-            return None;
-        }
-        let yields = body.operand_const_bool(arm.body)?;
-        let (lo, hi) = match case_key(&body.pats[arm.pattern].kind)? {
-            CaseKey::Value(v) => (v, v),
-            CaseKey::Range { lo, hi } => (lo, hi),
-            CaseKey::Wildcard => {
-                default = Some(yields);
-                break;
-            }
-        };
-        spans.push(ArmSpan { lo, hi, yields });
-    }
-    let default = default.unwrap_or(false);
+    let (spans, wildcard) = arm_spans(arms, body)?;
+    // A match without a wildcard is exhaustive, so every value has an arm and
+    // nothing reads the default.
+    let default = match wildcard {
+        Some(i) => body.operand_const_bool(arms[i].body)?,
+        None => false,
+    };
+    let is_member = |arm: usize| Some(body.operand_const_bool(arms[arm].body)? != default);
 
-    // The window before a single value is walked: finding it by enumeration
-    // would do the work of every arm the width goes on to refuse. Only a
-    // member widens it, a value outside failing the range compare being the
-    // answer the default gives anyway.
+    // The window before a single value is walked: enumerating to find it would
+    // do the work of every arm the width goes on to refuse. Only a member
+    // widens it — a value outside fails the range compare, which is the answer
+    // the default gives anyway.
     let (mut min, mut max) = (i64::MAX, i64::MIN);
-    for span in spans.iter().filter(|s| s.yields != default) {
-        min = min.min(span.lo);
-        max = max.max(span.hi);
+    for &(arm, lo, hi) in &spans {
+        if !is_member(arm)? {
+            continue;
+        }
+        min = min.min(lo);
+        max = max.max(hi);
         if max.abs_diff(min) >= u64::from(64 * BITSET_MAX_WORDS) {
             return None;
         }
@@ -125,15 +109,16 @@ fn analyze(arms: &[ArmData], body: &Body) -> Option<Bitset> {
     let mut seen = vec![0u64; words_len];
     let mut words = vec![0u64; words_len];
     let mut members = 0usize;
-    for span in &spans {
-        for v in span.lo.max(min)..=span.hi.min(max) {
+    for &(arm, lo, hi) in &spans {
+        let member = is_member(arm)?;
+        for v in lo.max(min)..=hi.min(max) {
             let off = v.abs_diff(min);
             let (word, bit) = ((off / 64) as usize, 1u64 << (off % 64));
             if seen[word] & bit != 0 {
                 continue;
             }
             seen[word] |= bit;
-            if span.yields != default {
+            if member {
                 words[word] |= bit;
                 members += 1;
             }
