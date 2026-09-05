@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1788627142668,
+  "lastUpdate": 1788637233257,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -53737,6 +53737,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/98e8ad2e8953bb3fe06088fb2c304c70d591ee4b"
         },
         "date": 1788627142255,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 2013,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6560,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18891,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 277505,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "6c883abb77017fa0223382d3020e22d57e620c62",
+          "message": "Merge pull request #1978 from wado-lang/claude/tagged-template-literals-redesign-fccmqv\n\nfeat(compiler): tagged template literals over ReflectTemplate",
+          "timestamp": "2026-09-06T04:27:31+09:00",
+          "tree_id": "a57cc304e0e3546da8fa04b9fa83d9af045a7a81",
+          "url": "https://github.com/wado-lang/wado/commit/6c883abb77017fa0223382d3020e22d57e620c62"
+        },
+        "date": 1788637232592,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
