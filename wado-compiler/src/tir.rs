@@ -1068,9 +1068,8 @@ impl TypeTable {
         self.types.iter()
     }
 
-    /// Whether `id` is one of the scalar integers. `i128` / `u128` are prelude
-    /// structs and answer `false`: the callers ask in order to emit a Wasm
-    /// integer instruction, which no wide integer has.
+    /// Whether `id` is one of the scalar integers. `i128` / `u128` answer
+    /// `false`: no Wasm integer instruction takes them.
     pub fn is_integer(&self, id: TypeId) -> bool {
         // Follow newtype chain to get ultimate base type
         let base_id = self.representation_head(id);
@@ -1297,10 +1296,9 @@ impl TypeTable {
     }
 
     /// Whether `&T` / `&mut T` is represented as a `Box<T>` cell rather than
-    /// `T`'s own GC handle: a primitive, an enum, a variant, or a function type
-    /// (WEP 2026-06-13, Reference Representation). The boxing pass and every
-    /// consumer deciding by representation read this one predicate. `i128` /
-    /// `u128` are structs, so they answer `false` through the fallthrough.
+    /// `T`'s own GC handle (WEP 2026-06-13, Reference Representation). The
+    /// boxing pass and every consumer deciding by representation read this one
+    /// predicate.
     #[must_use]
     pub fn is_boxed_reference_target(&self, ty: TypeId) -> bool {
         match self.get(ty) {
@@ -1943,10 +1941,8 @@ impl TypeTable {
         self.compiler_items.trait_name(item)
     }
 
-    /// Whether `type_id` is an unsigned integer, `u128` included. This is what
-    /// an integer literal pattern asks of its scrutinee: the answer picks
-    /// between the `u128` and `i128` comparison paths, and codegen rejects a
-    /// `(ref $u128)` where it expects a `(ref $i128)`.
+    /// Whether `type_id` is an unsigned integer, `u128` included. An integer
+    /// literal pattern asks this to pick the `u128` over the `i128` comparison.
     #[must_use]
     pub fn is_unsigned_int(&self, type_id: TypeId) -> bool {
         matches!(
@@ -1957,13 +1953,8 @@ impl TypeTable {
         ) || self.wide_int_item(type_id) == Some(crate::compiler_item::CompilerItem::U128)
     }
 
-    /// Which wide-integer prelude struct `type_id` is —
-    /// [`CompilerItem::I128`](crate::compiler_item::CompilerItem::I128),
-    /// [`CompilerItem::U128`](crate::compiler_item::CompilerItem::U128), or
-    /// `None` for every other type. `i128` and `u128` are declarations in
-    /// `core:prelude/int128.wado`, so a declaration identity is the whole
-    /// answer; a phase that spells the name instead answers differently for a
-    /// user type that shares it.
+    /// Which wide-integer prelude struct `type_id` is, `None` for anything else.
+    /// By declaration identity: a name match also answers for a user type.
     #[must_use]
     pub fn wide_int_item(&self, type_id: TypeId) -> Option<crate::compiler_item::CompilerItem> {
         use crate::compiler_item::CompilerItem;

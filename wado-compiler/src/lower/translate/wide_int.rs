@@ -1,10 +1,6 @@
-//! Rewrite `match` on `i128` / `u128` scrutinees into if-else chains as
-//! the TIR → NIR translator walks them.
-//!
-//! Wasm has no native 128-bit comparison, so the rewrite emits explicit
-//! comparisons against `i128` / `u128` literals and lets `convert_expr`'s
-//! wide-int arm turn each into the `Eq::eq` / `Ord::cmp` call the prelude
-//! impls provide.
+//! Rewrite `match` on an `i128` / `u128` scrutinee into an if-else chain as the
+//! TIR → NIR translator walks it. Wasm has no 128-bit comparison, so each arm
+//! becomes a comparison `convert_expr` turns into a prelude `Eq` / `Ord` call.
 
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -16,10 +12,8 @@ use crate::tir::{
 };
 use crate::token::Span;
 
-/// True when the scrutinee type is the i128/u128 wrapper struct and at
-/// least one arm tests its value. Wildcard / binding arms alone don't trigger
-/// the rewrite — a plain `match x { _ => ... }` on a wide-int value is fine to
-/// lower as a normal NIR `Match`.
+/// True for a wide-int scrutinee with at least one arm that tests its value. A
+/// `match x { _ => … }` lowers fine as a normal NIR `Match`.
 pub(super) fn should_rewrite(
     scrutinee_type: TypeId,
     arms: &[TirMatchArm],
@@ -49,66 +43,19 @@ pub(super) fn build_if_chain(
 ) -> TirExpr {
     let mut else_expr: Option<TirExpr> = None;
     for arm in arms.iter().rev() {
+        // The refutable shapes differ only in the condition they test.
+        if let Some(condition) = arm_condition(&arm.pattern, scrutinee, span, type_table) {
+            let condition = with_guard(condition, arm.guard.as_ref(), span);
+            else_expr = Some(build_if(
+                condition,
+                &arm.body,
+                else_expr,
+                result_type_id,
+                span,
+            ));
+            continue;
+        }
         match &arm.pattern {
-            TirPattern::Literal(TirLiteralPattern::I128(value)) => {
-                let condition = compare(scrutinee, TirBinaryOp::Eq, *value, span, type_table);
-                let condition = with_guard(condition, arm.guard.as_ref(), span);
-                else_expr = Some(build_if(
-                    condition,
-                    &arm.body,
-                    else_expr,
-                    result_type_id,
-                    span,
-                ));
-            }
-            TirPattern::Literal(TirLiteralPattern::U128(value)) => {
-                let condition = compare(
-                    scrutinee,
-                    TirBinaryOp::Eq,
-                    value.cast_signed(),
-                    span,
-                    type_table,
-                );
-                let condition = with_guard(condition, arm.guard.as_ref(), span);
-                else_expr = Some(build_if(
-                    condition,
-                    &arm.body,
-                    else_expr,
-                    result_type_id,
-                    span,
-                ));
-            }
-            TirPattern::Range {
-                start,
-                end,
-                inclusive,
-                ..
-            } => {
-                let lower = compare(scrutinee, TirBinaryOp::GtEq, *start, span, type_table);
-                let upper_op = if *inclusive {
-                    TirBinaryOp::LtEq
-                } else {
-                    TirBinaryOp::Lt
-                };
-                let upper = compare(scrutinee, upper_op, *end, span, type_table);
-                let condition = TirExpr::new(
-                    TirExprKind::Binary {
-                        op: TirBinaryOp::And,
-                        left: Box::new(lower),
-                        right: Box::new(upper),
-                    },
-                    TypeTable::BOOL,
-                    span,
-                );
-                let condition = with_guard(condition, arm.guard.as_ref(), span);
-                else_expr = Some(build_if(
-                    condition,
-                    &arm.body,
-                    else_expr,
-                    result_type_id,
-                    span,
-                ));
-            }
             TirPattern::Wildcard => {
                 if let Some(guard) = &arm.guard {
                     else_expr = Some(build_if(
@@ -170,6 +117,50 @@ pub(super) fn build_if_chain(
     else_expr.expect("wide-int match has at least one arm")
 }
 
+/// The condition an arm's pattern tests, or `None` for one that always matches
+/// and so needs no test.
+fn arm_condition(
+    pattern: &TirPattern,
+    scrutinee: &TirExpr,
+    span: Span,
+    type_table: &Rc<RefCell<TypeTable>>,
+) -> Option<TirExpr> {
+    match pattern {
+        TirPattern::Literal(TirLiteralPattern::I128(value)) => Some(compare(
+            scrutinee,
+            TirBinaryOp::Eq,
+            *value,
+            span,
+            type_table,
+        )),
+        TirPattern::Literal(TirLiteralPattern::U128(value)) => Some(compare(
+            scrutinee,
+            TirBinaryOp::Eq,
+            value.cast_signed(),
+            span,
+            type_table,
+        )),
+        TirPattern::Range {
+            start,
+            end,
+            inclusive,
+            ..
+        } => {
+            let upper_op = if *inclusive {
+                TirBinaryOp::LtEq
+            } else {
+                TirBinaryOp::Lt
+            };
+            Some(and(
+                compare(scrutinee, TirBinaryOp::GtEq, *start, span, type_table),
+                compare(scrutinee, upper_op, *end, span, type_table),
+                span,
+            ))
+        }
+        _ => None,
+    }
+}
+
 /// `scrutinee <op> <bits>` as a plain `Binary`. `convert_expr`'s wide-int arm
 /// turns it — and the literal operand — into the calls the prelude provides.
 fn compare(
@@ -195,18 +186,22 @@ fn compare(
     )
 }
 
+fn and(left: TirExpr, right: TirExpr, span: Span) -> TirExpr {
+    TirExpr::new(
+        TirExprKind::Binary {
+            op: TirBinaryOp::And,
+            left: Box::new(left),
+            right: Box::new(right),
+        },
+        TypeTable::BOOL,
+        span,
+    )
+}
+
 fn with_guard(condition: TirExpr, guard: Option<&TirExpr>, span: Span) -> TirExpr {
     match guard {
         None => condition,
-        Some(guard) => TirExpr::new(
-            TirExprKind::Binary {
-                op: TirBinaryOp::And,
-                left: Box::new(condition),
-                right: Box::new(guard.clone()),
-            },
-            TypeTable::BOOL,
-            span,
-        ),
+        Some(guard) => and(condition, guard.clone(), span),
     }
 }
 

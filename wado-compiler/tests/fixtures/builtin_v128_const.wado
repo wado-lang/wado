@@ -1,8 +1,7 @@
-/// `builtin::v128_const` takes its bit pattern as an `i128` literal, and `i128`
-/// is a prelude struct built by a constructor call — so WIR translation reads
-/// the constant back out of either that call or the struct literal the inliner
-/// leaves in its place. Matching only one shape ICE'd at some -O levels and not
-/// others.
+/// `builtin::v128_const` takes its bit pattern as an `i128` literal. `i128` is a
+/// prelude struct built by a constructor call, so WIR translation reads the
+/// constant back out of either that call or the struct literal the inliner
+/// leaves in its place. Matching one shape only ICE'd on every call.
 use { println, Stdout } from "core:cli";
 
 export fn run() with Stdout {

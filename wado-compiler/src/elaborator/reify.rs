@@ -10287,14 +10287,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             }
             ast::Pattern::Literal(lit) => {
                 use crate::tir::TirLiteralPattern;
-                // Mirror `Elaborator::resolve_if_pattern_inner`'s literal
-                // arm: wide-int literals follow the
-                // scrutinee's signedness (a `u128` scrutinee must compare
-                // via `u128::*`, not `i128::*`, or codegen emits a
-                // `(ref $u128)` vs `(ref $i128)` mismatch), and char /
-                // string literals decode their escapes. `null` on a
-                // variant scrutinee with a `None` case lowers to that
-                // case.
+                // Mirrors `Elaborator::resolve_if_pattern_inner`'s literal arm:
+                // char / string literals decode their escapes, and `null` on a
+                // variant scrutinee with a `None` case lowers to that case.
                 let scrutinee_is_unsigned = self
                     .tysys
                     .type_table

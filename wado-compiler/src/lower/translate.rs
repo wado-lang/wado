@@ -1206,9 +1206,8 @@ impl FunctionTranslator<'_, '_> {
         // `i64` must not collide).
         use crate::nir_value_graph::ValueKind;
         let vk = match &expr.kind {
-            // A wide int is a struct, not a pool scalar, and `u64` could not
-            // hold it anyway: fall through so `convert_expr` builds the
-            // constructor call.
+            // A wide int is a struct, and `u64` could not hold one anyway:
+            // fall through to `convert_expr`'s constructor call.
             TirExprKind::IntLiteral { value, .. } => self
                 .wide_int_of(expr.type_id)
                 .is_none()
@@ -1328,11 +1327,11 @@ impl FunctionTranslator<'_, '_> {
             );
             return self.convert_expr(&block_expr);
         }
-        // A wide int (`i128` / `u128`) is a struct: an integer literal of one
-        // is its constructor call, and a comparison is a call into its `Eq` /
-        // `Ord` impl. Pattern lowering builds the scalar forms — it holds the
-        // type table immutably and so cannot intern either call — and this is
-        // where every pattern position passes through, whatever nests it.
+        // A wide int (`i128` / `u128`) is a struct, so a literal of one is a
+        // constructor call and a comparison an `Eq` / `Ord` call. Pattern
+        // lowering emits the scalar forms instead: it holds the type table
+        // immutably and cannot intern either call. Every pattern position
+        // passes through here, whatever nests it.
         if let TirExprKind::IntLiteral { repr, .. } = &expr.kind
             && let Some(item) = self.wide_int_of(expr.type_id)
         {

@@ -231,8 +231,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             | PrimitiveType::U64
                             | PrimitiveType::F32
                             | PrimitiveType::F64
-                    ) // The wide integers are struct-backed in the prelude, so
-                      // their base never reads as a `Primitive`.
+                    )
                 ) || tt.wide_int_item(base).is_some()
             }
             ArgClass::FloatLit => matches!(

@@ -1,10 +1,9 @@
-//! Shared TIR builders for `i128` / `u128` values, at the `lower::` top level
-//! for callers either side of the planner / translator boundary, which must
-//! produce identical `Call` shapes for the optimizer and `wir_build` to match
-//! on. A literal fitting 64 bits emits `from_i64` / `from_u64`, anything wider
-//! `from_pair(lo, hi)` — the elaborator's own split for source literals. Both
-//! types are prelude structs, so a comparison is a call into their `Eq` / `Ord`
-//! impls: Wasm has no 128-bit compare and no scalar lowering exists.
+//! TIR builders for `i128` / `u128` values — both are prelude structs, so a
+//! literal is a constructor call and a comparison an `Eq` / `Ord` call.
+//!
+//! At the `lower::` top level for callers either side of the planner /
+//! translator boundary: the optimizer and `wir_build` match on the `Call` shape,
+//! so every producer must emit the same one.
 
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -44,9 +43,9 @@ fn ctor_ref(type_table: &TypeTable, owner: CompilerItem, ctor: CompilerItem) -> 
 }
 
 /// Which wide-int constructor a call names, and how its arguments compose into
-/// the 128-bit pattern. [`classify_ctor`] recognises exactly the calls the
-/// builders below emit, so a consumer reading a wide-int literal back cannot
-/// drift from the producer.
+/// the 128-bit pattern. [`classify_ctor`] recognises exactly the calls
+/// [`create_literal`] emits, so a consumer reading a wide-int literal back
+/// cannot drift from the producer.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub(crate) enum WideIntCtor {
     /// `i128::from_i64(v)` — sign-extends.
@@ -58,6 +57,27 @@ pub(crate) enum WideIntCtor {
 }
 
 impl WideIntCtor {
+    /// Every `(owner, shape)` pair a wide-int literal can take.
+    const ALL: [(CompilerItem, Self); 4] = [
+        (CompilerItem::I128, Self::FromI64),
+        (CompilerItem::I128, Self::FromPair),
+        (CompilerItem::U128, Self::FromU64),
+        (CompilerItem::U128, Self::FromPair),
+    ];
+
+    /// The constructor method `item` reaches this shape through — the one
+    /// mapping between the two, so the producer and the matcher below cannot
+    /// come to list different sets.
+    fn method(self, item: CompilerItem) -> CompilerItem {
+        match (item, self) {
+            (CompilerItem::I128, Self::FromI64) => CompilerItem::I128FromI64,
+            (CompilerItem::I128, Self::FromPair) => CompilerItem::I128FromPair,
+            (CompilerItem::U128, Self::FromU64) => CompilerItem::U128FromU64,
+            (CompilerItem::U128, Self::FromPair) => CompilerItem::U128FromPair,
+            (item, shape) => panic!("{item} has no {shape:?} constructor"),
+        }
+    }
+
     /// The 128-bit pattern `args` denote, in the callee's parameter order and
     /// each read as the raw bits of its declared 64-bit parameter type.
     pub(crate) fn compose(self, args: &[u64]) -> i128 {
@@ -72,40 +92,17 @@ impl WideIntCtor {
 
 /// The wide-int constructor `mangled` names, or `None` for any other callee.
 pub(crate) fn classify_ctor(type_table: &TypeTable, mangled: &str) -> Option<WideIntCtor> {
-    for (owner, ctor, kind) in [
-        (
-            CompilerItem::I128,
-            CompilerItem::I128FromI64,
-            WideIntCtor::FromI64,
-        ),
-        (
-            CompilerItem::U128,
-            CompilerItem::U128FromU64,
-            WideIntCtor::FromU64,
-        ),
-        (
-            CompilerItem::I128,
-            CompilerItem::I128FromPair,
-            WideIntCtor::FromPair,
-        ),
-        (
-            CompilerItem::U128,
-            CompilerItem::U128FromPair,
-            WideIntCtor::FromPair,
-        ),
-    ] {
-        let ctor = ctor_ref(type_table, owner, ctor);
+    WideIntCtor::ALL.into_iter().find_map(|(owner, shape)| {
+        let ctor = ctor_ref(type_table, owner, shape.method(owner));
         let name = LocalMethodName::new(ctor.type_name, None, ctor.method_name);
-        if name.to_mangled_name() == mangled {
-            return Some(kind);
-        }
-    }
-    None
+        (name.to_mangled_name() == mangled).then_some(shape)
+    })
 }
 
 /// A literal of the wide-integer type `item` carrying the bit pattern `bits`.
-/// Reads the pattern as signed or unsigned per `item`, so the two constructor
-/// families are picked by the type rather than by the caller.
+/// A value fitting 64 bits goes through `from_i64` / `from_u64`, anything wider
+/// through `from_pair(low, high)` — the elaborator's own split for source
+/// literals.
 pub(crate) fn create_literal(
     item: CompilerItem,
     bits: i128,
@@ -113,11 +110,57 @@ pub(crate) fn create_literal(
     type_table: &TypeTable,
     span: Span,
 ) -> TirExpr {
-    match item {
-        CompilerItem::I128 => create_i128_literal(bits, type_id, type_table, span),
-        CompilerItem::U128 => create_u128_literal(bits.cast_unsigned(), type_id, type_table, span),
+    let (low, high) = (bits.cast_unsigned() as u64, (bits >> 64) as u64);
+    // Each argument as `(raw bits, declared parameter type)`.
+    let (shape, args): (_, Vec<(u64, TypeId)>) = match item {
+        CompilerItem::I128 if i64::try_from(bits).is_ok() => {
+            (WideIntCtor::FromI64, vec![(low, TypeTable::I64)])
+        }
+        CompilerItem::I128 => (
+            WideIntCtor::FromPair,
+            vec![(low, TypeTable::U64), (high, TypeTable::I64)],
+        ),
+        CompilerItem::U128 if u64::try_from(bits.cast_unsigned()).is_ok() => {
+            (WideIntCtor::FromU64, vec![(low, TypeTable::U64)])
+        }
+        CompilerItem::U128 => (
+            WideIntCtor::FromPair,
+            vec![(low, TypeTable::U64), (high, TypeTable::U64)],
+        ),
         other => panic!("{other} is not a wide-integer type"),
-    }
+    };
+    let ctor = ctor_ref(type_table, item, shape.method(item));
+    let method_info = LocalMethodName::new(ctor.type_name, None, ctor.method_name);
+    TirExpr::new(
+        TirExprKind::Call {
+            func: Box::new(FunctionRef {
+                module_source: ctor.module_source,
+                name: method_info.to_mangled_name(),
+                monomorph_info: None,
+                method_info: Some(method_info),
+            }),
+            type_args: vec![],
+            args: args
+                .into_iter()
+                .map(|(value, param_type)| {
+                    // `repr` is the spelling a dump prints, so it follows the
+                    // parameter's own signedness.
+                    let repr = if param_type == TypeTable::I64 {
+                        value.cast_signed().to_string()
+                    } else {
+                        value.to_string()
+                    };
+                    CallArg::new(
+                        TirExpr::new(TirExprKind::IntLiteral { value, repr }, param_type, span),
+                        false,
+                    )
+                })
+                .collect(),
+            has_receiver: false,
+        },
+        type_id,
+        span,
+    )
 }
 
 /// A literal of the wide-integer type `item` read from a source-form integer
@@ -153,47 +196,51 @@ pub(crate) fn compare(
     type_table: &Rc<RefCell<TypeTable>>,
     span: Span,
 ) -> Option<TirExpr> {
-    let ord_op = match op {
-        TirBinaryOp::Lt => Some(crate::ast::BinaryOp::Lt),
-        TirBinaryOp::Gt => Some(crate::ast::BinaryOp::Gt),
-        TirBinaryOp::LtEq => Some(crate::ast::BinaryOp::LtEq),
-        TirBinaryOp::GtEq => Some(crate::ast::BinaryOp::GtEq),
-        TirBinaryOp::Eq | TirBinaryOp::NotEq => None,
-        _ => return None,
+    use crate::ast::BinaryOp;
+
+    let eq = || {
+        trait_method_call(
+            item,
+            CompilerItem::Eq,
+            "eq",
+            left,
+            right,
+            TypeTable::BOOL,
+            type_table,
+            span,
+        )
     };
-    let (trait_item, method, result_type) = match ord_op {
-        Some(_) => (
+    let ord = |op| {
+        let ordering = type_table
+            .borrow_mut()
+            .make_compiler_enum(CompilerItem::Ordering);
+        let cmp = trait_method_call(
+            item,
             CompilerItem::Ord,
             "cmp",
-            type_table
-                .borrow_mut()
-                .make_compiler_enum(CompilerItem::Ordering),
-        ),
-        None => (CompilerItem::Eq, "eq", TypeTable::BOOL),
+            left,
+            right,
+            ordering,
+            type_table,
+            span,
+        );
+        crate::elaborator::reify::ord_bool_from_cmp(cmp, op, span, type_table)
     };
-    let call = trait_method_call(
-        item,
-        trait_item,
-        method,
-        left,
-        right,
-        result_type,
-        type_table,
-        span,
-    );
-    Some(match (ord_op, op) {
-        (Some(ord_op), _) => {
-            crate::elaborator::reify::ord_bool_from_cmp(call, ord_op, span, type_table)
-        }
-        (None, TirBinaryOp::NotEq) => TirExpr::new(
+    Some(match op {
+        TirBinaryOp::Eq => eq(),
+        TirBinaryOp::NotEq => TirExpr::new(
             TirExprKind::Unary {
                 op: TirUnaryOp::Not,
-                expr: Box::new(call),
+                expr: Box::new(eq()),
             },
             TypeTable::BOOL,
             span,
         ),
-        (None, _) => call,
+        TirBinaryOp::Lt => ord(BinaryOp::Lt),
+        TirBinaryOp::Gt => ord(BinaryOp::Gt),
+        TirBinaryOp::LtEq => ord(BinaryOp::LtEq),
+        TirBinaryOp::GtEq => ord(BinaryOp::GtEq),
+        _ => return None,
     })
 }
 
@@ -248,194 +295,6 @@ fn trait_method_call(
             vec![CallArg::new(arg, false)],
         ),
         result_type,
-        span,
-    )
-}
-
-/// Create an i128 literal TIR expression that evaluates to `value`.
-pub(crate) fn create_i128_literal(
-    value: i128,
-    type_id: TypeId,
-    type_table: &TypeTable,
-    span: Span,
-) -> TirExpr {
-    if let Ok(fits) = i64::try_from(value) {
-        let ctor = ctor_ref(type_table, CompilerItem::I128, CompilerItem::I128FromI64);
-        return build_i128_from_i64_call(fits, value, type_id, &ctor, span);
-    }
-    let (low, high) = (value as u64, (value >> 64) as i64);
-    let ctor = ctor_ref(type_table, CompilerItem::I128, CompilerItem::I128FromPair);
-    build_i128_from_pair_call(low, high, type_id, &ctor, span)
-}
-
-/// Create a u128 literal TIR expression that evaluates to `value`.
-pub(crate) fn create_u128_literal(
-    value: u128,
-    type_id: TypeId,
-    type_table: &TypeTable,
-    span: Span,
-) -> TirExpr {
-    if let Ok(fits) = u64::try_from(value) {
-        let ctor = ctor_ref(type_table, CompilerItem::U128, CompilerItem::U128FromU64);
-        return build_u128_from_u64_call(fits, value, type_id, &ctor, span);
-    }
-    let (low, high) = (value as u64, (value >> 64) as u64);
-    let ctor = ctor_ref(type_table, CompilerItem::U128, CompilerItem::U128FromPair);
-    build_u128_from_pair_call(low, high, type_id, &ctor, span)
-}
-
-fn build_i128_from_i64_call(
-    value: i64,
-    original: i128,
-    type_id: TypeId,
-    ctor: &CtorRef,
-    span: Span,
-) -> TirExpr {
-    let inner_literal = TirExpr::new(
-        TirExprKind::IntLiteral {
-            value: value.cast_unsigned(),
-            repr: original.to_string(),
-        },
-        TypeTable::I64,
-        span,
-    );
-    let method_info = LocalMethodName::new(ctor.type_name.clone(), None, ctor.method_name.clone());
-    let mangled_name = method_info.to_mangled_name();
-    TirExpr::new(
-        TirExprKind::Call {
-            func: Box::new(FunctionRef {
-                module_source: ctor.module_source.clone(),
-                name: mangled_name,
-                monomorph_info: None,
-                method_info: Some(method_info),
-            }),
-            type_args: vec![],
-            args: vec![CallArg::new(inner_literal, false)],
-            has_receiver: false,
-        },
-        type_id,
-        span,
-    )
-}
-
-fn build_u128_from_u64_call(
-    value: u64,
-    original: u128,
-    type_id: TypeId,
-    ctor: &CtorRef,
-    span: Span,
-) -> TirExpr {
-    let inner_literal = TirExpr::new(
-        TirExprKind::IntLiteral {
-            value,
-            repr: original.to_string(),
-        },
-        TypeTable::U64,
-        span,
-    );
-    let method_info = LocalMethodName::new(ctor.type_name.clone(), None, ctor.method_name.clone());
-    let mangled_name = method_info.to_mangled_name();
-    TirExpr::new(
-        TirExprKind::Call {
-            func: Box::new(FunctionRef {
-                module_source: ctor.module_source.clone(),
-                name: mangled_name,
-                monomorph_info: None,
-                method_info: Some(method_info),
-            }),
-            type_args: vec![],
-            args: vec![CallArg::new(inner_literal, false)],
-            has_receiver: false,
-        },
-        type_id,
-        span,
-    )
-}
-
-fn build_i128_from_pair_call(
-    low: u64,
-    high: i64,
-    type_id: TypeId,
-    ctor: &CtorRef,
-    span: Span,
-) -> TirExpr {
-    let low_literal = TirExpr::new(
-        TirExprKind::IntLiteral {
-            value: low,
-            repr: low.to_string(),
-        },
-        TypeTable::U64,
-        span,
-    );
-    let high_literal = TirExpr::new(
-        TirExprKind::IntLiteral {
-            value: high.cast_unsigned(),
-            repr: high.to_string(),
-        },
-        TypeTable::I64,
-        span,
-    );
-    let method_info = LocalMethodName::new(ctor.type_name.clone(), None, ctor.method_name.clone());
-    TirExpr::new(
-        TirExprKind::Call {
-            func: Box::new(FunctionRef {
-                module_source: ctor.module_source.clone(),
-                name: method_info.to_mangled_name(),
-                monomorph_info: None,
-                method_info: Some(method_info),
-            }),
-            type_args: vec![],
-            args: vec![
-                CallArg::new(low_literal, false),
-                CallArg::new(high_literal, false),
-            ],
-            has_receiver: false,
-        },
-        type_id,
-        span,
-    )
-}
-
-fn build_u128_from_pair_call(
-    low: u64,
-    high: u64,
-    type_id: TypeId,
-    ctor: &CtorRef,
-    span: Span,
-) -> TirExpr {
-    let low_literal = TirExpr::new(
-        TirExprKind::IntLiteral {
-            value: low,
-            repr: low.to_string(),
-        },
-        TypeTable::U64,
-        span,
-    );
-    let high_literal = TirExpr::new(
-        TirExprKind::IntLiteral {
-            value: high,
-            repr: high.to_string(),
-        },
-        TypeTable::U64,
-        span,
-    );
-    let method_info = LocalMethodName::new(ctor.type_name.clone(), None, ctor.method_name.clone());
-    TirExpr::new(
-        TirExprKind::Call {
-            func: Box::new(FunctionRef {
-                module_source: ctor.module_source.clone(),
-                name: method_info.to_mangled_name(),
-                monomorph_info: None,
-                method_info: Some(method_info),
-            }),
-            type_args: vec![],
-            args: vec![
-                CallArg::new(low_literal, false),
-                CallArg::new(high_literal, false),
-            ],
-            has_receiver: false,
-        },
-        type_id,
         span,
     )
 }
