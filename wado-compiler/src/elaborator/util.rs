@@ -382,26 +382,25 @@ fn decode_surrogate_pair(high: u16, low: u16) -> u32 {
     0x10000 + (high << 10) + low
 }
 
-/// A range-pattern endpoint's value, as the bits of the scrutinee's own type:
-/// read unsigned, a `u128` bound above `i128::MAX` keeps its pattern rather than
-/// failing to parse. `None` for an endpoint that denotes no integer, which
-/// annotate diagnoses.
-///
-/// The one decoder for the question — signedness governs it, so a caller that
-/// answers without the scrutinee's type answers wrongly for half the range.
+/// An integer literal's 128 bits, read as signed or unsigned per `is_unsigned`.
+/// Only the unsigned read reaches a value above `i128::MAX`.
+pub(super) fn parse_int_bits(repr: &str, is_unsigned: bool) -> Result<i128, String> {
+    if is_unsigned {
+        parse_u128_literal(repr).map(u128::cast_signed)
+    } else {
+        parse_i128_literal(repr)
+    }
+}
+
+/// A range-pattern endpoint's value, as the bits of the scrutinee's own type.
+/// `None` for an endpoint denoting no integer, which annotate diagnoses.
 pub(super) fn range_endpoint_to_i128(
     pattern: &crate::ast::Pattern,
     is_unsigned: bool,
 ) -> Option<i128> {
     use crate::ast::{Literal, Pattern};
     match pattern {
-        Pattern::Literal(Literal::Number(repr)) => {
-            if is_unsigned {
-                parse_u128_literal(repr).ok().map(u128::cast_signed)
-            } else {
-                parse_i128_literal(repr).ok()
-            }
-        }
+        Pattern::Literal(Literal::Number(repr)) => parse_int_bits(repr, is_unsigned).ok(),
         Pattern::Literal(Literal::Char(raw)) => {
             unescape_char(raw).ok().map(|c| i128::from(c as u32))
         }
@@ -420,9 +419,8 @@ pub(super) fn range_endpoint_to_i128(
     }
 }
 
-/// Order two range endpoints, which [`range_endpoint_to_i128`] returns as bit
-/// patterns. An unsigned bound above `i128::MAX` has a negative pattern, so a
-/// signed compare would read an ascending range as reversed.
+/// Order two endpoints [`range_endpoint_to_i128`] returned. An unsigned bound
+/// above `i128::MAX` reads negative, so a signed compare would call it reversed.
 pub(super) fn range_endpoints_ordered(
     start: i128,
     end: i128,

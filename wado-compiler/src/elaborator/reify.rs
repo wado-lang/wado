@@ -10024,12 +10024,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         })
     }
 
-    /// Resolve a range-pattern endpoint to its `i128` value, read as the bits of
-    /// a scrutinee that `is_unsigned` describes. A *user* associated-constant
-    /// endpoint (`TokenKind::FOO`) resolves through
-    /// `sem.decls.associated_constants`, which only reify can reach; every other
-    /// endpoint shape goes through [`super::util::range_endpoint_to_i128`], the
-    /// same decoder annotate used to diagnose it.
+    /// [`super::util::range_endpoint_to_i128`] plus the one endpoint shape only
+    /// reify reaches: a user associated constant (`TokenKind::FOO`).
     fn pattern_endpoint_value(
         &mut self,
         endpoint: &ast::Pattern,
@@ -10057,12 +10053,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 this.reify_expr(&const_expr, ctx, Some(type_id))
             });
             if let TirExprKind::IntLiteral { repr, .. } = &resolved.kind {
-                return if is_unsigned {
-                    super::util::parse_u128_literal(repr).map(u128::cast_signed)
-                } else {
-                    super::util::parse_i128_literal(repr)
-                }
-                .unwrap_or_else(|e| {
+                return super::util::parse_int_bits(repr, is_unsigned).unwrap_or_else(|e| {
                     panic!("a const range endpoint annotate accepted parses: {e}")
                 });
             }
@@ -10296,23 +10287,21 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     .type_table
                     .borrow()
                     .is_unsigned_int(scrutinee_type);
-                let int_pattern = |value: u128| {
+                let int_pattern = |bits: u128| {
                     if scrutinee_is_unsigned {
-                        TirLiteralPattern::U128(value)
+                        TirLiteralPattern::U128(bits)
                     } else {
-                        TirLiteralPattern::I128(value as i128)
+                        TirLiteralPattern::I128(bits.cast_signed())
                     }
                 };
                 let tir_lit = match lit {
-                    ast::Literal::Number(repr) => {
-                        if scrutinee_is_unsigned {
-                            int_pattern(super::util::parse_u128_literal(repr).unwrap_or(0))
-                        } else {
-                            TirLiteralPattern::I128(
-                                super::util::parse_i128_literal(repr).unwrap_or(0),
-                            )
-                        }
-                    }
+                    // A malformed literal is already diagnosed, so the value it
+                    // stands in with is never reached.
+                    ast::Literal::Number(repr) => int_pattern(
+                        super::util::parse_int_bits(repr, scrutinee_is_unsigned)
+                            .unwrap_or(0)
+                            .cast_unsigned(),
+                    ),
                     ast::Literal::Byte(raw) => {
                         int_pattern(u128::from(super::util::unescape_byte(raw).unwrap_or(0)))
                     }

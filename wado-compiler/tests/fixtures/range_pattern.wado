@@ -108,8 +108,7 @@ test "a parenthesised range" {
 type Mask = u32;
 
 test "a range pattern on a newtype reads its base type's signedness" {
-    // `is_unsigned_int` used to answer on the newtype itself, so the arm
-    // compared signed and a bound past `i32::MAX` never matched.
+    // Compared signed, a bound past `i32::MAX` never matches.
     let m: Mask = 4294967290;
     assert m matches { 0..=4294967295 };
     assert !(m matches { 0..=4294967289 });

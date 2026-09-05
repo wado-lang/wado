@@ -1,8 +1,7 @@
-// A wide-int pattern used to work only as the whole pattern of a `match` and
-// only as a plain literal: `lower::translate` rewrote that one shape into
-// `Eq::eq` calls and left every other shape to the scalar path, which has no
-// 128-bit compare. A range arm silently took the wrong branch, and a literal
-// nested in a tuple pattern ICE'd with "`Eq` has no scalar lowering".
+// Wado has no 128-bit compare, so every wide-int pattern lowers to an `Eq` /
+// `Ord` call. Once only the whole pattern of a `match`, and only a plain
+// literal, got that: a range arm took the wrong branch and a literal nested in
+// a tuple ICE'd.
 
 test "i128 range pattern" {
     let x: i128 = 3;
@@ -46,8 +45,8 @@ test "wide range pattern past 64 bits" {
 }
 
 test "u128 range pattern above i128::MAX" {
-    // Bounds a signed decode cannot hold. Reify used to parse every endpoint as
-    // `i128` and swallow the overflow to 0, so the arm compared against `0..=0`.
+    // Bounds no signed decode holds: parsed as `i128` they overflow, and their
+    // bit patterns order the range backwards.
     let huge: u128 = 340282366920938463463374607431768211454;
     assert huge matches {
         340282366920938463463374607431768211453..=340282366920938463463374607431768211455

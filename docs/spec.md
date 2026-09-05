@@ -1222,9 +1222,9 @@ Available operations:
 | Bitwise    | `&`, `\|`, `^`, `~`, `<<`, `>>`                                |
 | Conversion | `from_u64()`, `from_i64()`, `low()`, `high()`, `as`, `TryFrom` |
 
-Literal and range patterns work on them wherever a pattern may appear, nested
-ones included: `match [x, y] { [1..=5, _] => … }`. Each lowers to the `Eq` /
-`Ord` calls the matching comparison would.
+Literal and range patterns work on them in every pattern position, nested ones
+included: `match [x, y] { [1..=5, _] => … }`. Each lowers to the same `Eq` /
+`Ord` call the equivalent comparison does.
 
 `as` casts follow Rust semantics in both directions:
 

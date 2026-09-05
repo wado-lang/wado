@@ -163,14 +163,10 @@ pub(crate) fn create_literal(
     )
 }
 
-/// A literal of the wide-integer type `item` read from an integer spelling. An
-/// [`TirExprKind::IntLiteral`] truncates its value to `u64` and keeps the full
-/// spelling in `repr`, so `repr` is the only operand wide enough to recover a
-/// 128-bit value from.
-///
-/// The producers spell one bit pattern either way — pattern lowering renders a
-/// `u128` bound as the signed reading of its bits — so both are read, and a
-/// decimal falls in exactly one of the two ranges.
+/// A literal of the wide-integer type `item` read from `repr`, an
+/// [`TirExprKind::IntLiteral`]'s only operand wide enough to hold 128 bits.
+/// Producers spell one bit pattern either way, and a decimal falls in exactly
+/// one of the two ranges, so both readings are tried.
 pub(crate) fn literal_from_repr(
     item: CompilerItem,
     repr: &str,

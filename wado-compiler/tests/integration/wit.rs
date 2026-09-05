@@ -167,10 +167,8 @@ fn record_export_groups_into_default_interface() {
     );
 }
 
-/// `i128` / `u128` are prelude structs, so they cross the Component Model
-/// boundary as their own record rather than being rejected. `map_primitive` used
-/// to carry an "`i128` has no WIT representation" arm beside this, reachable
-/// only through `PrimitiveType::I128`, which nothing produced for a user type.
+/// `i128` / `u128` are prelude structs, so each crosses the Component Model
+/// boundary as its own record rather than being rejected as unrepresentable.
 #[test]
 fn wide_int_export_emits_its_prelude_record() {
     check(
