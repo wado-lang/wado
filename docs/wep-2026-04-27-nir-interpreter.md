@@ -89,9 +89,9 @@ structs and tuples whose every field is constant, and the field reads projecting
 back out of one; enums, whose discriminant is the whole value, and variants,
 which carry a case and its payload. The lattice has three states: unevaluated,
 constant, non-constant. So an unreachable branch contributes nothing and a
-trapping arm does not contaminate a fold. An aggregate leaves the engine only
-where it has a literal shape to be written as; otherwise what reaches the IR is
-the scalars projected out of it.
+trapping arm does not contaminate a fold. An aggregate leaves the engine as the
+literal tree the lower phase would have emitted for it, where the node it
+replaces yields an object nothing else reaches.
 
 Bindings: immutable locals and globals whose initializer is constant, plus a
 global's separately known fields, such as a sequence global's length; and a
@@ -246,23 +246,15 @@ Every callee the census names builds a `List<T>` from a constant:
 `push_encoded_ranges` (34), `union_char_ranges` (4), `binary_property_ranges`
 (4), `general_category_ranges` (2). A `List<T>` region is also what the no-call
 row reports, so the census points at this one capability twice over, once by
-name and once by the silence. A `List<T>` filled
-by a loop and returned does not fold, whether `T` is a scalar or a struct, while
-the same program over a `String` does. A `String`'s backing is a byte array the
-engine represents and can write back, and a `List<T>`'s is not.
-
-What stops is the list, not everything that touches one. A scalar the engine
-projects out of it still folds, so `` `${table().len()}` `` reaches the IR as the
-rendered literal while `` `${table():?}` ``, which needs the list itself, does
-not.
+name and once by the silence. What those rows waited on was the exit: the engine
+represented the value all along and had nowhere to put it, a `String`'s backing
+being the one shape it could write back.
 
 #### What it writes
 
-`commit_fold` is where a folded value becomes IR, and it splits three ways today:
-a scalar promotes to a pooled operand, a byte-sequence container goes to
-`materialize_seq_via`, and every other aggregate is refused. The exit replaces
-that one type's writer with a walk of the value against its type, emitting the
-literal node NIR already has for each shape.
+`commit_fold` is where a folded value becomes IR. A scalar promotes to a pooled
+operand; everything else goes to a walk of the value against its type, emitting
+the literal node NIR already has for each shape.
 
 | Value                       | Node               |
 | --------------------------- | ------------------ |
@@ -273,16 +265,14 @@ literal node NIR already has for each shape.
 | `Aggregate` otherwise       | `StructLiteral`    |
 | `Variant`                   | `VariantConstruct` |
 
-A `String` and a `List<u8>` keep the node they get today, so the byte path's
-output is unchanged and only its refusal of everything else goes away.
 `wir_build` lowers all five node forms already, and
 [`ArrayLiteral`](./wep-2026-05-31-nir-array-literal.md) was added for a consumer
 of exactly this kind.
 
 Field order is load-bearing: `wir_build` lowers a struct literal's fields
 positionally, and SROA asserts their indices cover `0..N` once. So the writer
-emits in `field_index` order and asserts the value's list is complete, which the
-lattice's reader guarantees — a NIR aggregate literal lists every field.
+emits in `field_index` order and refuses a value whose fields do not, which the
+lattice's reader makes unreachable — a NIR aggregate literal lists every field.
 
 #### The engine has no shape source
 
@@ -298,42 +288,61 @@ from its element types.
 per-instance field types, and are where `wir_build` reads them. The exit takes
 the same information as a `TypeId` → fields index, built once per pass and
 carried on `ProgramFacts`, where an absent fact already costs folds rather than
-correctness.
+correctness. A tuple needs none of it: its element types are its own `type_args`.
 
 #### The writer answers whether it changed anything
 
-`is_worth_materializing` refuses two shapes: a global read, which globalization
-put there to build once and share, and the literal the seq writer itself writes.
-Refusing the second is what makes that rewrite happen once rather than at every
-visit, and it is the shape the general writer needs a general answer for.
-
-Recognizing a literal tree does not give one. A `List<u8>` written `[1, 2, 3]`
-reaches the engine as an `ArrayLiteral` of constants, and the writer's form for
-it is a `PackedArray`, which packs into a data segment — a literal tree the
-rewrite must still change. Only the writer knows which it would emit, so it
-decides: the walk compares each node against the node it would put there,
-allocates where they differ, and reports whether anything did. Nothing settles
-"is this already the literal the rewrite writes" separately, so nothing can drift
-from it. Materializing leaves a tree the walk then matches, so the next visit
-writes nothing and reduction stays monotone and idempotent.
+Recognizing a literal tree does not answer "is this already the literal the
+rewrite writes". A `List<u8>` written `[1, 2, 3]` reaches the engine as an
+`ArrayLiteral` of constants, and the writer's form for it is a `PackedArray`,
+which packs into a data segment — a literal tree the rewrite must still change.
+Only the writer knows which it would emit, so it decides: the walk compares each
+node against the node it would put there, allocates where they differ, and
+reports whether anything did. Nothing settles the question separately, so nothing
+can drift from it. Materializing leaves a tree the walk then matches, so the next
+visit writes nothing and reduction stays monotone and idempotent.
 
 The cost gate stays separate and may stay conservative: asking the lattice for a
 container literal's value is what `seq_literal_value` decides, and over-asking
 costs a query the writer then declines, never a loop.
 
-#### The gates
+#### Identity
 
-A reference leaf. `commit_fold` tests the node's own type for a reference shape,
-since a fresh literal where the program yields an alias is a difference `ref.eq`
-can tell. That test stands for the whole value only while no field can hold a
-reference. The walk sees each leaf's declared type, so the test belongs there.
+A literal is a fresh object. Writing one over an expression that yields a shared
+one leaves the program two objects where it had one, and `ref.eq` tells them
+apart. So the exit writes only over a node that yields an object nothing else
+reaches: a call or a region, which hand back what they built; a literal, which is
+one already; and the single read of a local nothing borrows, since a second read
+or a `&p` beside one is the second reacher. Whether the copy planner would later
+copy a value read is not knowable here, which is why a second read counts as
+sharing whatever its type. A reference-shaped leaf is refused outright, at each
+leaf rather than at the root, since a field can hold one where the whole value
+does not.
 
-A budget. The byte path needs none: a `PackedArray` within `MAX_SEQ_ELEMENTS`
-reaches WIR as one `array.new_data`. A general aggregate has no such floor. A
+A scratch body needs none of this. It is read for the value it computes and then
+dropped, so nothing written over it runs.
+
+#### Storage is not a value
+
+A backing array reaches the IR as its container's field, where the length says
+how much of it is live, and never as a node of its own: writing a literal over
+the `array_new` that opens a buffer would hand the writes that follow a data
+segment's worth of zeros. For the same reason an empty container is left alone —
+a literal over one can only trade a buffer for a smaller buffer, and an opened
+buffer is what the region about to fill it is holding.
+
+Within a container the backing is cut to the length, capacity being an allocation
+detail. That is what puts a folded string's bytes in a data segment sized to the
+string.
+
+#### The budget
+
+The byte path needs none: a `PackedArray` within `MAX_SEQ_ELEMENTS` reaches WIR
+as one `array.new_data`. A general aggregate has no such floor. A
 thousand-element `List<i32>` built by a loop is a dozen instructions, and its
-literal is a thousand operands, which `array.new_fixed` packs into a data
-segment only where the elements are primitive. So the writer counts the leaves it
-would emit and refuses past a ceiling.
+literal is a thousand operands, which `array.new_fixed` packs into a data segment
+only where the elements are primitive. So the writer counts the operands it would
+place, charging a byte sequence one, and refuses past `MAX_MATERIALIZED_LEAVES`.
 
 #### What it does not reach
 
@@ -342,13 +351,13 @@ to a value is unaffected — `HighlightVisitor::new` builds its table through
 `String::grow`, which abandons the evaluation, so it stays a call whatever the
 writer can emit. That one is stage 3's.
 
-- [ ] The `TypeId` → fields index on `ProgramFacts`, and whether a tuple's
-      element types come from its `type_args` or need the index too.
-- [ ] The writer, reporting whether it changed the tree, and the per-leaf
-      reference gate.
-- [ ] The leaf ceiling, from `mise run report-wasm-size` and the benchmark suite.
-      Whether it should rise where the result is a `let` globalization can hoist
-      — built once at instantiation rather than at every evaluation — is open.
+- [x] The `TypeId` → fields index on `ProgramFacts`.
+- [x] The writer, reporting whether it changed the tree, and the identity,
+      storage and budget gates.
+- [ ] The leaf ceiling, from `mise run report-wasm-size` and the benchmark suite;
+      it starts at a round number nothing has measured. Whether it should rise
+      where the result is a `let` globalization can hoist — built once at
+      instantiation rather than at every evaluation — is open.
 - [ ] A destructuring `let`; a body containing one is abandoned.
 
 Done when a constant `List` result and a constant struct result reach the IR as
