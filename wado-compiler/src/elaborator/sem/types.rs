@@ -671,10 +671,8 @@ pub(crate) struct StaticMethodDispatch {
     /// the method declares no defaults (or for variant / builtin dispatches).
     pub(crate) param_defaults: Vec<(String, Option<crate::ast::Expr>)>,
     /// The module a default in [`Self::param_defaults`] resolves in: the
-    /// declaring scope. That is `function_ref.module_source` except where the
-    /// callee name is minted rather than declared. An effect operation's names
-    /// the synthetic dispatch namespace and a bound-qualified `T::method()`'s
-    /// the caller, so those two record the declaration's module instead.
+    /// declaring one. Usually `function_ref.module_source`, but that names the
+    /// caller wherever the callee is minted per call site rather than declared.
     pub(crate) defaults_module: crate::module_source::ModuleSource,
     /// The callee's resolved parameter types in declaration order, which reify
     /// needs to type a default it materializes — a default on a trait method

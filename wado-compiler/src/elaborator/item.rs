@@ -1567,8 +1567,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             method_scope.register_generic_params(&method.type_params, next_slot);
             // Both frames are in scope for a default, so both supply the type
             // argument a caller gets by default, in declaration-slot order.
-            // Both frames are in scope for a default, so both supply the type
-            // argument a caller gets by default, in declaration-slot order.
             let type_params: Vec<ast::GenericParam> = trait_decl
                 .type_params
                 .iter()

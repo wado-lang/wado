@@ -1894,11 +1894,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ))
     }
 
-    /// Fill missing trailing arguments from the callee's declared defaults,
-    /// resolving each in the caller's context. A default may name an earlier
-    /// parameter (`fn rect(w, h = w)`), so param-name idents in its cloned AST
-    /// are substituted with the caller's argument AST before resolution. A
-    /// position with no declared default is left for the arity check.
+    /// [`Self::apply_param_defaults`] against the callee's own declaration, for
+    /// a caller with no use for the defaults beyond the padding.
     pub(super) fn pad_args_with_defaults(
         &mut self,
         callee: &Expr,
@@ -1918,8 +1915,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         );
     }
 
-    /// [`Self::pad_args_with_defaults`] against defaults already looked up, so
-    /// a caller can record the same ones it padded with.
+    /// Fill missing trailing arguments from `defaults`, resolving each in the
+    /// caller's context. A default may name an earlier parameter (`fn rect(w, h
+    /// = w)`), so param-name idents in its cloned AST are substituted with the
+    /// caller's argument AST before resolution. A position with no declared
+    /// default is left for the arity check.
     pub(super) fn apply_param_defaults(
         &mut self,
         call_args_ast: &[Expr],
@@ -3100,9 +3100,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .iter()
                 .map(|t| self.tysys.type_table.borrow().fq_type_name(*t))
                 .collect();
-            // The defaults below are the trait's, so they resolve in the module
-            // that declares it — never the caller's, which the `FunctionRef`
-            // names because the mangled callee is minted per instantiation.
+            // The defaults below are the trait's, so they resolve in its own
+            // module. The `FunctionRef` names the caller's, because the mangled
+            // callee is minted per instantiation.
             let trait_module = found_trait.module().cloned();
             let mut method_info = LocalMethodName::new(
                 self.binder_in_scope(type_param_name),
