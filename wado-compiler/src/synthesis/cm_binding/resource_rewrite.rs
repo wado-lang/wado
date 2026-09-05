@@ -1986,12 +1986,12 @@ fn parameterize_stream_cm_name(
     if crate::component_model::is_u8_stream_element(tt, elem) {
         return None;
     }
-    let elem_name = tt.base_type_name(elem);
     let payload = crate::component_model::cm_payload_type_from_type_id(tt, elem).map_or_else(
         || {
             // The element's declaring interface keys the CM-name lookup. Its
             // `module_source` is the loader identity (a `.wado` path); the
             // registry bridges it to the versioned `#[cm(...)]` key.
+            let elem_name = tt.base_type_name(elem);
             let elem_source = tt
                 .nominal_head(tt.representation_head(elem))
                 .map(|(_, m)| m.to_string());

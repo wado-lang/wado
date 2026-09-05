@@ -582,6 +582,14 @@ pub(super) struct ImplMethodEntry {
     pub(super) method_id: DefId,
 }
 
+impl ImplMethodEntry {
+    /// Whether an inherent impl declares it. A trait impl's member takes the
+    /// trait's reach, and so carries no visibility of its own.
+    pub(super) fn is_inherent(&self) -> bool {
+        self.inherent_visibility.is_some()
+    }
+}
+
 /// Every impl block's methods, for O(1) lookup instead of a scan over every
 /// module. It held the receiver-less ones alone until a qualified call to an
 /// instance method was found to have no rung of its own to answer from.

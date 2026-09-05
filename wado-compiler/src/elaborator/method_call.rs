@@ -3295,6 +3295,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         arg_type_name: Option<&str>,
         target_hint: Option<&ImplTargetKey>,
     ) -> Option<StaticMethodRef> {
+        // Only trait impls are searched below, so a shadowing inherent
+        // declaration is invisible here: selecting a trait impl would mangle
+        // the call to a body the spelling does not name, while every signature
+        // and visibility lookup answered from the inherent one.
+        let receiver = self.static_receiver_key(struct_name, target_hint);
+        if self.has_inherent_impl_method(&receiver, method_name) {
+            return None;
+        }
         let (impl_defs, declared_name) = self.trait_impls_for_receiver(struct_name, target_hint);
         let from_trait_name = self
             .tysys

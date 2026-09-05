@@ -69,6 +69,21 @@ pub(crate) fn build_func_index(items: &[Item]) -> IndexMap<String, usize> {
     index
 }
 
+/// A type head names the type's own method, so an inherent declaration shadows
+/// a trait impl's of the same name, as dot syntax resolves it; the trait's is
+/// named `Trait::method`. Unshadowed, the two read as an overload, which every
+/// lookup that must commit to one declaration declines — no signature, no
+/// use→def edge, and the callee dropped from a call WIR still emitted.
+fn shadow_trait_impls<T>(
+    declared: Vec<T>,
+    is_inherent: impl Fn(&T) -> bool,
+) -> impl Iterator<Item = T> {
+    let shadows = declared.iter().any(&is_inherent);
+    declared
+        .into_iter()
+        .filter(move |declaration| is_inherent(declaration) || !shadows)
+}
+
 pub use types::TypeError;
 use types::{
     EnumInfo, FlagsInfo, GenericNewtypeInfo, ResourceInfo, StructFieldInfo, TypeLookup, VariantInfo,
@@ -687,9 +702,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     }
 
     /// The declarations of `method_name` in `receiver`'s impl blocks, whether
-    /// or not they take a receiver. An inherent one shadows a trait impl's, as
-    /// dot syntax resolves it: a type head names the type's own method, and the
-    /// trait's is named `Trait::method`.
+    /// or not they take a receiver, shadowed by [`shadow_trait_impls`].
     pub(in crate::elaborator) fn impl_method_decl_ids(
         &self,
         receiver: &trait_env::ImplTargetKey,
@@ -709,13 +722,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 Some((inherent, self.tysys.declared_method(impl_def, method_name)?))
             })
             .collect();
-        // Unshadowed, the two kinds read as an overload, and every lookup that
-        // must commit to one declaration declined.
-        let shadows = declared.iter().any(|(inherent, _)| *inherent);
-        declared
-            .into_iter()
-            .filter(move |(inherent, _)| *inherent || !shadows)
-            .map(|(_, def)| def)
+        shadow_trait_impls(declared, |(inherent, _)| *inherent).map(|(_, def)| def)
     }
 
     /// The receiver-less declarations of `method_name` on `receiver`. Several
@@ -732,18 +739,35 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
     /// Every declaration of `method_name` an impl block on `receiver` makes,
     /// both kinds: `Type::method` is how the receiver-taking ones are named.
+    /// Shadowed by [`shadow_trait_impls`], as [`Self::impl_method_decl_ids`] is:
+    /// a rule one of the two ladders keeps is a rule the spelling does not have.
     pub(in crate::elaborator) fn impl_method_entries(
         &self,
         receiver: &trait_env::ImplTargetKey,
         method_name: &str,
     ) -> impl Iterator<Item = &trait_env::ImplMethodEntry> {
-        self.tysys
+        let named: Vec<&trait_env::ImplMethodEntry> = self
+            .tysys
             .trait_env
             .impl_method_index
             .get(receiver)
             .into_iter()
             .flatten()
-            .filter(move |e| e.name == method_name)
+            .filter(|e| e.name == method_name)
+            .collect();
+        shadow_trait_impls(named, |e| e.is_inherent())
+    }
+
+    /// Whether an inherent impl on `receiver` declares `method_name`, of either
+    /// kind — the fact [`shadow_trait_impls`] filters on, for the ladders that
+    /// search the trait impls alone and would otherwise miss the shadow.
+    pub(in crate::elaborator) fn has_inherent_impl_method(
+        &self,
+        receiver: &trait_env::ImplTargetKey,
+        method_name: &str,
+    ) -> bool {
+        self.impl_method_entries(receiver, method_name)
+            .any(trait_env::ImplMethodEntry::is_inherent)
     }
 
     /// Build a [`control_flow::CtrlFlowCtx`] over the currently-active

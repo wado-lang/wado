@@ -329,7 +329,12 @@ Every convergence below was forced by a defect where two of them disagreed:
   use→def edge, and the callee dropped from a call WIR still emitted. Shadowing
   is what leaves at most one declaration that states a reach of its own, so the
   visibility ladder reads the one the spelling names rather than whichever
-  entry the name was indexed under first.
+  entry the name was indexed under first. It is one rule, `shadow_trait_impls`,
+  over every ladder the spelling reaches: the impl-block walk, the method index
+  the associated-function lookups read, and the trait-impl selection that mangles
+  the call. Applied to one of them, a receiver-less method still answered from
+  the trait impl the signature and the reach were never read off.
+
 - How many of a callee's parameters a call's arguments cover — the call syntax,
   not the signature. Written qualified, an instance method's receiver is the
   first argument, so `qualified_call_param_types` answers with the whole list;
