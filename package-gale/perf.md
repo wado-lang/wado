@@ -182,6 +182,21 @@ levers above and fixed in the compiler rather than here:
 | before                                              | 1.549–1.578 |
 | after                                               | 1.421–1.517 |
 
+The third, later the same day, is the parser's: every `_kind_set_*` is
+`k matches { TK_… | … }`, which lowered to a `br_table` from twelve members
+up — an indirect branch on a data-dependent key, 4.5% self in `_kind_set_4`
+alone — and `nir/match_to_bitset` now makes it a branch-free mask test
+(`_kind_set_37` is one unsigned compare, its members being contiguous). The
+functions then inline at every site. Four alternating pairs, ranges disjoint:
+
+| ms/iter          | before      | after       |
+| ---------------- | ----------- | ----------- |
+| syntax-highlight | 1.443–1.517 | 1.338–1.364 |
+| sqlite-parse     | 1.150–1.160 | 1.037–1.127 |
+
+That retires the "multi-token guard re-test" item below as a cost: the
+re-tested `_kind_set_37` is now a subtract and a compare.
+
 Still on the table in the highlight half: `HighlightVisitor::new` re-resolves a
 fully static mapping on every call — ~170 `capture_id_of` scans and the
 `class_text` rewrites, ~2.5% of the profile. The compile-time engine will not
