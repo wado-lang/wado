@@ -35,7 +35,7 @@ interpolation, against the same program printing the literal, which costs
 | `${255:x}`                   | 5 197  | 3 200            |
 | `${3.5}`                     | 6 411  | 4 414            |
 
-The first two rows fold to the literal; `char`, `{:x}` and floats do not. The
+The first two rows fold to the literal. `char`, `{:x}` and floats do not. The
 roadmap is ordered against a census of the corpus rather than against this
 document's guesses.
 
@@ -334,7 +334,7 @@ Each is a small, local refusal the census does not count, so each needs a reason
 of its own to be worth the code.
 
 - [ ] A `switch` with a constant scrutinee. A switch is formed before inlining.
-      When inlining then makes its scrutinee constant, nothing revisits it.
+      When inlining later makes its scrutinee constant, nothing revisits it.
 - [ ] Closure calls: an indirect call whose closure is known is never resolved to
       a direct call, so neither inlining nor CTFE reaches through it.
 - [ ] Guards decided when the engine is only asked what an expression denotes.

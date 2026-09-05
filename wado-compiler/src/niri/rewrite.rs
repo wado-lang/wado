@@ -217,7 +217,9 @@ impl Interpreter<'_> {
             );
             return false;
         };
-        let Ok(used) = usize::try_from(used) else {
+        // `Value::Int` holds the sign-extended bit pattern, so a negative length
+        // reads as a huge `u64` until it is decoded at its own width.
+        let Ok(used) = usize::try_from(used as i32) else {
             crate::compiler_trace!("region_seed", "materialize {e:?}: negative len {used}");
             return false;
         };

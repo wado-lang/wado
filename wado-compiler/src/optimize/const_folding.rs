@@ -367,7 +367,8 @@ fn const_seq_len(body: &Body, e: ExprId) -> Option<i32> {
 /// `GlobalVarSet`, so reading that store back is what lets it fold. A store's
 /// value is body content still being reduced, hence rebuilt per pass.
 struct GlobalView {
-    /// See [`MaterializingGlobals`].
+    /// See [`MaterializingGlobals`]. Derived per call, since it reads body
+    /// contents, which the count-keyed [`ConstFoldCache`] does not track.
     materializing: MaterializingGlobals,
     /// What each global holds. Seeded from [`FoldMaps::declared_globals`]; a
     /// global every store of which is the same constant overrides its
