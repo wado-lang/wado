@@ -210,35 +210,7 @@ type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(78)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(79)
 
-<<<<<<< HEAD
-type "functype//core:json/core:json/JsonDeserializer::take_scanned_run$scalar" = fn(ref "core:prelude/slice.wado//Slice<u8>", i32, i32, bool) -> [i32, ref null "core:prelude/string.wado//String", ref null "core:serde//DeserializeError"];  // TypeId(80)
-
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write$spec0$scalar" = fn(ref "core:prelude/string.wado//String", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(81)
-
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write$spec1$scalar" = fn(ref "core:prelude/string.wado//String", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(82)
-
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(83)
-
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(84)
-
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(85)
-||||||| bdeeb7bad
-type "functype//core:json/core:json/JsonDeserializer::take_scanned_run$scalar" = fn(ref "core:prelude/slice.wado//Slice<u8>", i32, i32, bool) -> [i32, ref null "core:prelude/string.wado//String", ref null "core:serde//DeserializeError"];  // TypeId(80)
-
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write$spec0$scalar" = fn(ref "core:prelude/string.wado//String", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(81)
-
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write$spec1$scalar" = fn(ref "core:prelude/string.wado//String", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(82)
-
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar" = fn(i32, ref "core:prelude/string.wado//String");  // TypeId(83)
-
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(84)
-
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(85)
-
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(86)
-=======
 type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(80)
->>>>>>> origin/main
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -934,10 +906,11 @@ fn "core:json/core/json/to_string<static_method_in_generic_context.wado/Foo>$spe
     let buf_1: ref "core:prelude/string.wado//String";
     let __qm_e: ref "core:serde//SerializeError";
     let c: char;
-    let v_19: ref "core:prelude/string.wado//String";
+    let __local_2: ref "core:prelude/string.wado//String";
     buf_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(128), used: 0 };
-    v_19 = global:static_method_in_generic_context.wado::__const_obj_20;
-    "core:json/write_escaped_string"(buf_1, v_19);
+    __local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
+    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(42, __local_2);
+    "core:json/write_escaped_string"(buf_1, __local_2);
     if @likely(ref.is_null(ref.null none)) {
     } else {
         __qm_e = ref.as_non_null(ref.null none);
@@ -2893,40 +2866,6 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
     }, start_57 = self.used, self.used = new_used_56, start_57;
 }
 
-<<<<<<< HEAD
-||||||| bdeeb7bad
-fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(self, f) {
-    let is_negative: bool;
-    let abs_val: u64;
-    let digit_count: i32;
-    let offset: i32;
-    let val_6: i64;
-    let n: i32;
-    let t: u64;
-    is_negative = self < 0;
-    val_6 = builtin::i64_extend_i32_s(self);
-    abs_val = select i64(val_6 < 0_i64, 0_i64 - val_6, val_6);
-    digit_count = __inline_count_digits_u64_1: block -> i32 {
-        if abs_val == 0_i64 {
-            break __inline_count_digits_u64_1: 1;
-        }
-        n = 0;
-        t = abs_val;
-        b319: block {
-            l320: loop {
-                break_if b319 t <=u 0_i64;
-                n = n + 1;
-                t = t /u 10_i64;
-                continue l320;
-            };
-        };
-        break __inline_count_digits_u64_1: n;
-    };
-    offset = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write$spec1$scalar"(f, is_negative, global:core:prelude/primitive.wado::__const_obj_37, digit_count);
-    "core:prelude/primitive.wado/write_decimal_digits"(f.repr, offset, abs_val, digit_count);
-}
-
-=======
 fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(self, f) {
     let is_negative: bool;
     let abs_val: u64;
@@ -2975,5 +2914,4 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(self, f) {
     };
 }
 
->>>>>>> origin/main
 export fn "static_method_in_generic_context.wado/__cm_export____test_0_roundtrip" as "__test_0_roundtrip"

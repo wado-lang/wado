@@ -76,31 +76,11 @@ type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pad
 
 type "functype//core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_raw_all" = fn(i32, ref "core:prelude/slice.wado//Slice<u8>") -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(24)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pad$spec0$scalar" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(25)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(25)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(26)
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(26)
 
-<<<<<<< HEAD
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(27)
-||||||| bdeeb7bad
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pad$spec0$scalar" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(27)
-=======
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(27)
->>>>>>> origin/main
-
-<<<<<<< HEAD
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(28)
-
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(29)
-||||||| bdeeb7bad
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(28)
-
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(29)
-
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(30)
-=======
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(28)
->>>>>>> origin/main
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(27)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -367,25 +347,10 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad"(self, cont
     }
     self_18 = struct.new "core:prelude/string.wado//StrCharIter" { repr: content.repr, used: content.used, byte_index: 0 };
     n_19 = 0;
-<<<<<<< HEAD
-    b16: block {
-        l17: loop {
-            let __local_2_mv_0: i32;
-            let __local_2_mv_1: char;
-            multivalue_bind [__local_2_mv_0, __local_2_mv_1] = "core:prelude/string.wado/core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/Iterator::next"(self_18);
-            if __local_2_mv_0 == 0 {
-||||||| bdeeb7bad
-    b18: block {
-        l19: loop {
-            let __local_2_mv_0: i32;
-            let __local_2_mv_1: char;
-            multivalue_bind [__local_2_mv_0, __local_2_mv_1] = "core:prelude/string.wado/core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/Iterator::next"(self_18);
-            if __local_2_mv_0 == 0 {
-=======
     _licm_used_145 = self_18.used;
     _licm_repr_146 = self_18.repr;
-    b14: block {
-        l15: loop {
+    b12: block {
+        l13: loop {
             __sroa_slot_144 = 0;
             __inline_core_prelude_string_wado_StrCharIter_core_prelude_traits_wado_Iterator__next_6: block {
                 if self_18.byte_index >= _licm_used_145 {
@@ -424,24 +389,11 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad"(self, cont
             let __match_scrut_0: i32;
             __match_scrut_0 = __sroa_slot_144;
             if __match_scrut_0 == 0 {
->>>>>>> origin/main
                 n_19 = n_19 + 1;
             } else {
-<<<<<<< HEAD
-                break b16;
-||||||| bdeeb7bad
-                break b18;
-=======
-                break b14;
->>>>>>> origin/main
+                break b12;
             }
-<<<<<<< HEAD
-            continue l17;
-||||||| bdeeb7bad
-            continue l19;
-=======
-            continue l15;
->>>>>>> origin/main
+            continue l13;
         };
     };
     content_len = n_19;
@@ -487,53 +439,21 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad"(self, cont
             self_69.used = new_used_77;
             builtin::array_copy<u8>(self_69.repr, start_78, content.repr, 0, n_73);
         };
-<<<<<<< HEAD
-        self_52 = self.buf;
-        i_55 = 0;
-        b25: block {
-            l26: loop {
-                break_if b25 i_55 >= padding;
-                new_used_119 = self_52.used + 1;
-                if @unlikely(new_used_119 > builtin::array_len(self_52.repr)) {
-||||||| bdeeb7bad
-        self_52 = self.buf;
-        i_55 = 0;
-        b27: block {
-            l28: loop {
-                break_if b27 i_55 >= padding;
-                new_used_119 = self_52.used + 1;
-                if @unlikely(new_used_119 > builtin::array_len(self_52.repr)) {
-=======
         self_80 = self.buf;
         i_83 = 0;
-        b27: block {
-            l28: loop {
-                break_if b27 i_83 >= padding;
+        b25: block {
+            l26: loop {
+                break_if b25 i_83 >= padding;
                 new_used_152 = self_80.used + 1;
                 if @unlikely(new_used_152 > builtin::array_len(self_80.repr)) {
->>>>>>> origin/main
                     cold_path;
                     "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_80, new_used_152);
                 }
-<<<<<<< HEAD
-                start_120 = self_52.used;
-                self_52.used = new_used_119;
-                builtin::array_set_u8(self_52.repr, start_120, 48);
-                i_55 = i_55 + 1;
-                continue l26;
-||||||| bdeeb7bad
-                start_120 = self_52.used;
-                self_52.used = new_used_119;
-                builtin::array_set_u8(self_52.repr, start_120, 48);
-                i_55 = i_55 + 1;
-                continue l28;
-=======
                 start_153 = self_80.used;
                 self_80.used = new_used_152;
                 builtin::array_set_u8(self_80.repr, start_153, 48);
                 i_83 = i_83 + 1;
-                continue l28;
->>>>>>> origin/main
+                continue l26;
             };
         };
         __inline_core_prelude_string_wado_String__push_str_range_unchecked_28: block {
@@ -566,73 +486,29 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad"(self, cont
             self_96.used = new_used_103;
             builtin::array_copy<u8>(self_96.repr, start_104, content.repr, 0, self_100);
         };
-<<<<<<< HEAD
-        self_78 = self.buf;
-        c_79 = self.fill;
-        i_81 = 0;
-        b31: block {
-            l32: loop {
-                break_if b31 i_81 >= padding;
-                "core:prelude/string.wado/core:prelude/string.wado/String::push"(self_78, c_79);
-                i_81 = i_81 + 1;
-                continue l32;
-||||||| bdeeb7bad
-        self_78 = self.buf;
-        c_79 = self.fill;
-        i_81 = 0;
-        b33: block {
-            l34: loop {
-                break_if b33 i_81 >= padding;
-                "core:prelude/string.wado/core:prelude/string.wado/String::push"(self_78, c_79);
-                i_81 = i_81 + 1;
-                continue l34;
-=======
         self_106 = self.buf;
         c_107 = self.fill;
         i_109 = 0;
-        b33: block {
-            l34: loop {
-                break_if b33 i_109 >= padding;
+        b31: block {
+            l32: loop {
+                break_if b31 i_109 >= padding;
                 "core:prelude/string.wado/core:prelude/string.wado/String::push"(self_106, c_107);
                 i_109 = i_109 + 1;
-                continue l34;
->>>>>>> origin/main
+                continue l32;
             };
         };
     } else if align == 1 {
         left_pad = padding / 2;
         right_pad = padding - left_pad;
-<<<<<<< HEAD
-        self_82 = self.buf;
-        c_83 = self.fill;
-        i_85 = 0;
-        b34: block {
-            l35: loop {
-                break_if b34 i_85 >= left_pad;
-                "core:prelude/string.wado/core:prelude/string.wado/String::push"(self_82, c_83);
-                i_85 = i_85 + 1;
-                continue l35;
-||||||| bdeeb7bad
-        self_82 = self.buf;
-        c_83 = self.fill;
-        i_85 = 0;
-        b36: block {
-            l37: loop {
-                break_if b36 i_85 >= left_pad;
-                "core:prelude/string.wado/core:prelude/string.wado/String::push"(self_82, c_83);
-                i_85 = i_85 + 1;
-                continue l37;
-=======
         self_110 = self.buf;
         c_111 = self.fill;
         i_113 = 0;
-        b36: block {
-            l37: loop {
-                break_if b36 i_113 >= left_pad;
+        b34: block {
+            l35: loop {
+                break_if b34 i_113 >= left_pad;
                 "core:prelude/string.wado/core:prelude/string.wado/String::push"(self_110, c_111);
                 i_113 = i_113 + 1;
-                continue l37;
->>>>>>> origin/main
+                continue l35;
             };
         };
         __inline_core_prelude_string_wado_String__push_str_38: block {
@@ -648,71 +524,27 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad"(self, cont
             self_114.used = new_used_121;
             builtin::array_copy<u8>(self_114.repr, start_122, content.repr, 0, self_118);
         };
-<<<<<<< HEAD
-        self_96 = self.buf;
-        c_97 = self.fill;
-        i_99 = 0;
-        b37: block {
-            l38: loop {
-                break_if b37 i_99 >= right_pad;
-                "core:prelude/string.wado/core:prelude/string.wado/String::push"(self_96, c_97);
-                i_99 = i_99 + 1;
-                continue l38;
-||||||| bdeeb7bad
-        self_96 = self.buf;
-        c_97 = self.fill;
-        i_99 = 0;
-        b39: block {
-            l40: loop {
-                break_if b39 i_99 >= right_pad;
-                "core:prelude/string.wado/core:prelude/string.wado/String::push"(self_96, c_97);
-                i_99 = i_99 + 1;
-                continue l40;
-=======
         self_124 = self.buf;
         c_125 = self.fill;
         i_127 = 0;
-        b39: block {
-            l40: loop {
-                break_if b39 i_127 >= right_pad;
+        b37: block {
+            l38: loop {
+                break_if b37 i_127 >= right_pad;
                 "core:prelude/string.wado/core:prelude/string.wado/String::push"(self_124, c_125);
                 i_127 = i_127 + 1;
-                continue l40;
->>>>>>> origin/main
+                continue l38;
             };
         };
     } else {
-<<<<<<< HEAD
-        self_100 = self.buf;
-        c_101 = self.fill;
-        i_103 = 0;
-        b39: block {
-            l40: loop {
-                break_if b39 i_103 >= padding;
-                "core:prelude/string.wado/core:prelude/string.wado/String::push"(self_100, c_101);
-                i_103 = i_103 + 1;
-                continue l40;
-||||||| bdeeb7bad
-        self_100 = self.buf;
-        c_101 = self.fill;
-        i_103 = 0;
-        b41: block {
-            l42: loop {
-                break_if b41 i_103 >= padding;
-                "core:prelude/string.wado/core:prelude/string.wado/String::push"(self_100, c_101);
-                i_103 = i_103 + 1;
-                continue l42;
-=======
         self_128 = self.buf;
         c_129 = self.fill;
         i_131 = 0;
-        b41: block {
-            l42: loop {
-                break_if b41 i_131 >= padding;
+        b39: block {
+            l40: loop {
+                break_if b39 i_131 >= padding;
                 "core:prelude/string.wado/core:prelude/string.wado/String::push"(self_128, c_129);
                 i_131 = i_131 + 1;
-                continue l42;
->>>>>>> origin/main
+                continue l40;
             };
         };
         __inline_core_prelude_string_wado_String__push_str_44: block {
