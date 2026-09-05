@@ -3108,6 +3108,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .iter()
                 .map(|t| self.tysys.type_table.borrow().fq_type_name(*t))
                 .collect();
+            // The defaults below are the trait's, so they resolve in the module
+            // that declares it — never the caller's, which the `FunctionRef`
+            // names because the mangled callee is minted per instantiation.
+            let trait_module = found_trait.module().cloned();
             let mut method_info = LocalMethodName::new(
                 self.binder_in_scope(type_param_name),
                 Some(found_trait),
@@ -3161,7 +3165,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 key,
                 super::sem::types::StaticMethodDispatch {
                     method_def: method_info_result.method_def,
-                    defaults_module: func_ref.module_source.clone(),
+                    defaults_module: trait_module.unwrap_or_else(|| func_ref.module_source.clone()),
                     function_ref: func_ref,
                     param_is_mut: vec![false; args.len()],
                     type_args: vec![],

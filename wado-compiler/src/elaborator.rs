@@ -2070,7 +2070,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 Item::Impl(impl_block) => {
                     self.resolve_impl_item(impl_block);
                 }
-                Item::Trait(_trait_decl) => {}
+                Item::Trait(trait_decl) => {
+                    self.resolve_trait_param_defaults(trait_decl);
+                }
                 Item::Variant(variant_decl) => {
                     self.resolve_variant_decl(variant_decl);
                 }
@@ -2102,7 +2104,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         &effect_decl.methods,
                         crate::elaborator::item::OperationOwner::Interface,
                     );
-                    self.resolve_operation_param_defaults(&[], &effect_decl.methods);
+                    self.resolve_operation_param_defaults(&[], &effect_decl.methods, None);
                     // An operation's default body is walked as the function
                     // reify will emit it as, so its facts land under the same
                     // `AstId` every other function's do.
@@ -2117,9 +2119,11 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         &resource_decl.methods,
                         crate::elaborator::item::OperationOwner::Resource,
                     );
+                    let resource_def = self.tysys.resolutions.defs().of_ast_id(resource_decl.id);
                     self.resolve_operation_param_defaults(
                         &resource_decl.type_params,
                         &resource_decl.methods,
+                        resource_def,
                     );
                 }
                 // Other items will be added as needed

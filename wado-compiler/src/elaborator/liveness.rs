@@ -175,14 +175,7 @@ pub(crate) fn compute(
                     }
                 }
                 Item::Trait(trait_decl) => {
-                    for method in &trait_decl.methods {
-                        if method.body.is_none() {
-                            continue;
-                        }
-                        let key = method.id;
-                        graph.add_function_edges(method, references, &key);
-                        graph.seed_world(key);
-                    }
+                    seed_operations(&mut graph, &trait_decl.methods, references);
                 }
                 Item::Interface(interface_decl) => {
                     seed_operations(&mut graph, &interface_decl.methods, references);
@@ -215,13 +208,13 @@ pub(crate) fn compute(
     liveness
 }
 
-/// Seed each operation of an `interface` / `resource` that reaches code nothing
-/// in the AST names.
+/// Seed each declared method of a `trait` / `interface` / `resource` that
+/// reaches code nothing in the AST names.
 ///
-/// A default body's only call is the dispatch wrapper synthesis emits later; a
-/// parameter default is materialized by reify at every call that omits the
-/// argument. Unseeded, either one and everything only it reaches are dead, and
-/// reify drops a callee the materialized call still names.
+/// A default body's only call is the one dispatch mints later; a parameter
+/// default is materialized by reify at every call that omits the argument.
+/// Unseeded, either one and everything only it reaches are dead, and reify
+/// drops a callee the materialized call still names.
 fn seed_operations(graph: &mut Graph, methods: &[Function], references: &References<'_>) {
     for method in methods {
         if method.body.is_none() && !method.params.iter().any(|p| p.default.is_some()) {

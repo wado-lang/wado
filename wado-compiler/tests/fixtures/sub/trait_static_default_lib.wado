@@ -1,0 +1,10 @@
+// A trait method's default resolves in this module, so it reaches `secret`,
+// which nothing here exports and no caller can name.
+
+fn secret() -> i32 {
+    return 7;
+}
+
+pub trait Make {
+    fn make(n: i32 = secret()) -> i32;
+}

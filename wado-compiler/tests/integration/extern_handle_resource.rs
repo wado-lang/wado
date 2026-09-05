@@ -673,3 +673,14 @@ fn a_resource_operation_takes_a_parameter_default() {
         "a default on an operation is allowed, got {d:?}"
     );
 }
+
+/// A parameter default does not change the scope its siblings resolve in:
+/// `Self` still names the declaring resource.
+#[test]
+fn a_defaulted_operation_keeps_self_in_scope() {
+    let source = "#[cm(\"web:dom/element\", type = \"extern-handle\")]\n\
+         resource Element {\n    fn attach(&self, other: Self, n: i32 = 7);\n}\n\
+         export fn run() {}\n";
+    let d = diagnostics(source);
+    assert!(d.is_empty(), "`Self` resolves beside a default, got {d:?}");
+}
