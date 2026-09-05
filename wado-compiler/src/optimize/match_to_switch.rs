@@ -220,10 +220,10 @@ fn case_key(pat: &PatKind) -> Option<CaseKey> {
             ..
         } => {
             let lo = i64::try_from(*start).ok()?;
-            let mut hi = i64::try_from(*end).ok()?;
-            if !*inclusive {
-                hi -= 1;
-            }
+            let hi = i64::try_from(*end).ok()?;
+            // `checked_sub` rather than the elaborator's empty-range check: the
+            // key is that this function is total on the patterns it is handed.
+            let hi = if *inclusive { hi } else { hi.checked_sub(1)? };
             if hi < lo {
                 return None;
             }
