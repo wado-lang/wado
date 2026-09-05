@@ -43,6 +43,7 @@ pub(super) enum OnBoundTrait {
     ReflectEnum,
     ReflectFlags,
     ReflectNewtype,
+    ReflectTemplate,
     Ref,
     RefMut,
     Inspect,
@@ -65,6 +66,7 @@ impl OnBoundTrait {
             Self::ReflectEnum => CompilerItem::ReflectEnum,
             Self::ReflectFlags => CompilerItem::ReflectFlags,
             Self::ReflectNewtype => CompilerItem::ReflectNewtype,
+            Self::ReflectTemplate => CompilerItem::ReflectTemplate,
             Self::Ref => CompilerItem::Ref,
             Self::RefMut => CompilerItem::RefMut,
             Self::Inspect => CompilerItem::Inspect,
@@ -86,6 +88,7 @@ impl OnBoundTrait {
             CompilerItem::ReflectEnum => Self::ReflectEnum,
             CompilerItem::ReflectFlags => Self::ReflectFlags,
             CompilerItem::ReflectNewtype => Self::ReflectNewtype,
+            CompilerItem::ReflectTemplate => Self::ReflectTemplate,
             CompilerItem::Ref => Self::Ref,
             CompilerItem::RefMut => Self::RefMut,
             CompilerItem::Inspect => Self::Inspect,
@@ -120,6 +123,7 @@ impl OnBoundTrait {
                 | Self::ReflectEnum
                 | Self::ReflectFlags
                 | Self::ReflectNewtype
+                | Self::ReflectTemplate
         )
     }
 }
@@ -834,6 +838,9 @@ impl TypeSystem {
                 }
                 _ => false,
             },
+            // A template's holes are the site's own expressions: nothing to
+            // hide from anyone.
+            CompilerItem::ReflectTemplate => true,
             _ => true,
         }
     }
@@ -900,6 +907,8 @@ impl TypeSystem {
                 of(CompilerItem::ReflectFlags, OnBoundTrait::ReflectFlags)
             } else if trait_name == items.trait_name(CompilerItem::ReflectNewtype) {
                 of(CompilerItem::ReflectNewtype, OnBoundTrait::ReflectNewtype)
+            } else if trait_name == items.trait_name(CompilerItem::ReflectTemplate) {
+                of(CompilerItem::ReflectTemplate, OnBoundTrait::ReflectTemplate)
             } else if trait_name == items.trait_name(CompilerItem::Ref) {
                 of(CompilerItem::Ref, OnBoundTrait::Ref)
             } else if trait_name == items.trait_name(CompilerItem::RefMut) {
@@ -1791,6 +1800,9 @@ impl TypeSystem {
             | OnBoundTrait::ReflectEnum
             | OnBoundTrait::ReflectFlags => declaring_module_of_kind(scope, def, on_bound),
             OnBoundTrait::ReflectNewtype => self.newtype_declaring_module(scope, def),
+            // A template shape names no declaration; its request is recorded
+            // at the site that mints it.
+            OnBoundTrait::ReflectTemplate => None,
             OnBoundTrait::Eq
             | OnBoundTrait::Ord
             | OnBoundTrait::Serialize
@@ -1833,6 +1845,7 @@ fn declaring_module_of_kind(
         OnBoundTrait::ReflectFlags => scope.flags_members_of(def).map(|i| i.module_source.clone()),
         OnBoundTrait::Reflect
         | OnBoundTrait::ReflectNewtype
+        | OnBoundTrait::ReflectTemplate
         | OnBoundTrait::Eq
         | OnBoundTrait::Ord
         | OnBoundTrait::Serialize

@@ -157,6 +157,9 @@ pub enum CompilerItem {
     /// `FlagsBit<T>` — the per-bit member struct minted by
     /// `ReflectFlags::members()` (WEP 2026-06-13 §3c).
     ReflectFlagsBit,
+    /// `Hole<T, V>` — the per-hole member struct minted by
+    /// `ReflectTemplate::members()` (WEP 2026-01-10).
+    ReflectTemplateHole,
     /// `Slice<T>` — the array reference view the byte-slice methods and
     /// the synthesised `FieldSchema::lookup` signature are written against.
     Slice,
@@ -219,6 +222,10 @@ pub enum CompilerItem {
     /// per-newtype `impl ReflectNewtype for N` synthesis points at it. The one
     /// kind with no members: it carries a base (WEP 2026-06-13).
     ReflectNewtype,
+    /// `ReflectTemplate` — compile-time introspection of a tagged template
+    /// literal's shape; the per-shape `impl ReflectTemplate` synthesis points
+    /// at it (WEP 2026-01-10).
+    ReflectTemplate,
     /// `Member` — the sealed attr-reading face implemented by every
     /// `StructField<T, F>` member (WEP 2026-06-13).
     Member,
@@ -406,6 +413,12 @@ pub enum CompilerItem {
     ReflectStructDefaults,
     /// `ReflectStruct::empty_slots` — `[..Option<F>]` with every slot empty.
     ReflectStructEmptySlots,
+    /// `ReflectTemplate::members` — the per-hole member tuple.
+    ReflectTemplateMembers,
+    /// `ReflectTemplate::tail` — the literal text after the last hole.
+    ReflectTemplateTail,
+    /// `ReflectTemplate::raw_tail` — `tail` with escapes preserved.
+    ReflectTemplateRawTail,
     /// `Member::name` — the member's source field name.
     MemberName,
     /// `Member::wire_name_override` — the member's raw `#[wire(name)]` value.
@@ -639,6 +652,7 @@ impl CompilerItem {
         Self::ReflectStructField,
         Self::ReflectEnumCase,
         Self::ReflectFlagsBit,
+        Self::ReflectTemplateHole,
         Self::Slice,
         Self::AsyncCall,
         Self::Future,
@@ -650,6 +664,7 @@ impl CompilerItem {
         Self::ReflectEnum,
         Self::ReflectFlags,
         Self::ReflectNewtype,
+        Self::ReflectTemplate,
         Self::Member,
         Self::Ref,
         Self::RefMut,
@@ -722,6 +737,9 @@ impl CompilerItem {
         Self::ReflectStructFromFields,
         Self::ReflectStructDefaults,
         Self::ReflectStructEmptySlots,
+        Self::ReflectTemplateMembers,
+        Self::ReflectTemplateTail,
+        Self::ReflectTemplateRawTail,
         Self::MemberName,
         Self::MemberWireNameOverride,
         Self::ReflectVariantDiscriminant,
@@ -833,6 +851,7 @@ impl CompilerItem {
             Self::ReflectStructField => "struct_field",
             Self::ReflectEnumCase => "enum_case",
             Self::ReflectFlagsBit => "flags_bit",
+            Self::ReflectTemplateHole => "hole",
             Self::Slice => "slice",
             Self::AsyncCall => "async_call",
             Self::Future => "future",
@@ -844,6 +863,7 @@ impl CompilerItem {
             Self::ReflectEnum => "reflect_enum",
             Self::ReflectFlags => "reflect_flags",
             Self::ReflectNewtype => "reflect_newtype",
+            Self::ReflectTemplate => "reflect_template",
             Self::Member => "member",
             Self::Ref => "ref",
             Self::RefMut => "ref_mut",
@@ -916,6 +936,9 @@ impl CompilerItem {
             Self::ReflectStructFromFields => "reflect_struct_from_fields",
             Self::ReflectStructDefaults => "reflect_struct_defaults",
             Self::ReflectStructEmptySlots => "reflect_struct_empty_slots",
+            Self::ReflectTemplateMembers => "reflect_template_members",
+            Self::ReflectTemplateTail => "reflect_template_tail",
+            Self::ReflectTemplateRawTail => "reflect_template_raw_tail",
             Self::MemberName => "member_name",
             Self::MemberWireNameOverride => "member_wire_name_override",
             Self::FormatterNew => "formatter_new",
@@ -1060,6 +1083,7 @@ impl CompilerItem {
             | Self::ReflectStructField
             | Self::ReflectEnumCase
             | Self::ReflectFlagsBit
+            | Self::ReflectTemplateHole
             | Self::Slice
             | Self::AsyncCall
             | Self::Future
@@ -1071,6 +1095,7 @@ impl CompilerItem {
             | Self::ReflectEnum
             | Self::ReflectFlags
             | Self::ReflectNewtype
+            | Self::ReflectTemplate
             | Self::Member
             | Self::Ref
             | Self::RefMut
@@ -1090,6 +1115,9 @@ impl CompilerItem {
             | Self::ReflectStructFromFields
             | Self::ReflectStructDefaults
             | Self::ReflectStructEmptySlots
+            | Self::ReflectTemplateMembers
+            | Self::ReflectTemplateTail
+            | Self::ReflectTemplateRawTail
             | Self::MemberName
             | Self::MemberWireNameOverride
             | Self::FormatterNew
@@ -1268,6 +1296,7 @@ impl CompilerItem {
             | Self::ReflectStructField
             | Self::ReflectEnumCase
             | Self::ReflectFlagsBit
+            | Self::ReflectTemplateHole
             | Self::Slice
             | Self::AsyncCall => CompilerItemKind::Struct,
             Self::Future | Self::FutureWritable | Self::Stream | Self::StreamWritable => {
@@ -1289,6 +1318,7 @@ impl CompilerItem {
             | Self::ReflectEnum
             | Self::ReflectFlags
             | Self::ReflectNewtype
+            | Self::ReflectTemplate
             | Self::Member
             | Self::Ref
             | Self::RefMut
@@ -1341,6 +1371,9 @@ impl CompilerItem {
             | Self::ReflectStructFromFields
             | Self::ReflectStructDefaults
             | Self::ReflectStructEmptySlots
+            | Self::ReflectTemplateMembers
+            | Self::ReflectTemplateTail
+            | Self::ReflectTemplateRawTail
             | Self::MemberName
             | Self::MemberWireNameOverride
             | Self::ReflectVariantDiscriminant

@@ -144,6 +144,22 @@ pub fn field_get_helper_name(mangled_struct: &str, mangled_field: &str) -> Strin
     format!("$field_get${mangled_struct}${mangled_field}")
 }
 
+/// Name of the synthesized hole-read helper for a template shape and one of
+/// its hole types, both by structural mangle. Lowering rewrites
+/// `builtin::hole_get::<T, V>` calls to it (WEP 2026-01-10).
+pub fn hole_get_helper_name(mangled_shape: &str, mangled_hole: &str) -> String {
+    format!("$hole_get${mangled_shape}${mangled_hole}")
+}
+
+/// Name of the synthesized hole-render helper for a template shape. Lowering
+/// rewrites `builtin::hole_fmt::<T>` calls to it (WEP 2026-01-10).
+pub fn hole_fmt_helper_name(mangled_shape: &str) -> String {
+    format!("$hole_fmt${mangled_shape}")
+}
+
+/// Prefix of a template shape's mangled name; the rest is the shape's hash.
+pub const TEMPLATE_SHAPE_PREFIX: &str = "$tmpl$";
+
 /// Field name of the discriminant slot on a variant's base struct (the tag
 /// every case subtype inherits). Single source of truth for the WIR variant
 /// GC representation: the builder (`wir_build/types.rs`, `pattern_match.rs`,

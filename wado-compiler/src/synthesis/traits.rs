@@ -502,16 +502,22 @@ struct ReflectTarget {
 
 /// Select the structs in `module` that need a synthesized `ReflectStruct` impl:
 /// every declared struct, generic or not. Monomorphized instances inherit the
-/// generic impl through substitution.
+/// generic impl through substitution. A tagged template literal's type is a
+/// struct of the template kind, not this one.
 fn collect_reflect_targets(module: &TirModule) -> Vec<ReflectTarget> {
+    let tt = module.type_table.borrow();
     module
         .structs
         .iter()
         .filter(|s| s.monomorph_info.is_none())
+        .filter(|s| match s.def {
+            crate::tir::StructDef::Anon(shape) => tt.template_shape(shape).is_none(),
+            crate::tir::StructDef::Decl(_) => true,
+        })
         .map(|s| ReflectTarget {
             name: s.name.clone(),
             def: s.def,
-            receiver: module.type_table.borrow().fq_struct_head(s.def),
+            receiver: tt.fq_struct_head(s.def),
             type_params: s.type_params.clone(),
             fields: s
                 .fields
@@ -737,6 +743,11 @@ pub(crate) const REFLECT_FIELD_TYPES_ASSOC: &str = "FieldTypes";
 /// `ReflectStruct`'s slot associated type (`type FieldSlots`): the field types
 /// under `Option`, the shape `defaults()` returns and a streaming build fills.
 pub(crate) const REFLECT_FIELD_SLOTS_ASSOC: &str = "FieldSlots";
+
+/// `ReflectTemplate`'s payload-pack associated type (`type Holes`): the hole
+/// types themselves, bound to place per-hole trait bounds on a tag
+/// (WEP 2026-01-10).
+pub(crate) const REFLECT_HOLES_ASSOC: &str = "Holes";
 
 /// Module-level types and method names resolved once from the compiler-item
 /// registry and reused across every struct's `ReflectStruct` synthesis in that

@@ -345,6 +345,34 @@ impl std::fmt::Debug for AnonStructId {
 pub enum AnonShape {
     Fields(Vec<(String, TypeId)>),
     Synthetic(String),
+    /// The type a tagged template literal denotes, identified by its static
+    /// shape: two sites writing one template reach one type (WEP 2026-01-10).
+    Template(TemplateShape),
+}
+
+/// One hole of a template shape: its expression's type, its specifier as
+/// written, and its expression's source text.
+#[derive(Clone, PartialEq, Eq, Hash, Debug)]
+pub struct TemplateHole {
+    pub ty: TypeId,
+    pub spec: Option<String>,
+    pub source: String,
+}
+
+/// The static part of a tagged template literal: the raw literal segments —
+/// one more than the holes, cooked forms derived on demand — and the holes.
+#[derive(Clone, PartialEq, Eq, Hash, Debug)]
+pub struct TemplateShape {
+    pub segments: Vec<String>,
+    pub holes: Vec<TemplateHole>,
+}
+
+impl TemplateShape {
+    /// The struct field holding hole `k`.
+    #[must_use]
+    pub fn field_name(k: usize) -> String {
+        format!("h{k}")
+    }
 }
 
 /// What a struct type's head is.
@@ -1213,6 +1241,78 @@ impl TypeTable {
         self.intern_shape(module_source, AnonShape::Synthetic(name))
     }
 
+    /// Intern a tagged template literal's shape. The shape is the identity, so
+    /// two sites writing one template in one module reach one id.
+    pub fn intern_template_shape(
+        &mut self,
+        module_source: ModuleSource,
+        shape: TemplateShape,
+    ) -> AnonStructId {
+        self.intern_shape(module_source, AnonShape::Template(shape))
+    }
+
+    /// The template shape behind an anonymous struct, or `None` for a struct
+    /// literal's or a synthetic one.
+    #[must_use]
+    pub fn template_shape(&self, id: AnonStructId) -> Option<&TemplateShape> {
+        match &self.anon_structs[id.0 as usize].1 {
+            AnonShape::Template(shape) => Some(shape),
+            AnonShape::Fields(_) | AnonShape::Synthetic(_) => None,
+        }
+    }
+
+    /// Whether `id` denotes a tagged template literal's type.
+    #[must_use]
+    pub fn is_template_type(&self, id: TypeId) -> bool {
+        match self.get(id) {
+            ResolvedType::Struct {
+                def: StructDef::Anon(shape),
+                ..
+            } => self.template_shape(*shape).is_some(),
+            _ => false,
+        }
+    }
+
+    /// The template shape a type denotes, or `None` where it is not one.
+    #[must_use]
+    pub fn template_shape_of_type(&self, id: TypeId) -> Option<&TemplateShape> {
+        match self.get(id) {
+            ResolvedType::Struct {
+                def: StructDef::Anon(shape),
+                ..
+            } => self.template_shape(*shape),
+            _ => None,
+        }
+    }
+
+    /// The field type holding a hole of type `ty`: the handle where a
+    /// reference is one, the value where a reference would be a box — a
+    /// scalar copy is free and a box is an allocation (WEP 2026-01-10).
+    pub fn hole_field_type(&mut self, ty: TypeId) -> TypeId {
+        if self.is_boxed_reference_target(ty) {
+            ty
+        } else {
+            self.make_ref(ty)
+        }
+    }
+
+    /// Whether `&T` / `&mut T` is represented as a `Box<T>` cell rather than
+    /// `T`'s own GC handle: a primitive other than `i128` / `u128`, an enum, a
+    /// variant, or a function type (WEP 2026-06-13, Reference Representation).
+    /// The boxing pass and every consumer deciding by representation read this
+    /// one predicate.
+    #[must_use]
+    pub fn is_boxed_reference_target(&self, ty: TypeId) -> bool {
+        match self.get(ty) {
+            ResolvedType::Primitive(p) => !matches!(p, PrimitiveType::I128 | PrimitiveType::U128),
+            ResolvedType::Enum { .. } | ResolvedType::Variant { .. } | ResolvedType::Function { .. } => {
+                true
+            }
+            ResolvedType::GenericInstance { def, .. } => self.find_variant_type(*def).is_some(),
+            _ => false,
+        }
+    }
+
     fn intern_shape(&mut self, module_source: ModuleSource, shape: AnonShape) -> AnonStructId {
         let key = (module_source, shape);
         if let Some(&id) = self.anon_struct_index.get(&key) {
@@ -1229,7 +1329,7 @@ impl TypeTable {
     pub fn anon_struct_fields(&self, id: AnonStructId) -> &[(String, TypeId)] {
         match &self.anon_structs[id.0 as usize].1 {
             AnonShape::Fields(fields) => fields,
-            AnonShape::Synthetic(_) => &[],
+            AnonShape::Synthetic(_) | AnonShape::Template(_) => &[],
         }
     }
 
@@ -1275,6 +1375,20 @@ impl TypeTable {
                     .map(|(n, ty)| format!("{n}:{}", field_type(self, *ty)))
                     .collect();
                 format!("__anon_{{{}}}", parts.join(","))
+            }
+            // A shape's literal text is arbitrary, so the name is its hash;
+            // the hole types are rendered through `field_type` so two shapes
+            // differing only in a type-parameter spelling still part.
+            AnonShape::Template(shape) => {
+                use std::hash::{Hash, Hasher};
+                let mut hasher = std::collections::hash_map::DefaultHasher::new();
+                shape.segments.hash(&mut hasher);
+                for hole in &shape.holes {
+                    field_type(self, hole.ty).hash(&mut hasher);
+                    hole.spec.hash(&mut hasher);
+                    hole.source.hash(&mut hasher);
+                }
+                format!("{}{:016x}", crate::name::TEMPLATE_SHAPE_PREFIX, hasher.finish())
             }
         }
     }
@@ -1487,6 +1601,7 @@ impl TypeTable {
             CompilerItem::ReflectVariantCase,
             CompilerItem::ReflectEnumCase,
             CompilerItem::ReflectFlagsBit,
+            CompilerItem::ReflectTemplateHole,
         ]
         .into_iter()
         .filter_map(|item| self.compiler_items().struct_owned_opt(item))
@@ -3412,6 +3527,10 @@ impl TypeTable {
             return None;
         }
         match self.get(id) {
+            ResolvedType::Struct {
+                def: StructDef::Anon(shape),
+                ..
+            } if self.template_shape(*shape).is_some() => Some(CompilerItem::ReflectTemplate),
             ResolvedType::Struct { .. } => Some(CompilerItem::ReflectStruct),
             ResolvedType::Variant { .. } => Some(CompilerItem::ReflectVariant),
             ResolvedType::Enum { .. } => Some(CompilerItem::ReflectEnum),

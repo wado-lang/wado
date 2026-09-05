@@ -1356,6 +1356,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 ReflectDispatch::Variant => {
                     self.resolve_reflect_variant_static_call(self_ty, static_call, ctx)
                 }
+                ReflectDispatch::Template => {
+                    self.resolve_reflect_template_static_call(self_ty, static_call, ctx)
+                }
                 ReflectDispatch::Scalar(spec) => {
                     self.resolve_reflect_scalar_static_call(spec, self_ty, static_call, ctx)
                 }

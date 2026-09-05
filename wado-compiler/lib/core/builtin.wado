@@ -65,6 +65,18 @@ pub fn variant_case_construct<T, P>(payload: P, index: i32) -> T;
 /// Reads field `index` of struct `v`. Rewritten by lowering to a direct
 /// field access (WEP 2026-06-13 §2). Used by `StructField::get`.
 pub fn struct_field_get<T, F>(v: &T, index: i32) -> F;
+
+/// Reads hole `index` of template `t` as `V`, dereferencing a hole held by
+/// handle. Rewritten by lowering to the per-(shape, hole-type) helper
+/// synthesized alongside `ReflectTemplate` (WEP 2026-01-10). Used by
+/// `Hole::get`.
+pub fn hole_get<T, V>(t: &T, index: i32) -> V;
+
+/// Renders hole `index` of template `t` through its specifier into `f`.
+/// Rewritten by lowering to the per-shape helper synthesized alongside
+/// `ReflectTemplate` (WEP 2026-01-10). Used by `Hole::fmt`.
+pub fn hole_fmt<T>(t: &T, index: i32, f: &mut Formatter);
+
 /// Returns the length of a GC array. `array.len` reads the header, so the
 /// element type is irrelevant — but it must still be *named*, or every caller
 /// with a `&Array<T>` is checked against an element type it does not have.

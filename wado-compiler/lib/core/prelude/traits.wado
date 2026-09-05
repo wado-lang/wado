@@ -216,6 +216,32 @@ internal trait ReflectNewtype: Reflect {
     type Base;
 }
 
+/// Compile-time introspection of a tagged template literal's shape. The
+/// compiler synthesizes an impl per shape; it cannot be implemented in user
+/// code and is callable only in monomorphized contexts (`T` the anonymous
+/// type a template literal denotes). See WEP 2026-01-10.
+#[compiler_item("reflect_template")]
+internal trait ReflectTemplate: Reflect {
+    /// The hole types as a tuple `[V_0, V_1, ...]`.
+    type Holes;
+
+    /// The per-hole member tuple `[Hole<Self, V_0>, ...]`.
+    type Members;
+
+    /// Returns the per-hole members.
+    #[compiler_item("reflect_template_members")]
+    fn members() -> Self::Members;
+
+    /// The literal text after the last hole — the whole template when it has
+    /// none — with escapes processed.
+    #[compiler_item("reflect_template_tail")]
+    fn tail() -> String;
+
+    /// `tail()` with escapes preserved.
+    #[compiler_item("reflect_template_raw_tail")]
+    fn raw_tail() -> String;
+}
+
 /// A case handle minted by `ReflectVariant::members()`: the payload type `P`
 /// is static, the case index is a value. `extract` / `construct` bridge a
 /// variant value and its payload in both directions.
@@ -342,6 +368,59 @@ impl<T> Member for FlagsBit<T> {
 
     fn wire_name_override(&self) -> Option<String> {
         return Option::None;
+    }
+}
+
+/// A hole handle minted by `ReflectTemplate::members()`: the literal text
+/// before the hole, the hole's source text and specifier presence are
+/// constants, and `get` / `fmt` reach the hole's value in a template.
+/// See WEP 2026-01-10.
+#[compiler_item("hole")]
+pub struct Hole<T, V> {
+    index: i32,
+    lit: String,
+    raw: String,
+    source: String,
+    has_spec: bool,
+}
+
+impl<T, V> Hole<T, V> {
+    /// The hole's position in the template.
+    pub fn index(&self) -> i32 {
+        return self.index;
+    }
+
+    /// The literal text between the previous hole (or the start) and this
+    /// one, escapes processed.
+    pub fn lit(&self) -> String {
+        return self.lit;
+    }
+
+    /// `lit()` with escapes preserved: `\n` is a backslash and an `n`.
+    pub fn raw(&self) -> String {
+        return self.raw;
+    }
+
+    /// The hole's expression as written: `"user.name"`.
+    pub fn source(&self) -> String {
+        return self.source;
+    }
+
+    /// Whether the hole wrote a `:spec`.
+    pub fn has_spec(&self) -> bool {
+        return self.has_spec;
+    }
+
+    /// The hole's value in `t`.
+    pub fn get(&self, t: &T) -> V {
+        return builtin::hole_get(t, self.index);
+    }
+
+    /// Renders the value as the untagged template would: the trait method
+    /// the specifier's type selects (`Display::fmt` when it names none), on a
+    /// `Formatter` carrying the specifier's settings over `f`'s buffer.
+    pub fn fmt(&self, t: &T, f: &mut Formatter) {
+        builtin::hole_fmt(t, self.index, f);
     }
 }
 
