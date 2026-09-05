@@ -1,16 +1,12 @@
-//! WebIDL-to-IR transformation, over the webidl2 AST that
-//! `scripts/webidl/snapshot.mjs` writes. See `docs/wep-2026-04-01-tide.md`.
-//!
-//! Every interface in the snapshot becomes an `extern-handle` resource with
-//! one CM interface of its own, `web:<package>/<kebab-name>`. A member whose
-//! type the slice cannot express is skipped and reported, never approximated.
+//! WebIDL-to-IR transformation, over the webidl2 AST `scripts/webidl/snapshot.mjs`
+//! writes: one extern-handle resource per interface. See `docs/wep-2026-04-01-tide.md`.
 
 use anyhow::{Result, bail};
 use indexmap::{IndexMap, IndexSet};
 use serde::Deserialize;
 
 use crate::ir::{WadoFunction, WadoInterface, WadoModule, WadoParam, WadoResource, WadoType};
-use crate::naming::{to_kebab_case, to_upper_camel_case, to_wado_identifier};
+use crate::naming::{to_kebab_case, to_snake_case, to_upper_camel_case, to_wado_identifier};
 
 /// The file `snapshot.mjs` writes: the slice's definitions, in webidl2's shape.
 #[derive(Deserialize)]
@@ -88,7 +84,7 @@ pub enum Member {
     Other,
 }
 
-#[derive(Deserialize, Clone)]
+#[derive(Deserialize)]
 pub struct Argument {
     pub name: String,
     #[serde(rename = "idlType")]
@@ -97,16 +93,16 @@ pub struct Argument {
     pub variadic: bool,
 }
 
-#[derive(Deserialize, Clone)]
+#[derive(Deserialize)]
 pub struct IdlType {
     pub generic: String,
     pub nullable: bool,
-    pub union: bool,
     #[serde(rename = "idlType")]
     pub inner: IdlTypeInner,
 }
 
-#[derive(Deserialize, Clone)]
+/// A name, or the constituents of a union or of a generic's arguments.
+#[derive(Deserialize)]
 #[serde(untagged)]
 pub enum IdlTypeInner {
     Name(String),
@@ -131,8 +127,8 @@ struct Merged<'a> {
 /// A member's lowering: a function, or why there is none.
 type Lowered = std::result::Result<WadoFunction, String>;
 
-/// Generate the `web:<package>` module's source from a snapshot, naming
-/// `source` in its header: the generated code and the skipped members.
+/// The `web:<package>` module's source, naming `source` in its header, and
+/// the skipped members.
 ///
 /// # Errors
 ///
@@ -151,19 +147,18 @@ pub fn generate(snapshot: &Snapshot, source: &str) -> Result<(String, Vec<String
 ///
 /// # Errors
 ///
-/// Fails when the slice is not closed — a parent or a mixin it names is
-/// missing — or when a child redeclares an inherited method.
+/// The slice is not closed (a parent or a mixin it names is missing), or a
+/// child redeclares an inherited method.
 pub fn transform(snapshot: &Snapshot) -> Result<WebIdlOutput> {
-    let typedefs: IndexMap<&str, &IdlType> = snapshot
-        .typedefs
-        .iter()
-        .map(|t| (t.name.as_str(), &t.idl_type))
-        .collect();
     let merged = merge(snapshot)?;
     let lowering = Lowering {
         package: &snapshot.package,
         slice: merged.keys().copied().collect(),
-        typedefs,
+        typedefs: snapshot
+            .typedefs
+            .iter()
+            .map(|t| (t.name.as_str(), &t.idl_type))
+            .collect(),
     };
 
     let mut skipped = Vec::new();
@@ -271,7 +266,7 @@ fn merge(snapshot: &Snapshot) -> Result<IndexMap<&str, Merged<'_>>> {
 }
 
 /// A child may not redeclare a method reachable through its chain. Statics
-/// (`new` above all) are not inherited, so they are not in the question.
+/// (`new` above all) are not inherited.
 fn reject_overrides(merged: &IndexMap<&str, Merged<'_>>, resources: &[WadoResource]) -> Result<()> {
     let methods: IndexMap<&str, IndexSet<&str>> = merged
         .keys()
@@ -320,47 +315,39 @@ impl Lowering<'_> {
                 readonly,
                 special,
             } => {
-                let getter_name = to_wado_identifier(name);
+                let getter = to_wado_identifier(name);
                 if special == "static" {
-                    return vec![(getter_name, Err("static attribute".to_string()))];
+                    return vec![(getter, Err("static attribute".to_string()))];
                 }
                 let ty = match self.lower_type(idl_type) {
                     Ok(ty) => ty,
-                    Err(reason) => return vec![(getter_name, Err(reason))],
+                    Err(reason) => return vec![(getter, Err(reason))],
                 };
                 let kebab = to_kebab_case(name);
                 let mut out = vec![(
-                    getter_name.clone(),
-                    Ok(WadoFunction {
-                        name: getter_name,
-                        doc_comment: None,
-                        cm_attr: format!("{path}#{kebab}"),
-                        params: vec![self_param(iface)],
-                        return_type: Some(ty.clone()),
-                        is_async: false,
-                        never_returns: false,
-                    }),
+                    getter.clone(),
+                    Ok(function(
+                        &getter,
+                        format!("{path}#{kebab}"),
+                        vec![self_param(iface)],
+                        Some(ty.clone()),
+                    )),
                 )];
                 if !readonly {
-                    let setter_name = format!("set_{}", to_wado_identifier(name));
+                    let setter = format!("set_{}", to_snake_case(name));
+                    let value = WadoParam {
+                        name: "value".to_string(),
+                        ty,
+                        wit_name: "value".to_string(),
+                    };
                     out.push((
-                        setter_name.clone(),
-                        Ok(WadoFunction {
-                            name: setter_name,
-                            doc_comment: None,
-                            cm_attr: format!("{path}#set-{kebab}"),
-                            params: vec![
-                                self_param(iface),
-                                WadoParam {
-                                    name: "value".to_string(),
-                                    ty,
-                                    wit_name: "value".to_string(),
-                                },
-                            ],
-                            return_type: None,
-                            is_async: false,
-                            never_returns: false,
-                        }),
+                        setter.clone(),
+                        Ok(function(
+                            &setter,
+                            format!("{path}#set-{kebab}"),
+                            vec![self_param(iface), value],
+                            None,
+                        )),
                     ));
                 }
                 out
@@ -442,62 +429,41 @@ impl Lowering<'_> {
                 Err(_) if arg.optional || arg.variadic => break,
                 Err(reason) => return Err(format!("`{}`: {reason}", arg.name)),
             };
-            // An `optional` argument is an `Option`: `None` is the argument
-            // left out, so the WebIDL default applies in the browser. A CM
-            // operation admits no default argument, which would let a call
-            // site omit it as well.
-            let ty = match ty {
-                WadoType::Option(_) => ty,
-                other if arg.optional => WadoType::Option(Box::new(other)),
-                other => other,
-            };
+            // `None` is the argument left out, so the WebIDL default applies in
+            // the browser. A CM operation admits no default argument.
             params.push(WadoParam {
                 name: to_wado_identifier(&arg.name),
-                ty,
+                ty: optional(ty, arg.optional),
                 wit_name: to_kebab_case(&arg.name),
             });
         }
-        Ok(WadoFunction {
-            name: wado_name.to_string(),
-            doc_comment: None,
-            cm_attr,
-            params,
-            return_type,
-            is_async: false,
-            never_returns: false,
-        })
+        Ok(function(wado_name, cm_attr, params, return_type))
     }
 
-    /// The Wado type of a `WebIDL` type, or why the slice has none.
-    ///
-    /// A union collapses to the one constituent the slice can express — the
-    /// `DOMString` of `(TrustedHTML or DOMString)`, the `boolean` shorthand
-    /// of `(ScrollIntoViewOptions or boolean)` — and an `undefined`
-    /// constituent makes it nullable. Two expressible constituents want a
-    /// variant, which is not built.
+    /// The Wado type of a `WebIDL` type, or why the slice has none. A union is
+    /// the one constituent the slice can express; `undefined` in it means nullable.
     fn lower_type(&self, ty: &IdlType) -> std::result::Result<WadoType, String> {
         if !ty.generic.is_empty() {
             return Err(format!("`{}<…>`", ty.generic));
         }
-        let name = match &ty.inner {
-            IdlTypeInner::Name(name) => name,
-            IdlTypeInner::Types(members) => {
-                let undefined = members.iter().any(is_undefined);
-                let mut expressible = members
+        let (inner, nullable) = match &ty.inner {
+            IdlTypeInner::Name(name) => (self.lower_name(name)?, ty.nullable),
+            IdlTypeInner::Types(constituents) => {
+                let mut expressible = constituents
                     .iter()
-                    .filter(|m| !is_undefined(m))
-                    .filter_map(|m| self.lower_type(m).ok());
+                    .filter(|c| !is_undefined(c))
+                    .filter_map(|c| self.lower_type(c).ok());
                 let (Some(one), None) = (expressible.next(), expressible.next()) else {
                     return Err("union type".to_string());
                 };
-                return Ok(match one {
-                    WadoType::Option(_) => one,
-                    other if ty.nullable || undefined => WadoType::Option(Box::new(other)),
-                    other => other,
-                });
+                (one, ty.nullable || constituents.iter().any(is_undefined))
             }
         };
-        let inner = match name.as_str() {
+        Ok(optional(inner, nullable))
+    }
+
+    fn lower_name(&self, name: &str) -> std::result::Result<WadoType, String> {
+        Ok(match name {
             "boolean" => WadoType::Bool,
             "byte" => WadoType::I8,
             "octet" => WadoType::U8,
@@ -511,20 +477,11 @@ impl Lowering<'_> {
             "double" | "unrestricted double" => WadoType::F64,
             "DOMString" | "USVString" | "ByteString" => WadoType::String,
             "undefined" => return Err("`undefined` outside a return type".to_string()),
-            _ if self.slice.contains(name.as_str()) => WadoType::Named(to_upper_camel_case(name)),
-            _ => match self.typedefs.get(name.as_str()) {
-                Some(target) => {
-                    let mut target = (*target).clone();
-                    target.nullable |= ty.nullable;
-                    return self.lower_type(&target);
-                }
+            _ if self.slice.contains(name) => WadoType::Named(to_upper_camel_case(name)),
+            _ => match self.typedefs.get(name) {
+                Some(target) => return self.lower_type(target),
                 None => return Err(format!("`{name}` is outside the slice")),
             },
-        };
-        Ok(if ty.nullable {
-            WadoType::Option(Box::new(inner))
-        } else {
-            inner
         })
     }
 
@@ -536,15 +493,14 @@ impl Lowering<'_> {
         resources: &[WadoResource],
     ) -> Option<WadoInterface> {
         let (name, global) = merged.iter().find(|(_, iface)| iface.global)?;
-        let path = format!("web:{}/global", self.package);
-        let accessor = |name: &str, ty: &str| WadoFunction {
-            name: to_wado_identifier(name),
-            doc_comment: None,
-            cm_attr: format!("{path}#{}", to_kebab_case(name)),
-            params: Vec::new(),
-            return_type: Some(WadoType::Named(ty.to_string())),
-            is_async: false,
-            never_returns: false,
+        let path = self.interface_path("global");
+        let accessor = |name: &str, ty: &str| {
+            function(
+                &to_wado_identifier(name),
+                format!("{path}#{}", to_kebab_case(name)),
+                Vec::new(),
+                Some(WadoType::Named(ty.to_string())),
+            )
         };
         let global_type = to_upper_camel_case(name);
         let mut functions = vec![accessor(name, &global_type)];
@@ -575,6 +531,23 @@ impl Lowering<'_> {
     }
 }
 
+fn function(
+    name: &str,
+    cm_attr: String,
+    params: Vec<WadoParam>,
+    return_type: Option<WadoType>,
+) -> WadoFunction {
+    WadoFunction {
+        name: name.to_string(),
+        doc_comment: None,
+        cm_attr,
+        params,
+        return_type,
+        is_async: false,
+        never_returns: false,
+    }
+}
+
 fn self_param(iface: &str) -> WadoParam {
     WadoParam {
         name: "self".to_string(),
@@ -583,8 +556,15 @@ fn self_param(iface: &str) -> WadoParam {
     }
 }
 
+/// `ty` as an `Option` when `wrap`, without doubling one it already is.
+fn optional(ty: WadoType, wrap: bool) -> WadoType {
+    match ty {
+        WadoType::Option(_) => ty,
+        ty if wrap => WadoType::Option(Box::new(ty)),
+        ty => ty,
+    }
+}
+
 fn is_undefined(ty: &IdlType) -> bool {
-    matches!(&ty.inner, IdlTypeInner::Name(n) if n == "undefined")
-        && ty.generic.is_empty()
-        && !ty.union
+    ty.generic.is_empty() && matches!(&ty.inner, IdlTypeInner::Name(n) if n == "undefined")
 }

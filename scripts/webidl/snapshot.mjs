@@ -2,10 +2,10 @@
 //
 // Usage: node snapshot.mjs <output.json>
 //
-// The slice is the interfaces listed below, their `partial interface`s and
-// the mixins they include — as written by the specs that define one of them —
-// and the typedefs their members name. The output is what
-// `wado-from-idl --webidl` reads, so generation never needs the network.
+// The slice is the interfaces listed below, with their partials and included
+// mixins from the specs that define one of them, and the typedefs their
+// members name. `wado-from-idl --webidl` reads the output, so generation
+// never needs the network.
 
 import { parseAll } from "@webref/idl";
 import { readFile, writeFile } from "node:fs/promises";
@@ -67,10 +67,17 @@ for (const spec of specs) {
     if (def.type === "typedef") typedefs.set(def.name, plain(spec, def));
   }
 }
-const named = new Set();
+const kept = new Map();
 const visit = (t) => {
-  if (Array.isArray(t.idlType)) t.idlType.forEach(visit);
-  else named.add(t.idlType);
+  if (Array.isArray(t.idlType)) {
+    t.idlType.forEach(visit);
+    return;
+  }
+  const td = typedefs.get(t.idlType);
+  if (td && !kept.has(td.name)) {
+    kept.set(td.name, td);
+    visit(td.idlType);
+  }
 };
 for (const iface of [...interfaces, ...mixins]) {
   for (const m of iface.members) {
@@ -78,18 +85,6 @@ for (const iface of [...interfaces, ...mixins]) {
     for (const a of m.arguments ?? []) visit(a.idlType);
   }
 }
-const kept = [];
-const queue = [...named];
-while (queue.length) {
-  const name = queue.shift();
-  const td = typedefs.get(name);
-  if (!td || kept.includes(td)) continue;
-  kept.push(td);
-  const before = named.size;
-  visit(td.idlType);
-  queue.push(...[...named].slice(before));
-}
-kept.sort((a, b) => a.name.localeCompare(b.name));
 
 const require = createRequire(import.meta.url);
 const webref = JSON.parse(
@@ -103,9 +98,9 @@ const snapshot = {
   interfaces,
   mixins,
   includes,
-  typedefs: kept,
+  typedefs: [...kept.values()].sort((a, b) => a.name.localeCompare(b.name)),
 };
 await writeFile(out, JSON.stringify(snapshot, null, 2) + "\n");
 console.error(
-  `snapshot: ${interfaces.length} interface and ${mixins.length} mixin definitions from ${defining.join(", ")}, ${kept.length} typedefs (@webref/idl ${webref.version}) → ${out}`,
+  `snapshot: ${interfaces.length} interface and ${mixins.length} mixin definitions from ${defining.join(", ")}, ${kept.size} typedefs (@webref/idl ${webref.version}) → ${out}`,
 );

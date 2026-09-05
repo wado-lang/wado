@@ -402,10 +402,8 @@ fn fixup_types_in_block(
     }
 }
 
-/// Fix up an expression in a Let statement that might hold adapter intermediate
-/// values: a method-call result, or the initial value of the lifted result — a
-/// `ref.null` for a nullable-ref `Option`, a `None` construct for a GC-variant
-/// one (`Option<Element>`, whose payload is a handle).
+/// Retype a Let holding an adapter intermediate: a method-call result, or the
+/// lifted result's initial value (`ref.null`, or the `None` of a GC-variant `Option`).
 fn fixup_adapter_let(
     expr: &mut TirExpr,
     local_index: u32,

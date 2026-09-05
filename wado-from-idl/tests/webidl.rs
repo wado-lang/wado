@@ -168,6 +168,7 @@ fn chain() -> Definitions {
             attribute("document", &plain("Node"), true),
             attribute("self", &plain("Window"), true),
             attribute("name", &plain("DOMString"), false),
+            attribute("type", &plain("DOMString"), false),
             attribute("started", &plain("Timestamp"), true),
         ],
     );
@@ -253,6 +254,11 @@ fn an_optional_argument_is_an_option() {
 fn a_keyword_is_escaped_a_typedef_resolves_and_a_const_is_not_a_member() {
     let (code, _) = chain().generate();
     assert!(code.contains("fn self_(&self) -> Window;"), "{code}");
+    assert!(code.contains("fn type_(&self) -> String;"), "{code}");
+    assert!(
+        code.contains("fn set_type(&self, value: String);"),
+        "{code}"
+    );
     assert!(code.contains("fn started(&self) -> f64;"), "{code}");
     assert!(!code.contains("ELEMENT_NODE"), "{code}");
 }
