@@ -308,31 +308,29 @@ Every convergence below was forced by a defect where two of them disagreed:
   [`wep-2026-08-12-declaration-identity.md`](./wep-2026-08-12-declaration-identity.md)
   owns the identity model.
 - Which declarations `Type::method` can name — `qualified_method_decl_ids` for
-  the declarations, `qualified_method_sig` for the signature. The spelling admits
-  a receiver-less method and an instance one whose receiver the call passes as
-  its first argument, and the index behind it holds both. `ImplMethodEntry` is
-  what an entry holds, and `has_self` is the fact the receiver-less lookups
-  filter on. A site that ends its ladder short of one kind answers for half the
-  spelling, and the halves disagree.
+  the declarations, `qualified_method_sig` for the signature. The spelling names
+  a receiver-less method, and an instance one whose receiver the call passes as
+  its first argument. One index holds both kinds, an `ImplMethodEntry` each, and
+  `has_self` is the field a receiver-less lookup filters on. A lookup that stops
+  at one kind answers for half the spelling, and the two halves disagree.
 
   A type head names the type's own method, so an inherent declaration shadows a
   trait impl's of the same name, as dot syntax already resolves it; the trait's
-  is named `Trait::method`. The shadow is per kind. An associated function and a
-  method taking a receiver are not alternatives for one call, because different
-  argument lists reach them, and shadowing across the two would leave the
-  associated function no spelling at all: `Trait::method()` has no receiver to
-  infer `Self` from. `impl_method_entries` is the one walk that applies the
-  rule, and every lookup over the spelling's declared methods is a projection
-  of it.
+  is named `Trait::method`. The shadow holds within a kind. An associated
+  function and a method taking a receiver are not alternatives for one call,
+  because different argument lists reach them, and shadowing across the two
+  would leave the associated function no spelling at all: `Trait::method()` has
+  no receiver to infer `Self` from. `impl_method_entries` is the one walk that
+  applies the rule, and every lookup over the spelling's declared methods is a
+  projection of it.
 
-  The trait-impl selection that mangles the call is a different question and
-  keeps its own walk: which trait impl _block_ the argument picks, a block that
-  declares no method of the name included — `impl Factory for Wrap<T> {}` still
-  answers `Wrap::make()` with the trait's default. A method index cannot hold
-  that block, so the selection consults the resolver for the one fact it shares,
-  whether an inherent associated function shadows the name, and declines where
-  one does. It selects receiver-less methods alone, which is why that is the
-  kind it asks about.
+  Which trait impl _block_ the arguments pick is a different question, and it
+  keeps a walk of its own. A block that declares no method of the name still
+  answers: `impl Factory for Wrap<T> {}` gives `Wrap::make()` the trait's
+  default, and no method index holds that block. So the selection consults the
+  resolver for the one fact the two questions share — whether an inherent
+  associated function shadows the name — and declines where one does. It asks
+  about receiver-less methods because those are the ones it selects.
 
 - How many of a callee's parameters a call's arguments cover — the call syntax,
   not the signature. Written qualified, an instance method's receiver is the

@@ -2721,6 +2721,14 @@ impl FunctionTranslator<'_, '_> {
                 let translated_args: Vec<WirInstr> =
                     args.iter().map(|a| self.translate_operand(*a)).collect();
                 let import_name = target.import_name();
+                // The core import is the canonical's to type, not the call
+                // site's: a cancel answers with the `u32` its copy ended on
+                // where the declaring signature states no result. One binding
+                // both types the import and drops the value it returns.
+                let discards_result = expr.type_id == TypeTable::UNIT
+                    && target.canonical().is_some_and(
+                        crate::canonical::CanonicalIntrinsic::returns_discarded_result,
+                    );
                 // Look up in WASI imports (registered by register_imports from TIR imports)
                 let func_id = if let Some(func_id) = self
                     .ctx
@@ -2748,10 +2756,8 @@ impl FunctionTranslator<'_, '_> {
                         } else {
                             vec![self.ctx.type_id_to_wir_type(self.type_table, expr.type_id)]
                         };
-                    // The canonical's own result, where the declaring signature
-                    // states none: the import must be the one the component
-                    // provides, not the one the call site would ask for.
-                    if results.is_empty() && intrinsic.returns_discarded_result() {
+                    if discards_result {
+                        assert!(results.is_empty(), "a UNIT call declares no result");
                         results.push(WirType::I32);
                     }
                     self.ctx
@@ -2761,11 +2767,7 @@ impl FunctionTranslator<'_, '_> {
                     func_id,
                     args: translated_args,
                 };
-                if expr.type_id == TypeTable::UNIT
-                    && target
-                        .canonical()
-                        .is_some_and(crate::canonical::CanonicalIntrinsic::returns_discarded_result)
-                {
+                if discards_result {
                     WirInstr::Drop(Box::new(call))
                 } else {
                     call

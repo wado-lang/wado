@@ -692,11 +692,11 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     }
 
     /// Every declaration of `method_name` an impl block on `receiver` makes,
-    /// receiver-less first — the one walk behind every qualified lookup.
+    /// receiver-less first. The one walk behind every qualified lookup.
     ///
-    /// An inherent declaration shadows a trait impl's *of the same kind*, as
-    /// dot syntax resolves it. Only same-kind declarations are alternatives for
-    /// one call: different argument lists reach them.
+    /// An inherent declaration shadows a trait impl's of the same kind, as dot
+    /// syntax resolves it. The two kinds are not alternatives for one call,
+    /// because different argument lists reach them.
     pub(in crate::elaborator) fn impl_method_entries(
         &self,
         receiver: &trait_env::ImplTargetKey,
@@ -709,12 +709,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             .get(receiver)
             .map_or(&[], Vec::as_slice);
         let named = move |entry: &&trait_env::ImplMethodEntry| entry.name == method_name;
-        let shadowed = |has_self: bool| {
+        let inherent_of_kind = |has_self: bool| {
             bucket
                 .iter()
                 .any(|e| e.name == method_name && e.has_self == has_self && e.is_inherent())
         };
-        let shadowed = [shadowed(false), shadowed(true)];
+        let shadowed = [inherent_of_kind(false), inherent_of_kind(true)];
         let survives = move |entry: &&trait_env::ImplMethodEntry| {
             entry.is_inherent() || !shadowed[usize::from(entry.has_self)]
         };

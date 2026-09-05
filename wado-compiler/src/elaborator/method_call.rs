@@ -1436,9 +1436,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             );
         }
 
-        // One signature answers every list this call checks and pads against, at
-        // the receiver it already resolved, so none of them counts the receiver
-        // differently. `Type::<T>::op(&x)` writes that receiver first.
         let callee_sig = static_receiver
             .as_ref()
             .and_then(|key| self.unique_qualified_method_sig_keyed(key, &static_call.method));
@@ -2579,10 +2576,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .is_some()
     }
 
-    /// Look up static method return type based on struct name and method name
-    /// `receiver` is the declaration the call site resolved, not a spelling to
-    /// re-resolve: beside a same-named local declaration, the caller's own frame
-    /// answers with the wrong one.
+    /// What a qualified call returns, off the declaration it selected where it
+    /// has one. `receiver` is the declaration the call site resolved, never a
+    /// spelling to re-resolve: beside a same-named local declaration, the
+    /// caller's own frame answers with the wrong one.
     pub(super) fn lookup_static_method_return_type(
         &mut self,
         method_ref: &StaticMethodRef,
@@ -2690,24 +2687,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         method_name: &str,
         target_hint: Option<&crate::elaborator::trait_env::ImplTargetKey>,
     ) -> Option<Vec<TypeId>> {
-        // O(1) lookup via pre-built static method index. The index is
-        // keyed by the receiver's canonical decl key so two same-named
-        // structs in different modules each resolve to their own
-        // bucket. Prefer the caller's pre-resolved key when available
-        // (it threads through the `TypeId`'s module source and so
-        // distinguishes `CounterA::make` from `CounterB::make` even
-        // though both alias the same bare name `"Counter"`).
         let static_key = self.static_receiver_key(struct_name, target_hint);
-        // Carry the impl's defining module out of the index alongside
-        // the AST so the per-param elaborator can swap into its perspective —
-        // a static method's signature references types the impl module
-        // imports, not the caller's.
-        // Static methods take no receiver, so the digest's canonical form —
-        // impl type params left abstract — is already the answer.
-        // Value parameters only: every caller keeps a receiver of its own,
-        // separate from this list.
         if let Some(sig) = self.unique_static_method_sig(&static_key, method_name) {
-            return Some(sig.decl.param_types[sig.first_value_param()..].to_vec());
+            return Some(sig.value_param_types());
         }
         // A resource declares its statics in Wado like any other declaration,
         // so they answer from the same signature table at the same point in the
@@ -2717,7 +2699,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             && let Some(sig) = self.tysys.signatures.resource_method_sig(*def, method_name)
             && sig.self_kind == ast::SelfKind::None
         {
-            return Some(sig.decl.param_types[sig.first_value_param()..].to_vec());
+            return Some(sig.value_param_types());
         }
         // The index holds only the declaring resource's own methods, so an
         // inherited one is reached by walking the chain. Instance methods only:
@@ -2727,7 +2709,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             && !self.declares_resource_static(*def, method_name)
             && let Some((_, sig)) = self.resource_instance_method(*def, method_name)
         {
-            return Some(sig.decl.param_types[sig.first_value_param()..].to_vec());
+            return Some(sig.value_param_types());
         }
         None
     }
@@ -2802,9 +2784,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// The *trait* impl blocks a receiver written `struct_name` reaches,
-    /// current-module-first — every block whose head names the receiver's
-    /// declaration, whether or not it declares the method asked about: a block
-    /// that overrides nothing still answers with the trait's default.
+    /// current-module-first. Every block whose head names the receiver's
+    /// declaration is one, whether or not it declares the method asked about:
+    /// a block that overrides nothing still answers with the trait's default.
     ///
     /// A receiver reaches two namespaces: its declaration, and an impl binding
     /// the name as its own type parameter (`impl<V: Bound> Trait for V`), which
@@ -3197,11 +3179,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         arg_type_name: Option<&str>,
         target_hint: Option<&ImplTargetKey>,
     ) -> Option<StaticMethodRef> {
-        // Only trait impls are searched below, and only their receiver-less
-        // methods, so a shadowing inherent associated function is invisible
-        // here: selecting a trait impl would mangle the call to a body the
-        // spelling does not name, while every signature and visibility lookup
-        // answered from the inherent one.
+        // A shadowing inherent associated function declines the whole search,
+        // which reaches trait impls alone: selecting one would mangle the call
+        // to a body the spelling does not name, while every other lookup
+        // answered from the inherent declaration.
         if self.has_inherent_static_method(struct_name, method_name, target_hint) {
             return None;
         }

@@ -1325,10 +1325,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let ns_key = self.namespace_member(prefix, type_name).map(|def| {
                         trait_env::ImplTargetKey::of_decl(self.tysys.resolutions.defs(), def)
                     });
-                    // One signature answers every list, at the receiver this
-                    // call resolved. Reify replays the `Call` from what is
-                    // recorded below, so an empty list is a call short an
-                    // argument, or padding left untyped.
                     let callee_key = self.static_receiver_key(type_name, ns_key.as_ref());
                     let callee_sig =
                         self.unique_qualified_method_sig_keyed(&callee_key, method_name);

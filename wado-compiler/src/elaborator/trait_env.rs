@@ -572,9 +572,8 @@ pub(super) struct ImplMethodEntry {
     /// rung; `None` on a trait impl's.
     pub(super) module: ModuleSource,
     pub(super) inherent_visibility: Option<ast::Visibility>,
-    /// Whether the method declares a receiver. `Type::method` admits both
-    /// kinds, passing the receiver as its first argument; the dot spelling and
-    /// the associated-function lookups want the receiver-less ones alone.
+    /// Whether the method declares a receiver. `Type::method` names both kinds
+    /// and passes the receiver as its first argument; other lookups filter.
     pub(super) has_self: bool,
     /// The method itself: the key into the signature digest, which carries
     /// everything a lookup needs — resolved in the impl's own frame and its
@@ -1218,12 +1217,8 @@ impl TraitEnv {
                         .or_default()
                         .push(impl_def);
                 }
-                // Every method the block declares, whichever kind of block it
-                // is: `Type::method` reaches an instance method too, passing
-                // the receiver as its first argument, and `has_self` is what
-                // the receiver-less lookups filter on. A trait impl's statics
-                // join the same canonical bucket as inherent ones —
-                // `f64::from_bits` and friends in `core:prelude/int128.wado`.
+                // Every method of every block, inherent and trait alike, in one
+                // canonical bucket: `Type::method` reaches both kinds.
                 let is_trait_impl = impl_block.trait_type.is_some();
                 for method in &impl_block.methods {
                     impl_method_index

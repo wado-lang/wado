@@ -708,7 +708,6 @@ impl CalleeParams {
             return Self::default();
         };
         let receiver = sig.self_kind != ast::SelfKind::None;
-        let values = sig.first_value_param().min(sig.decl.param_types.len());
         Self {
             param_is_mut: receiver
                 .then(|| sig.self_kind == ast::SelfKind::MutRef)
@@ -720,11 +719,9 @@ impl CalleeParams {
                 .into_iter()
                 .chain(crate::elaborator::sig::Param::named_defaults(&sig.params))
                 .collect(),
-            param_types: if receiver {
-                sig.decl.param_types.clone()
-            } else {
-                sig.decl.param_types[values..].to_vec()
-            },
+            // Whole list: it leads with the receiver exactly where the callee
+            // declares one, which is exactly where the spelling writes one.
+            param_types: sig.decl.param_types.clone(),
             self_in_args: receiver,
         }
     }

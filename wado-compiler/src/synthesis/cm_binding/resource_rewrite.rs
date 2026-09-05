@@ -8,6 +8,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use crate::ast::{AstId, NamedType, Type};
+use crate::compiler_item::CompilerItem;
 use crate::component_model::CmInterfaceRegistry;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
@@ -60,7 +61,7 @@ fn packed_status(result: TirExpr) -> TirExpr {
 fn copy_result_of(packed: TirExpr, type_table: &RefCell<TypeTable>) -> TirExpr {
     let copy_result = type_table
         .borrow_mut()
-        .make_compiler_enum(crate::compiler_item::CompilerItem::CopyResult);
+        .make_compiler_enum(CompilerItem::CopyResult);
     internal_call("cm_copy_result", vec![packed], copy_result)
 }
 
@@ -68,7 +69,7 @@ fn copy_result_of(packed: TirExpr, type_table: &RefCell<TypeTable>) -> TirExpr {
 /// copy moved, paired with how it ended. Field order follows the declaration.
 fn copy_report_literal(
     type_id: TypeId,
-    item: crate::compiler_item::CompilerItem,
+    item: CompilerItem,
     moved_field: &str,
     moved: TirExpr,
     result: TirExpr,
@@ -105,7 +106,7 @@ fn stream_chunk_literal(
 ) -> TirExpr {
     copy_report_literal(
         chunk_type_id,
-        crate::compiler_item::CompilerItem::StreamChunk,
+        CompilerItem::StreamChunk,
         "items",
         items,
         result,
@@ -121,7 +122,7 @@ fn stream_write_literal(
 ) -> TirExpr {
     copy_report_literal(
         write_type_id,
-        crate::compiler_item::CompilerItem::StreamWrite,
+        CompilerItem::StreamWrite,
         "count",
         count,
         result,
@@ -679,7 +680,7 @@ fn synthesize_stream_write_func(elem_type_id: TypeId, ctx: &SynthCtx) -> TirFunc
 
     let write_type_id = type_table
         .borrow_mut()
-        .make_compiler_struct(crate::compiler_item::CompilerItem::StreamWrite);
+        .make_compiler_struct(CompilerItem::StreamWrite);
     stmts.push(return_stmt(Some(stream_write_literal(
         write_type_id,
         packed_count(result_ref()),
@@ -1656,33 +1657,31 @@ enum BindingTarget {
     /// Direct `CmRawCall` to the canonical Wasm import (simple operations).
     Canonical(CanonicalIntrinsic),
     /// Call to a `core:rt` binding function (complex operations).
-    Internal(crate::compiler_item::CompilerItem),
+    Internal(CompilerItem),
     /// Call to a synthesized binding function in the entry module.
     Entry(String),
 }
 
 /// The `core:rt` binding a CM member needs beyond its canonical import: one
 /// that moves a payload, or reads back what the canonical only signals.
-fn internal_cm_binding(cm_name: &str) -> Option<crate::compiler_item::CompilerItem> {
+fn internal_cm_binding(cm_name: &str) -> Option<CompilerItem> {
     Some(match cm_name {
-        "stream-read" => crate::compiler_item::CompilerItem::CmStreamReadU8,
-        "stream-write" => crate::compiler_item::CompilerItem::CmStreamWriteU8,
-        "stream-write-raw" => crate::compiler_item::CompilerItem::CmStreamWriteRawU8,
-        "error-context-new" => crate::compiler_item::CompilerItem::CmErrorContextNew,
-        "error-context-debug-message" => {
-            crate::compiler_item::CompilerItem::CmErrorContextDebugMessage
-        }
-        "waitable-set-wait" => crate::compiler_item::CompilerItem::CmWaitableSetWait,
-        "waitable-set-poll" => crate::compiler_item::CompilerItem::CmWaitableSetPoll,
+        "stream-read" => CompilerItem::CmStreamReadU8,
+        "stream-write" => CompilerItem::CmStreamWriteU8,
+        "stream-write-raw" => CompilerItem::CmStreamWriteRawU8,
+        "error-context-new" => CompilerItem::CmErrorContextNew,
+        "error-context-debug-message" => CompilerItem::CmErrorContextDebugMessage,
+        "waitable-set-wait" => CompilerItem::CmWaitableSetWait,
+        "waitable-set-poll" => CompilerItem::CmWaitableSetPoll,
         // Void canonical; the binding returns the handle as a `Waitable`.
-        "waitable-join" => crate::compiler_item::CompilerItem::CmWaitableJoin,
+        "waitable-join" => CompilerItem::CmWaitableJoin,
         _ => return None,
     })
 }
 
-/// `None` for a method not handled here — it falls through to WIR translate.
-/// Every stream name reaching this point names a `u8` element, which the caller
-/// checks; the payload-carrying futures the parameterized paths above took.
+/// What a Component Model primitive binds to. `None` falls through to WIR
+/// translate, and the caller has already taken the payload-carrying names, so
+/// every stream reaching here is a `u8` one.
 fn cm_binding_function(cm_name: &str) -> Option<BindingTarget> {
     if let Some(binding) = internal_cm_binding(cm_name) {
         return Some(BindingTarget::Internal(binding));
