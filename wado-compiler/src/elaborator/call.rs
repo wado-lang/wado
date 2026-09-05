@@ -1353,11 +1353,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         method_name,
                     );
 
-                    let mut return_type = self.lookup_static_method_return_type(
-                        &method_ref,
-                        &receiver,
-                        &final_mangled,
-                    );
+                    let mut return_type =
+                        self.lookup_static_method_return_type(&method_ref, &receiver);
                     if !method_type_args.is_empty() {
                         return_type = self
                             .tysys
@@ -1376,16 +1373,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     };
 
                     // The importing module never names `Type` on its own, so a
-                    // bare-name key reaches nothing and every `mut` parameter
-                    // would read as non-mut for the mutation and alias passes.
+                    // bare-name key reaches nothing and every fact below would
+                    // read as the callee declaring no parameters at all.
                     let ns_key = self.namespace_member(prefix, type_name).map(|def| {
                         trait_env::ImplTargetKey::of_decl(self.tysys.resolutions.defs(), def)
                     });
-                    let param_is_mut = self.lookup_static_method_param_is_mut(
-                        type_name,
-                        method_name,
-                        ns_key.as_ref(),
-                    );
+                    let callee_key = self.static_receiver_key(type_name, ns_key.as_ref());
+                    let callee_sig =
+                        self.unique_qualified_method_sig_keyed(&callee_key, method_name);
+                    let declares_params = callee_sig.is_some();
+                    let super::sem::types::CalleeParams {
+                        param_is_mut,
+                        param_defaults,
+                        param_types,
+                        self_in_args,
+                    } = super::sem::types::CalleeParams::of_signature(callee_sig.as_ref());
 
                     let func_ref = FunctionRef {
                         module_source: struct_module,
@@ -1401,21 +1403,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         )),
                     };
 
-                    // Recorded so reify replays this Call shape without re-running
-                    // dispatch. Empty defaults would leave codegen a call short an
-                    // argument; empty types would leave reify padding untyped.
-                    let param_defaults = self.lookup_static_method_param_defaults(
-                        type_name,
-                        method_name,
-                        ns_key.as_ref(),
-                    );
-                    let declared_params = self.lookup_static_method_param_types_keyed(
-                        type_name,
-                        method_name,
-                        ns_key.as_ref(),
-                    );
-                    let declares_params = declared_params.is_some();
-                    let param_types = declared_params.unwrap_or_default();
                     let checked: Vec<TypeId> = if method_type_args.is_empty() {
                         param_types.clone()
                     } else {
@@ -1450,7 +1437,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             type_args: vec![],
                             param_defaults,
                             param_types,
-                            self_in_args: false,
+                            self_in_args,
                         },
                     );
 
@@ -1808,13 +1795,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if callee_module.is_effect_like()
             && let Some(decl) = self.effect_or_resource_decl_at(receiver_site)
             && let Some((_, Some(return_type))) = self.resolve_effect_op_signature(decl, func_name)
-        {
-            return return_type;
-        }
-
-        // First, try local functions (entry point module)
-        if callee_module.is_entry_point()
-            && let Some(&return_type) = self.sem.decls.function_return_types.get(func_name)
         {
             return return_type;
         }
@@ -2794,20 +2774,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         );
     }
 
-    /// The static-method index entry `receiver::name` selects, for the
-    /// questions the signature alone cannot answer — which module declared it,
-    /// and at what visibility.
+    /// The index entry for the declaration `receiver::method_name` names, for
+    /// the questions the signature alone cannot answer: which module declared
+    /// it, and at what visibility.
     pub(super) fn static_method_entry(
         &self,
         receiver: &super::trait_env::ImplTargetKey,
         method_name: &str,
-    ) -> Option<&super::trait_env::StaticMethodEntry> {
-        self.tysys
-            .trait_env
-            .static_method_index
-            .get(receiver)?
-            .iter()
-            .find(|e| e.name == method_name)
+    ) -> Option<&super::trait_env::ImplMethodEntry> {
+        self.impl_method_entries(receiver, method_name).next()
     }
 
     /// [`Self::qualified_method_sig`] where the name resolves to exactly one
@@ -2821,12 +2796,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         struct_name: &str,
         method_name: &str,
     ) -> Option<MethodSig> {
-        let key = self.impl_target(struct_name);
-        let mut declared = self.qualified_method_decl_ids(&key, method_name);
+        self.unique_qualified_method_sig_keyed(&self.impl_target(struct_name), method_name)
+    }
+
+    /// [`Self::unique_qualified_method_sig`] at a receiver the caller resolved.
+    pub(super) fn unique_qualified_method_sig_keyed(
+        &self,
+        key: &trait_env::ImplTargetKey,
+        method_name: &str,
+    ) -> Option<MethodSig> {
+        let mut declared = self.qualified_method_decl_ids(key, method_name);
         if declared.next().is_some() && declared.next().is_some() {
             return None;
         }
-        self.qualified_method_sig(struct_name, method_name)
+        self.qualified_method_sig_keyed(key, method_name)
     }
 
     /// The canonical signature `struct_name::method_name` names, receiver-less
@@ -2838,16 +2821,25 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         struct_name: &str,
         method_name: &str,
     ) -> Option<MethodSig> {
-        let key = self.impl_target(struct_name);
+        self.qualified_method_sig_keyed(&self.impl_target(struct_name), method_name)
+    }
+
+    /// [`Self::qualified_method_sig`] for a caller that already resolved its
+    /// receiver. Deriving a second key from the bare name answers from another
+    /// vantage than the one the call resolved at.
+    pub(super) fn qualified_method_sig_keyed(
+        &self,
+        key: &ImplTargetKey,
+        method_name: &str,
+    ) -> Option<MethodSig> {
         let trait_env = &self.tysys.trait_env;
-        if let Some(entry) = trait_env
-            .static_method_index
-            .get(&key)
-            .and_then(|methods| methods.iter().find(|e| e.name == method_name))
-        {
+        // Receiver-less first: an instance method reaches the impl ladder
+        // below, which declines an overloaded name rather than taking the
+        // first indexed one.
+        if let Some(entry) = self.static_method_entries(key, method_name).next() {
             return self.tysys.signatures.method_sig(entry.method_id).cloned();
         }
-        if let Some((_, _, decl_id, _)) = trait_env.resource_static(&key, method_name) {
+        if let Some((_, _, decl_id, _)) = trait_env.resource_static(key, method_name) {
             return self
                 .tysys
                 .signatures
@@ -2857,7 +2849,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // One name over several impls is an overload only an argument
         // separates, so a single signature is not this lookup's to pick.
         let mut declared = self
-            .impl_method_decl_ids(&key, method_name)
+            .qualified_method_decl_ids(key, method_name)
             .filter_map(|def| self.tysys.signatures.method_sig(def).cloned());
         if let Some(sig) = declared.next()
             && declared.next().is_none()
@@ -2866,7 +2858,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         // The qualified form disambiguates a colliding name, so it reaches an
         // inherited method too.
-        let ImplTargetKey::Decl(def) = key else {
+        let &ImplTargetKey::Decl(def) = key else {
             return None;
         };
         // A resource declares its own statics whether or not the static index

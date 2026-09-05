@@ -1808,13 +1808,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     span: method.span,
                 });
             }
-            // Extract `#[cm("...")]` attribute payload, if any, so the
-            // dispatch synthesis can map raw resource call sites back
-            // to the right per-monomorphisation wrapper. Mirrors the
-            // elaborator's existing per-call extraction in
-            // `lookup_resource_static_cm`: takes the bare attribute
-            // string without splitting on `#`. None for effect ops
-            // and for resource methods that lack the attribute.
+            // The bare `#[cm("...")]` payload, unsplit on `#`, recorded on the
+            // signature so every call site reads the same one.
             let cm_name = method
                 .attrs
                 .iter()

@@ -839,14 +839,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             ),
             // Unit type () - search for impl blocks in loaded modules
             ResolvedType::Unit => (TypeTable::UNIT_TYPE_NAME.to_string(), None, None, None),
-            // Enum types - search for impl blocks by enum name
-            ResolvedType::Enum { .. } => {
+            // An enum or a non-generic variant: the declaration is the whole
+            // receiver, so its head names the impl blocks to search. A generic
+            // variant arrives as `GenericInstance`, handled above.
+            ResolvedType::Enum { .. } | ResolvedType::Variant { .. } => {
                 let (name, module_source) = self
                     .tysys
                     .type_table
                     .borrow()
                     .nominal_head(base_type_id)
-                    .expect("an enum names a declaration");
+                    .expect("an enum or variant names a declaration");
                 (name, Some(module_source), None, None)
             }
             // Generic resource types (Future<T>, Stream<T>, etc.)

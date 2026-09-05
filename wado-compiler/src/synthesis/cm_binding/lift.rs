@@ -96,7 +96,7 @@ fn synthesize_lift_inner(
     // before dispatching, so the CM-lift logic sees the underlying shape
     // rather than treating an unknown name as an i32 handle. Other type
     // shapes pass through `resolve_type` unchanged.
-    let resolved = ctx.cm_interface_registry.resolve_type(ty);
+    let resolved = ctx.cm_interface_registry.value_type(ty);
     let ty = &resolved;
     // Resolve stdlib struct names through the compiler-item registry so
     // a rename of `String` / `List` / `Option` / `Result` flows through
@@ -317,7 +317,7 @@ fn try_lift_wasi_struct(
     // Resolve field types through newtypes and compute the record layout
     let resolved_fields: Vec<(String, Type)> = fields
         .iter()
-        .map(|(fname, fty)| (fname.clone(), ctx.cm_interface_registry.resolve_type(fty)))
+        .map(|(fname, fty)| (fname.clone(), ctx.cm_interface_registry.value_type(fty)))
         .collect();
     let offsets = cm_abi::layout_fields_with_registry_scoped(
         resolved_fields.iter().map(|(_, ty)| ty),

@@ -523,7 +523,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             mut return_type,
             self_kind,
             param_types,
-            param_is_mut: _,
+            param_is_mut,
             owner,
             cm_name,
             is_ref_impl,
@@ -1014,15 +1014,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .receiver_head_awaits_substitution(base_type_id);
         let base_receiver = match matched_ref_kind {
             Some(kind) => Receiver::Ref(kind),
-            None => Receiver::Type(base_struct_name.clone()),
+            None => Receiver::Type(base_struct_name),
         };
-        let base_target = match matched_ref_kind {
-            Some(kind) => ImplTargetKey::Ref(kind),
-            // `impl_target_of` falls back on a written name, so hand it the
-            // declaration name rather than the module-qualified head.
-            None => self.impl_target_of(base_type_id, &base_struct_name.decl_name()),
-        };
-        let param_is_mut = self.lookup_method_param_is_mut(&base_target, method_name);
         let mut method_info =
             LocalMethodName::of(base_receiver, trait_name, method_name.to_string())
                 .with_type_args(&impl_type_arg_names, &method_type_arg_names);
@@ -1426,8 +1419,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Extract struct name AND canonical decl key for parameter type
         // lookup (follow newtypes to base). The canonical key disambiguates
-        // two modules' same-named structs whose static methods both live in
-        // the global `StaticMethodIndex`.
+        // two modules' same-named structs whose methods both live in the
+        // global `ImplMethodIndex`.
         let (struct_name_for_lookup, struct_key_for_lookup) =
             self.static_receiver_struct_key(target_type_id);
 
@@ -1446,21 +1439,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             );
         }
 
-        // Look up parameter types for coercion. Thread the canonical
-        // receiver key (from the resolved target type) so that two
-        // modules' same-named structs each route to their own impl.
-        let declared_params = struct_name_for_lookup.as_ref().and_then(|name| {
-            self.lookup_static_method_param_types_keyed(
-                name,
-                &static_call.method,
-                struct_key_for_lookup.as_ref(),
-            )
-        });
+        let callee_sig = static_receiver
+            .as_ref()
+            .and_then(|key| self.unique_qualified_method_sig_keyed(key, &static_call.method));
+        let super::sem::types::CalleeParams {
+            param_is_mut,
+            param_defaults: static_method_defaults,
+            mut param_types,
+            self_in_args,
+        } = super::sem::types::CalleeParams::of_signature(callee_sig.as_ref());
         // Whether a signature answered at all. A variant case or a flags member
         // reaches this path with no signature behind it, and its own arm below
-        // owns its argument count; only a declared static has one to check here.
-        let declares_params = declared_params.is_some();
-        let mut param_types = declared_params.unwrap_or_default();
+        // owns its argument count; only a declared callee has one to check here.
+        let declares_params = callee_sig.is_some();
 
         // Literal preselect for a conversion call (WEP 2026-07-31 phase 4):
         // choose the impl before the argument is elaborated, so the expected
@@ -1482,17 +1473,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return TypeTable::ERROR;
         }
 
-        // Looked up once, reused for arg padding and the recorded dispatch fact.
-        let static_method_defaults: Vec<(String, Option<ast::Expr>)> = struct_name_for_lookup
-            .as_ref()
-            .map(|name| {
-                self.lookup_static_method_param_defaults(
-                    name,
-                    &static_call.method,
-                    struct_key_for_lookup.as_ref(),
-                )
-            })
-            .unwrap_or_default();
         // The module those defaults were written in, so their bodies answer to
         // it rather than to this call site.
         let static_method_module = static_receiver.as_ref().and_then(|receiver| {
@@ -1553,8 +1533,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 || !method_type_args.is_empty();
             if has_type_args
                 && !param_types.is_empty()
-                && let Some(name) = struct_name_for_lookup.as_deref()
-                && let Some(sig) = self.qualified_method_sig(name, &static_call.method)
+                && let Some(sig) = callee_sig.as_ref()
             {
                 let declaring_args: Vec<TypeId> = match &static_call.target_type {
                     ast::Type::Generic(g) => g.args.iter().map(|t| self.resolve_type(t)).collect(),
@@ -1572,10 +1551,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     &declaring_args,
                     &method_type_args,
                 );
-                let first_value = sig.first_value_param().min(instantiated.param_types.len());
+                // `param_types` leads with the receiver exactly where the
+                // spelling wrote one, so the instantiated list must start at
+                // the same parameter.
+                let skip = if self_in_args {
+                    0
+                } else {
+                    sig.first_value_param().min(instantiated.param_types.len())
+                };
                 for (param_type, &instantiated_type) in param_types
                     .iter_mut()
-                    .zip(&instantiated.param_types[first_value..])
+                    .zip(&instantiated.param_types[skip..])
                 {
                     *param_type = instantiated_type;
                 }
@@ -1959,7 +1945,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .expect("a newtype names a declaration");
 
                     // Check if the newtype itself has the static method
-                    if self.has_static_method_direct(&newtype_name, &static_call.method) {
+                    if self.declares_method_directly(&newtype_name, &static_call.method) {
                         let fq = self
                             .tysys
                             .type_table
@@ -2059,7 +2045,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .borrow()
                         .nominal_head(target_type_id)
                         .expect("a flags type names a declaration");
-                    if self.has_static_method_direct(&flags_name, &static_call.method) {
+                    if self.declares_method_directly(&flags_name, &static_call.method) {
                         let fq = self
                             .tysys
                             .type_table
@@ -2152,11 +2138,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         );
 
         // Look up return type
-        let mut return_type = self.lookup_static_method_return_type(
-            &method_ref,
-            &mangled_struct_name,
-            &mangled_func_name,
-        );
+        let mut return_type =
+            self.lookup_static_method_return_type(&method_ref, &mangled_struct_name);
 
         // A value blanket indexes statics under its receiver *param* name, so
         // the concrete receiver's own bucket misses.
@@ -2226,17 +2209,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .map(|t| self.tysys.type_table.borrow().fq_type_name(*t))
             .collect();
 
-        let param_is_mut = struct_name_for_lookup
-            .as_deref()
-            .map(|name| {
-                self.lookup_static_method_param_is_mut(
-                    name,
-                    &static_call.method,
-                    struct_key_for_lookup.as_ref(),
-                )
-            })
-            .unwrap_or_default();
-
         // Build method_info with base struct name and trait name (if applicable)
         let mut method_info = LocalMethodName::new(
             self.qualified_receiver_name(&struct_name),
@@ -2245,9 +2217,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         )
         .with_type_args(&impl_only_type_arg_names, &method_type_arg_names);
 
-        // Propagate #[cm("...")] from resource static methods for CM binding synthesis.
-        let cm_owner = self.tysys.type_table.borrow().nominal_def(target_type_id);
-        method_info.cm_name = self.lookup_resource_static_cm(cm_owner, &static_call.method);
+        // The `#[cm("...")]` import the callee binds, off the signature this
+        // call resolved to, at the receiver it resolved at.
+        method_info.cm_name = static_receiver
+            .as_ref()
+            .and_then(|key| self.qualified_method_sig_keyed(key, &static_call.method))
+            .and_then(|sig| sig.cm_name);
 
         // The selection covers trait impls only; an inherent static has none
         // and reaches the index instead.
@@ -2285,7 +2260,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 type_args: method_type_args,
                 param_defaults: static_method_defaults,
                 param_types: param_types.clone(),
-                self_in_args: false,
+                self_in_args,
             },
         );
 
@@ -2318,15 +2293,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         } = self.find_blanket_static_method(receiver_type_id, method)?;
 
         let template_name = MethodName::format_local(&binder, Some(&trait_name), method);
+        // The blanket's own declaration of the method: its bucket is keyed by
+        // the receiver *param*, which no name written at a call site reaches.
         let method_ref = StaticMethodRef::new(
             blanket_module.clone(),
             blanket_param.clone(),
             method.to_string(),
             Some(trait_name.clone()),
-            None,
+            self.tysys.declared_method(blanket_def, method),
         );
-        let template_return =
-            self.lookup_static_method_return_type(&method_ref, &binder, &template_name);
+        let template_return = self.lookup_static_method_return_type(&method_ref, &binder);
         if template_return == TypeTable::UNKNOWN {
             return None;
         }
@@ -2548,19 +2524,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let Some(header) = self.tysys.trait_env.impl_headers.get(&b.def) else {
                     return false;
                 };
-                self.tysys
-                    .trait_env
-                    .static_method_index
-                    .get(&crate::elaborator::trait_env::ImplTargetKey::TypeParam(
+                self.static_method_entries(
+                    &crate::elaborator::trait_env::ImplTargetKey::TypeParam(
                         b.module.clone(),
                         b.param.clone(),
-                    ))
-                    .is_some_and(|entries| {
-                        entries.iter().any(|e| {
-                            e.name == method_name
-                                && header.methods.iter().any(|m| m.def == e.method_id)
-                        })
-                    })
+                    ),
+                    method_name,
+                )
+                .any(|e| header.methods.iter().any(|m| m.def == e.method_id))
             })
             // The trait comes off the impl's own header, so the blanket
             // index's bare-name key never reaches a mangled name.
@@ -2599,82 +2570,34 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .map(|(blanket, _)| blanket)
     }
 
-    /// Look up `#[cm("...")]` for a static (no-self) method on the resource
-    /// `def` declares.
-    fn lookup_resource_static_cm(
-        &self,
-        def: Option<crate::defs::DefId>,
-        method_name: &str,
-    ) -> Option<String> {
-        let key = crate::elaborator::trait_env::ImplTargetKey::of_decl(
-            self.tysys.resolutions.defs(),
-            def?,
-        );
-        let (_, _, decl_id, _) = self.tysys.trait_env.resource_static(&key, method_name)?;
-        self.tysys
-            .signatures
-            .resource_method_sig(*decl_id, method_name)?
-            .cm_name
-            .clone()
+    /// Whether an impl block on `struct_name` itself declares `method_name`, of
+    /// either kind, which decides whether a newtype answers a qualified call or
+    /// its base does. No newtype fallback here, for that reason.
+    fn declares_method_directly(&self, struct_name: &str, method_name: &str) -> bool {
+        self.impl_method_entries(&self.impl_target(struct_name), method_name)
+            .next()
+            .is_some()
     }
 
-    /// Check if a static method exists directly for a given type name (no newtype fallback).
-    fn has_static_method_direct(&self, struct_name: &str, method_name: &str) -> bool {
-        let qualified = self.qualified_receiver_name(struct_name);
-        let mangled = MethodName::format_local(&qualified, None, method_name);
-        if self.sem.decls.function_return_types.contains_key(&mangled) {
-            return true;
-        }
-        // Also check with trait-qualified name
-        if let Some(trait_name) = self.find_static_method_trait(struct_name, method_name) {
-            let trait_mangled =
-                MethodName::format_local(&qualified, Some(&trait_name), method_name);
-            if self
-                .sem
-                .decls
-                .function_return_types
-                .contains_key(&trait_mangled)
-            {
-                return true;
-            }
-        }
-        // Every impl block on the type, inherent and trait alike.
-        let keys = self
-            .tysys
-            .trait_env
-            .all_impl_keys(&self.impl_target(struct_name));
-        self.keys_declare_static_method(&keys, method_name)
-    }
-
-    /// Look up static method return type based on struct name and method name
-    /// `receiver` is the declaration the call site resolved, not a spelling to
-    /// re-resolve: beside a same-named local declaration, the caller's own frame
-    /// answers with the wrong one.
+    /// What a qualified call returns, off the declaration it selected where it
+    /// has one. `receiver` is the declaration the call site resolved, never a
+    /// spelling to re-resolve: beside a same-named local declaration, the
+    /// caller's own frame answers with the wrong one.
     pub(super) fn lookup_static_method_return_type(
         &mut self,
         method_ref: &StaticMethodRef,
         receiver: &FqTypeName,
-        mangled_func_name: &str,
     ) -> TypeId {
         let struct_name = method_ref.type_name.as_str();
         let method_name = method_ref.method_name.as_str();
-        // First check locally registered function_return_types
-        if let Some(&return_type) = self.sem.decls.function_return_types.get(mangled_func_name) {
-            return return_type;
-        }
-
-        // Also try with just StructName::method (for non-generic types)
-        let simple_name = MethodName::format_local(receiver, None, method_name);
-        if let Some(&return_type) = self.sem.decls.function_return_types.get(&simple_name) {
-            return return_type;
-        }
-
-        // Try with trait-qualified name (StructName^TraitName::method)
-        if let Some(trait_name) = self.find_static_method_trait(struct_name, method_name) {
-            let trait_mangled = MethodName::format_local(receiver, Some(&trait_name), method_name);
-            if let Some(&return_type) = self.sem.decls.function_return_types.get(&trait_mangled) {
-                return return_type;
-            }
+        // The declaration the selection picked answers first: an overload's
+        // members may return differently, and the pick is what the call's
+        // mangled name was built from.
+        if let Some(sig) = method_ref
+            .method_id
+            .and_then(|def| self.tysys.signatures.method_sig(def))
+        {
+            return sig.decl.return_type.unwrap_or(TypeTable::UNIT);
         }
 
         // The receiver's own declaration is the key. A head naming none falls
@@ -2767,24 +2690,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         method_name: &str,
         target_hint: Option<&crate::elaborator::trait_env::ImplTargetKey>,
     ) -> Option<Vec<TypeId>> {
-        // O(1) lookup via pre-built static method index. The index is
-        // keyed by the receiver's canonical decl key so two same-named
-        // structs in different modules each resolve to their own
-        // bucket. Prefer the caller's pre-resolved key when available
-        // (it threads through the `TypeId`'s module source and so
-        // distinguishes `CounterA::make` from `CounterB::make` even
-        // though both alias the same bare name `"Counter"`).
         let static_key = self.static_receiver_key(struct_name, target_hint);
-        // Carry the impl's defining module out of the index alongside
-        // the AST so the per-param elaborator can swap into its perspective —
-        // a static method's signature references types the impl module
-        // imports, not the caller's.
-        // Static methods take no receiver, so the digest's canonical form —
-        // impl type params left abstract — is already the answer.
-        // Value parameters only: every caller keeps a receiver of its own,
-        // separate from this list.
         if let Some(sig) = self.unique_static_method_sig(&static_key, method_name) {
-            return Some(sig.decl.param_types[sig.first_value_param()..].to_vec());
+            return Some(sig.value_param_types());
         }
         // A resource declares its statics in Wado like any other declaration,
         // so they answer from the same signature table at the same point in the
@@ -2794,7 +2702,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             && let Some(sig) = self.tysys.signatures.resource_method_sig(*def, method_name)
             && sig.self_kind == ast::SelfKind::None
         {
-            return Some(sig.decl.param_types[sig.first_value_param()..].to_vec());
+            return Some(sig.value_param_types());
         }
         // The index holds only the declaring resource's own methods, so an
         // inherited one is reached by walking the chain. Instance methods only:
@@ -2804,7 +2712,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             && !self.declares_resource_static(*def, method_name)
             && let Some((_, sig)) = self.resource_instance_method(*def, method_name)
         {
-            return Some(sig.decl.param_types[sig.first_value_param()..].to_vec());
+            return Some(sig.value_param_types());
         }
         None
     }
@@ -2835,14 +2743,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let mut current_type = target_type_id;
             loop {
                 match self.tysys.type_table.borrow().get(current_type).clone() {
-                    ResolvedType::Struct { .. } | ResolvedType::GenericInstance { .. } => {
-                        break self
-                            .tysys
-                            .type_table
-                            .borrow()
-                            .nominal_def(current_type)
-                            .map(|def| ImplTargetKey::of_decl(self.tysys.resolutions.defs(), def));
-                    }
+                    // Keyed on what they wrap, not on themselves: a newtype's
+                    // impls are looked up on its base, and `flags`' on `u32`.
                     ResolvedType::Newtype { base_type, .. } => current_type = base_type,
                     ResolvedType::Flags { .. } => {
                         current_type = TypeTable::U32;
@@ -2852,7 +2754,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             TypeTable::ARRAY_TYPE_NAME.to_string(),
                         ));
                     }
-                    _ => break None,
+                    // Every other nominal type keys on its own declaration.
+                    _ => {
+                        break self
+                            .tysys
+                            .type_table
+                            .borrow()
+                            .nominal_def(current_type)
+                            .map(|def| ImplTargetKey::of_decl(self.tysys.resolutions.defs(), def));
+                    }
                 }
             }
         };
@@ -2864,27 +2774,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         (name, key)
     }
 
-    /// Default-value expressions for a static method's non-self parameters, in
-    /// the same order as [`Self::lookup_static_method_param_types_keyed`].
-    /// Returns `(param_name, default_expr)` pairs; `default_expr` is `None` for
-    /// parameters without a declared default.
-    pub(super) fn lookup_static_method_param_defaults(
-        &mut self,
-        struct_name: &str,
-        method_name: &str,
-        target_hint: Option<&crate::elaborator::trait_env::ImplTargetKey>,
-    ) -> Vec<(String, Option<ast::Expr>)> {
-        let static_key = self.static_receiver_key(struct_name, target_hint);
-        // Names and defaults come out of the same record, so their order
-        // matches the parameter types by construction.
-        self.unique_static_method_sig(&static_key, method_name)
-            .map(|sig| crate::elaborator::sig::Param::named_defaults(&sig.params))
-            .unwrap_or_default()
-    }
-
     /// The receiver a static lookup keys on: the key its caller already
     /// resolved, else the written name over the walking module's frame.
-    fn static_receiver_key(
+    pub(super) fn static_receiver_key(
         &self,
         struct_name: &str,
         target_hint: Option<&ImplTargetKey>,
@@ -2895,7 +2787,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// The *trait* impl blocks a receiver written `struct_name` reaches,
-    /// current-module-first, with the declared name their heads must spell.
+    /// current-module-first. Every block whose head names the receiver's
+    /// declaration is one, whether or not it declares the method asked about:
+    /// a block that overrides nothing still answers with the trait's default.
     ///
     /// A receiver reaches two namespaces: its declaration, and an impl binding
     /// the name as its own type parameter (`impl<V: Bound> Trait for V`), which
@@ -2905,7 +2799,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &self,
         struct_name: &str,
         target_hint: Option<&ImplTargetKey>,
-    ) -> (Vec<crate::defs::DefId>, String) {
+    ) -> Vec<crate::defs::DefId> {
         let defs = self.tysys.resolutions.defs();
         let target = self.static_receiver_key(struct_name, target_hint);
         let declared_name = target.type_name(defs).unwrap_or(struct_name).to_string();
@@ -2924,49 +2818,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .copied()
             .collect();
         keys.extend(declared.iter().filter(|k| !is_current(k)).copied());
-        (keys, declared_name)
-    }
-
-    /// Canonical signatures of the methods named `method_name` declared on
-    /// `type_key`, current-module-first. `all_impl_index` is already in global
-    /// order, so the partition needs no per-call sort.
-    fn impl_method_sigs<'b>(
-        &'b self,
-        type_key: &ImplTargetKey,
-        method_name: &str,
-    ) -> Vec<&'b super::sig::MethodSig> {
-        let env = &self.tysys.trait_env;
-        let Some(keys) = env.all_impl_index.get(type_key) else {
-            return Vec::new();
-        };
-        let mut current: Vec<&super::sig::MethodSig> = Vec::new();
-        let mut others: Vec<&super::sig::MethodSig> = Vec::new();
-        for key in keys {
+        keys.retain(|key| {
             let header = &env.impl_headers[key];
-            for method in header.methods.iter().filter(|m| m.name == method_name) {
-                let sig = self
-                    .tysys
-                    .signatures
-                    .method_sig(method.def)
-                    .expect("the decl pass records every impl-declared method's signature");
-                if *self.tysys.resolutions.defs().module(*key) == self.current_module_source {
-                    current.push(sig);
-                } else {
-                    others.push(sig);
-                }
-            }
-        }
-        current.extend(others);
-        current
-    }
-
-    /// Look up whether each non-self parameter of an instance method is `mut`.
-    /// Returns empty vec (conservative) for unknown methods.
-    fn lookup_method_param_is_mut(&self, type_key: &ImplTargetKey, method_name: &str) -> Vec<bool> {
-        self.impl_method_sigs(type_key, method_name)
-            .first()
-            .map(|sig| super::sig::Param::is_mut_flags(&sig.params))
-            .unwrap_or_default()
+            header.trait_type.is_some()
+                && self.impl_head_decl_name(header, defs.module(*key)) == declared_name
+        });
+        keys
     }
 
     /// The return type every method the qualified spelling can name agrees on,
@@ -3011,23 +2868,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> Vec<TypeId> {
         self.unique_static_method_sig(static_key, method_name)
             .map(|sig| sig.decl.type_params.iter().map(|(_, id)| *id).collect())
-            .unwrap_or_default()
-    }
-
-    /// Whether each parameter of a static method is `mut`, empty for an unknown
-    /// method. The receiver key is pre-resolved where the caller holds one — a
-    /// namespace member's bare spelling cannot reach it.
-    pub(super) fn lookup_static_method_param_is_mut(
-        &self,
-        struct_name: &str,
-        method_name: &str,
-        target_hint: Option<&crate::elaborator::trait_env::ImplTargetKey>,
-    ) -> Vec<bool> {
-        let type_target = self.static_receiver_key(struct_name, target_hint);
-        self.impl_method_sigs(&type_target, method_name)
-            .into_iter()
-            .find(|sig| sig.self_kind == ast::SelfKind::None)
-            .map(|sig| super::sig::Param::is_mut_flags(&sig.params))
             .unwrap_or_default()
     }
 
@@ -3165,30 +3005,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// Whether any impl block among `keys` declares `method_name` taking no
-    /// receiver. Headers name the methods and the signature digest says
-    /// whether each takes `self`, so the question is answered without an
-    /// impl-block AST — and keyed canonically, so two modules' same-named
-    /// types cannot answer for each other.
-    fn keys_declare_static_method(&self, keys: &[crate::defs::DefId], method_name: &str) -> bool {
-        keys.iter().any(|key| {
-            self.tysys
-                .trait_env
-                .impl_headers
-                .get(key)
-                .into_iter()
-                .flat_map(|header| header.methods.iter())
-                .any(|m| {
-                    m.name == method_name
-                        && self
-                            .tysys
-                            .signatures
-                            .method_sig(m.def)
-                            .is_some_and(|sig| sig.self_kind == ast::SelfKind::None)
-                })
-        })
-    }
-
     /// Whether an inherent impl (`impl Type { … }`) declares a no-self method
     /// of this name. A conversion-call guard needs the distinction: a trait
     /// lookup returning `None` is a failure only when no inherent static can
@@ -3200,8 +3016,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         target_hint: Option<&ImplTargetKey>,
     ) -> bool {
         let target = self.static_receiver_key(struct_name, target_hint);
-        let keys = self.tysys.trait_env.inherent_impl_keys(&target);
-        self.keys_declare_static_method(&keys, method_name)
+        self.static_method_entries(&target, method_name)
+            .any(super::trait_env::ImplMethodEntry::is_inherent)
     }
 
     /// The argument preselect over a receiver's conversion impls: `Selected` and
@@ -3263,16 +3079,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .to_string();
         let mut candidates: Vec<ConversionCandidate> = Vec::new();
         let mut has_blanket = false;
-        let (impl_defs, declared_name) = self.trait_impls_for_receiver(struct_name, target_hint);
-        for impl_def in impl_defs {
+        for impl_def in self.trait_impls_for_receiver(struct_name, target_hint) {
             let header = &self.tysys.trait_env.impl_headers[&impl_def];
             let module = self.tysys.resolutions.defs().module(impl_def).clone();
-            let Some(trait_type) = header.trait_type.as_ref() else {
-                continue;
-            };
+            let trait_type = header
+                .trait_type
+                .as_ref()
+                .expect("trait_impls_for_receiver yields trait impls alone");
             let base = super::trait_env::get_type_name_static(trait_type);
-            if self.impl_head_decl_name(header, &module) != declared_name
-                || (base != from_trait_name && base != "TryFrom")
+            if (base != from_trait_name && base != "TryFrom")
                 || !header.methods.iter().any(|m| m.name == method_name)
             {
                 continue;
@@ -3367,7 +3182,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         arg_type_name: Option<&str>,
         target_hint: Option<&ImplTargetKey>,
     ) -> Option<StaticMethodRef> {
-        let (impl_defs, declared_name) = self.trait_impls_for_receiver(struct_name, target_hint);
+        // A shadowing inherent associated function declines the whole search,
+        // which reaches trait impls alone: selecting one would mangle the call
+        // to a body the spelling does not name, while every other lookup
+        // answered from the inherent declaration.
+        if self.has_inherent_static_method(struct_name, method_name, target_hint) {
+            return None;
+        }
+        let impl_defs = self.trait_impls_for_receiver(struct_name, target_hint);
         let from_trait_name = self
             .tysys
             .type_table
@@ -3471,9 +3293,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                           impl_module: &ModuleSource|
          -> Option<(crate::name::FqTraitName, crate::defs::DefId)> {
             let trait_type = header.trait_type.as_ref()?;
-            if self.impl_head_decl_name(header, impl_module) != declared_name
-                || !matches_arg_type(trait_type, &header.ty, impl_module, &header.type_params)
-            {
+            if !matches_arg_type(trait_type, &header.ty, impl_module, &header.type_params) {
                 return None;
             }
             for method in header.methods.iter().filter(|m| m.name == method_name) {
@@ -3565,41 +3385,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         struct_name: &str,
         method_name: &str,
     ) -> bool {
-        let mangled_name = MethodName::format_local(
-            &self.qualified_receiver_name(struct_name),
-            None,
-            method_name,
-        );
-
-        // Check if it's registered in function_return_types (static methods are registered there)
-        if self
-            .sem
-            .decls
-            .function_return_types
-            .contains_key(&mangled_name)
-        {
-            return true;
-        }
-
-        // O(1) lookup via pre-built static method index (impl blocks).
+        // O(1) lookup via the impl-method index, both kinds: the spelling names
+        // a receiver-taking method too, passing the receiver first.
         // Canonicalise so a same-named struct in another module doesn't
         // accidentally claim this name.
         let static_key = self.impl_target_at(site, struct_name);
-        if let Some(methods) = self.tysys.trait_env.static_method_index.get(&static_key)
-            && methods.iter().any(|e| e.name == method_name)
+        if self
+            .impl_method_entries(&static_key, method_name)
+            .next()
+            .is_some()
         {
-            return true;
-        }
-
-        // The index holds only what `TraitEnv::build` classified as a static
-        // method; ask the headers directly for the rest.
-        if self.keys_declare_static_method(
-            &self
-                .tysys
-                .trait_env
-                .all_impl_keys(&self.impl_target_at(site, struct_name)),
-            method_name,
-        ) {
             return true;
         }
 
@@ -3689,7 +3484,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self.lookup_newtype(struct_name)
         {
             // First check if the newtype itself has this static method
-            if self.has_static_method_direct(struct_name, method_name) {
+            if self.declares_method_directly(struct_name, method_name) {
                 (
                     struct_name.to_string(),
                     qualified_struct_name,
@@ -3817,11 +3612,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
 
         // Look up return type using the actual struct name
-        let mut return_type = self.lookup_static_method_return_type(
-            &method_ref,
-            &actual_struct_fq,
-            &final_mangled_name,
-        );
+        let mut return_type = self.lookup_static_method_return_type(&method_ref, &actual_struct_fq);
 
         // Substitute impl-level + method-level type parameters in return type.
         // `lookup_static_method_return_type` registers impl params at indices
@@ -3893,7 +3684,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 func_ref,
                 vec![],
                 callee_sig.as_ref(),
-                true,
             ),
         );
 

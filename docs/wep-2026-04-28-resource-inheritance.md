@@ -592,6 +592,8 @@ Implemented, with tests in `wado-compiler/tests/integration/extern_handle_resour
 
 - Lowering. An extern-handle resource is not a CM `resource`: it registers as a `u32` newtype (`component_model.rs`), so every `own` / `borrow` path passes it by, a `&self` receiver loses its reference, and the WIT renders the same opaque `u32` in every position (`wit_emit.rs::extern_handle`). Upcast and an inherited method's receiver are wasm-level no-ops — the call resolves to the declaring resource through `MethodOwner::Ancestor`.
 
+- The registry reads that newtype two ways. `resolve_type` peels the handle to its `u32`, the view the boundary decides with: the flat ABI, the canonical options, the emitted WIT. `value_type` keeps the resource's own type, the view the guest holds. A binding's signature takes the second, because `Option<Element>` and `Option<u32>` are distinct GC types (`tests/integration/web_dom.rs`). `cm_type_to_type_id` finds the resource's `TypeId` under its package, a `web:` package being one flat file.
+
 Not built:
 
 - `downcast`, and the `Eq` / `Inspect` / `Display` host imports.

@@ -174,7 +174,7 @@ fn fixup_wasi_derived_types_in_adapter(
         }
         let new_type = call_args[i].type_id;
         // Resolve newtypes (e.g., FieldName → String) before computing WASI-derived TypeId
-        let resolved = cm_interface_registry.resolve_type(param_type);
+        let resolved = cm_interface_registry.value_type(param_type);
         replace_wasi_derived_type_recursive(
             adapter,
             &resolved,
@@ -192,7 +192,7 @@ fn fixup_wasi_derived_types_in_adapter(
     if !adapter.is_cm_binding
         && let Some(return_type) = &func_info.return_type
     {
-        let resolved = cm_interface_registry.resolve_type(return_type);
+        let resolved = cm_interface_registry.value_type(return_type);
         replace_wasi_derived_type_recursive(
             adapter,
             &resolved,
@@ -402,7 +402,8 @@ fn fixup_types_in_block(
     }
 }
 
-/// Fix up an expression in a Let statement that might hold adapter intermediate values.
+/// Retype a Let holding an adapter intermediate: a method-call result, or the
+/// `ref.null` a lifted result starts as.
 fn fixup_adapter_let(
     expr: &mut TirExpr,
     local_index: u32,
@@ -412,27 +413,17 @@ fn fixup_adapter_let(
     locals: &mut [TirLocal],
 ) {
     let should_fix = expr.type_id == TypeTable::I32 || expr.type_id == old_type;
-    match &mut expr.kind {
-        TirExprKind::Call { func, .. } if func.method_info.is_some() => {
-            if should_fix {
-                expr.type_id = new_type;
-                *let_type_id = new_type;
-                if (local_index as usize) < locals.len() {
-                    locals[local_index as usize].type_id = new_type;
-                }
-            }
-        }
-        TirExprKind::Null => {
-            if should_fix {
-                expr.type_id = new_type;
-                *let_type_id = new_type;
-                if (local_index as usize) < locals.len() {
-                    locals[local_index as usize].type_id = new_type;
-                }
-            }
-        }
-        _ => {}
+    let holds_intermediate = match &expr.kind {
+        TirExprKind::Call { func, .. } => func.method_info.is_some(),
+        TirExprKind::Null => true,
+        _ => false,
+    };
+    if !(should_fix && holds_intermediate) {
+        return;
     }
+    expr.type_id = new_type;
+    *let_type_id = new_type;
+    locals[local_index as usize].type_id = new_type;
 }
 
 /// Fix up an expression statement (e.g., Assign with `VariantConstruct`).
@@ -754,9 +745,7 @@ fn fixup_adapter_param_from_call_site(
     }
     let local_idx = param.local_index as usize;
     param.type_id = arg_type;
-    if local_idx < adapter.locals.len() {
-        adapter.locals[local_idx].type_id = arg_type;
-    }
+    adapter.locals[local_idx].type_id = arg_type;
 }
 
 /// Cast call-site args whose flat-typed adapter param is authoritative

@@ -41,7 +41,7 @@ what lacked the mechanism.
 
 The static path was not merely name-only, it was circular. `Type::m(args)`
 elaborated its arguments against parameter types found by (receiver, method)
-name — `static_method_index` is searched with `find`, so with two conversion
+name — the impl-method index is searched with `find`, so with two conversion
 impls it returns whichever comes first — and _then_ selected the impl from the
 resulting argument type. Selection shaped the argument and the argument drove
 selection; where the two disagreed no impl matched (`Wrapper::from(42)` against

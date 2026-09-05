@@ -669,39 +669,16 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         self.qualified_method_decl_ids(receiver, method_name).next()
     }
 
-    /// Every declaration `receiver::method_name` can name, each once,
-    /// receiver-less ones first. A caller that must choose reads them all
-    /// rather than trusting the order: one name over several impls is an
-    /// overload, not a tiebreak. The two indexes overlap, and a declaration
-    /// counted twice reads as an overload of itself.
+    /// Every declaration `receiver::method_name` can name, in
+    /// [`Self::impl_method_entries`]' order. A caller that must choose reads
+    /// them all: one name over several impls is an overload, not a tiebreak.
     pub(super) fn qualified_method_decl_ids(
         &self,
         receiver: &trait_env::ImplTargetKey,
         method_name: &str,
     ) -> impl Iterator<Item = crate::defs::DefId> {
-        let statics = self
-            .static_method_entries(receiver, method_name)
-            .map(|e| e.method_id);
-        let mut seen = crate::hashmap::IndexSet::default();
-        statics
-            .chain(self.impl_method_decl_ids(receiver, method_name))
-            .filter(move |def| seen.insert(*def))
-    }
-
-    /// The declarations of `method_name` in `receiver`'s impl blocks, whether
-    /// or not they take a receiver.
-    pub(in crate::elaborator) fn impl_method_decl_ids(
-        &self,
-        receiver: &trait_env::ImplTargetKey,
-        method_name: &str,
-    ) -> impl Iterator<Item = crate::defs::DefId> {
-        self.tysys
-            .trait_env
-            .all_impl_index
-            .get(receiver)
-            .into_iter()
-            .flatten()
-            .filter_map(|&impl_def| self.tysys.declared_method(impl_def, method_name))
+        self.impl_method_entries(receiver, method_name)
+            .map(|entry| entry.method_id)
     }
 
     /// The receiver-less declarations of `method_name` on `receiver`. Several
@@ -711,14 +688,46 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         &self,
         receiver: &trait_env::ImplTargetKey,
         method_name: &str,
-    ) -> impl Iterator<Item = &trait_env::StaticMethodEntry> {
-        self.tysys
+    ) -> impl Iterator<Item = &trait_env::ImplMethodEntry> {
+        self.impl_method_entries(receiver, method_name)
+            .filter(|e| !e.has_self)
+    }
+
+    /// Every declaration of `method_name` an impl block on `receiver` makes,
+    /// receiver-less first. The one walk behind every qualified lookup.
+    ///
+    /// An inherent declaration shadows a trait impl's of the same kind, as dot
+    /// syntax resolves it. The two kinds are not alternatives for one call,
+    /// because different argument lists reach them.
+    pub(in crate::elaborator) fn impl_method_entries(
+        &self,
+        receiver: &trait_env::ImplTargetKey,
+        method_name: &str,
+    ) -> impl Iterator<Item = &trait_env::ImplMethodEntry> {
+        let bucket: &[trait_env::ImplMethodEntry] = self
+            .tysys
             .trait_env
-            .static_method_index
+            .impl_method_index
             .get(receiver)
-            .into_iter()
-            .flatten()
-            .filter(move |e| e.name == method_name)
+            .map_or(&[], Vec::as_slice);
+        let named = move |entry: &&trait_env::ImplMethodEntry| entry.name == method_name;
+        let inherent_of_kind = |has_self: bool| {
+            bucket
+                .iter()
+                .any(|e| e.name == method_name && e.has_self == has_self && e.is_inherent())
+        };
+        let shadowed = [inherent_of_kind(false), inherent_of_kind(true)];
+        let survives = move |entry: &&trait_env::ImplMethodEntry| {
+            entry.is_inherent() || !shadowed[usize::from(entry.has_self)]
+        };
+        let of_kind = move |has_self: bool| {
+            bucket
+                .iter()
+                .filter(named)
+                .filter(survives)
+                .filter(move |e| e.has_self == has_self)
+        };
+        of_kind(false).chain(of_kind(true))
     }
 
     /// Build a [`control_flow::CtrlFlowCtx`] over the currently-active

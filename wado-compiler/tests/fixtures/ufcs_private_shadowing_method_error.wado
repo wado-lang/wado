@@ -1,0 +1,14 @@
+// A qualified call read its callee's reach from whichever entry the name was
+// indexed under first. A trait impl's same-named method declares no reach of
+// its own, so reading that one skipped the check the shadowing inherent method
+// owed, and the private method answered from another module.
+
+use m from "./sub/ufcs_shadowed_private_target.wado";
+
+export fn run() {
+    let p = m::P { v: 1 };
+    let _ = m::P::tag(&p);
+}
+
+__DATA__
+{"compile_error": "method `tag` of `P` is private to its defining file"}

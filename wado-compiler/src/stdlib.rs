@@ -143,7 +143,7 @@ stdlib_table! {
     "wasi:tls/types.wado" => "wasi/tls/types.wado",
     "wasi:tls/client.wado" => "wasi/tls/client.wado",
     "wasi:tls/worlds.wado" => "wasi/tls/worlds.wado",
-    // Web platform bindings — the extern-handle slice Tide's WebIDL frontend replaces.
+    // Web platform bindings, generated from the WebIDL snapshot beside them.
     "web:dom" => "web/dom.wado",
 }
 
