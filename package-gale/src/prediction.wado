@@ -822,6 +822,10 @@ fn try_expand_opaque(
         return null;
     }
     let mut expanded_configs: List<SllConfig> = [];
+    // An expansion that turns opaque has no lookahead to offer, and dropping
+    // it would hand its tokens to the other alts. It still lets an at-end
+    // conflict route to the simulator, which needs no lookahead from it.
+    let mut expansion_opaque = false;
     for let c of original_configs {
         if !opaque_alts.contains(&c.alt_index) {
             continue;
@@ -848,12 +852,11 @@ fn try_expand_opaque(
                         return_stack: new_stack,
                     };
                     for let a of sll_advance(&exp, token, ctx) {
-                        // An opaque config here has no lookahead to offer, and
-                        // dropping it would hand its tokens to the other alts.
                         if a.pos == SLL_POS_OPAQUE {
-                            return null;
+                            expansion_opaque = true;
+                        } else {
+                            expanded_configs.push(a);
                         }
-                        expanded_configs.push(a);
                     }
                 }
             }
@@ -902,6 +905,9 @@ fn try_expand_opaque(
                 branch_tokens: ctx.token_names_of(&all_tokens),
             }),
         );
+    }
+    if expansion_opaque {
+        return null;
     }
     let mut branches: List<PredictionBranch> = [];
     let mut has_improvement = false;
