@@ -142,8 +142,10 @@ Self-containment is decided before the run, since the run copies the enclosing
 body while the checks only walk the block. That costs one thing: a mention on a
 statically dead path counts, because no scan can tell it from a live one. An
 outer local the region only reads is seeded from the walker's environment when
-it is constant there, and a write position or a reference-typed mention refuses
-the region instead.
+it is constant there. A write position refuses the region, and so does a scalar
+under a reference the program can write through: seeding one would put a value
+where the program holds an alias. A shared reference is not one of those, since
+nothing writes through it.
 
 Two shapes are not regions, and both look like one.
 
@@ -219,16 +221,16 @@ cannot reach.
 
 The census counts 1 198 surviving regions across 9 of 22 files:
 
-| Cause                                | Regions |
-| ------------------------------------ | ------- |
-| no call on its path explains it      | 900     |
-| it writes a global                   | 240     |
-| `push_encoded_ranges` still runs     | 34      |
-| it writes a place no local roots     | 13      |
-| `union_char_ranges` still runs       | 4       |
-| `binary_property_ranges` still runs  | 4       |
-| `general_category_ranges` still runs | 2       |
-| `i32::fmt_decimal` still runs        | 1       |
+| Cause                                 | Regions |
+| ------------------------------------- | ------- |
+| no call on its path explains it       | 900     |
+| it writes a global                    | 240     |
+| `push_encoded_ranges` still runs      | 34      |
+| it writes a place rooting in no local | 13      |
+| `union_char_ranges` still runs        | 4       |
+| `binary_property_ranges` still runs   | 4       |
+| `general_category_ranges` still runs  | 2       |
+| `i32::fmt_decimal` still runs         | 1       |
 
 Two Gale-generated files hold 1 120 of them. That concentration is not a Gale
 fact: what generated code does is call the same missing capability often.
@@ -265,7 +267,7 @@ literals, `Array::slice`'s computed bounds fold, and the corpus is recounted.
 
 ### 2. The stores the engine will not read
 
-- [ ] The 238 global writes, which are the stores that fail the
+- [ ] The 240 global writes, which are the stores that fail the
       materialization property: a global read somewhere that does not store it.
       Whether that set has a shape of its own, or is a tail of unrelated cases,
       decides whether there is a mechanism here at all.
@@ -376,6 +378,13 @@ facility rather than adding a third.
 
 Downstream of the same gap: recursion beyond a base case stays unfolded, and a
 runtime trap inside an unfolded body stays observable.
+
+### A write whose place roots in no local
+
+The census counts 13. The frame cannot say where such a write lands, so it
+refuses the region rather than carry it out. Closing it takes a place for the
+roots a local does not cover — a global, a call result — or a count showing each
+is rare enough to leave refused.
 
 ### Comparing two literal strings as a guard
 

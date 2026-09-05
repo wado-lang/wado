@@ -16,7 +16,7 @@ use super::callee::{CallSite, Callee};
 use super::place::write_root_local;
 
 /// Record the local each `&mut` parameter of `site` writes. `None` when the
-/// site does not match the signature, or when a write's place no local roots.
+/// site does not match the signature, or when no local roots a write's place.
 fn write_targets(
     body: &Body,
     site: &CallSite<'_>,
@@ -33,8 +33,8 @@ fn write_targets(
 
 /// The block behind a `Block` / `LabeledBlock` expression that can yield a
 /// value. One leaving nothing on the stack has none to fold to, whatever its
-/// last statement computed: unit is an inlined statement call, never a
-/// `let ... else { panic("…") }` arm.
+/// last statement computed: `unit` is an inlined statement call, `never` the
+/// `else` of a `let ... else { panic("…") }`.
 pub(super) fn value_block_shape<'a>(
     body: &'a Body,
     e: ExprId,
@@ -163,7 +163,7 @@ impl RegionRefusal {
             Self::GlobalWrite => "it writes a global",
             Self::OpaqueCall => "it calls through a closure or the component boundary",
             Self::UnrunnableCall => "it calls a function the engine cannot run",
-            Self::UnaccountableWrite => "it writes a place no local roots",
+            Self::UnaccountableWrite => "it writes a place that roots in no local",
             Self::OuterWrite => "it writes a local it does not own",
         }
     }

@@ -248,7 +248,7 @@ enum Reach {
 /// from the reachable body alone, an orphaned mention being unable to run. Two
 /// `value_reads` sources sweep the whole arena instead: an in-place rewrite
 /// shares ids between a live node and the displaced parent that held it, so a
-/// mention's only witness may sit where nothing live refers to.
+/// mention's only witness may sit in a node nothing live refers to.
 pub(super) fn aggregate_safe_locals(
     body: &Body,
     reached: &Reached,
