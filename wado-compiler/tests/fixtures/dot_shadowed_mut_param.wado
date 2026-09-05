@@ -1,0 +1,30 @@
+// Dot syntax selects the inherent method, and the `mut` on its parameter is the
+// selected declaration's own. The dispatch carried that fact and dropped it,
+// then re-read it by name from whichever impl of the name sat in the current
+// module first — here the trait impl, whose parameter is not `mut`. Flagged
+// non-`mut`, the callee's copy was elided and `items.push` grew the caller's
+// list: `items.len()` printed 3 at `-O0`.
+
+use { println, Stdout } from "core:cli";
+use { Q } from "./sub/dot_shadowed_mut_target.wado";
+
+trait Feed {
+    fn eat(&self, items: List<i32>) -> i32;
+}
+
+impl Feed for Q {
+    fn eat(&self, items: List<i32>) -> i32 {
+        return 100 + items.len();
+    }
+}
+
+export fn run() with Stdout {
+    let q = Q { v: 9 };
+    let items: List<i32> = [1, 2];
+    println(`${q.eat(items)}`);
+    println(`${items.len()}`);
+    println(`${Feed::eat(&q, items)}`);
+}
+
+__DATA__
+{"stdout": "3\n2\n102\n"}

@@ -523,7 +523,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             mut return_type,
             self_kind,
             param_types,
-            param_is_mut: _,
+            param_is_mut,
             owner,
             cm_name,
             is_ref_impl,
@@ -1014,15 +1014,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .receiver_head_awaits_substitution(base_type_id);
         let base_receiver = match matched_ref_kind {
             Some(kind) => Receiver::Ref(kind),
-            None => Receiver::Type(base_struct_name.clone()),
+            None => Receiver::Type(base_struct_name),
         };
-        let base_target = match matched_ref_kind {
-            Some(kind) => ImplTargetKey::Ref(kind),
-            // `impl_target_of` falls back on a written name, so hand it the
-            // declaration name rather than the module-qualified head.
-            None => self.impl_target_of(base_type_id, &base_struct_name.decl_name()),
-        };
-        let param_is_mut = self.lookup_method_param_is_mut(&base_target, method_name);
         let mut method_info =
             LocalMethodName::of(base_receiver, trait_name, method_name.to_string())
                 .with_type_args(&impl_type_arg_names, &method_type_arg_names);
@@ -2844,48 +2837,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .collect();
         keys.extend(declared.iter().filter(|k| !is_current(k)).copied());
         (keys, declared_name)
-    }
-
-    /// Canonical signatures of the methods named `method_name` declared on
-    /// `type_key`, current-module-first. `all_impl_index` is already in global
-    /// order, so the partition needs no per-call sort.
-    fn impl_method_sigs<'b>(
-        &'b self,
-        type_key: &ImplTargetKey,
-        method_name: &str,
-    ) -> Vec<&'b super::sig::MethodSig> {
-        let env = &self.tysys.trait_env;
-        let Some(keys) = env.all_impl_index.get(type_key) else {
-            return Vec::new();
-        };
-        let mut current: Vec<&super::sig::MethodSig> = Vec::new();
-        let mut others: Vec<&super::sig::MethodSig> = Vec::new();
-        for key in keys {
-            let header = &env.impl_headers[key];
-            for method in header.methods.iter().filter(|m| m.name == method_name) {
-                let sig = self
-                    .tysys
-                    .signatures
-                    .method_sig(method.def)
-                    .expect("the decl pass records every impl-declared method's signature");
-                if *self.tysys.resolutions.defs().module(*key) == self.current_module_source {
-                    current.push(sig);
-                } else {
-                    others.push(sig);
-                }
-            }
-        }
-        current.extend(others);
-        current
-    }
-
-    /// Look up whether each non-self parameter of an instance method is `mut`.
-    /// Returns empty vec (conservative) for unknown methods.
-    fn lookup_method_param_is_mut(&self, type_key: &ImplTargetKey, method_name: &str) -> Vec<bool> {
-        self.impl_method_sigs(type_key, method_name)
-            .first()
-            .map(|sig| super::sig::Param::is_mut_flags(&sig.params))
-            .unwrap_or_default()
     }
 
     /// The return type every method the qualified spelling can name agrees on,

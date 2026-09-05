@@ -25,10 +25,9 @@ pub(crate) struct MethodDispatch {
     /// (`impl Trait for &T`). Reify wraps the receiver in an extra `&` /
     /// `&mut` layer before passing it to the method.
     pub(crate) is_ref_impl: bool,
-    /// Per-argument `is_mut` flag drained from the resolved method's
-    /// parameter signature (`lookup_method_param_is_mut`). Reify zips
-    /// this with the reified argument exprs to build [`crate::tir::CallArg`]s
-    /// with the same `is_mut` shape annotate produced.
+    /// Per-argument `is_mut` flag off the dispatched method's own signature.
+    /// Reify zips this with the reified argument exprs to build
+    /// [`crate::tir::CallArg`]s with the same `is_mut` shape annotate produced.
     pub(crate) param_is_mut: Vec<bool>,
     /// Parameter names in declaration order. Used as substitution keys
     /// when a default references an earlier parameter (`fn f(w, h = w)`).
