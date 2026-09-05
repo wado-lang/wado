@@ -181,6 +181,9 @@ set -xe -o pipefail
 # package-gale is excluded in CI only, where test-gale-o3 covers it; locally
 # one run walks every nested package. benchmark/* test blocks need no `--dir`:
 # their file reads sit in `export fn run()`, which the test world never calls.
+# Same batch-compilation shape as `test-gale-o3`, whose comment explains the
+# purge and what holding the pages costs in RSS.
+export MIMALLOC_PURGE_DELAY=-1
 extra_args=()
 if [ -n "${CI:-}" ]; then
     extra_args+=(--exclude 'package-gale/**' --format tap)
@@ -197,6 +200,19 @@ description = "Run package-gale tests with -O3"
 run = """
 #!/usr/bin/env bash
 set -xe -o pipefail
+# A compile builds a working set of several hundred MiB and frees it whole when
+# the file is done, so the heap empties once per file. mimalloc's 10ms purge
+# timer then returns those pages to the OS just before the next file asks for
+# them again, and taking them back costs a fault and a free-list rebuild each:
+# 7.0 GiB purged over 24.8K calls to compile four fixtures. Holding them runs
+# this suite in 828s against 931s (-11%, compile CPU 3081s against 3442s) for a
+# peak RSS of 5941 MiB against 4798, which is comfortable on a 16 GiB runner and
+# the first thing to revisit on a smaller one. Serializing the compiles (`-p 1`)
+# leaves the page traffic where it was, so it is the per-file heap that costs,
+# not the threads. Batch compilation only: `wado serve` is long-running, and
+# reclaiming after a spike is what the purge is for. The standing fix is the
+# allocation volume itself — ~31% of a compile's CPU is in the allocator.
+export MIMALLOC_PURGE_DELAY=-1
 extra_args=()
 if [ -n "${CI:-}" ]; then
     extra_args+=(--format tap)

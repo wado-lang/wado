@@ -1,5 +1,61 @@
 # Changelog
 
+## [v0.0.26](https://github.com/wado-lang/wado/compare/v0.0.25...v0.0.26) - 2026-09-05
+
+- chore: require npm 12, and update deps by @gfx in https://github.com/wado-lang/wado/pull/1904
+- fix(compiler): land or refuse a whole-value write through a `&mut` to a variant place by @gfx in https://github.com/wado-lang/wado/pull/1901
+- fix(optimizer): price a cast by what it emits, and walk value-position blocks by @gfx in https://github.com/wado-lang/wado/pull/1905
+- docs: add "fix the class" to the principles by @gfx in https://github.com/wado-lang/wado/pull/1907
+- feat(gale): run actions and predicates inside a group, and answer every required group position by @gfx in https://github.com/wado-lang/wado/pull/1908
+- feat(cm): lower an extern-handle resource to the universal handle by @gfx in https://github.com/wado-lang/wado/pull/1909
+- chore(cloudflare-worker): enforce the npm floor by @gfx in https://github.com/wado-lang/wado/pull/1912
+- perf(ownership): widen value-copy elision; gale-gen 13% faster by @gfx in https://github.com/wado-lang/wado/pull/1910
+- refactor(elaborator): the body walk speaks types, reify builds TIR by @gfx in https://github.com/wado-lang/wado/pull/1911
+- chore: remove the unwired CM thread builtins by @gfx in https://github.com/wado-lang/wado/pull/1913
+- fix(lsp): keep the receiver's argument slot in path-form parameter hints by @gfx in https://github.com/wado-lang/wado/pull/1915
+- refactor(elaborator): give a body-walk fact one home by @gfx in https://github.com/wado-lang/wado/pull/1914
+- perf(optimizer): fuse string appends, scalarize a read field, and keep constants global by @gfx in https://github.com/wado-lang/wado/pull/1916
+- feat(gale): finish Stage C action execution for the lexer by @gfx in https://github.com/wado-lang/wado/pull/1917
+- docs: admit Wado dialects as Kiln inputs, and record the markup-surface axis by @gfx in https://github.com/wado-lang/wado/pull/1919
+- refactor(format)!: `#` is a `Formatter` field, not a trait per specifier by @gfx in https://github.com/wado-lang/wado/pull/1923
+- perf(optimizer): converge the -O3 fixed-point loop by @gfx in https://github.com/wado-lang/wado/pull/1918
+- feat(cm): give stream copies their Component Model result by @gfx in https://github.com/wado-lang/wado/pull/1926
+- perf(optimizer): outline cold regions, and retune the inline thresholds by @gfx in https://github.com/wado-lang/wado/pull/1927
+- fix(compiler): a VariantCase payload reaches a free generic function by @gfx in https://github.com/wado-lang/wado/pull/1928
+- perf(int128): divide by Knuth Algorithm D, render 19 digits per division by @gfx in https://github.com/wado-lang/wado/pull/1929
+- fix(diagnostics): a span says which parse's text it indexes by @gfx in https://github.com/wado-lang/wado/pull/1930
+- fix(gale): decide a group once, from one classification by @gfx in https://github.com/wado-lang/wado/pull/1931
+- feat(reflect): `Reflect`, the identity root the four kinds sit under by @gfx in https://github.com/wado-lang/wado/pull/1934
+- chore(deps): Bump the github-actions group with 3 updates by @dependabot[bot] in https://github.com/wado-lang/wado/pull/1936
+- chore(deps): Bump the cargo group with 3 updates by @dependabot[bot] in https://github.com/wado-lang/wado/pull/1937
+- docs: a rubric for surveying emerging languages, two filled surveys, and what Wado took from them by @gfx in https://github.com/wado-lang/wado/pull/1938
+- fix(elaborator): select a newtype's own blanket over its base's (#1932) by @gfx in https://github.com/wado-lang/wado/pull/1935
+- perf(optimizer): cut the derived struct deserializer's quadratic field dispatch by @gfx in https://github.com/wado-lang/wado/pull/1939
+- perf(serde): dispatch a wire key through a decision tree by @gfx in https://github.com/wado-lang/wado/pull/1941
+- perf(gale): price the descriptor cache by the read, and carry many descriptors per entry module by @gfx in https://github.com/wado-lang/wado/pull/1940
+- feat(highlight): hold the grammar to the identifier classes it colours by @gfx in https://github.com/wado-lang/wado/pull/1943
+- perf(gale): highlight pays only for what the query asks for, and a dropped value keeps only its effects by @gfx in https://github.com/wado-lang/wado/pull/1945
+- fix(elaborator): labeled block branch typing, and reject loop jumps with no loop by @gfx in https://github.com/wado-lang/wado/pull/1946
+- fix(lsp,gale): a contextual keyword is whichever the parse read it as by @gfx in https://github.com/wado-lang/wado/pull/1950
+- feat(reflect): cover the newtype kind by @gfx in https://github.com/wado-lang/wado/pull/1947
+- feat(stdlib): core:jwt over HMAC in core:digest and canonical base64url by @gfx in https://github.com/wado-lang/wado/pull/1948
+- perf: one scaling per fixed-point conversion, and SROA for struct-yielding blocks by @gfx in https://github.com/wado-lang/wado/pull/1951
+- feat(elaborator): trait resolution as functions of a self-contained program by @gfx in https://github.com/wado-lang/wado/pull/1949
+- feat(core): add clamp and String::split_once, read the stdlib from disk in dev by @gfx in https://github.com/wado-lang/wado/pull/1952
+- docs: record clamp and the rule builtin::select follows by @gfx in https://github.com/wado-lang/wado/pull/1954
+- perf(zlib): rewrite core:zlib's hot paths, and stop field_scalarize over-syncing nested loops by @gfx in https://github.com/wado-lang/wado/pull/1953
+- fix(optimizer): unify the per-call verdicts the value graph's loop summary and straight-line walk read by @gfx in https://github.com/wado-lang/wado/pull/1955
+- fix(optimizer): use the receiver verdict alone for a call's receiver slot by @gfx in https://github.com/wado-lang/wado/pull/1957
+- perf(gale): elide a guarded scan alt's leading token re-test by @gfx in https://github.com/wado-lang/wado/pull/1958
+- perf(ownership): key value-copy sharing on liveness, not on the whole body by @gfx in https://github.com/wado-lang/wado/pull/1956
+- chore(e2e): consolidate the fixture corpus into named per-topic files by @gfx in https://github.com/wado-lang/wado/pull/1960
+- fix(elaborator): answer a call's callee from one lookup, over every walk by @gfx in https://github.com/wado-lang/wado/pull/1962
+- feat(elaborator): trait selection is one written order, decided by the solver by @gfx in https://github.com/wado-lang/wado/pull/1964
+- perf(optimizer): price a splice by what it replaces by @gfx in https://github.com/wado-lang/wado/pull/1965
+- perf(optimizer): skip drained pass rounds, stamp session buffers, hold the allocator's pages by @gfx in https://github.com/wado-lang/wado/pull/1966
+- fix(kiln): point every options diagnostic at the key it names by @gfx in https://github.com/wado-lang/wado/pull/1967
+- perf(test): reuse the stdlib snapshot across fixtures, and prewarm to the work there is by @gfx in https://github.com/wado-lang/wado/pull/1968
+
 ## [v0.0.25](https://github.com/wado-lang/wado/compare/v0.0.24...v0.0.25) - 2026-08-26
 
 - chore(deps): bump js-yaml from 4.3.0 to 4.3.1 in /wado-vscode in the npm_and_yarn group across 1 directory by @dependabot[bot] in https://github.com/wado-lang/wado/pull/1764

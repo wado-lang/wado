@@ -33,9 +33,9 @@ use wado_compiler::compiler_host::{
 #[cfg(test)]
 use wado_compiler::kiln::DeclSite;
 use wado_compiler::kiln::{
-    FileHash, GeneratedHeader, GeneratorModule, Invocation, InvocationPath, OptionsDescriptor,
-    Plan, PlanError, content_hash, file_hash, generator_identity, has_generated_marker, hex_digest,
-    validate_options,
+    FileHash, GeneratedHeader, GeneratorModule, Invocation, InvocationPath, OptionsAnchor,
+    OptionsDescriptor, Plan, PlanError, content_hash, file_hash, generator_identity,
+    has_generated_marker, hex_digest, validate_options,
 };
 use wado_compiler::{Code, Diagnostic, Severity};
 use wado_manifest::Manifest;
@@ -1366,7 +1366,11 @@ fn typed_encode_options<H: CompilerHost>(
             Some(AttrValue::Object(obj)) if obj.is_empty() => None,
             other => other,
         };
-        match validate_options(&descriptor, supplied) {
+        let anchor = OptionsAnchor {
+            file: &inv.decl_site.module,
+            span: inv.options_span,
+        };
+        match validate_options(&descriptor, supplied, anchor) {
             Ok(canonical) => {
                 inv.options = canonical;
             }
@@ -1501,6 +1505,7 @@ mod tests {
                 output_dir: InvocationPath::normalize("build/kiln/proto"),
                 options: wado_compiler::kiln::CanonicalOptions::default(),
                 raw_options: None,
+                options_span: wado_compiler::Span::default(),
             }
         }
 
@@ -1730,6 +1735,7 @@ mod tests {
                 output_dir: InvocationPath::normalize("build/kiln/proto"),
                 options: wado_compiler::kiln::CanonicalOptions::default(),
                 raw_options: None,
+                options_span: wado_compiler::Span::default(),
             }
         }
 

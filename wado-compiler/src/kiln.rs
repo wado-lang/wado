@@ -21,9 +21,12 @@ pub use cache::{
 };
 pub use header::{GeneratedHeader, has_generated_marker, parse_header};
 pub use inline::{InvocationIndex, collect_inline_invocations};
-pub use invocation::{DeclSite, GeneratorModule, GeneratorSpec, Invocation, InvocationPath};
+pub use invocation::{
+    DeclSite, GENERATOR_WORLD_FQ, GeneratorModule, GeneratorSpec, Invocation, InvocationPath,
+    SpecParts, parse_spec, spec_key,
+};
 pub use options::{
     CanonicalValue, OptionsDescriptor, OptionsField, OptionsType, extract_options_descriptor,
 };
-pub use options_check::{CanonicalOptions, validate as validate_options};
+pub use options_check::{CanonicalOptions, OptionsAnchor, validate as validate_options};
 pub use plan::{Plan, PlanError, build_plan, depends_on};

@@ -22,7 +22,7 @@ All levels run DCE on functions, types, and globals.
 
 The inline budget counts emitted Wasm instructions on the callee's hot path, not NIR nodes — see [`inline`](#nir-passes) for the weights. `--optimize-inline-growth <pct>` additionally bounds how far inlining may grow the whole unit; no level sets it by default.
 
-The fixed-point loop exits early on convergence, so a pass must report a change only when it made one, never when it merely found work to look at. A `gate_only!` pass reports to the dirty-set gate alone and never extends the loop.
+The fixed-point loop exits early on convergence, so a pass must report a change only when it made one, never when it merely found work to look at. A `gate_only!` pass reports to the dirty-set gate alone and never extends the loop. Both macros name the pass's gate column beside it, and a drained column skips the round before the pass builds any whole-program state.
 
 A run that reaches the cap logs it at debug level, naming the passes still reporting changes. At `-O2`/`-Os` and `-O3` that is also a `debug_assert`: their caps are sized so the loop converges under them. `-O1`'s smaller number of rounds and an explicit `--optimize-iterations` are budgets, and say nothing about convergence.
 

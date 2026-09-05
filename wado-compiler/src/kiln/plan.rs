@@ -224,6 +224,7 @@ mod tests {
             output_dir: InvocationPath::normalize(out),
             options: crate::kiln::options_check::CanonicalOptions::default(),
             raw_options: None,
+            options_span: crate::token::Span::default(),
         }
     }
 
