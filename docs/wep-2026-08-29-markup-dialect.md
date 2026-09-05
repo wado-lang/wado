@@ -184,4 +184,4 @@ render function is its whole interface.
 - [WebIDL Binding Generator (`wado-from-idl`)](./wep-2026-04-01-tide.md) — `web:dom`, the client-side target
 - [Marl — Markdown Renderer and Formatter](./wep-2026-07-05-marl.md) — the server-side consumer, and its escaping helpers
 - [HTTP Path Router (`core:router`)](./wep-2026-05-06-core-router.md) — the other server-side consumer
-- [Tagged Template Literals](./wep-2026-01-10-tagged-template-literals.md) — the interpolation-based surface, whose hole support is still a future extension
+- [Tagged Template Literals](./wep-2026-01-10-tagged-template-literals.md) — the interpolation-based surface; an `html` tag with contextual escaping is its worked example

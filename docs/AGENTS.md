@@ -36,7 +36,7 @@ missing and what closing it takes. A deliberate omission goes in Decision.
 
 - [Target WASI P3 Only](./wep-2026-01-11-wasi-p3-only.md)
 - [Deterministic Math Library (libm) Integration](./wep-2026-01-10-deterministic-libm.md)
-- [Tagged Template Literals for Compile-Time Execution](./wep-2026-01-10-tagged-template-literals.md)
+- [Tagged Template Literals](./wep-2026-01-10-tagged-template-literals.md)
 - [WebAssembly Module Import Support](./wep-2026-01-10-wasm-import.md)
 - [Operator Precedence and Associativity](./wep-2026-01-11-operator-precedence.md)
 - [Ambient Logging Functions](./wep-2026-01-12-ambient-logging.md)

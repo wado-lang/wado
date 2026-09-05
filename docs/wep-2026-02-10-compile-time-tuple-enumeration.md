@@ -6,7 +6,7 @@ Tuples in Wado are heterogeneous: each element can have a different type (`[i32,
 
 However, several use cases require processing each element of a tuple individually:
 
-1. **Tagged template literals**: A tag function receives interpolated values as a tuple and must process each value according to its type (e.g., `sql` tag converting each value to a SQL parameter)
+1. **Tagged template literals**: A tag function walks the template's holes, each carrying a value of its own type (e.g., `sql` tag converting each value to a SQL parameter)
 2. **Serialization**: Converting a tuple of heterogeneous values into a serialized form
 3. **Structured logging**: Formatting each value with type-appropriate formatting
 
@@ -21,7 +21,7 @@ Instead of iterating over a tuple, define a trait with `begin`/`add`/`finish` me
 ```wado
 trait TemplateTag {
     type Output;
-    fn begin(strings: CookedStrings) -> Self;
+    fn begin() -> Self;
     fn add<T>(&mut self, value: T);
     fn finish(self) -> Self::Output;
 }
@@ -114,12 +114,14 @@ Expansion occurs in the **elaborator during monomorphization**, not in the desug
 
 Flow:
 
-1. A generic function `fn tag<Values>(strings: CookedStrings, values: Values)` is defined
+1. A generic function `fn tag<Values>(values: Values)` is defined
 2. At a call site, `Values` is instantiated to a concrete tuple type (e.g., `[i32, String]`)
 3. The elaborator monomorphizes the function body with `Values = [i32, String]`
 4. During monomorphization, the elaborator encounters `for let [i, v] of values.enumerate()`
 5. `values` has concrete type `[i32, String]` -> the elaborator unrolls the loop
 6. Each unrolled body is resolved independently with the appropriate element type
+
+A tagged template reaches the same walk through `ReflectTemplate::<T>::members()`, whose tuple type is fixed once `T` is — see [Tagged Template Literals](./wep-2026-01-10-tagged-template-literals.md).
 
 ### Type Checking Model
 
@@ -152,34 +154,27 @@ impl ToSqlParam for String {
     fn to_sql_param(&self) -> SqlParam { return SqlParam::Text(*self); }
 }
 
-fn sql<Values>(strings: CookedStrings, values: Values) -> SqlQuery {
-    let mut query = strings[0];
+fn to_params<Values>(values: Values) -> List<SqlParam> {
     let mut params: List<SqlParam> = [];
     for let [i, v] of values.enumerate() {
         params.push(v.to_sql_param());
-        query.push_str("?");
-        query.push_str(strings[i + 1]);
     }
-    return SqlQuery { query, params };
+    return params;
 }
 ```
 
-When called as `sql::<[i32, String]>(strings, [42, "Alice"])`, the loop body expands to:
+When called as `to_params::<[i32, String]>([42, "Alice"])`, the loop body expands to:
 
 ```wado
 __unroll_0: {
     let i: i32 = 0;
     let v: i32 = values.0;
     params.push(v.to_sql_param());        // resolves to i32::to_sql_param
-    query.push_str("?");
-    query.push_str(strings[1]);
 }
 __unroll_1: {
     let i: i32 = 1;
     let v: String = values.1;
     params.push(v.to_sql_param());        // resolves to String::to_sql_param
-    query.push_str("?");
-    query.push_str(strings[2]);
 }
 ```
 
@@ -215,8 +210,8 @@ error: method `to_sql_param` not found on type `bool`
 note: tuple type determined here
   --> app.wado:20:9
    |
-20 |     sql`SELECT * WHERE id = {id} AND name = {name} AND active = {is_active}`
-   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+20 |     to_params([id, name, is_active])
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 ```
 
 ## Implementation Plan
@@ -254,7 +249,7 @@ note: tuple type determined here
 
 ## Related WEPs
 
-- [String Template Desugaring](./wep-2026-01-20-string-template-desugaring.md): Primary motivation; tagged templates use tuple enumeration to process interpolated values
+- [Tagged Template Literals](./wep-2026-01-10-tagged-template-literals.md): Primary motivation; a tag walks the template's holes with this enumeration
 - [Tuple and List Literal Syntax](./wep-2026-01-15-tuple-and-array-literals.md): Defines tuple literal syntax and semantics
 
 ## References

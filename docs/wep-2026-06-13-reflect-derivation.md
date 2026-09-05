@@ -112,6 +112,13 @@ internal trait ReflectNewtype: Reflect {         // newtype
 }
 ```
 
+A sixth kind, `ReflectTemplate`, is synthesized per tagged template literal
+rather than per declaration: its subject is the anonymous type a template
+denotes, its payload pack is the hole types and its members are `Hole` handles
+carrying the literal text around each hole. It follows every rule here — sealed,
+monomorphized-only, one member channel — and is specified in
+[Tagged Template Literals](./wep-2026-01-10-tagged-template-literals.md).
+
 `members()` returns a tuple, walked by tuple `for-of`; a generic derivation binds
 one pack in its header, and the elaborator resolves the walk to the known member
 type so member methods stay callable. Which pack a derivation binds follows from
@@ -247,8 +254,9 @@ compiler renders internally; a type with none is written bare.
 
 ### What can be named
 
-The types `Reflect` is synthesized for: the five kinds, and the tuple family,
-which is the one still to come (Known gaps).
+The types `Reflect` is synthesized for: the five declaration kinds, the
+template kind, and the tuple family, which is the one still to come (Known
+gaps).
 Naming an unnameable type is therefore an unsatisfied `T: Reflect`, reason-chained
 like any other bound, rather than a special case buried in an intrinsic.
 

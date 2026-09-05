@@ -2331,109 +2331,54 @@ The same `= expr` syntax applies to struct fields; see [Struct Field Defaults](#
 
 ### Tagged Template Literals
 
-Tagged template literals enable compile-time function execution on string literals, allowing zero-overhead binary encoding, DSL validation, and custom compile-time transformations.
-
-#### Syntax
+A path written directly before a template literal is a tag. The template then
+denotes a call of that function on the template's holes, in their own types,
+with the literal text around them, instead of a rendered `String`:
 
 ```wado
-let result = tag`literal string`;
+let q = sql`SELECT * FROM users WHERE id = ${id} AND name = ${user.name}`;
+let s = String::raw`C:\path\${name}`;   // backslashes kept
 ```
 
-Where `tag` is an effect-free function that executes at compile time.
+The tag is a function name or a static method path, with no whitespace before
+the backtick. The literal is lexed exactly as an untagged template.
 
-#### Requirements
-
-- The tag function must have no `with` clause (effect-free/pure function)
-- Function signature: `fn(String) -> T` where `T` is any type
-- The function is executed during compilation
-- If the function panics, it becomes a compile error
-- Only other effect-free functions can be called within the tag function
-
-#### Example - Binary Literals
+A tag is an ordinary function whose one parameter is bound by `ReflectTemplate`,
+the reflected kind of a template literal. The compiler synthesizes one type per
+template shape — its segments, specifiers and hole types — holding a reference
+per hole; the type is anonymous and reached only through the bound. The tag
+walks the holes with tuple `for-of`:
 
 ```wado
-use {base64, hex} from "core:encoding";
-
-// base64 and hex are standard library functions, not keywords
-let embedded_image = base64`iVBORw0KGgoAAAANSUhEUgAAAAUA...`;  // Type: List<u8>
-let crypto_key = hex`48656c6c6f20576f726c64`;                // Type: List<u8>
-
-// Invalid base64 causes compile error
-let invalid = base64`!!!invalid!!!`;  // Compile error: Invalid base64 encoding
-```
-
-#### Example - DSL Validation
-
-```wado
-// User-defined compile-time validation
-fn regex(pattern: String) -> Regex {
-    match compile_regex(pattern) {
-        Ok(r) => r,
-        Err(e) => panic(`Invalid regex pattern: ${e}`),  // Compile error
+fn sql<T: ReflectTemplate<Holes = [..V]>, ..V: ToSqlParam>(t: T) -> SqlQuery {
+    let mut query = "";
+    let mut params: List<SqlParam> = [];
+    for let h of ReflectTemplate::<T>::members() {
+        query.push_str(&h.lit());               // literal text before this hole
+        query.push_str(&"?");
+        params.push(h.get(&t).to_sql_param());  // the value, by reference
     }
-}
-
-let email_pattern = regex`^[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]${2,}$`;
-
-// SQL query validation
-fn sql(query: String) -> SqlQuery {
-    match parse_sql(query) {
-        Ok(q) => q,
-        Err(e) => panic(`Invalid SQL syntax at ${e.position}: ${e.message}`),
-    }
-}
-
-let query = sql`SELECT * FROM users WHERE id = ?`;  // Validated at compile time
-```
-
-#### Standard Library Support
-
-The `core:encoding` module provides common binary encodings:
-
-```wado
-use {base64, hex} from "core:encoding";
-
-// Base64 decoding (RFC 4648)
-pub fn base64(input: String) -> List<u8> {
-    match decode_base64_impl(input) {
-        Ok(data) => data,
-        Err(e) => panic(`Invalid base64 encoding: ${e}`),
-    }
-}
-
-// Hexadecimal decoding
-pub fn hex(input: String) -> List<u8> {
-    match decode_hex_impl(input) {
-        Ok(data) => data,
-        Err(e) => panic(`Invalid hex encoding: ${e}`),
-    }
+    query.push_str(&ReflectTemplate::<T>::tail());
+    return SqlQuery { query, params };
 }
 ```
 
-#### Compile-Time Execution Constraints
+A hole handle answers `lit()` / `raw()` (the preceding segment, escapes
+processed or preserved), `get(&t)` (the value, `&V`), `source()` (the
+expression text), `has_spec()`, and `fmt(&t, f)` (rendering as the untagged
+template would). Every answer but `get` and `fmt` is a constant, so after
+monomorphization the tag body is one constant append per segment and one typed
+operation per hole — what an untagged template costs.
 
-Tagged template functions are executed at compile time with the following constraints:
+Holes are evaluated once, left to right, before the tag runs. A tag may carry
+effects and return any type. Whether a call folds at compile time is the
+optimizer's decision, as for any other call; the meaning does not depend on it.
 
-- Effect-free only: Functions with `with` clauses cannot be used as tags
-- Pure computation: Only other effect-free functions can be called
-- Deterministic: Execution must be deterministic (guaranteed by Wado's deterministic libm)
-- Heap allocation: Allowed via Wasm GC (unlike Rust's `const fn`)
-- Recursion: Allowed with reasonable depth limits
-- No I/O: Functions requiring effects (FileSystem, Network, etc.) cannot be called
+An untagged template means what the prelude's `format` tag means: each hole
+rendered through its specifier into one buffer.
 
-#### Design Rationale
-
-Tagged template literals provide a general mechanism for compile-time computation, avoiding the need for built-in syntax for each use case. This aligns with Wado's philosophy of minimal built-ins and explicit dependencies. See `docs/wep-2026-01-10-tagged-template-literals.md` for detailed design decisions.
-
-#### Future Extensions
-
-Interpolation support may be added in future versions:
-
-```wado
-// Future: interpolation syntax (not yet implemented)
-let id = 42;
-let query = sql`SELECT * FROM users WHERE id = ${id}`;
-```
+See [WEP: Tagged Template Literals](./wep-2026-01-10-tagged-template-literals.md)
+for the type, the desugaring and the cost model.
 
 ### Newtype
 
