@@ -1,0 +1,16 @@
+// The qualified spelling reaches an instance method on a type imported by
+// name, as it already did on a locally declared one and through a namespace.
+// The ladder answering "is this name callable" had no rung for a method that
+// declares a receiver; what answered locally was a name-keyed map of the
+// module being elaborated, which an imported callee is not in.
+
+use { Q } from "./sub/ufcs_imported_type_target.wado";
+
+test "a qualified call reaches an imported type's instance method" {
+    let q = Q::make(1);
+    assert q.take(2) == 3;
+    assert Q::take(&q, 2) == 3;
+}
+
+__DATA__
+{"test": {}}

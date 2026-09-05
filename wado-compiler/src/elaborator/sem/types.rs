@@ -25,10 +25,9 @@ pub(crate) struct MethodDispatch {
     /// (`impl Trait for &T`). Reify wraps the receiver in an extra `&` /
     /// `&mut` layer before passing it to the method.
     pub(crate) is_ref_impl: bool,
-    /// Per-argument `is_mut` flag drained from the resolved method's
-    /// parameter signature (`lookup_method_param_is_mut`). Reify zips
-    /// this with the reified argument exprs to build [`crate::tir::CallArg`]s
-    /// with the same `is_mut` shape annotate produced.
+    /// Per-argument `is_mut` flag off the dispatched method's own signature.
+    /// Reify zips this with the reified argument exprs to build
+    /// [`crate::tir::CallArg`]s with the same `is_mut` shape annotate produced.
     pub(crate) param_is_mut: Vec<bool>,
     /// Parameter names in declaration order. Used as substitution keys
     /// when a default references an earlier parameter (`fn f(w, h = w)`).
@@ -690,64 +689,70 @@ pub(crate) struct StaticMethodDispatch {
     pub(crate) self_in_args: bool,
 }
 
-impl StaticMethodDispatch {
-    /// The dispatch a call records for a callee it resolved to `sig`.
-    ///
-    /// Whether the receiver is among the arguments is the one thing the three
-    /// per-parameter lists must agree on, so `self_in_args` decides all of them
-    /// here rather than at each recording site. Written qualified, an instance
-    /// method takes its receiver as the call's first argument, and every list
-    /// carries a leading entry for it: spelled at the call site and never
-    /// omitted, hence no default, and `mut` exactly when the method takes
-    /// `&mut self`.
+/// What a call sees of its callee's parameters: the three lists it checks and
+/// pads against, and whether the receiver leads them. One derivation, because a
+/// site that counts `self` in one list and not another misreads every argument.
+#[derive(Default)]
+pub(crate) struct CalleeParams {
+    pub(crate) param_is_mut: Vec<bool>,
+    pub(crate) param_defaults: Vec<(String, Option<crate::ast::Expr>)>,
+    pub(crate) param_types: Vec<TypeId>,
+    pub(crate) self_in_args: bool,
+}
+
+impl CalleeParams {
+    /// The qualified spelling, the only one reaching here, writes the receiver
+    /// as the first argument, so every list leads with an entry for it where
+    /// the callee declares one: never omitted, hence no default, and `mut`
+    /// exactly when the method takes `&mut self`.
     ///
     /// `sig` is `None` for a callee no signature lookup answers — a trait static
-    /// on a primitive receiver, say. The lists are empty and reify reads the
-    /// call's own arguments; the fact is still recorded, because reify rebuilds
-    /// the `Call` from it and nothing else.
-    pub(crate) fn of_signature(
-        method_def: Option<crate::defs::DefId>,
-        function_ref: FunctionRef,
-        type_args: Vec<TypeId>,
-        sig: Option<&crate::elaborator::sig::MethodSig>,
-        self_in_args: bool,
-    ) -> Self {
-        let defaults_module = function_ref.module_source.clone();
+    /// on a primitive receiver, say. The lists are empty and a consumer reads
+    /// the call's own arguments instead.
+    pub(crate) fn of_signature(sig: Option<&crate::elaborator::sig::MethodSig>) -> Self {
         let Some(sig) = sig else {
-            return Self {
-                method_def,
-                function_ref,
-                param_is_mut: Vec::new(),
-                type_args,
-                param_defaults: Vec::new(),
-                defaults_module,
-                param_types: Vec::new(),
-                self_in_args: false,
-            };
+            return Self::default();
         };
-        let receiver = self_in_args && sig.self_kind != ast::SelfKind::None;
-        let values = sig.first_value_param().min(sig.decl.param_types.len());
+        let receiver = sig.self_kind != ast::SelfKind::None;
         Self {
-            method_def,
-            function_ref,
             param_is_mut: receiver
                 .then(|| sig.self_kind == ast::SelfKind::MutRef)
                 .into_iter()
                 .chain(crate::elaborator::sig::Param::is_mut_flags(&sig.params))
                 .collect(),
-            type_args,
             param_defaults: receiver
                 .then(|| ("self".to_string(), None))
                 .into_iter()
                 .chain(crate::elaborator::sig::Param::named_defaults(&sig.params))
                 .collect(),
-            defaults_module,
-            param_types: if receiver {
-                sig.decl.param_types.clone()
-            } else {
-                sig.decl.param_types[values..].to_vec()
-            },
+            // Whole list: it leads with the receiver exactly where the callee
+            // declares one, which is exactly where the spelling writes one.
+            param_types: sig.decl.param_types.clone(),
             self_in_args: receiver,
+        }
+    }
+}
+
+impl StaticMethodDispatch {
+    /// The dispatch a call records for a callee it resolved to `sig`. The
+    /// per-parameter lists come from [`CalleeParams`], so the recorded fact
+    /// says what the call site checked against.
+    pub(crate) fn of_signature(
+        method_def: Option<crate::defs::DefId>,
+        function_ref: FunctionRef,
+        type_args: Vec<TypeId>,
+        sig: Option<&crate::elaborator::sig::MethodSig>,
+    ) -> Self {
+        let params = CalleeParams::of_signature(sig);
+        Self {
+            method_def,
+            defaults_module: function_ref.module_source.clone(),
+            function_ref,
+            type_args,
+            param_is_mut: params.param_is_mut,
+            param_defaults: params.param_defaults,
+            param_types: params.param_types,
+            self_in_args: params.self_in_args,
         }
     }
 }

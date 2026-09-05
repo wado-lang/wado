@@ -1,0 +1,31 @@
+// Dot syntax found an inherent method by naming the receiver kinds it looked
+// up, and a non-generic `variant` was not among them: `p.tag()` reported no
+// such method while `Plain::tag(&p)` resolved. A trait impl on the same
+// variant, and an inherent impl on an `enum`, both worked.
+
+use { println, Stdout } from "core:cli";
+
+variant Plain {
+    A,
+    B(i32),
+}
+
+impl Plain {
+    fn tag(&self) -> i32 {
+        return match self {
+            Plain::A => 1,
+            Plain::B(n) => *n,
+        };
+    }
+}
+
+export fn run() with Stdout {
+    let p = Plain::B(2);
+    let q = Plain::A;
+    // Both spellings reach the same declaration.
+    println(`${p.tag()}`);
+    println(`${Plain::tag(&q)}`);
+}
+
+__DATA__
+{"stdout": "2\n1\n"}

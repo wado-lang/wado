@@ -23,28 +23,41 @@ use { Dom, Event, EventTarget, Node } from "web:dom";
 
 export fn run() with (Dom, Event, EventTarget) {
     let doc = Dom::document();
-    let el = doc.create_element("div");
+    let el = doc.create_element("div", null);
     el.set_id("app");
-    el.set_text_content("hello");
+    el.set_text_content(Option::Some("hello"));
 
     assert el.tag_name() == "div";
     assert el.id() == "app";
 
     // Declared on `Node`, called on an `Element`.
-    assert el.text_content() == "hello";
+    assert el.text_content() == Option::Some("hello");
 
     // The upcast converts nothing: the same handle answers as a `Node`.
     let parent: Node = el;
-    assert parent.text_content() == "hello";
+    assert parent.text_content() == Option::Some("hello");
 
     // Declared on `EventTarget`, two links above `Element`.
     let ev = Event::new("click");
-    assert el.dispatch_event(&ev);
+    assert el.dispatch_event(ev);
 
     // A handle both taken as a non-receiver argument and handed back.
-    let child = doc.create_element("span");
-    child.set_text_content("world");
-    assert parent.append_child(&child).text_content() == "world";
+    let child = doc.create_element("span", null);
+    child.set_text_content(Option::Some("world"));
+    assert parent.append_child(child).text_content() == Option::Some("world");
+
+    // An optional handle: the host answers with the element's own handle, or none.
+    let found = doc.get_element_by_id("app");
+    assert found matches { Some(_) };
+    if let Some(same) = found {
+        assert same.id() == "app";
+    }
+    assert doc.get_element_by_id("missing") matches { None };
+
+    // An optional handle argument, absent and present.
+    assert !parent.contains(null);
+    let child_node: Node = child;
+    assert parent.contains(Option::Some(child_node));
 }
 "#;
 
@@ -102,13 +115,24 @@ fn add_dom_to_linker(
         over_dom(dom, |dom, ()| (dom.insert(Object::default()),)),
     )?;
 
-    linker.instance("web:dom/document")?.func_wrap(
+    let mut document = linker.instance("web:dom/document")?;
+    document.func_wrap(
         "create-element",
-        over_dom(dom, |dom, (_self, local_name): (u32, String)| {
-            (dom.insert(Object {
-                tag: local_name,
-                ..Object::default()
-            }),)
+        over_dom(
+            dom,
+            |dom, (_self, local_name, _options): (u32, String, Option<String>)| {
+                (dom.insert(Object {
+                    tag: local_name,
+                    ..Object::default()
+                }),)
+            },
+        ),
+    )?;
+    document.func_wrap(
+        "get-element-by-id",
+        over_dom(dom, |dom, (_self, id): (u32, String)| {
+            let found = dom.objects.iter().position(|o| o.id == id);
+            (found.map(|index| u32::try_from(index).expect("a table index")),)
         }),
     )?;
 
@@ -131,16 +155,21 @@ fn add_dom_to_linker(
     let mut node = linker.instance("web:dom/node")?;
     node.func_wrap(
         "text-content",
-        over_dom(dom, |dom, (handle,): (u32,)| (dom.at(handle).text.clone(),)),
+        over_dom(dom, |dom, (handle,): (u32,)| {
+            (Some(dom.at(handle).text.clone()),)
+        }),
     )?;
     node.func_wrap(
         "set-text-content",
-        over_dom(dom, |dom, (handle, value): (u32, String)| {
-            dom.at(handle).text = value;
+        over_dom(dom, |dom, (handle, value): (u32, Option<String>)| {
+            dom.at(handle).text = value.unwrap_or_default();
         }),
     )?;
     node.func_wrap("append-child", |_, (_parent, child): (u32, u32)| {
         Ok((child,))
+    })?;
+    node.func_wrap("contains", |_, (_parent, other): (u32, Option<u32>)| {
+        Ok((other.is_some(),))
     })?;
 
     linker.instance("web:dom/event")?.func_wrap(

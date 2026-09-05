@@ -1,0 +1,20 @@
+// A namespaced qualified call (`m::Q::bump(&q, 10)`) read its parameter facts
+// from three receiver-less lookups, so an instance method's defaults came back
+// empty and codegen bound the receiver to the first value parameter.
+
+use { println, Stdout } from "core:cli";
+use m from "./sub/ufcs_namespaced_facts_target.wado";
+
+export fn run() with Stdout {
+    let q = m::Q { v: 1 };
+    println(`${m::Q::bump(&q, 10)}`);
+    println(`${m::Q::bump(&q, 10, 2)}`);
+    // A `mut` parameter is the callee's own copy, so the caller's list is
+    // untouched. The same lookup answered for no parameter at all.
+    let items: List<i32> = [7];
+    println(`${m::Q::eat(&q, items)}`);
+    println(`${items.len()}`);
+}
+
+__DATA__
+{"stdout": "16\n13\n2\n1\n"}

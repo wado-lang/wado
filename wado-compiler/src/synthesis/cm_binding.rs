@@ -392,12 +392,10 @@ fn future_stream_payload_site(tt: &TypeTable, expr: &TirExpr) -> Option<(TypeId,
     } else {
         return None;
     };
-    let (receiver, _, _) = expr.kind.as_method_call()?;
-    let mut type_id = receiver.type_id;
-    while let ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) = tt.get(type_id) {
-        type_id = *inner;
-    }
-    Some((*tt.generic_type_args(type_id)?.first()?, is_future))
+    // Every future / stream canonical but `new` operates on a handle.
+    let (receiver, _) = expr.kind.call_receiver()?;
+    let handle = tt.peel_refs(receiver.type_id);
+    Some((*tt.generic_type_args(handle)?.first()?, is_future))
 }
 
 /// Keyed on `module_source`, never the bare name: a homonym of an imported

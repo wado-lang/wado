@@ -769,6 +769,22 @@ fn collect_resources_in_type(
     }
 }
 
+/// A named type the shared generator spells as a declared CM type: a record,
+/// or a local newtype kept as its alias so the boundary matches `wado wit`.
+fn has_named_cm_form(ty: &Type, registry: &crate::component_model::CmInterfaceRegistry) -> bool {
+    let Type::Named(named) = ty else {
+        return false;
+    };
+    let source = registry.source_interface(named);
+    source.as_deref().is_some_and(|s| {
+        registry
+            .get_struct_fields_by_source(s, &named.name)
+            .is_some()
+    }) || registry
+        .local_newtype_base(source.as_deref(), &named.name)
+        .is_some()
+}
+
 fn wado_type_to_cm_val_type(
     ty: &Type,
     stream_type_idx: Option<u32>,
@@ -2616,6 +2632,13 @@ fn generate_cm_imports(
                 }
             }
 
+            // Every own-resource index is registered by here, so the borrowed
+            // view each signature hands `ast_type_to_cm` is built once.
+            let resource_exports: IndexMap<&str, u32> = own_resource_type_indices
+                .iter()
+                .map(|(k, &v)| (k.as_str(), v))
+                .collect();
+
             for func in &supported_functions {
                 // Pre-define param-only types (stream for params, result for params)
                 let needs_stream_u8 = func
@@ -2659,28 +2682,25 @@ fn generate_cm_imports(
                         let resolved_ty = project
                             .cm_interface_registry
                             .resolve_type_preserving_local_newtypes(ty);
-                        let is_struct = matches!(&resolved_ty, Type::Named(named)
-                        if project.cm_interface_registry.source_interface(named).is_some_and(|s| {
-                            project
-                                .cm_interface_registry
-                                .get_struct_fields_by_source(&s, &named.name)
-                                .is_some()
-                        }));
-                        // A local newtype routes through `ast_type_to_cm` like a
-                        // struct so its named alias reaches the boundary.
-                        let is_local_newtype = matches!(&resolved_ty, Type::Named(named)
-                        if project
-                            .cm_interface_registry
-                            .local_newtype_base(
-                                project.cm_interface_registry.source_interface(named).as_deref(),
-                                &named.name,
-                            )
-                            .is_some());
-                        let val_type = if is_component_import || is_struct || is_local_newtype {
-                            let resource_exports: IndexMap<&str, u32> = own_resource_type_indices
-                                .iter()
-                                .map(|(k, &v)| (k.as_str(), v))
-                                .collect();
+                        let is_named =
+                            has_named_cm_form(&resolved_ty, &project.cm_interface_registry);
+                        // A composite (`Option<T>`, `List<T>`, a tuple) needs the
+                        // shared generator too: `wado_type_to_cm_val_type` spells
+                        // only the flat shapes and the pre-defined `Stream` /
+                        // `Result` params.
+                        let is_composite = match &resolved_ty {
+                            Type::Generic(g) => g.name != "Stream" && g.name != "Result",
+                            Type::Tuple(_) => true,
+                            Type::Named(_)
+                            | Type::NamespacedGeneric(_)
+                            | Type::Function(_)
+                            | Type::Reference(_)
+                            | Type::MutReference(_)
+                            | Type::TypePackSpread(..)
+                            | Type::Infer(_)
+                            | Type::Error(_) => false,
+                        };
+                        let val_type = if is_component_import || is_named || is_composite {
                             let mut sink = crate::component_model::InstanceSink {
                                 it: &mut instance_type,
                                 next_idx: &mut local_type_idx,
@@ -2693,7 +2713,7 @@ fn generate_cm_imports(
                             )
                         } else {
                             wado_type_to_cm_val_type(
-                                ty,
+                                &resolved_ty,
                                 stream_type_idx,
                                 result_param_type_idx,
                                 &enum_export_indices,
@@ -2715,26 +2735,9 @@ fn generate_cm_imports(
                     let resolved_ty = project
                         .cm_interface_registry
                         .resolve_type_preserving_local_newtypes(ty);
-                    let is_struct = matches!(&resolved_ty, Type::Named(named)
-                    if project.cm_interface_registry.source_interface(named).is_some_and(|s| {
-                        project
-                            .cm_interface_registry
-                            .get_struct_fields_by_source(&s, &named.name)
-                            .is_some()
-                    }));
-                    let is_local_newtype = matches!(&resolved_ty, Type::Named(named)
-                    if project
-                        .cm_interface_registry
-                        .local_newtype_base(
-                                project.cm_interface_registry.source_interface(named).as_deref(),
-                                &named.name,
-                            )
-                        .is_some());
-                    if is_component_import || is_struct || is_local_newtype {
-                        let resource_exports: IndexMap<&str, u32> = own_resource_type_indices
-                            .iter()
-                            .map(|(k, &v)| (k.as_str(), v))
-                            .collect();
+                    if is_component_import
+                        || has_named_cm_form(&resolved_ty, &project.cm_interface_registry)
+                    {
                         let mut sink = crate::component_model::InstanceSink {
                             it: &mut instance_type,
                             next_idx: &mut local_type_idx,

@@ -4064,7 +4064,7 @@ A symbol is named `MODULE#SYMBOL` — the written form used by docs, `wado query
 core:json#parse                      # free function / global
 core:math#f64::PI                    # associated const / static fn
 core:collections#TreeMap.get         # instance method
-core:collections#List<String>::len   # generics use Wado angle brackets
+core:prelude#List<String>::len       # generics use Wado angle brackets
 core:fmt#Point^Display::fmt          # trait-impl member
 "./utils.wado"#Helper::new           # relative path — must be quoted
 ```

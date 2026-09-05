@@ -573,6 +573,32 @@ impl written for it, and no `Reflect*` fact or derived impl
       struct at its literal, a body-local struct at its statement — or lower
       them as the declaration `derive` reads.
 
+### Specificity is refused, and now has a named cost
+
+Rank 3 declines to rank a blanket whose bounds imply another's, and the reason
+stands: a narrower impl binding an associated type differently is the
+specialization soundness question, which a rank would decide by accident.
+
+Reflection is the first pattern to pay for it. A derivation written over the
+kind traits has no last-resort arm: an `impl<T: Reflect>` meant to catch
+everything else reports at every struct, beside the `impl<T: ReflectStruct>`.
+So a receiver the kinds do not admit (members not visible here, or a kind the
+set does not cover) produces no candidate rather than falling through, and rank
+2's escape, an impl written for the receiver, cannot serve a derivation whose
+subject is unknown by construction.
+
+[Total Reflection](./wep-2026-09-05-total-reflection.md) serves that side
+without a rank: one `impl<T: Reflect>` branching on the kind inside its body
+leaves no overlapping pair to break. This gap is therefore independent of
+reflection. Reopening it takes both of:
+
+- [ ] Answer what a caller sees when the narrower impl binds an associated type
+      differently — the question rank 3 declines.
+- [ ] Answer incomparable bound sets. Supertrait closure is a partial order:
+      `{Constrained, Reflect}` beside `{ReflectStruct, Reflect}` is neither
+      narrower nor wider, so a specificity rank leaves that pair at rank 3 and
+      the ambiguity report has to keep naming it.
+
 ## Related WEPs
 
 What each contributes to the order above.

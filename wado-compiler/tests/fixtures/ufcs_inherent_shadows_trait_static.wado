@@ -1,0 +1,34 @@
+// `ufcs_inherent_shadows_trait_method.wado`'s rule, for a receiver-less method.
+// The rule lived in the impl-block ladder alone, so the index the
+// associated-function lookups read still answered with whichever entry the name
+// was indexed under first: `S::make()` returned the trait impl's declaration
+// while the instance spelling returned the inherent one.
+
+use { println, Stdout } from "core:cli";
+
+trait Mk {
+    fn make() -> i32;
+}
+
+struct S {
+    v: i32,
+}
+
+impl Mk for S {
+    fn make() -> i32 {
+        return 100;
+    }
+}
+
+impl S {
+    fn make() -> i32 {
+        return 1;
+    }
+}
+
+export fn run() with Stdout {
+    println(`${S::make()}`);
+}
+
+__DATA__
+{"stdout": "1\n"}
