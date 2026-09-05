@@ -5073,7 +5073,7 @@ fn labeled_block_stmt_b(label: &str, stmts: Vec<StmtBuild>) -> StmtBuild {
             StmtKind::LabeledBlock {
                 label: label.clone(),
                 block,
-                role: BlockRole::Plain,
+                role: BlockRole::of_label(&label),
             },
         )
     })
@@ -7367,7 +7367,7 @@ fn labeled_block_expr_of(label: &'static str, stmts: Vec<StmtBuild>, type_id: Ty
                 label: label.to_string(),
                 block,
                 result_type: type_id,
-                role: BlockRole::Plain,
+                role: BlockRole::of_label(label),
             },
             type_id,
         ))

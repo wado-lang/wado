@@ -198,8 +198,9 @@ than by what looks important.
   frame. It fires from the final IR, never from a refusal a pass recorded, so it
   retires itself as the fold reaches each shape.
 - `WADO_TRACE=ctfe_call` names what each declined call wanted that the frame
-  could not give; `ctfe_stmt` names the statement a frame abandoned at. The
-  remark reports the region, the traces the call and the statement inside it.
+  could not give, `ctfe_stmt` the statement a frame abandoned at, and
+  `region_seed` every refusal along the fold path, under the function it walked.
+  The remark reports the region, the traces the call and the statement inside it.
 - `mise run report-const-regions` counts the remarks over the benchmark and
   `wasm-size` corpora and the Wado packages.
 
@@ -332,8 +333,8 @@ and a small one demotes the stage to a known gap.
 Each is a small, local refusal the census does not count, so each needs a reason
 of its own to be worth the code.
 
-- [ ] A `switch` with a constant scrutinee. A switch is formed before inlining,
-      so a scrutinee inlining makes constant survives untouched.
+- [ ] A `switch` with a constant scrutinee. A switch is formed before inlining.
+      When inlining then makes its scrutinee constant, nothing revisits it.
 - [ ] Closure calls: an indirect call whose closure is known is never resolved to
       a direct call, so neither inlining nor CTFE reaches through it.
 - [ ] Guards decided when the engine is only asked what an expression denotes.

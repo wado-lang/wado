@@ -218,6 +218,7 @@ impl Interpreter<'_> {
             return false;
         };
         let Ok(used) = usize::try_from(used) else {
+            crate::compiler_trace!("region_seed", "materialize {e:?}: negative len {used}");
             return false;
         };
         if used == 0 || used > elements.len() {
@@ -238,11 +239,19 @@ impl Interpreter<'_> {
                 return false;
             };
             let Ok(byte) = u8::try_from(byte) else {
+                crate::compiler_trace!(
+                    "region_seed",
+                    "materialize {e:?}: element out of a byte's range: {byte}"
+                );
                 return false;
             };
             bytes.push(byte);
         }
         let Some(backing_type) = self.type_table.find_builtin_array(TypeTable::U8) else {
+            crate::compiler_trace!(
+                "region_seed",
+                "materialize {e:?}: no Array<u8> type interned"
+            );
             return false;
         };
         let span = sink.body().exprs[e].span;

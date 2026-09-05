@@ -5,23 +5,32 @@
 //! removes (scalarizes / elides) is not.
 
 use crate::common::{InMemoryHost, runtime};
-use wado_compiler::{CompilerOptions, OptLevel};
+use wado_compiler::{CompilerOptions, OptLevel, Severity};
 
-/// Compile `source` at `-O2` and return the `remark:` diagnostics as
+/// Compile `source` under `options` and return the `remark:` diagnostics as
 /// `"line:col message"` strings.
-fn remarks_for(source: &str) -> Vec<String> {
+///
+/// The compile is asserted: a source that fails to compile emits no remark
+/// either, which would pass an "is empty" expectation for the wrong reason.
+fn remarks_under(source: &str, options: CompilerOptions) -> Vec<String> {
     let host = InMemoryHost::new();
-    let options = CompilerOptions {
-        opt_level: OptLevel::O2,
-        ..CompilerOptions::default()
-    };
-    let _ = runtime().block_on(wado_compiler::compile_with_options(
+    let compiled = runtime().block_on(wado_compiler::compile_with_options(
         source,
         &host,
         Some("test.wado"),
         options,
     ));
-    host.diagnostics()
+    let diagnostics = host.diagnostics();
+    let errors: Vec<&str> = diagnostics
+        .iter()
+        .filter(|d| matches!(d.severity, Severity::Error | Severity::Fatal))
+        .map(|d| d.message.as_str())
+        .collect();
+    assert!(
+        compiled.is_ok() && errors.is_empty(),
+        "the source must compile: {errors:?}"
+    );
+    diagnostics
         .into_iter()
         .filter(|d| d.message.starts_with("remark:"))
         .map(|d| {
@@ -33,6 +42,17 @@ fn remarks_for(source: &str) -> Vec<String> {
             format!("{loc} {}", d.message)
         })
         .collect()
+}
+
+/// [`remarks_under`] at `-O2`.
+fn remarks_for(source: &str) -> Vec<String> {
+    remarks_under(
+        source,
+        CompilerOptions {
+            opt_level: OptLevel::O2,
+            ..CompilerOptions::default()
+        },
+    )
 }
 
 #[test]
@@ -130,37 +150,20 @@ export fn run() with Stdout {
     );
 }
 
-/// Compile `source` at `-O2` with `-D` overrides and return the `remark:`
-/// diagnostics as `"line:col message"` strings.
+/// [`remarks_under`] at `-O2` with `-D` overrides.
 fn remarks_for_params(source: &str, overrides: &[(&str, &str)]) -> Vec<String> {
-    let host = InMemoryHost::new();
     let mut param_overrides = wado_compiler::hashmap::IndexMap::default();
     for (k, v) in overrides {
         param_overrides.insert((*k).to_string(), (*v).to_string());
     }
-    let options = CompilerOptions {
-        opt_level: OptLevel::O2,
-        param_overrides,
-        ..CompilerOptions::default()
-    };
-    let _ = runtime().block_on(wado_compiler::compile_with_options(
+    remarks_under(
         source,
-        &host,
-        Some("test.wado"),
-        options,
-    ));
-    host.diagnostics()
-        .into_iter()
-        .filter(|d| d.message.starts_with("remark:"))
-        .map(|d| {
-            let loc = d
-                .span
-                .as_ref()
-                .map(|s| format!("{}:{}", s.line, s.column))
-                .unwrap_or_default();
-            format!("{loc} {}", d.message)
-        })
-        .collect()
+        CompilerOptions {
+            opt_level: OptLevel::O2,
+            param_overrides,
+            ..CompilerOptions::default()
+        },
+    )
 }
 
 #[test]
@@ -441,7 +444,7 @@ export fn run() with Stdout {
 #[test]
 fn param_used_outside_a_gate_is_not_remarked() {
     // Printing a parameter is an ordinary use of its value. The read survives
-    // by design, and the branch it sits under is decided by something else.
+    // by design, and the branch it sits under reads the parameter not at all.
     let remarks = remarks_for_params(
         r#"
 use { println, Stdout } from "core:cli";
@@ -449,8 +452,8 @@ use { println, Stdout } from "core:cli";
 #[param(name = "log.level")]
 global LOG_LEVEL: String = "trace";
 
-export fn run(args: List<String>) with Stdout {
-    if args.len() > 0 {
+export fn run() with Stdout {
+    if builtin::black_box(true) {
         println(LOG_LEVEL);
     }
 }
