@@ -268,6 +268,7 @@ impl TypeSystem {
             | Expr::Matches(_)
             | Expr::Closure(_)
             | Expr::TemplateString(_)
+            | Expr::TaggedTemplate(_)
             | Expr::Cast(_)
             | Expr::StructLiteral(_)
             | Expr::TupleLiteral(_)

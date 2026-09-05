@@ -2924,6 +2924,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             ast::Expr::TemplateString(template) => {
                 self.reify_template_string(template, ctx, recorded_type)
             }
+            ast::Expr::TaggedTemplate(tagged) => {
+                self.reify_tagged_template(tagged, ctx, recorded_type)
+            }
             ast::Expr::Matches(m) => self.with_defaults_suppressed(|s| s.reify_matches(m, ctx)),
             ast::Expr::CompoundAssign(compound) => {
                 self.reify_compound_assign(compound, ctx, recorded_type)
@@ -5224,6 +5227,153 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         }
 
         TirExpr::new(TirExprKind::TemplateString { parts }, string_type, span)
+    }
+
+    /// Reify a tagged template as the call annotate resolved it: the tag on a
+    /// literal of the template's anonymous type, one field per hole. A hole
+    /// that is a place is read or borrowed where it stands; any other is
+    /// evaluated once, in source order, into a local of the block the call
+    /// then sits in (WEP 2026-01-10).
+    fn reify_tagged_template(
+        &mut self,
+        tagged: &ast::TaggedTemplateExpr,
+        ctx: &mut FunctionContext,
+        recorded_type: TypeId,
+    ) -> TirExpr {
+        use crate::tir::{
+            CallArg, TemplateShape, TirBlock, TirExprKind, TirStmt, TirStmtKind, TirStructField,
+        };
+
+        let span = tagged.span;
+        let (Some(template_ty), Some(dispatch)) = (
+            self.ann_tagged_template(tagged.id),
+            self.ann_static_method_dispatch(tagged.id),
+        ) else {
+            // Annotate diagnosed the template or the tag.
+            return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, span);
+        };
+        let (struct_name, hole_types) = {
+            let tt = self.tysys.type_table.borrow();
+            let shape = tt
+                .template_shape_of_type(template_ty)
+                .expect("annotate records a template type for a tagged template");
+            let holes: Vec<TypeId> = shape.holes.iter().map(|h| h.ty).collect();
+            (tt.type_name(template_ty), holes)
+        };
+
+        let unique_id = ctx.next_local;
+        let mut stmts: Vec<TirStmt> = Vec::new();
+        let mut fields: Vec<TirStructField> = Vec::new();
+        let holes = tagged.template.parts.iter().filter_map(|part| match part {
+            ast::TemplatePart::Interpolation { expr, .. } => Some(expr.as_ref()),
+            ast::TemplatePart::String(_) => None,
+        });
+        for (k, (expr, &hole_ty)) in holes.zip(&hole_types).enumerate() {
+            let mut value = self.reify_expr(expr, ctx, None);
+            if !self.is_place_for_hole(expr, ctx) {
+                let name = format!("__hole_{unique_id}_{k}");
+                let local_index = ctx.add_local(name.clone(), hole_ty, false, None);
+                stmts.push(TirStmt::new(
+                    TirStmtKind::Let {
+                        name: name.clone(),
+                        local_index,
+                        is_mut: false,
+                        is_reactive: false,
+                        type_id: hole_ty,
+                        value,
+                        skip_value_copy: false,
+                    },
+                    expr.span(),
+                ));
+                value = TirExpr::new(
+                    TirExprKind::Local {
+                        index: local_index,
+                        name,
+                    },
+                    hole_ty,
+                    expr.span(),
+                );
+            }
+            let field_ty = self.tysys.type_table.borrow_mut().hole_field_type(hole_ty);
+            if field_ty != hole_ty {
+                if let TirExprKind::Local { index, .. } = &value.kind {
+                    ctx.address_taken_locals.insert(*index);
+                }
+                value = TirExpr::new(
+                    TirExprKind::Unary {
+                        op: crate::tir::TirUnaryOp::Ref,
+                        expr: Box::new(value),
+                    },
+                    field_ty,
+                    expr.span(),
+                );
+            }
+            fields.push(TirStructField {
+                name: TemplateShape::field_name(k),
+                value,
+                field_index: k as u32,
+            });
+        }
+
+        let literal = TirExpr::new(
+            TirExprKind::StructLiteral {
+                struct_type: template_ty,
+                struct_name,
+                fields,
+            },
+            template_ty,
+            span,
+        );
+        let call = TirExpr::new(
+            TirExprKind::Call {
+                type_args: dispatch.type_args,
+                func: Box::new(dispatch.function_ref),
+                args: vec![CallArg::new(literal, false)],
+                has_receiver: false,
+            },
+            recorded_type,
+            span,
+        );
+        if stmts.is_empty() {
+            return call;
+        }
+
+        let label = format!("__tagged_{unique_id}");
+        stmts.push(TirStmt::new(
+            TirStmtKind::Break {
+                label: Some(label.clone()),
+                value: Some(call),
+            },
+            span,
+        ));
+        TirExpr::new(
+            TirExprKind::LabeledBlock {
+                label,
+                block: TirBlock::new(stmts, span),
+                result_type: recorded_type,
+            },
+            recorded_type,
+            span,
+        )
+    }
+
+    /// Whether a hole expression names storage the template literal can read
+    /// or borrow in situ: a local, a parameter, a global, or a field chain
+    /// rooted at one. Anything else is evaluated once into a temporary.
+    fn is_place_for_hole(&self, expr: &ast::Expr, ctx: &FunctionContext) -> bool {
+        match expr {
+            ast::Expr::Ident(ident) => {
+                !ident.name.contains("::")
+                    && (ctx.lookup(&ident.name).is_some()
+                        || self
+                            .sem
+                            .decls
+                            .lookup_global(&ident.name, &self.current_module_source)
+                            .is_some())
+            }
+            ast::Expr::FieldAccess(f) => self.is_place_for_hole(&f.expr, ctx),
+            _ => false,
+        }
     }
 
     /// Reify a `a..<b` / `a..=b` range expression. The elaborator

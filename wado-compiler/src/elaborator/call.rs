@@ -369,6 +369,25 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ctx: &mut FunctionContext,
         expected_type: Option<TypeId>,
     ) -> TypeId {
+        self.resolve_call_with_args(call, ctx, expected_type, None)
+    }
+
+    /// [`Self::resolve_call`] over arguments already typed. A tagged template
+    /// calls its tag on a value no AST spells, so it hands the argument type
+    /// in and `call.args` stays empty: every step reading an argument's AST —
+    /// literal re-coercion, closure hints, a span for a diagnostic — falls
+    /// back to the call as a whole.
+    pub(super) fn resolve_call_with_args(
+        &mut self,
+        call: &ast::CallExpr,
+        ctx: &mut FunctionContext,
+        expected_type: Option<TypeId>,
+        given_args: Option<Vec<TypeId>>,
+    ) -> TypeId {
+        debug_assert!(
+            given_args.is_none() || call.args.is_empty(),
+            "typed arguments replace the call's AST arguments, never join them"
+        );
         // Closure call: a bare identifier that names a *value* binding (a
         // local/param — checked first, so shadowing wins — or a module/imported
         // global) is invoked on its value, not looked up as a named function.
@@ -673,15 +692,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         // Resolve arguments with coercion awareness
-        let mut args: Vec<TypeId> = call
-            .args
-            .iter()
-            .enumerate()
-            .map(|(i, arg)| {
-                let expected_type = param_types.get(i).copied();
-                self.resolve_expr(arg, ctx, expected_type)
-            })
-            .collect();
+        let mut args: Vec<TypeId> = match given_args {
+            Some(args) => args,
+            None => call
+                .args
+                .iter()
+                .enumerate()
+                .map(|(i, arg)| {
+                    let expected_type = param_types.get(i).copied();
+                    self.resolve_expr(arg, ctx, expected_type)
+                })
+                .collect(),
+        };
 
         // Settle this resolution's variables. `solve_infer_var` keeps the
         // first answer, so a slot the arguments pinned stays pinned and one

@@ -540,6 +540,10 @@ impl CaptureScanner {
                 // evaluate twice, once for its slot and once for the template.
                 self.add(unparse_expr_source(expr), ast_id, is_place_expr(expr), pos);
             }
+            Expr::TaggedTemplate(_) => {
+                // The tag's result only, for the same reason.
+                self.add(unparse_expr_source(expr), ast_id, is_place_expr(expr), pos);
+            }
             Expr::If(i) => {
                 // Bodies are not walked: this node's own capture is the value
                 // of the branch the run took. Its condition chose that branch.

@@ -3113,6 +3113,26 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     )?;
                 }
             }
+            ast::Expr::TaggedTemplate(t) => {
+                Self::validate_expr_type_names(
+                    &t.tag,
+                    known_type_names,
+                    resource_type_names,
+                    type_params,
+                    logger,
+                )?;
+                for part in &t.template.parts {
+                    if let ast::TemplatePart::Interpolation { expr, .. } = part {
+                        Self::validate_expr_type_names(
+                            expr,
+                            known_type_names,
+                            resource_type_names,
+                            type_params,
+                            logger,
+                        )?;
+                    }
+                }
+            }
             ast::Expr::TemplateString(ts) => {
                 for part in &ts.parts {
                     if let ast::TemplatePart::Interpolation { expr, .. } = part {

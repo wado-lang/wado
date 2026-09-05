@@ -525,6 +525,14 @@ impl MoveWalker<'_> {
                     }
                 }
             }
+            // A hole is read or borrowed where it stands, never moved.
+            Expr::TaggedTemplate(t) => {
+                for part in &t.template.parts {
+                    if let ast::TemplatePart::Interpolation { expr, .. } = part {
+                        self.visit_expr(expr);
+                    }
+                }
+            }
 
             Expr::Block(block) => {
                 self.visit_block(block);

@@ -14,7 +14,8 @@ use crate::ast::{
     Param, PathSegment, Pattern, RangeExpr, RangeKind, ResourceDecl, RestClause, RestClauseDecl,
     ReturnStmt, SelfKind, StaticMethodCallExpr, Stmt, StoresEntry, StructDecl, StructField,
     StructLiteralExpr, StructLiteralField, StructLiteralSpread, StructPatternField, TaskReturnStmt,
-    TemplatePart, TemplateStringExpr, TestDecl, TraitDecl, TryOpExpr, TupleLiteralExpr,
+    TaggedTemplateExpr, TemplatePart, TemplateStringExpr, TestDecl, TraitDecl, TryOpExpr,
+    TupleLiteralExpr,
     TupleTypeDecl, Type, UnaryExpr, UnaryOp, UseDecl, UseItem, UseItemSimple, VariantCase,
     VariantDecl, Visibility, WhileStmt, WorldDecl, WorldExport, WorldExportFn,
     WorldExportInterface, WorldImport,
@@ -3807,6 +3808,35 @@ impl Parser {
                     let span = start_span.merge(&question_token.span);
                     let id = self.alloc_ast_id();
                     expr = Expr::TryOp(Box::new(TryOpExpr { id, expr, span }));
+                }
+                // A template literal directly after a path tags it. Whitespace
+                // and comments never reach the token stream, so a byte gap is
+                // the adjacency test; with a gap the literal is left for the
+                // ordinary unexpected-token error.
+                TokenKind::TemplateStringLit(_) if expr.span().end == self.peek().span.start => {
+                    if !matches!(expr, Expr::Ident(_)) {
+                        return Err(self.error_at_span(
+                            self.peek().span,
+                            "a template tag must be a function name or a static method path",
+                        ));
+                    }
+                    let template_token = self.advance();
+                    let TokenKind::TemplateStringLit(parts) = template_token.kind.clone() else {
+                        unreachable!("matched a template literal token")
+                    };
+                    let template_span = template_token.span;
+                    let Expr::TemplateString(template) =
+                        self.parse_template_string_parts(parts, template_span)?
+                    else {
+                        unreachable!("template parts parse to a template string")
+                    };
+                    let span = expr.span().merge(&template_span);
+                    expr = Expr::TaggedTemplate(Box::new(TaggedTemplateExpr {
+                        id: self.alloc_ast_id(),
+                        tag: expr,
+                        template: *template,
+                        span,
+                    }));
                 }
                 _ => break,
             }

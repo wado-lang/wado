@@ -30,6 +30,7 @@ pub(crate) mod sig;
 mod solver_bridge;
 mod stmt;
 mod synth;
+mod tagged_template;
 mod template;
 pub(crate) mod trait_env;
 mod trait_query;

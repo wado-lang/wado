@@ -367,6 +367,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             Expr::Match(match_expr) => self.resolve_match_expr(match_expr, ctx, expected_type),
             Expr::Closure(closure) => self.resolve_closure(closure, ctx, expected_type),
             Expr::TemplateString(template) => self.resolve_template_string(template, ctx),
+            Expr::TaggedTemplate(tagged) => {
+                self.resolve_tagged_template(tagged, ctx, expected_type)
+            }
             Expr::Cast(cast) => self.resolve_cast(cast, ctx),
             Expr::StructLiteral(struct_lit) => {
                 self.resolve_struct_literal(struct_lit, ctx, expected_type)
@@ -4487,8 +4490,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let head = crate::tir::StructDef::Anon(shape);
         let anon_name = self.tysys.type_table.borrow().anon_struct_mangle(shape);
 
-        let module_source = self.current_module_source.clone();
-
         let existing_type = self.tysys.type_table.borrow().find_struct_type(head);
         if let Some(existing_type) = existing_type {
             self.record_generic_instantiation_with_mangle(
@@ -4503,58 +4504,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return existing_type;
         }
 
-        let struct_type = self.tysys.type_table.borrow_mut().make_struct(head);
-
-        // Register field info so field access works
-        let field_info = super::types::StructFieldInfo {
-            name: anon_name.clone(),
-            module_source,
-            // Anonymous struct literals have no `StructDecl`; the literal
-            // expression's own `AstId` is the closest thing to a declaration
-            // site and is unique per literal, which is what matters here.
-            defined_at: struct_lit.id,
-            fields: effective_fields
-                .iter()
-                .map(|(fname, fty)| (fname.clone(), *fty, crate::ast::Visibility::Public))
-                .collect(),
-            field_ast_ids: Vec::new(),
-            field_defaults: vec![None; effective_fields.len()],
-            type_param_bounds: Vec::new(),
-            type_param_type_ids: Vec::new(),
-            type_param_defaults: Vec::new(),
-        };
-        self.sem.decls.anon_struct_fields.insert(shape, field_info);
-
-        // Create TirStruct definition for codegen
-        let tir_fields: Vec<TirField> = effective_fields
-            .iter()
-            .enumerate()
-            .map(|(i, (fname, fty))| TirField {
-                name: fname.clone(),
-                visibility: crate::ast::Visibility::Public,
-                type_id: *fty,
-                index: i as u32,
-                span: struct_lit.span,
-                is_secret: false,
-                wire_name_override: None,
-                serde_default: false,
-                serde_positional: false,
-                default_expr: None,
-            })
-            .collect();
-
-        self.sem.decls.pending_anonymous_structs.push(TirStruct {
-            def: head,
-            type_args: Vec::new(),
-            name: anon_name.clone(),
-            module_source: self.current_module_source.clone(),
-            visibility: crate::ast::Visibility::Private,
-            type_params: Vec::new(),
-            monomorph_info: None,
-            fields: tir_fields,
-            span: struct_lit.span,
-            wire_name_policy: None,
-        });
+        let struct_type = self.mint_anonymous_struct(
+            shape,
+            &anon_name,
+            &effective_fields,
+            struct_lit.id,
+            struct_lit.span,
+        );
 
         self.record_generic_instantiation_with_mangle(
             struct_lit.id,
@@ -4567,6 +4523,73 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Reify rebuilds the anonymous `StructLiteral`; the body walk
         // registered the struct type, field info, and pending TirStruct above
         // for their side effects. Project only the type.
+        struct_type
+    }
+
+    /// Mint the type of an interned anonymous shape on its first sighting:
+    /// the `TypeId`, the field info every field access reads, and the
+    /// `TirStruct` reify drains into the module. A struct literal and a
+    /// tagged template both reach their type here.
+    pub(super) fn mint_anonymous_struct(
+        &mut self,
+        shape: crate::tir::AnonStructId,
+        anon_name: &str,
+        fields: &[(String, TypeId)],
+        defined_at: AstId,
+        span: Span,
+    ) -> TypeId {
+        let head = crate::tir::StructDef::Anon(shape);
+        let struct_type = self.tysys.type_table.borrow_mut().make_struct(head);
+
+        let field_info = super::types::StructFieldInfo {
+            name: anon_name.to_string(),
+            module_source: self.current_module_source.clone(),
+            // A shape has no `StructDecl`; the expression minting it is the
+            // closest thing to a declaration site and is unique per site,
+            // which is what matters here.
+            defined_at,
+            fields: fields
+                .iter()
+                .map(|(fname, fty)| (fname.clone(), *fty, crate::ast::Visibility::Public))
+                .collect(),
+            field_ast_ids: Vec::new(),
+            field_defaults: vec![None; fields.len()],
+            type_param_bounds: Vec::new(),
+            type_param_type_ids: Vec::new(),
+            type_param_defaults: Vec::new(),
+        };
+        self.sem.decls.anon_struct_fields.insert(shape, field_info);
+
+        let tir_fields: Vec<TirField> = fields
+            .iter()
+            .enumerate()
+            .map(|(i, (fname, fty))| TirField {
+                name: fname.clone(),
+                visibility: crate::ast::Visibility::Public,
+                type_id: *fty,
+                index: i as u32,
+                span,
+                is_secret: false,
+                wire_name_override: None,
+                serde_default: false,
+                serde_positional: false,
+                default_expr: None,
+            })
+            .collect();
+
+        self.sem.decls.pending_anonymous_structs.push(TirStruct {
+            def: head,
+            type_args: Vec::new(),
+            name: anon_name.to_string(),
+            module_source: self.current_module_source.clone(),
+            visibility: crate::ast::Visibility::Private,
+            type_params: Vec::new(),
+            monomorph_info: None,
+            fields: tir_fields,
+            span,
+            wire_name_policy: None,
+        });
+
         struct_type
     }
 

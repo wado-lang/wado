@@ -1631,6 +1631,10 @@ impl<'a> Unparser<'a> {
             Expr::Matches(m) => self.unparse_matches(m),
             Expr::Closure(c) => self.unparse_closure(c),
             Expr::TemplateString(t) => self.unparse_template_string(t),
+            Expr::TaggedTemplate(t) => {
+                self.unparse_expr(&t.tag);
+                self.unparse_template_string(&t.template);
+            }
             Expr::Cast(c) => self.unparse_cast(c),
             Expr::StructLiteral(s) => self.unparse_struct_literal(s),
             Expr::TupleLiteral(t) => self.unparse_tuple_literal(t),
@@ -3043,6 +3047,7 @@ fn binds_tighter_than(expr: &Expr, slot: OperandSlot) -> bool {
             | Expr::Index(_)
             | Expr::TryOp(_)
             | Expr::TemplateString(_)
+            | Expr::TaggedTemplate(_)
             | Expr::StructLiteral(_)
             | Expr::TupleLiteral(_)
             | Expr::TupleComprehension(_)
@@ -3302,6 +3307,10 @@ fn unparse_expr_into(expr: &Expr, output: &mut String) {
         }
         Expr::Closure(c) => unparse_closure_into(c, output),
         Expr::TemplateString(t) => unparse_template_string_into(t, output),
+        Expr::TaggedTemplate(t) => {
+            unparse_expr_into(&t.tag, output);
+            unparse_template_string_into(&t.template, output);
+        }
         Expr::Block(b) => unparse_block_expr_into(b, output),
         Expr::If(i) => unparse_if_expr_into(i, output),
         Expr::Match(m) => unparse_match_into(m, output),
