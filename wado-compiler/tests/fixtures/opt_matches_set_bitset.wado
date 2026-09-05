@@ -1,0 +1,112 @@
+// Test: `k matches { A | B | … }` is a mask test, not the `br_table` a dense
+// set would lower to or the compare cascade a sparse one keeps. It offsets
+// from the smallest member, compares that offset unsigned against the width,
+// then shifts the mask down and reads a bit. The offset is bound once and the
+// two halves joined with a bitwise `&`, so nothing branches on the key.
+//
+// Covered here: a set past one 64-bit word, which picks its word with a
+// `select`; an enum set, read as discriminants; a range member; and a
+// wildcard yielding `true`, which negates the test.
+
+enum Kind {
+    A,
+    B,
+    C,
+    D,
+    E,
+    F,
+    G,
+}
+
+fn in_set(k: i32) -> bool {
+    return k matches { 3 | 4 | 5 | 7 | 8 | 9 | 10 | 12 | 13 | 14 | 15 | 16 | 17 | 20 };
+}
+
+fn wide(k: i32) -> bool {
+    return k matches { 1 | 5 | 66 | 70 | 130 | 200 };
+}
+
+fn odd_kind(k: Kind) -> bool {
+    return k matches { A | C | E | G };
+}
+
+fn not_in_set(k: i32) -> bool {
+    return match k {
+        3 | 4 | 5 | 9 => false,
+        _ => true,
+    };
+}
+
+fn digit_or_under(c: char) -> bool {
+    return c matches { '0'..='9' | '_' };
+}
+
+// Two ranges with a hole between them: 3, 4 and 7..=10 are mask 243 over a
+// window of 8. (Overlapping ranges need no handling here — the pattern
+// checker rejects them before the optimizer sees the match.)
+fn ranges(k: i32) -> bool {
+    return k matches { 3..=4 | 7..=10 };
+}
+
+// Every value in the window is a member, so the range compare answers alone.
+fn contiguous(k: i32) -> bool {
+    return k matches { 20..=25 };
+}
+
+export fn run() {
+    assert in_set(builtin::black_box(3));
+    assert in_set(builtin::black_box(20));
+    assert !in_set(builtin::black_box(6));
+    assert !in_set(builtin::black_box(2));
+    assert !in_set(builtin::black_box(21));
+    assert !in_set(builtin::black_box(-1));
+    assert !in_set(builtin::black_box(67));
+    assert wide(builtin::black_box(1));
+    assert wide(builtin::black_box(66));
+    assert wide(builtin::black_box(130));
+    assert wide(builtin::black_box(200));
+    assert !wide(builtin::black_box(65));
+    assert !wide(builtin::black_box(201));
+    assert !wide(builtin::black_box(0));
+    assert odd_kind(builtin::black_box(Kind::A));
+    assert odd_kind(builtin::black_box(Kind::G));
+    assert !odd_kind(builtin::black_box(Kind::B));
+    assert !not_in_set(builtin::black_box(9));
+    assert not_in_set(builtin::black_box(10));
+    assert not_in_set(builtin::black_box(2));
+    assert digit_or_under(builtin::black_box('0'));
+    assert digit_or_under(builtin::black_box('9'));
+    assert digit_or_under(builtin::black_box('_'));
+    assert !digit_or_under(builtin::black_box('/'));
+    assert !digit_or_under(builtin::black_box(':'));
+    assert !digit_or_under(builtin::black_box('a'));
+    assert ranges(builtin::black_box(3));
+    assert ranges(builtin::black_box(4));
+    assert !ranges(builtin::black_box(5));
+    assert !ranges(builtin::black_box(6));
+    assert ranges(builtin::black_box(7));
+    assert ranges(builtin::black_box(10));
+    assert !ranges(builtin::black_box(2));
+    assert !ranges(builtin::black_box(11));
+    assert contiguous(builtin::black_box(20));
+    assert contiguous(builtin::black_box(25));
+    assert !contiguous(builtin::black_box(19));
+    assert !contiguous(builtin::black_box(26));
+}
+
+__DATA__
+{
+    "stdout": "",
+    "wir_expect:O2": [
+        "(163575_i64 >>u ",
+        "(85_i64 >>u ",
+        "(71_i64 >>u ",
+        "(243_i64 >>u ",
+        " - 20) <u 6",
+        "select u64(__bitset_offset",
+        ") <u 18) & ((("
+    ],
+    "wir_not_expect:O2": [
+        "br_table"
+    ]
+}

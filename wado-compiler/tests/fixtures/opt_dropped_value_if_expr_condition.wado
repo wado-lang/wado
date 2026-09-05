@@ -1,0 +1,61 @@
+// Test: what an `if` tests is read whatever the `if` itself yields.
+//
+// A `match` arm holding one `if` is that `if` as the arm's value, so the arm
+// of a discarded `match` yields nothing. The condition is read all the same.
+// Here it is a call whose result is searched, which lowers to a value block
+// whose tail is the inlined `contains`, a labeled block breaking with a `bool`
+// on both exits. Asking only whether the enclosing `if` yields answers "no"
+// and strips those breaks, leaving the branch testing nothing. That is how
+// `gale-gen`'s `sll_advance` came to trap on `unreachable`.
+
+use { println, Stdout } from "core:cli";
+
+struct Ctx {
+    calls: i32,
+}
+
+impl Ctx {
+    fn first_ids(&mut self, n: i32) -> List<i32> {
+        self.calls += 1;
+        let mut out: List<i32> = [];
+        for let mut i = 0; i < n; i += 1 {
+            out.push(i * 2);
+        }
+        return out;
+    }
+}
+
+fn go(ctx: &mut Ctx, k: i32, n: i32, token: i32) -> i32 {
+    let mut hits = 0;
+    match k {
+        1 => {
+            if ctx.first_ids(n).contains(&token) {
+                hits += 1;
+            }
+        },
+        2 => {
+            if !ctx.first_ids(n).contains(&token) {
+                hits += 10;
+            }
+        },
+        _ => {
+            hits += 100;
+        },
+    }
+    return hits;
+}
+
+export fn run() with Stdout {
+    let mut ctx = Ctx { calls: 0 };
+    println(`${go(&mut ctx, builtin::black_box(1), builtin::black_box(4), builtin::black_box(4))}`);
+    println(`${go(&mut ctx, builtin::black_box(1), builtin::black_box(4), builtin::black_box(5))}`);
+    println(`${go(&mut ctx, builtin::black_box(2), builtin::black_box(4), builtin::black_box(5))}`);
+    println(`${go(&mut ctx, builtin::black_box(2), builtin::black_box(4), builtin::black_box(6))}`);
+    println(`${go(&mut ctx, builtin::black_box(9), builtin::black_box(4), builtin::black_box(6))}`);
+    println(`${ctx.calls}`);
+}
+
+__DATA__
+{
+    "stdout": "1\n0\n10\n0\n100\n4\n"
+}

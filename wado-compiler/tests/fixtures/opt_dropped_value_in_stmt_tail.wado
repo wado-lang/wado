@@ -1,0 +1,42 @@
+// Test: a discarded value closing a block that yields nothing keeps only its
+// effects. `xs.pop()` closes an `if` body, a loop body, and a `match` arm
+// inside a unit `if`. None of those leaves a value, so the `Option` its
+// inlined body builds on both exits is as dead there as in `let _ = xs.pop()`.
+
+use { println, Stdout } from "core:cli";
+
+fn drain(n: i32) -> i32 {
+    let mut xs: List<i32> = [];
+    for let mut i = 0; i < n; i += 1 {
+        xs.push(i);
+    }
+    if n > 3 {
+        xs.pop();
+    }
+    while xs.len() > 2 {
+        xs.pop();
+    }
+    match n {
+        5 => {
+            if xs.len() > 1 {
+                xs.pop();
+            }
+        },
+        _ => {
+            xs.push(n);
+        },
+    }
+    return xs.len();
+}
+
+export fn run() with Stdout {
+    println(`${drain(builtin::black_box(5))}`);
+}
+
+__DATA__
+{
+    "stdout": "1\n",
+    "wir_not_expect:O2": [
+        "Option<i32>"
+    ]
+}

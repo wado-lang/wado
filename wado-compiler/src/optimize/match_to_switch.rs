@@ -192,9 +192,89 @@ struct SwitchAnalysis {
     default_arm: Option<usize>,
 }
 
-enum CaseSpec {
-    Value(i64),
-    Range { lo: i64, hi: i64 },
+/// The values one arm's pattern names, as `i64` keys.
+enum CaseKey {
+    /// Inclusive at both ends, `lo <= hi`. A literal is the one-value span.
+    Span {
+        lo: i64,
+        hi: i64,
+    },
+    Wildcard,
+}
+
+/// `pat` as a [`CaseKey`], or `None` for one no key dispatch takes: a binding,
+/// which would need an arm-local `let` of the scrutinee; a bound past `i64`,
+/// where a wrapping cast would corrupt the range; or any destructuring
+/// pattern.
+fn case_key(pat: &PatKind) -> Option<CaseKey> {
+    let one = |v| CaseKey::Span { lo: v, hi: v };
+    Some(match pat {
+        PatKind::Literal(NirLiteralPattern::I128(v)) => one(i64::try_from(*v).ok()?),
+        PatKind::Literal(NirLiteralPattern::U128(v)) => one(i64::try_from(*v).ok()?),
+        PatKind::Literal(NirLiteralPattern::Char(c)) => one(i64::from(u32::from(*c))),
+        PatKind::Enum { case_index, .. } => one(i64::from(*case_index)),
+        PatKind::Range {
+            start,
+            end,
+            inclusive,
+            ..
+        } => {
+            let lo = i64::try_from(*start).ok()?;
+            let hi = i64::try_from(*end).ok()?;
+            assert!(
+                if *inclusive { lo <= hi } else { lo < hi },
+                "the elaborator rejects a reversed or empty range, so {lo}..{hi} \
+                 (inclusive: {inclusive}) cannot reach here"
+            );
+            CaseKey::Span {
+                lo,
+                hi: if *inclusive { hi } else { hi - 1 },
+            }
+        }
+        PatKind::Wildcard => CaseKey::Wildcard,
+        PatKind::Literal(
+            NirLiteralPattern::Bool(_) | NirLiteralPattern::String(_) | NirLiteralPattern::Null,
+        )
+        | PatKind::Binding { .. }
+        | PatKind::Tuple(..)
+        | PatKind::Variant { .. }
+        | PatKind::Struct { .. }
+        | PatKind::Or(_)
+        | PatKind::ConstantValue { .. } => return None,
+    })
+}
+
+/// The width in bits of a scrutinee a key dispatch may take — an integer,
+/// `char`, or enum — or `None` for any other type.
+pub(super) fn scrutinee_bits(scrutinee_type: &ResolvedType) -> Option<u32> {
+    match scrutinee_type {
+        ResolvedType::Primitive(PrimitiveType::I8 | PrimitiveType::U8) => Some(8),
+        ResolvedType::Primitive(PrimitiveType::I16 | PrimitiveType::U16) => Some(16),
+        ResolvedType::Primitive(PrimitiveType::I32 | PrimitiveType::U32 | PrimitiveType::Char)
+        | ResolvedType::Enum { .. } => Some(32),
+        ResolvedType::Primitive(PrimitiveType::I64 | PrimitiveType::U64) => Some(64),
+        _ => None,
+    }
+}
+
+/// One arm's values as `(arm index, lo, hi)`, inclusive at both ends.
+pub(super) type ArmSpan = (usize, i64, i64);
+
+/// The arms' spans up to the wildcard, and the wildcard's own index. `match`
+/// is first-match-wins, so the arms past a wildcard are dead and none is
+/// walked. `None` for a guard, or a pattern no key dispatch takes.
+pub(super) fn arm_spans(arms: &[ArmData], body: &Body) -> Option<(Vec<ArmSpan>, Option<usize>)> {
+    let mut spans = Vec::new();
+    for (i, arm) in arms.iter().enumerate() {
+        if arm.guard.is_some() {
+            return None;
+        }
+        match case_key(&body.pats[arm.pattern].kind)? {
+            CaseKey::Span { lo, hi } => spans.push((i, lo, hi)),
+            CaseKey::Wildcard => return Some((spans, Some(i))),
+        }
+    }
+    Some((spans, None))
 }
 
 /// Analyze whether a `Match` can be rewritten into a `Switch`. Accepts
@@ -202,101 +282,17 @@ enum CaseSpec {
 /// are integer or `char` literals, enum cases, integer/`char` ranges, or
 /// wildcard (the default).
 fn analyze(scrutinee_type: &ResolvedType, arms: &[ArmData], body: &Body) -> Option<SwitchAnalysis> {
-    match scrutinee_type {
-        ResolvedType::Primitive(
-            PrimitiveType::I32
-            | PrimitiveType::U32
-            | PrimitiveType::I64
-            | PrimitiveType::U64
-            | PrimitiveType::I16
-            | PrimitiveType::U16
-            | PrimitiveType::I8
-            | PrimitiveType::U8
-            | PrimitiveType::Char,
-        )
-        | ResolvedType::Enum { .. } => {}
-        _ => return None,
-    }
+    scrutinee_bits(scrutinee_type)?;
 
-    let mut specs: Vec<(CaseSpec, usize)> = Vec::new();
-    let mut default_arm: Option<usize> = None;
-    let mut min_value = i64::MAX;
-    let mut max_value = i64::MIN;
-
-    for (arm_idx, arm) in arms.iter().enumerate() {
-        if arm.guard.is_some() {
-            return None;
-        }
-        let mut record = |lo: i64, hi: i64, specs: &mut Vec<(CaseSpec, usize)>| {
-            min_value = min_value.min(lo);
-            max_value = max_value.max(hi);
-            specs.push((
-                if lo == hi {
-                    CaseSpec::Value(lo)
-                } else {
-                    CaseSpec::Range { lo, hi }
-                },
-                arm_idx,
-            ));
-        };
-        match &body.pats[arm.pattern].kind {
-            // Bail if a literal does not fit in `i64`: the Switch dispatch
-            // operates on `i64` case values, so a wrapping cast would corrupt
-            // the min/max range analysis.
-            PatKind::Literal(NirLiteralPattern::I128(v)) => {
-                let v = i64::try_from(*v).ok()?;
-                record(v, v, &mut specs);
-            }
-            PatKind::Literal(NirLiteralPattern::U128(v)) => {
-                let v = i64::try_from(*v).ok()?;
-                record(v, v, &mut specs);
-            }
-            PatKind::Literal(NirLiteralPattern::Char(c)) => {
-                let v = i64::from(u32::from(*c));
-                record(v, v, &mut specs);
-            }
-            PatKind::Enum { case_index, .. } => {
-                let v = i64::from(*case_index);
-                record(v, v, &mut specs);
-            }
-            PatKind::Range {
-                start,
-                end,
-                inclusive,
-                ..
-            } => {
-                let lo = i64::try_from(*start).ok()?;
-                let mut hi = i64::try_from(*end).ok()?;
-                if !*inclusive {
-                    hi -= 1;
-                }
-                if hi < lo {
-                    // Empty range — let the generic lowering handle it.
-                    return None;
-                }
-                record(lo, hi, &mut specs);
-            }
-            PatKind::Wildcard => {
-                if default_arm.is_some() {
-                    return None;
-                }
-                default_arm = Some(arm_idx);
-                // `match` is first-match-wins, so a wildcard matches everything
-                // from this position on: every later arm is dead. Stop here —
-                // collecting their specs would route their values to their own
-                // arms instead of the wildcard default.
-                break;
-            }
-            // A `Binding` default arm (`n => use(n)`) would need an
-            // arm-local `Let n = scrutinee` that `build_switch` doesn't
-            // emit. The normal `Match` lowering path handles bindings
-            // correctly, so bail out of the Switch rewrite here.
-            _ => return None,
-        }
-    }
-
+    let (specs, default_arm) = arm_spans(arms, body)?;
     if specs.is_empty() {
         return None;
+    }
+    let mut min_value = i64::MAX;
+    let mut max_value = i64::MIN;
+    for &(_, lo, hi) in &specs {
+        min_value = min_value.min(lo);
+        max_value = max_value.max(hi);
     }
 
     let range = i128::from(max_value) - i128::from(min_value) + 1;
@@ -314,14 +310,10 @@ fn analyze(scrutinee_type: &ResolvedType, arms: &[ArmData], body: &Body) -> Opti
     // shared values once — a value covered twice must not inflate density.
     let range = range as usize;
     let mut offset_arm: Vec<Option<usize>> = vec![None; range];
-    for (spec, arm_idx) in &specs {
-        let (lo, hi) = match spec {
-            CaseSpec::Value(v) => (*v, *v),
-            CaseSpec::Range { lo, hi } => (*lo, *hi),
-        };
+    for &(arm_idx, lo, hi) in &specs {
         for v in lo..=hi {
             let offset = (v - min_value) as usize;
-            offset_arm[offset].get_or_insert(*arm_idx);
+            offset_arm[offset].get_or_insert(arm_idx);
         }
     }
 

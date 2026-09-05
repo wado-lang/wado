@@ -162,6 +162,49 @@ is Wado-wide rather than Gale's, but this is the benchmark it showed on: the
 parser and `TreeBuilder` discard a `pop()` per closed node, and each was
 allocating the `Option` it threw away.
 
+### Three Wado-wide gaps, read off Gale's WIR (landed, 2026-09-05)
+
+All three were found by reading the `-O2` WIR of the frames the profile below
+ranks, and all three were fixed in the compiler rather than here.
+
+- **The inliner held `classify` forever.** A function that would fold a loop
+  away under constant parameters is kept small, so it stays admissible once
+  those constants arrive. No call site passes a constant token kind, so they
+  never arrived, and meanwhile `classify` received no inlining of its own:
+  `List::len`, `into_iter` and a `SliceRefIter::next` boxing an `i32` per
+  rule-stack element stayed calls, on ~5300 calls per highlight. A hold is now
+  released once the loop converges with it still in place.
+- **`drop_value` kept a dead `Option`.** A discarded `pop()` closing an `if`
+  body built one anyway, at 26 sites in the SQLite parser.
+- **Every `_kind_set_*` branched on its key.** They are all
+  `k matches { TK_… | … }`, which became a `br_table` from twelve members up —
+  an indirect branch on a data-dependent key, 4.5% self-time in `_kind_set_4`
+  alone. `nir/match_to_bitset` makes it a branch-free mask test, and the
+  functions then inline at every site. `_kind_set_37`'s members are
+  contiguous, so it is one unsigned compare.
+
+The lexer's char classes are the same shape. A range member (`'0'..='9'`) was
+refused at first and the review caught it, so `latn_match` and the first-char
+dispatch kept their cascades until it was widened; that is where sqlite-parse's
+share of the gain comes from.
+
+Whole branch against `origin/main`, four alternating pairs, ranges disjoint:
+
+| ms/iter          | main        | branch      |
+| ---------------- | ----------- | ----------- |
+| syntax-highlight | 1.535–1.576 | 1.199–1.291 |
+| sqlite-parse     | 1.137–1.166 | 0.940–0.989 |
+
+The mask test also retires the "multi-token guard re-test" item below as a
+cost: the re-tested `_kind_set_37` is now a subtract and a compare.
+
+One lever is left in the highlight half. `HighlightVisitor::new` re-resolves a
+fully static mapping on every call, ~170 `capture_id_of` scans plus the
+`class_text` rewrites, about 2.5% of the profile. The compile-time engine
+cannot fold it, its 10K-step budget being far under the string compares that
+takes, so the fix is `highlight_gen` emitting the resolved `default_ids` and
+`capture_classes` tables directly.
+
 ### Live profile (`syntax_highlight`, 2999 leaf samples @1 ms, 2026-09-02)
 
 Taken after the two levers above, before `nir/drop_value` and before the token

@@ -1,0 +1,50 @@
+// Test: a branch of a non-unit `if` leaves a value whether or not anything
+// reads the `if`.
+//
+// WIR sizes a value region from the owning expression's own type, so a
+// `bool`-typed `if` lowers its branches as value regions even where its own
+// value is dropped. Asking instead who reads it answers "nobody" and strips
+// the value off the labeled block an inlined multi-exit call leaves, and WIR
+// then writes `unreachable` where the value belonged.
+//
+// `if let P = x { set.insert(v); }` in a loop is the shape, which is how
+// `gale-gen`'s `try_expand_opaque` collects the rules its configs reference.
+// It shows at `-O1`, where fewer rounds leave the dropped `if` an expression
+// rather than folding it to a statement.
+
+use { println, Stdout } from "core:cli";
+use { TreeSet } from "core:collections";
+
+struct Ref {
+    name: String,
+}
+
+variant Element {
+    RuleRef(Ref),
+    Tok(i32),
+}
+
+fn distinct_rules(elems: &List<Element>) -> i32 {
+    let mut names = TreeSet::<String>::new();
+    for let e of elems {
+        if let RuleRef(r) = e {
+            names.insert(r.name);
+        }
+    }
+    return names.len();
+}
+
+export fn run() with Stdout {
+    let elems: List<Element> = [
+        Element::RuleRef(Ref { name: "expr" }),
+        Element::Tok(builtin::black_box(1)),
+        Element::RuleRef(Ref { name: "stmt" }),
+        Element::RuleRef(Ref { name: "expr" }),
+    ];
+    println(`${distinct_rules(&elems)}`);
+}
+
+__DATA__
+{
+    "stdout": "2\n"
+}

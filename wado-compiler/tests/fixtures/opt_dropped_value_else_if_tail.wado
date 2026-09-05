@@ -1,0 +1,43 @@
+// Test: an `else if` is a block holding one statement `if`, so a value-yielding
+// `if` chain puts a statement `if` at the tail of a value region — the one
+// shape WIR turns a statement `if` into a value. `drop_value` must read that
+// tail as consumed: stripping the `Option` an inlined `pop()` builds there
+// would leave the region with no value, and the function would trap.
+
+use { println, Stdout } from "core:cli";
+
+fn take(xs: &mut List<i32>, a: bool, c: bool) -> Option<i32> {
+    let v: Option<i32> = if a {
+        Option::None
+    } else if c {
+        xs.pop()
+    } else {
+        Option::None
+    };
+    return v;
+}
+
+fn take_arm(k: i32, c: bool) -> Option<i32> {
+    let mut xs: List<i32> = [1, 2, 3];
+    return match k {
+        1 => {
+            if c { xs.pop() } else { Option::<i32>::None }
+        },
+        _ => Option::None,
+    };
+}
+
+export fn run() with Stdout {
+    let mut xs: List<i32> = [1, 2, 3];
+    println(`${take(&mut xs, builtin::black_box(false), builtin::black_box(true)):?}`);
+    println(`${take(&mut xs, builtin::black_box(true), builtin::black_box(true)):?}`);
+    println(`${take(&mut xs, builtin::black_box(false), builtin::black_box(false)):?}`);
+    println(`${take_arm(builtin::black_box(1), builtin::black_box(true)):?}`);
+    println(`${take_arm(builtin::black_box(2), builtin::black_box(true)):?}`);
+    println(`${xs.len()}`);
+}
+
+__DATA__
+{
+    "stdout": "Option::Some(3)\nOption::None\nOption::None\nOption::Some(3)\nOption::None\n2\n"
+}

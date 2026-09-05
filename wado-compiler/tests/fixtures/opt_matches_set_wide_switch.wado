@@ -1,0 +1,27 @@
+// Test: a boolean set the mask test refuses still reaches `match_to_switch`.
+// `match_to_bitset` runs first and takes what it can; a scrutinee wider than
+// 32 bits is not one of them, so the dense set below falls through to the
+// `br_table` — the ordering of the two rules, which no other fixture pins.
+
+use { println, Stdout } from "core:cli";
+
+fn is_kw(k: i64) -> bool {
+    return k matches { 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 };
+}
+
+export fn run() with Stdout {
+    let mut hits = 0;
+    for let mut i = 0; i < 32; i += 1 {
+        if is_kw(i as i64) {
+            hits += 1;
+        }
+    }
+    println(`${hits}`);
+}
+
+__DATA__
+{
+    "stdout": "13\n",
+    "wir_expect:O2": ["br_table"],
+    "wir_not_expect:O2": ["__bitset_offset"]
+}
