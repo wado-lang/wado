@@ -216,25 +216,26 @@ cannot reach.
 
 ## Roadmap
 
-The census counts 1 093 surviving regions across 9 of 22 files:
+The census counts 1 198 surviving regions across 9 of 22 files:
 
 | Cause                                | Regions |
 | ------------------------------------ | ------- |
-| no call on its path explains it      | 820     |
-| it writes a global                   | 238     |
+| no call on its path explains it      | 900     |
+| it writes a global                   | 240     |
 | `push_encoded_ranges` still runs     | 34      |
+| it writes a place no local roots     | 13      |
 | `union_char_ranges` still runs       | 4       |
 | `binary_property_ranges` still runs  | 4       |
 | `general_category_ranges` still runs | 2       |
 | `i32::fmt_decimal` still runs        | 1       |
 
-Two Gale-generated files hold 1 064 of them. That concentration is not a Gale
+Two Gale-generated files hold 1 120 of them. That concentration is not a Gale
 fact: what generated code does is call the same missing capability often.
 
 The largest row is also the least specific. A region naming no call is waiting on
 a value the engine cannot represent rather than a body it cannot run. It says
 which instrument to reach for next, not which capability is missing, so only
-`ctfe_stmt` turns those 820 into work.
+`ctfe_stmt` turns those 900 into work.
 
 ### 1. The aggregate exit
 

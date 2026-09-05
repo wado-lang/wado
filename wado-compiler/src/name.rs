@@ -253,21 +253,13 @@ pub fn is_reserved_label(label: &str) -> bool {
 /// expanded `` `...` `` literal.
 pub const TEMPLATE_BLOCK_LABEL: &str = "__tmpl";
 
-/// The label an inlined block wears: the inline site's label over the callee's
-/// own, so a marker the callee's label carries survives the copy.
-#[must_use]
-pub fn inlined_label(site: &str, inner: &str) -> String {
-    format!("{site}__{inner}")
-}
-
-/// Whether `label` marks the block an expanded template string breaks out of,
-/// inlined any number of times or not. Shared by the producer
-/// (`synthesis::template`) and the optimizer passes that key on it, rather than
-/// each re-comparing the constant.
+/// Whether `label` marks the block an expanded template string breaks out of.
+/// Shared by the producer (`synthesis::template`) and lowering, which reads it
+/// once into [`crate::nir_arena::BlockRole`]. Passes ask the node from there —
+/// a label is a name, and gets rewritten.
 #[must_use]
 pub fn is_template_block(label: &str) -> bool {
     label == TEMPLATE_BLOCK_LABEL
-        || (is_reserved_label(label) && label.ends_with(&inlined_label("", TEMPLATE_BLOCK_LABEL)))
 }
 
 /// Name of the result accumulator local in an expanded template block.
@@ -1982,19 +1974,6 @@ mod tests {
         let resolved = resolve_import_with_entry(&mut interner, &from_dep, "logger", None);
         let logger_dep = interner.dependency("../logger/src/lib.wado");
         assert_ne!(resolved, logger_dep);
-    }
-
-    #[test]
-    fn a_template_block_is_one_after_inlining() {
-        let once = inlined_label("__inline_run_1", TEMPLATE_BLOCK_LABEL);
-        let twice = inlined_label("__inline_main_2", &once);
-        assert!(is_template_block(TEMPLATE_BLOCK_LABEL));
-        assert!(is_template_block(&once));
-        assert!(is_template_block(&twice));
-        // A user label cannot start with the synthetic prefix, so a suffix
-        // alone is not the marker.
-        assert!(!is_template_block("x____tmpl"));
-        assert!(!is_template_block("__tmpl_buf_0"));
     }
 
     #[test]

@@ -1,9 +1,6 @@
 // Store-to-load forwarding on struct fields. The forwarded constant is pinned
-// on the scalar the field decomposes to rather than on the `fmt_decimal`
-// argument: `${p2.a}` reads it inside a template region, and an address-taken
-// primitive is stored boxed, so the region sees a `Box<i32>`-typed mention
-// where the environment holds a scalar — which `region_free_reads` refuses to
-// seed. Seeding a boxed scalar would restore it.
+// on the scalar the field decomposes to, which is what forwarding produces
+// whether or not the template around it then folds.
 use { println, Stdout } from "core:cli";
 
 struct Pair {

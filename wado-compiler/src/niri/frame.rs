@@ -303,7 +303,7 @@ impl Interpreter<'_> {
                 let block = *block;
                 self.exec_loop(body, block)
             }
-            StmtKind::LabeledBlock { label, block } => {
+            StmtKind::LabeledBlock { label, block, .. } => {
                 let (label, block) = (label.clone(), *block);
                 match value_of_block_flow(self.exec_block(body, block), Some(&label)) {
                     Ok(value) => Flow::Fallthrough(value),
