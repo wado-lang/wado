@@ -89,7 +89,7 @@ pub variant TypeInfo {
     Newtype(DeclInfo),
     Resource(DeclInfo),
     Tuple(DeclInfo),
-    Scalar(DeclInfo),
+    Primitive(PrimitiveKind),
     Array(TypeInfo),
     Reference { mutable: bool, target: TypeInfo },
     Function {
@@ -100,6 +100,14 @@ pub variant TypeInfo {
         stores: List<i32>,             // `stores[…]`, by parameter position
     },
     Never,
+}
+
+/// The Wasm primitives, at the granularity the type system has.
+pub enum PrimitiveKind {
+    I8, I16, I32, I64,
+    U8, U16, U32, U64,
+    F32, F64,
+    Bool, Char, V128,
 }
 
 impl TypeInfo {
@@ -125,7 +133,7 @@ for the rest, which is the classification this WEP completes:
 | the four sealed member handles                            | `Struct`    |
 | a resource, `Future<T>` / `Stream<T>`                     | `Resource`  |
 | the tuple family, `()`                                    | `Tuple`     |
-| `i8`…`u64`, `f32`, `f64`, `bool`, `char`, `v128`          | `Scalar`    |
+| `i8`…`u64`, `f32`, `f64`, `bool`, `char`, `v128`          | `Primitive` |
 | `Array<T>`                                                | `Array`     |
 | `&T` / `&mut T`                                           | `Reference` |
 | `fn(…) -> R with E…`                                      | `Function`  |
@@ -141,17 +149,24 @@ projection carry no case: none survives monomorphization, which is where a
 typed with its underlying value type, so the wrapper never reaches
 monomorphize.
 
-`Scalar` names the Wasm primitives, which is a fact about representation rather
-than about being a leaf. `String`, `i128` and `u128` read as scalars to a
-programmer and are prelude structs with private fields, so they land in
-`Struct` and, having no visible members downstream, cannot be opened there
-either. That gap between what `Scalar` covers and what a consumer means by
-"leaf" is recorded below.
+`Primitive` is named for what it holds — the Wasm primitives — and carries the
+one at the granularity the type system already has, so a consumer branches on
+`PrimitiveKind` rather than on a name string. The granularity sits in the case's
+payload, not in the case set, so `match type`'s arms are unaffected by it: one
+`primitive` arm, an ordinary `match` inside where a body cares. That placement
+is also why the kind is carried now rather than deferred — widening a case's
+payload later breaks every pattern already written against it, so "add it when
+someone needs it" is not the free option it looks like.
 
-Within what it does cover, `Scalar` is deliberately coarse: nothing yet reads a
-primitive's width or signedness through reflection, and a consumer that needs
-one writes the per-type impl it already writes. Splitting it later is additive
-only as a sub-classification, which is the constraint any refinement inherits.
+The kind is the identity here, so this case carries no `DeclInfo`: the module is
+`core:prelude` and the name is the kind's spelling, both derivable, and
+`canonical_name()` renders them.
+
+`String`, `i128` and `u128` read as primitives to a programmer and are none:
+each is a prelude struct — `i128` and `u128` are `#[compiler_item]` structs of
+two 64-bit limbs — with private fields, so they classify as `Struct` and, having
+no visible members downstream, cannot be opened there either. The gap between
+what `Primitive` covers and what a consumer means by "leaf" is recorded below.
 
 A structural case keeps its components rather than rendering them away, which
 is why the flat "name + module + args" shape the earlier WEP sketched does not
@@ -189,6 +204,25 @@ nested `MODULE#SYMBOL`. A structural type is the same shape with the operator
 outermost, and the tuple family's anchor — `core:prelude#[i32,String]`, the
 prelude's `pub type [...T];` — was already decided this way.
 
+Every type therefore has exactly one identity, and it is a module symbol. A
+resource and an interface each have a second one — the Component Model
+coordinate (`wasi:io/streams.input-stream`) — and reflection does not carry it:
+`DeclInfo` reports the Wado module symbol for every case alike, with no branch
+for the CM-backed ones. The friction is real and accepted: a consumer keying a
+registry by CM coordinate cannot get there from `TypeInfo`, and a WASI type
+reads by the name its generated Wado module gives it. One identity that is
+always the same shape is worth more than a second one that only some types
+have.
+
+### A `Shape` tree belongs to Jade
+
+A facet-style metadata tree — kind-agnostic, walking an unknown type to
+arbitrary depth through lazy `fn() -> Shape` edges — is what a schema library
+ultimately reads, and it is deliberately not here. Written over `match type` it
+is ordinary library code in `wado:jade`; synthesized in the compiler it would be
+a per-type metadata list beside `members()`, which
+[Reflect Derivation](./wep-2026-06-13-reflect-derivation.md) refuses.
+
 ### `match type` — narrowing a subject to its kind
 
 A bound states a kind before the subject is known. The body states it after:
@@ -196,11 +230,11 @@ A bound states a kind before the subject is known. The body states it after:
 ```wado
 fn describe<T: Reflect>(v: &T) -> String {
     match type T {
-        struct([..F]) => return fields_of(v),
-        variant([..P]) => return live_case_of(v),
+        struct(FieldTypes = [..F]) => return fields_of(v),
+        variant(CasePayloads = [..P]) => return live_case_of(v),
         enum | flags => return Reflect::<T>::type_name(),
         newtype => return describe(&B::from(*v)),
-        tuple | scalar | array | reference | function | resource | never | opaque
+        tuple | primitive | array | reference | function | resource | never | opaque
             => return Reflect::<T>::type_name(),
     }
 }
@@ -252,13 +286,22 @@ projection reads:
 
 ```wado
 match type T {
-    struct([..F]) => …,     // T: ReflectStruct<FieldTypes = [..F]>
-    variant([..P]) => …,    // T: ReflectVariant<CasePayloads = [..P]>
+    struct(FieldTypes = [..F]) => …,      // T: ReflectStruct<FieldTypes = [..F]>
+    variant(CasePayloads = [..P]) => …,   // T: ReflectVariant<CasePayloads = [..P]>
+    enum => …,                            // binds nothing; T: ReflectEnum
 }
 ```
 
-The spelling is open (Known gaps). The mechanism it feeds is not: bounds in
-force are name-keyed in `annotate_ctx.trait_ctx.type_param_bounds`, which
+The binder is spelled as an impl header spells it, association named, so a
+derivation moved from a blanket into an arm reads the same in both places. An
+arm that reads no pack writes none — a kind-only branch pays nothing for a pack
+it never touches — and an arm binds the pack without bounding it: `..F: Serialize`
+belongs to the header of the function the arm delegates to, which keeps the arm
+about proving the kind. Both are revisitable; a derivation that turns out to
+need the bound on the arm is the reason to revisit.
+
+The mechanism underneath is unchanged by the spelling: bounds in force are
+name-keyed in `annotate_ctx.trait_ctx.type_param_bounds`, which
 `reflect_pack_bound_ty` reads, so an arm pushes a synthesized bound onto that
 map under RAII and every existing projection path serves it unchanged.
 
@@ -329,30 +372,6 @@ boundary so the split is not rediscovered.
 
 ## Known gaps
 
-### The arm's pack binder has no spelling
-
-What the binder does is settled: the arm pushes `T: ReflectStruct<FieldTypes =
-[..F]>` with `..F` in scope for that arm's body, which is what
-`reflect_pack_bound_ty` reads and what every projection below it already
-serves. What it looks like is not. Three shapes, each with a cost:
-
-- Positional, as above — `struct([..F])`. Shortest, and the association is
-  implied by the arm's kind, so `FieldTypes` / `CasePayloads` / `Members` never
-  appear. A reader cannot tell from the arm which association was bound.
-- Named — `struct(FieldTypes = [..F])`. Matches an impl header exactly, so a
-  derivation moved from a blanket into an arm reads the same. Verbose on the
-  arm that binds nothing.
-- Inferred — no binder, the pack implicit under a reserved name. Rejected on
-  sight: an implicitly-named type parameter is nothing else in the language.
-
-Two questions ride on the choice. Whether an arm may bound the pack
-(`struct([..F: Serialize])`) or only bind it, leaving bounds to the callee it
-delegates to; and whether an arm that binds nothing may still be written
-`struct` bare — which it must, or every kind-only branch pays for a pack it
-never reads.
-
-- [ ] Choose the spelling and answer both.
-
 ### The structural notation is unwritten and one-way
 
 `core:prelude#&Point` and `core:prelude#fn(i32) -> i32` are decided above and
@@ -365,51 +384,31 @@ one back is the harder half, since a structural type has no `AstId` for
 - [ ] Decide what `wado query "core:prelude#&Point"` answers — the target's
       declaration, a synthesized view, or a diagnostic naming the limit.
 
-### A resource is named twice
+### A leaf is not a `Primitive`, and nothing says which it is
 
-`Resource(DeclInfo)` names a resource by its Wado module symbol, which the
-compiler has (`ResolvedType::Resource` carries a `DefId`). Its Component Model
-coordinate (`wasi:io/streams.input-stream`) is a second identity for the same
-type, and the two do not render alike.
+`String`, `i128` and `u128` classify as `Struct` and reach `opaque` downstream,
+while `i32` reaches `primitive`. Nothing breaks — every derivation writes
+`impl … for String`, and both arms already say "do not walk this" — but a
+consumer asking "is this an aggregate I should recurse into" reads two arms for
+one answer, and `opaque` also carries structs that genuinely are aggregates it
+may not see.
 
-- [ ] Decide whether `DeclInfo` on a resource reports the CM coordinate, the
-      Wado symbol, or both.
+Marking the three (`#[primitive]` on the declaration, folding them into
+`Primitive`) misstates them; a separate leaf predicate states the question
+directly but is a second classification over the same cases.
 
-### `Scalar` is representation, and a consumer means "leaf"
+- [ ] Decide whether the leaf/aggregate question gets an answer of its own, and
+      where it lives.
 
-`String`, `i128` and `u128` are prelude structs, so they classify as `Struct`
-and reach `opaque` downstream, while `i32` reaches `scalar`. Nothing breaks —
-every derivation writes `impl … for String` — but the split a consumer wants is
-leaf versus aggregate, and `Scalar` is the Wasm primitives, which is a
-different line. The two arms it can land in already say "do not walk this", so
-the gap is in what the taxonomy communicates rather than in what it permits.
+### The classification must not read `PrimitiveType::I128`
 
-Marking the three (`#[scalar]` on the declaration, folding them into `Scalar`)
-closes it, at the price of an attribute any type may claim, which moves a
-third-party type between arms.
+`i128` and `u128` are prelude structs, and `PrimitiveType::I128` / `U128` also
+exist in the type table, read by the CM ABI, const-eval and lowering. A
+classification that matches on `ResolvedType::Primitive` alone would answer
+`Primitive` for a type this WEP puts in `Struct`.
 
-- [ ] Decide whether `Scalar` stays "a Wasm primitive" or becomes "primitive or
-      so marked", and if the latter, what marks it and who may.
-
-### `Scalar` granularity
-
-Nothing reads a primitive's width, signedness or floating-ness through
-reflection yet. A later split has to be a sub-classification of `Scalar` for
-existing arms to keep meaning what they meant.
-
-- [ ] Revisit when a consumer needs it.
-
-### A `Shape` tree is a library, not a synthesis
-
-A facet-style metadata tree — kind-agnostic, walking an unknown type to
-arbitrary depth through lazy `fn() -> Shape` edges — is what a schema library
-(Jade, Layer B) ultimately reads. Written over `match type` it is ordinary
-library code and adds no synthesized per-type metadata; synthesized in the
-compiler it would be the parallel metadata list
-[Reflect Derivation](./wep-2026-06-13-reflect-derivation.md) refuses beside
-`members()`.
-
-- [ ] Write it in `wado:jade` over this WEP's mechanism, not in the compiler.
+- [ ] Key the classification on the surface type the program names, and assert
+      the two never disagree.
 
 ## Related WEPs
 
@@ -418,5 +417,5 @@ compiler it would be the parallel metadata list
 - [Trait Resolution](./wep-2026-09-01-trait-resolution.md) — why a root-bounded blanket beside the kind ones is rank 3
 - [Struct Walkability](./wep-2026-07-10-struct-walkability.md) — the visibility gate an arm inherits
 - [Symbol Notation](./wep-2026-06-14-symbol-notation.md) — the register `canonical_name()` renders, widened here to structural types
-- [Jade](./wep-2026-06-13-jade.md) — the consumer of the `Shape` gap
+- [Jade](./wep-2026-06-13-jade.md) — where the `Shape` tree is written
 - [Elaborator Architecture](./wep-2026-05-26-elaborator-rearchitecture.md) — where an arm's hypothesis and its expansion live
