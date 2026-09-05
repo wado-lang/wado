@@ -1945,12 +1945,15 @@ impl TypeTable {
     /// literal pattern asks this to pick the `u128` over the `i128` comparison.
     #[must_use]
     pub fn is_unsigned_int(&self, type_id: TypeId) -> bool {
+        // Through the newtype chain, as `is_integer` reads it: a newtype over
+        // `u32` compares unsigned, or a bound past `i32::MAX` never matches.
+        let base_id = self.representation_head(type_id);
         matches!(
-            self.get(type_id),
+            self.get(base_id),
             ResolvedType::Primitive(
                 PrimitiveType::U8 | PrimitiveType::U16 | PrimitiveType::U32 | PrimitiveType::U64
             )
-        ) || self.wide_int_item(type_id) == Some(crate::compiler_item::CompilerItem::U128)
+        ) || self.wide_int_item(base_id) == Some(crate::compiler_item::CompilerItem::U128)
     }
 
     /// Which wide-integer prelude struct `type_id` is, `None` for anything else.

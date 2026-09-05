@@ -2052,8 +2052,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .borrow()
             .is_unsigned_int(scrutinee_type);
 
-        let start_val = self.pattern_to_i128(start, is_unsigned);
-        let end_val = self.pattern_to_i128(end, is_unsigned);
+        let start_val = util::range_endpoint_to_i128(start, is_unsigned);
+        let end_val = util::range_endpoint_to_i128(end, is_unsigned);
 
         let (Some(start_val), Some(end_val)) = (start_val, end_val) else {
             let _ = self.emit(TypeError::InvalidPattern {
@@ -2065,53 +2065,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Check for reversed or empty range
         let inclusive = matches!(kind, crate::ast::RangeKind::Inclusive);
-        if start_val > end_val {
+        let order = util::range_endpoints_ordered(start_val, end_val, is_unsigned);
+        if order.is_gt() {
             let _ = self.emit(TypeError::InvalidPattern {
                 message: "reversed range pattern".to_string(),
                 span,
             });
             return;
         }
-        if !inclusive && start_val >= end_val {
+        if !inclusive && order.is_ge() {
             let _ = self.emit(TypeError::InvalidPattern {
                 message: "empty range pattern".to_string(),
                 span,
             });
         }
-    }
-
-    fn pattern_to_i128(&self, pattern: &Pattern, is_unsigned: bool) -> Option<i128> {
-        match pattern {
-            Pattern::Literal(Literal::Number(repr)) => {
-                if is_unsigned {
-                    util::parse_u128_literal(repr).ok().map(|v| v as i128)
-                } else {
-                    util::parse_i128_literal(repr).ok()
-                }
-            }
-            Pattern::Literal(Literal::Char(raw)) => {
-                util::unescape_char(raw).ok().map(|c| c as i128)
-            }
-            Pattern::Literal(Literal::Byte(raw)) => util::unescape_byte(raw).ok().map(i128::from),
-            Pattern::Variant {
-                variant_name,
-                variant_qualifier,
-                bindings,
-                ..
-            } if bindings.is_empty() => {
-                // Could be an associated constant like i32::MAX, i32::MIN
-                self.primitive_assoc_const_to_i128(variant_qualifier.as_ref(), variant_name)
-            }
-            _ => None,
-        }
-    }
-
-    fn primitive_assoc_const_to_i128(
-        &self,
-        qualifier: Option<&Type>,
-        const_name: &str,
-    ) -> Option<i128> {
-        primitive_assoc_const_to_i128(qualifier, const_name)
     }
 
     /// Get payload type for a variant case, substituting type parameters if needed

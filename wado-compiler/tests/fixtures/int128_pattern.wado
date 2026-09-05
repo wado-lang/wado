@@ -45,6 +45,24 @@ test "wide range pattern past 64 bits" {
     assert !(big matches { 0..=1267650600228229401496703205376 });
 }
 
+test "u128 range pattern above i128::MAX" {
+    // Bounds a signed decode cannot hold. Reify used to parse every endpoint as
+    // `i128` and swallow the overflow to 0, so the arm compared against `0..=0`.
+    let huge: u128 = 340282366920938463463374607431768211454;
+    assert huge matches {
+        340282366920938463463374607431768211453..=340282366920938463463374607431768211455
+    };
+    assert !(huge matches { 0..=340282366920938463463374607431768211453 });
+    // Nested, where the same decoder answers for a sub-pattern.
+    let pair = [huge, huge];
+    let tag = match pair {
+        [0..=1, _] => 1,
+        [340282366920938463463374607431768211454..=340282366920938463463374607431768211455, _] => 2,
+        _ => 3,
+    };
+    assert tag == 2;
+}
+
 test "negative i128 range pattern" {
     let neg: i128 = -1267650600228229401496703205376;
     assert neg matches { -1267650600228229401496703205377..=0 };

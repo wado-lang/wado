@@ -163,10 +163,14 @@ pub(crate) fn create_literal(
     )
 }
 
-/// A literal of the wide-integer type `item` read from a source-form integer
-/// spelling. An [`TirExprKind::IntLiteral`] truncates its value to `u64` and
-/// keeps the full spelling in `repr`, so `repr` is the only operand wide enough
-/// to recover a 128-bit value from.
+/// A literal of the wide-integer type `item` read from an integer spelling. An
+/// [`TirExprKind::IntLiteral`] truncates its value to `u64` and keeps the full
+/// spelling in `repr`, so `repr` is the only operand wide enough to recover a
+/// 128-bit value from.
+///
+/// The producers spell one bit pattern either way — pattern lowering renders a
+/// `u128` bound as the signed reading of its bits — so both are read, and a
+/// decimal falls in exactly one of the two ranges.
 pub(crate) fn literal_from_repr(
     item: CompilerItem,
     repr: &str,
@@ -175,13 +179,9 @@ pub(crate) fn literal_from_repr(
     span: Span,
 ) -> TirExpr {
     use crate::elaborator::util::{parse_i128_literal, parse_u128_literal};
-    let bits = match item {
-        CompilerItem::I128 => parse_i128_literal(repr),
-        CompilerItem::U128 => parse_u128_literal(repr).map(u128::cast_signed),
-        other => panic!("{other} is not a wide-integer type"),
-    };
-    let bits =
-        bits.unwrap_or_else(|e| panic!("a wide-int literal reaching `lower` parses: {repr}: {e}"));
+    let bits = parse_i128_literal(repr)
+        .or_else(|_| parse_u128_literal(repr).map(u128::cast_signed))
+        .unwrap_or_else(|e| panic!("a wide-int literal reaching `lower` parses: {repr}: {e}"));
     create_literal(item, bits, type_id, type_table, span)
 }
 

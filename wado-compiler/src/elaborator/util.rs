@@ -382,6 +382,59 @@ fn decode_surrogate_pair(high: u16, low: u16) -> u32 {
     0x10000 + (high << 10) + low
 }
 
+/// A range-pattern endpoint's value, as the bits of the scrutinee's own type:
+/// read unsigned, a `u128` bound above `i128::MAX` keeps its pattern rather than
+/// failing to parse. `None` for an endpoint that denotes no integer, which
+/// annotate diagnoses.
+///
+/// The one decoder for the question — signedness governs it, so a caller that
+/// answers without the scrutinee's type answers wrongly for half the range.
+pub(super) fn range_endpoint_to_i128(
+    pattern: &crate::ast::Pattern,
+    is_unsigned: bool,
+) -> Option<i128> {
+    use crate::ast::{Literal, Pattern};
+    match pattern {
+        Pattern::Literal(Literal::Number(repr)) => {
+            if is_unsigned {
+                parse_u128_literal(repr).ok().map(u128::cast_signed)
+            } else {
+                parse_i128_literal(repr).ok()
+            }
+        }
+        Pattern::Literal(Literal::Char(raw)) => {
+            unescape_char(raw).ok().map(|c| i128::from(c as u32))
+        }
+        Pattern::Literal(Literal::Byte(raw)) => unescape_byte(raw).ok().map(i128::from),
+        // An associated constant (`i32::MAX`) resolved by value; a user constant
+        // needs the reify-side lookup its caller adds.
+        Pattern::Variant {
+            variant_name,
+            variant_qualifier,
+            bindings,
+            ..
+        } if bindings.is_empty() => {
+            super::stmt::primitive_assoc_const_to_i128(variant_qualifier.as_ref(), variant_name)
+        }
+        _ => None,
+    }
+}
+
+/// Order two range endpoints, which [`range_endpoint_to_i128`] returns as bit
+/// patterns. An unsigned bound above `i128::MAX` has a negative pattern, so a
+/// signed compare would read an ascending range as reversed.
+pub(super) fn range_endpoints_ordered(
+    start: i128,
+    end: i128,
+    is_unsigned: bool,
+) -> std::cmp::Ordering {
+    if is_unsigned {
+        start.cast_unsigned().cmp(&end.cast_unsigned())
+    } else {
+        start.cmp(&end)
+    }
+}
+
 /// Parse an unsigned integer literal into a u128 value.
 /// Supports decimal, hex, binary, octal, and scientific notation (e.g., "1e10").
 pub(crate) fn parse_u128_literal(repr: &str) -> Result<u128, String> {

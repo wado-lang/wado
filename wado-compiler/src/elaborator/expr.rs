@@ -3092,48 +3092,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> ExhPattern {
         let is_unsigned = self.exh_is_unsigned(scrutinee_type);
         let (Some(start_val), Some(end_val)) = (
-            self.exh_pattern_to_i128(start, is_unsigned),
-            self.exh_pattern_to_i128(end, is_unsigned),
+            util::range_endpoint_to_i128(start, is_unsigned),
+            util::range_endpoint_to_i128(end, is_unsigned),
         ) else {
             // Bad bounds → old path returned `Wildcard` (catch-all).
             return ExhPattern::CatchAll;
         };
         let inclusive = matches!(kind, ast::RangeKind::Inclusive);
         // Reversed / empty ranges → old path returned `Wildcard` (catch-all).
-        if start_val > end_val || (!inclusive && start_val >= end_val) {
+        let order = util::range_endpoints_ordered(start_val, end_val, is_unsigned);
+        if order.is_gt() || (!inclusive && order.is_ge()) {
             return ExhPattern::CatchAll;
         }
         let hi = if inclusive { end_val } else { end_val - 1 };
         ExhPattern::Range(start_val, hi)
-    }
-
-    /// Resolve a range-bound AST pattern to its `i128` value. Mirrors
-    /// `Elaborator::pattern_to_i128`.
-    fn exh_pattern_to_i128(&self, pattern: &ast::Pattern, is_unsigned: bool) -> Option<i128> {
-        match pattern {
-            ast::Pattern::Literal(Literal::Number(repr)) => {
-                if is_unsigned {
-                    util::parse_u128_literal(repr).ok().map(|v| v as i128)
-                } else {
-                    util::parse_i128_literal(repr).ok()
-                }
-            }
-            ast::Pattern::Literal(Literal::Char(raw)) => {
-                util::unescape_char(raw).ok().map(|c| c as i128)
-            }
-            ast::Pattern::Literal(Literal::Byte(raw)) => {
-                util::unescape_byte(raw).ok().map(i128::from)
-            }
-            ast::Pattern::Variant {
-                variant_name,
-                variant_qualifier,
-                bindings,
-                ..
-            } if bindings.is_empty() => {
-                super::stmt::primitive_assoc_const_to_i128(variant_qualifier.as_ref(), variant_name)
-            }
-            _ => None,
-        }
     }
 
     fn check_variant_exhaustiveness(
