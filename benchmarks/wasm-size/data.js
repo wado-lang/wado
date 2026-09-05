@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1788616840883,
+  "lastUpdate": 1788620596583,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -53605,6 +53605,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/78596fa8966bffa9bce36a6cd13672008791fa3c"
         },
         "date": 1788616840400,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 2013,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6560,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18891,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 288497,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "658ff2576813b5a07d26acffa06d59c758741d4e",
+          "message": "Merge pull request #1972 from wado-lang/claude/effect-op-param-defaults\n\nfeat(elaborator): let an operation declare parameter defaults",
+          "timestamp": "2026-09-05T23:47:46+09:00",
+          "tree_id": "bab0767dc1fc5bc502c78359834924a64bb86ae7",
+          "url": "https://github.com/wado-lang/wado/commit/658ff2576813b5a07d26acffa06d59c758741d4e"
+        },
+        "date": 1788620595741,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
