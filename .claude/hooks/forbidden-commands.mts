@@ -4,17 +4,17 @@
 
 const FORBIDDEN = [
   {
-    pattern: /^(sed|awk|python(3(\.\d+)?)?)$/,
+    pattern: /^(sed|awk|perl|python(3(\.\d+)?)?)$/,
     reason:
-      "sed, awk, python and python3 are forbidden (AGENTS.md > Tooling): a rewrite keeps" +
+      "sed, awk, perl, python and python3 are forbidden (AGENTS.md > Tooling): a rewrite keeps" +
       " matching where it was not aimed. Edit with the editing tools, one call per change" +
       " site; script in Node.js.",
   },
   {
-    pattern: /^nohup$/,
+    pattern: /^(nohup|setsid|disown)$/,
     reason:
-      "nohup is forbidden (AGENTS.md > Tooling): it notifies nobody when the job exits. Run" +
-      " a long job through the harness's background mechanism.",
+      "nohup, setsid and disown are forbidden (AGENTS.md > Tooling): a detached job notifies" +
+      " nobody when it exits. Run a long job through the harness's background mechanism.",
   },
 ];
 

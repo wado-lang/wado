@@ -39,12 +39,13 @@ function readState(path: string): State {
   }
 }
 
-// Anything the branch changed against its merge base, or anything still in the
-// worktree. Without a merge base there is no branch to judge.
-function hasWork(): boolean {
+// Work to distill is what the branch committed against its merge base. A dirty
+// worktree is the commit-and-push hook's to demand first, so the two Stop hooks
+// run in sequence rather than both at once.
+function hasCommittedWork(): boolean {
   try {
     const base = git("merge-base", "origin/main", "HEAD");
-    return git("status", "--porcelain") !== "" || git("diff", "--name-only", base) !== "";
+    return git("status", "--porcelain") === "" && git("diff", "--name-only", base) !== "";
   } catch {
     return false;
   }
@@ -52,7 +53,9 @@ function hasWork(): boolean {
 
 if (import.meta.main) {
   const payload = await readPayload();
-  if (!payload.session_id) process.exit(0);
+  const isStop = payload.hook_event_name === "Stop";
+  // Every prompt and every skill call reaches here; only these two touch git.
+  if (!payload.session_id || (!isStop && !invokesSkill(payload, "distill"))) process.exit(0);
 
   let path: string;
   try {
@@ -60,8 +63,7 @@ if (import.meta.main) {
   } catch {
     process.exit(0); // Not a repository: nothing to distill.
   }
-  const isStop = payload.hook_event_name === "Stop";
-  const action = decide(payload, readState(path), isStop && hasWork());
+  const action = decide(payload, readState(path), isStop && hasCommittedWork());
   if (action === "record-done") writeFileSync(path, "done");
   if (action === "ask") {
     writeFileSync(path, "asked");

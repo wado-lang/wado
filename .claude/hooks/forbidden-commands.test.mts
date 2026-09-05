@@ -6,6 +6,10 @@ import { commandNames, denialReason } from "./forbidden-commands.mts";
 
 const DENIED = [
   "sed -i 's/a/b/' f.rs",
+  "perl -pi -e 's/a/b/' f.rs",
+  "bash -c 'perl -0777 -pi -e s/a/b/ f.rs'",
+  "setsid cargo test",
+  "cargo test & disown",
   "set -o pipefail; cat f | sed -n '1,5p'",
   "git log | awk '{print $1}'",
   "python3 -c 'print(1)'",
@@ -112,4 +116,6 @@ test("resolves the command word of every nested source", () => {
 test("gives the reason of the ban that applies", () => {
   assert.match(denialReason("sed -i x f")!, /editing tools/);
   assert.match(denialReason("nohup cargo test &")!, /background/);
+  assert.match(denialReason("perl -pi -e x f")!, /editing tools/);
+  assert.match(denialReason("setsid cargo test")!, /background/);
 });
