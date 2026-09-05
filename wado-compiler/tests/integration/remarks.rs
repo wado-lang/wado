@@ -571,10 +571,15 @@ export fn run() with Stdout {
 
 #[test]
 fn a_list_region_blames_no_call() {
-    // A `List<T>` the engine cannot represent stops the fold, and no call on the
-    // path is to blame: `push` inlines away and what it leaves is `grow` on a
-    // cold path the frame never reaches. Naming that would send the reader after
-    // the wrong thing, so the remark says there is nothing to name.
+    // Inspecting the list needs the `List<T>` itself, which the engine cannot
+    // write back, so the fold stops on a value rather than on a body. No call on
+    // the inner region's path is to blame: `push` inlines away and what it
+    // leaves is `grow` on a cold path the frame never reaches. Naming that would
+    // send the reader after the wrong thing, so the remark says there is nothing
+    // to name.
+    //
+    // `${table().len()}` would not do: the length is a scalar the engine
+    // projects out of the list, so that whole template folds.
     let remarks = const_region_remarks(
         r#"
 use { println, Stdout } from "core:cli";
@@ -590,7 +595,7 @@ fn table() -> List<i32> {
 }
 
 export fn run() with Stdout {
-    println(`n=${table().len()}`);
+    println(`n=${table():?}`);
 }
 "#,
     );
