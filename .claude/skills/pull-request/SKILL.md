@@ -64,5 +64,19 @@ the description is broken, and never rewrite prose to work around it.
 
 ## After opening & Periodic status checks
 
+Subscribe to the PR with `subscribe_pr_activity` and keep it subscribed until
+the PR is merged or closed. Watching is not passive: handle every event or skip
+it deliberately.
+
 Check mergeability (`mergeable_state`). If conflicting, resolve it with the
 `git-upstream-sync` skill.
+
+## Answering a review
+
+A review — human or bot — is a set of claims to weigh, not a task list. Answer
+it with the `code-review-response` skill: verify each finding against the
+current code, fix the ones worth fixing, and say why for the rest. Skipping a
+finding is a decision you state, never silence.
+
+Re-read the review after each push: a finding that returns names the design,
+not the comment.
