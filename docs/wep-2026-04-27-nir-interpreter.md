@@ -256,10 +256,99 @@ projects out of it still folds, so `` `${table().len()}` `` reaches the IR as th
 rendered literal while `` `${table():?}` ``, which needs the list itself, does
 not.
 
-- [ ] A `List<T>` of scalars written back as
-      [`ArrayLiteral`](./wep-2026-05-31-nir-array-literal.md) and a plain struct
-      as `StructLiteral`, each needing its own answer to "is this already the
-      literal the rewrite writes" so the worklist still settles.
+#### What it writes
+
+`commit_fold` is where a folded value becomes IR, and it splits three ways today:
+a scalar promotes to a pooled operand, a byte-sequence container goes to
+`materialize_seq_via`, and every other aggregate is refused. The exit replaces
+that one type's writer with a walk of the value against its type, emitting the
+literal node NIR already has for each shape.
+
+| Value                       | Node               |
+| --------------------------- | ------------------ |
+| scalar                      | pooled operand     |
+| `Seq` of `u8`               | `PackedArray`      |
+| `Seq` otherwise             | `ArrayLiteral`     |
+| `Aggregate` of a tuple type | `TupleLiteral`     |
+| `Aggregate` otherwise       | `StructLiteral`    |
+| `Variant`                   | `VariantConstruct` |
+
+A `String` and a `List<u8>` keep the node they get today, so the byte path's
+output is unchanged and only its refusal of everything else goes away.
+`wir_build` lowers all five node forms already, and
+[`ArrayLiteral`](./wep-2026-05-31-nir-array-literal.md) was added for a consumer
+of exactly this kind.
+
+Field order is load-bearing: `wir_build` lowers a struct literal's fields
+positionally, and SROA asserts their indices cover `0..N` once. So the writer
+emits in `field_index` order and asserts the value's list is complete, which the
+lattice's reader guarantees — a NIR aggregate literal lists every field.
+
+#### The engine has no shape source
+
+Reading a literal into a value drops what writing one back needs. A
+`StructLiteral` field carries a name, a `VariantConstruct` a case index, and a
+pooled scalar operand the `TypeId` extraction reads its width from. `Value` keys
+a field by index, a case by name, and a scalar by `PrimitiveType`, which cannot
+name the enum, `flags` or newtype a field is declared as. Guessing a type is not
+a lost fold but a wrong one: `wir_build` resolves a tuple literal's struct type
+from its element types.
+
+`NirPackage`'s `structs` and `variants` hold the names, the case indices and the
+per-instance field types, and are where `wir_build` reads them. The exit takes
+the same information as a `TypeId` → fields index, built once per pass and
+carried on `ProgramFacts`, where an absent fact already costs folds rather than
+correctness.
+
+#### The writer answers whether it changed anything
+
+`is_worth_materializing` refuses two shapes: a global read, which globalization
+put there to build once and share, and the literal the seq writer itself writes.
+Refusing the second is what makes that rewrite happen once rather than at every
+visit, and it is the shape the general writer needs a general answer for.
+
+Recognizing a literal tree does not give one. A `List<u8>` written `[1, 2, 3]`
+reaches the engine as an `ArrayLiteral` of constants, and the writer's form for
+it is a `PackedArray`, which packs into a data segment — a literal tree the
+rewrite must still change. Only the writer knows which it would emit, so it
+decides: the walk compares each node against the node it would put there,
+allocates where they differ, and reports whether anything did. Nothing settles
+"is this already the literal the rewrite writes" separately, so nothing can drift
+from it. Materializing leaves a tree the walk then matches, so the next visit
+writes nothing and reduction stays monotone and idempotent.
+
+The cost gate stays separate and may stay conservative: asking the lattice for a
+container literal's value is what `seq_literal_value` decides, and over-asking
+costs a query the writer then declines, never a loop.
+
+#### The gates
+
+A reference leaf. `commit_fold` tests the node's own type for a reference shape,
+since a fresh literal where the program yields an alias is a difference `ref.eq`
+can tell. That test stands for the whole value only while no field can hold a
+reference. The walk sees each leaf's declared type, so the test belongs there.
+
+A budget. The byte path needs none: a `PackedArray` within `MAX_SEQ_ELEMENTS`
+reaches WIR as one `array.new_data`. A general aggregate has no such floor. A
+thousand-element `List<i32>` built by a loop is a dozen instructions, and its
+literal is a thousand operands, which `array.new_fixed` packs into a data
+segment only where the elements are primitive. So the writer counts the leaves it
+would emit and refuses past a ceiling.
+
+#### What it does not reach
+
+The exit writes values; it does not produce them. A callee the engine never folds
+to a value is unaffected — `HighlightVisitor::new` builds its table through
+`String::grow`, which abandons the evaluation, so it stays a call whatever the
+writer can emit. That one is stage 3's.
+
+- [ ] The `TypeId` → fields index on `ProgramFacts`, and whether a tuple's
+      element types come from its `type_args` or need the index too.
+- [ ] The writer, reporting whether it changed the tree, and the per-leaf
+      reference gate.
+- [ ] The leaf ceiling, from `mise run report-wasm-size` and the benchmark suite.
+      Whether it should rise where the result is a `let` globalization can hoist
+      — built once at instantiation rather than at every evaluation — is open.
 - [ ] A destructuring `let`; a body containing one is abandoned.
 
 Done when a constant `List` result and a constant struct result reach the IR as
