@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1788607397537,
+  "lastUpdate": 1788615478555,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -53517,6 +53517,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/bba5889816eb8c54851849622c7cff0f66f5c2a7"
         },
         "date": 1788607397206,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 2013,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6560,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18891,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 288497,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "aaaae3ec6fdb45d123f9ea94836864cb8d1d33fa",
+          "message": "Merge pull request #1974 from wado-lang/claude/elabolator-refactoring-by6txy\n\nrefactor(elaborator): resolve a qualified call from one declaration index",
+          "timestamp": "2026-09-05T22:21:49+09:00",
+          "tree_id": "0e3062301e31c13b43ef6531a39ae36eadaa11a2",
+          "url": "https://github.com/wado-lang/wado/commit/aaaae3ec6fdb45d123f9ea94836864cb8d1d33fa"
+        },
+        "date": 1788615477711,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
