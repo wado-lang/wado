@@ -194,9 +194,8 @@ struct SwitchAnalysis {
 
 /// The values one arm's pattern names, as `i64` keys.
 enum CaseKey {
-    Value(i64),
-    /// Inclusive at both ends, `lo <= hi`.
-    Range {
+    /// Inclusive at both ends, `lo <= hi`. A literal is the one-value span.
+    Span {
         lo: i64,
         hi: i64,
     },
@@ -204,15 +203,16 @@ enum CaseKey {
 }
 
 /// `pat` as a [`CaseKey`], or `None` for one no key dispatch takes: a binding,
-/// which would need an arm-local `let` of the scrutinee; a literal past `i64`,
-/// where a wrapping cast would corrupt the range; an empty range; or any
-/// destructuring pattern.
+/// which would need an arm-local `let` of the scrutinee; a bound past `i64`,
+/// where a wrapping cast would corrupt the range; or any destructuring
+/// pattern.
 fn case_key(pat: &PatKind) -> Option<CaseKey> {
+    let one = |v| CaseKey::Span { lo: v, hi: v };
     Some(match pat {
-        PatKind::Literal(NirLiteralPattern::I128(v)) => CaseKey::Value(i64::try_from(*v).ok()?),
-        PatKind::Literal(NirLiteralPattern::U128(v)) => CaseKey::Value(i64::try_from(*v).ok()?),
-        PatKind::Literal(NirLiteralPattern::Char(c)) => CaseKey::Value(i64::from(u32::from(*c))),
-        PatKind::Enum { case_index, .. } => CaseKey::Value(i64::from(*case_index)),
+        PatKind::Literal(NirLiteralPattern::I128(v)) => one(i64::try_from(*v).ok()?),
+        PatKind::Literal(NirLiteralPattern::U128(v)) => one(i64::try_from(*v).ok()?),
+        PatKind::Literal(NirLiteralPattern::Char(c)) => one(i64::from(u32::from(*c))),
+        PatKind::Enum { case_index, .. } => one(i64::from(*case_index)),
         PatKind::Range {
             start,
             end,
@@ -221,13 +221,15 @@ fn case_key(pat: &PatKind) -> Option<CaseKey> {
         } => {
             let lo = i64::try_from(*start).ok()?;
             let hi = i64::try_from(*end).ok()?;
-            // `checked_sub` rather than the elaborator's empty-range check: the
-            // key is that this function is total on the patterns it is handed.
-            let hi = if *inclusive { hi } else { hi.checked_sub(1)? };
-            if hi < lo {
-                return None;
+            assert!(
+                if *inclusive { lo <= hi } else { lo < hi },
+                "the elaborator rejects a reversed or empty range, so {lo}..{hi} \
+                 (inclusive: {inclusive}) cannot reach here"
+            );
+            CaseKey::Span {
+                lo,
+                hi: if *inclusive { hi } else { hi - 1 },
             }
-            CaseKey::Range { lo, hi }
         }
         PatKind::Wildcard => CaseKey::Wildcard,
         PatKind::Literal(
@@ -268,8 +270,7 @@ pub(super) fn arm_spans(arms: &[ArmData], body: &Body) -> Option<(Vec<ArmSpan>, 
             return None;
         }
         match case_key(&body.pats[arm.pattern].kind)? {
-            CaseKey::Value(v) => spans.push((i, v, v)),
-            CaseKey::Range { lo, hi } => spans.push((i, lo, hi)),
+            CaseKey::Span { lo, hi } => spans.push((i, lo, hi)),
             CaseKey::Wildcard => return Some((spans, Some(i))),
         }
     }
