@@ -53,4 +53,6 @@ is the whole branch, as always, not the fixes alone.
 ## Report
 
 One comment on the pull request: what was fixed, and what was skipped with its
-reason. The skips are half the answer, not an omission from it.
+reason. The skips are half the answer, not an omission from it. A review that
+arrived outside a pull request, `/code-review` among them, is reported the same
+way in the session.

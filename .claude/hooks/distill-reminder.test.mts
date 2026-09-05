@@ -4,16 +4,15 @@ import { test } from "node:test";
 
 import { decide } from "./distill-reminder.mts";
 
+// What names a skill is skill-invocation's own test; this one is the decision.
 const stop = (extra: object = {}) => ({ hook_event_name: "Stop", ...extra });
 const work = () => true;
 const noWork = () => false;
 
 test("a distill run is recorded, whichever way it was invoked", () => {
   for (const payload of [
-    { hook_event_name: "UserPromptSubmit", prompt: "/distill" },
-    { hook_event_name: "UserPromptSubmit", prompt: "  /distill the branch" },
+    { hook_event_name: "UserPromptSubmit", prompt: "/distill the branch" },
     { hook_event_name: "PostToolUse", tool_name: "Skill", tool_input: { skill: "distill" } },
-    { hook_event_name: "PostToolUse", tool_name: "Skill", tool_input: { skill: "wado:distill" } },
   ]) {
     assert.equal(decide(payload, "unset", work), "record-done");
   }
@@ -35,9 +34,7 @@ test("a stop the hook itself caused never blocks again", () => {
 
 test("anything else is left alone", () => {
   for (const payload of [
-    { hook_event_name: "UserPromptSubmit", prompt: "/distill-something-else" },
     { hook_event_name: "UserPromptSubmit", prompt: "explain distill" },
-    { hook_event_name: "PostToolUse", tool_name: "Bash", tool_input: { skill: "distill" } },
     { hook_event_name: "SessionEnd" },
     {},
   ]) {

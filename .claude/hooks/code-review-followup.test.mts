@@ -4,36 +4,15 @@ import { test } from "node:test";
 
 import { followUpContext } from "./code-review-followup.mts";
 
+// What names a skill is skill-invocation's own test; this one is the reminder.
 const prompt = (text: string) => ({ hook_event_name: "UserPromptSubmit", prompt: text });
-const skill = (name: string) => ({
-  hook_event_name: "PostToolUse",
-  tool_name: "Skill",
-  tool_input: { skill: name },
-});
 
 test("a /code-review run asks for the response skill", () => {
-  for (const payload of [
-    prompt("/code-review"),
-    prompt("  /code-review --fix high"),
-    skill("code-review"),
-    skill("wado:code-review"),
-  ]) {
-    assert.match(followUpContext(payload) ?? "", /code-review-response/);
-  }
+  assert.match(followUpContext(prompt("/code-review --fix high")) ?? "", /code-review-response/);
 });
 
 test("anything else is left alone", () => {
-  for (const payload of [
-    prompt("/code-review-response"),
-    prompt("review the diff"),
-    prompt("run /distill"),
-    skill("code-review-response"),
-    skill("distill"),
-    { hook_event_name: "PostToolUse", tool_name: "Bash", tool_input: { command: "/code-review" } },
-    { hook_event_name: "PreToolUse", tool_name: "Skill", tool_input: { skill: "code-review" } },
-    {},
-    null,
-  ]) {
+  for (const payload of [prompt("/code-review-response"), prompt("review the diff"), {}, null]) {
     assert.equal(followUpContext(payload), null);
   }
 });

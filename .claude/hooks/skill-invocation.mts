@@ -10,17 +10,20 @@ export type HookPayload = {
   tool_input?: { skill?: string };
 };
 
-const TYPED = /^\s*\/([\w:.-]+)/;
-const bare = (skill: string) => skill.replace(/^.*:/, "");
+// A typed name runs to the end of its word, so `/distill/foo` names no skill.
+const TYPED = /^\s*\/([\w:.-]+)(?=\s|$)/;
+
+// The payload is parsed JSON, so a declared field is a claim about its shape.
+// Anything but a string names no skill, and a plugin prefix is not part of one.
+const named = (value: unknown): string | null =>
+  typeof value === "string" ? value.replace(/^.*:/, "") : null;
 
 export function invokesSkill(payload: HookPayload | null, skill: string): boolean {
   switch (payload?.hook_event_name) {
-    case "UserPromptSubmit": {
-      const typed = TYPED.exec(payload.prompt ?? "")?.[1];
-      return typed !== undefined && bare(typed) === skill;
-    }
+    case "UserPromptSubmit":
+      return named(TYPED.exec(String(payload.prompt ?? ""))?.[1]) === skill;
     case "PostToolUse":
-      return payload.tool_name === "Skill" && bare(payload.tool_input?.skill ?? "") === skill;
+      return payload.tool_name === "Skill" && named(payload.tool_input?.skill) === skill;
     default:
       return false;
   }
