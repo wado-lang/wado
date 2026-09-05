@@ -293,10 +293,10 @@ What the tag body compiles to, once monomorphized, inlined and folded:
   copy, and no last-use analysis is asked to elide one.
 
 The residue is the code a hand-written builder would be: one constant append
-per segment and one typed operation per hole. This is the design's claim, and
-`wir_expect` fixtures hold each tag in `core:*` to it. Where a read fails to
-fold, that is the optimizer's gap to close, not a reason to move the segments
-into a runtime value.
+per segment and one typed operation per hole. That is the design's claim, and
+a `wir_expect` fixture holds a tag to it. Where a read fails to fold, that is
+the optimizer's gap to close, not a reason to move the segments into a runtime
+value.
 
 Each distinct template shape instantiates the tag once, as inlining a builder at
 each site would. Two sites with the same shape share one instantiation.

@@ -36,6 +36,7 @@ the tree-sitter capture vocabulary, so any tree-sitter theme applies:
 | `operator`         | `matches`, `+`, `==`, `->`, …                |
 | `type`             | type references and type parameters          |
 | `property`         | `.field`, literal and pattern field names    |
+| `function`         | a template tag, `` sql`…` ``                 |
 | `function method`  | `.method()`                                  |
 | `variable`         | `stores[p]`, a contextual keyword as a name  |
 | `constant builtin` | `true` / `false` / `null` / `self`           |
@@ -49,7 +50,9 @@ sits outside the path rule, so it cannot tell a variant case from a static
 method. A segment spelled with a contextual keyword is a name all the same, so
 those words are captured there: `Instant::from(x)` is the shape every `From`
 impl is called through. `.method()` is not the same case: there the grammar
-matches the `(` alongside the name, so the call is certain.
+matches the `(` alongside the name, so the call is certain. A template tag is
+certain for the same reason — the backtick follows the name — so the tag takes
+`function` while the owner of a qualified one stays a `::` head.
 
 A dotted capture like `constant.builtin` becomes `class="constant builtin"`.
 See [`example/standalone.wado`](./example/standalone.wado) for a full styled
