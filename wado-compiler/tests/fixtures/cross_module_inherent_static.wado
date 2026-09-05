@@ -1,0 +1,16 @@
+// A static method on an inherent impl that lives in a module other than its
+// type's home. The call must name the method in the impl's module, as the
+// instance path already does (`cross_module_inherent_third.wado`): naming the
+// type's module instead minted an extern stub for a name the package defines,
+// and lowering reported it. A default argument resolves in the impl's module
+// for the same reason.
+use { Gadget } from "./sub/cross_module_inherent_third_type.wado";
+use { } from "./sub/cross_module_inherent_static_impl.wado";
+
+test "a static reached across the impl's module" {
+    assert Gadget::of(21).n == 21;
+}
+
+test "a static's default argument resolves in the impl's module" {
+    assert Gadget::origin().n == 0;
+}
