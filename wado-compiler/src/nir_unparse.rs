@@ -444,7 +444,7 @@ impl<'a> NirUnparser<'a> {
                 self.write_indent();
                 self.output.push_str("continue;\n");
             }
-            StmtKind::LabeledBlock { label, block } => {
+            StmtKind::LabeledBlock { label, block, .. } => {
                 let block = *block;
                 self.write_indent();
                 self.output.push_str(label);

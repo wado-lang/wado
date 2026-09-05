@@ -6,7 +6,7 @@
 //! that off bare `Expr` statements only, and reboxes what the decomposition
 //! moves one level down — every round, past the optimizer's iteration cap.
 
-use crate::nir_arena::{BlockId, ExprKind, NodeRef, Operand, StmtId, StmtKind};
+use crate::nir_arena::{BlockId, BlockRole, ExprKind, NodeRef, Operand, StmtId, StmtKind};
 use crate::nir_engine::{Engine, Rule};
 use crate::tir::TypeTable;
 use crate::token::Span;
@@ -29,7 +29,7 @@ impl Rule for DropValueRule {
         let mut changed = false;
         let mut new_stmts = Vec::with_capacity(stmts.len());
         for s in stmts {
-            let Some((label, block)) = discarded(s)
+            let Some((label, block, role)) = discarded(s)
                 .then(|| plan_labeled_block(engine, s))
                 .flatten()
             else {
@@ -38,7 +38,7 @@ impl Rule for DropValueRule {
             };
             let span = engine.body.stmts[s].span;
             strip_exits(engine, block, &label);
-            new_stmts.push(engine.alloc_stmt(StmtKind::LabeledBlock { label, block }, span));
+            new_stmts.push(engine.alloc_stmt(StmtKind::LabeledBlock { label, block, role }, span));
             changed = true;
         }
         if changed {
@@ -72,7 +72,7 @@ fn emit_discarded(engine: &mut Engine, op: Operand, span: Span, out: &mut Vec<St
 
 /// The (label, block) of a statement whose whole value is a labeled block with
 /// exits this pass can rewrite. The caller decides the value is discarded.
-fn plan_labeled_block(engine: &Engine, s: StmtId) -> Option<(String, BlockId)> {
+fn plan_labeled_block(engine: &Engine, s: StmtId) -> Option<(String, BlockId, BlockRole)> {
     let StmtKind::Expr(Operand::Expr(e)) = &engine.body.stmts[s].kind else {
         return None;
     };
@@ -80,6 +80,7 @@ fn plan_labeled_block(engine: &Engine, s: StmtId) -> Option<(String, BlockId)> {
         label,
         block,
         result_type,
+        role,
     } = &engine.body.exprs[*e].kind
     else {
         return None;
@@ -87,7 +88,7 @@ fn plan_labeled_block(engine: &Engine, s: StmtId) -> Option<(String, BlockId)> {
     if *result_type == TypeTable::UNIT {
         return None;
     }
-    let (label, block) = (label.clone(), *block);
+    let (label, block, role) = (label.clone(), *block, *role);
     // A fall-through would leave the value in the tail statement, which is not
     // an exit this pass rewrites.
     let last = *engine.body.blocks[block].stmts.last()?;
@@ -97,7 +98,7 @@ fn plan_labeled_block(engine: &Engine, s: StmtId) -> Option<(String, BlockId)> {
     ) {
         return None;
     }
-    strippable(engine, block, &label).then_some((label, block))
+    strippable(engine, block, &label).then_some((label, block, role))
 }
 
 /// Whether every `break <label>` in `block` sits where [`strip_stmt`] rewrites
@@ -128,9 +129,9 @@ fn strippable_stmt(engine: &Engine, s: StmtId, label: &str) -> bool {
         StmtKind::Loop { body } => strippable(engine, *body, label),
         // A block rebinding the label owns every break to it inside, so neither
         // walk descends.
-        StmtKind::LabeledBlock { label: l, block } => {
-            l == label || strippable(engine, *block, label)
-        }
+        StmtKind::LabeledBlock {
+            label: l, block, ..
+        } => l == label || strippable(engine, *block, label),
         StmtKind::Let { .. }
         | StmtKind::LetDestructure { .. }
         | StmtKind::Expr(_)
@@ -186,7 +187,9 @@ fn strip_stmt(engine: &mut Engine, s: StmtId, label: &str, out: &mut Vec<StmtId>
             out.push(s);
             return changed;
         }
-        StmtKind::LabeledBlock { label: l, block } => {
+        StmtKind::LabeledBlock {
+            label: l, block, ..
+        } => {
             let (shadows, block) = (l == label, *block);
             let changed = !shadows && strip_exits(engine, block, label);
             out.push(s);

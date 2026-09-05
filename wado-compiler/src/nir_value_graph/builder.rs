@@ -1736,7 +1736,7 @@ impl<'a> Builder<'a> {
             // it — that IS fall-through, and the tail-only walk cannot see
             // early self-breaks, so scan the subtree too. Over-approximating
             // the break's reachability only adds an arm to the join (sound).
-            StmtKind::LabeledBlock { block, label } => {
+            StmtKind::LabeledBlock { block, label, .. } => {
                 self.block_falls_through(*block) || block_breaks_to(self.body, *block, label)
             }
             // A `Loop` falls through only via `break`, which we do not

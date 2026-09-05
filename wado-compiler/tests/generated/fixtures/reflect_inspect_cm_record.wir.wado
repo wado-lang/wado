@@ -114,8 +114,8 @@ fn "reflect_inspect_cm_record.wado/__cm_binding__Stdout_write_via_stream"(data) 
 }
 
 fn "reflect_inspect_cm_record.wado/__cm_export__run"() {
-    let __r: ref "core:prelude/string.wado//String";
-    let __f: ref "core:prelude/format.wado//Formatter";
+    let __local_1: ref "core:prelude/string.wado//String";
+    let __local_2: ref "core:prelude/format.wado//Formatter";
     let handle: i32;
     let packed: i64;
     let rx_11: i32;
@@ -132,13 +132,13 @@ fn "reflect_inspect_cm_record.wado/__cm_export__run"() {
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:reflect_inspect_cm_record.wado::__modules_initialized = 1;
     };
-    __r = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-    __f = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __r };
-    "core:prelude/traits.wado/wasi:clocks/system_clock.wado/Instant^core:prelude/traits.wado/Inspect::inspect$spec0"(__f);
+    __local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
+    __local_2 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_1 };
+    "core:prelude/traits.wado/wasi:clocks/system_clock.wado/Instant^core:prelude/traits.wado/Inspect::inspect$spec0"(__local_2);
     rx_11 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_12 = builtin::i32_wrap_i64(packed >> 32_i64);
     handle = "reflect_inspect_cm_record.wado/__cm_binding__Stdout_write_via_stream"(rx_11);
-    "core:rt/write_string_to_stream"(tx_12, __r, 1);
+    "core:rt/write_string_to_stream"(tx_12, __local_1, 1);
     "wasi/future-drop-readable:transmission-cli"(handle);
     "wasi/task-return"(0);
 }

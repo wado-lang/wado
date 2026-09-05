@@ -611,6 +611,15 @@ run = "mise run -C benchmark http-routing"
 description = "Build all languages and report Wasm sizes"
 run = "mise run -C wasm-size report-wasm-size"
 
+[tasks.report-const-regions]
+description = "Count the compile-time regions that survive optimization, by cause"
+run = """
+#!/usr/bin/env bash
+set -xe -o pipefail
+cargo build --bin wado
+node scripts/const-region-census.mjs
+"""
+
 [tasks.jco-deps]
 description = "Install the released jco for the vendor-free pipeline (scripts/jco)"
 run = "cd scripts/jco && npm install"

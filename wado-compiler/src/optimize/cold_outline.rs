@@ -428,7 +428,9 @@ fn escapes_from<'a>(
             StmtKind::Loop { body: b } => {
                 return escapes_from(body, NodeRef::Block(*b), labels, loops + 1);
             }
-            StmtKind::LabeledBlock { label, block } => return scoped(labels, label, *block, loops),
+            StmtKind::LabeledBlock { label, block, .. } => {
+                return scoped(labels, label, *block, loops);
+            }
             _ => {}
         },
         NodeRef::Expr(e) => {

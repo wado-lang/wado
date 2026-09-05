@@ -9,10 +9,11 @@ use cranelift_entity::EntityRef;
 use crate::nir::NirFunction;
 use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
+use crate::niri::{build_callee_map, build_ctfe_builtin_map};
 
 use super::aggregate_forward::AggregateForwardRule;
 use super::const_branch_prune::{BranchPruneRule, PruneMode};
-use super::const_folding::{ConstFoldRule, build_callee_map, build_ctfe_builtin_map};
+use super::const_folding::ConstFoldRule;
 use super::drop_value::DropValueRule;
 use super::elide_box_local::build_elide_box_local;
 use super::elide_local::ElideRule;

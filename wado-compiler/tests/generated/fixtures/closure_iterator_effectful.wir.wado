@@ -90,7 +90,7 @@ fn "closure_iterator_effectful.wado/run"() with Stdout {
     let elements: ref Array<i32>;
     let self_2: ref "core:prelude/slice.wado//SliceValueIter<i32>";
     let item_8: i32;
-    let __r: ref "core:prelude/string.wado//String";
+    let __local_2: ref "core:prelude/string.wado//String";
     let handle: i32;
     let packed: i64;
     let rx_25: i32;
@@ -115,12 +115,12 @@ fn "closure_iterator_effectful.wado/run"() with Stdout {
             }
             item_8 = builtin::array_get_value<i32>(_licm_repr_35, __hfs_index_55);
             __hfs_index_55 = __hfs_index_55 + 1;
-            __r = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-            "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(item_8, __r);
+            __local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
+            "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(item_8, __local_2);
             rx_25 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
             tx_26 = builtin::i32_wrap_i64(packed >> 32_i64);
             handle = "closure_iterator_effectful.wado/__cm_binding__Stdout_write_via_stream"(rx_25);
-            "core:rt/write_string_to_stream"(tx_26, __r, 1);
+            "core:rt/write_string_to_stream"(tx_26, __local_2, 1);
             "wasi/future-drop-readable:transmission-cli"(handle);
             continue l1;
         };

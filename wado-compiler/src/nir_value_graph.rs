@@ -799,6 +799,19 @@ impl ValuePool {
         seen: &mut IndexSet<ValueId>,
         out: &mut IndexSet<u32>,
     ) {
+        self.for_each_opaque_local(v, seen, |idx, _| {
+            out.insert(idx);
+        });
+    }
+
+    /// Every `Opaque(Local)` leaf under `v`, with the leaf's own id — the one
+    /// [`Self::type_of`] answers for.
+    pub fn for_each_opaque_local(
+        &self,
+        v: ValueId,
+        seen: &mut IndexSet<ValueId>,
+        mut f: impl FnMut(u32, ValueId),
+    ) {
         // Worklist with a visited set, not recursion: an induction `LoopPhi` is
         // self-referential (`body_iter` = `binary(phi, step)`), so a recursive walk
         // would not terminate. The visited set bounds the traversal at each value's
@@ -810,7 +823,7 @@ impl ValuePool {
             }
             if let ValueKind::Opaque(oid) = self.kind(v) {
                 if let Some(OpaqueSource::Local(idx)) = self.opaque_source(*oid) {
-                    out.insert(idx);
+                    f(idx, v);
                 }
                 continue;
             }

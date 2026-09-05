@@ -1897,7 +1897,7 @@ impl FunctionTranslator<'_, '_> {
                     else_body,
                 })
             }
-            StmtKind::LabeledBlock { label, block } => {
+            StmtKind::LabeledBlock { label, block, .. } => {
                 self.label_stack.push(LabelEntry {
                     label: Some(label.clone()),
                     is_loop_break: false,

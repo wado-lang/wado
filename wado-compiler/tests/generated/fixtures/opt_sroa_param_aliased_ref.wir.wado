@@ -106,7 +106,7 @@ fn "opt_sroa_param_aliased_ref.wado/__cm_binding__Stdout_write_via_stream"(data)
 fn "opt_sroa_param_aliased_ref.wado/__cm_export__run"() {
     let n: ref "opt_sroa_param_aliased_ref.wado//Node";
     let result: i32;
-    let __r: ref "core:prelude/string.wado//String";
+    let __local_2: ref "core:prelude/string.wado//String";
     let handle: i32;
     let packed: i64;
     let rx_16: i32;
@@ -125,12 +125,12 @@ fn "opt_sroa_param_aliased_ref.wado/__cm_export__run"() {
     };
     n = struct.new "opt_sroa_param_aliased_ref.wado//Node" { value: 0 };
     result = "opt_sroa_param_aliased_ref.wado/run_loop"(n, n);
-    __r = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(result, __r);
+    __local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
+    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(result, __local_2);
     rx_16 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_17 = builtin::i32_wrap_i64(packed >> 32_i64);
     handle = "opt_sroa_param_aliased_ref.wado/__cm_binding__Stdout_write_via_stream"(rx_16);
-    "core:rt/write_string_to_stream"(tx_17, __r, 1);
+    "core:rt/write_string_to_stream"(tx_17, __local_2, 1);
     "wasi/future-drop-readable:transmission-cli"(handle);
     "wasi/task-return"(0);
 }

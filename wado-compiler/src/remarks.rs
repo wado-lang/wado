@@ -1,18 +1,23 @@
-//! Optimizer remarks (WEP 2026-06-03): surface the value-semantic copies that
-//! survive optimization and would otherwise be invisible while coding. After the
-//! NIR pipeline a survivor is a `$value_copy$T` helper call, an `array_clone` /
-//! `array_clone_shallow` spine copy, or a `copy_value`.
+//! Optimizer remarks (WEP 2026-06-03): the costs that survive optimization and
+//! would otherwise be invisible while coding — a value-semantic copy, a branch a
+//! build-time parameter still decides, a block computing a constant at run time.
 //!
 //! NIR is the last IR carrying per-expression spans and `wir_build` lowers these
 //! one-to-one, so walking optimized NIR yields exact source locations. Detection
-//! covers the entry package alone — a dependency's internals would drown out the
-//! program — and `array_copy` is bulk movement, not a copy, so it is excluded.
+//! covers the entry package alone: a dependency's internals would drown out the
+//! program.
+
+use cranelift_entity::EntityRef;
 
 use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
 use crate::nir::{FunctionRef, NirUnaryOp};
-use crate::nir_arena::{Body, ExprId, ExprKind, NodeRef};
+use crate::nir_arena::{Body, ExprId, ExprKind, NodeRef, StmtKind};
 use crate::nir_package::NirPackage;
+use crate::niri::{
+    CtfeBuiltin, CtfeBuiltinMap, build_callee_map, build_ctfe_builtin_map, is_ctfe_runnable,
+    materializing_globals, region_queries,
+};
 use crate::tir::{TypeId, TypeTable};
 use crate::token::Span;
 
@@ -88,7 +93,6 @@ impl Collector<'_> {
     /// If the expression `id` is a surviving value-copy operation, return the
     /// type whose value is copied.
     fn copied_type(&self, body: &Body, id: ExprId) -> Option<TypeId> {
-        use cranelift_entity::EntityRef;
         let node = &body.exprs[id];
         let ExprKind::Call { func_id, args, .. } = &node.kind else {
             return None;
@@ -438,4 +442,113 @@ fn branch_gate(body: &Body, node: NodeRef) -> Option<(crate::nir_arena::Operand,
         },
         NodeRef::Block(_) | NodeRef::Pat(_) => None,
     }
+}
+
+/// Report each block that computes a constant at run time: a compile-time region
+/// the fold did not reach. Read off the final IR, never off a refusal a pass
+/// recorded, so it retires itself as the fold reaches each shape.
+pub fn collect_const_region_remarks(package: &NirPackage) -> Vec<Remark> {
+    let callees = build_callee_map(package);
+    let ctfe_builtins = build_ctfe_builtin_map(package);
+    let materializing = materializing_globals(package);
+    let names = ctfe_runnable_names(package);
+    let type_table_ref = package.type_table.borrow();
+    let type_table: &TypeTable = &type_table_ref;
+
+    let mut remarks = Vec::new();
+    for func_rc in &package.functions {
+        let func = func_rc.borrow();
+        if !func.module_source.is_entry_package() {
+            continue;
+        }
+        let Some(body) = &func.body else {
+            continue;
+        };
+        for region in region_queries(body, &callees, &ctfe_builtins, &materializing, type_table) {
+            // Reading an outer local means no constant to miss; writing one
+            // means an inner block of a template, reported through its parent.
+            if region.reads_outer || region.writes_outer {
+                continue;
+            }
+            let surviving = surviving_calls(body, region.expr, &names, &ctfe_builtins);
+            let cause = match (region.refusal, surviving.is_empty()) {
+                (Some(refusal), _) => refusal.describe().to_string(),
+                (None, false) => format!(
+                    "{} still runs here",
+                    surviving
+                        .iter()
+                        .map(|n| format!("`{n}`"))
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                ),
+                (None, true) => "no call on its path explains it".to_string(),
+            };
+            remarks.push(Remark {
+                message: format!("this block computes a constant at run time: {cause}"),
+                module: func.module_source.clone(),
+                span: body.exprs[region.expr].span,
+            });
+        }
+    }
+    remarks
+}
+
+/// The functions on `region`'s own path the engine was free to run and did not,
+/// under the names their authors wrote. A call under a `cold_path` marker is in
+/// the block but not on the path, and naming it buries the callee that is.
+///
+/// Empty is an answer: the fold waits on a value the engine cannot represent
+/// rather than a body it cannot run, which `WADO_TRACE=ctfe_stmt` locates.
+fn surviving_calls(
+    body: &Body,
+    region: ExprId,
+    names: &[Option<String>],
+    ctfe_builtins: &CtfeBuiltinMap,
+) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    let mut stack = vec![(NodeRef::Expr(region), false)];
+    while let Some((node, in_cold)) = stack.pop() {
+        let in_cold = in_cold || block_is_cold(body, node, ctfe_builtins);
+        if !in_cold
+            && let NodeRef::Expr(e) = node
+            && let ExprKind::Call { func_id, .. } = &body.exprs[e].kind
+            && let Some(Some(name)) = names.get(func_id.index())
+            && !out.contains(name)
+        {
+            out.push(name.clone());
+        }
+        body.for_each_child(node, |c| stack.push((c, in_cold)));
+    }
+    out
+}
+
+/// Whether `node` is a block the program itself marks unlikely, which the
+/// optimizer spells as a `cold_path` call among its statements.
+fn block_is_cold(body: &Body, node: NodeRef, ctfe_builtins: &CtfeBuiltinMap) -> bool {
+    let NodeRef::Block(b) = node else {
+        return false;
+    };
+    body.blocks[b].stmts.iter().any(|s| {
+        let StmtKind::Expr(op) = &body.stmts[*s].kind else {
+            return false;
+        };
+        op.as_expr().is_some_and(|e| {
+            matches!(&body.exprs[e].kind, ExprKind::Call { func_id, .. }
+                if ctfe_builtins.get(func_id) == Some(&CtfeBuiltin::ColdPath))
+        })
+    })
+}
+
+/// Display name per `func_id`, for the functions a compile-time frame can run.
+/// `None` for every other id — a builtin, an impure callee — so a call to one is
+/// not named as work the engine declined.
+fn ctfe_runnable_names(package: &NirPackage) -> Vec<Option<String>> {
+    package
+        .functions
+        .iter()
+        .map(|f| {
+            let f = f.borrow();
+            is_ctfe_runnable(&f).then(|| crate::name::diagnostic_function_name(&f.name).to_string())
+        })
+        .collect()
 }
