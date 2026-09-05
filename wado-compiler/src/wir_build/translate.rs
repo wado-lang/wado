@@ -2721,6 +2721,14 @@ impl FunctionTranslator<'_, '_> {
                 let translated_args: Vec<WirInstr> =
                     args.iter().map(|a| self.translate_operand(*a)).collect();
                 let import_name = target.import_name();
+                // The core import is the canonical's to type, not the call
+                // site's: a cancel answers with the `u32` its copy ended on
+                // where the declaring signature states no result. One binding
+                // both types the import and drops the value it returns.
+                let discards_result = expr.type_id == TypeTable::UNIT
+                    && target.canonical().is_some_and(
+                        crate::canonical::CanonicalIntrinsic::returns_discarded_result,
+                    );
                 // Look up in WASI imports (registered by register_imports from TIR imports)
                 let func_id = if let Some(func_id) = self
                     .ctx
@@ -2742,18 +2750,27 @@ impl FunctionTranslator<'_, '_> {
                                 .type_id_to_wir_type(self.type_table, self.operand_type_id(*a))
                         })
                         .collect();
-                    let results =
+                    let mut results =
                         if expr.type_id == TypeTable::UNIT || expr.type_id == TypeTable::NEVER {
                             vec![]
                         } else {
                             vec![self.ctx.type_id_to_wir_type(self.type_table, expr.type_id)]
                         };
+                    if discards_result {
+                        assert!(results.is_empty(), "a UNIT call declares no result");
+                        results.push(WirType::I32);
+                    }
                     self.ctx
                         .ensure_canonical(intrinsic.clone(), params, results)
                 };
-                WirInstr::Call {
+                let call = WirInstr::Call {
                     func_id,
                     args: translated_args,
+                };
+                if discards_result {
+                    WirInstr::Drop(Box::new(call))
+                } else {
+                    call
                 }
             }
 

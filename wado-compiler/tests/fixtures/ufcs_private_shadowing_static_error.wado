@@ -1,0 +1,15 @@
+// `ufcs_private_shadowing_method_error.wado` for a receiver-less method. The
+// shadowing rule reached the impl-block ladder alone, so the associated-function
+// index still answered with the trait impl's entry, which declares no reach of
+// its own. The private inherent method then answered from another module, and
+// the two entries counted together left the callee with no signature, so
+// liveness dropped it and the call reify emitted named nothing.
+
+use m from "./sub/ufcs_shadowed_private_static_target.wado";
+
+export fn run() {
+    let _ = m::P::make();
+}
+
+__DATA__
+{"compile_error": "method `make` of `P` is private to its defining file"}

@@ -220,6 +220,11 @@ impl MethodSig {
         usize::from(self.self_kind != crate::ast::SelfKind::None)
     }
 
+    /// The non-receiver parameter types, parallel to [`Self::params`].
+    pub(crate) fn value_param_types(&self) -> Vec<TypeId> {
+        self.decl.param_types[self.first_value_param()..].to_vec()
+    }
+
     /// Where `decl.type_params` splits: the declaring block's slots before
     /// this index, the method's own after it.
     pub(crate) fn declaring_split(&self) -> usize {

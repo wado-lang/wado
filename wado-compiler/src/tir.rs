@@ -4647,6 +4647,16 @@ impl TirExprKind {
         let (receiver, rest) = args.split_first()?;
         Some((&receiver.expr, func, rest))
     }
+
+    /// `args[0]` of a call whose callee declares a receiver, whichever spelling
+    /// wrote it. [`Self::as_method_call`] answers for dot syntax alone, and
+    /// gates the lowering rules only that spelling may take.
+    pub fn call_receiver(&self) -> Option<(&TirExpr, &FunctionRef)> {
+        let TirExprKind::Call { func, args, .. } = self else {
+            return None;
+        };
+        Some((&args.first()?.expr, func))
+    }
 }
 
 #[derive(Debug, Clone)]
