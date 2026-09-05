@@ -165,8 +165,19 @@ The kind is the identity here, so this case carries no `DeclInfo`: the module is
 `String`, `i128` and `u128` read as primitives to a programmer and are none:
 each is a prelude struct — `i128` and `u128` are `#[compiler_item]` structs of
 two 64-bit limbs — with private fields, so they classify as `Struct` and, having
-no visible members downstream, cannot be opened there either. The gap between
-what `Primitive` covers and what a consumer means by "leaf" is recorded below.
+no visible members downstream, cannot be opened there either.
+
+That they land in `opaque` rather than beside `i32` is not a question left
+unanswered. A coarser one — leaf or aggregate — is computed from these cases
+and never the reverse, so the split is the superset: merging `primitive` into a
+leaf case would lose the difference between `i32` and a struct this site may not
+open, which `type_info()` still reports as `Struct`. No consumer branches on the
+coarse question either, because reflection offers one action per side and only
+one of them: an aggregate is walked through the kind bound an arm proves, while
+reading a leaf's value needs a bound reflection never carries (`Display`,
+`Serialize`). `primitive` and `opaque` therefore admit the same body — delegate
+to a bound the signature already has, or name the type — and a predicate
+telling them apart would serve no branch.
 
 A structural case keeps its components rather than rendering them away, which
 is why the flat "name + module + args" shape the earlier WEP sketched does not
@@ -383,22 +394,6 @@ one back is the harder half, since a structural type has no `AstId` for
 - [ ] Render every `TypeInfo` case in `symbol_notation`.
 - [ ] Decide what `wado query "core:prelude#&Point"` answers — the target's
       declaration, a synthesized view, or a diagnostic naming the limit.
-
-### A leaf is not a `Primitive`, and nothing says which it is
-
-`String`, `i128` and `u128` classify as `Struct` and reach `opaque` downstream,
-while `i32` reaches `primitive`. Nothing breaks — every derivation writes
-`impl … for String`, and both arms already say "do not walk this" — but a
-consumer asking "is this an aggregate I should recurse into" reads two arms for
-one answer, and `opaque` also carries structs that genuinely are aggregates it
-may not see.
-
-Marking the three (`#[primitive]` on the declaration, folding them into
-`Primitive`) misstates them; a separate leaf predicate states the question
-directly but is a second classification over the same cases.
-
-- [ ] Decide whether the leaf/aggregate question gets an answer of its own, and
-      where it lives.
 
 ### The classification must not read `PrimitiveType::I128`
 
