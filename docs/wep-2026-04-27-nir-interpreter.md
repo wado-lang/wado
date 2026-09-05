@@ -25,18 +25,19 @@ every evaluation, and it keeps the formatting code alive in the binary. Every
 `${}` over constants, every `to_string()` on a literal and every constant
 `assert` message pays that. Measured at `-Os` on a program that prints one
 interpolation, against the same program printing the literal, which costs
-2 012 bytes:
+1 997 bytes:
 
-| Interpolation                    | Cost   | Over the literal |
-| -------------------------------- | ------ | ---------------- |
-| `${"y"}`, `${42}`, `${42:?}`     | ~2 030 | ~18              |
-| `${255:x}`, `${7:04}`, `${true}` | ~2 035 | ~23              |
-| `${'x'}`                         | 2 355  | 343              |
-| `${3.5}`                         | 6 269  | 4 257            |
+| Interpolation                | Cost   | Over the literal |
+| ---------------------------- | ------ | ---------------- |
+| `${"y"}`, `${42}`, `${42:?}` | ~2 015 | ~18              |
+| `${7:04}`, `${true}`         | ~2 020 | ~24              |
+| `${'x'}`                     | 2 340  | 343              |
+| `${255:x}`                   | 5 197  | 3 200            |
+| `${3.5}`                     | 6 411  | 4 414            |
 
-The first two rows fold to the literal; `char` and floats do not. The roadmap is
-ordered against a census of the corpus rather than against this document's
-guesses.
+The first two rows fold to the literal; `char`, `{:x}` and floats do not. The
+roadmap is ordered against a census of the corpus rather than against this
+document's guesses.
 
 ## Decision
 
@@ -275,8 +276,8 @@ literals, `Array::slice`'s computed bounds fold, and the corpus is recounted.
 ### 3. The frame owns storage
 
 `` `${'x'}` `` still leaves `Formatter::pad` standing, which the remark names,
-where `` `${true}` `` folds and reports nothing. That is the last non-float
-interpolation paying for its formatter.
+where `` `${true}` `` folds and reports nothing. With `` `${255:x}` `` it is
+what still pays for its formatter short of floats.
 
 - [ ] What distinguishes the `char` path from the `bool` one.
 - [ ] A place-valued field, so an aggregate can carry a reference. Today such an
