@@ -167,6 +167,24 @@ fn record_export_groups_into_default_interface() {
     );
 }
 
+/// `i128` / `u128` are prelude structs, so they cross the Component Model
+/// boundary as their own record rather than being rejected. `map_primitive` used
+/// to carry an "`i128` has no WIT representation" arm beside this, reachable
+/// only through `PrimitiveType::I128`, which nothing produced for a user type.
+#[test]
+fn wide_int_export_emits_its_prelude_record() {
+    check(
+        "use { i128 } from \"core:prelude/int128.wado\";\n\
+         export fn widen(v: i128) -> i128 { return v; }",
+        "package root:component;\n\n\
+         interface entry {\n  \
+           record i128 {\n    low: u64,\n    high: s64,\n  }\n  \
+           widen: func(v: i128) -> i128;\n\
+         }\n\n\
+         world command {\n  export entry;\n}",
+    );
+}
+
 #[test]
 fn cli_program_emits_faithful_world_imports_and_run_export() {
     // A `run` entry with `with Stdout` maps to the standard `wasi:cli/run`
