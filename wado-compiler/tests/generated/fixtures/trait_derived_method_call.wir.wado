@@ -155,13 +155,11 @@ type "functype//core:serde/trait_derived_method_call.wado/Pair<i32>^core:serde/S
 
 type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write$spec0$scalar" = fn(ref "core:prelude/string.wado//String", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(58)
 
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar" = fn(i32, ref "core:prelude/string.wado//String");  // TypeId(59)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(59)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(60)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(60)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(61)
-
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(62)
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(61)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -325,13 +323,10 @@ fn "trait_derived_method_call.wado/__test_2_a_primitive_s_impl_answers_a_method_
     let __fuse_at_11: i32;
     let __fuse_at_12: i32;
     let __fuse_at_15: i32;
-    let __local_2: ref "core:prelude/string.wado//String";
     let __sroa_ser_out: ref "core:prelude/string.wado//String";
     __sroa_ser_out = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
-    __local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(7, __local_2);
-    __sroa_ser_out = __local_2;
-    __v0 = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_1: ref Array<u8>; __array_clone_src_1 = __sroa_ser_out.repr; let __array_clone_len_3: i32; __array_clone_len_3 = __sroa_ser_out.used; let __array_clone_dst_2: ref Array<u8>; __array_clone_dst_2 = builtin::array_new<u8>(__array_clone_len_3); builtin::array_copy<u8>(__array_clone_dst_2, 0, __array_clone_src_1, 0, __array_clone_len_3); __array_clone_dst_2), used: __sroa_ser_out.used };
+    __sroa_ser_out = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(55), used: 1 };
+    __v0 = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_1: ref Array<u8>; __array_clone_src_1 = __sroa_ser_out.repr; let __array_clone_dst_2: ref Array<u8>; __array_clone_dst_2 = builtin::array_new<u8>(1); builtin::array_copy<u8>(__array_clone_dst_2, 0, __array_clone_src_1, 0, 1); __array_clone_dst_2), used: 1 };
     __cond_5 = "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/traits.wado/Eq::eq"(__v0, global:trait_derived_method_call.wado::__const_obj_33);
     if @unlikely(__cond_5 == 0) {
         cold_path;
@@ -2283,37 +2278,6 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, new_used_56);
     }, start_57 = self.used, self.used = new_used_56, start_57;
-}
-
-fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(self, f) {
-    let is_negative: bool;
-    let abs_val: u64;
-    let digit_count: i32;
-    let offset: i32;
-    let val_6: i64;
-    let n: i32;
-    let t: u64;
-    is_negative = self < 0;
-    val_6 = builtin::i64_extend_i32_s(self);
-    abs_val = select i64(val_6 < 0_i64, 0_i64 - val_6, val_6);
-    digit_count = __inline_count_digits_u64_1: block -> i32 {
-        if abs_val == 0_i64 {
-            break __inline_count_digits_u64_1: 1;
-        }
-        n = 0;
-        t = abs_val;
-        b215: block {
-            l216: loop {
-                break_if b215 t <=u 0_i64;
-                n = n + 1;
-                t = t /u 10_i64;
-                continue l216;
-            };
-        };
-        break __inline_count_digits_u64_1: n;
-    };
-    offset = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write$spec0$scalar"(f, is_negative, global:core:prelude/primitive.wado::__const_obj_92, digit_count);
-    "core:prelude/primitive.wado/write_decimal_digits"(f.repr, offset, abs_val, digit_count);
 }
 
 export fn "trait_derived_method_call.wado/__cm_export____test_0_a_derived_body_answers_a_method_call_on_a_struct" as "__test_0_a_derived_body_answers_a_method_call_on_a_struct"
