@@ -24,6 +24,18 @@ assert decoded matches { Ok(s) && s == "Wado" };
 
 ## Functions
 
+### `pub fn format<T: ReflectTemplate<Holes = [..V]>, ..V>(t: T) -> String`
+
+The tag an untagged template means: every hole rendered through its
+specifier into one buffer. `` format`x=${x}` `` is `` `x=${x}` ``.
+See WEP 2026-01-10.
+
+### `pub fn format<T: ReflectTemplate<Holes = [..V]>, ..V>(t: T) -> String`
+
+The tag an untagged template means: every hole rendered through its
+specifier into one buffer. `` format`x=${x}` `` is `` `x=${x}` ``.
+See WEP 2026-01-10.
+
 ### `pub fn eq_constant_time<A: AsByteSlice, B: AsByteSlice>(a: &A, b: &B) -> bool`
 
 Whether two byte strings are equal, in time that does not depend on where
@@ -3490,6 +3502,12 @@ _Fields are private._
 #### `pub fn new() -> String`
 
 Create a new empty string.
+
+#### `pub fn raw<T: ReflectTemplate<Holes = [..V]>, ..V>(t: T) -> String`
+
+The tag keeping a template's escapes as written: `` String::raw`a\nb` ``
+is `"a\\nb"`, its holes rendered as the untagged template renders
+them. See WEP 2026-01-10.
 
 #### `pub fn with_capacity(capacity: i32) -> String`
 
