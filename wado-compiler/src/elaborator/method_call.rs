@@ -2313,12 +2313,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // The blanket's own declaration of the method: its bucket is keyed by
         // the receiver *param*, which no name written at a call site reaches.
         let method_def = self.tysys.declared_method(blanket_def, method);
-        // Its defaults come from the template's signature: no receiver-keyed
+        // Its defaults come from the template's own signature: no receiver-keyed
         // lookup reaches a blanket, so the call site brings none.
-        let template = method_def.and_then(|def| self.tysys.signatures.method_sig(def).cloned());
-        let static_method_defaults = template
-            .as_ref()
-            .map(|sig| super::sig::Param::named_defaults(&sig.params))
+        let (static_method_defaults, template_defaults_module) = method_def
+            .and_then(|def| self.tysys.signatures.method_sig(def))
+            .map(|sig| {
+                (
+                    super::sig::Param::named_defaults(&sig.params),
+                    sig.defaults_module.clone(),
+                )
+            })
             .unwrap_or_default();
         let method_ref = StaticMethodRef::new(
             blanket_module.clone(),
@@ -2346,8 +2350,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             method,
             receiver_type_id,
         );
-        if !self.check_static_call_args(&param_types, args, arg_spans, &static_method_defaults, span)
-        {
+        if !self.check_static_call_args(
+            &param_types,
+            args,
+            arg_spans,
+            &static_method_defaults,
+            span,
+        ) {
             return Some(TypeTable::ERROR);
         }
 
@@ -2382,8 +2391,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             call_id,
             super::sem::types::StaticMethodDispatch {
                 method_def,
-                defaults_module: template
-                    .and_then(|sig| sig.defaults_module)
+                defaults_module: template_defaults_module
                     .unwrap_or_else(|| func_ref.module_source.clone()),
                 function_ref: func_ref,
                 param_is_mut: Vec::new(),

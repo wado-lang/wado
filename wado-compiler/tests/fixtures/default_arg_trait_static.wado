@@ -1,9 +1,9 @@
 //! Regression (issue #1977): a `trait` static's parameter default is declared
-//! on the trait, so the `impl`'s signature carries none. Every
-//! `Type::method()` spelling read that signature and rejected an omitted
-//! argument for arity instead of padding it. What the impl inherits is the
-//! trait's whole parameter list — names, defaults, and the module they resolve
-//! in — because a default may name the trait's module or an earlier parameter.
+//! on the trait, so the `impl`'s signature carries none, and every
+//! `Type::method()` spelling rejected an omitted argument for arity instead of
+//! padding it. The impl inherits the trait's whole parameter list: the names,
+//! the defaults, and the module they resolve in, because a default may name
+//! the trait's module or an earlier parameter.
 
 use { Tag } from "./sub/default_arg_trait_static_lib.wado";
 
@@ -50,9 +50,8 @@ impl Tag for Marker {
     }
 }
 
-// The default `Tag` declares calls this name in *its* module, where it answers
-// 3. This one is what the call site sees; padding under the wrong module takes
-// it, and the assertions below say which module answered.
+// `Tag`'s default calls this name in *its* module, where it answers 3. This is
+// the one the call site sees: padding under the wrong module takes it.
 fn origin() -> i32 {
     return 100;
 }

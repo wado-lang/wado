@@ -142,9 +142,9 @@ impl Signatures {
                 .get_mut(&def)
                 .expect("every key was just read from this map");
             sig.defaults_module = Some(module);
-            for (param, declared) in sig.params.iter_mut().zip(declared) {
-                param.name = declared.name;
-                param.default = declared.default;
+            for (param, from_trait) in sig.params.iter_mut().zip(declared) {
+                param.name = from_trait.name;
+                param.default = from_trait.default;
             }
         }
     }
@@ -204,10 +204,10 @@ pub(crate) struct MethodSig {
     /// Canonical name from `#[cm("…")]`, resolved at the declaration.
     pub(crate) cm_name: Option<String>,
     pub(crate) is_async: bool,
-    /// Where [`Self::params`]' defaults were written, when that is not this
-    /// declaration's own module: a trait's, for the methods implementing it.
-    /// A default resolves in the scope that wrote it, so a call site pads from
-    /// here rather than from the module it reached the callee through.
+    /// Where [`Self::params`]' defaults were written, when another declaration
+    /// wrote them: the trait's module, for a method implementing one. A default
+    /// resolves in the scope that wrote it, so a call site pads from here
+    /// rather than from the module it reached the callee through.
     pub(crate) defaults_module: Option<ModuleSource>,
 }
 

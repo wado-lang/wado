@@ -1279,8 +1279,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         .iter()
                         .find_map(crate::ast::Attribute::cm_identifier),
                     is_async: method.is_async,
-                    // A trait impl's are the trait's, filled once every
-                    // module's declarations are assembled.
+                    // A trait impl takes the trait's, once every module's
+                    // declarations are assembled.
                     defaults_module: None,
                 },
             );

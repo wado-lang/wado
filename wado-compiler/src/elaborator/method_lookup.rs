@@ -2905,8 +2905,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             param_names: method_param_names,
             consumes_self: _,
             inherent_visibility,
-            // Reify pads this path's defaults under the caller, as it does for
-            // every `MethodDispatch`; no perspective swap reads a module here.
+            // Reify pads a `MethodDispatch` under the caller: no swap reads it.
             defaults_module: _,
         } = method_info?;
 

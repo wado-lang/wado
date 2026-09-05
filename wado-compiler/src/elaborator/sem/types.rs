@@ -702,8 +702,9 @@ pub(crate) struct CalleeParams {
     pub(crate) param_defaults: Vec<(String, Option<crate::ast::Expr>)>,
     pub(crate) param_types: Vec<TypeId>,
     pub(crate) self_in_args: bool,
-    /// Set where the defaults were written outside the callee's own module —
-    /// on the trait it implements. See [`StaticMethodDispatch::defaults_module`].
+    /// The module the defaults were written in, when that is not the callee's
+    /// own: the trait it implements. See
+    /// [`StaticMethodDispatch::defaults_module`].
     pub(crate) defaults_module: Option<crate::module_source::ModuleSource>,
 }
 
@@ -756,7 +757,6 @@ impl StaticMethodDispatch {
             method_def,
             defaults_module: params
                 .defaults_module
-                .clone()
                 .unwrap_or_else(|| function_ref.module_source.clone()),
             function_ref,
             type_args,
