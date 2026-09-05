@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1788621919491,
+  "lastUpdate": 1788627142668,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -53693,6 +53693,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/2b17ea16e73b8728ec5327ae935917c34e968369"
         },
         "date": 1788621918730,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 2013,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6560,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18891,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 277505,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "98e8ad2e8953bb3fe06088fb2c304c70d591ee4b",
+          "message": "Merge pull request #1979 from wado-lang/claude/skills-pull-request-guidelines-ulbf91\n\nchore(hooks): drive the review-response and distill steps from hooks",
+          "timestamp": "2026-09-06T01:37:21+09:00",
+          "tree_id": "b0578e14fc1cd90376c1d1bccafcbf53290be0ad",
+          "url": "https://github.com/wado-lang/wado/commit/98e8ad2e8953bb3fe06088fb2c304c70d591ee4b"
+        },
+        "date": 1788627142255,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
