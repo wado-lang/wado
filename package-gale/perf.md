@@ -162,6 +162,33 @@ is Wado-wide rather than Gale's, but this is the benchmark it showed on: the
 parser and `TreeBuilder` discard a `pop()` per closed node, and each was
 allocating the `Option` it threw away.
 
+### The optimizer reaches `classify` (landed, 2026-09-05)
+
+Two Wado-wide gaps, both found by reading `classify`'s `-O2` WIR after the
+levers above and fixed in the compiler rather than here:
+
+- The inliner _held_ `classify` every round — a function whose parameters,
+  were they constant, would fold its override loop away is kept small for a
+  folded-price admission — but no call site ever passes a constant token kind,
+  so it was never inlined and never received inlining either: `List::len`,
+  `into_iter` and one `SliceRefIter::next` per rule-stack element, each
+  boxing an `i32`, stayed calls on ~5300 `classify` calls per highlight. Holds
+  are now released once the loop converges with them in place.
+- `drop_value` left the `Option` a discarded `pop()` builds when the `pop()`
+  closed an `if` body — 26 sites in the SQLite parser, one per closed node.
+
+| syntax-highlight, release host, 5 alternating pairs | ms/iter     |
+| --------------------------------------------------- | ----------- |
+| before                                              | 1.549–1.578 |
+| after                                               | 1.421–1.517 |
+
+Still on the table in the highlight half: `HighlightVisitor::new` re-resolves a
+fully static mapping on every call — ~170 `capture_id_of` scans and the
+`class_text` rewrites, ~2.5% of the profile. The compile-time engine will not
+fold it (its 10K-step budget is far under the string compares it takes), so
+the fix is `highlight_gen` emitting the resolved `default_ids` /
+`capture_classes` tables directly.
+
 ### Live profile (`syntax_highlight`, 2999 leaf samples @1 ms, 2026-09-02)
 
 Taken after the two levers above, before `nir/drop_value` and before the token

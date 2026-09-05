@@ -1,7 +1,8 @@
-// Test: a discarded value closing a statement's block keeps only its effects.
-// `xs.pop()` is the last statement of an `if` body and of a loop body; neither
-// construct yields a value, so the `Option` its inlined body builds on both
-// exits is dead there as much as in `let _ = xs.pop()`.
+// Test: a discarded value closing a block that yields nothing keeps only its
+// effects. `xs.pop()` is the last statement of an `if` body, of a loop body,
+// and of a `match` arm inside a unit `if`; none of those leaves a value, so
+// the `Option` its inlined body builds on both exits is dead there as much as
+// in `let _ = xs.pop()`.
 
 use { println, Stdout } from "core:cli";
 
@@ -16,6 +17,16 @@ fn drain(n: i32) -> i32 {
     while xs.len() > 2 {
         xs.pop();
     }
+    match n {
+        5 => {
+            if xs.len() > 1 {
+                xs.pop();
+            }
+        },
+        _ => {
+            xs.push(n);
+        },
+    }
     return xs.len();
 }
 
@@ -25,7 +36,7 @@ export fn run() with Stdout {
 
 __DATA__
 {
-    "stdout": "2\n",
+    "stdout": "1\n",
     "wir_not_expect:O2": [
         "Option<i32>"
     ]
