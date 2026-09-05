@@ -5,6 +5,45 @@
 
 use std::fmt;
 
+/// The `core:kiln/generator` world FQ name: what a generator package declares
+/// in `[world]`, and the target world its source is analyzed under.
+pub const GENERATOR_WORLD_FQ: &str = "core:kiln/generator";
+
+/// The parts of a `module:` build-dependency specifier: the
+/// `[build-dependencies]` lookup key (`ns:name` or `lib:nick`), an optional
+/// pinned `@version`, and an optional `/submodule` path. The coordinate and
+/// version never contain `/`, so the first `/` starts the submodule; the `@`
+/// split only applies to a segment carrying a `:`.
+pub struct SpecParts<'a> {
+    pub key: &'a str,
+    pub version: Option<&'a str>,
+    pub submodule: Option<&'a str>,
+}
+
+/// Parse a `module:` specifier into its [`SpecParts`].
+#[must_use]
+pub fn parse_spec(spec: &str) -> SpecParts<'_> {
+    let (head, submodule) = match spec.split_once('/') {
+        Some((h, s)) => (h, Some(s)),
+        None => (spec, None),
+    };
+    let (key, version) = match head.split_once('@') {
+        Some((k, v)) if k.contains(':') => (k, Some(v)),
+        _ => (head, None),
+    };
+    SpecParts {
+        key,
+        version,
+        submodule,
+    }
+}
+
+/// The `[build-dependencies]` lookup key for a `module:` specifier.
+#[must_use]
+pub fn spec_key(spec: &str) -> &str {
+    parse_spec(spec).key
+}
+
 /// A forward-slash, NFC-normalized file path relative to the project root.
 ///
 /// Wrapped to keep cache-key hashing consistent regardless of where the path
@@ -169,6 +208,11 @@ pub struct Invocation {
     /// Excluded from [`Invocation::identity_tuple`] — equivalence is decided
     /// by `options_canonical` alone.
     pub raw_options: Option<crate::ast::AttrValue>,
+    /// Span of the inline `options:` key, or of the whole `use` clause when
+    /// the clause wrote none: what the driver blames when it re-validates
+    /// `raw_options`, long after the AST is gone. Diagnostics only; excluded
+    /// from [`Invocation::identity_tuple`].
+    pub options_span: crate::token::Span,
 }
 
 impl Invocation {
@@ -200,6 +244,29 @@ impl Invocation {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn parse_spec_splits_version_and_submodule() {
+        let bare = parse_spec("wado-lang:gale");
+        assert_eq!(bare.key, "wado-lang:gale");
+        assert_eq!(bare.version, None);
+        assert_eq!(bare.submodule, None);
+
+        let versioned = parse_spec("wado-lang:gale@0.0.9");
+        assert_eq!(versioned.key, "wado-lang:gale");
+        assert_eq!(versioned.version, Some("0.0.9"));
+        assert_eq!(versioned.submodule, None);
+
+        let sub = parse_spec("example:proto-codegen@1.2/generator");
+        assert_eq!(sub.key, "example:proto-codegen");
+        assert_eq!(sub.version, Some("1.2"));
+        assert_eq!(sub.submodule, Some("generator"));
+
+        let sub_no_ver = parse_spec("lib:gen/sub");
+        assert_eq!(sub_no_ver.key, "lib:gen");
+        assert_eq!(sub_no_ver.version, None);
+        assert_eq!(sub_no_ver.submodule, Some("sub"));
+    }
 
     #[test]
     fn normalize_strips_dot_slash() {
@@ -247,6 +314,7 @@ mod tests {
             output_dir: InvocationPath::normalize("build/kiln/a"),
             options: crate::kiln::options_check::CanonicalOptions::default(),
             raw_options: None,
+            options_span: crate::token::Span::default(),
         };
         let inv_b = Invocation {
             decl_site: DeclSite {

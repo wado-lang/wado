@@ -19,47 +19,14 @@ use wado_manifest::{DependencySource, LockFile, LockedPackage, Manifest};
 
 use crate::oci;
 
-/// The `core:kiln/generator` world FQ name.
-pub const GENERATOR_WORLD_FQ: &str = "core:kiln/generator";
+/// The specifier grammar lives with [`wado_compiler::kiln::GeneratorSpec`], the
+/// type that carries it: the LSP resolves the same `module:` string against the
+/// same `[build-dependencies]` table, off the compiler crate alone.
+pub use wado_compiler::kiln::{GENERATOR_WORLD_FQ, SpecParts, parse_spec, spec_key};
 
 /// The OCI repository sub-path a Kiln generator publishes to (`wado publish`
 /// maps the `core:kiln/generator` world to this segment).
 pub const GENERATOR_WORLD_SEGMENT: &str = "core-kiln-generator";
-
-/// The parts of a `module:` build-dependency specifier: the `[build-dependencies]`
-/// lookup key (`ns:name` or `lib:nick`), an optional pinned `@version`, and an
-/// optional `/submodule` path. The coordinate and version never contain `/`, so
-/// the first `/` starts the submodule; the `@` split only applies to a segment
-/// carrying a `:`.
-pub struct SpecParts<'a> {
-    pub key: &'a str,
-    pub version: Option<&'a str>,
-    pub submodule: Option<&'a str>,
-}
-
-/// Parse a `module:` specifier into its [`SpecParts`].
-#[must_use]
-pub fn parse_spec(spec: &str) -> SpecParts<'_> {
-    let (head, submodule) = match spec.split_once('/') {
-        Some((h, s)) => (h, Some(s)),
-        None => (spec, None),
-    };
-    let (key, version) = match head.split_once('@') {
-        Some((k, v)) if k.contains(':') => (k, Some(v)),
-        _ => (head, None),
-    };
-    SpecParts {
-        key,
-        version,
-        submodule,
-    }
-}
-
-/// The `[build-dependencies]` lookup key for a `module:` specifier.
-#[must_use]
-pub fn spec_key(spec: &str) -> &str {
-    parse_spec(spec).key
-}
 
 /// The highest version published at the generator's world sub-path matching
 /// `req`. Tags are listed on the sub-path repository — which can be public on
@@ -215,29 +182,6 @@ pub fn locked_generator_versions(manifest_root: &Path) -> IndexMap<String, Strin
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn parse_spec_splits_version_and_submodule() {
-        let bare = parse_spec("wado-lang:gale");
-        assert_eq!(bare.key, "wado-lang:gale");
-        assert_eq!(bare.version, None);
-        assert_eq!(bare.submodule, None);
-
-        let versioned = parse_spec("wado-lang:gale@0.0.9");
-        assert_eq!(versioned.key, "wado-lang:gale");
-        assert_eq!(versioned.version, Some("0.0.9"));
-        assert_eq!(versioned.submodule, None);
-
-        let sub = parse_spec("example:proto-codegen@1.2/generator");
-        assert_eq!(sub.key, "example:proto-codegen");
-        assert_eq!(sub.version, Some("1.2"));
-        assert_eq!(sub.submodule, Some("generator"));
-
-        let sub_no_ver = parse_spec("lib:gen/sub");
-        assert_eq!(sub_no_ver.key, "lib:gen");
-        assert_eq!(sub_no_ver.version, None);
-        assert_eq!(sub_no_ver.submodule, Some("sub"));
-    }
 
     #[test]
     fn resolved_build_dep_locked_package_pins_integrity_and_world() {

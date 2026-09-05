@@ -718,10 +718,12 @@ impl Default for Engine {
 /// emission to an inner host, while also capturing every emitted
 /// diagnostic into an internal buffer. Forwarding preserves the inner
 /// host's side effects (logging, error counting) so wrapping is
-/// observationally invisible to it.
-struct DiagnosticCollector<'a, H> {
+/// observationally invisible to it — unless it was built by
+/// [`DiagnosticCollector::silencing`].
+pub(crate) struct DiagnosticCollector<'a, H> {
     inner: &'a H,
     diagnostics: std::sync::Mutex<Vec<CompilerDiagnostic>>,
+    forward: bool,
 }
 
 impl<'a, H> DiagnosticCollector<'a, H> {
@@ -729,6 +731,16 @@ impl<'a, H> DiagnosticCollector<'a, H> {
         Self {
             inner,
             diagnostics: std::sync::Mutex::new(Vec::new()),
+            forward: true,
+        }
+    }
+
+    /// Collect without forwarding: the wrapped host never learns of a
+    /// diagnostic emitted through this one.
+    pub(crate) fn silencing(inner: &'a H) -> Self {
+        Self {
+            forward: false,
+            ..Self::new(inner)
         }
     }
 
@@ -761,7 +773,9 @@ impl<H: CompilerHost> CompilerHost for DiagnosticCollector<'_, H> {
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .push(diagnostic.clone());
-        self.inner.emit_diagnostic(diagnostic);
+        if self.forward {
+            self.inner.emit_diagnostic(diagnostic);
+        }
     }
 
     // Delegate every non-diagnostic capability to the wrapped host — the
@@ -795,7 +809,8 @@ impl<H: CompilerHost> CompilerHost for DiagnosticCollector<'_, H> {
 /// `override_invocations` short-circuits kiln discovery: a runtime-backed
 /// host (native `wado-cli`) supplies an [`InvocationIndex`] it built by
 /// running the generators, and it is used verbatim. When `None`, the
-/// consume-only on-disk discovery (`kiln::prepare_invocations`) runs.
+/// consume-only on-disk discovery runs instead. Either way the clause and
+/// `options` checks in `kiln::prepare_invocations` still report on the source.
 ///
 /// Every failure path emits its diagnostic directly through `host` and
 /// returns [`Semantics::empty`], so callers see a uniformly-shaped
@@ -817,10 +832,8 @@ async fn build_semantics<H: CompilerHost>(
     for e in &parsed.errors {
         host.emit_diagnostic(wado_compiler::parse_error_diagnostic(e, Some(filename)));
     }
-    let invocations = match override_invocations {
-        Some(index) => index,
-        None => kiln::prepare_invocations(filename, &parsed.ast, host).await,
-    };
+    let invocations =
+        kiln::prepare_invocations(filename, &parsed.ast, override_invocations, host).await;
     match wado_compiler::load(
         parsed,
         Some(filename),
