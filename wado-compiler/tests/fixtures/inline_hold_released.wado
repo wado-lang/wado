@@ -1,13 +1,12 @@
 // Test: a callee held for a fold that never comes still receives inlining.
 //
-// `lookup` is over the `-O2` budget as written, and were its parameters
-// constant the branch over `kind` would fold and delete the scan loop. The
-// inliner holds it — splices nothing into it — to keep that option open for
-// the constants a later round may bring. No call site ever passes a constant
-// `kind`, so once the loop has converged with the hold still in place there
-// is nothing left to wait for: the hold is released, and `lookup`'s own
-// callees — `List::len`, the by-reference iterator — inline into it like any
-// other function's.
+// `lookup` is over the `-O2` budget as written, and a constant `kind` would
+// fold the branch over it and delete the scan loop. So the inliner holds it,
+// splicing nothing into it, to keep that admission open for the constants a
+// later round may bring. No call site ever passes one, so once the loop has
+// converged with the hold in place there is nothing left to wait for: the
+// hold is released, and `List::len` and the by-reference iterator inline into
+// `lookup` like any other function's callees.
 
 struct Table {
     ids: List<i32>,

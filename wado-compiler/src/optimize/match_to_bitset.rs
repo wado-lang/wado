@@ -1,20 +1,10 @@
-//! Match → bitset: a guardless `Match` over an integer, `char` or enum
-//! scrutinee whose arms are literals or ranges and whose bodies are constant
-//! booleans — the shape `x matches { A | B | … }` lowers to — becomes a mask
-//! test: `(x - min) as u32 < range & (WORD >> (x - min)) & 1 != 0`, `WORD`
-//! being the 64-bit word `x - min` falls in, picked by `select` when the set
-//! spans more than one, and the range compare alone when the members are
-//! contiguous. A handful of ALU instructions and no branch on the key, where
-//! the cascade pays a compare per member and the `br_table` an indirect branch
-//! keyed on the scrutinee. Ordered before `match_to_switch`, which would take
-//! the dense ones; a set past [`BITSET_MAX_WORDS`] falls through to it.
-//!
-//! The scrutinee is evaluated once into a fresh local and the offset into a
-//! second, so any scrutinee the match took is accepted and no read repeats
-//! work: the test is a `Block` of the two `let`s and the expression.
+//! Match → bitset: the set membership test `x matches { A | B | 'x'..='z' }`
+//! becomes `(x - min) as u32 < range & (WORD >> (x - min)) & 1 != 0`, which
+//! branches on nothing. Runs before `match_to_switch`, which takes what is
+//! left.
 
 use crate::nir::{FuncId, NirBinaryOp, NirUnaryOp};
-use crate::nir_arena::{ArmData, Body, ExprId, ExprKind, Operand, StmtKind};
+use crate::nir_arena::{ArmData, Body, ExprId, ExprKind, Operand, StmtId, StmtKind};
 use crate::nir_engine::{Engine, Rule};
 use crate::nir_value_graph::ValueKind;
 use crate::tir::{TypeId, TypeTable};
@@ -54,6 +44,13 @@ struct Bitset {
     default: bool,
 }
 
+/// The values one arm names, and what it yields for them.
+struct ArmSpan {
+    lo: i64,
+    hi: i64,
+    yields: bool,
+}
+
 impl Rule for MatchToBitsetRule<'_> {
     fn apply_expr(&self, engine: &mut Engine, id: ExprId) -> bool {
         let ExprKind::Match {
@@ -68,8 +65,8 @@ impl Rule for MatchToBitsetRule<'_> {
         }
         let scrutinee = *scrutinee;
         let scrut_type = engine.body.operand_type(scrutinee);
-        // The test offsets in `i32`, which every value of a narrower type
-        // survives the cast to.
+        // The offset is taken in `i32`, so a wider scrutinee would lose values
+        // to the cast.
         if scrutinee_bits(self.type_table.get(scrut_type)).is_none_or(|bits| bits > 32) {
             return false;
         }
@@ -84,23 +81,10 @@ impl Rule for MatchToBitsetRule<'_> {
 }
 
 fn analyze(arms: &[ArmData], body: &Body) -> Option<Bitset> {
-    // `match` is first-match-wins: a value keeps the first arm naming it, and
-    // the arms past a wildcard are dead. Without a wildcard the match is
-    // exhaustive, so every value has an arm and the default is never read.
-    let default = arms
-        .iter()
-        .find(|arm| {
-            matches!(
-                case_key(&body.pats[arm.pattern].kind),
-                Some(CaseKey::Wildcard)
-            )
-        })
-        .map_or(Some(false), |arm| body.operand_const_bool(arm.body))?;
-    // The spans first, so the width is known before a single value is walked:
-    // enumerating to find it would do the work of every arm the width goes on
-    // to refuse.
-    let mut spans: Vec<(i64, i64, bool)> = Vec::new();
-    let (mut min, mut max) = (i64::MAX, i64::MIN);
+    // The arms past a wildcard are dead. A match without one is exhaustive, so
+    // every value has an arm and nothing reads the default.
+    let mut spans = Vec::new();
+    let mut default = None;
     for arm in arms {
         if arm.guard.is_some() {
             return None;
@@ -109,17 +93,23 @@ fn analyze(arms: &[ArmData], body: &Body) -> Option<Bitset> {
         let (lo, hi) = match case_key(&body.pats[arm.pattern].kind)? {
             CaseKey::Value(v) => (v, v),
             CaseKey::Range { lo, hi } => (lo, hi),
-            CaseKey::Wildcard => break,
+            CaseKey::Wildcard => {
+                default = Some(yields);
+                break;
+            }
         };
-        spans.push((lo, hi, yields));
-        if yields == default {
-            continue;
-        }
-        // Only a member widens the window: a value outside it fails the range
-        // compare, which is the answer the default gives anyway. A span the
-        // range cannot hold refuses the match here rather than after the walk.
-        min = min.min(lo);
-        max = max.max(hi);
+        spans.push(ArmSpan { lo, hi, yields });
+    }
+    let default = default.unwrap_or(false);
+
+    // The window before a single value is walked: finding it by enumeration
+    // would do the work of every arm the width goes on to refuse. Only a
+    // member widens it, a value outside failing the range compare being the
+    // answer the default gives anyway.
+    let (mut min, mut max) = (i64::MAX, i64::MIN);
+    for span in spans.iter().filter(|s| s.yields != default) {
+        min = min.min(span.lo);
+        max = max.max(span.hi);
         if max.abs_diff(min) >= u64::from(64 * BITSET_MAX_WORDS) {
             return None;
         }
@@ -128,23 +118,22 @@ fn analyze(arms: &[ArmData], body: &Body) -> Option<Bitset> {
         return None;
     }
     let range = u32::try_from(max.abs_diff(min)).ok()?.checked_add(1)?;
-    // First-match-wins over the window the members span: a value an earlier
-    // arm named keeps that arm, so a later member arm does not claim it. Both
-    // sets are bitmaps over the window, so a span costs its own width and no
-    // membership scan.
+
+    // Bitmaps over the window, so a span costs its own width and no membership
+    // scan. `seen` is what makes it first-match-wins.
     let words_len = range.div_ceil(64) as usize;
     let mut seen = vec![0u64; words_len];
     let mut words = vec![0u64; words_len];
     let mut members = 0usize;
-    for (lo, hi, yields) in spans {
-        for v in lo.max(min)..=hi.min(max) {
+    for span in &spans {
+        for v in span.lo.max(min)..=span.hi.min(max) {
             let off = v.abs_diff(min);
             let (word, bit) = ((off / 64) as usize, 1u64 << (off % 64));
             if seen[word] & bit != 0 {
                 continue;
             }
             seen[word] |= bit;
-            if yields != default {
+            if span.yields != default {
                 words[word] |= bit;
                 members += 1;
             }
@@ -153,8 +142,6 @@ fn analyze(arms: &[ArmData], body: &Body) -> Option<Bitset> {
     if members < BITSET_MIN_MEMBERS {
         return None;
     }
-    // Every value in the window is a member, so the range compare answers on
-    // its own and a mask of all ones would only repeat it.
     if members == range as usize {
         words.clear();
     }
@@ -166,6 +153,67 @@ fn analyze(arms: &[ArmData], body: &Body) -> Option<Bitset> {
     })
 }
 
+/// Node construction at one span, so the test below reads as the expression it
+/// builds rather than as a run of arena calls.
+struct Build<'e, 'a> {
+    engine: &'e mut Engine<'a>,
+    span: Span,
+}
+
+impl Build<'_, '_> {
+    fn expr(&mut self, kind: ExprKind, ty: TypeId) -> Operand {
+        Operand::Expr(self.engine.alloc_expr(kind, ty, self.span))
+    }
+
+    fn int(&mut self, v: u64, ty: TypeId) -> Operand {
+        self.engine.const_operand(ValueKind::Int(v, ty), ty)
+    }
+
+    fn cast(&mut self, expr: Operand, ty: TypeId) -> Operand {
+        self.expr(
+            ExprKind::Cast {
+                expr,
+                target_type: ty,
+            },
+            ty,
+        )
+    }
+
+    fn binary(&mut self, left: Operand, op: NirBinaryOp, right: Operand, ty: TypeId) -> Operand {
+        self.expr(ExprKind::Binary { left, op, right }, ty)
+    }
+
+    /// A fresh immutable local bound to `value`, as its index and its `let`.
+    fn bind(&mut self, name: &str, ty: TypeId, value: Operand) -> (u32, StmtId) {
+        let name = format!("__bitset_{name}_{}", self.engine.locals().len());
+        let local_index = self.engine.alloc_local(name.clone(), ty, false);
+        let stmt = self.engine.alloc_stmt(
+            StmtKind::Let {
+                name,
+                local_index,
+                is_mut: false,
+                is_reactive: false,
+                type_id: ty,
+                value,
+                skip_value_copy: true,
+            },
+            self.span,
+        );
+        (local_index, stmt)
+    }
+
+    fn read(&mut self, local_index: u32, ty: TypeId) -> Operand {
+        let name = self.engine.locals()[local_index as usize].name.clone();
+        self.expr(
+            ExprKind::Local {
+                index: local_index,
+                name,
+            },
+            ty,
+        )
+    }
+}
+
 impl MatchToBitsetRule<'_> {
     fn build(
         &self,
@@ -175,105 +223,53 @@ impl MatchToBitsetRule<'_> {
         set: &Bitset,
         span: Span,
     ) -> ExprKind {
-        let alloc = |engine: &mut Engine, kind: ExprKind, ty: TypeId| {
-            Operand::Expr(engine.alloc_expr(kind, ty, span))
-        };
-        let int = |engine: &mut Engine, v: u64, ty: TypeId| {
-            engine.const_operand(ValueKind::Int(v, ty), ty)
-        };
-        let bind = |engine: &mut Engine, name: &str, ty: TypeId, value: Operand| {
-            let name = format!("__bitset_{name}_{}", engine.locals().len());
-            let local_index = engine.alloc_local(name.clone(), ty, false);
-            let stmt = engine.alloc_stmt(
-                StmtKind::Let {
-                    name,
-                    local_index,
-                    is_mut: false,
-                    is_reactive: false,
-                    type_id: ty,
-                    value,
-                    skip_value_copy: true,
-                },
-                span,
-            );
-            (local_index, stmt)
-        };
-        let read = |engine: &mut Engine, local_index: u32, ty: TypeId| {
-            let name = engine.locals()[local_index as usize].name.clone();
-            alloc(
-                engine,
-                ExprKind::Local {
-                    index: local_index,
-                    name,
-                },
-                ty,
-            )
-        };
-        let cast = |engine: &mut Engine, expr: Operand, ty: TypeId| {
-            alloc(
-                engine,
-                ExprKind::Cast {
-                    expr,
-                    target_type: ty,
-                },
-                ty,
-            )
-        };
-        let binary =
-            |engine: &mut Engine, left: Operand, op: NirBinaryOp, right: Operand, ty: TypeId| {
-                alloc(engine, ExprKind::Binary { left, op, right }, ty)
-            };
+        let b = &mut Build { engine, span };
 
-        // `let x = scrutinee; let off = (x as i32 - min) as u32;`
-        let (x, let_x) = bind(engine, "key", scrut_type, scrutinee);
-        let x = read(engine, x, scrut_type);
-        let x = if scrut_type == TypeTable::I32 {
-            x
+        let (key, let_key) = b.bind("key", scrut_type, scrutinee);
+        let key = b.read(key, scrut_type);
+        let key = if scrut_type == TypeTable::I32 {
+            key
         } else {
-            cast(engine, x, TypeTable::I32)
+            b.cast(key, TypeTable::I32)
         };
-        let min = int(engine, set.min as u64, TypeTable::I32);
-        let off = binary(engine, x, NirBinaryOp::Sub, min, TypeTable::I32);
-        let off = cast(engine, off, TypeTable::U32);
-        let (off, let_off) = bind(engine, "offset", TypeTable::U32, off);
+        let min = b.int(set.min as u64, TypeTable::I32);
+        let off = b.binary(key, NirBinaryOp::Sub, min, TypeTable::I32);
+        let off = b.cast(off, TypeTable::U32);
+        let (off, let_off) = b.bind("offset", TypeTable::U32, off);
 
-        let below = |engine: &mut Engine, bound: u32| {
-            let off = read(engine, off, TypeTable::U32);
-            let bound = int(engine, u64::from(bound), TypeTable::U32);
-            binary(engine, off, NirBinaryOp::Lt, bound, TypeTable::BOOL)
+        let below = |b: &mut Build, bound: u32| {
+            let off = b.read(off, TypeTable::U32);
+            let bound = b.int(u64::from(bound), TypeTable::U32);
+            b.binary(off, NirBinaryOp::Lt, bound, TypeTable::BOOL)
         };
-        let in_range = below(engine, set.range);
+        let in_range = below(b, set.range);
         let member = if let Some((&last_word, lower)) = set.words.split_last() {
             // The word the offset falls in, from the last one backwards so
             // each `select` guards the word below it.
-            let mut word = int(engine, last_word, TypeTable::U64);
+            let mut word = b.int(last_word, TypeTable::U64);
             for (i, &w) in lower.iter().enumerate().rev() {
-                let guard = below(engine, 64 * (i as u32 + 1));
-                let this = int(engine, w, TypeTable::U64);
-                word = alloc(
-                    engine,
-                    select_call(self.select_id, TypeTable::U64, guard, this, word),
-                    TypeTable::U64,
-                );
+                let guard = below(b, 64 * (i as u32 + 1));
+                let this = b.int(w, TypeTable::U64);
+                let call = select_call(self.select_id, TypeTable::U64, guard, this, word);
+                word = b.expr(call, TypeTable::U64);
             }
             // Wasm masks a shift count to the width, so the offset within the
             // word needs no `& 63`.
-            let shift = read(engine, off, TypeTable::U32);
-            let shift = cast(engine, shift, TypeTable::U64);
-            let shifted = binary(engine, word, NirBinaryOp::Shr, shift, TypeTable::U64);
-            let one = int(engine, 1, TypeTable::U64);
-            let bit = binary(engine, shifted, NirBinaryOp::BitAnd, one, TypeTable::U64);
-            let zero = int(engine, 0, TypeTable::U64);
-            let hit = binary(engine, bit, NirBinaryOp::NotEq, zero, TypeTable::BOOL);
-            // Both sides are pure and trap-free, so a bitwise `&` keeps the
+            let shift = b.read(off, TypeTable::U32);
+            let shift = b.cast(shift, TypeTable::U64);
+            let shifted = b.binary(word, NirBinaryOp::Shr, shift, TypeTable::U64);
+            let one = b.int(1, TypeTable::U64);
+            let bit = b.binary(shifted, NirBinaryOp::BitAnd, one, TypeTable::U64);
+            let zero = b.int(0, TypeTable::U64);
+            let hit = b.binary(bit, NirBinaryOp::NotEq, zero, TypeTable::BOOL);
+            // Both operands are pure and trap-free, so a bitwise `&` keeps the
             // test branch-free where `&&` would lower to a branch.
-            binary(engine, in_range, NirBinaryOp::BitAnd, hit, TypeTable::BOOL)
+            b.binary(in_range, NirBinaryOp::BitAnd, hit, TypeTable::BOOL)
         } else {
             in_range
         };
         let result = if set.default {
-            alloc(
-                engine,
+            b.expr(
                 ExprKind::Unary {
                     op: NirUnaryOp::Not,
                     expr: member,
@@ -284,6 +280,6 @@ impl MatchToBitsetRule<'_> {
             member
         };
         let tail = engine.alloc_stmt(StmtKind::Expr(result), span);
-        ExprKind::Block(engine.alloc_block(vec![let_x, let_off, tail], span))
+        ExprKind::Block(engine.alloc_block(vec![let_key, let_off, tail], span))
     }
 }

@@ -1,10 +1,12 @@
-// Test: `k matches { A | B | … }` over a constant set is a mask test — offset
-// from the smallest member, an unsigned range compare, a shift and a bit
-// test — rather than the `br_table` a dense set would otherwise lower to or the
-// compare cascade a sparse one keeps. A set spanning more than one 64-bit
-// word picks its word with a `select`; an enum set reads its discriminants; a
-// range member is expanded into the mask. The offset is bound once and the two
-// halves joined with a bitwise `&`, so nothing branches on the key.
+// Test: `k matches { A | B | … }` is a mask test, not the `br_table` a dense
+// set would lower to or the compare cascade a sparse one keeps. It offsets
+// from the smallest member, compares that offset unsigned against the width,
+// then shifts the mask down and reads a bit. The offset is bound once and the
+// two halves joined with a bitwise `&`, so nothing branches on the key.
+//
+// Covered here: a set past one 64-bit word, which picks its word with a
+// `select`; an enum set, read as discriminants; a range member; and a
+// wildcard yielding `true`, which negates the test.
 
 enum Kind {
     A,

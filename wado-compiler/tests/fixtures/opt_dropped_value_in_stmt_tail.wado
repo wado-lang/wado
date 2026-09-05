@@ -1,8 +1,7 @@
 // Test: a discarded value closing a block that yields nothing keeps only its
-// effects. `xs.pop()` is the last statement of an `if` body, of a loop body,
-// and of a `match` arm inside a unit `if`; none of those leaves a value, so
-// the `Option` its inlined body builds on both exits is dead there as much as
-// in `let _ = xs.pop()`.
+// effects. `xs.pop()` closes an `if` body, a loop body, and a `match` arm
+// inside a unit `if`. None of those leaves a value, so the `Option` its
+// inlined body builds on both exits is as dead there as in `let _ = xs.pop()`.
 
 use { println, Stdout } from "core:cli";
 

@@ -168,8 +168,8 @@ paid on a benchmark `fts` never touched.
   dispatch-bound — cut the calls, not the branch. What does answer to dispatch is
   a cascade long enough to pay for that branch, or one that is not a cascade at
   all: independent `if`s no arm leaves test every key whatever matched, which
-  `nir/if_chain_to_match` is what fixes. A set _membership_ test —
-  `k matches { A | B | 'x'..='z' | … }` — is neither: `match_to_bitset` lowers
+  `nir/if_chain_to_match` is what fixes. A set _membership_ test,
+  `k matches { A | B | 'x'..='z' | … }`, is neither. `match_to_bitset` lowers
   it to a branch-free mask test when the scrutinee is 32 bits or narrower and
   the members span at most 256 values, so write it as the set rather than
   hand-rolling a range compare or a table. Past that span it is a `br_table`.

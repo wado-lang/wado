@@ -1,12 +1,12 @@
 // Test: what an `if` tests is read whatever the `if` itself yields.
 //
-// A `match` arm holding one `if` is that `if` as the arm's value, and the arm
-// of a discarded `match` yields nothing — but the condition is read all the
-// same. Here the condition is a call whose result is searched, so it lowers to
-// a value block whose tail is the inlined `contains`, a labeled block breaking
-// with a `bool` on both exits. Asking only whether the enclosing `if` yields
-// answers "no" and strips those breaks, leaving the branch testing nothing:
-// `gale-gen`'s `sll_advance` trapped on `unreachable` that way.
+// A `match` arm holding one `if` is that `if` as the arm's value, so the arm
+// of a discarded `match` yields nothing. The condition is read all the same.
+// Here it is a call whose result is searched, which lowers to a value block
+// whose tail is the inlined `contains`, a labeled block breaking with a `bool`
+// on both exits. Asking only whether the enclosing `if` yields answers "no"
+// and strips those breaks, leaving the branch testing nothing. That is how
+// `gale-gen`'s `sll_advance` came to trap on `unreachable`.
 
 use { println, Stdout } from "core:cli";
 

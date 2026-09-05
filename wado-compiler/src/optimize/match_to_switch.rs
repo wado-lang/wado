@@ -192,9 +192,8 @@ struct SwitchAnalysis {
     default_arm: Option<usize>,
 }
 
-/// The values one arm's pattern names, as the `i64` keys a dispatch over an
-/// integer-like scrutinee compares. Shared with `match_to_bitset`, so the two
-/// rules read one literal the same way.
+/// The values one arm's pattern names, as `i64` keys. Shared with
+/// `match_to_bitset`, so the two rules read one literal the same way.
 pub(super) enum CaseKey {
     Value(i64),
     /// Inclusive at both ends, `lo <= hi`.
@@ -205,9 +204,9 @@ pub(super) enum CaseKey {
     Wildcard,
 }
 
-/// `pat` as a [`CaseKey`], or `None` for a pattern no key dispatch takes: a
-/// binding (it would need an arm-local `let` of the scrutinee), a literal past
-/// `i64` (a wrapping cast would corrupt the range), an empty range, or any
+/// `pat` as a [`CaseKey`], or `None` for one no key dispatch takes: a binding,
+/// which would need an arm-local `let` of the scrutinee; a literal past `i64`,
+/// where a wrapping cast would corrupt the range; an empty range; or any
 /// destructuring pattern.
 pub(super) fn case_key(pat: &PatKind) -> Option<CaseKey> {
     Some(match pat {

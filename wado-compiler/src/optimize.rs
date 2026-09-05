@@ -702,10 +702,8 @@ fn run_optimization_passes(
         profiler.debug(&report);
     }
     if !iter_changed.is_empty() {
-        // `limit`, not `config.iterations`: a release grants the cap a second
-        // time, and the round it stopped at is the one to report. A run that
-        // stopped before the release still holds its callees, and each kept
-        // every call it makes — nothing downstream would say so.
+        // A run that stopped before the release still holds its callees, and
+        // each kept every call it makes. Nothing downstream would say so.
         let held = match inline_holds.still_held() {
             0 => String::new(),
             n => format!("; {n} function(s) still held by the inliner"),

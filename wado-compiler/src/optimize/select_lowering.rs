@@ -91,7 +91,7 @@ impl Rule for SelectLoweringRule<'_> {
     }
 }
 
-/// `builtin::select(cond, a, b)` over `ty`, for a rule synthesizing one.
+/// `builtin::select(cond, a, b)` over `ty`.
 pub(super) fn select_call(
     select_id: crate::nir::FuncId,
     ty: TypeId,

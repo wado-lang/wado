@@ -963,12 +963,9 @@ pub(super) fn locals_possibly_mutated(
     out
 }
 
-/// Whether `block`'s tail value reaches a consumer — a `let` initializer, an
-/// argument, a returned or broken value — walking the parent map up through
-/// the wrappers whose own position decides it. A block under a statement `if`
-/// yields iff that statement is the tail of a block that yields, which is the
-/// one shape WIR turns a statement `if` into a value. The chain is bounded by
-/// tree depth.
+/// Whether `block`'s tail value reaches a consumer: a `let` initializer, an
+/// argument, a returned or broken value. Walks the parent map, which is
+/// bounded by tree depth.
 pub(super) fn block_yields_value(engine: &Engine, block: BlockId) -> bool {
     node_yields_value(engine, NodeRef::Block(block))
 }

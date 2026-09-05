@@ -1352,17 +1352,9 @@ pub(super) struct InlineBudget {
 
 /// The callees [`Verdict::hold`] keeps un-spliced-into, carried across rounds.
 ///
-/// A hold is a bet on evidence a later round brings — the constants that would
-/// fold the loop out of the body. A loop that has converged with the hold still
-/// in place brings none, so the bet is settled: the function is never inlined
-/// on its folded price, and keeping it small buys nothing while every call it
-/// makes stays a call. [`InlineHolds::release`] then lets it receive inlining
-/// like any other function, and the loop runs on to settle what that opens.
-///
-/// A held function is skipped as a caller but still marked seen, so a hold
-/// that lapses on its own — a callee's price moved without touching the
-/// function's revision — has to re-dirty it here, or it would receive nothing
-/// to the end of the loop. The set therefore persists across rounds.
+/// A hold bets on constants a later round brings. A loop that converged with
+/// the hold still in place brings none, so [`Self::release`] settles the bet
+/// and lets the function receive inlining like any other.
 #[derive(Default)]
 pub(super) struct InlineHolds {
     held: IndexSet<FuncId>,
@@ -1370,8 +1362,10 @@ pub(super) struct InlineHolds {
 }
 
 impl InlineHolds {
-    /// Record this round's verdict on `id`, re-dirtying a function whose hold
-    /// has lapsed.
+    /// Record this round's verdict on `id`. A held function is skipped as a
+    /// caller but still marked seen, so a hold that lapses on its own — a
+    /// callee's price moved without touching this function's revision — has to
+    /// re-dirty it, or it would receive nothing to the end of the loop.
     fn settle(&mut self, id: FuncId, hold: bool, gate: &mut FunctionGate) {
         if hold && !self.released {
             self.held.insert(id);
@@ -1380,10 +1374,9 @@ impl InlineHolds {
         }
     }
 
-    /// Release every hold and mark the held functions for another round.
-    /// Returns whether there was anything to release. The drain plus the
-    /// [`Self::settle`] guard leave the set empty for good, so the second call
-    /// after the reopened run converges is the loop's exit.
+    /// Release every hold, marking those functions for another round. The
+    /// drain and the [`Self::settle`] guard leave the set empty for good, so
+    /// the call after the reopened run converges is the loop's exit.
     pub(super) fn release(&mut self, gate: &mut FunctionGate) -> bool {
         if self.held.is_empty() {
             return false;
@@ -1395,8 +1388,6 @@ impl InlineHolds {
         true
     }
 
-    /// The functions still held, for the report a run that never converged
-    /// prints: their calls stayed calls and the release never ran.
     pub(super) fn still_held(&self) -> usize {
         self.held.len()
     }
