@@ -18,6 +18,11 @@ that. Record which of these each finding was:
 - Grounded in a project rule the code breaks → fix it, and cite the rule.
 - Not real, or already recorded as a known gap → skip, and say why.
 
+Whose defect it is does not enter into it. `AGENTS.md` settles the question: a
+pre-existing issue must be fixed whether you found it or a reviewer pointed it
+out, and a compiler bug is P0 the moment you suspect one. Attributing a finding
+to this branch or to the tree costs time and changes nothing you then do.
+
 A severity label and an aggregate "merge risk" verdict track neither the truth
 nor what you have already answered. Neither is evidence of anything.
 
