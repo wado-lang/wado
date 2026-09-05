@@ -702,15 +702,18 @@ fn run_optimization_passes(
         profiler.debug(&report);
     }
     if !iter_changed.is_empty() {
-        // A run that never converged never released its inline holds either,
-        // so those functions kept every call they make. Named here because
-        // nothing downstream would say so.
+        // `limit`, not `config.iterations`: a release grants the cap a second
+        // time, and the round it stopped at is the one to report. A run that
+        // stopped before the release still holds its callees, and each kept
+        // every call it makes — nothing downstream would say so.
+        let held = match inline_holds.still_held() {
+            0 => String::new(),
+            n => format!("; {n} function(s) still held by the inliner"),
+        };
         let report = format!(
-            "NIR optimizer hit the {}-iteration cap without converging; still changing: [{}]; \
-             {} function(s) still held by the inliner",
-            config.iterations,
+            "NIR optimizer hit the {limit}-iteration cap without converging; \
+             still changing: [{}]{held}",
             iter_changed.join(", "),
-            inline_holds.still_held(),
         );
         profiler.debug(&report);
         // A pass reported a change it did not make, or is taking one step per

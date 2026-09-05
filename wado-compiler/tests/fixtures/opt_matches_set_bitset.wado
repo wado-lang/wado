@@ -39,6 +39,18 @@ fn digit_or_under(c: char) -> bool {
     return c matches { '0'..='9' | '_' };
 }
 
+// Two ranges with a hole between them: 3, 4 and 7..=10 are mask 243 over a
+// window of 8. (Overlapping ranges need no handling here — the pattern
+// checker rejects them before the optimizer sees the match.)
+fn ranges(k: i32) -> bool {
+    return k matches { 3..=4 | 7..=10 };
+}
+
+// Every value in the window is a member, so the range compare answers alone.
+fn contiguous(k: i32) -> bool {
+    return k matches { 20..=25 };
+}
+
 export fn run() {
     assert in_set(builtin::black_box(3));
     assert in_set(builtin::black_box(20));
@@ -66,6 +78,18 @@ export fn run() {
     assert !digit_or_under(builtin::black_box('/'));
     assert !digit_or_under(builtin::black_box(':'));
     assert !digit_or_under(builtin::black_box('a'));
+    assert ranges(builtin::black_box(3));
+    assert ranges(builtin::black_box(4));
+    assert !ranges(builtin::black_box(5));
+    assert !ranges(builtin::black_box(6));
+    assert ranges(builtin::black_box(7));
+    assert ranges(builtin::black_box(10));
+    assert !ranges(builtin::black_box(2));
+    assert !ranges(builtin::black_box(11));
+    assert contiguous(builtin::black_box(20));
+    assert contiguous(builtin::black_box(25));
+    assert !contiguous(builtin::black_box(19));
+    assert !contiguous(builtin::black_box(26));
 }
 
 __DATA__
@@ -75,6 +99,8 @@ __DATA__
         "(163575_i64 >>u ",
         "(85_i64 >>u ",
         "(71_i64 >>u ",
+        "(243_i64 >>u ",
+        " - 20) <u 6",
         "select u64(__bitset_offset",
         ") <u 18) & ((("
     ],

@@ -96,8 +96,11 @@ fn analyze(arms: &[ArmData], body: &Body) -> Option<Bitset> {
             )
         })
         .map_or(Some(false), |arm| body.operand_const_bool(arm.body))?;
-    let mut seen: Vec<i64> = Vec::new();
-    let mut members: Vec<i64> = Vec::new();
+    // The spans first, so the width is known before a single value is walked:
+    // enumerating to find it would do the work of every arm the width goes on
+    // to refuse.
+    let mut spans: Vec<(i64, i64, bool)> = Vec::new();
+    let (mut min, mut max) = (i64::MAX, i64::MIN);
     for arm in arms {
         if arm.guard.is_some() {
             return None;
@@ -108,42 +111,52 @@ fn analyze(arms: &[ArmData], body: &Body) -> Option<Bitset> {
             CaseKey::Range { lo, hi } => (lo, hi),
             CaseKey::Wildcard => break,
         };
-        // A range wider than the mask can hold is refused before it is walked.
-        if hi.abs_diff(lo) >= u64::from(64 * BITSET_MAX_WORDS) {
+        spans.push((lo, hi, yields));
+        if yields == default {
+            continue;
+        }
+        // Only a member widens the window: a value outside it fails the range
+        // compare, which is the answer the default gives anyway. A span the
+        // range cannot hold refuses the match here rather than after the walk.
+        min = min.min(lo);
+        max = max.max(hi);
+        if max.abs_diff(min) >= u64::from(64 * BITSET_MAX_WORDS) {
             return None;
         }
-        for v in lo..=hi {
-            if seen.contains(&v) {
+    }
+    if min > max {
+        return None;
+    }
+    let range = u32::try_from(max.abs_diff(min)).ok()?.checked_add(1)?;
+    // First-match-wins over the window the members span: a value an earlier
+    // arm named keeps that arm, so a later member arm does not claim it. Both
+    // sets are bitmaps over the window, so a span costs its own width and no
+    // membership scan.
+    let words_len = range.div_ceil(64) as usize;
+    let mut seen = vec![0u64; words_len];
+    let mut words = vec![0u64; words_len];
+    let mut members = 0usize;
+    for (lo, hi, yields) in spans {
+        for v in lo.max(min)..=hi.min(max) {
+            let off = v.abs_diff(min);
+            let (word, bit) = ((off / 64) as usize, 1u64 << (off % 64));
+            if seen[word] & bit != 0 {
                 continue;
             }
-            seen.push(v);
+            seen[word] |= bit;
             if yields != default {
-                members.push(v);
+                words[word] |= bit;
+                members += 1;
             }
         }
     }
-    if members.len() < BITSET_MIN_MEMBERS {
+    if members < BITSET_MIN_MEMBERS {
         return None;
     }
-    let min = *members
-        .iter()
-        .min()
-        .expect("at least BITSET_MIN_MEMBERS members");
-    let max = *members
-        .iter()
-        .max()
-        .expect("at least BITSET_MIN_MEMBERS members");
-    let range = u32::try_from(max.abs_diff(min)).ok()?.checked_add(1)?;
-    if range > 64 * BITSET_MAX_WORDS {
-        return None;
-    }
-    let mut words = Vec::new();
-    if members.len() < range as usize {
-        words = vec![0u64; range.div_ceil(64) as usize];
-        for v in members {
-            let off = v.abs_diff(min);
-            words[(off / 64) as usize] |= 1 << (off % 64);
-        }
+    // Every value in the window is a member, so the range compare answers on
+    // its own and a mask of all ones would only repeat it.
+    if members == range as usize {
+        words.clear();
     }
     Some(Bitset {
         min,
