@@ -2204,7 +2204,10 @@ fn build_inlined_labeled_block(
     collect_inner_labels(callee, NodeRef::Block(callee.root), &mut inner_labels);
     let mut label_map: IndexMap<String, String> = IndexMap::default();
     for inner_label in inner_labels {
-        label_map.insert(inner_label.clone(), format!("{label}__{inner_label}"));
+        label_map.insert(
+            inner_label.clone(),
+            crate::name::inlined_label(&label, &inner_label),
+        );
     }
 
     let ctx = InlineCtx {

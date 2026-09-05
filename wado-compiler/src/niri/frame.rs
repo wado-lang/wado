@@ -13,7 +13,7 @@ use crate::nir_visitor::NirRefVisitor;
 use crate::tir::TypeTable;
 
 use super::callee::{CallSite, CalleeKey};
-use super::place::{borrowed_place_operand, place_aliased_by_another, place_of};
+use super::place::{borrowed_place_operand, named_local, place_aliased_by_another, place_of};
 use super::region::{block_shape, region_needs, region_shape, value_block_shape};
 use super::trackability::Trackability;
 use super::{CallRun, CtfeBuiltin, FrameState, Interpreter, Lattice};
@@ -151,17 +151,6 @@ impl LoopSnapshot {
     }
 }
 
-/// The local `op` writes out, through the casts monomorphization leaves. A
-/// deref or a projection is not one: those name storage reached *through* a
-/// value rather than the value itself.
-fn named_local(body: &Body, op: Operand) -> Option<u32> {
-    match &body.exprs[op.as_expr()?].kind {
-        ExprKind::Local { index, .. } => Some(*index),
-        ExprKind::Cast { expr, .. } => named_local(body, *expr),
-        _ => None,
-    }
-}
-
 /// Whether a `&mut` argument's storage is also named by another argument. Each
 /// parameter binds its own snapshot and each write-back replays whole, so a
 /// second handle either reads a value the program never had or loses its own
@@ -248,7 +237,13 @@ impl Interpreter<'_> {
                         self.bind_ctfe_local(index, lattice);
                         Flow::Fallthrough(Lattice::Unevaluated)
                     }
-                    Lattice::NonConst | Lattice::Unevaluated => Flow::Bail,
+                    lattice @ (Lattice::NonConst | Lattice::Unevaluated) => {
+                        crate::compiler_trace!(
+                            "ctfe_stmt",
+                            "let local {index} did not reach a constant: {lattice:?}"
+                        );
+                        Flow::Bail
+                    }
                 }
             }
             StmtKind::Expr(op) => {
@@ -593,6 +588,7 @@ impl Interpreter<'_> {
     /// the alias still named.
     fn bind_ctfe_local(&mut self, index: u32, lattice: Lattice) {
         let lattice = if self.frame.ctfe_clobbered.contains(index) {
+            crate::compiler_trace!("region_seed", "local {index} is clobbered");
             Lattice::NonConst
         } else {
             lattice
@@ -673,7 +669,9 @@ impl Interpreter<'_> {
 
     /// The value bound to a by-value or shared-reference parameter. A shared
     /// reference cannot write, so the referent's own constant stands; one
-    /// retained past the callee's return is refused by `stores`.
+    /// retained past the callee's return is refused by `stores`. An alias
+    /// local passes its place's value, as `&place` does: the parameter reads
+    /// through what it receives.
     fn shared_ref_arg_value(&mut self, body: &Body, arg: Operand) -> Option<Value> {
         if let Some(e) = arg.as_expr()
             && let ExprKind::Unary {
@@ -683,6 +681,10 @@ impl Interpreter<'_> {
         {
             let inner = *inner;
             return self.operand_lattice_folded(body, inner).as_const();
+        }
+        if named_local(body, arg).is_some_and(|index| self.frame.place_aliases.contains_key(&index))
+        {
+            return self.projected_lattice(body, arg).as_const();
         }
         self.operand_lattice_folded(body, arg).as_const()
     }
@@ -858,21 +860,33 @@ impl Interpreter<'_> {
     /// The constant a self-contained region denotes, run as its own frame: one
     /// building its value in locals of its own is as self-contained as a call
     /// body. An outer local it only reads is seeded from the walker's
-    /// environment, sound because [`region_needs`] rejects write positions
-    /// and reference-typed mentions, which also confines writes to the scratch.
+    /// environment, sound because [`region_needs`] rejects write positions,
+    /// which also confines writes to the scratch.
     pub(super) fn try_region_fold(&mut self, body: &Body, e: ExprId) -> Option<Value> {
         let (block, label) = region_shape(body, e, self.type_table)?;
+        crate::compiler_trace!(
+            "region_seed",
+            "region {e:?} ({}): shaped",
+            self.type_table.type_name(body.exprs[e].type_id)
+        );
         if let Some(value) = self.frame.scratch_folds.get(&e) {
             return Some(value.clone());
         }
         if self.type_table.is_reference_shaped(body.exprs[e].type_id) {
+            crate::compiler_trace!("region_seed", "region {e:?}: reference-shaped, refused");
             return None;
         }
         if self.frame.region_misses.contains(&e) {
+            crate::compiler_trace!("region_seed", "region {e:?}: already missed");
             return None;
         }
         let needs = region_needs(body, block, self.facts, self.type_table);
-        if needs.refusal.is_some() {
+        if let Some(refusal) = needs.refusal {
+            crate::compiler_trace!(
+                "region_seed",
+                "region {e:?}: refused, {}",
+                refusal.describe()
+            );
             return None;
         }
         let mut seeds: Vec<(u32, Value)> = Vec::with_capacity(needs.free_reads.len());
@@ -889,12 +903,13 @@ impl Interpreter<'_> {
                 );
                 return None;
             };
-            // A scalar under a reference would be a value where the program
-            // holds an alias.
-            if read.is_reference && value.is_scalar() {
+            // A scalar under a writable reference would be a value where the
+            // program holds an alias: boxing collapses `&mut x` into a bare
+            // read, so no write position is left for `region_needs` to see.
+            if read.writable_reference && value.is_scalar() {
                 crate::compiler_trace!(
                     "region_seed",
-                    "region {e:?}: reference local {index} holds a scalar"
+                    "region {e:?}: writable reference local {index} holds a scalar"
                 );
                 return None;
             }
@@ -910,9 +925,18 @@ impl Interpreter<'_> {
         let value = value_of_block_flow(flow, label)
             .ok()
             .and_then(|lattice| lattice.as_const());
-        if value.is_none() {
-            crate::compiler_trace!("region_seed", "region {e:?}: run abandoned");
-            self.frame.region_misses.insert(e);
+        match &value {
+            None => {
+                crate::compiler_trace!("region_seed", "region {e:?}: run abandoned");
+                self.frame.region_misses.insert(e);
+            }
+            Some(v) => {
+                crate::compiler_trace!(
+                    "region_seed",
+                    "region {e:?}: folded (scalar={})",
+                    v.is_scalar()
+                );
+            }
         }
         value
     }

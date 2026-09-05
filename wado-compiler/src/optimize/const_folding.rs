@@ -152,6 +152,7 @@ fn fold_function(
     type_table: &TypeTable,
 ) -> bool {
     let mut func = func_rc.borrow_mut();
+    crate::compiler_trace!("region_seed", "folding {}", func.name);
     let NirFunction { body, locals, .. } = &mut *func;
     let Some(body) = body.as_mut() else {
         return false;

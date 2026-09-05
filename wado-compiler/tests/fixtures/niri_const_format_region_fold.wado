@@ -12,6 +12,11 @@
 // one body exhausts it and five of them stop folding. Each folded literal is
 // then globalized, so it is built once at instantiation rather than per call.
 // The runtime output is what proves the folded bytes are the right ones.
+//
+// `hex` does not fold yet: `Formatter::prepare_int_write` survives as a call
+// taking `&mut Formatter`, and a `Formatter` holds `buf: &mut String`, a field
+// the frame cannot value (the WEP's "place-valued field"). Its output is still
+// checked at run time.
 
 use { println, Stdout } from "core:cli";
 
@@ -63,7 +68,6 @@ __DATA__
         "array.new_fixed<u8>(98, 61, 116, 114, 117, 101)",
         "array.new_fixed<u8>(110, 101, 103, 61, 45, 55)",
         "array.new_fixed<u8>(112, 97, 100, 61, 48, 48, 48, 55)",
-        "array.new_fixed<u8>(104, 101, 120, 61, 102, 102)",
         "array.new_fixed<u8>(100, 98, 103, 61, 52, 50)"
     ]
 }

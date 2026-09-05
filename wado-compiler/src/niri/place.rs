@@ -37,6 +37,17 @@ pub(super) fn peel_wrappers(body: &Body, op: Operand) -> Option<ExprId> {
     Some(e)
 }
 
+/// The local `op` names as a value, through the casts monomorphization leaves.
+/// A deref or a projection is not one: those name storage reached *through*
+/// a value rather than the value itself.
+pub(super) fn named_local(body: &Body, op: Operand) -> Option<u32> {
+    match &body.exprs[op.as_expr()?].kind {
+        ExprKind::Local { index, .. } => Some(*index),
+        ExprKind::Cast { expr, .. } => named_local(body, *expr),
+        _ => None,
+    }
+}
+
 /// The local an lvalue or borrow chain roots at: `x`, `x.f`, `x[i]`, `*x`, a
 /// cast over any of those (a cast names the same storage as its operand), and
 /// any nesting.
@@ -88,9 +99,13 @@ pub(super) fn write_root_local(body: &Body, op: Operand) -> Option<u32> {
 /// The borrow `op` spells over a place: whether it is mutable, and the
 /// borrowed operand. `None` unless the operand borrows something
 /// [`place_of`] can root at a local — `&GLOBAL` and a borrow of an rvalue
-/// name no local place.
+/// name no local place. A cast over the borrow names the same borrow.
 pub(super) fn borrowed_place_operand(body: &Body, op: Operand) -> Option<(bool, Operand)> {
-    let ExprKind::Unary { op: unary, expr } = &body.exprs[op.as_expr()?].kind else {
+    let mut e = op.as_expr()?;
+    while let ExprKind::Cast { expr, .. } = &body.exprs[e].kind {
+        e = expr.as_expr()?;
+    }
+    let ExprKind::Unary { op: unary, expr } = &body.exprs[e].kind else {
         return None;
     };
     let is_mut = match unary {

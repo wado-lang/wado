@@ -4,6 +4,7 @@
 //! string template fold to a literal. Asked before the run, since the run copies
 //! the whole enclosing body while this only walks the block.
 
+use crate::name::RefKind;
 use crate::nir::NirUnaryOp;
 use crate::nir_arena::{
     BlockId, Body, ExprId, ExprKind, LocalSet, NodeRef, Operand, PatKind, StmtKind,
@@ -189,8 +190,7 @@ pub(super) fn region_needs(
     let mut refusal: Option<RegionRefusal> = None;
     let mut declared = LocalSet::default();
     let mut seen = LocalSet::default();
-    let mut mentioned: Vec<(u32, TypeId)> = Vec::new();
-    let mut promoted: Vec<u32> = Vec::new();
+    let mut mentioned: Vec<(u32, Option<TypeId>)> = Vec::new();
     let mut written = LocalSet::default();
     let mut stack = vec![NodeRef::Block(block)];
     while let Some(node) = stack.pop() {
@@ -247,7 +247,7 @@ pub(super) fn region_needs(
                 }
                 ExprKind::Local { index, .. } => {
                     if seen.insert(*index) {
-                        mentioned.push((*index, body.exprs[e].type_id));
+                        mentioned.push((*index, Some(body.exprs[e].type_id)));
                     }
                 }
                 ExprKind::Assign { target, .. } => {
@@ -274,26 +274,19 @@ pub(super) fn region_needs(
             let Operand::Value(v) = op else {
                 return;
             };
-            let mut named = crate::hashmap::IndexSet::default();
-            body.values.collect_opaque_locals(v, &mut named);
-            for index in named {
-                if seen.insert(index) {
-                    promoted.push(index);
-                }
-            }
+            let mut visited = crate::hashmap::IndexSet::default();
+            body.values
+                .for_each_opaque_local(v, &mut visited, |index, leaf| {
+                    if seen.insert(index) {
+                        mentioned.push((index, body.values.type_of(leaf)));
+                    }
+                });
         });
         body.for_each_child(node, |c| stack.push(c));
     }
-    let named = mentioned
-        .into_iter()
-        .map(|(index, ty)| (index, type_table.is_reference_shaped(ty)))
-        // A local reached only through a pool value carries no skeleton node to
-        // read a type off, so it is seeded as a reference: what a shape the
-        // frame cannot check is worth.
-        .chain(promoted.into_iter().map(|index| (index, true)));
     let mut out = Vec::new();
     let mut writes_outer = false;
-    for (index, is_reference) in named {
+    for (index, ty) in mentioned {
         if declared.contains(index) {
             continue;
         }
@@ -304,7 +297,9 @@ pub(super) fn region_needs(
         }
         out.push(FreeRead {
             index,
-            is_reference,
+            // A pool leaf without a recorded type counts as writable: the
+            // frame cannot check its shape.
+            writable_reference: ty.is_none_or(|ty| writable_reference(ty, type_table)),
         });
     }
     RegionNeeds {
@@ -324,10 +319,20 @@ pub(super) struct RegionNeeds {
     pub(super) writes_outer: bool,
 }
 
-/// A local a region reads without declaring, and whether it names a reference.
-/// Seeding a reference is sound only where the frame already reads it as a
-/// constant, which only the caller, holding the environment, knows.
+/// A local a region reads without declaring, and whether the mention names a
+/// reference the program can write through. Seeding one is sound only where
+/// the frame already reads it as a constant, which only the caller, holding
+/// the environment, knows.
 pub(super) struct FreeRead {
     pub(super) index: u32,
-    pub(super) is_reference: bool,
+    pub(super) writable_reference: bool,
+}
+
+/// Whether `ty` is a reference something can write through: `&mut`, or a box
+/// not known to stand for a shared borrow. A shared borrow only reads.
+fn writable_reference(ty: TypeId, type_table: &TypeTable) -> bool {
+    matches!(
+        RefKind::from_resolved(type_table.get(ty)),
+        Some(RefKind::Mut)
+    ) || type_table.is_mut_box(ty)
 }

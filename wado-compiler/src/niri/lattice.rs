@@ -18,6 +18,7 @@ use crate::tir::{PrimitiveType, ResolvedType, TypeId};
 
 use super::CtfeBuiltin;
 use super::pattern::PatternMatch;
+use super::place::named_local;
 use super::{GlobalKey, Interpreter, Lattice, PatBindings, let_ref_global};
 
 impl Interpreter<'_> {
@@ -113,9 +114,8 @@ impl Interpreter<'_> {
     /// has no value for — and [`Self::expr_to_lattice`] leaves that
     /// unevaluated, so a rebind or a capture never turns into a copy.
     pub(super) fn projected_lattice(&self, body: &Body, op: Operand) -> Lattice {
-        if let Some(e) = op.as_expr()
-            && let ExprKind::Local { index, .. } = &body.exprs[e].kind
-            && let Some((root, path)) = self.frame.place_aliases.get(index)
+        if let Some(index) = named_local(body, op)
+            && let Some((root, path)) = self.frame.place_aliases.get(&index)
         {
             return self
                 .place_value(*root, path)

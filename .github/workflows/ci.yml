@@ -78,11 +78,7 @@ jobs:
         with:
           shared-key: ci
           save-if: false
-      # DIAGNOSTIC (revert before merge): the region fold fires here but not
-      # on the runner; the trace names the statement the frame abandons at.
       - run: cargo test --locked --all -- --skip fixture_test_
-        env:
-          WADO_TRACE: ctfe_stmt,ctfe_call,region_seed,const_fold
 
   test-e2e-o0:
     name: Test (E2E O0)
@@ -130,10 +126,7 @@ jobs:
         with:
           shared-key: ci
           save-if: false
-      # DIAGNOSTIC (revert before merge): see test-core.
       - run: cargo test --locked -p wado-compiler --test e2e -- fixture_test_o2
-        env:
-          WADO_TRACE: ctfe_stmt,ctfe_call,region_seed,const_fold
 
   test-e2e-o3:
     name: Test (E2E O3)

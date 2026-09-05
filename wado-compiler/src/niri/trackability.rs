@@ -102,11 +102,19 @@ impl Reached {
             // agree: a borrow the frame aliases but this walk clobbers leaves
             // the frame holding no value for the place it just aliased.
             if *is_mut && reassigned.contains(*local_index) {
+                crate::compiler_trace!(
+                    "region_seed",
+                    "alias borrow skipped: let {local_index} is mut and reassigned"
+                );
                 continue;
             }
             let Some((is_mut, inner)) = borrowed_place_operand(body, *value) else {
                 continue;
             };
+            crate::compiler_trace!(
+                "region_seed",
+                "alias borrow recorded: let {local_index} over {inner:?} (mut={is_mut})"
+            );
             let reach = if is_mut { Reach::Write } else { Reach::Read };
             self.record(body, inner, reach);
         }
@@ -248,11 +256,19 @@ pub(super) fn aggregate_safe_locals(
 ) -> LocalSet {
     fn disqualify_root(body: &Body, op: Operand, set: &mut LocalSet) {
         if let Some(index) = lvalue_root_local(body, op) {
+            crate::compiler_trace!(
+                "region_seed",
+                "not aggregate-safe: local {index} via {op:?}"
+            );
             set.insert(index);
         }
     }
     let share_root = |body: &Body, op: Operand, set: &mut LocalSet| {
         if let Some(index) = shared_reference_root(body, op, type_table) {
+            crate::compiler_trace!(
+                "region_seed",
+                "not aggregate-safe: local {index} shared via {op:?}"
+            );
             set.insert(index);
         }
     };
@@ -341,6 +357,10 @@ pub(super) fn aggregate_safe_locals(
     value_reads.extend(reached.reads.iter().chain(&reached.writes).copied());
     for (e, index) in &local_mentions {
         if !value_reads.contains(e) {
+            crate::compiler_trace!(
+                "region_seed",
+                "not aggregate-safe: local {index} mentioned at {e:?} outside a read position"
+            );
             disqualified.insert(*index);
         }
     }
@@ -362,6 +382,7 @@ pub(super) fn aggregate_safe_locals(
 pub(super) fn clobbered_locals(body: &Body, reached: &Reached, type_table: &TypeTable) -> LocalSet {
     fn disqualify(body: &Body, op: Operand, set: &mut LocalSet) {
         if let Some(index) = lvalue_root_local(body, op) {
+            crate::compiler_trace!("region_seed", "clobbered: local {index} via {op:?}");
             set.insert(index);
         }
     }

@@ -284,7 +284,11 @@ interpolation paying for its formatter.
       would take a write meant for the referent; what it needs to hold is the
       place the frame already names elsewhere. The refusal is whole-value, so a
       scalar field naming no storage is refused with the rest, which is why
-      `Array::slice`'s computed bounds stop folding.
+      `Array::slice`'s computed bounds stop folding. It is also what
+      `` `${255:x}` `` waits on: `Formatter::prepare_int_write` survives as a
+      call taking `&mut Formatter`, whose `buf` is such a field. A template
+      folds today only where inlining and SROA dissolve its `Formatter` first,
+      which the inliner's pricing decides, not the engine.
 - [ ] `String::grow`, which reshapes the caller's container from a frame of its
       own and so abandons the evaluation whenever a buffer outgrows its
       reservation.

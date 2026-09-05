@@ -752,6 +752,10 @@ impl<'a> Interpreter<'a> {
         let unbacked_aggregate = matches!(&lattice, Lattice::Const(v) if !v.is_scalar())
             && !self.frame.aggregate_locals.contains(index);
         let lattice = if unbacked_aggregate {
+            crate::compiler_trace!(
+                "region_seed",
+                "local {index} binds an aggregate the frame cannot track"
+            );
             Lattice::NonConst
         } else {
             lattice
