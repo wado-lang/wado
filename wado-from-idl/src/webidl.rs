@@ -117,8 +117,11 @@ pub struct WebIdlOutput {
     pub skipped: Vec<String>,
 }
 
-/// One interface with its partials and mixins folded in.
+/// One interface with its partials and mixins folded in. `defined` is false
+/// while only partials have been seen, which the slice does not admit.
+#[derive(Default)]
 struct Merged<'a> {
+    defined: bool,
     inheritance: Option<String>,
     global: bool,
     members: Vec<&'a Member>,
@@ -166,33 +169,7 @@ pub fn transform(snapshot: &Snapshot) -> Result<WebIdlOutput> {
     let mut resources: IndexMap<&str, WadoResource> = IndexMap::new();
     for (name, iface) in &merged {
         let path = lowering.interface_path(name);
-        let mut candidates: IndexMap<String, (Vec<WadoFunction>, Vec<String>)> = IndexMap::new();
-        for member in &iface.members {
-            for lowered in lowering.lower_member(name, &path, member) {
-                match lowered {
-                    Ok(function) => candidates
-                        .entry(function.name.clone())
-                        .or_default()
-                        .0
-                        .push(function),
-                    Err((wado_name, reason)) => {
-                        candidates.entry(wado_name).or_default().1.push(reason);
-                    }
-                }
-            }
-        }
-        let mut methods = Vec::new();
-        for (wado_name, (mut functions, reasons)) in candidates {
-            match functions.len() {
-                1 => methods.push(functions.pop().unwrap()),
-                0 => skipped.extend(
-                    reasons
-                        .into_iter()
-                        .map(|reason| format!("{name}.{wado_name}: {reason}")),
-                ),
-                n => skipped.push(format!("{name}.{wado_name}: {n} overloads")),
-            }
-        }
+        let methods = lowering.methods_of(name, &path, iface, &mut skipped);
         resources.insert(
             name,
             WadoResource {
@@ -220,31 +197,21 @@ fn merge(snapshot: &Snapshot) -> Result<IndexMap<&str, Merged<'_>>> {
     let mut merged: IndexMap<&str, Merged<'_>> = snapshot
         .slice
         .iter()
-        .map(|name| {
-            (
-                name.as_str(),
-                Merged {
-                    inheritance: None,
-                    global: false,
-                    members: Vec::new(),
-                },
-            )
-        })
+        .map(|name| (name.as_str(), Merged::default()))
         .collect();
-    let mut defined: IndexSet<&str> = IndexSet::new();
     for iface in &snapshot.interfaces {
         let Some(target) = merged.get_mut(iface.name.as_str()) else {
             bail!("interface `{}` is not in the slice", iface.name);
         };
         if !iface.partial {
-            defined.insert(&iface.name);
+            target.defined = true;
             target.inheritance.clone_from(&iface.inheritance);
             target.global = iface.ext_attrs.iter().any(|a| a.name == "Global");
         }
         target.members.extend(&iface.members);
     }
     for (name, iface) in &merged {
-        if !defined.contains(name) {
+        if !iface.defined {
             bail!("the slice names `{name}`, which no interface definition declares");
         }
         if let Some(parent) = &iface.inheritance
@@ -315,6 +282,45 @@ struct Lowering<'a> {
 impl Lowering<'_> {
     fn interface_path(&self, name: &str) -> String {
         format!("web:{}/{}", self.package, to_kebab_case(name))
+    }
+
+    /// Every member of `iface` that lowers, appending to `skipped` the ones
+    /// that do not and the names two overloads compete for.
+    fn methods_of(
+        &self,
+        iface: &str,
+        path: &str,
+        merged: &Merged<'_>,
+        skipped: &mut Vec<String>,
+    ) -> Vec<WadoFunction> {
+        let mut candidates: IndexMap<String, (Vec<WadoFunction>, Vec<String>)> = IndexMap::new();
+        for member in &merged.members {
+            for lowered in self.lower_member(iface, path, member) {
+                match lowered {
+                    Ok(function) => {
+                        candidates
+                            .entry(function.name.clone())
+                            .or_default()
+                            .0
+                            .push(function);
+                    }
+                    Err((name, reason)) => candidates.entry(name).or_default().1.push(reason),
+                }
+            }
+        }
+        let mut methods = Vec::new();
+        for (name, (mut functions, reasons)) in candidates {
+            match functions.len() {
+                1 => methods.push(functions.pop().unwrap()),
+                0 => skipped.extend(
+                    reasons
+                        .into_iter()
+                        .map(|reason| format!("{iface}.{name}: {reason}")),
+                ),
+                n => skipped.push(format!("{iface}.{name}: {n} overloads")),
+            }
+        }
+        methods
     }
 
     /// The functions a member yields: a getter and a setter for an attribute,

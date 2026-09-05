@@ -59,9 +59,8 @@ fn an_upcast_is_a_no_op() {
     );
 }
 
-/// An `option<extern-handle>` result lifts into the declared `Option<Element>`:
-/// the lift's `None` initializer is retyped along with its `Some`, so the
-/// binding's local and its two assignments agree.
+/// An `option<extern-handle>` result lifts into the declared `Option<Element>`,
+/// not the `Option<u32>` the boundary sees.
 #[test]
 fn an_optional_extern_handle_result_lifts_to_the_declared_option() {
     let wat = compile_to_wat(&on_an_element(

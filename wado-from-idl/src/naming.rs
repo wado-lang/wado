@@ -1,4 +1,4 @@
-//! Naming convention utilities for WIT-to-Wado conversion
+//! The names a WIT or `WebIDL` identifier takes in Wado and at the CM boundary.
 
 use heck::{ToKebabCase, ToSnakeCase, ToUpperCamelCase};
 use wado_compiler::syntax::{CONTEXTUAL_KEYWORDS, KEYWORDS, NAME_KEYWORDS};
