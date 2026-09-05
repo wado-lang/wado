@@ -74,6 +74,21 @@ fn an_optional_extern_handle_result_lifts_to_the_declared_option() {
     );
 }
 
+/// An `option<extern-handle>` parameter is the caller's `Option<Node>` on both
+/// sides of the binding, whether the argument is `null`, a `Some` literal, or a
+/// value of that type.
+#[test]
+fn an_optional_extern_handle_argument_keeps_the_declared_option() {
+    let wat = compile_to_wat(&on_an_element(
+        "let node: Node = el;\n\
+         assert !el.contains(null);\n\
+         assert el.is_same_node(Option::Some(node));\n\
+         let other: Option<Node> = Option::Some(node);\n\
+         assert el.is_equal_node(other);",
+    ));
+    assert!(wat.contains("web:dom/node"), "{wat}");
+}
+
 /// Compile `source`, holding it to what `wado check` reports as well: a program
 /// this slice accepts has to be clean, not merely compilable.
 fn compile_to_wat(source: &str) -> String {

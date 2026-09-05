@@ -1,6 +1,7 @@
 //! Naming convention utilities for WIT-to-Wado conversion
 
 use heck::{ToKebabCase, ToSnakeCase, ToUpperCamelCase};
+use wado_compiler::syntax::{CONTEXTUAL_KEYWORDS, KEYWORDS, NAME_KEYWORDS};
 
 /// Convert WIT kebab-case to Wado `snake_case` for function/field names
 #[must_use]
@@ -20,62 +21,16 @@ pub fn to_kebab_case(name: &str) -> String {
     name.to_kebab_case()
 }
 
-/// The Wado keywords, plus `self`, which no parameter or method may be named.
-const RESERVED: &[&str] = &[
-    "if",
-    "else",
-    "while",
-    "for",
-    "loop",
-    "break",
-    "continue",
-    "return",
-    "match",
-    "fn",
-    "let",
-    "global",
-    "const",
-    "struct",
-    "enum",
-    "variant",
-    "flags",
-    "impl",
-    "trait",
-    "type",
-    "resource",
-    "extends",
-    "world",
-    "effect",
-    "interface",
-    "pub",
-    "internal",
-    "export",
-    "mut",
-    "async",
-    "unique",
-    "stores",
-    "reactive",
-    "use",
-    "from",
-    "import",
-    "as",
-    "with",
-    "in",
-    "of",
-    "assert",
-    "true",
-    "false",
-    "null",
-    "matches",
-    "self",
-];
-
-/// Convert a `WebIDL` identifier to a Wado `snake_case` name that is not a
-/// keyword: `type` becomes `type_`.
+/// Convert a `WebIDL` identifier to a Wado `snake_case` name the parser takes
+/// as a name: a keyword it does not (`match`, `self`) gets a trailing `_`.
 #[must_use]
 pub fn to_wado_identifier(name: &str) -> String {
     let snake = name.to_snake_case();
-    if RESERVED.contains(&snake.as_str()) {
+    let keyword = KEYWORDS
+        .iter()
+        .chain(CONTEXTUAL_KEYWORDS)
+        .any(|(keyword, _)| *keyword == snake);
+    if keyword && !NAME_KEYWORDS.contains(&snake.as_str()) {
         format!("{snake}_")
     } else {
         snake
@@ -95,8 +50,11 @@ mod tests {
 
     #[test]
     fn a_webidl_identifier_avoids_the_keywords() {
-        assert_eq!(to_wado_identifier("type"), "type_");
+        assert_eq!(to_wado_identifier("match"), "match_");
+        assert_eq!(to_wado_identifier("resume"), "resume_");
         assert_eq!(to_wado_identifier("self"), "self_");
+        // The parser takes these as names.
+        assert_eq!(to_wado_identifier("type"), "type");
         assert_eq!(to_wado_identifier("innerHTML"), "inner_html");
         assert_eq!(to_kebab_case("HTMLInputElement"), "html-input-element");
         assert_eq!(to_kebab_case("setHTMLUnsafe"), "set-html-unsafe");

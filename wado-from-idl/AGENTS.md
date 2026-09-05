@@ -15,7 +15,7 @@ Generates Wado stdlib modules from IDL files: WIT, and WebIDL.
   `mise run update-stdlib-web`; `tests/web_dom_is_fresh.rs` fails when the
   module is stale. The snapshot is the webidl2 AST of the slice
   `scripts/webidl/snapshot.mjs` takes from `@webref/idl`; widen the slice
-  there and run `mise run update-webidl-snapshot` (network). See
+  there and run `mise run update-webidl-snapshot`. See
   `docs/wep-2026-04-01-tide.md`.
 
 Never edit a generated `.wado` file. Change this crate and regenerate.

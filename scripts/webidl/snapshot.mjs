@@ -2,10 +2,9 @@
 //
 // Usage: node snapshot.mjs <output.json>
 //
-// The slice is the interfaces listed below, with their partials and included
-// mixins from the specs that define one of them, and the typedefs their
-// members name. `wado-from-idl --webidl` reads the output, so generation
-// never needs the network.
+// The slice is the interfaces listed below, their partials and included mixins
+// from every spec, and the typedefs their members name. `wado-from-idl --webidl`
+// reads the output, so generation never needs the network.
 
 import { parseAll } from "@webref/idl";
 import { readFile, writeFile } from "node:fs/promises";
@@ -29,44 +28,27 @@ if (!out) {
   process.exit(1);
 }
 
-// webidl2 nodes expose their fields through getters, so a spread would drop
-// them; `toJSON` is the plain shape.
-const plain = (spec, def) => ({ spec, ...JSON.parse(JSON.stringify(def)) });
-
 const all = await parseAll();
-const specs = Object.keys(all).sort();
+// Spec order is the output order, so the snapshot is deterministic.
+const defs = Object.keys(all)
+  .sort()
+  .flatMap((spec) => all[spec]);
 
-const inSlice = (def) => def.type === "interface" && SLICE.includes(def.name);
-const defining = specs.filter((spec) =>
-  all[spec].some((def) => inSlice(def) && !def.partial),
+const interfaces = defs.filter(
+  (def) => def.type === "interface" && SLICE.includes(def.name),
 );
-const interfaces = [];
-const includes = [];
-for (const spec of defining) {
-  for (const def of all[spec]) {
-    if (inSlice(def)) interfaces.push(plain(spec, def));
-    if (def.type === "includes" && SLICE.includes(def.target)) {
-      includes.push(plain(spec, def));
-    }
-  }
-}
+const includes = defs.filter(
+  (def) => def.type === "includes" && SLICE.includes(def.target),
+);
 const mixinNames = new Set(includes.map((i) => i.includes));
-const mixins = [];
-for (const spec of defining) {
-  for (const def of all[spec]) {
-    if (def.type === "interface mixin" && mixinNames.has(def.name)) {
-      mixins.push(plain(spec, def));
-    }
-  }
-}
+const mixins = defs.filter(
+  (def) => def.type === "interface mixin" && mixinNames.has(def.name),
+);
 
 // A typedef is kept when a member of the slice names it, transitively.
-const typedefs = new Map();
-for (const spec of specs) {
-  for (const def of all[spec]) {
-    if (def.type === "typedef") typedefs.set(def.name, plain(spec, def));
-  }
-}
+const typedefs = new Map(
+  defs.filter((def) => def.type === "typedef").map((def) => [def.name, def]),
+);
 const kept = new Map();
 const visit = (t) => {
   if (Array.isArray(t.idlType)) {
@@ -102,5 +84,5 @@ const snapshot = {
 };
 await writeFile(out, JSON.stringify(snapshot, null, 2) + "\n");
 console.error(
-  `snapshot: ${interfaces.length} interface and ${mixins.length} mixin definitions from ${defining.join(", ")}, ${kept.size} typedefs (@webref/idl ${webref.version}) → ${out}`,
+  `snapshot: ${interfaces.length} interface and ${mixins.length} mixin definitions, ${kept.size} typedefs (@webref/idl ${webref.version}) → ${out}`,
 );

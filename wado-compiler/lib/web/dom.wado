@@ -14,10 +14,10 @@ pub resource EventTarget {
 pub resource Event {
     #[cm("web:dom/event#new")]
     #[cm_params("type")]
-    fn new(type_: String) -> Event;
+    fn new(type: String) -> Event;
     #[cm("web:dom/event#type")]
     #[cm_params("self")]
-    fn type_(&self) -> String;
+    fn type(&self) -> String;
     #[cm("web:dom/event#target")]
     #[cm_params("self")]
     fn target(&self) -> Option<EventTarget>;
@@ -71,7 +71,7 @@ pub resource Event {
     fn time_stamp(&self) -> f64;
     #[cm("web:dom/event#init-event")]
     #[cm_params("self", "type", "bubbles", "cancelable")]
-    fn init_event(&self, type_: String, bubbles: Option<bool>, cancelable: Option<bool>);
+    fn init_event(&self, type: String, bubbles: Option<bool>, cancelable: Option<bool>);
 }
 
 #[cm("web:dom/node", type = "extern-handle")]
@@ -170,6 +170,45 @@ pub resource Node extends EventTarget {
 
 #[cm("web:dom/element", type = "extern-handle")]
 pub resource Element extends Node {
+    #[cm("web:dom/element#get-spatial-navigation-container")]
+    #[cm_params("self")]
+    fn get_spatial_navigation_container(&self) -> Node;
+    #[cm("web:dom/element#check-visibility")]
+    #[cm_params("self")]
+    fn check_visibility(&self) -> bool;
+    #[cm("web:dom/element#scroll-top")]
+    #[cm_params("self")]
+    fn scroll_top(&self) -> f64;
+    #[cm("web:dom/element#set-scroll-top")]
+    #[cm_params("self", "value")]
+    fn set_scroll_top(&self, value: f64);
+    #[cm("web:dom/element#scroll-left")]
+    #[cm_params("self")]
+    fn scroll_left(&self) -> f64;
+    #[cm("web:dom/element#set-scroll-left")]
+    #[cm_params("self", "value")]
+    fn set_scroll_left(&self, value: f64);
+    #[cm("web:dom/element#scroll-width")]
+    #[cm_params("self")]
+    fn scroll_width(&self) -> i32;
+    #[cm("web:dom/element#scroll-height")]
+    #[cm_params("self")]
+    fn scroll_height(&self) -> i32;
+    #[cm("web:dom/element#client-top")]
+    #[cm_params("self")]
+    fn client_top(&self) -> i32;
+    #[cm("web:dom/element#client-left")]
+    #[cm_params("self")]
+    fn client_left(&self) -> i32;
+    #[cm("web:dom/element#client-width")]
+    #[cm_params("self")]
+    fn client_width(&self) -> i32;
+    #[cm("web:dom/element#client-height")]
+    #[cm_params("self")]
+    fn client_height(&self) -> i32;
+    #[cm("web:dom/element#current-css-zoom")]
+    #[cm_params("self")]
+    fn current_css_zoom(&self) -> f64;
     #[cm("web:dom/element#namespace-uri")]
     #[cm_params("self")]
     fn namespace_uri(&self) -> Option<String>;
@@ -245,6 +284,12 @@ pub resource Element extends Node {
     #[cm("web:dom/element#insert-adjacent-text")]
     #[cm_params("self", "where", "data")]
     fn insert_adjacent_text(&self, where: String, data: String);
+    #[cm("web:dom/element#element-timing")]
+    #[cm_params("self")]
+    fn element_timing(&self) -> String;
+    #[cm("web:dom/element#set-element-timing")]
+    #[cm_params("self", "value")]
+    fn set_element_timing(&self, value: String);
     #[cm("web:dom/element#set-html")]
     #[cm_params("self", "html")]
     fn set_html(&self, html: String);
@@ -269,6 +314,15 @@ pub resource Element extends Node {
     #[cm("web:dom/element#insert-adjacent-html")]
     #[cm_params("self", "position", "string")]
     fn insert_adjacent_html(&self, position: String, string: String);
+    #[cm("web:dom/element#set-pointer-capture")]
+    #[cm_params("self", "pointer-id")]
+    fn set_pointer_capture(&self, pointer_id: i32);
+    #[cm("web:dom/element#release-pointer-capture")]
+    #[cm_params("self", "pointer-id")]
+    fn release_pointer_capture(&self, pointer_id: i32);
+    #[cm("web:dom/element#has-pointer-capture")]
+    #[cm_params("self", "pointer-id")]
+    fn has_pointer_capture(&self, pointer_id: i32) -> bool;
     #[cm("web:dom/element#first-element-child")]
     #[cm_params("self")]
     fn first_element_child(&self) -> Option<Element>;
@@ -278,15 +332,6 @@ pub resource Element extends Node {
     #[cm("web:dom/element#child-element-count")]
     #[cm_params("self")]
     fn child_element_count(&self) -> u32;
-    #[cm("web:dom/element#prepend")]
-    #[cm_params("self")]
-    fn prepend(&self);
-    #[cm("web:dom/element#append")]
-    #[cm_params("self")]
-    fn append(&self);
-    #[cm("web:dom/element#replace-children")]
-    #[cm_params("self")]
-    fn replace_children(&self);
     #[cm("web:dom/element#move-before")]
     #[cm_params("self", "node", "child")]
     fn move_before(&self, node: Node, child: Option<Node>);
@@ -299,22 +344,316 @@ pub resource Element extends Node {
     #[cm("web:dom/element#next-element-sibling")]
     #[cm_params("self")]
     fn next_element_sibling(&self) -> Option<Element>;
-    #[cm("web:dom/element#before")]
-    #[cm_params("self")]
-    fn before(&self);
-    #[cm("web:dom/element#after")]
-    #[cm_params("self")]
-    fn after(&self);
-    #[cm("web:dom/element#replace-with")]
-    #[cm_params("self")]
-    fn replace_with(&self);
     #[cm("web:dom/element#remove")]
     #[cm_params("self")]
     fn remove(&self);
+    #[cm("web:dom/element#role")]
+    #[cm_params("self")]
+    fn role(&self) -> Option<String>;
+    #[cm("web:dom/element#set-role")]
+    #[cm_params("self", "value")]
+    fn set_role(&self, value: Option<String>);
+    #[cm("web:dom/element#aria-active-descendant-element")]
+    #[cm_params("self")]
+    fn aria_active_descendant_element(&self) -> Option<Element>;
+    #[cm("web:dom/element#set-aria-active-descendant-element")]
+    #[cm_params("self", "value")]
+    fn set_aria_active_descendant_element(&self, value: Option<Element>);
+    #[cm("web:dom/element#aria-atomic")]
+    #[cm_params("self")]
+    fn aria_atomic(&self) -> Option<String>;
+    #[cm("web:dom/element#set-aria-atomic")]
+    #[cm_params("self", "value")]
+    fn set_aria_atomic(&self, value: Option<String>);
+    #[cm("web:dom/element#aria-auto-complete")]
+    #[cm_params("self")]
+    fn aria_auto_complete(&self) -> Option<String>;
+    #[cm("web:dom/element#set-aria-auto-complete")]
+    #[cm_params("self", "value")]
+    fn set_aria_auto_complete(&self, value: Option<String>);
+    #[cm("web:dom/element#aria-braille-label")]
+    #[cm_params("self")]
+    fn aria_braille_label(&self) -> Option<String>;
+    #[cm("web:dom/element#set-aria-braille-label")]
+    #[cm_params("self", "value")]
+    fn set_aria_braille_label(&self, value: Option<String>);
+    #[cm("web:dom/element#aria-braille-role-description")]
+    #[cm_params("self")]
+    fn aria_braille_role_description(&self) -> Option<String>;
+    #[cm("web:dom/element#set-aria-braille-role-description")]
+    #[cm_params("self", "value")]
+    fn set_aria_braille_role_description(&self, value: Option<String>);
+    #[cm("web:dom/element#aria-busy")]
+    #[cm_params("self")]
+    fn aria_busy(&self) -> Option<String>;
+    #[cm("web:dom/element#set-aria-busy")]
+    #[cm_params("self", "value")]
+    fn set_aria_busy(&self, value: Option<String>);
+    #[cm("web:dom/element#aria-checked")]
+    #[cm_params("self")]
+    fn aria_checked(&self) -> Option<String>;
+    #[cm("web:dom/element#set-aria-checked")]
+    #[cm_params("self", "value")]
+    fn set_aria_checked(&self, value: Option<String>);
+    #[cm("web:dom/element#aria-col-count")]
+    #[cm_params("self")]
+    fn aria_col_count(&self) -> Option<String>;
+    #[cm("web:dom/element#set-aria-col-count")]
+    #[cm_params("self", "value")]
+    fn set_aria_col_count(&self, value: Option<String>);
+    #[cm("web:dom/element#aria-col-index")]
+    #[cm_params("self")]
+    fn aria_col_index(&self) -> Option<String>;
+    #[cm("web:dom/element#set-aria-col-index")]
+    #[cm_params("self", "value")]
+    fn set_aria_col_index(&self, value: Option<String>);
+    #[cm("web:dom/element#aria-col-index-text")]
+    #[cm_params("self")]
+    fn aria_col_index_text(&self) -> Option<String>;
+    #[cm("web:dom/element#set-aria-col-index-text")]
+    #[cm_params("self", "value")]
+    fn set_aria_col_index_text(&self, value: Option<String>);
+    #[cm("web:dom/element#aria-col-span")]
+    #[cm_params("self")]
+    fn aria_col_span(&self) -> Option<String>;
+    #[cm("web:dom/element#set-aria-col-span")]
+    #[cm_params("self", "value")]
+    fn set_aria_col_span(&self, value: Option<String>);
+    #[cm("web:dom/element#aria-current")]
+    #[cm_params("self")]
+    fn aria_current(&self) -> Option<String>;
+    #[cm("web:dom/element#set-aria-current")]
+    #[cm_params("self", "value")]
+    fn set_aria_current(&self, value: Option<String>);
+    #[cm("web:dom/element#aria-description")]
+    #[cm_params("self")]
+    fn aria_description(&self) -> Option<String>;
+    #[cm("web:dom/element#set-aria-description")]
+    #[cm_params("self", "value")]
+    fn set_aria_description(&self, value: Option<String>);
+    #[cm("web:dom/element#aria-disabled")]
+    #[cm_params("self")]
+    fn aria_disabled(&self) -> Option<String>;
+    #[cm("web:dom/element#set-aria-disabled")]
+    #[cm_params("self", "value")]
+    fn set_aria_disabled(&self, value: Option<String>);
+    #[cm("web:dom/element#aria-expanded")]
+    #[cm_params("self")]
+    fn aria_expanded(&self) -> Option<String>;
+    #[cm("web:dom/element#set-aria-expanded")]
+    #[cm_params("self", "value")]
+    fn set_aria_expanded(&self, value: Option<String>);
+    #[cm("web:dom/element#aria-has-popup")]
+    #[cm_params("self")]
+    fn aria_has_popup(&self) -> Option<String>;
+    #[cm("web:dom/element#set-aria-has-popup")]
+    #[cm_params("self", "value")]
+    fn set_aria_has_popup(&self, value: Option<String>);
+    #[cm("web:dom/element#aria-hidden")]
+    #[cm_params("self")]
+    fn aria_hidden(&self) -> Option<String>;
+    #[cm("web:dom/element#set-aria-hidden")]
+    #[cm_params("self", "value")]
+    fn set_aria_hidden(&self, value: Option<String>);
+    #[cm("web:dom/element#aria-invalid")]
+    #[cm_params("self")]
+    fn aria_invalid(&self) -> Option<String>;
+    #[cm("web:dom/element#set-aria-invalid")]
+    #[cm_params("self", "value")]
+    fn set_aria_invalid(&self, value: Option<String>);
+    #[cm("web:dom/element#aria-key-shortcuts")]
+    #[cm_params("self")]
+    fn aria_key_shortcuts(&self) -> Option<String>;
+    #[cm("web:dom/element#set-aria-key-shortcuts")]
+    #[cm_params("self", "value")]
+    fn set_aria_key_shortcuts(&self, value: Option<String>);
+    #[cm("web:dom/element#aria-label")]
+    #[cm_params("self")]
+    fn aria_label(&self) -> Option<String>;
+    #[cm("web:dom/element#set-aria-label")]
+    #[cm_params("self", "value")]
+    fn set_aria_label(&self, value: Option<String>);
+    #[cm("web:dom/element#aria-level")]
+    #[cm_params("self")]
+    fn aria_level(&self) -> Option<String>;
+    #[cm("web:dom/element#set-aria-level")]
+    #[cm_params("self", "value")]
+    fn set_aria_level(&self, value: Option<String>);
+    #[cm("web:dom/element#aria-live")]
+    #[cm_params("self")]
+    fn aria_live(&self) -> Option<String>;
+    #[cm("web:dom/element#set-aria-live")]
+    #[cm_params("self", "value")]
+    fn set_aria_live(&self, value: Option<String>);
+    #[cm("web:dom/element#aria-modal")]
+    #[cm_params("self")]
+    fn aria_modal(&self) -> Option<String>;
+    #[cm("web:dom/element#set-aria-modal")]
+    #[cm_params("self", "value")]
+    fn set_aria_modal(&self, value: Option<String>);
+    #[cm("web:dom/element#aria-multi-line")]
+    #[cm_params("self")]
+    fn aria_multi_line(&self) -> Option<String>;
+    #[cm("web:dom/element#set-aria-multi-line")]
+    #[cm_params("self", "value")]
+    fn set_aria_multi_line(&self, value: Option<String>);
+    #[cm("web:dom/element#aria-multi-selectable")]
+    #[cm_params("self")]
+    fn aria_multi_selectable(&self) -> Option<String>;
+    #[cm("web:dom/element#set-aria-multi-selectable")]
+    #[cm_params("self", "value")]
+    fn set_aria_multi_selectable(&self, value: Option<String>);
+    #[cm("web:dom/element#aria-orientation")]
+    #[cm_params("self")]
+    fn aria_orientation(&self) -> Option<String>;
+    #[cm("web:dom/element#set-aria-orientation")]
+    #[cm_params("self", "value")]
+    fn set_aria_orientation(&self, value: Option<String>);
+    #[cm("web:dom/element#aria-placeholder")]
+    #[cm_params("self")]
+    fn aria_placeholder(&self) -> Option<String>;
+    #[cm("web:dom/element#set-aria-placeholder")]
+    #[cm_params("self", "value")]
+    fn set_aria_placeholder(&self, value: Option<String>);
+    #[cm("web:dom/element#aria-pos-in-set")]
+    #[cm_params("self")]
+    fn aria_pos_in_set(&self) -> Option<String>;
+    #[cm("web:dom/element#set-aria-pos-in-set")]
+    #[cm_params("self", "value")]
+    fn set_aria_pos_in_set(&self, value: Option<String>);
+    #[cm("web:dom/element#aria-pressed")]
+    #[cm_params("self")]
+    fn aria_pressed(&self) -> Option<String>;
+    #[cm("web:dom/element#set-aria-pressed")]
+    #[cm_params("self", "value")]
+    fn set_aria_pressed(&self, value: Option<String>);
+    #[cm("web:dom/element#aria-read-only")]
+    #[cm_params("self")]
+    fn aria_read_only(&self) -> Option<String>;
+    #[cm("web:dom/element#set-aria-read-only")]
+    #[cm_params("self", "value")]
+    fn set_aria_read_only(&self, value: Option<String>);
+    #[cm("web:dom/element#aria-relevant")]
+    #[cm_params("self")]
+    fn aria_relevant(&self) -> Option<String>;
+    #[cm("web:dom/element#set-aria-relevant")]
+    #[cm_params("self", "value")]
+    fn set_aria_relevant(&self, value: Option<String>);
+    #[cm("web:dom/element#aria-required")]
+    #[cm_params("self")]
+    fn aria_required(&self) -> Option<String>;
+    #[cm("web:dom/element#set-aria-required")]
+    #[cm_params("self", "value")]
+    fn set_aria_required(&self, value: Option<String>);
+    #[cm("web:dom/element#aria-role-description")]
+    #[cm_params("self")]
+    fn aria_role_description(&self) -> Option<String>;
+    #[cm("web:dom/element#set-aria-role-description")]
+    #[cm_params("self", "value")]
+    fn set_aria_role_description(&self, value: Option<String>);
+    #[cm("web:dom/element#aria-row-count")]
+    #[cm_params("self")]
+    fn aria_row_count(&self) -> Option<String>;
+    #[cm("web:dom/element#set-aria-row-count")]
+    #[cm_params("self", "value")]
+    fn set_aria_row_count(&self, value: Option<String>);
+    #[cm("web:dom/element#aria-row-index")]
+    #[cm_params("self")]
+    fn aria_row_index(&self) -> Option<String>;
+    #[cm("web:dom/element#set-aria-row-index")]
+    #[cm_params("self", "value")]
+    fn set_aria_row_index(&self, value: Option<String>);
+    #[cm("web:dom/element#aria-row-index-text")]
+    #[cm_params("self")]
+    fn aria_row_index_text(&self) -> Option<String>;
+    #[cm("web:dom/element#set-aria-row-index-text")]
+    #[cm_params("self", "value")]
+    fn set_aria_row_index_text(&self, value: Option<String>);
+    #[cm("web:dom/element#aria-row-span")]
+    #[cm_params("self")]
+    fn aria_row_span(&self) -> Option<String>;
+    #[cm("web:dom/element#set-aria-row-span")]
+    #[cm_params("self", "value")]
+    fn set_aria_row_span(&self, value: Option<String>);
+    #[cm("web:dom/element#aria-selected")]
+    #[cm_params("self")]
+    fn aria_selected(&self) -> Option<String>;
+    #[cm("web:dom/element#set-aria-selected")]
+    #[cm_params("self", "value")]
+    fn set_aria_selected(&self, value: Option<String>);
+    #[cm("web:dom/element#aria-set-size")]
+    #[cm_params("self")]
+    fn aria_set_size(&self) -> Option<String>;
+    #[cm("web:dom/element#set-aria-set-size")]
+    #[cm_params("self", "value")]
+    fn set_aria_set_size(&self, value: Option<String>);
+    #[cm("web:dom/element#aria-sort")]
+    #[cm_params("self")]
+    fn aria_sort(&self) -> Option<String>;
+    #[cm("web:dom/element#set-aria-sort")]
+    #[cm_params("self", "value")]
+    fn set_aria_sort(&self, value: Option<String>);
+    #[cm("web:dom/element#aria-value-max")]
+    #[cm_params("self")]
+    fn aria_value_max(&self) -> Option<String>;
+    #[cm("web:dom/element#set-aria-value-max")]
+    #[cm_params("self", "value")]
+    fn set_aria_value_max(&self, value: Option<String>);
+    #[cm("web:dom/element#aria-value-min")]
+    #[cm_params("self")]
+    fn aria_value_min(&self) -> Option<String>;
+    #[cm("web:dom/element#set-aria-value-min")]
+    #[cm_params("self", "value")]
+    fn set_aria_value_min(&self, value: Option<String>);
+    #[cm("web:dom/element#aria-value-now")]
+    #[cm_params("self")]
+    fn aria_value_now(&self) -> Option<String>;
+    #[cm("web:dom/element#set-aria-value-now")]
+    #[cm_params("self", "value")]
+    fn set_aria_value_now(&self, value: Option<String>);
+    #[cm("web:dom/element#aria-value-text")]
+    #[cm_params("self")]
+    fn aria_value_text(&self) -> Option<String>;
+    #[cm("web:dom/element#set-aria-value-text")]
+    #[cm_params("self", "value")]
+    fn set_aria_value_text(&self, value: Option<String>);
+    #[cm("web:dom/element#aria-notify")]
+    #[cm_params("self", "announcement")]
+    fn aria_notify(&self, announcement: String);
 }
 
 #[cm("web:dom/html-element", type = "extern-handle")]
 pub resource HtmlElement extends Element {
+    #[cm("web:dom/html-element#container-timing")]
+    #[cm_params("self")]
+    fn container_timing(&self) -> String;
+    #[cm("web:dom/html-element#set-container-timing")]
+    #[cm_params("self", "value")]
+    fn set_container_timing(&self, value: String);
+    #[cm("web:dom/html-element#container-timing-ignore")]
+    #[cm_params("self")]
+    fn container_timing_ignore(&self) -> bool;
+    #[cm("web:dom/html-element#set-container-timing-ignore")]
+    #[cm_params("self", "value")]
+    fn set_container_timing_ignore(&self, value: bool);
+    #[cm("web:dom/html-element#scroll-parent")]
+    #[cm_params("self")]
+    fn scroll_parent(&self) -> Option<Element>;
+    #[cm("web:dom/html-element#offset-parent")]
+    #[cm_params("self")]
+    fn offset_parent(&self) -> Option<Element>;
+    #[cm("web:dom/html-element#offset-top")]
+    #[cm_params("self")]
+    fn offset_top(&self) -> i32;
+    #[cm("web:dom/html-element#offset-left")]
+    #[cm_params("self")]
+    fn offset_left(&self) -> i32;
+    #[cm("web:dom/html-element#offset-width")]
+    #[cm_params("self")]
+    fn offset_width(&self) -> i32;
+    #[cm("web:dom/html-element#offset-height")]
+    #[cm_params("self")]
+    fn offset_height(&self) -> i32;
     #[cm("web:dom/html-element#title")]
     #[cm_params("self")]
     fn title(&self) -> String;
@@ -447,6 +786,12 @@ pub resource HtmlElement extends Element {
     #[cm("web:dom/html-element#set-input-mode")]
     #[cm_params("self", "value")]
     fn set_input_mode(&self, value: String);
+    #[cm("web:dom/html-element#virtual-keyboard-policy")]
+    #[cm_params("self")]
+    fn virtual_keyboard_policy(&self) -> String;
+    #[cm("web:dom/html-element#set-virtual-keyboard-policy")]
+    #[cm_params("self", "value")]
+    fn set_virtual_keyboard_policy(&self, value: String);
     #[cm("web:dom/html-element#nonce")]
     #[cm_params("self")]
     fn nonce(&self) -> String;
@@ -475,6 +820,12 @@ pub resource HtmlElement extends Element {
 
 #[cm("web:dom/html-input-element", type = "extern-handle")]
 pub resource HtmlInputElement extends HtmlElement {
+    #[cm("web:dom/html-input-element#webkitdirectory")]
+    #[cm_params("self")]
+    fn webkitdirectory(&self) -> bool;
+    #[cm("web:dom/html-input-element#set-webkitdirectory")]
+    #[cm_params("self", "value")]
+    fn set_webkitdirectory(&self, value: bool);
     #[cm("web:dom/html-input-element#accept")]
     #[cm_params("self")]
     fn accept(&self) -> String;
@@ -651,7 +1002,7 @@ pub resource HtmlInputElement extends HtmlElement {
     fn set_step(&self, value: String);
     #[cm("web:dom/html-input-element#type")]
     #[cm_params("self")]
-    fn type_(&self) -> String;
+    fn type(&self) -> String;
     #[cm("web:dom/html-input-element#set-type")]
     #[cm_params("self", "value")]
     fn set_type(&self, value: String);
@@ -739,6 +1090,12 @@ pub resource HtmlInputElement extends HtmlElement {
     #[cm("web:dom/html-input-element#set-use-map")]
     #[cm_params("self", "value")]
     fn set_use_map(&self, value: String);
+    #[cm("web:dom/html-input-element#capture")]
+    #[cm_params("self")]
+    fn capture(&self) -> String;
+    #[cm("web:dom/html-input-element#set-capture")]
+    #[cm_params("self", "value")]
+    fn set_capture(&self, value: String);
     #[cm("web:dom/html-input-element#popover-target-element")]
     #[cm_params("self")]
     fn popover_target_element(&self) -> Option<Element>;
@@ -755,6 +1112,12 @@ pub resource HtmlInputElement extends HtmlElement {
 
 #[cm("web:dom/document", type = "extern-handle")]
 pub resource Document extends Node {
+    #[cm("web:dom/document#element-from-point")]
+    #[cm_params("self", "x", "y")]
+    fn element_from_point(&self, x: f64, y: f64) -> Option<Element>;
+    #[cm("web:dom/document#scrolling-element")]
+    #[cm_params("self")]
+    fn scrolling_element(&self) -> Option<Element>;
     #[cm("web:dom/document#new")]
     fn new() -> Document;
     #[cm("web:dom/document#url")]
@@ -796,6 +1159,12 @@ pub resource Document extends Node {
     #[cm("web:dom/document#create-event")]
     #[cm_params("self", "interface")]
     fn create_event(&self, interface_: String) -> Event;
+    #[cm("web:dom/document#fullscreen-enabled")]
+    #[cm_params("self")]
+    fn fullscreen_enabled(&self) -> bool;
+    #[cm("web:dom/document#fullscreen")]
+    #[cm_params("self")]
+    fn fullscreen(&self) -> bool;
     #[cm("web:dom/document#parse-html-unsafe")]
     #[cm_params("html")]
     fn parse_html_unsafe(html: String) -> Document;
@@ -844,12 +1213,6 @@ pub resource Document extends Node {
     #[cm("web:dom/document#close")]
     #[cm_params("self")]
     fn close(&self);
-    #[cm("web:dom/document#write")]
-    #[cm_params("self")]
-    fn write(&self);
-    #[cm("web:dom/document#writeln")]
-    #[cm_params("self")]
-    fn writeln(&self);
     #[cm("web:dom/document#has-focus")]
     #[cm_params("self")]
     fn has_focus(&self) -> bool;
@@ -919,12 +1282,33 @@ pub resource Document extends Node {
     #[cm("web:dom/document#release-events")]
     #[cm_params("self")]
     fn release_events(&self);
+    #[cm("web:dom/document#was-discarded")]
+    #[cm_params("self")]
+    fn was_discarded(&self) -> bool;
+    #[cm("web:dom/document#picture-in-picture-enabled")]
+    #[cm_params("self")]
+    fn picture_in_picture_enabled(&self) -> bool;
+    #[cm("web:dom/document#exit-pointer-lock")]
+    #[cm_params("self")]
+    fn exit_pointer_lock(&self);
+    #[cm("web:dom/document#prerendering")]
+    #[cm_params("self")]
+    fn prerendering(&self) -> bool;
     #[cm("web:dom/document#get-element-by-id")]
     #[cm_params("self", "element-id")]
     fn get_element_by_id(&self, element_id: String) -> Option<Element>;
+    #[cm("web:dom/document#fullscreen-element")]
+    #[cm_params("self")]
+    fn fullscreen_element(&self) -> Option<Element>;
     #[cm("web:dom/document#active-element")]
     #[cm_params("self")]
     fn active_element(&self) -> Option<Element>;
+    #[cm("web:dom/document#picture-in-picture-element")]
+    #[cm_params("self")]
+    fn picture_in_picture_element(&self) -> Option<Element>;
+    #[cm("web:dom/document#pointer-lock-element")]
+    #[cm_params("self")]
+    fn pointer_lock_element(&self) -> Option<Element>;
     #[cm("web:dom/document#first-element-child")]
     #[cm_params("self")]
     fn first_element_child(&self) -> Option<Element>;
@@ -934,15 +1318,6 @@ pub resource Document extends Node {
     #[cm("web:dom/document#child-element-count")]
     #[cm_params("self")]
     fn child_element_count(&self) -> u32;
-    #[cm("web:dom/document#prepend")]
-    #[cm_params("self")]
-    fn prepend(&self);
-    #[cm("web:dom/document#append")]
-    #[cm_params("self")]
-    fn append(&self);
-    #[cm("web:dom/document#replace-children")]
-    #[cm_params("self")]
-    fn replace_children(&self);
     #[cm("web:dom/document#move-before")]
     #[cm_params("self", "node", "child")]
     fn move_before(&self, node: Node, child: Option<Node>);
@@ -952,10 +1327,73 @@ pub resource Document extends Node {
     #[cm("web:dom/document#create-ns-resolver")]
     #[cm_params("self", "node-resolver")]
     fn create_ns_resolver(&self, node_resolver: Node) -> Node;
+    #[cm("web:dom/document#aria-notify")]
+    #[cm_params("self", "announcement")]
+    fn aria_notify(&self, announcement: String);
 }
 
 #[cm("web:dom/window", type = "extern-handle")]
 pub resource Window extends EventTarget {
+    #[cm("web:dom/window#credentialless")]
+    #[cm_params("self")]
+    fn credentialless(&self) -> bool;
+    #[cm("web:dom/window#orientation")]
+    #[cm_params("self")]
+    fn orientation(&self) -> i16;
+    #[cm("web:dom/window#request-resize")]
+    #[cm_params("self")]
+    fn request_resize(&self);
+    #[cm("web:dom/window#move-to")]
+    #[cm_params("self", "x", "y")]
+    fn move_to(&self, x: i32, y: i32);
+    #[cm("web:dom/window#move-by")]
+    #[cm_params("self", "x", "y")]
+    fn move_by(&self, x: i32, y: i32);
+    #[cm("web:dom/window#resize-to")]
+    #[cm_params("self", "width", "height")]
+    fn resize_to(&self, width: i32, height: i32);
+    #[cm("web:dom/window#resize-by")]
+    #[cm_params("self", "x", "y")]
+    fn resize_by(&self, x: i32, y: i32);
+    #[cm("web:dom/window#inner-width")]
+    #[cm_params("self")]
+    fn inner_width(&self) -> i32;
+    #[cm("web:dom/window#inner-height")]
+    #[cm_params("self")]
+    fn inner_height(&self) -> i32;
+    #[cm("web:dom/window#scroll-x")]
+    #[cm_params("self")]
+    fn scroll_x(&self) -> f64;
+    #[cm("web:dom/window#page-x-offset")]
+    #[cm_params("self")]
+    fn page_x_offset(&self) -> f64;
+    #[cm("web:dom/window#scroll-y")]
+    #[cm_params("self")]
+    fn scroll_y(&self) -> f64;
+    #[cm("web:dom/window#page-y-offset")]
+    #[cm_params("self")]
+    fn page_y_offset(&self) -> f64;
+    #[cm("web:dom/window#screen-x")]
+    #[cm_params("self")]
+    fn screen_x(&self) -> i32;
+    #[cm("web:dom/window#screen-left")]
+    #[cm_params("self")]
+    fn screen_left(&self) -> i32;
+    #[cm("web:dom/window#screen-y")]
+    #[cm_params("self")]
+    fn screen_y(&self) -> i32;
+    #[cm("web:dom/window#screen-top")]
+    #[cm_params("self")]
+    fn screen_top(&self) -> i32;
+    #[cm("web:dom/window#outer-width")]
+    #[cm_params("self")]
+    fn outer_width(&self) -> i32;
+    #[cm("web:dom/window#outer-height")]
+    #[cm_params("self")]
+    fn outer_height(&self) -> i32;
+    #[cm("web:dom/window#device-pixel-ratio")]
+    #[cm_params("self")]
+    fn device_pixel_ratio(&self) -> f64;
     #[cm("web:dom/window#event")]
     #[cm_params("self")]
     fn event(&self) -> Option<Event>;
@@ -1013,6 +1451,9 @@ pub resource Window extends EventTarget {
     #[cm("web:dom/window#release-events")]
     #[cm_params("self")]
     fn release_events(&self);
+    #[cm("web:dom/window#cancel-idle-callback")]
+    #[cm_params("self", "handle")]
+    fn cancel_idle_callback(&self, handle: u32);
     #[cm("web:dom/window#origin")]
     #[cm_params("self")]
     fn origin(&self) -> String;
@@ -1028,15 +1469,9 @@ pub resource Window extends EventTarget {
     #[cm("web:dom/window#atob")]
     #[cm_params("self", "data")]
     fn atob(&self, data: String) -> String;
-    #[cm("web:dom/window#set-timeout")]
-    #[cm_params("self", "handler", "timeout")]
-    fn set_timeout(&self, handler: String, timeout: Option<i32>) -> i32;
     #[cm("web:dom/window#clear-timeout")]
     #[cm_params("self", "id")]
     fn clear_timeout(&self, id: Option<i32>);
-    #[cm("web:dom/window#set-interval")]
-    #[cm_params("self", "handler", "timeout")]
-    fn set_interval(&self, handler: String, timeout: Option<i32>) -> i32;
     #[cm("web:dom/window#clear-interval")]
     #[cm_params("self", "id")]
     fn clear_interval(&self, id: Option<i32>);
@@ -1045,7 +1480,7 @@ pub resource Window extends EventTarget {
     fn cancel_animation_frame(&self, handle: u32);
 }
 
-/// The DOM entry points, which hand out the first handle.
+/// The `web:dom` entry points, which hand out the first handle.
 #[cm("web:dom/global")]
 pub interface Dom {
     #[cm("web:dom/global#window")]

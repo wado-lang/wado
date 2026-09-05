@@ -38,20 +38,22 @@ impl Definitions {
     }
 }
 
-fn plain(name: &str) -> String {
+fn named(name: &str, nullable: bool) -> String {
     format!(
-        r#"{{"type": "attribute-type", "extAttrs": [], "generic": "", "nullable": false, "union": false, "idlType": "{name}"}}"#
+        r#"{{"type": "attribute-type", "extAttrs": [], "generic": "", "nullable": {nullable}, "union": false, "idlType": "{name}"}}"#
     )
+}
+
+fn plain(name: &str) -> String {
+    named(name, false)
 }
 
 fn nullable(name: &str) -> String {
-    plain(name).replace(r#""nullable": false"#, r#""nullable": true"#)
+    named(name, true)
 }
 
 fn typedef(name: &str, ty: &str) -> String {
-    format!(
-        r#"{{"spec": "hr-time", "type": "typedef", "name": "{name}", "idlType": {ty}, "extAttrs": []}}"#
-    )
+    format!(r#"{{"type": "typedef", "name": "{name}", "idlType": {ty}, "extAttrs": []}}"#)
 }
 
 fn attribute(name: &str, ty: &str, readonly: bool) -> String {
@@ -66,6 +68,10 @@ fn argument(name: &str, ty: &str, optional: bool, default: &str) -> String {
     )
 }
 
+fn variadic(name: &str, ty: &str) -> String {
+    argument(name, ty, true, "null").replace(r#""variadic": false"#, r#""variadic": true"#)
+}
+
 fn operation(name: &str, ret: &str, args: &[String], special: &str) -> String {
     format!(
         r#"{{"type": "operation", "name": "{name}", "idlType": {ret}, "arguments": [{}], "extAttrs": [], "special": "{special}"}}"#,
@@ -78,20 +84,21 @@ fn definition(
     name: &str,
     inheritance: &str,
     ext_attrs: &str,
+    partial: bool,
     members: &[String],
 ) -> String {
     format!(
-        r#"{{"spec": "dom", "type": "{kind}", "name": "{name}", "inheritance": {inheritance}, "partial": false, "extAttrs": [{ext_attrs}], "members": [{}]}}"#,
+        r#"{{"type": "{kind}", "name": "{name}", "inheritance": {inheritance}, "partial": {partial}, "extAttrs": [{ext_attrs}], "members": [{}]}}"#,
         members.join(", ")
     )
 }
 
 fn interface(name: &str, inheritance: &str, ext_attrs: &str, members: &[String]) -> String {
-    definition("interface", name, inheritance, ext_attrs, members)
+    definition("interface", name, inheritance, ext_attrs, false, members)
 }
 
 fn partial(name: &str, members: &[String]) -> String {
-    interface(name, "null", "", members).replace(r#""partial": false"#, r#""partial": true"#)
+    definition("interface", name, "null", "", true, members)
 }
 
 const GLOBAL: &str =
@@ -254,7 +261,8 @@ fn an_optional_argument_is_an_option() {
 fn a_keyword_is_escaped_a_typedef_resolves_and_a_const_is_not_a_member() {
     let (code, _) = chain().generate();
     assert!(code.contains("fn self_(&self) -> Window;"), "{code}");
-    assert!(code.contains("fn type_(&self) -> String;"), "{code}");
+    // `type` is a keyword the parser takes as a name.
+    assert!(code.contains("fn type(&self) -> String;"), "{code}");
     assert!(
         code.contains("fn set_type(&self, value: String);"),
         "{code}"
@@ -297,6 +305,13 @@ fn a_member_the_slice_cannot_express_is_skipped_and_reported() {
             ],
             "",
         ),
+        // A variadic has no default to fall back on, so the member goes.
+        operation(
+            "prepend",
+            &plain("undefined"),
+            &[variadic("nodes", &plain("Node"))],
+            "",
+        ),
         // Two overloads that both lower are ambiguous, so neither is emitted.
         operation("alert", &plain("undefined"), &[], ""),
         operation(
@@ -327,7 +342,8 @@ fn a_member_the_slice_cannot_express_is_skipped_and_reported() {
         [
             "Element.attributes: `NamedNodeMap` is outside the slice",
             "Element.request_fullscreen: `Promise<…>`",
-            "Element.append: `nodes`: union type",
+            "Element.append: `nodes`: union of 2 expressible types",
+            "Element.prepend: `nodes`: variadic",
             "Element.alert: 2 overloads",
             "Element.(getter): getter operation",
         ]
@@ -362,6 +378,14 @@ fn a_union_collapses_to_its_one_expressible_constituent() {
                 &union(&[plain("boolean"), plain("DOMString")], false),
                 false,
             ),
+            attribute(
+                "script",
+                &union(
+                    &[plain("HTMLScriptElement"), plain("SVGScriptElement")],
+                    false,
+                ),
+                true,
+            ),
         ],
     ));
     let (code, skipped) = defs.generate();
@@ -371,7 +395,13 @@ fn a_union_collapses_to_its_one_expressible_constituent() {
         "{code}"
     );
     assert!(code.contains("fn event(&self) -> Option<Node>;"), "{code}");
-    assert_eq!(skipped, ["Element.hidden: union type"]);
+    assert_eq!(
+        skipped,
+        [
+            "Element.hidden: union of 2 expressible types",
+            "Element.script: union: `HTMLScriptElement` is outside the slice; `SVGScriptElement` is outside the slice",
+        ]
+    );
 }
 
 #[test]
@@ -394,6 +424,7 @@ fn a_mixin_folds_into_each_including_interface() {
         "ParentNode",
         "null",
         "",
+        false,
         &[operation(
             "querySelector",
             &nullable("Element"),
@@ -402,7 +433,7 @@ fn a_mixin_folds_into_each_including_interface() {
         )],
     ));
     defs.includes.push(
-        r#"{"spec": "dom", "type": "includes", "extAttrs": [], "target": "Element", "includes": "ParentNode"}"#
+        r#"{"type": "includes", "extAttrs": [], "target": "Element", "includes": "ParentNode"}"#
             .to_string(),
     );
     let (code, skipped) = defs.generate();
@@ -413,6 +444,17 @@ fn a_mixin_folds_into_each_including_interface() {
         "{code}"
     );
     assert_eq!(skipped, Vec::<String>::new());
+}
+
+#[test]
+fn a_second_global_is_rejected() {
+    let mut defs = chain();
+    defs.interfaces[1] = interface("Node", r#""EventTarget""#, GLOBAL, &[]);
+    let err = transform(&defs.build()).expect_err("two globals are an error");
+    assert!(
+        err.to_string().contains("one `[Global]` interface"),
+        "{err}"
+    );
 }
 
 #[test]

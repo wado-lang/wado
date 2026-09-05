@@ -53,6 +53,11 @@ export fn run() with (Dom, Event, EventTarget) {
         assert same.id() == "app";
     }
     assert doc.get_element_by_id("missing") matches { None };
+
+    // An optional handle argument, absent and present.
+    assert !parent.contains(null);
+    let child_node: Node = child;
+    assert parent.contains(Option::Some(child_node));
 }
 "#;
 
@@ -162,6 +167,9 @@ fn add_dom_to_linker(
     )?;
     node.func_wrap("append-child", |_, (_parent, child): (u32, u32)| {
         Ok((child,))
+    })?;
+    node.func_wrap("contains", |_, (_parent, other): (u32, Option<u32>)| {
+        Ok((other.is_some(),))
     })?;
 
     linker.instance("web:dom/event")?.func_wrap(

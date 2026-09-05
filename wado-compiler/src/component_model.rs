@@ -703,7 +703,12 @@ impl CmFunctionInfo {
             }
             Type::Named(named) => named.name == "String",
             Type::Tuple(elems) => elems.iter().any(Self::type_requires_memory),
-            _ => false,
+            Type::Reference(inner) | Type::MutReference(inner) => Self::type_requires_memory(inner),
+            Type::NamespacedGeneric(_)
+            | Type::Function(_)
+            | Type::TypePackSpread(..)
+            | Type::Infer(_)
+            | Type::Error(_) => false,
         }
     }
 
@@ -3050,9 +3055,10 @@ impl CmInterfaceRegistry {
         let resources: IndexSet<&str> = self.resources.keys().map(|(_, n)| n.as_str()).collect();
         let structs: IndexSet<&str> = self.structs.keys().map(|(_, n)| n.as_str()).collect();
 
-        // Check all parameter types
+        // Check all parameter types, at the boundary's view: an extern handle is a `u32`.
         for (_, _, ty) in &func.params {
-            if !is_param_type_supported_with_types(ty, &enums, &resources, &structs) {
+            let resolved = self.resolve_type(ty);
+            if !is_param_type_supported_with_types(&resolved, &enums, &resources, &structs) {
                 return false;
             }
         }
@@ -3094,11 +3100,11 @@ impl CmInterfaceRegistry {
             .clone()
             .unwrap_or_else(|| method_name.replace('_', "-"));
 
-        // Resolve newtypes in params upfront
-        // This ensures codegen doesn't need any type resolution logic
+        // Params carry their value types: newtypes peeled, extern handles kept,
+        // so a binding's GC-level types match the caller's.
         let resolved_params: Vec<(String, String, Type)> = params
             .into_iter()
-            .map(|(name, cm_name, ty)| (name, cm_name, self.resolve_type(&ty)))
+            .map(|(name, cm_name, ty)| (name, cm_name, self.value_type(&ty)))
             .collect();
         let func_info = CmFunctionInfo {
             namespace: wasi.namespace.clone(),
@@ -3147,7 +3153,7 @@ impl CmInterfaceRegistry {
     ) {
         let resolved_params: Vec<(String, String, Type)> = params
             .into_iter()
-            .map(|(name, cm_name, ty)| (name, cm_name, self.resolve_type(&ty)))
+            .map(|(name, cm_name, ty)| (name, cm_name, self.value_type(&ty)))
             .collect();
         let func_info = CmFunctionInfo {
             // A world import sits above any interface, so it has no namespace,
@@ -3448,7 +3454,15 @@ impl CmInterfaceRegistry {
     /// This resolves newtypes like `Instant` -> `u64` throughout the type tree,
     /// including within generic type arguments.
     pub fn resolve_type(&self, ty: &Type) -> Type {
-        self.resolve_type_impl(ty, false)
+        self.resolve_type_impl(ty, false, false)
+    }
+
+    /// The type a value of `ty` has in the guest: newtypes peel to their base,
+    /// but an extern-handle resource stays itself. Its handle is the resource's
+    /// own representation, and `Option<Node>` is a GC type of its own, not
+    /// `Option<u32>`; [`Self::resolve_type`] is the boundary's view.
+    pub fn value_type(&self, ty: &Type) -> Type {
+        self.resolve_type_impl(ty, false, true)
     }
 
     /// Like [`Self::resolve_type`], but a *local* newtype (no `#[cm(...)]`
@@ -3457,21 +3471,26 @@ impl CmInterfaceRegistry {
     /// so the compiled component's structural type matches `wado wit`
     /// (issue #1456). WASI/CM-imported newtypes still resolve through.
     pub fn resolve_type_preserving_local_newtypes(&self, ty: &Type) -> Type {
-        self.resolve_type_impl(ty, true)
+        self.resolve_type_impl(ty, true, false)
     }
 
-    fn resolve_type_impl(&self, ty: &Type, preserve_local: bool) -> Type {
+    fn resolve_type_impl(&self, ty: &Type, preserve_local: bool, keep_handles: bool) -> Type {
         match ty {
             Type::Named(named) => {
-                if preserve_local
+                let source = self.source_interface(named);
+                let kept = (preserve_local
                     && self
-                        .local_newtype_base(self.source_interface(named).as_deref(), &named.name)
-                        .is_some()
-                {
+                        .local_newtype_base(source.as_deref(), &named.name)
+                        .is_some())
+                    || (keep_handles
+                        && source
+                            .as_deref()
+                            .is_some_and(|s| self.is_extern_handle_resource(s, &named.name)));
+                if kept {
                     ty.clone()
                 } else if let Some(aliased_ty) = self.resolve_newtype_ref(named) {
                     // Recursively resolve the aliased type
-                    self.resolve_type_impl(aliased_ty, preserve_local)
+                    self.resolve_type_impl(aliased_ty, preserve_local, keep_handles)
                 } else {
                     ty.clone()
                 }
@@ -3481,7 +3500,7 @@ impl CmInterfaceRegistry {
                 let resolved_args: Vec<Type> = generic
                     .args
                     .iter()
-                    .map(|arg| self.resolve_type_impl(arg, preserve_local))
+                    .map(|arg| self.resolve_type_impl(arg, preserve_local, keep_handles))
                     .collect();
                 Type::Generic(GenericType {
                     id: generic.id,
@@ -3493,24 +3512,29 @@ impl CmInterfaceRegistry {
             Type::Tuple(types) => {
                 let resolved: Vec<Type> = types
                     .iter()
-                    .map(|t| self.resolve_type_impl(t, preserve_local))
+                    .map(|t| self.resolve_type_impl(t, preserve_local, keep_handles))
                     .collect();
                 Type::Tuple(resolved)
             }
-            Type::Reference(inner) => {
-                Type::Reference(Box::new(self.resolve_type_impl(inner, preserve_local)))
-            }
-            Type::MutReference(inner) => {
-                Type::MutReference(Box::new(self.resolve_type_impl(inner, preserve_local)))
-            }
+            Type::Reference(inner) => Type::Reference(Box::new(self.resolve_type_impl(
+                inner,
+                preserve_local,
+                keep_handles,
+            ))),
+            Type::MutReference(inner) => Type::MutReference(Box::new(self.resolve_type_impl(
+                inner,
+                preserve_local,
+                keep_handles,
+            ))),
             Type::Function(func_ty) => {
                 // For function types, resolve params and return type
                 let resolved_params: Vec<Type> = func_ty
                     .params
                     .iter()
-                    .map(|t| self.resolve_type_impl(t, preserve_local))
+                    .map(|t| self.resolve_type_impl(t, preserve_local, keep_handles))
                     .collect();
-                let resolved_return = self.resolve_type_impl(&func_ty.return_type, preserve_local);
+                let resolved_return =
+                    self.resolve_type_impl(&func_ty.return_type, preserve_local, keep_handles);
                 Type::Function(Box::new(crate::ast::FunctionType {
                     is_mut: func_ty.is_mut,
                     params: resolved_params,
@@ -3525,7 +3549,7 @@ impl CmInterfaceRegistry {
                 let resolved_args: Vec<Type> = ng
                     .args
                     .iter()
-                    .map(|arg| self.resolve_type_impl(arg, preserve_local))
+                    .map(|arg| self.resolve_type_impl(arg, preserve_local, keep_handles))
                     .collect();
                 Type::NamespacedGeneric(Box::new(crate::ast::NamespacedGenericType {
                     id: ng.id,

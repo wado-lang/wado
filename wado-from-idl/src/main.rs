@@ -327,12 +327,7 @@ fn run_webidl_mode(snapshot_path: &Path, output_dir: &Path) -> Result<()> {
         .with_context(|| format!("Failed to read {}", snapshot_path.display()))?;
     let snapshot: wado_from_idl::webidl::Snapshot = serde_json::from_str(&json)
         .with_context(|| format!("Failed to parse {}", snapshot_path.display()))?;
-    let base_dir = std::env::current_dir()?;
-    let source = snapshot_path
-        .strip_prefix(&base_dir)
-        .unwrap_or(snapshot_path)
-        .display()
-        .to_string();
+    let source = relative_to_cwd(snapshot_path)?;
     let (code, skipped) = wado_from_idl::webidl::generate(&snapshot, &source)?;
 
     fs::create_dir_all(output_dir)
@@ -420,6 +415,19 @@ fn stdlib_identity_for(namespace: &str, pkg_name: &str, file: Option<&str>) -> O
     })
 }
 
+/// `path` as the generated header names it: relative to the working directory
+/// when under it.
+fn relative_to_cwd(path: &Path) -> Result<String> {
+    Ok(relative_to(path, &std::env::current_dir()?))
+}
+
+fn relative_to(path: &Path, base_dir: &Path) -> String {
+    path.strip_prefix(base_dir)
+        .unwrap_or(path)
+        .display()
+        .to_string()
+}
+
 fn package_sources(
     source_map: &PackageSourceMap,
     pkg_id: PackageId,
@@ -428,9 +436,7 @@ fn package_sources(
     let Some(paths) = source_map.package_paths(pkg_id) else {
         return Vec::new();
     };
-    let mut out: Vec<String> = paths
-        .map(|p| p.strip_prefix(base_dir).unwrap_or(p).display().to_string())
-        .collect();
+    let mut out: Vec<String> = paths.map(|p| relative_to(p, base_dir)).collect();
     out.sort();
     out.dedup();
     out

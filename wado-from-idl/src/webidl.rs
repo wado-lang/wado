@@ -124,8 +124,9 @@ struct Merged<'a> {
     members: Vec<&'a Member>,
 }
 
-/// A member's lowering: a function, or why there is none.
-type Lowered = std::result::Result<WadoFunction, String>;
+/// A member's lowering: a function, or the Wado name it would have had and
+/// why there is none.
+type Lowered = std::result::Result<WadoFunction, (String, String)>;
 
 /// The `web:<package>` module's source, naming `source` in its header, and
 /// the skipped members.
@@ -147,8 +148,8 @@ pub fn generate(snapshot: &Snapshot, source: &str) -> Result<(String, Vec<String
 ///
 /// # Errors
 ///
-/// The slice is not closed (a parent or a mixin it names is missing), or a
-/// child redeclares an inherited method.
+/// The slice is not closed (a parent or a mixin it names is missing), a child
+/// redeclares an inherited method, or the slice holds two `[Global]` interfaces.
 pub fn transform(snapshot: &Snapshot) -> Result<WebIdlOutput> {
     let merged = merge(snapshot)?;
     let lowering = Lowering {
@@ -162,43 +163,55 @@ pub fn transform(snapshot: &Snapshot) -> Result<WebIdlOutput> {
     };
 
     let mut skipped = Vec::new();
-    let mut resources = Vec::new();
+    let mut resources: IndexMap<&str, WadoResource> = IndexMap::new();
     for (name, iface) in &merged {
-        let mut candidates: IndexMap<String, Vec<Lowered>> = IndexMap::new();
+        let path = lowering.interface_path(name);
+        let mut candidates: IndexMap<String, (Vec<WadoFunction>, Vec<String>)> = IndexMap::new();
         for member in &iface.members {
-            for (wado_name, lowered) in lowering.lower_member(name, member) {
-                candidates.entry(wado_name).or_default().push(lowered);
+            for lowered in lowering.lower_member(name, &path, member) {
+                match lowered {
+                    Ok(function) => candidates
+                        .entry(function.name.clone())
+                        .or_default()
+                        .0
+                        .push(function),
+                    Err((wado_name, reason)) => {
+                        candidates.entry(wado_name).or_default().1.push(reason);
+                    }
+                }
             }
         }
         let mut methods = Vec::new();
-        for (wado_name, lowered) in candidates {
-            let (ok, reasons): (Vec<_>, Vec<_>) = lowered.into_iter().partition(Result::is_ok);
-            match ok.len() {
-                1 => methods.push(ok.into_iter().next().unwrap().unwrap()),
+        for (wado_name, (mut functions, reasons)) in candidates {
+            match functions.len() {
+                1 => methods.push(functions.pop().unwrap()),
                 0 => skipped.extend(
                     reasons
                         .into_iter()
-                        .map(|r| format!("{name}.{wado_name}: {}", r.unwrap_err())),
+                        .map(|reason| format!("{name}.{wado_name}: {reason}")),
                 ),
                 n => skipped.push(format!("{name}.{wado_name}: {n} overloads")),
             }
         }
-        resources.push(WadoResource {
-            name: to_upper_camel_case(name),
-            doc_comment: None,
-            cm_attr: lowering.interface_path(name),
-            extern_handle: true,
-            extends: iface.inheritance.as_deref().map(to_upper_camel_case),
-            methods,
-        });
+        resources.insert(
+            name,
+            WadoResource {
+                name: to_upper_camel_case(name),
+                doc_comment: None,
+                cm_attr: path,
+                extern_handle: true,
+                extends: iface.inheritance.as_deref().map(to_upper_camel_case),
+                methods,
+            },
+        );
     }
     reject_overrides(&merged, &resources)?;
 
     let mut module = WadoModule::new(snapshot.package.clone(), snapshot.webref.clone());
     module
         .interfaces
-        .extend(lowering.global_effect(&merged, &resources));
-    module.resources = resources;
+        .extend(lowering.global_effect(&merged, &resources)?);
+    module.resources = resources.into_values().collect();
     Ok(WebIdlOutput { module, skipped })
 }
 
@@ -230,12 +243,10 @@ fn merge(snapshot: &Snapshot) -> Result<IndexMap<&str, Merged<'_>>> {
         }
         target.members.extend(&iface.members);
     }
-    for name in merged.keys() {
+    for (name, iface) in &merged {
         if !defined.contains(name) {
             bail!("the slice names `{name}`, which no interface definition declares");
         }
-    }
-    for (name, iface) in &merged {
         if let Some(parent) = &iface.inheritance
             && !merged.contains_key(parent.as_str())
         {
@@ -267,10 +278,12 @@ fn merge(snapshot: &Snapshot) -> Result<IndexMap<&str, Merged<'_>>> {
 
 /// A child may not redeclare a method reachable through its chain. Statics
 /// (`new` above all) are not inherited.
-fn reject_overrides(merged: &IndexMap<&str, Merged<'_>>, resources: &[WadoResource]) -> Result<()> {
-    let methods: IndexMap<&str, IndexSet<&str>> = merged
-        .keys()
-        .zip(resources)
+fn reject_overrides(
+    merged: &IndexMap<&str, Merged<'_>>,
+    resources: &IndexMap<&str, WadoResource>,
+) -> Result<()> {
+    let methods: IndexMap<&str, IndexSet<&str>> = resources
+        .iter()
         .map(|(name, r)| {
             let receivers = r
                 .methods
@@ -304,10 +317,9 @@ impl Lowering<'_> {
         format!("web:{}/{}", self.package, to_kebab_case(name))
     }
 
-    /// The functions a member yields, keyed by Wado name: a getter and a
-    /// setter for an attribute, one function otherwise.
-    fn lower_member(&self, iface: &str, member: &Member) -> Vec<(String, Lowered)> {
-        let path = self.interface_path(iface);
+    /// The functions a member yields: a getter and a setter for an attribute,
+    /// one function otherwise. `path` is `iface`'s CM interface.
+    fn lower_member(&self, iface: &str, path: &str, member: &Member) -> Vec<Lowered> {
         match member {
             Member::Attribute {
                 name,
@@ -317,38 +329,31 @@ impl Lowering<'_> {
             } => {
                 let getter = to_wado_identifier(name);
                 if special == "static" {
-                    return vec![(getter, Err("static attribute".to_string()))];
+                    return vec![Err((getter, "static attribute".to_string()))];
                 }
                 let ty = match self.lower_type(idl_type) {
                     Ok(ty) => ty,
-                    Err(reason) => return vec![(getter, Err(reason))],
+                    Err(reason) => return vec![Err((getter, reason))],
                 };
                 let kebab = to_kebab_case(name);
-                let mut out = vec![(
-                    getter.clone(),
-                    Ok(function(
-                        &getter,
-                        format!("{path}#{kebab}"),
-                        vec![self_param(iface)],
-                        Some(ty.clone()),
-                    )),
-                )];
+                let mut out = vec![Ok(function(
+                    getter,
+                    format!("{path}#{kebab}"),
+                    vec![self_param(iface)],
+                    Some(ty.clone()),
+                ))];
                 if !readonly {
-                    let setter = format!("set_{}", to_snake_case(name));
                     let value = WadoParam {
                         name: "value".to_string(),
                         ty,
                         wit_name: "value".to_string(),
                     };
-                    out.push((
-                        setter.clone(),
-                        Ok(function(
-                            &setter,
-                            format!("{path}#set-{kebab}"),
-                            vec![self_param(iface), value],
-                            None,
-                        )),
-                    ));
+                    out.push(Ok(function(
+                        format!("set_{}", to_snake_case(name)),
+                        format!("{path}#set-{kebab}"),
+                        vec![self_param(iface), value],
+                        None,
+                    )));
                 }
                 out
             }
@@ -366,17 +371,16 @@ impl Lowering<'_> {
                 let receiver = match special.as_str() {
                     "" => Some(self_param(iface)),
                     "static" => None,
-                    _ => return vec![(wado_name, Err(format!("{special} operation")))],
+                    _ => return vec![Err((wado_name, format!("{special} operation")))],
                 };
-                let lowered = self.lower_operation(
+                vec![self.lower_operation(
                     iface,
-                    &wado_name,
+                    wado_name,
                     format!("{path}#{}", to_kebab_case(name)),
                     receiver,
                     arguments,
                     Some(idl_type),
-                );
-                vec![(wado_name, lowered)]
+                )]
             }
             Member::Constructor {
                 arguments,
@@ -384,17 +388,16 @@ impl Lowering<'_> {
             } => {
                 // `[HTMLConstructor]` runs only from a custom element definition.
                 if ext_attrs.iter().any(|a| a.name == "HTMLConstructor") {
-                    return vec![("new".to_string(), Err("HTMLConstructor".to_string()))];
+                    return vec![Err(("new".to_string(), "HTMLConstructor".to_string()))];
                 }
-                let lowered = self.lower_operation(
+                vec![self.lower_operation(
                     iface,
-                    "new",
+                    "new".to_string(),
                     format!("{path}#new"),
                     None,
                     arguments,
                     None,
-                );
-                vec![("new".to_string(), lowered)]
+                )]
             }
             Member::Other => Vec::new(),
         }
@@ -404,30 +407,32 @@ impl Lowering<'_> {
     fn lower_operation(
         &self,
         iface: &str,
-        wado_name: &str,
+        wado_name: String,
         cm_attr: String,
         receiver: Option<WadoParam>,
         arguments: &[Argument],
         return_type: Option<&IdlType>,
     ) -> Lowered {
+        let skip = |reason: String| Err((wado_name.clone(), reason));
         let return_type = match return_type {
             None => Some(WadoType::Named(to_upper_camel_case(iface))),
             Some(ty) if is_undefined(ty) => None,
-            Some(ty) => Some(self.lower_type(ty)?),
+            Some(ty) => match self.lower_type(ty) {
+                Ok(ty) => Some(ty),
+                Err(reason) => return skip(reason),
+            },
         };
         let mut params: Vec<WadoParam> = receiver.into_iter().collect();
         for arg in arguments {
-            let lowered = if arg.variadic {
-                Err("variadic".to_string())
-            } else {
-                self.lower_type(&arg.idl_type)
-            };
-            let ty = match lowered {
+            if arg.variadic {
+                return skip(format!("`{}`: variadic", arg.name));
+            }
+            let ty = match self.lower_type(&arg.idl_type) {
                 Ok(ty) => ty,
                 // A trailing optional the slice cannot express is left to
                 // its WebIDL default; a required one takes the member with it.
-                Err(_) if arg.optional || arg.variadic => break,
-                Err(reason) => return Err(format!("`{}`: {reason}", arg.name)),
+                Err(_) if arg.optional => break,
+                Err(reason) => return skip(format!("`{}`: {reason}", arg.name)),
             };
             // `None` is the argument left out, so the WebIDL default applies in
             // the browser. A CM operation admits no default argument.
@@ -449,14 +454,21 @@ impl Lowering<'_> {
         let (inner, nullable) = match &ty.inner {
             IdlTypeInner::Name(name) => (self.lower_name(name)?, ty.nullable),
             IdlTypeInner::Types(constituents) => {
-                let mut expressible = constituents
-                    .iter()
-                    .filter(|c| !is_undefined(c))
-                    .filter_map(|c| self.lower_type(c).ok());
-                let (Some(one), None) = (expressible.next(), expressible.next()) else {
-                    return Err("union type".to_string());
-                };
-                (one, ty.nullable || constituents.iter().any(is_undefined))
+                let mut expressible = Vec::new();
+                let mut reasons = Vec::new();
+                for constituent in constituents.iter().filter(|c| !is_undefined(c)) {
+                    match self.lower_type(constituent) {
+                        Ok(ty) => expressible.push(ty),
+                        Err(reason) => reasons.push(reason),
+                    }
+                }
+                match expressible.len() {
+                    1 => (),
+                    0 => return Err(format!("union: {}", reasons.join("; "))),
+                    n => return Err(format!("union of {n} expressible types")),
+                }
+                let nullable = ty.nullable || constituents.iter().any(is_undefined);
+                (expressible.pop().unwrap(), nullable)
             }
         };
         Ok(optional(inner, nullable))
@@ -490,21 +502,35 @@ impl Lowering<'_> {
     fn global_effect(
         &self,
         merged: &IndexMap<&str, Merged<'_>>,
-        resources: &[WadoResource],
-    ) -> Option<WadoInterface> {
-        let (name, global) = merged.iter().find(|(_, iface)| iface.global)?;
+        resources: &IndexMap<&str, WadoResource>,
+    ) -> Result<Option<WadoInterface>> {
+        let mut globals = merged.iter().filter(|(_, iface)| iface.global);
+        let Some((name, global)) = globals.next() else {
+            return Ok(None);
+        };
+        if let Some((second, _)) = globals.next() {
+            bail!("a package has one `[Global]` interface; the slice has `{name}` and `{second}`");
+        }
         let path = self.interface_path("global");
-        let accessor = |name: &str, ty: &str| {
+        let accessor = |wado_name: String, kebab: &str, ty: &str| {
             function(
-                &to_wado_identifier(name),
-                format!("{path}#{}", to_kebab_case(name)),
+                wado_name,
+                format!("{path}#{kebab}"),
                 Vec::new(),
                 Some(WadoType::Named(ty.to_string())),
             )
         };
         let global_type = to_upper_camel_case(name);
-        let mut functions = vec![accessor(name, &global_type)];
-        let resource = &resources[merged.get_index_of(name).unwrap()];
+        let mut functions = vec![accessor(
+            to_wado_identifier(name),
+            &to_kebab_case(name),
+            &global_type,
+        )];
+        let methods: IndexSet<&str> = resources[name]
+            .methods
+            .iter()
+            .map(|m| m.name.as_str())
+            .collect();
         for member in &global.members {
             if let Member::Attribute {
                 name,
@@ -514,31 +540,33 @@ impl Lowering<'_> {
             } = member
                 && let Ok(WadoType::Named(ty)) = self.lower_type(idl_type)
                 && ty != global_type
-                && resource
-                    .methods
-                    .iter()
-                    .any(|m| m.name == to_wado_identifier(name))
             {
-                functions.push(accessor(name, &ty));
+                let wado_name = to_wado_identifier(name);
+                if methods.contains(wado_name.as_str()) {
+                    functions.push(accessor(wado_name, &to_kebab_case(name), &ty));
+                }
             }
         }
-        Some(WadoInterface {
-            name: "Dom".to_string(),
-            doc_comment: Some("The DOM entry points, which hand out the first handle.".to_string()),
+        Ok(Some(WadoInterface {
+            name: to_upper_camel_case(self.package),
+            doc_comment: Some(format!(
+                "The `web:{}` entry points, which hand out the first handle.",
+                self.package
+            )),
             cm_interface: path,
             functions,
-        })
+        }))
     }
 }
 
 fn function(
-    name: &str,
+    name: String,
     cm_attr: String,
     params: Vec<WadoParam>,
     return_type: Option<WadoType>,
 ) -> WadoFunction {
     WadoFunction {
-        name: name.to_string(),
+        name,
         doc_comment: None,
         cm_attr,
         params,
