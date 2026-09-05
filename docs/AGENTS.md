@@ -168,3 +168,4 @@ missing and what closing it takes. A deliberate omission goes in Decision.
 - [`wado lint` — Corpus Checks](./wep-2026-08-31-wado-lint.md)
 - [Trait Resolution — One Order, Written Down](./wep-2026-09-01-trait-resolution.md)
 - [JSON Web Tokens (`core:jwt`)](./wep-2026-09-02-core-jwt.md)
+- [Reflection over an Unknown Type — `TypeKind` and `match type`](./wep-2026-09-05-reflect-unknown-types.md)
