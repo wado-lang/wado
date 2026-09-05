@@ -391,6 +391,9 @@ pub(super) struct ImplMethodHeader {
     /// Parameter count excluding `self`, so an arity check reads the digest
     /// instead of the method AST.
     pub(super) param_count: usize,
+    /// Whether the method declares a receiver. Excluded from `param_count`,
+    /// and checked beside it: the receiver is as much of the call's shape.
+    pub(super) has_receiver: bool,
     /// The member's declared rung; consulted only on an inherent impl.
     pub(super) visibility: ast::Visibility,
 }
@@ -414,6 +417,10 @@ fn method_headers(
                 .iter()
                 .filter(|p| p.self_kind == ast::SelfKind::None)
                 .count(),
+            has_receiver: m
+                .params
+                .iter()
+                .any(|p| p.self_kind != ast::SelfKind::None),
             visibility: m.visibility,
         })
         .collect()

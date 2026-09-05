@@ -737,6 +737,19 @@ pub enum TypeError {
         span: Span,
     },
 
+    /// An `impl` method's receiver disagrees with the trait's declaration — an
+    /// added or dropped `self`. The same defect as an arity mismatch: the
+    /// receiver is an argument the call site does not write, so the call is
+    /// built to the trait's shape and only fails Wasm validation.
+    TraitMethodReceiverMismatch {
+        trait_name: String,
+        method_name: String,
+        /// Whether the trait declares a receiver, and whether the impl does.
+        expected: bool,
+        found: bool,
+        span: Span,
+    },
+
     /// `impl X for T` where `X` resolves to no trait, effect or resource in
     /// the impl's frame.
     UnknownTraitImpl {
@@ -1639,6 +1652,24 @@ impl TypeError {
                 format!(
                     "method `{method_name}` takes {found} parameter(s) but `{trait_name}` declares {expected}"
                 ),
+                *span,
+            ),
+            TypeError::TraitMethodReceiverMismatch {
+                trait_name,
+                method_name,
+                expected,
+                found,
+                span,
+            } => (
+                Code::TypeMismatch,
+                {
+                    let receiver = |has: bool| if has { "a receiver" } else { "no receiver" };
+                    format!(
+                        "method `{method_name}` takes {} but `{trait_name}` declares {}",
+                        receiver(*found),
+                        receiver(*expected)
+                    )
+                },
                 *span,
             ),
             TypeError::UnknownTraitImpl { name, span } => (

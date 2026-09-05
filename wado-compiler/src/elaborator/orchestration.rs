@@ -1157,10 +1157,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             }
         }
 
-        // An `impl` method whose parameter count differs from the trait's is
-        // never rejected downstream — the call is built to the trait's arity
+        // An `impl` method whose parameter list differs from the trait's is
+        // never rejected downstream — the call is built to the trait's shape
         // and only fails Wasm validation — so compare the two here, where every
-        // declaration and impl is in hand.
+        // declaration and impl is in hand. The receiver counts as much as the
+        // rest: no call site writes it, so a `self` the trait does not declare
+        // leaves the callee reading an argument nothing pushed.
         //
         // The impl's trait is the one its header resolved to, so a module
         // implementing its own `Encode` is never checked against another
@@ -1189,6 +1191,18 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             method_name: method.name.clone(),
                             expected,
                             found,
+                            span: method.name_span,
+                        },
+                    );
+                }
+                if declared.has_receiver != method.has_receiver {
+                    let _ = logger.error_in(
+                        &header.module,
+                        TypeError::TraitMethodReceiverMismatch {
+                            trait_name: decl.name.clone(),
+                            method_name: method.name.clone(),
+                            expected: declared.has_receiver,
+                            found: method.has_receiver,
                             span: method.name_span,
                         },
                     );
