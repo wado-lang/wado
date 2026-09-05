@@ -1938,8 +1938,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         );
     }
 
-    /// [`Self::pad_args_with_defaults`] against defaults already looked up, for
-    /// a caller that records them alongside the padding it performs.
+    /// [`Self::pad_args_with_defaults`] against defaults already looked up, so
+    /// a caller can record the same ones it padded with.
     pub(super) fn apply_param_defaults(
         &mut self,
         call_args_ast: &[Expr],

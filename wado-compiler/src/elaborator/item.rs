@@ -1510,14 +1510,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             .expect("the decl pass records every interface / resource declaration's operations")
     }
 
-    /// Resolve a `trait` declaration in its own frame and record it.
-    ///
-    /// `Self` takes slot 0 and the trait's own type parameters follow, so a
-    /// method signature naming `Self`, `Self::Assoc` or the trait's `T` is
-    /// abstract over exactly those slots. An `impl` reads a method back by
-    /// filling slot 0 with its target and the rest with its trait arguments
-    /// — the same instantiation every other declaration uses, instead of
-    /// re-resolving the trait's method AST in the impl's perspective.
     /// The scope a `trait`'s methods resolve in: `Self` as slot 0, bounded by
     /// the trait itself, then the trait's own type parameters. Returned with
     /// the `Self` slot and the first slot a method's own parameters may take.
@@ -1561,11 +1553,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// [`Self::resolve_operation_param_defaults`] for a `trait`'s methods, whose
     /// scope binds `Self` as a slot rather than a concrete type.
     pub(super) fn resolve_trait_param_defaults(&mut self, trait_decl: &ast::TraitDecl) {
-        if !trait_decl
-            .methods
-            .iter()
-            .any(|m| m.params.iter().any(|p| p.default.is_some()))
-        {
+        if !declares_a_default(&trait_decl.methods) {
             return;
         }
         let (mut scope, _, next_slot) = self.enter_trait_scope(trait_decl);
@@ -1577,23 +1565,18 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 .trait_ctx
                 .install_effect_params(&method.type_params);
             method_scope.register_generic_params(&method.type_params, next_slot);
-            let mut ctx = FunctionContext::new(TypeTable::UNIT, method.name.clone());
-            for param in &method.params {
-                if param.self_kind != SelfKind::None {
-                    continue;
-                }
-                let type_id = method_scope.resolve_type(&param.ty);
-                if let Some(default_ast) = &param.default {
-                    let expected =
-                        method_scope.apply_type_param_defaults(&method.type_params, type_id);
-                    let resolved = method_scope.resolve_expr(default_ast, &mut ctx, Some(expected));
-                    method_scope.typecheck(resolved, expected, default_ast.span());
-                }
-                ctx.add_local_at(param.name.clone(), type_id, param.is_mut, None, param.span);
-            }
+            method_scope.check_param_defaults(method, &method.type_params);
         }
     }
 
+    /// Resolve a `trait` declaration in its own frame and record it.
+    ///
+    /// `Self` takes slot 0 and the trait's own type parameters follow, so a
+    /// method signature naming `Self`, `Self::Assoc` or the trait's `T` is
+    /// abstract over exactly those slots. An `impl` reads a method back by
+    /// filling slot 0 with its target and the rest with its trait arguments
+    /// — the same instantiation every other declaration uses, instead of
+    /// re-resolving the trait's method AST in the impl's perspective.
     pub(super) fn resolve_trait_decl(&mut self, trait_decl: &ast::TraitDecl) {
         let (mut scope, self_slot, next_slot) = self.enter_trait_scope(trait_decl);
 
@@ -1708,13 +1691,13 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     }
 
     /// The scope an `interface` / `resource` declaration's operations resolve
-    /// in: its type parameters, and — for a resource — `Self` bound to the
-    /// declaring resource, returned alongside for the receiver's own type.
+    /// in: its type parameters, and for a resource `Self` bound to the declaring
+    /// resource. That `Self` type comes back too, because it is the receiver's.
     ///
-    /// The `Self` type is constructed after the type params are in scope, so a
-    /// generic resource's `GenericResource` instance can reference its own
-    /// `TypeParam`s (which gap-2 substitution then specialises per impl-block
-    /// instantiation). A non-generic resource is a plain `Resource { def }`.
+    /// It is constructed after the type params are in scope, so a generic
+    /// resource's `GenericResource` instance can reference its own `TypeParam`s
+    /// (which gap-2 substitution then specialises per impl-block instantiation).
+    /// A non-generic resource is a plain `Resource { def }`.
     fn enter_operation_scope(
         &mut self,
         type_params: &[ast::GenericParam],
@@ -1755,9 +1738,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     }
 
     /// Lower an effect or resource declaration's method list to [`TirEffectOp`]s.
-    /// `resource_self` marks a resource decl, whose
-    /// `&self` shorthand becomes a real parameter at index 0 to match
-    /// `__cm_binding__<R>_<op>(self, args)`; an effect decl takes no receiver.
+    /// `resource_self` marks a resource decl, whose `&self` shorthand becomes a
+    /// real parameter at index 0 to match `__cm_binding__<R>_<op>(self, args)`;
+    /// an effect decl takes no receiver.
     pub(super) fn resolve_effect_ops(
         &mut self,
         type_params: &[ast::GenericParam],
@@ -1994,10 +1977,28 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         }
     }
 
+    /// Check one method's parameter defaults against their parameter types, with
+    /// the earlier parameters in scope and `type_params`' own defaults applied.
+    fn check_param_defaults(&mut self, method: &ast::Function, type_params: &[ast::GenericParam]) {
+        let mut ctx = FunctionContext::new(TypeTable::UNIT, method.name.clone());
+        for param in &method.params {
+            if param.self_kind != SelfKind::None {
+                continue;
+            }
+            let type_id = self.resolve_type(&param.ty);
+            if let Some(default_ast) = &param.default {
+                let expected = self.apply_type_param_defaults(type_params, type_id);
+                let resolved = self.resolve_expr(default_ast, &mut ctx, Some(expected));
+                self.typecheck(resolved, expected, default_ast.span());
+            }
+            ctx.add_local_at(param.name.clone(), type_id, param.is_mut, None, param.span);
+        }
+    }
+
     /// Walk each operation's parameter defaults in the declaring scope, the way
     /// [`Self::resolve_function`] walks a free function's. A call site re-emits
-    /// the default from the AST, so this is what records the expression types it
-    /// reads back and the use→def edges that keep the items a default names
+    /// the default from the AST, and reads back what this walk records: the
+    /// default's expression types, and the use→def edges that keep what it names
     /// alive.
     pub(super) fn resolve_operation_param_defaults(
         &mut self,
@@ -2005,34 +2006,15 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         methods: &[ast::Function],
         resource_self: Option<crate::defs::DefId>,
     ) {
-        if !methods
-            .iter()
-            .any(|m| m.params.iter().any(|p| p.default.is_some()))
-        {
+        if !declares_a_default(methods) {
             return;
         }
         let (mut scope, _) = self.enter_operation_scope(type_params, resource_self);
-        // A default names no function-local item, and the table is whatever the
-        // last body walked left behind.
+        // A default names no function-local item, and the table holds whatever
+        // the last body walked left behind.
         scope.sem.decls.clear_fn_local_items();
         for method in methods {
-            // Only the earlier parameters are in scope, as in a free function's
-            // signature; the receiver is never one of them.
-            let mut ctx = FunctionContext::new(TypeTable::UNIT, method.name.clone());
-            for param in &method.params {
-                if param.self_kind != SelfKind::None {
-                    continue;
-                }
-                let type_id = scope.resolve_type(&param.ty);
-                if let Some(default_ast) = &param.default {
-                    // The declaration promises the value for the type argument
-                    // a caller gets by default, never for a bare slot.
-                    let expected = scope.apply_type_param_defaults(type_params, type_id);
-                    let resolved = scope.resolve_expr(default_ast, &mut ctx, Some(expected));
-                    scope.typecheck(resolved, expected, default_ast.span());
-                }
-                ctx.add_local_at(param.name.clone(), type_id, param.is_mut, None, param.span);
-            }
+            scope.check_param_defaults(method, type_params);
         }
     }
 
@@ -2895,6 +2877,13 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         // satisfies the signature.
         Some(placeholder_function(func.name.clone(), func.span))
     }
+}
+
+/// Whether any of `methods` gives a parameter a default.
+fn declares_a_default(methods: &[ast::Function]) -> bool {
+    methods
+        .iter()
+        .any(|m| m.params.iter().any(|p| p.default.is_some()))
 }
 
 /// Which declaration an operation belongs to. A resource's operations are

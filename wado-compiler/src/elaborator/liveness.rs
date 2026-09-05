@@ -211,10 +211,10 @@ pub(crate) fn compute(
 /// Seed each declared method of a `trait` / `interface` / `resource` that
 /// reaches code nothing in the AST names.
 ///
-/// A default body's only call is the one dispatch mints later; a parameter
-/// default is materialized by reify at every call that omits the argument.
-/// Unseeded, either one and everything only it reaches are dead, and reify
-/// drops a callee the materialized call still names.
+/// Dispatch mints the only call to a default body, and reify materializes a
+/// parameter default at every call that omits the argument. Neither call is in
+/// the AST, so without a seed here the method is dead, everything only it
+/// reaches goes with it, and the minted call names a callee reify dropped.
 fn seed_operations(graph: &mut Graph, methods: &[Function], references: &References<'_>) {
     for method in methods {
         if method.body.is_none() && !method.params.iter().any(|p| p.default.is_some()) {
