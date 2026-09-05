@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1788615478555,
+  "lastUpdate": 1788616840883,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -53561,6 +53561,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/aaaae3ec6fdb45d123f9ea94836864cb8d1d33fa"
         },
         "date": 1788615477711,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 2013,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6560,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18891,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 288497,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "78596fa8966bffa9bce36a6cd13672008791fa3c",
+          "message": "Merge pull request #1969 from wado-lang/claude/niri-website-redesign-1g32fz\n\nfeat(niri): fold constant string templates, and report the regions that stay",
+          "timestamp": "2026-09-05T22:38:10+09:00",
+          "tree_id": "471c960753877586c39e3e4d91a6fcfddd5ed311",
+          "url": "https://github.com/wado-lang/wado/commit/78596fa8966bffa9bce36a6cd13672008791fa3c"
+        },
+        "date": 1788616840400,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
