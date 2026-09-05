@@ -526,8 +526,16 @@ fn run_optimization_passes(
     // What changed in the iteration just run, and so the convergence flag:
     // empty ends the loop, non-empty after it names what held the loop open.
     let mut iter_changed: Vec<&'static str> = Vec::new();
-    for i in 0..config.iterations {
-        profiler.span_start(&format!("nir/iteration {}", i + 1));
+    let mut i = 0;
+    // Rounds since the fixed point was last sought from scratch. Releasing the
+    // inline holds opens a second run, with the cap of its own: the cap sizes
+    // one convergence, and a program that takes most of it to converge once
+    // would otherwise hit it on the rounds the release adds.
+    let mut round = 0;
+    while round < config.iterations {
+        i += 1;
+        round += 1;
+        profiler.span_start(&format!("nir/iteration {i}"));
         iter_changed.clear();
         macro_rules! record {
             ($name:expr, $c:expr) => {{
@@ -675,22 +683,19 @@ fn run_optimization_passes(
             GatedPass::TmplHoist,
             hoist_template_buffers
         );
-        profiler.span_end(&format!("nir/iteration {}", i + 1));
+        profiler.span_end(&format!("nir/iteration {i}"));
         crate::compiler_trace!(
             "opt_loop",
-            "iter {:>3}: changed_by = [{}]",
-            i + 1,
+            "iter {i:>3}: changed_by = [{}]",
             iter_changed.join(", ")
         );
         if iter_changed.is_empty() {
             if inline_holds.release(&mut gate) {
-                crate::compiler_trace!("opt_loop", "iter {:>3}: inline holds released", i + 1);
+                crate::compiler_trace!("opt_loop", "iter {i:>3}: inline holds released");
+                round = 0;
                 continue;
             }
-            profiler.debug(&format!(
-                "NIR optimizer converged after {} iteration(s)",
-                i + 1
-            ));
+            profiler.debug(&format!("NIR optimizer converged after {i} iteration(s)"));
             break;
         }
     }
