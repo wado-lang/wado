@@ -25,7 +25,7 @@ use crate::nir_package::NirPackage;
 use crate::niri::{
     BorrowRoot, CalleeMap, CtfeBuiltinMap, EditSink, GlobalEnv, GlobalFieldEnv, GlobalKey,
     Interpreter, Lattice, MaterializingGlobals, build_callee_map, build_ctfe_builtin_map,
-    global_mention, materialization_pair,
+    materializing_globals,
 };
 use crate::tir::{PrimitiveType, ResolvedType, TypeId, TypeTable};
 
@@ -436,50 +436,6 @@ fn build_global_view(project: &NirPackage, type_table: &TypeTable, maps: &FoldMa
         view.values.insert(key, Lattice::NonConst);
     }
     view
-}
-
-/// Derive the [`MaterializingGlobals`] set: pair a global on every block that
-/// materializes it, and drop it again on any mention outside one. Global
-/// initializers are walked too, since a read there counts like any other.
-fn materializing_globals(project: &NirPackage) -> MaterializingGlobals {
-    let mut paired = MaterializingGlobals::default();
-    let mut loose: IndexSet<GlobalKey> = IndexSet::default();
-    let mut visit = |body: &Body| {
-        let mut stack = vec![(NodeRef::Block(body.root), None::<GlobalKey>)];
-        while let Some((node, enclosing)) = stack.pop() {
-            let enclosing = match node {
-                NodeRef::Block(b) => match materialization_pair(body, b) {
-                    Some(key) => {
-                        paired.insert(key.clone());
-                        Some(key)
-                    }
-                    None => enclosing,
-                },
-                _ => enclosing,
-            };
-            // A mention of some *other* global inside a pair block is a plain
-            // read, so the pair says nothing about it.
-            if let NodeRef::Expr(e) = node
-                && let Some(key) = global_mention(body, e)
-                && enclosing.as_ref() != Some(&key)
-            {
-                loose.insert(key);
-            }
-            body.for_each_child(node, |c| stack.push((c, enclosing.clone())));
-        }
-    };
-    for func_rc in &project.functions {
-        if let Some(body) = func_rc.borrow().body.as_ref() {
-            visit(body);
-        }
-    }
-    for global in &project.globals {
-        if let Some(declared) = global.init.declared() {
-            visit(declared.body());
-        }
-    }
-    paired.retain(|key| !loose.contains(key));
-    paired
 }
 
 /// Whether `e` is `&GLOBAL` — a shared borrow of a whole global, not of a part

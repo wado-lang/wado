@@ -304,6 +304,54 @@ pub fn is_ctfe_eligible(func: &NirFunction) -> bool {
         && is_ctfe_runnable(func)
 }
 
+/// Derive the [`MaterializingGlobals`] set: pair a global on every block that
+/// materializes it, and drop it again on any mention outside one. Global
+/// initializers are walked too, since a read there counts like any other.
+///
+/// One derivation for the fold and the remark alike: a remark deciding this for
+/// itself would blame a store the fold exempts.
+#[must_use]
+pub fn materializing_globals(project: &NirPackage) -> MaterializingGlobals {
+    let mut paired = MaterializingGlobals::default();
+    let mut loose: IndexSet<GlobalKey> = IndexSet::default();
+    let mut visit = |body: &Body| {
+        let mut stack = vec![(NodeRef::Block(body.root), None::<GlobalKey>)];
+        while let Some((node, enclosing)) = stack.pop() {
+            let enclosing = match node {
+                NodeRef::Block(b) => match region::materialization_pair(body, b) {
+                    Some(key) => {
+                        paired.insert(key.clone());
+                        Some(key)
+                    }
+                    None => enclosing,
+                },
+                _ => enclosing,
+            };
+            // A mention of some *other* global inside a pair block is a plain
+            // read, so the pair says nothing about it.
+            if let NodeRef::Expr(e) = node
+                && let Some(key) = region::global_mention(body, e)
+                && enclosing.as_ref() != Some(&key)
+            {
+                loose.insert(key);
+            }
+            body.for_each_child(node, |c| stack.push((c, enclosing.clone())));
+        }
+    };
+    for func_rc in &project.functions {
+        if let Some(body) = func_rc.borrow().body.as_ref() {
+            visit(body);
+        }
+    }
+    for global in &project.globals {
+        if let Some(declared) = global.init.declared() {
+            visit(declared.body());
+        }
+    }
+    paired.retain(|key| !loose.contains(key));
+    paired
+}
+
 /// A region-shaped block and what a frame would need to run it. No free reads
 /// and no refusal mean it depends on nothing outside itself, so it denotes a
 /// constant whether or not the engine reached one.
@@ -314,6 +362,12 @@ pub struct RegionQuery {
     pub expr: ExprId,
     pub free_reads: Vec<u32>,
     pub refusal: Option<RegionRefusal>,
+    /// Whether the block writes a local declared outside it. Carried apart from
+    /// `refusal`, which holds whichever fact the walk met first: a block that
+    /// writes its parent's buffer *and* calls something unrunnable reports the
+    /// call, and a consumer asking "is this an inner block of a larger region"
+    /// would then miss it.
+    pub writes_outer: bool,
 }
 
 /// Every region-shaped block in `body`, in walk order. Both the fold, which runs
@@ -324,6 +378,7 @@ pub fn region_queries(
     body: &Body,
     callees: &CalleeMap,
     ctfe_builtins: &CtfeBuiltinMap,
+    materializing: &MaterializingGlobals,
     type_table: &TypeTable,
 ) -> Vec<RegionQuery> {
     let facts = ProgramFacts {
@@ -331,7 +386,7 @@ pub fn region_queries(
         ctfe_builtins: Some(ctfe_builtins),
         globals: None,
         global_fields: None,
-        materializing: None,
+        materializing: Some(materializing),
     };
     let mut out = Vec::new();
     let mut stack = vec![NodeRef::Block(body.root)];
@@ -344,6 +399,7 @@ pub fn region_queries(
                 expr: e,
                 free_reads: needs.free_reads.into_iter().map(|r| r.index).collect(),
                 refusal: needs.refusal,
+                writes_outer: needs.writes_outer,
             });
         }
         body.for_each_child(node, |c| stack.push(c));

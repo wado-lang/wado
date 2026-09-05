@@ -544,6 +544,37 @@ export fn run() with Stdout {
 }
 
 #[test]
+fn a_surviving_region_is_not_blamed_for_a_materializing_store() {
+    // The store globalization leaves is exempt for the fold, so a region that
+    // carries one and survives anyway must be blamed for whatever actually
+    // stopped it. Reporting the store instead sends the reader after a write the
+    // engine was never refusing, and files the region under the wrong cause.
+    //
+    // Three interpolations is what it takes to survive: one folds.
+    let remarks = const_region_remarks(
+        r#"
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let w = 1024;
+    let h = 768;
+    println(`mandelbrot ${w}x${h}, max_iter=${256}`);
+}
+"#,
+    );
+
+    assert_eq!(remarks.len(), 1, "expected one remark, got {remarks:?}");
+    assert!(
+        !remarks[0].contains("writes a global"),
+        "the materializing store is not what stopped it: {remarks:?}"
+    );
+    assert!(
+        remarks[0].contains("fmt_decimal"),
+        "the surviving formatter is: {remarks:?}"
+    );
+}
+
+#[test]
 fn a_template_buffers_inner_block_is_not_remarked() {
     // Every template region contains inner blocks that write the buffer their
     // parent owns. Reporting those would bury the region worth reporting, so a

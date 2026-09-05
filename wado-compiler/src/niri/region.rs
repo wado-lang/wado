@@ -297,11 +297,13 @@ pub(super) fn region_needs(
         // frame cannot check is worth.
         .chain(promoted.into_iter().map(|index| (index, true)));
     let mut out = Vec::new();
+    let mut writes_outer = false;
     for (index, is_reference) in named {
         if declared.contains(index) {
             continue;
         }
         if written.contains(index) {
+            writes_outer = true;
             refusal.get_or_insert(RegionRefusal::OuterWrite);
             continue;
         }
@@ -313,6 +315,7 @@ pub(super) fn region_needs(
     RegionNeeds {
         free_reads: out,
         refusal,
+        writes_outer,
     }
 }
 
@@ -321,6 +324,9 @@ pub(super) fn region_needs(
 pub(super) struct RegionNeeds {
     pub(super) free_reads: Vec<FreeRead>,
     pub(super) refusal: Option<RegionRefusal>,
+    /// Whether an outer local is written. `refusal` may name an earlier fact
+    /// instead, since the walk keeps the first it meets.
+    pub(super) writes_outer: bool,
 }
 
 /// A local a region reads without declaring, and whether it names a reference.

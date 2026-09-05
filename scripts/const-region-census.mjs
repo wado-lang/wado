@@ -4,7 +4,7 @@
 // Usage: node scripts/const-region-census.mjs [--bin <wado>]
 
 import { execFile } from "node:child_process";
-import { readdir } from "node:fs/promises";
+import { access, readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
 
@@ -12,7 +12,13 @@ const run = promisify(execFile);
 
 const argv = process.argv.slice(2);
 const binIndex = argv.indexOf("--bin");
+if (binIndex >= 0 && argv[binIndex + 1] === undefined) {
+  throw new Error("--bin needs the path to a wado binary");
+}
 const WADO = binIndex >= 0 ? argv[binIndex + 1] : "target/debug/wado";
+// Checked once, so a missing binary is one error rather than a run in which
+// every file fails to compile and the census prints a confident zero.
+await access(WADO);
 
 const CORPUS_DIRS = ["benchmark", "wasm-size"];
 
@@ -38,7 +44,7 @@ async function corpusFiles() {
   return files.sort();
 }
 
-/** The `remark:` lines a compile emits, or `null` when the file does not build. */
+/** The `remark:` lines a compile emits, or the reason it did not build. */
 async function remarksFor(file) {
   try {
     const { stderr } = await run(
@@ -46,9 +52,12 @@ async function remarksFor(file) {
       ["compile", "-O2", "--log-level", "info", "-o", "/dev/null", file],
       { maxBuffer: 64 << 20 },
     );
-    return stderr.split("\n").filter((l) => l.includes("remark:"));
-  } catch {
-    return null;
+    return { remarks: stderr.split("\n").filter((l) => l.includes("remark:")) };
+  } catch (e) {
+    // Carry the diagnostic: a file that is not an entry point and one the
+    // compiler rejects both land here, and only the first is expected.
+    const first = (e.stderr ?? "").split("\n").find((l) => l.includes("error:"));
+    return { error: first?.trim() ?? e.message };
   }
 }
 
@@ -68,9 +77,9 @@ const byFile = new Map();
 const skipped = [];
 
 for (const file of files) {
-  const remarks = await remarksFor(file);
-  if (remarks === null) {
-    skipped.push(file);
+  const { remarks, error } = await remarksFor(file);
+  if (error !== undefined) {
+    skipped.push([file, error]);
     continue;
   }
   const regions = remarks.filter((r) => r.includes("computes a constant at run time"));
@@ -101,6 +110,6 @@ for (const [file, n] of [...byFile].sort((a, b) => b[1] - a[1])) {
 }
 
 if (skipped.length > 0) {
-  console.log(`\nNot compiled (not an entry point, or needs a package build):`);
-  for (const file of skipped) console.log(`- \`${file}\``);
+  console.log(`\n## Not compiled\n`);
+  for (const [file, error] of skipped) console.log(`- \`${file}\` — ${error}`);
 }

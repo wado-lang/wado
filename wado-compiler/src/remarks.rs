@@ -15,8 +15,8 @@ use crate::nir::{FunctionRef, NirUnaryOp};
 use crate::nir_arena::{Body, ExprId, ExprKind, NodeRef};
 use crate::nir_package::NirPackage;
 use crate::niri::{
-    CtfeBuiltin, CtfeBuiltinMap, RegionRefusal, build_callee_map, build_ctfe_builtin_map,
-    is_ctfe_runnable, region_queries,
+    CtfeBuiltin, CtfeBuiltinMap, build_callee_map, build_ctfe_builtin_map, is_ctfe_runnable,
+    materializing_globals, region_queries,
 };
 use crate::tir::{TypeId, TypeTable};
 use crate::token::Span;
@@ -450,6 +450,7 @@ fn branch_gate(body: &Body, node: NodeRef) -> Option<(crate::nir_arena::Operand,
 pub fn collect_const_region_remarks(package: &NirPackage) -> Vec<Remark> {
     let callees = build_callee_map(package);
     let ctfe_builtins = build_ctfe_builtin_map(package);
+    let materializing = materializing_globals(package);
     let names = ctfe_runnable_names(package);
     let type_table_ref = package.type_table.borrow();
     let type_table: &TypeTable = &type_table_ref;
@@ -463,7 +464,7 @@ pub fn collect_const_region_remarks(package: &NirPackage) -> Vec<Remark> {
         let Some(body) = &func.body else {
             continue;
         };
-        for region in region_queries(body, &callees, &ctfe_builtins, type_table) {
+        for region in region_queries(body, &callees, &ctfe_builtins, &materializing, type_table) {
             // A region reading an outer local yields no constant, whatever else
             // in it the engine also cannot do.
             if !region.free_reads.is_empty() {
@@ -471,7 +472,7 @@ pub fn collect_const_region_remarks(package: &NirPackage) -> Vec<Remark> {
             }
             // An inner block writing the buffer its parent owns is how a
             // template is built. The parent is reported on its own.
-            if region.refusal == Some(RegionRefusal::OuterWrite) {
+            if region.writes_outer {
                 continue;
             }
             let surviving = surviving_calls(body, region.expr, &names, &ctfe_builtins);
