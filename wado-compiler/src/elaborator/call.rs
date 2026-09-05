@@ -1300,11 +1300,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         method_name,
                     );
 
-                    let mut return_type = self.lookup_static_method_return_type(
-                        &method_ref,
-                        &receiver,
-                        &final_mangled,
-                    );
+                    let mut return_type =
+                        self.lookup_static_method_return_type(&method_ref, &receiver);
                     if !method_type_args.is_empty() {
                         return_type = self
                             .tysys

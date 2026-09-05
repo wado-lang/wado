@@ -2145,11 +2145,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         );
 
         // Look up return type
-        let mut return_type = self.lookup_static_method_return_type(
-            &method_ref,
-            &mangled_struct_name,
-            &mangled_func_name,
-        );
+        let mut return_type =
+            self.lookup_static_method_return_type(&method_ref, &mangled_struct_name);
 
         // A value blanket indexes statics under its receiver *param* name, so
         // the concrete receiver's own bucket misses.
@@ -2303,15 +2300,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         } = self.find_blanket_static_method(receiver_type_id, method)?;
 
         let template_name = MethodName::format_local(&binder, Some(&trait_name), method);
+        // The blanket's own declaration of the method: its bucket is keyed by
+        // the receiver *param*, which no name written at a call site reaches.
         let method_ref = StaticMethodRef::new(
             blanket_module.clone(),
             blanket_param.clone(),
             method.to_string(),
             Some(trait_name.clone()),
-            None,
+            self.tysys.declared_method(blanket_def, method),
         );
-        let template_return =
-            self.lookup_static_method_return_type(&method_ref, &binder, &template_name);
+        let template_return = self.lookup_static_method_return_type(&method_ref, &binder);
         if template_return == TypeTable::UNKNOWN {
             return None;
         }
@@ -2598,27 +2596,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         method_ref: &StaticMethodRef,
         receiver: &FqTypeName,
-        mangled_func_name: &str,
     ) -> TypeId {
         let struct_name = method_ref.type_name.as_str();
         let method_name = method_ref.method_name.as_str();
-        // First check locally registered function_return_types
-        if let Some(&return_type) = self.sem.decls.function_return_types.get(mangled_func_name) {
-            return return_type;
-        }
-
-        // Also try with just StructName::method (for non-generic types)
-        let simple_name = MethodName::format_local(receiver, None, method_name);
-        if let Some(&return_type) = self.sem.decls.function_return_types.get(&simple_name) {
-            return return_type;
-        }
-
-        // Try with trait-qualified name (StructName^TraitName::method)
-        if let Some(trait_name) = self.find_static_method_trait(struct_name, method_name) {
-            let trait_mangled = MethodName::format_local(receiver, Some(&trait_name), method_name);
-            if let Some(&return_type) = self.sem.decls.function_return_types.get(&trait_mangled) {
-                return return_type;
-            }
+        // The declaration the selection picked answers first: an overload's
+        // members may return differently, and the pick is what the call's
+        // mangled name was built from. A map of mangled names stood here and
+        // held the current module's methods alone, so an imported callee fell
+        // through to the agreed-return rung, which declines a disagreeing
+        // overload.
+        if let Some(sig) = method_ref
+            .method_id
+            .and_then(|def| self.tysys.signatures.method_sig(def))
+        {
+            return sig.decl.return_type.unwrap_or(TypeTable::UNIT);
         }
 
         // The receiver's own declaration is the key. A head naming none falls
@@ -3723,11 +3714,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
 
         // Look up return type using the actual struct name
-        let mut return_type = self.lookup_static_method_return_type(
-            &method_ref,
-            &actual_struct_fq,
-            &final_mangled_name,
-        );
+        let mut return_type = self.lookup_static_method_return_type(&method_ref, &actual_struct_fq);
 
         // Substitute impl-level + method-level type parameters in return type.
         // `lookup_static_method_return_type` registers impl params at indices
