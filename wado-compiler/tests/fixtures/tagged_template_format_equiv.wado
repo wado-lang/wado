@@ -1,0 +1,35 @@
+// The prelude's `format` tag means what the untagged template means: every
+// hole rendered through its specifier into one buffer. The two forms are
+// held to the same output over the specifier matrix (WEP 2026-01-10).
+use { println, Stdout } from "core:cli";
+
+struct Pt {
+    x: i32,
+    y: i32,
+}
+
+impl Display for Pt {
+    fn fmt(&self, f: &mut Formatter) {
+        f.write_str(&`(${self.x}, ${self.y})`);
+    }
+}
+
+type Meters = f64;
+
+export fn run() with Stdout {
+    let pi = builtin::black_box(3.14159);
+    let n = builtin::black_box(-42);
+    let s = builtin::black_box("あい");
+    let p = Pt { x: 1, y: 2 };
+    let m: Meters = 2.5;
+    let r = &s;
+    let tagged = format`${pi:.2}|${n:08}|${255:#x}|${255:X}|${5:b}|${8:o}|${1200:e}|${s:>6}|${s:.1}|${p}|${p:?}|${p:#?}|${m}|${r}|${r:?}|${true}|${'c'}|${n:+}`;
+    let plain = `${pi:.2}|${n:08}|${255:#x}|${255:X}|${5:b}|${8:o}|${1200:e}|${s:>6}|${s:.1}|${p}|${p:?}|${p:#?}|${m}|${r}|${r:?}|${true}|${'c'}|${n:+}`;
+    println(tagged);
+    assert tagged == plain;
+    assert format`` == "";
+    assert format`plain text` == "plain text";
+}
+
+__DATA__
+{"stdout": "3.14|-0000042|0xff|FF|101|10|1.2e3|    あい|あ|(1, 2)|Pt { x: 1, y: 2 }|Pt {\n  x: 1,\n  y: 2,\n}|2.5|あい|&\"あい\"|true|c|-42\n"}

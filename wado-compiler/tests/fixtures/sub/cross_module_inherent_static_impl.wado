@@ -1,0 +1,20 @@
+// Module B: an inherent `impl` on module A's `Gadget`, holding a static rather
+// than the instance method `…_third_impl.wado` adds. The static's definition is
+// registered under this module, so a call must name it here too.
+use { Gadget } from "./cross_module_inherent_third_type.wado";
+
+// Private to this module, so `origin`'s default resolves only where it was
+// written. A literal would resolve in every module and pin nothing.
+fn base() -> i32 {
+    return 9;
+}
+
+impl Gadget {
+    pub fn of(n: i32) -> Gadget {
+        return Gadget { n };
+    }
+
+    pub fn origin(n: i32 = base()) -> Gadget {
+        return Gadget { n };
+    }
+}

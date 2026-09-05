@@ -744,8 +744,13 @@ relevant sites.
    name '(' inner ')'` read the token after the `'('` as if `alias` were
    one token, and committed to the wrong alt. A single-token body keeps
    the cheap skip — widening this to every repeat would downgrade
-   decisions the static path resolves correctly today. Fixture
-   `tests/grammars/scan_optional_lookahead_restore.g4`.
+   decisions the static path resolves correctly today. The walk holds at
+   every depth, a rule-ref expansion included: Wado's `if x matches {`
+   reached `(tagOwner '::')* tagName` through one and, skipped past, the
+   repeat claimed `matches` for the tag. Where the body cannot be walked,
+   the config turns opaque rather than lossy. Fixture
+   `tests/grammars/scan_optional_lookahead_restore.g4`; the expansion case
+   is pinned in `src/dump_test.wado`.
 7. A scan-side optional rewinds to its entry position when its body
    fails, because a failed optional means "skip". Leaving the callee's
    `-1` in the scan position both mis-scans the elements after it and

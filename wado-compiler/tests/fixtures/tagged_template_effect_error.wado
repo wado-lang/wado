@@ -1,0 +1,15 @@
+// A tag call is a call: its effects are the caller's to declare, the same as
+// for the spelled form (WEP 2026-01-10).
+use { println, Stdout } from "core:cli";
+
+fn shout<T: ReflectTemplate<Holes = [..V]>, ..V>(t: T) -> i32 with Stdout {
+    println(ReflectTemplate::<T>::tail());
+    return 1;
+}
+
+export fn run() {
+    let _ = shout`hi`;
+}
+
+__DATA__
+{"compile_error": "Stdout"}

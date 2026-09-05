@@ -502,16 +502,22 @@ struct ReflectTarget {
 
 /// Select the structs in `module` that need a synthesized `ReflectStruct` impl:
 /// every declared struct, generic or not. Monomorphized instances inherit the
-/// generic impl through substitution.
+/// generic impl through substitution. A tagged template literal's type is a
+/// struct of the template kind, not this one.
 fn collect_reflect_targets(module: &TirModule) -> Vec<ReflectTarget> {
+    let tt = module.type_table.borrow();
     module
         .structs
         .iter()
         .filter(|s| s.monomorph_info.is_none())
+        .filter(|s| match s.def {
+            crate::tir::StructDef::Anon(shape) => tt.template_shape(shape).is_none(),
+            crate::tir::StructDef::Decl(_) => true,
+        })
         .map(|s| ReflectTarget {
             name: s.name.clone(),
             def: s.def,
-            receiver: module.type_table.borrow().fq_struct_head(s.def),
+            receiver: tt.fq_struct_head(s.def),
             type_params: s.type_params.clone(),
             fields: s
                 .fields
@@ -737,6 +743,11 @@ pub(crate) const REFLECT_FIELD_TYPES_ASSOC: &str = "FieldTypes";
 /// `ReflectStruct`'s slot associated type (`type FieldSlots`): the field types
 /// under `Option`, the shape `defaults()` returns and a streaming build fills.
 pub(crate) const REFLECT_FIELD_SLOTS_ASSOC: &str = "FieldSlots";
+
+/// `ReflectTemplate`'s payload-pack associated type (`type Holes`): the hole
+/// types themselves, bound to place per-hole trait bounds on a tag
+/// (WEP 2026-01-10).
+pub(crate) const REFLECT_HOLES_ASSOC: &str = "Holes";
 
 /// Module-level types and method names resolved once from the compiler-item
 /// registry and reused across every struct's `ReflectStruct` synthesis in that
@@ -1262,98 +1273,152 @@ pub(super) fn generate_field_bridge_helpers(
     ref_struct_type: TypeId,
     span: Span,
 ) -> Vec<TirFunction> {
-    let mangled_struct = type_table.borrow().mangle_type_arg_for_generic(struct_type);
-
-    // Key each helper by the field type's *erased* mangle. `erase_newtypes_and_flags`
-    // (after monomorphize, before lower) collapses `Newtype`/`Flags` to their base,
-    // and the `struct_field_get` call site mangles its `field_ty` through that
-    // erasure — so a helper minted here under the pre-erasure newtype name would
-    // never be found. Fields sharing an erased type share one index-dispatched
-    // helper.
-    let mut by_field_type: crate::hashmap::IndexMap<String, (TypeId, Vec<(String, u32)>)> =
-        crate::hashmap::IndexMap::default();
-    for (field_name, field_type, index) in fields {
-        let mangled = type_table.borrow().mangle_type_arg_erased(*field_type);
-        by_field_type
-            .entry(mangled)
-            .or_insert_with(|| (*field_type, Vec::new()))
-            .1
-            .push((field_name.clone(), *index));
-    }
-
-    let mut helpers = Vec::new();
-    for (mangled_field, (field_type, group)) in &by_field_type {
-        helpers.push(generate_field_get_helper(
-            crate::name::field_get_helper_name(&mangled_struct, mangled_field),
-            ref_struct_type,
-            *field_type,
-            group,
-            span,
-        ));
-    }
-    helpers
+    let members: Vec<ReadBridgeMember> = fields
+        .iter()
+        .map(|(name, field_type, index)| ReadBridgeMember {
+            name: name.clone(),
+            index: *index,
+            field_type: *field_type,
+            value_type: *field_type,
+        })
+        .collect();
+    generate_read_bridge_helpers(
+        type_table,
+        &members,
+        crate::name::field_get_helper_name,
+        struct_type,
+        ref_struct_type,
+        span,
+    )
 }
 
-/// Build `$field_get$S$F(v: &S, index: i32) -> F`:
-/// `return match index { field_index => v.<field_name>, … _ => unreachable() };`.
-fn generate_field_get_helper(
+/// One member a read bridge dispatches on: the field it reads, and the type
+/// the read answers — the field's own, unless the field holds it by handle.
+pub(super) struct ReadBridgeMember {
+    pub name: String,
+    pub index: u32,
+    pub field_type: TypeId,
+    pub value_type: TypeId,
+}
+
+/// Mint one index-dispatched read helper per distinct value type:
+/// `$…$S$V(v: &S, index: i32) -> V`, dereferencing a field that holds its
+/// value by handle.
+///
+/// Keyed by the value type's *erased* mangle. `erase_newtypes_and_flags`
+/// (after monomorphize, before lower) collapses `Newtype`/`Flags` to their
+/// base, and the marker call site mangles through that erasure — so a helper
+/// minted under the pre-erasure name would never be found. Members sharing an
+/// erased type share one helper.
+pub(super) fn generate_read_bridge_helpers(
+    type_table: &RefCell<TypeTable>,
+    members: &[ReadBridgeMember],
+    helper_name: fn(&str, &str) -> String,
+    struct_type: TypeId,
+    ref_struct_type: TypeId,
+    span: Span,
+) -> Vec<TirFunction> {
+    let mangled_struct = type_table.borrow().mangle_type_arg_for_generic(struct_type);
+    let mut by_value_type: crate::hashmap::IndexMap<String, Vec<&ReadBridgeMember>> =
+        crate::hashmap::IndexMap::default();
+    for member in members {
+        let mangled = type_table
+            .borrow()
+            .mangle_type_arg_erased(member.value_type);
+        by_value_type.entry(mangled).or_default().push(member);
+    }
+
+    by_value_type
+        .iter()
+        .map(|(mangled_value, group)| {
+            generate_read_helper(
+                helper_name(&mangled_struct, mangled_value),
+                ref_struct_type,
+                group,
+                span,
+            )
+        })
+        .collect()
+}
+
+/// `return match index { index => v.<name>, … _ => unreachable() };` over the
+/// members of one value type.
+fn generate_read_helper(
     helper_name: String,
     ref_struct_type: TypeId,
-    field_type: TypeId,
-    fields: &[(String, u32)],
+    members: &[&ReadBridgeMember],
     span: Span,
 ) -> TirFunction {
+    // The group erases to one type, so any member names the answer. Holding
+    // that value by handle is per member: a newtype does, its base does not.
+    let answer_type = members[0].value_type;
+    let cases: Vec<(String, u32)> = members.iter().map(|m| (m.name.clone(), m.index)).collect();
     let dispatch = case_index_dispatch(
         local_expr(1, "index", TypeTable::I32, span),
-        fields,
-        |field_name, index| {
-            field_access_local(0, "v", ref_struct_type, index, field_name, field_type, span)
+        &cases,
+        |name, index| {
+            let member = members
+                .iter()
+                .find(|m| m.index == index)
+                .expect("every case is a member of the group");
+            let access = field_access_local(
+                0,
+                "v",
+                ref_struct_type,
+                index,
+                name,
+                member.field_type,
+                span,
+            );
+            if member.field_type == member.value_type {
+                access
+            } else {
+                deref_expr(access, member.value_type, span)
+            }
         },
-        field_type,
+        answer_type,
         span,
     );
 
-    let body = TirBlock::new(
-        vec![TirStmt::new(
-            TirStmtKind::Return {
-                value: Some(dispatch),
-            },
+    let params = vec![
+        TirParam {
+            name: "v".to_string(),
+            type_id: ref_struct_type,
+            local_index: 0,
+            is_mut: false,
+            is_mut_ref: false,
             span,
-        )],
-        span,
-    );
-
+        },
+        TirParam {
+            name: "index".to_string(),
+            type_id: TypeTable::I32,
+            local_index: 1,
+            is_mut: false,
+            is_mut_ref: false,
+            span,
+        },
+    ];
+    let locals = crate::synthesis::common::locals_from_params(&params);
     make_synthetic_free_function(
         helper_name,
-        vec![
-            TirParam {
-                name: "v".to_string(),
-                type_id: ref_struct_type,
-                local_index: 0,
-                is_mut: false,
-                is_mut_ref: false,
+        params,
+        answer_type,
+        TirBlock::new(
+            vec![TirStmt::new(
+                TirStmtKind::Return {
+                    value: Some(dispatch),
+                },
                 span,
-            },
-            TirParam {
-                name: "index".to_string(),
-                type_id: TypeTable::I32,
-                local_index: 1,
-                is_mut: false,
-                is_mut_ref: false,
-                span,
-            },
-        ],
-        field_type,
-        body,
-        vec![
-            param_local("v", ref_struct_type, false),
-            param_local("index", TypeTable::I32, false),
-        ],
+            )],
+            span,
+        ),
+        locals,
     )
 }
 
 /// Build `Type^ReflectKind::type_name() -> String { return "Type"; }` —
-/// shared by the struct `ReflectStruct` and variant `ReflectVariant` syntheses.
+/// shared by every kind's synthesis, and by any other member answering a
+/// string constant (`ReflectTemplate::tail`).
 ///
 /// `display_name` is the caller's because it belongs to the declaration
 /// namespace: an anonymous shape's head is its mangle, module paths and all.
@@ -1388,6 +1453,279 @@ fn generate_type_name_fn(
         method_info,
         vec![],
         string_type,
+        body,
+        vec![],
+    )
+}
+
+/// Generate the `ReflectTemplate` impl of every tagged template shape
+/// (WEP 2026-01-10): `type_name()`, `wire_name_policy()`, `members()`,
+/// `tail()`, `raw_tail()`, plus the per-hole-type `$hole_get` bridge. The
+/// `$hole_fmt` bridge is minted by `synthesis::template`, beside the
+/// specifier lowering it reuses.
+pub fn synthesize_reflect_template(project: &mut Package) {
+    let trait_name = reflect_trait_fq(project, CompilerItem::ReflectTemplate);
+    run_reflect_synthesis(
+        project,
+        &trait_name,
+        &SynthRequests::default(),
+        generate_template_reflect_impls,
+    );
+}
+
+/// A template shape selected for `ReflectTemplate` synthesis.
+struct ReflectTemplateTarget {
+    def: crate::tir::StructDef,
+    receiver: FqTypeName,
+    shape: crate::tir::TemplateShape,
+    /// The struct's fields, one per hole, typed as the field holds them.
+    fields: Vec<FieldInfo>,
+    span: Span,
+}
+
+/// Synthesize the `ReflectTemplate` impl of every template shape in `module`.
+fn generate_template_reflect_impls(
+    module: &mut TirModule,
+    ctx: &mut SynthesisCtx<'_, '_, '_>,
+    template_trait_name: &crate::name::FqTraitName,
+) {
+    let targets: Vec<ReflectTemplateTarget> = {
+        let tt = module.type_table.borrow();
+        module
+            .structs
+            .iter()
+            .filter_map(|s| {
+                let crate::tir::StructDef::Anon(id) = s.def else {
+                    return None;
+                };
+                let shape = tt.template_shape(id)?.clone();
+                Some(ReflectTemplateTarget {
+                    def: s.def,
+                    receiver: tt.fq_struct_head(s.def),
+                    shape,
+                    fields: s
+                        .fields
+                        .iter()
+                        .map(|f| (f.name.clone(), f.type_id, f.index))
+                        .collect(),
+                    span: s.span,
+                })
+            })
+            .collect()
+    };
+    if targets.is_empty() {
+        return;
+    }
+
+    let env = ReflectSynthEnv::resolve(&mut module.type_table.borrow_mut());
+    let (hole_struct_name, hole_struct_def) = resolve_member_struct(
+        &module.type_table.borrow(),
+        CompilerItem::ReflectTemplateHole,
+    );
+    let (members_method, tail_method, raw_tail_method) = {
+        let tt = module.type_table.borrow();
+        let items = tt.compiler_items();
+        (
+            items
+                .method_name(CompilerItem::ReflectTemplateMembers)
+                .to_string(),
+            items
+                .method_name(CompilerItem::ReflectTemplateTail)
+                .to_string(),
+            items
+                .method_name(CompilerItem::ReflectTemplateRawTail)
+                .to_string(),
+        )
+    };
+
+    let mut generated = Vec::new();
+    for target in &targets {
+        let span = target.span;
+        let receiver = &target.receiver;
+        let hole_types: Vec<TypeId> = target.shape.holes.iter().map(|h| h.ty).collect();
+
+        let (struct_type, ref_struct_type, member_types, members_tuple_type) = {
+            let mut tt = module.type_table.borrow_mut();
+            let struct_type = tt.make_struct(target.def);
+            let ref_struct_type = tt.make_ref(struct_type);
+            let holes_tuple_type = tt.make_tuple(hole_types.clone());
+            let member_types: Vec<TypeId> = hole_types
+                .iter()
+                .map(|&hole| tt.make_generic_instance(hole_struct_def, vec![struct_type, hole]))
+                .collect();
+            let members_tuple_type = tt.make_tuple(member_types.clone());
+            register_reflect_assoc_types(
+                &mut tt,
+                struct_type,
+                CompilerItem::ReflectTemplate,
+                false,
+                &[
+                    (REFLECT_HOLES_ASSOC, holes_tuple_type),
+                    (REFLECT_MEMBERS_ASSOC, members_tuple_type),
+                ],
+            );
+            (
+                struct_type,
+                ref_struct_type,
+                member_types,
+                members_tuple_type,
+            )
+        };
+
+        let display_name = module.type_table.borrow().struct_head_decl_name(target.def);
+        let string_fn = |method: &str, text: &str| {
+            generate_type_name_fn(
+                receiver,
+                text,
+                env.string_type,
+                template_trait_name,
+                method,
+                span,
+            )
+        };
+        let tail_raw = target
+            .shape
+            .segments
+            .last()
+            .expect("a template shape has one more segment than holes");
+        let mut functions = vec![
+            generate_type_name_fn(
+                receiver,
+                &display_name,
+                env.string_type,
+                &env.root_trait_name,
+                &env.type_name_method,
+                span,
+            ),
+            generate_wire_name_policy_fn(
+                receiver,
+                env.case_style_type,
+                &None,
+                &env.root_trait_name,
+                &env.wire_name_policy_method,
+                span,
+            ),
+            generate_template_members_fn(
+                &target.shape,
+                &member_types,
+                members_tuple_type,
+                &hole_struct_name,
+                env.string_type,
+                trait_method_info(receiver, template_trait_name, &members_method),
+                span,
+            ),
+            string_fn(
+                &tail_method,
+                &crate::elaborator::unescape_template_segment(tail_raw),
+            ),
+            string_fn(&raw_tail_method, tail_raw),
+        ];
+        // A hole's field holds it by handle unless it would box, so the read
+        // through it derefs; `$hole_get` is otherwise `$field_get`.
+        let hole_members: Vec<ReadBridgeMember> = target
+            .fields
+            .iter()
+            .zip(&hole_types)
+            .map(|((name, field_type, index), &hole_type)| ReadBridgeMember {
+                name: name.clone(),
+                index: *index,
+                field_type: *field_type,
+                value_type: hole_type,
+            })
+            .collect();
+        functions.extend(generate_read_bridge_helpers(
+            &module.type_table,
+            &hole_members,
+            crate::name::hole_get_helper_name,
+            struct_type,
+            ref_struct_type,
+            span,
+        ));
+        generated.extend(functions.into_iter().map(|f| Rc::new(RefCell::new(f))));
+        ctx.record_impl(receiver, &template_trait_name.canonical().expect(KEYED));
+    }
+
+    module.functions.extend(generated);
+}
+
+/// Build `Shape^ReflectTemplate::members()` as one `Hole` literal per hole —
+/// `{ index, lit, raw, source, has_spec }` in the handle's declaration order.
+fn generate_template_members_fn(
+    shape: &crate::tir::TemplateShape,
+    member_types: &[TypeId],
+    members_tuple_type: TypeId,
+    hole_struct_name: &str,
+    string_type: TypeId,
+    method_info: LocalMethodName,
+    span: Span,
+) -> TirFunction {
+    let string_field = |name: &str, text: &str, index: u32| TirStructField {
+        name: name.to_string(),
+        value: TirExpr::new(
+            TirExprKind::StringLiteral(text.to_string()),
+            string_type,
+            span,
+        ),
+        field_index: index,
+    };
+    let rows: Vec<Vec<TirStructField>> = shape
+        .holes
+        .iter()
+        .zip(&shape.segments)
+        .enumerate()
+        .map(|(k, (hole, raw))| {
+            vec![
+                reflect_meta_int_field("index", k as u64, TypeTable::I32, 0, span),
+                string_field("lit", &crate::elaborator::unescape_template_segment(raw), 1),
+                string_field("raw", raw, 2),
+                string_field("source", &hole.source, 3),
+                TirStructField {
+                    name: "has_spec".to_string(),
+                    value: TirExpr::new(
+                        TirExprKind::BoolLiteral(hole.spec.is_some()),
+                        TypeTable::BOOL,
+                        span,
+                    ),
+                    field_index: 4,
+                },
+            ]
+        })
+        .collect();
+    // One member type per row; the tuple builder takes the common handle
+    // type and every element carries its own instantiation.
+    let qualified_name = method_info.to_mangled_name();
+    let elements = rows
+        .into_iter()
+        .zip(member_types)
+        .map(|(fields, &member_type)| {
+            TirExpr::new(
+                TirExprKind::StructLiteral {
+                    struct_type: member_type,
+                    struct_name: hole_struct_name.to_string(),
+                    fields,
+                },
+                member_type,
+                span,
+            )
+        })
+        .collect();
+    let tuple = TirExpr::new(
+        TirExprKind::TupleLiteral { elements },
+        members_tuple_type,
+        span,
+    );
+    let body = TirBlock::new(
+        vec![TirStmt::new(
+            TirStmtKind::Return { value: Some(tuple) },
+            span,
+        )],
+        span,
+    );
+    make_synthetic_method(
+        qualified_name,
+        method_info,
+        vec![],
+        members_tuple_type,
         body,
         vec![],
     )
@@ -1822,7 +2160,7 @@ fn unreachable_call(result_type: TypeId, span: Span) -> TirExpr {
 
 /// Dispatch `match index { k => <arm(k)>, _ => unreachable() }` over the
 /// cases sharing one payload type.
-fn case_index_dispatch(
+pub(super) fn case_index_dispatch(
     index_expr: TirExpr,
     cases: &[(String, u32)],
     arm_body: impl Fn(&str, u32) -> TirExpr,

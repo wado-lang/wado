@@ -470,6 +470,7 @@ primary
     | structLiteral
     | braceLiteral
     | block
+    | taggedTemplate
     | exprPath
     | tupleOrArrayLiteral
     | closure
@@ -495,6 +496,23 @@ braceLiteral
 
 exprPath
     : identifier ('::' (typeArgs | pathSegment))*
+    ;
+
+// A template literal directly after a path tags it (WEP 2026-01-10). The
+// compiler demands adjacency, which whitespace skipping hides from this
+// grammar; the gap case is a `compile_error` fixture.
+taggedTemplate
+    : (tagOwner '::')* tagName templateString
+    ;
+
+// The type or module a qualified tag hangs off, uncoloured like a `::`
+// segment's head; the tag itself is the function the template calls.
+tagOwner
+    : identifier
+    ;
+
+tagName
+    : identifier
     ;
 
 // A `::` segment: a variant case, a static method, or the middle of a module
@@ -541,6 +559,7 @@ primaryNoStruct
     | 'self'
     | compileTimeExpr
     | resumeExpr
+    | taggedTemplate
     | exprPath
     | tupleOrArrayLiteral
     | closure

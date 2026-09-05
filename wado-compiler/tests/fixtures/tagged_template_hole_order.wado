@@ -1,0 +1,33 @@
+// A hole is read where it stands, in source order: a place hole a later hole
+// mutates carries the value it had at its own position, so `format` renders
+// what the untagged template renders (WEP 2026-01-10).
+use { println, Stdout } from "core:cli";
+
+fn bump(m: &mut i32) -> i32 {
+    *m += 10;
+    return *m;
+}
+
+fn grow(s: &mut String) -> i32 {
+    s.push_str(&"!");
+    return 0;
+}
+
+export fn run() with Stdout {
+    let mut a = 1;
+    let tagged = format`${a} ${bump(&mut a)}`;
+    let mut b = 1;
+    let plain = `${b} ${bump(&mut b)}`;
+    println(tagged);
+    assert tagged == plain;
+
+    let mut s = "a";
+    let tagged_s = format`${s} ${grow(&mut s)}`;
+    let mut t = "a";
+    let plain_s = `${t} ${grow(&mut t)}`;
+    println(tagged_s);
+    assert tagged_s == plain_s;
+}
+
+__DATA__
+{"stdout": "1 11\na 0\n"}

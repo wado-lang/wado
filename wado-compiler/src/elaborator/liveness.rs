@@ -817,6 +817,14 @@ impl LastUseAnalyzer<'_> {
                     }
                 }
             }
+            Expr::TaggedTemplate(e) => {
+                for part in e.template.parts.iter().rev() {
+                    if let ast::TemplatePart::Interpolation { expr, .. } = part {
+                        self.walk_expr(expr, live, record);
+                    }
+                }
+                self.walk_expr(&e.tag, live, record);
+            }
             Expr::Block(b) => self.walk_block(b, live, record),
             Expr::LabeledBlock(b) => self.walk_block(&b.block, live, record),
             Expr::If(e) => self.walk_if(

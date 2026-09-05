@@ -57,6 +57,18 @@ pub(super) fn turbofish_has_hole(ast_args: &[Type]) -> bool {
     ast_args.iter().any(|t| matches!(t, Type::Infer(_)))
 }
 
+/// One span per resolved argument. An argument the source does not spell — a
+/// tagged template's, which is the template itself — reports at the call.
+pub(super) fn arg_spans_of(
+    raw_args: &[Expr],
+    resolved: usize,
+    call_span: crate::Span,
+) -> Vec<crate::Span> {
+    (0..resolved)
+        .map(|i| raw_args.get(i).map_or(call_span, Expr::span))
+        .collect()
+}
+
 /// True when a turbofish needs inference to fill some type-argument slot: it
 /// supplies fewer args than the generic has parameters (omitted trailing args)
 /// or it contains an explicit `_` placeholder.
@@ -369,6 +381,25 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ctx: &mut FunctionContext,
         expected_type: Option<TypeId>,
     ) -> TypeId {
+        self.resolve_call_with_args(call, ctx, expected_type, None)
+    }
+
+    /// [`Self::resolve_call`] over arguments already typed. A tagged template
+    /// calls its tag on a value no AST spells, so it hands the argument type
+    /// in and `call.args` stays empty: every step reading an argument's AST —
+    /// literal re-coercion, closure hints, a span for a diagnostic — falls
+    /// back to the call as a whole.
+    pub(super) fn resolve_call_with_args(
+        &mut self,
+        call: &ast::CallExpr,
+        ctx: &mut FunctionContext,
+        expected_type: Option<TypeId>,
+        given_args: Option<Vec<TypeId>>,
+    ) -> TypeId {
+        assert!(
+            given_args.is_none() || call.args.is_empty(),
+            "typed arguments replace the call's AST arguments, never join them"
+        );
         // Closure call: a bare identifier that names a *value* binding (a
         // local/param — checked first, so shadowing wins — or a module/imported
         // global) is invoked on its value, not looked up as a named function.
@@ -407,6 +438,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         &sig.params,
                         sig.return_type,
                         /* pad_with_defaults */ local.is_some(),
+                        given_args.as_deref(),
                     );
                 }
 
@@ -450,6 +482,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     &sig.params,
                     sig.return_type,
                     /* pad_with_defaults */ false,
+                    given_args.as_deref(),
                 );
             }
 
@@ -526,11 +559,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             ..
         } = &callee_kind
         {
-            let args: Vec<TypeId> = call
-                .args
-                .iter()
-                .map(|a| self.resolve_expr(a, ctx, None))
-                .collect();
+            let args: Vec<TypeId> = match &given_args {
+                Some(args) => args.clone(),
+                None => call
+                    .args
+                    .iter()
+                    .map(|a| self.resolve_expr(a, ctx, None))
+                    .collect(),
+            };
             return self.resolve_type_param_static_call(
                 prefix,
                 suffix,
@@ -673,15 +709,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         // Resolve arguments with coercion awareness
-        let mut args: Vec<TypeId> = call
-            .args
-            .iter()
-            .enumerate()
-            .map(|(i, arg)| {
-                let expected_type = param_types.get(i).copied();
-                self.resolve_expr(arg, ctx, expected_type)
-            })
-            .collect();
+        let mut args: Vec<TypeId> = match given_args {
+            Some(args) => args,
+            None => call
+                .args
+                .iter()
+                .enumerate()
+                .map(|(i, arg)| {
+                    let expected_type = param_types.get(i).copied();
+                    self.resolve_expr(arg, ctx, expected_type)
+                })
+                .collect(),
+        };
 
         // Settle this resolution's variables. `solve_infer_var` keeps the
         // first answer, so a slot the arguments pinned stays pinned and one
@@ -815,6 +854,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let holes = turbofish_holes(&call.type_args);
                     merge_turbofish_type_args(&mut method_type_args, &holes, &method_args);
                 }
+                // The method's own parameters, in the dense space its type
+                // arguments are indexed by — an effect or `fn`-bound parameter
+                // holds no slot in one.
+                let mtype_params: Vec<ast::GenericParam> = self
+                    .lookup_static_method_type_params(prefix, suffix)
+                    .into_iter()
+                    .filter(ast::GenericParam::is_real_type_param)
+                    .collect();
+                // A method-level parameter bound only through another's
+                // associated type (`..V` off `Holes`) is projected once the
+                // owner is inferred, as the free-function path does; the
+                // bound check below then sees it concrete.
+                if !method_type_args.is_empty() {
+                    self.project_assoc_bound_args(&mtype_params, &mut method_type_args);
+                }
                 // Record `[impl_args, method_args]` — the same order
                 // `lookup_static_method_param_types` substitutes in — since reify
                 // needs both halves to rebuild the mangled `__<Type>__<method>`.
@@ -834,7 +888,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 );
                 // Enforce the static method's type-arg bounds (shared rule).
                 if !method_type_args.is_empty() {
-                    let mtype_params = self.lookup_static_method_type_params(prefix, suffix);
                     self.enforce_type_arg_bounds(&mtype_params, &method_type_args, call.span);
                 }
                 // Handle From conversions with no explicit impl: reflexive and newtype.
@@ -1361,8 +1414,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     self.recoerce_literal_args(&call.args, &mut args, &checked);
                     // The same check the bare `Type::method` spelling gets: a
                     // count is only skipped where no signature answered.
-                    let arg_spans: Vec<crate::Span> =
-                        call.args.iter().map(ast::Expr::span).collect();
+                    let arg_spans = arg_spans_of(&call.args, args.len(), call.span);
                     if declares_params
                         && !self.check_static_call_args(
                             &checked,
@@ -1531,15 +1583,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // one tuple — the per-param shape inference already produces.
         self.group_variadic_type_args(&callee, &mut type_args);
 
-        // Check trait bounds on function type arguments
         if !type_args.is_empty() {
-            self.check_function_type_arg_bounds(&callee, &type_args, call.span);
             // Resolve any type parameter that appears only inside another
             // parameter's associated-type-equality bound (e.g.
-            // `fn f<T, I: Iterator<Item = T>>`). The bounds check above
-            // registered the owner's associated types, so this can now
-            // project them.
+            // `fn f<T, I: Iterator<Item = T>>`, `..V` off `Holes`) before the
+            // bounds check, which skips an argument still parametric — the
+            // order the method and static-method paths take, so one
+            // enforcement answers for every call kind.
             self.infer_type_args_from_assoc_bounds(&callee, &mut type_args);
+            self.check_function_type_arg_bounds(&callee, &type_args, call.span);
         }
 
         // Defer (mint holes) or report uninferred type params.
@@ -1682,16 +1734,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         fn_params: &[TypeId],
         return_type: TypeId,
         pad_with_defaults: bool,
+        given_args: Option<&[TypeId]>,
     ) -> TypeId {
-        let mut args: Vec<TypeId> = call
-            .args
-            .iter()
-            .enumerate()
-            .map(|(i, arg)| {
-                let expected_type = fn_params.get(i).copied();
-                self.resolve_expr(arg, ctx, expected_type)
-            })
-            .collect();
+        let mut args: Vec<TypeId> = match given_args {
+            Some(args) => args.to_vec(),
+            None => call
+                .args
+                .iter()
+                .enumerate()
+                .map(|(i, arg)| {
+                    let expected_type = fn_params.get(i).copied();
+                    self.resolve_expr(arg, ctx, expected_type)
+                })
+                .collect(),
+        };
 
         if pad_with_defaults && args.len() < fn_params.len() {
             self.pad_args_with_defaults(&call.callee, &call.args, &mut args, fn_params, ctx);
@@ -2211,6 +2267,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .into_iter()
             .filter(super::super::ast::GenericParam::is_real_type_param)
             .collect();
+        self.project_assoc_bound_args(&params, type_args);
+    }
+
+    /// [`Self::infer_type_args_from_assoc_bounds`] over a declared parameter
+    /// list, for a static method (`String::raw<T: ReflectTemplate<Holes =
+    /// [..V]>, ..V>`), whose params come from its impl rather than a callee.
+    pub(super) fn project_assoc_bound_args(
+        &mut self,
+        params: &[ast::GenericParam],
+        type_args: &mut Vec<TypeId>,
+    ) {
         // A turbofish naming only the non-pack params (`parse::<Perms>()`,
         // where the subject appears solely in the return type) leaves the
         // trailing pack slot absent. Seed it with its declared, still-unbound
@@ -2226,7 +2293,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             };
             type_args.push(declared);
         }
-        self.resolve_assoc_bound_args(&params, type_args);
+        self.resolve_assoc_bound_args(params, type_args);
     }
 
     /// Report "cannot infer type parameter" at the call site rather than letting
@@ -2899,7 +2966,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         // Built here rather than on the caller's hot path: only a call that
         // actually reaches a blanket static needs the per-argument spans.
-        let arg_spans: Vec<crate::Span> = raw_args.iter().map(Expr::span).collect();
+        let arg_spans = arg_spans_of(raw_args, args.len(), span);
         self.resolve_blanket_static_method(
             receiver_ty,
             method,

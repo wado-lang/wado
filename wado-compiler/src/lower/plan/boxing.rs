@@ -8,8 +8,8 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::name::mangle_generic_name;
 use crate::tir::{
-    MonomorphInfo, PrimitiveType, ResolvedType, TirBlock, TirExpr, TirExprKind, TirField, TirLocal,
-    TirPattern, TirStmt, TirStmtKind, TirStruct, TirStructField, TypeId, TypeTable,
+    MonomorphInfo, ResolvedType, TirBlock, TirExpr, TirExprKind, TirField, TirLocal, TirPattern,
+    TirStmt, TirStmtKind, TirStruct, TirStructField, TypeId, TypeTable,
 };
 use crate::token::Span;
 
@@ -44,10 +44,6 @@ pub fn prepare_types(flat: &mut FlatPackage) -> BoxPlan {
         .cloned()
         .unwrap_or_else(ModuleSource::prelude);
     let mut builder = TypeBuilder::new(box_module_source);
-
-    for v in &flat.variants {
-        builder.variant_names.insert(v.name.clone());
-    }
 
     {
         let mut type_table = flat.type_table.borrow_mut();
@@ -190,9 +186,6 @@ struct TypeBuilder {
     generated_structs: Vec<TirStruct>,
     /// `#[compiler_item("box")]` on `struct Box<T>` in the prelude.
     box_module_source: ModuleSource,
-    /// `GenericInstance` whose name is one of these is a variant
-    /// and needs boxing.
-    variant_names: IndexSet<String>,
     /// `(arity, return type)` → the function `TypeId` its `Box` is keyed on.
     fn_box_repr: IndexMap<(usize, TypeId), TypeId>,
 }
@@ -205,7 +198,6 @@ impl TypeBuilder {
             box_type_ids: IndexSet::default(),
             generated_structs: Vec::new(),
             box_module_source,
-            variant_names: IndexSet::default(),
         }
     }
 
@@ -294,36 +286,15 @@ impl TypeBuilder {
         struct_type_id
     }
 
-    /// Check if a type is a variant (either directly or as a `GenericInstance` of a variant).
-    fn is_variant_type(&self, type_id: TypeId, type_table: &TypeTable) -> bool {
-        match type_table.get(type_id) {
-            ResolvedType::Variant { .. } => true,
-            ResolvedType::GenericInstance { def, .. } => {
-                self.variant_names.contains(type_table.def_name(*def))
-            }
-            _ => false,
-        }
-    }
-
-    /// Scan the type table to find which primitives need Box types.
+    /// Scan the type table for the referents that need a `Box`, by the one
+    /// predicate `TypeTable::is_boxed_reference_target` states.
     fn create_needed_box_types(&mut self, type_table: &mut TypeTable) {
-        // Collect the base TypeIds needing boxing, plus newtypes: primitives
-        // (bar the already-GC i128/u128), standalone enums (scalar-backed, so a
-        // deref-assignment needs the same stable heap slot), variants (whose
-        // subtype hierarchy blocks field-by-field assignment), and function
-        // types. A variant's case subset is GC-backed and goes elsewhere.
         let mut needs_box_base: IndexSet<TypeId> = IndexSet::default();
 
         for type_id in type_table.iter_type_ids().collect::<Vec<_>>() {
             match type_table.get(type_id).clone() {
                 ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
-                    let is_prim = matches!(type_table.get(inner), ResolvedType::Primitive(p)
-                        if !matches!(p, PrimitiveType::I128 | PrimitiveType::U128));
-                    let is_enum = matches!(type_table.get(inner), ResolvedType::Enum { def }
-                        if !self.variant_names.contains(type_table.def_name(*def)));
-                    let is_variant = self.is_variant_type(inner, type_table);
-                    let is_fn = matches!(type_table.get(inner), ResolvedType::Function { .. });
-                    if is_prim || is_enum || is_variant || is_fn {
+                    if type_table.is_boxed_reference_target(inner) {
                         needs_box_base.insert(inner);
                     }
                 }

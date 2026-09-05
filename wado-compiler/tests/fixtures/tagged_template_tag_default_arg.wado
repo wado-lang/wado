@@ -1,0 +1,35 @@
+// A tag takes the template as its one written argument; a trailing parameter
+// with a default is filled at the site, as it is for a spelled call
+// (WEP 2026-01-10).
+use { println, Stdout } from "core:cli";
+
+fn marked<T: ReflectTemplate<Holes = [..V]>, ..V: Display>(t: T, mark: String = "#") -> String {
+    let mut out = "";
+    for let h of ReflectTemplate::<T>::members() {
+        out.push_str(&h.lit());
+        h.fmt(&t, &mut Formatter::new(&mut out));
+    }
+    out.push_str(&ReflectTemplate::<T>::tail());
+    out.push_str(&mark);
+    return out;
+}
+
+struct Wrap {}
+
+impl Wrap {
+    pub fn tag<T: ReflectTemplate<Holes = [..V]>, ..V: Display>(t: T, mark: String = "@") -> String {
+        let mut out = "";
+        out.push_str(&ReflectTemplate::<T>::tail());
+        out.push_str(&mark);
+        return out;
+    }
+}
+
+export fn run() with Stdout {
+    let n = builtin::black_box(7);
+    println(marked`n=${n}`);
+    println(Wrap::tag`tail`);
+}
+
+__DATA__
+{"stdout": "n=7#\ntail@\n"}

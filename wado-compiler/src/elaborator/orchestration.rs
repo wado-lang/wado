@@ -1122,6 +1122,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             CompilerItem::ReflectEnum,
             CompilerItem::ReflectFlags,
             CompilerItem::ReflectNewtype,
+            CompilerItem::ReflectTemplate,
             CompilerItem::Member,
             CompilerItem::Ref,
             CompilerItem::RefMut,
@@ -3112,17 +3113,26 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     )?;
                 }
             }
+            ast::Expr::TaggedTemplate(t) => {
+                for expr in std::iter::once(&t.tag).chain(t.template.interpolations()) {
+                    Self::validate_expr_type_names(
+                        expr,
+                        known_type_names,
+                        resource_type_names,
+                        type_params,
+                        logger,
+                    )?;
+                }
+            }
             ast::Expr::TemplateString(ts) => {
-                for part in &ts.parts {
-                    if let ast::TemplatePart::Interpolation { expr, .. } = part {
-                        Self::validate_expr_type_names(
-                            expr,
-                            known_type_names,
-                            resource_type_names,
-                            type_params,
-                            logger,
-                        )?;
-                    }
+                for expr in ts.interpolations() {
+                    Self::validate_expr_type_names(
+                        expr,
+                        known_type_names,
+                        resource_type_names,
+                        type_params,
+                        logger,
+                    )?;
                 }
             }
             ast::Expr::LabeledBlock(lb) => {

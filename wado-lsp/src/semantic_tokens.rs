@@ -770,10 +770,16 @@ fn follows(tokens: &[Token], index: usize, ahead: usize, kind: &TokenKind) -> bo
         .is_some_and(|t| std::mem::discriminant(&t.kind) == std::mem::discriminant(kind))
 }
 
-/// Whether the name at `index` is called: `f(`, or `f::<T>(` past a turbofish.
-/// `::<` opens `Opt::<i32>::None` too, so the `(` must follow the close.
+/// Whether the name at `index` is called: `f(`, a tag directly before a
+/// template literal, or `f::<T>(` past a turbofish. `::<` opens
+/// `Opt::<i32>::None` too, so the `(` must follow the close.
 fn calls(tokens: &[Token], index: usize) -> bool {
     if follows(tokens, index, 1, &TokenKind::LParen) {
+        return true;
+    }
+    if tokens.get(index + 1).is_some_and(|t| {
+        matches!(t.kind, TokenKind::TemplateStringLit(_)) && t.span.start == tokens[index].span.end
+    }) {
         return true;
     }
     if !follows(tokens, index, 1, &TokenKind::ColonColon)
@@ -1331,6 +1337,23 @@ mod tests {
         assert!(
             compute(src, None).iter().all(|t| t.line < 1),
             "a multi-line run cannot go on the LSP wire",
+        );
+    }
+
+    /// A tag is the function the template calls, so it colours as one. The
+    /// backtick must be adjacent: with a gap the name is an ordinary variable
+    /// and the template a separate literal, which is what the parser reads too.
+    #[test]
+    fn template_tag_is_a_function() {
+        let tagged = "fn run() {\n    let a = sql`x`;\n}\n";
+        assert_eq!(
+            kind_of(&compute(tagged, None), tagged, 1, "sql"),
+            token_type::FUNCTION,
+        );
+        let gapped = "fn run() {\n    let a = sql `x`;\n}\n";
+        assert_eq!(
+            kind_of(&compute(gapped, None), gapped, 1, "sql"),
+            token_type::VARIABLE,
         );
     }
 

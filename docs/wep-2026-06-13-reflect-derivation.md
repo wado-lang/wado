@@ -112,6 +112,13 @@ internal trait ReflectNewtype: Reflect {         // newtype
 }
 ```
 
+`ReflectTemplate` is a sixth kind, synthesized per tagged template literal
+rather than per declaration. Its subject is the anonymous type a template
+denotes, its payload pack is the hole types, and its members are `Hole` handles
+carrying the literal text around each hole. It follows every rule here: sealed,
+monomorphized-only, one member channel. See
+[Tagged Template Literals](./wep-2026-01-10-tagged-template-literals.md).
+
 `members()` returns a tuple, walked by tuple `for-of`; a generic derivation binds
 one pack in its header, and the elaborator resolves the walk to the known member
 type so member methods stay callable. Which pack a derivation binds follows from
@@ -421,7 +428,7 @@ nothing else yet does.
   per-instantiation, so it follows `type_name()`'s synthesis, where the resolved
   subject already carries the facts a declaration's case needs (its base name,
   module, and type arguments). Making the root total lands with it: today only
-  the five synthesized kinds carry it. Both are
+  a synthesized kind carries it. Both are
   [Total Reflection](./wep-2026-09-05-total-reflection.md)'s to close.
 
 ## Related WEPs

@@ -1,0 +1,32 @@
+#![TODO]
+// A generic static method answered by a blanket impl never binds its own type
+// parameters: `resolve_named_type_blanket_static` passes no method type args,
+// so the pack stays declared and monomorphize reports `TypePack ..F not found
+// in substitution map`. A method whose body ignores the pack compiles, which
+// is why this needs a body that walks it.
+//
+// Predates tagged templates, and is what stops a tag written as
+// `` i32::label`…` `` (WEP 2026-01-10).
+
+trait Named {
+    fn label<S: ReflectStruct<FieldTypes = [..F]>, ..F>(v: &S) -> i32;
+}
+
+impl<X: Display> Named for X {
+    fn label<S: ReflectStruct<FieldTypes = [..F]>, ..F>(v: &S) -> i32 {
+        let mut n = 0;
+        for let f of ReflectStruct::<S>::members() {
+            n += 1;
+        }
+        return n;
+    }
+}
+
+struct Pair {
+    a: i32,
+    b: i32,
+}
+
+test "a blanket static method binds its own pack" {
+    assert i32::label(&Pair { a: 1, b: 2 }) == 2;
+}

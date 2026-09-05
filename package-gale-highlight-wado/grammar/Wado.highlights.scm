@@ -21,6 +21,10 @@
 (INTERP_OPEN) @string
 (interpolationEnd "}" @string)
 
+; A tag is the function the template calls. A qualified tag's owner stays
+; uncoloured, like the head of `Foo::new`.
+(tagName) @function
+
 ; A specifier is not code: `${x:>8.2}` must not colour `>` as an operator.
 ; A rule-context override outranks the token's default, so listing the atoms
 ; that double as operators is enough to mute them.

@@ -307,6 +307,28 @@ for let c of "hello".chars() {
 }
 ```
 
+Tagged templates (see [WEP: Tagged Template Literals](./wep-2026-01-10-tagged-template-literals.md)): a path written directly before the backtick calls that function on the template's holes, each in its own type, with the literal text around them as constants.
+
+```wado
+fn sql<T: ReflectTemplate<Holes = [..V]>, ..V: ToParam>(t: T) -> Query {
+    let mut text = "";
+    let mut params: List<Param> = [];
+    for let h of ReflectTemplate::<T>::members() {   // one unrolled step per hole
+        text.push_str(&h.lit());                     // literal before the hole (constant)
+        text.push_str(&"?");
+        params.push(h.get(&t).to_param());           // the hole's value, typed
+    }
+    text.push_str(&ReflectTemplate::<T>::tail());    // literal after the last hole
+    return Query { text, params };
+}
+let q = sql`SELECT * FROM users WHERE id = ${id} AND name = ${user.name}`;
+
+// A hole handle also answers raw() / source() / has_spec() / index(), and
+// fmt(&t, f) renders through the specifier as `${x:spec}` would.
+format`x=${x:04}`          // == `x=${x:04}` — the untagged meaning, as a tag
+String::raw`a\n${x}`       // escapes kept as written: "a\\n" + x
+```
+
 ### Structs
 
 ```wado

@@ -30,6 +30,7 @@ pub(crate) mod sig;
 mod solver_bridge;
 mod stmt;
 mod synth;
+mod tagged_template;
 mod template;
 pub(crate) mod trait_env;
 mod trait_query;
@@ -73,6 +74,7 @@ pub use types::TypeError;
 use types::{
     EnumInfo, FlagsInfo, GenericNewtypeInfo, ResourceInfo, StructFieldInfo, TypeLookup, VariantInfo,
 };
+pub(crate) use util::unescape_template_segment;
 
 pub struct Elaborator<'a, H: CompilerHost> {
     /// Pipeline-wide type knowledge: type arena, decl-interned type

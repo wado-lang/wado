@@ -1,0 +1,13 @@
+// A tag is any static-method path, including one on an imported type: the
+// template is its one argument wherever the call resolves (WEP 2026-01-10).
+use { Sql } from "./sub/tagged_template_qualified_tag_lib.wado";
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let id = builtin::black_box(7);
+    let name = builtin::black_box("ada");
+    println(Sql::q`id = ${id} AND name = ${name}`);
+}
+
+__DATA__
+{"stdout": "id = ? AND name = ?\n"}

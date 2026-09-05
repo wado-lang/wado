@@ -13,11 +13,11 @@ use crate::ast::{
     MatchExpr, MatchesExpr, MethodCallExpr, Module, NamedType, NamespacedGenericType, Newtype,
     Param, PathSegment, Pattern, RangeExpr, RangeKind, ResourceDecl, RestClause, RestClauseDecl,
     ReturnStmt, SelfKind, StaticMethodCallExpr, Stmt, StoresEntry, StructDecl, StructField,
-    StructLiteralExpr, StructLiteralField, StructLiteralSpread, StructPatternField, TaskReturnStmt,
-    TemplatePart, TemplateStringExpr, TestDecl, TraitDecl, TryOpExpr, TupleLiteralExpr,
-    TupleTypeDecl, Type, UnaryExpr, UnaryOp, UseDecl, UseItem, UseItemSimple, VariantCase,
-    VariantDecl, Visibility, WhileStmt, WorldDecl, WorldExport, WorldExportFn,
-    WorldExportInterface, WorldImport,
+    StructLiteralExpr, StructLiteralField, StructLiteralSpread, StructPatternField,
+    TaggedTemplateExpr, TaskReturnStmt, TemplatePart, TemplateStringExpr, TestDecl, TraitDecl,
+    TryOpExpr, TupleLiteralExpr, TupleTypeDecl, Type, UnaryExpr, UnaryOp, UseDecl, UseItem,
+    UseItemSimple, VariantCase, VariantDecl, Visibility, WhileStmt, WorldDecl, WorldExport,
+    WorldExportFn, WorldExportInterface, WorldImport,
 };
 use crate::compiler_host::{Code, DiagnosticSpan, Severity};
 use crate::token::{Span, TemplateTokenPart, Token, TokenKind, TokenKind as T};
@@ -3808,6 +3808,35 @@ impl Parser {
                     let id = self.alloc_ast_id();
                     expr = Expr::TryOp(Box::new(TryOpExpr { id, expr, span }));
                 }
+                // A template literal directly after a path tags it. Whitespace
+                // and comments never reach the token stream, so a byte gap is
+                // the adjacency test; with a gap the literal is left for the
+                // ordinary unexpected-token error.
+                TokenKind::TemplateStringLit(_) if expr.span().end == self.peek().span.start => {
+                    if !matches!(expr, Expr::Ident(_)) {
+                        return Err(self.error_at_span(
+                            self.peek().span,
+                            "a template tag must be a function name or a static method path",
+                        ));
+                    }
+                    let template_token = self.advance();
+                    let TokenKind::TemplateStringLit(parts) = template_token.kind.clone() else {
+                        unreachable!("matched a template literal token")
+                    };
+                    let template_span = template_token.span;
+                    let Expr::TemplateString(template) =
+                        self.parse_template_string_parts(parts, template_span)?
+                    else {
+                        unreachable!("template parts parse to a template string")
+                    };
+                    let span = expr.span().merge(&template_span);
+                    expr = Expr::TaggedTemplate(Box::new(TaggedTemplateExpr {
+                        id: self.alloc_ast_id(),
+                        tag: expr,
+                        template: *template,
+                        span,
+                    }));
+                }
                 _ => break,
             }
         }
@@ -7574,6 +7603,64 @@ mod tests {
         let want = source.find("${}").expect("interpolation");
         assert_eq!(hit.span.start, want, "span {:?}", hit.span);
         assert_eq!(hit.span.end, want + 2, "span {:?}", hit.span);
+    }
+
+    /// A path directly before a template literal tags it; the tag may be
+    /// qualified, and the template keeps its holes.
+    #[test]
+    fn test_tagged_template_parses() {
+        let module = parse("fn f() { let a = sql`x ${y} z`; let b = String::raw`q`; }").unwrap();
+        let Item::Function(func) = &module.items[0] else {
+            panic!("expected a function");
+        };
+        let body = func.body.as_ref().unwrap();
+        let Stmt::Let(a) = &body.stmts[0] else {
+            panic!("expected a let");
+        };
+        let tag_name = |value: &Option<Expr>| {
+            let Some(Expr::TaggedTemplate(tagged)) = value else {
+                panic!("expected a tagged template, got {value:?}");
+            };
+            let Expr::Ident(ident) = &tagged.tag else {
+                panic!("expected a path tag, got {:?}", tagged.tag);
+            };
+            (ident.name.clone(), tagged.template.parts.len())
+        };
+        assert_eq!(tag_name(&a.value), ("sql".to_string(), 3));
+        let Stmt::Let(b) = &body.stmts[1] else {
+            panic!("expected a let");
+        };
+        assert_eq!(tag_name(&b.value), ("String::raw".to_string(), 1));
+    }
+
+    /// Whitespace or a comment between the path and the backtick is a gap:
+    /// the literal is then an unexpected token, as it was before tags.
+    #[test]
+    fn test_tagged_template_needs_adjacency() {
+        for source in [
+            "fn f() { let a = sql `x`; }",
+            "fn f() { let a = sql/**/`x`; }",
+        ] {
+            let err = parse(source).expect_err(source);
+            assert!(
+                err.message.contains("expected `;`"),
+                "{source}: {}",
+                err.message
+            );
+        }
+    }
+
+    /// Only a path tags; a call result or a field access does not.
+    #[test]
+    fn test_tagged_template_rejects_non_path() {
+        for source in ["fn f() { let a = g()`x`; }", "fn f() { let a = o.g`x`; }"] {
+            let err = parse(source).expect_err(source);
+            assert!(
+                err.message.contains("a template tag must be"),
+                "{source}: {}",
+                err.message
+            );
+        }
     }
 
     /// Every specifier the stdlib and fixtures rely on keeps parsing.

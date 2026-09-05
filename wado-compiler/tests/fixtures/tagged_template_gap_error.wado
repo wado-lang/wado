@@ -1,0 +1,14 @@
+// A tag is written directly before the backtick. With a gap the literal is
+// not a tag's operand, so it is an unexpected token where the statement should
+// end (WEP 2026-01-10). The grammar cannot see the gap, so this fixture is
+// what holds `check-grammar`'s second invariant.
+fn tag<T: ReflectTemplate<Holes = [..V]>, ..V>(t: T) -> i32 {
+    return 1;
+}
+
+export fn run() {
+    let _ = tag `x`;
+}
+
+__DATA__
+{"compile_error": "expected `;` or `}`"}

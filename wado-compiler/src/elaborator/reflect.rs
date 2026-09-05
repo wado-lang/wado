@@ -156,6 +156,36 @@ impl VariantMethods {
     }
 }
 
+/// `ReflectTemplate`'s member names — the template analog of [`StructMethods`].
+struct TemplateMethods {
+    members: String,
+    tail: String,
+    raw_tail: String,
+}
+
+impl TemplateMethods {
+    fn resolve(tt: &TypeTable) -> Self {
+        let items = tt.compiler_items();
+        Self {
+            members: items
+                .method_name(CompilerItem::ReflectTemplateMembers)
+                .to_string(),
+            tail: items
+                .method_name(CompilerItem::ReflectTemplateTail)
+                .to_string(),
+            raw_tail: items
+                .method_name(CompilerItem::ReflectTemplateRawTail)
+                .to_string(),
+        }
+    }
+
+    fn declares(&self, method: &str) -> bool {
+        [&self.members, &self.tail, &self.raw_tail]
+            .into_iter()
+            .any(|name| name == method)
+    }
+}
+
 /// A scalar kind's member names, sourced from its [`ScalarReflectSpec`].
 struct ScalarMethods {
     value: String,
@@ -176,6 +206,7 @@ pub(super) enum ReflectDispatch {
     Root,
     Struct,
     Variant,
+    Template,
     Scalar(ScalarReflectSpec),
 }
 
@@ -183,6 +214,7 @@ pub(super) enum ReflectDispatch {
 /// needs on a generic subject.
 const STRUCT_PACK_BOUND: &str = "FieldTypes = [..F]";
 const VARIANT_PACK_BOUND: &str = "CasePayloads = [..P]";
+const TEMPLATE_PACK_BOUND: &str = "Holes = [..V]";
 
 /// The `[..P]` pack a reflect bound projects: the pack element type itself and
 /// the `(name, index)` handle a mapped pack is rebuilt from.
@@ -847,6 +879,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if self.is_reflect_variant_trait_call(prefix, method) {
             return Some(ReflectDispatch::Variant);
         }
+        if self.is_reflect_template_trait_call(prefix, method) {
+            return Some(ReflectDispatch::Template);
+        }
         [ScalarReflectSpec::ENUM, ScalarReflectSpec::FLAGS]
             .into_iter()
             .find(|spec| self.is_reflect_scalar_trait_call(*spec, prefix, method))
@@ -962,6 +997,124 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return false;
         }
         VariantMethods::resolve(&self.tysys.type_table.borrow()).declares(method)
+    }
+
+    /// Whether `prefix::method` names a `ReflectTemplate` trait-qualified static
+    /// call. Same scope discipline as [`Self::is_reflect_trait_call`].
+    fn is_reflect_template_trait_call(&self, prefix: &str, method: &str) -> bool {
+        if self
+            .tysys
+            .classify_on_bound_trait(&self.type_lookup(), prefix)
+            != Some(super::trait_query::OnBoundTrait::ReflectTemplate)
+        {
+            return false;
+        }
+        TemplateMethods::resolve(&self.tysys.type_table.borrow()).declares(method)
+    }
+
+    /// The hole types of the template shape `self_ty` denotes, or `None` where
+    /// it denotes none.
+    pub(super) fn reflect_template_holes(&self, self_ty: TypeId) -> Option<Vec<TypeId>> {
+        let tt = self.tysys.type_table.borrow();
+        let shape = tt.template_shape_of_type(self_ty)?;
+        Some(shape.holes.iter().map(|hole| hole.ty).collect())
+    }
+
+    /// Resolve a `ReflectTemplate::<T>::method()` trait-qualified static call to
+    /// the synthesized `T^ReflectTemplate::method` and record the dispatch fact
+    /// for reify. The template analog of [`Self::resolve_reflect_static_call`]:
+    /// no newtype peels, since a template shape is never wrapped, and no demand
+    /// is recorded, since every shape is synthesized.
+    pub(super) fn resolve_reflect_template_static_call(
+        &mut self,
+        self_ty: TypeId,
+        static_call: &ast::StaticMethodCallExpr,
+        ctx: &mut FunctionContext,
+    ) -> TypeId {
+        let method = static_call.method.clone();
+        let (trait_name, methods) = {
+            let tt = self.tysys.type_table.borrow();
+            (
+                tt.compiler_items().trait_fq(CompilerItem::ReflectTemplate),
+                TemplateMethods::resolve(&tt),
+            )
+        };
+
+        if !self.reject_reflect_metadata_args(static_call, ctx) {
+            return TypeTable::ERROR;
+        }
+
+        let subject = self.tysys.type_table.borrow().get(self_ty).clone();
+        if let ResolvedType::TypeParam { name, .. } = subject {
+            let return_type = if method == methods.members {
+                let Some(members_ty) = self.payload_member_pack_bound_ty(
+                    self_ty,
+                    &name,
+                    trait_name.base_name(),
+                    crate::synthesis::traits::REFLECT_HOLES_ASSOC,
+                    CompilerItem::ReflectTemplateHole,
+                ) else {
+                    self.emit_missing_pack_bound(
+                        trait_name.base_name(),
+                        &name,
+                        &method,
+                        TEMPLATE_PACK_BOUND,
+                        static_call,
+                    );
+                    return TypeTable::ERROR;
+                };
+                members_ty
+            } else {
+                self.tysys
+                    .type_table
+                    .borrow_mut()
+                    .make_compiler_struct(CompilerItem::String)
+            };
+            self.record_type_param_reflect_dispatch(
+                &name,
+                trait_name,
+                method,
+                static_call,
+                Vec::new(),
+            );
+            return return_type;
+        }
+
+        let Some(holes) = self.reflect_template_holes(self_ty) else {
+            let self_name = self.tysys.type_table.borrow().type_name(self_ty);
+            let _ = self.emit(TypeError::UnknownFunction {
+                name: format!("{}::<{self_name}>::{method}", trait_name.base_name()),
+                span: static_call.span,
+            });
+            return TypeTable::ERROR;
+        };
+
+        let return_type = if method == methods.members {
+            self.payload_members_ty(CompilerItem::ReflectTemplateHole, self_ty, &holes)
+        } else {
+            self.tysys
+                .type_table
+                .borrow_mut()
+                .make_compiler_struct(CompilerItem::String)
+        };
+
+        let (base_name, module_source) = self
+            .tysys
+            .type_table
+            .borrow()
+            .nominal_head(self_ty)
+            .expect("a template shape is a struct and names its head");
+        let func_ref = self.reflect_func_ref(
+            self_ty,
+            &base_name,
+            &[],
+            &trait_name,
+            &method,
+            module_source,
+        );
+        self.record_reflect_dispatch(static_call.id, func_ref, Vec::new());
+
+        return_type
     }
 
     /// Resolve a `ReflectVariant::<T>::method()` trait-qualified static call to
@@ -1477,7 +1630,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> Option<TypeId> {
         use crate::synthesis::traits::{
             REFLECT_CASE_PAYLOADS_ASSOC, REFLECT_FIELD_SLOTS_ASSOC, REFLECT_FIELD_TYPES_ASSOC,
-            REFLECT_MEMBERS_ASSOC,
+            REFLECT_HOLES_ASSOC, REFLECT_MEMBERS_ASSOC,
         };
         if matches!(
             self.tysys.type_table.borrow().get(subject),
@@ -1485,7 +1638,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ) {
             return None;
         }
-        let (struct_trait, variant_trait, enum_trait, flags_trait) = {
+        let (struct_trait, variant_trait, enum_trait, flags_trait, template_trait) = {
             let tt = self.tysys.type_table.borrow();
             let items = tt.compiler_items();
             (
@@ -1493,8 +1646,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 items.trait_name(CompilerItem::ReflectVariant).to_string(),
                 items.trait_name(CompilerItem::ReflectEnum).to_string(),
                 items.trait_name(CompilerItem::ReflectFlags).to_string(),
+                items.trait_name(CompilerItem::ReflectTemplate).to_string(),
             )
         };
+        if trait_name == template_trait {
+            let holes = self.reflect_template_holes(subject)?;
+            return match assoc_name {
+                REFLECT_HOLES_ASSOC => Some(self.tysys.type_table.borrow_mut().make_tuple(holes)),
+                REFLECT_MEMBERS_ASSOC => Some(self.payload_members_ty(
+                    CompilerItem::ReflectTemplateHole,
+                    subject,
+                    &holes,
+                )),
+                _ => None,
+            };
+        }
         if trait_name == struct_trait {
             let members = self.reflect_struct_subject(subject)?.member_types;
             return match assoc_name {

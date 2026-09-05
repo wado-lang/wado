@@ -399,11 +399,11 @@ fn sll_config_first(c: &SllConfig, ctx: &mut GenContext) -> List<i32> {
     return ctx.first_ids_of_elements_from(c.elements, c.pos);
 }
 
-/// Alternatives to walk into for a nullable `Repeat` whose body can consume
-/// more than one token. Skipping such a body to `pos + 1` would claim the
-/// repeat matched a single token, so the walk would keep separating
-/// alternatives on lookahead that actually sits inside the body. A
-/// single-token body keeps the cheap skip, which is exact for it.
+/// Alternatives to walk into for a `Repeat` whose body can consume more than
+/// one token. Skipping such a body to `pos + 1` would claim the repeat
+/// matched a single token, so the walk would keep separating alternatives on
+/// lookahead that actually sits inside the body. A single-token body keeps
+/// the cheap skip, which is exact for it.
 fn repeat_entry_alts(rep: &RepeatElement, ctx: &mut GenContext) -> Option<List<Alternative>> {
     return match rep.element {
         RuleRef(rr) => {
@@ -429,11 +429,51 @@ fn sll_step(c: &SllConfig, pos: i32) -> List<SllConfig> {
     ];
 }
 
+/// Move `c` past the `Repeat` at `at` on `token`, which its body admits: a
+/// single-token body is stepped past, a multi-token one walked into
+/// (invariant 6), and one that cannot be walked turns the config opaque.
+fn walk_repeat(c: &SllConfig, at: i32, token: i32, ctx: &mut GenContext, inline_depth: i32) -> List<SllConfig> {
+    let Repeat(rep) = &c.elements[at] else {
+        panic("walk_repeat: not a repeat");
+    };
+    let Some(inner_alts) = repeat_entry_alts(rep, ctx) else {
+        return sll_step(c, at + 1);
+    };
+    if inner_alts.len() > 8 {
+        return sll_step(c, SLL_POS_OPAQUE);
+    }
+    let new_stack = push_return(&c.return_stack, c.elements, at + 1);
+    let mut body_results: List<SllConfig> = [];
+    for let alt of &inner_alts {
+        let mut v: List<String> = [];
+        if !ctx.first_ids_of_alt(alt, &mut v).contains(&token) {
+            continue;
+        }
+        let exp = SllConfig {
+            ..*c,
+            elements: &alt.elements,
+            pos: 0,
+            return_stack: new_stack,
+        };
+        for let a of sll_advance(&exp, token, ctx, inline_depth + 1) {
+            body_results.push(a);
+        }
+    }
+    // Entered configs all carry this config's alt index, so `sll_dedup_by_alt`
+    // would keep one and drop the rest — a walk over a subset of the body.
+    // Opacity is the honest answer: it hands the decision to the tournament.
+    if body_results.len() > 1 {
+        return sll_step(c, SLL_POS_OPAQUE);
+    }
+    return body_results;
+}
+
 /// Advance a config by one token, expanding RuleRefs into the rule's alternatives.
 fn sll_advance(c: &SllConfig, token: i32, ctx: &mut GenContext, inline_depth: i32 = 0) -> List<SllConfig> {
-    // Limit inline expansion depth to prevent explosion from recursive rules.
+    // Bound inline expansion through recursive rules. The config stays alive
+    // as opaque: dropping it would hand its token to whichever alt survives.
     if inline_depth > 2 {
-        return [];
+        return sll_step(c, SLL_POS_OPAQUE);
     }
     if c.pos == SLL_POS_OPAQUE {
         return [];
@@ -452,48 +492,8 @@ fn sll_advance(c: &SllConfig, token: i32, ctx: &mut GenContext, inline_depth: i3
         let mut results: List<SllConfig> = [];
         let mut visiting: List<String> = [];
         if ctx.first_ids_of_element(elem, &mut visiting).contains(&token) {
-            let mut entered = false;
-            if let Repeat(rep) = elem {
-                if c.return_stack.len() < 1 {
-                    let inner_alts = repeat_entry_alts(rep, ctx);
-                    if let Some(inner_alts) = inner_alts {
-                        if inner_alts.len() <= 8 {
-                            entered = true;
-                            let new_stack = push_return(&c.return_stack, c.elements, c.pos + 1);
-                            let mut body_results: List<SllConfig> = [];
-                            for let alt of &inner_alts {
-                                let mut v2: List<String> = [];
-                                if !ctx.first_ids_of_alt(alt, &mut v2).contains(&token) {
-                                    continue;
-                                }
-                                let exp = SllConfig {
-                                    ..*c,
-                                    elements: &alt.elements,
-                                    pos: 0,
-                                    return_stack: new_stack,
-                                };
-                                let advanced = sll_advance(&exp, token, ctx, inline_depth + 1);
-                                for let a of advanced {
-                                    body_results.push(a);
-                                }
-                            }
-                            // Entered configs all carry this config's alt index, so
-                            // `sll_dedup_by_alt` would keep one and drop the rest —
-                            // a walk over a subset of the body. Opacity is the honest
-                            // answer: it hands the decision to the tournament.
-                            if body_results.len() > 1 {
-                                results.push(SllConfig { ..*c, pos: SLL_POS_OPAQUE });
-                            } else {
-                                for let a of body_results {
-                                    results.push(a);
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            if !entered {
-                results.push(SllConfig { ..*c, pos: c.pos + 1 });
+            for let a of walk_repeat(c, c.pos, token, ctx, inline_depth) {
+                results.push(a);
             }
         }
         // Also try skipping: advance past all consecutive nullables non-recursively.
@@ -501,7 +501,9 @@ fn sll_advance(c: &SllConfig, token: i32, ctx: &mut GenContext, inline_depth: i3
         while skip_pos < c.elements.len() && is_nullable(&c.elements[skip_pos]) {
             let mut v: List<String> = [];
             if ctx.first_ids_of_element(&c.elements[skip_pos], &mut v).contains(&token) {
-                results.push(SllConfig { ..*c, pos: skip_pos + 1 });
+                for let a of walk_repeat(c, skip_pos, token, ctx, inline_depth) {
+                    results.push(a);
+                }
             }
             skip_pos += 1;
         }
@@ -574,12 +576,10 @@ fn sll_advance(c: &SllConfig, token: i32, ctx: &mut GenContext, inline_depth: i3
                 [];
             }
         },
-        // Treat the repeat as consuming one token — the approximation
-        // `scan_body_can_match_empty` and invariant 6 both work around.
         Repeat(rep) => {
             let mut visiting: List<String> = [];
             if ctx.first_ids_of_element(&rep.element, &mut visiting).contains(&token) {
-                sll_step(c, c.pos + 1);
+                walk_repeat(c, c.pos, token, ctx, inline_depth);
             } else {
                 [];
             }
@@ -816,6 +816,10 @@ fn try_expand_opaque(
         return null;
     }
     let mut expanded_configs: List<SllConfig> = [];
+    // An expansion that turns opaque has no lookahead to offer, and dropping
+    // it would hand its tokens to the other alts. It still lets an at-end
+    // conflict route to the simulator, which needs no lookahead from it.
+    let mut expansion_opaque = false;
     for let c of original_configs {
         if !opaque_alts.contains(&c.alt_index) {
             continue;
@@ -841,9 +845,10 @@ fn try_expand_opaque(
                         pos: 0,
                         return_stack: new_stack,
                     };
-                    let advanced = sll_advance(&exp, token, ctx);
-                    for let a of advanced {
-                        if a.pos != -1 {
+                    for let a of sll_advance(&exp, token, ctx) {
+                        if a.pos == SLL_POS_OPAQUE {
+                            expansion_opaque = true;
+                        } else {
                             expanded_configs.push(a);
                         }
                     }
@@ -894,6 +899,9 @@ fn try_expand_opaque(
                 branch_tokens: ctx.token_names_of(&all_tokens),
             }),
         );
+    }
+    if expansion_opaque {
+        return null;
     }
     let mut branches: List<PredictionBranch> = [];
     let mut has_improvement = false;

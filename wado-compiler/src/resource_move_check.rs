@@ -519,10 +519,14 @@ impl MoveWalker<'_> {
                 self.visit_value(&c.body);
             }
             Expr::TemplateString(ts) => {
-                for part in &ts.parts {
-                    if let ast::TemplatePart::Interpolation { expr, .. } = part {
-                        self.visit_expr(expr);
-                    }
+                for expr in ts.interpolations() {
+                    self.visit_expr(expr);
+                }
+            }
+            // A hole is read or borrowed where it stands, never moved.
+            Expr::TaggedTemplate(t) => {
+                for expr in t.template.interpolations() {
+                    self.visit_expr(expr);
                 }
             }
 

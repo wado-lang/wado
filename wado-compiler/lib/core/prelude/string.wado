@@ -6,6 +6,8 @@
 use { Eq, Ord, Iterator, IntoIterator, Add, Default, From, Ordering } from "core:prelude/traits.wado";
 use { LenientFromStr, LenientParseError } from "core:prelude/traits.wado";
 use { IterMap, IterFilter, IterEnumerate, IterTake, IterSkip, IterChain, IterZip } from "core:prelude/traits.wado";
+use { ReflectTemplate } from "core:prelude/traits.wado";
+use { Formatter } from "core:prelude/format.wado";
 use { Option, Result } from "core:prelude/types.wado";
 use { Slice } from "core:prelude/slice.wado";
 use { Array } from "core:prelude/array.wado";
@@ -413,6 +415,19 @@ impl String {
     /// Create a new empty string.
     pub fn new() -> String {
         return String::with_capacity(0);
+    }
+
+    /// The tag keeping a template's escapes as written: `` String::raw`a\nb` ``
+    /// is `"a\\nb"`, its holes rendered as the untagged template renders
+    /// them. See WEP 2026-01-10.
+    pub fn raw<T: ReflectTemplate<Holes = [..V]>, ..V>(t: T) -> String {
+        let mut out = "";
+        for let h of ReflectTemplate::<T>::members() {
+            out.push_str(&h.raw());
+            h.fmt(&t, &mut Formatter::new(&mut out));
+        }
+        out.push_str(&ReflectTemplate::<T>::raw_tail());
+        return out;
     }
 
     /// Create an empty string with space for `capacity` bytes.

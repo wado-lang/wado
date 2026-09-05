@@ -2924,6 +2924,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             ast::Expr::TemplateString(template) => {
                 self.reify_template_string(template, ctx, recorded_type)
             }
+            ast::Expr::TaggedTemplate(tagged) => {
+                self.reify_tagged_template(tagged, ctx, recorded_type)
+            }
             ast::Expr::Matches(m) => self.with_defaults_suppressed(|s| s.reify_matches(m, ctx)),
             ast::Expr::CompoundAssign(compound) => {
                 self.reify_compound_assign(compound, ctx, recorded_type)
@@ -5185,7 +5188,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             let mut combined = String::new();
             for part in &template.parts {
                 if let ast::TemplatePart::String(s) = part {
-                    combined.push_str(&unescape_checked(s));
+                    combined.push_str(&super::util::unescape_template_segment(s));
                 }
             }
             return TirExpr::new(TirExprKind::StringLiteral(combined), string_type, span);
@@ -5204,7 +5207,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         for part in &template.parts {
             match part {
                 ast::TemplatePart::String(s) => {
-                    let unescaped = unescape_checked(s);
+                    let unescaped = super::util::unescape_template_segment(s);
                     if !unescaped.is_empty() {
                         parts.push(TirTemplatePart::Literal(unescaped));
                     }
@@ -5224,6 +5227,168 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         }
 
         TirExpr::new(TirExprKind::TemplateString { parts }, string_type, span)
+    }
+
+    /// Reify a tagged template as the call annotate resolved it: the tag on a
+    /// literal of the template's anonymous type, one field per hole. A hole
+    /// that is a place is read or borrowed where it stands; any other is
+    /// evaluated once, in source order, into a local of the block the call
+    /// then sits in (WEP 2026-01-10).
+    fn reify_tagged_template(
+        &mut self,
+        tagged: &ast::TaggedTemplateExpr,
+        ctx: &mut FunctionContext,
+        recorded_type: TypeId,
+    ) -> TirExpr {
+        use crate::tir::{
+            CallArg, TemplateShape, TirBlock, TirExprKind, TirStmt, TirStmtKind, TirStructField,
+        };
+
+        let span = tagged.span;
+        let (Some(template_ty), Some(dispatch)) = (
+            self.ann_tagged_template(tagged.id),
+            self.ann_static_method_dispatch(tagged.id),
+        ) else {
+            // Annotate diagnosed the template or the tag.
+            return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, span);
+        };
+        let (struct_name, hole_types) = {
+            let tt = self.tysys.type_table.borrow();
+            let crate::tir::ResolvedType::Struct { def, .. } = tt.get(template_ty) else {
+                panic!("annotate records a struct type for a tagged template");
+            };
+            let shape = tt
+                .template_shape_of_type(template_ty)
+                .expect("annotate records a template type for a tagged template");
+            let holes: Vec<TypeId> = shape.holes.iter().map(|h| h.ty).collect();
+            // The name the shape was registered under, not the one a message
+            // shows: both render the shape, and only the mangle is a key.
+            (tt.struct_head_name(*def), holes)
+        };
+
+        let unique_id = ctx.next_local;
+        let mut stmts: Vec<TirStmt> = Vec::new();
+        let mut fields: Vec<TirStructField> = Vec::new();
+        let holes: Vec<&ast::Expr> = tagged.template.interpolations().collect();
+        let values: Vec<TirExpr> = holes
+            .iter()
+            .map(|expr| self.reify_expr(expr, ctx, None))
+            .collect();
+        // A place is read where it stands only while nothing between there and
+        // the call can write it. The struct literal is built after every
+        // hoisted hole has run, so a place followed by a hole that is not one
+        // is read too late and must be bound at its own position instead.
+        let last_hoisted = values.iter().rposition(|v| !Self::is_place_hole(v));
+        for (k, ((expr, mut value), &hole_ty)) in
+            holes.iter().zip(values).zip(&hole_types).enumerate()
+        {
+            if last_hoisted.is_some_and(|last| k <= last) {
+                let name = format!("__hole_{unique_id}_{k}");
+                let local_index = ctx.add_local(name.clone(), hole_ty, false, None);
+                stmts.push(TirStmt::new(
+                    TirStmtKind::Let {
+                        name: name.clone(),
+                        local_index,
+                        is_mut: false,
+                        is_reactive: false,
+                        type_id: hole_ty,
+                        value,
+                        skip_value_copy: false,
+                    },
+                    expr.span(),
+                ));
+                value = TirExpr::new(
+                    TirExprKind::Local {
+                        index: local_index,
+                        name,
+                    },
+                    hole_ty,
+                    expr.span(),
+                );
+            }
+            let field_ty = self.tysys.type_table.borrow_mut().hole_field_type(hole_ty);
+            if field_ty != hole_ty {
+                if let TirExprKind::Local { index, .. } = &value.kind {
+                    ctx.address_taken_locals.insert(*index);
+                }
+                value = TirExpr::new(
+                    TirExprKind::Unary {
+                        op: crate::tir::TirUnaryOp::Ref,
+                        expr: Box::new(value),
+                    },
+                    field_ty,
+                    expr.span(),
+                );
+            }
+            fields.push(TirStructField {
+                name: TemplateShape::field_name(k),
+                value,
+                field_index: k as u32,
+            });
+        }
+
+        let literal = TirExpr::new(
+            TirExprKind::StructLiteral {
+                struct_type: template_ty,
+                struct_name,
+                fields,
+            },
+            template_ty,
+            span,
+        );
+        // The template is the tag's one written argument; a trailing parameter
+        // with a default is filled here, as it is for a spelled call.
+        let mut args = vec![CallArg::new(literal, false)];
+        self.reify_pad_dispatch_defaults(&tagged.tag, &mut args, &dispatch, span, ctx);
+        let call = TirExpr::new(
+            TirExprKind::Call {
+                type_args: dispatch.type_args,
+                func: Box::new(dispatch.function_ref),
+                args,
+                has_receiver: false,
+            },
+            recorded_type,
+            span,
+        );
+        if stmts.is_empty() {
+            return call;
+        }
+
+        let label = format!("__tagged_{unique_id}");
+        stmts.push(TirStmt::new(
+            TirStmtKind::Break {
+                label: Some(label.clone()),
+                value: Some(call),
+            },
+            span,
+        ));
+        TirExpr::new(
+            TirExprKind::LabeledBlock {
+                label,
+                block: TirBlock::new(stmts, span),
+                result_type: recorded_type,
+            },
+            recorded_type,
+            span,
+        )
+    }
+
+    /// Whether a reified hole names storage the template literal can read or
+    /// borrow in situ: a local, a parameter, a global, or a field or element
+    /// chain rooted at one. Anything else computes a value, which the literal
+    /// reads once from a temporary instead.
+    ///
+    /// Decided on the reified value rather than the hole's spelling, so it
+    /// answers by what the hole *is* — resolution already settled that — and
+    /// not by a name looked up a second time.
+    fn is_place_hole(value: &TirExpr) -> bool {
+        match &value.kind {
+            TirExprKind::Local { .. } | TirExprKind::GlobalVarGet { .. } => true,
+            TirExprKind::FieldAccess { expr, .. } | TirExprKind::Index { expr, .. } => {
+                Self::is_place_hole(expr)
+            }
+            _ => false,
+        }
     }
 
     /// Reify a `a..<b` / `a..=b` range expression. The elaborator
@@ -7602,9 +7767,36 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         }
     }
 
-    /// Pad missing trailing positional args with the callee's
-    /// declared defaults. Mirrors `Elaborator::pad_args_with_defaults`
-    /// Only bare-ident free functions have defaults.
+    /// Pad `args` with the defaults the call omitted, for either shape a
+    /// dispatch names: a free function's parameter list, or a static method's
+    /// own. Neither answers for the other, so both are asked.
+    fn reify_pad_dispatch_defaults(
+        &mut self,
+        callee: &ast::Expr,
+        args: &mut Vec<crate::tir::CallArg>,
+        dispatch: &crate::elaborator::sem::types::StaticMethodDispatch,
+        span: crate::token::Span,
+        ctx: &mut FunctionContext,
+    ) {
+        self.reify_pad_args_with_defaults(
+            callee,
+            args,
+            &dispatch.param_types,
+            &dispatch.function_ref.module_source.clone(),
+            &dispatch.function_ref.name.clone(),
+            ctx,
+        );
+        let module = dispatch.defaults_module.clone();
+        self.reify_apply_param_defaults(
+            args,
+            &dispatch.param_defaults,
+            &dispatch.param_types,
+            &module,
+            span,
+            ctx,
+        );
+    }
+
     fn reify_pad_args_with_defaults(
         &mut self,
         callee: &ast::Expr,
@@ -7883,25 +8075,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     CallArg::new(arg, is_mut)
                 })
                 .collect();
-            self.reify_pad_args_with_defaults(
-                &call.callee,
-                &mut arg_exprs,
-                &dispatch.param_types,
-                &dispatch.function_ref.module_source,
-                &dispatch.function_ref.name,
-                ctx,
-            );
-            // A `::`-qualified `Type::method()` or `Effect::op()` is not a free
-            // function, so the pad above finds nothing; apply its own defaults.
-            let smc_module = dispatch.defaults_module.clone();
-            self.reify_apply_param_defaults(
-                &mut arg_exprs,
-                &dispatch.param_defaults,
-                &dispatch.param_types,
-                &smc_module,
-                span,
-                ctx,
-            );
+            self.reify_pad_dispatch_defaults(&call.callee, &mut arg_exprs, &dispatch, span, ctx);
             // Type args: replay exactly what the production builder put on
             // the `Call`. This already folds in any explicit turbofish and,
             // crucially, carries only the method-level type args — a generic
@@ -10687,13 +10861,6 @@ fn primitive_int_assoc_const(prefix: &str, suffix: &str) -> Option<(i128, crate:
         _ => return None,
     };
     Some((value, ty))
-}
-
-/// Decode a template literal segment. Only a module whose body walk logged no
-/// errors reaches reify, and that walk is what rejects a malformed escape.
-fn unescape_checked(raw: &str) -> String {
-    super::util::unescape_template_string(raw)
-        .expect("the body walk rejects a malformed template escape before reify runs")
 }
 
 /// Build the receiver node the recorded `(self_kind, is_ref_impl)` pair asks

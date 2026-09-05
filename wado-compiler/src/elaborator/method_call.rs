@@ -1350,6 +1350,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 ReflectDispatch::Variant => {
                     self.resolve_reflect_variant_static_call(self_ty, static_call, ctx)
                 }
+                ReflectDispatch::Template => {
+                    self.resolve_reflect_template_static_call(self_ty, static_call, ctx)
+                }
                 ReflectDispatch::Scalar(spec) => {
                     self.resolve_reflect_scalar_static_call(spec, self_ty, static_call, ctx)
                 }
@@ -2253,7 +2256,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             key,
             super::sem::types::StaticMethodDispatch {
                 method_def: selected.as_ref().and_then(|r| r.method_id),
-                defaults_module: func_ref.module_source.clone(),
+                // The scope annotate resolved these defaults in, so reify
+                // resolves them in the same one.
+                defaults_module: static_method_module
+                    .unwrap_or_else(|| func_ref.module_source.clone()),
                 function_ref: func_ref,
                 param_is_mut,
                 type_args: method_type_args,
@@ -3594,14 +3600,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return TypeTable::ERROR;
         }
 
+        // An inherent impl may live in any module of the package that owns the
+        // type, and its methods are registered under that module. So the
+        // fallback takes the impl's module where one is indexed, and the type's
+        // home only where none is (`cross_module_inherent_static.wado`).
         let method_ref = resolved.unwrap_or_else(|| {
-            StaticMethodRef::new(
-                self.declaring_module_of(&actual_struct_name),
-                &actual_struct_name,
-                method_name,
-                None,
-                None,
-            )
+            let target = self.static_receiver_key(&actual_struct_name, receiver_key.as_ref());
+            let module = self
+                .static_method_entries(&target, method_name)
+                .find(|e| e.is_inherent())
+                .map(|e| e.module.clone())
+                .unwrap_or_else(|| self.declaring_module_of(&actual_struct_name));
+            StaticMethodRef::new(module, &actual_struct_name, method_name, None, None)
         });
 
         // Use trait-qualified mangled name if this is a trait method

@@ -830,10 +830,14 @@ pub fn walk_expr<V: AstVisitor>(v: &mut V, expr: &Expr) {
             v.visit_expr(&c.body);
         }
         Expr::TemplateString(t) => {
-            for part in &t.parts {
-                if let TemplatePart::Interpolation { expr, .. } = part {
-                    v.visit_expr(expr);
-                }
+            for expr in t.interpolations() {
+                v.visit_expr(expr);
+            }
+        }
+        Expr::TaggedTemplate(t) => {
+            v.visit_expr(&t.tag);
+            for expr in t.template.interpolations() {
+                v.visit_expr(expr);
             }
         }
         Expr::Cast(c) => {
@@ -2206,6 +2210,10 @@ pub enum Expr {
     Matches(Box<MatchesExpr>),
     Closure(Box<ClosureExpr>),
     TemplateString(Box<TemplateStringExpr>),
+    /// A template literal a path tags: `` sql`… ${x} …` ``. A call of the
+    /// tag on the template's holes, not a string
+    /// (`docs/wep-2026-01-10-tagged-template-literals.md`).
+    TaggedTemplate(Box<TaggedTemplateExpr>),
     Cast(Box<CastExpr>),
     StructLiteral(Box<StructLiteralExpr>),
     TupleLiteral(Box<TupleLiteralExpr>),
@@ -2344,6 +2352,7 @@ impl Expr {
             Expr::Matches(e) => e.id,
             Expr::Closure(e) => e.id,
             Expr::TemplateString(e) => e.id,
+            Expr::TaggedTemplate(e) => e.id,
             Expr::Cast(e) => e.id,
             Expr::StructLiteral(e) => e.id,
             Expr::TupleLiteral(e) => e.id,
@@ -2379,6 +2388,7 @@ impl Expr {
             Expr::Matches(e) => e.span,
             Expr::Closure(e) => e.span,
             Expr::TemplateString(e) => e.span,
+            Expr::TaggedTemplate(e) => e.span,
             Expr::Cast(e) => e.span,
             Expr::StructLiteral(e) => e.span,
             Expr::TupleLiteral(e) => e.span,
@@ -2468,6 +2478,10 @@ impl Expr {
             Expr::TemplateString(mut e) => {
                 e.span = new_span;
                 Expr::TemplateString(e)
+            }
+            Expr::TaggedTemplate(mut e) => {
+                e.span = new_span;
+                Expr::TaggedTemplate(e)
             }
             Expr::Cast(mut e) => {
                 e.span = new_span;
@@ -2567,10 +2581,13 @@ impl Expr {
                 c.expr.substitute_idents(subs);
             }
             Expr::TemplateString(t) => {
-                for part in &mut t.parts {
-                    if let TemplatePart::Interpolation { expr, .. } = part {
-                        expr.substitute_idents(subs);
-                    }
+                for expr in t.interpolations_mut() {
+                    expr.substitute_idents(subs);
+                }
+            }
+            Expr::TaggedTemplate(t) => {
+                for expr in t.template.interpolations_mut() {
+                    expr.substitute_idents(subs);
                 }
             }
             Expr::TupleLiteral(t) => {
@@ -3103,6 +3120,33 @@ pub struct ClosureParam {
 pub struct TemplateStringExpr {
     pub id: AstId,
     pub parts: Vec<TemplatePart>,
+    pub span: Span,
+}
+
+impl TemplateStringExpr {
+    /// The hole expressions, in source order.
+    pub fn interpolations(&self) -> impl Iterator<Item = &Expr> {
+        self.parts.iter().filter_map(|part| match part {
+            TemplatePart::Interpolation { expr, .. } => Some(expr.as_ref()),
+            TemplatePart::String(_) => None,
+        })
+    }
+
+    pub fn interpolations_mut(&mut self) -> impl Iterator<Item = &mut Expr> {
+        self.parts.iter_mut().filter_map(|part| match part {
+            TemplatePart::Interpolation { expr, .. } => Some(expr.as_mut()),
+            TemplatePart::String(_) => None,
+        })
+    }
+}
+
+/// A tagged template: `` sql`… ${x} …` ``. The tag is the path written
+/// directly before the backtick; the parser admits only an [`Expr::Ident`].
+#[derive(Debug, Clone)]
+pub struct TaggedTemplateExpr {
+    pub id: AstId,
+    pub tag: Expr,
+    pub template: TemplateStringExpr,
     pub span: Span,
 }
 

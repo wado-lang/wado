@@ -30,6 +30,9 @@ enum DeclKey {
     /// name one, so what reaches it — a blanket over its `Reflect*` facts —
     /// reads the same of every shape.
     AnonymousStruct,
+    /// One head for every tagged template literal's type, its hole types as
+    /// the arguments, on the same terms as [`Self::AnonymousStruct`].
+    TemplateShape,
 }
 
 /// How an impl's parameter is spelled where a type mentions it.
@@ -98,6 +101,16 @@ impl Lowering {
     fn anonymous_head(&self) -> TypeDeclId {
         self.known_type(&DeclKey::AnonymousStruct)
             .expect("the anonymous head is interned before the program is read")
+    }
+
+    fn template_shape(&mut self) -> TypeDeclId {
+        TypeDeclId(intern(&mut self.decls, DeclKey::TemplateShape))
+    }
+
+    /// The head every template shape lowers under, interned by `build`.
+    fn template_head(&self) -> TypeDeclId {
+        self.known_type(&DeclKey::TemplateShape)
+            .expect("the template head is interned before the program is read")
     }
 
     /// The head a function type lowers under.
@@ -304,6 +317,14 @@ impl Lowering {
                 def: crate::tir::StructDef::Anon(shape),
                 ..
             } => {
+                if let Some(template) = table.template_shape(*shape) {
+                    let holes = template
+                        .holes
+                        .iter()
+                        .map(|hole| self.type_id(table, hole.ty, param))
+                        .collect::<Option<Vec<_>>>()?;
+                    return decl(DeclKey::TemplateShape, holes);
+                }
                 if table.anon_struct_is_synthetic(*shape) {
                     return None;
                 }
@@ -554,7 +575,7 @@ fn representative(
                 None
             }
         }
-        DeclKey::AnonymousStruct => None,
+        DeclKey::AnonymousStruct | DeclKey::TemplateShape => None,
     }
 }
 
@@ -607,13 +628,14 @@ impl SolverBridge {
 
     /// The reflection kinds. The root holds of every kind, ungated by field
     /// visibility (WEP 2026-06-13).
-    const REFLECT: [OnBoundTrait; 6] = [
+    const REFLECT: [OnBoundTrait; 7] = [
         OnBoundTrait::Reflect,
         OnBoundTrait::ReflectStruct,
         OnBoundTrait::ReflectVariant,
         OnBoundTrait::ReflectEnum,
         OnBoundTrait::ReflectFlags,
         OnBoundTrait::ReflectNewtype,
+        OnBoundTrait::ReflectTemplate,
     ];
 
     /// Whether the differential asks about `item`: the lowering states the
@@ -759,6 +781,8 @@ impl SolverBridge {
         }
         let anonymous = lowering.anonymous_struct();
         lowering.opaque_heads.insert(anonymous);
+        let template = lowering.template_shape();
+        lowering.opaque_heads.insert(template);
         // A struct declared in a body has its identity here and its fields
         // only once annotate reaches the body.
         let defs = tysys.resolutions.defs();
@@ -1015,8 +1039,14 @@ impl SolverBridge {
                 visible_from,
             );
         }
-        // A literal's fields are all visible, from every module.
+        // A literal's fields are all visible, from every module; so are a
+        // template's holes.
         state(lowering.anonymous_head(), OnBoundTrait::ReflectStruct, None);
+        state(
+            lowering.template_head(),
+            OnBoundTrait::ReflectTemplate,
+            None,
+        );
         let of = |kind| move |def: &DefId| (*def, kind);
         let memberless = tysys
             .all_variant_cases
@@ -1113,7 +1143,8 @@ impl SolverBridge {
                 }
                 // A literal's shape is a struct, which both predicates read as
                 // `Struct { .. }`; none is minted when the program is built.
-                DeclKey::AnonymousStruct => (true, true),
+                // A template shape is a struct too.
+                DeclKey::AnonymousStruct | DeclKey::TemplateShape => (true, true),
             };
             if is_ref {
                 fact(Some(TypeDeclId(id)), ref_);
@@ -1387,6 +1418,7 @@ impl SolverBridge {
                         DeclKey::Def(def) => tysys.resolutions.defs().name(*def).to_string(),
                         DeclKey::Builtin(name) => name.clone(),
                         DeclKey::AnonymousStruct => "{..}".to_string(),
+                        DeclKey::TemplateShape => "`..`".to_string(),
                     },
                 )
         };

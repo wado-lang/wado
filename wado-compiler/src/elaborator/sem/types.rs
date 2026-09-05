@@ -220,6 +220,12 @@ macro_rules! with_body_facts {
             /// the expected type at the site, so reify constructs what
             /// annotate typed.
             ann_bare_case => bare_cases: $crate::defs::DefId,
+            /// The anonymous type a tagged template literal denotes, keyed
+            /// by the [`crate::ast::TaggedTemplateExpr`]'s [`AstId`]. The
+            /// tag call's own facts sit under the same key in
+            /// `static_method_dispatch` / `generic_instantiations`, as a
+            /// call's would.
+            ann_tagged_template => tagged_templates: $crate::tir::TypeId,
         }
     };
 }

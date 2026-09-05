@@ -330,6 +330,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         match expr {
             Expr::Literal(lit) => self.synth_literal(&lit.value),
             Expr::TemplateString(_) => ArgClass::StrLit,
+            // A tag's result is whatever the tag returns; the callee is
+            // resolved against a type the classifier does not mint.
+            Expr::TaggedTemplate(_) => ArgClass::Opaque(OpaqueReason::Inference),
             Expr::Ident(id) => self.synth_ident(id, scope),
             Expr::Unary(u) => self.synth_unary(u, scope),
             Expr::Binary(b) => self.synth_binary(b, scope),

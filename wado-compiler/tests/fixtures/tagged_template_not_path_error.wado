@@ -1,0 +1,16 @@
+// Only a path may tag a template: a call result is a syntax error at the
+// backtick (WEP 2026-01-10).
+fn tag<T: ReflectTemplate<Holes = [..V]>, ..V>(t: T) -> i32 {
+    return 1;
+}
+
+fn pick() -> i32 {
+    return 2;
+}
+
+export fn run() {
+    let _ = pick()`x`;
+}
+
+__DATA__
+{"compile_error": "a template tag must be a function name or a static method path"}
