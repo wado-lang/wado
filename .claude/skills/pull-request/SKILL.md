@@ -64,9 +64,8 @@ the description is broken, and never rewrite prose to work around it.
 
 ## After opening & Periodic status checks
 
-Subscribe to the PR with `subscribe_pr_activity` and keep it subscribed until
-the PR is merged or closed. Handle every event it delivers; skipping one is a
-decision you state.
+Subscribe to the PR with `subscribe_pr_activity`. Handle every event it
+delivers; skipping one is a decision you state.
 
 Check mergeability (`mergeable_state`). If conflicting, resolve it with the
 `git-upstream-sync` skill.
