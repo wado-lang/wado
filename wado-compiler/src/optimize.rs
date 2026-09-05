@@ -30,6 +30,7 @@ mod labeled_block_fusion;
 mod let_block_flatten;
 mod licm;
 mod loop_version_bce;
+mod match_to_bitset;
 mod match_to_switch;
 mod mod_ref;
 pub(crate) mod multi_value_return;

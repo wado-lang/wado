@@ -19,6 +19,7 @@ use super::elide_local::ElideRule;
 use super::gate::{FunctionGate, GatedPass};
 use super::if_chain_to_match::IfChainToMatchRule;
 use super::labeled_block_fusion::{build_labeled_block_fusion, build_slot_temp_sroa};
+use super::match_to_bitset::MatchToBitsetRule;
 use super::match_to_switch::MatchToSwitchRule;
 use super::ref_elim::build_ref_elim;
 use super::string_push::{AppendFuseRule, ConstAsciiPushRule, ShortPushStrRule, resolve_ctx};
@@ -39,6 +40,7 @@ pub(super) fn run_peephole(
     // Intern the builtins the bundled rules synthesize, before any shared
     // immutable borrow of `project`, so their calls are born resolved.
     let (cold_path_id, unreachable_id) = super::match_to_switch::intern_cold_markers(project);
+    let select_id = super::select_lowering::intern_select(project);
     // Whole-package contexts, resolved once before the mutable body walk.
     let push_ctx = resolve_ctx(project);
     let const_ascii_push_rule = push_ctx.as_ref().and_then(ConstAsciiPushRule::new);
@@ -57,6 +59,7 @@ pub(super) fn run_peephole(
     let const_fold_rule = ConstFoldRule::new(&type_table, &callees, &ctfe_builtins);
     let branch_prune_rule = BranchPruneRule::new(PruneMode::Fixpoint);
     let aggregate_forward_rule = AggregateForwardRule;
+    let bitset_rule = MatchToBitsetRule::new(&type_table, select_id);
     let match_rule = MatchToSwitchRule::new(&type_table, cold_path_id, unreachable_id);
     let if_chain_rule = IfChainToMatchRule::new(&type_table);
     let tuple_projection_rule = TupleProjectionRule;
@@ -127,8 +130,11 @@ pub(super) fn run_peephole(
         };
         let mut rules: Vec<&dyn Rule> = Vec::with_capacity(10);
         if pre_inline {
-            // Ordered before `match_rule`, which lowers the `Match` it plants.
+            // Ordered before `match_rule`, which lowers the `Match` it plants;
+            // `bitset_rule` before it too, taking the boolean sets `match_rule`
+            // would otherwise make a `br_table` of.
             rules.push(&if_chain_rule);
+            rules.push(&bitset_rule);
             rules.push(&match_rule);
         }
         if let Some(ref_elim_rule) = ref_elim_rule.as_ref() {

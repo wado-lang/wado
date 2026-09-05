@@ -168,7 +168,10 @@ paid on a benchmark `fts` never touched.
   dispatch-bound — cut the calls, not the branch. What does answer to dispatch is
   a cascade long enough to pay for that branch, or one that is not a cascade at
   all: independent `if`s no arm leaves test every key whatever matched, which
-  `nir/if_chain_to_match` is what fixes.
+  `nir/if_chain_to_match` is what fixes. A set _membership_ test —
+  `k matches { A | B | … }` — is neither: `match_to_bitset` lowers it to a
+  branch-free mask test, so write it as the set and do not hand-roll a range
+  compare or a table.
 - **Write into the caller's buffer, not a temp.** `` `{v}` `` allocates a
   throwaway `String` and copies it in, per value; `buf.push_display(&v)` skips
   both. A run of adjacent `push` / `push_str` calls is fused into one capacity

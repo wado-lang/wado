@@ -53,12 +53,13 @@ The design, its soundness invariants, the standing "do not reintroduce" rules, a
 position-flexible rules share, each on the same worklist instead of a walk of
 its own. It hosts `aggregate_forward`, `const_branch_prune`, the env-free half
 of `const_folding`, `drop_value`, `elide_box_local`, `elide_local`,
-`if_chain_to_match`, `labeled_block_fusion`, `match_to_switch`, `ref_elim`,
-`slot_temp_sroa`, `string_push`, and `tuple_projection`. It runs twice per
-fixed-point iteration, before and after `inline`, so each rule sees the
-instruction window the other exposes. `match_to_switch` and `if_chain_to_match`
-run only before; `ref_elim`, `elide_box_local`, `slot_temp_sroa`, and
-`drop_value` run only after.
+`if_chain_to_match`, `labeled_block_fusion`, `match_to_bitset`,
+`match_to_switch`, `ref_elim`, `slot_temp_sroa`, `string_push`, and
+`tuple_projection`. It runs twice per fixed-point iteration, before and after
+`inline`, so each rule sees the instruction window the other exposes.
+`match_to_bitset`, `match_to_switch` and `if_chain_to_match` run only before;
+`ref_elim`, `elide_box_local`, `slot_temp_sroa`, and `drop_value` run only
+after.
 
 Allocation and aggregate:
 
@@ -109,6 +110,7 @@ Whole-program and backend:
 
 - `dce` — remove unreachable functions, types, string/bytes literals, and WASI imports by call-graph reachability.
 - `promote_fields` / `freeze_pure_arith` (`extract.rs`) — freeze a pure operand position into the `ValueId` it denotes. Arithmetic freezes before the loop (on the clean graph, which is what makes freezing a constant leaf read sound) and again last, after every binary-walking pass; scalar `FieldAccess` over a stable receiver freezes between them, once SROA has settled the struct shape.
+- `match_to_bitset` — lower a boolean-valued `match` over literals — what `x matches { A | B | … }` desugars to — to a mask test: `(x - min) as u32 < range && (WORD >> (x - min)) & 1 != 0`, the word picked by `select` when the set spans more than one, and the range compare alone when the members are contiguous. Branch-free where the cascade pays a compare per member and the `br_table` an indirect branch keyed on the scrutinee. Ordered before `match_to_switch`, which would otherwise take the dense ones; four members and four words are the bounds.
 - `match_to_switch` — lower a dense integer/enum `match` to a `br_table` switch, once it covers twelve values, which one range arm can do alone. The table replaces a cascade the predictor gets right with a single indirect branch, so it pays only once that cascade is long.
 - `if_chain_to_match` — fuse a run of sibling `if K == x { … }` statements over one local into a single `Match`. A derived `Deserialize` routes a field through such a run, unrolled one arm per declared field and left by none of them, so a struct pays one comparison per field declared for _every_ field on the wire. The guards are exclusive because the constants are distinct and no arm writes the local; the constant bindings between the arms (the unrolled index) move ahead of the run. No width threshold of its own — the `Match` alone never tests more keys than the flat run.
 - `select_lowering` — lower an `if` with pure arms to a branchless `builtin::select`.

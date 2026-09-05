@@ -1,0 +1,71 @@
+// Test: `k matches { A | B | … }` over a constant set is a mask test — offset
+// from the smallest member, an unsigned range compare, a shift and a bit
+// test — rather than the `br_table` a dense set would otherwise lower to or the
+// compare cascade a sparse one keeps. A set spanning more than one 64-bit
+// word picks its word with a `select`; an enum set reads its discriminants.
+
+enum Kind {
+    A,
+    B,
+    C,
+    D,
+    E,
+    F,
+    G,
+}
+
+fn in_set(k: i32) -> bool {
+    return k matches { 3 | 4 | 5 | 7 | 8 | 9 | 10 | 12 | 13 | 14 | 15 | 16 | 17 | 20 };
+}
+
+fn wide(k: i32) -> bool {
+    return k matches { 1 | 5 | 66 | 70 | 130 | 200 };
+}
+
+fn odd_kind(k: Kind) -> bool {
+    return k matches { A | C | E | G };
+}
+
+fn not_in_set(k: i32) -> bool {
+    return match k {
+        3 | 4 | 5 | 9 => false,
+        _ => true,
+    };
+}
+
+export fn run() {
+    assert in_set(builtin::black_box(3));
+    assert in_set(builtin::black_box(20));
+    assert !in_set(builtin::black_box(6));
+    assert !in_set(builtin::black_box(2));
+    assert !in_set(builtin::black_box(21));
+    assert !in_set(builtin::black_box(-1));
+    assert !in_set(builtin::black_box(67));
+    assert wide(builtin::black_box(1));
+    assert wide(builtin::black_box(66));
+    assert wide(builtin::black_box(130));
+    assert wide(builtin::black_box(200));
+    assert !wide(builtin::black_box(65));
+    assert !wide(builtin::black_box(201));
+    assert !wide(builtin::black_box(0));
+    assert odd_kind(builtin::black_box(Kind::A));
+    assert odd_kind(builtin::black_box(Kind::G));
+    assert !odd_kind(builtin::black_box(Kind::B));
+    assert !not_in_set(builtin::black_box(9));
+    assert not_in_set(builtin::black_box(10));
+    assert not_in_set(builtin::black_box(2));
+}
+
+__DATA__
+{
+    "stdout": "",
+    "wir_expect:O2": [
+        "(163575_i64 >>u ",
+        "(85_i64 >>u ",
+        "(71_i64 >>u ",
+        "select u64((k - 1) <u 64, 17_i64, select u64((k - 1) <u 128, 34_i64, select u64((k - 1) <u 192, 2_i64, 128_i64)))"
+    ],
+    "wir_not_expect:O2": [
+        "br_table"
+    ]
+}

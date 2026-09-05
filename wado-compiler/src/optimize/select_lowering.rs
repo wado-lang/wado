@@ -15,15 +15,7 @@ use crate::tir::{PrimitiveType, ResolvedType, TypeId, TypeTable};
 
 /// Run select lowering on all functions, driven by the rewrite engine.
 pub fn select_lowering(project: &mut NirPackage) -> bool {
-    // Intern the `select` builtin once so every synthesized call is born
-    // resolved. Its `FuncId` keys on `Free(builtin, "select")` (type args ride
-    // the node), so one id serves all instantiations.
-    let select_id = project.intern_extern(&FunctionRef {
-        module_source: ModuleSource::builtin(),
-        name: "select".to_string(),
-        monomorph_info: None,
-        method_info: None,
-    });
+    let select_id = intern_select(project);
     let type_table = project.type_table.borrow();
     let rule = SelectLoweringRule {
         type_table: &type_table,
@@ -40,6 +32,18 @@ pub fn select_lowering(project: &mut NirPackage) -> bool {
         }
     }
     changed
+}
+
+/// Intern the `select` builtin once so every synthesized call is born
+/// resolved. Its `FuncId` keys on `Free(builtin, "select")` (type args ride
+/// the node), so one id serves all instantiations.
+pub(super) fn intern_select(project: &mut NirPackage) -> crate::nir::FuncId {
+    project.intern_extern(&FunctionRef {
+        module_source: ModuleSource::builtin(),
+        name: "select".to_string(),
+        monomorph_info: None,
+        method_info: None,
+    })
 }
 
 struct SelectLoweringRule<'t> {
