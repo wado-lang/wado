@@ -830,10 +830,8 @@ pub fn walk_expr<V: AstVisitor>(v: &mut V, expr: &Expr) {
             v.visit_expr(&c.body);
         }
         Expr::TemplateString(t) => {
-            for part in &t.parts {
-                if let TemplatePart::Interpolation { expr, .. } = part {
-                    v.visit_expr(expr);
-                }
+            for expr in t.interpolations() {
+                v.visit_expr(expr);
             }
         }
         Expr::TaggedTemplate(t) => {
@@ -2583,10 +2581,8 @@ impl Expr {
                 c.expr.substitute_idents(subs);
             }
             Expr::TemplateString(t) => {
-                for part in &mut t.parts {
-                    if let TemplatePart::Interpolation { expr, .. } = part {
-                        expr.substitute_idents(subs);
-                    }
+                for expr in t.interpolations_mut() {
+                    expr.substitute_idents(subs);
                 }
             }
             Expr::TaggedTemplate(t) => {

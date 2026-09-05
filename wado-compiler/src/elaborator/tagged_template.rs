@@ -57,49 +57,34 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         result
     }
 
-    /// Type the holes and read the segments off the template, or `None` where
-    /// a hole cannot be a shape's member: an error, an undecided inference
-    /// variable, or a type parameter of the enclosing item.
+    /// The template's shape, or `None` where a hole cannot be a member of one:
+    /// an error, an undecided inference variable, or a type parameter of the
+    /// enclosing item. A hole also carries its source text, which only a tag
+    /// reads.
     fn resolve_template_shape(
         &mut self,
         template: &ast::TemplateStringExpr,
         ctx: &mut FunctionContext,
     ) -> Option<TemplateShape> {
-        let mut segments = Vec::new();
-        let mut holes = Vec::new();
-        let mut pending = String::new();
+        let parts = self.resolve_template_parts(template, ctx)?;
         let mut sound = true;
-        for part in &template.parts {
-            match part {
-                ast::TemplatePart::String(raw) => {
-                    // The gate reify relies on: it decodes these segments with
-                    // no diagnostic channel of its own.
-                    if let Err(message) = super::util::unescape_template_string(raw) {
-                        let _ = self.emit(TypeError::InvalidLiteral {
-                            message,
-                            span: template.span,
-                        });
-                        sound = false;
-                    }
-                    pending.push_str(raw);
+        let holes: Vec<TemplateHole> = parts
+            .holes
+            .into_iter()
+            .zip(template.interpolations())
+            .map(|((ty, spec), expr)| {
+                sound &= self.hole_type_admissible(ty, expr.span());
+                TemplateHole {
+                    ty,
+                    spec,
+                    source: unparse_expr_source(expr),
                 }
-                ast::TemplatePart::Interpolation { expr, format } => {
-                    let ty = self.resolve_expr(expr, ctx, None);
-                    let ty = self.apply_infer_holes(ty);
-                    if !self.hole_type_admissible(ty, expr.span()) {
-                        sound = false;
-                    }
-                    segments.push(std::mem::take(&mut pending));
-                    holes.push(TemplateHole {
-                        ty,
-                        spec: format.as_ref().map(|f| f.spec.clone()),
-                        source: unparse_expr_source(expr),
-                    });
-                }
-            }
-        }
-        segments.push(pending);
-        sound.then_some(TemplateShape { segments, holes })
+            })
+            .collect();
+        sound.then_some(TemplateShape {
+            segments: parts.segments,
+            holes,
+        })
     }
 
     /// Whether `ty` can be a hole of a shape: decided, and free of the

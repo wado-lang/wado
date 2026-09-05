@@ -69,10 +69,6 @@ pub(super) fn arg_spans_of(
         .collect()
 }
 
-fn resolved_arg_spans(call: &ast::CallExpr, resolved: usize) -> Vec<crate::Span> {
-    arg_spans_of(&call.args, resolved, call.span)
-}
-
 /// True when a turbofish needs inference to fill some type-argument slot: it
 /// supplies fewer args than the generic has parameters (omitted trailing args)
 /// or it contains an explicit `_` placeholder.
@@ -563,11 +559,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             ..
         } = &callee_kind
         {
-            let args: Vec<TypeId> = call
-                .args
-                .iter()
-                .map(|a| self.resolve_expr(a, ctx, None))
-                .collect();
+            let args: Vec<TypeId> = match &given_args {
+                Some(args) => args.clone(),
+                None => call
+                    .args
+                    .iter()
+                    .map(|a| self.resolve_expr(a, ctx, None))
+                    .collect(),
+            };
             return self.resolve_type_param_static_call(
                 prefix,
                 suffix,
@@ -1428,7 +1427,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     self.recoerce_literal_args(&call.args, &mut args, &checked);
                     // The same check the bare `Type::method` spelling gets: a
                     // count is only skipped where no signature answered.
-                    let arg_spans = resolved_arg_spans(call, args.len());
+                    let arg_spans = arg_spans_of(&call.args, args.len(), call.span);
                     if declares_params
                         && !self.check_static_call_args(
                             &checked,

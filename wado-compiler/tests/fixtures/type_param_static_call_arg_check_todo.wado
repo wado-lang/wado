@@ -1,0 +1,26 @@
+#![TODO]
+// `T::method(...)` on a type parameter never checks its arguments against the
+// trait method's parameters: `resolve_type_param_static_call` resolves them
+// and records the dispatch without a `check_static_call_args`, so a mismatch
+// reaches codegen as an invalid core Wasm module rather than a diagnostic.
+//
+// Every other call kind reports this. A tagged template reaches the same path
+// (WEP 2026-01-10), so the check would answer for both spellings at once.
+
+trait Tag {
+    fn tag(n: i32) -> i32;
+}
+
+impl Tag for i32 {
+    fn tag(n: i32) -> i32 {
+        return n;
+    }
+}
+
+fn through_bound<T: Tag>() -> i32 {
+    return T::tag("oops");
+}
+
+test "an argument of the wrong type is reported, not lowered" {
+    assert through_bound::<i32>() == 0;
+}

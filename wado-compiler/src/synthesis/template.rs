@@ -205,7 +205,6 @@ pub fn synthesize_hole_fmt_helpers(
                     .iter()
                     .zip(&s.fields)
                     .map(|(hole, field)| HoleFmtArm {
-                        field_index: field.index,
                         field_type: field.type_id,
                         hole_type: hole.ty,
                         spec: hole.spec.as_deref().map(|spec| {
@@ -229,10 +228,9 @@ pub fn synthesize_hole_fmt_helpers(
     }
 }
 
-/// One arm of a shape's `$hole_fmt` helper: the field holding the hole, as
-/// the struct types it, and the hole's own type and specifier.
+/// One arm of a shape's `$hole_fmt` helper, at the hole's own index: the
+/// field holding it, as the struct types it, and the hole's type and specifier.
 struct HoleFmtArm {
-    field_index: u32,
     field_type: TypeId,
     hole_type: TypeId,
     spec: Option<TemplateFormatSpec>,
@@ -283,23 +281,14 @@ fn build_hole_fmt_helper(
         )
     };
 
-    let cases: Vec<(String, u32)> = holes
-        .iter()
-        .map(|hole| {
-            (
-                crate::tir::TemplateShape::field_name(hole.field_index as usize),
-                hole.field_index,
-            )
-        })
+    let cases: Vec<(String, u32)> = (0..holes.len())
+        .map(|k| (crate::tir::TemplateShape::field_name(k), k as u32))
         .collect();
     let dispatch = crate::synthesis::traits::case_index_dispatch(
         local(1, "index", TypeTable::I32),
         &cases,
         |field_name, index| {
-            let hole = holes
-                .iter()
-                .find(|hole| hole.field_index == index)
-                .expect("every case is a hole");
+            let hole = &holes[index as usize];
             let field = field_access(
                 local(0, "t", ref_struct_type),
                 index,

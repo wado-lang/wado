@@ -1799,14 +1799,13 @@ impl FunctionTranslator<'_, '_> {
         }
     }
 
-    /// The type args a bridge marker names: the call's own, else the method's,
-    /// else the `impl`'s — at least `arity` of them.
-    fn marker_type_args<'m>(
-        type_args: &'m [tir::TypeId],
-        mi: Option<&'m tir::MonomorphInfo>,
-        arity: usize,
+    /// The `N` type args a bridge marker names: the call's own, else the
+    /// method's, else the `impl`'s.
+    fn marker_type_args<const N: usize>(
+        type_args: &[tir::TypeId],
+        mi: Option<&tir::MonomorphInfo>,
         marker: &str,
-    ) -> &'m [tir::TypeId] {
+    ) -> [tir::TypeId; N] {
         let ta = if type_args.is_empty() {
             let mi =
                 mi.unwrap_or_else(|| panic!("{marker} marker without type args or monomorph info"));
@@ -1818,11 +1817,8 @@ impl FunctionTranslator<'_, '_> {
         } else {
             type_args
         };
-        assert!(
-            ta.len() >= arity,
-            "{marker} marker expects {arity} type args, got {ta:?}"
-        );
-        ta
+        *ta.first_chunk::<N>()
+            .unwrap_or_else(|| panic!("{marker} marker expects {N} type args, got {ta:?}"))
     }
 
     /// A call of the bridge helper `name`, homed where `head_ty` is declared,
@@ -1930,7 +1926,7 @@ impl FunctionTranslator<'_, '_> {
         }
 
         if matches_builtin(&func.name, mi, "struct_field_get") {
-            let ta = Self::marker_type_args(type_args, mi, 2, "struct_field_get");
+            let ta = Self::marker_type_args::<2>(type_args, mi, "struct_field_get");
             let name = {
                 let tt = self.base.type_table.borrow();
                 crate::name::field_get_helper_name(
@@ -1944,7 +1940,7 @@ impl FunctionTranslator<'_, '_> {
         // `hole_get<T, V>` names the shape and the hole type; `hole_fmt<T>`
         // the shape only.
         if matches_builtin(&func.name, mi, "hole_get") {
-            let ta = Self::marker_type_args(type_args, mi, 2, "hole_get");
+            let ta = Self::marker_type_args::<2>(type_args, mi, "hole_get");
             let name = {
                 let tt = self.base.type_table.borrow();
                 crate::name::hole_get_helper_name(
@@ -1955,7 +1951,7 @@ impl FunctionTranslator<'_, '_> {
             return Some(self.bridge_call(ta[0], name, args, "hole_get"));
         }
         if matches_builtin(&func.name, mi, "hole_fmt") {
-            let ta = Self::marker_type_args(type_args, mi, 1, "hole_fmt");
+            let ta = Self::marker_type_args::<1>(type_args, mi, "hole_fmt");
             let name = crate::name::hole_fmt_helper_name(
                 &self.base.type_table.borrow().mangle_type_arg_unboxed(ta[0]),
             );
@@ -1971,7 +1967,7 @@ impl FunctionTranslator<'_, '_> {
                 return None;
             };
 
-        let ta = Self::marker_type_args(type_args, mi, 2, "case bridge");
+        let ta = Self::marker_type_args::<2>(type_args, mi, "case bridge");
         let name = {
             let tt = self.base.type_table.borrow();
             helper_name_for(

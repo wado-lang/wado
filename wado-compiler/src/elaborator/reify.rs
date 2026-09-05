@@ -5188,7 +5188,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             let mut combined = String::new();
             for part in &template.parts {
                 if let ast::TemplatePart::String(s) = part {
-                    combined.push_str(&unescape_checked(s));
+                    combined.push_str(&super::util::unescape_template_segment(s));
                 }
             }
             return TirExpr::new(TirExprKind::StringLiteral(combined), string_type, span);
@@ -5207,7 +5207,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         for part in &template.parts {
             match part {
                 ast::TemplatePart::String(s) => {
-                    let unescaped = unescape_checked(s);
+                    let unescaped = super::util::unescape_template_segment(s);
                     if !unescaped.is_empty() {
                         parts.push(TirTemplatePart::Literal(unescaped));
                     }
@@ -5254,11 +5254,16 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         };
         let (struct_name, hole_types) = {
             let tt = self.tysys.type_table.borrow();
+            let crate::tir::ResolvedType::Struct { def, .. } = tt.get(template_ty) else {
+                panic!("annotate records a struct type for a tagged template");
+            };
             let shape = tt
                 .template_shape_of_type(template_ty)
                 .expect("annotate records a template type for a tagged template");
             let holes: Vec<TypeId> = shape.holes.iter().map(|h| h.ty).collect();
-            (tt.type_name(template_ty), holes)
+            // The name the shape was registered under, not the one a message
+            // shows: both render the shape, and only the mangle is a key.
+            (tt.struct_head_name(*def), holes)
         };
 
         let unique_id = ctx.next_local;
@@ -10859,13 +10864,6 @@ fn primitive_int_assoc_const(prefix: &str, suffix: &str) -> Option<(i128, crate:
         _ => return None,
     };
     Some((value, ty))
-}
-
-/// Decode a template literal segment. Only a module whose body walk logged no
-/// errors reaches reify, and that walk is what rejects a malformed escape.
-fn unescape_checked(raw: &str) -> String {
-    super::util::unescape_template_string(raw)
-        .expect("the body walk rejects a malformed template escape before reify runs")
 }
 
 /// Build the receiver node the recorded `(self_kind, is_ref_impl)` pair asks

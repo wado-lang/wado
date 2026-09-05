@@ -171,23 +171,23 @@ __tagged: {
 ```
 
 `id` is an `i32`, so its hole holds the value; `user.name` is a `String`, so
-its hole holds the handle. A hole that is a place — a local, a global, a field
-or element path rooted at one — is read or borrowed where it stands. Any other
-hole expression is evaluated once into a local of the block, which the literal
-then reads or borrows.
+its hole holds the handle. A hole that names storage is read or borrowed where
+it stands: a local, a global, or a field or element path rooted at one. Any
+other hole expression is evaluated once into a local of the block, which the
+literal then reads or borrows.
 
 The holes are evaluated in source order, the order an untagged template
-evaluates them, and the literal is built after the last of them. So a place is
-read in situ only while nothing after it can write it: a place followed by a
-hole that is not one is bound at its own position too, and the tag sees the
-value the place held there. That is what holds `` format`${a} ${bump(&mut a)}` ``
-to what `` `${a} ${bump(&mut a)}` `` renders.
+evaluates them, and the literal is built after the last of them. So a hole is
+read in situ only while nothing after it can write that storage. A hole that
+names storage and is followed by one that does not is bound at its own position
+too, and the tag then sees the value the storage held there. That is what holds
+`` format`${a} ${bump(&mut a)}` `` to what `` `${a} ${bump(&mut a)}` `` renders.
 
 The struct literal is the only place the synthesized type is built. Passing it
-by value copies scalars and handles; the storage behind a hole is never copied,
-whatever the tag does with it. Borrowing a local of a handle type marks nothing
-on that local — only a box-target type's local is retagged by a borrow, and
-those are the holes held by value.
+by value copies scalars and handles, never the storage a handle points at.
+Borrowing a local of a handle type marks nothing on that local: only a
+box-target type's local is retagged by a borrow, and those holes are held by
+value.
 
 The synthesized `impl ReflectTemplate` carries the segments, specifiers and
 sources as literals in its `members()` and `tail()` bodies, and `Hole::get`
@@ -289,8 +289,9 @@ What the tag body compiles to, once monomorphized, inlined and folded:
   result binds read-only in every tag above, so the value-copy planner shares
   the storage rather than copying it — the path `core:serde`'s `f.get(self)`
   already takes.
-- A hole holds a handle or a scalar, so no storage crosses into the tag by
-  copy, and no last-use analysis is asked to elide one.
+- A hole holds a handle or a scalar, so nothing a handle points at is copied
+  into the tag, and no last-use analysis is asked to elide a copy. A hole bound
+  at its own position for evaluation order copies what a `let` would.
 
 The residue is the code a hand-written builder would be: one constant append
 per segment and one typed operation per hole. That is the design's claim, and
@@ -550,10 +551,12 @@ synthesis and the fold; then the prelude tags and fixtures.
   identifier's span at the name, so adjacency fails and the site is a syntax
   error. Nothing needs it yet.
 - A tag that is not a function or a static method — a variant case, a
-  closure-typed binding, an abstract `T::method` — is a diagnostic. Each
-  resolves through a call path that records no dispatch, so reify has nothing
-  to rebuild. `T::method` is the one worth opening: it needs that path to
-  carry the typed argument and record a dispatch of its own.
+  closure-typed binding — is a diagnostic. Each resolves through a call path
+  that records no dispatch, so reify has nothing to rebuild.
+- A tag on a type parameter (`` T::tag`…` ``) works, but a mismatch between the
+  template and the method's parameter is not reported: that path checks no
+  argument, whatever the call's spelling. Pinned as
+  `type_param_static_call_arg_check_todo.wado`.
 - A tag reached through a namespace import (`` ns::Sql::q`…` ``) or answered by
   a blanket impl (`` i32::label`…` ``). Neither is a tagged-template gap: the
   same static method fails the same way when spelled as a call, and both are

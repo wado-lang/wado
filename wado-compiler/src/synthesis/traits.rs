@@ -1273,93 +1273,144 @@ pub(super) fn generate_field_bridge_helpers(
     ref_struct_type: TypeId,
     span: Span,
 ) -> Vec<TirFunction> {
-    let mangled_struct = type_table.borrow().mangle_type_arg_for_generic(struct_type);
-
-    // Key each helper by the field type's *erased* mangle. `erase_newtypes_and_flags`
-    // (after monomorphize, before lower) collapses `Newtype`/`Flags` to their base,
-    // and the `struct_field_get` call site mangles its `field_ty` through that
-    // erasure — so a helper minted here under the pre-erasure newtype name would
-    // never be found. Fields sharing an erased type share one index-dispatched
-    // helper.
-    let mut by_field_type: crate::hashmap::IndexMap<String, (TypeId, Vec<(String, u32)>)> =
-        crate::hashmap::IndexMap::default();
-    for (field_name, field_type, index) in fields {
-        let mangled = type_table.borrow().mangle_type_arg_erased(*field_type);
-        by_field_type
-            .entry(mangled)
-            .or_insert_with(|| (*field_type, Vec::new()))
-            .1
-            .push((field_name.clone(), *index));
-    }
-
-    let mut helpers = Vec::new();
-    for (mangled_field, (field_type, group)) in &by_field_type {
-        helpers.push(generate_field_get_helper(
-            crate::name::field_get_helper_name(&mangled_struct, mangled_field),
-            ref_struct_type,
-            *field_type,
-            group,
-            span,
-        ));
-    }
-    helpers
+    let members: Vec<ReadBridgeMember> = fields
+        .iter()
+        .map(|(name, field_type, index)| ReadBridgeMember {
+            name: name.clone(),
+            index: *index,
+            field_type: *field_type,
+            value_type: *field_type,
+        })
+        .collect();
+    generate_read_bridge_helpers(
+        type_table,
+        &members,
+        crate::name::field_get_helper_name,
+        struct_type,
+        ref_struct_type,
+        span,
+    )
 }
 
-/// Build `$field_get$S$F(v: &S, index: i32) -> F`:
-/// `return match index { field_index => v.<field_name>, … _ => unreachable() };`.
-fn generate_field_get_helper(
+/// One member a read bridge dispatches on: the field it reads, and the type
+/// the read answers — the field's own, unless the field holds it by handle.
+pub(super) struct ReadBridgeMember {
+    pub name: String,
+    pub index: u32,
+    pub field_type: TypeId,
+    pub value_type: TypeId,
+}
+
+/// Mint one index-dispatched read helper per distinct value type:
+/// `$…$S$V(v: &S, index: i32) -> V`, dereferencing a field that holds its
+/// value by handle.
+///
+/// Keyed by the value type's *erased* mangle. `erase_newtypes_and_flags`
+/// (after monomorphize, before lower) collapses `Newtype`/`Flags` to their
+/// base, and the marker call site mangles through that erasure — so a helper
+/// minted under the pre-erasure name would never be found. Members sharing an
+/// erased type share one helper.
+pub(super) fn generate_read_bridge_helpers(
+    type_table: &RefCell<TypeTable>,
+    members: &[ReadBridgeMember],
+    helper_name: fn(&str, &str) -> String,
+    struct_type: TypeId,
+    ref_struct_type: TypeId,
+    span: Span,
+) -> Vec<TirFunction> {
+    let mangled_struct = type_table.borrow().mangle_type_arg_for_generic(struct_type);
+    let mut by_value_type: crate::hashmap::IndexMap<String, Vec<&ReadBridgeMember>> =
+        crate::hashmap::IndexMap::default();
+    for member in members {
+        let mangled = type_table
+            .borrow()
+            .mangle_type_arg_erased(member.value_type);
+        by_value_type.entry(mangled).or_default().push(member);
+    }
+
+    by_value_type
+        .iter()
+        .map(|(mangled_value, group)| {
+            generate_read_helper(
+                helper_name(&mangled_struct, mangled_value),
+                ref_struct_type,
+                group,
+                span,
+            )
+        })
+        .collect()
+}
+
+/// `return match index { index => v.<name>, … _ => unreachable() };` over the
+/// members of one value type.
+fn generate_read_helper(
     helper_name: String,
     ref_struct_type: TypeId,
-    field_type: TypeId,
-    fields: &[(String, u32)],
+    members: &[&ReadBridgeMember],
     span: Span,
 ) -> TirFunction {
+    let value_type = members[0].value_type;
+    let cases: Vec<(String, u32)> = members.iter().map(|m| (m.name.clone(), m.index)).collect();
     let dispatch = case_index_dispatch(
         local_expr(1, "index", TypeTable::I32, span),
-        fields,
-        |field_name, index| {
-            field_access_local(0, "v", ref_struct_type, index, field_name, field_type, span)
+        &cases,
+        |name, index| {
+            let member = members
+                .iter()
+                .find(|m| m.index == index)
+                .expect("every case is a member of the group");
+            let access = field_access_local(
+                0,
+                "v",
+                ref_struct_type,
+                index,
+                name,
+                member.field_type,
+                span,
+            );
+            if member.field_type == value_type {
+                access
+            } else {
+                deref_expr(access, value_type, span)
+            }
         },
-        field_type,
+        value_type,
         span,
     );
 
-    let body = TirBlock::new(
-        vec![TirStmt::new(
-            TirStmtKind::Return {
-                value: Some(dispatch),
-            },
+    let params = vec![
+        TirParam {
+            name: "v".to_string(),
+            type_id: ref_struct_type,
+            local_index: 0,
+            is_mut: false,
+            is_mut_ref: false,
             span,
-        )],
-        span,
-    );
-
+        },
+        TirParam {
+            name: "index".to_string(),
+            type_id: TypeTable::I32,
+            local_index: 1,
+            is_mut: false,
+            is_mut_ref: false,
+            span,
+        },
+    ];
+    let locals = crate::synthesis::common::locals_from_params(&params);
     make_synthetic_free_function(
         helper_name,
-        vec![
-            TirParam {
-                name: "v".to_string(),
-                type_id: ref_struct_type,
-                local_index: 0,
-                is_mut: false,
-                is_mut_ref: false,
+        params,
+        value_type,
+        TirBlock::new(
+            vec![TirStmt::new(
+                TirStmtKind::Return {
+                    value: Some(dispatch),
+                },
                 span,
-            },
-            TirParam {
-                name: "index".to_string(),
-                type_id: TypeTable::I32,
-                local_index: 1,
-                is_mut: false,
-                is_mut_ref: false,
-                span,
-            },
-        ],
-        field_type,
-        body,
-        vec![
-            param_local("v", ref_struct_type, false),
-            param_local("index", TypeTable::I32, false),
-        ],
+            )],
+            span,
+        ),
+        locals,
     )
 }
 
@@ -1561,13 +1612,29 @@ fn generate_template_reflect_impls(
                 trait_method_info(receiver, template_trait_name, &members_method),
                 span,
             ),
-            string_fn(&tail_method, &cooked_segment(tail_raw)),
+            string_fn(
+                &tail_method,
+                &crate::elaborator::unescape_template_segment(tail_raw),
+            ),
             string_fn(&raw_tail_method, tail_raw),
         ];
-        functions.extend(generate_hole_bridge_helpers(
+        // A hole's field holds it by handle unless it would box, so the read
+        // through it derefs; `$hole_get` is otherwise `$field_get`.
+        let hole_members: Vec<ReadBridgeMember> = target
+            .fields
+            .iter()
+            .zip(&hole_types)
+            .map(|((name, field_type, index), &hole_type)| ReadBridgeMember {
+                name: name.clone(),
+                index: *index,
+                field_type: *field_type,
+                value_type: hole_type,
+            })
+            .collect();
+        functions.extend(generate_read_bridge_helpers(
             &module.type_table,
-            &target.fields,
-            &hole_types,
+            &hole_members,
+            crate::name::hole_get_helper_name,
             struct_type,
             ref_struct_type,
             span,
@@ -1577,13 +1644,6 @@ fn generate_template_reflect_impls(
     }
 
     module.functions.extend(generated);
-}
-
-/// A raw template segment with its escapes processed. The elaborator gated
-/// every segment, so a malformed one never reaches here.
-fn cooked_segment(raw: &str) -> String {
-    crate::elaborator::unescape_template_string(raw)
-        .expect("the elaborator rejects a malformed template segment")
 }
 
 /// Build `Shape^ReflectTemplate::members()` as one `Hole` literal per hole —
@@ -1614,7 +1674,7 @@ fn generate_template_members_fn(
         .map(|(k, (hole, raw))| {
             vec![
                 reflect_meta_int_field("index", k as u64, TypeTable::I32, 0, span),
-                string_field("lit", &cooked_segment(raw), 1),
+                string_field("lit", &crate::elaborator::unescape_template_segment(raw), 1),
                 string_field("raw", raw, 2),
                 string_field("source", &hole.source, 3),
                 TirStructField {
@@ -1667,107 +1727,6 @@ fn generate_template_members_fn(
         body,
         vec![],
     )
-}
-
-/// Synthesize the `$hole_get$S$V` helpers for every distinct hole type of a
-/// template shape: `match index { k => t.h_k, … }`, dereferencing a field
-/// that holds the hole by handle. `Hole::<S, V>::get`'s body carries a
-/// `builtin::hole_get` marker that lowering rewrites to its helper, keyed
-/// like [`generate_field_bridge_helpers`].
-fn generate_hole_bridge_helpers(
-    type_table: &RefCell<TypeTable>,
-    fields: &[FieldInfo],
-    hole_types: &[TypeId],
-    struct_type: TypeId,
-    ref_struct_type: TypeId,
-    span: Span,
-) -> Vec<TirFunction> {
-    let mangled_struct = type_table.borrow().mangle_type_arg_for_generic(struct_type);
-    let mut by_hole_type: crate::hashmap::IndexMap<String, (TypeId, Vec<(String, u32, TypeId)>)> =
-        crate::hashmap::IndexMap::default();
-    for ((field_name, field_type, index), &hole_type) in fields.iter().zip(hole_types) {
-        let mangled = type_table.borrow().mangle_type_arg_erased(hole_type);
-        by_hole_type
-            .entry(mangled)
-            .or_insert_with(|| (hole_type, Vec::new()))
-            .1
-            .push((field_name.clone(), *index, *field_type));
-    }
-
-    by_hole_type
-        .iter()
-        .map(|(mangled_hole, (hole_type, group))| {
-            let cases: Vec<(String, u32)> = group
-                .iter()
-                .map(|(name, index, _)| (name.clone(), *index))
-                .collect();
-            let field_type_of = |name: &str| {
-                group
-                    .iter()
-                    .find(|(n, _, _)| n == name)
-                    .map(|(_, _, ty)| *ty)
-                    .expect("every case names a field of the group")
-            };
-            let dispatch = case_index_dispatch(
-                local_expr(1, "index", TypeTable::I32, span),
-                &cases,
-                |field_name, index| {
-                    let field_type = field_type_of(field_name);
-                    let access = field_access_local(
-                        0,
-                        "t",
-                        ref_struct_type,
-                        index,
-                        field_name,
-                        field_type,
-                        span,
-                    );
-                    if field_type == *hole_type {
-                        access
-                    } else {
-                        deref_expr(access, *hole_type, span)
-                    }
-                },
-                *hole_type,
-                span,
-            );
-            let body = TirBlock::new(
-                vec![TirStmt::new(
-                    TirStmtKind::Return {
-                        value: Some(dispatch),
-                    },
-                    span,
-                )],
-                span,
-            );
-            let params = vec![
-                TirParam {
-                    name: "t".to_string(),
-                    type_id: ref_struct_type,
-                    local_index: 0,
-                    is_mut: false,
-                    is_mut_ref: false,
-                    span,
-                },
-                TirParam {
-                    name: "index".to_string(),
-                    type_id: TypeTable::I32,
-                    local_index: 1,
-                    is_mut: false,
-                    is_mut_ref: false,
-                    span,
-                },
-            ];
-            let locals = crate::synthesis::common::locals_from_params(&params);
-            make_synthetic_free_function(
-                crate::name::hole_get_helper_name(&mangled_struct, mangled_hole),
-                params,
-                *hole_type,
-                body,
-                locals,
-            )
-        })
-        .collect()
 }
 
 /// Generate the `ReflectVariant` members for each requested variant
