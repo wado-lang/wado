@@ -217,7 +217,7 @@ pub(super) fn unescape_char(raw: &str) -> Result<char, String> {
 ///
 /// Like `unescape_string` but also handles the escapes only a template needs:
 /// the interpolation syntax (`\{`, `\}`, `\$`) and the delimiter (`` \` ``).
-pub(super) fn unescape_template_string(raw: &str) -> Result<String, String> {
+pub(crate) fn unescape_template_string(raw: &str) -> Result<String, String> {
     let mut result = String::new();
     let mut chars = raw.chars().peekable();
     let mut pending_high: Option<u16> = None;

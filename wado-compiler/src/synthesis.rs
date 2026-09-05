@@ -28,6 +28,7 @@ fn synthesize_reflect_metadata(project: &mut Package) {
     traits::synthesize_reflect_enum(project);
     traits::synthesize_reflect_flags(project);
     traits::synthesize_reflect_newtype(project);
+    traits::synthesize_reflect_template(project);
 }
 
 /// Run pre-monomorphize synthesis phases on the project.
@@ -77,6 +78,9 @@ pub fn synthesize(project: Package) -> Result<Package, String> {
     for module in project.tir_modules.values_mut() {
         let tt = module.type_table.clone();
         template::expand_templates(module, &tt, &trait_env);
+        // A tagged template's `Hole::fmt` renders a hole the way the untagged
+        // form would, so its bridge is minted here, by the same lowering.
+        template::synthesize_hole_fmt_helpers(module, &tt, &trait_env);
     }
 
     // Effect-dispatch wrapper synthesis and call-site rewriting run before

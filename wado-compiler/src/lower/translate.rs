@@ -1939,6 +1939,63 @@ impl FunctionTranslator<'_, '_> {
             });
         }
 
+        if matches_builtin(&func.name, mi, "hole_get") || matches_builtin(&func.name, mi, "hole_fmt")
+        {
+            let is_get = matches_builtin(&func.name, mi, "hole_get");
+            // `hole_get<T, V>` names both; `hole_fmt<T>` names the shape only.
+            // Either way the marker's own type args come first, and the `Hole`
+            // impl's `[T, V]` stand in when the call carries none.
+            let (shape_ty, hole_ty) = if !type_args.is_empty() {
+                (type_args[0], type_args.get(1).copied())
+            } else {
+                let mi = mi.expect("hole marker without type args or monomorph info");
+                let ta = if mi.method_type_args.is_empty() {
+                    &mi.impl_type_args
+                } else {
+                    &mi.method_type_args
+                };
+                assert!(
+                    !ta.is_empty(),
+                    "hole marker expects the shape as its first type arg, got {ta:?}"
+                );
+                (ta[0], ta.get(1).copied())
+            };
+            let (helper_name, helper_module) = {
+                let tt = self.base.type_table.borrow();
+                let shape = tt.mangle_type_arg_unboxed(shape_ty);
+                let name = if is_get {
+                    let hole_ty = hole_ty.expect("hole_get names the hole type");
+                    crate::name::hole_get_helper_name(&shape, &tt.mangle_type_arg_unboxed(hole_ty))
+                } else {
+                    crate::name::hole_fmt_helper_name(&shape)
+                };
+                let module = tt
+                    .nominal_head(shape_ty)
+                    .map(|(_, m)| m)
+                    .unwrap_or_else(|| panic!("hole marker on a non-template type"));
+                (name, module)
+            };
+            let nir_func = nir::FunctionRef {
+                module_source: helper_module,
+                name: helper_name,
+                monomorph_info: None,
+                method_info: None,
+            };
+            let func_id = self.base.interner.borrow_mut().resolve(&nir_func);
+            return Some(ExprKind::Call {
+                func_id,
+                type_args: vec![],
+                args: args
+                    .iter()
+                    .map(|a| ArenaCallArg {
+                        expr: self.convert_specialized_arg_operand(&a.expr),
+                        is_mut: a.is_mut,
+                    })
+                    .collect(),
+                has_receiver: false,
+            });
+        }
+
         let helper_name_for: fn(&str, &str) -> String =
             if matches_builtin(&func.name, mi, "variant_case_extract") {
                 crate::name::case_extract_helper_name
