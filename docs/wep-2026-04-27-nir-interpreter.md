@@ -215,25 +215,30 @@ cannot reach.
 
 ## Roadmap
 
-The census counts 55 surviving regions across 3 files:
+The census counts 1 097 surviving regions across 9 of 22 files:
 
 | Cause                                     | Regions |
 | ----------------------------------------- | ------- |
+| no call on its path explains it           | 810     |
+| it writes a global                        | 255     |
 | `push_encoded_ranges` still runs          | 28      |
-| it writes a global                        | 19      |
-| `String::grow` still runs                 | 4       |
 | it calls a function the engine cannot run | 4       |
 | `union_char_ranges` still runs            | 2       |
 
-All of it lives in two Gale-generated files and one benchmark. That distribution
-is not a Gale fact: both named callees return a `List<T>` and reproduce in
-twenty lines of ordinary Wado, so what generated code does is call the same
-missing capability often.
+Two Gale-generated files hold 1 068 of them. That concentration is not a Gale
+fact: what generated code does is call the same missing capability often.
+
+The largest row is also the least specific. A region naming no call is waiting on
+a value the engine cannot represent rather than a body it cannot run, so it says
+which instrument to reach for next — `ctfe_stmt` — not which capability is
+missing. Only the statement trace turns those 810 into work.
 
 ### 1. The aggregate exit
 
-`push_encoded_ranges` (28) and `union_char_ranges` (2) are half of what is left,
-and both build a `List<CharRange>` from a constant. A `List<T>` filled by a loop
+`push_encoded_ranges` (28) and `union_char_ranges` (2) both build a
+`List<CharRange>` from a constant, and a `List<T>` region is what the no-call row
+reports, so this is the capability the census points at twice over — once by
+name, once by the silence. A `List<T>` filled by a loop
 and returned does not fold, whether `T` is a scalar or a struct, while the same
 program over a `String` does. A `String`'s backing is a byte array the engine
 represents and can write back, and a `List<T>`'s is not.
@@ -254,7 +259,7 @@ literals, `Array::slice`'s computed bounds fold, and the corpus is recounted.
 
 ### 2. The stores the engine will not read
 
-- [ ] The 19 remaining global writes, which are the stores that fail the
+- [ ] The 255 global writes, which are the stores that fail the
       materialization property: a global read somewhere that does not store it.
       Whether that set has a shape of its own, or is a tail of unrelated cases,
       decides whether there is a mechanism here at all.
