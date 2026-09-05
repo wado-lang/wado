@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1788620596583,
+  "lastUpdate": 1788621919491,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -53669,6 +53669,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 288497,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "2b17ea16e73b8728ec5327ae935917c34e968369",
+          "message": "Merge pull request #1975 from wado-lang/perf-inline-hold-release\n\nperf(optimizer): lower set-membership matches to a mask test, and release settled inline holds",
+          "timestamp": "2026-09-06T00:00:50+09:00",
+          "tree_id": "c47c1a1715f942255d4e6145a4dadecc6d890a49",
+          "url": "https://github.com/wado-lang/wado/commit/2b17ea16e73b8728ec5327ae935917c34e968369"
+        },
+        "date": 1788621918730,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 2013,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6560,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18891,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 277505,
             "unit": "bytes"
           }
         ]
