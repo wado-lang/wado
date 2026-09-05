@@ -357,7 +357,7 @@ solved better. Kept as an optimization opportunity, dropped as a promise.
   already has. SQL, HTML with contextual escaping, structured logging, URL
   building and raw strings are library code.
 - The `ReflectTemplate` kind is a sixth entry under `Reflect`, synthesized per
-  template shape rather than per declaration. `Hole` joins the four member
+  template shape rather than per declaration. `Hole` joins the other member
   handles under the same seal.
 - Type checking of the walk body is at monomorphization, as it is for every
   pack walk. A pack bound (`..V: Trait`) makes the common failure a bound
@@ -557,6 +557,8 @@ synthesis and the fold; then the prelude tags and fixtures.
   template and the method's parameter is not reported: that path checks no
   argument, whatever the call's spelling. Pinned as
   `type_param_static_call_arg_check_todo.wado`.
+- Whether `match type` gains a `template` arm for the `Template` case
+  [Total Reflection](./wep-2026-09-05-total-reflection.md) gives the type.
 - A tag reached through a namespace import (`` ns::Sql::q`…` ``) or answered by
   a blanket impl (`` i32::label`…` ``). Neither is a tagged-template gap: the
   same static method fails the same way when spelled as a call, and both are

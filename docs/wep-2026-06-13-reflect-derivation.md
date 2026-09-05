@@ -112,11 +112,11 @@ internal trait ReflectNewtype: Reflect {         // newtype
 }
 ```
 
-A sixth kind, `ReflectTemplate`, is synthesized per tagged template literal
-rather than per declaration: its subject is the anonymous type a template
-denotes, its payload pack is the hole types and its members are `Hole` handles
-carrying the literal text around each hole. It follows every rule here — sealed,
-monomorphized-only, one member channel — and is specified in
+`ReflectTemplate` is a sixth kind, synthesized per tagged template literal
+rather than per declaration. Its subject is the anonymous type a template
+denotes, its payload pack is the hole types, and its members are `Hole` handles
+carrying the literal text around each hole. It follows every rule here: sealed,
+monomorphized-only, one member channel. See
 [Tagged Template Literals](./wep-2026-01-10-tagged-template-literals.md).
 
 `members()` returns a tuple, walked by tuple `for-of`; a generic derivation binds
@@ -249,46 +249,6 @@ compiler renders internally; a type with none is written bare.
 
 ### What can be named
 
-<<<<<<< HEAD
-The types `Reflect` is synthesized for: the five declaration kinds, the
-template kind, and the tuple family, which is the one still to come (Known
-gaps).
-Naming an unnameable type is therefore an unsatisfied `T: Reflect`, reason-chained
-like any other bound, rather than a special case buried in an intrinsic.
-
-A tuple is anonymous, but the prelude's `pub type [...T];` owns the family
-([Variadic Type Parameters](./wep-2026-03-14-variadic-type-parameters.md) §3)
-and that anchor is its identity: module `core:prelude`, name `[..]`, elements as
-type arguments — a generic struct's family-plus-arguments split. Only the
-rendering differs, the arguments sitting between the brackets:
-`core:prelude#[i32,String]`, and `core:prelude#()` for the family at arity zero.
-
-A resource, a function type, and a reference carry no `Reflect` impl, rather
-than a name the design invents. A resource's identity is a Component Model
-coordinate (`wasi:io/streams.input-stream`), not a module symbol, so it waits on
-the CM naming rules; the structural types have no owning declaration at all. No
-consumer needs them — a schema library inlines a tuple's schema and never keys a
-handle.
-||||||| fd30e0884
-The types `Reflect` is synthesized for: the five kinds, and the tuple family,
-which is the one still to come (Known gaps).
-Naming an unnameable type is therefore an unsatisfied `T: Reflect`, reason-chained
-like any other bound, rather than a special case buried in an intrinsic.
-
-A tuple is anonymous, but the prelude's `pub type [...T];` owns the family
-([Variadic Type Parameters](./wep-2026-03-14-variadic-type-parameters.md) §3)
-and that anchor is its identity: module `core:prelude`, name `[..]`, elements as
-type arguments — a generic struct's family-plus-arguments split. Only the
-rendering differs, the arguments sitting between the brackets:
-`core:prelude#[i32,String]`, and `core:prelude#()` for the family at arity zero.
-
-A resource, a function type, and a reference carry no `Reflect` impl, rather
-than a name the design invents. A resource's identity is a Component Model
-coordinate (`wasi:io/streams.input-stream`), not a module symbol, so it waits on
-the CM naming rules; the structural types have no owning declaration at all. No
-consumer needs them — a schema library inlines a tuple's schema and never keys a
-handle.
-=======
 Every type. `Reflect` is total, and which case answers for each is
 [Total Reflection](./wep-2026-09-05-total-reflection.md)'s table. A tuple is
 anonymous but its family is not — the prelude's `internal type [..T];` owns it
@@ -296,7 +256,6 @@ anonymous but its family is not — the prelude's `internal type [..T];` owns it
 so its identity is the family plus the elements as type arguments, rendered
 `core:prelude#[i32,String]`. `()` is the unit type rather than that family at
 arity zero, and answers for itself.
->>>>>>> origin/main
 
 ### Cost and shape
 
@@ -469,7 +428,7 @@ nothing else yet does.
   per-instantiation, so it follows `type_name()`'s synthesis, where the resolved
   subject already carries the facts a declaration's case needs (its base name,
   module, and type arguments). Making the root total lands with it: today only
-  the five synthesized kinds carry it. Both are
+  a synthesized kind carries it. Both are
   [Total Reflection](./wep-2026-09-05-total-reflection.md)'s to close.
 
 ## Related WEPs

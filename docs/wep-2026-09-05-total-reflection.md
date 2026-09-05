@@ -50,7 +50,7 @@ So a derivation writes one blanket per kind, which is what `Inspect` and
 
 ### Every type carries `Reflect`
 
-`Reflect` holds of every type, not of the five synthesized kinds alone. It is
+`Reflect` holds of every type, not of the synthesized kinds alone. It is
 the second such trait: `Inspect` already holds for all
 (`solver_bridge.rs`, `TraitDef::holds_for_all`), so a total root introduces no
 resolution shape the language does not have.
@@ -76,6 +76,7 @@ pub variant TypeInfo {
     Enum(DeclInfo),
     Flags(DeclInfo),
     Newtype(DeclInfo),
+    Template(DeclInfo),
     Resource(DeclInfo),
     Array(DeclInfo),
     Primitive(PrimitiveKind),
@@ -136,15 +137,16 @@ members of the type the same way the parameters are. The effect row is where an
 `DeclInfo` like any other and needs no identity of its own.
 
 Every case is positive: no arm means "something the design has no answer for".
-`TypeTable::reflect_kind` already computes the first five and answers `None`
-for the rest, which is the classification this WEP completes:
+`TypeTable::reflect_kind` already computes the synthesized kinds and answers
+`None` for the rest, which is the classification this WEP completes:
 
 | Type                                                      | Case        |
 | --------------------------------------------------------- | ----------- |
 | `struct` (anonymous included), `variant`, `enum`, `flags` | that case   |
+| a tagged template's type                                  | `Template`  |
 | `String`, `i128`, `u128` — prelude structs                | `Struct`    |
 | `type N = B`                                              | `Newtype`   |
-| the four sealed member handles                            | `Struct`    |
+| the sealed member handles                                 | `Struct`    |
 | a resource, `Future<T>` / `Stream<T>`                     | `Resource`  |
 | `Array<T>`                                                | `Array`     |
 | `i8`…`u64`, `f32`, `f64`, `bool`, `char`, `v128`          | `Primitive` |
@@ -166,9 +168,15 @@ case itself. `Primitive`, `Unit` and `Never` each name exactly one declaration
 with no arguments, so the case is the identity and repeating it would be a
 second spelling; the rest carry theirs.
 
-The four member handles are `Struct` because the seal is on structure, not on
+A member handle is `Struct` because the seal is on structure, not on
 identity. Nothing may enumerate their fields, and `match type` is where that
 shows: they reach no `struct` arm. Naming them was never withheld.
+
+A tagged template's type is an anonymous struct, but it answers
+`ReflectTemplate` rather than `ReflectStruct`
+([Tagged Template Literals](./wep-2026-01-10-tagged-template-literals.md)), so
+it carries its own case. No program can name the type, so the case is reached
+only through the bound a tag already writes.
 
 A type parameter, an inference variable, a pack and an associated-type
 projection carry no case, since none survives monomorphization, which is where a
@@ -287,7 +295,7 @@ A kind arm proves its kind's bound for its own body. `struct =>` elaborates
 under the hypothesis `T: ReflectStruct`, so `ReflectStruct::<T>::members()`
 resolves inside it and nowhere else.
 
-Only the five kind traits have a hypothesis to push. The other arms name a
+Only a kind trait has a hypothesis to push. The other arms name a
 classification with no trait behind it, so they add nothing to what `T: Reflect`
 already gives, and neither do they bind: an `array` arm cannot name its element
 type today (Known gaps). An alternation pushes what all its kinds share, which
@@ -309,7 +317,7 @@ handles) cannot enter `struct` without making that hypothesis false. It enters
 `type_info()` still reports what the type is. A future kind does not land there;
 it fails exhaustiveness, as intended.
 
-Three rules make it more than sugar over the five blankets:
+Three rules make it more than sugar over one blanket per kind:
 
 Arms are checked once, at the definition, under the arm's own hypothesis, never
 per instantiation. This is the requirement Zig's comptime switch does not meet,
@@ -380,7 +388,8 @@ no new syntax, and one implication rule (`Reflect<Kind = StructKind>` ⟹
 `ReflectStruct`) would carry it.
 
 It is rejected because the scaffolding is per derivation: every consumer writes
-a dispatcher trait and five impls to reach one branch, which is the cost this
+a dispatcher trait and one impl per kind to reach one branch, which is the
+cost this
 WEP exists to remove, and the entry blanket it forces (`impl<T: Reflect> Tr for T`)
 lands on the specificity gap rather than avoiding it.
 
@@ -435,7 +444,7 @@ land on and the notation "runs both ways" today.
 
 ### An arm with no trait behind it binds nothing
 
-The five kind traits give an arm its hypothesis and its associations. The other
+A kind trait gives an arm its hypothesis and its associations. The other
 arms have neither, so an `array` arm cannot name its element type and a
 `function` arm cannot name a parameter's. A body that needs one reads
 `type_info()` and gets a value, not a type it can call a bound method on.
