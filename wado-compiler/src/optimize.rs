@@ -73,6 +73,7 @@ use tmpl_hoist::hoist_template_buffers;
 use value_copy_demote::demote_value_copies;
 
 use extract::FreezePhase;
+use gate::GatedPass;
 
 use crate::compiler_host::SpanEmitter;
 use crate::nir_package::NirPackage;
@@ -186,6 +187,15 @@ pub fn optimize(
                 // first as the threshold climbs — -8.2% at 20, -35.3% at 26 —
                 // so 16 costs it least while still buying the serde rows.
                 // Below 13 every row is worse.
+                //
+                // That sweep raised the threshold uniformly, so it does not
+                // describe this gate. `inline::net_cost` subtracts the call site
+                // a splice removes, making it `gross - (CALL + params) <= 16`,
+                // which admits a four-parameter callee at gross 22. A credit
+                // proportional to what calling costs is a different regime: it
+                // buys json-catalog ser 11.9% on release, where a uniform 20
+                // cost that row 8.2%. 16 is inherited from the sweep, not
+                // re-derived under it.
                 inline_threshold: inline_threshold.unwrap_or(16),
                 inline_growth,
                 cap_is_defect: opt_iterations.is_none(),
@@ -526,19 +536,27 @@ fn run_optimization_passes(
         // A gate-aware pass: receives `&mut gate`, skips functions it has
         // already processed at their current revision, and reports its own
         // per-function changes.
+        //
+        // A drained column skips the round at the schedule, not inside the
+        // pass. A pass builds its whole-program state before it reaches its
+        // first function, and a drained column means no function changed since
+        // it last ran, so that round would rebuild the state and rewrite
+        // nothing.
         macro_rules! gated {
-            ($name:expr, $pass:expr) => {{
-                record!(
-                    $name,
-                    run_pass($name, project, profiler, |p| $pass(p, &mut gate))
-                );
+            (@run $name:expr, $id:expr, $pass:expr) => {
+                run_pass($name, project, profiler, |p| {
+                    gate.any_pending($id, p.functions.len()) && $pass(p, &mut gate)
+                })
+            };
+            ($name:expr, $id:expr, $pass:expr) => {{
+                record!($name, gated!(@run $name, $id, $pass));
             }};
         }
         // Reports changes to the gate but not to `iter_changed` — must never
         // keep the loop alive on its own.
         macro_rules! gate_only {
-            ($name:expr, $pass:expr) => {{
-                run_pass($name, project, profiler, |p| $pass(p, &mut gate));
+            ($name:expr, $id:expr, $pass:expr) => {{
+                gated!(@run $name, $id, $pass);
             }};
         }
         // Container SROA must run before inline in each iteration: inline
@@ -546,98 +564,113 @@ fn run_optimization_passes(
         // `builtin::array_get_value` + field-access pairs, after which the method-call
         // shape this pass keys on is gone. Running early also catches the `[]`
         // desugaring while its inner `Constructor` is still a plain `Call`.
-        gated!("nir/container_sroa", scalarize_containers);
+        gated!(
+            "nir/container_sroa",
+            GatedPass::ContainerSroa,
+            scalarize_containers
+        );
         // Peephole engine, pre-inline run — several rules over one worklist; see
         // `optimize/peephole.rs`. Before inline so `string_push` still sees the
         // `buf.push_str("0.")` shape, which the inliner's expansion would erase.
         // Hosts `MatchToSwitchRule` (`include_match = true`), so `inline` copies
         // `Switch`-shaped bodies, and `const_branch_prune`.
-        gated!("nir/peephole", |p, g| peephole::run_peephole(p, g, true));
+        gated!("nir/peephole", GatedPass::PeepholePre, |p, g| {
+            peephole::run_peephole(p, g, true)
+        });
         // Demote deep `$value_copy$T` copies of `List<E>` to shallow spine
         // copies when the binding's elements are provably never mutated through
         // it. Runs before `nir/inline`, where the `$value_copy$T(arg)` shape it
         // matches disappears. (Copies are inserted precisely at the lower phase,
         // so there is no elision pass to sequence against.)
-        gate_only!("nir/value_copy_demote", |p, g| demote_value_copies(
-            p,
-            g,
-            &mut descriptor_cache
-        ));
+        gate_only!(
+            "nir/value_copy_demote",
+            GatedPass::ValueCopyDemote,
+            |p, g| demote_value_copies(p, g, &mut descriptor_cache)
+        );
         // Single-field parameter SROA: rewrite functions whose parameter type
         // is `&S` for a single-field struct (`Box<T>` being the canonical
         // case) to take the inner scalar directly. Runs before `nir/inline`
         // so the inliner sees post-SROA signatures and can propagate the
         // scalar through call chains. NIR analog of WIR's `sroa_param`; see
         // `optimize/sroa_param.rs`.
-        gated!("nir/sroa_param", sroa_single_field_parameters);
+        gated!(
+            "nir/sroa_param",
+            GatedPass::SroaParam,
+            sroa_single_field_parameters
+        );
         // Variant returns become tuple returns: `Result<T, E>` -> `[tag, slots]`.
         // Runs beside `sroa_param` and before `nir/inline` for the same reason —
         // the inliner, and every value pass after it, then sees an integer tag
         // and plain locals where a boxed variant used to be opaque. The Wasm ABI
         // is left to `multi_value_return`, which already flattens a destructured
         // tuple return.
-        gated!("nir/sroa_variant_return", scalarize_variant_returns);
+        gated!(
+            "nir/sroa_variant_return",
+            GatedPass::SroaVariantReturn,
+            scalarize_variant_returns
+        );
         // `inline` self-reports the callers it modified to the gate (no
         // `bump_all`); it only mutates caller bodies, so the gated passes need
         // re-examine just those (and their neighbours).
-        record!(
-            "nir/inline",
-            run_pass("nir/inline", project, profiler, |p| {
-                inline_functions(
-                    p,
-                    config.inline_threshold,
-                    &mut inline_budget,
-                    &mut gate,
-                    &mut descriptor_cache,
-                )
-            })
-        );
+        gated!("nir/inline", GatedPass::Inline, |p, g| inline_functions(
+            p,
+            config.inline_threshold,
+            &mut inline_budget,
+            g,
+            &mut descriptor_cache,
+        ));
         // Peephole engine, post-inline run. `elide_local` runs again over
         // inline's freshly dead bindings. No `MatchToSwitchRule` — the
         // pre-inline run lowered every reachable `Match` already.
-        gated!("nir/peephole", |p, g| peephole::run_peephole(p, g, false));
+        gated!("nir/peephole", GatedPass::PeepholePost, |p, g| {
+            peephole::run_peephole(p, g, false)
+        });
         // `labeled_block_fusion` moved into the post-inline `nir/peephole`
         // session as `LabeledBlockFusionRule`; see `optimize/peephole.rs`.
         gated!(
             "nir/let_block_flatten",
+            GatedPass::LetBlockFlatten,
             let_block_flatten::flatten_let_blocks
         );
-        gated!("nir/sroa", scalar_replace_aggregates);
-        gated!("nir/copy_prop", propagate_copies);
+        gated!("nir/sroa", GatedPass::Sroa, scalar_replace_aggregates);
+        gated!("nir/copy_prop", GatedPass::CopyProp, propagate_copies);
         // DAE / DRVE after `copy_prop` shrinks signatures and discards unused
         // let-bindings before `const_fold` revisits the simplified body.
         // Running here (rather than at WIR level) lets `inline` see the slimmer
         // signatures on the next iteration and lets `dce` clean up the freshly
         // dead computation in the same fixed-point loop. (Write-only local
         // elimination moved into the unified `nir/peephole` pass above.)
-        gated!("nir/dae", eliminate_dead_arguments);
-        gated!("nir/drve", eliminate_dead_return_values);
+        gated!("nir/dae", GatedPass::Dae, eliminate_dead_arguments);
+        gated!("nir/drve", GatedPass::Drve, eliminate_dead_return_values);
         // The flow-sensitive half of constant folding — env-bound locals,
         // forwarded struct fields, immutable-global reads, constant-branch
         // collapse — where the env-free half runs in `nir/peephole`. It absorbs
         // `field_forward`, which used to alternate one statement per round and
         // left `-O3` non-convergent. No `cse` pass: hash-consing already shares.
-        record!(
-            "nir/const_fold",
-            run_pass("nir/const_fold", project, profiler, |p| {
-                fold_constants(p, &mut gate, &mut const_fold_cache)
-            })
-        );
+        gated!("nir/const_fold", GatedPass::ConstFold, |p, g| {
+            fold_constants(p, g, &mut const_fold_cache)
+        });
         // Trivial-block / dead-statement pruning moved into the pre-inline
         // `nir/peephole` run above; the post-loop `branch_prune_final` and the
         // post-globalization `const_fold_post_global` keep their own engine
         // sessions (`prune_template_block_wrappers` / `prune_constant_branches`).
         // After `const_fold`, so a caller's config struct literal already holds
         // folded constants; inside the loop, so the next iteration prunes the
-        // clone's dead branches and reaches one call deeper.
+        // clone's dead branches and reaches one call deeper. Not `gated!`: it
+        // owns no column, since a summary taken before a callee gained a write
+        // would license an unsound substitution (see its module doc).
         record!(
             "nir/param_spec",
             run_pass("nir/param_spec", project, profiler, |p| {
                 param_spec::specialize_const_params(p, &mut param_spec_state, &mut gate)
             })
         );
-        gated!("nir/licm", apply_licm);
-        gated!("nir/tmpl_hoist", hoist_template_buffers);
+        gated!("nir/licm", GatedPass::Licm, apply_licm);
+        gated!(
+            "nir/tmpl_hoist",
+            GatedPass::TmplHoist,
+            hoist_template_buffers
+        );
         profiler.span_end(&format!("nir/iteration {}", i + 1));
         crate::compiler_trace!(
             "opt_loop",

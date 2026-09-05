@@ -387,6 +387,7 @@ mod tests {
             output_dir: InvocationPath::normalize("build/kiln/proto"),
             options: crate::kiln::options_check::CanonicalOptions::default(),
             raw_options: None,
+            options_span: crate::token::Span::default(),
         };
         let result: Result<(FileHash, Vec<FileHash>), &'static str> =
             gather_file_hashes(&inv, |_| Err("oops"), |_| Ok(vec![]));

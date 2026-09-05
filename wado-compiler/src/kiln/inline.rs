@@ -13,7 +13,7 @@ use crate::hashmap::IndexMap;
 use super::cache::{encode_options_canonical, hex_digest};
 use super::invocation::{DeclSite, GeneratorModule, GeneratorSpec, Invocation, InvocationPath};
 use super::options::OptionsDescriptor;
-use super::options_check::{CanonicalOptions, validate};
+use super::options_check::{CanonicalOptions, OptionsAnchor, validate};
 
 /// Default output-directory prefix for inline invocations: each clause lands
 /// under `build/kiln/<synthetic_id>` unless it declares its own `output_dir`.
@@ -289,12 +289,16 @@ fn lower_inline(
         }
     };
 
+    let options_entry = cfg.get("options");
+    let options_span = options_entry.map_or(use_decl.span, |entry| entry.key_span);
     let options = if let Some(module) = module.as_ref() {
         validate_inline_options(
             module,
-            attr_value(cfg, "options"),
-            use_decl,
-            module_path,
+            options_entry.map(|entry| &entry.value),
+            OptionsAnchor {
+                file: module_path,
+                span: options_span,
+            },
             descriptors,
             &mut errors,
         )
@@ -361,7 +365,8 @@ fn lower_inline(
         inputs,
         output_dir,
         options,
-        raw_options: attr_value(cfg, "options").cloned(),
+        raw_options: options_entry.map(|entry| entry.value.clone()),
+        options_span,
     })
 }
 
@@ -517,8 +522,7 @@ fn strip_manifest_root_prefix(manifest_root: &str, resolved: &str) -> String {
 fn validate_inline_options(
     module: &GeneratorModule,
     options_value: Option<&AttrValue>,
-    use_decl: &UseDecl,
-    module_path: &str,
+    anchor: OptionsAnchor<'_>,
     descriptors: &IndexMap<String, OptionsDescriptor>,
     errors: &mut Vec<Diagnostic>,
 ) -> CanonicalOptions {
@@ -528,14 +532,9 @@ fn validate_inline_options(
         return CanonicalOptions::default();
     };
 
-    match validate(descriptor, options_value) {
+    match validate(descriptor, options_value, anchor) {
         Ok(c) => c,
         Err(mut errs) => {
-            for d in &mut errs {
-                if d.span.is_none() {
-                    d.span = Some(span_of(module_path, use_decl));
-                }
-            }
             errors.append(&mut errs);
             CanonicalOptions::default()
         }

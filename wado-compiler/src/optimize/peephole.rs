@@ -72,12 +72,13 @@ pub(super) fn run_peephole(
     } else {
         GatedPass::PeepholePost
     };
-    // Once for the run, and only when the gate has a body to visit.
-    let effects = if gate.any_pending(gated_pass, len) {
-        super::mod_ref::compute_fn_effects(&project.functions, &project.builtin_registry)
-    } else {
-        Vec::new()
-    };
+    debug_assert!(
+        gate.any_pending(gated_pass, len),
+        "[NIR] run_peephole entered on a drained gate: the setup above would be \
+         built for a run that visits no function. `gated!` owns that skip."
+    );
+    // Once for the run.
+    let effects = super::mod_ref::compute_fn_effects(&project.functions, &project.builtin_registry);
     gate.run_gated(gated_pass, len, |fid| {
         let mut func = project.functions[fid.index()].borrow_mut();
         // `stores_aliased_locals` is per-function, so the ref-elimination rule is

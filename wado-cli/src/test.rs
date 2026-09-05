@@ -429,6 +429,10 @@ fn resolve_paths(paths: Vec<String>, extra_excludes: &[String]) -> Result<Vec<St
     Ok(resolved)
 }
 
+/// The ceiling on `--parallel`. A worker holds a stdlib snapshot and the memory
+/// under it, and the prewarm barrier needs every worker inside tokio's pool.
+pub const MAX_JOBS: usize = 128;
+
 pub fn parse_args(mut parser: lexopt::Parser) -> Result<TestOptions, CliExit> {
     let usage = format_usage();
     let mut paths: Vec<String> = Vec::new();
@@ -543,10 +547,12 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<TestOptions, CliExit> {
     // Default to CPU count to saturate compile/execute. Load derives a
     // lower cap internally (Cranelift JIT is multi-threaded; see `run`).
     // `.max(2)` covers single-core environments.
-    let mut jobs = jobs.unwrap_or_else(|| {
-        let cpus = std::thread::available_parallelism().map_or(4, std::num::NonZero::get);
-        cpus.max(2)
-    });
+    let mut jobs = jobs
+        .unwrap_or_else(|| {
+            let cpus = std::thread::available_parallelism().map_or(4, std::num::NonZero::get);
+            cpus.max(2)
+        })
+        .min(MAX_JOBS);
 
     if matches!(profile, ProfileMode::Guest { .. }) {
         if no_run {
@@ -634,11 +640,11 @@ struct PipelineBudget {
 
 impl PipelineBudget {
     fn new(parallel_cap: usize, compile_jobs: usize, execute_jobs: usize) -> Self {
-        let cpu_cap = parallel_cap.max(1);
-        let modules_cap = compile_jobs.max(1) + execute_jobs.max(1);
+        // A zero-permit semaphore is a stage that never runs.
+        assert!(parallel_cap > 0 && compile_jobs > 0 && execute_jobs > 0);
         Self {
-            cpu: Arc::new(Semaphore::new(cpu_cap)),
-            modules: Arc::new(Semaphore::new(modules_cap)),
+            cpu: Arc::new(Semaphore::new(parallel_cap)),
+            modules: Arc::new(Semaphore::new(compile_jobs + execute_jobs)),
         }
     }
 }
@@ -2321,6 +2327,15 @@ async fn prewarm_stdlib_snapshot_on_workers(parallelism: usize) {
     }
 }
 
+/// How many workers are worth prewarming for `total_files` of compile work.
+///
+/// A worker builds its snapshot on the first compile it takes, so warming more
+/// workers than there are files leaves snapshots nothing will ever use, each
+/// costing a build and the memory to hold it.
+fn prewarm_workers(compile_jobs: usize, total_files: usize) -> usize {
+    compile_jobs.min(total_files).max(1)
+}
+
 /// Report the source files that changed while the run was in progress, and
 /// whether any did. A run that read two versions of a file describes neither
 /// tree; green is the dangerous outcome, since the pinned generator would
@@ -2390,20 +2405,14 @@ pub async fn run(opts: TestOptions) -> Result<(), CliExit> {
     // load workers on top of internal Cranelift threading thrashes
     // more than it helps. The shared cpu semaphore enforces the
     // cross-stage total either way.
-    let compile_jobs = jobs.max(1);
+    let compile_jobs = jobs;
     let load_jobs = (jobs / 2).max(1);
-    let execute_jobs = jobs.max(1);
-
-    // Prewarm the stdlib snapshot on `compile_jobs` distinct worker
-    // threads before stage 1 starts. Each worker would otherwise build
-    // the snapshot (~120 ms) on its first compile and steal that time
-    // from the first batch of compiles; running the builds in parallel
-    // up-front amortises the cost and leaves the tokio blocking-pool
-    // threads in the steady state that the compile stage's
-    // `spawn_blocking` tasks can re-use.
-    prewarm_stdlib_snapshot_on_workers(compile_jobs).await;
+    let execute_jobs = jobs;
 
     let total_files: usize = package_runs.iter().map(|r| r.paths.len()).sum();
+
+    prewarm_stdlib_snapshot_on_workers(prewarm_workers(compile_jobs, total_files)).await;
+
     let reporter: Arc<dyn TestReporter> = match format {
         TestFormat::Verbose => Arc::new(VerboseReporter::new(overall_start)),
         TestFormat::Heartbeat => Arc::new(HeartbeatReporter::new(overall_start, total_files)),
@@ -2460,6 +2469,15 @@ mod tests {
 
     fn parse(name: &str) -> TestExportName {
         parse_test_export(name).unwrap_or_else(|| panic!("expected `test-` prefix in {name:?}"))
+    }
+
+    #[test]
+    fn prewarming_stops_at_the_files_there_are() {
+        assert_eq!(prewarm_workers(16, 1), 1);
+        assert_eq!(prewarm_workers(16, 4), 4);
+        assert_eq!(prewarm_workers(16, 4000), 16);
+        // A run with nothing to compile still warms the thread that finds out.
+        assert_eq!(prewarm_workers(16, 0), 1);
     }
 
     #[test]

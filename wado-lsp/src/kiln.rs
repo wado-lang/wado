@@ -1,9 +1,12 @@
-//! Consume-only Kiln invocation index for LSP queries (WEP 2026-04-12
-//! §"Consume-only mode").
+//! The Kiln pre-pass for one document: collect its inline `with { generator }`
+//! clauses, check their options ([`options`]), and resolve the consume-only
+//! invocation index (WEP 2026-04-12 §"Consume-only mode").
 //!
 //! No LSP host can run a generator component, so it cannot re-derive the hashes
 //! `<output_dir>/<primary>.kiln.json` records. Redirects therefore trust that
 //! artifact and fire on any drift; verifying drift is `wado check`'s job.
+
+mod options;
 
 use std::path::{Path, PathBuf};
 
@@ -12,8 +15,13 @@ use wado_compiler::kiln::metadata::{METADATA_VERSION, Metadata, metadata_filenam
 use wado_compiler::kiln::{InvocationIndex, InvocationPath, collect_inline_invocations};
 use wado_compiler::{Code, CompilerHost, Diagnostic, DiagnosticSpan, Severity};
 
-/// Build a consume-only [`InvocationIndex`] for the entry document. Empty when
-/// the entry has no inline `with` clause or no enclosing `wado.toml`.
+/// The redirect index the loader resolves `use … from "<schema>"` through,
+/// with every clause and its options checked along the way.
+///
+/// `override_index` is the index a runtime-backed host built by actually
+/// running the generators. It replaces the on-disk discovery, but not the
+/// checks: those describe the source the user is editing, so they hold
+/// whoever produced the index.
 ///
 /// **Contract**: `entry_filename` and `entry_ast` must be the same filename and
 /// bytes the caller then passes to `wado_compiler::load` — otherwise the
@@ -21,11 +29,12 @@ use wado_compiler::{Code, CompilerHost, Diagnostic, DiagnosticSpan, Severity};
 pub async fn prepare_invocations<H: CompilerHost>(
     entry_filename: &str,
     entry_ast: &Module,
+    override_index: Option<InvocationIndex>,
     host: &H,
 ) -> InvocationIndex {
     let entry_path = Path::new(entry_filename);
     let Some(manifest_root) = nearest_manifest_dir(entry_path, host).await else {
-        return InvocationIndex::new();
+        return override_index.unwrap_or_default();
     };
 
     let descriptors = wado_compiler::hashmap::IndexMap::default();
@@ -40,14 +49,20 @@ pub async fn prepare_invocations<H: CompilerHost>(
         // here: the semantics pass never re-runs this collector, so emitting
         // the diagnostics through the host is the only way they reach the
         // editor. No double-emit risk — this is the sole `collect` call on the
-        // consume-only LSP path.
+        // LSP path, and each snapshot builds once.
         Err(diags) => {
             for d in diags {
                 host.emit_diagnostic(d);
             }
-            return InvocationIndex::new();
+            return override_index.unwrap_or_default();
         }
     };
+
+    options::check_all(&invocations, &manifest_root, host).await;
+
+    if let Some(index) = override_index {
+        return index;
+    }
 
     let mut index = InvocationIndex::new();
     for invocation in &invocations {

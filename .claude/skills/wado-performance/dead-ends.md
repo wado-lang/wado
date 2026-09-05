@@ -18,6 +18,138 @@ wado dump -O2 benchmark/json_catalog/json_catalog.wado    # before/after: diff t
 for i in 1 2 3; do mise run json-catalog; done           # before and after
 ```
 
+## Where json-canada's time actually is (2026-09-04)
+
+Not a dead end — the map the entries below were measured against, since every
+share here was established by ablation rather than read off a profile. Each row
+is the whole benchmark minus one thing, dev build (which matches release on this
+benchmark to under 2%, so the stdlib can be edited and re-run in 8 seconds with
+no rebuild).
+
+Serialize, 7.65 ms/iter:
+
+| remove                                    | ms/iter | cost |
+| ----------------------------------------- | ------- | ---- |
+| — (baseline)                              | 7.65    | —    |
+| every division in the digit loop          | 7.44    | 0.24 |
+| the decimal-point `array_copy` shift      | 7.28    | 0.37 |
+| `short()`, replaced by a constant         | 5.98    | 1.68 |
+| the digit loop, replaced by `array_fill`  | 5.77    | 1.90 |
+| all float formatting (19-byte `push_str`) | 3.09    | 4.56 |
+| the float bytes entirely (traversal only) | 1.58    | 6.07 |
+
+Deserialize, 10.96 ms/iter: `scanned_to_f64` → 0.0 costs 1.55 ms, and deleting
+`digits = digits * 10 + d` on top of that is free — the scan is bound by the
+bounds-checked `array.get` and its branches, not the arithmetic.
+
+Two things follow. The serde traversal alone (1.58 ms, no float bytes written)
+is already 65% of serde_json's entire 2.43 ms serialize, so the structural cost
+is the standing gap, not the codec. And `short()` at 1.68 ms is ~15 ns per
+conversion, which is ryu-class — there is no algorithmic slack left in it.
+
+## Four ways to keep `short` small and still drop its `uscale` calls (2026-09-04)
+
+Inlining `uscale` into `short` buys json-canada ser +2.4% and costs json-twitter
+ser 2.3% — placement, on a hot path that never calls `short` (see the entry
+below). So: get the win without growing `short`. Four shapes, all worse, and the
+reason is the same each time.
+
+| arm                                              | `short` | canada ser | twitter ser |
+| ------------------------------------------------ | ------- | ---------- | ----------- |
+| base                                             | 87      | 7.59       | 0.821       |
+| inline `uscale` into `short` (what landed)       | 122     | **7.39**   | 0.837       |
+| share the mask, keep the three calls             | 89      | 7.70       | 0.835       |
+| one call returning all three scalings            | 86      | 7.81       | **0.814**   |
+| one call returning the two bounds                | 88      | 7.88       | **0.818**   |
+| pin the rare arm out of line (shrinks the above) | 113     | 7.46       | 0.833       |
+
+Every arm but the first makes fewer calls and fewer mask computations than base,
+and every one of them is **slower than base**. So "fewer instructions" does not
+predict the outcome here at all. The arm that wins is the only one with _no call
+left on the hot path_. What it saves is the call boundary itself — argument
+setup, the multivalue return, the registers that cannot stay live across it — and
+not the two mask computations, which are worth nothing. The three-scaling arm
+also does a third wide multiply `short` does not need: a shortest representation
+at full width has `dmin == dmax`, so canada only ever needs two.
+
+Two traps worth naming. A call is charged the ABI edge unless the callee carries
+a loop this pass will splice, and what the threshold judges is that price **less
+the call site it replaces**, so a helper that reads as "a mask and three calls"
+comes in under budget and is pulled into `short` together with all three bodies.
+`#[inline(never)]` is the only way to hold such a helper out of line, and
+reaching for it there is not a claim against the cost model.
+
+A size-matched control does not falsify a placement story either. Padding `short`
+with a dead branch grew the _wasm_ by 196 bytes against the real change's 205 and
+left twitter at exactly 0.820 all three rounds, because a compare-and-jump is
+nothing in machine code next to three inlined `uscale` bodies. Wasm bytes are not
+the unit the effect is measured in.
+
+Generalizes: canada's gain and twitter's loss are one phenomenon, not two. The
+only lever that moves either is whether `short` carries the scaling inline, and
+it moves them in opposite directions.
+
+## Three ways to get `uscale` inlined (2026-09-04)
+
+`uscale` grosses 21 against the -O2 budget of 16, and its four parameters make
+the call site it replaces worth 6, so `net_cost` puts it at 15 and `short`
+carries all three scalings inline. That buys json-canada ser 7%, the whole of the
+-O3 gain on this row. Raising the threshold to 22 buys the same 7%, along with
+the global bloat the 2026-08-27 entry rules out.
+
+The three arms below were measured while `short` still paid three calls per
+conversion, each recomputing the same `(1 << (s & 63)) - 1`. Each fails for a
+reason that does not turn on how `uscale` is admitted:
+
+- **`builtin::cold_path()` in `uscale`'s exactness arm.** Prices the function by
+  its fast path and gets it inlined everywhere. json-canada ser +3.4%, de +2.7%
+  — and **fts -4.5%**, three rounds, non-overlapping. `fixed_width_for_prec`
+  scales once, so it gains nothing from the mask and only pays the growth; it is
+  the same size-sensitive function the skill's `cold_outline` note names.
+- **Merging `check_special`'s two zero tests** into `bits << 1 == 0` (cost 18 →
+  under budget). json-canada de **-2.4%** on its own and nothing measurable on
+  ser, on a function the de path never calls. Pure placement.
+- **Returning the two bracketing scalings together** (`uscale_bounds`), to shrink
+  `short` from three calls to two rather than grow it. The threshold admits it on
+  its own price, and the growth budget, where a single-site candidate costs
+  nothing, never gets to veto it. `short` grew from 87 to 113 dump lines
+  regardless.
+
+Generalizes: at this scale module layout outweighs the instruction saving, in
+both directions. Growing `short` moved json-twitter serialize 2–5% on a hot path
+that is byte-identical bar block-label numbering. So hash the wasm of every row
+first and only measure the ones that differ. Three of the five float-touching
+benchmarks came out byte-identical, which retires their readings outright and is
+the only reason the surviving numbers mean anything.
+
+## Two digits at a time in `write_digits_at` (2026-09-04)
+
+`write_decimal` is 27.7% self on json-canada, whose shortest-round-trip
+mantissas are 17 digits: `v % 10` / `v / 10` per digit is a 17-long serial
+chain on `v`, which reads as latency-bound. Stepping `v / 100` and peeling the
+pair's two digits off `r` halves the chain and moves those two divisions off it.
+
+**5% slower**, three alternating pairs, ser 282.5/286.9/288.3 → 261.6/272.7/271.7
+MB/s. The chain was never the cost. Two ablations on the same loop say so:
+
+| `write_digits_at` variant                  | ser ms/iter |
+| ------------------------------------------ | ----------- |
+| today                                      | 7.65        |
+| `v & 7` / `v >> 1` (every division gone)   | 7.44        |
+| `array_fill` (whole loop gone, same bytes) | 5.77        |
+
+Deleting **every** division buys 0.24 ms; deleting the per-byte `array.set`
+loop buys 1.9 ms. The loop is store-bound at ~2.8 cycles/byte, and a bulk fill
+of the same span is near-free because it lowers to a vectorized memset. So two
+digits per step only added a third multiply to a loop the multiplies were never
+pacing.
+
+Generalizes: on a GC-array-backed `String` the digit loop's cost is the one
+`array.set` per byte, which no digit-generation scheme removes. Ablate the
+arithmetic before optimizing it. This is the same finding as the 2026-08-16 entry
+below, reached from the opposite direction — a 17-digit chain rather than a short
+one — so the digit count is not what makes it come out differently.
+
 ## i64 divisions in integer formatting (2026-08-16)
 
 Decimal formatting cost three i64 divisions per digit: `count_digits_i64` ran

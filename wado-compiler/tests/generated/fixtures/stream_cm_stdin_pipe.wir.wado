@@ -43,11 +43,9 @@ type "functype//stream_cm_stdin_pipe.wado/__cm_export__run" = fn();  // TypeId(1
 
 type "functype//stream_cm_stdin_pipe.wado/__cm_future_read_core:prelude/types.wado/Result<(),wasi:cli/types.wado/ErrorCode>" = fn(i32) -> ref null "core:prelude/types.wado//Result<(),wasi:cli/types.wado/ErrorCode>";  // TypeId(15)
 
-type "functype//core:rt/cm_await_blocked" = fn(i32) -> i32;  // TypeId(16)
+type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(16)
 
-type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(17)
-
-type "functype//wasi/future-read:transmission-cli" = fn(i32, i32) -> i32;  // TypeId(18)
+type "functype//wasi/future-read:transmission-cli" = fn(i32, i32) -> i32;  // TypeId(17)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/task-return from "wasi/task-return";
@@ -100,19 +98,30 @@ fn "stream_cm_stdin_pipe.wado/__cm_export__run"() {
 
 fn "stream_cm_stdin_pipe.wado/__cm_future_read_core:prelude/types.wado/Result<(),wasi:cli/types.wado/ErrorCode>"(handle) {
     let ptr: i32;
-    let status: i32;
+    let status_2: i32;
     let result: ref null "core:prelude/types.wado//Result<(),wasi:cli/types.wado/ErrorCode>";
     let __disc: i32;
     let __result_val: ref "core:prelude/types.wado//Result<(),wasi:cli/types.wado/ErrorCode>";
     let __edisc: i32;
     let __eresult: "wasi:cli/types.wado//enum:ErrorCode";
+    let ws: i32;
+    let evt_ptr: i32;
+    let status_13: i32;
     ptr = "mem/realloc"(0, 0, 1, 2);
-    status = "wasi/future-read:transmission-cli"(handle, ptr);
-    if status == -1 {
-        status = "core:rt/cm_await_blocked"(handle);
+    status_2 = "wasi/future-read:transmission-cli"(handle, ptr);
+    if status_2 == -1 {
+        ws = "wasi/waitable-set-new"();
+        "wasi/waitable-join"(handle, ws);
+        evt_ptr = "mem/realloc"(0, 0, 4, 8);
+        drop("wasi/waitable-set-wait"(ws, evt_ptr));
+        status_13 = builtin::load_i32(evt_ptr + 4);
+        drop("mem/realloc"(evt_ptr, 8, 4, 0));
+        "wasi/waitable-join"(handle, 0);
+        "wasi/waitable-set-drop"(ws);
+        status_2 = status_13;
     }
     result = ref.null none;
-    if (status & 15) == 0 {
+    if (status_2 & 15) == 0 {
         __disc = builtin::load_u8(ptr);
         __result_val = ref.null none;
         if __disc == 0 {
@@ -133,21 +142,6 @@ fn "stream_cm_stdin_pipe.wado/__cm_future_read_core:prelude/types.wado/Result<()
     }
     drop("mem/realloc"(ptr, 2, 1, 0));
     return result;
-}
-
-fn "core:rt/cm_await_blocked"(handle) {
-    let ws: i32;
-    let evt_ptr: i32;
-    let status: i32;
-    ws = "wasi/waitable-set-new"();
-    "wasi/waitable-join"(handle, ws);
-    evt_ptr = "mem/realloc"(0, 0, 4, 8);
-    drop("wasi/waitable-set-wait"(ws, evt_ptr));
-    status = builtin::load_i32(evt_ptr + 4);
-    drop("mem/realloc"(evt_ptr, 8, 4, 0));
-    "wasi/waitable-join"(handle, 0);
-    "wasi/waitable-set-drop"(ws);
-    return status;
 }
 
 fn "core:prelude/fpfmt.wado/__initialize_module"() {
