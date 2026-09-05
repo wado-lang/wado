@@ -23,9 +23,9 @@ use crate::nir_arena::{
 use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
 use crate::niri::{
-    BorrowRoot, CalleeMap, CtfeBuiltinMap, EditSink, GlobalEnv, GlobalFieldEnv, GlobalKey,
-    Interpreter, Lattice, MaterializingGlobals, build_callee_map, build_ctfe_builtin_map,
-    materializing_globals,
+    AggregateShapes, BorrowRoot, CalleeMap, CtfeBuiltinMap, EditSink, GlobalEnv, GlobalFieldEnv,
+    GlobalKey, Interpreter, Lattice, MaterializingGlobals, build_callee_map,
+    build_ctfe_builtin_map, materializing_globals,
 };
 use crate::tir::{PrimitiveType, ResolvedType, TypeId, TypeTable};
 
@@ -40,6 +40,7 @@ struct FoldMaps {
     callees: CalleeMap,
     ctfe_builtins: CtfeBuiltinMap,
     declared_globals: GlobalEnv,
+    shapes: AggregateShapes,
 }
 
 fn build_fold_maps(project: &NirPackage, type_table: &TypeTable) -> FoldMaps {
@@ -58,6 +59,7 @@ fn build_fold_maps(project: &NirPackage, type_table: &TypeTable) -> FoldMaps {
         callees,
         ctfe_builtins,
         declared_globals,
+        shapes: AggregateShapes::of(project, type_table),
     }
 }
 
@@ -137,6 +139,7 @@ fn new_visitor<'a>(
     };
     visitor.interpreter.with_callees(&maps.callees);
     visitor.interpreter.with_ctfe_builtins(&maps.ctfe_builtins);
+    visitor.interpreter.with_shapes(&maps.shapes);
     visitor
         .interpreter
         .with_globals(&globals.values)
@@ -220,6 +223,9 @@ struct EngineSink<'e, 'a> {
 impl EditSink for EngineSink<'_, '_> {
     fn body(&self) -> &Body {
         self.engine.body
+    }
+    fn edits_the_program(&self) -> bool {
+        true
     }
     fn replace_kind(&mut self, e: ExprId, kind: ExprKind) {
         self.engine.replace_expr_kind(e, kind);

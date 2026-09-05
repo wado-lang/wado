@@ -35,6 +35,7 @@ impl FrameState {
     fn for_call(track: Trackability, params: impl IntoIterator<Item = (u32, Value)>) -> Self {
         let mut state = Self {
             aggregate_locals: track.aggregate_locals,
+            unshared_locals: track.unshared,
             reassigned: track.reassigned,
             ..Self::default()
         };

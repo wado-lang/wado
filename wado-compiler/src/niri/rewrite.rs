@@ -1,19 +1,19 @@
 //! Writing a value back into the IR: what becomes of an expression once the
 //! projection says what it denotes. Every edit goes through an [`EditSink`], so
 //! the same rewrites serve the throwaway frame body and the real one. A scalar
-//! promotes to a pure operand and a byte-sequence container to the lower phase's
-//! string literal; every other aggregate reaches the IR only via its scalars.
+//! promotes to a pure operand, and every other value to the literal tree the
+//! lower phase emits for it.
 
 use crate::compiler_item::SeqField;
 use crate::const_eval::Value;
 use crate::nir::{NirBinaryOp, NirUnaryOp};
 use crate::nir_arena::{
-    ArenaStructField, ArmData, BlockId, Body, ExprId, ExprKind, NodeRef, Operand, PatId, PatKind,
-    StmtId, StmtKind,
+    ArenaStructField, ArmData, BlockId, Body, ExprId, ExprKind, ExprNode, NodeRef, Operand, PatId,
+    PatKind, StmtId, StmtKind,
 };
 use crate::nir_value_graph::ValueKind;
 use crate::nir_visitor::NirRefVisitor;
-use crate::tir::{PrimitiveType, TypeId, TypeTable};
+use crate::tir::{PrimitiveType, ResolvedType, TypeId, TypeTable};
 
 use super::lattice::is_provably_exhaustive;
 use super::pattern::PatternMatch;
@@ -22,6 +22,11 @@ use super::{BodySink, EditSink, Interpreter, Lattice, PatBindings};
 /// A set of local indices, in the form [`crate::nir_value_graph::ValueGraph`]'s
 /// opaque-local collection hands back.
 type LocalIndexSet = crate::hashmap::IndexSet<u32>;
+
+/// Widest literal tree the writer will emit, counted in the operands it would
+/// place. A value the engine holds is bounded per sequence and by nothing across
+/// nesting, and past this the loop that computes it is the smaller program.
+const MAX_MATERIALIZED_LEAVES: usize = 1024;
 
 impl Interpreter<'_> {
     /// Splice each constant-condition `if` statement of `block` into `block`
@@ -91,30 +96,38 @@ impl Interpreter<'_> {
         self.rewrite_match_expr_via(sink, e)
     }
 
-    /// Take `value` over `e`: promote a scalar, materialize a byte-sequence
-    /// container, memoize what the sink declined, and report whether the node was
-    /// rewritten. A reference-typed node is refused whole — a fresh literal where
-    /// the program yields an alias, which `ref.eq` can tell apart. An aggregate
-    /// is written where [`Self::is_worth_materializing`] agrees.
+    /// Take `value` over `e`: promote a scalar, write an aggregate back as the
+    /// literal the lower phase emits for it, memoize what the sink declined, and
+    /// report whether the node was rewritten. A reference-typed node is refused —
+    /// a fresh literal where the program yields an alias, which `ref.eq` can tell
+    /// apart — and so is a leaf under it.
     fn commit_fold<S: EditSink>(&mut self, sink: &mut S, e: ExprId, value: Value) -> bool {
         let node_type = sink.body().exprs[e].type_id;
-        if self.type_table.is_reference_shaped(node_type) {
-            crate::compiler_trace!("region_seed", "commit {e:?}: refused, reference-shaped");
-            return false;
-        }
         if value.is_scalar() {
+            if self.type_table.is_reference_shaped(node_type) {
+                crate::compiler_trace!("region_seed", "commit {e:?}: refused, reference-shaped");
+                return false;
+            }
             if sink.replace_with_value(e, value.clone()) {
                 return true;
             }
             self.frame.scratch_folds.insert(e, value);
             return false;
         }
-        let consumes = consumes_its_source(&sink.body().exprs[e].kind);
-        if !consumes && !self.is_worth_materializing(sink.body(), e) {
-            crate::compiler_trace!("region_seed", "commit {e:?}: not worth materializing");
+        // A backing array is storage, not a value: it reaches the IR as its
+        // container's field, where the length says how much of it is live.
+        // Writing a literal over the `array_new` that opens a buffer would hand
+        // the writes that follow a data segment's worth of zeros instead.
+        if matches!(value, Value::Seq { .. }) {
+            crate::compiler_trace!("region_seed", "commit {e:?}: a bare backing array");
             return false;
         }
-        let committed = self.materialize_seq_via(sink, e, &value);
+        if sink.edits_the_program() && !self.yields_own_object(sink.body(), e) {
+            crate::compiler_trace!("region_seed", "commit {e:?}: not an object of its own");
+            return false;
+        }
+        let consumes = consumes_its_source(&sink.body().exprs[e].kind);
+        let committed = self.materialize_via(sink, e, &value);
         crate::compiler_trace!(
             "region_seed",
             "commit {e:?} ({}): aggregate materialize -> {committed} (consumes={consumes})",
@@ -126,14 +139,25 @@ impl Interpreter<'_> {
         committed
     }
 
-    /// Whether writing the value over `e` buys anything. It does everywhere but
-    /// two shapes already holding the answer: the literal
-    /// [`Self::materialize_seq_via`] writes, refusing which is what makes the
-    /// rewrite happen once, and a global read, whose value globalization put
-    /// there precisely to build once and share.
-    fn is_worth_materializing(&self, body: &Body, e: ExprId) -> bool {
-        !matches!(body.exprs[e].kind, ExprKind::GlobalVarGet { .. })
-            && !self.is_materialized_seq_literal(body, e)
+    /// Whether `e` yields an object nothing else in the body reaches, so writing
+    /// a literal over it keeps the program's identities. A call and a region
+    /// hand back what they built, and a literal is one already. A read of a
+    /// local does too while nothing else reaches what it holds: two reads, or a
+    /// `&p` beside one, leave the program two objects where it had one, which
+    /// `ref.eq` tells apart.
+    fn yields_own_object(&self, body: &Body, e: ExprId) -> bool {
+        match &body.exprs[e].kind {
+            ExprKind::Call { .. }
+            | ExprKind::Block(_)
+            | ExprKind::LabeledBlock { .. }
+            | ExprKind::StructLiteral { .. }
+            | ExprKind::TupleLiteral { .. }
+            | ExprKind::ArrayLiteral { .. }
+            | ExprKind::PackedArray(_)
+            | ExprKind::VariantConstruct { .. } => true,
+            ExprKind::Local { index, .. } => self.frame.unshared_locals.contains(*index),
+            _ => false,
+        }
     }
 
     /// A sequence container still computing its contents: the shape whose
@@ -142,13 +166,6 @@ impl Interpreter<'_> {
     fn is_unmaterialized_seq_literal(&self, body: &Body, e: ExprId) -> bool {
         self.seq_literal_backing(body, e)
             .is_some_and(|b| !matches!(b, ExprKind::PackedArray(_)))
-    }
-
-    /// Whether `e` already holds the literal [`Self::materialize_seq_via`]
-    /// writes.
-    fn is_materialized_seq_literal(&self, body: &Body, e: ExprId) -> bool {
-        self.seq_literal_backing(body, e)
-            .is_some_and(|b| matches!(b, ExprKind::PackedArray(_)))
     }
 
     /// The backing array a sequence container literal is built over.
@@ -172,114 +189,357 @@ impl Interpreter<'_> {
             .map(|b| &body.exprs[b].kind)
     }
 
-    /// Write `value` back over `e` as the container literal the lower phase
-    /// emits for a source string: a struct over a packed byte array and its
-    /// length. Only the first `used` bytes — capacity is not observable — and an
-    /// empty container is left alone. Identified by type, never by shape: over a
-    /// `Chunk { data, tag }` the literal would read `tag` as a length.
-    fn materialize_seq_via<S: EditSink>(&self, sink: &mut S, e: ExprId, value: &Value) -> bool {
-        let Value::Aggregate { type_id, .. } = value else {
-            crate::compiler_trace!(
-                "region_seed",
-                "materialize {e:?}: value is not an aggregate"
-            );
-            return false;
-        };
-        if !self.type_table.is_seq_container(*type_id) {
-            crate::compiler_trace!("region_seed", "materialize {e:?}: not a seq container");
+    /// Write `value` over `e` as the literal tree the lower phase emits for it,
+    /// reporting whether anything changed. The walk reuses every node that
+    /// already spells its part of the value, so a node the writer itself
+    /// produced is left alone and the worklist settles.
+    fn materialize_via<S: EditSink>(&self, sink: &mut S, e: ExprId, value: &Value) -> bool {
+        let ExprNode { type_id, span, .. } = sink.body().exprs[e];
+        let mut budget = MAX_MATERIALIZED_LEAVES;
+        if charge_leaves(value, self.type_table, &mut budget).is_none() {
             return false;
         }
-        // The literal is written over `e` but typed from the value, and
-        // `replace_kind` keeps `e`'s own type: writing it over a node the rest
-        // of the tree reads as something else would emit the container's
-        // fields under that node's type. A node yielding nothing can hold
-        // neither.
-        if sink.body().exprs[e].type_id != *type_id {
-            crate::compiler_trace!(
-                "region_seed",
-                "materialize {e:?}: node type {} != value type {}",
-                self.type_table.type_name(sink.body().exprs[e].type_id),
-                self.type_table.type_name(*type_id)
-            );
-            return false;
-        }
-        let Some(Value::Seq { elements, .. }) = value.field(SeqField::Backing.index()) else {
-            crate::compiler_trace!("region_seed", "materialize {e:?}: backing is not a seq");
-            return false;
-        };
-        let Some((used, PrimitiveType::I32)) =
-            value.field(SeqField::Len.index()).and_then(Value::as_int)
+        let Some(written) = self.write_value(sink, Some(Operand::Expr(e)), value, type_id, span)
         else {
-            crate::compiler_trace!(
-                "region_seed",
-                "materialize {e:?}: len is not an i32: {:?}",
-                value.field(SeqField::Len.index())
-            );
             return false;
         };
+        match written {
+            Operand::Expr(fresh) if fresh != e => {
+                sink.become_expr(e, fresh);
+                true
+            }
+            _ => false,
+        }
+    }
+
+    /// The operand spelling `value` at type `ty`, reusing `existing` where it
+    /// already spells it and allocating where it does not. `None` refuses the
+    /// whole tree: a reference leaf, or a shape the engine cannot name.
+    fn write_value<S: EditSink>(
+        &self,
+        sink: &mut S,
+        existing: Option<Operand>,
+        value: &Value,
+        ty: TypeId,
+        span: crate::token::Span,
+    ) -> Option<Operand> {
+        // A reference names storage; a literal is a fresh object, and `ref.eq`
+        // tells the two apart. The node's own type answers for the root, and
+        // this answers for every leaf under it.
+        if self.type_table.is_reference_shaped(ty) {
+            return None;
+        }
+        match value {
+            Value::Aggregate { type_id, .. } if self.type_table.is_seq_container(*type_id) => {
+                self.write_container(sink, existing, value, *type_id, ty, span)
+            }
+            Value::Aggregate { type_id, fields } => {
+                self.write_aggregate(sink, existing, fields, *type_id, ty, span)
+            }
+            Value::Seq { type_id, elements } => {
+                self.write_seq(sink, existing, elements, *type_id, ty, span)
+            }
+            Value::Variant {
+                type_id,
+                case_name,
+                payload,
+            } => self.write_variant(
+                sink,
+                existing,
+                *type_id,
+                case_name,
+                payload.as_deref(),
+                ty,
+                span,
+            ),
+            scalar => {
+                let kind = scalar_kind(scalar, ty)?;
+                if let Some(Operand::Value(v)) = existing
+                    && sink.body().values.kind(v) == &kind
+                    && sink.body().values.type_of(v) == Some(ty)
+                {
+                    return existing;
+                }
+                Some(sink.const_operand(kind, ty))
+            }
+        }
+    }
+
+    /// A `String` or a `List<T>`: the struct over a backing array and a length
+    /// the lower phase writes. The backing is cut to that length — capacity is
+    /// not observable, and cutting it is what puts a formatted string's bytes in
+    /// a data segment sized to the string. Identified by type, never by shape:
+    /// over a `Chunk { data, tag }` the literal would read `tag` as a length.
+    fn write_container<S: EditSink>(
+        &self,
+        sink: &mut S,
+        existing: Option<Operand>,
+        value: &Value,
+        type_id: TypeId,
+        ty: TypeId,
+        span: crate::token::Span,
+    ) -> Option<Operand> {
+        if ty != type_id {
+            return None;
+        }
+        let Some(Value::Seq {
+            type_id: backing_type,
+            elements,
+        }) = value.field(SeqField::Backing.index())
+        else {
+            return None;
+        };
+        let length = value.field(SeqField::Len.index())?;
         // `Value::Int` holds the sign-extended bit pattern, so a negative length
         // reads as a huge `u64` until it is decoded at its own width.
-        let Ok(used) = usize::try_from(used as i32) else {
-            crate::compiler_trace!("region_seed", "materialize {e:?}: negative len {used}");
-            return false;
+        let (used, PrimitiveType::I32) = length.as_int()? else {
+            return None;
         };
-        if used == 0 || used > elements.len() {
-            crate::compiler_trace!(
-                "region_seed",
-                "materialize {e:?}: used {used} of {} elements",
-                elements.len()
-            );
-            return false;
+        let used = usize::try_from(used as i32).ok()?;
+        if used > elements.len() {
+            return None;
         }
-        let mut bytes = Vec::with_capacity(used);
-        for element in &elements[..used] {
-            let Some((byte, PrimitiveType::U8)) = element.as_int() else {
-                crate::compiler_trace!(
-                    "region_seed",
-                    "materialize {e:?}: element is not a u8: {element:?}"
-                );
-                return false;
-            };
-            let Ok(byte) = u8::try_from(byte) else {
-                crate::compiler_trace!(
-                    "region_seed",
-                    "materialize {e:?}: element out of a byte's range: {byte}"
-                );
-                return false;
-            };
-            bytes.push(byte);
+        // An empty container carries nothing, so a literal over one can only
+        // trade a buffer for a smaller buffer — and an opened buffer is exactly
+        // what the region about to fill it is holding.
+        if used == 0 && existing.is_some() {
+            return existing;
         }
-        let Some(backing_type) = self.type_table.find_builtin_array(TypeTable::U8) else {
-            crate::compiler_trace!(
-                "region_seed",
-                "materialize {e:?}: no Array<u8> type interned"
-            );
-            return false;
+        let cut = Value::seq(*backing_type, elements[..used].to_vec())?;
+        let previous = existing_fields(sink.body(), existing, type_id);
+        let slot = |index: SeqField| {
+            previous
+                .as_ref()
+                .and_then(|p| p.get(index.index() as usize).copied())
+                .flatten()
         };
-        let span = sink.body().exprs[e].span;
-        let backing = sink.alloc_expr(ExprKind::PackedArray(bytes), backing_type, span);
-        let len = u64::try_from(used).expect("a bounded element count fits u64");
-        let len = sink.const_operand(ValueKind::Int(len, TypeTable::I32), TypeTable::I32);
-        sink.replace_kind(
-            e,
-            ExprKind::StructLiteral {
-                struct_type: *type_id,
-                struct_name: self.type_table.type_name(*type_id),
-                fields: vec![
-                    ArenaStructField {
-                        name: SeqField::Backing.field_name().to_string(),
-                        value: Operand::Expr(backing),
-                        field_index: SeqField::Backing.index(),
-                    },
-                    ArenaStructField {
-                        name: SeqField::Len.field_name().to_string(),
-                        value: len,
-                        field_index: SeqField::Len.index(),
-                    },
-                ],
-            },
+        let backing = self.write_value(sink, slot(SeqField::Backing), &cut, *backing_type, span)?;
+        let len = self.write_value(sink, slot(SeqField::Len), length, TypeTable::I32, span)?;
+        let fields = [(SeqField::Backing, backing), (SeqField::Len, len)];
+        assert!(
+            fields
+                .iter()
+                .enumerate()
+                .all(|(k, (field, _))| field.index() as usize == k)
         );
-        true
+        self.struct_literal(
+            sink,
+            existing,
+            previous,
+            type_id,
+            fields
+                .into_iter()
+                .map(|(field, op)| (field.field_name().to_string(), op))
+                .collect(),
+            span,
+        )
+    }
+
+    /// A struct or a tuple. A tuple's element types come from the type itself;
+    /// every other struct needs the declaration shape, and a type the index does
+    /// not name is refused.
+    fn write_aggregate<S: EditSink>(
+        &self,
+        sink: &mut S,
+        existing: Option<Operand>,
+        fields: &[(u32, Value)],
+        type_id: TypeId,
+        ty: TypeId,
+        span: crate::token::Span,
+    ) -> Option<Operand> {
+        if ty != type_id {
+            return None;
+        }
+        let tuple = self.type_table.as_tuple(type_id);
+        let names: Vec<(String, TypeId)> = match &tuple {
+            Some(elements) => elements
+                .iter()
+                .enumerate()
+                .map(|(i, t)| (i.to_string(), *t))
+                .collect(),
+            None => self
+                .facts
+                .shapes?
+                .fields(type_id)?
+                .iter()
+                .map(|f| (f.name.clone(), f.type_id))
+                .collect(),
+        };
+        if fields.len() != names.len() {
+            return None;
+        }
+        let previous = if tuple.is_some() {
+            existing_elements(sink.body(), existing)
+        } else {
+            existing_fields(sink.body(), existing, type_id)
+        };
+        let mut written = Vec::with_capacity(names.len());
+        for (index, (name, field_type)) in names.into_iter().enumerate() {
+            let (recorded, field) = &fields[index];
+            // The literal lowers positionally, so a value whose fields do not
+            // cover `0..N` in order has no literal to be written as.
+            if *recorded != index as u32 {
+                return None;
+            }
+            let slot = previous
+                .as_ref()
+                .and_then(|p| p.get(index).copied())
+                .flatten();
+            written.push((name, self.write_value(sink, slot, field, field_type, span)?));
+        }
+        if tuple.is_some() {
+            let elements: Vec<Operand> = written.into_iter().map(|(_, op)| op).collect();
+            if previous.is_some_and(|p| p.iter().copied().eq(elements.iter().copied().map(Some))) {
+                return existing;
+            }
+            return Some(Operand::Expr(sink.alloc_expr(
+                ExprKind::TupleLiteral { elements },
+                type_id,
+                span,
+            )));
+        }
+        self.struct_literal(sink, existing, previous, type_id, written, span)
+    }
+
+    /// `elements` as the backing array itself: bytes pack into a `PackedArray`,
+    /// which reaches WIR as one `array.new_data`, and everything else into an
+    /// `ArrayLiteral`.
+    fn write_seq<S: EditSink>(
+        &self,
+        sink: &mut S,
+        existing: Option<Operand>,
+        elements: &[Value],
+        type_id: TypeId,
+        ty: TypeId,
+        span: crate::token::Span,
+    ) -> Option<Operand> {
+        if ty != type_id {
+            return None;
+        }
+        let ResolvedType::BuiltinArray(element_type) = *self.type_table.get(type_id) else {
+            return None;
+        };
+        if element_type == TypeTable::U8 {
+            let mut bytes = Vec::with_capacity(elements.len());
+            for element in elements {
+                let (byte, PrimitiveType::U8) = element.as_int()? else {
+                    return None;
+                };
+                bytes.push(u8::try_from(byte).ok()?);
+            }
+            if let Some(Operand::Expr(previous)) = existing
+                && matches!(&sink.body().exprs[previous].kind, ExprKind::PackedArray(b) if *b == bytes)
+            {
+                return existing;
+            }
+            return Some(Operand::Expr(sink.alloc_expr(
+                ExprKind::PackedArray(bytes),
+                type_id,
+                span,
+            )));
+        }
+        let previous = existing_elements(sink.body(), existing);
+        let mut written = Vec::with_capacity(elements.len());
+        for (index, element) in elements.iter().enumerate() {
+            let slot = previous
+                .as_ref()
+                .and_then(|p| p.get(index).copied())
+                .flatten();
+            written.push(self.write_value(sink, slot, element, element_type, span)?);
+        }
+        if previous.is_some_and(|p| p.iter().copied().eq(written.iter().copied().map(Some))) {
+            return existing;
+        }
+        Some(Operand::Expr(sink.alloc_expr(
+            ExprKind::ArrayLiteral { elements: written },
+            type_id,
+            span,
+        )))
+    }
+
+    /// A variant case and its payload. The case index and the payload's type are
+    /// the declaration's, which only the shape index names.
+    #[allow(clippy::too_many_arguments)]
+    fn write_variant<S: EditSink>(
+        &self,
+        sink: &mut S,
+        existing: Option<Operand>,
+        type_id: TypeId,
+        case_name: &str,
+        payload: Option<&Value>,
+        ty: TypeId,
+        span: crate::token::Span,
+    ) -> Option<Operand> {
+        if ty != type_id {
+            return None;
+        }
+        let case = self.facts.shapes?.case(type_id, case_name)?;
+        let previous = match existing.and_then(Operand::as_expr) {
+            Some(e) => match &sink.body().exprs[e].kind {
+                ExprKind::VariantConstruct {
+                    variant_type,
+                    case_index,
+                    payload,
+                    ..
+                } if *variant_type == type_id && *case_index == case.index => Some(*payload),
+                _ => None,
+            },
+            None => None,
+        };
+        let written = match payload {
+            Some(payload) => {
+                Some(self.write_value(sink, previous.flatten(), payload, case.payload, span)?)
+            }
+            None => None,
+        };
+        if previous == Some(written) {
+            return existing;
+        }
+        Some(Operand::Expr(sink.alloc_expr(
+            ExprKind::VariantConstruct {
+                variant_type: type_id,
+                case_index: case.index,
+                case_name: case_name.to_string(),
+                payload: written,
+            },
+            type_id,
+            span,
+        )))
+    }
+
+    /// `fields` as a `StructLiteral`, reusing `existing` when `previous` already
+    /// holds exactly these operands.
+    fn struct_literal<S: EditSink>(
+        &self,
+        sink: &mut S,
+        existing: Option<Operand>,
+        previous: Option<Vec<Option<Operand>>>,
+        type_id: TypeId,
+        fields: Vec<(String, Operand)>,
+        span: crate::token::Span,
+    ) -> Option<Operand> {
+        if previous.is_some_and(|p| p.iter().copied().eq(fields.iter().map(|(_, op)| Some(*op)))) {
+            return existing;
+        }
+        Some(Operand::Expr(
+            sink.alloc_expr(
+                ExprKind::StructLiteral {
+                    struct_type: type_id,
+                    struct_name: self.type_table.type_name(type_id),
+                    fields: fields
+                        .into_iter()
+                        .enumerate()
+                        .map(|(index, (name, value))| ArenaStructField {
+                            name,
+                            value,
+                            field_index: index as u32,
+                        })
+                        .collect(),
+                },
+                type_id,
+                span,
+            ),
+        ))
     }
 
     /// The environment-free constant scalar `e` denotes: literal arithmetic,
@@ -939,6 +1199,94 @@ fn consumes_its_source(kind: &ExprKind) -> bool {
         kind,
         ExprKind::Call { .. } | ExprKind::Block(_) | ExprKind::LabeledBlock { .. }
     )
+}
+
+/// Charge `budget` one per operand writing `value` would place, failing as soon
+/// as it runs out. A byte sequence costs one, since it packs into a single
+/// `PackedArray` however long it is.
+fn charge_leaves(value: &Value, type_table: &TypeTable, budget: &mut usize) -> Option<()> {
+    let children: &[Value] = match value {
+        Value::Aggregate { fields, .. } => {
+            for (_, field) in fields.iter() {
+                charge_leaves(field, type_table, budget)?;
+            }
+            return Some(());
+        }
+        Value::Seq { type_id, elements } => {
+            if matches!(
+                type_table.get(*type_id),
+                ResolvedType::BuiltinArray(e) if *e == TypeTable::U8
+            ) {
+                *budget = budget.checked_sub(1)?;
+                return Some(());
+            }
+            elements
+        }
+        Value::Variant { payload, .. } => {
+            return match payload.as_deref() {
+                Some(payload) => charge_leaves(payload, type_table, budget),
+                None => Some(()),
+            };
+        }
+        _ => {
+            *budget = budget.checked_sub(1)?;
+            return Some(());
+        }
+    };
+    for child in children {
+        charge_leaves(child, type_table, budget)?;
+    }
+    Some(())
+}
+
+/// The pooled constant a scalar becomes at `ty`. `None` for an aggregate, which
+/// the pool models no operand form for.
+fn scalar_kind(value: &Value, ty: TypeId) -> Option<ValueKind> {
+    Some(match value {
+        Value::Int { value, .. } => ValueKind::Int(*value, ty),
+        Value::Float { value, .. } => ValueKind::Float(value.to_bits(), ty),
+        Value::Bool(b) => ValueKind::Bool(*b),
+        Value::Char(c) => ValueKind::Char(*c),
+        Value::Null => ValueKind::Null,
+        Value::Unit => ValueKind::Unit,
+        Value::Aggregate { .. } | Value::Seq { .. } | Value::Variant { .. } => return None,
+    })
+}
+
+/// The operands a struct literal of `type_id` already holds, in `field_index`
+/// order. `None` when `existing` is not one, which makes every slot fresh.
+fn existing_fields(
+    body: &Body,
+    existing: Option<Operand>,
+    type_id: TypeId,
+) -> Option<Vec<Option<Operand>>> {
+    let ExprKind::StructLiteral {
+        struct_type,
+        fields,
+        ..
+    } = &body.exprs[existing?.as_expr()?].kind
+    else {
+        return None;
+    };
+    if *struct_type != type_id {
+        return None;
+    }
+    let mut slots = vec![None; fields.len()];
+    for field in fields {
+        *slots.get_mut(field.field_index as usize)? = Some(field.value);
+    }
+    Some(slots)
+}
+
+/// The operands a positional literal already holds. `None` when `existing` is
+/// not one.
+fn existing_elements(body: &Body, existing: Option<Operand>) -> Option<Vec<Option<Operand>>> {
+    let (ExprKind::ArrayLiteral { elements } | ExprKind::TupleLiteral { elements }) =
+        &body.exprs[existing?.as_expr()?].kind
+    else {
+        return None;
+    };
+    Some(elements.iter().copied().map(Some).collect())
 }
 
 /// The boolean value of an operand: a promoted `ValueKind::Bool` in the pool.

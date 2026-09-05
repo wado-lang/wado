@@ -138,12 +138,14 @@ mod pattern;
 mod place;
 mod region;
 mod rewrite;
+mod shapes;
 mod trackability;
 
 pub use callee::{Callee, CalleeKey, CalleeMap};
 use pattern::PatternMatch;
 pub use region::RegionRefusal;
 pub(crate) use rewrite::guard_declares_locals;
+pub use shapes::AggregateShapes;
 use trackability::Trackability;
 
 /// Commit sink for niri's body rewrites, so one set of rewrites serves two
@@ -151,6 +153,10 @@ use trackability::Trackability;
 /// `EngineSink`, which keeps the real body's maps coherent.
 pub trait EditSink {
     fn body(&self) -> &Body;
+    /// Whether an edit through this sink reaches the program. A scratch body is
+    /// read for the value it computes and then dropped, so what is written over
+    /// it is never run and no rewrite there can be observed.
+    fn edits_the_program(&self) -> bool;
     /// Replace `e`'s kind. The new kind's children must already be parented to
     /// `e` (literals have none); use [`EditSink::become_expr`] to move an
     /// existing node's content into `e`.
@@ -182,6 +188,9 @@ pub struct BodySink<'a> {
 impl EditSink for BodySink<'_> {
     fn body(&self) -> &Body {
         self.body
+    }
+    fn edits_the_program(&self) -> bool {
+        false
     }
     fn replace_kind(&mut self, e: ExprId, kind: ExprKind) {
         self.body.exprs[e].kind = kind;
@@ -380,6 +389,7 @@ pub fn region_queries(
         globals: None,
         global_fields: None,
         materializing: Some(materializing),
+        shapes: None,
     };
     let mut out = Vec::new();
     let mut stack = vec![NodeRef::Block(body.root)];
@@ -433,6 +443,9 @@ struct FrameState {
     /// The body's [`aggregate_safe_locals`] — the only locals that may bind an
     /// aggregate constant. An unpopulated set refuses every aggregate binding.
     aggregate_locals: LocalSet,
+    /// The body's unshared locals — the ones whose single read may be written
+    /// over with a literal, nothing else reaching the object it yields.
+    unshared_locals: LocalSet,
     /// Locals a compile-time frame cannot track — see [`clobbered_locals`].
     /// Empty outside a frame.
     ctfe_clobbered: LocalSet,
@@ -475,6 +488,7 @@ pub(crate) struct ProgramFacts<'a> {
     globals: Option<&'a GlobalEnv>,
     global_fields: Option<&'a GlobalFieldEnv>,
     materializing: Option<&'a MaterializingGlobals>,
+    shapes: Option<&'a AggregateShapes>,
 }
 
 impl ProgramFacts<'_> {
@@ -624,6 +638,14 @@ impl<'a> Interpreter<'a> {
         self
     }
 
+    /// Install the declaration shapes. Without them, a struct or variant
+    /// constant stays in the engine — writing one back needs field names and
+    /// case indices the value does not carry.
+    pub fn with_shapes(&mut self, shapes: &'a AggregateShapes) -> &mut Self {
+        self.facts.shapes = Some(shapes);
+        self
+    }
+
     /// Install the [`GlobalFieldEnv`]. Without this,
     /// `FieldAccess(GlobalVarGet(_), _)` stays [`Lattice::Unevaluated`].
     /// Mirrors [`with_globals`](Self::with_globals).
@@ -686,12 +708,13 @@ impl<'a> Interpreter<'a> {
         self.frame.alias_classes = classes;
     }
 
-    /// Record which of `body`'s locals may bind an aggregate constant. The
-    /// driving visitor calls this once per function, next to
-    /// [`Self::record_ref_global_aliases`].
+    /// Record which of `body`'s locals may bind an aggregate constant, and which
+    /// ones nothing beyond their single read reaches. The driving visitor calls
+    /// this once per function, next to [`Self::record_ref_global_aliases`].
     pub fn record_aggregate_locals(&mut self, body: &Body) {
-        self.frame.aggregate_locals =
-            Trackability::outside_frame(body, self.facts, self.type_table).aggregate_locals;
+        let track = Trackability::outside_frame(body, self.facts, self.type_table);
+        self.frame.aggregate_locals = track.aggregate_locals;
+        self.frame.unshared_locals = track.unshared;
     }
 
     /// Record which locals a `let` bound to `&GLOBAL`.

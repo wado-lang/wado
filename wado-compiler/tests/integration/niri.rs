@@ -3672,10 +3672,12 @@ fn container_lit(type_id: TypeId, backing: Build, used: u64) -> Build {
 }
 
 /// The shape the lower phase emits for a source string: a container struct
-/// over a packed byte array plus its length.
-fn seq_lit(type_id: TypeId, bytes: Vec<u8>) -> Build {
+/// over a packed byte array plus its length. The backing carries the array
+/// type, which is what the exit reads the element type off.
+fn seq_lit(table: &mut TypeTable, type_id: TypeId, bytes: Vec<u8>) -> Build {
     let used = bytes.len() as u64;
-    container_lit(type_id, packed_array(bytes, type_id), used)
+    let array_ty = table.make_builtin_array(TypeTable::U8);
+    container_lit(type_id, packed_array(bytes, array_ty), used)
 }
 
 /// Register the container items `materialize_seq_via` identifies by, and the
@@ -3721,7 +3723,7 @@ fn a_constant_string_call_result_becomes_a_literal() {
         "greeting",
         vec![],
         string_ty,
-        return_stmt(seq_lit(string_ty, b"hi".to_vec())),
+        return_stmt(seq_lit(&mut table, string_ty, b"hi".to_vec())),
     );
     let callees = build_callee_map_test(std::slice::from_ref(&greeting));
 
@@ -3824,7 +3826,7 @@ fn a_write_does_not_reach_a_value_copied_out_before_it() {
         TypeTable::U8,
         &[("c", list_ty, true), ("d", list_ty, false)],
         vec![
-            let_mut_stmt_b("c", 0, list_ty, seq_lit(list_ty, vec![1, 2])),
+            let_mut_stmt_b("c", 0, list_ty, seq_lit(&mut table, list_ty, vec![1, 2])),
             let_stmt_b("d", 1, list_ty, local_expr(0, list_ty)),
             expr_stmt_b(seq_write_call(
                 set_id,
@@ -3886,7 +3888,7 @@ fn a_write_through_a_frame_owned_place_is_read_back() {
         vec![],
         TypeTable::U8,
         vec![
-            let_mut_stmt_b("c", 0, list_ty, seq_lit(list_ty, vec![0, 0])),
+            let_mut_stmt_b("c", 0, list_ty, seq_lit(&mut table, list_ty, vec![0, 0])),
             expr_stmt_b(seq_write_call(
                 set_id,
                 vec![
@@ -3989,7 +3991,7 @@ fn a_field_store_through_a_frame_owned_place_is_read_back() {
         vec![],
         TypeTable::I32,
         vec![
-            let_mut_stmt_b("c", 0, list_ty, seq_lit(list_ty, vec![5, 6])),
+            let_mut_stmt_b("c", 0, list_ty, seq_lit(&mut table, list_ty, vec![5, 6])),
             assign_stmt_b(used(), int_lit(1, TypeTable::I32, "1")),
             return_stmt(used()),
         ],
@@ -4020,7 +4022,7 @@ fn a_store_through_a_projection_that_is_not_a_place_is_refused() {
         vec![],
         TypeTable::I32,
         vec![
-            let_mut_stmt_b("c", 0, list_ty, seq_lit(list_ty, vec![5, 6])),
+            let_mut_stmt_b("c", 0, list_ty, seq_lit(&mut table, list_ty, vec![5, 6])),
             assign_stmt_b(
                 field_access(
                     index_expr(
@@ -4211,7 +4213,12 @@ fn a_copy_into_a_frame_owned_place_splices_the_source() {
         vec![],
         TypeTable::U8,
         vec![
-            let_mut_stmt_b("c", 0, list_ty, seq_lit(list_ty, vec![0, 0, 0, 0])),
+            let_mut_stmt_b(
+                "c",
+                0,
+                list_ty,
+                seq_lit(&mut table, list_ty, vec![0, 0, 0, 0]),
+            ),
             expr_stmt_b(seq_write_call(
                 copy_id,
                 vec![
@@ -4263,7 +4270,7 @@ fn a_copy_past_the_end_of_the_destination_is_refused() {
         vec![],
         TypeTable::U8,
         vec![
-            let_mut_stmt_b("c", 0, list_ty, seq_lit(list_ty, vec![0, 0])),
+            let_mut_stmt_b("c", 0, list_ty, seq_lit(&mut table, list_ty, vec![0, 0])),
             expr_stmt_b(seq_write_call(
                 copy_id,
                 vec![
@@ -4339,7 +4346,7 @@ fn a_call_writing_through_a_mut_ref_updates_the_caller_place() {
         vec![],
         TypeTable::I32,
         vec![
-            let_mut_stmt_b("c", 0, list_ty, seq_lit(list_ty, vec![5, 6])),
+            let_mut_stmt_b("c", 0, list_ty, seq_lit(&mut table, list_ty, vec![5, 6])),
             expr_stmt_b(call_expr_args(
                 &bump,
                 vec![(mut_ref(local_expr(0, list_ty), list_ty), true)],
@@ -4365,6 +4372,7 @@ fn a_call_writing_through_a_mut_ref_updates_the_caller_place() {
 /// paired with a caller passing `&mut c` and a second argument built over the
 /// same local, returning `c.used`.
 fn add_through_mut_ref_and_second_arg(
+    table: &mut TypeTable,
     list_ty: TypeId,
     second_param_ty: TypeId,
     second_arg: Build,
@@ -4392,7 +4400,7 @@ fn add_through_mut_ref_and_second_arg(
         vec![],
         TypeTable::I32,
         vec![
-            let_mut_stmt_b("c", 0, list_ty, seq_lit(list_ty, vec![5, 6])),
+            let_mut_stmt_b("c", 0, list_ty, seq_lit(table, list_ty, vec![5, 6])),
             expr_stmt_b(call_expr_args(
                 &add,
                 vec![
@@ -4417,6 +4425,7 @@ fn a_second_argument_naming_a_mut_ref_target_declines_the_call() {
     let list_ref_ty = table.make_ref(list_ty);
 
     let (add, caller) = add_through_mut_ref_and_second_arg(
+        &mut table,
         list_ty,
         list_ref_ty,
         shared_ref(local_expr(0, list_ty), list_ref_ty),
@@ -4456,7 +4465,7 @@ fn a_method_call_writes_back_through_its_receiver() {
         vec![],
         TypeTable::I32,
         vec![
-            let_mut_stmt_b("c", 0, list_ty, seq_lit(list_ty, vec![5, 6])),
+            let_mut_stmt_b("c", 0, list_ty, seq_lit(&mut table, list_ty, vec![5, 6])),
             expr_stmt_b(method_call_expr(&bump, local_expr(0, list_ty), Vec::new())),
             return_stmt(used_of_local(list_ty)),
         ],
@@ -4497,7 +4506,7 @@ fn a_mutating_call_outside_statement_position_is_not_run() {
         vec![],
         TypeTable::I32,
         vec![
-            let_mut_stmt_b("c", 0, list_ty, seq_lit(list_ty, vec![5, 6])),
+            let_mut_stmt_b("c", 0, list_ty, seq_lit(&mut table, list_ty, vec![5, 6])),
             return_stmt(binary(
                 NirBinaryOp::Add,
                 call_expr_args(
@@ -4538,7 +4547,7 @@ fn a_mutating_call_bound_by_a_let_writes_back() {
         vec![],
         TypeTable::I32,
         vec![
-            let_mut_stmt_b("c", 0, list_ty, seq_lit(list_ty, vec![5, 6])),
+            let_mut_stmt_b("c", 0, list_ty, seq_lit(&mut table, list_ty, vec![5, 6])),
             let_stmt_b(
                 "a",
                 1,
@@ -4612,7 +4621,7 @@ fn a_run_that_bails_part_way_writes_nothing() {
         vec![],
         TypeTable::I32,
         vec![
-            let_mut_stmt_b("c", 0, list_ty, seq_lit(list_ty, vec![5, 6])),
+            let_mut_stmt_b("c", 0, list_ty, seq_lit(&mut table, list_ty, vec![5, 6])),
             expr_stmt_b(call_expr_args(
                 &half,
                 vec![(mut_ref(local_expr(0, list_ty), list_ty), true)],
@@ -4739,7 +4748,7 @@ fn a_shared_receiver_leaves_the_container_trackable() {
         vec![],
         TypeTable::I32,
         vec![
-            let_mut_stmt_b("c", 0, list_ty, seq_lit(list_ty, vec![5, 6])),
+            let_mut_stmt_b("c", 0, list_ty, seq_lit(&mut table, list_ty, vec![5, 6])),
             expr_stmt_b(method_call_expr(&bump, local_expr(0, list_ty), Vec::new())),
             return_stmt(method_call_expr(&len, local_expr(0, list_ty), Vec::new())),
         ],
@@ -7430,7 +7439,7 @@ fn a_region_write_through_an_alias_lands_in_the_borrowed_local() {
     };
     let region = block_expr_of(
         vec![
-            let_mut_stmt_b("c", 0, list_ty, seq_lit(list_ty, vec![0, 0])),
+            let_mut_stmt_b("c", 0, list_ty, seq_lit(&mut table, list_ty, vec![0, 0])),
             let_stmt_b("p", 1, list_ty, mut_ref(local_expr(0, list_ty), list_ty)),
             expr_stmt_b(seq_write_call(
                 set_id,
@@ -7570,7 +7579,7 @@ fn a_region_write_behind_a_cast_still_lands() {
     };
     let region = block_expr_of(
         vec![
-            let_mut_stmt_b("c", 0, list_ty, seq_lit(list_ty, vec![0, 0])),
+            let_mut_stmt_b("c", 0, list_ty, seq_lit(&mut table, list_ty, vec![0, 0])),
             expr_stmt_b(seq_write_call(
                 set_id,
                 vec![
@@ -7619,7 +7628,7 @@ fn an_alias_read_as_a_value_does_not_become_a_copy() {
 
     let region = block_expr_of(
         vec![
-            let_mut_stmt_b("c", 0, list_ty, seq_lit(list_ty, vec![0, 0])),
+            let_mut_stmt_b("c", 0, list_ty, seq_lit(&mut table, list_ty, vec![0, 0])),
             let_stmt_b("p", 1, list_ty, mut_ref(local_expr(0, list_ty), list_ty)),
             let_stmt_b("s", 2, list_ty, local_expr(1, list_ty)),
             expr_stmt_b(seq_write_call(
@@ -7689,7 +7698,7 @@ fn an_alias_captured_in_an_aggregate_is_not_a_constant() {
 
     let region = block_expr_of(
         vec![
-            let_mut_stmt_b("c", 0, list_ty, seq_lit(list_ty, vec![0, 0])),
+            let_mut_stmt_b("c", 0, list_ty, seq_lit(&mut table, list_ty, vec![0, 0])),
             let_stmt_b("p", 1, list_ty, mut_ref(local_expr(0, list_ty), list_ty)),
             let_stmt_b(
                 "h",
@@ -7758,7 +7767,7 @@ fn a_deref_read_binds_a_copy_not_the_place() {
 
     let region = block_expr_of(
         vec![
-            let_mut_stmt_b("c", 0, list_ty, seq_lit(list_ty, vec![0, 0])),
+            let_mut_stmt_b("c", 0, list_ty, seq_lit(&mut table, list_ty, vec![0, 0])),
             let_stmt_b("p", 1, list_ty, mut_ref(local_expr(0, list_ty), list_ty)),
             let_stmt_b(
                 "v",
