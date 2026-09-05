@@ -85,27 +85,29 @@ impl Rule for SelectLoweringRule<'_> {
 
         engine.replace_expr_kind(
             id,
-            ExprKind::Call {
-                func_id: self.select_id,
-                type_args: vec![result_type],
-                args: vec![
-                    ArenaCallArg {
-                        expr: condition,
-                        is_mut: false,
-                    },
-                    ArenaCallArg {
-                        expr: true_val,
-                        is_mut: false,
-                    },
-                    ArenaCallArg {
-                        expr: false_val,
-                        is_mut: false,
-                    },
-                ],
-                has_receiver: false,
-            },
+            select_call(self.select_id, result_type, condition, true_val, false_val),
         );
         true
+    }
+}
+
+/// `builtin::select(cond, a, b)` over `ty`, for a rule synthesizing one.
+pub(super) fn select_call(
+    select_id: crate::nir::FuncId,
+    ty: TypeId,
+    cond: Operand,
+    a: Operand,
+    b: Operand,
+) -> ExprKind {
+    let arg = |expr| ArenaCallArg {
+        expr,
+        is_mut: false,
+    };
+    ExprKind::Call {
+        func_id: select_id,
+        type_args: vec![ty],
+        args: vec![arg(cond), arg(a), arg(b)],
+        has_receiver: false,
     }
 }
 

@@ -1358,6 +1358,11 @@ pub(super) struct InlineBudget {
 /// on its folded price, and keeping it small buys nothing while every call it
 /// makes stays a call. [`InlineHolds::release`] then lets it receive inlining
 /// like any other function, and the loop runs on to settle what that opens.
+///
+/// A held function is skipped as a caller but still marked seen, so a hold
+/// that lapses on its own — a callee's price moved without touching the
+/// function's revision — has to re-dirty it here, or it would receive nothing
+/// to the end of the loop. The set therefore persists across rounds.
 #[derive(Default)]
 pub(super) struct InlineHolds {
     held: IndexSet<FuncId>,
@@ -1365,18 +1370,35 @@ pub(super) struct InlineHolds {
 }
 
 impl InlineHolds {
+    /// Record this round's verdict on `id`, re-dirtying a function whose hold
+    /// has lapsed.
+    fn settle(&mut self, id: FuncId, hold: bool, gate: &mut FunctionGate) {
+        if hold && !self.released {
+            self.held.insert(id);
+        } else if self.held.swap_remove(&id) {
+            gate.mark_changed(id);
+        }
+    }
+
     /// Release every hold and mark the held functions for another round.
-    /// Returns whether there was anything to release; once released, the holds
-    /// stay released, so a second call after convergence is the loop's exit.
+    /// Returns whether there was anything to release. The drain plus the
+    /// [`Self::settle`] guard leave the set empty for good, so the second call
+    /// after the reopened run converges is the loop's exit.
     pub(super) fn release(&mut self, gate: &mut FunctionGate) -> bool {
-        if self.released || self.held.is_empty() {
+        if self.held.is_empty() {
             return false;
         }
         self.released = true;
-        for &id in &self.held {
+        for id in self.held.drain(..) {
             gate.mark_changed(id);
         }
         true
+    }
+
+    /// The functions still held, for the report a run that never converged
+    /// prints: their calls stayed calls and the release never ran.
+    pub(super) fn still_held(&self) -> usize {
+        self.held.len()
     }
 }
 
@@ -1533,9 +1555,6 @@ pub fn inline_functions(
         .map(|f| f.borrow().body.as_ref().is_some_and(body_has_loop))
         .collect();
 
-    // Callees that must not receive inlining this round — see `Verdict::hold`.
-    holds.held.clear();
-
     // What the unit holds right now, and what each admitted candidate would add
     // to it. `Candidate::forced` marks the ones the budget may not turn down.
     // Both prices cost a walk over the whole unit per round and no level sets a
@@ -1619,11 +1638,8 @@ pub fn inline_functions(
             &spliced,
             &written_by_func[i],
         );
-        if verdict.hold
-            && !holds.released
-            && let Some(id) = func.id
-        {
-            holds.held.insert(id);
+        if let Some(id) = func.id {
+            holds.settle(id, verdict.hold, gate);
         }
         if verdict.inline {
             let id = func.id.expect("func_id assigned at lower");

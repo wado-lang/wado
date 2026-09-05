@@ -13,6 +13,7 @@ use crate::nir::{NirBinaryOp, NirUnaryOp};
 use crate::nir_arena::{
     BlockId, Body, ExprId, ExprKind, NodeRef, Operand, PatId, PatKind, StmtId, StmtKind,
 };
+use crate::nir_engine::Engine;
 use crate::nir_value_graph::{OpaqueSource, ValueId, ValueKind};
 
 /// Every block reachable from the body root, in DFS pop order (a block precedes
@@ -960,4 +961,55 @@ pub(super) fn locals_possibly_mutated(
         body.for_each_child(n, |c| stack.push(c));
     }
     out
+}
+
+/// Whether `block`'s tail value reaches a consumer — a `let` initializer, an
+/// argument, a returned or broken value — walking the parent map up through
+/// the wrappers whose own position decides it. A block under a statement `if`
+/// yields iff that statement is the tail of a block that yields, which is the
+/// one shape WIR turns a statement `if` into a value. The chain is bounded by
+/// tree depth.
+pub(super) fn block_yields_value(engine: &Engine, block: BlockId) -> bool {
+    node_yields_value(engine, NodeRef::Block(block))
+}
+
+fn node_yields_value(engine: &Engine, node: NodeRef) -> bool {
+    let Some(parent) = engine.parent_of(node) else {
+        return false;
+    };
+    match parent {
+        NodeRef::Expr(pe) => match &engine.body.exprs[pe].kind {
+            ExprKind::Block(_)
+            | ExprKind::LabeledBlock { .. }
+            | ExprKind::If { .. }
+            | ExprKind::Match { .. }
+            | ExprKind::Switch { .. } => node_yields_value(engine, NodeRef::Expr(pe)),
+            _ => true,
+        },
+        NodeRef::Stmt(ps) => match &engine.body.stmts[ps].kind {
+            StmtKind::Let { .. }
+            | StmtKind::LetDestructure { .. }
+            | StmtKind::Return { value: Some(_) }
+            | StmtKind::Break { value: Some(_), .. } => true,
+            StmtKind::Expr(_) => node_yields_value(engine, NodeRef::Stmt(ps)),
+            StmtKind::If { .. } => match node {
+                NodeRef::Expr(_) => true,
+                NodeRef::Block(_) => node_yields_value(engine, NodeRef::Stmt(ps)),
+                NodeRef::Stmt(_) | NodeRef::Pat(_) => false,
+            },
+            StmtKind::Loop { .. }
+            | StmtKind::LabeledBlock { .. }
+            | StmtKind::Break { value: None, .. }
+            | StmtKind::Return { value: None }
+            | StmtKind::Continue => false,
+        },
+        NodeRef::Block(pb) => {
+            let NodeRef::Stmt(s) = node else {
+                return false;
+            };
+            engine.body.blocks[pb].stmts.last() == Some(&s)
+                && node_yields_value(engine, NodeRef::Block(pb))
+        }
+        NodeRef::Pat(_) => false,
+    }
 }

@@ -20,8 +20,8 @@ use crate::tir::{TypeId, TypeTable};
 use crate::token::Span;
 
 use super::arena_query::{
-    block_contains_loop, has_break_to, is_local, is_local_operand, promoted_read_count_at,
-    single_payload_binding,
+    block_contains_loop, block_yields_value, has_break_to, is_local, is_local_operand,
+    promoted_read_count_at, single_payload_binding,
 };
 use super::sroa_variant_return::{Pad, zero_pad};
 
@@ -90,69 +90,6 @@ impl Rule for LabeledBlockFusionRule {
             return true;
         }
         false
-    }
-}
-
-// ---------------------------------------------------------------------------
-// yields-value walker (replaces the standalone pass's recursive flag)
-// ---------------------------------------------------------------------------
-
-/// True iff the tail value of `block` reaches a consumer (a `let` initializer,
-/// a function argument, a returned expression, …). Walks up the parent map; the
-/// chain is bounded by tree depth. Mirrors the `yields_value` flag the
-/// standalone recursive driver threaded through `fuse_in_block`.
-fn block_yields_value(engine: &Engine, block: BlockId) -> bool {
-    node_yields_value(engine, NodeRef::Block(block))
-}
-
-fn node_yields_value(engine: &Engine, node: NodeRef) -> bool {
-    let Some(parent) = engine.parent_of(node) else {
-        return false;
-    };
-    match parent {
-        NodeRef::Expr(pe) => match &engine.body.exprs[pe].kind {
-            // Wrappers / control-flow expressions: yield iff the wrapper
-            // itself is in a value-consuming position.
-            ExprKind::Block(_)
-            | ExprKind::LabeledBlock { .. }
-            | ExprKind::If { .. }
-            | ExprKind::Match { .. }
-            | ExprKind::Switch { .. } => node_yields_value(engine, NodeRef::Expr(pe)),
-            // Any other expression parent (Binary, Call, FieldAccess, …):
-            // this node's value is consumed by the surrounding expression.
-            _ => true,
-        },
-        NodeRef::Stmt(ps) => match &engine.body.stmts[ps].kind {
-            StmtKind::Let { .. }
-            | StmtKind::LetDestructure { .. }
-            | StmtKind::Return { value: Some(_) }
-            | StmtKind::Break { value: Some(_), .. } => true,
-            StmtKind::Expr(_) => node_yields_value(engine, NodeRef::Stmt(ps)),
-            // For a block under a stmt-form `If` (a branch), mirror the
-            // standalone driver's Shape::If propagation: the branch yields iff
-            // the If statement itself yields (tail of a yielding outer block).
-            // For the condition expression, the value is always consumed.
-            StmtKind::If { .. } => match node {
-                NodeRef::Expr(_) => true,
-                NodeRef::Block(_) => node_yields_value(engine, NodeRef::Stmt(ps)),
-                _ => false,
-            },
-            // Stmt-form Loop / LabeledBlock discard their body's value.
-            StmtKind::Loop { .. } | StmtKind::LabeledBlock { .. } => false,
-            StmtKind::Break { value: None, .. }
-            | StmtKind::Return { value: None }
-            | StmtKind::Continue => false,
-        },
-        NodeRef::Block(pb) => {
-            // A stmt under a block yields iff it is the tail AND the block does.
-            let stmts = &engine.body.blocks[pb].stmts;
-            let s_id = match node {
-                NodeRef::Stmt(s) => s,
-                _ => return false,
-            };
-            stmts.last().copied() == Some(s_id) && node_yields_value(engine, NodeRef::Block(pb))
-        }
-        NodeRef::Pat(_) => false,
     }
 }
 

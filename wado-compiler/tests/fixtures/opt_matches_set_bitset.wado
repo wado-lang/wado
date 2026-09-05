@@ -2,7 +2,9 @@
 // from the smallest member, an unsigned range compare, a shift and a bit
 // test — rather than the `br_table` a dense set would otherwise lower to or the
 // compare cascade a sparse one keeps. A set spanning more than one 64-bit
-// word picks its word with a `select`; an enum set reads its discriminants.
+// word picks its word with a `select`; an enum set reads its discriminants; a
+// range member is expanded into the mask. The offset is bound once and the two
+// halves joined with a bitwise `&`, so nothing branches on the key.
 
 enum Kind {
     A,
@@ -33,6 +35,10 @@ fn not_in_set(k: i32) -> bool {
     };
 }
 
+fn digit_or_under(c: char) -> bool {
+    return c matches { '0'..='9' | '_' };
+}
+
 export fn run() {
     assert in_set(builtin::black_box(3));
     assert in_set(builtin::black_box(20));
@@ -54,6 +60,12 @@ export fn run() {
     assert !not_in_set(builtin::black_box(9));
     assert not_in_set(builtin::black_box(10));
     assert not_in_set(builtin::black_box(2));
+    assert digit_or_under(builtin::black_box('0'));
+    assert digit_or_under(builtin::black_box('9'));
+    assert digit_or_under(builtin::black_box('_'));
+    assert !digit_or_under(builtin::black_box('/'));
+    assert !digit_or_under(builtin::black_box(':'));
+    assert !digit_or_under(builtin::black_box('a'));
 }
 
 __DATA__
@@ -63,7 +75,8 @@ __DATA__
         "(163575_i64 >>u ",
         "(85_i64 >>u ",
         "(71_i64 >>u ",
-        "select u64((k - 1) <u 64, 17_i64, select u64((k - 1) <u 128, 34_i64, select u64((k - 1) <u 192, 2_i64, 128_i64)))"
+        "select u64(__bitset_offset",
+        ") <u 18) & ((("
     ],
     "wir_not_expect:O2": [
         "br_table"

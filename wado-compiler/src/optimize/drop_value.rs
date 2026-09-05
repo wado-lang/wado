@@ -20,18 +20,11 @@ impl Rule for DropValueRule {
         let stmts = engine.body.blocks[id].stmts.clone();
         let last = stmts.last().copied();
         // A statement something follows is discarded, and so is the tail of a
-        // block that yields nothing: the root, which `translate_block` lowers
-        // with no value at all, the body of a statement `if`, loop, or labeled
-        // block, and an arm of a unit-typed expression. WIR decides "value
-        // region" by the owning expression's own type, not by whether anything
-        // reads it, so a `match` arm whose non-unit result is dropped still
+        // block whose value reaches no consumer — the root, a loop body, the
+        // arm of a `match` nothing reads. WIR lowers exactly those with no
+        // value region, and a `match` arm whose result is consumed still
         // expects its last statement to leave a value.
-        let tail_discarded = id == engine.body.root
-            || match engine.parent_of(NodeRef::Block(id)) {
-                Some(NodeRef::Stmt(_)) => true,
-                Some(NodeRef::Expr(e)) => engine.body.exprs[e].type_id == TypeTable::UNIT,
-                Some(NodeRef::Block(_) | NodeRef::Pat(_)) | None => false,
-            };
+        let tail_discarded = !arena_query::block_yields_value(engine, id);
         let discarded = |s: StmtId| Some(s) != last || tail_discarded;
         let mut changed = false;
         let mut new_stmts = Vec::with_capacity(stmts.len());

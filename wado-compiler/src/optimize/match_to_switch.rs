@@ -192,6 +192,71 @@ struct SwitchAnalysis {
     default_arm: Option<usize>,
 }
 
+/// The values one arm's pattern names, as the `i64` keys a dispatch over an
+/// integer-like scrutinee compares. Shared with `match_to_bitset`, so the two
+/// rules read one literal the same way.
+pub(super) enum CaseKey {
+    Value(i64),
+    /// Inclusive at both ends, `lo <= hi`.
+    Range {
+        lo: i64,
+        hi: i64,
+    },
+    Wildcard,
+}
+
+/// `pat` as a [`CaseKey`], or `None` for a pattern no key dispatch takes: a
+/// binding (it would need an arm-local `let` of the scrutinee), a literal past
+/// `i64` (a wrapping cast would corrupt the range), an empty range, or any
+/// destructuring pattern.
+pub(super) fn case_key(pat: &PatKind) -> Option<CaseKey> {
+    Some(match pat {
+        PatKind::Literal(NirLiteralPattern::I128(v)) => CaseKey::Value(i64::try_from(*v).ok()?),
+        PatKind::Literal(NirLiteralPattern::U128(v)) => CaseKey::Value(i64::try_from(*v).ok()?),
+        PatKind::Literal(NirLiteralPattern::Char(c)) => CaseKey::Value(i64::from(u32::from(*c))),
+        PatKind::Enum { case_index, .. } => CaseKey::Value(i64::from(*case_index)),
+        PatKind::Range {
+            start,
+            end,
+            inclusive,
+            ..
+        } => {
+            let lo = i64::try_from(*start).ok()?;
+            let mut hi = i64::try_from(*end).ok()?;
+            if !*inclusive {
+                hi -= 1;
+            }
+            if hi < lo {
+                return None;
+            }
+            CaseKey::Range { lo, hi }
+        }
+        PatKind::Wildcard => CaseKey::Wildcard,
+        PatKind::Literal(
+            NirLiteralPattern::Bool(_) | NirLiteralPattern::String(_) | NirLiteralPattern::Null,
+        )
+        | PatKind::Binding { .. }
+        | PatKind::Tuple(..)
+        | PatKind::Variant { .. }
+        | PatKind::Struct { .. }
+        | PatKind::Or(_)
+        | PatKind::ConstantValue { .. } => return None,
+    })
+}
+
+/// The width in bits of a scrutinee a key dispatch may take — an integer,
+/// `char`, or enum — or `None` for any other type.
+pub(super) fn scrutinee_bits(scrutinee_type: &ResolvedType) -> Option<u32> {
+    match scrutinee_type {
+        ResolvedType::Primitive(PrimitiveType::I8 | PrimitiveType::U8) => Some(8),
+        ResolvedType::Primitive(PrimitiveType::I16 | PrimitiveType::U16) => Some(16),
+        ResolvedType::Primitive(PrimitiveType::I32 | PrimitiveType::U32 | PrimitiveType::Char)
+        | ResolvedType::Enum { .. } => Some(32),
+        ResolvedType::Primitive(PrimitiveType::I64 | PrimitiveType::U64) => Some(64),
+        _ => None,
+    }
+}
+
 enum CaseSpec {
     Value(i64),
     Range { lo: i64, hi: i64 },
@@ -202,21 +267,7 @@ enum CaseSpec {
 /// are integer or `char` literals, enum cases, integer/`char` ranges, or
 /// wildcard (the default).
 fn analyze(scrutinee_type: &ResolvedType, arms: &[ArmData], body: &Body) -> Option<SwitchAnalysis> {
-    match scrutinee_type {
-        ResolvedType::Primitive(
-            PrimitiveType::I32
-            | PrimitiveType::U32
-            | PrimitiveType::I64
-            | PrimitiveType::U64
-            | PrimitiveType::I16
-            | PrimitiveType::U16
-            | PrimitiveType::I8
-            | PrimitiveType::U8
-            | PrimitiveType::Char,
-        )
-        | ResolvedType::Enum { .. } => {}
-        _ => return None,
-    }
+    scrutinee_bits(scrutinee_type)?;
 
     let mut specs: Vec<(CaseSpec, usize)> = Vec::new();
     let mut default_arm: Option<usize> = None;
@@ -227,56 +278,10 @@ fn analyze(scrutinee_type: &ResolvedType, arms: &[ArmData], body: &Body) -> Opti
         if arm.guard.is_some() {
             return None;
         }
-        let mut record = |lo: i64, hi: i64, specs: &mut Vec<(CaseSpec, usize)>| {
-            min_value = min_value.min(lo);
-            max_value = max_value.max(hi);
-            specs.push((
-                if lo == hi {
-                    CaseSpec::Value(lo)
-                } else {
-                    CaseSpec::Range { lo, hi }
-                },
-                arm_idx,
-            ));
-        };
-        match &body.pats[arm.pattern].kind {
-            // Bail if a literal does not fit in `i64`: the Switch dispatch
-            // operates on `i64` case values, so a wrapping cast would corrupt
-            // the min/max range analysis.
-            PatKind::Literal(NirLiteralPattern::I128(v)) => {
-                let v = i64::try_from(*v).ok()?;
-                record(v, v, &mut specs);
-            }
-            PatKind::Literal(NirLiteralPattern::U128(v)) => {
-                let v = i64::try_from(*v).ok()?;
-                record(v, v, &mut specs);
-            }
-            PatKind::Literal(NirLiteralPattern::Char(c)) => {
-                let v = i64::from(u32::from(*c));
-                record(v, v, &mut specs);
-            }
-            PatKind::Enum { case_index, .. } => {
-                let v = i64::from(*case_index);
-                record(v, v, &mut specs);
-            }
-            PatKind::Range {
-                start,
-                end,
-                inclusive,
-                ..
-            } => {
-                let lo = i64::try_from(*start).ok()?;
-                let mut hi = i64::try_from(*end).ok()?;
-                if !*inclusive {
-                    hi -= 1;
-                }
-                if hi < lo {
-                    // Empty range — let the generic lowering handle it.
-                    return None;
-                }
-                record(lo, hi, &mut specs);
-            }
-            PatKind::Wildcard => {
+        let (lo, hi) = match case_key(&body.pats[arm.pattern].kind)? {
+            CaseKey::Value(v) => (v, v),
+            CaseKey::Range { lo, hi } => (lo, hi),
+            CaseKey::Wildcard => {
                 if default_arm.is_some() {
                     return None;
                 }
@@ -287,12 +292,17 @@ fn analyze(scrutinee_type: &ResolvedType, arms: &[ArmData], body: &Body) -> Opti
                 // arms instead of the wildcard default.
                 break;
             }
-            // A `Binding` default arm (`n => use(n)`) would need an
-            // arm-local `Let n = scrutinee` that `build_switch` doesn't
-            // emit. The normal `Match` lowering path handles bindings
-            // correctly, so bail out of the Switch rewrite here.
-            _ => return None,
-        }
+        };
+        min_value = min_value.min(lo);
+        max_value = max_value.max(hi);
+        specs.push((
+            if lo == hi {
+                CaseSpec::Value(lo)
+            } else {
+                CaseSpec::Range { lo, hi }
+            },
+            arm_idx,
+        ));
     }
 
     if specs.is_empty() {

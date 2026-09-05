@@ -528,14 +528,12 @@ fn run_optimization_passes(
     // empty ends the loop, non-empty after it names what held the loop open.
     let mut iter_changed: Vec<&'static str> = Vec::new();
     let mut i = 0;
-    // Rounds since the fixed point was last sought from scratch. Releasing the
-    // inline holds opens a second run, with the cap of its own: the cap sizes
-    // one convergence, and a program that takes most of it to converge once
-    // would otherwise hit it on the rounds the release adds.
-    let mut round = 0;
-    while round < config.iterations {
+    // The cap sizes one convergence. Releasing the inline holds opens a second
+    // run, which gets the cap again: a program that takes most of it to
+    // converge once would otherwise hit it on the rounds the release adds.
+    let mut limit = config.iterations;
+    while i < limit {
         i += 1;
-        round += 1;
         profiler.span_start(&format!("nir/iteration {i}"));
         iter_changed.clear();
         macro_rules! record {
@@ -693,7 +691,7 @@ fn run_optimization_passes(
         if iter_changed.is_empty() {
             if inline_holds.release(&mut gate) {
                 crate::compiler_trace!("opt_loop", "iter {i:>3}: inline holds released");
-                round = 0;
+                limit = i + config.iterations;
                 continue;
             }
             profiler.debug(&format!("NIR optimizer converged after {i} iteration(s)"));
@@ -704,10 +702,15 @@ fn run_optimization_passes(
         profiler.debug(&report);
     }
     if !iter_changed.is_empty() {
+        // A run that never converged never released its inline holds either,
+        // so those functions kept every call they make. Named here because
+        // nothing downstream would say so.
         let report = format!(
-            "NIR optimizer hit the {}-iteration cap without converging; still changing: [{}]",
+            "NIR optimizer hit the {}-iteration cap without converging; still changing: [{}]; \
+             {} function(s) still held by the inliner",
             config.iterations,
-            iter_changed.join(", ")
+            iter_changed.join(", "),
+            inline_holds.still_held(),
         );
         profiler.debug(&report);
         // A pass reported a change it did not make, or is taking one step per
