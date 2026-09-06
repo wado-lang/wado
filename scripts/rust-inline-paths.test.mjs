@@ -81,3 +81,10 @@ test("reads a Rust identifier to its end, Unicode included", () => {
   assert.deepEqual(texts(`let x: ${a}crate::T;`), []);
   assert.deepEqual(texts(`let ${a}use = crate::g();`), ["crate::"]);
 });
+
+test("reads a macro metavariable as a name, not an import", () => {
+  // `$use` binds a fragment; read as an import, its span would hide the path
+  // in the expansion the same way `$crate` is not a path root.
+  assert.deepEqual(texts("macro_rules! m { ($use:ident) => { crate::g() } }"), ["crate::"]);
+  assert.deepEqual(texts("macro_rules! m { () => { $crate::g() } }"), []);
+});

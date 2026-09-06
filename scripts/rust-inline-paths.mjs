@@ -13,9 +13,10 @@ import { fileURLToPath } from "node:url";
 const BASELINE_PATH = fileURLToPath(new URL("rust-inline-paths.json", import.meta.url));
 
 // A Rust identifier runs over `XID_Continue`, so `αcrate` is one name and not
-// a path root. `$crate` is macro hygiene, which no `use` can replace.
+// a path root. `$crate` is macro hygiene, which no `use` can replace, and
+// `$use` is a macro metavariable rather than an import.
 const INLINE_PATH = /(?<![\p{XID_Continue}#$])(?:crate|super)::/gu;
-const USE_KEYWORD = /(?<![\p{XID_Continue}#])use(?![\p{XID_Continue}])/gu;
+const USE_KEYWORD = /(?<![\p{XID_Continue}#$])use(?![\p{XID_Continue}])/gu;
 
 /** Index past the char literal at `at`, or -1 when the quote opens a lifetime. */
 function charLiteralEnd(source, at) {
