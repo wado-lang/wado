@@ -252,18 +252,14 @@ impl<'a> Unparser<'a> {
     /// form has no slot for an interior comment, so it must take the form that
     /// gives every entry its own line.
     fn has_comment_in_range(&self, start: usize, end: usize) -> bool {
-        self.all_comments.iter().any(|c| {
-            c.span.start > start
-                && c.span.start < end
-                && !self.emitted_comments.contains(&c.span.start)
-        })
+        self.pending_comments(start, end).next().is_some()
     }
 
     /// Emit every comment starting before `pos` that no construct has placed,
-    /// each on its own indented line. This is the formatter's no-loss
-    /// guarantee — see the comment rules in `docs/compiler.md`. Call it only
-    /// where the output is at the start of a line: a line comment written
-    /// mid-line would comment out what follows.
+    /// each on its own indented line. The formatter's no-loss guarantee; the
+    /// rules it serves are in `docs/formatter.md`. Call it only where the
+    /// output is at the start of a line: a line comment written mid-line would
+    /// comment out what follows.
     fn flush_comments_before(&mut self, pos: usize, spacing: Spacing) {
         self.flush_comments_in(0, pos, spacing);
     }
@@ -287,11 +283,8 @@ impl<'a> Unparser<'a> {
     }
 
     /// Open a member's line: whatever the members before it had no slot for,
-    /// then its own leading comments. Flushing at this boundary rather than at
-    /// the previous member's end puts a moved comment where the next parse
-    /// will read it, so the output is a fixed point. Flushing *before* the
-    /// leading run keeps the comment out from between a doc comment and what
-    /// it documents.
+    /// then its own leading comments — in that order, so nothing lands between
+    /// a doc comment and what it documents.
     fn open_member(&mut self, id: crate::ast::AstId, start: usize) {
         self.flush_comments_before(self.leading_start(id, start), Spacing::KeepBlankLines);
         self.emit_leading_for(id);
@@ -313,11 +306,9 @@ impl<'a> Unparser<'a> {
             .find(|c| !self.emitted_comments.contains(&c.span.start))
     }
 
-    /// Emit the unplaced comments in `lo..pos`, then the indent for whatever
-    /// follows on that line. A line comment takes a line of its own; a block
-    /// comment stays ahead of the entry on its line, so `/*flag=*/false` reads
-    /// as the argument's own annotation rather than a stranded comment. `lo`
-    /// keeps a comment written before the list out of it.
+    /// Emit the unplaced comments in `lo..pos`, then the indent for the entry
+    /// that follows. A line comment takes a line of its own; a block comment
+    /// stays ahead of the entry, so `/*flag=*/false` reads as its annotation.
     fn open_entry_line(&mut self, lo: usize, pos: usize) {
         for comment in &self.pending_comments_in(lo, pos) {
             self.emitted_comments.insert(comment.span.start);
@@ -335,9 +326,7 @@ impl<'a> Unparser<'a> {
 
     /// Emit the unplaced block comments in `lo..hi` inline, each followed by a
     /// space. A line comment cannot go inline, so it stays pending and the
-    /// caller's one-line rendering is rejected for leaving it there. The range
-    /// is bounded on both ends: a comment before the construct belongs to
-    /// whatever encloses it, not inside these delimiters.
+    /// caller's one-line rendering is rejected for leaving it there.
     fn emit_inline_comments_in(&mut self, lo: usize, hi: usize) {
         for comment in &self.pending_comments_in(lo, hi) {
             if comment.kind != CommentKind::Block {
@@ -350,17 +339,22 @@ impl<'a> Unparser<'a> {
     }
 
     /// The comments in `lo..hi` no construct has placed, in source order.
-    /// Cloned because emitting one writes through `&mut self`.
+    fn pending_comments(
+        &self,
+        lo: usize,
+        hi: usize,
+    ) -> impl Iterator<Item = &crate::comment::Comment> {
+        self.all_comments.iter().filter(move |c| {
+            c.span.start >= lo
+                && c.span.start < hi
+                && !self.emitted_comments.contains(&c.span.start)
+        })
+    }
+
+    /// [`Self::pending_comments`] as an owned list, for a caller that emits
+    /// them and so cannot hold the borrow.
     fn pending_comments_in(&self, lo: usize, hi: usize) -> Vec<crate::comment::Comment> {
-        self.all_comments
-            .iter()
-            .filter(|c| {
-                c.span.start >= lo
-                    && c.span.start < hi
-                    && !self.emitted_comments.contains(&c.span.start)
-            })
-            .cloned()
-            .collect()
+        self.pending_comments(lo, hi).cloned().collect()
     }
 
     /// Emit one entry of a delimited list per line, between the delimiters at

@@ -6181,9 +6181,9 @@ impl Parser {
         self.contextual_keywords
             .append(&mut parser.contextual_keywords);
         // Its comments belong to the file too. The outer lex hides them behind
-        // the template's single token, so without this they reach no trivia
-        // map and the formatter drops them with nothing to detect it. The
-        // second list is what a nested interpolation absorbed in turn.
+        // the template's single token, so without this they reach no trivia map
+        // and the formatter drops them undetected. The second list is what a
+        // nested interpolation absorbed in turn.
         self.absorb_comments(lex_result.comments);
         let nested = std::mem::take(&mut parser.comments);
         self.absorb_comments(nested);
