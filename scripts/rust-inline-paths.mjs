@@ -1,13 +1,15 @@
 // A `crate::` or `super::` path must be brought into scope by a `use` item, not
-// written inline where it is read (AGENTS.md > General Rules). Clippy's
-// `absolute_paths` sees the `crate::` half only, so this is the whole rule in
-// one place: the same scan backs the CI check and the Claude Code edit guard.
+// written inline where it is read (AGENTS.md > General Rules).
+//
+// Clippy's `absolute_paths` enforces the `crate::` half; no clippy lint reads
+// `super::`, so that half is enforced here. The scan finds both, because the
+// Claude Code edit guard has no compiler to ask and refuses either one.
 //
 // The corpus predates the rule, so `rust-inline-paths.json` records what each
 // file still carries and the check fails only on a file that grows past it.
 //
 // Usage:
-//   node scripts/rust-inline-paths.mjs           # list every inline path
+//   node scripts/rust-inline-paths.mjs           # list every `super::`
 //   node scripts/rust-inline-paths.mjs --check   # fail on a file over baseline
 //   node scripts/rust-inline-paths.mjs --update  # rewrite the baseline
 
@@ -17,8 +19,11 @@ import { fileURLToPath } from "node:url";
 
 export const BASELINE_PATH = fileURLToPath(new URL("rust-inline-paths.json", import.meta.url));
 
+/** The half clippy cannot see, which is what this script gates. */
+const UNLINTED_ROOTS = ["super"];
+
 // `$crate` is macro hygiene, which no `use` can replace.
-const INLINE_PATH = /(?<![A-Za-z0-9_#$])(?:crate|super)::/g;
+const inlinePath = (roots) => new RegExp(`(?<![A-Za-z0-9_#$])(?:${roots.join("|")})::`, "g");
 const USE_KEYWORD = /(?<![A-Za-z0-9_#])use(?![A-Za-z0-9_])/g;
 
 /** Index past the char literal at `at`, or -1 when the quote opens a lifetime. */
@@ -126,8 +131,8 @@ function useItemSpans(code) {
   return spans;
 }
 
-/** Every `crate::` / `super::` written outside a `use` item, in source order. */
-export function findInlinePaths(source) {
+/** Every `roots` path written outside a `use` item, in source order. */
+export function findInlinePaths(source, roots = ["crate", "super"]) {
   const code = stripNonCode(source);
   const spans = useItemSpans(code);
   const lineStarts = [0];
@@ -136,7 +141,7 @@ export function findInlinePaths(source) {
   }
   const hits = [];
   let line = 1;
-  for (const match of code.matchAll(INLINE_PATH)) {
+  for (const match of code.matchAll(inlinePath(roots))) {
     while (lineStarts[line] !== undefined && lineStarts[line] <= match.index) line++;
     if (spans.some(([from, to]) => match.index >= from && match.index < to)) continue;
     hits.push({
@@ -156,10 +161,10 @@ function rustFiles() {
 }
 
 /** File path to the number of inline paths it carries, omitting the clean ones. */
-export function census(files) {
+export function census(files, roots) {
   const counts = {};
   for (const file of files) {
-    const found = findInlinePaths(readFileSync(file, "utf8")).length;
+    const found = findInlinePaths(readFileSync(file, "utf8"), roots).length;
     if (found > 0) counts[file] = found;
   }
   return counts;
@@ -179,17 +184,17 @@ const total = (counts) => Object.values(counts).reduce((sum, n) => sum + n, 0);
 function main(argv) {
   const files = rustFiles();
   if (argv.includes("--update")) {
-    const counts = census(files);
+    const counts = census(files, UNLINTED_ROOTS);
     writeBaseline(counts);
     console.log(`baseline: ${total(counts)} inline paths in ${Object.keys(counts).length} files`);
     return 0;
   }
   if (argv.includes("--check")) {
-    const counts = census(files);
+    const counts = census(files, UNLINTED_ROOTS);
     const baseline = readBaseline();
     const grown = Object.entries(counts).filter(([file, n]) => n > (baseline[file] ?? 0));
     if (grown.length > 0) {
-      console.error("error: inline crate:: / super:: paths added; import them with `use`:");
+      console.error("error: inline `super::` paths added; import them with `use`:");
       for (const [file, n] of grown) console.error(`  ${file}: ${baseline[file] ?? 0} -> ${n}`);
       console.error("");
       console.error("Run `node scripts/rust-inline-paths.mjs <file>` to list them.");
@@ -197,13 +202,14 @@ function main(argv) {
     }
     const left = total(counts);
     const shrunk = total(baseline) - left;
-    console.log(`ok: no file gained an inline path (${left} left${shrunk > 0 ? `, ${shrunk} fewer than the baseline — run --update` : ""})`);
+    const ratchet = shrunk > 0 ? `, ${shrunk} fewer than the baseline — run --update` : "";
+    console.log(`ok: no file gained an inline path (${left} left${ratchet})`);
     return 0;
   }
   const targets = argv.length > 0 ? argv : files;
   let found = 0;
   for (const file of targets) {
-    for (const hit of findInlinePaths(readFileSync(file, "utf8"))) {
+    for (const hit of findInlinePaths(readFileSync(file, "utf8"), UNLINTED_ROOTS)) {
       console.log(`${file}:${hit.line}:${hit.column}: ${hit.text}`);
       found++;
     }

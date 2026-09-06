@@ -53,6 +53,14 @@ test("keeps `crate` that is not a path root", () => {
   assert.deepEqual(texts("pub(crate) fn f() {}"), []);
 });
 
+test("scans only the roots it is asked for", () => {
+  const source = "fn f() { crate::a(); super::b() }";
+  assert.deepEqual(
+    findInlinePaths(source, ["super"]).map((hit) => hit.text),
+    ["super::"],
+  );
+});
+
 test("locates every hit", () => {
   const [hit] = findInlinePaths("fn f() {\n    let x = super::g();\n}");
   assert.deepEqual({ line: hit.line, column: hit.column }, { line: 2, column: 13 });
