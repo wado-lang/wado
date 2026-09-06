@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // PreToolUse hook for the editing tools: refuse Rust text that names an item
-// through `crate::` or `super::` instead of importing it. Clippy and
-// `mise run check-rust-paths` report the same thing once the edit has landed.
+// through `crate::` or `super::` instead of importing it.
+// `mise run check-rust-paths` reports the same thing once the edit has landed.
 
 import { findInlinePaths } from "../../scripts/rust-inline-paths.mjs";
 
