@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1788683843191,
+  "lastUpdate": 1788712250516,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -53869,6 +53869,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/9f5553cdb31b833d0fc1d79db78363ebe8f5f60c"
         },
         "date": 1788683842545,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 2013,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6560,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18891,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 277505,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "647df91bc596cc0a7c9f5189be4020c06bd0cd17",
+          "message": "Merge pull request #1983 from wado-lang/claude/formatter-structural-bug-3pyw9c\n\nfix(format): keep a comment in any token gap, by construction",
+          "timestamp": "2026-09-07T01:16:20+09:00",
+          "tree_id": "87138a11eb24911f6928ec333d1d724750647dfb",
+          "url": "https://github.com/wado-lang/wado/commit/647df91bc596cc0a7c9f5189be4020c06bd0cd17"
+        },
+        "date": 1788712250191,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
