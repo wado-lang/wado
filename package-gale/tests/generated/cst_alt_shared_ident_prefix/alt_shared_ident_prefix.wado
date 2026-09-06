@@ -1623,7 +1623,7 @@ fn scan_match_expr(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EM
         let sp = pos;
         sg_0_done: {
             sg_0: {
-                pos = scan_arm(tokens, pos, follow);
+                pos = scan_arm(tokens, pos, &FOLLOW_MASK_1);
                 if pos < 0 { break sg_0; }
                 while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA {
                     let sp = pos;
@@ -1656,7 +1656,7 @@ fn scan_match_expr(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EM
 
 fn scan_arm(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
-    pos = scan_pattern(tokens, pos, &FOLLOW_MASK_1);
+    pos = scan_pattern(tokens, pos, &FOLLOW_MASK_2);
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_LIT_EQGT { return -1; }
     pos += 1;
@@ -1705,7 +1705,7 @@ fn scan_pattern(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY
                                 let sp = pos;
                                 sg_3_done: {
                                     sg_3: {
-                                        pos = scan_pattern(tokens, pos, follow);
+                                        pos = scan_pattern(tokens, pos, &FOLLOW_MASK_1);
                                         if pos < 0 { break sg_3; }
                                         while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA {
                                             let sp = pos;
@@ -1749,7 +1749,7 @@ fn scan_pattern(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY
                     let sp = pos;
                     sg_5_done: {
                         sg_5: {
-                            pos = scan_pattern(tokens, pos, follow);
+                            pos = scan_pattern(tokens, pos, &FOLLOW_MASK_1);
                             if pos < 0 { break sg_5; }
                             while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA {
                                 let sp = pos;
@@ -1831,7 +1831,7 @@ fn _parse_match_expr__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
     opt_scan: {
         let tokens = &p.kinds;
         let mut pos: i32 = p.pos;
-        pos = scan_arm(tokens, pos, follow);
+        pos = scan_arm(tokens, pos, &FOLLOW_MASK_1);
         if pos < 0 { break opt_scan; }
         while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA {
             let sp = pos;
@@ -1854,7 +1854,7 @@ fn _parse_match_expr__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
         opt_scan_pos = pos;
     }
     if opt_scan_pos >= 0 {
-        _parse_arm(p, follow);
+        _parse_arm(p, &FOLLOW_MASK_1);
         loop {
             if p.recovering { break; }
             let mut rep_scan_pos: i32 = -1;
@@ -1898,7 +1898,7 @@ fn _parse_match_expr(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -
 }
 
 fn _parse_arm__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    _parse_pattern(p, &FOLLOW_MASK_1);
+    _parse_pattern(p, &FOLLOW_MASK_2);
     p.expect(TK_LIT_EQGT, &SYNC_0);
     p.expect(TK_IDENT, &EMPTY_SYNC);
     return;
@@ -1941,7 +1941,7 @@ fn _parse_pattern__inner_alt_2(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
         opt_scan: {
             let tokens = &p.kinds;
             let mut pos: i32 = p.pos;
-            pos = scan_pattern(tokens, pos, follow);
+            pos = scan_pattern(tokens, pos, &FOLLOW_MASK_1);
             if pos < 0 { break opt_scan; }
             while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA {
                 let sp = pos;
@@ -1961,7 +1961,7 @@ fn _parse_pattern__inner_alt_2(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
             opt_scan_pos = pos;
         }
         if opt_scan_pos >= 0 {
-            _parse_pattern(p, follow);
+            _parse_pattern(p, &FOLLOW_MASK_1);
             loop {
                 if p.recovering { break; }
                 let mut rep_scan_pos: i32 = -1;
@@ -2005,7 +2005,7 @@ fn _parse_pattern__inner_scan_2(tokens: &Array<i32>, pos: i32, follow: &List<Lis
                     let sp = pos;
                     sg_13_done: {
                         sg_13: {
-                            pos = scan_pattern(tokens, pos, follow);
+                            pos = scan_pattern(tokens, pos, &FOLLOW_MASK_1);
                             if pos < 0 { break sg_13; }
                             while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA {
                                 let sp = pos;
@@ -2075,7 +2075,7 @@ fn _parse_pattern__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLO
         opt_scan: {
             let tokens = &p.kinds;
             let mut pos: i32 = p.pos;
-            pos = scan_pattern(tokens, pos, follow);
+            pos = scan_pattern(tokens, pos, &FOLLOW_MASK_1);
             if pos < 0 { break opt_scan; }
             while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA {
                 let sp = pos;
@@ -2095,7 +2095,7 @@ fn _parse_pattern__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLO
             opt_scan_pos = pos;
         }
         if opt_scan_pos >= 0 {
-            _parse_pattern(p, follow);
+            _parse_pattern(p, &FOLLOW_MASK_1);
             loop {
                 if p.recovering { break; }
                 let mut rep_scan_pos: i32 = -1;
@@ -2268,5 +2268,6 @@ global SYNC_4: List<i32> = [TK_IDENT, TK_LIT_LPAREN, TK_LIT_MUT, TK_LIT_RPAREN, 
 global SYNC_5: List<i32> = [TK_LIT_COLONCOLON];
 
 global FOLLOW_MASK_0: List<List<i32>> = [[TK_EOF]];
-global FOLLOW_MASK_1: List<List<i32>> = [[TK_LIT_EQGT], [TK_IDENT]];
+global FOLLOW_MASK_1: List<List<i32>> = [[TK_LIT_COMMA], [TK_IDENT, TK_LIT_LPAREN, TK_LIT_MUT, TK_LIT_U5f]];
+global FOLLOW_MASK_2: List<List<i32>> = [[TK_LIT_EQGT], [TK_IDENT]];
 

@@ -1726,7 +1726,7 @@ fn scan_e(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLO
 fn scan_e_list(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let scan_start = pos;
     let mut pos = pos;
-    pos = scan_e(tokens, pos, follow, 0);
+    pos = scan_e(tokens, pos, &FOLLOW_MASK_1, 0);
     if pos < 0 { return -1; }
     while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA && !(follow_yields(tokens, pos, follow, TK_EOF)) {
         let sp = pos;
@@ -1817,7 +1817,7 @@ fn _parse_e(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: 
 }
 
 fn _parse_e_list__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let e = _parse_e(p, follow);
+    let e = _parse_e(p, &FOLLOW_MASK_1);
     loop {
         if p.recovering { break; }
         if follow_yields(&p.kinds, p.pos, follow, TK_EOF) { break; }
@@ -1924,4 +1924,5 @@ global EMPTY_SYNC: List<i32> = [];
 global SYNC_0: List<i32> = [TK_INT];
 
 global FOLLOW_MASK_0: List<List<i32>> = [[TK_LIT_RPAREN]];
+global FOLLOW_MASK_1: List<List<i32>> = [[TK_LIT_COMMA], [TK_INT]];
 

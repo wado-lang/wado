@@ -1541,7 +1541,7 @@ fn scan_e_lr_2(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_LIT_BETWEEN { return -1; }
     pos += 1;
-    pos = scan_e(tokens, pos, &FOLLOW_MASK_1, 0, &FOLLOW_MASK_2);
+    pos = scan_e(tokens, pos, &FOLLOW_MASK_1, 0, &FOLLOW_MASK_1);
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_LIT_AND { return -1; }
     pos += 1;
@@ -1643,7 +1643,7 @@ fn _parse_e__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, min
                 if !(lr_cont.is_empty() || follow_yields(&p.kinds, _lr_end, lr_cont, TK_EOF)) { break; }
                 p.b.start_node_at(_cp, RK_E, _start);
                 p.expect(TK_LIT_BETWEEN, &EMPTY_SYNC);
-                _parse_e(p, &FOLLOW_MASK_1, 0, &FOLLOW_MASK_2);
+                _parse_e(p, &FOLLOW_MASK_1, 0, &FOLLOW_MASK_1);
                 p.expect(TK_LIT_AND, &EMPTY_SYNC);
                 _parse_e(p, follow, 3);
                 p.b.finish_node(p.last_end());
@@ -1726,6 +1726,5 @@ global EMPTY_SYNC: List<i32> = [];
 global SYNC_0: List<i32> = [TK_ID];
 
 global FOLLOW_MASK_0: List<List<i32>> = [[TK_EOF]];
-global FOLLOW_MASK_1: List<List<i32>> = [[TK_LIT_AND]];
-global FOLLOW_MASK_2: List<List<i32>> = [[TK_LIT_AND], [TK_ID]];
+global FOLLOW_MASK_1: List<List<i32>> = [[TK_LIT_AND], [TK_ID]];
 
