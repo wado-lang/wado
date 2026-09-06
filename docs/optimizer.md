@@ -221,15 +221,14 @@ Missing optimizations, one entry per pass-shaped gap. Architectural work — com
 
       Measured, `WADO_TRACE=vg_field`: the value graph forwards it. The
       `Formatter` literal seeds eight of its nine fields (`buf`, a `&mut`, is
-      the one it cannot), and the `width` read hits that store. So the graph is
-      not what stops this — the consumer is, and where it stops is the next
-      thing to find: whether `store_load_forward` never sees the graph that
-      forwarded (`ensure_value_graph` caches per body, so a rule that ran before
-      the round the literal settled in reads an older one), or sees it and the
-      branch is pruned too late. Hand-written programs do not show any of it:
-      the same shape at top level, in a labeled block, through a trait method,
-      with a `&mut` field and a non-inlinable `&mut` call in the other arm, all
-      fold.
+      the one it cannot), and the `width` read hits that store. What drops it is
+      `store_load_forward`: the read arrives with no re-emittable value, so
+      `scoped_const_reads` did not return what the graph's own walk found. That
+      call re-walks in a scratch pool and keeps a read only when
+      `is_const_value` answers over the *live* pool, which is the next thing to
+      look at. Hand-written programs do not show any of it: the same shape at
+      top level, in a labeled block, through a trait method, with a `&mut` field
+      and a non-inlinable `&mut` call in the other arm, all fold.
 
       `sroa` declines the same struct for its own reason — `&mut candidate` is a
       hard escape, exempting only a shared `&` argument to a non-storing callee

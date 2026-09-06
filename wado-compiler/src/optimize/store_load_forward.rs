@@ -1,8 +1,9 @@
 //! Store-to-Load Forwarding: replace a value-position `Local` or `FieldAccess`
 //! read with the literal reaching it. The `ValueGraph` handles reaching-defs,
 //! branch merges, and heap-write invalidation, so this rule only inspects each
-//! read's `ValueKind`. Address-taken and `stores`-aliased locals are excluded;
-//! a field read is safe already, its store seeded only for an unaliased receiver.
+//! read's `ValueKind`. Address-taken and `stores`-aliased locals are excluded
+//! from `Local` forwarding; a field read is safe already, its store seeded for
+//! any receiver but a `stores`-aliased one and versioned against writes.
 
 use std::cell::Cell;
 
@@ -139,9 +140,13 @@ fn forward_at_root(
     unsafe_locals: &IndexSet<u32>,
     forwarded: &crate::hashmap::IndexMap<ExprId, crate::nir_value_graph::ValueId>,
 ) -> bool {
-    // Snapshot reads before rewriting. `FieldAccess` reads carry `None`:
-    // their alias safety is upstream — the builder never seeds an aliased
-    // receiver, so such a read never carries a re-emittable `ValueId`.
+    // Snapshot reads before rewriting. A `FieldAccess` carries no local index,
+    // so the `unsafe_locals` filter below never applies to one: a field read's
+    // safety is the value graph's, and it is by version rather than by refusing
+    // to seed. A `stores`-aliased receiver is the one the builder never seeds;
+    // a reference-aliased receiver is seeded and versioned against the escaped
+    // generation, which every impure call bumps, so a forward that survives to
+    // here is one no write could have reached.
     let mut reads: Vec<(ExprId, Option<u32>)> = Vec::new();
     collect_candidate_reads(engine.body, &mut reads);
 
@@ -157,16 +162,26 @@ fn forward_at_root(
         // not the value, is used; forwarding the stored literal would destroy
         // the place and lose a callee's write-back (`g(&mut obj.f)` → `g(&mut
         // 5)`). Mirrors the sibling `extract::freeze_pure_arith` guard.
+        let field = matches!(engine.body.exprs[expr].kind, ExprKind::FieldAccess { .. });
         if super::extract::is_place_read(engine, expr) {
+            if field {
+                crate::compiler_trace!("vg_field", "forward {expr:?}: a place read");
+            }
             continue;
         }
         // A read not in `forwarded` has no re-emittable value.
         let Some(vid) = forwarded.get(&expr).copied() else {
+            if field {
+                crate::compiler_trace!("vg_field", "forward {expr:?}: no re-emittable value");
+            }
             continue;
         };
         // The constant promotes into `expr`'s parent operand slot (WEP: The Live
         // ValueGraph).
         let Some(value) = super::extract::extract_const(engine, vid, expr) else {
+            if field {
+                crate::compiler_trace!("vg_field", "forward {expr:?}: {vid:?} does not extract");
+            }
             continue;
         };
         changed |= engine.replace_expr_with_value(expr, value);
