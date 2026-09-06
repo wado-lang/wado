@@ -134,8 +134,13 @@ selected in the `use { … }` list, and a file is not an interface.
 
 ### Deliberate omissions
 
-Globs at a use site and directory listing, both already refused for local Kiln
-inputs: a package boundary is not the place to relax them. Writing into a
+Glob patterns, in the allowlist as much as at a use site. A pattern would spare
+a package with many assets some typing, and would cost the list its whole point:
+what is offered would depend on what happens to sit in the directory, so a file
+dropped in becomes API and a file renamed silently stops being it. Naming each
+file is the mechanism, not the ceremony around it.
+
+Directory listing, already refused for local Kiln inputs. Writing into a
 dependency. Reaching a file of a dependency's dependency.
 
 ## Roadmap
@@ -164,10 +169,6 @@ dependency. Reaching a file of a dependency's dependency.
 
 ## Known gaps
 
-- Glob patterns in the allowlist (`grammar/*.g4`). Exact entries are what a use
-  site needs and what publish can verify; a package with many assets will want
-  patterns. Closing it means saying what a pattern means for the stability
-  promise and for what publish uploads.
 - A dependency's own Kiln invocations. The clause-harvest walks the local module
   graph and stops at the dependency edge, so a package that generates from its
   own assets does not work when consumed. Closing it means harvesting through
