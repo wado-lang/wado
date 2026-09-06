@@ -1589,6 +1589,8 @@ pub struct WorldExportFn {
     pub name: String,
     pub is_async: bool,
     pub params: Vec<Param>,
+    /// `(` through `)` of the parameter list — see [`Function::params_span`].
+    pub params_span: Span,
     pub return_type: Option<Type>,
     pub span: Span,
 }
@@ -1623,12 +1625,26 @@ pub enum UseItem {
     /// Effect with functions: `Effect::{func1, func2}`
     InterfaceFunctions {
         interface_name: String,
+        /// Span of the interface name identifier — where the item starts.
+        name_span: Span,
         functions: Vec<UseItemSimple>,
     },
     /// Wildcard import: `use _ from "..."` (load module for side effects only)
     Wildcard,
     /// Namespace import: `use name from "..."` (import entire module as namespace)
     Namespace { name: String },
+}
+
+impl UseItem {
+    /// Where the item starts in source. `None` for the forms that *are* the
+    /// whole import list (`use _`, `use name`), which have no gap to sit in.
+    pub fn start(&self) -> Option<usize> {
+        match self {
+            UseItem::Simple { name_span, .. } => Some(name_span.start),
+            UseItem::InterfaceFunctions { name_span, .. } => Some(name_span.start),
+            UseItem::Wildcard | UseItem::Namespace { .. } => None,
+        }
+    }
 }
 
 /// Simple use item (used within effect function imports)
@@ -1866,6 +1882,10 @@ pub struct UseDecl {
     pub source_id: AstId,
     /// Items being imported
     pub items: Vec<UseItem>,
+    /// `{` through `}` of the item list, `None` for the wildcard and namespace
+    /// forms, which have no braces. The formatter needs the delimiters, not
+    /// just the items, to know what a comment sits inside.
+    pub items_span: Option<Span>,
     /// Optional import attributes
     pub attributes: Option<ImportAttributes>,
     pub span: Span,
@@ -1888,6 +1908,9 @@ pub struct Function {
     pub type_params: Vec<GenericParam>,
     pub attrs: Vec<Attribute>,
     pub params: Vec<Param>,
+    /// `(` through `)` of the parameter list. The formatter needs the
+    /// delimiters, not just the parameters, to know what a comment sits inside.
+    pub params_span: Span,
     pub return_type: Option<Type>,
     pub effects: Vec<String>,
     /// Parallel to `effects`: `(AstId, Span)` of each effect-name identifier as
@@ -2679,6 +2702,24 @@ pub enum LiteralMember<'a> {
     Field(usize, &'a StructLiteralField),
 }
 
+impl LiteralMember<'_> {
+    pub fn span(&self) -> Span {
+        match self {
+            LiteralMember::Spread(_, sp) => sp.span,
+            LiteralMember::Field(_, f) => f.span,
+        }
+    }
+
+    /// `AstId` of the member's value expression — the node a same-line trailing
+    /// comment attaches to, since it is the member's last-ending node.
+    pub fn value_id(&self) -> AstId {
+        match self {
+            LiteralMember::Spread(_, sp) => sp.expr.id(),
+            LiteralMember::Field(_, f) => f.value.id(),
+        }
+    }
+}
+
 impl StructLiteralExpr {
     /// Members in source order (spreads interleaved with fields via `field_pos`).
     /// Every pass that walks members shares this order so last-wins / insert
@@ -3159,6 +3200,9 @@ pub enum TemplatePart {
     Interpolation {
         expr: Box<Expr>,
         format: Option<FormatSpec>,
+        /// The `${` that opens the interpolation. Bounds what the formatter
+        /// may place inside these braces.
+        open: Span,
     },
 }
 

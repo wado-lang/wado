@@ -76,6 +76,34 @@ pub fn lex_interpolation(
     result
 }
 
+/// Every comment in `source`, the ones inside template interpolations
+/// included. [`lex`] hides those behind the template's single token, so a
+/// caller comparing what a rewrite kept — the formatter's drop check — cannot
+/// see them without descending.
+#[must_use]
+pub fn comments_deep(source: &str) -> Vec<Comment> {
+    fn descend(tokens: &[Token], out: &mut Vec<Comment>) {
+        for token in tokens {
+            let TokenKind::TemplateStringLit(parts) = &token.kind else {
+                continue;
+            };
+            for part in parts {
+                let TemplateTokenPart::Interpolation { expr, origin, .. } = part else {
+                    continue;
+                };
+                let nested = lex_interpolation(expr, *origin, token.span.space);
+                descend(&nested.tokens, out);
+                out.extend(nested.comments);
+            }
+        }
+    }
+    let result = lex(source);
+    let mut comments = result.comments;
+    descend(&result.tokens, &mut comments);
+    comments.sort_by_key(|c| c.span.start);
+    comments
+}
+
 /// Move a fragment-relative position onto the file `origin` sits in. Only the
 /// fragment's first line shares a line with `origin`, so only it shifts by the
 /// origin's column.

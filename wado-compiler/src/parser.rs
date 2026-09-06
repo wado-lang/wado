@@ -1449,6 +1449,7 @@ impl Parser {
         self.expect(&TokenKind::Use)?;
 
         // Check for wildcard import: `use _ from "..."`
+        let mut items_span = None;
         let items = if matches!(self.peek_kind(), TokenKind::Ident(name) if name == "_") {
             self.advance(); // consume `_`
             vec![UseItem::Wildcard]
@@ -1461,9 +1462,12 @@ impl Parser {
             vec![UseItem::Namespace { name }]
         } else {
             // Parse items: `{...}`
+            let lbrace_span = self.peek().span;
             self.expect(&TokenKind::LBrace)?;
             let items = self.parse_use_items()?;
+            let rbrace_span = self.peek().span;
             self.expect(&TokenKind::RBrace)?;
+            items_span = Some(lbrace_span.merge(&rbrace_span));
             items
         };
 
@@ -1493,6 +1497,7 @@ impl Parser {
             source_span,
             source_id,
             items,
+            items_span,
             attributes,
             span: start_span.merge(&end_span),
         })
@@ -1521,6 +1526,7 @@ impl Parser {
 
                 items.push(UseItem::InterfaceFunctions {
                     interface_name: name,
+                    name_span,
                     functions,
                 });
             } else {
@@ -1750,9 +1756,12 @@ impl Parser {
         // Parse generic parameters like <T, U> or <T: Ord>
         let type_params = self.parse_generic_params()?;
 
+        let lparen_span = self.peek().span;
         self.expect(&TokenKind::LParen)?;
         let params = self.parse_param_list()?;
+        let rparen_span = self.peek().span;
         self.expect(&TokenKind::RParen)?;
+        let params_span = lparen_span.merge(&rparen_span);
 
         // A `self` receiver is only meaningful inside a method. A free function
         // spelling `self` is rejected here rather than silently accepted as a
@@ -1802,6 +1811,7 @@ impl Parser {
             type_params,
             attrs,
             params,
+            params_span,
             return_type,
             effects,
             effect_ids,
@@ -1874,7 +1884,7 @@ impl Parser {
                     },
                     is_mut: false,
                     default: None,
-                    span: start_span,
+                    span: start_span.merge(&self_span),
                 });
             }
 
@@ -1915,7 +1925,7 @@ impl Parser {
                 self_kind: SelfKind::Value,
                 is_mut: false,
                 default: None,
-                span: start_span,
+                span: start_span.merge(&self_span),
             });
         }
 
@@ -1937,6 +1947,9 @@ impl Parser {
             None
         };
 
+        // Through the last token consumed, never the child's span:
+        // `Type::Function` reports only its first parameter type's span, and a
+        // parameter that stops short loses everything past that point.
         Ok(Param {
             id,
             name,
@@ -1945,7 +1958,7 @@ impl Parser {
             self_kind: SelfKind::None,
             is_mut,
             default,
-            span: start_span,
+            span: start_span.merge(&self.tokens[self.pos - 1].span),
         })
     }
 
@@ -5273,14 +5286,10 @@ impl Parser {
                 None
             };
 
-            // Field span covers the full declaration — start of the
-            // first token through the end of the default expression
-            // (or the type, if there is no default). A start-only span
-            // would leave descendant spans extending past the parent,
-            // breaking AstId-keyed trivia attribution that picks the
-            // outermost node ending on the comment's line.
-            let last_end = default.as_ref().map_or_else(|| ty.span(), Expr::span);
-            let span = start_span.merge(&last_end);
+            // Through the last token consumed, as a parameter does: a parent
+            // shorter than its descendants breaks the AstId-keyed trivia
+            // attribution that picks the outermost node ending on a line.
+            let span = start_span.merge(&self.tokens[self.pos - 1].span);
 
             fields.push(StructField {
                 id,
@@ -6013,8 +6022,10 @@ impl Parser {
 
         let _type_params = self.parse_generic_params()?;
 
+        let lparen_span = self.peek().span;
         self.expect(&TokenKind::LParen)?;
         let params = self.parse_param_list()?;
+        let rparen_span = self.peek().span;
         self.expect(&TokenKind::RParen)?;
 
         let return_type = self.parse_optional_return_type()?;
@@ -6026,6 +6037,7 @@ impl Parser {
             name,
             is_async,
             params,
+            params_span: lparen_span.merge(&rparen_span),
             return_type,
             span: start_span.merge(&close_span),
         }))
@@ -6067,9 +6079,19 @@ impl Parser {
                         }
                         None => None,
                     };
+                    // `origin` is the interpolation's first content byte, so
+                    // the `${` is the two bytes before it, on the same line.
+                    let open = Span::new(
+                        origin.offset.saturating_sub("${".len()),
+                        origin.offset,
+                        origin.line,
+                        origin.column.saturating_sub("${".len()),
+                    )
+                    .in_space(self.ast_id_space);
                     parts.push(TemplatePart::Interpolation {
                         expr: Box::new(parsed),
                         format: format_spec,
+                        open,
                     });
                 }
             }
@@ -6159,7 +6181,38 @@ impl Parser {
         // so what it read as a keyword belongs to the enclosing module.
         self.contextual_keywords
             .append(&mut parser.contextual_keywords);
+        // Its comments belong to the file too. The outer lex hides them behind
+        // the template's single token, so without this they reach no trivia map
+        // and the formatter drops them undetected. The second list is what a
+        // nested interpolation absorbed in turn.
+        self.absorb_comments(lex_result.comments);
+        let nested = std::mem::take(&mut parser.comments);
+        self.absorb_comments(nested);
         Ok(expr)
+    }
+
+    /// Merge `comments` into this parse's stream, keeping it ordered by
+    /// position. A comment already there — the same fragment re-parsed after a
+    /// speculative branch backtracked — is skipped.
+    fn absorb_comments(&mut self, comments: Vec<crate::comment::Comment>) {
+        for comment in comments {
+            let at = self
+                .comments
+                .partition_point(|c| c.span.start < comment.span.start);
+            if self
+                .comments
+                .get(at)
+                .is_some_and(|c| c.span.start == comment.span.start)
+            {
+                continue;
+            }
+            assert!(
+                at >= self.comment_cursor,
+                "an interpolation's comments sit inside the template token being parsed, \
+                 so the cursor cannot have passed them",
+            );
+            self.comments.insert(at, comment);
+        }
     }
 
     /// Parse struct literal: `Point { x: 10, y: 20 }` or `Point { x, y }` (shorthand)
@@ -6509,6 +6562,31 @@ mod tests {
         (module, errors)
     }
 
+    /// A parameter's span covers the whole parameter, and the parameter list's
+    /// span its parentheses. Anything narrower and a position past the name —
+    /// a trailing comment, an LSP query — falls outside the parameter it names.
+    #[test]
+    fn test_param_and_param_list_spans_cover_their_text() {
+        let src = "fn f(a: i32, c: fn(i32) -> i32, mut b: String = s) {\n}\n";
+        let module = parse(src).unwrap();
+        let Item::Function(func) = &module.items[0] else {
+            panic!("expected a function");
+        };
+        assert_eq!(
+            &src[func.params_span.start..func.params_span.end],
+            "(a: i32, c: fn(i32) -> i32, mut b: String = s)"
+        );
+        let spans: Vec<&str> = func
+            .params
+            .iter()
+            .map(|p| &src[p.span.start..p.span.end])
+            .collect();
+        assert_eq!(
+            spans,
+            vec!["a: i32", "c: fn(i32) -> i32", "mut b: String = s"]
+        );
+    }
+
     /// Extract the sole `return` expression from `fn r() -> bool { return EXPR; }`.
     fn return_expr(src: &str) -> Expr {
         let module = parse(src).unwrap();
@@ -6624,6 +6702,7 @@ mod tests {
             if let UseItem::InterfaceFunctions {
                 interface_name,
                 functions,
+                ..
             } = &use_decl.items[0]
             {
                 assert_eq!(interface_name, "Stdout");
