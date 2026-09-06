@@ -154,9 +154,7 @@ fn element_consumes_follow_arg(elem: &Element) -> bool {
         // A greedy `?` runs its body once, so `lower_repeat_op` hands its own
         // continuation straight down to it. Every other kind loops, and what
         // follows one iteration is another one.
-        Repeat(rep) => !rep.non_greedy
-            && rep.kind matches { Optional }
-            && element_consumes_follow_arg(&rep.element),
+        Repeat(rep) => !rep.non_greedy && rep.kind matches { Optional } && element_consumes_follow_arg(&rep.element),
         TokenRef(_) | Literal(_) | Group(_) | Wildcard(_) | Not(_) => false,
     };
 }
@@ -222,16 +220,15 @@ fn compute_follow_arg(ctx: &mut GenContext, elements: &List<Element>, i: i32) ->
         }
         return FollowArg::NoFollow;
     }
-    if mask.is_empty() {
-        // The loop prefix is an alternative to the caller's own follow, not a
-        // prefix of it: the loop iterates again, or it ends and what follows
-        // the loop takes over. Prepending would assert the loop's first token
-        // at a depth the second reading does not have it, and replacing would
-        // lose that reading — `names : name (COMMA name)*` inside
-        // `block : OR names? OR ID` needs the closing OR, not the comma.
-        let loop_prefix = caller_loop_prefix(ctx, elements, i + 1);
-        if let Some(id) = ctx.intern_follow_mask(&loop_prefix) {
-            return FollowArg::AltMask(id);
+    // A caller loop past the callee is an alternative to what the current rule
+    // was called with, not a prefix of it: prepending asserts the loop's first
+    // token at a depth the other reading does not have it, and replacing loses
+    // that reading.
+    if mask.is_empty() && i + 1 < elements.len() {
+        if let Repeat(rep) = &elements[i + 1] {
+            if let Some(id) = ctx.intern_follow_mask(&greedy_loop_prefix(ctx, rep)) {
+                return FollowArg::AltMask(id);
+            }
         }
     }
     if let Some(id) = ctx.intern_follow_mask(&mask) {
@@ -240,36 +237,8 @@ fn compute_follow_arg(ctx: &mut GenContext, elements: &List<Element>, i: i32) ->
     return FollowArg::Forward;
 }
 
-/// The positions a greedy loop at `start` would consume on its next
-/// iteration, when that loop is the whole of a nullable suffix.
-///
-/// `deep_position_first_sets_from` halts on a suffix that can consume
-/// nothing, and `compute_call_site_follow` drops a multi-element one
-/// (soundness invariant 2), so `path : seg (SEP seg)*` threads its callee
-/// no mask at all and the callee's own tail-greedy `SEP?` keeps a SEP only
-/// the loop can use. The loop is greedy: if the input matches its body, it
-/// takes it, so its body's prefix is what the caller does next.
-///
-/// Two positions are the floor. One is the over-approximation invariant 1
-/// rejects — SEP opens both readings, and a callee yielding on SEP alone
-/// gives up `a::<b>`'s own separator. The second position is the evidence:
-/// `follow_yields` matches every depth, so `:: b` yields and `:: <` does not.
-fn caller_loop_prefix(ctx: &mut GenContext, elements: &List<Element>, start: i32) -> List<List<String>> {
-    let empty: List<List<String>> = [];
-    if start >= elements.len() {
-        return empty;
-    }
-    if let Repeat(rep) = &elements[start] {
-        return greedy_loop_prefix(ctx, rep);
-    }
-    return empty;
-}
-
-/// What a repeat's body is told about its own continuation.
-///
-/// A greedy `?` runs its body once, so the body continues exactly where the
-/// repeat does and the caller already computed that. Every other kind loops,
-/// and what follows one iteration is another one —
+/// What a repeat's body is told about its own continuation. A greedy `?` runs
+/// its body once, so it passes its own arg down; every other kind loops, and
 /// `retarget_loop_tail_follow` answers that instead.
 fn greedy_optional_inner_follow(rep: &RepeatElement, follow_arg: FollowArg) -> FollowArg {
     if !rep.non_greedy && rep.kind matches { Optional } {
@@ -278,21 +247,10 @@ fn greedy_optional_inner_follow(rep: &RepeatElement, follow_arg: FollowArg) -> F
     return FollowArg::NoFollow;
 }
 
-/// Give a greedy loop body's tail `RuleCall` the loop's own iteration prefix as
-/// its FOLLOW.
-///
-/// Its continuation is another iteration, which the body's element list does
-/// not mention, so `compute_follow_arg` leaves it `Forward` — the caller's own
-/// follow, where the loop's separator is absent. `path : seg (SEP seg)*` then
-/// parses `a::b` and stops, because the second `seg` keeps the `::` the loop
-/// wanted.
-///
-/// The rewrite runs here, after the body is lowered, because here is the only
-/// place that knows these ops are a loop body. Only the body's own tail
-/// qualifies: a nested group's tail continues inside that group, and giving it
-/// the loop's prefix makes it yield tokens its own alt still needs. So the
-/// shape is required to be the bare call or a single-alt group ending in one,
-/// and only a `Forward` call — anything else already has a local answer.
+/// Give a greedy loop body's tail `RuleCall` the loop's iteration prefix: its
+/// continuation is another iteration, which the body's element list does not
+/// mention. Only the body's own tail qualifies — a nested group's tail
+/// continues inside that group, and would yield tokens its own alt still needs.
 fn retarget_loop_tail_follow(op: Op, mask_id: i32) -> Op {
     return match op {
         RuleCall(rc) => {

@@ -32,8 +32,8 @@ if (import.meta.main) {
   try {
     reason = denialReason(JSON.parse(input)?.tool_input);
   } catch {
-    // A guard that cannot read the edit stays out of the way; clippy and the CI
-    // check still see what lands.
+    // A guard that cannot read the edit stays out of the way; the CI check
+    // still sees what lands.
   }
   if (reason) {
     process.stdout.write(

@@ -28,12 +28,7 @@ use {
     find_lexer_rule,
 } from "./ir.wado";
 use { Atn, AtnState, AtnTransition } from "./atn.wado";
-use {
-    resolve_ci,
-    fold_range_ci,
-    lexer_alts_scan,
-    lexer_alts_can_collide,
-} from "./lexer_gen.wado";
+use { resolve_ci, fold_range_ci, lexer_alts_scan, lexer_alts_can_collide } from "./lexer_gen.wado";
 use {
     ATN_BASIC,
     ATN_RULE_START,
@@ -69,7 +64,12 @@ pub struct LatnResult {
 /// whole lexer-ATN path: builder, blob, runtime fragment.
 pub fn grammar_needs_latn(grammar: &Grammar) -> bool {
     return grammar.lexer_rules.iter_ref().any(
-        |rule| !rule.is_virtual && lexer_rule_is_atn_class(rule, &grammar.lexer_rules),
+        |rule| !rule.is_virtual
+            && lexer_rule_is_atn_class(
+            rule,
+            &grammar.lexer_rules,
+            resolve_ci(&grammar.options, &rule.options),
+        ),
     );
 }
 
@@ -99,9 +99,8 @@ pub fn grammar_needs_latn(grammar: &Grammar) -> bool {
 ///   forward scan needs that scan to make the same choice again. The rule
 ///   class is regular, so the simulator decides it running the arms together,
 ///   in one pass over the text.
-pub fn lexer_rule_is_atn_class(rule: &LexerRule, all_rules: &List<LexerRule>, ci: bool = false) -> bool {
-    return scan_recursive_ng(&rule.name, &rule.body, all_rules)
-        || scan_undecidable_arms(&rule.body, all_rules, ci);
+pub fn lexer_rule_is_atn_class(rule: &LexerRule, all_rules: &List<LexerRule>, ci: bool) -> bool {
+    return scan_recursive_ng(&rule.name, &rule.body, all_rules) || scan_undecidable_arms(&rule.body, all_rules, ci);
 }
 
 /// A greedy repeat directly in `alts` whose body is an alternation the static
@@ -264,7 +263,8 @@ pub fn build_latn(grammar: &Grammar) -> LatnResult {
     let mut seen: List<String> = [];
     let mut atn_class_rules: List<String> = [];
     for let rule of &grammar.lexer_rules {
-        if !rule.is_virtual && lexer_rule_is_atn_class(rule, &grammar.lexer_rules) {
+        let rule_ci = resolve_ci(&grammar.options, &rule.options);
+        if !rule.is_virtual && lexer_rule_is_atn_class(rule, &grammar.lexer_rules, rule_ci) {
             atn_class_rules.push(rule.name);
             collect_reachable(&rule.name, &grammar.lexer_rules, &mut incl, &mut seen);
         }

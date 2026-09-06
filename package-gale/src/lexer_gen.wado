@@ -1678,11 +1678,7 @@ fn lexer_alts_have_non_greedy(
 
 /// `visiting` guards a fragment that reaches itself — the recursive comment
 /// fragment walks forever without it.
-fn lexer_elem_has_non_greedy(
-    elem: &LexerElement,
-    all_rules: &List<LexerRule>,
-    visiting: &mut List<String>,
-) -> bool {
+fn lexer_elem_has_non_greedy(elem: &LexerElement, all_rules: &List<LexerRule>, visiting: &mut List<String>) -> bool {
     match *elem {
         Repeat(rep) => {
             return rep.non_greedy || lexer_elem_has_non_greedy(&rep.element, all_rules, visiting);

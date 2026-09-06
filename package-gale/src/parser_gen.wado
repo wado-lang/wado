@@ -833,11 +833,6 @@ fn gen_lr_suffix_dispatch(
     ctx: &mut GenContext,
     mid_operand_gated: bool = false,
 ) {
-    let projected = project_lr_dispatch(lr_alts, lr_dispatch);
-    let valid_lr_indices = projected.0;
-    let lr_precs = projected.1;
-    let suffix_first_sets = projected.2;
-
     w.begin(&"loop");
     w.line(&"let suffix_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };");
     // No-progress guard, mirroring the ATN twins
@@ -848,46 +843,7 @@ fn gen_lr_suffix_dispatch(
     // suffix that yielded an empty `valid_lr_alts` member would otherwise
     // spin here.
     w.line(&"let _lr_pos0 = pos;");
-
-    let mut is_first = true;
-    for let mut g = 0; g < lr_dispatch.groups.len(); g += 1 {
-        let group = &lr_dispatch.groups[g];
-
-        let union_first = slot_first_union(group, &suffix_first_sets);
-        let cond = ctx.admits_check_str(&admits_or_everything(&union_first), &"suffix_kind");
-        if is_first {
-            w.begin(&`if ${cond}`);
-            is_first = false;
-        } else {
-            w.else_begin(&`else if ${cond}`);
-        }
-
-        if group.len() == 1 {
-            let lr_idx = valid_lr_indices[group[0]];
-            let prec = lr_precs[group[0]];
-            gen_lr_branch_call(w, fn_name, lr_idx, prec, ctx.emit_follow(), mid_operand_gated);
-        } else {
-            gen_lr_overlap_dispatch(
-                w,
-                fn_name,
-                rule,
-                group,
-                &valid_lr_indices,
-                &lr_precs,
-                &suffix_first_sets,
-                ctx,
-                mid_operand_gated,
-            );
-        }
-    }
-
-    if !is_first {
-        w.else_begin(&"else");
-        w.line(&"break;");
-        w.end();
-    } else {
-        w.line(&"break;");
-    }
+    emit_lr_group_chain(w, &scan_lr_site(fn_name), rule, lr_alts, lr_dispatch, ctx, mid_operand_gated);
     w.begin(&"if pos == _lr_pos0");
     w.line(&"break;");
     w.end();
@@ -928,24 +884,172 @@ fn gen_scan_lr_call_with_prec(
     w.end();
 }
 
-/// The scan-side local holding the token one past the suffix's first.
-global SECOND_KIND_LOCAL: String = "second_kind";
+/// The parse loop's branch data: the rule-kind constant its wrap node carries,
+/// and whether the rule's alternatives are labeled.
+struct LrParseBranch {
+    rk: String,
+    labeled: bool,
+}
 
-fn gen_lr_overlap_dispatch(
+/// What an LR dispatch branch commits to once its group and token are picked.
+variant LrBranch {
+    /// The scan twin's precedence-gated call into the suffix scan.
+    ScanCall,
+    /// The parse loop's wrap node plus the suffix ops.
+    ParseBody(LrParseBranch),
+}
+
+/// The site an LR dispatch is emitted into: how it reads the next two tokens,
+/// how it calls a suffix scan, and which emitter its branches use.
+struct LrOverlapSite {
+    kind_expr: String,
+    second_expr: String,
+    /// Initializer for `second_expr`; empty where the site reads it inline.
+    second_init: String,
+    scan_fn: String,
+    scan_args: String,
+    branch: LrBranch,
+}
+
+fn scan_lr_site(fn_name: &String) -> LrOverlapSite {
+    return LrOverlapSite {
+        kind_expr: "suffix_kind",
+        second_expr: "second_kind",
+        second_init: "if pos + 1 < tokens.len() { tokens[pos + 1] } else { TK_EOF }",
+        scan_fn: *fn_name,
+        scan_args: "tokens, pos",
+        branch: LrBranch::ScanCall,
+    };
+}
+
+fn parse_lr_site(scan_fn: &String, rk: &String, labeled: bool) -> LrOverlapSite {
+    return LrOverlapSite {
+        kind_expr: "_sk",
+        second_expr: "p.peek_at(1)",
+        second_init: "",
+        scan_fn: *scan_fn,
+        scan_args: "&p.kinds, p.pos",
+        branch: LrBranch::ParseBody(LrParseBranch { rk: *rk, labeled: labeled }),
+    };
+}
+
+fn emit_lr_overlap_branch(
     w: &mut CodeWriter,
-    fn_name: &String,
+    site: &LrOverlapSite,
+    lr: &LrAlt,
     rule: &ParserRule,
+    ctx: &mut GenContext,
+    nc: &mut List<[String, i32]>,
+    mid_operand_gated: bool,
+    scan_local: &String = &"",
+) {
+    match &site.branch {
+        ScanCall => {
+            gen_lr_branch_call(
+                w,
+                &site.scan_fn,
+                lr.alt_index,
+                lr.own_prec,
+                ctx.emit_follow(),
+                mid_operand_gated,
+                scan_local,
+            );
+        },
+        ParseBody(b) => {
+            emit_lr_branch(w, lr, rule, &b.rk, &site.scan_fn, b.labeled, ctx, nc, mid_operand_gated, scan_local);
+        },
+    }
+}
+
+/// Open the arm for one leading token, chaining onto the arms before it.
+/// Returns the new "no arm yet" state.
+fn begin_lr_arm(w: &mut CodeWriter, site: &LrOverlapSite, tk: &String, first: bool) -> bool {
+    if first {
+        w.begin(&`if ${site.kind_expr} == ${*tk}`);
+    } else {
+        w.else_begin(&`else if ${site.kind_expr} == ${*tk}`);
+    }
+    return false;
+}
+
+/// The suffix first sets of the valid LR alternatives, indexed the way
+/// `LrDispatchData.groups` indexes them.
+fn lr_suffix_first_sets(lr_alts: &List<LrAlt>, lr_dispatch: &LrDispatchData) -> List<List<String>> {
+    let mut out: List<List<String>> = [];
+    for let v of &lr_dispatch.valid_lr_alts {
+        out.push(lr_alts[*v].suffix_first);
+    }
+    return out;
+}
+
+/// The `if <first token>` chain over the LR dispatch groups, shared by the scan
+/// twin and the parse loop. Both leave the loop when no group admits.
+fn emit_lr_group_chain(
+    w: &mut CodeWriter,
+    site: &LrOverlapSite,
+    rule: &ParserRule,
+    lr_alts: &List<LrAlt>,
+    lr_dispatch: &LrDispatchData,
+    ctx: &mut GenContext,
+    mid_operand_gated: bool,
+) {
+    let suffix_first_sets = lr_suffix_first_sets(lr_alts, lr_dispatch);
+    let mut nc: List<[String, i32]> = [];
+    let mut is_first = true;
+    for let group of &lr_dispatch.groups {
+        let union_first = slot_first_union(group, &suffix_first_sets);
+        let cond = ctx.admits_check_str(&admits_or_everything(&union_first), &site.kind_expr);
+        if is_first {
+            w.begin(&`if ${cond}`);
+            is_first = false;
+        } else {
+            w.else_begin(&`else if ${cond}`);
+        }
+        if group.len() == 1 {
+            let lr = &lr_alts[lr_dispatch.valid_lr_alts[group[0]]];
+            emit_lr_overlap_branch(w, site, lr, rule, ctx, &mut nc, mid_operand_gated);
+        } else {
+            emit_lr_overlap(
+                w,
+                site,
+                rule,
+                lr_alts,
+                lr_dispatch,
+                group,
+                &suffix_first_sets,
+                ctx,
+                &mut nc,
+                mid_operand_gated,
+            );
+        }
+    }
+    if is_first {
+        w.line(&"break;");
+    } else {
+        w.else_begin(&"else");
+        w.line(&"break;");
+        w.end();
+    }
+}
+
+/// One overlap group (suffixes sharing a first token): a unique first token
+/// commits directly, a shared one sub-dispatches on the second token or on a
+/// bound suffix scan, with the last candidate falling through.
+fn emit_lr_overlap(
+    w: &mut CodeWriter,
+    site: &LrOverlapSite,
+    rule: &ParserRule,
+    lr_alts: &List<LrAlt>,
+    lr_dispatch: &LrDispatchData,
     group: &List<i32>,
-    valid_lr_indices: &List<i32>,
-    lr_precs: &List<i32>,
     suffix_first_sets: &List<List<String>>,
     ctx: &mut GenContext,
-    mid_operand_gated: bool = false,
+    nc: &mut List<[String, i32]>,
+    mid_operand_gated: bool,
 ) {
     let mut emitted = TreeSet::<String>::new();
     let mut first_branch = true;
 
-    // First pass: unique-token branches.
     for let mut k = 0; k < group.len(); k += 1 {
         let this_first = &suffix_first_sets[group[k]];
         for let mut t = 0; t < this_first.len(); t += 1 {
@@ -955,52 +1059,30 @@ fn gen_lr_overlap_dispatch(
             }
             let mut shared = false;
             for let mut j = 0; j < group.len(); j += 1 {
-                if j == k {
-                    continue;
-                }
-                if suffix_first_sets[group[j]].contains(tk) {
+                if j != k && suffix_first_sets[group[j]].contains(tk) {
                     shared = true;
                 }
             }
             if !shared {
-                let lr_idx = valid_lr_indices[group[k]];
-                let prec = lr_precs[group[k]];
-                if first_branch {
-                    w.begin(&`if suffix_kind == ${*tk}`);
-                    first_branch = false;
-                } else {
-                    w.else_begin(&`else if suffix_kind == ${*tk}`);
-                }
-                gen_lr_branch_call(w, fn_name, lr_idx, prec, ctx.emit_follow(), mid_operand_gated);
+                first_branch = begin_lr_arm(w, site, tk, first_branch);
+                let lr = &lr_alts[lr_dispatch.valid_lr_alts[group[k]]];
+                emit_lr_overlap_branch(w, site, lr, rule, ctx, nc, mid_operand_gated);
                 emitted.insert(*tk);
             }
         }
     }
 
-    // Second pass: shared-token branches with second-token sub-dispatch.
     let mut shared_tokens: List<String> = [];
-    let mut shared_seen = TreeSet::<String>::new();
     for let mut k = 0; k < group.len(); k += 1 {
-        let sfs = &suffix_first_sets[group[k]];
-        for let mut ti = 0; ti < sfs.len(); ti += 1 {
-            let tk = &sfs[ti];
-            if emitted.contains(*tk) {
+        for let tk of &suffix_first_sets[group[k]] {
+            if emitted.contains(*tk) || shared_tokens.contains(tk) {
                 continue;
             }
-            if !shared_seen.contains(*tk) {
-                shared_seen.insert(*tk);
-                shared_tokens.push(*tk);
-            }
+            shared_tokens.push(*tk);
         }
     }
-    for let mut st = 0; st < shared_tokens.len(); st += 1 {
-        let shared_tk = &shared_tokens[st];
-        if first_branch {
-            w.begin(&`if suffix_kind == ${*shared_tk}`);
-            first_branch = false;
-        } else {
-            w.else_begin(&`else if suffix_kind == ${*shared_tk}`);
-        }
+    for let shared_tk of &shared_tokens {
+        first_branch = begin_lr_arm(w, site, shared_tk, first_branch);
         let mut last_k = -1;
         for let mut k = 0; k < group.len(); k += 1 {
             if suffix_first_sets[group[k]].contains(shared_tk) {
@@ -1015,8 +1097,8 @@ fn gen_lr_overlap_dispatch(
                 seconds.push([] as List<String>);
                 continue;
             }
-            let lr_idx = valid_lr_indices[group[k]];
-            seconds.push(compute_lr_second_token(shared_tk, &rule.alternatives[lr_idx].elements, ctx));
+            let alt = lr_alts[lr_dispatch.valid_lr_alts[group[k]]].alt_index;
+            seconds.push(compute_lr_second_token(shared_tk, &rule.alternatives[alt].elements, ctx));
         }
         // Compute the sub-conditions before emitting: each local they read is
         // only declared when one of them reads it.
@@ -1025,24 +1107,29 @@ fn gen_lr_overlap_dispatch(
             if k == last_k || !suffix_first_sets[group[k]].contains(shared_tk) {
                 continue;
             }
-            let lr_idx = valid_lr_indices[group[k]];
+            let alt = lr_alts[lr_dispatch.valid_lr_alts[group[k]]].alt_index;
             let plan = lr_second_token_plan(
                 shared_tk,
-                &rule.alternatives[lr_idx].elements,
-                &lr_scan_local(lr_idx),
-                &SECOND_KIND_LOCAL,
+                &rule.alternatives[alt].elements,
+                &lr_scan_local(alt),
+                &site.second_expr,
                 lr_second_token_discriminates(k, group, shared_tk, &seconds),
                 ctx,
             );
             conds.push([k, plan[0], plan[1]]);
         }
-        if conds.iter_ref().any(|c: &[i32, String, String]| c.1.contains(SECOND_KIND_LOCAL)) {
-            w.line(&`let ${SECOND_KIND_LOCAL} = if pos + 1 < tokens.len() \{ tokens[pos + 1] \} else \{ TK_EOF \};`);
+        if !site.second_init.is_empty()
+            && conds.iter_ref().any(|c: &[i32, String, String]| c.1.contains(site.second_expr)) {
+            w.line(&`let ${site.second_expr} = ${site.second_init};`);
         }
+        // Bind every fallback scan ahead of the chain, so the branch it guards
+        // reuses the answer instead of re-running it.
         for let c of &conds {
             if !c.2.is_empty() {
-                let lr_idx = valid_lr_indices[group[c.0]];
-                w.line(&`let ${c.2} = ${*fn_name}_lr_${lr_idx}(tokens, pos${follow_sep(ctx.emit_follow())});`);
+                let alt = lr_alts[lr_dispatch.valid_lr_alts[group[c.0]]].alt_index;
+                w.line(
+                    &`let ${c.2} = ${site.scan_fn}_lr_${alt}(${site.scan_args}${follow_sep(ctx.emit_follow())});`,
+                );
             }
         }
         let mut sub_first = true;
@@ -1050,14 +1137,13 @@ fn gen_lr_overlap_dispatch(
             if !suffix_first_sets[group[k]].contains(shared_tk) {
                 continue;
             }
-            let lr_idx = valid_lr_indices[group[k]];
-            let prec = lr_precs[group[k]];
+            let lr = &lr_alts[lr_dispatch.valid_lr_alts[group[k]]];
             if k == last_k {
                 if sub_first {
-                    gen_lr_branch_call(w, fn_name, lr_idx, prec, ctx.emit_follow(), mid_operand_gated);
+                    emit_lr_overlap_branch(w, site, lr, rule, ctx, nc, mid_operand_gated);
                 } else {
                     w.else_begin(&"else");
-                    gen_lr_branch_call(w, fn_name, lr_idx, prec, ctx.emit_follow(), mid_operand_gated);
+                    emit_lr_overlap_branch(w, site, lr, rule, ctx, nc, mid_operand_gated);
                     w.end();
                 }
             } else {
@@ -1068,7 +1154,7 @@ fn gen_lr_overlap_dispatch(
                 } else {
                     w.else_begin(&`else if ${plan.1}`);
                 }
-                gen_lr_branch_call(w, fn_name, lr_idx, prec, ctx.emit_follow(), mid_operand_gated, &plan.2);
+                emit_lr_overlap_branch(w, site, lr, rule, ctx, nc, mid_operand_gated, &plan.2);
             }
         }
         emitted.insert(*shared_tk);
@@ -3405,48 +3491,7 @@ fn gen_lr_fn(
     w.begin(&"loop");
     w.line(&"if p.recovering { break; }");
     w.line(&"let _sk = p.peek_kind();");
-    let mut nc: List<[String, i32]> = [];
-    let mut first = true;
-    for let group of &lr_dispatch.groups {
-        // Union of every member suffix's first set gates the group's arm.
-        let mut union_first: List<String> = [];
-        for let gi of group {
-            for let tk of &lr_alts[lr_dispatch.valid_lr_alts[*gi]].suffix_first {
-                if !union_first.contains(tk) {
-                    union_first.push(*tk);
-                }
-            }
-        }
-        let cond = ctx.admits_check_str(&admits_or_everything(&union_first), &"_sk");
-        if first {
-            w.begin(&`if ${cond}`);
-            first = false;
-        } else {
-            w.else_begin(&`else if ${cond}`);
-        }
-        if group.len() == 1 {
-            emit_lr_branch(
-                w,
-                &lr_alts[lr_dispatch.valid_lr_alts[group[0]]],
-                rule,
-                &rk,
-                &scan_fn,
-                labeled,
-                ctx,
-                &mut nc,
-                mid_operand_gated,
-            );
-        } else {
-            emit_lr_overlap(w, rule, lr_alts, lr_dispatch, group, &rk, &scan_fn, ctx, &mut nc, mid_operand_gated);
-        }
-    }
-    if first {
-        w.line(&"break;");
-    } else {
-        w.else_begin(&"else");
-        w.line(&"break;");
-        w.end();
-    }
+    emit_lr_group_chain(w, &parse_lr_site(&scan_fn, &rk, labeled), rule, lr_alts, lr_dispatch, ctx, mid_operand_gated);
     w.end();
     emit_lr_after_return(w, rule, emits_vals, ctx);
     w.end();
@@ -3623,149 +3668,6 @@ fn emit_lr_branch_body(
     w.line(&"p.b.finish_node(p.last_end());");
     if emits_vals {
         w.line(&"_lr_acc = vals;");
-    }
-}
-
-/// Overlap group (suffixes sharing a first token), unique first
-/// tokens commit directly; a shared first token branches on `peek_at(1)` via
-/// `compute_lr_second_token`, the last candidate falling through.
-fn emit_lr_overlap(
-    w: &mut CodeWriter,
-    rule: &ParserRule,
-    lr_alts: &List<LrAlt>,
-    lr_dispatch: &LrDispatchData,
-    group: &List<i32>,
-    rk: &String,
-    scan_fn: &String,
-    ctx: &mut GenContext,
-    nc: &mut List<[String, i32]>,
-    mid_operand_gated: bool = false,
-) {
-    let labeled = rule_alts_labeled(&rule.alternatives);
-    let mut first_sets: List<List<String>> = [];
-    for let gi of group {
-        first_sets.push(lr_alts[lr_dispatch.valid_lr_alts[*gi]].suffix_first);
-    }
-    let mut emitted: List<String> = [];
-    let mut first_branch = true;
-    for let mut k = 0; k < group.len(); k += 1 {
-        for let tk of &first_sets[k] {
-            if emitted.contains(tk) {
-                continue;
-            }
-            let mut shared = false;
-            for let mut j = 0; j < group.len(); j += 1 {
-                if j != k && first_sets[j].contains(tk) {
-                    shared = true;
-                }
-            }
-            if !shared {
-                if first_branch {
-                    w.begin(&`if _sk == ${*tk}`);
-                    first_branch = false;
-                } else {
-                    w.else_begin(&`else if _sk == ${*tk}`);
-                }
-                emit_lr_branch(
-                    w,
-                    &lr_alts[lr_dispatch.valid_lr_alts[group[k]]],
-                    rule,
-                    rk,
-                    scan_fn,
-                    labeled,
-                    ctx,
-                    nc,
-                    mid_operand_gated,
-                );
-                emitted.push(*tk);
-            }
-        }
-    }
-    let mut shared_tokens: List<String> = [];
-    for let mut k = 0; k < group.len(); k += 1 {
-        for let tk of &first_sets[k] {
-            if emitted.contains(tk) || shared_tokens.contains(tk) {
-                continue;
-            }
-            shared_tokens.push(*tk);
-        }
-    }
-    for let shared_tk of &shared_tokens {
-        if first_branch {
-            w.begin(&`if _sk == ${*shared_tk}`);
-            first_branch = false;
-        } else {
-            w.else_begin(&`else if _sk == ${*shared_tk}`);
-        }
-        let mut last_k = -1;
-        for let mut k = 0; k < group.len(); k += 1 {
-            if first_sets[k].contains(shared_tk) {
-                last_k = k;
-            }
-        }
-        // What each candidate for this leading token can show second — read by
-        // every candidate's plan, so a check is only used where it separates.
-        let mut seconds: List<List<String>> = [];
-        for let mut k = 0; k < group.len(); k += 1 {
-            if !first_sets[k].contains(shared_tk) {
-                seconds.push([] as List<String>);
-                continue;
-            }
-            let lr = &lr_alts[lr_dispatch.valid_lr_alts[group[k]]];
-            seconds.push(compute_lr_second_token(shared_tk, &rule.alternatives[lr.alt_index].elements, ctx));
-        }
-        // Bind every fallback scan ahead of the chain, so the branch it guards
-        // reuses the answer instead of re-running it.
-        let mut conds: List<[i32, String, String]> = [];
-        for let mut k = 0; k < group.len(); k += 1 {
-            if k == last_k || !first_sets[k].contains(shared_tk) {
-                continue;
-            }
-            let lr = &lr_alts[lr_dispatch.valid_lr_alts[group[k]]];
-            let plan = lr_second_token_plan(
-                shared_tk,
-                &rule.alternatives[lr.alt_index].elements,
-                &lr_scan_local(lr.alt_index),
-                &"p.peek_at(1)",
-                lr_second_token_discriminates(k, group, shared_tk, &seconds),
-                ctx,
-            );
-            conds.push([k, plan[0], plan[1]]);
-            if !plan[1].is_empty() {
-                w.line(
-                    &`let ${plan[1]} = ${*scan_fn}_lr_${lr.alt_index}(&p.kinds, p.pos${follow_sep(ctx.emit_follow())});`,
-                );
-            }
-        }
-        let mut sub_first = true;
-        for let mut k = 0; k < group.len(); k += 1 {
-            if !first_sets[k].contains(shared_tk) {
-                continue;
-            }
-            let lr = &lr_alts[lr_dispatch.valid_lr_alts[group[k]]];
-            if k == last_k {
-                if sub_first {
-                    emit_lr_branch(w, lr, rule, rk, scan_fn, labeled, ctx, nc, mid_operand_gated);
-                } else {
-                    w.else_begin(&"else");
-                    emit_lr_branch(w, lr, rule, rk, scan_fn, labeled, ctx, nc, mid_operand_gated);
-                    w.end();
-                }
-            } else {
-                let plan = conds.iter_ref().find(|c: &[i32, String, String]| c.0 == k).unwrap();
-                if sub_first {
-                    w.begin(&`if ${plan.1}`);
-                    sub_first = false;
-                } else {
-                    w.else_begin(&`else if ${plan.1}`);
-                }
-                emit_lr_branch(w, lr, rule, rk, scan_fn, labeled, ctx, nc, mid_operand_gated, &plan.2);
-            }
-        }
-        emitted.push(*shared_tk);
-    }
-    if !first_branch {
-        w.end();
     }
 }
 
@@ -6984,12 +6886,7 @@ fn lr_second_token_plan(
 
 /// Whether candidate `k`'s second token separates it from the other candidates
 /// for `shared_tk` — no other one can show a token it also shows.
-fn lr_second_token_discriminates(
-    k: i32,
-    group: &List<i32>,
-    shared_tk: &String,
-    seconds: &List<List<String>>,
-) -> bool {
+fn lr_second_token_discriminates(k: i32, group: &List<i32>, shared_tk: &String, seconds: &List<List<String>>) -> bool {
     for let mut j = 0; j < group.len(); j += 1 {
         if j == k {
             continue;
@@ -7004,28 +6901,6 @@ fn lr_second_token_discriminates(
 /// The local a fallback sub-dispatch binds its suffix scan to.
 fn lr_scan_local(lr_idx: i32) -> String {
     return `_lr_scan_${lr_idx}`;
-}
-
-
-/// Project lower's `LrDispatchData` (which indexes into `lr_alts`)
-/// into emit's per-alt arrays — alt indices in `rule.alternatives`,
-/// per-alt precedence, per-alt suffix first set. Used by the suffix-
-/// dispatch and overlap-dispatch helpers that still reference alt
-/// indices directly.
-fn project_lr_dispatch(
-    lr_alts: &List<LrAlt>,
-    lr_dispatch: &LrDispatchData,
-) -> [List<i32>, List<i32>, List<List<String>>] {
-    let mut valid_lr_indices: List<i32> = [];
-    let mut lr_precs: List<i32> = [];
-    let mut suffix_first_sets: List<List<String>> = [];
-    for let v of &lr_dispatch.valid_lr_alts {
-        let lr = &lr_alts[*v];
-        valid_lr_indices.push(lr.alt_index);
-        lr_precs.push(lr.own_prec);
-        suffix_first_sets.push(lr.suffix_first);
-    }
-    return [valid_lr_indices, lr_precs, suffix_first_sets];
 }
 
 fn gen_prediction_code(
