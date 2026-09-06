@@ -87,6 +87,11 @@ the merge on its own, so the resolution states each:
 - An inherent declaration shadows an inherited one, and only of the same kind: a
   receiver-less declaration beside an instance one is no alternative, since
   different argument lists reach them.
+- A `variant` case, an `enum` case and a `flags` member shadow an inherited
+  static of the same name, by that same rule: they are written on the type,
+  and the static is only borrowed. This matches Rust, where `V::A(5)` is the
+  case and `<V as Tagged>::A(5)` reaches the trait's. It does not extend to an
+  inherent static of the same name, which is a type declaring one name twice.
 - A trait impl's declaration is mangled with its trait. Taken as inherent it
   names a body nothing declares.
 - An inherited default body has two modules — the block's, where the body is
@@ -123,12 +128,12 @@ other. Unifying them further is symmetry, not this WEP's decision.
 
 ## Known gaps
 
-- A variant case and an inherited trait static that share a name: the static
-  claims the spelling before the variant arm is reached, so `V::A(5)` resolves
-  to the trait's `A` and types as its return. The resolution is now the one
-  place that decides this, but which should win is a language rule, not a
-  refactor: a declaration on the type shadowing an inherited one would match
-  what `impl_method_entries` already does for methods.
+- A trait's static has no trait-qualified spelling. `Tagged::<V>::tag(5)` — the
+  counterpart of Rust's `<V as Tagged>::A(5)` — answers `unknown function`, and
+  an instance method's `Tagged::describe(&v)` works only because the receiver
+  argument pins `Self`. So where a case shadows an inherited static, a bound
+  (`fn f<T: Tagged>() { T::tag(5) }`) is the only way left to reach it. The
+  spelling is missing on its own, not just under shadowing.
 - `locate_static_method_impl` remains as the trait-selection rung, still
   matching a `From` impl's source type by rendered name. TypeId matching is its
   replacement ([Overload Resolution](./wep-2026-07-31-overload-resolution.md)

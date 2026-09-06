@@ -154,6 +154,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return resolved;
         }
 
+        // A case or member the receiver declares is written on the type, and
+        // shadows a static it only inherits — the rule the rungs above apply to
+        // an inherent declaration. Its own arm builds the constructor.
+        if self.declares_case_named(&key, method_name) {
+            return StaticLookup::NotStatic;
+        }
+
         // With no argument to read, the selection below would take the first
         // candidate, which is the wrong one as often as not.
         if overloaded && arg_hint.is_none() {
@@ -365,6 +372,25 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     })
             })
             .collect()
+    }
+
+    /// Whether the receiver declares a `variant` case, an `enum` case or a
+    /// `flags` member of this name — a constructor the spelling names, not a
+    /// call.
+    fn declares_case_named(&self, key: &ImplTargetKey, name: &str) -> bool {
+        let ImplTargetKey::Decl(def) = key else {
+            return false;
+        };
+        let lookup = self.type_lookup();
+        lookup
+            .variant_cases_of(*def)
+            .is_some_and(|info| info.cases.iter().any(|case| case.name == name))
+            || lookup
+                .enum_cases_of(*def)
+                .is_some_and(|info| info.cases.iter().any(|case| case.name == name))
+            || lookup
+                .flags_members_of(*def)
+                .is_some_and(|info| info.members.iter().any(|member| member.name == name))
     }
 
     /// [`Self::callee_of_declaration`] for a declaration the receiver makes

@@ -1,0 +1,59 @@
+//! A case the type declares shadows a static it only inherits, as an inherent
+//! declaration shadows a trait impl's. `V::A(5)` built the trait's `A` instead
+//! of the case, so the value typed as that call's return rather than as `V`.
+//!
+//! The trait's own static stays reachable through a bound. Naming it at the
+//! receiver does not: that spelling is the case's now.
+
+trait Tagged {
+    fn A(n: i32) -> i32 {
+        return n * 100;
+    }
+
+    fn B() -> i32 {
+        return 1;
+    }
+}
+
+variant V {
+    A(i32),
+    B,
+}
+
+impl Tagged for V {}
+
+enum Color {
+    Red,
+    Green,
+}
+
+trait Named {
+    fn Red() -> i32 {
+        return 9;
+    }
+}
+
+impl Named for Color {}
+
+fn tagged_via<T: Tagged>(n: i32) -> i32 {
+    return T::A(n);
+}
+
+test "a variant case wins over the static its type inherits" {
+    let v = V::A(5);
+    assert v matches { A(5) };
+}
+
+test "a unit case wins too" {
+    let v = V::B;
+    assert v matches { B };
+}
+
+test "an enum case wins over an inherited static" {
+    let c = Color::Red;
+    assert c == Color::Red;
+}
+
+test "the inherited static is still reached through a bound" {
+    assert tagged_via::<V>(5) == 500;
+}
