@@ -10,7 +10,7 @@
 use crate::ast;
 use crate::compiler_host::CompilerHost;
 use crate::defs::DefId;
-use crate::tir::TypeId;
+use crate::tir::{TypeId, TypeTable};
 
 use super::Elaborator;
 use super::sem::types::CalleeParams;
@@ -24,9 +24,18 @@ use super::trait_env::ImplTargetKey;
 pub(super) struct StaticCallee {
     /// The declaration's lists, read at the receiver: what the call checks and
     /// pads against.
-    pub(super) params: CalleeParams,
+    ///
+    /// `None` where the spelling resolves but no list it can be checked against
+    /// comes with it — several declarations an argument picks among, or a
+    /// generic block whose slots the receiver did not fill. The call site
+    /// substitutes from its own inference and counts its own arguments, as it
+    /// did before any lookup answered. The return type is known either way.
+    pub(super) params: Option<CalleeParams>,
     /// The method's own slots as its declaration wrote them.
     pub(super) own_params: Vec<ast::GenericParam>,
+    /// What the call evaluates to, read at the receiver as `params` is.
+    /// `UNKNOWN` where the declaration names no return type.
+    pub(super) return_type: TypeId,
 }
 
 /// The resolution's outcome. `NotStatic` is an answer, not a failure: the
@@ -37,12 +46,6 @@ pub(super) enum StaticLookup {
     /// Several traits supply the name with a default body. No argument
     /// separates them, so the spelling names none: the call site reports it.
     Ambiguous(Vec<String>),
-    /// The spelling resolves, but no list this call can be checked against
-    /// comes with it: several declarations an argument picks among (two `From`
-    /// impls on one receiver), or a generic block whose slots the receiver did
-    /// not fill. The call site substitutes from its own inference and counts
-    /// its own arguments, as it did before any lookup answered.
-    Unlisted,
     NotStatic,
 }
 
@@ -56,18 +59,19 @@ impl StaticLookup {
     pub(super) fn found(&self) -> Option<&StaticCallee> {
         match self {
             Self::Found(callee) => Some(callee),
-            Self::Ambiguous(_) | Self::Unlisted | Self::NotStatic => None,
+            Self::Ambiguous(_) | Self::NotStatic => None,
         }
     }
 
-    /// The parameters to check and pad against, and whether a declaration
-    /// answered at all.
+    /// The parameters to check and pad against, and whether any came with the
+    /// resolution.
     pub(super) fn params(self) -> (CalleeParams, bool) {
         match self {
-            Self::Found(callee) => (callee.params, true),
-            Self::Ambiguous(_) | Self::Unlisted | Self::NotStatic => {
-                (CalleeParams::default(), false)
-            }
+            Self::Found(callee) => match callee.params {
+                Some(params) => (params, true),
+                None => (CalleeParams::default(), false),
+            },
+            Self::Ambiguous(_) | Self::NotStatic => (CalleeParams::default(), false),
         }
     }
 }
@@ -150,9 +154,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // An overload with no argument to read cannot be picked here at all:
         // the selection below takes the first candidate, which is the wrong one
-        // as often as not. The call site resolves it from its arguments.
+        // as often as not. The call site resolves it from its arguments, and
+        // the return type still answers where every candidate agrees — each
+        // `From` impl returns the receiver, so the pick cannot change it.
         if overloaded && arg_hint.is_none() {
-            return StaticLookup::Unlisted;
+            return self.overloaded_callee(&key, method_name);
         }
 
         // `receiver_key` as the caller gave it, not the key derived above: a
@@ -175,7 +181,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // The selection above reads the argument; where it could not pick, the
         // name is an overload the call site's own resolution settles.
         if overloaded {
-            return StaticLookup::Unlisted;
+            return self.overloaded_callee(&key, method_name);
         }
 
         // A newtype and a `flags` reach what they wrap: their impls are looked
@@ -215,11 +221,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // The one trait's own declaration is where an inherited method's
         // signature lives: `method_sig` answers for what an `impl` block
         // declares, and this method is declared nowhere but the trait.
-        if let Some((decl, _)) = declaring.first()
-            && let Some(callee) =
-                self.callee_of_trait_declaration(method_name, *decl, receiver_type)
-        {
-            return StaticLookup::Found(Box::new(callee));
+        if let Some(decl) = declaring.first().map(|(decl, _)| *decl) {
+            // Resolved here rather than asked of every caller: the name costs a
+            // scope to resolve, and this is the one rung whose frame needs it.
+            let receiver_type = receiver_type.or_else(|| {
+                let mut scope = self.enter_inherited_type_param_scope();
+                let resolved =
+                    scope.resolve_unsited_type_name(receiver_name, crate::token::Span::default());
+                drop(scope);
+                Some(resolved)
+            });
+            if let Some(callee) = self.callee_of_trait_declaration(method_name, decl, receiver_type)
+            {
+                return StaticLookup::Found(Box::new(callee));
+            }
         }
 
         if let Some(method_ref) =
@@ -228,10 +243,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let found = match method_ref.method_id {
                 Some(def) => self.callee_of_declaration(def, receiver_type),
                 // The auto-derived `Default`: synthesis emits the body, so no
-                // declaration backs it and it takes no arguments.
+                // declaration backs it. It takes no arguments and answers with
+                // the receiver's own type.
                 None => Some(StaticLookup::Found(Box::new(StaticCallee {
-                    params: CalleeParams::default(),
+                    params: Some(CalleeParams::default()),
                     own_params: Vec::new(),
+                    return_type: self
+                        .tysys
+                        .auto_derive_default_struct_type(&self.type_lookup(), receiver_name)
+                        .unwrap_or(TypeTable::UNKNOWN),
                 }))),
             };
             if let Some(resolved) = found {
@@ -256,14 +276,36 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let mut params = CalleeParams::of_signature(Some(&sig));
         // The defaults are the trait's, and resolve where it wrote them.
         params.defaults_module = Some(module);
+        let mut return_type = sig.decl.return_type.unwrap_or(TypeTable::UNIT);
         if let Some(receiver_type) = receiver_type {
             let instantiated = sig.instantiate_call(&self.tysys.type_table, &[receiver_type], &[]);
             params.param_types = instantiated.param_types;
+            return_type = instantiated.return_type;
         }
         Some(StaticCallee {
-            params,
+            params: Some(params),
             own_params: sig.own_params,
+            return_type,
         })
+    }
+
+    /// The resolution for a name several declarations answer to, which only an
+    /// argument separates. No list comes with it, and the return type only
+    /// where every candidate agrees.
+    fn overloaded_callee(&self, key: &ImplTargetKey, method_name: &str) -> StaticLookup {
+        let mut returns = self
+            .qualified_method_decl_ids(key, method_name)
+            .filter_map(|def| self.tysys.signatures.method_sig(def))
+            .map(|sig| sig.decl.return_type.unwrap_or(TypeTable::UNIT));
+        let agreed = returns
+            .next()
+            .filter(|&first| returns.all(|r| r == first))
+            .unwrap_or(TypeTable::UNKNOWN);
+        StaticLookup::Found(Box::new(StaticCallee {
+            params: None,
+            own_params: Vec::new(),
+            return_type: agreed,
+        }))
     }
 
     /// The traits a block on the receiver implements that supply `method_name`
@@ -311,6 +353,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // cannot resolve, not a spelling that names nothing.
         let sig = self.tysys.signatures.method_sig(def).cloned()?;
         let mut params = CalleeParams::of_signature(Some(&sig));
+        let mut return_type = sig.decl.return_type.unwrap_or(TypeTable::UNIT);
+        let mut listed = true;
         // A trait's own declaration — the method a block inherits with its
         // default body — is written in the trait's frame, where `Self` leads
         // the slots. Read it at the receiver, or every type it names stays a
@@ -321,6 +365,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         {
             let instantiated = sig.instantiate_call(&self.tysys.type_table, &[receiver_type], &[]);
             params.param_types = instantiated.param_types;
+            return_type = instantiated.return_type;
         }
         // A generic block's slots are the receiver's arguments — `ByteList`
         // fills `List<T>`'s `T` with `u8`. Reported unfilled, the list says the
@@ -337,16 +382,26 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .borrow()
                     .nominal_type_args(self.tysys.get_base_type(ty))
             });
-            let Some(args) = receiver_args else {
-                return Some(StaticLookup::Unlisted);
-            };
-            let instantiated =
-                sig.instantiate_call_with(&self.tysys.type_table, Some(&declaring), &args, &[]);
-            params.param_types = instantiated.param_types;
+            match receiver_args {
+                Some(args) => {
+                    let instantiated = sig.instantiate_call_with(
+                        &self.tysys.type_table,
+                        Some(&declaring),
+                        &args,
+                        &[],
+                    );
+                    params.param_types = instantiated.param_types;
+                    return_type = instantiated.return_type;
+                }
+                // The return type is the declaration's own, as it was before
+                // any list came with it: only the list needs the slots filled.
+                None => listed = false,
+            }
         }
         Some(StaticLookup::Found(Box::new(StaticCallee {
-            params,
+            params: listed.then_some(params),
             own_params: sig.own_params,
+            return_type,
         })))
     }
 }

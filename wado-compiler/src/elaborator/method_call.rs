@@ -2651,74 +2651,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return sig.decl.return_type.unwrap_or(TypeTable::UNIT);
         }
 
-        // The receiver's own declaration is the key. A head naming none falls
-        // to the frame derivation, which is one vantage; a second key tried
-        // when the first misses makes the order a silent tiebreak.
-        let static_key = receiver.head().def().map_or_else(
-            || self.impl_target(struct_name),
-            |def| super::trait_env::ImplTargetKey::of_decl(self.tysys.resolutions.defs(), def),
+        // The receiver's own declaration is the key the resolution answers at.
+        // A head naming none leaves it to derive one from the name, which is
+        // the same vantage every other site now uses.
+        let static_key = receiver.head().def().map(|def| {
+            super::trait_env::ImplTargetKey::of_decl(self.tysys.resolutions.defs(), def)
+        });
+        let resolved = self.resolve_static_callee(
+            None,
+            struct_name,
+            static_key.as_ref(),
+            method_name,
+            None,
+            None,
         );
-        // The decl pass already resolved this signature in the impl's own
-        // frame — impl and method type params interned, `Self` bound to the
-        // impl target, the impl module's imports in scope. Re-deriving all of
-        // that here is what the digest exists to avoid.
-        if let Some(return_type) = self.agreed_qualified_method_return(&static_key, method_name) {
-            return return_type;
-        }
-
-        // Search resource declarations via pre-built index. Same canonical
-        // key disambiguation as the inherent-impl path above. The decl pass
-        // resolved these in the resource's own frame, so a generic resource's
-        // `Option<T>` is already a `TypeParam` here.
-        let indexed_resource_return = self
-            .tysys
-            .trait_env
-            .resource_static(&static_key, method_name)
-            .and_then(|(name, _, item_id, _)| {
-                let sig = self.tysys.signatures.resource_method_sig(*item_id, name)?;
-                Some(sig.decl.return_type.unwrap_or(TypeTable::UNIT))
-            });
-        if let Some(return_type) = indexed_resource_return {
-            return return_type;
-        }
-
-        // The index is keyed by the declaring resource, so an inherited
-        // method is reachable only by walking the chain.
-        if let super::trait_env::ImplTargetKey::Decl(def) = &static_key
-            && let Some((_, sig)) = self.resource_instance_method(*def, method_name)
-        {
-            return sig.decl.return_type.unwrap_or(TypeTable::UNIT);
-        }
-
-        // Auto-derived `Default::default()` returns the struct type itself.
-        if method_name == "default"
-            && let Some(struct_type) = self
-                .tysys
-                .auto_derive_default_struct_type(&self.type_lookup(), struct_name)
-        {
-            return struct_type;
-        }
-
-        // Fall back to a trait default method body. When
-        // `impl Trait for Type` does not override a static method that the
-        // trait provides a default for, concrete `Type::method()` calls
-        // must still resolve — this mirrors how generic dispatch
-        // (`T::method()`) already reaches the trait default.
-        if let Some(trait_name) = self.find_static_method_trait(struct_name, method_name)
-            && let Some(default_method) = self
-                .trait_sig_by_name(trait_name.base_name())
-                .and_then(|sig| sig.method(method_name))
-                .filter(|m| m.default_body.is_some() && m.sig.self_kind == ast::SelfKind::None)
-                .cloned()
-        {
-            let mut scope = self.enter_inherited_type_param_scope();
-            let self_type_id = scope.resolve_unsited_type_name(struct_name, Span::default());
-            let result = default_method
-                .sig
-                .instantiate_call(&scope.tysys.type_table, &[self_type_id], &[])
-                .return_type;
-            drop(scope);
-            return result;
+        if let Some(callee) = resolved.found() {
+            return callee.return_type;
         }
 
         TypeTable::UNKNOWN
@@ -2877,23 +2825,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         keys
     }
 
-    /// The return type every method the qualified spelling can name agrees on,
-    /// `None` when they disagree. An overload set still answers: every `From`
-    /// impl returns the receiver, so which one this call reaches cannot change
-    /// the result.
-    fn agreed_qualified_method_return(
-        &self,
-        static_key: &crate::elaborator::trait_env::ImplTargetKey,
-        method_name: &str,
-    ) -> Option<TypeId> {
-        let mut returns = self
-            .qualified_method_decl_ids(static_key, method_name)
-            .filter_map(|def| self.tysys.signatures.method_sig(def))
-            .map(|sig| sig.decl.return_type.unwrap_or(TypeTable::UNIT));
-        let first = returns.next()?;
-        returns.all(|r| r == first).then_some(first)
-    }
-
     /// The static method declared under this name, `None` when several impls
     /// declare it and the index has nothing to choose between them. A conversion
     /// that must choose goes through [`Self::conversion_preselect`].
@@ -2953,15 +2884,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 if generic.args.len() == 1
                     && self.get_type_name_full(&generic.args[0]) == arg_type_name)
         })
-    }
-
-    pub(super) fn find_static_method_trait(
-        &self,
-        struct_name: &str,
-        method_name: &str,
-    ) -> Option<crate::name::FqTraitName> {
-        self.locate_static_method_impl(struct_name, method_name, None, None)
-            .and_then(|r| r.trait_name)
     }
 
     /// Which conversion trait a static `from` / `try_from` call names.
