@@ -31,13 +31,9 @@ test "the caller loop claims a separator the callee cannot use" {
     assert_tree(&"a::b", &"(start (path (seg a) :: (seg b)))");
 }
 
-// The mask reaches the `seg` call the suffix names — the one before the loop —
-// but not the `seg` at the loop body's own tail, whose continuation is another
-// iteration that no local element list mentions. So the second segment keeps a
-// separator the loop wanted, and `a::b::c` stops after `a::b`. Threading the
-// prefix down `ctx` reaches it and costs `RustParser.g4`'s item dispatch: the
-// scope is the loop body, and a nested group's tail inside it must not read it.
-#[TODO]
+// The `seg` at the loop body's own tail continues into another iteration, which
+// its element list does not mention — `lower_repeat_op` hands it the prefix
+// after lowering the body, being the only place that knows those ops are one.
 test "the loop keeps claiming separators past its first iteration" {
     assert_tree(&"a::b::c", &"(start (path (seg a) :: (seg b) :: (seg c)))");
 }

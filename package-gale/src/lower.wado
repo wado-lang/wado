@@ -251,6 +251,83 @@ fn caller_loop_prefix(ctx: &mut GenContext, elements: &List<Element>, start: i32
     return empty;
 }
 
+/// Give a greedy loop body's tail `RuleCall` the loop's own iteration prefix as
+/// its FOLLOW.
+///
+/// Its continuation is another iteration, which the body's element list does
+/// not mention, so `compute_follow_arg` leaves it `Forward` — the caller's own
+/// follow, where the loop's separator is absent. `path : seg (SEP seg)*` then
+/// parses `a::b` and stops, because the second `seg` keeps the `::` the loop
+/// wanted.
+///
+/// The rewrite runs here, after the body is lowered, because here is the only
+/// place that knows these ops are a loop body. Only the body's own tail
+/// qualifies: a nested group's tail continues inside that group, and giving it
+/// the loop's prefix makes it yield tokens its own alt still needs. So the
+/// shape is required to be the bare call or a single-alt group ending in one,
+/// and only a `Forward` call — anything else already has a local answer.
+fn retarget_loop_tail_follow(op: Op, mask_id: i32) -> Op {
+    return match op {
+        RuleCall(rc) => {
+            if rc.follow_arg matches { Forward } {
+                let mut call = rc;
+                call.follow_arg = FollowArg::Mask(mask_id);
+                Op::RuleCall(call);
+            } else {
+                Op::RuleCall(rc);
+            }
+        },
+        Group(g) => {
+            if g.alts.len() != 1 || g.alts[0].ops.is_empty() {
+                Op::Group(g);
+            } else {
+                let mut group = g;
+                let mut alt = group.alts[0];
+                let last = alt.ops.len() - 1;
+                alt.ops[last] = retarget_loop_tail_follow(alt.ops[last], mask_id);
+                group.alts[0] = alt;
+                Op::Group(group);
+            }
+        },
+        ListLabel(ll) => {
+            let mut labelled = ll;
+            labelled.inner = retarget_loop_tail_follow(labelled.inner, mask_id);
+            Op::ListLabel(labelled);
+        },
+        Token(_) | Literal(_) | Wildcard(_) | Excluded(_) | Repeat(_) => op,
+    };
+}
+
+/// Scan-side mirror of `retarget_loop_tail_follow`. The two must move together:
+/// a scan that counts a tail iteration the parse yields makes the longest-match
+/// tournament pick an alt the parse then refuses.
+fn retarget_scan_loop_tail_follow(element: ScanElement, mask_id: i32) -> ScanElement {
+    return match element {
+        RuleCall(rc) => {
+            if rc.follow_arg matches { Forward } {
+                let mut call = rc;
+                call.follow_arg = FollowArg::Mask(mask_id);
+                ScanElement::RuleCall(call);
+            } else {
+                ScanElement::RuleCall(rc);
+            }
+        },
+        Group(g) => {
+            if g.alts.len() != 1 || g.alts[0].elements.is_empty() {
+                ScanElement::Group(g);
+            } else {
+                let mut group = g;
+                let mut alt = group.alts[0];
+                let last = alt.elements.len() - 1;
+                alt.elements[last] = retarget_scan_loop_tail_follow(alt.elements[last], mask_id);
+                group.alts[0] = alt;
+                ScanElement::Group(group);
+            }
+        },
+        Token(_) | Wildcard | Excluded(_) | Repeat(_) | OptionalLookahead(_) => element,
+    };
+}
+
 /// The positions one iteration of `rep` consumes, or `[]` when the loop is not
 /// one this evidence covers: a non-greedy or `?` repeat decides elsewhere, a
 /// multi-alt body has no single prefix, and a one-position prefix is the
@@ -2218,13 +2295,20 @@ fn lower_scan_repeat(
 
     let iter_follow = union_kind_arrays(&inner_first, outer_follow);
 
-    let body = lower_scan_element(
+    let mut body = lower_scan_element(
         &rep.element,
         ctx,
         &iter_follow,
         FollowArg::NoFollow,
         gate_caller_follow,
     );
+    // The standalone `scan_<rule>` walks this copy while the parse function
+    // walks `RepeatOp.scan_body`; both must give the body's tail call the same
+    // FOLLOW as the parse side, or the scan reports an end the parse walks past
+    // and the enclosing optional commits on a length that never happens.
+    if let Some(mask_id) = ctx.intern_follow_mask(&greedy_loop_prefix(ctx, rep)) {
+        body = retarget_scan_loop_tail_follow(body, mask_id);
+    }
     let effective_gate = gate_caller_follow && !rep.non_greedy;
     if effective_gate {
         ctx.mark_caller_follow_gate();
@@ -3639,13 +3723,18 @@ fn lower_repeat_op(
     // `gen_scan_*` walker graph. Uses the same `iter_follow` as the
     // parse side so per-position context (`caller_follow_first`
     // baked on nested `ScanRepeatElement`s) lines up.
-    let scan_body = lower_scan_element(
+    let mut scan_body = lower_scan_element(
         &rep.element,
         ctx,
         &iter_follow,
         FollowArg::NoFollow,
         gate_caller_follow,
     );
+    let mut body = body;
+    if let Some(mask_id) = ctx.intern_follow_mask(&greedy_loop_prefix(ctx, rep)) {
+        body = retarget_loop_tail_follow(body, mask_id);
+        scan_body = retarget_scan_loop_tail_follow(scan_body, mask_id);
+    }
     let body_is_single_alt_group = if let Group(g) = body_elem {
         g.alternatives.len() == 1;
     } else {
