@@ -6,6 +6,7 @@ use { Admits, Diagnostic, DiagnosticKind, DiagnosticOwner, admits_or_everything 
 use { AltBinding } from "./attr_resolve.wado";
 use { MemberNames } from "./java2wado/jmembers.wado";
 use { TokenKinds, append_ids } from "./token_kinds.wado";
+use { FOLLOW_MAX_DEPTH } from "./runtime/follow.wado";
 use { TreeMap } from "core:collections";
 
 /// A token-kind set interned during parser codegen. Multi-element
@@ -38,8 +39,10 @@ pub struct FollowMaskEntry {
 /// multi-token follow-mask path. Bounds the runtime peek; deeper
 /// continuations are truncated (the deepest tokens are the cheapest to
 /// disambiguate at runtime via the existing 1-token dispatch, so
-/// truncation hurts precision rather than correctness).
-pub global FOLLOW_MASK_MAX_K: i32 = 4;
+/// truncation hurts precision rather than correctness). The runtime caps
+/// each continuation at the same depth, so a mask that already reaches it
+/// is the whole gate.
+pub global FOLLOW_MASK_MAX_K: i32 = FOLLOW_MAX_DEPTH;
 
 /// The labeled rule calls of one rule whose capture an action reads: `spans`
 /// carry the call's token range (`$x.text`), `nodes` its builder row (`$x.ctx`).
@@ -108,6 +111,8 @@ pub struct GenContext {
     /// `FOLLOW_MASK_<id>` global names are stable across runs. See
     /// `FollowMaskEntry`.
     follow_mask_registry: TreeMap<String, FollowMaskEntry>,
+    /// Positions each interned mask constrains, indexed by its id.
+    follow_mask_depths: List<i32>,
     /// Registry of recovery sync sets (a leaf's FIRST-of-rest) keyed by
     /// canonical representation. Each distinct non-empty set becomes one
     /// `SYNC_<id>: List<i32>` global passed to `expect` by reference, so a
@@ -272,6 +277,7 @@ impl GenContext {
             kind_set_used: [],
             lr_rule_snakes: [],
             follow_mask_registry: TreeMap::new(),
+            follow_mask_depths: [],
             sync_set_registry: TreeMap::new(),
             tail_greedy_cache: none_list_cache(rule_count),
             diagnostics: [],
@@ -1940,8 +1946,15 @@ impl GenContext {
             return Option::<i32>::Some(entry.id);
         }
         let id = self.follow_mask_registry.len();
+        self.follow_mask_depths.push(canonical.len());
         self.follow_mask_registry[key] = FollowMaskEntry { id, mask: canonical };
         return Option::<i32>::Some(id);
+    }
+
+    /// The positions `FOLLOW_MASK_<id>` constrains. At `FOLLOW_MAX_DEPTH` the
+    /// mask is the whole gate, since `follow_yields` reads no deeper.
+    pub fn follow_mask_is_full(&self, id: i32) -> bool {
+        return self.follow_mask_depths[id] >= FOLLOW_MAX_DEPTH;
     }
 
     /// All interned FOLLOW masks in `FOLLOW_MASK_<id>` order (insertion

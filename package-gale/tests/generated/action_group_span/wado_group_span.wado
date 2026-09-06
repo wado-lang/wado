@@ -1072,52 +1072,64 @@ fn line_col_from_starts(line_starts: &List<i32>, pos: i32) -> [i32, i32] {
     }
     return [lo + 1, pos - line_starts[lo]];
 }
-pub global EMPTY_FOLLOW: List<List<i32>> = [];
+pub global EMPTY_FOLLOW: List<i32> = [];
 
 pub global FOLLOW_ALT_MARK: i32 = -1;
 
-fn is_follow_alt_mark(depth: &List<i32>) -> bool {
-    return depth.len() == 1 && depth[0] == FOLLOW_ALT_MARK;
+pub global FOLLOW_MAX_DEPTH: i32 = 4;
+
+fn append_capped(out: &mut List<i32>, follow: &List<i32>, start_depth: i32) {
+    let mut depth = start_depth;
+    for let set of follow {
+        if *set == FOLLOW_ALT_MARK {
+            out.push(*set);
+            depth = 0;
+        } else if depth < FOLLOW_MAX_DEPTH {
+            out.push(*set);
+            depth += 1;
+        }
+    }
 }
 
-pub fn follow_alt(first: &List<List<i32>>, second: &List<List<i32>>) -> List<List<i32>> {
+pub fn follow_alt(first: &List<i32>, second: &List<i32>) -> List<i32> {
     if first.is_empty() {
         return *second;
     }
     if second.is_empty() {
         return *first;
     }
-    let mut joined: List<List<i32>> = List::with_capacity(first.len() + second.len() + 1);
-    for let depth of first {
-        joined.push(*depth);
-    }
-    joined.push([FOLLOW_ALT_MARK]);
-    for let depth of second {
-        joined.push(*depth);
-    }
+    let mut joined: List<i32> = List::with_capacity(first.len() + second.len() + 1);
+    append_capped(&mut joined, first, 0);
+    joined.push(FOLLOW_ALT_MARK);
+    append_capped(&mut joined, second, 0);
     return joined;
 }
 
-pub fn follow_prepend(prefix: &List<List<i32>>, follow: &List<List<i32>>) -> List<List<i32>> {
-    if follow.is_empty() {
+pub fn follow_prepend(prefix: &List<i32>, follow: &List<i32>) -> List<i32> {
+    if follow.is_empty() || prefix.len() >= FOLLOW_MAX_DEPTH {
         return *prefix;
     }
-    let mut combined: List<List<i32>> = List::with_capacity(prefix.len() + follow.len());
-    for let depth of prefix {
-        combined.push(*depth);
+    let mut combined: List<i32> = List::with_capacity(prefix.len() + follow.len());
+    for let set of prefix {
+        combined.push(*set);
     }
-    for let depth of follow {
-        combined.push(*depth);
-        if is_follow_alt_mark(depth) {
+    let mut depth = prefix.len();
+    for let set of follow {
+        if *set == FOLLOW_ALT_MARK {
+            combined.push(*set);
             for let head of prefix {
                 combined.push(*head);
             }
+            depth = prefix.len();
+        } else if depth < FOLLOW_MAX_DEPTH {
+            combined.push(*set);
+            depth += 1;
         }
     }
     return combined;
 }
 
-pub fn follow_yields(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>>, eof_kind: i32) -> bool {
+pub fn follow_yields(tokens: &Array<i32>, pos: i32, follow: &List<i32>, sets: &List<List<i32>>, eof_kind: i32) -> bool {
     if follow.is_empty() {
         return false;
     }
@@ -1125,8 +1137,7 @@ pub fn follow_yields(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>>, eo
     let mut alive = true;
     let mut constrained = false;
     for let mut i = 0; i < follow.len(); i += 1 {
-        let set = &follow[i];
-        if is_follow_alt_mark(set) {
+        if follow[i] == FOLLOW_ALT_MARK {
             if alive && constrained {
                 return true;
             }
@@ -1139,6 +1150,7 @@ pub fn follow_yields(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>>, eo
         if !alive {
             continue;
         }
+        let set = &sets[follow[i]];
         if !set.is_empty() {
             let idx = pos + depth;
             let kind = if idx < tokens.len() { tokens[idx] } else { eof_kind };
@@ -1671,7 +1683,7 @@ struct ArgTakerVals {
     s: String = "",
 }
 
-fn scan_whole(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn scan_whole(tokens: &Array<i32>, pos: i32, follow: &List<i32> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     sg_0_done: {
         sg_0: {
@@ -1686,7 +1698,7 @@ fn scan_whole(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_F
     return pos;
 }
 
-fn scan_opt(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn scan_opt(tokens: &Array<i32>, pos: i32, follow: &List<i32> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     if pos < tokens.len() && tokens[pos] == TK_A {
         let sp = pos;
@@ -1698,7 +1710,7 @@ fn scan_opt(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOL
     return pos;
 }
 
-fn scan_before(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn scan_before(tokens: &Array<i32>, pos: i32, follow: &List<i32> = &EMPTY_FOLLOW) -> i32 {
     let scan_start = pos;
     let mut pos = pos;
     pos = scan_a(tokens, pos, follow);
@@ -1707,7 +1719,7 @@ fn scan_before(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_
     return pos;
 }
 
-fn scan_loop_span(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn scan_loop_span(tokens: &Array<i32>, pos: i32, follow: &List<i32> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     sg_1_done: {
         sg_1: {
@@ -1719,7 +1731,7 @@ fn scan_loop_span(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMP
         }
         return -1;
     }
-    while pos < tokens.len() && tokens[pos] == TK_A && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+    while pos < tokens.len() && tokens[pos] == TK_A && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
         let sp = pos;
         sg_2_done: {
             sg_2: {
@@ -1737,7 +1749,7 @@ fn scan_loop_span(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMP
     return pos;
 }
 
-fn scan_deep(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn scan_deep(tokens: &Array<i32>, pos: i32, follow: &List<i32> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     osl_3_done: {
         if pos < tokens.len() && tokens[pos] == TK_A {
@@ -1770,7 +1782,7 @@ fn scan_deep(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FO
     return pos;
 }
 
-fn scan_group_text(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn scan_group_text(tokens: &Array<i32>, pos: i32, follow: &List<i32> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     let gp_6 = pos;
     let sgk_6 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
@@ -1800,7 +1812,7 @@ fn scan_group_text(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EM
     return pos;
 }
 
-fn scan_loop_text(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn scan_loop_text(tokens: &Array<i32>, pos: i32, follow: &List<i32> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_A { return -1; }
     pos += 1;
@@ -1812,7 +1824,7 @@ fn scan_loop_text(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMP
     return pos;
 }
 
-fn scan_arg_reader(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn scan_arg_reader(tokens: &Array<i32>, pos: i32, follow: &List<i32> = &EMPTY_FOLLOW) -> i32 {
     let scan_start = pos;
     let mut pos = pos;
     pos = scan_a(tokens, pos, &follow_prepend(&FOLLOW_MASK_0, follow));
@@ -1823,14 +1835,14 @@ fn scan_arg_reader(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EM
     return pos;
 }
 
-fn scan_arg_taker(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn scan_arg_taker(tokens: &Array<i32>, pos: i32, follow: &List<i32> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_B { return -1; }
     pos += 1;
     return pos;
 }
 
-fn scan_a(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn scan_a(tokens: &Array<i32>, pos: i32, follow: &List<i32> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_A { return -1; }
     pos += 1;
@@ -1839,7 +1851,7 @@ fn scan_a(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLO
     return pos;
 }
 
-fn _parse_whole__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> WholeVals {
+fn _parse_whole__inner(p: &mut Parser, follow: &List<i32> = &EMPTY_FOLLOW) -> WholeVals {
     let mut vals = WholeVals {};
     vals._span_lo_r = p.pos;
     let r = _parse_a(p, &follow_prepend(&FOLLOW_MASK_0, follow));
@@ -1851,7 +1863,7 @@ fn _parse_whole__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW)
     return vals;
 }
 
-fn _parse_whole(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> WholeVals {
+fn _parse_whole(p: &mut Parser, follow: &List<i32> = &EMPTY_FOLLOW) -> WholeVals {
     if p.recovering { return WholeVals {}; }
     let _start = p.peek_start();
     p.b.start_node(RK_WHOLE, _start);
@@ -1863,7 +1875,7 @@ fn _parse_whole(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Who
     return __vals;
 }
 
-fn _parse_opt__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> OptVals {
+fn _parse_opt__inner(p: &mut Parser, follow: &List<i32> = &EMPTY_FOLLOW) -> OptVals {
     let mut vals = OptVals {};
     let mut opt_scan_pos: i32 = -1;
     opt_scan: {
@@ -1884,7 +1896,7 @@ fn _parse_opt__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -
     return vals;
 }
 
-fn _parse_opt(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> OptVals {
+fn _parse_opt(p: &mut Parser, follow: &List<i32> = &EMPTY_FOLLOW) -> OptVals {
     if p.recovering { return OptVals {}; }
     let _start = p.peek_start();
     p.b.start_node(RK_OPT, _start);
@@ -1896,7 +1908,7 @@ fn _parse_opt(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> OptVa
     return __vals;
 }
 
-fn _parse_before__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> BeforeVals {
+fn _parse_before__inner(p: &mut Parser, follow: &List<i32> = &EMPTY_FOLLOW) -> BeforeVals {
     let mut vals = BeforeVals {};
     if !p.speculating {
          p.emit(p.text_between(vals._span_lo_r, vals._span_hi_r)) 
@@ -1907,7 +1919,7 @@ fn _parse_before__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW
     return vals;
 }
 
-fn _parse_before(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> BeforeVals {
+fn _parse_before(p: &mut Parser, follow: &List<i32> = &EMPTY_FOLLOW) -> BeforeVals {
     if p.recovering { return BeforeVals {}; }
     let _start = p.peek_start();
     p.b.start_node(RK_BEFORE, _start);
@@ -1919,13 +1931,13 @@ fn _parse_before(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Be
     return __vals;
 }
 
-fn _parse_loop_span__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> LoopSpanVals {
+fn _parse_loop_span__inner(p: &mut Parser, follow: &List<i32> = &EMPTY_FOLLOW) -> LoopSpanVals {
     let mut vals = LoopSpanVals {};
     let mut _plus_first = true;
     loop {
         if p.recovering { break; }
         if !_plus_first {
-            if follow_yields(&p.kinds, p.pos, follow, TK_EOF) { break; }
+            if follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) { break; }
             let mut rep_scan_pos: i32 = -1;
             rep_scan: {
                 let tokens = &p.kinds;
@@ -1957,7 +1969,7 @@ fn _parse_loop_span__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOL
     return vals;
 }
 
-fn _parse_loop_span(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> LoopSpanVals {
+fn _parse_loop_span(p: &mut Parser, follow: &List<i32> = &EMPTY_FOLLOW) -> LoopSpanVals {
     if p.recovering { return LoopSpanVals {}; }
     let _start = p.peek_start();
     p.b.start_node(RK_LOOP_SPAN, _start);
@@ -1969,7 +1981,7 @@ fn _parse_loop_span(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) ->
     return __vals;
 }
 
-fn _parse_deep__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> DeepVals {
+fn _parse_deep__inner(p: &mut Parser, follow: &List<i32> = &EMPTY_FOLLOW) -> DeepVals {
     let mut vals = DeepVals {};
     if p.peek_kind() == TK_A {
         let mut opt_scan_pos: i32 = -1;
@@ -1999,7 +2011,7 @@ fn _parse_deep__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
     return vals;
 }
 
-fn _parse_deep(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> DeepVals {
+fn _parse_deep(p: &mut Parser, follow: &List<i32> = &EMPTY_FOLLOW) -> DeepVals {
     if p.recovering { return DeepVals {}; }
     let _start = p.peek_start();
     p.b.start_node(RK_DEEP, _start);
@@ -2011,7 +2023,7 @@ fn _parse_deep(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> Deep
     return __vals;
 }
 
-fn _parse_group_text__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
+fn _parse_group_text__inner(p: &mut Parser, follow: &List<i32> = &EMPTY_FOLLOW) -> () {
     let _rule_start_tok = p.pos;
     let grp_kind = p.peek_kind();
     if grp_kind == TK_A {
@@ -2028,7 +2040,7 @@ fn _parse_group_text__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
     return;
 }
 
-fn _parse_group_text(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
+fn _parse_group_text(p: &mut Parser, follow: &List<i32> = &EMPTY_FOLLOW) -> () {
     if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_GROUP_TEXT, _start);
@@ -2039,7 +2051,7 @@ fn _parse_group_text(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -
     }
 }
 
-fn _parse_loop_text__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
+fn _parse_loop_text__inner(p: &mut Parser, follow: &List<i32> = &EMPTY_FOLLOW) -> () {
     let _rule_start_tok = p.pos;
     let mut _plus_first = true;
     loop {
@@ -2066,7 +2078,7 @@ fn _parse_loop_text__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOL
     return;
 }
 
-fn _parse_loop_text(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
+fn _parse_loop_text(p: &mut Parser, follow: &List<i32> = &EMPTY_FOLLOW) -> () {
     if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_LOOP_TEXT, _start);
@@ -2077,7 +2089,7 @@ fn _parse_loop_text(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) ->
     }
 }
 
-fn _parse_arg_reader__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> ArgReaderVals {
+fn _parse_arg_reader__inner(p: &mut Parser, follow: &List<i32> = &EMPTY_FOLLOW) -> ArgReaderVals {
     let mut vals = ArgReaderVals {};
     vals._span_lo_r = p.pos;
     let r = _parse_a(p, &follow_prepend(&FOLLOW_MASK_0, follow));
@@ -2086,7 +2098,7 @@ fn _parse_arg_reader__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
     return vals;
 }
 
-fn _parse_arg_reader(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> ArgReaderVals {
+fn _parse_arg_reader(p: &mut Parser, follow: &List<i32> = &EMPTY_FOLLOW) -> ArgReaderVals {
     if p.recovering { return ArgReaderVals {}; }
     let _start = p.peek_start();
     p.b.start_node(RK_ARG_READER, _start);
@@ -2098,7 +2110,7 @@ fn _parse_arg_reader(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -
     return __vals;
 }
 
-fn _parse_arg_taker__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, s: String = "") -> ArgTakerVals {
+fn _parse_arg_taker__inner(p: &mut Parser, follow: &List<i32> = &EMPTY_FOLLOW, s: String = "") -> ArgTakerVals {
     let mut vals = ArgTakerVals {};
     vals.s = s;
     let b = p.expect(TK_B, &EMPTY_SYNC);
@@ -2108,7 +2120,7 @@ fn _parse_arg_taker__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOL
     return vals;
 }
 
-fn _parse_arg_taker(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, s: String = "") -> ArgTakerVals {
+fn _parse_arg_taker(p: &mut Parser, follow: &List<i32> = &EMPTY_FOLLOW, s: String = "") -> ArgTakerVals {
     if p.recovering { return ArgTakerVals {}; }
     let _start = p.peek_start();
     p.b.start_node(RK_ARG_TAKER, _start);
@@ -2120,13 +2132,13 @@ fn _parse_arg_taker(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, s:
     return __vals;
 }
 
-fn _parse_a__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
+fn _parse_a__inner(p: &mut Parser, follow: &List<i32> = &EMPTY_FOLLOW) -> () {
     let a = p.expect(TK_A, &SYNC_1);
     let a_2 = p.expect(TK_A, &EMPTY_SYNC);
     return;
 }
 
-fn _parse_a(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
+fn _parse_a(p: &mut Parser, follow: &List<i32> = &EMPTY_FOLLOW) -> () {
     if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_A, _start);
@@ -2233,6 +2245,7 @@ global EMPTY_SYNC: List<i32> = [];
 global SYNC_0: List<i32> = [TK_A, TK_B];
 global SYNC_1: List<i32> = [TK_A];
 
-global FOLLOW_MASK_0: List<List<i32>> = [[TK_B]];
-global FOLLOW_MASK_1: List<List<i32>> = [[TK_A], [TK_A], [TK_B]];
+global FOLLOW_SETS: List<List<i32>> = [[TK_B], [TK_A]];
+global FOLLOW_MASK_0: List<i32> = [0];
+global FOLLOW_MASK_1: List<i32> = [1, 1, 0];
 

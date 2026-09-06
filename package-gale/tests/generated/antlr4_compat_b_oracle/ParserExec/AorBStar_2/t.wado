@@ -1069,52 +1069,64 @@ fn line_col_from_starts(line_starts: &List<i32>, pos: i32) -> [i32, i32] {
     }
     return [lo + 1, pos - line_starts[lo]];
 }
-pub global EMPTY_FOLLOW: List<List<i32>> = [];
+pub global EMPTY_FOLLOW: List<i32> = [];
 
 pub global FOLLOW_ALT_MARK: i32 = -1;
 
-fn is_follow_alt_mark(depth: &List<i32>) -> bool {
-    return depth.len() == 1 && depth[0] == FOLLOW_ALT_MARK;
+pub global FOLLOW_MAX_DEPTH: i32 = 4;
+
+fn append_capped(out: &mut List<i32>, follow: &List<i32>, start_depth: i32) {
+    let mut depth = start_depth;
+    for let set of follow {
+        if *set == FOLLOW_ALT_MARK {
+            out.push(*set);
+            depth = 0;
+        } else if depth < FOLLOW_MAX_DEPTH {
+            out.push(*set);
+            depth += 1;
+        }
+    }
 }
 
-pub fn follow_alt(first: &List<List<i32>>, second: &List<List<i32>>) -> List<List<i32>> {
+pub fn follow_alt(first: &List<i32>, second: &List<i32>) -> List<i32> {
     if first.is_empty() {
         return *second;
     }
     if second.is_empty() {
         return *first;
     }
-    let mut joined: List<List<i32>> = List::with_capacity(first.len() + second.len() + 1);
-    for let depth of first {
-        joined.push(*depth);
-    }
-    joined.push([FOLLOW_ALT_MARK]);
-    for let depth of second {
-        joined.push(*depth);
-    }
+    let mut joined: List<i32> = List::with_capacity(first.len() + second.len() + 1);
+    append_capped(&mut joined, first, 0);
+    joined.push(FOLLOW_ALT_MARK);
+    append_capped(&mut joined, second, 0);
     return joined;
 }
 
-pub fn follow_prepend(prefix: &List<List<i32>>, follow: &List<List<i32>>) -> List<List<i32>> {
-    if follow.is_empty() {
+pub fn follow_prepend(prefix: &List<i32>, follow: &List<i32>) -> List<i32> {
+    if follow.is_empty() || prefix.len() >= FOLLOW_MAX_DEPTH {
         return *prefix;
     }
-    let mut combined: List<List<i32>> = List::with_capacity(prefix.len() + follow.len());
-    for let depth of prefix {
-        combined.push(*depth);
+    let mut combined: List<i32> = List::with_capacity(prefix.len() + follow.len());
+    for let set of prefix {
+        combined.push(*set);
     }
-    for let depth of follow {
-        combined.push(*depth);
-        if is_follow_alt_mark(depth) {
+    let mut depth = prefix.len();
+    for let set of follow {
+        if *set == FOLLOW_ALT_MARK {
+            combined.push(*set);
             for let head of prefix {
                 combined.push(*head);
             }
+            depth = prefix.len();
+        } else if depth < FOLLOW_MAX_DEPTH {
+            combined.push(*set);
+            depth += 1;
         }
     }
     return combined;
 }
 
-pub fn follow_yields(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>>, eof_kind: i32) -> bool {
+pub fn follow_yields(tokens: &Array<i32>, pos: i32, follow: &List<i32>, sets: &List<List<i32>>, eof_kind: i32) -> bool {
     if follow.is_empty() {
         return false;
     }
@@ -1122,8 +1134,7 @@ pub fn follow_yields(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>>, eo
     let mut alive = true;
     let mut constrained = false;
     for let mut i = 0; i < follow.len(); i += 1 {
-        let set = &follow[i];
-        if is_follow_alt_mark(set) {
+        if follow[i] == FOLLOW_ALT_MARK {
             if alive && constrained {
                 return true;
             }
@@ -1136,6 +1147,7 @@ pub fn follow_yields(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>>, eo
         if !alive {
             continue;
         }
+        let set = &sets[follow[i]];
         if !set.is_empty() {
             let idx = pos + depth;
             let kind = if idx < tokens.len() { tokens[idx] } else { eof_kind };
@@ -1640,9 +1652,9 @@ impl Parser {
     }
 }
 
-fn scan_a(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn scan_a(tokens: &Array<i32>, pos: i32, follow: &List<i32> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
-    while pos < tokens.len() && _kind_set_0(tokens[pos]) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+    while pos < tokens.len() && _kind_set_0(tokens[pos]) && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
         let sp = pos;
         let gp_0 = pos;
         let sgk_0 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
@@ -1673,11 +1685,11 @@ fn scan_a(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLO
     return pos;
 }
 
-fn _parse_a__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
+fn _parse_a__inner(p: &mut Parser, follow: &List<i32> = &EMPTY_FOLLOW) -> () {
     let _rule_start_tok = p.pos;
     loop {
         if p.recovering { break; }
-        if follow_yields(&p.kinds, p.pos, follow, TK_EOF) { break; }
+        if follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) { break; }
         let mut gd_winner: i32 = -1;
         let mut gd_best: i32 = -1;
         let gd_kind = p.peek_kind();
@@ -1716,7 +1728,7 @@ fn _parse_a__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> 
     return;
 }
 
-fn _parse_a(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
+fn _parse_a(p: &mut Parser, follow: &List<i32> = &EMPTY_FOLLOW) -> () {
     if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_A, _start);
@@ -1788,4 +1800,6 @@ fn _kind_set_0(k: i32) -> bool {
 }
 
 global EMPTY_SYNC: List<i32> = [];
+
+global FOLLOW_SETS: List<List<i32>> = [];
 

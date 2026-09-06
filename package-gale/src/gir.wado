@@ -734,13 +734,20 @@ pub struct LiteralOp {
 /// - `Forward` — the callee sits at THIS rule's tail, so its
 ///   continuation is whatever the current rule was itself called with;
 ///   emit forwards the current function's `follow` argument unchanged.
-/// - `Combined(id)` — a local suffix precedes what the current rule was
-///   called with; emit prepends `FOLLOW_MASK_<id>` to the forwarded
+/// - `Mask(id)` — the local suffix already fills the depth the gate reads,
+///   so it is the whole continuation; emit passes `&FOLLOW_MASK_<id>`.
+/// - `Combined(id)` — a shorter local suffix precedes what the current rule
+///   was called with; emit prepends `FOLLOW_MASK_<id>` to the forwarded
 ///   `follow` (see the variant doc below).
 /// - `AltMask(id)` — the two are alternatives rather than a sequence.
 pub variant FollowArg {
     NoFollow,
     Forward,
+    /// The local suffix spans `FOLLOW_MAX_DEPTH` positions, which is as deep
+    /// as `follow_yields` reads, so what the current rule was called with
+    /// stands past every position the gate can consult. Emit passes the
+    /// static `&FOLLOW_MASK_<id>` and the call allocates nothing.
+    Mask(i32),
     /// A local suffix stands between the callee and what the current rule was
     /// called with (`… callee X <end>`, `… callee X? <end>`): the continuation
     /// is `FOLLOW_MASK_<id>` followed by that. The forwarded half matters even

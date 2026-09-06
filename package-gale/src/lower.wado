@@ -167,11 +167,13 @@ fn element_consumes_follow_arg(elem: &Element) -> bool {
 /// The callee's continuation past the call is the local suffix
 /// `elements[i+1..]`:
 ///
-///   - non-empty local prefix → `Combined(id)`: the prefix ahead of whatever
-///     the CURRENT rule was called with (the runtime `follow`). The forwarded
-///     half is kept even for a non-nullable suffix, where the prefix already
-///     spans it: the depth past the suffix is what separates a callee's own
-///     reading of a token from the caller's;
+///   - a local prefix spanning `FOLLOW_MAX_DEPTH` → `Mask(id)`: it fills every
+///     position the gate reads, so nothing the caller adds is reachable;
+///   - a shorter non-empty local prefix → `Combined(id)`: the prefix ahead of
+///     whatever the CURRENT rule was called with (the runtime `follow`). The
+///     forwarded half is kept even for a non-nullable suffix, where the prefix
+///     already spans it: the depth past the suffix is what separates a callee's
+///     own reading of a token from the caller's;
 ///   - empty local prefix, callee strictly at this rule's tail → `Forward`;
 ///   - empty local prefix with a caller loop past it → `AltMask(id)`: another
 ///     iteration or what follows the loop, whichever the input matches.
@@ -216,7 +218,7 @@ fn compute_follow_arg(ctx: &mut GenContext, elements: &List<Element>, i: i32) ->
         // separates a callee's own reading from the caller's. `|a| b` and
         // `|a|b| c` are the same two tokens at the loop and differ at the third.
         if let Some(id) = ctx.intern_follow_mask(&mask) {
-            return FollowArg::Combined(id);
+            return sequenced_follow_arg(ctx, id);
         }
         return FollowArg::NoFollow;
     }
@@ -232,9 +234,20 @@ fn compute_follow_arg(ctx: &mut GenContext, elements: &List<Element>, i: i32) ->
         }
     }
     if let Some(id) = ctx.intern_follow_mask(&mask) {
-        return FollowArg::Combined(id);
+        return sequenced_follow_arg(ctx, id);
     }
     return FollowArg::Forward;
+}
+
+/// A local prefix followed by what the current rule was called with. A prefix
+/// that already spans `FOLLOW_MAX_DEPTH` leaves the forwarded half past every
+/// position `follow_yields` reads, so the static mask is the whole gate and the
+/// call site allocates nothing.
+fn sequenced_follow_arg(ctx: &GenContext, mask_id: i32) -> FollowArg {
+    if ctx.follow_mask_is_full(mask_id) {
+        return FollowArg::Mask(mask_id);
+    }
+    return FollowArg::Combined(mask_id);
 }
 
 /// What a repeat's body is told about its own continuation. A greedy `?` runs

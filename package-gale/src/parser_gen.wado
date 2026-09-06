@@ -184,7 +184,7 @@ use { group_alt_classes, non_greedy_static_undecided, peel_repeat_body_label, re
 fn add_follow_param(f: &mut FnSpec) {
     f.add_param_spec(ParamSpec {
         name: FOLLOW_PARAM,
-        type_str: "&List<List<i32>>",
+        type_str: "&List<i32>",
         default_value: Option::Some("&EMPTY_FOLLOW"),
     });
 }
@@ -270,7 +270,7 @@ pub fn gen_parser(
 fn add_lr_cont_param(f: &mut FnSpec) {
     f.add_param_spec(ParamSpec {
         name: "lr_cont",
-        type_str: "&List<List<i32>>",
+        type_str: "&List<i32>",
         default_value: Option::Some("&EMPTY_FOLLOW"),
     });
 }
@@ -876,7 +876,7 @@ fn gen_scan_lr_call_with_prec(
         // Lockstep with the parse loop: the tournament must measure the same
         // climb the parse will take.
         w.line(
-            &"if !(lr_cont.is_empty() || follow_yields(tokens, pos, lr_cont, TK_EOF)) { pos = lr_saved_pos; break; }",
+            &"if !(lr_cont.is_empty() || follow_yields(tokens, pos, lr_cont, &FOLLOW_SETS, TK_EOF)) { pos = lr_saved_pos; break; }",
         );
     }
     w.else_begin(&"else");
@@ -1920,7 +1920,11 @@ fn gen_scan_op_repeat(w: &mut CodeWriter, re: &ScanRepeatElement, ctx: &mut GenC
     // Stop the scan where the caller's continuation matches, or the tournament
     // picking the calling rule's alt over-counts this Repeat. Inert when
     // `follow` is empty; mirrors the parse side.
-    let caller_follow_gate = if re.gate_caller_follow { "follow_yields(tokens, pos, follow, TK_EOF)" } else { "" };
+    let caller_follow_gate = if re.gate_caller_follow {
+        "follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)";
+    } else {
+        "";
+    };
 
     // A body matching nothing has no iteration to scan — once here, not once
     // per arm, so an arm added later cannot miss it.
@@ -3606,7 +3610,9 @@ fn emit_lr_branch(
         // continuation is still there — climbing past it strands the caller.
         w.line(&`let _lr_end = ${scan_call};`);
         w.line(&"if _lr_end < 0 { break; }");
-        w.line(&"if !(lr_cont.is_empty() || follow_yields(&p.kinds, _lr_end, lr_cont, TK_EOF)) { break; }");
+        w.line(
+            &"if !(lr_cont.is_empty() || follow_yields(&p.kinds, _lr_end, lr_cont, &FOLLOW_SETS, TK_EOF)) { break; }",
+        );
     } else {
         w.begin(&`if ${scan_call} < 0`);
         w.line(&"break;");
@@ -3773,7 +3779,7 @@ global EMPTY_PROBE_VIABLE: List<String> = [];
 /// conjoining can only move a verdict from "exit" to "iterate".
 fn emit_probe_verdict(w: &mut CodeWriter, probe_viable: &List<String>, verdict: &String, ctx: &mut GenContext) {
     let mask = if ctx.emit_follow() {
-        "follow.is_empty() || follow_yields(tokens, pos, follow, TK_EOF)";
+        "follow.is_empty() || follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)";
     } else {
         "true";
     };
@@ -3820,7 +3826,7 @@ fn gen_repeat_body(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut GenContext, nc: &
             w.begin(&"loop");
             w.line(&"if p.recovering { break; }");
             if ctx.emit_follow() && r.gate_caller_follow {
-                w.line(&"if follow_yields(&p.kinds, p.pos, follow, TK_EOF) { break; }");
+                w.line(&"if follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) { break; }");
             }
             // Where the body has alternatives its own decision is the guard:
             // finding none ends the loop, and the dispatch commits to a find.
@@ -4329,7 +4335,7 @@ fn gate_cond_with_caller_follow(cond: &String, gate_caller_follow: bool) -> Stri
 
 /// The runtime test that the caller's continuation claims the tokens ahead,
 /// so a tail-position repeat must yield rather than take them.
-global CALLER_FOLLOW_YIELDS: String = "follow_yields(&p.kinds, p.pos, follow, TK_EOF)";
+global CALLER_FOLLOW_YIELDS: String = "follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF)";
 
 /// Shared body of every storable-Optional + Group arm: emit a single
 /// `let ${opt_field}: Option<T> = if ${cond} { parse; Some(...) } else
@@ -5444,7 +5450,7 @@ fn gen_op_repeat_optional_rulecall(
     };
 
     let caller_follow_gate = if rep_op.gate_caller_follow {
-        "follow_yields(&p.kinds, p.pos, follow, TK_EOF)";
+        "follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF)";
     } else {
         "";
     };
@@ -5479,7 +5485,7 @@ fn probe_decides(
 fn gen_optional_probe_entry(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut GenContext, nc: &mut List<[String, i32]>) {
     let verdict = dedup_name(&"opt_enter", nc);
     let entry_gate = if ctx.emit_follow() && r.gate_caller_follow {
-        `!(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && `;
+        `!(follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF)) && `;
     } else {
         "";
     };
@@ -5530,7 +5536,7 @@ fn gen_op_repeat_optional_leaf(
     // Same K-prefix gate as the RuleCall arm — see
     // `gen_op_repeat_optional_rulecall` for the rationale.
     let caller_follow_gate = if rep_op.gate_caller_follow {
-        "follow_yields(&p.kinds, p.pos, follow, TK_EOF)";
+        "follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF)";
     } else {
         "";
     };
@@ -5552,7 +5558,7 @@ fn gen_op_repeat_optional_leaf(
 /// (`gate_caller_follow`).
 fn gen_caller_follow_gate(w: &mut CodeWriter, rep_op: &RepeatOp) {
     if rep_op.gate_caller_follow {
-        w.line(&"if follow_yields(&p.kinds, p.pos, follow, TK_EOF) { break; }");
+        w.line(&"if follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) { break; }");
     }
 }
 
@@ -5578,6 +5584,7 @@ fn follow_arg_expr(arg: &FollowArg) -> String {
     return match arg {
         NoFollow => "&EMPTY_FOLLOW",
         Forward => "follow",
+        Mask(id) => `&FOLLOW_MASK_${id}`,
         Combined(id) => `&follow_prepend(&FOLLOW_MASK_${id}, follow)`,
         AltMask(id) => `&follow_alt(&FOLLOW_MASK_${id}, follow)`,
     };

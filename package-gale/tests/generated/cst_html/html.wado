@@ -1072,52 +1072,64 @@ fn line_col_from_starts(line_starts: &List<i32>, pos: i32) -> [i32, i32] {
     }
     return [lo + 1, pos - line_starts[lo]];
 }
-pub global EMPTY_FOLLOW: List<List<i32>> = [];
+pub global EMPTY_FOLLOW: List<i32> = [];
 
 pub global FOLLOW_ALT_MARK: i32 = -1;
 
-fn is_follow_alt_mark(depth: &List<i32>) -> bool {
-    return depth.len() == 1 && depth[0] == FOLLOW_ALT_MARK;
+pub global FOLLOW_MAX_DEPTH: i32 = 4;
+
+fn append_capped(out: &mut List<i32>, follow: &List<i32>, start_depth: i32) {
+    let mut depth = start_depth;
+    for let set of follow {
+        if *set == FOLLOW_ALT_MARK {
+            out.push(*set);
+            depth = 0;
+        } else if depth < FOLLOW_MAX_DEPTH {
+            out.push(*set);
+            depth += 1;
+        }
+    }
 }
 
-pub fn follow_alt(first: &List<List<i32>>, second: &List<List<i32>>) -> List<List<i32>> {
+pub fn follow_alt(first: &List<i32>, second: &List<i32>) -> List<i32> {
     if first.is_empty() {
         return *second;
     }
     if second.is_empty() {
         return *first;
     }
-    let mut joined: List<List<i32>> = List::with_capacity(first.len() + second.len() + 1);
-    for let depth of first {
-        joined.push(*depth);
-    }
-    joined.push([FOLLOW_ALT_MARK]);
-    for let depth of second {
-        joined.push(*depth);
-    }
+    let mut joined: List<i32> = List::with_capacity(first.len() + second.len() + 1);
+    append_capped(&mut joined, first, 0);
+    joined.push(FOLLOW_ALT_MARK);
+    append_capped(&mut joined, second, 0);
     return joined;
 }
 
-pub fn follow_prepend(prefix: &List<List<i32>>, follow: &List<List<i32>>) -> List<List<i32>> {
-    if follow.is_empty() {
+pub fn follow_prepend(prefix: &List<i32>, follow: &List<i32>) -> List<i32> {
+    if follow.is_empty() || prefix.len() >= FOLLOW_MAX_DEPTH {
         return *prefix;
     }
-    let mut combined: List<List<i32>> = List::with_capacity(prefix.len() + follow.len());
-    for let depth of prefix {
-        combined.push(*depth);
+    let mut combined: List<i32> = List::with_capacity(prefix.len() + follow.len());
+    for let set of prefix {
+        combined.push(*set);
     }
-    for let depth of follow {
-        combined.push(*depth);
-        if is_follow_alt_mark(depth) {
+    let mut depth = prefix.len();
+    for let set of follow {
+        if *set == FOLLOW_ALT_MARK {
+            combined.push(*set);
             for let head of prefix {
                 combined.push(*head);
             }
+            depth = prefix.len();
+        } else if depth < FOLLOW_MAX_DEPTH {
+            combined.push(*set);
+            depth += 1;
         }
     }
     return combined;
 }
 
-pub fn follow_yields(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>>, eof_kind: i32) -> bool {
+pub fn follow_yields(tokens: &Array<i32>, pos: i32, follow: &List<i32>, sets: &List<List<i32>>, eof_kind: i32) -> bool {
     if follow.is_empty() {
         return false;
     }
@@ -1125,8 +1137,7 @@ pub fn follow_yields(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>>, eo
     let mut alive = true;
     let mut constrained = false;
     for let mut i = 0; i < follow.len(); i += 1 {
-        let set = &follow[i];
-        if is_follow_alt_mark(set) {
+        if follow[i] == FOLLOW_ALT_MARK {
             if alive && constrained {
                 return true;
             }
@@ -1139,6 +1150,7 @@ pub fn follow_yields(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>>, eo
         if !alive {
             continue;
         }
+        let set = &sets[follow[i]];
         if !set.is_empty() {
             let idx = pos + depth;
             let kind = if idx < tokens.len() { tokens[idx] } else { eof_kind };
@@ -2718,33 +2730,33 @@ impl Parser {
     }
 }
 
-fn scan_html_document(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn scan_html_document(tokens: &Array<i32>, pos: i32, follow: &List<i32> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
-    while pos < tokens.len() && _kind_set_0(tokens[pos]) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+    while pos < tokens.len() && _kind_set_0(tokens[pos]) && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
         let sp = pos;
         pos = scan_scriptlet_or_sea_ws(tokens, pos, &EMPTY_FOLLOW);
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
-    if pos < tokens.len() && tokens[pos] == TK_XML && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+    if pos < tokens.len() && tokens[pos] == TK_XML && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
         pos += 1;
     }
-    while pos < tokens.len() && _kind_set_0(tokens[pos]) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+    while pos < tokens.len() && _kind_set_0(tokens[pos]) && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
         let sp = pos;
         pos = scan_scriptlet_or_sea_ws(tokens, pos, &EMPTY_FOLLOW);
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
-    if pos < tokens.len() && tokens[pos] == TK_DTD && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+    if pos < tokens.len() && tokens[pos] == TK_DTD && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
         pos += 1;
     }
-    while pos < tokens.len() && _kind_set_0(tokens[pos]) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+    while pos < tokens.len() && _kind_set_0(tokens[pos]) && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
         let sp = pos;
         pos = scan_scriptlet_or_sea_ws(tokens, pos, &EMPTY_FOLLOW);
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
-    while pos < tokens.len() && _kind_set_1(tokens[pos]) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+    while pos < tokens.len() && _kind_set_1(tokens[pos]) && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
         let sp = pos;
         pos = scan_html_elements(tokens, pos, &EMPTY_FOLLOW);
         if pos < 0 { pos = sp; break; }
@@ -2753,14 +2765,14 @@ fn scan_html_document(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = 
     return pos;
 }
 
-fn scan_scriptlet_or_sea_ws(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn scan_scriptlet_or_sea_ws(tokens: &Array<i32>, pos: i32, follow: &List<i32> = &EMPTY_FOLLOW) -> i32 {
     if pos < tokens.len() && _kind_set_0(tokens[pos]) {
         return pos + 1;
     }
     return -1;
 }
 
-fn scan_html_elements(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn scan_html_elements(tokens: &Array<i32>, pos: i32, follow: &List<i32> = &EMPTY_FOLLOW) -> i32 {
     let scan_start = pos;
     let mut pos = pos;
     while pos < tokens.len() && _kind_set_2(tokens[pos]) {
@@ -2771,7 +2783,7 @@ fn scan_html_elements(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = 
     }
     pos = scan_html_element(tokens, pos, &follow_prepend(&FOLLOW_MASK_0, follow));
     if pos < 0 { return -1; }
-    while pos < tokens.len() && _kind_set_2(tokens[pos]) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+    while pos < tokens.len() && _kind_set_2(tokens[pos]) && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
         let sp = pos;
         pos = scan_html_misc(tokens, pos, &EMPTY_FOLLOW);
         if pos < 0 { pos = sp; break; }
@@ -2781,7 +2793,7 @@ fn scan_html_elements(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = 
     return pos;
 }
 
-fn scan_html_element(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn scan_html_element(tokens: &Array<i32>, pos: i32, follow: &List<i32> = &EMPTY_FOLLOW) -> i32 {
     let start = pos;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
@@ -2805,11 +2817,11 @@ fn scan_html_element(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &
                     sg_0_0: {
                         if pos >= tokens.len() || tokens[pos] != TK_TAG_CLOSE { break sg_0_0; }
                         pos += 1;
-                        if pos < tokens.len() && _kind_set_3(tokens[pos]) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+                        if pos < tokens.len() && _kind_set_3(tokens[pos]) && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
                             let sp = pos;
                             sg_1_done: {
                                 sg_1: {
-                                    pos = scan_html_content(tokens, pos, &follow_prepend(&FOLLOW_MASK_1, follow));
+                                    pos = scan_html_content(tokens, pos, &FOLLOW_MASK_1);
                                     if pos < 0 { break sg_1; }
                                     if pos >= tokens.len() || tokens[pos] != TK_TAG_OPEN { break sg_1; }
                                     pos += 1;
@@ -2869,14 +2881,14 @@ fn scan_html_element(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &
     return pos;
 }
 
-fn scan_html_content(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn scan_html_content(tokens: &Array<i32>, pos: i32, follow: &List<i32> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
-    if pos < tokens.len() && _kind_set_6(tokens[pos]) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+    if pos < tokens.len() && _kind_set_6(tokens[pos]) && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
         let sp = pos;
         pos = scan_html_chardata(tokens, pos, follow);
         if pos < 0 { pos = sp; }
     }
-    while pos < tokens.len() && _kind_set_7(tokens[pos]) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+    while pos < tokens.len() && _kind_set_7(tokens[pos]) && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
         let sp = pos;
         sg_2_done: {
             sg_2: {
@@ -2910,7 +2922,7 @@ fn scan_html_content(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &
                 } else {
                     pos = gp_3;
                 }
-                if pos < tokens.len() && _kind_set_6(tokens[pos]) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+                if pos < tokens.len() && _kind_set_6(tokens[pos]) && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
                     let sp = pos;
                     pos = scan_html_chardata(tokens, pos, follow);
                     if pos < 0 { pos = sp; }
@@ -2925,11 +2937,11 @@ fn scan_html_content(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &
     return pos;
 }
 
-fn scan_html_attribute(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn scan_html_attribute(tokens: &Array<i32>, pos: i32, follow: &List<i32> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_TAG_NAME { return -1; }
     pos += 1;
-    if pos < tokens.len() && tokens[pos] == TK_TAG_EQUALS && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+    if pos < tokens.len() && tokens[pos] == TK_TAG_EQUALS && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
         let sp = pos;
         sg_4_done: {
             sg_4: {
@@ -2946,14 +2958,14 @@ fn scan_html_attribute(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> =
     return pos;
 }
 
-fn scan_html_chardata(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn scan_html_chardata(tokens: &Array<i32>, pos: i32, follow: &List<i32> = &EMPTY_FOLLOW) -> i32 {
     if pos < tokens.len() && _kind_set_6(tokens[pos]) {
         return pos + 1;
     }
     return -1;
 }
 
-fn scan_html_misc(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn scan_html_misc(tokens: &Array<i32>, pos: i32, follow: &List<i32> = &EMPTY_FOLLOW) -> i32 {
     let start = pos;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
@@ -2976,14 +2988,14 @@ fn scan_html_misc(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMP
     return pos;
 }
 
-fn scan_html_comment(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn scan_html_comment(tokens: &Array<i32>, pos: i32, follow: &List<i32> = &EMPTY_FOLLOW) -> i32 {
     if pos < tokens.len() && _kind_set_5(tokens[pos]) {
         return pos + 1;
     }
     return -1;
 }
 
-fn scan_script(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn scan_script(tokens: &Array<i32>, pos: i32, follow: &List<i32> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_SCRIPT_OPEN { return -1; }
     pos += 1;
@@ -3013,7 +3025,7 @@ fn scan_script(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_
     return pos;
 }
 
-fn scan_style(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn scan_style(tokens: &Array<i32>, pos: i32, follow: &List<i32> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_STYLE_OPEN { return -1; }
     pos += 1;
@@ -3043,10 +3055,10 @@ fn scan_style(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_F
     return pos;
 }
 
-fn _parse_html_document__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
+fn _parse_html_document__inner(p: &mut Parser, follow: &List<i32> = &EMPTY_FOLLOW) -> () {
     loop {
         if p.recovering { break; }
-        if follow_yields(&p.kinds, p.pos, follow, TK_EOF) { break; }
+        if follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) { break; }
         let mut rep_scan_pos: i32 = -1;
         rep_scan: {
             let tokens = &p.kinds;
@@ -3073,12 +3085,12 @@ fn _parse_html_document__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
         }
         _parse_scriptlet_or_sea_ws(p, &EMPTY_FOLLOW);
     }
-    if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_XML) {
+    if !(follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF)) && (p.peek_kind() == TK_XML) {
         p.expect(TK_XML, &EMPTY_SYNC);
     }
     loop {
         if p.recovering { break; }
-        if follow_yields(&p.kinds, p.pos, follow, TK_EOF) { break; }
+        if follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) { break; }
         let mut rep_scan_pos_2: i32 = -1;
         rep_scan_2: {
             let tokens = &p.kinds;
@@ -3105,12 +3117,12 @@ fn _parse_html_document__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
         }
         _parse_scriptlet_or_sea_ws(p, &EMPTY_FOLLOW);
     }
-    if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_DTD) {
+    if !(follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF)) && (p.peek_kind() == TK_DTD) {
         p.expect(TK_DTD, &EMPTY_SYNC);
     }
     loop {
         if p.recovering { break; }
-        if follow_yields(&p.kinds, p.pos, follow, TK_EOF) { break; }
+        if follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) { break; }
         let mut rep_scan_pos_3: i32 = -1;
         rep_scan_3: {
             let tokens = &p.kinds;
@@ -3139,7 +3151,7 @@ fn _parse_html_document__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
     }
     loop {
         if p.recovering { break; }
-        if follow_yields(&p.kinds, p.pos, follow, TK_EOF) { break; }
+        if follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) { break; }
         let mut rep_scan_pos_4: i32 = -1;
         rep_scan_4: {
             let tokens = &p.kinds;
@@ -3169,7 +3181,7 @@ fn _parse_html_document__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
     return;
 }
 
-fn _parse_html_document(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
+fn _parse_html_document(p: &mut Parser, follow: &List<i32> = &EMPTY_FOLLOW) -> () {
     if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_HTMLDOCUMENT, _start);
@@ -3180,7 +3192,7 @@ fn _parse_html_document(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW
     }
 }
 
-fn _parse_scriptlet_or_sea_ws__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
+fn _parse_scriptlet_or_sea_ws__inner(p: &mut Parser, follow: &List<i32> = &EMPTY_FOLLOW) -> () {
     let kind = p.peek_kind();
     if _kind_set_0(kind) {
         let _ = p.expect(kind, &EMPTY_SYNC);
@@ -3194,7 +3206,7 @@ fn _parse_scriptlet_or_sea_ws__inner(p: &mut Parser, follow: &List<List<i32>> = 
     return;
 }
 
-fn _parse_scriptlet_or_sea_ws(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
+fn _parse_scriptlet_or_sea_ws(p: &mut Parser, follow: &List<i32> = &EMPTY_FOLLOW) -> () {
     if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_SCRIPTLETORSEAWS, _start);
@@ -3205,7 +3217,7 @@ fn _parse_scriptlet_or_sea_ws(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
     }
 }
 
-fn _parse_html_elements__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
+fn _parse_html_elements__inner(p: &mut Parser, follow: &List<i32> = &EMPTY_FOLLOW) -> () {
     loop {
         if p.recovering { break; }
         let mut rep_scan_pos: i32 = -1;
@@ -3237,7 +3249,7 @@ fn _parse_html_elements__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
     _parse_html_element(p, &follow_prepend(&FOLLOW_MASK_0, follow));
     loop {
         if p.recovering { break; }
-        if follow_yields(&p.kinds, p.pos, follow, TK_EOF) { break; }
+        if follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) { break; }
         let mut rep_scan_pos_2: i32 = -1;
         rep_scan_2: {
             let tokens = &p.kinds;
@@ -3267,7 +3279,7 @@ fn _parse_html_elements__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
     return;
 }
 
-fn _parse_html_elements(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
+fn _parse_html_elements(p: &mut Parser, follow: &List<i32> = &EMPTY_FOLLOW) -> () {
     if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_HTMLELEMENTS, _start);
@@ -3278,7 +3290,7 @@ fn _parse_html_elements(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW
     }
 }
 
-fn _parse_html_element__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
+fn _parse_html_element__inner(p: &mut Parser, follow: &List<i32> = &EMPTY_FOLLOW) -> () {
     let kind = p.peek_kind();
     if kind == TK_TAG_OPEN {
         p.expect(TK_TAG_OPEN, &SYNC_1);
@@ -3318,7 +3330,7 @@ fn _parse_html_element__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
             opt_scan: {
                 let tokens = &p.kinds;
                 let mut pos: i32 = p.pos;
-                pos = scan_html_content(tokens, pos, &follow_prepend(&FOLLOW_MASK_1, follow));
+                pos = scan_html_content(tokens, pos, &FOLLOW_MASK_1);
                 if pos < 0 { break opt_scan; }
                 if pos >= tokens.len() || tokens[pos] != TK_TAG_OPEN { break opt_scan; }
                 pos += 1;
@@ -3330,8 +3342,8 @@ fn _parse_html_element__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
                 pos += 1;
                 opt_scan_pos = pos;
             }
-            if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (opt_scan_pos >= 0) {
-                _parse_html_content(p, &follow_prepend(&FOLLOW_MASK_1, follow));
+            if !(follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF)) && (opt_scan_pos >= 0) {
+                _parse_html_content(p, &FOLLOW_MASK_1);
                 p.expect(TK_TAG_OPEN, &SYNC_4);
                 p.expect(TK_TAG_SLASH, &SYNC_1);
                 p.expect(TK_TAG_NAME, &SYNC_5);
@@ -3364,7 +3376,7 @@ fn _parse_html_element__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
     return;
 }
 
-fn _parse_html_element(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
+fn _parse_html_element(p: &mut Parser, follow: &List<i32> = &EMPTY_FOLLOW) -> () {
     if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_HTMLELEMENT, _start);
@@ -3375,13 +3387,13 @@ fn _parse_html_element(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW)
     }
 }
 
-fn _parse_html_content__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (_kind_set_6(p.peek_kind())) {
+fn _parse_html_content__inner(p: &mut Parser, follow: &List<i32> = &EMPTY_FOLLOW) -> () {
+    if !(follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF)) && (_kind_set_6(p.peek_kind())) {
         _parse_html_chardata(p, follow);
     }
     loop {
         if p.recovering { break; }
-        if follow_yields(&p.kinds, p.pos, follow, TK_EOF) { break; }
+        if follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) { break; }
         let mut rep_scan_pos: i32 = -1;
         rep_scan: {
             let tokens = &p.kinds;
@@ -3418,7 +3430,7 @@ fn _parse_html_content__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
                     } else {
                         pos = gp_8;
                     }
-                    if pos < tokens.len() && _kind_set_6(tokens[pos]) && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+                    if pos < tokens.len() && _kind_set_6(tokens[pos]) && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
                         let sp = pos;
                         pos = scan_html_chardata(tokens, pos, follow);
                         if pos < 0 { pos = sp; }
@@ -3441,14 +3453,14 @@ fn _parse_html_content__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
         } else {
             p.no_viable("no viable alternative", p.peek_span(), &SYNC_8);
         }
-        if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (_kind_set_6(p.peek_kind())) {
+        if !(follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF)) && (_kind_set_6(p.peek_kind())) {
             _parse_html_chardata(p, follow);
         }
     }
     return;
 }
 
-fn _parse_html_content(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
+fn _parse_html_content(p: &mut Parser, follow: &List<i32> = &EMPTY_FOLLOW) -> () {
     if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_HTMLCONTENT, _start);
@@ -3459,16 +3471,16 @@ fn _parse_html_content(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW)
     }
 }
 
-fn _parse_html_attribute__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
+fn _parse_html_attribute__inner(p: &mut Parser, follow: &List<i32> = &EMPTY_FOLLOW) -> () {
     p.expect(TK_TAG_NAME, &SYNC_9);
-    if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_TAG_EQUALS && p.peek_at(1) == TK_ATTVALUE_VALUE) {
+    if !(follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF)) && (p.peek_kind() == TK_TAG_EQUALS && p.peek_at(1) == TK_ATTVALUE_VALUE) {
         p.expect(TK_TAG_EQUALS, &SYNC_10);
         p.expect(TK_ATTVALUE_VALUE, &EMPTY_SYNC);
     }
     return;
 }
 
-fn _parse_html_attribute(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
+fn _parse_html_attribute(p: &mut Parser, follow: &List<i32> = &EMPTY_FOLLOW) -> () {
     if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_HTMLATTRIBUTE, _start);
@@ -3479,7 +3491,7 @@ fn _parse_html_attribute(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLO
     }
 }
 
-fn _parse_html_chardata__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
+fn _parse_html_chardata__inner(p: &mut Parser, follow: &List<i32> = &EMPTY_FOLLOW) -> () {
     let kind = p.peek_kind();
     if _kind_set_6(kind) {
         let _ = p.expect(kind, &EMPTY_SYNC);
@@ -3493,7 +3505,7 @@ fn _parse_html_chardata__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
     return;
 }
 
-fn _parse_html_chardata(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
+fn _parse_html_chardata(p: &mut Parser, follow: &List<i32> = &EMPTY_FOLLOW) -> () {
     if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_HTMLCHARDATA, _start);
@@ -3504,7 +3516,7 @@ fn _parse_html_chardata(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW
     }
 }
 
-fn _parse_html_misc__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
+fn _parse_html_misc__inner(p: &mut Parser, follow: &List<i32> = &EMPTY_FOLLOW) -> () {
     let kind = p.peek_kind();
     if _kind_set_5(kind) {
         _parse_html_comment(p, follow);
@@ -3522,7 +3534,7 @@ fn _parse_html_misc__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOL
     return;
 }
 
-fn _parse_html_misc(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
+fn _parse_html_misc(p: &mut Parser, follow: &List<i32> = &EMPTY_FOLLOW) -> () {
     if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_HTMLMISC, _start);
@@ -3533,7 +3545,7 @@ fn _parse_html_misc(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) ->
     }
 }
 
-fn _parse_html_comment__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
+fn _parse_html_comment__inner(p: &mut Parser, follow: &List<i32> = &EMPTY_FOLLOW) -> () {
     let kind = p.peek_kind();
     if _kind_set_5(kind) {
         let _ = p.expect(kind, &EMPTY_SYNC);
@@ -3547,7 +3559,7 @@ fn _parse_html_comment__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
     return;
 }
 
-fn _parse_html_comment(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
+fn _parse_html_comment(p: &mut Parser, follow: &List<i32> = &EMPTY_FOLLOW) -> () {
     if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_HTMLCOMMENT, _start);
@@ -3558,13 +3570,13 @@ fn _parse_html_comment(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW)
     }
 }
 
-fn _parse_script__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
+fn _parse_script__inner(p: &mut Parser, follow: &List<i32> = &EMPTY_FOLLOW) -> () {
     p.expect(TK_SCRIPT_OPEN, &SYNC_14);
     p.expect_set(&SYNC_14);
     return;
 }
 
-fn _parse_script(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
+fn _parse_script(p: &mut Parser, follow: &List<i32> = &EMPTY_FOLLOW) -> () {
     if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_SCRIPT, _start);
@@ -3575,13 +3587,13 @@ fn _parse_script(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> ()
     }
 }
 
-fn _parse_style__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
+fn _parse_style__inner(p: &mut Parser, follow: &List<i32> = &EMPTY_FOLLOW) -> () {
     p.expect(TK_STYLE_OPEN, &SYNC_15);
     p.expect_set(&SYNC_15);
     return;
 }
 
-fn _parse_style(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
+fn _parse_style(p: &mut Parser, follow: &List<i32> = &EMPTY_FOLLOW) -> () {
     if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_STYLE, _start);
@@ -3735,6 +3747,7 @@ global SYNC_13: List<i32> = [TK_HTML_COMMENT, TK_HTML_CONDITIONAL_COMMENT];
 global SYNC_14: List<i32> = [TK_SCRIPT_BODY, TK_SCRIPT_SHORT_BODY];
 global SYNC_15: List<i32> = [TK_STYLE_BODY, TK_STYLE_SHORT_BODY];
 
-global FOLLOW_MASK_0: List<List<i32>> = [[TK_HTML_COMMENT, TK_HTML_CONDITIONAL_COMMENT, TK_SEA_WS]];
-global FOLLOW_MASK_1: List<List<i32>> = [[TK_TAG_OPEN], [TK_TAG_SLASH], [TK_TAG_NAME], [TK_TAG_CLOSE]];
+global FOLLOW_SETS: List<List<i32>> = [[TK_HTML_COMMENT, TK_HTML_CONDITIONAL_COMMENT, TK_SEA_WS], [TK_TAG_OPEN], [TK_TAG_SLASH], [TK_TAG_NAME], [TK_TAG_CLOSE]];
+global FOLLOW_MASK_0: List<i32> = [0];
+global FOLLOW_MASK_1: List<i32> = [1, 2, 3, 4];
 
