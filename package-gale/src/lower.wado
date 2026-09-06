@@ -210,10 +210,74 @@ fn compute_follow_arg(ctx: &mut GenContext, elements: &List<Element>, i: i32) ->
         }
         return FollowArg::NoFollow;
     }
+    if mask.is_empty() {
+        // A loop prefix is not prepended to the caller's own follow: the loop
+        // can iterate again, so the outer continuation does not sit at the
+        // depth right after one iteration. `Mask` is the whole check, and a
+        // prefix check is what the gate wants.
+        let loop_prefix = caller_loop_prefix(ctx, elements, i + 1);
+        if let Some(id) = ctx.intern_follow_mask(&loop_prefix) {
+            return FollowArg::Mask(id);
+        }
+    }
     if let Some(id) = ctx.intern_follow_mask(&mask) {
         return FollowArg::Combined(id);
     }
     return FollowArg::Forward;
+}
+
+/// The positions a greedy loop at `start` would consume on its next
+/// iteration, when that loop is the whole of a nullable suffix.
+///
+/// `deep_position_first_sets_from` halts on a suffix that can consume
+/// nothing, and `compute_call_site_follow` drops a multi-element one
+/// (soundness invariant 2), so `path : seg (SEP seg)*` threads its callee
+/// no mask at all and the callee's own tail-greedy `SEP?` keeps a SEP only
+/// the loop can use. The loop is greedy: if the input matches its body, it
+/// takes it, so its body's prefix is what the caller does next.
+///
+/// Two positions are the floor. One is the over-approximation invariant 1
+/// rejects — SEP opens both readings, and a callee yielding on SEP alone
+/// gives up `a::<b>`'s own separator. The second position is the evidence:
+/// `follow_yields` matches every depth, so `:: b` yields and `:: <` does not.
+fn caller_loop_prefix(ctx: &mut GenContext, elements: &List<Element>, start: i32) -> List<List<String>> {
+    let empty: List<List<String>> = [];
+    if start >= elements.len() {
+        return empty;
+    }
+    if let Repeat(rep) = &elements[start] {
+        return greedy_loop_prefix(ctx, rep);
+    }
+    return empty;
+}
+
+/// The positions one iteration of `rep` consumes, or `[]` when the loop is not
+/// one this evidence covers: a non-greedy or `?` repeat decides elsewhere, a
+/// multi-alt body has no single prefix, and a one-position prefix is the
+/// over-approximation soundness invariant 1 rejects.
+fn greedy_loop_prefix(ctx: &mut GenContext, rep: &RepeatElement) -> List<List<String>> {
+    let empty: List<List<String>> = [];
+    if rep.non_greedy || rep.kind matches { Optional } {
+        return empty;
+    }
+    let mut body_elements: List<Element> = [];
+    match &rep.element {
+        Group(g) => {
+            if g.alternatives.len() != 1 {
+                return empty;
+            }
+            body_elements = g.alternatives[0].elements;
+        },
+        TokenRef(_) | Literal(_) | RuleRef(_) | Repeat(_) | Label(_) | Wildcard(_) | Not(_) => {
+            body_elements.push(rep.element);
+        },
+    }
+    let mut visiting: List<String> = [];
+    let [prefix, _consumed] = ctx.deep_position_first_sets_from(&body_elements, 0, FOLLOW_MASK_MAX_K, &mut visiting);
+    if prefix.len() < 2 {
+        return empty;
+    }
+    return prefix;
 }
 
 /// Whether a tail-greedy `Repeat` at index `i` in `elements` should

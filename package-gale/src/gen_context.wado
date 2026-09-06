@@ -1113,7 +1113,21 @@ impl GenContext {
                     let rule = self.find_rule(&r.name);
                     if let Some(rule) = rule {
                         if rule.alternatives.len() != 1 {
-                            // Multi-alt: per-depth union would over-yield. Halt.
+                            // Multi-alt: the per-depth union over-yields past
+                            // the head, where the alts diverge. At the head it
+                            // is exact — every parse of a rule the suffix must
+                            // match starts in its first set — so contribute
+                            // that one position and halt. A nullable rule
+                            // contributes nothing: this position may be the
+                            // next element's.
+                            let mut null_visiting: List<String> = [];
+                            if !self.rule_is_nullable(&r.name, &mut null_visiting) {
+                                let mut fv: List<String> = [];
+                                let first = self.first_of_element(elem, &mut fv);
+                                if !first.is_empty() {
+                                    result.push(first);
+                                }
+                            }
                             return cursor;
                         }
                         visiting.push(r.name);
