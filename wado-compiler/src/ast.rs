@@ -3200,6 +3200,9 @@ pub enum TemplatePart {
     Interpolation {
         expr: Box<Expr>,
         format: Option<FormatSpec>,
+        /// The `${` that opens the interpolation. Bounds what the formatter
+        /// may place inside these braces.
+        open: Span,
     },
 }
 

@@ -5195,7 +5195,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         }
 
         if template.parts.len() == 1
-            && let ast::TemplatePart::Interpolation { expr, format: None } = &template.parts[0]
+            && let ast::TemplatePart::Interpolation { expr, format: None, .. } = &template.parts[0]
         {
             let resolved = self.reify_expr(expr, ctx, None);
             if resolved.type_id == string_type {
@@ -5212,7 +5212,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                         parts.push(TirTemplatePart::Literal(unescaped));
                     }
                 }
-                ast::TemplatePart::Interpolation { expr, format } => {
+                ast::TemplatePart::Interpolation { expr, format, .. } => {
                     let resolved = self.reify_expr(expr, ctx, None);
                     let format_spec = format.as_ref().map(|f| {
                         crate::format_spec::parse(&f.spec)

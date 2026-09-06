@@ -95,7 +95,7 @@ fn test_template_string_single_interpolation() {
 
             // Part 1: {name}
             match &template.parts[1] {
-                wado_compiler::ast::TemplatePart::Interpolation { expr, format } => {
+                wado_compiler::ast::TemplatePart::Interpolation { expr, format, .. } => {
                     assert!(format.is_none(), "expected no format spec");
                     match &**expr {
                         wado_compiler::ast::Expr::Ident(ident) => {
@@ -184,7 +184,7 @@ fn test_template_format_simple() {
     match expr {
         wado_compiler::ast::Expr::TemplateString(template) => {
             match &template.parts[1] {
-                wado_compiler::ast::TemplatePart::Interpolation { expr, format } => {
+                wado_compiler::ast::TemplatePart::Interpolation { expr, format, .. } => {
                     // Check expression is 'pi'
                     match &**expr {
                         wado_compiler::ast::Expr::Ident(ident) => {
@@ -247,7 +247,7 @@ fn test_template_double_colon_not_format() {
     match expr {
         wado_compiler::ast::Expr::TemplateString(template) => {
             match &template.parts[1] {
-                wado_compiler::ast::TemplatePart::Interpolation { expr, format } => {
+                wado_compiler::ast::TemplatePart::Interpolation { expr, format, .. } => {
                     // Should have NO format spec
                     assert!(
                         format.is_none(),

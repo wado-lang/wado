@@ -6079,9 +6079,18 @@ impl Parser {
                         }
                         None => None,
                     };
+                    // `origin` is the interpolation's first content byte, so
+                    // the `${` is the two bytes before it, on the same line.
+                    let open = Span::new(
+                        origin.offset.saturating_sub("${".len()),
+                        origin.offset,
+                        origin.line,
+                        origin.column.saturating_sub("${".len()),
+                    );
                     parts.push(TemplatePart::Interpolation {
                         expr: Box::new(parsed),
                         format: format_spec,
+                        open,
                     });
                 }
             }

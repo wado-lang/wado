@@ -907,6 +907,64 @@ fn test_format_keeps_a_comment_in_a_template_interpolation() {
     assert_format_preserves_ast(source);
 }
 
+/// A comment moves out of the construct that cannot place it, never into one
+/// it was not written in: not between a doc comment and what it documents, not
+/// into a neighbouring interpolation, and not inside a call it precedes.
+#[test]
+fn test_format_moves_a_comment_out_but_never_in() {
+    // A comment moved out of the global lands above the next item's doc
+    // comment, so `wado doc` still sees the doc on the function.
+    let source = "global A: i32 = // stray\n1;\n\n/// Adds one.\npub fn f(x: i32) -> i32 {\n    return x + A;\n}\n";
+    let formatted = wado_compiler::format(source).expect("format failed");
+    let lines: Vec<&str> = formatted.lines().collect();
+    let doc = lines
+        .iter()
+        .position(|l| l.starts_with("/// Adds one."))
+        .expect("doc kept");
+    assert_eq!(
+        lines[doc + 1], "pub fn f(x: i32) -> i32 {",
+        "nothing may come between a doc comment and its item:\n{formatted}"
+    );
+    assert!(
+        !formatted.contains("\n\n\n"),
+        "moving a comment must not invent blank lines:\n{formatted}"
+    );
+
+    // A comment trailing one interpolation must not become another's.
+    let source = "fn f(x: i32, y: i32) -> String {\n    return `${x /*c*/} ${y}`;\n}\n";
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert!(
+        !formatted.contains("${/*c*/ y}"),
+        "a comment must not move to another expression:\n{formatted}"
+    );
+    assert!(formatted.contains("/*c*/"), "got:\n{formatted}");
+
+    // A comment before a call stays before it, rather than being adopted by
+    // the argument list.
+    let source = "fn f() {\n    let x = /*about the call*/ foo(1, 2,);\n}\n";
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert!(
+        formatted.contains("= /*about the call*/ foo("),
+        "got:\n{formatted}"
+    );
+    let again = wado_compiler::format(&formatted).expect("reformat failed");
+    assert_eq!(formatted, again, "format should be idempotent");
+}
+
+/// The width budget counts the ` {` a condition is followed by even when the
+/// condition is a call, whose own wrapping decision is one level in.
+#[test]
+fn test_format_wraps_a_call_condition_that_only_fits_without_its_brace() {
+    let source = format!("fn f() {{\n    if cond({}) {{\n    }}\n}}\n", "c".repeat(107));
+    let formatted = wado_compiler::format(&source).expect("format failed");
+    assert!(
+        formatted.lines().all(|l| l.len() <= 120),
+        "a line went over the width budget:\n{formatted}"
+    );
+    let again = wado_compiler::format(&formatted).expect("reformat failed");
+    assert_eq!(formatted, again, "format should be idempotent");
+}
+
 /// A comment a member's own constructs cannot place stops inside the
 /// declaration it was written in, not past its closing brace.
 #[test]

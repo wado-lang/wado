@@ -265,15 +265,20 @@ impl<'a> Unparser<'a> {
     /// where the output is at the start of a line: a line comment written
     /// mid-line would comment out what follows.
     fn flush_comments_before(&mut self, pos: usize, spacing: Spacing) {
+        self.flush_comments_in(0, pos, spacing);
+    }
+
+    /// [`Self::flush_comments_before`] bounded below as well, for a construct
+    /// that must not adopt a comment written before it.
+    fn flush_comments_in(&mut self, lo: usize, hi: usize, spacing: Spacing) {
         assert!(
             self.output.is_empty() || self.output.ends_with('\n'),
-            "flush_comments_before must be called at the start of a line",
+            "a comment flush must start at the start of a line",
         );
-        for comment in &self.pending_comments_in(0, pos) {
+        for comment in &self.pending_comments_in(lo, hi) {
             self.emitted_comments.insert(comment.span.start);
             if spacing == Spacing::KeepBlankLines {
                 self.emit_blank_lines_to(comment.span.line);
-                self.last_source_line = comment.span.line;
             }
             self.write_indent();
             self.emit_comment(comment);
@@ -281,21 +286,40 @@ impl<'a> Unparser<'a> {
         }
     }
 
-    /// Open a member's line: its own leading comments, then whatever the
-    /// members before it had no slot for. Flushing at this boundary rather than
-    /// at the previous member's end puts a relocated comment where the next
-    /// parse will read it, so the output is a fixed point.
+    /// Open a member's line: whatever the members before it had no slot for,
+    /// then its own leading comments. Flushing at this boundary rather than at
+    /// the previous member's end puts a moved comment where the next parse
+    /// will read it, so the output is a fixed point. Flushing *before* the
+    /// leading run keeps the comment out from between a doc comment and what
+    /// it documents.
     fn open_member(&mut self, id: crate::ast::AstId, start: usize) {
+        self.flush_comments_before(self.leading_start(id, start), Spacing::KeepBlankLines);
         self.emit_leading_for(id);
-        self.flush_comments_before(start, Spacing::KeepBlankLines);
     }
 
-    /// Emit the unplaced comments before `pos`, then the indent for whatever
+    /// Where `id`'s leading run begins: the first leading comment no construct
+    /// has placed, else `fallback`.
+    fn leading_start(&self, id: crate::ast::AstId, fallback: usize) -> usize {
+        self.first_unplaced_leading(id)
+            .map_or(fallback, |c| c.span.start)
+    }
+
+    /// The first leading comment of `id` no construct has placed. One emitted
+    /// elsewhere is no longer part of the run: it anchors nothing and bounds
+    /// nothing.
+    fn first_unplaced_leading(&self, id: crate::ast::AstId) -> Option<&'a crate::comment::Comment> {
+        self.leading_of(id)
+            .iter()
+            .find(|c| !self.emitted_comments.contains(&c.span.start))
+    }
+
+    /// Emit the unplaced comments in `lo..pos`, then the indent for whatever
     /// follows on that line. A line comment takes a line of its own; a block
     /// comment stays ahead of the entry on its line, so `/*flag=*/false` reads
-    /// as the argument's own annotation rather than a stranded comment.
-    fn open_entry_line(&mut self, pos: usize) {
-        for comment in &self.pending_comments_in(0, pos) {
+    /// as the argument's own annotation rather than a stranded comment. `lo`
+    /// keeps a comment written before the list out of it.
+    fn open_entry_line(&mut self, lo: usize, pos: usize) {
+        for comment in &self.pending_comments_in(lo, pos) {
             self.emitted_comments.insert(comment.span.start);
             self.indent_if_at_line_start();
             self.emit_comment(comment);
@@ -339,14 +363,15 @@ impl<'a> Unparser<'a> {
             .collect()
     }
 
-    /// Emit one entry of a delimited list per line, up to the delimiter at
-    /// `close`. `anchors` gives each entry its source start and the id a
-    /// same-line trailing comment attaches to. Every wrapped list renders here,
-    /// so where an interior comment goes is decided once rather than per
+    /// Emit one entry of a delimited list per line, between the delimiters at
+    /// `open` and `close`. `anchors` gives each entry its source start and the
+    /// id a same-line trailing comment attaches to. Every wrapped list renders
+    /// here, so where an interior comment goes is decided once rather than per
     /// construct.
     fn emit_entries_per_line<T, A, E>(
         &mut self,
         entries: &[T],
+        open: usize,
         close: usize,
         anchors: A,
         mut emit: E,
@@ -354,10 +379,14 @@ impl<'a> Unparser<'a> {
         A: Fn(&T) -> (Option<usize>, Option<crate::ast::AstId>),
         E: FnMut(&mut Self, &T),
     {
+        let mut lo = open;
         for entry in entries {
             let (start, trailing_id) = anchors(entry);
             match start {
-                Some(start) => self.open_entry_line(start),
+                Some(start) => {
+                    self.open_entry_line(lo, start);
+                    lo = start;
+                }
                 None => self.write_indent(),
             }
             emit(self, entry);
@@ -367,9 +396,10 @@ impl<'a> Unparser<'a> {
             }
             self.output.push('\n');
         }
-        // Whatever is left inside the delimiters, a comment wedged inside an
-        // entry included: there is no finer place for it.
-        self.flush_comments_before(close, Spacing::Tight);
+        // Whatever is left between the delimiters, a comment wedged inside an
+        // entry included: there is no finer place for it. Bounded by `open`,
+        // since a comment written before the list is not inside it.
+        self.flush_comments_in(open, close, Spacing::Tight);
     }
 
     /// Leading trivia for `id`, or an empty slice when no trivia map is
@@ -379,12 +409,9 @@ impl<'a> Unparser<'a> {
     }
 
     /// The line `id`'s leading run starts on: its first still-unplaced leading
-    /// comment, else `fallback`. A comment emitted elsewhere anchors nothing —
-    /// the gap it described is not where it ended up.
+    /// comment, else `fallback`.
     fn leading_start_line(&self, id: crate::ast::AstId, fallback: usize) -> usize {
-        self.leading_of(id)
-            .iter()
-            .find(|c| !self.emitted_comments.contains(&c.span.start))
+        self.first_unplaced_leading(id)
             .map_or(fallback, |c| c.span.line)
     }
 
@@ -406,7 +433,10 @@ impl<'a> Unparser<'a> {
                 self.output.push('\n');
             }
         }
-        self.last_source_line = target_line;
+        // Never backwards. A construct written above what the output has
+        // already reached is one being moved down, and re-anchoring to its line
+        // would invent the gap below it.
+        self.last_source_line = self.last_source_line.max(target_line);
     }
 
     pub fn unparse(mut self, module: &Module) -> String {
@@ -455,10 +485,12 @@ impl<'a> Unparser<'a> {
     fn unparse_item(&mut self, item: &Item) {
         let id = get_item_id(item);
 
-        let last_comment_was_doc = self.emit_leading_for_check_doc(id);
         // Whatever the items before this one had no slot for, at the boundary
-        // the next parse will read it in.
-        self.flush_comments_before(get_item_span(item).start, Spacing::KeepBlankLines);
+        // the next parse will read it in, and above this item's leading run so
+        // that nothing lands between a doc comment and what it documents.
+        let leading_start = self.leading_start(id, get_item_span(item).start);
+        self.flush_comments_before(leading_start, Spacing::KeepBlankLines);
+        let last_comment_was_doc = self.emit_leading_for_check_doc(id);
 
         // Anchor the leading-blank computation to the first attribute, not to
         // the item's own line — otherwise repeated formatting passes would grow
@@ -574,6 +606,7 @@ impl<'a> Unparser<'a> {
         let braces = u.items_span.unwrap_or(u.span);
         self.emit_entries_per_line(
             &u.items,
+            braces.start,
             braces.end,
             |item| {
                 let id = match item {
@@ -811,6 +844,7 @@ impl<'a> Unparser<'a> {
         self.indent_level += 1;
         self.emit_entries_per_line(
             params,
+            params_span.start,
             params_span.end,
             |p| (Some(p.span.start), Some(p.id)),
             Unparser::unparse_param,
@@ -1349,12 +1383,15 @@ impl<'a> Unparser<'a> {
         for stmt in &block.stmts {
             let stmt_span = get_stmt_span(stmt);
             let stmt_id = stmt.id();
-            self.emit_leading_for(stmt_id);
             // Whatever the statements before this one had no slot for. Flushing
             // at the next boundary rather than at the previous statement's end
             // puts the comment where the next parse will read it — as this
             // statement's leading trivia — so the output is a fixed point.
-            self.flush_comments_before(stmt_span.start, Spacing::KeepBlankLines);
+            self.flush_comments_before(
+                self.leading_start(stmt_id, stmt_span.start),
+                Spacing::KeepBlankLines,
+            );
+            self.emit_leading_for(stmt_id);
             self.emit_blank_lines_to(stmt_span.line);
             self.unparse_stmt(stmt);
             self.emit_trailing_for(stmt_id);
@@ -1428,6 +1465,9 @@ impl<'a> Unparser<'a> {
 
         if let Some(ref v) = l.value {
             self.output.push_str(" = ");
+            // A block comment between `=` and the value annotates the value, so
+            // it stays there rather than moving into whatever the value is.
+            self.emit_inline_comments_in(l.span.start, v.span().start);
             self.unparse_expr(v);
         }
         if let Some(else_block) = &l.else_block {
@@ -1452,6 +1492,7 @@ impl<'a> Unparser<'a> {
         self.output.push_str("return");
         if let Some(value) = &r.value {
             self.output.push(' ');
+            self.emit_inline_comments_in(r.span.start, value.span().start);
             self.unparse_expr(value);
         }
         self.output.push_str(";\n");
@@ -1859,6 +1900,7 @@ impl<'a> Unparser<'a> {
             self.indent_level += 1;
             self.emit_entries_per_line(
                 elements,
+                tuple_lit.span.start,
                 tuple_lit.span.end,
                 |e| (Some(e.span().start), Some(e.id())),
                 Unparser::unparse_expr,
@@ -2160,6 +2202,7 @@ impl<'a> Unparser<'a> {
         self.indent_level += 1;
         self.emit_entries_per_line(
             args,
+            span.start,
             span.end,
             |a| (Some(a.span().start), Some(a.id())),
             Unparser::unparse_expr,
@@ -2500,12 +2543,14 @@ impl<'a> Unparser<'a> {
             match part {
                 // Literal segments are stored raw, escapes and all.
                 TemplatePart::String(s) => self.output.push_str(s),
-                TemplatePart::Interpolation { expr, format } => {
+                TemplatePart::Interpolation { expr, format, open } => {
                     self.output.push_str("${");
-                    // A block comment inside the interpolation keeps its place;
-                    // a line comment would end the template, so it stays
-                    // unplaced and the enclosing statement flushes it.
-                    self.emit_inline_comments_in(t.span.start, expr.span().start);
+                    // A block comment inside these braces keeps its place; a
+                    // line comment would end the template, so it stays unplaced
+                    // and the enclosing statement flushes it. The range starts
+                    // at this interpolation's own `${`, or a comment trailing
+                    // the previous one would move to this expression.
+                    self.emit_inline_comments_in(open.start, expr.span().start);
                     self.unparse_expr(expr);
                     if let Some(fmt) = format {
                         self.output.push(':');
@@ -2579,6 +2624,7 @@ impl<'a> Unparser<'a> {
         self.indent_level += 1;
         self.emit_entries_per_line(
             &s.members(),
+            s.span.start,
             s.span.end,
             |m| (Some(m.span().start), Some(m.value_id())),
             |s, m| s.emit_literal_member(m),
@@ -2760,8 +2806,16 @@ impl<'a> Unparser<'a> {
         let snapshot = mark.output;
         let added = self.added_since(mark);
         let last = added.rfind('\n').map_or(0, |nl| nl + 1);
+        // The reservation belongs to the line the caller will write on, so it
+        // counts only while the rendering is still on that line. Once the
+        // construct has broken, what follows the piece being measured is the
+        // rest of the construct, not the caller's ` {`.
         let reserved = match self.reserved_width {
-            Some((base, extra)) if mark.output <= base => extra,
+            Some((base, extra))
+                if mark.output >= base && !self.output[base..mark.output].contains('\n') =>
+            {
+                extra
+            }
             _ => 0,
         };
         added.split('\n').any(|line| {
@@ -2802,7 +2856,6 @@ impl<'a> Unparser<'a> {
                 self.write_indent();
                 self.emit_comment(comment);
                 self.output.push('\n');
-                self.last_source_line = comment.span.line;
             }
         }
     }
@@ -2820,7 +2873,6 @@ impl<'a> Unparser<'a> {
                 self.write_indent();
                 self.emit_comment(comment);
                 self.output.push('\n');
-                self.last_source_line = comment.span.line;
                 last_was_doc = comment.kind == CommentKind::DocLine;
             }
         }
@@ -2909,7 +2961,6 @@ impl<'a> Unparser<'a> {
                 self.write_indent();
                 self.emit_comment(comment);
                 self.output.push('\n');
-                self.last_source_line = comment.span.line;
             }
         }
     }
@@ -3603,7 +3654,7 @@ fn unparse_template_string_into(t: &TemplateStringExpr, output: &mut String) {
         match part {
             // Literal segments are stored raw, escapes and all.
             TemplatePart::String(s) => output.push_str(s),
-            TemplatePart::Interpolation { expr, format } => {
+            TemplatePart::Interpolation { expr, format, .. } => {
                 output.push_str("${");
                 unparse_expr_into(expr, output);
                 if let Some(fmt) = format {
@@ -5428,3 +5479,4 @@ mod tests {
         assert_eq!(compound_op_str(CompoundAssignOp::Div), "/=");
     }
 }
+

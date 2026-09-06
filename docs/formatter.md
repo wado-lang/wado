@@ -85,6 +85,9 @@ to no node of the syntax tree. The rules below hold for all of them.
 - A construct with no such place moves the comment outward, to the next
   statement, item, member, or closing brace. It never leaves the declaration it
   was written in unless nothing inside that declaration can hold it.
+- A comment only ever moves outward. It is never adopted by a construct it was
+  not written inside, and never lands between a doc comment and what that
+  comment documents.
 - A block comment before a list entry stays on that entry's line, so
   `foo(/*flag=*/true)` reads as the argument's annotation. A line comment takes
   a line of its own.
