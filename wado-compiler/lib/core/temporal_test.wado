@@ -433,12 +433,12 @@ test "Instant::parse_rfc3339 drops the offset, keeping the exact instant" {
 }
 
 test "Instant and ZonedDateTime parse through FromStr" {
-    assert Instant::from_str("2023-11-14T22:13:20Z") matches { Ok(t) && t == Instant {
+    assert Instant::from_str(&"2023-11-14T22:13:20Z") matches { Ok(t) && t == Instant {
         seconds: 1_700_000_000,
         nanoseconds: 0,
     } };
-    assert ZonedDateTime::from_str("2023-11-15T07:13:20+09:00") matches { Ok(zdt) && zdt.time_zone == "+09:00" };
-    assert Instant::from_str("nope") matches { Err(_) };
+    assert ZonedDateTime::from_str(&"2023-11-15T07:13:20+09:00") matches { Ok(zdt) && zdt.time_zone == "+09:00" };
+    assert Instant::from_str(&"nope") matches { Err(_) };
 }
 
 test "Instant exposes microsecond and full-range nanosecond epochs" {
@@ -990,12 +990,12 @@ test "the plain family goes over the wire as its ISO 8601 form" {
 }
 
 test "the plain family parses through FromStr" {
-    assert PlainDate::from_str("2023-11-14") matches { Ok(d) && d == PlainDate::new(2023, 11, 14) };
-    assert PlainTime::from_str("22:13") matches { Ok(t) && t == PlainTime { hour: 22, minute: 13 } };
-    assert PlainYearMonth::from_str("2024-02") matches { Ok(m) && m == PlainYearMonth::new(2024, 2) };
-    assert PlainMonthDay::from_str("--02-29") matches { Ok(m) && m == PlainMonthDay::new(2, 29) };
-    assert PlainDateTime::from_str("2023-11-14T22:13") matches { Ok(_) };
-    assert PlainDate::from_str("2023-11-14 ") matches { Err(_) };
+    assert PlainDate::from_str(&"2023-11-14") matches { Ok(d) && d == PlainDate::new(2023, 11, 14) };
+    assert PlainTime::from_str(&"22:13") matches { Ok(t) && t == PlainTime { hour: 22, minute: 13 } };
+    assert PlainYearMonth::from_str(&"2024-02") matches { Ok(m) && m == PlainYearMonth::new(2024, 2) };
+    assert PlainMonthDay::from_str(&"--02-29") matches { Ok(m) && m == PlainMonthDay::new(2, 29) };
+    assert PlainDateTime::from_str(&"2023-11-14T22:13") matches { Ok(_) };
+    assert PlainDate::from_str(&"2023-11-14 ") matches { Err(_) };
 }
 
 test "Instant serializes as an RFC 3339 string with minimal precision" {
