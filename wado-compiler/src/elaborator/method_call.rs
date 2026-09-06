@@ -1454,12 +1454,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .as_ref()
             .and_then(|key| self.unique_qualified_method_sig_keyed(key, &static_call.method));
         let (callee_params, declares_params) = match static_receiver.as_ref() {
-            Some(receiver) => self.static_callee_params(
-                receiver,
-                target_type_id,
-                &static_call.method,
-                static_call.span,
-            ),
+            Some(receiver) => {
+                self.static_callee_params(receiver, target_type_id, &static_call.method)
+            }
             None => (super::sem::types::CalleeParams::default(), false),
         };
         let super::sem::types::CalleeParams {
@@ -3702,7 +3699,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let receiver_key = self.impl_target(&actual_struct_name);
         let receiver_type = self.resolve_unsited_type_name(&actual_struct_name, span);
         let (callee_params, _) =
-            self.static_callee_params(&receiver_key, receiver_type, method_name, span);
+            self.static_callee_params(&receiver_key, receiver_type, method_name);
 
         let StaticMethodRef {
             module: struct_module,

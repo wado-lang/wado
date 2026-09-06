@@ -965,7 +965,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let receiver_key = self.impl_target(prefix);
                 let receiver_type = self.resolve_unsited_type_name(prefix, call.span);
                 let (callee_params, declares_params) =
-                    self.static_callee_params(&receiver_key, receiver_type, suffix, call.span);
+                    self.static_callee_params(&receiver_key, receiver_type, suffix);
                 let raw_param_types = if declares_params {
                     callee_params.param_types.clone()
                 } else {

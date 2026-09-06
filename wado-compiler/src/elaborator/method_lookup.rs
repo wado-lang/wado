@@ -1457,11 +1457,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// it fills. A callee no declaration names — a variant case, a flags member
     /// — answers `false` and owns its argument count in its own arm.
     pub(super) fn static_callee_params(
-        &mut self,
+        &self,
         receiver: &ImplTargetKey,
         receiver_type: TypeId,
         method_name: &str,
-        span: Span,
     ) -> (super::sem::types::CalleeParams, bool) {
         if let Some(sig) = self.unique_qualified_method_sig_keyed(receiver, method_name) {
             return (
@@ -1469,7 +1468,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 true,
             );
         }
-        match self.inherited_trait_static_params(receiver, receiver_type, method_name, span) {
+        match self.inherited_trait_static_params(receiver, receiver_type, method_name) {
             Some(params) => (params, true),
             None => (super::sem::types::CalleeParams::default(), false),
         }
@@ -1481,16 +1480,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// answers, and the call site was left with no list at all: the arity went
     /// unchecked and no default was padded, and codegen emitted a call whose
     /// arguments nothing had pushed.
-    pub(super) fn inherited_trait_static_params(
-        &mut self,
+    ///
+    /// Read off the blocks on the receiver rather than resolved: the resolution
+    /// this stands in for is the one the call has not made yet, and running it
+    /// here would decide an overload and reach impls on other types.
+    fn inherited_trait_static_params(
+        &self,
         receiver: &ImplTargetKey,
         receiver_type: TypeId,
         method_name: &str,
-        span: Span,
     ) -> Option<super::sem::types::CalleeParams> {
-        // Only where no impl on the receiver declares the name at all. Several
-        // is an overload the call site picks by argument, and resolving it here
-        // would both decide it and report an ambiguity the call does not have.
+        // Only where no block on the receiver declares the name. Several is an
+        // overload the call site picks among by argument.
         if self
             .qualified_method_decl_ids(receiver, method_name)
             .next()
@@ -1498,17 +1499,49 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         {
             return None;
         }
-        let found = self.find_trait_method_for_type(
-            receiver,
-            method_name,
-            None,
-            Some(receiver_type),
-            span,
-            None,
-            None,
-        )?;
-        (found.method_info.self_kind == ast::SelfKind::None)
-            .then(|| super::sem::types::CalleeParams::of_inherited_static(found.method_info))
+        for impl_def in self
+            .tysys
+            .trait_env
+            .impl_index
+            .get(receiver)?
+            .iter()
+            .copied()
+        {
+            let Some(impl_sig) = self.tysys.signatures.impl_sig(impl_def) else {
+                continue;
+            };
+            let Some(declaring) = impl_sig
+                .trait_decl
+                .and_then(|decl| self.tysys.signatures.trait_sig(decl))
+            else {
+                continue;
+            };
+            let Some(declared) = declaring.method(method_name) else {
+                continue;
+            };
+            // A required method the block does not declare is its own error,
+            // reported where the two are compared; an instance method reaches
+            // its receiver through the spelling's first argument.
+            if declared.default_body.is_none() || declared.sig.self_kind != ast::SelfKind::None {
+                continue;
+            }
+            // The trait's frame: `Self` leads its slots, the trait's own
+            // arguments follow, and the method's own stay open to inference.
+            let mut declaring_args = vec![receiver_type];
+            declaring_args.extend(impl_sig.trait_type_args.iter().copied());
+            let instantiated =
+                declared
+                    .sig
+                    .instantiate_call(&self.tysys.type_table, &declaring_args, &[]);
+            return Some(super::sem::types::CalleeParams {
+                param_is_mut: super::sig::Param::is_mut_flags(&declared.sig.params),
+                param_defaults: super::sig::Param::named_defaults(&declared.sig.params),
+                param_types: instantiated.param_types,
+                self_in_args: false,
+                defaults_module: Some(declaring.module.clone()),
+            });
+        }
+        None
     }
 
     /// Find a trait method for a given type and method name, for when an
