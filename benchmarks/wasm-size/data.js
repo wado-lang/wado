@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1788656199459,
+  "lastUpdate": 1788683843191,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -53825,6 +53825,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/e47d83d7f26be559cee5530eeecea4a066b0706e"
         },
         "date": 1788656199163,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 2013,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6560,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18891,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 277505,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "9f5553cdb31b833d0fc1d79db78363ebe8f5f60c",
+          "message": "Merge pull request #1982 from wado-lang/claude/package-gale-import-s-design-tg9l2z\n\nfeat(gale): compose `import S;` against the supplied inputs",
+          "timestamp": "2026-09-06T17:22:47+09:00",
+          "tree_id": "f29b8a3273b520025c4d2caf9ea51b0155875ef4",
+          "url": "https://github.com/wado-lang/wado/commit/9f5553cdb31b833d0fc1d79db78363ebe8f5f60c"
+        },
+        "date": 1788683842545,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
