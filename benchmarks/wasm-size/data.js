@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1788712250516,
+  "lastUpdate": 1788735302442,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -53913,6 +53913,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/647df91bc596cc0a7c9f5189be4020c06bd0cd17"
         },
         "date": 1788712250191,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 2013,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6560,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18891,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 277505,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "d89a39b90f4b484f0f5749ce7a472973adb97c3e",
+          "message": "Merge pull request #1986 from wado-lang/claude/wado-non-wado-assets-nbvleo\n\nfix(kiln): harvest clauses from every module, one redirect per declaring site",
+          "timestamp": "2026-09-07T07:42:37+09:00",
+          "tree_id": "e4465981c931ae8948b66778b14c8d0c05d1d6c2",
+          "url": "https://github.com/wado-lang/wado/commit/d89a39b90f4b484f0f5749ce7a472973adb97c3e"
+        },
+        "date": 1788735301857,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
