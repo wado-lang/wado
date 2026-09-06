@@ -89,8 +89,11 @@ fn forward_one(
         // `ensure_value_graph` never rebuilds, so what is seeded here is what
         // licm and `promote_fields` inherit.
         engine.set_param_locals(param_locals);
-        engine.build_value_graph_now();
     }
+    // Before the first query: `scoped_const_reads` only *grows* a graph that
+    // already exists, and this session is the one that set the real alias sets,
+    // so a body reaching it without one forwarded nothing at all.
+    engine.build_value_graph_now();
     unsafe_locals.extend(engine.body_address_taken().iter().copied());
     // The complement of the unsafe set: what disqualifies a local is being
     // address-taken or `stores`-aliased, not being an aggregate.
@@ -162,25 +165,29 @@ fn forward_at_root(
         // not the value, is used; forwarding the stored literal would destroy
         // the place and lose a callee's write-back (`g(&mut obj.f)` → `g(&mut
         // 5)`). Mirrors the sibling `extract::freeze_pure_arith` guard.
-        let field = matches!(engine.body.exprs[expr].kind, ExprKind::FieldAccess { .. });
+        let field = match &engine.body.exprs[expr].kind {
+            ExprKind::FieldAccess { field_name, .. } => Some(field_name.clone()),
+            _ => None,
+        };
+        let field = field.filter(|n| n == "width");
         if super::extract::is_place_read(engine, expr) {
-            if field {
-                crate::compiler_trace!("vg_field", "forward {expr:?}: a place read");
+            if field.is_some() {
+                crate::compiler_trace!("vg_field", "forward width {expr:?}: a place read");
             }
             continue;
         }
         // A read not in `forwarded` has no re-emittable value.
         let Some(vid) = forwarded.get(&expr).copied() else {
-            if field {
-                crate::compiler_trace!("vg_field", "forward {expr:?}: no re-emittable value");
+            if field.is_some() {
+                crate::compiler_trace!("vg_field", "forward width {expr:?}: no re-emittable value");
             }
             continue;
         };
         // The constant promotes into `expr`'s parent operand slot (WEP: The Live
         // ValueGraph).
         let Some(value) = super::extract::extract_const(engine, vid, expr) else {
-            if field {
-                crate::compiler_trace!("vg_field", "forward {expr:?}: {vid:?} does not extract");
+            if field.is_some() {
+                crate::compiler_trace!("vg_field", "forward width {expr:?}: {vid:?} no extract");
             }
             continue;
         };

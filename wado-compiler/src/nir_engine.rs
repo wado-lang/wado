@@ -519,8 +519,10 @@ impl<'a> Engine<'a> {
         // (`bump_call_effects`), destroying a local's reaching value across the
         // calls between its store and a later read. A SROA scalar is
         // non-escaping, so the real sets leave it untouched by calls — exactly
-        // the forwarding we need to recover. (`pure_calls` is left empty here:
-        // bumping at every call is conservative — it only forgoes a forward.)
+        // the forwarding we need to recover. The per-call verdicts are the real
+        // ones for the same reason: a call this walk cannot call pure bumps
+        // every escaped local's heap version, and a field read of one then
+        // matches no store.
         let empty_builtins = IndexSet::default();
         let vo = builder::build_scoped(
             self.body,
@@ -531,13 +533,25 @@ impl<'a> Engine<'a> {
             &self.untrackable_locals,
             &self.mut_escaped_locals,
             self.vg_type_table,
-            self.pure_builtin_callees.unwrap_or(&empty_builtins),
+            builder::CallFacts {
+                pure_builtin: self.pure_builtin_callees.unwrap_or(&empty_builtins),
+                pure: &self.pure_calls,
+                receiver_immutable: &self.receiver_immutable_calls,
+            },
             &mut scratch,
             None,
             live_base,
         );
+        let mut fields_seen = 0;
+        let mut fields_const = 0;
         let mut out = Vec::new();
         for (e, v) in vo {
+            if matches!(self.body.exprs[e].kind, ExprKind::FieldAccess { .. }) {
+                fields_seen += 1;
+                if builder::is_const_value(&self.body.values, v) {
+                    fields_const += 1;
+                }
+            }
             if !builder::is_const_value(&self.body.values, v) {
                 continue;
             }
@@ -550,6 +564,11 @@ impl<'a> Engine<'a> {
                 out.push((e, v));
             }
         }
+        crate::compiler_trace!(
+            "vg_field",
+            "scoped reads: {fields_const} of {fields_seen} field reads are const, {} kept",
+            out.len()
+        );
         out
     }
 
@@ -579,7 +598,11 @@ impl<'a> Engine<'a> {
             &self.untrackable_locals,
             &self.mut_escaped_locals,
             self.vg_type_table,
-            self.pure_builtin_callees.unwrap_or(&empty_builtins),
+            builder::CallFacts {
+                pure_builtin: self.pure_builtin_callees.unwrap_or(&empty_builtins),
+                pure: &self.pure_calls,
+                receiver_immutable: &self.receiver_immutable_calls,
+            },
             &mut scratch,
             None,
         );

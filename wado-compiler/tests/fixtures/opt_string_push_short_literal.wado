@@ -20,7 +20,9 @@
 // the WIR that:
 //   * each source byte is written directly with `array_set_u8` (the
 //     inlined `push_ascii` fast path), all six sharing the one reservation
-//     the append fusion leaves for the whole adjacent run; and
+//     the append fusion leaves for the whole adjacent run — the buffer
+//     starts empty and nothing else writes it, so that reservation's new
+//     length is the constant 6; and
 //   * no `push_str`, char-`push`, or `encode_char` call survives — the
 //     specialization avoids the temporary `String` alloc and the UTF-8
 //     width dispatch for every short-literal site.
@@ -39,7 +41,7 @@ __DATA__
 {
     "stdout": "0..inf\n",
     "wir_expect:O2": [
-        "buf.used = new_used;",
+        "buf.used = 6;",
         "array_set_u8(buf.repr,",
         ", 48)",
         ", 46)",

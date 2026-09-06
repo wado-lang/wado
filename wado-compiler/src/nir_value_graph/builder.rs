@@ -248,7 +248,7 @@ pub(crate) fn build_scoped(
     untrackable: &crate::hashmap::IndexSet<u32>,
     mut_escaped: &crate::hashmap::IndexSet<u32>,
     type_table: Option<&crate::tir::TypeTable>,
-    pure_builtin_callees: &crate::hashmap::IndexSet<FuncId>,
+    calls: CallFacts<'_>,
     scratch: &mut ValuePool,
     heap_seed: Option<&HeapSnapshot>,
     live_base: u32,
@@ -262,7 +262,7 @@ pub(crate) fn build_scoped(
         untrackable,
         mut_escaped,
         type_table,
-        pure_builtin_callees,
+        calls,
         scratch,
         heap_seed,
     );
@@ -296,13 +296,20 @@ pub(crate) fn walk_scoped(
     untrackable: &crate::hashmap::IndexSet<u32>,
     mut_escaped: &crate::hashmap::IndexSet<u32>,
     type_table: Option<&crate::tir::TypeTable>,
-    pure_builtin_callees: &crate::hashmap::IndexSet<FuncId>,
+    calls: CallFacts<'_>,
     scratch: &mut ValuePool,
     heap_seed: Option<&HeapSnapshot>,
 ) -> ScopedWalk {
     let pool = std::mem::take(scratch);
     let mut b = Builder::new(body, aliased, untrackable, mut_escaped, type_table, pool);
-    b.pure_builtin_callees.clone_from(pure_builtin_callees);
+    // The same per-call verdicts the whole-body build gets. Withholding them
+    // does not merely forgo a forward: a call the walk cannot call pure bumps
+    // every escaped local's heap version, and a field read of one then matches
+    // no store — so the scoped walk forwarded no field read at all.
+    b.pure_builtin_callees.clone_from(calls.pure_builtin);
+    b.pure_calls.clone_from(calls.pure);
+    b.receiver_immutable_calls
+        .clone_from(calls.receiver_immutable);
     b.current_value.clone_from(seed);
     // Seed the heap with the caller's version state at the call site so a
     // spliced field read carries the version a fresh whole-function build
@@ -1991,13 +1998,13 @@ fn block_breaks_to_node(body: &Body, node: NodeRef, label: &str) -> bool {
 
 /// The per-call verdicts the loop summary reads, bundled so it asks the same
 /// questions [`Builder::bump_call_effects`] asks of one call.
-struct CallFacts<'a> {
+pub(crate) struct CallFacts<'a> {
     /// Builtin intrinsics operating below the struct-field layer.
-    pure_builtin: &'a crate::hashmap::IndexSet<FuncId>,
+    pub(crate) pure_builtin: &'a crate::hashmap::IndexSet<FuncId>,
     /// Calls that mutate no caller local.
-    pure: &'a crate::hashmap::IndexSet<ExprId>,
+    pub(crate) pure: &'a crate::hashmap::IndexSet<ExprId>,
     /// Calls whose callee cannot write through the receiver.
-    receiver_immutable: &'a crate::hashmap::IndexSet<ExprId>,
+    pub(crate) receiver_immutable: &'a crate::hashmap::IndexSet<ExprId>,
 }
 
 /// A loop body's heap-write effects, used to invalidate exactly the fields a
