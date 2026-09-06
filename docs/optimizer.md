@@ -210,22 +210,28 @@ Missing optimizations, one entry per pass-shaped gap. Architectural work — com
       best, then nested. That reaches the hand-written dispatchers the
       synthesised `FieldSchema::lookup` tree does not. An atom that guards
       another's operand range has to be tested first, or a miss becomes a trap.
-- [ ] Reading a `&mut` field as the place it holds. `` `${'x'}` `` reaches the
-      IR as a `Formatter` whose `buf: &mut String` is read back —
-      `let self = f.buf;` — and the writes go through that read. The literal
-      seeds eight of its nine fields; `buf` is the one it cannot, since a
-      reference is not a value the graph names. So the region stays a run-time
-      append where `` `${true}` `` folds to a literal. This is
-      [the NIR interpreter WEP](./wep-2026-04-27-nir-interpreter.md)'s
-      place-valued field seen from the graph side, and `niri`'s frame already
-      answers it for a `let`-bound borrow (`place_aliases`).
+- [ ] A length the graph could know. `` `${'x'}` `` builds its buffer with
+      `String::with_capacity`, so every append is guarded by
+      `n > array_len(buf.repr)` over a `repr` the same statement set to
+      `array_new(18)`. The graph names no builtin, so the length is opaque, the
+      guard survives, and the `String::grow` behind it bumps every escaped
+      local's heap version — which is what now stops `buf.used` forwarding
+      across an append, and with it the whole template folding to a literal.
+      `niri` already evaluates both builtins (`CtfeBuiltin::ArrayNew` /
+      `ArrayLen`) from its `CtfeBuiltinMap`; the graph would take the same map.
+
+      The other way in is `niri`'s, and it is
+      [that WEP](./wep-2026-04-27-nir-interpreter.md)'s stage 3: the region
+      containing all of this is refused because the `&mut` in
+      `Formatter { …, buf: &mut buffer }` is a write the frame does not perform.
+      Either one folds the template; the graph's is the smaller.
 
       `sroa` declines the same struct for its own reason — `&mut candidate` is a
       hard escape, exempting only a shared `&` argument to a non-storing callee
       — which is worth revisiting now that nothing else keeps the `Formatter`
-      alive. `WADO_TRACE=vg_field` reports what a field read forwarded to and
-      what a literal seeded; `WADO_TRACE=sroa` and `copy_prop` report a declined
-      candidate.
+      alive. `WADO_TRACE=vg_field` reports what a field read forwarded to, what
+      a literal seeded, and which local a `&mut` field borrows;
+      `WADO_TRACE=sroa` and `copy_prop` report a declined candidate.
 - [ ] Tail call optimization (`return_call`).
 - [ ] Bounds-check elimination for chained sequential access (`arr[0]; arr[1]; arr[2]`).
 - [ ] Folding a `match` whose scrutinee is a syntactically known
