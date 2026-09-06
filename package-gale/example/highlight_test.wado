@@ -2,7 +2,8 @@
 //!
 //! Read the `add` line of `EXPECTED` next to the `one` line: the same `a`
 //! carries `variable parameter` in one and `variable` in the other, and the
-//! `=>` further right is what decides it.
+//! `=>` further right is what decides it. The default value nests parentheses,
+//! so reaching that `=>` means matching brackets.
 
 use { highlight_page } from "./highlight.wado";
 
@@ -10,8 +11,8 @@ global PAGE: String = `<style>
 body { color: navy; }
 </style>
 <script>
-let add = (a, b) => a + b;
-let one = (a);
+let add = (a, b = (1 + 2)) => a + b;
+let one = ((a));
 </script>
 <p>hi</p>
 `;
@@ -20,8 +21,8 @@ global EXPECTED: String = `<span class="tag">&lt;style&gt;</span>
 <span class="type">body</span> <span class="punctuation bracket">{</span> <span class="property">color</span><span class="punctuation delimiter">:</span> <span class="constant">navy</span><span class="punctuation delimiter">;</span> <span class="punctuation bracket">}</span>
 <span class="tag">&lt;/style&gt;</span>
 <span class="tag">&lt;script&gt;</span>
-<span class="keyword">let</span> <span class="variable">add</span> <span class="operator">=</span> <span class="punctuation bracket">(</span><span class="variable parameter">a</span><span class="punctuation delimiter">,</span> <span class="variable parameter">b</span><span class="punctuation bracket">)</span> <span class="operator">=&gt;</span> <span class="variable">a</span> <span class="operator">+</span> <span class="variable">b</span><span class="punctuation delimiter">;</span>
-<span class="keyword">let</span> <span class="variable">one</span> <span class="operator">=</span> <span class="punctuation bracket">(</span><span class="variable">a</span><span class="punctuation bracket">)</span><span class="punctuation delimiter">;</span>
+<span class="keyword">let</span> <span class="variable">add</span> <span class="operator">=</span> <span class="punctuation bracket">(</span><span class="variable parameter">a</span><span class="punctuation delimiter">,</span> <span class="variable parameter">b</span> <span class="operator">=</span> <span class="punctuation bracket">(</span><span class="number">1</span> <span class="operator">+</span> <span class="number">2</span><span class="punctuation bracket">)</span><span class="punctuation bracket">)</span> <span class="operator">=&gt;</span> <span class="variable">a</span> <span class="operator">+</span> <span class="variable">b</span><span class="punctuation delimiter">;</span>
+<span class="keyword">let</span> <span class="variable">one</span> <span class="operator">=</span> <span class="punctuation bracket">(</span><span class="punctuation bracket">(</span><span class="variable">a</span><span class="punctuation bracket">)</span><span class="punctuation bracket">)</span><span class="punctuation delimiter">;</span>
 <span class="tag">&lt;/script&gt;</span>
 <span class="tag">&lt;p&gt;</span>hi<span class="tag">&lt;/p&gt;</span>
 `;
@@ -31,14 +32,15 @@ test "the page highlights through all three grammars" {
     assert html == EXPECTED, `actual:\n${html}\nexpected:\n${EXPECTED}`;
 }
 
-test "an identifier is a parameter or a variable by a token further right" {
-    // `(a)` and `(a, b) =>` are the same tokens up to the closing paren. Only
-    // the parse separates them, so only a parser-driven query can class them
-    // apart — this is the whole point of the example.
-    let param = highlight_page(&"<script>let f = (a) => a;</script>");
+test "an identifier is a parameter or a variable by a token past a nested paren" {
+    // Both open `(`, and both hold a `(` before their own closing one, so the
+    // `=>` that separates them is reachable only by matching brackets. That is
+    // past a lexer, which classifies the identifier before the `=>` exists, and
+    // past a regex, whose `[^)]*` stops at the inner `)`.
+    let param = highlight_page(&"<script>let f = (a = (1)) => a;</script>");
     assert param.contains(`<span class="variable parameter">a</span>`), param;
 
-    let variable = highlight_page(&"<script>let f = (a);</script>");
+    let variable = highlight_page(&"<script>let f = ((a));</script>");
     assert !variable.contains("parameter"), variable;
     assert variable.contains(`<span class="variable">a</span>`), variable;
 }
@@ -59,6 +61,20 @@ test "each language keeps its own token space" {
 
     let js = highlight_page(&"<script>a;</script>");
     assert js.contains(`<span class="variable">a</span>`), js;
+}
+
+test "a context capture needs its enclosing rule to have parsed" {
+    // What classifying from a parse costs. The parser recovers a tree from the
+    // missing `;`, but the names no longer sit under `declaration`, so the
+    // overrides that class them do not fire. Should recovery place them there
+    // one day, this test says so by failing.
+    let ok = highlight_page(&"<style>a { b: c; }</style>");
+    assert ok.contains(`<span class="property">b</span>`), ok;
+
+    let broken = highlight_page(&"<style>a { b: c }</style>");
+    assert !broken.contains(`<span class="property">b</span>`), broken;
+    // The text itself survives either way.
+    assert plain_text(&broken) == "<style>a { b: c }</style>", plain_text(&broken);
 }
 
 test "highlighting is text-preserving" {

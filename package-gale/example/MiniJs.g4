@@ -7,10 +7,12 @@
 // `arrow` and `group` both open with `(`, so what an identifier between the
 // parentheses is depends on the `=>` after the closing one:
 //
-//     let add = (a, b) => a + b;   // a, b are parameters
-//     let one = (a);               // a is a variable
+//     let add = (a, b = (1 + 2)) => a + b;   // a, b are parameters
+//     let one = ((a));                       // a is a variable
 //
-// `MiniJs.highlights.scm` is where that pays off, and says why.
+// A default value can nest parentheses, so finding that closing paren means
+// matching brackets. `MiniJs.highlights.scm` is where this pays off, and says
+// why it is beyond a regular expression and not only beyond a lexer.
 //
 // `term` therefore builds with a shared-lookahead warning: `arrow` and `group`
 // are not token-led, so the generated parser settles them with a longest-match
@@ -37,7 +39,11 @@ term
     ;
 
 arrow  : JS_LPAREN params? JS_RPAREN JS_ARROW expr ;
-params : JS_IDENT (JS_COMMA JS_IDENT)* ;
+params : param (JS_COMMA param)* ;
+// A default value can be any expression, `group` included, so the parentheses
+// a decision has to look past nest. This is what puts the decision beyond a
+// regular expression rather than merely beyond a token-at-a-time lexer.
+param  : JS_IDENT (JS_ASSIGN expr)? ;
 group  : JS_LPAREN expr JS_RPAREN ;
 call   : JS_IDENT JS_LPAREN (expr (JS_COMMA expr)*)? JS_RPAREN ;
 

@@ -454,19 +454,30 @@ Embedding is the vehicle. The point is one line of
 ```
 
 `arrow` and `group` both open with `(`, so whether an identifier inside the
-parentheses is a parameter is settled by the `=>` after the closing paren. That
-token comes arbitrarily later:
+parentheses is a parameter is settled by the `=>` after the closing paren:
 
-```html
-<span class="punctuation bracket">(</span><span class="variable parameter">a</span>… <span class="operator">=&gt;</span> <span class="variable">a</span>
-<span class="punctuation bracket">(</span><span class="variable">a</span><span class="punctuation bracket">)</span>
+```js
+let add = (a, b = (1 + 2)) => a + b;   // a, b are parameters
+let one = ((a));                       // a is a variable
 ```
 
-A lexer classifies `a` when it reads it, before the deciding token exists; no
-amount of mode-stack state brings it closer. The parser decides first, and the
-query reads the answer off the rule stack. `MiniCss.highlights.scm` does the
-same in the small: one `CSS_IDENT` token becomes a selector, a property, or a
+Two things stand between a highlighter and that answer. A lexer classifies the
+identifier when it reads it, before the deciding token exists, and no
+mode-stack state brings it closer. A regex highlighter does look ahead, and
+`\(([^)]*)\)\s*=>` would settle a flat parameter list. But a default value nests
+parentheses, so `[^)]*` stops at the inner `)` and misses the `=>`. Finding that
+closing paren means matching brackets, which no regular expression does.
+
+The parser matches them, and the query reads the answer off the rule stack.
+`MiniCss.highlights.scm` does the same in the small, though a stateful lexer
+could keep up there: one `CSS_IDENT` token becomes a selector, a property, or a
 value by where the parse put it.
+
+What you pay for it is that a context capture fires only where the enclosing
+rule parsed. Drop the `;` from `color: navy` and the three CSS names lose their
+classes: the parser still recovers a tree, but the tokens no longer sit under
+`declaration`. Every parse-driven highlighter has this shape, tree-sitter
+included.
 
 The whole page's highlighted HTML is pinned in
 [`example/highlight_test.wado`](./example/highlight_test.wado):
