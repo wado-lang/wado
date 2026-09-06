@@ -210,21 +210,28 @@ Missing optimizations, one entry per pass-shaped gap. Architectural work — com
       best, then nested. That reaches the hand-written dispatchers the
       synthesised `FieldSchema::lookup` tree does not. An atom that guards
       another's operand range has to be tested first, or a miss becomes a trap.
-- [ ] Reading a `let`-bound borrow as a rename rather than an alias. `let f =
-      &mut s;` whose every use of `f` is a field projection names `s`'s place
-      and reaches no further, but it puts `s` in the value graph's `aliased`
-      set, so `f.width` is never seeded from `s`'s literal, and it is a hard
-      escape for `sroa`, so `s` is never scalarized. Both stop at the same edge.
-      Every template's `Formatter` has this shape, which is why
-      `` `${'x'}` `` does not fold while `` `${true}` `` does: `char::fmt`
-      branches on `f.width`, the branch cannot fold, its `else` arm keeps `f`
-      alive as `pad`'s receiver, and that keeps `s` aliased. Deleting the branch
-      from `char::fmt` makes the template fold to a literal outright. Hand-written
-      programs rarely show it — the borrow is usually collapsed first — so the
-      same shape written out at top level, in a labeled block, through a trait
-      method, with a `&mut` field and a non-inlinable `&mut` call in the other
-      arm, all fold. `niri`'s frame already reads such a borrow as a place
-      (`place_aliases`); this is that idea on the graph side.
+- [ ] Forwarding a template `Formatter`'s field to the read that decides a
+      branch. `` `${'x'}` `` does not fold where `` `${true}` `` does:
+      `char::fmt` branches on `f.width` where `f = &mut __f` and `__f` is a
+      `Formatter` literal three statements above, and that read never folds in
+      NIR. The `else` arm therefore survives every NIR pass, keeps `f` alive as
+      `pad`'s receiver, and keeps `__f` borrowed; WIR's const-forward collapses
+      the branch afterwards, too late. Deleting the branch from `char::fmt`
+      makes the template fold to a literal outright.
+
+      Measured, `WADO_TRACE=vg_field`: the `Formatter`'s nine fields *are*
+      seeded, and every `width` read still reports no store seeded for that
+      field — so seed and read do not meet, rather than a version invalidating
+      between them. Which of the two it is needs the trace to name its function;
+      it does not today, and the value graph has no other anchor. Hand-written
+      programs do not show it: the same shape at top level, in a labeled block,
+      through a trait method, with a `&mut` field and a non-inlinable `&mut`
+      call in the other arm, all fold.
+
+      `sroa` declines the same struct for its own reason — `&mut candidate` is a
+      hard escape, exempting only a shared `&` argument to a non-storing callee
+      — but that is not what blocks this: the hand-written cases fold while
+      `sroa` declines them too (`WADO_TRACE=sroa`).
 - [ ] Tail call optimization (`return_call`).
 - [ ] Bounds-check elimination for chained sequential access (`arr[0]; arr[1]; arr[2]`).
 - [ ] Folding a `match` whose scrutinee is a syntactically known

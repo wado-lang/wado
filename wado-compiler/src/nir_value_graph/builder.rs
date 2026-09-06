@@ -1286,6 +1286,11 @@ impl<'a> Builder<'a> {
                         return;
                     };
                     let StmtKind::Expr(Operand::Expr(tail)) = &self.body.stmts[last].kind else {
+                        crate::compiler_trace!(
+                            "vg_field",
+                            "peel {root}: block tail is {:.60?}",
+                            self.body.stmts[last].kind
+                        );
                         return;
                     };
                     producer = *tail;
@@ -1318,6 +1323,10 @@ impl<'a> Builder<'a> {
                             block_breaks_to_node(self.body, NodeRef::Expr(ve), &label)
                         })
                     {
+                        crate::compiler_trace!(
+                            "vg_field",
+                            "peel {root}: label has more than one break"
+                        );
                         return;
                     }
                     let Some(pe) = value.as_expr() else {
@@ -1334,6 +1343,15 @@ impl<'a> Builder<'a> {
         // Clone out the (field_index, value-expr) pairs to release the body
         // borrow before mutating `field_store`.
         let pairs: Vec<(u32, Operand)> = fields.iter().map(|f| (f.field_index, f.value)).collect();
+        crate::compiler_trace!(
+            "vg_field",
+            "seed local {root}: {} fields of {}",
+            pairs.len(),
+            match &self.body.exprs[producer].kind {
+                ExprKind::StructLiteral { struct_name, .. } => struct_name.clone(),
+                _ => String::new(),
+            }
+        );
         for (field_index, field_value) in pairs {
             // A promoted constant field is its own `ValueId`; a skeleton field is
             // resolved through `value_of`.
