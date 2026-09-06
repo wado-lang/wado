@@ -436,6 +436,43 @@ complete real examples, and
 [WEP: Gale Highlight Query](../docs/wep-2026-07-12-gale-highlight-query.md) for
 the design.
 
+### What the context tier buys
+
+The override form is the reason to highlight from a parse rather than a token
+stream. [`example/`](./example) carries a three-grammar demo of it —
+[`MiniHtml.g4`](./example/MiniHtml.g4) lexes a `<style>` / `<script>` body as
+one token, and [`highlight.wado`](./example/highlight.wado) hands each body to
+[`MiniCss.g4`](./example/MiniCss.g4) or [`MiniJs.g4`](./example/MiniJs.g4).
+
+Embedding is the vehicle. The point is one line of
+[`MiniJs.highlights.scm`](./example/MiniJs.highlights.scm):
+
+```scheme
+(params (IDENT) @variable.parameter)
+```
+
+`arrow` and `group` both open with `(`, so whether an identifier inside the
+parentheses is a parameter is settled by the `=>` after the closing paren —
+arbitrarily many tokens later:
+
+```html
+<span class="punctuation bracket">(</span><span class="variable parameter">a</span>… <span class="operator">=&gt;</span> <span class="variable">a</span>
+<span class="punctuation bracket">(</span><span class="variable">a</span><span class="punctuation bracket">)</span>
+```
+
+A lexer classifies `a` when it reads it, before the deciding token exists; no
+amount of mode-stack state brings it closer. The parser decides first, and the
+query reads the answer off the rule stack. `MiniCss.highlights.scm` does the
+same in the small: one `IDENT` token becomes a selector, a property, or a value
+by where the parse put it.
+
+The whole page's highlighted HTML is pinned in
+[`example/highlight_test.wado`](./example/highlight_test.wado):
+
+```sh
+wado test package-gale/example/highlight_test.wado
+```
+
 ## Compatibility and further reading
 
 Gale targets the full ANTLR4 `.g4` grammar syntax, plus the small superset

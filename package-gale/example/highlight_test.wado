@@ -1,0 +1,77 @@
+//! The pinned output of `highlight.wado` — three grammars over one page.
+//!
+//! Read the `add` line of `EXPECTED` next to the `one` line. The same `a`
+//! carries `variable parameter` in one and `variable` in the other, and the
+//! token that decides it is the `=>` further right. That is the classification
+//! a lexer cannot make, and it is why these three files are a parser demo
+//! rather than a token-colouring one.
+
+use { highlight_page, highlight_css, highlight_js } from "./highlight.wado";
+
+global PAGE: String = `<style>
+body { color: navy; }
+</style>
+<script>
+let add = (a, b) => a + b;
+let one = (a);
+</script>
+<p>hi</p>
+`;
+
+global EXPECTED: String = `<span class="tag">&lt;style&gt;</span>
+<span class="type">body</span> <span class="punctuation bracket">{</span> <span class="property">color</span><span class="punctuation delimiter">:</span> <span class="constant">navy</span><span class="punctuation delimiter">;</span> <span class="punctuation bracket">}</span>
+<span class="tag">&lt;/style&gt;</span>
+<span class="tag">&lt;script&gt;</span>
+<span class="keyword">let</span> <span class="variable">add</span> <span class="operator">=</span> <span class="punctuation bracket">(</span><span class="variable parameter">a</span><span class="punctuation delimiter">,</span> <span class="variable parameter">b</span><span class="punctuation bracket">)</span> <span class="operator">=&gt;</span> <span class="variable">a</span> <span class="operator">+</span> <span class="variable">b</span><span class="punctuation delimiter">;</span>
+<span class="keyword">let</span> <span class="variable">one</span> <span class="operator">=</span> <span class="punctuation bracket">(</span><span class="variable">a</span><span class="punctuation bracket">)</span><span class="punctuation delimiter">;</span>
+<span class="tag">&lt;/script&gt;</span>
+<span class="tag">&lt;p&gt;</span>hi<span class="tag">&lt;/p&gt;</span>
+`;
+
+test "the page highlights through all three grammars" {
+    let html = highlight_page(&PAGE);
+    assert html == EXPECTED, `actual:\n${html}\nexpected:\n${EXPECTED}`;
+}
+
+test "an identifier is a parameter or a variable by a token further right" {
+    // `(a)` and `(a, b) =>` are the same tokens up to the closing paren. Only
+    // the parse separates them, so only a parser-driven query can class them
+    // apart — this is the whole point of the example.
+    let param = highlight_js(&"let f = (a) => a;");
+    assert param.contains(`<span class="variable parameter">a</span>`), param;
+
+    let variable = highlight_js(&"let f = (a);");
+    assert !variable.contains("parameter"), variable;
+    assert variable.contains(`<span class="variable">a</span>`), variable;
+}
+
+test "one CSS identifier token takes three classes by position" {
+    let html = highlight_css(&"color { color: color; }");
+    assert html.contains(`<span class="type">color</span>`), html;
+    assert html.contains(`<span class="property">color</span>`), html;
+    assert html.contains(`<span class="constant">color</span>`), html;
+}
+
+test "highlighting is text-preserving" {
+    // Spans stripped and entities unescaped, the output is the input back.
+    let restored = plain_text(&highlight_page(&PAGE));
+    assert restored == PAGE, `actual:\n${restored}\nexpected:\n${PAGE}`;
+}
+
+/// The highlighted text with its spans stripped and its entities unescaped.
+fn plain_text(html: &String) -> String {
+    let mut text = String::new();
+    let mut in_tag = false;
+    for let c of html.chars() {
+        if in_tag {
+            if c == '>' {
+                in_tag = false;
+            }
+        } else if c == '<' {
+            in_tag = true;
+        } else {
+            text.push(c);
+        }
+    }
+    return text.replace("&lt;", "<").replace("&gt;", ">").replace("&quot;", "\"").replace("&amp;", "&");
+}
