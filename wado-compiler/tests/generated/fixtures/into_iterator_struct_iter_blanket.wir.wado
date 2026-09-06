@@ -91,14 +91,14 @@ fn "into_iterator_struct_iter_blanket.wado/__cm_export__run"() {
     let packed: i64;
     let rx_8: i32;
     let tx_9: i32;
-    __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:into_iterator_struct_iter_blanket.wado::__modules_initialized);
+    $inline___initialize_modules_0: block {
+        break_if $inline___initialize_modules_0 @likely(global:into_iterator_struct_iter_blanket.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:into_iterator_struct_iter_blanket.wado::__modules_initialized = 1;
     };
-    __inline___initialize_modules_2: block {
-        break_if __inline___initialize_modules_2 @likely(global:into_iterator_struct_iter_blanket.wado::__modules_initialized);
+    $inline___initialize_modules_2: block {
+        break_if $inline___initialize_modules_2 @likely(global:into_iterator_struct_iter_blanket.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:into_iterator_struct_iter_blanket.wado::__modules_initialized = 1;
@@ -154,6 +154,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c) {
     let start_9: i32;
     let repr: ref Array<u8>;
     let pos: i32;
+    let _av_51: i32;
     if c <u 128 {
         byte = c & 255;
         new_used = self.used + 1;
@@ -166,33 +167,34 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c) {
         builtin::array_set_u8(self.repr, start_9, byte);
         return;
     }
-    if @unlikely((self.used + 4) > builtin::array_len(self.repr)) {
+    _av_51 = self.used;
+    if @unlikely((_av_51 + 4) > builtin::array_len(self.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, self.used + 4);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, _av_51 + 4);
     }
-    self.used = self.used + __inline_encode_char_6: block -> i32 {
+    self.used = self.used + $inline_encode_char_6: block -> i32 {
         repr = self.repr;
         pos = self.used;
         if c <u 128 {
             builtin::array_set_u8(repr, pos, c & 255);
-            break __inline_encode_char_6: 1;
+            break $inline_encode_char_6: 1;
         }
         if c <u 2048 {
             builtin::array_set_u8(repr, pos, (192 | (c >>u 6)) & 255);
             builtin::array_set_u8(repr, pos + 1, (128 | (c & 63)) & 255);
-            break __inline_encode_char_6: 2;
+            break $inline_encode_char_6: 2;
         }
         if c <u 65536 {
             builtin::array_set_u8(repr, pos, (224 | (c >>u 12)) & 255);
             builtin::array_set_u8(repr, pos + 1, (128 | ((c >>u 6) & 63)) & 255);
             builtin::array_set_u8(repr, pos + 2, (128 | (c & 63)) & 255);
-            break __inline_encode_char_6: 3;
+            break $inline_encode_char_6: 3;
         }
         builtin::array_set_u8(repr, pos, (240 | (c >>u 18)) & 255);
         builtin::array_set_u8(repr, pos + 1, (128 | ((c >>u 12) & 63)) & 255);
         builtin::array_set_u8(repr, pos + 2, (128 | ((c >>u 6) & 63)) & 255);
         builtin::array_set_u8(repr, pos + 3, (128 | (c & 63)) & 255);
-        break __inline_encode_char_6: 4;
+        break $inline_encode_char_6: 4;
     };
 }
 
@@ -220,32 +222,32 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::from_iter<core:pre
             break_if b8 __sroa___iter_2_byte_index >= __sroa___iter_2_used;
             __sroa_slot_36 = 0;
             __sroa_slot_37 = 0;
-            __inline_decode_char_at_4: block {
+            $inline_decode_char_at_4: block {
                 b0 = builtin::array_get_value<u8>(__sroa___iter_2_repr, __sroa___iter_2_byte_index);
                 if b0 <u 128 {
                     __sroa_slot_36 = b0;
                     __sroa_slot_37 = 1;
-                    break __inline_decode_char_at_4;
+                    break $inline_decode_char_at_4;
                 }
                 if b0 <u 224 {
                     b1_15 = builtin::array_get_value<u8>(__sroa___iter_2_repr, __sroa___iter_2_byte_index + 1);
                     __sroa_slot_36 = ((b0 & 31) << 6) | (b1_15 & 63);
                     __sroa_slot_37 = 2;
-                    break __inline_decode_char_at_4;
+                    break $inline_decode_char_at_4;
                 }
                 if b0 <u 240 {
                     b1_16 = builtin::array_get_value<u8>(__sroa___iter_2_repr, __sroa___iter_2_byte_index + 1);
                     b2_17 = builtin::array_get_value<u8>(__sroa___iter_2_repr, __sroa___iter_2_byte_index + 2);
                     __sroa_slot_36 = (((b0 & 15) << 12) | ((b1_16 & 63) << 6)) | (b2_17 & 63);
                     __sroa_slot_37 = 3;
-                    break __inline_decode_char_at_4;
+                    break $inline_decode_char_at_4;
                 }
                 b1_18 = builtin::array_get_value<u8>(__sroa___iter_2_repr, __sroa___iter_2_byte_index + 1);
                 b2_19 = builtin::array_get_value<u8>(__sroa___iter_2_repr, __sroa___iter_2_byte_index + 2);
                 b3 = builtin::array_get_value<u8>(__sroa___iter_2_repr, __sroa___iter_2_byte_index + 3);
                 __sroa_slot_36 = ((((b0 & 7) << 18) | ((b1_18 & 63) << 12)) | ((b2_19 & 63) << 6)) | (b3 & 63);
                 __sroa_slot_37 = 4;
-                break __inline_decode_char_at_4;
+                break $inline_decode_char_at_4;
             };
             __sroa___iter_2_byte_index = __sroa___iter_2_byte_index + __sroa_slot_37;
             __fused_slot_38 = __sroa_slot_36;
@@ -306,16 +308,16 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
                 "wasi/waitable-set-drop"(ws);
                 result = status_41;
             }
-            written_16 = struct.new "core:prelude/types.wado//StreamWrite" { count: result >> 4, result: __inline_cm_copy_result_14: block -> "core:prelude/types.wado//enum:CopyResult" {
+            written_16 = struct.new "core:prelude/types.wado//StreamWrite" { count: result >> 4, result: $inline_cm_copy_result_14: block -> "core:prelude/types.wado//enum:CopyResult" {
                 let __match_scrut_0: i32;
                 __match_scrut_0 = result & 15;
                 if __match_scrut_0 == 0 {
-                    break __inline_cm_copy_result_14: 0;
+                    break $inline_cm_copy_result_14: 0;
                 } else if __match_scrut_0 == 1 {
-                    break __inline_cm_copy_result_14: 1;
+                    break $inline_cm_copy_result_14: 1;
                 } else {
                 }
-                break __inline_cm_copy_result_14: 2;
+                break $inline_cm_copy_result_14: 2;
             } };
             drop("mem/realloc"(ptr_14, raw_len, 1, 0));
             offset = offset + written_16.count;

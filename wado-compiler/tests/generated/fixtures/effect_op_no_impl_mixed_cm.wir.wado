@@ -104,14 +104,14 @@ fn "effect_op_no_impl_mixed_cm.wado/__cm_export__run"() {
     let __local_1: ref null "effect_op_no_impl_mixed_cm.wado//__Dispatch_Log";
     let __local_2: ref "effect_op_no_impl_mixed_cm.wado//__Dispatch_Log";
     let __local_3: bool;
-    __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:effect_op_no_impl_mixed_cm.wado::__modules_initialized);
+    $inline___initialize_modules_0: block {
+        break_if $inline___initialize_modules_0 @likely(global:effect_op_no_impl_mixed_cm.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:effect_op_no_impl_mixed_cm.wado::__modules_initialized = 1;
     };
-    __inline___initialize_modules_2: block {
-        break_if __inline___initialize_modules_2 @likely(global:effect_op_no_impl_mixed_cm.wado::__modules_initialized);
+    $inline___initialize_modules_2: block {
+        break_if $inline___initialize_modules_2 @likely(global:effect_op_no_impl_mixed_cm.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:effect_op_no_impl_mixed_cm.wado::__modules_initialized = 1;
@@ -121,7 +121,7 @@ fn "effect_op_no_impl_mixed_cm.wado/__cm_export__run"() {
     handle_3 = "effect_op_no_impl_mixed_cm.wado/__cm_binding__Stdout_write_via_stream"(rx_6);
     "core:rt/write_string_to_stream"(tx_7, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("before"), used: 6 }, 1);
     "wasi/future-drop-readable:transmission-cli"(handle_3);
-    if __inline___effect_dispatch__Log__enabled_0: block -> bool {
+    if $inline___effect_dispatch__Log__enabled_0: block -> bool {
         __local_1 = global:effect_op_no_impl_mixed_cm.wado::__effect_Log;
         if @likely(ref.is_null(__local_1) == 0) {
             __local_2 = ref.as_non_null(__local_1);
@@ -132,7 +132,7 @@ fn "effect_op_no_impl_mixed_cm.wado/__cm_export__run"() {
                 call_ref "functype/$canonical_closure_fn_1"(__indirect_call_1.func, __indirect_call_1.env, 2);
             };
             global:effect_op_no_impl_mixed_cm.wado::__effect_Log = __local_1;
-            break __inline___effect_dispatch__Log__enabled_0: __local_3;
+            break $inline___effect_dispatch__Log__enabled_0: __local_3;
         } else {
             "core:rt/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("no handler installed for `Log::enabled`"), used: 39 });
             unreachable;
@@ -231,16 +231,16 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
                 "wasi/waitable-set-drop"(ws);
                 result = status_41;
             }
-            written_16 = struct.new "core:prelude/types.wado//StreamWrite" { count: result >> 4, result: __inline_cm_copy_result_14: block -> "core:prelude/types.wado//enum:CopyResult" {
+            written_16 = struct.new "core:prelude/types.wado//StreamWrite" { count: result >> 4, result: $inline_cm_copy_result_14: block -> "core:prelude/types.wado//enum:CopyResult" {
                 let __match_scrut_0: i32;
                 __match_scrut_0 = result & 15;
                 if __match_scrut_0 == 0 {
-                    break __inline_cm_copy_result_14: 0;
+                    break $inline_cm_copy_result_14: 0;
                 } else if __match_scrut_0 == 1 {
-                    break __inline_cm_copy_result_14: 1;
+                    break $inline_cm_copy_result_14: 1;
                 } else {
                 }
-                break __inline_cm_copy_result_14: 2;
+                break $inline_cm_copy_result_14: 2;
             } };
             drop("mem/realloc"(ptr_14, raw_len, 1, 0));
             offset = offset + written_16.count;

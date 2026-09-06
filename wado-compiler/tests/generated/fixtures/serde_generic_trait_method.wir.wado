@@ -76,50 +76,46 @@ global mut global:serde_generic_trait_method.wado::__const_obj_1: ref null "core
 global global:serde_generic_trait_method.wado::__const_obj_2: ref null Array<u8> = array.new_fixed<u8>(52, 50);
 
 fn "serde_generic_trait_method.wado/run"() with Stdout {
-    let new_used_15: i32;
+    let s: ref "core:prelude/string.wado//String";
     let start_16: i32;
-    let new_used_23: i32;
     let start_24: i32;
-    let new_used_42: i32;
     let start_43: i32;
     let handle: i32;
     let packed: i64;
     let rx_51: i32;
     let tx_52: i32;
     let __sroa_buf_data: ref "core:prelude/string.wado//String";
-    __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:serde_generic_trait_method.wado::__modules_initialized);
+    $inline___initialize_modules_0: block {
+        break_if $inline___initialize_modules_0 @likely(global:serde_generic_trait_method.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:serde_generic_trait_method.wado::__modules_initialized = 1;
     };
     __sroa_buf_data = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
-    new_used_15 = 0 + 2;
-    if @unlikely(new_used_15 > builtin::array_len(__sroa_buf_data.repr)) {
+    if @unlikely(2 > builtin::array_len(__sroa_buf_data.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(__sroa_buf_data, new_used_15);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(__sroa_buf_data, 2);
     }
     start_16 = __sroa_buf_data.used;
-    __sroa_buf_data.used = new_used_15;
+    __sroa_buf_data.used = 2;
     builtin::array_copy<u8>(__sroa_buf_data.repr, start_16, global:serde_generic_trait_method.wado::__const_obj_2, 0, 2);
-    new_used_23 = __sroa_buf_data.used + 1;
-    if @unlikely(new_used_23 > builtin::array_len(__sroa_buf_data.repr)) {
+    if @unlikely(3 > builtin::array_len(__sroa_buf_data.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(__sroa_buf_data, new_used_23);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(__sroa_buf_data, 3);
     }
     start_24 = __sroa_buf_data.used;
-    __sroa_buf_data.used = new_used_23;
+    __sroa_buf_data.used = 3;
     builtin::array_set_u8(__sroa_buf_data.repr, start_24, 44);
     if ref.is_null(global:serde_generic_trait_method.wado::__const_obj_1) {
-        global:serde_generic_trait_method.wado::__const_obj_1 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 };
+        s = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 };
+        global:serde_generic_trait_method.wado::__const_obj_1 = s;
     }
-    new_used_42 = __sroa_buf_data.used + 5;
-    if @unlikely(new_used_42 > builtin::array_len(__sroa_buf_data.repr)) {
+    if @unlikely(8 > builtin::array_len(__sroa_buf_data.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(__sroa_buf_data, new_used_42);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(__sroa_buf_data, 8);
     }
     start_43 = __sroa_buf_data.used;
-    __sroa_buf_data.used = new_used_42;
+    __sroa_buf_data.used = 8;
     builtin::array_copy<u8>(__sroa_buf_data.repr, start_43, global:serde_generic_trait_method.wado::__const_obj_1.repr, 0, 5);
     rx_51 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_52 = builtin::i32_wrap_i64(packed >> 32_i64);
@@ -133,8 +129,8 @@ fn "serde_generic_trait_method.wado/__cm_binding__Stdout_write_via_stream"(data)
 }
 
 fn "serde_generic_trait_method.wado/__cm_export__run"() {
-    __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:serde_generic_trait_method.wado::__modules_initialized);
+    $inline___initialize_modules_0: block {
+        break_if $inline___initialize_modules_0 @likely(global:serde_generic_trait_method.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:serde_generic_trait_method.wado::__modules_initialized = 1;
@@ -229,16 +225,16 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
                 "wasi/waitable-set-drop"(ws);
                 result = status_41;
             }
-            written_16 = struct.new "core:prelude/types.wado//StreamWrite" { count: result >> 4, result: __inline_cm_copy_result_14: block -> "core:prelude/types.wado//enum:CopyResult" {
+            written_16 = struct.new "core:prelude/types.wado//StreamWrite" { count: result >> 4, result: $inline_cm_copy_result_14: block -> "core:prelude/types.wado//enum:CopyResult" {
                 let __match_scrut_0: i32;
                 __match_scrut_0 = result & 15;
                 if __match_scrut_0 == 0 {
-                    break __inline_cm_copy_result_14: 0;
+                    break $inline_cm_copy_result_14: 0;
                 } else if __match_scrut_0 == 1 {
-                    break __inline_cm_copy_result_14: 1;
+                    break $inline_cm_copy_result_14: 1;
                 } else {
                 }
-                break __inline_cm_copy_result_14: 2;
+                break $inline_cm_copy_result_14: 2;
             } };
             drop("mem/realloc"(ptr_14, raw_len, 1, 0));
             offset = offset + written_16.count;

@@ -90,14 +90,14 @@ fn "option_match.wado/__cm_export__run"() {
     let packed_55: i64;
     let rx_56: i32;
     let tx_57: i32;
-    __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:option_match.wado::__modules_initialized);
+    $inline___initialize_modules_0: block {
+        break_if $inline___initialize_modules_0 @likely(global:option_match.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:option_match.wado::__modules_initialized = 1;
     };
-    __inline___initialize_modules_2: block {
-        break_if __inline___initialize_modules_2 @likely(global:option_match.wado::__modules_initialized);
+    $inline___initialize_modules_2: block {
+        break_if $inline___initialize_modules_2 @likely(global:option_match.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:option_match.wado::__modules_initialized = 1;
@@ -108,21 +108,17 @@ fn "option_match.wado/__cm_export__run"() {
     "core:rt/write_string_to_stream"(tx_36, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("not none"), used: 8 }, 1);
     "wasi/future-drop-readable:transmission-cli"(handle_9);
     if ref.is_null(ref.null none) {
-        block {
-            rx_42 = builtin::i32_wrap_i64(local.tee packed_41("wasi/stream-new"()));
-            tx_43 = builtin::i32_wrap_i64(packed_41 >> 32_i64);
-            handle_15 = "option_match.wado/__cm_binding__Stdout_write_via_stream"(rx_42);
-            "core:rt/write_string_to_stream"(tx_43, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("matched none"), used: 12 }, 1);
-            "wasi/future-drop-readable:transmission-cli"(handle_15);
-        };
+        rx_42 = builtin::i32_wrap_i64(local.tee packed_41("wasi/stream-new"()));
+        tx_43 = builtin::i32_wrap_i64(packed_41 >> 32_i64);
+        handle_15 = "option_match.wado/__cm_binding__Stdout_write_via_stream"(rx_42);
+        "core:rt/write_string_to_stream"(tx_43, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("matched none"), used: 12 }, 1);
+        "wasi/future-drop-readable:transmission-cli"(handle_15);
     } else {
-        block {
-            rx_49 = builtin::i32_wrap_i64(local.tee packed_48("wasi/stream-new"()));
-            tx_50 = builtin::i32_wrap_i64(packed_48 >> 32_i64);
-            handle_20 = "option_match.wado/__cm_binding__Stdout_write_via_stream"(rx_49);
-            "core:rt/write_string_to_stream"(tx_50, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("has value"), used: 9 }, 1);
-            "wasi/future-drop-readable:transmission-cli"(handle_20);
-        };
+        rx_49 = builtin::i32_wrap_i64(local.tee packed_48("wasi/stream-new"()));
+        tx_50 = builtin::i32_wrap_i64(packed_48 >> 32_i64);
+        handle_20 = "option_match.wado/__cm_binding__Stdout_write_via_stream"(rx_49);
+        "core:rt/write_string_to_stream"(tx_50, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("has value"), used: 9 }, 1);
+        "wasi/future-drop-readable:transmission-cli"(handle_20);
     }
     rx_56 = builtin::i32_wrap_i64(local.tee packed_55("wasi/stream-new"()));
     tx_57 = builtin::i32_wrap_i64(packed_55 >> 32_i64);
@@ -201,16 +197,16 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
                 "wasi/waitable-set-drop"(ws);
                 result = status_41;
             }
-            written_16 = struct.new "core:prelude/types.wado//StreamWrite" { count: result >> 4, result: __inline_cm_copy_result_14: block -> "core:prelude/types.wado//enum:CopyResult" {
+            written_16 = struct.new "core:prelude/types.wado//StreamWrite" { count: result >> 4, result: $inline_cm_copy_result_14: block -> "core:prelude/types.wado//enum:CopyResult" {
                 let __match_scrut_0: i32;
                 __match_scrut_0 = result & 15;
                 if __match_scrut_0 == 0 {
-                    break __inline_cm_copy_result_14: 0;
+                    break $inline_cm_copy_result_14: 0;
                 } else if __match_scrut_0 == 1 {
-                    break __inline_cm_copy_result_14: 1;
+                    break $inline_cm_copy_result_14: 1;
                 } else {
                 }
-                break __inline_cm_copy_result_14: 2;
+                break $inline_cm_copy_result_14: 2;
             } };
             drop("mem/realloc"(ptr_14, raw_len, 1, 0));
             offset = offset + written_16.count;

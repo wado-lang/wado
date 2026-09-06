@@ -107,28 +107,26 @@ fn "hfs_closure_in_loop_body.wado/__cm_binding__Stdout_write_via_stream"(data) w
 }
 
 fn "hfs_closure_in_loop_body.wado/__cm_export__run"() {
-    let p: ref "hfs_closure_in_loop_body.wado//Pair";
     let __local_1: ref "core:prelude/string.wado//String";
     let handle: i32;
     let self_12: i32;
     let packed: i64;
     let rx_15: i32;
     let tx_16: i32;
-    __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:hfs_closure_in_loop_body.wado::__modules_initialized);
+    $inline___initialize_modules_0: block {
+        break_if $inline___initialize_modules_0 @likely(global:hfs_closure_in_loop_body.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:hfs_closure_in_loop_body.wado::__modules_initialized = 1;
     };
-    __inline___initialize_modules_2: block {
-        break_if __inline___initialize_modules_2 @likely(global:hfs_closure_in_loop_body.wado::__modules_initialized);
+    $inline___initialize_modules_2: block {
+        break_if $inline___initialize_modules_2 @likely(global:hfs_closure_in_loop_body.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:hfs_closure_in_loop_body.wado::__modules_initialized = 1;
     };
-    p = struct.new "hfs_closure_in_loop_body.wado//Pair" { x: 10, y: 20 };
     __local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(local.tee self_12("hfs_closure_in_loop_body.wado/build"(p)), __local_1);
+    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(local.tee self_12("hfs_closure_in_loop_body.wado/build"(struct.new "hfs_closure_in_loop_body.wado//Pair" { x: 10, y: 20 })), __local_1);
     rx_15 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_16 = builtin::i32_wrap_i64(packed >> 32_i64);
     handle = "hfs_closure_in_loop_body.wado/__cm_binding__Stdout_write_via_stream"(rx_15);
@@ -223,16 +221,16 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
                 "wasi/waitable-set-drop"(ws);
                 result = status_41;
             }
-            written_16 = struct.new "core:prelude/types.wado//StreamWrite" { count: result >> 4, result: __inline_cm_copy_result_14: block -> "core:prelude/types.wado//enum:CopyResult" {
+            written_16 = struct.new "core:prelude/types.wado//StreamWrite" { count: result >> 4, result: $inline_cm_copy_result_14: block -> "core:prelude/types.wado//enum:CopyResult" {
                 let __match_scrut_0: i32;
                 __match_scrut_0 = result & 15;
                 if __match_scrut_0 == 0 {
-                    break __inline_cm_copy_result_14: 0;
+                    break $inline_cm_copy_result_14: 0;
                 } else if __match_scrut_0 == 1 {
-                    break __inline_cm_copy_result_14: 1;
+                    break $inline_cm_copy_result_14: 1;
                 } else {
                 }
-                break __inline_cm_copy_result_14: 2;
+                break $inline_cm_copy_result_14: 2;
             } };
             drop("mem/realloc"(ptr_14, raw_len, 1, 0));
             offset = offset + written_16.count;
@@ -259,9 +257,9 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(self, f) {
     is_negative = self < 0;
     val_6 = builtin::i64_extend_i32_s(self);
     abs_val = select i64(val_6 < 0_i64, 0_i64 - val_6, val_6);
-    digit_count_4 = __inline_count_digits_u64_1: block -> i32 {
+    digit_count_4 = $inline_count_digits_u64_1: block -> i32 {
         if abs_val == 0_i64 {
-            break __inline_count_digits_u64_1: 1;
+            break $inline_count_digits_u64_1: 1;
         }
         n = 0;
         t_9 = abs_val;
@@ -273,7 +271,7 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(self, f) {
                 continue l15;
             };
         };
-        break __inline_count_digits_u64_1: n;
+        break $inline_count_digits_u64_1: n;
     };
     offset_5 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write$spec0$scalar"(f, is_negative, global:core:prelude/primitive.wado::__const_obj_3, digit_count_4);
     arr = f.repr;

@@ -657,19 +657,19 @@ fn "cm_waitable_set_poll.wado/handle"(request) with WaitableSet {
     let ptr_558: i32;
     let self_559: i32;
     let i_565: i32;
-    __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:cm_waitable_set_poll.wado::__modules_initialized);
+    $inline___initialize_modules_0: block {
+        break_if $inline___initialize_modules_0 @likely(global:cm_waitable_set_poll.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:cm_waitable_set_poll.wado::__modules_initialized = 1;
     };
     ws_1 = "wasi/waitable-set-new"();
-    __fused___inline_cm_waitable_set_poll_1: block {
+    $fused_$inline_cm_waitable_set_poll_1: block {
         out_ptr = "mem/realloc"(0, 0, 4, 8);
         code = "wasi/waitable-set-poll"(ws_1, out_ptr);
         if code == 0 {
             drop("mem/realloc"(out_ptr, 8, 4, 0));
-            break __fused___inline_cm_waitable_set_poll_1;
+            break $fused_$inline_cm_waitable_set_poll_1;
         }
         drop(builtin::load_i32(out_ptr));
         drop(builtin::load_i32(out_ptr + 4));
@@ -1105,7 +1105,7 @@ fn "cm_waitable_set_poll.wado/handle"(request) with WaitableSet {
             }
         }
         "cm_waitable_set_poll.wado/__cm_future_write_core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Trailers>,wasi:http/types.wado/ErrorCode>"(tx_364, struct.new "core:prelude/types.wado//Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>::Ok" { discriminant: 0, payload_0: struct.new "core:prelude/types.wado//Option<wasi:http/types.wado/Fields>" { 1 } });
-        break __fused___inline_cm_waitable_set_poll_1;
+        break $fused_$inline_cm_waitable_set_poll_1;
     };
     "wasi/waitable-set-drop"(ws_1);
     rx_465 = builtin::i32_wrap_i64(local.tee packed_464("wasi/future-new"()));
@@ -1568,8 +1568,8 @@ fn "cm_waitable_set_poll.wado/__cm_binding__Response_new"(headers, contents, tra
 }
 
 fn "cm_waitable_set_poll.wado/__cm_export__handle"(request) {
-    __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:cm_waitable_set_poll.wado::__modules_initialized);
+    $inline___initialize_modules_0: block {
+        break_if $inline___initialize_modules_0 @likely(global:cm_waitable_set_poll.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:cm_waitable_set_poll.wado::__modules_initialized = 1;

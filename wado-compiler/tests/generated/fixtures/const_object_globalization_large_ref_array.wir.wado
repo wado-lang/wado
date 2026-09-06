@@ -87,7 +87,6 @@ global global:core:prelude/primitive.wado::__const_obj_8: ref null "core:prelude
 fn "const_object_globalization_large_ref_array.wado/run"() with Stdout {
     let i: i32;
     let __local_2: ref "core:prelude/string.wado//String";
-    let elements: ref "Array<core:prelude/string.wado/String>";
     let handle: i32;
     let new_used_21: i32;
     let start_22: i32;
@@ -98,8 +97,8 @@ fn "const_object_globalization_large_ref_array.wado/run"() with Stdout {
     let packed: i64;
     let rx_47: i32;
     let tx_48: i32;
-    __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:const_object_globalization_large_ref_array.wado::__modules_initialized);
+    $inline___initialize_modules_0: block {
+        break_if $inline___initialize_modules_0 @likely(global:const_object_globalization_large_ref_array.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:const_object_globalization_large_ref_array.wado::__modules_initialized = 1;
@@ -371,8 +370,7 @@ fn "const_object_globalization_large_ref_array.wado/run"() with Stdout {
                 builtin::array_set<ref "core:prelude/string.wado//String">(__wir_arr_init_1, 257, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(120), used: 1 });
                 builtin::array_set<ref "core:prelude/string.wado//String">(__wir_arr_init_1, 258, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(120), used: 1 });
                 builtin::array_set<ref "core:prelude/string.wado//String">(__wir_arr_init_1, 259, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(120), used: 1 });
-                elements = ref.as_non_null(__wir_arr_init_1);
-                global:const_object_globalization_large_ref_array.wado::__const_obj_0 = elements;
+                global:const_object_globalization_large_ref_array.wado::__const_obj_0 = ref.as_non_null(__wir_arr_init_1);
             }
             __local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 };
             "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(i, __local_2);
@@ -384,12 +382,12 @@ fn "const_object_globalization_large_ref_array.wado/run"() with Stdout {
             start_22 = __local_2.used;
             __local_2.used = new_used_21;
             builtin::array_set_u8(__local_2.repr, start_22, 58);
-            __inline_core_prelude_string_wado_String__push_str_12: block {
+            $inline_core_prelude_string_wado_String__push_str_12: block {
                 block {
                 };
                 other = builtin::array_get_value<ref "core:prelude/string.wado//String">(global:const_object_globalization_large_ref_array.wado::__const_obj_0, 3);
                 self_40 = other.used;
-                break_if __inline_core_prelude_string_wado_String__push_str_12 self_40 == 0;
+                break_if $inline_core_prelude_string_wado_String__push_str_12 self_40 == 0;
                 new_used_43 = __local_2.used + self_40;
                 if @unlikely(new_used_43 > builtin::array_len(__local_2.repr)) {
                     cold_path;
@@ -415,8 +413,8 @@ fn "const_object_globalization_large_ref_array.wado/__cm_binding__Stdout_write_v
 }
 
 fn "const_object_globalization_large_ref_array.wado/__cm_export__run"() {
-    __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:const_object_globalization_large_ref_array.wado::__modules_initialized);
+    $inline___initialize_modules_0: block {
+        break_if $inline___initialize_modules_0 @likely(global:const_object_globalization_large_ref_array.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:const_object_globalization_large_ref_array.wado::__modules_initialized = 1;
@@ -511,16 +509,16 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
                 "wasi/waitable-set-drop"(ws);
                 result = status_41;
             }
-            written_16 = struct.new "core:prelude/types.wado//StreamWrite" { count: result >> 4, result: __inline_cm_copy_result_14: block -> "core:prelude/types.wado//enum:CopyResult" {
+            written_16 = struct.new "core:prelude/types.wado//StreamWrite" { count: result >> 4, result: $inline_cm_copy_result_14: block -> "core:prelude/types.wado//enum:CopyResult" {
                 let __match_scrut_0: i32;
                 __match_scrut_0 = result & 15;
                 if __match_scrut_0 == 0 {
-                    break __inline_cm_copy_result_14: 0;
+                    break $inline_cm_copy_result_14: 0;
                 } else if __match_scrut_0 == 1 {
-                    break __inline_cm_copy_result_14: 1;
+                    break $inline_cm_copy_result_14: 1;
                 } else {
                 }
-                break __inline_cm_copy_result_14: 2;
+                break $inline_cm_copy_result_14: 2;
             } };
             drop("mem/realloc"(ptr_14, raw_len, 1, 0));
             offset = offset + written_16.count;
@@ -547,9 +545,9 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(self, f) {
     is_negative = self < 0;
     val_6 = builtin::i64_extend_i32_s(self);
     abs_val = select i64(val_6 < 0_i64, 0_i64 - val_6, val_6);
-    digit_count_4 = __inline_count_digits_u64_1: block -> i32 {
+    digit_count_4 = $inline_count_digits_u64_1: block -> i32 {
         if abs_val == 0_i64 {
-            break __inline_count_digits_u64_1: 1;
+            break $inline_count_digits_u64_1: 1;
         }
         n = 0;
         t_9 = abs_val;
@@ -561,7 +559,7 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(self, f) {
                 continue l19;
             };
         };
-        break __inline_count_digits_u64_1: n;
+        break $inline_count_digits_u64_1: n;
     };
     offset_5 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write$spec0$scalar"(f, is_negative, global:core:prelude/primitive.wado::__const_obj_8, digit_count_4);
     arr = f.repr;

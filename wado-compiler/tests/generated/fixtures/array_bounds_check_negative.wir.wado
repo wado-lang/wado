@@ -19,21 +19,21 @@ import memory (1) from "mem/memory";
 global mut global:array_bounds_check_negative.wado::__modules_initialized: bool = 0;
 
 fn "array_bounds_check_negative.wado/__cm_export__run"() {
-    let elements: ref Array<i32>;
-    __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:array_bounds_check_negative.wado::__modules_initialized);
+    let __sroa_arr_repr: ref Array<i32>;
+    $inline___initialize_modules_0: block {
+        break_if $inline___initialize_modules_0 @likely(global:array_bounds_check_negative.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:array_bounds_check_negative.wado::__modules_initialized = 1;
     };
-    __inline___initialize_modules_2: block {
-        break_if __inline___initialize_modules_2 @likely(global:array_bounds_check_negative.wado::__modules_initialized);
+    $inline___initialize_modules_2: block {
+        break_if $inline___initialize_modules_2 @likely(global:array_bounds_check_negative.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:array_bounds_check_negative.wado::__modules_initialized = 1;
     };
-    elements = array.new_fixed<i32>(10, 20, 30);
-    drop(builtin::array_get_value<i32>(elements, -1));
+    __sroa_arr_repr = array.new_fixed<i32>(10, 20, 30);
+    drop(builtin::array_get_value<i32>(__sroa_arr_repr, -1));
     "wasi/task-return"(0);
 }
 

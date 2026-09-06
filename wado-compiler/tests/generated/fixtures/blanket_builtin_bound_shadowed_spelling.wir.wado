@@ -96,21 +96,21 @@ global global:blanket_builtin_bound_shadowed_spelling.wado::__const_obj_0: ref n
 fn "blanket_builtin_bound_shadowed_spelling.wado/run"() with Stdout {
     let __cond_2: bool;
     let __cond_4: bool;
-    let elements: ref Array<i32>;
     let self_12: ref "core:prelude/slice.wado//SliceValueIter<i32>";
     let self_15: ref "core:prelude/slice.wado//SliceValueIter<i32>";
     let handle: i32;
     let packed: i64;
     let rx_24: i32;
     let tx_25: i32;
-    __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:blanket_builtin_bound_shadowed_spelling.wado::__modules_initialized);
+    let __sroa_xs_repr: ref Array<i32>;
+    $inline___initialize_modules_0: block {
+        break_if $inline___initialize_modules_0 @likely(global:blanket_builtin_bound_shadowed_spelling.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:blanket_builtin_bound_shadowed_spelling.wado::__modules_initialized = 1;
     };
-    elements = array.new_fixed<i32>(1, 2, 3);
-    self_12 = struct.new "core:prelude/slice.wado//SliceValueIter<i32>" { repr: elements, index: 0, end: 3 };
+    __sroa_xs_repr = array.new_fixed<i32>(1, 2, 3);
+    self_12 = struct.new "core:prelude/slice.wado//SliceValueIter<i32>" { repr: __sroa_xs_repr, index: 0, end: 3 };
     let __vr_9_mv_0: i32;
     let __vr_9_mv_1: i32;
     multivalue_bind [__vr_9_mv_0, __vr_9_mv_1] = "blanket_builtin_bound_shadowed_spelling.wado/core:prelude/slice.wado/SliceValueIter<i32>^core:prelude/traits.wado/Iterator::reduce$__Closure_0"(self_12);
@@ -124,7 +124,7 @@ fn "blanket_builtin_bound_shadowed_spelling.wado/run"() with Stdout {
         "blanket_builtin_bound_shadowed_spelling.wado/run$cold1"();
         unreachable;
     }
-    self_15 = struct.new "core:prelude/slice.wado//SliceValueIter<i32>" { repr: elements, index: 0, end: 3 };
+    self_15 = struct.new "core:prelude/slice.wado//SliceValueIter<i32>" { repr: __sroa_xs_repr, index: 0, end: 3 };
     let __vr_10_mv_0: i32;
     let __vr_10_mv_1: i32;
     multivalue_bind [__vr_10_mv_0, __vr_10_mv_1] = "blanket_builtin_bound_shadowed_spelling.wado/core:prelude/slice.wado/SliceValueIter<i32>^core:prelude/traits.wado/Iterator::reduce$__Closure_1"(self_15);
@@ -150,8 +150,8 @@ fn "blanket_builtin_bound_shadowed_spelling.wado/__cm_binding__Stdout_write_via_
 }
 
 fn "blanket_builtin_bound_shadowed_spelling.wado/__cm_export__run"() {
-    __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:blanket_builtin_bound_shadowed_spelling.wado::__modules_initialized);
+    $inline___initialize_modules_0: block {
+        break_if $inline___initialize_modules_0 @likely(global:blanket_builtin_bound_shadowed_spelling.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:blanket_builtin_bound_shadowed_spelling.wado::__modules_initialized = 1;
@@ -257,16 +257,16 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
                 "wasi/waitable-set-drop"(ws);
                 result = status_41;
             }
-            written_16 = struct.new "core:prelude/types.wado//StreamWrite" { count: result >> 4, result: __inline_cm_copy_result_14: block -> "core:prelude/types.wado//enum:CopyResult" {
+            written_16 = struct.new "core:prelude/types.wado//StreamWrite" { count: result >> 4, result: $inline_cm_copy_result_14: block -> "core:prelude/types.wado//enum:CopyResult" {
                 let __match_scrut_0: i32;
                 __match_scrut_0 = result & 15;
                 if __match_scrut_0 == 0 {
-                    break __inline_cm_copy_result_14: 0;
+                    break $inline_cm_copy_result_14: 0;
                 } else if __match_scrut_0 == 1 {
-                    break __inline_cm_copy_result_14: 1;
+                    break $inline_cm_copy_result_14: 1;
                 } else {
                 }
-                break __inline_cm_copy_result_14: 2;
+                break $inline_cm_copy_result_14: 2;
             } };
             drop("mem/realloc"(ptr_14, raw_len, 1, 0));
             offset = offset + written_16.count;
@@ -286,11 +286,11 @@ fn "blanket_builtin_bound_shadowed_spelling.wado/core:prelude/slice.wado/SliceVa
     let _licm_repr_16: ref Array<i32>;
     let __hfs_index_17: i32;
     let _av_18: i32;
-    __fused___inline_core_prelude_slice_wado_SliceValueIter_i32__core_prelude_traits_wado_Iterator__next_0: block {
+    $fused_$inline_core_prelude_slice_wado_SliceValueIter_i32__core_prelude_traits_wado_Iterator__next_0: block {
         _av_18 = self.index;
-        break_if __fused___inline_core_prelude_slice_wado_SliceValueIter_i32__core_prelude_traits_wado_Iterator__next_0 _av_18 >= self.end;
+        break_if $fused_$inline_core_prelude_slice_wado_SliceValueIter_i32__core_prelude_traits_wado_Iterator__next_0 _av_18 >= self.end;
         item_7 = builtin::array_get_value<i32>(self.repr, _av_18);
-        self.index = self.index + 1;
+        self.index = _av_18 + 1;
         acc = item_7;
         _licm_end_15 = self.end;
         _licm_repr_16 = self.repr;
@@ -320,11 +320,11 @@ fn "blanket_builtin_bound_shadowed_spelling.wado/core:prelude/slice.wado/SliceVa
     let _licm_repr_16: ref Array<i32>;
     let __hfs_index_17: i32;
     let _av_18: i32;
-    __fused___inline_core_prelude_slice_wado_SliceValueIter_i32__core_prelude_traits_wado_Iterator__next_0: block {
+    $fused_$inline_core_prelude_slice_wado_SliceValueIter_i32__core_prelude_traits_wado_Iterator__next_0: block {
         _av_18 = self.index;
-        break_if __fused___inline_core_prelude_slice_wado_SliceValueIter_i32__core_prelude_traits_wado_Iterator__next_0 _av_18 >= self.end;
+        break_if $fused_$inline_core_prelude_slice_wado_SliceValueIter_i32__core_prelude_traits_wado_Iterator__next_0 _av_18 >= self.end;
         item_7 = builtin::array_get_value<i32>(self.repr, _av_18);
-        self.index = self.index + 1;
+        self.index = _av_18 + 1;
         acc = item_7;
         _licm_end_15 = self.end;
         _licm_repr_16 = self.repr;

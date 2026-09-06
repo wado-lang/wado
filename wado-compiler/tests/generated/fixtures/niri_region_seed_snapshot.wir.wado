@@ -78,7 +78,6 @@ fn "niri_region_seed_snapshot.wado/__cm_binding__Stdout_write_via_stream"(data) 
 fn "niri_region_seed_snapshot.wado/__cm_export__run"() {
     let s: ref "core:prelude/string.wado//String";
     let __local_2: ref "core:prelude/string.wado//String";
-    let start_10: i32;
     let new_used_25: i32;
     let start_26: i32;
     let new_used_33: i32;
@@ -91,32 +90,27 @@ fn "niri_region_seed_snapshot.wado/__cm_export__run"() {
     let packed_59: i64;
     let rx_60: i32;
     let tx_61: i32;
-    __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:niri_region_seed_snapshot.wado::__modules_initialized);
+    $inline___initialize_modules_0: block {
+        break_if $inline___initialize_modules_0 @likely(global:niri_region_seed_snapshot.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:niri_region_seed_snapshot.wado::__modules_initialized = 1;
     };
-    __inline___initialize_modules_2: block {
-        break_if __inline___initialize_modules_2 @likely(global:niri_region_seed_snapshot.wado::__modules_initialized);
+    $inline___initialize_modules_2: block {
+        break_if $inline___initialize_modules_2 @likely(global:niri_region_seed_snapshot.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:niri_region_seed_snapshot.wado::__modules_initialized = 1;
     };
     s = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97, 98), used: 2 };
     __local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(17), used: 0 };
-    if @unlikely(1 > builtin::array_len(__local_2.repr)) {
-        cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(__local_2, 1);
-    }
-    start_10 = __local_2.used;
     __local_2.used = 1;
-    builtin::array_set_u8(__local_2.repr, start_10, 120);
+    builtin::array_set_u8(__local_2.repr, 0, 120);
     block {
         block {
         };
-        new_used_25 = __local_2.used + 2;
-        if @unlikely(new_used_25 > builtin::array_len(__local_2.repr)) {
+        new_used_25 = 1 + 2;
+        if @unlikely(new_used_25 > 17) {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(__local_2, new_used_25);
         }
@@ -208,14 +202,14 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
     end_3 = _av_50 + (_av_51 - _av_50);
     offset = data.start;
     block {
-        l8: loop {
+        l7: loop {
             __sroa_data_start = offset;
-            ptr_14 = builtin::i32_wrap_i64(local.tee packed_13(len_23 = end_3 - __sroa_data_start; ptr_24 = "mem/realloc"(0, 0, 1, len_23); i = 0; b9: block {
-                l10: loop {
-                    break_if b9 i >= len_23;
+            ptr_14 = builtin::i32_wrap_i64(local.tee packed_13(len_23 = end_3 - __sroa_data_start; ptr_24 = "mem/realloc"(0, 0, 1, len_23); i = 0; b8: block {
+                l9: loop {
+                    break_if b8 i >= len_23;
                     builtin::store_u8(ptr_24 + i, builtin::array_get_value_u8(repr_2, __sroa_data_start + i));
                     i = i + 1;
-                    continue l10;
+                    continue l9;
                 };
             }; builtin::i64_extend_i32_s(ptr_24) | (builtin::i64_extend_i32_s(len_23) << 32_i64)));
             raw_len = builtin::i32_wrap_i64(packed_13 >> 32_i64);
@@ -231,23 +225,23 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
                 "wasi/waitable-set-drop"(ws);
                 result = status_41;
             }
-            written_16 = struct.new "core:prelude/types.wado//StreamWrite" { count: result >> 4, result: __inline_cm_copy_result_14: block -> "core:prelude/types.wado//enum:CopyResult" {
+            written_16 = struct.new "core:prelude/types.wado//StreamWrite" { count: result >> 4, result: $inline_cm_copy_result_14: block -> "core:prelude/types.wado//enum:CopyResult" {
                 let __match_scrut_0: i32;
                 __match_scrut_0 = result & 15;
                 if __match_scrut_0 == 0 {
-                    break __inline_cm_copy_result_14: 0;
+                    break $inline_cm_copy_result_14: 0;
                 } else if __match_scrut_0 == 1 {
-                    break __inline_cm_copy_result_14: 1;
+                    break $inline_cm_copy_result_14: 1;
                 } else {
                 }
-                break __inline_cm_copy_result_14: 2;
+                break $inline_cm_copy_result_14: 2;
             } };
             drop("mem/realloc"(ptr_14, raw_len, 1, 0));
             offset = offset + written_16.count;
             if select i32(select i32(written_16.result != 0, 1, written_16.count <= 0), 1, offset >= end_3) {
                 return written_16.result;
             }
-            continue l8;
+            continue l7;
         };
     };
 }

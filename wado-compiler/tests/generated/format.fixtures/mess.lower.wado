@@ -2928,20 +2928,20 @@ pub fn "fn(i32)->i32^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn(i32
 
 fn __test_0() {
     core::cli::println(String { repr: packed"Hello, Wado!", used: 12 });
-    __for_of_0: {
+    $for_of_0: {
         let mut __iter_0: SliceValueIter<core:prelude/string.wado/String> = core::cli::args()."core:prelude/list.wado/List<core:prelude/string.wado/String>^core:prelude/traits.wado/IntoIterator::into_iter"();
         loop {
             let __match_5: Option<String> = __iter_0."core:prelude/slice.wado/SliceValueIter<core:prelude/string.wado/String>^core:prelude/traits.wado/Iterator::next"();
             match __match_5 {
-                Some(arg) => {
-                    core::cli::println(__tmpl: {
+                Some(arg) => $block_1: {
+                    core::cli::println($tmpl: {
                         let mut __r: String = "core::prelude/string.wado::core:prelude/string.wado/String::with_capacity"(21);
                         __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"arg: ", used: 5 });
                         __r."core:prelude/string.wado/String::push_str"(&arg);
-                        break __tmpl: __r;
+                        break $tmpl: __r;
                     });
                 },
-                _ => {
+                _ => $block_2: {
                     break;
                 },
             };
@@ -2949,12 +2949,12 @@ fn __test_0() {
     }
     let __match_6: Option<String> = core::cli::env(String { repr: packed"HOME", used: 4 });
     match __match_6 {
-        Some(home) => {
-            core::cli::println(__tmpl: {
+        Some(home) => $block_6: {
+            core::cli::println($tmpl: {
                 let mut __r: String = "core::prelude/string.wado::core:prelude/string.wado/String::with_capacity"(21);
                 __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"HOME=", used: 5 });
                 __r."core:prelude/string.wado/String::push_str"(&home);
-                break __tmpl: __r;
+                break $tmpl: __r;
             });
         },
         _ => (),
@@ -3018,7 +3018,7 @@ pub fn env(name: String) -> Option<String> with Environment {
         if !(i < vars."core:prelude/list.wado/List<[core:prelude/string.wado/String,core:prelude/string.wado/String]>::len"()) {
             break;
         }
-        __for_0_body: {
+        $for_0_body: {
             let pair: [String, String] = vars."core:prelude/list.wado/List<[core:prelude/string.wado/String,core:prelude/string.wado/String]>^core:prelude/traits.wado/IndexValue<i32>::index_value"(i);
             if pair.0."core:prelude/string.wado/String^core:prelude/traits.wado/Eq::eq"(&name) {
                 return Option<String>::Some("mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(pair.1));
@@ -3237,11 +3237,11 @@ fn __test_0() {
     let mut greeting: String = "core::prelude/string.wado::core:prelude/string.wado/String::new"();
     greeting."core:prelude/string.wado/String::push_str"(&String { repr: packed"Hello, ", used: 7 });
     greeting."core:prelude/string.wado/String::push_str"(&String { repr: packed"Wado!", used: 5 });
-    __assert_0: {
+    $assert_0: {
         let __cond: bool = greeting."core:prelude/string.wado/String^core:prelude/traits.wado/Eq::eq"(&String { repr: packed"Hello, Wado!", used: 12 });
         if !__cond {
             core::builtin::cold_path();
-            core::rt::panic(__tmpl: {
+            core::rt::panic($tmpl: {
                 let mut __r: String = "core::prelude/string.wado::core:prelude/string.wado/String::with_capacity"(139);
                 __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"Assertion failed in ", used: 20 });
                 __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"__test_0", used: 8 });
@@ -3255,17 +3255,17 @@ fn __test_0() {
                 __f = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut __r);
                 greeting."core:prelude/string.wado/String^core:prelude/traits.wado/Inspect::inspect"(&mut __f);
                 __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"\n", used: 1 });
-                break __tmpl: __r;
+                break $tmpl: __r;
             });
         }
     }
     let primes: List<i32> = "core::prelude/list.wado::core:prelude/list.wado/List<i32>^core:prelude/traits.wado/From<Array<T>>::from"([2, 3, 5, 7]) as List<i32>;
-    __assert_1: {
+    $assert_1: {
         let __v1: i32 = primes."core:prelude/list.wado/List<i32>::len"();
         let __cond: bool = (__v1 == 4);
         if !__cond {
             core::builtin::cold_path();
-            core::rt::panic(__tmpl: {
+            core::rt::panic($tmpl: {
                 let mut __r: String = "core::prelude/string.wado::core:prelude/string.wado/String::with_capacity"(159);
                 __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"Assertion failed in ", used: 20 });
                 __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"__test_0", used: 8 });
@@ -3283,18 +3283,18 @@ fn __test_0() {
                 __f = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut __r);
                 Box<i32> { value: __v1 }."i32^core:prelude/traits.wado/Inspect::inspect"(&mut __f);
                 __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"\n", used: 1 });
-                break __tmpl: __r;
+                break $tmpl: __r;
             });
         }
     }
-    __assert_2: {
+    $assert_2: {
         let __cond: bool = match primes."core:prelude/list.wado/List<i32>^core:prelude/slice.wado/Sequence::get"(1) {
             Some(v) => (v == 3),
             _ => false,
         };
         if !__cond {
             core::builtin::cold_path();
-            core::rt::panic(__tmpl: {
+            core::rt::panic($tmpl: {
                 let mut __r: String = "core::prelude/string.wado::core:prelude/string.wado/String::with_capacity"(129);
                 __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"Assertion failed in ", used: 20 });
                 __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"__test_0", used: 8 });
@@ -3304,18 +3304,18 @@ fn __test_0() {
                 let mut __f: Formatter = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut __r);
                 Box<i32> { value: 89 }."i32^core:prelude/traits.wado/Display::fmt"(&mut __f);
                 __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"\ncondition: primes.get(1) matches { Some(v) && v == 3 }\n", used: 56 });
-                break __tmpl: __r;
+                break $tmpl: __r;
             });
         }
     }
-    __assert_3: {
+    $assert_3: {
         let __cond: bool = match primes."core:prelude/list.wado/List<i32>^core:prelude/slice.wado/Sequence::get"(9) {
             None => true,
             _ => false,
         };
         if !__cond {
             core::builtin::cold_path();
-            core::rt::panic(__tmpl: {
+            core::rt::panic($tmpl: {
                 let mut __r: String = "core::prelude/string.wado::core:prelude/string.wado/String::with_capacity"(116);
                 __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"Assertion failed in ", used: 20 });
                 __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"__test_0", used: 8 });
@@ -3325,19 +3325,19 @@ fn __test_0() {
                 let mut __f: Formatter = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut __r);
                 Box<i32> { value: 90 }."i32^core:prelude/traits.wado/Display::fmt"(&mut __f);
                 __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"\ncondition: primes.get(9) matches { None }\n", used: 43 });
-                break __tmpl: __r;
+                break $tmpl: __r;
             });
         }
     }
     let decoded: Result<String, String> = "core::prelude/string.wado::core:prelude/string.wado/String::from_utf8<core:prelude/list.wado/List<u8>>"("core::prelude/list.wado::core:prelude/list.wado/List<u8>^core:prelude/traits.wado/From<Array<T>>::from"([87, 97, 100, 111]) as List<u8>);
-    __assert_4: {
+    $assert_4: {
         let __cond: bool = match decoded {
             Ok(s) => s."core:prelude/string.wado/String^core:prelude/traits.wado/Eq::eq"(&String { repr: packed"Wado", used: 4 }),
             _ => false,
         };
         if !__cond {
             core::builtin::cold_path();
-            core::rt::panic(__tmpl: {
+            core::rt::panic($tmpl: {
                 let mut __r: String = "core::prelude/string.wado::core:prelude/string.wado/String::with_capacity"(152);
                 __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"Assertion failed in ", used: 20 });
                 __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"__test_0", used: 8 });
@@ -3351,7 +3351,7 @@ fn __test_0() {
                 __f = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut __r);
                 Box<core:prelude/types.wado/Result<core:prelude/string.wado/String,core:prelude/string.wado/String>> { value: decoded }."core:prelude/types.wado/Result<core:prelude/string.wado/String,core:prelude/string.wado/String>^core:prelude/traits.wado/Inspect::inspect"(&mut __f);
                 __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"\n", used: 1 });
-                break __tmpl: __r;
+                break $tmpl: __r;
             });
         }
     }
@@ -3695,11 +3695,11 @@ pub fn uscale(x: u64, pm_hi: u64, pm_lo: u64, s: i32) -> u64 {
 }
 
 pub fn fixed_width(f: f64, n: i32) -> FormatResult {
-    __assert_0: {
+    $assert_0: {
         let __cond: bool = (n <= 18);
         if !__cond {
             core::builtin::cold_path();
-            core::rt::panic(__tmpl: {
+            core::rt::panic($tmpl: {
                 let mut __r: String = "core::prelude/string.wado::core:prelude/string.wado/String::with_capacity"(131);
                 __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"Assertion failed in ", used: 20 });
                 __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"fixed_width", used: 11 });
@@ -3715,7 +3715,7 @@ pub fn fixed_width(f: f64, n: i32) -> FormatResult {
                 __f = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut __r);
                 Box<i32> { value: n }."i32^core:prelude/traits.wado/Inspect::inspect"(&mut __f);
                 __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"\n", used: 1 });
-                break __tmpl: __r;
+                break $tmpl: __r;
             });
         }
     }
@@ -4324,7 +4324,7 @@ pub fn parse_text_range(s: &String, start: i32, end: i32) -> Option<f64> {
         if !((i < len) && Box<u8> { value: s."core:prelude/string.wado/String::get_byte_unchecked"(i) }.u8::is_ascii_digit()) {
             break;
         }
-        __for_0_body: {
+        $for_0_body: {
             d = ((d * 10) + (s."core:prelude/string.wado/String::get_byte_unchecked"(i) - 48) as u64);
         }
         i = (i + 1);
@@ -4340,7 +4340,7 @@ pub fn parse_text_range(s: &String, start: i32, end: i32) -> Option<f64> {
             if !((i < len) && Box<u8> { value: s."core:prelude/string.wado/String::get_byte_unchecked"(i) }.u8::is_ascii_digit()) {
                 break;
             }
-            __for_1_body: {
+            $for_1_body: {
                 d = ((d * 10) + (s."core:prelude/string.wado/String::get_byte_unchecked"(i) - 48) as u64);
                 frac = (frac + 1);
             }
@@ -4376,7 +4376,7 @@ pub fn parse_text_range(s: &String, start: i32, end: i32) -> Option<f64> {
             if !((i < len) && Box<u8> { value: s."core:prelude/string.wado/String::get_byte_unchecked"(i) }.u8::is_ascii_digit()) {
                 break;
             }
-            __for_2_body: {
+            $for_2_body: {
                 p = ((p * 10) + (s."core:prelude/string.wado/String::get_byte_unchecked"(i) - 48) as i32);
             }
             i = (i + 1);
@@ -4619,7 +4619,7 @@ pub fn "core:prelude/int128.wado/u128::from_str_radix_range"(s: &String, start: 
     "core::prelude/intparse.wado::assert_radix"(radix);
     let prefix: Result<i32, IntErrorKind> = "core::prelude/intparse.wado::parse_unsigned_prefix_range"(s, start, end);
     match prefix {
-        Err(k) => {
+        Err(k) => $block_0: {
             return Result<u128, ParseIntError>::Err("core::prelude/intparse.wado::core:prelude/intparse.wado/ParseIntError::new"(k));
         },
         _ => (),
@@ -4644,12 +4644,12 @@ pub fn "core:prelude/int128.wado/u128::from_i128"(val: i128) -> u128 {
 }
 
 fn "core:prelude/int128.wado/u128::round_to_mantissa"(self: &u128, mant_bits: i32) -> [u64, i64] {
-    __assert_0: {
+    $assert_0: {
         let __v0: u64 = self.high;
         let __cond: bool = (__v0 != 0);
         if !__cond {
             core::builtin::cold_path();
-            core::rt::panic(__tmpl: {
+            core::rt::panic($tmpl: {
                 let mut __r: String = "core::prelude/string.wado::core:prelude/string.wado/String::with_capacity"(128);
                 __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"Assertion failed in ", used: 20 });
                 __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"u128::round_to_mantissa", used: 23 });
@@ -4663,7 +4663,7 @@ fn "core:prelude/int128.wado/u128::round_to_mantissa"(self: &u128, mant_bits: i3
                 __f = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut __r);
                 Box<u64> { value: __v0 }."u64^core:prelude/traits.wado/Inspect::inspect"(&mut __f);
                 __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"\n", used: 1 });
-                break __tmpl: __r;
+                break $tmpl: __r;
             });
         }
     }
@@ -4695,14 +4695,14 @@ fn "core:prelude/int128.wado/u128::round_to_mantissa"(self: &u128, mant_bits: i3
         a = (a >> 1);
         exp = (exp + 1);
     }
-    __assert_1: {
+    $assert_1: {
         let __v2: i32 = (mant_bits - 1);
         let __v3: u64 = __v2 as u64;
         let __v4: u64 = (a >> __v3);
         let __cond: bool = (__v4 == 1);
         if !__cond {
             core::builtin::cold_path();
-            core::rt::panic(__tmpl: {
+            core::rt::panic($tmpl: {
                 let mut __r: String = "core::prelude/string.wado::core:prelude/string.wado/String::with_capacity"(285);
                 __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"Assertion failed in ", used: 20 });
                 __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"u128::round_to_mantissa", used: 23 });
@@ -4732,7 +4732,7 @@ fn "core:prelude/int128.wado/u128::round_to_mantissa"(self: &u128, mant_bits: i3
                 __f = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut __r);
                 Box<u64> { value: __v4 }."u64^core:prelude/traits.wado/Inspect::inspect"(&mut __f);
                 __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"\n", used: 1 });
-                break __tmpl: __r;
+                break $tmpl: __r;
             });
         }
     }
@@ -4766,11 +4766,11 @@ pub fn "core:prelude/int128.wado/u128::as_f32"(self: &u128) -> f32 {
 }
 
 fn "core:prelude/int128.wado/u128::div_rem_wide"(hi: u64, lo: u64, d: u64) -> [u64, u64] {
-    __assert_0: {
+    $assert_0: {
         let __cond: bool = (hi < d);
         if !__cond {
             core::builtin::cold_path();
-            core::rt::panic(__tmpl: {
+            core::rt::panic($tmpl: {
                 let mut __r: String = "core::prelude/string.wado::core:prelude/string.wado/String::with_capacity"(133);
                 __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"Assertion failed in ", used: 20 });
                 __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"u128::div_rem_wide", used: 18 });
@@ -4788,7 +4788,7 @@ fn "core:prelude/int128.wado/u128::div_rem_wide"(hi: u64, lo: u64, d: u64) -> [u
                 __f = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut __r);
                 Box<u64> { value: d }."u64^core:prelude/traits.wado/Inspect::inspect"(&mut __f);
                 __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"\n", used: 1 });
-                break __tmpl: __r;
+                break $tmpl: __r;
             });
         }
     }
@@ -4808,11 +4808,11 @@ fn "core:prelude/int128.wado/u128::div_rem_wide"(hi: u64, lo: u64, d: u64) -> [u
     let un0: u64 = (un10 & core::prelude/int128.wado::LOW32);
     let q1: u64 = "core::prelude/int128.wado::core:prelude/int128.wado/u128::trial_quotient"(un32, un1, dn1, dn0);
     let un21: u64 = (((un32 << 32) + un1) - (q1 * dn));
-    __assert_1: {
+    $assert_1: {
         let __cond: bool = (un21 < dn);
         if !__cond {
             core::builtin::cold_path();
-            core::rt::panic(__tmpl: {
+            core::rt::panic($tmpl: {
                 let mut __r: String = "core::prelude/string.wado::core:prelude/string.wado/String::with_capacity"(139);
                 __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"Assertion failed in ", used: 20 });
                 __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"u128::div_rem_wide", used: 18 });
@@ -4830,7 +4830,7 @@ fn "core:prelude/int128.wado/u128::div_rem_wide"(hi: u64, lo: u64, d: u64) -> [u
                 __f = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut __r);
                 Box<u64> { value: dn }."u64^core:prelude/traits.wado/Inspect::inspect"(&mut __f);
                 __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"\n", used: 1 });
-                break __tmpl: __r;
+                break $tmpl: __r;
             });
         }
     }
@@ -4885,11 +4885,11 @@ pub fn "core:prelude/int128.wado/u128::div_rem"(self: &u128, divisor: &u128) -> 
             let estimate: u64 = __pattern_temp_1.0;
             __pattern_temp_1.1;
             let mut q: u64 = (estimate >> (63 - n));
-            __assert_0: {
+            $assert_0: {
                 let __cond: bool = (q != 0);
                 if !__cond {
                     core::builtin::cold_path();
-                    core::rt::panic(__tmpl: {
+                    core::rt::panic($tmpl: {
                         let mut __r: String = "core::prelude/string.wado::core:prelude/string.wado/String::with_capacity"(112);
                         __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"Assertion failed in ", used: 20 });
                         __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"u128::div_rem", used: 13 });
@@ -4903,7 +4903,7 @@ pub fn "core:prelude/int128.wado/u128::div_rem"(self: &u128, divisor: &u128) -> 
                         __f = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut __r);
                         Box<u64> { value: q }."u64^core:prelude/traits.wado/Inspect::inspect"(&mut __f);
                         __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"\n", used: 1 });
-                        break __tmpl: __r;
+                        break $tmpl: __r;
                     });
                 }
             }
@@ -5020,11 +5020,11 @@ fn "core:prelude/int128.wado/u128::fmt_base"(self: &u128, f: &mut Formatter, bas
             lo = ((lo >> shift_u64) | hi_bits);
             hi = (hi >> shift_u64);
         }
-        __assert_0: {
+        $assert_0: {
             let __cond: bool = (pos == offset);
             if !__cond {
                 core::builtin::cold_path();
-                core::rt::panic(__tmpl: {
+                core::rt::panic($tmpl: {
                     let mut __r: String = "core::prelude/string.wado::core:prelude/string.wado/String::with_capacity"(146);
                     __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"Assertion failed in ", used: 20 });
                     __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"u128::fmt_base", used: 14 });
@@ -5042,7 +5042,7 @@ fn "core:prelude/int128.wado/u128::fmt_base"(self: &u128, f: &mut Formatter, bas
                     __f = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut __r);
                     Box<i32> { value: offset }."i32^core:prelude/traits.wado/Inspect::inspect"(&mut __f);
                     __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"\n", used: 1 });
-                    break __tmpl: __r;
+                    break $tmpl: __r;
                 });
             }
         }
@@ -5076,7 +5076,7 @@ fn round_off_digits_u128(val: u128, drop: i32) -> u128 {
         if !(i < drop) {
             break;
         }
-        __for_0_body: {
+        $for_0_body: {
             divisor = divisor."core:prelude/int128.wado/u128^core:prelude/traits.wado/Mul::mul"(&"core::prelude/int128.wado::core:prelude/int128.wado/u128::from_u64"(10));
         }
         i = (i + 1);
@@ -5131,7 +5131,7 @@ fn write_int_exp_128(f: &mut Formatter, is_negative: bool, abs_value: u128, uppe
             if !(i < precision) {
                 break;
             }
-            __for_0_body: {
+            $for_0_body: {
                 f."core:prelude/format.wado/Formatter::write_char"('0');
             }
             i = (i + 1);
@@ -5251,7 +5251,7 @@ pub fn "core:prelude/int128.wado/i128::from_str_radix_range"(s: &String, start: 
     "core::prelude/intparse.wado::assert_radix"(radix);
     let __pattern_temp_0: [bool, i32] = match "core::prelude/intparse.wado::parse_signed_prefix_range"(s, start, end) {
         Ok(p) => p,
-        Err(k) => {
+        Err(k) => $block_0: {
             return Result<i128, ParseIntError>::Err("core::prelude/intparse.wado::core:prelude/intparse.wado/ParseIntError::new"(k));
         },
     };
@@ -5273,7 +5273,7 @@ pub fn "core:prelude/int128.wado/i128::from_str_radix_range"(s: &String, start: 
                 Result<i128, ParseIntError>::Ok("core::prelude/int128.wado::core:prelude/int128.wado/i128::from_u128"(v));
             };
         },
-        Err(k) => {
+        Err(k) => $block_9: {
             let kind: IntErrorKind = if (is_negative && (k == IntErrorKind::PosOverflow)) {
                 IntErrorKind::NegOverflow;
             } else {
@@ -5580,7 +5580,7 @@ fn parse_u64_digits(s: &String, start: i32, end: i32, radix: u32) -> Result<u64,
         if !(i < end) {
             break;
         }
-        __for_0_body: {
+        $for_0_body: {
             let d: i32 = "core::prelude/intparse.wado::digit_value"(core::builtin::array_get_value_u8(bytes, i));
             if ((d < 0) || (d >= radix as i32)) {
                 return Result<u64, IntErrorKind>::Err(IntErrorKind::InvalidDigit);
@@ -5612,7 +5612,7 @@ fn parse_u128_digits(s: &String, start: i32, end: i32, radix: u32) -> Result<u12
         if !(i < end) {
             break;
         }
-        __for_0_body: {
+        $for_0_body: {
             let d: i32 = "core::prelude/intparse.wado::digit_value"(core::builtin::array_get_value_u8(bytes, i));
             if ((d < 0) || (d >= radix as i32)) {
                 return Result<u128, IntErrorKind>::Err(IntErrorKind::InvalidDigit);
@@ -5671,7 +5671,7 @@ fn parse_i64_radix_range(s: &String, start: i32, end: i32, radix: u32, max: i64,
     "core::prelude/intparse.wado::assert_radix"(radix);
     let __pattern_temp_0: [bool, i32] = match "core::prelude/intparse.wado::parse_signed_prefix_range"(s, start, end) {
         Ok(p) => p,
-        Err(k) => {
+        Err(k) => $block_0: {
             return Result<i64, ParseIntError>::Err("core::prelude/intparse.wado::core:prelude/intparse.wado/ParseIntError::new"(k));
         },
     };
@@ -5691,7 +5691,7 @@ fn parse_i64_radix_range(s: &String, start: i32, end: i32, radix: u32, max: i64,
                 Result<i64, ParseIntError>::Ok(v as i64);
             };
         },
-        Err(k) => {
+        Err(k) => $block_9: {
             let kind: IntErrorKind = if (is_negative && (k == IntErrorKind::PosOverflow)) {
                 IntErrorKind::NegOverflow;
             } else {
@@ -5706,7 +5706,7 @@ fn parse_u64_radix_range(s: &String, start: i32, end: i32, radix: u32, max: u64)
     "core::prelude/intparse.wado::assert_radix"(radix);
     let digit_start: i32 = match "core::prelude/intparse.wado::parse_unsigned_prefix_range"(s, start, end) {
         Ok(i) => i,
-        Err(k) => {
+        Err(k) => $block_0: {
             return Result<u64, ParseIntError>::Err("core::prelude/intparse.wado::core:prelude/intparse.wado/ParseIntError::new"(k));
         },
     };
@@ -5964,7 +5964,7 @@ fn write_decimal_digits(arr: &mut Array<u8>, offset: i32, val: u64, digit_count:
         if !(i < digit_count) {
             break;
         }
-        __for_0_body: {
+        $for_0_body: {
             pos = (pos - 1);
             core::builtin::array_set_u8(arr, pos, ('0' as i32 + (t % 10) as i32) as u8);
             t = (t / 10);
@@ -5983,7 +5983,7 @@ fn count_digits_u64(val: u64) -> i32 {
         if !(t > 0) {
             break;
         }
-        __for_0_body: {
+        $for_0_body: {
             n = (n + 1);
         }
         t = (t / 10);
@@ -5998,7 +5998,7 @@ fn round_off_digits_u64(val: u64, drop: i32) -> u64 {
         if !(i < drop) {
             break;
         }
-        __for_0_body: {
+        $for_0_body: {
             divisor = (divisor * 10);
         }
         i = (i + 1);
@@ -6053,7 +6053,7 @@ fn write_int_exp(f: &mut Formatter, is_negative: bool, abs_value: u64, upper: bo
             if !(i < precision) {
                 break;
             }
-            __for_0_body: {
+            $for_0_body: {
                 f."core:prelude/format.wado/Formatter::write_char"('0');
             }
             i = (i + 1);
@@ -6286,11 +6286,11 @@ pub fn i32::min(a: i32, b: i32) -> i32 {
 }
 
 pub fn i32::clamp(value: i32, low: i32, high: i32) -> i32 {
-    __assert_0: {
+    $assert_0: {
         let __cond: bool = (low <= high);
         if !__cond {
             core::builtin::cold_path();
-            core::rt::panic(__tmpl: {
+            core::rt::panic($tmpl: {
                 let mut __r: String = "core::prelude/string.wado::core:prelude/string.wado/String::with_capacity"(142);
                 __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"Assertion failed in ", used: 20 });
                 __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"i32::clamp", used: 10 });
@@ -6308,7 +6308,7 @@ pub fn i32::clamp(value: i32, low: i32, high: i32) -> i32 {
                 __f = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut __r);
                 Box<i32> { value: high }."i32^core:prelude/traits.wado/Inspect::inspect"(&mut __f);
                 __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"\n", used: 1 });
-                break __tmpl: __r;
+                break $tmpl: __r;
             });
         }
     }
@@ -6830,7 +6830,7 @@ pub fn "v128^core:prelude/traits.wado/Inspect::inspect"(self: Box<v128>, f: &mut
         if !(i < 16) {
             break;
         }
-        __for_0_body: {
+        $for_0_body: {
             let byte: u8 = match i {
                 0 => core::builtin::i8x16_extract_lane_u(0, self.value),
                 1 => core::builtin::i8x16_extract_lane_u(1, self.value),
@@ -6849,11 +6849,11 @@ pub fn "v128^core:prelude/traits.wado/Inspect::inspect"(self: Box<v128>, f: &mut
                 14 => core::builtin::i8x16_extract_lane_u(14, self.value),
                 _ => core::builtin::i8x16_extract_lane_u(15, self.value),
             } as u8;
-            f."core:prelude/format.wado/Formatter::write_str"(&__tmpl: {
+            f."core:prelude/format.wado/Formatter::write_str"(&$tmpl: {
                 let mut __r: String = "core::prelude/string.wado::core:prelude/string.wado/String::with_capacity"(16);
                 let mut __f: Formatter = Formatter { fill: '0', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: true, width: 2, precision: -2, indent: 0, buf: &mut __r };
                 Box<u8> { value: byte }."u8^core:prelude/traits.wado/LowerHex::fmt_lower_hex"(&mut __f);
-                break __tmpl: __r;
+                break $tmpl: __r;
             });
         }
         i = (i + 1);
@@ -7556,7 +7556,7 @@ fn bytes_match_at(haystack: &Array<u8>, pos: i32, needle: &Array<u8>, needle_len
         if !(j < needle_len) {
             break;
         }
-        __for_0_body: {
+        $for_0_body: {
             if (haystack."Array<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value"((pos + j)) != needle."Array<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value"(j)) {
                 return false;
             }
@@ -7587,10 +7587,10 @@ pub fn "core:prelude/string.wado/StrUtf8ByteIter^core:prelude/traits.wado/Iterat
     loop {
         let __match_2: Option<u8> = self."core:prelude/string.wado/StrUtf8ByteIter^core:prelude/traits.wado/Iterator::next"();
         match __match_2 {
-            Some(_) => {
+            Some(_) => $block_0: {
                 n = (n + 1);
             },
-            _ => {
+            _ => $block_1: {
                 break;
             },
         };
@@ -7602,10 +7602,10 @@ pub fn "core:prelude/string.wado/StrUtf8ByteIter^core:prelude/traits.wado/Iterat
     loop {
         let __match_3: Option<u8> = self."core:prelude/string.wado/StrUtf8ByteIter^core:prelude/traits.wado/Iterator::next"();
         match __match_3 {
-            Some(item) => {
+            Some(item) => $block_0: {
                 f(item);
             },
-            _ => {
+            _ => $block_1: {
                 break;
             },
         };
@@ -7616,12 +7616,12 @@ pub fn "core:prelude/string.wado/StrUtf8ByteIter^core:prelude/traits.wado/Iterat
     loop {
         let __match_3: Option<u8> = self."core:prelude/string.wado/StrUtf8ByteIter^core:prelude/traits.wado/Iterator::next"();
         match __match_3 {
-            Some(item) => {
+            Some(item) => $block_1: {
                 if pred(item) {
                     return Option<u8>::Some(item);
                 }
             },
-            _ => {
+            _ => $block_2: {
                 break;
             },
         };
@@ -7633,12 +7633,12 @@ pub fn "core:prelude/string.wado/StrUtf8ByteIter^core:prelude/traits.wado/Iterat
     loop {
         let __match_3: Option<u8> = self."core:prelude/string.wado/StrUtf8ByteIter^core:prelude/traits.wado/Iterator::next"();
         match __match_3 {
-            Some(item) => {
+            Some(item) => $block_1: {
                 if pred(item) {
                     return true;
                 }
             },
-            _ => {
+            _ => $block_2: {
                 break;
             },
         };
@@ -7650,12 +7650,12 @@ pub fn "core:prelude/string.wado/StrUtf8ByteIter^core:prelude/traits.wado/Iterat
     loop {
         let __match_3: Option<u8> = self."core:prelude/string.wado/StrUtf8ByteIter^core:prelude/traits.wado/Iterator::next"();
         match __match_3 {
-            Some(item) => {
+            Some(item) => $block_1: {
                 if !pred(item) {
                     return false;
                 }
             },
-            _ => {
+            _ => $block_2: {
                 break;
             },
         };
@@ -7668,10 +7668,10 @@ pub fn "core:prelude/string.wado/StrUtf8ByteIter^core:prelude/traits.wado/Iterat
     loop {
         let __match_3: Option<u8> = self."core:prelude/string.wado/StrUtf8ByteIter^core:prelude/traits.wado/Iterator::next"();
         match __match_3 {
-            Some(item) => {
+            Some(item) => $block_0: {
                 result = Option<u8>::Some(item);
             },
-            _ => {
+            _ => $block_1: {
                 break;
             },
         };
@@ -7684,13 +7684,13 @@ pub fn "core:prelude/string.wado/StrUtf8ByteIter^core:prelude/traits.wado/Iterat
     loop {
         let __match_4: Option<u8> = self."core:prelude/string.wado/StrUtf8ByteIter^core:prelude/traits.wado/Iterator::next"();
         match __match_4 {
-            Some(item) => {
+            Some(item) => $block_1: {
                 if (remaining <= 0) {
                     return Option<u8>::Some(item);
                 }
                 remaining = (remaining - 1);
             },
-            _ => {
+            _ => $block_2: {
                 break;
             },
         };
@@ -7703,13 +7703,13 @@ pub fn "core:prelude/string.wado/StrUtf8ByteIter^core:prelude/traits.wado/Iterat
     loop {
         let __match_4: Option<u8> = self."core:prelude/string.wado/StrUtf8ByteIter^core:prelude/traits.wado/Iterator::next"();
         match __match_4 {
-            Some(item) => {
+            Some(item) => $block_1: {
                 if pred(item) {
                     return Option<i32>::Some(idx);
                 }
                 idx = (idx + 1);
             },
-            _ => {
+            _ => $block_2: {
                 break;
             },
         };
@@ -7720,15 +7720,15 @@ pub fn "core:prelude/string.wado/StrUtf8ByteIter^core:prelude/traits.wado/Iterat
 pub fn "core:prelude/string.wado/StrUtf8ByteIter^core:prelude/traits.wado/Iterator::reduce"(self: &mut StrUtf8ByteIter, f: fn mut(u8, u8) -> u8) -> Option<u8> {
     let __match_5: Option<u8> = self."core:prelude/string.wado/StrUtf8ByteIter^core:prelude/traits.wado/Iterator::next"();
     match __match_5 {
-        Some(first) => {
+        Some(first) => $block_3: {
             let mut acc: u8 = first;
             loop {
                 let __match_6: Option<u8> = self."core:prelude/string.wado/StrUtf8ByteIter^core:prelude/traits.wado/Iterator::next"();
                 match __match_6 {
-                    Some(item) => {
+                    Some(item) => $block_0: {
                         acc = f(acc, item);
                     },
-                    _ => {
+                    _ => $block_1: {
                         break;
                     },
                 };
@@ -7759,21 +7759,21 @@ pub fn "core:prelude/string.wado/StrUtf8ByteIter^core:prelude/traits.wado/Iterat
 pub fn "core:prelude/string.wado/StrUtf8ByteIter^core:prelude/traits.wado/Iterator::min_by"(self: &mut StrUtf8ByteIter, cmp: fn mut(Box<u8>, Box<u8>) -> Ordering) -> Option<u8> {
     let __match_5: Option<u8> = self."core:prelude/string.wado/StrUtf8ByteIter^core:prelude/traits.wado/Iterator::next"();
     match __match_5 {
-        Some(first) => {
+        Some(first) => $block_4: {
             let mut best: Box<u8> = Box<u8> { value: first };
             loop {
                 let __match_6: Option<u8> = self."core:prelude/string.wado/StrUtf8ByteIter^core:prelude/traits.wado/Iterator::next"();
                 match __match_6 {
-                    Some(item) => {
+                    Some(item) => $block_1: {
                         let __match_7: Ordering = cmp(item, best);
                         match __match_7 {
-                            Less => {
+                            Less => $block_0: {
                                 best.value = item.value;
                             },
                             _ => (),
                         };
                     },
-                    _ => {
+                    _ => $block_2: {
                         break;
                     },
                 };
@@ -7788,17 +7788,17 @@ pub fn "core:prelude/string.wado/StrUtf8ByteIter^core:prelude/traits.wado/Iterat
 pub fn "core:prelude/string.wado/StrUtf8ByteIter^core:prelude/traits.wado/Iterator::max_by"(self: &mut StrUtf8ByteIter, cmp: fn mut(Box<u8>, Box<u8>) -> Ordering) -> Option<u8> {
     let __match_5: Option<u8> = self."core:prelude/string.wado/StrUtf8ByteIter^core:prelude/traits.wado/Iterator::next"();
     match __match_5 {
-        Some(first) => {
+        Some(first) => $block_4: {
             let mut best: Box<u8> = Box<u8> { value: first };
             loop {
                 let __match_6: Option<u8> = self."core:prelude/string.wado/StrUtf8ByteIter^core:prelude/traits.wado/Iterator::next"();
                 match __match_6 {
-                    Some(item) => {
+                    Some(item) => $block_1: {
                         if (cmp(best, item) != Ordering::Greater) {
                             best.value = item.value;
                         }
                     },
-                    _ => {
+                    _ => $block_2: {
                         break;
                     },
                 };
@@ -7826,10 +7826,10 @@ pub fn "core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/Iterator::
     loop {
         let __match_2: Option<char> = self."core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/Iterator::next"();
         match __match_2 {
-            Some(_) => {
+            Some(_) => $block_0: {
                 n = (n + 1);
             },
-            _ => {
+            _ => $block_1: {
                 break;
             },
         };
@@ -7841,10 +7841,10 @@ pub fn "core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/Iterator::
     loop {
         let __match_3: Option<char> = self."core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/Iterator::next"();
         match __match_3 {
-            Some(item) => {
+            Some(item) => $block_0: {
                 f(item);
             },
-            _ => {
+            _ => $block_1: {
                 break;
             },
         };
@@ -7855,12 +7855,12 @@ pub fn "core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/Iterator::
     loop {
         let __match_3: Option<char> = self."core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/Iterator::next"();
         match __match_3 {
-            Some(item) => {
+            Some(item) => $block_1: {
                 if pred(item) {
                     return Option<char>::Some(item);
                 }
             },
-            _ => {
+            _ => $block_2: {
                 break;
             },
         };
@@ -7872,12 +7872,12 @@ pub fn "core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/Iterator::
     loop {
         let __match_3: Option<char> = self."core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/Iterator::next"();
         match __match_3 {
-            Some(item) => {
+            Some(item) => $block_1: {
                 if pred(item) {
                     return true;
                 }
             },
-            _ => {
+            _ => $block_2: {
                 break;
             },
         };
@@ -7889,12 +7889,12 @@ pub fn "core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/Iterator::
     loop {
         let __match_3: Option<char> = self."core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/Iterator::next"();
         match __match_3 {
-            Some(item) => {
+            Some(item) => $block_1: {
                 if !pred(item) {
                     return false;
                 }
             },
-            _ => {
+            _ => $block_2: {
                 break;
             },
         };
@@ -7907,10 +7907,10 @@ pub fn "core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/Iterator::
     loop {
         let __match_3: Option<char> = self."core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/Iterator::next"();
         match __match_3 {
-            Some(item) => {
+            Some(item) => $block_0: {
                 result = Option<char>::Some(item);
             },
-            _ => {
+            _ => $block_1: {
                 break;
             },
         };
@@ -7923,13 +7923,13 @@ pub fn "core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/Iterator::
     loop {
         let __match_4: Option<char> = self."core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/Iterator::next"();
         match __match_4 {
-            Some(item) => {
+            Some(item) => $block_1: {
                 if (remaining <= 0) {
                     return Option<char>::Some(item);
                 }
                 remaining = (remaining - 1);
             },
-            _ => {
+            _ => $block_2: {
                 break;
             },
         };
@@ -7942,13 +7942,13 @@ pub fn "core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/Iterator::
     loop {
         let __match_4: Option<char> = self."core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/Iterator::next"();
         match __match_4 {
-            Some(item) => {
+            Some(item) => $block_1: {
                 if pred(item) {
                     return Option<i32>::Some(idx);
                 }
                 idx = (idx + 1);
             },
-            _ => {
+            _ => $block_2: {
                 break;
             },
         };
@@ -7959,15 +7959,15 @@ pub fn "core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/Iterator::
 pub fn "core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/Iterator::reduce"(self: &mut StrCharIter, f: fn mut(char, char) -> char) -> Option<char> {
     let __match_5: Option<char> = self."core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/Iterator::next"();
     match __match_5 {
-        Some(first) => {
+        Some(first) => $block_3: {
             let mut acc: char = first;
             loop {
                 let __match_6: Option<char> = self."core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/Iterator::next"();
                 match __match_6 {
-                    Some(item) => {
+                    Some(item) => $block_0: {
                         acc = f(acc, item);
                     },
-                    _ => {
+                    _ => $block_1: {
                         break;
                     },
                 };
@@ -7998,21 +7998,21 @@ pub fn "core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/Iterator::
 pub fn "core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/Iterator::min_by"(self: &mut StrCharIter, cmp: fn mut(Box<char>, Box<char>) -> Ordering) -> Option<char> {
     let __match_5: Option<char> = self."core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/Iterator::next"();
     match __match_5 {
-        Some(first) => {
+        Some(first) => $block_4: {
             let mut best: Box<char> = Box<char> { value: first };
             loop {
                 let __match_6: Option<char> = self."core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/Iterator::next"();
                 match __match_6 {
-                    Some(item) => {
+                    Some(item) => $block_1: {
                         let __match_7: Ordering = cmp(item, best);
                         match __match_7 {
-                            Less => {
+                            Less => $block_0: {
                                 best.value = item.value;
                             },
                             _ => (),
                         };
                     },
-                    _ => {
+                    _ => $block_2: {
                         break;
                     },
                 };
@@ -8027,17 +8027,17 @@ pub fn "core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/Iterator::
 pub fn "core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/Iterator::max_by"(self: &mut StrCharIter, cmp: fn mut(Box<char>, Box<char>) -> Ordering) -> Option<char> {
     let __match_5: Option<char> = self."core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/Iterator::next"();
     match __match_5 {
-        Some(first) => {
+        Some(first) => $block_4: {
             let mut best: Box<char> = Box<char> { value: first };
             loop {
                 let __match_6: Option<char> = self."core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/Iterator::next"();
                 match __match_6 {
-                    Some(item) => {
+                    Some(item) => $block_1: {
                         if (cmp(best, item) != Ordering::Greater) {
                             best.value = item.value;
                         }
                     },
-                    _ => {
+                    _ => $block_2: {
                         break;
                     },
                 };
@@ -8066,10 +8066,10 @@ pub fn "core:prelude/string.wado/StrCharIndicesIter^core:prelude/traits.wado/Ite
     loop {
         let __match_2: Option<[i32, char]> = self."core:prelude/string.wado/StrCharIndicesIter^core:prelude/traits.wado/Iterator::next"();
         match __match_2 {
-            Some(_) => {
+            Some(_) => $block_0: {
                 n = (n + 1);
             },
-            _ => {
+            _ => $block_1: {
                 break;
             },
         };
@@ -8081,10 +8081,10 @@ pub fn "core:prelude/string.wado/StrCharIndicesIter^core:prelude/traits.wado/Ite
     loop {
         let __match_3: Option<[i32, char]> = self."core:prelude/string.wado/StrCharIndicesIter^core:prelude/traits.wado/Iterator::next"();
         match __match_3 {
-            Some(item) => {
+            Some(item) => $block_0: {
                 f(item);
             },
-            _ => {
+            _ => $block_1: {
                 break;
             },
         };
@@ -8095,12 +8095,12 @@ pub fn "core:prelude/string.wado/StrCharIndicesIter^core:prelude/traits.wado/Ite
     loop {
         let __match_3: Option<[i32, char]> = self."core:prelude/string.wado/StrCharIndicesIter^core:prelude/traits.wado/Iterator::next"();
         match __match_3 {
-            Some(item) => {
+            Some(item) => $block_1: {
                 if pred("mess_dirty.wado::$value_copy$[i32,char]"(item)) {
                     return Option<[i32, char]>::Some("mess_dirty.wado::$value_copy$[i32,char]"(item));
                 }
             },
-            _ => {
+            _ => $block_2: {
                 break;
             },
         };
@@ -8112,12 +8112,12 @@ pub fn "core:prelude/string.wado/StrCharIndicesIter^core:prelude/traits.wado/Ite
     loop {
         let __match_3: Option<[i32, char]> = self."core:prelude/string.wado/StrCharIndicesIter^core:prelude/traits.wado/Iterator::next"();
         match __match_3 {
-            Some(item) => {
+            Some(item) => $block_1: {
                 if pred(item) {
                     return true;
                 }
             },
-            _ => {
+            _ => $block_2: {
                 break;
             },
         };
@@ -8129,12 +8129,12 @@ pub fn "core:prelude/string.wado/StrCharIndicesIter^core:prelude/traits.wado/Ite
     loop {
         let __match_3: Option<[i32, char]> = self."core:prelude/string.wado/StrCharIndicesIter^core:prelude/traits.wado/Iterator::next"();
         match __match_3 {
-            Some(item) => {
+            Some(item) => $block_1: {
                 if !pred(item) {
                     return false;
                 }
             },
-            _ => {
+            _ => $block_2: {
                 break;
             },
         };
@@ -8147,10 +8147,10 @@ pub fn "core:prelude/string.wado/StrCharIndicesIter^core:prelude/traits.wado/Ite
     loop {
         let __match_3: Option<[i32, char]> = self."core:prelude/string.wado/StrCharIndicesIter^core:prelude/traits.wado/Iterator::next"();
         match __match_3 {
-            Some(item) => {
+            Some(item) => $block_0: {
                 result = Option<[i32, char]>::Some(item);
             },
-            _ => {
+            _ => $block_1: {
                 break;
             },
         };
@@ -8163,13 +8163,13 @@ pub fn "core:prelude/string.wado/StrCharIndicesIter^core:prelude/traits.wado/Ite
     loop {
         let __match_4: Option<[i32, char]> = self."core:prelude/string.wado/StrCharIndicesIter^core:prelude/traits.wado/Iterator::next"();
         match __match_4 {
-            Some(item) => {
+            Some(item) => $block_1: {
                 if (remaining <= 0) {
                     return Option<[i32, char]>::Some(item);
                 }
                 remaining = (remaining - 1);
             },
-            _ => {
+            _ => $block_2: {
                 break;
             },
         };
@@ -8182,13 +8182,13 @@ pub fn "core:prelude/string.wado/StrCharIndicesIter^core:prelude/traits.wado/Ite
     loop {
         let __match_4: Option<[i32, char]> = self."core:prelude/string.wado/StrCharIndicesIter^core:prelude/traits.wado/Iterator::next"();
         match __match_4 {
-            Some(item) => {
+            Some(item) => $block_1: {
                 if pred(item) {
                     return Option<i32>::Some(idx);
                 }
                 idx = (idx + 1);
             },
-            _ => {
+            _ => $block_2: {
                 break;
             },
         };
@@ -8199,15 +8199,15 @@ pub fn "core:prelude/string.wado/StrCharIndicesIter^core:prelude/traits.wado/Ite
 pub fn "core:prelude/string.wado/StrCharIndicesIter^core:prelude/traits.wado/Iterator::reduce"(self: &mut StrCharIndicesIter, f: fn mut([i32, char], [i32, char]) -> [i32, char]) -> Option<[i32, char]> {
     let __match_5: Option<[i32, char]> = self."core:prelude/string.wado/StrCharIndicesIter^core:prelude/traits.wado/Iterator::next"();
     match __match_5 {
-        Some(first) => {
+        Some(first) => $block_3: {
             let mut acc: [i32, char] = first;
             loop {
                 let __match_6: Option<[i32, char]> = self."core:prelude/string.wado/StrCharIndicesIter^core:prelude/traits.wado/Iterator::next"();
                 match __match_6 {
-                    Some(item) => {
+                    Some(item) => $block_0: {
                         acc = "mess_dirty.wado::$value_copy$[i32,char]"(f("mess_dirty.wado::$value_copy$[i32,char]"(acc), item));
                     },
-                    _ => {
+                    _ => $block_1: {
                         break;
                     },
                 };
@@ -8238,21 +8238,21 @@ pub fn "core:prelude/string.wado/StrCharIndicesIter^core:prelude/traits.wado/Ite
 pub fn "core:prelude/string.wado/StrCharIndicesIter^core:prelude/traits.wado/Iterator::min_by"(self: &mut StrCharIndicesIter, cmp: fn mut(&[i32, char], &[i32, char]) -> Ordering) -> Option<[i32, char]> {
     let __match_5: Option<[i32, char]> = self."core:prelude/string.wado/StrCharIndicesIter^core:prelude/traits.wado/Iterator::next"();
     match __match_5 {
-        Some(first) => {
+        Some(first) => $block_4: {
             let mut best: [i32, char] = first;
             loop {
                 let __match_6: Option<[i32, char]> = self."core:prelude/string.wado/StrCharIndicesIter^core:prelude/traits.wado/Iterator::next"();
                 match __match_6 {
-                    Some(item) => {
+                    Some(item) => $block_1: {
                         let __match_7: Ordering = cmp(&item, &best);
                         match __match_7 {
-                            Less => {
+                            Less => $block_0: {
                                 best = item;
                             },
                             _ => (),
                         };
                     },
-                    _ => {
+                    _ => $block_2: {
                         break;
                     },
                 };
@@ -8267,17 +8267,17 @@ pub fn "core:prelude/string.wado/StrCharIndicesIter^core:prelude/traits.wado/Ite
 pub fn "core:prelude/string.wado/StrCharIndicesIter^core:prelude/traits.wado/Iterator::max_by"(self: &mut StrCharIndicesIter, cmp: fn mut(&[i32, char], &[i32, char]) -> Ordering) -> Option<[i32, char]> {
     let __match_5: Option<[i32, char]> = self."core:prelude/string.wado/StrCharIndicesIter^core:prelude/traits.wado/Iterator::next"();
     match __match_5 {
-        Some(first) => {
+        Some(first) => $block_4: {
             let mut best: [i32, char] = first;
             loop {
                 let __match_6: Option<[i32, char]> = self."core:prelude/string.wado/StrCharIndicesIter^core:prelude/traits.wado/Iterator::next"();
                 match __match_6 {
-                    Some(item) => {
+                    Some(item) => $block_1: {
                         if (cmp(&best, &item) != Ordering::Greater) {
                             best = item;
                         }
                     },
-                    _ => {
+                    _ => $block_2: {
                         break;
                     },
                 };
@@ -8300,7 +8300,7 @@ pub fn "core:prelude/string.wado/StrSplitIter^core:prelude/traits.wado/Iterator:
         if !(i <= limit) {
             break;
         }
-        __for_0_body: {
+        $for_0_body: {
             if ((self.sep_len > 0) && "core::prelude/string.wado::bytes_match_at"(self.repr, i, sep, self.sep_len)) {
                 let part: String = "core::prelude/string.wado::substring"(self.repr, self.pos, (i - self.pos));
                 self.pos = (i + self.sep_len);
@@ -8318,10 +8318,10 @@ pub fn "core:prelude/string.wado/StrSplitIter^core:prelude/traits.wado/Iterator:
     loop {
         let __match_2: Option<String> = self."core:prelude/string.wado/StrSplitIter^core:prelude/traits.wado/Iterator::next"();
         match __match_2 {
-            Some(_) => {
+            Some(_) => $block_0: {
                 n = (n + 1);
             },
-            _ => {
+            _ => $block_1: {
                 break;
             },
         };
@@ -8333,10 +8333,10 @@ pub fn "core:prelude/string.wado/StrSplitIter^core:prelude/traits.wado/Iterator:
     loop {
         let __match_3: Option<String> = self."core:prelude/string.wado/StrSplitIter^core:prelude/traits.wado/Iterator::next"();
         match __match_3 {
-            Some(item) => {
+            Some(item) => $block_0: {
                 f(item);
             },
-            _ => {
+            _ => $block_1: {
                 break;
             },
         };
@@ -8347,12 +8347,12 @@ pub fn "core:prelude/string.wado/StrSplitIter^core:prelude/traits.wado/Iterator:
     loop {
         let __match_3: Option<String> = self."core:prelude/string.wado/StrSplitIter^core:prelude/traits.wado/Iterator::next"();
         match __match_3 {
-            Some(item) => {
+            Some(item) => $block_1: {
                 if pred("mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(item)) {
                     return Option<String>::Some("mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(item));
                 }
             },
-            _ => {
+            _ => $block_2: {
                 break;
             },
         };
@@ -8364,12 +8364,12 @@ pub fn "core:prelude/string.wado/StrSplitIter^core:prelude/traits.wado/Iterator:
     loop {
         let __match_3: Option<String> = self."core:prelude/string.wado/StrSplitIter^core:prelude/traits.wado/Iterator::next"();
         match __match_3 {
-            Some(item) => {
+            Some(item) => $block_1: {
                 if pred(item) {
                     return true;
                 }
             },
-            _ => {
+            _ => $block_2: {
                 break;
             },
         };
@@ -8381,12 +8381,12 @@ pub fn "core:prelude/string.wado/StrSplitIter^core:prelude/traits.wado/Iterator:
     loop {
         let __match_3: Option<String> = self."core:prelude/string.wado/StrSplitIter^core:prelude/traits.wado/Iterator::next"();
         match __match_3 {
-            Some(item) => {
+            Some(item) => $block_1: {
                 if !pred(item) {
                     return false;
                 }
             },
-            _ => {
+            _ => $block_2: {
                 break;
             },
         };
@@ -8399,10 +8399,10 @@ pub fn "core:prelude/string.wado/StrSplitIter^core:prelude/traits.wado/Iterator:
     loop {
         let __match_3: Option<String> = self."core:prelude/string.wado/StrSplitIter^core:prelude/traits.wado/Iterator::next"();
         match __match_3 {
-            Some(item) => {
+            Some(item) => $block_0: {
                 result = Option<String>::Some(item);
             },
-            _ => {
+            _ => $block_1: {
                 break;
             },
         };
@@ -8415,13 +8415,13 @@ pub fn "core:prelude/string.wado/StrSplitIter^core:prelude/traits.wado/Iterator:
     loop {
         let __match_4: Option<String> = self."core:prelude/string.wado/StrSplitIter^core:prelude/traits.wado/Iterator::next"();
         match __match_4 {
-            Some(item) => {
+            Some(item) => $block_1: {
                 if (remaining <= 0) {
                     return Option<String>::Some(item);
                 }
                 remaining = (remaining - 1);
             },
-            _ => {
+            _ => $block_2: {
                 break;
             },
         };
@@ -8434,13 +8434,13 @@ pub fn "core:prelude/string.wado/StrSplitIter^core:prelude/traits.wado/Iterator:
     loop {
         let __match_4: Option<String> = self."core:prelude/string.wado/StrSplitIter^core:prelude/traits.wado/Iterator::next"();
         match __match_4 {
-            Some(item) => {
+            Some(item) => $block_1: {
                 if pred(item) {
                     return Option<i32>::Some(idx);
                 }
                 idx = (idx + 1);
             },
-            _ => {
+            _ => $block_2: {
                 break;
             },
         };
@@ -8451,15 +8451,15 @@ pub fn "core:prelude/string.wado/StrSplitIter^core:prelude/traits.wado/Iterator:
 pub fn "core:prelude/string.wado/StrSplitIter^core:prelude/traits.wado/Iterator::reduce"(self: &mut StrSplitIter, f: fn mut(String, String) -> String) -> Option<String> {
     let __match_5: Option<String> = self."core:prelude/string.wado/StrSplitIter^core:prelude/traits.wado/Iterator::next"();
     match __match_5 {
-        Some(first) => {
+        Some(first) => $block_3: {
             let mut acc: String = first;
             loop {
                 let __match_6: Option<String> = self."core:prelude/string.wado/StrSplitIter^core:prelude/traits.wado/Iterator::next"();
                 match __match_6 {
-                    Some(item) => {
+                    Some(item) => $block_0: {
                         acc = "mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(f("mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(acc), item));
                     },
-                    _ => {
+                    _ => $block_1: {
                         break;
                     },
                 };
@@ -8490,21 +8490,21 @@ pub fn "core:prelude/string.wado/StrSplitIter^core:prelude/traits.wado/Iterator:
 pub fn "core:prelude/string.wado/StrSplitIter^core:prelude/traits.wado/Iterator::min_by"(self: &mut StrSplitIter, cmp: fn mut(&String, &String) -> Ordering) -> Option<String> {
     let __match_5: Option<String> = self."core:prelude/string.wado/StrSplitIter^core:prelude/traits.wado/Iterator::next"();
     match __match_5 {
-        Some(first) => {
+        Some(first) => $block_4: {
             let mut best: String = first;
             loop {
                 let __match_6: Option<String> = self."core:prelude/string.wado/StrSplitIter^core:prelude/traits.wado/Iterator::next"();
                 match __match_6 {
-                    Some(item) => {
+                    Some(item) => $block_1: {
                         let __match_7: Ordering = cmp(&item, &best);
                         match __match_7 {
-                            Less => {
+                            Less => $block_0: {
                                 best = item;
                             },
                             _ => (),
                         };
                     },
-                    _ => {
+                    _ => $block_2: {
                         break;
                     },
                 };
@@ -8519,17 +8519,17 @@ pub fn "core:prelude/string.wado/StrSplitIter^core:prelude/traits.wado/Iterator:
 pub fn "core:prelude/string.wado/StrSplitIter^core:prelude/traits.wado/Iterator::max_by"(self: &mut StrSplitIter, cmp: fn mut(&String, &String) -> Ordering) -> Option<String> {
     let __match_5: Option<String> = self."core:prelude/string.wado/StrSplitIter^core:prelude/traits.wado/Iterator::next"();
     match __match_5 {
-        Some(first) => {
+        Some(first) => $block_4: {
             let mut best: String = first;
             loop {
                 let __match_6: Option<String> = self."core:prelude/string.wado/StrSplitIter^core:prelude/traits.wado/Iterator::next"();
                 match __match_6 {
-                    Some(item) => {
+                    Some(item) => $block_1: {
                         if (cmp(&best, &item) != Ordering::Greater) {
                             best = item;
                         }
                     },
-                    _ => {
+                    _ => $block_2: {
                         break;
                     },
                 };
@@ -8556,7 +8556,7 @@ pub fn "core:prelude/string.wado/StrSplitNIter^core:prelude/traits.wado/Iterator
         if !(i <= limit) {
             break;
         }
-        __for_0_body: {
+        $for_0_body: {
             if ((self.sep_len > 0) && "core::prelude/string.wado::bytes_match_at"(self.repr, i, sep, self.sep_len)) {
                 let part: String = "core::prelude/string.wado::substring"(self.repr, self.pos, (i - self.pos));
                 self.pos = (i + self.sep_len);
@@ -8575,10 +8575,10 @@ pub fn "core:prelude/string.wado/StrSplitNIter^core:prelude/traits.wado/Iterator
     loop {
         let __match_2: Option<String> = self."core:prelude/string.wado/StrSplitNIter^core:prelude/traits.wado/Iterator::next"();
         match __match_2 {
-            Some(_) => {
+            Some(_) => $block_0: {
                 n = (n + 1);
             },
-            _ => {
+            _ => $block_1: {
                 break;
             },
         };
@@ -8590,10 +8590,10 @@ pub fn "core:prelude/string.wado/StrSplitNIter^core:prelude/traits.wado/Iterator
     loop {
         let __match_3: Option<String> = self."core:prelude/string.wado/StrSplitNIter^core:prelude/traits.wado/Iterator::next"();
         match __match_3 {
-            Some(item) => {
+            Some(item) => $block_0: {
                 f(item);
             },
-            _ => {
+            _ => $block_1: {
                 break;
             },
         };
@@ -8604,12 +8604,12 @@ pub fn "core:prelude/string.wado/StrSplitNIter^core:prelude/traits.wado/Iterator
     loop {
         let __match_3: Option<String> = self."core:prelude/string.wado/StrSplitNIter^core:prelude/traits.wado/Iterator::next"();
         match __match_3 {
-            Some(item) => {
+            Some(item) => $block_1: {
                 if pred("mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(item)) {
                     return Option<String>::Some("mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(item));
                 }
             },
-            _ => {
+            _ => $block_2: {
                 break;
             },
         };
@@ -8621,12 +8621,12 @@ pub fn "core:prelude/string.wado/StrSplitNIter^core:prelude/traits.wado/Iterator
     loop {
         let __match_3: Option<String> = self."core:prelude/string.wado/StrSplitNIter^core:prelude/traits.wado/Iterator::next"();
         match __match_3 {
-            Some(item) => {
+            Some(item) => $block_1: {
                 if pred(item) {
                     return true;
                 }
             },
-            _ => {
+            _ => $block_2: {
                 break;
             },
         };
@@ -8638,12 +8638,12 @@ pub fn "core:prelude/string.wado/StrSplitNIter^core:prelude/traits.wado/Iterator
     loop {
         let __match_3: Option<String> = self."core:prelude/string.wado/StrSplitNIter^core:prelude/traits.wado/Iterator::next"();
         match __match_3 {
-            Some(item) => {
+            Some(item) => $block_1: {
                 if !pred(item) {
                     return false;
                 }
             },
-            _ => {
+            _ => $block_2: {
                 break;
             },
         };
@@ -8656,10 +8656,10 @@ pub fn "core:prelude/string.wado/StrSplitNIter^core:prelude/traits.wado/Iterator
     loop {
         let __match_3: Option<String> = self."core:prelude/string.wado/StrSplitNIter^core:prelude/traits.wado/Iterator::next"();
         match __match_3 {
-            Some(item) => {
+            Some(item) => $block_0: {
                 result = Option<String>::Some(item);
             },
-            _ => {
+            _ => $block_1: {
                 break;
             },
         };
@@ -8672,13 +8672,13 @@ pub fn "core:prelude/string.wado/StrSplitNIter^core:prelude/traits.wado/Iterator
     loop {
         let __match_4: Option<String> = self."core:prelude/string.wado/StrSplitNIter^core:prelude/traits.wado/Iterator::next"();
         match __match_4 {
-            Some(item) => {
+            Some(item) => $block_1: {
                 if (remaining <= 0) {
                     return Option<String>::Some(item);
                 }
                 remaining = (remaining - 1);
             },
-            _ => {
+            _ => $block_2: {
                 break;
             },
         };
@@ -8691,13 +8691,13 @@ pub fn "core:prelude/string.wado/StrSplitNIter^core:prelude/traits.wado/Iterator
     loop {
         let __match_4: Option<String> = self."core:prelude/string.wado/StrSplitNIter^core:prelude/traits.wado/Iterator::next"();
         match __match_4 {
-            Some(item) => {
+            Some(item) => $block_1: {
                 if pred(item) {
                     return Option<i32>::Some(idx);
                 }
                 idx = (idx + 1);
             },
-            _ => {
+            _ => $block_2: {
                 break;
             },
         };
@@ -8708,15 +8708,15 @@ pub fn "core:prelude/string.wado/StrSplitNIter^core:prelude/traits.wado/Iterator
 pub fn "core:prelude/string.wado/StrSplitNIter^core:prelude/traits.wado/Iterator::reduce"(self: &mut StrSplitNIter, f: fn mut(String, String) -> String) -> Option<String> {
     let __match_5: Option<String> = self."core:prelude/string.wado/StrSplitNIter^core:prelude/traits.wado/Iterator::next"();
     match __match_5 {
-        Some(first) => {
+        Some(first) => $block_3: {
             let mut acc: String = first;
             loop {
                 let __match_6: Option<String> = self."core:prelude/string.wado/StrSplitNIter^core:prelude/traits.wado/Iterator::next"();
                 match __match_6 {
-                    Some(item) => {
+                    Some(item) => $block_0: {
                         acc = "mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(f("mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(acc), item));
                     },
-                    _ => {
+                    _ => $block_1: {
                         break;
                     },
                 };
@@ -8747,21 +8747,21 @@ pub fn "core:prelude/string.wado/StrSplitNIter^core:prelude/traits.wado/Iterator
 pub fn "core:prelude/string.wado/StrSplitNIter^core:prelude/traits.wado/Iterator::min_by"(self: &mut StrSplitNIter, cmp: fn mut(&String, &String) -> Ordering) -> Option<String> {
     let __match_5: Option<String> = self."core:prelude/string.wado/StrSplitNIter^core:prelude/traits.wado/Iterator::next"();
     match __match_5 {
-        Some(first) => {
+        Some(first) => $block_4: {
             let mut best: String = first;
             loop {
                 let __match_6: Option<String> = self."core:prelude/string.wado/StrSplitNIter^core:prelude/traits.wado/Iterator::next"();
                 match __match_6 {
-                    Some(item) => {
+                    Some(item) => $block_1: {
                         let __match_7: Ordering = cmp(&item, &best);
                         match __match_7 {
-                            Less => {
+                            Less => $block_0: {
                                 best = item;
                             },
                             _ => (),
                         };
                     },
-                    _ => {
+                    _ => $block_2: {
                         break;
                     },
                 };
@@ -8776,17 +8776,17 @@ pub fn "core:prelude/string.wado/StrSplitNIter^core:prelude/traits.wado/Iterator
 pub fn "core:prelude/string.wado/StrSplitNIter^core:prelude/traits.wado/Iterator::max_by"(self: &mut StrSplitNIter, cmp: fn mut(&String, &String) -> Ordering) -> Option<String> {
     let __match_5: Option<String> = self."core:prelude/string.wado/StrSplitNIter^core:prelude/traits.wado/Iterator::next"();
     match __match_5 {
-        Some(first) => {
+        Some(first) => $block_4: {
             let mut best: String = first;
             loop {
                 let __match_6: Option<String> = self."core:prelude/string.wado/StrSplitNIter^core:prelude/traits.wado/Iterator::next"();
                 match __match_6 {
-                    Some(item) => {
+                    Some(item) => $block_1: {
                         if (cmp(&best, &item) != Ordering::Greater) {
                             best = item;
                         }
                     },
-                    _ => {
+                    _ => $block_2: {
                         break;
                     },
                 };
@@ -8823,10 +8823,10 @@ pub fn "core:prelude/string.wado/StrSplitWhitespaceIter^core:prelude/traits.wado
     loop {
         let __match_2: Option<String> = self."core:prelude/string.wado/StrSplitWhitespaceIter^core:prelude/traits.wado/Iterator::next"();
         match __match_2 {
-            Some(_) => {
+            Some(_) => $block_0: {
                 n = (n + 1);
             },
-            _ => {
+            _ => $block_1: {
                 break;
             },
         };
@@ -8838,10 +8838,10 @@ pub fn "core:prelude/string.wado/StrSplitWhitespaceIter^core:prelude/traits.wado
     loop {
         let __match_3: Option<String> = self."core:prelude/string.wado/StrSplitWhitespaceIter^core:prelude/traits.wado/Iterator::next"();
         match __match_3 {
-            Some(item) => {
+            Some(item) => $block_0: {
                 f(item);
             },
-            _ => {
+            _ => $block_1: {
                 break;
             },
         };
@@ -8852,12 +8852,12 @@ pub fn "core:prelude/string.wado/StrSplitWhitespaceIter^core:prelude/traits.wado
     loop {
         let __match_3: Option<String> = self."core:prelude/string.wado/StrSplitWhitespaceIter^core:prelude/traits.wado/Iterator::next"();
         match __match_3 {
-            Some(item) => {
+            Some(item) => $block_1: {
                 if pred("mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(item)) {
                     return Option<String>::Some("mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(item));
                 }
             },
-            _ => {
+            _ => $block_2: {
                 break;
             },
         };
@@ -8869,12 +8869,12 @@ pub fn "core:prelude/string.wado/StrSplitWhitespaceIter^core:prelude/traits.wado
     loop {
         let __match_3: Option<String> = self."core:prelude/string.wado/StrSplitWhitespaceIter^core:prelude/traits.wado/Iterator::next"();
         match __match_3 {
-            Some(item) => {
+            Some(item) => $block_1: {
                 if pred(item) {
                     return true;
                 }
             },
-            _ => {
+            _ => $block_2: {
                 break;
             },
         };
@@ -8886,12 +8886,12 @@ pub fn "core:prelude/string.wado/StrSplitWhitespaceIter^core:prelude/traits.wado
     loop {
         let __match_3: Option<String> = self."core:prelude/string.wado/StrSplitWhitespaceIter^core:prelude/traits.wado/Iterator::next"();
         match __match_3 {
-            Some(item) => {
+            Some(item) => $block_1: {
                 if !pred(item) {
                     return false;
                 }
             },
-            _ => {
+            _ => $block_2: {
                 break;
             },
         };
@@ -8904,10 +8904,10 @@ pub fn "core:prelude/string.wado/StrSplitWhitespaceIter^core:prelude/traits.wado
     loop {
         let __match_3: Option<String> = self."core:prelude/string.wado/StrSplitWhitespaceIter^core:prelude/traits.wado/Iterator::next"();
         match __match_3 {
-            Some(item) => {
+            Some(item) => $block_0: {
                 result = Option<String>::Some(item);
             },
-            _ => {
+            _ => $block_1: {
                 break;
             },
         };
@@ -8920,13 +8920,13 @@ pub fn "core:prelude/string.wado/StrSplitWhitespaceIter^core:prelude/traits.wado
     loop {
         let __match_4: Option<String> = self."core:prelude/string.wado/StrSplitWhitespaceIter^core:prelude/traits.wado/Iterator::next"();
         match __match_4 {
-            Some(item) => {
+            Some(item) => $block_1: {
                 if (remaining <= 0) {
                     return Option<String>::Some(item);
                 }
                 remaining = (remaining - 1);
             },
-            _ => {
+            _ => $block_2: {
                 break;
             },
         };
@@ -8939,13 +8939,13 @@ pub fn "core:prelude/string.wado/StrSplitWhitespaceIter^core:prelude/traits.wado
     loop {
         let __match_4: Option<String> = self."core:prelude/string.wado/StrSplitWhitespaceIter^core:prelude/traits.wado/Iterator::next"();
         match __match_4 {
-            Some(item) => {
+            Some(item) => $block_1: {
                 if pred(item) {
                     return Option<i32>::Some(idx);
                 }
                 idx = (idx + 1);
             },
-            _ => {
+            _ => $block_2: {
                 break;
             },
         };
@@ -8956,15 +8956,15 @@ pub fn "core:prelude/string.wado/StrSplitWhitespaceIter^core:prelude/traits.wado
 pub fn "core:prelude/string.wado/StrSplitWhitespaceIter^core:prelude/traits.wado/Iterator::reduce"(self: &mut StrSplitWhitespaceIter, f: fn mut(String, String) -> String) -> Option<String> {
     let __match_5: Option<String> = self."core:prelude/string.wado/StrSplitWhitespaceIter^core:prelude/traits.wado/Iterator::next"();
     match __match_5 {
-        Some(first) => {
+        Some(first) => $block_3: {
             let mut acc: String = first;
             loop {
                 let __match_6: Option<String> = self."core:prelude/string.wado/StrSplitWhitespaceIter^core:prelude/traits.wado/Iterator::next"();
                 match __match_6 {
-                    Some(item) => {
+                    Some(item) => $block_0: {
                         acc = "mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(f("mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(acc), item));
                     },
-                    _ => {
+                    _ => $block_1: {
                         break;
                     },
                 };
@@ -8995,21 +8995,21 @@ pub fn "core:prelude/string.wado/StrSplitWhitespaceIter^core:prelude/traits.wado
 pub fn "core:prelude/string.wado/StrSplitWhitespaceIter^core:prelude/traits.wado/Iterator::min_by"(self: &mut StrSplitWhitespaceIter, cmp: fn mut(&String, &String) -> Ordering) -> Option<String> {
     let __match_5: Option<String> = self."core:prelude/string.wado/StrSplitWhitespaceIter^core:prelude/traits.wado/Iterator::next"();
     match __match_5 {
-        Some(first) => {
+        Some(first) => $block_4: {
             let mut best: String = first;
             loop {
                 let __match_6: Option<String> = self."core:prelude/string.wado/StrSplitWhitespaceIter^core:prelude/traits.wado/Iterator::next"();
                 match __match_6 {
-                    Some(item) => {
+                    Some(item) => $block_1: {
                         let __match_7: Ordering = cmp(&item, &best);
                         match __match_7 {
-                            Less => {
+                            Less => $block_0: {
                                 best = item;
                             },
                             _ => (),
                         };
                     },
-                    _ => {
+                    _ => $block_2: {
                         break;
                     },
                 };
@@ -9024,17 +9024,17 @@ pub fn "core:prelude/string.wado/StrSplitWhitespaceIter^core:prelude/traits.wado
 pub fn "core:prelude/string.wado/StrSplitWhitespaceIter^core:prelude/traits.wado/Iterator::max_by"(self: &mut StrSplitWhitespaceIter, cmp: fn mut(&String, &String) -> Ordering) -> Option<String> {
     let __match_5: Option<String> = self."core:prelude/string.wado/StrSplitWhitespaceIter^core:prelude/traits.wado/Iterator::next"();
     match __match_5 {
-        Some(first) => {
+        Some(first) => $block_4: {
             let mut best: String = first;
             loop {
                 let __match_6: Option<String> = self."core:prelude/string.wado/StrSplitWhitespaceIter^core:prelude/traits.wado/Iterator::next"();
                 match __match_6 {
-                    Some(item) => {
+                    Some(item) => $block_1: {
                         if (cmp(&best, &item) != Ordering::Greater) {
                             best = item;
                         }
                     },
-                    _ => {
+                    _ => $block_2: {
                         break;
                     },
                 };
@@ -9087,10 +9087,10 @@ pub fn "core:prelude/string.wado/StrLinesIter^core:prelude/traits.wado/Iterator:
     loop {
         let __match_2: Option<String> = self."core:prelude/string.wado/StrLinesIter^core:prelude/traits.wado/Iterator::next"();
         match __match_2 {
-            Some(_) => {
+            Some(_) => $block_0: {
                 n = (n + 1);
             },
-            _ => {
+            _ => $block_1: {
                 break;
             },
         };
@@ -9102,10 +9102,10 @@ pub fn "core:prelude/string.wado/StrLinesIter^core:prelude/traits.wado/Iterator:
     loop {
         let __match_3: Option<String> = self."core:prelude/string.wado/StrLinesIter^core:prelude/traits.wado/Iterator::next"();
         match __match_3 {
-            Some(item) => {
+            Some(item) => $block_0: {
                 f(item);
             },
-            _ => {
+            _ => $block_1: {
                 break;
             },
         };
@@ -9116,12 +9116,12 @@ pub fn "core:prelude/string.wado/StrLinesIter^core:prelude/traits.wado/Iterator:
     loop {
         let __match_3: Option<String> = self."core:prelude/string.wado/StrLinesIter^core:prelude/traits.wado/Iterator::next"();
         match __match_3 {
-            Some(item) => {
+            Some(item) => $block_1: {
                 if pred("mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(item)) {
                     return Option<String>::Some("mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(item));
                 }
             },
-            _ => {
+            _ => $block_2: {
                 break;
             },
         };
@@ -9133,12 +9133,12 @@ pub fn "core:prelude/string.wado/StrLinesIter^core:prelude/traits.wado/Iterator:
     loop {
         let __match_3: Option<String> = self."core:prelude/string.wado/StrLinesIter^core:prelude/traits.wado/Iterator::next"();
         match __match_3 {
-            Some(item) => {
+            Some(item) => $block_1: {
                 if pred(item) {
                     return true;
                 }
             },
-            _ => {
+            _ => $block_2: {
                 break;
             },
         };
@@ -9150,12 +9150,12 @@ pub fn "core:prelude/string.wado/StrLinesIter^core:prelude/traits.wado/Iterator:
     loop {
         let __match_3: Option<String> = self."core:prelude/string.wado/StrLinesIter^core:prelude/traits.wado/Iterator::next"();
         match __match_3 {
-            Some(item) => {
+            Some(item) => $block_1: {
                 if !pred(item) {
                     return false;
                 }
             },
-            _ => {
+            _ => $block_2: {
                 break;
             },
         };
@@ -9168,10 +9168,10 @@ pub fn "core:prelude/string.wado/StrLinesIter^core:prelude/traits.wado/Iterator:
     loop {
         let __match_3: Option<String> = self."core:prelude/string.wado/StrLinesIter^core:prelude/traits.wado/Iterator::next"();
         match __match_3 {
-            Some(item) => {
+            Some(item) => $block_0: {
                 result = Option<String>::Some(item);
             },
-            _ => {
+            _ => $block_1: {
                 break;
             },
         };
@@ -9184,13 +9184,13 @@ pub fn "core:prelude/string.wado/StrLinesIter^core:prelude/traits.wado/Iterator:
     loop {
         let __match_4: Option<String> = self."core:prelude/string.wado/StrLinesIter^core:prelude/traits.wado/Iterator::next"();
         match __match_4 {
-            Some(item) => {
+            Some(item) => $block_1: {
                 if (remaining <= 0) {
                     return Option<String>::Some(item);
                 }
                 remaining = (remaining - 1);
             },
-            _ => {
+            _ => $block_2: {
                 break;
             },
         };
@@ -9203,13 +9203,13 @@ pub fn "core:prelude/string.wado/StrLinesIter^core:prelude/traits.wado/Iterator:
     loop {
         let __match_4: Option<String> = self."core:prelude/string.wado/StrLinesIter^core:prelude/traits.wado/Iterator::next"();
         match __match_4 {
-            Some(item) => {
+            Some(item) => $block_1: {
                 if pred(item) {
                     return Option<i32>::Some(idx);
                 }
                 idx = (idx + 1);
             },
-            _ => {
+            _ => $block_2: {
                 break;
             },
         };
@@ -9220,15 +9220,15 @@ pub fn "core:prelude/string.wado/StrLinesIter^core:prelude/traits.wado/Iterator:
 pub fn "core:prelude/string.wado/StrLinesIter^core:prelude/traits.wado/Iterator::reduce"(self: &mut StrLinesIter, f: fn mut(String, String) -> String) -> Option<String> {
     let __match_5: Option<String> = self."core:prelude/string.wado/StrLinesIter^core:prelude/traits.wado/Iterator::next"();
     match __match_5 {
-        Some(first) => {
+        Some(first) => $block_3: {
             let mut acc: String = first;
             loop {
                 let __match_6: Option<String> = self."core:prelude/string.wado/StrLinesIter^core:prelude/traits.wado/Iterator::next"();
                 match __match_6 {
-                    Some(item) => {
+                    Some(item) => $block_0: {
                         acc = "mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(f("mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(acc), item));
                     },
-                    _ => {
+                    _ => $block_1: {
                         break;
                     },
                 };
@@ -9259,21 +9259,21 @@ pub fn "core:prelude/string.wado/StrLinesIter^core:prelude/traits.wado/Iterator:
 pub fn "core:prelude/string.wado/StrLinesIter^core:prelude/traits.wado/Iterator::min_by"(self: &mut StrLinesIter, cmp: fn mut(&String, &String) -> Ordering) -> Option<String> {
     let __match_5: Option<String> = self."core:prelude/string.wado/StrLinesIter^core:prelude/traits.wado/Iterator::next"();
     match __match_5 {
-        Some(first) => {
+        Some(first) => $block_4: {
             let mut best: String = first;
             loop {
                 let __match_6: Option<String> = self."core:prelude/string.wado/StrLinesIter^core:prelude/traits.wado/Iterator::next"();
                 match __match_6 {
-                    Some(item) => {
+                    Some(item) => $block_1: {
                         let __match_7: Ordering = cmp(&item, &best);
                         match __match_7 {
-                            Less => {
+                            Less => $block_0: {
                                 best = item;
                             },
                             _ => (),
                         };
                     },
-                    _ => {
+                    _ => $block_2: {
                         break;
                     },
                 };
@@ -9288,17 +9288,17 @@ pub fn "core:prelude/string.wado/StrLinesIter^core:prelude/traits.wado/Iterator:
 pub fn "core:prelude/string.wado/StrLinesIter^core:prelude/traits.wado/Iterator::max_by"(self: &mut StrLinesIter, cmp: fn mut(&String, &String) -> Ordering) -> Option<String> {
     let __match_5: Option<String> = self."core:prelude/string.wado/StrLinesIter^core:prelude/traits.wado/Iterator::next"();
     match __match_5 {
-        Some(first) => {
+        Some(first) => $block_4: {
             let mut best: String = first;
             loop {
                 let __match_6: Option<String> = self."core:prelude/string.wado/StrLinesIter^core:prelude/traits.wado/Iterator::next"();
                 match __match_6 {
-                    Some(item) => {
+                    Some(item) => $block_1: {
                         if (cmp(&best, &item) != Ordering::Greater) {
                             best = item;
                         }
                     },
-                    _ => {
+                    _ => $block_2: {
                         break;
                     },
                 };
@@ -9444,12 +9444,12 @@ pub fn "core:prelude/string.wado/String::from_utf8_slice"(bytes: Slice<u8>) -> R
     let bad: i32 = "core::prelude/string.wado::core:prelude/string.wado/String::utf8_error_offset"(&bytes);
     if (bad >= 0) {
         core::builtin::cold_path();
-        return Result<String, String>::Err(__tmpl: {
+        return Result<String, String>::Err($tmpl: {
             let mut __r: String = "core::prelude/string.wado::core:prelude/string.wado/String::with_capacity"(38);
             __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"invalid UTF-8 at byte ", used: 22 });
             let mut __f: Formatter = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut __r);
             Box<i32> { value: bad }."i32^core:prelude/traits.wado/Display::fmt"(&mut __f);
-            break __tmpl: __r;
+            break $tmpl: __r;
         });
     }
     return Result<String, String>::Ok(String { repr: bytes."core:prelude/slice.wado/Slice<u8>::to_array"() as Array<u8>, used: bytes."core:prelude/slice.wado/Slice<u8>::len"() });
@@ -9565,7 +9565,7 @@ pub fn "core:prelude/string.wado/String^core:prelude/traits.wado/Ord::cmp"(self:
         if !(i < min_len) {
             break;
         }
-        __for_0_body: {
+        $for_0_body: {
             let a_byte: u8 = a_repr."Array<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value"(i);
             let b_byte: u8 = b_repr."Array<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value"(i);
             if (a_byte < b_byte) {
@@ -10289,7 +10289,7 @@ fn memory_to_gc_array(ptr: i32, len: i32) -> Array<u8> {
         if !(i < len) {
             break;
         }
-        __for_0_body: {
+        $for_0_body: {
             core::builtin::array_set_u8(&mut arr, i, core::builtin::i32_load8_u((ptr + i)) as u8);
         }
         i = (i + 1);
@@ -10308,7 +10308,7 @@ fn gc_array_to_memory(arr: &Array<u8>, src_start: i32, ptr: i32, len: i32) {
         if !(i < len) {
             break;
         }
-        __for_0_body: {
+        $for_0_body: {
             core::builtin::i32_store8((ptr + i), core::builtin::array_get_value_u8(arr, (src_start + i)));
         }
         i = (i + 1);
@@ -11115,7 +11115,7 @@ pub fn "core:prelude/format.wado/Formatter::write_char_n"(self: &mut Formatter, 
         if !(i < n) {
             break;
         }
-        __for_0_body: {
+        $for_0_body: {
             self.buf."core:prelude/string.wado/String::push"(c);
         }
         i = (i + 1);
@@ -11221,7 +11221,7 @@ fn "core:prelude/format.wado/Formatter::count_chars_from"(self: &Formatter, star
         if !(i < end) {
             break;
         }
-        __for_0_body: {
+        $for_0_body: {
             if ((self.buf."core:prelude/string.wado/String::get_byte_unchecked"(i) & 192) != 128) {
                 count = (count + 1);
             }
@@ -11252,7 +11252,7 @@ fn "core:prelude/format.wado/Formatter::write_fill_at"(self: &mut Formatter, at:
             if !(j < n) {
                 break;
             }
-            __for_0_body: {
+            $for_0_body: {
                 self.buf."core:prelude/string.wado/String::set_byte_unchecked"((at + j), fill_byte);
             }
             j = (j + 1);
@@ -11266,13 +11266,13 @@ fn "core:prelude/format.wado/Formatter::write_fill_at"(self: &mut Formatter, at:
         if !(j < n) {
             break;
         }
-        __for_1_body: {
+        $for_1_body: {
             let mut k: i32 = 0;
             loop {
                 if !(k < fill_len) {
                     break;
                 }
-                __for_2_body: {
+                $for_2_body: {
                     self.buf."core:prelude/string.wado/String::set_byte_unchecked"(((at + (j * fill_len)) + k), encoded."core:prelude/string.wado/String::get_byte_unchecked"(k));
                 }
                 k = (k + 1);
@@ -11364,7 +11364,7 @@ pub fn "core:prelude/format.wado/Formatter::write_indent"(self: &mut Formatter) 
         if !(i < self.indent) {
             break;
         }
-        __for_0_body: {
+        $for_0_body: {
             self."core:prelude/format.wado/Formatter::write_str"(&String { repr: packed"  ", used: 2 });
         }
         i = (i + 1);
@@ -11402,12 +11402,12 @@ pub fn "core:prelude/string.wado/String^core:prelude/traits.wado/Inspect::inspec
     f."core:prelude/format.wado/Formatter::write_char"('"');
     let mut count: i32 = 0;
     let mut truncated: bool = false;
-    __for_of_5: {
+    $for_of_5: {
         let mut __iter_5: StrCharIter = "mess_dirty.wado::$value_copy$core:prelude/string.wado/StrCharIter"(*self."core:prelude/string.wado/String::chars"()."core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/IntoIterator::into_iter"());
         loop {
             let __match_10: Option<char> = __iter_5."core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/Iterator::next"();
             match __match_10 {
-                Some(c) => {
+                Some(c) => $block_15: {
                     if ((limit >= 0) && (count >= limit)) {
                         truncated = true;
                         break;
@@ -11435,11 +11435,11 @@ pub fn "core:prelude/string.wado/String^core:prelude/traits.wado/Inspect::inspec
                                         let code: i32 = c as i32;
                                         if ((code < 32) || (code == 127)) {
                                             f."core:prelude/format.wado/Formatter::write_str"(&String { repr: packed"\\u{", used: 3 });
-                                            f."core:prelude/format.wado/Formatter::write_str"(&__tmpl: {
+                                            f."core:prelude/format.wado/Formatter::write_str"(&$tmpl: {
                                                 let mut __r: String = "core::prelude/string.wado::core:prelude/string.wado/String::with_capacity"(16);
                                                 let mut __f: Formatter = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut __r);
                                                 Box<i32> { value: code }."i32^core:prelude/traits.wado/LowerHex::fmt_lower_hex"(&mut __f);
-                                                break __tmpl: __r;
+                                                break $tmpl: __r;
                                             });
                                             f."core:prelude/format.wado/Formatter::write_char"('}');
                                         } else {
@@ -11452,7 +11452,7 @@ pub fn "core:prelude/string.wado/String^core:prelude/traits.wado/Inspect::inspec
                     }
                     count = (count + 1);
                 },
-                _ => {
+                _ => $block_16: {
                     break;
                 },
             };
@@ -11616,12 +11616,12 @@ pub fn "core:prelude/format.wado/Alignment^core:prelude/traits.wado/Display::fmt
 
 fn inspect_wire_override(v: Box<core:prelude/types.wado/Option<core:prelude/string.wado/String>>, f: &mut Formatter) {
     match v.value {
-        Some(s) => {
+        Some(s) => $block_0: {
             f."core:prelude/format.wado/Formatter::write_str"(&String { repr: packed"Option::Some(", used: 13 });
             s."core:prelude/string.wado/String^core:prelude/traits.wado/Inspect::inspect"(f);
             f."core:prelude/format.wado/Formatter::write_str"(&String { repr: packed")", used: 1 });
         },
-        None => {
+        None => $block_1: {
             f."core:prelude/format.wado/Formatter::write_str"(&String { repr: packed"Option::None", used: 12 });
         },
     };
@@ -12397,12 +12397,12 @@ pub fn "core/builtin/array_copy<u8>"(dst: &mut Array<u8>, dst_offset: i32, src: 
 pub fn "core/builtin/array_fill<u8>"(arr: &mut Array<u8>, offset: i32, value: u8, len: i32);
 
 fn "core:prelude/list.wado/List<u64>^core:prelude/traits.wado/IndexValue<i32>::index_value"(self: &List<u64>, index: i32) -> u64 {
-    __assert_0: {
+    $assert_0: {
         let __v1: i32 = self.used;
         let __cond: bool = (index < __v1);
         if !__cond {
             core::builtin::cold_path();
-            core::rt::panic(__tmpl: {
+            core::rt::panic($tmpl: {
                 let mut __r: String = "core::prelude/string.wado::core:prelude/string.wado/String::with_capacity"(173);
                 __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"Assertion failed in ", used: 20 });
                 __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"List::index_value", used: 17 });
@@ -12422,7 +12422,7 @@ fn "core:prelude/list.wado/List<u64>^core:prelude/traits.wado/IndexValue<i32>::i
                 __f = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut __r);
                 Box<i32> { value: __v1 }."i32^core:prelude/traits.wado/Inspect::inspect"(&mut __f);
                 __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"\n", used: 1 });
-                break __tmpl: __r;
+                break $tmpl: __r;
             });
         }
     }
@@ -12438,9 +12438,9 @@ fn "core:prelude/list.wado/List<u8>^core:prelude/slice.wado/AsSlice::as_slice"(s
 }
 
 fn "core:prelude/types.wado/Result<core:prelude/string.wado/String,core:prelude/string.wado/String>^core:prelude/traits.wado/Inspect::inspect"(self: Box<core:prelude/types.wado/Result<core:prelude/string.wado/String,core:prelude/string.wado/String>>, f: &mut Formatter) {
-    __tuple_for_of_2: {
+    $tuple_for_of_2: {
         let __tuple_2: [VariantCase<core:prelude/types.wado/Result<core:prelude/string.wado/String,core:prelude/string.wado/String>,core:prelude/string.wado/String>, VariantCase<core:prelude/types.wado/Result<core:prelude/string.wado/String,core:prelude/string.wado/String>,core:prelude/string.wado/String>] = "core::prelude/types.wado::core:prelude/types.wado/Result<core:prelude/string.wado/String,core:prelude/string.wado/String>^core:prelude/traits.wado/ReflectVariant::members"();
-        __tuple_iter_2_0: {
+        $tuple_iter_2_0: {
             let case: VariantCase<core:prelude/types.wado/Result<core:prelude/string.wado/String,core:prelude/string.wado/String>,core:prelude/string.wado/String> = __tuple_2.0;
             if case."core:prelude/traits.wado/VariantCase<core:prelude/types.wado/Result<core:prelude/string.wado/String,core:prelude/string.wado/String>,core:prelude/string.wado/String>::holds"(self) {
                 f."core:prelude/format.wado/Formatter::write_str"(&"core::prelude/types.wado::core:prelude/types.wado/Result<core:prelude/string.wado/String,core:prelude/string.wado/String>^core:prelude/traits.wado/Reflect::type_name"());
@@ -12451,7 +12451,7 @@ fn "core:prelude/types.wado/Result<core:prelude/string.wado/String,core:prelude/
                 }
             }
         }
-        __tuple_iter_2_1: {
+        $tuple_iter_2_1: {
             let case: VariantCase<core:prelude/types.wado/Result<core:prelude/string.wado/String,core:prelude/string.wado/String>,core:prelude/string.wado/String> = __tuple_2.1;
             if case."core:prelude/traits.wado/VariantCase<core:prelude/types.wado/Result<core:prelude/string.wado/String,core:prelude/string.wado/String>,core:prelude/string.wado/String>::holds"(self) {
                 f."core:prelude/format.wado/Formatter::write_str"(&"core::prelude/types.wado::core:prelude/types.wado/Result<core:prelude/string.wado/String,core:prelude/string.wado/String>^core:prelude/traits.wado/Reflect::type_name"());
@@ -12494,12 +12494,12 @@ fn "core:prelude/list.wado/List<i32>^core:prelude/traits.wado/From<Array<T>>::fr
 }
 
 fn "core:prelude/list.wado/List<[core:prelude/string.wado/String,core:prelude/string.wado/String]>^core:prelude/traits.wado/IndexValue<i32>::index_value"(self: &List<[String, String]>, index: i32) -> [String, String] {
-    __assert_0: {
+    $assert_0: {
         let __v1: i32 = self.used;
         let __cond: bool = (index < __v1);
         if !__cond {
             core::builtin::cold_path();
-            core::rt::panic(__tmpl: {
+            core::rt::panic($tmpl: {
                 let mut __r: String = "core::prelude/string.wado::core:prelude/string.wado/String::with_capacity"(173);
                 __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"Assertion failed in ", used: 20 });
                 __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"List::index_value", used: 17 });
@@ -12519,7 +12519,7 @@ fn "core:prelude/list.wado/List<[core:prelude/string.wado/String,core:prelude/st
                 __f = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut __r);
                 Box<i32> { value: __v1 }."i32^core:prelude/traits.wado/Inspect::inspect"(&mut __f);
                 __r."core:prelude/string.wado/String::push_str"(&String { repr: packed"\n", used: 1 });
-                break __tmpl: __r;
+                break $tmpl: __r;
             });
         }
     }
@@ -12611,7 +12611,7 @@ fn "core/prelude/array.wado/write_seq_inspect<i32>"(repr: &Array<i32>, start: i3
         if !(i < end) {
             break;
         }
-        __for_0_body: {
+        $for_0_body: {
             if ((limit >= 0) && (shown >= limit)) {
                 truncated = true;
                 break;
@@ -12690,13 +12690,13 @@ fn "Array<u64>^core:prelude/traits.wado/IndexValue<i32>::index_value"(self: &Arr
 
 fn "core/prelude/types.wado/unwrap_failed<core:prelude/intparse.wado/IntErrorKind>"(msg: String, value: IntErrorKind) -> ! {
     core::builtin::cold_path();
-    core::rt::panic(__tmpl: {
+    core::rt::panic($tmpl: {
         let mut __r: String = "core::prelude/string.wado::core:prelude/string.wado/String::with_capacity"(34);
         __r."core:prelude/string.wado/String::push_str"(&msg);
         __r."core:prelude/string.wado/String::push_str"(&String { repr: packed": ", used: 2 });
         let mut __f: Formatter = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut __r);
         Box<core:prelude/intparse.wado/IntErrorKind> { value: value }."core:prelude/intparse.wado/IntErrorKind^core:prelude/traits.wado/Inspect::inspect"(&mut __f);
-        break __tmpl: __r;
+        break $tmpl: __r;
     });
 }
 
@@ -12737,9 +12737,9 @@ pub fn "Array<core:prelude/string.wado/String>::len"(self: &Array<String>) -> i3
 }
 
 fn "core:prelude/intparse.wado/IntErrorKind^core:prelude/traits.wado/Inspect::inspect"(self: Box<core:prelude/intparse.wado/IntErrorKind>, f: &mut Formatter) {
-    __tuple_for_of_2: {
+    $tuple_for_of_2: {
         let __tuple_2: [EnumCase<core:prelude/intparse.wado/IntErrorKind>, EnumCase<core:prelude/intparse.wado/IntErrorKind>, EnumCase<core:prelude/intparse.wado/IntErrorKind>, EnumCase<core:prelude/intparse.wado/IntErrorKind>] = "core::prelude/intparse.wado::core:prelude/intparse.wado/IntErrorKind^core:prelude/traits.wado/ReflectEnum::members"();
-        __tuple_iter_2_0: {
+        $tuple_iter_2_0: {
             let case: EnumCase<core:prelude/intparse.wado/IntErrorKind> = __tuple_2.0;
             if case."core:prelude/traits.wado/EnumCase<core:prelude/intparse.wado/IntErrorKind>::holds"(self) {
                 f."core:prelude/format.wado/Formatter::write_str"(&"core::prelude/intparse.wado::core:prelude/intparse.wado/IntErrorKind^core:prelude/traits.wado/Reflect::type_name"());
@@ -12747,7 +12747,7 @@ fn "core:prelude/intparse.wado/IntErrorKind^core:prelude/traits.wado/Inspect::in
                 f."core:prelude/format.wado/Formatter::write_str"(&case."core:prelude/traits.wado/EnumCase<core:prelude/intparse.wado/IntErrorKind>^core:prelude/traits.wado/Member::name"());
             }
         }
-        __tuple_iter_2_1: {
+        $tuple_iter_2_1: {
             let case: EnumCase<core:prelude/intparse.wado/IntErrorKind> = __tuple_2.1;
             if case."core:prelude/traits.wado/EnumCase<core:prelude/intparse.wado/IntErrorKind>::holds"(self) {
                 f."core:prelude/format.wado/Formatter::write_str"(&"core::prelude/intparse.wado::core:prelude/intparse.wado/IntErrorKind^core:prelude/traits.wado/Reflect::type_name"());
@@ -12755,7 +12755,7 @@ fn "core:prelude/intparse.wado/IntErrorKind^core:prelude/traits.wado/Inspect::in
                 f."core:prelude/format.wado/Formatter::write_str"(&case."core:prelude/traits.wado/EnumCase<core:prelude/intparse.wado/IntErrorKind>^core:prelude/traits.wado/Member::name"());
             }
         }
-        __tuple_iter_2_2: {
+        $tuple_iter_2_2: {
             let case: EnumCase<core:prelude/intparse.wado/IntErrorKind> = __tuple_2.2;
             if case."core:prelude/traits.wado/EnumCase<core:prelude/intparse.wado/IntErrorKind>::holds"(self) {
                 f."core:prelude/format.wado/Formatter::write_str"(&"core::prelude/intparse.wado::core:prelude/intparse.wado/IntErrorKind^core:prelude/traits.wado/Reflect::type_name"());
@@ -12763,7 +12763,7 @@ fn "core:prelude/intparse.wado/IntErrorKind^core:prelude/traits.wado/Inspect::in
                 f."core:prelude/format.wado/Formatter::write_str"(&case."core:prelude/traits.wado/EnumCase<core:prelude/intparse.wado/IntErrorKind>^core:prelude/traits.wado/Member::name"());
             }
         }
-        __tuple_iter_2_3: {
+        $tuple_iter_2_3: {
             let case: EnumCase<core:prelude/intparse.wado/IntErrorKind> = __tuple_2.3;
             if case."core:prelude/traits.wado/EnumCase<core:prelude/intparse.wado/IntErrorKind>::holds"(self) {
                 f."core:prelude/format.wado/Formatter::write_str"(&"core::prelude/intparse.wado::core:prelude/intparse.wado/IntErrorKind^core:prelude/traits.wado/Reflect::type_name"());
@@ -12779,10 +12779,10 @@ fn "core:prelude/list.wado/List<u8>^core:prelude/traits.wado/FromIterator::from_
     loop {
         let __match_3: Option<u8> = iter."core:prelude/slice.wado/SliceValueIter<u8>^core:prelude/traits.wado/Iterator::next"();
         match __match_3 {
-            Some(item) => {
+            Some(item) => $block_0: {
                 result."core:prelude/list.wado/List<u8>::push"(item);
             },
-            _ => {
+            _ => $block_1: {
                 break;
             },
         };
@@ -12811,7 +12811,7 @@ fn "core/prelude/array.wado/write_seq_inspect_alt<i32>"(repr: &Array<i32>, start
         if !(i < end) {
             break;
         }
-        __for_0_body: {
+        $for_0_body: {
             if ((limit >= 0) && (shown >= limit)) {
                 truncated = true;
                 break;

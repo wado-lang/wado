@@ -149,8 +149,8 @@ fn "effect_handler_with_do.wado/run"() with Stdout {
     let packed: i64;
     let rx_64: i32;
     let tx_65: i32;
-    __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:effect_handler_with_do.wado::__modules_initialized);
+    $inline___initialize_modules_0: block {
+        break_if $inline___initialize_modules_0 @likely(global:effect_handler_with_do.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:effect_handler_with_do.wado::__modules_initialized = 1;
@@ -159,7 +159,7 @@ fn "effect_handler_with_do.wado/run"() with Stdout {
     __save_MonotonicClock = global:effect_handler_with_do.wado::__effect_MonotonicClock;
     __d_MonotonicClock = struct.new "effect_handler_with_do.wado//__Dispatch_MonotonicClock" { outer: __save_MonotonicClock, op_now: struct.new "canonical//CanonicalClosure_0" { env: struct.new "effect_handler_with_do.wado//__Closure_0" { __capture_0: __h_MonotonicClock }, func: ref.func "closure/effect_handler_with_do.wado/__closure_wrapper_0" }, op_get_resolution: struct.new "canonical//CanonicalClosure_0" { env: struct.new "effect_handler_with_do.wado//__Closure_1" {  }, func: ref.func "closure/effect_handler_with_do.wado/__closure_wrapper_1" }, op_wait_until: struct.new "canonical//CanonicalClosure_1" { env: struct.new "effect_handler_with_do.wado//__Closure_2" {  }, func: ref.func "closure/effect_handler_with_do.wado/__closure_wrapper_2" }, op_wait_for: struct.new "canonical//CanonicalClosure_1" { env: struct.new "effect_handler_with_do.wado//__Closure_3" {  }, func: ref.func "closure/effect_handler_with_do.wado/__closure_wrapper_3" } };
     global:effect_handler_with_do.wado::__effect_MonotonicClock = __d_MonotonicClock;
-    m = __inline___effect_dispatch__MonotonicClock__now_1: block -> u64 {
+    m = $inline___effect_dispatch__MonotonicClock__now_1: block -> u64 {
         __local_0 = global:effect_handler_with_do.wado::__effect_MonotonicClock;
         if ref.is_null(__local_0) == 0 {
             __local_1 = ref.as_non_null(__local_0);
@@ -170,9 +170,9 @@ fn "effect_handler_with_do.wado/run"() with Stdout {
                 call_ref "functype/$canonical_closure_fn_0"(__indirect_call_1.func, __indirect_call_1.env);
             };
             global:effect_handler_with_do.wado::__effect_MonotonicClock = __local_0;
-            break __inline___effect_dispatch__MonotonicClock__now_1: __local_2_10;
+            break $inline___effect_dispatch__MonotonicClock__now_1: __local_2_10;
         } else {
-            break __inline___effect_dispatch__MonotonicClock__now_1: "effect_handler_with_do.wado/__cm_binding__MonotonicClock_now"();
+            break $inline___effect_dispatch__MonotonicClock__now_1: "effect_handler_with_do.wado/__cm_binding__MonotonicClock_now"();
         }
         unreachable;
     };
@@ -208,8 +208,8 @@ fn "effect_handler_with_do.wado/__cm_binding__MonotonicClock_now"() with Monoton
 }
 
 fn "effect_handler_with_do.wado/__cm_export__run"() {
-    __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:effect_handler_with_do.wado::__modules_initialized);
+    $inline___initialize_modules_0: block {
+        break_if $inline___initialize_modules_0 @likely(global:effect_handler_with_do.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:effect_handler_with_do.wado::__modules_initialized = 1;
@@ -304,16 +304,16 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
                 "wasi/waitable-set-drop"(ws);
                 result = status_41;
             }
-            written_16 = struct.new "core:prelude/types.wado//StreamWrite" { count: result >> 4, result: __inline_cm_copy_result_14: block -> "core:prelude/types.wado//enum:CopyResult" {
+            written_16 = struct.new "core:prelude/types.wado//StreamWrite" { count: result >> 4, result: $inline_cm_copy_result_14: block -> "core:prelude/types.wado//enum:CopyResult" {
                 let __match_scrut_0: i32;
                 __match_scrut_0 = result & 15;
                 if __match_scrut_0 == 0 {
-                    break __inline_cm_copy_result_14: 0;
+                    break $inline_cm_copy_result_14: 0;
                 } else if __match_scrut_0 == 1 {
-                    break __inline_cm_copy_result_14: 1;
+                    break $inline_cm_copy_result_14: 1;
                 } else {
                 }
-                break __inline_cm_copy_result_14: 2;
+                break $inline_cm_copy_result_14: 2;
             } };
             drop("mem/realloc"(ptr_14, raw_len, 1, 0));
             offset = offset + written_16.count;
@@ -352,9 +352,9 @@ fn "core:prelude/primitive.wado/u64::fmt_decimal$scalar$spec0$scalar"(self, f) {
     let pos: i32;
     let t_285: u64;
     let i_286: i32;
-    digit_count_2 = __inline_count_digits_u64_0: block -> i32 {
+    digit_count_2 = $inline_count_digits_u64_0: block -> i32 {
         if self == 0_i64 {
-            break __inline_count_digits_u64_0: 1;
+            break $inline_count_digits_u64_0: 1;
         }
         n_5 = 0;
         t_6 = self;
@@ -366,7 +366,7 @@ fn "core:prelude/primitive.wado/u64::fmt_decimal$scalar$spec0$scalar"(self, f) {
                 continue l16;
             };
         };
-        break __inline_count_digits_u64_0: n_5;
+        break $inline_count_digits_u64_0: n_5;
     };
     new_used_63 = f.used + digit_count_2;
     if @unlikely(new_used_63 > builtin::array_len(f.repr)) {
