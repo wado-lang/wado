@@ -2396,7 +2396,14 @@ fn rewrite_temp_uses(body: &mut Body, node: NodeRef, cx: &mut SiteCx) -> bool {
 /// has no tag form, and leaves the site to the rebox.
 fn temp_uses_rewritable(body: &Body, local: u32, rebind: &Rebind, layout: &Layout) -> bool {
     let mut ok = true;
-    check_temp_uses(body, NodeRef::Block(body.root), local, rebind, layout, &mut ok);
+    check_temp_uses(
+        body,
+        NodeRef::Block(body.root),
+        local,
+        rebind,
+        layout,
+        &mut ok,
+    );
     ok
 }
 
@@ -2435,7 +2442,10 @@ fn check_temp_uses(
             }
             ExprKind::Match { expr: scrut, arms } => {
                 if is_local(body, *scrut, local) {
-                    if !arms.iter().all(|a| arm_is_one_level(body, a, rebind, layout)) {
+                    if !arms
+                        .iter()
+                        .all(|a| arm_is_one_level(body, a, rebind, layout))
+                    {
                         *ok = false;
                         return;
                     }
@@ -2459,7 +2469,9 @@ fn check_temp_uses(
             _ => {}
         }
     }
-    body.for_each_child(node, |c| check_temp_uses(body, c, local, rebind, layout, ok));
+    body.for_each_child(node, |c| {
+        check_temp_uses(body, c, local, rebind, layout, ok)
+    });
 }
 
 fn is_local(body: &Body, op: Operand, local: u32) -> bool {
