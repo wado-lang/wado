@@ -10,14 +10,11 @@ fn assert_tree(input: &String, expected: &String) {
     assert actual == *expected, `\ninput:    ${*input}\nexpected: ${*expected}\nactual:   ${actual}`;
 }
 
-// The caller's `b?` and the callee's own `Y?` compete for the same `Y`, and
-// `driver_cst_ll_greedy_optional_cross_rule_test` is that shape with the
-// opposite answer: there ANTLR4's greedy subrule gives the token to the
-// innermost, here full-context LL gives it to alt 0's `b?`. The static
-// evidence at the call site is identical — mask `{Y, EOF}` against mask
-// `{'else', ';'}` — so one policy has to lose, and greedy is the one a real
-// grammar depends on. Deciding it needs the runtime ATN simulator.
-#[TODO]
-test "tree: X Y picks (a b?) under LL" {
-    assert_tree(&"X Y", &"(r (a X) (b Y))");
+// Pinned against the published jar: `antlr4-oracle.sh ll_nullable_suffix.g4 r`
+// on `X Y` prints `(r (a X Y) <EOF>)`. Both readings complete, so `Y?` is a
+// greedy subrule over an ambiguity and takes the token —
+// `driver_cst_ll_greedy_optional_cross_rule_test` is the same rule with the
+// `else`.
+test "tree: X Y is the greedy subrule's, not the caller's b?" {
+    assert_tree(&"X Y", &"(r (a X Y))");
 }
