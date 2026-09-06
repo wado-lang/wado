@@ -3342,11 +3342,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         None
     }
 
-    /// Get the operator trait and method name for a binary operator.
-    pub(super) fn is_static_method(&mut self, struct_name: &str, method_name: &str) -> bool {
-        self.is_static_method_at(None, struct_name, method_name)
-    }
-
     /// Whether `struct_name::method_name` names a declaration at all — the
     /// resolution [`Elaborator::resolve_static_callee`] performs, asked for its
     /// outcome alone. The site decides which declaration `struct_name` names;

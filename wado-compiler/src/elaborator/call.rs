@@ -1917,13 +1917,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let prefix = &name[..pos];
             let suffix = &name[pos + 2..];
             // Check if it's a static method
-            if self.is_static_method(prefix, suffix) {
-                // One signature answers both halves: the slots this use site
-                // instantiates and the parameters it checks against. The
-                // parameter types come back in the declaration's own frame, so
-                // the call site has the same reason to instantiate them as it
-                // does for a free function.
-                let sig = self.unique_qualified_method_sig(prefix, suffix)?;
+            // One signature answers both halves: the slots this use site
+            // instantiates and the parameters it checks against. The parameter
+            // types come back in the declaration's own frame, so the call site
+            // has the same reason to instantiate them as it does for a free
+            // function.
+            //
+            // A name no single signature answers for — an overload, or a
+            // method inherited with its trait's default body — leaves the
+            // branches below to answer, rather than ending the lookup: an
+            // expected type is what makes a sequence literal coerce.
+            if let Some(sig) = self.unique_qualified_method_sig(prefix, suffix) {
                 let slots = sig.decl.type_params.iter().map(|(_, id)| *id).collect();
                 return Some((sig.decl.param_types, slots));
             }
