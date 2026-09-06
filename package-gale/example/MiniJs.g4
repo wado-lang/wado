@@ -2,21 +2,15 @@
 // composite page grammar. Composed into `MiniHtml.g4` by its `import`.
 // License: same as the Gale package.
 //
-// Mode-hosted and prefixed for the same two reasons as `MiniCss.g4`.
+// Mode-hosted and prefixed for the same reasons as `MiniCss.g4`.
 //
-// The grammar exists for one classification a lexer cannot make. `arrow` and
-// `group` both open with `(`, so what an identifier inside the parentheses is
-// — a parameter or a variable — is settled by the `=>` that follows the
-// closing paren, arbitrarily many tokens later:
+// `arrow` and `group` both open with `(`, so what an identifier between the
+// parentheses is depends on the `=>` after the closing one:
 //
 //     let add = (a, b) => a + b;   // a, b are parameters
 //     let one = (a);               // a is a variable
 //
-// No lexer can answer that when it reads `a`; it has not seen the deciding
-// token yet, and no amount of mode-stack state brings it closer. The parser
-// resolves it, and `MiniJs.highlights.scm` reads the answer off the rule
-// stack: a `JS_IDENT` under `params` is `@variable.parameter`, elsewhere
-// `@variable`.
+// `MiniJs.highlights.scm` is where that pays off, and says why.
 //
 // `term` therefore builds with a shared-lookahead warning: `arrow` and `group`
 // are not token-led, so the generated parser settles them with a longest-match

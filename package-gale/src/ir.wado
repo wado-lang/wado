@@ -1285,22 +1285,7 @@ pub fn merge_grammars(grammars: List<Grammar>) -> Grammar {
 /// Every supplied grammar as one: split halves concatenate, and a grammar
 /// another's `import` names folds in as a delegate. Contract in `import.md`.
 pub fn compose_grammars(grammars: List<Grammar>) -> Result<Grammar, ParseError> {
-    // Resolution is by declared name, so a name has to identify one input.
-    // A second input of the same name is otherwise neither merged nor folded:
-    // `delegate_order` binds the first match and the rest vanish silently.
-    for let mut i = 0; i < grammars.len(); i += 1 {
-        for let mut j = i + 1; j < grammars.len(); j += 1 {
-            if grammars[i].name == grammars[j].name {
-                return Result::Err(
-                    ParseError::new(
-                        `two supplied inputs declare grammar "${grammars[i].name}"`,
-                        Span::new(0, 0),
-                        ["one input per declared grammar name"],
-                    ),
-                );
-            }
-        }
-    }
+    let by_name = index_by_name(&grammars)?;
     let mut delegate_names: List<String> = [];
     for let g of &grammars {
         for let im of &g.imports {
@@ -1328,7 +1313,7 @@ pub fn compose_grammars(grammars: List<Grammar>) -> Result<Grammar, ParseError> 
         );
     }
     let mut composite = merge_grammars(masters);
-    let order = delegate_order(&composite.imports, &grammars)?;
+    let order = delegate_order(&composite.imports, &grammars, &by_name)?;
     for let idx of order {
         import_delegate(&mut composite, &grammars[idx]);
     }
@@ -1336,13 +1321,35 @@ pub fn compose_grammars(grammars: List<Grammar>) -> Result<Grammar, ParseError> 
     return Result::Ok(composite);
 }
 
+/// Each grammar's index by declared name. An import resolves through this, so
+/// building it is where a name two inputs both claim is caught.
+fn index_by_name(grammars: &List<Grammar>) -> Result<TreeMap<String, i32>, ParseError> {
+    let mut by_name = TreeMap::<String, i32>::new();
+    for let mut i = 0; i < grammars.len(); i += 1 {
+        if !by_name.try_insert(grammars[i].name, i) {
+            return Result::Err(
+                ParseError::new(
+                    `two supplied inputs declare grammar "${grammars[i].name}"`,
+                    Span::new(0, 0),
+                    ["one input per declared grammar name"],
+                ),
+            );
+        }
+    }
+    return Result::Ok(by_name);
+}
+
 /// Indices into `grammars` of every delegate the master reaches, depth-first
 /// in import order. This order decides which version of a rule survives.
-fn delegate_order(imports: &List<String>, grammars: &List<Grammar>) -> Result<List<i32>, ParseError> {
+fn delegate_order(
+    imports: &List<String>,
+    grammars: &List<Grammar>,
+    by_name: &TreeMap<String, i32>,
+) -> Result<List<i32>, ParseError> {
     let mut order: List<i32> = [];
     let mut visited: List<String> = [];
     for let name of imports {
-        visit_delegate(name, grammars, &mut order, &mut visited)?;
+        visit_delegate(name, grammars, by_name, &mut order, &mut visited)?;
     }
     return Result::Ok(order);
 }
@@ -1350,6 +1357,7 @@ fn delegate_order(imports: &List<String>, grammars: &List<Grammar>) -> Result<Li
 fn visit_delegate(
     name: &String,
     grammars: &List<Grammar>,
+    by_name: &TreeMap<String, i32>,
     order: &mut List<i32>,
     visited: &mut List<String>,
 ) -> Result<(), ParseError> {
@@ -1357,14 +1365,7 @@ fn visit_delegate(
         return Result::Ok(());
     }
     visited.push(*name);
-    let mut found = -1;
-    for let mut i = 0; i < grammars.len(); i += 1 {
-        if grammars[i].name == *name {
-            found = i;
-            break;
-        }
-    }
-    if found < 0 {
+    let Some(found) = by_name.get(*name) else {
         return Result::Err(
             ParseError::new(
                 `imported grammar "${*name}" is not among the supplied inputs`,
@@ -1372,10 +1373,10 @@ fn visit_delegate(
                 ["a supplied grammar declaring that name"],
             ),
         );
-    }
+    };
     order.push(found);
     for let im of &grammars[found].imports {
-        visit_delegate(im, grammars, order, visited)?;
+        visit_delegate(im, grammars, by_name, order, visited)?;
     }
     return Result::Ok(());
 }

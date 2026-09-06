@@ -1,22 +1,12 @@
-//! Three grammars, one parser, and the thing a lexer cannot do.
+//! Three grammars highlighting one page.
 //!
-//! `MiniHtml.g4` imports `MiniCss.g4` and `MiniJs.g4`, so the `use` below
-//! builds a single recognizer: one lexer with three modes, one parser, one
-//! tree. Three highlight queries ride in beside the grammars and are
-//! concatenated, so each language still keeps its own `.scm`. There is no
-//! stitching code here — composition did it at generation time.
+//! `MiniHtml.g4` imports the other two, so this one `use` builds a single
+//! recognizer: one lexer with three modes, one parser, one tree. The three
+//! queries ride in beside the grammars and are concatenated, so each language
+//! keeps its own `.scm`. There is no stitching code because composition did it
+//! all at generation time.
 //!
-//! Embedding is the vehicle, not the point. A lexer-based highlighter does
-//! embedded languages too. What it cannot do is `MiniJs.highlights.scm`'s
-//!
-//!     (params (JS_IDENT) @variable.parameter)
-//!
-//! In `(a, b) => a + b` the identifiers are parameters; in `(a)` the identifier
-//! is a variable. The token deciding which — the `=>` after the closing paren —
-//! comes arbitrarily later, so no lexer has seen it when it must classify `a`.
-//! The parser decides first, and the query reads the answer off the rule stack.
-//! `MiniCss.highlights.scm` does the same in the small: one `CSS_IDENT` token
-//! becomes a selector, a property, or a value by where the parse put it.
+//! What the example is for is in `MiniJs.highlights.scm`.
 
 use page from "./MiniHtml.g4"
     with {

@@ -454,8 +454,8 @@ Embedding is the vehicle. The point is one line of
 ```
 
 `arrow` and `group` both open with `(`, so whether an identifier inside the
-parentheses is a parameter is settled by the `=>` after the closing paren —
-arbitrarily many tokens later:
+parentheses is a parameter is settled by the `=>` after the closing paren. That
+token comes arbitrarily later:
 
 ```html
 <span class="punctuation bracket">(</span><span class="variable parameter">a</span>… <span class="operator">=&gt;</span> <span class="variable">a</span>
@@ -477,8 +477,8 @@ wado test package-gale/example/highlight_test.wado
 
 ### Composing a grammar for an embedded language
 
-The example is also what `import` looks like for an embedded language, and it
-needs no feature beyond composition itself — two conventions carry it:
+The example is also what `import` looks like for an embedded language. It needs
+no feature beyond composition itself; two conventions carry it:
 
 - **The embedded grammar's lexer rules live in a mode of its own** (`mode CSS;`).
   A composite has one lexer, so without a mode `MiniHtml`'s `TEXT` would
@@ -492,11 +492,9 @@ The host owns the boundaries and nothing else: `MiniHtml.g4` declares
 unifies the two `mode CSS` declarations by name. So the host says where each
 language begins and ends, and neither delegate names its host.
 
-The trade is that an embedded grammar is no longer usable on its own — its
-rules sit in a mode nothing enters, so a standalone lexer starts in an empty
-`DEFAULT_MODE`. A grammar meant for both uses needs a way for the host to say
-where a delegate's rules land, which composition does not have; see
-[`TODO.md`](./TODO.md).
+The trade is that an embedded grammar no longer works on its own, since its
+rules sit in a mode nothing enters. The full contract, and what a grammar
+usable both ways would need, are in [`import.md`](./import.md).
 
 ## Compatibility and further reading
 

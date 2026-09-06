@@ -2848,9 +2848,8 @@ test "emit_test_chunk: each descriptor calls through its own namespace" {
 }
 
 // Every claim's `use` must name every grammar the descriptor supplies, or the
-// generator is handed the master alone and composition fails on a file that was
-// there. No corpus descriptor reaches Stage B with slaves today, so only this
-// covers those two.
+// generator gets the master alone. No corpus descriptor reaches Stage B with
+// slaves today, so only this covers those two emitters.
 test "emit_test_chunk: every claim names the descriptor's slave grammars" {
     let chunks: List<TestChunk> = [
         emit_stage_a_parse_test_chunk(&"C", &"N", &"i", &"s", &Triage::Pass, 2),
