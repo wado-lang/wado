@@ -19,7 +19,8 @@
 // scan tournament. That warning is the demo working, not a defect.
 // Deliberately left out, so a reader does not read a subset boundary as a
 // limitation: automatic semicolon insertion (a statement needs its `;`),
-// control flow, `function`, and every precedence level but one.
+// control flow, `function`, every precedence level but one, and a `<` inside a
+// string or comment.
 grammar MiniJs;
 
 // No `EOF`: a script is a fragment of the host document, not a file.
@@ -61,7 +62,9 @@ JS_SEMI    : ';' ;
 JS_PLUS    : '+' ;
 JS_STAR    : '*' ;
 JS_NUMBER  : [0-9]+ ;
-JS_STRING  : '"' ~["]* '"' ;
+// Both exclude `<`: a token that swallowed `</script>` would hide the host's
+// terminator and the mode would never pop. See `import.md`.
+JS_STRING  : '"' ~["<]* '"' ;
 JS_IDENT   : [a-zA-Z_] [a-zA-Z0-9_]* ;
-JS_COMMENT : '//' ~[\r\n]* -> channel(HIDDEN) ;
+JS_COMMENT : '//' ~[<\r\n]* -> channel(HIDDEN) ;
 JS_WS      : [ \t\r\n]+ -> skip ;

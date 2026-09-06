@@ -7,8 +7,8 @@ with no runtime to install and no version to keep in sync.
 
 The `.g4` format is ANTLR4's; for the full grammar language, see ANTLR4's
 [documentation](https://github.com/antlr/antlr4/tree/master/doc). Gale accepts
-every grammar ANTLR4 accepts — and a few it rejects, where the meaning is
-unambiguous (see [Design](#design)).
+every grammar ANTLR4 accepts bar a short list — and a few it rejects, where the
+meaning is unambiguous (see [Design](#design)).
 
 ## Design
 
@@ -21,7 +21,9 @@ with no remaining choice — e.g. a `.`- or `~X`-led left-recursive suffix like
 `e ~';' e`, which ANTLR4 errors on (no operator token to climb); or a lexer
 `mode` inside a combined `grammar`, which ANTLR4 restricts to a `lexer grammar`
 but which is unambiguous since a combined grammar already bundles a lexer. Where
-the meaning is not uniquely determined, Gale rejects loudly rather than guessing.
+the meaning is not uniquely determined, Gale rejects loudly rather than guessing
+— including a handful of grammars ANTLR4 accepts, listed under claim (a) in
+[`antlr4-compatibility.md`](./antlr4-compatibility.md).
 
 Self-contained output, no version drift. Gale inlines its entire runtime into
 every generated parser. There is no `gale-runtime` package to keep aligned with

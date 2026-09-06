@@ -476,11 +476,19 @@ impl G4Parser {
     }
 
     /// `import S, T;` — record each delegate's declared name for
-    /// `compose_grammars` to bind. The aliased form is rejected; see `import.md`.
+    /// `compose_grammars` to bind. One name and the `;` are the minimum, so a
+    /// mistyped clause is loud here rather than a missing rule later. The
+    /// aliased form is rejected; see `import.md`.
     fn parse_delegate_grammars(&mut self) -> Result<(), ParseError> {
         loop {
             if !self.is_kind(G4Token::Identifier) {
-                break;
+                return Result::<(), ParseError>::Err(
+                    ParseError::new(
+                        "expected a grammar name after `import`",
+                        self.peek().span,
+                        ["import <grammar name>"],
+                    ),
+                );
             }
             let name_tok = self.peek();
             let name = name_tok.text.to_string();
@@ -504,9 +512,12 @@ impl G4Parser {
             }
             break;
         }
-        if self.is_kind(G4Token::Semicolon) {
-            self.advance();
+        if !self.is_kind(G4Token::Semicolon) {
+            return Result::<(), ParseError>::Err(
+                ParseError::new("expected `;` after the import list", self.peek().span, [";"]),
+            );
         }
+        self.advance();
         return Result::<(), ParseError>::Ok(());
     }
 

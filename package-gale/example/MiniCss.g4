@@ -16,8 +16,9 @@
 // all three are spelled identically, and `MiniCss.highlights.scm` reads them
 // apart off the rule stack.
 // Deliberately left out, so a reader does not read a subset boundary as a
-// limitation: class / id / descendant selectors, multi-token values, at-rules.
-// What this grammar does accept, it accepts in every form CSS allows.
+// limitation: class / id / descendant selectors, multi-token values, at-rules,
+// and a `<` inside a comment. What this grammar does accept, it accepts in
+// every form CSS allows.
 grammar MiniCss;
 
 // No `EOF`: a stylesheet is a fragment of the host document, not a file.
@@ -40,5 +41,7 @@ CSS_COMMA   : ',' ;
 CSS_HASH    : '#' [0-9a-fA-F]+ ;
 CSS_NUMBER  : [0-9]+ ('px' | '%')? ;
 CSS_IDENT   : [a-zA-Z-] [a-zA-Z0-9-]* ;
-CSS_COMMENT : '/*' .*? '*/' -> channel(HIDDEN) ;
+// `~[<]`, not `.`: a token that swallowed `</style>` would hide the host's
+// terminator and the mode would never pop. See `import.md`.
+CSS_COMMENT : '/*' ~[<]*? '*/' -> channel(HIDDEN) ;
 CSS_WS      : [ \t\r\n]+ -> skip ;

@@ -151,6 +151,16 @@ fn token_names(g: &Grammar) -> List<String> {
     return out;
 }
 
+fn channel_of(g: &Grammar, name: &String) -> i32 {
+    for let r of &g.lexer_rules {
+        if r.name == *name {
+            return r.channel;
+        }
+    }
+    assert false, `no lexer rule named ${name}`;
+    return -1;
+}
+
 test "compose_grammars leaves a grammar with no import on the merge path" {
     let lexer = parse("lexer grammar FooLexer;\nA : 'a' ;").unwrap();
     let parser = parse("parser grammar FooParser;\nr : A ;").unwrap();
@@ -349,6 +359,29 @@ test "compose_grammars discards a mode left empty by an override" {
     for let r of &empty.lexer_rules {
         assert r.mode == 0, `${r.name} mode=${r.mode}`;
     }
+}
+
+test "compose_grammars gives each delegate's channels a slot of their own" {
+    let g = compose([
+        "lexer grammar M;\nimport S, T;\nchannels { A }\nM_C : 'm' -> channel(A) ;",
+        "lexer grammar S;\nchannels { B }\nS_C : 's' -> channel(B) ;",
+        "lexer grammar T;\nchannels { C }\nT_C : 't' -> channel(C) ;",
+    ]);
+    assert g.channels == ["A", "B", "C"], `${g.channels:?}`;
+    assert channel_of(&g, &"M_C") == 2;
+    assert channel_of(&g, &"S_C") == 3;
+    assert channel_of(&g, &"T_C") == 4;
+}
+
+test "compose_grammars merges two delegates naming one channel onto one slot" {
+    let g = compose([
+        "lexer grammar M;\nimport S, T;\nM_C : 'm' ;",
+        "lexer grammar S;\nchannels { NOTE }\nS_C : 's' -> channel(NOTE) ;",
+        "lexer grammar T;\nchannels { NOTE }\nT_C : 't' -> channel(NOTE) ;",
+    ]);
+    assert g.channels == ["NOTE"], `${g.channels:?}`;
+    assert channel_of(&g, &"S_C") == 2;
+    assert channel_of(&g, &"T_C") == 2;
 }
 
 test "Grammar construction" {

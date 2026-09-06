@@ -56,7 +56,7 @@ A mode that an override emptied is discarded, and the remaining modes are renumb
 
 Composition also nests one language inside another, which is what
 `package-gale/example/` demonstrates. Nothing beyond the rules above carries
-it, given two conventions in the delegate:
+it, given four conventions in the delegate:
 
 - Its lexer rules live in a mode of its own (`mode CSS;`), so they are
   unreachable until the host pushes into it. A composite has one lexer, and
@@ -69,6 +69,15 @@ it, given two conventions in the delegate:
   the delegate's mode, never produces that token. The gate is deliberate: a
   parser rule is reached in whatever mode its caller pushed, and nothing records
   that, so a literal is read as the mode the parser starts in.
+- No token of its own may span the host's terminator. A composite has one lexer,
+  so inside the mode a delegate rule is matched like any other: a
+  `JS_COMMENT : '//' ~[\r\n]*` runs straight through `</script>`, the mode never
+  pops, and the rest of the document is lexed as JavaScript. A mode cannot
+  express HTML's rule that a closing tag ends raw text whatever the embedded
+  language thinks — deciding that needs lookahead a mode does not have. So a
+  scanning rule stops at `<`, and the `<` it then rejects inside a string or a
+  comment is a stated hole in the delegate rather than a document in the wrong
+  mode.
 
 The host declares the same mode name for the token that leaves it
 (`STYLE_CLOSE : '</style>' -> popMode ;` under its own `mode CSS;`), and the

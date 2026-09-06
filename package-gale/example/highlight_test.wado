@@ -90,6 +90,25 @@ test "a context capture needs its enclosing rule to have parsed" {
     assert plain_text(&half_written) == "<style>a { b: }</style>", plain_text(&half_written);
 }
 
+test "a closing tag ends its block from inside a comment or a string" {
+    // The delegates' scanning rules stop at `<` so the host's terminator stays
+    // visible; otherwise the mode never pops and the rest of the document is
+    // lexed as CSS or JavaScript. See "Embedding a language" in `import.md`.
+    let tail = `<span class="tag">&lt;p&gt;</span>x<span class="tag">&lt;/p&gt;</span>`;
+    let line_comment = highlight_page(&"<script>// note </script><p>x</p>");
+    assert line_comment.ends_with(tail), line_comment;
+    let string = highlight_page(&`<script>let s = "</script><p>x</p>`);
+    assert string.ends_with(tail), string;
+    let block_comment = highlight_page(&"<style>a { /* x </style><p>x</p>");
+    assert block_comment.ends_with(tail), block_comment;
+}
+
+test "an ordinary comment and string still take their classes" {
+    let page = highlight_page(&`<style>a { /* c */ b: c }</style><script>let s = "hi";</script>`);
+    assert page.contains(`<span class="comment">/* c */</span>`), page;
+    assert page.contains(`<span class="string">&quot;hi&quot;</span>`), page;
+}
+
 test "highlighting is text-preserving" {
     // Spans stripped and entities unescaped, the output is the input back.
     let restored = plain_text(&highlight_page(&PAGE));
