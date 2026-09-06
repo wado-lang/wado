@@ -439,16 +439,18 @@ the design.
 ### What the context tier buys
 
 The override form is the reason to highlight from a parse rather than a token
-stream. [`example/`](./example) carries a three-grammar demo of it —
-[`MiniHtml.g4`](./example/MiniHtml.g4) lexes a `<style>` / `<script>` body as
-one token, and [`highlight.wado`](./example/highlight.wado) hands each body to
-[`MiniCss.g4`](./example/MiniCss.g4) or [`MiniJs.g4`](./example/MiniJs.g4).
+stream. [`example/`](./example) carries a three-grammar demo of it.
+[`MiniHtml.g4`](./example/MiniHtml.g4) imports
+[`MiniCss.g4`](./example/MiniCss.g4) and [`MiniJs.g4`](./example/MiniJs.g4), so
+one `use` builds a single recognizer: one lexer with three modes, one parser,
+one tree. The three `.scm` queries ride in beside the grammars and are
+concatenated, so each language keeps its own.
 
 Embedding is the vehicle. The point is one line of
 [`MiniJs.highlights.scm`](./example/MiniJs.highlights.scm):
 
 ```scheme
-(params (IDENT) @variable.parameter)
+(params (JS_IDENT) @variable.parameter)
 ```
 
 `arrow` and `group` both open with `(`, so whether an identifier inside the
@@ -463,8 +465,8 @@ arbitrarily many tokens later:
 A lexer classifies `a` when it reads it, before the deciding token exists; no
 amount of mode-stack state brings it closer. The parser decides first, and the
 query reads the answer off the rule stack. `MiniCss.highlights.scm` does the
-same in the small: one `IDENT` token becomes a selector, a property, or a value
-by where the parse put it.
+same in the small: one `CSS_IDENT` token becomes a selector, a property, or a
+value by where the parse put it.
 
 The whole page's highlighted HTML is pinned in
 [`example/highlight_test.wado`](./example/highlight_test.wado):
@@ -472,6 +474,29 @@ The whole page's highlighted HTML is pinned in
 ```sh
 wado test package-gale/example/highlight_test.wado
 ```
+
+### Composing a grammar for an embedded language
+
+The example is also what `import` looks like for an embedded language, and it
+needs no feature beyond composition itself — two conventions carry it:
+
+- **The embedded grammar's lexer rules live in a mode of its own** (`mode CSS;`).
+  A composite has one lexer, so without a mode `MiniHtml`'s `TEXT` would
+  swallow a stylesheet whole.
+- **Its token names are prefixed** (`CSS_IDENT`, `JS_IDENT`). A composite has
+  one token space, where the first rule of a given name wins and the rest are
+  dropped.
+
+The host owns the boundaries and nothing else: `MiniHtml.g4` declares
+`mode CSS` itself, holding just the `</style>` that leaves it, and composition
+unifies the two `mode CSS` declarations by name. So the host says where each
+language begins and ends, and neither delegate names its host.
+
+The trade is that an embedded grammar is no longer usable on its own — its
+rules sit in a mode nothing enters, so a standalone lexer starts in an empty
+`DEFAULT_MODE`. A grammar meant for both uses needs a way for the host to say
+where a delegate's rules land, which composition does not have; see
+[`TODO.md`](./TODO.md).
 
 ## Compatibility and further reading
 

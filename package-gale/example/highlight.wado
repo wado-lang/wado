@@ -1,87 +1,38 @@
-//! Three grammars highlighting one page, and the thing a lexer cannot do.
+//! Three grammars, one parser, and the thing a lexer cannot do.
 //!
-//! `MiniHtml.g4` lexes a `<style>` / `<script>` body as a single token, so this
-//! module can cut each body out and hand it to the grammar that owns it —
-//! `MiniCss.g4` or `MiniJs.g4`. Each generated parser carries its own
-//! `highlights.scm`, so the classes come from three independent queries.
+//! `MiniHtml.g4` imports `MiniCss.g4` and `MiniJs.g4`, so the `use` below
+//! builds a single recognizer: one lexer with three modes, one parser, one
+//! tree. Three highlight queries ride in beside the grammars and are
+//! concatenated, so each language still keeps its own `.scm`. There is no
+//! stitching code here — composition did it at generation time.
 //!
 //! Embedding is the vehicle, not the point. A lexer-based highlighter does
 //! embedded languages too. What it cannot do is `MiniJs.highlights.scm`'s
 //!
-//!     (params (IDENT) @variable.parameter)
+//!     (params (JS_IDENT) @variable.parameter)
 //!
 //! In `(a, b) => a + b` the identifiers are parameters; in `(a)` the identifier
 //! is a variable. The token deciding which — the `=>` after the closing paren —
 //! comes arbitrarily later, so no lexer has seen it when it must classify `a`.
 //! The parser decides first, and the query reads the answer off the rule stack.
-//! `MiniCss.highlights.scm` does the same in the small: one `IDENT` token
+//! `MiniCss.highlights.scm` does the same in the small: one `CSS_IDENT` token
 //! becomes a selector, a property, or a value by where the parse put it.
 
-use html from "./MiniHtml.g4"
+use page from "./MiniHtml.g4"
     with {
         generator: {
             module: "../src/generator.wado",
-            inputs: ["./MiniHtml.highlights.scm"],
-        },
-    };
-use css from "./MiniCss.g4"
-    with {
-        generator: {
-            module: "../src/generator.wado",
-            inputs: ["./MiniCss.highlights.scm"],
-        },
-    };
-use js from "./MiniJs.g4"
-    with {
-        generator: {
-            module: "../src/generator.wado",
-            inputs: ["./MiniJs.highlights.scm"],
+            inputs: [
+                "./MiniCss.g4",
+                "./MiniJs.g4",
+                "./MiniHtml.highlights.scm",
+                "./MiniCss.highlights.scm",
+                "./MiniJs.highlights.scm",
+            ],
         },
     };
 
-/// The source between two character offsets. Token spans index characters, so
-/// this is multi-byte safe where byte slicing would not be.
-fn slice(chars: &List<char>, lo: i32, hi: i32) -> String {
-    let mut out = String::with_capacity(hi - lo);
-    for let mut i = lo; i < hi; i += 1 {
-        out.push(chars[i]);
-    }
-    return out;
-}
-
-/// Highlight a standalone stylesheet.
-pub fn highlight_css(source: &String) -> String {
-    return css::highlight(source);
-}
-
-/// Highlight a standalone script.
-pub fn highlight_js(source: &String) -> String {
-    return js::highlight(source);
-}
-
-/// Highlight a page as HTML `<span class="...">` runs: the markup through
-/// `MiniHtml`, each embedded body through the grammar that owns it.
+/// Highlight a page as HTML `<span class="...">` runs.
 pub fn highlight_page(source: &String) -> String {
-    let toks = html::tokenize(source);
-    let chars = toks.chars;
-    let mut out = String::new();
-    let mut cut = 0;
-    for let mut i = 0; i < toks.len(); i += 1 {
-        let kind = toks.kinds[i];
-        if kind != html::TK_STYLE_BODY && kind != html::TK_SCRIPT_BODY {
-            continue;
-        }
-        let lo = toks.starts[i];
-        let hi = toks.ends[i];
-        out.push_str(&html::highlight(&slice(chars, cut, lo)));
-        let body = slice(chars, lo, hi);
-        if kind == html::TK_STYLE_BODY {
-            out.push_str(&css::highlight(&body));
-        } else {
-            out.push_str(&js::highlight(&body));
-        }
-        cut = hi;
-    }
-    out.push_str(&html::highlight(&slice(chars, cut, chars.len())));
-    return out;
+    return page::highlight(source);
 }

@@ -50,8 +50,26 @@ A mode that an override emptied is discarded, and the remaining modes are renumb
 
 `import Foo = Bar;`. ANTLR4's aliased form names the delegate for qualified action references (`gFoo.x`), and Gale has no counterpart for those. Accepting it while dropping what the alias means would be worse than refusing it, so it is a loud error for now. Closing that is queued in [`TODO.md`](./TODO.md); it is the one place Gale rejects a grammar ANTLR4 compiles.
 
+## Embedding a language
+
+Composition also nests one language inside another, which is what
+`package-gale/example/` demonstrates. Nothing beyond the rules above carries
+it, given two conventions in the delegate:
+
+- Its lexer rules live in a mode of its own (`mode CSS;`), so they are
+  unreachable until the host pushes into it. A composite has one lexer, and
+  without a mode the host's catch-all text rule swallows the embedded body.
+- Its token names are prefixed. One token space means the first rule of a given
+  name wins, so `CSS_IDENT` and `JS_IDENT` must differ to both survive.
+
+The host declares the same mode name for the token that leaves it
+(`STYLE_CLOSE : '</style>' -> popMode ;` under its own `mode CSS;`), and the
+two declarations unify by name. The host therefore owns both boundaries and the
+delegate names no host.
+
 ## Known gaps
 
 - Stage B′ does not oracle a composite: `antlr4-oracle.sh` invokes the jar on one grammar file with no `-lib` slave lookup. Composite descriptors are pinned by Stage A and Stage C only.
 - An override replaces a rule. There is no "add an alternative", so a dialect restates any rule it extends.
+- A delegate written to be embedded cannot also be used on its own: the mode its rules sit in is decided by the file declaring them, so standalone it starts in an empty `DEFAULT_MODE`. Closing it means the host saying where a delegate's rules land; see [`TODO.md`](./TODO.md).
 - Kiln `inputs` are relative paths inside the project, so a dialect living in its own repository still holds a copy of the grammar it extends. Resolution shrinks that from a drifting fork to a copy a checksum can hold. Reaching a grammar inside a dependency package is a Kiln gap.
