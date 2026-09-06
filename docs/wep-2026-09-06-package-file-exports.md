@@ -49,6 +49,11 @@ is what a consumer does with the file: import it as a module, feed it to a
 generator, inline it. What the package promises is the same either way, and
 deciding it is the owner's, as it is for `pub` and `export` on an item.
 
+The key is `exports`, after npm's field of the same name and meaning. It sits
+beside the `export` visibility keyword without colliding: `export` marks one
+item as crossing the CM ABI, `exports` lists the files a package offers, and no
+position accepts both.
+
 A refusal names the package, not the path. Reaching for an unlisted file answers
 "package `X` exports no file `Y`" whether or not the file is there, so the list
 never doubles as a directory listing.
@@ -159,9 +164,6 @@ dependency. Reaching a file of a dependency's dependency.
 
 ## Known gaps
 
-- The key's name. `exports` reads as "part of the API", but `export` already
-  means "crosses the CM ABI" on an item, and these files cross nothing. `public`
-  and `files` are the alternatives.
 - Glob patterns in the allowlist (`grammar/*.g4`). Exact entries are what a use
   site needs and what publish can verify; a package with many assets will want
   patterns. Closing it means saying what a pattern means for the stability
