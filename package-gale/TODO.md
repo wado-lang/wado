@@ -81,10 +81,10 @@ Remaining:
 
 ### Composite (slave-grammar) descriptors
 
-`import S;` has landed — design in [`import.md`](./import.md). All 17 `CompositeLexers` / `CompositeParsers` descriptors are under the ordinary eligibility rules: 15 claim (b), 2 claim (d) token dumps that pin the composite's token numbering, and 11 Stage C output-compares, none triaged. What is left:
+`import S;` has landed; the contract is in [`import.md`](./import.md). All 17 `CompositeLexers` / `CompositeParsers` descriptors are under the ordinary eligibility rules: 15 claim (b), 2 claim (d) token dumps that pin the composite's token numbering, and 11 Stage C output-compares, none triaged. What is left:
 
-- **Stage B′ does not oracle a composite.** `antlr4-oracle.sh` invokes the jar on one grammar file with no `-lib` slave lookup, so `stage_b_oracle_eligible` excludes them. Closing it means teaching the oracle script to stage the slaves beside the master and pass `-lib`; the extractor would then hand it composite candidates unchanged.
-- **The dialect consumer still holds a copy.** Kiln `inputs` are relative paths inside the project, so a dialect in its own repository cannot name `Wado.g4` inside a dependency package ([WEP: Markup Dialect](../docs/wep-2026-08-29-markup-dialect.md)). Resolution shrinks that from a drifting fork to a copy a checksum can hold; the rest is a Kiln gap, not a Gale one.
+- **Stage B′ does not oracle a composite.** `antlr4-oracle.sh` invokes the jar on one grammar file with no `-lib` slave lookup, so `stage_b_oracle_eligible` excludes them. Closing it means teaching the oracle script to stage the slaves beside the master and pass `-lib`. The extractor would then hand it composite candidates unchanged.
+- **The dialect consumer still holds a copy.** Kiln `inputs` are relative paths inside the project, so a dialect in its own repository cannot name `Wado.g4` inside a dependency package ([WEP: Markup Dialect](../docs/wep-2026-08-29-markup-dialect.md)). Resolution shrinks that from a drifting fork to a copy a checksum can hold. The rest is a Kiln gap, not a Gale one.
 
 ## LL prediction — parked gaps
 

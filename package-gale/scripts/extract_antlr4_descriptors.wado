@@ -102,11 +102,8 @@ struct DescriptorPair {
 struct ParsedDescriptor {
     grammar: String,
     slave_grammars: List<String>,
-    /// `[type]` block, normalised to `Parser` or `Lexer`. Upstream writes
-    /// `CompositeParser` / `CompositeLexer` where the descriptor brings slave
-    /// grammars, but that is the same recognizer with more inputs — the
-    /// composition itself is what `slave_grammars` says, so every claim reads
-    /// one pair of type names.
+    /// `[type]` block, normalised to `Parser` or `Lexer` so every claim reads
+    /// one pair of names. `slave_grammars` is what says a descriptor composes.
     descriptor_type: String,
     /// `[input]` block — the raw test input fed to the generated parser.
     /// Empty when the descriptor declares no `[input]` (lexer-only smoke
@@ -131,8 +128,8 @@ struct ParsedDescriptor {
     start: String,
 }
 
-/// The recognizer a `[type]` names. `CompositeParser` / `CompositeLexer` is a
-/// parser / lexer whose grammar arrives in more than one file.
+/// The recognizer a `[type]` names. A `Composite*` one is the same recognizer
+/// with its grammar spread over more than one file.
 fn recognizer_type(declared: &String) -> String {
     return match *declared {
         "CompositeParser" => "Parser",
@@ -652,10 +649,8 @@ fn emit_test_file_for_category(category: &String, entries: &List<DescriptorEntry
             w.dedent();
             w.line(&"}");
         } else {
-            // A composite's claim (a) is that the whole composition holds: the
-            // master's `import S;` binds to a supplied input, the rules merge,
-            // and the composite resolves — which is what `assemble_grammar`
-            // (parse, compose, check) answers, the same call the generator makes.
+            // A composite's claim (a) is that the whole composition holds, which
+            // is what `assemble_grammar` answers — the call the generator makes.
             w.line(&"let inputs: List<[String, String]> = [");
             w.indent();
             w.line(&`["${e.g4_relpath}", #include_str("./grammars/${e.g4_relpath}")],`);
@@ -703,8 +698,7 @@ struct TestChunkSpec {
     /// Comparison helpers imported from `tests/support/tree_compare.wado`.
     tree_helpers: List<String> = [],
     /// Slave grammars the descriptor brings (`import S;`). They become the
-    /// invocation's `inputs`, since a Kiln generator resolves an import
-    /// against the files it is handed rather than the filesystem.
+    /// invocation's `inputs`, which is where a Kiln generator resolves imports.
     slave_count: i32 = 0,
     test_label: String,
     triage: Triage,
@@ -1032,8 +1026,6 @@ fn descriptor_is_stage_c_eligible(parsed: &ParsedDescriptor) -> bool {
     if t != "Parser" {
         return false;
     }
-    // A composite's print action usually sits in the delegate, so the whole
-    // composition answers this, not the master alone.
     if !descriptor_prints(parsed) {
         return false;
     }
@@ -1043,6 +1035,8 @@ fn descriptor_is_stage_c_eligible(parsed: &ParsedDescriptor) -> bool {
     return true;
 }
 
+/// Whether anything in the composition prints. A composite's print action
+/// usually sits in the delegate, not the master.
 fn descriptor_prints(parsed: &ParsedDescriptor) -> bool {
     if parsed.grammar.contains("System.out.print") {
         return true;
@@ -1246,7 +1240,7 @@ fn classify_output_for_tokens(input: &String) -> Option<String> {
 /// error" check.
 ///
 /// Eligibility is decided by the caller (Parser/Lexer type, non-empty
-/// `[input]`, non-empty `[errors]`, single grammar, category in the
+/// `[input]`, non-empty `[errors]`, category in the
 /// whitelist via `stage_a_err_category_eligible`).
 fn emit_stage_a_err_test_chunk(
     category: &String,
@@ -1299,7 +1293,7 @@ fn emit_stage_a_err_test_chunk(
 /// stripped surrounding whitespace.
 ///
 /// Eligibility is decided by the caller (Lexer type, non-empty
-/// `[input]`, non-empty `[output]`, empty `[errors]`, single grammar,
+/// `[input]`, non-empty `[output]`, empty `[errors]`,
 /// output is a clean `[@…]` dump).
 fn emit_stage_a_tokens_test_chunk(
     category: &String,

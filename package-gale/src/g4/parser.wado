@@ -475,11 +475,8 @@ impl G4Parser {
         return Result::<(), ParseError>::Ok(());
     }
 
-    /// `import S, T;` — record each delegate's declared name.
-    /// `compose_grammars` binds them; there is no filesystem to look in.
-    /// ANTLR4's aliased form `import Foo = Bar;` names the delegate for
-    /// qualified action references, which Gale has no counterpart for, so it
-    /// is rejected rather than silently composed as `import Bar;`.
+    /// `import S, T;` — record each delegate's declared name for
+    /// `compose_grammars` to bind. The aliased form is rejected; see `import.md`.
     fn parse_delegate_grammars(&mut self) -> Result<(), ParseError> {
         loop {
             if !self.is_kind(G4Token::Identifier) {

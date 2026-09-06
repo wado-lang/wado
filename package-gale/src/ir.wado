@@ -187,9 +187,8 @@ pub struct Grammar {
     /// Grammar-level `@name { ... }` / `@scope::name { ... }` actions,
     /// in declaration order.
     pub named_actions: List<NamedAction>,
-    /// Names of the grammars this one delegates to (`import S,T;`), in
-    /// declaration order. `compose_grammars` binds each to whichever
-    /// supplied input declares that name.
+    /// Grammars this one delegates to (`import S,T;`), in declaration order.
+    /// `compose_grammars` binds each to a supplied input declaring that name.
     pub imports: List<String> = [],
     /// Host language of action / predicate bodies (`options { language = X }`).
     /// Defaulted `Java` (ANTLR4's default target and the corpus's language).
@@ -1248,42 +1247,10 @@ pub fn merge_grammars(grammars: List<Grammar>) -> Grammar {
         for let act of &g.named_actions {
             named_actions.push(scoped_by_declaring_kind(act, &g.kind));
         }
-        // Build mode index remapping table for this grammar
-        let mut remap: List<i32> = [];
-        for let mn of &g.mode_names {
-            let idx = find_or_add_mode(&mut mode_names, mn);
-            remap.push(idx);
-        }
-        // Build channel id remapping table. User channels start at id 2
-        // (0=DEFAULT, 1=HIDDEN). Preserve existing ids when names line up.
-        let mut chan_remap: List<i32> = [];
-        for let cn of &g.channels {
-            let id = find_or_add_channel(&mut channels, cn);
-            chan_remap.push(id);
-        }
         for let r of g.parser_rules {
             parser_rules.push(r);
         }
-        for let mut r of g.lexer_rules {
-            // Remap mode indices
-            r.mode = remap[r.mode];
-            if r.push_mode >= 0 {
-                r.push_mode = remap[r.push_mode];
-            }
-            if r.set_mode >= 0 {
-                r.set_mode = remap[r.set_mode];
-            }
-            // Remap NAME-declared channel ids (>= 2; 0 and 1 are predefined)
-            // to their position in the merged channel list. A numeric
-            // `channel(N)` literal is an explicit id that does not come from
-            // the source grammar's `channels { }` block, so it has no
-            // `chan_remap` entry — leave it unchanged rather than remapping.
-            if r.channel >= 2 {
-                let src_idx = r.channel - 2;
-                if src_idx < chan_remap.len() {
-                    r.channel = chan_remap[src_idx];
-                }
-            }
+        for let r of rebase_lexer_rules(g, &mut mode_names, &mut channels) {
             lexer_rules.push(r);
         }
     }
@@ -1315,18 +1282,8 @@ pub fn merge_grammars(grammars: List<Grammar>) -> Grammar {
     };
 }
 
-/// Compose every supplied grammar into one, over both composition rules.
-/// Split halves (`FooLexer.g4` + `FooParser.g4`) concatenate through
-/// `merge_grammars`; a grammar whose declared name another one's `import`
-/// lists is a delegate, folded in under ANTLR4's inheritance rules
-/// (`vendor/antlr4/doc/grammars.md`): the master's rules win by name,
-/// delegates are visited depth-first in import order with the first version
-/// of a rule winning, tokens / channels / modes / named actions merge, and
-/// options are not inherited.
-///
-/// Resolution is by declared grammar name, never by filename — a Kiln
-/// generator has no filesystem, so `-lib` lookup has no analogue. An import
-/// naming no supplied input is an error rather than a silent omission.
+/// Every supplied grammar as one: split halves concatenate, and a grammar
+/// another's `import` names folds in as a delegate. Contract in `import.md`.
 pub fn compose_grammars(grammars: List<Grammar>) -> Result<Grammar, ParseError> {
     let mut delegate_names: List<String> = [];
     for let g of &grammars {
@@ -1364,8 +1321,7 @@ pub fn compose_grammars(grammars: List<Grammar>) -> Result<Grammar, ParseError> 
 }
 
 /// Indices into `grammars` of every delegate the master reaches, depth-first
-/// in import order, each on its first visit — the order that decides which
-/// version of a rule the composite keeps.
+/// in import order. This order decides which version of a rule survives.
 fn delegate_order(imports: &List<String>, grammars: &List<Grammar>) -> Result<List<i32>, ParseError> {
     let mut order: List<i32> = [];
     let mut visited: List<String> = [];
@@ -1408,42 +1364,19 @@ fn visit_delegate(
     return Result::Ok(());
 }
 
-/// Fold one delegate into the composite: every rule whose name is still free,
-/// with its modes and channels remapped. A rule the composite already defines
-/// is dropped, and its own references go with it — `DelegatorRuleOverridesDelegate`
-/// overrides a `b : B` that is the only reference to `B`.
+/// Fold one delegate into the composite: every rule whose name is still free.
+/// A rule the composite already defines is dropped with its own references.
 fn import_delegate(acc: &mut Grammar, d: &Grammar) {
     let mut dropped: List<String> = [];
     for let r of &d.parser_rules {
-        if find_parser_rule_index(&acc.parser_rules, &r.name) >= 0 {
+        if find_parser_rule(&acc.parser_rules, &r.name) matches { Some(_) } {
             dropped.push(r.name);
             continue;
         }
         acc.parser_rules.push(*r);
     }
 
-    let mut remap: List<i32> = [];
-    for let mn of &d.mode_names {
-        remap.push(find_or_add_mode(&mut acc.mode_names, mn));
-    }
-    let mut chan_remap: List<i32> = [];
-    for let cn of &d.channels {
-        chan_remap.push(find_or_add_channel(&mut acc.channels, cn));
-    }
-    for let mut r of d.lexer_rules {
-        r.mode = remap[r.mode];
-        if r.push_mode >= 0 {
-            r.push_mode = remap[r.push_mode];
-        }
-        if r.set_mode >= 0 {
-            r.set_mode = remap[r.set_mode];
-        }
-        if r.channel >= 2 {
-            let src_idx = r.channel - 2;
-            if src_idx < chan_remap.len() {
-                r.channel = chan_remap[src_idx];
-            }
-        }
+    for let r of rebase_lexer_rules(d, &mut acc.mode_names, &mut acc.channels) {
         let at = find_lexer_rule_index(&acc.lexer_rules, &r.name);
         if at < 0 {
             acc.lexer_rules.push(r);
@@ -1473,9 +1406,8 @@ fn import_delegate(acc: &mut Grammar, d: &Grammar) {
     }
 }
 
-/// Discard a mode every rule of which an overriding rule outside it replaced
-/// (`doc/grammars.md`). A mode a surviving `pushMode` / `mode` command still
-/// targets is kept — dropping it would dangle the command.
+/// Discard a mode an override emptied (`doc/grammars.md`). A mode a surviving
+/// `pushMode` / `mode` command targets is kept, or the command would dangle.
 fn drop_empty_modes(g: &mut Grammar) {
     let mut used: List<bool> = [];
     for let mut i = 0; i < g.mode_names.len(); i += 1 {
@@ -1517,13 +1449,8 @@ fn drop_empty_modes(g: &mut Grammar) {
     }
 }
 
-fn find_parser_rule_index(all_rules: &List<ParserRule>, name: &String) -> i32 {
-    for let mut i = 0; i < all_rules.len(); i += 1 {
-        if all_rules[i].name == *name {
-            return i;
-        }
-    }
-    return -1;
+fn find_parser_rule(all_rules: &List<ParserRule>, name: &String) -> Option<&ParserRule> with stores[all_rules] {
+    return all_rules.iter_ref().find(|r: &ParserRule| r.name == *name);
 }
 
 fn find_lexer_rule_index(all_rules: &List<LexerRule>, name: &String) -> i32 {
@@ -1537,6 +1464,39 @@ fn find_lexer_rule_index(all_rules: &List<LexerRule>, name: &String) -> i32 {
 
 pub fn find_lexer_rule(all_rules: &List<LexerRule>, name: &String) -> Option<&LexerRule> with stores[all_rules] {
     return all_rules.iter_ref().find(|r: &LexerRule| r.name == *name);
+}
+
+/// `g`'s lexer rules with their mode indices and channel ids rebased onto the
+/// destination tables, interning each name it meets.
+fn rebase_lexer_rules(g: &Grammar, modes: &mut List<String>, channels: &mut List<String>) -> List<LexerRule> {
+    let mut mode_remap: List<i32> = [];
+    for let mn of &g.mode_names {
+        mode_remap.push(find_or_add_mode(modes, mn));
+    }
+    let mut chan_remap: List<i32> = [];
+    for let cn of &g.channels {
+        chan_remap.push(find_or_add_channel(channels, cn));
+    }
+    let mut out: List<LexerRule> = [];
+    for let mut r of g.lexer_rules {
+        r.mode = mode_remap[r.mode];
+        if r.push_mode >= 0 {
+            r.push_mode = mode_remap[r.push_mode];
+        }
+        if r.set_mode >= 0 {
+            r.set_mode = mode_remap[r.set_mode];
+        }
+        // A numeric `channel(N)` literal is an explicit id with no
+        // `channels { }` entry behind it, so it has no remap slot.
+        if r.channel >= 2 {
+            let src_idx = r.channel - 2;
+            if src_idx < chan_remap.len() {
+                r.channel = chan_remap[src_idx];
+            }
+        }
+        out.push(r);
+    }
+    return out;
 }
 
 fn find_or_add_mode(modes: &mut List<String>, name: &String) -> i32 {
