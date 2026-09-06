@@ -1069,6 +1069,991 @@ fn line_col_from_starts(line_starts: &List<i32>, pos: i32) -> [i32, i32] {
     }
     return [lo + 1, pos - line_starts[lo]];
 }
+use { TreeMap } from "core:collections";
+
+pub global ATN_BASIC: i32 = 1;
+pub global ATN_RULE_START: i32 = 2;
+pub global ATN_RULE_STOP: i32 = 3;
+pub global ATN_BLOCK_START: i32 = 4;
+pub global ATN_BLOCK_END: i32 = 5;
+pub global ATN_STAR_LOOP_ENTRY: i32 = 6;
+pub global ATN_STAR_LOOP_BACK: i32 = 7;
+pub global ATN_PLUS_LOOP_BACK: i32 = 8;
+pub global ATN_LOOP_END: i32 = 9;
+
+pub global ATN_TR_EPSILON: i32 = 0;
+pub global ATN_TR_ATOM: i32 = 1;
+pub global ATN_TR_NOT_ATOM: i32 = 2;
+pub global ATN_TR_WILDCARD: i32 = 3;
+pub global ATN_TR_RULE: i32 = 4;
+pub global ATN_TR_PRECEDENCE: i32 = 5;
+
+global ATN_ACCEPT_EOF: i32 = -2;
+
+global ATN_CLOSURE_GUARD: i32 = 2000000;
+global ATN_ARENA_CAP: i32 = 400000;
+
+global ATN_MERGE_CACHE_STRIDE: i64 = 1000000;
+
+global CFG_KEY_PR_SLOT: i32 = 2048;
+global CFG_KEY_ALT_SLOT: i32 = 2048;
+global CFG_KEY_RS_SLOT: i32 = 1048576;
+global CFG_KEY_STATE_SLOT: i32 = 1048576;
+
+pub struct AtnSim {
+    pub state_kind: List<i32>,
+    pub state_tr_start: List<i32>,
+    pub state_tr_count: List<i32>,
+    pub tr_kind: List<i32>,
+    pub tr_target: List<i32>,
+    pub tr_label: List<i32>,
+    pub tr_follow: List<i32>,
+    pub tr_prec: List<i32>,
+    pub decision_state: List<i32>,
+    pub rule_start: List<i32>,
+    pub rule_nullable: List<bool>,
+    pub rule_first: List<List<i32>>,
+    pub rule_first_neg: List<List<i32>>,
+    pub rule_first_open: List<bool>,
+    pub state_cont_nullable: List<bool>,
+    pub state_cont_first_start: List<i32>,
+    pub state_cont_first_count: List<i32>,
+    pub state_cont_neg_start: List<i32>,
+    pub state_cont_neg_count: List<i32>,
+    pub cont_first_label: List<i32>,
+    pub cont_neg_label: List<i32>,
+    pub state_cont_first_open: List<bool>,
+}
+
+global CTX_BOUNDARY: i32 = -3;
+
+global CTX_EMPTY: i32 = 0;
+
+struct CtxArena {
+    edges: List<List<[i32, i32, i32]>>,
+    intern: TreeMap<i64, List<i32>>,
+    merge_cache: TreeMap<i64, i32>,
+}
+
+struct AtnConfig {
+    state: i32,
+    alt: i32,
+    pctx: i32,
+    rs: i32,
+    pr: i32,
+}
+
+impl CtxArena {
+    fn new() -> CtxArena {
+        let empty: List<[i32, i32, i32]> = [];
+        return CtxArena {
+            edges: [empty],
+            intern: TreeMap::<i64, List<i32>>::new(),
+            merge_cache: TreeMap::<i64, i32>::new(),
+        };
+    }
+
+    fn hash_of(edges: &List<[i32, i32, i32]>) -> i64 {
+        let mut h: i64 = 1469598103934665603;
+        for let e of edges {
+            h = (h ^ e.0 as i64 + 1) * 1099511628211;
+            h = (h ^ e.1 as i64 + 1) * 1099511628211;
+            h = (h ^ e.2 as i64 + 1) * 1099511628211;
+        }
+        return h & 4611686018427387903;
+    }
+
+    fn intern_edges(&mut self, sorted: &List<[i32, i32, i32]>) -> i32 {
+        if sorted.is_empty() {
+            return CTX_EMPTY;
+        }
+        let h = CtxArena::hash_of(sorted);
+        if let Some(cands) = self.intern.get(h) {
+            for let id of &cands {
+                if edge_lists_eq(&self.edges[*id], sorted) {
+                    return *id;
+                }
+            }
+        }
+        let id = self.edges.len();
+        self.edges.push(*sorted);
+        let mut cands = if let Some(c) = self.intern.get(h) {
+            c;
+        } else {
+            [] as List<i32>;
+        };
+        cands.push(id);
+        self.intern[h] = cands;
+        return id;
+    }
+
+    fn push(&mut self, return_state: i32, restore_pr: i32, parent: i32) -> i32 {
+        let one: List<[i32, i32, i32]> = [
+            [return_state, restore_pr, parent],
+        ];
+        return self.intern_edges(&one);
+    }
+
+    fn edges_view(&self, id: i32) -> List<[i32, i32, i32]> {
+        if id == CTX_EMPTY {
+            return [
+                [CTX_BOUNDARY, 0, CTX_EMPTY],
+            ];
+        }
+        return self.edges[id];
+    }
+
+    fn merge(&mut self, a: i32, b: i32) -> i32 {
+        if a == b {
+            return a;
+        }
+        let lo = if a < b { a } else { b };
+        let hi = if a < b { b } else { a };
+        assert ATN_MERGE_CACHE_STRIDE > ATN_ARENA_CAP as i64, "the merge-cache stride must exceed the arena cap, or two arena id pairs alias onto one key";
+        let ck = lo as i64 * ATN_MERGE_CACHE_STRIDE + hi as i64;
+        if let Some(id) = self.merge_cache.get(ck) {
+            return id;
+        }
+        let ea = self.edges_view(a);
+        let eb = self.edges_view(b);
+        let mut keys: List<[i32, i32]> = [];
+        let mut parents: List<i32> = [];
+        for let src of [&ea, &eb] {
+            for let e of *src {
+                let rk = [e.0, e.1];
+                let mut found = -1;
+                for let mut i = 0; i < keys.len(); i += 1 {
+                    if keys[i].0 == rk.0 && keys[i].1 == rk.1 {
+                        found = i;
+                        break;
+                    }
+                }
+                if found < 0 {
+                    keys.push(rk);
+                    parents.push(e.2);
+                } else {
+                    parents[found] = self.merge(parents[found], e.2);
+                }
+            }
+        }
+        let mut merged: List<[i32, i32, i32]> = [];
+        for let mut i = 0; i < keys.len(); i += 1 {
+            merged.push([keys[i].0, keys[i].1, parents[i]]);
+        }
+        sort_ctx_edges(&mut merged);
+        let id = self.intern_edges(&merged);
+        self.merge_cache[ck] = id;
+        return id;
+    }
+}
+
+fn sort_ctx_edges(edges: &mut List<[i32, i32, i32]>) {
+    let n = edges.len();
+    for let mut i = 1; i < n; i += 1 {
+        let cur = edges[i];
+        let mut j = i - 1;
+        while j >= 0 && ctx_edge_gt(&edges[j], &cur) {
+            edges[j + 1] = edges[j];
+            j -= 1;
+        }
+        edges[j + 1] = cur;
+    }
+}
+
+fn ctx_edge_gt(a: &[i32, i32, i32], b: &[i32, i32, i32]) -> bool {
+    if a.0 != b.0 {
+        return a.0 > b.0;
+    }
+    if a.1 != b.1 {
+        return a.1 > b.1;
+    }
+    return a.2 > b.2;
+}
+
+fn edge_lists_eq(a: &List<[i32, i32, i32]>, b: &List<[i32, i32, i32]>) -> bool {
+    if a.len() != b.len() {
+        return false;
+    }
+    for let mut i = 0; i < a.len(); i += 1 {
+        if a[i].0 != b[i].0 || a[i].1 != b[i].1 || a[i].2 != b[i].2 {
+            return false;
+        }
+    }
+    return true;
+}
+
+fn atn_read_u8(bytes: &ByteList, pos: i32) -> i32 {
+    return bytes.get_byte_unchecked(pos) as i32;
+}
+
+fn atn_read_u16(bytes: &ByteList, pos: i32) -> i32 {
+    let b0 = bytes.get_byte_unchecked(pos) as i32;
+    let b1 = bytes.get_byte_unchecked(pos + 1) as i32;
+    return b0 | b1 << 8;
+}
+
+fn atn_read_u24(bytes: &ByteList, pos: i32) -> i32 {
+    let b0 = bytes.get_byte_unchecked(pos) as i32;
+    let b1 = bytes.get_byte_unchecked(pos + 1) as i32;
+    let b2 = bytes.get_byte_unchecked(pos + 2) as i32;
+    return b0 | b1 << 8 | b2 << 16;
+}
+
+pub fn atn_decode(bytes: &ByteList, lr_tables: bool = true) -> AtnSim {
+    let mut p = 0;
+    let nrules = atn_read_u16(bytes, p);
+    p += 2;
+    let ndec = atn_read_u16(bytes, p);
+    p += 2;
+    let nstates = atn_read_u16(bytes, p);
+    p += 2;
+
+    let mut rule_start: List<i32> = List::with_capacity(nrules);
+    for let mut i = 0; i < nrules; i += 1 {
+        rule_start.push(atn_read_u16(bytes, p));
+        p += 2;
+    }
+    let mut decision_state: List<i32> = List::with_capacity(ndec);
+    for let mut i = 0; i < ndec; i += 1 {
+        decision_state.push(atn_read_u16(bytes, p));
+        p += 2;
+    }
+
+    let mut state_kind: List<i32> = List::with_capacity(nstates);
+    for let mut i = 0; i < nstates; i += 1 {
+        state_kind.push(atn_read_u8(bytes, p));
+        p += 1;
+    }
+    let mut state_tr_start: List<i32> = List::with_capacity(nstates);
+    let mut state_tr_count: List<i32> = List::with_capacity(nstates);
+    let mut ntrans_total = 0;
+    for let mut i = 0; i < nstates; i += 1 {
+        let count = atn_read_u16(bytes, p);
+        p += 2;
+        state_tr_start.push(ntrans_total);
+        state_tr_count.push(count);
+        ntrans_total += count;
+    }
+
+    let mut tr_kind: List<i32> = List::with_capacity(ntrans_total);
+    for let mut i = 0; i < ntrans_total; i += 1 {
+        tr_kind.push(atn_read_u8(bytes, p));
+        p += 1;
+    }
+    let mut tr_target: List<i32> = List::with_capacity(ntrans_total);
+    for let mut i = 0; i < ntrans_total; i += 1 {
+        tr_target.push(atn_read_u16(bytes, p) - 1);
+        p += 2;
+    }
+    let mut tr_label: List<i32> = List::with_capacity(ntrans_total);
+    for let mut i = 0; i < ntrans_total; i += 1 {
+        tr_label.push(atn_read_u24(bytes, p) - 1);
+        p += 3;
+    }
+    let mut tr_follow: List<i32> = List::with_capacity(ntrans_total);
+    for let mut i = 0; i < ntrans_total; i += 1 {
+        tr_follow.push(atn_read_u24(bytes, p) - 1);
+        p += 3;
+    }
+    let mut tr_prec: List<i32> = List::with_capacity(ntrans_total);
+    for let mut i = 0; i < ntrans_total; i += 1 {
+        tr_prec.push(atn_read_u16(bytes, p));
+        p += 2;
+    }
+
+    let nrules_count = rule_start.len();
+    let mut sim = AtnSim {
+        state_kind,
+        state_tr_start,
+        state_tr_count,
+        tr_kind,
+        tr_target,
+        tr_label,
+        tr_follow,
+        tr_prec,
+        decision_state,
+        rule_start,
+        rule_nullable: [],
+        rule_first: [],
+        rule_first_neg: [],
+        rule_first_open: [],
+        state_cont_nullable: [],
+        state_cont_first_start: [],
+        state_cont_first_count: [],
+        state_cont_neg_start: [],
+        state_cont_neg_count: [],
+        cont_first_label: [],
+        cont_neg_label: [],
+        state_cont_first_open: [],
+    };
+    for let mut r = 0; r < nrules_count; r += 1 {
+        sim.rule_nullable.push(false);
+        sim.rule_first.push([]);
+        sim.rule_first_neg.push([]);
+        sim.rule_first_open.push(false);
+    }
+    let mut has_precedence = false;
+    for let k of &sim.tr_kind {
+        if *k == ATN_TR_PRECEDENCE {
+            has_precedence = true;
+            break;
+        }
+    }
+    if lr_tables && has_precedence {
+        atn_compute_first_nullable(&mut sim);
+        atn_compute_state_cont(&mut sim);
+    }
+    return sim;
+}
+
+fn atn_compute_state_cont(sim: &mut AtnSim) {
+    let nstates = sim.state_kind.len();
+    for let mut st = 0; st < nstates; st += 1 {
+        let mut v1: List<i32> = [];
+        let nullable = atn_cont_nullable(sim, st, &mut v1);
+        let mut v2: List<i32> = [];
+        let mut f: List<i32> = [];
+        let mut fneg: List<i32> = [];
+        let open = atn_cont_first(sim, st, &mut v2, &mut f, &mut fneg);
+        sim.state_cont_nullable.push(nullable);
+        sim.state_cont_first_start.push(sim.cont_first_label.len());
+        sim.state_cont_first_count.push(f.len());
+        for let t of &f {
+            sim.cont_first_label.push(*t);
+        }
+        sim.state_cont_neg_start.push(sim.cont_neg_label.len());
+        sim.state_cont_neg_count.push(fneg.len());
+        for let x of &fneg {
+            sim.cont_neg_label.push(*x);
+        }
+        sim.state_cont_first_open.push(open);
+    }
+}
+
+fn atn_compute_first_nullable(sim: &mut AtnSim) {
+    let nrules = sim.rule_start.len();
+    let mut changed = true;
+    while changed {
+        changed = false;
+        for let mut r = 0; r < nrules; r += 1 {
+            let mut v1: List<i32> = [];
+            if atn_cont_nullable(sim, sim.rule_start[r], &mut v1) && !sim.rule_nullable[r] {
+                sim.rule_nullable[r] = true;
+                changed = true;
+            }
+            let mut v2: List<i32> = [];
+            let mut f: List<i32> = [];
+            let mut fneg: List<i32> = [];
+            if atn_cont_first(sim, sim.rule_start[r], &mut v2, &mut f, &mut fneg) && !sim.rule_first_open[r] {
+                sim.rule_first_open[r] = true;
+                changed = true;
+            }
+            for let t of &f {
+                if !sim.rule_first[r].contains(t) {
+                    sim.rule_first[r].push(*t);
+                    changed = true;
+                }
+            }
+            for let x of &fneg {
+                if !sim.rule_first_neg[r].contains(x) {
+                    sim.rule_first_neg[r].push(*x);
+                    changed = true;
+                }
+            }
+        }
+    }
+}
+
+fn atn_cont_nullable(sim: &AtnSim, state: i32, visited: &mut List<i32>) -> bool {
+    if visited.contains(&state) {
+        return false;
+    }
+    visited.push(state);
+    if sim.state_kind[state] == ATN_RULE_STOP {
+        return true;
+    }
+    let s = sim.state_tr_start[state];
+    let c = sim.state_tr_count[state];
+    for let mut j = 0; j < c; j += 1 {
+        let k = sim.tr_kind[s + j];
+        if k == ATN_TR_EPSILON || k == ATN_TR_PRECEDENCE {
+            if atn_cont_nullable(sim, sim.tr_target[s + j], visited) {
+                return true;
+            }
+        } else if k == ATN_TR_RULE {
+            let callee = sim.tr_label[s + j];
+            if callee >= 0 && sim.rule_nullable[callee] && atn_cont_nullable(sim, sim.tr_follow[s + j], visited) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+fn atn_cont_first(sim: &AtnSim, state: i32, visited: &mut List<i32>, out: &mut List<i32>, neg: &mut List<i32>) -> bool {
+    if visited.contains(&state) {
+        return false;
+    }
+    visited.push(state);
+    if sim.state_kind[state] == ATN_RULE_STOP {
+        return false;
+    }
+    let mut open = false;
+    let s = sim.state_tr_start[state];
+    let c = sim.state_tr_count[state];
+    for let mut j = 0; j < c; j += 1 {
+        let k = sim.tr_kind[s + j];
+        if k == ATN_TR_ATOM {
+            if !out.contains(&sim.tr_label[s + j]) {
+                out.push(sim.tr_label[s + j]);
+            }
+        } else if k == ATN_TR_WILDCARD {
+            open = true;
+        } else if k == ATN_TR_NOT_ATOM {
+            if !neg.contains(&sim.tr_label[s + j]) {
+                neg.push(sim.tr_label[s + j]);
+            }
+        } else if k == ATN_TR_EPSILON || k == ATN_TR_PRECEDENCE {
+            if atn_cont_first(sim, sim.tr_target[s + j], visited, out, neg) {
+                open = true;
+            }
+        } else if k == ATN_TR_RULE {
+            let callee = sim.tr_label[s + j];
+            if callee >= 0 {
+                for let t of &sim.rule_first[callee] {
+                    if !out.contains(t) {
+                        out.push(*t);
+                    }
+                }
+                for let x of &sim.rule_first_neg[callee] {
+                    if !neg.contains(x) {
+                        neg.push(*x);
+                    }
+                }
+                if sim.rule_first_open[callee] {
+                    open = true;
+                }
+                if sim.rule_nullable[callee] && atn_cont_first(sim, sim.tr_follow[s + j], visited, out, neg) {
+                    open = true;
+                }
+            }
+        }
+    }
+    return open;
+}
+
+fn atn_state_cont_admits(sim: &AtnSim, state: i32, t: i32, eof: i32) -> bool {
+    if sim.state_cont_first_open[state] && t != eof {
+        return true;
+    }
+    let fs = sim.state_cont_first_start[state];
+    let fc = sim.state_cont_first_count[state];
+    for let mut j = 0; j < fc; j += 1 {
+        if sim.cont_first_label[fs + j] == t {
+            return true;
+        }
+    }
+    if t != eof {
+        let ns = sim.state_cont_neg_start[state];
+        let nc = sim.state_cont_neg_count[state];
+        for let mut j = 0; j < nc; j += 1 {
+            if sim.cont_neg_label[ns + j] != t {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+fn atn_state_consumes(sim: &AtnSim, state: i32) -> bool {
+    let cnt = sim.state_tr_count[state];
+    if cnt == 0 {
+        return false;
+    }
+    let k = sim.tr_kind[sim.state_tr_start[state]];
+    return k == ATN_TR_ATOM || k == ATN_TR_NOT_ATOM || k == ATN_TR_WILDCARD;
+}
+
+struct CfgSet {
+    state: List<i32>,
+    alt: List<i32>,
+    rs: List<i32>,
+    pr: List<i32>,
+    pctx: List<i32>,
+    index: TreeMap<i64, i32>,
+}
+
+impl CfgSet {
+    fn new() -> CfgSet {
+        return CfgSet {
+            state: [],
+            alt: [],
+            rs: [],
+            pr: [],
+            pctx: [],
+            index: TreeMap::<i64, i32>::new(),
+        };
+    }
+
+    fn add(&mut self, arena: &mut CtxArena, state: i32, alt: i32, rs: i32, pr: i32, pctx: i32) -> [i32, bool] {
+        assert pr + 2 < CFG_KEY_PR_SLOT, `ATN config precedence ${pr} exceeds packed-key slot`;
+        assert alt + 1 < CFG_KEY_ALT_SLOT, `ATN config alt ${alt} exceeds packed-key slot`;
+        assert rs + 2 < CFG_KEY_RS_SLOT, `ATN config caller-stack depth ${rs} exceeds packed-key slot`;
+        assert state + 2 < CFG_KEY_STATE_SLOT, `ATN config state ${state} exceeds packed-key slot`;
+        let k = (((state + 2) as i64 * CFG_KEY_RS_SLOT as i64 + (rs + 2) as i64) * CFG_KEY_ALT_SLOT as i64 + (alt + 1) as i64) * CFG_KEY_PR_SLOT as i64 + (pr + 2) as i64;
+        if let Some(i) = self.index.get(k) {
+            let merged = arena.merge(self.pctx[i], pctx);
+            let changed = merged != self.pctx[i];
+            self.pctx[i] = merged;
+            return [i, changed];
+        }
+        let i = self.state.len();
+        self.state.push(state);
+        self.alt.push(alt);
+        self.rs.push(rs);
+        self.pr.push(pr);
+        self.pctx.push(pctx);
+        self.index[k] = i;
+        return [i, true];
+    }
+
+    fn to_list(&self) -> List<AtnConfig> {
+        let mut out: List<AtnConfig> = [];
+        for let mut i = 0; i < self.state.len(); i += 1 {
+            out.push(AtnConfig {
+                state: self.state[i],
+                alt: self.alt[i],
+                pctx: self.pctx[i],
+                rs: self.rs[i],
+                pr: self.pr[i],
+            });
+        }
+        return out;
+    }
+}
+
+fn atn_closure(sim: &AtnSim, arena: &mut CtxArena, seeds: &List<AtnConfig>, rstk: &List<i32>) -> List<AtnConfig> {
+    let mut cset = CfgSet::new();
+    let mut expanded: List<i32> = [];
+    let mut rset = CfgSet::new();
+    let mut work: List<AtnConfig> = *seeds;
+    let mut guard = 0;
+    while let Some(c) = work.pop() {
+        guard += 1;
+        if guard > ATN_CLOSURE_GUARD {
+            break;
+        }
+        let res = cset.add(arena, c.state, c.alt, c.rs, c.pr, c.pctx);
+        let idx = res.0;
+        while expanded.len() <= idx {
+            expanded.push(-9);
+        }
+        let merged_pctx = cset.pctx[idx];
+        if expanded[idx] == merged_pctx {
+            continue;
+        }
+        expanded[idx] = merged_pctx;
+        let cur = AtnConfig { state: c.state, alt: c.alt, pctx: merged_pctx, rs: c.rs, pr: c.pr };
+        atn_expand(sim, arena, &cur, rstk, &mut work, &mut rset);
+    }
+    return rset.to_list();
+}
+
+fn atn_expand(
+    sim: &AtnSim,
+    arena: &mut CtxArena,
+    cur: &AtnConfig,
+    rstk: &List<i32>,
+    work: &mut List<AtnConfig>,
+    rset: &mut CfgSet,
+) {
+    if cur.state == ATN_ACCEPT_EOF {
+        rset.add(arena, cur.state, cur.alt, cur.rs, cur.pr, cur.pctx);
+        return;
+    }
+    if sim.state_kind[cur.state] == ATN_RULE_STOP {
+        atn_pop(sim, arena, cur, rstk, work, rset);
+        return;
+    }
+    if atn_state_consumes(sim, cur.state) {
+        rset.add(arena, cur.state, cur.alt, cur.rs, cur.pr, cur.pctx);
+        return;
+    }
+    let start = sim.state_tr_start[cur.state];
+    let cnt = sim.state_tr_count[cur.state];
+    for let mut j = 0; j < cnt; j += 1 {
+        let k = sim.tr_kind[start + j];
+        let target = sim.tr_target[start + j];
+        if k == ATN_TR_EPSILON {
+            work.push(AtnConfig { state: target, alt: cur.alt, pctx: cur.pctx, rs: cur.rs, pr: cur.pr });
+        } else if k == ATN_TR_PRECEDENCE {
+            if sim.tr_prec[start + j] >= cur.pr {
+                work.push(AtnConfig { state: target, alt: cur.alt, pctx: cur.pctx, rs: cur.rs, pr: cur.pr });
+            }
+        } else if k == ATN_TR_RULE {
+            if target < 0 || arena.edges.len() >= ATN_ARENA_CAP {
+                continue;
+            }
+            let npctx = arena.push(sim.tr_follow[start + j], cur.pr, cur.pctx);
+            work.push(AtnConfig { state: target, alt: cur.alt, pctx: npctx, rs: cur.rs, pr: sim.tr_prec[start + j] });
+        }
+    }
+}
+
+fn atn_pop(
+    sim: &AtnSim,
+    arena: &mut CtxArena,
+    cur: &AtnConfig,
+    rstk: &List<i32>,
+    work: &mut List<AtnConfig>,
+    rset: &mut CfgSet,
+) {
+    if cur.pctx == CTX_EMPTY {
+        atn_rs_pop(arena, cur.state, cur.alt, cur.rs, cur.pr, rstk, work, rset);
+        return;
+    }
+    let edges = arena.edges[cur.pctx];
+    for let e of &edges {
+        if e.0 == CTX_BOUNDARY {
+            atn_rs_pop(arena, cur.state, cur.alt, cur.rs, cur.pr, rstk, work, rset);
+        } else {
+            work.push(AtnConfig { state: e.0, alt: cur.alt, pctx: e.2, rs: cur.rs, pr: e.1 });
+        }
+    }
+}
+
+fn atn_rs_pop(
+    arena: &mut CtxArena,
+    stop_state: i32,
+    alt: i32,
+    rs: i32,
+    pr: i32,
+    rstk: &List<i32>,
+    work: &mut List<AtnConfig>,
+    rset: &mut CfgSet,
+) {
+    if rs >= 0 {
+        let ret = rstk[rs];
+        if ret >= 0 {
+            work.push(AtnConfig { state: ret, alt: alt, pctx: CTX_EMPTY, rs: rs - 1, pr: pr });
+        } else if rs == 0 {
+            rset.add(arena, ATN_ACCEPT_EOF, alt, -1, pr, CTX_EMPTY);
+        } else {
+            rset.add(arena, stop_state, alt, rs, pr, CTX_EMPTY);
+        }
+    } else if rstk.is_empty() {
+        rset.add(arena, stop_state, alt, rs, pr, CTX_EMPTY);
+    } else {
+        rset.add(arena, ATN_ACCEPT_EOF, alt, -1, pr, CTX_EMPTY);
+    }
+}
+
+fn atn_move(sim: &AtnSim, configs: &List<AtnConfig>, token: i32, eof: i32) -> List<AtnConfig> {
+    let mut out: List<AtnConfig> = [];
+    for let c of configs {
+        if c.state == ATN_ACCEPT_EOF {
+            if token == eof {
+                out.push(*c);
+            }
+            continue;
+        }
+        if sim.state_kind[c.state] == ATN_RULE_STOP {
+            out.push(*c);
+            continue;
+        }
+        let start = sim.state_tr_start[c.state];
+        let cnt = sim.state_tr_count[c.state];
+        for let mut j = 0; j < cnt; j += 1 {
+            let k = sim.tr_kind[start + j];
+            let label = sim.tr_label[start + j];
+            let matched = if k == ATN_TR_ATOM {
+                label == token;
+            } else if k == ATN_TR_WILDCARD {
+                token != eof;
+            } else if k == ATN_TR_NOT_ATOM {
+                token != label && token != eof;
+            } else {
+                false;
+            };
+            if matched {
+                out.push(AtnConfig { state: sim.tr_target[start + j], alt: c.alt, pctx: c.pctx, rs: c.rs, pr: c.pr });
+            }
+        }
+    }
+    return out;
+}
+
+fn atn_unique_alts(configs: &List<AtnConfig>) -> List<i32> {
+    let mut alts: List<i32> = [];
+    for let c of configs {
+        if !alts.contains(&c.alt) {
+            alts.push(c.alt);
+        }
+    }
+    alts.sort();
+    return alts;
+}
+
+fn atn_min_alt(alts: &List<i32>) -> i32 {
+    if alts.is_empty() {
+        return -1;
+    }
+    let mut m = alts[0];
+    for let a of alts {
+        if *a < m {
+            m = *a;
+        }
+    }
+    return m;
+}
+
+fn atn_all_at_end(sim: &AtnSim, configs: &List<AtnConfig>) -> bool {
+    if configs.is_empty() {
+        return false;
+    }
+    for let c of configs {
+        if c.state != ATN_ACCEPT_EOF && sim.state_kind[c.state] != ATN_RULE_STOP {
+            return false;
+        }
+    }
+    return true;
+}
+
+pub global ATN_NO_DISABLED: List<i32> = [];
+
+pub fn atn_predict_with_stack(
+    sim: &AtnSim,
+    decision: i32,
+    rule_stack: &List<i32>,
+    tokens: &Array<i32>,
+    start_pos: i32,
+    eof: i32,
+    min_prec: i32 = 0,
+    disabled_alts: &List<i32> = &ATN_NO_DISABLED,
+) -> i32 {
+    let dstate = sim.decision_state[decision];
+    let start = sim.state_tr_start[dstate];
+    let cnt = sim.state_tr_count[dstate];
+    let rs_init = rule_stack.len() - 1;
+    let mut arena = CtxArena::new();
+    let mut seeds: List<AtnConfig> = [];
+    for let mut j = 0; j < cnt; j += 1 {
+        if sim.tr_kind[start + j] == ATN_TR_PRECEDENCE && sim.tr_prec[start + j] < min_prec {
+            continue;
+        }
+        if !disabled_alts.is_empty() && disabled_alts.contains(&j) {
+            continue;
+        }
+        seeds.push(AtnConfig { state: sim.tr_target[start + j], alt: j, pctx: CTX_EMPTY, rs: rs_init, pr: min_prec });
+    }
+    let mut configs = atn_closure(sim, &mut arena, &seeds, rule_stack);
+    let mut pos = start_pos;
+    let mut prev = atn_unique_alts(&configs);
+    let limit = tokens.len() - start_pos + 8;
+    let mut guard = 0;
+    loop {
+        guard += 1;
+        if guard > limit {
+            return atn_min_alt(&prev);
+        }
+        let alts = atn_unique_alts(&configs);
+        if alts.is_empty() {
+            return atn_min_alt(&prev);
+        }
+        if alts.len() == 1 {
+            return alts[0];
+        }
+        if atn_all_at_end(sim, &configs) {
+            return atn_min_alt(&alts);
+        }
+        prev = alts;
+        let token = if pos < tokens.len() { tokens[pos] } else { eof };
+        let moved = atn_move(sim, &configs, token, eof);
+        pos += 1;
+        configs = atn_closure(sim, &mut arena, &moved, rule_stack);
+    }
+}
+
+pub fn atn_lr_loop_decision(
+    sim: &AtnSim,
+    rule_stack: &List<i32>,
+    decision: i32,
+    tokens: &Array<i32>,
+    pos: i32,
+    eof: i32,
+    min_prec: i32 = 0,
+) -> i32 {
+    let dstate = sim.decision_state[decision];
+    let t = if pos < tokens.len() { tokens[pos] } else { eof };
+    let s = sim.state_tr_start[dstate];
+    let c = sim.state_tr_count[dstate];
+    let exit_alt = c - 1;
+    if atn_caller_mandates(sim, rule_stack, t, eof) {
+        return exit_alt;
+    }
+    for let mut j = 0; j < c; j += 1 {
+        if sim.tr_kind[s + j] == ATN_TR_PRECEDENCE {
+            if sim.tr_prec[s + j] < min_prec {
+                continue;
+            }
+            let tgt = sim.tr_target[s + j];
+            if atn_state_cont_admits(sim, tgt, t, eof) {
+                return j;
+            }
+        }
+    }
+    return exit_alt;
+}
+
+fn atn_caller_mandates(sim: &AtnSim, rule_stack: &List<i32>, t: i32, eof: i32) -> bool {
+    let mut i = rule_stack.len() - 1;
+    while i >= 0 {
+        let ret = rule_stack[i];
+        if ret < 0 {
+            return i == 0 && t == eof;
+        }
+        if sim.state_cont_nullable[ret] {
+            i -= 1;
+            continue;
+        }
+        return atn_state_cont_admits(sim, ret, t, eof);
+    }
+    return false;
+}
+
+pub fn atn_adaptive_predict(sim: &AtnSim, decision: i32, tokens: &Array<i32>, start_pos: i32, eof: i32) -> i32 {
+    let empty: List<i32> = [];
+    return atn_predict_with_stack(sim, decision, &empty, tokens, start_pos, eof);
+}
+use { TreeSet } from "core:collections";
+
+struct LThread {
+    state: i32,
+    stack: List<i32>,
+    accept: bool,
+}
+
+fn latn_sig(state: i32, stack: &List<i32>) -> String {
+    let mut s = `${state}#`;
+    for let mut i = 0; i < stack.len(); i += 1 {
+        if i > 0 {
+            s.push_str(&",");
+        }
+        s.push_str(&`${stack[i]}`);
+    }
+    return s;
+}
+
+fn latn_closure(
+    sim: &AtnSim,
+    out: &mut List<LThread>,
+    visited: &mut TreeSet<String>,
+    state: i32,
+    stack: &List<i32>,
+    open: &List<i32>,
+) {
+    let key = latn_sig(state, stack);
+    if visited.contains(key) {
+        return;
+    }
+    visited.insert(key);
+
+    if sim.state_kind[state] == ATN_RULE_STOP {
+        if stack.is_empty() {
+            out.push(LThread { state, stack: [], accept: true });
+        } else {
+            let ret = stack[stack.len() - 1];
+            let mut rest: List<i32> = [];
+            for let mut i = 0; i < stack.len() - 1; i += 1 {
+                rest.push(stack[i]);
+            }
+            latn_closure(sim, out, visited, ret, &rest, open);
+        }
+        return;
+    }
+
+    let ts = sim.state_tr_start[state];
+    let tc = sim.state_tr_count[state];
+    if tc > 0 {
+        let k0 = sim.tr_kind[ts];
+        if k0 == ATN_TR_ATOM || k0 == ATN_TR_NOT_ATOM || k0 == ATN_TR_WILDCARD {
+            out.push(LThread { state, stack: *stack, accept: false });
+            return;
+        }
+    }
+    for let mut i = 0; i < tc; i += 1 {
+        let idx = ts + i;
+        let target = sim.tr_target[idx];
+        if sim.tr_kind[idx] == ATN_TR_RULE {
+            if target < 0 {
+                continue;
+            }
+            if open.iter_ref().any(|o: &i32| *o == target) {
+                continue;
+            }
+            let mut ns: List<i32> = *stack;
+            ns.push(sim.tr_follow[idx]);
+            let mut open2: List<i32> = *open;
+            open2.push(target);
+            latn_closure(sim, out, visited, target, &ns, &open2);
+        } else {
+            latn_closure(sim, out, visited, target, stack, open);
+        }
+    }
+}
+
+pub fn latn_match(sim: &AtnSim, start_rule: i32, chars: &List<char>, start: i32, longest: bool) -> i32 {
+    let mut best = -1;
+    let mut clist: List<LThread> = [];
+    let mut seed = TreeSet::<String>::new();
+    let empty: List<i32> = [];
+    let no_open: List<i32> = [];
+    latn_closure(sim, &mut clist, &mut seed, sim.rule_start[start_rule], &empty, &no_open);
+
+    let mut pos = start;
+    loop {
+        let cur = if pos < chars.len() { chars[pos] as i32 } else { -1 };
+        let mut nlist: List<LThread> = [];
+        let mut nseen = TreeSet::<String>::new();
+        let mut i = 0;
+        let mut stop = false;
+        while i < clist.len() && !stop {
+            let th = &clist[i];
+            if th.accept {
+                best = pos;
+                stop = !longest;
+            } else {
+                let ts = sim.state_tr_start[th.state];
+                let tc = sim.state_tr_count[th.state];
+                for let mut j = 0; j < tc; j += 1 {
+                    let idx = ts + j;
+                    let kind = sim.tr_kind[idx];
+                    let matched = if cur < 0 {
+                        false;
+                    } else if kind == ATN_TR_ATOM {
+                        cur >= sim.tr_label[idx] && cur <= sim.tr_follow[idx];
+                    } else if kind == ATN_TR_WILDCARD {
+                        true;
+                    } else if kind == ATN_TR_NOT_ATOM {
+                        cur != sim.tr_label[idx];
+                    } else {
+                        false;
+                    };
+                    if matched {
+                        latn_closure(sim, &mut nlist, &mut nseen, sim.tr_target[idx], &th.stack, &no_open);
+                    }
+                }
+            }
+            i += 1;
+        }
+        clist = nlist;
+        if clist.is_empty() {
+            break;
+        }
+        pos += 1;
+    }
+    return best;
+}
 
 pub struct HighlightOverride {
     pub rule_name: String,
@@ -1359,163 +2344,102 @@ impl Lexer {
 }
 
 fn try_STRING(chars: &List<char>, start: i32) -> i32 {
-    let mut pos = start;
-    if pos >= chars.len() || chars[pos] != '"' { return -1; }
-    pos += 1;
-    loop {
-        let rep_saved_0 = pos;
-        rep_0: {
-            let alts_saved_1 = pos;
-            let mut alts_ok_1 = false;
-            alts_1_0: {
-                pos = alts_saved_1;
-                if pos >= chars.len() || chars[pos] != '\\' { break alts_1_0; }
-                pos += 1;
-                let alts_saved_2 = pos;
-                let mut alts_ok_2 = false;
-                alts_2_0: {
-                    pos = alts_saved_2;
-                    if pos >= chars.len() { break alts_2_0; }
-                    if !((chars[pos] matches { '"' | '\\' | '/' | 'b' | 'f' | 'n' | 'r' | 't' })) { break alts_2_0; }
-                    pos += 1;
-                    alts_ok_2 = true;
-                }
-                if !alts_ok_2 {
-                    alts_2_1: {
-                        pos = alts_saved_2;
-                        if pos >= chars.len() || chars[pos] != 'u' { break alts_2_1; }
-                        pos += 1;
-                        if pos >= chars.len() { break alts_2_1; }
-                        if !((chars[pos] matches { '0'..='9' | 'a'..='f' | 'A'..='F' })) { break alts_2_1; }
-                        pos += 1;
-                        if pos >= chars.len() { break alts_2_1; }
-                        if !((chars[pos] matches { '0'..='9' | 'a'..='f' | 'A'..='F' })) { break alts_2_1; }
-                        pos += 1;
-                        if pos >= chars.len() { break alts_2_1; }
-                        if !((chars[pos] matches { '0'..='9' | 'a'..='f' | 'A'..='F' })) { break alts_2_1; }
-                        pos += 1;
-                        if pos >= chars.len() { break alts_2_1; }
-                        if !((chars[pos] matches { '0'..='9' | 'a'..='f' | 'A'..='F' })) { break alts_2_1; }
-                        pos += 1;
-                        alts_ok_2 = true;
-                    }
-                }
-                if !alts_ok_2 { break alts_1_0; }
-                alts_ok_1 = true;
-            }
-            if !alts_ok_1 {
-                alts_1_1: {
-                    pos = alts_saved_1;
-                    if pos >= chars.len() { break alts_1_1; }
-                    if (chars[pos] matches { '"' | '\\' | '\u{0}'..='\u{1f}' }) { break alts_1_1; }
-                    pos += 1;
-                    alts_ok_1 = true;
-                }
-            }
-            if !alts_ok_1 { break rep_0; }
-            continue;
-        }
-        pos = rep_saved_0;
-        break;
-    }
-    if pos >= chars.len() || chars[pos] != '"' { return -1; }
-    pos += 1;
-    return pos;
+    return latn_match(&LATN_SIM, 0, chars, start, true);
 }
 
 fn try_NUMBER(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
-    let opt_saved_3 = pos;
-    let mut opt_ok_3 = false;
-    rep_3: {
-        if pos >= chars.len() || chars[pos] != '-' { break rep_3; }
+    let opt_saved_0 = pos;
+    let mut opt_ok_0 = false;
+    rep_0: {
+        if pos >= chars.len() || chars[pos] != '-' { break rep_0; }
         pos += 1;
-        opt_ok_3 = true;
+        opt_ok_0 = true;
     }
-    if !opt_ok_3 { pos = opt_saved_3; }
-    let alts_saved_4 = pos;
-    let mut alts_ok_4 = false;
-    alts_4_0: {
-        pos = alts_saved_4;
-        if pos >= chars.len() || chars[pos] != '0' { break alts_4_0; }
+    if !opt_ok_0 { pos = opt_saved_0; }
+    let alts_saved_1 = pos;
+    let mut alts_ok_1 = false;
+    alts_1_0: {
+        pos = alts_saved_1;
+        if pos >= chars.len() || chars[pos] != '0' { break alts_1_0; }
         pos += 1;
-        alts_ok_4 = true;
+        alts_ok_1 = true;
     }
-    if !alts_ok_4 {
-        alts_4_1: {
-            pos = alts_saved_4;
-            if pos >= chars.len() { break alts_4_1; }
-            if !((chars[pos] matches { '1'..='9' })) { break alts_4_1; }
+    if !alts_ok_1 {
+        alts_1_1: {
+            pos = alts_saved_1;
+            if pos >= chars.len() { break alts_1_1; }
+            if !((chars[pos] matches { '1'..='9' })) { break alts_1_1; }
             pos += 1;
             loop {
-                let rep_saved_5 = pos;
-                rep_5: {
-                    if pos >= chars.len() { break rep_5; }
-                    if !((chars[pos] matches { '0'..='9' })) { break rep_5; }
+                let rep_saved_2 = pos;
+                rep_2: {
+                    if pos >= chars.len() { break rep_2; }
+                    if !((chars[pos] matches { '0'..='9' })) { break rep_2; }
                     pos += 1;
                     continue;
                 }
-                pos = rep_saved_5;
+                pos = rep_saved_2;
                 break;
             }
-            alts_ok_4 = true;
+            alts_ok_1 = true;
         }
     }
-    if !alts_ok_4 { return -1; }
+    if !alts_ok_1 { return -1; }
+    let opt_saved_3 = pos;
+    let mut opt_ok_3 = false;
+    rep_3: {
+        if pos >= chars.len() || chars[pos] != '.' { break rep_3; }
+        pos += 1;
+        if pos >= chars.len() { break rep_3; }
+        if !((chars[pos] matches { '0'..='9' })) { break rep_3; }
+        pos += 1;
+        loop {
+            let rep_saved_4 = pos;
+            rep_4: {
+                if pos >= chars.len() { break rep_4; }
+                if !((chars[pos] matches { '0'..='9' })) { break rep_4; }
+                pos += 1;
+                continue;
+            }
+            pos = rep_saved_4;
+            break;
+        }
+        opt_ok_3 = true;
+    }
+    if !opt_ok_3 { pos = opt_saved_3; }
     let opt_saved_6 = pos;
     let mut opt_ok_6 = false;
     rep_6: {
-        if pos >= chars.len() || chars[pos] != '.' { break rep_6; }
+        if pos >= chars.len() { break rep_6; }
+        if !((chars[pos] matches { 'E' | 'e' })) { break rep_6; }
         pos += 1;
+        let opt_saved_7 = pos;
+        let mut opt_ok_7 = false;
+        rep_7: {
+            if pos >= chars.len() { break rep_7; }
+            if !((chars[pos] matches { '+' | '-' })) { break rep_7; }
+            pos += 1;
+            opt_ok_7 = true;
+        }
+        if !opt_ok_7 { pos = opt_saved_7; }
         if pos >= chars.len() { break rep_6; }
         if !((chars[pos] matches { '0'..='9' })) { break rep_6; }
         pos += 1;
         loop {
-            let rep_saved_7 = pos;
-            rep_7: {
-                if pos >= chars.len() { break rep_7; }
-                if !((chars[pos] matches { '0'..='9' })) { break rep_7; }
+            let rep_saved_8 = pos;
+            rep_8: {
+                if pos >= chars.len() { break rep_8; }
+                if !((chars[pos] matches { '0'..='9' })) { break rep_8; }
                 pos += 1;
                 continue;
             }
-            pos = rep_saved_7;
+            pos = rep_saved_8;
             break;
         }
         opt_ok_6 = true;
     }
     if !opt_ok_6 { pos = opt_saved_6; }
-    let opt_saved_9 = pos;
-    let mut opt_ok_9 = false;
-    rep_9: {
-        if pos >= chars.len() { break rep_9; }
-        if !((chars[pos] matches { 'E' | 'e' })) { break rep_9; }
-        pos += 1;
-        let opt_saved_10 = pos;
-        let mut opt_ok_10 = false;
-        rep_10: {
-            if pos >= chars.len() { break rep_10; }
-            if !((chars[pos] matches { '+' | '-' })) { break rep_10; }
-            pos += 1;
-            opt_ok_10 = true;
-        }
-        if !opt_ok_10 { pos = opt_saved_10; }
-        if pos >= chars.len() { break rep_9; }
-        if !((chars[pos] matches { '0'..='9' })) { break rep_9; }
-        pos += 1;
-        loop {
-            let rep_saved_11 = pos;
-            rep_11: {
-                if pos >= chars.len() { break rep_11; }
-                if !((chars[pos] matches { '0'..='9' })) { break rep_11; }
-                pos += 1;
-                continue;
-            }
-            pos = rep_saved_11;
-            break;
-        }
-        opt_ok_9 = true;
-    }
-    if !opt_ok_9 { pos = opt_saved_9; }
     return pos;
 }
 
@@ -1525,14 +2449,14 @@ fn try_WS(chars: &List<char>, start: i32) -> i32 {
     if !((chars[pos] matches { ' ' | '\t' | '\n' | '\r' })) { return -1; }
     pos += 1;
     loop {
-        let rep_saved_13 = pos;
-        rep_13: {
-            if pos >= chars.len() { break rep_13; }
-            if !((chars[pos] matches { ' ' | '\t' | '\n' | '\r' })) { break rep_13; }
+        let rep_saved_10 = pos;
+        rep_10: {
+            if pos >= chars.len() { break rep_10; }
+            if !((chars[pos] matches { ' ' | '\t' | '\n' | '\r' })) { break rep_10; }
             pos += 1;
             continue;
         }
-        pos = rep_saved_13;
+        pos = rep_saved_10;
         break;
     }
     return pos;
@@ -2474,4 +3398,6 @@ global SYNC_3: List<i32> = [TK_LIT_COLON];
 global SYNC_4: List<i32> = [TK_LIT_FALSE, TK_LIT_LBRACE, TK_LIT_LBRACKET, TK_LIT_NULL, TK_LIT_TRUE, TK_NUMBER, TK_STRING];
 global SYNC_5: List<i32> = [TK_LIT_RBRACKET];
 global SYNC_6: List<i32> = [TK_LIT_LBRACKET];
+
+global LATN_SIM: AtnSim = atn_decode(&b"\x05\x00\x00\x00\x40\x00\x00\x00\x02\x00\x04\x00\x06\x00\x08\x00\x02\x03\x02\x03\x02\x03\x02\x03\x02\x03\x04\x05\x01\x01\x01\x06\x09\x04\x05\x01\x01\x01\x01\x01\x01\x07\x01\x01\x04\x05\x01\x01\x01\x04\x05\x01\x01\x01\x01\x01\x01\x04\x05\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x04\x05\x01\x01\x01\x04\x05\x01\x01\x01\x01\x00\x00\x00\x01\x00\x00\x00\x01\x00\x00\x00\x01\x00\x00\x00\x01\x00\x00\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x02\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x01\x00\x08\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x03\x00\x01\x00\x01\x00\x01\x00\x01\x00\x03\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x04\x00\x00\x04\x00\x00\x01\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\x01\x01\x01\x01\x01\x01\x01\x01\x00\x00\x04\x00\x00\x00\x00\x01\x00\x04\x00\x04\x00\x04\x00\x04\x00\x00\x00\x00\x01\x01\x01\x00\x00\x00\x00\x01\x01\x01\x00\x0b\x00\x1d\x00\x2a\x00\x37\x00\x3c\x00\x0d\x00\x02\x00\x0e\x00\x0f\x00\x10\x00\x12\x00\x11\x00\x1b\x00\x14\x00\x17\x00\x1a\x00\x15\x00\x03\x00\x13\x00\x18\x00\x09\x00\x13\x00\x10\x00\x1c\x00\x0c\x00\x1f\x00\x04\x00\x20\x00\x21\x00\x22\x00\x24\x00\x27\x00\x1e\x00\x25\x00\x26\x00\x26\x00\x26\x00\x26\x00\x26\x00\x26\x00\x26\x00\x26\x00\x23\x00\x28\x00\x05\x00\x23\x00\x2c\x00\x06\x00\x2d\x00\x2e\x00\x2f\x00\x07\x00\x31\x00\x07\x00\x33\x00\x07\x00\x35\x00\x07\x00\x2b\x00\x39\x00\x08\x00\x3a\x00\x3b\x00\x3b\x00\x3b\x00\x38\x00\x3e\x00\x0a\x00\x3f\x00\x40\x00\x40\x00\x40\x00\x3d\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x23\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x02\x00\x00\x00\x00\x00\x00\x00\x00\x05\x00\x00\x00\x00\x00\x00\x00\x00\x23\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x5d\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x23\x00\x00\x5d\x00\x00\x30\x00\x00\x63\x00\x00\x67\x00\x00\x6f\x00\x00\x73\x00\x00\x75\x00\x00\x00\x00\x00\x00\x00\x00\x03\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x76\x00\x00\x00\x00\x00\x04\x00\x00\x00\x00\x00\x04\x00\x00\x00\x00\x00\x04\x00\x00\x00\x00\x00\x04\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x31\x00\x00\x62\x00\x00\x42\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x21\x00\x00\x24\x00\x00\x5e\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x23\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x16\x00\x00\x00\x00\x00\x00\x00\x00\x19\x00\x00\x00\x00\x00\x00\x00\x00\x23\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x5d\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x23\x00\x00\x5d\x00\x00\x30\x00\x00\x63\x00\x00\x67\x00\x00\x6f\x00\x00\x73\x00\x00\x75\x00\x00\x00\x00\x00\x00\x00\x00\x29\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x76\x00\x00\x00\x00\x00\x30\x00\x00\x00\x00\x00\x32\x00\x00\x00\x00\x00\x34\x00\x00\x00\x00\x00\x36\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x3a\x00\x00\x67\x00\x00\x47\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x22\x00\x00\x5c\x00\x00\x00\x00\x11\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00");
 
