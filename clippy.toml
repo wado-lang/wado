@@ -1,7 +1,8 @@
 # `absolute_paths` (warn, see Cargo.toml) fires on any path not brought into
-# scope by a `use`. Only local paths are the target, so every crate we depend on
-# is allowed and `max-segments = 0` catches even a two-segment `crate::item`.
-# A new dependency reached by an absolute path belongs on this list.
+# scope by a `use`. Only local paths are the target: `max-segments = 0` catches
+# a two-segment `crate::item`, and the list below keeps every dependency and
+# workspace member out of it. A new dependency reached by an absolute path
+# belongs on the list.
 absolute-paths-max-segments = 0
 absolute-paths-allowed-crates = [
     "alloc",

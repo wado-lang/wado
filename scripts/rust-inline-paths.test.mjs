@@ -61,9 +61,9 @@ test("scans only the roots it is asked for", () => {
   );
 });
 
-test("locates every hit", () => {
+test("locates a hit by line and column", () => {
   const [hit] = findInlinePaths("fn f() {\n    let x = super::g();\n}");
-  assert.deepEqual({ line: hit.line, column: hit.column }, { line: 2, column: 13 });
+  assert.deepEqual(hit, { line: 2, column: 13, text: "super::" });
 });
 
 test("blanks non-code without moving any later offset", () => {

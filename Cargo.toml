@@ -195,11 +195,10 @@ opt-level = 0
 [workspace.lints.clippy]
 pedantic = { level = "warn", priority = -1 }
 disallowed_types = "warn"
-# A path to an item must be brought into scope by a `use`, not written inline
-# where it is read. This sees the `crate::` half; `mise run check-rust-paths`
-# covers `super::`, which no clippy lint reads. `clippy.toml` narrows it to
-# local paths. The corpus predates the rule, so it warns until the last one is
-# migrated, then becomes `deny`.
+# A path to an item belongs in a `use`, not inline where the item is read. This
+# sees the `crate::` half; `mise run check-rust-paths` covers `super::`, which no
+# clippy lint reads. `clippy.toml` narrows it to local paths. It warns until the
+# corpus that predates the rule is migrated, then becomes `deny`.
 absolute_paths = "warn"
 mod_module_files = "deny"
 redundant_clone = "warn"

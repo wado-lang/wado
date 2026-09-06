@@ -69,12 +69,13 @@ run = "scripts/check-highlight.sh"
 description = "Fail if the Gale highlight query drifts from the compiler's syntax registries"
 run = "cargo run --bin wado-dev-tools -- highlight-vocab"
 
+# Clippy's `absolute_paths` covers the `crate::` half of the same rule.
 [tasks.check-rust-paths]
-description = "Fail if a Rust file gained a `crate::` / `super::` path written outside a `use` item"
+description = "Fail if a Rust file gained a `super::` path written outside a `use` item"
 run = "node scripts/rust-inline-paths.mjs --check"
 
 [tasks.update-rust-paths-baseline]
-description = "Record what each Rust file still carries, ratcheting the inline-path baseline down"
+description = "Record the `super::` paths each Rust file still carries, ratcheting the baseline down"
 run = "node scripts/rust-inline-paths.mjs --update"
 
 [tasks.check-deps]

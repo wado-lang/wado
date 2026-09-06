@@ -23,7 +23,7 @@ test("leaves every file that is not Rust alone", () => {
   assert.equal(addedRust({}), "");
 });
 
-test("counts the paths it reports", () => {
+test("reports where every path is", () => {
   const reason = denialReason({ file_path: "a.rs", new_string: "crate::a();\nsuper::b();" })!;
   assert.match(reason, /line 1: crate::, line 2: super::/);
 });

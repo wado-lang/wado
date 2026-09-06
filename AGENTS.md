@@ -57,7 +57,7 @@ mise run report-wasm-size  # measures the size of the generated Wasm files and r
   - Invariants: state them as assertions, not comments. An assert is checked; a comment goes stale.
   - Docs: keep them concise. Don't document implementation details.
 - Avoid ad-hoc workarounds. Write proper code based on a sound design.
-- Name an item, don't spell out its path: a `crate::` or `super::` path belongs in a `use` item at the top of the module, never inline where the item is read. Clippy's `absolute_paths` reports the `crate::` half and `mise run check-rust-paths` the `super::` half, which no clippy lint reads. The corpus predates the rule, so both are ratchets: the CI check fails on a file that gains one, and `scripts/rust-inline-paths.json` records what is left to migrate.
+- Name an item, don't spell out its path: a `crate::` or `super::` path belongs in a `use` item at the top of the module, never inline where the item is read. Clippy's `absolute_paths` reports the `crate::` half. No clippy lint reads `super::`, so `mise run check-rust-paths` gates that half in CI against `scripts/rust-inline-paths.json`, which holds what each file has left to migrate.
 - Perform red/green TDD.
 - A compiler bug is always P0 — no exceptions. The instant you suspect one, stop all other work, and as the top priority write a minimal reproducible e2e fixture and fix it. A workaround that lets the current task proceed is never a reason to skip or defer any of these.
 - A pre-existing issue — whether you find it or a reviewer points it out — must be fixed, with TDD when practical.

@@ -1,25 +1,22 @@
-// A `crate::` or `super::` path must be brought into scope by a `use` item, not
-// written inline where it is read (AGENTS.md > General Rules).
+// A `crate::` or `super::` path belongs in a `use` item, not inline where the
+// item is read (AGENTS.md > General Rules). Clippy's `absolute_paths` gates the
+// `crate::` half; no clippy lint reads `super::`, so this gates that one. The
+// scan finds both, because the Claude Code edit guard shares it and has no
+// compiler to ask.
 //
-// Clippy's `absolute_paths` enforces the `crate::` half; no clippy lint reads
-// `super::`, so that half is enforced here. The scan finds both, because the
-// Claude Code edit guard has no compiler to ask and refuses either one.
+// The corpus predates the rule, so `rust-inline-paths.json` holds what each file
+// still carries and `--check` fails only on a file that grows past it.
 //
-// The corpus predates the rule, so `rust-inline-paths.json` records what each
-// file still carries and the check fails only on a file that grows past it.
-//
-// Usage:
-//   node scripts/rust-inline-paths.mjs           # list every `super::`
-//   node scripts/rust-inline-paths.mjs --check   # fail on a file over baseline
-//   node scripts/rust-inline-paths.mjs --update  # rewrite the baseline
+// Usage: node scripts/rust-inline-paths.mjs [--check | --update | <file>…]
 
 import { execFileSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
-export const BASELINE_PATH = fileURLToPath(new URL("rust-inline-paths.json", import.meta.url));
+const BASELINE_PATH = fileURLToPath(new URL("rust-inline-paths.json", import.meta.url));
 
-/** The half clippy cannot see, which is what this script gates. */
+const ALL_ROOTS = ["crate", "super"];
+/** The half clippy cannot see, which is the half this script gates. */
 const UNLINTED_ROOTS = ["super"];
 
 // `$crate` is macro hygiene, which no `use` can replace.
@@ -101,7 +98,7 @@ export function stripNonCode(source) {
     } else if (source[i] === "'") {
       const end = charLiteralEnd(source, i);
       if (end < 0) {
-        i++; // a lifetime, whose name is ordinary code
+        i++;
       } else {
         blank(i, end);
         i = end;
@@ -124,7 +121,7 @@ function useItemSpans(code) {
   const spans = [];
   for (const match of code.matchAll(USE_KEYWORD)) {
     // `impl Trait + use<'a, T>` is a capture list, not an import.
-    if (/^\s*</.test(code.slice(match.index + 3))) continue;
+    if (/^\s*</.test(code.slice(match.index + 3, match.index + 8))) continue;
     const semicolon = code.indexOf(";", match.index);
     spans.push([match.index, semicolon < 0 ? code.length : semicolon]);
   }
@@ -132,7 +129,7 @@ function useItemSpans(code) {
 }
 
 /** Every `roots` path written outside a `use` item, in source order. */
-export function findInlinePaths(source, roots = ["crate", "super"]) {
+export function findInlinePaths(source, roots = ALL_ROOTS) {
   const code = stripNonCode(source);
   const spans = useItemSpans(code);
   const lineStarts = [0];
@@ -144,12 +141,7 @@ export function findInlinePaths(source, roots = ["crate", "super"]) {
   for (const match of code.matchAll(inlinePath(roots))) {
     while (lineStarts[line] !== undefined && lineStarts[line] <= match.index) line++;
     if (spans.some(([from, to]) => match.index >= from && match.index < to)) continue;
-    hits.push({
-      index: match.index,
-      line,
-      column: match.index - lineStarts[line - 1] + 1,
-      text: match[0],
-    });
+    hits.push({ line, column: match.index - lineStarts[line - 1] + 1, text: match[0] });
   }
   return hits;
 }
@@ -161,7 +153,7 @@ function rustFiles() {
 }
 
 /** File path to the number of inline paths it carries, omitting the clean ones. */
-export function census(files, roots) {
+function census(files, roots) {
   const counts = {};
   for (const file of files) {
     const found = findInlinePaths(readFileSync(file, "utf8"), roots).length;

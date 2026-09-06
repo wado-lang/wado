@@ -1,8 +1,7 @@
 #!/usr/bin/env node
 // PreToolUse hook for the editing tools: refuse Rust text that names an item
-// through `crate::` or `super::` instead of importing it. Clippy reports the
-// `crate::` half and `mise run check-rust-paths` the `super::` half, but both
-// speak after the edit lands; this speaks before it.
+// through `crate::` or `super::` instead of importing it. Clippy and
+// `mise run check-rust-paths` report the same thing once the edit has landed.
 
 import { findInlinePaths } from "../../scripts/rust-inline-paths.mjs";
 
@@ -20,9 +19,9 @@ export function denialReason(toolInput: ToolInput): string | null {
   if (hits.length === 0) return null;
   const where = hits.map((hit) => `line ${hit.line}: ${hit.text}`).join(", ");
   return (
-    `this edit names an item through ${hits.length === 1 ? "a path" : "paths"} it does not import` +
-    ` (${where}). A \`crate::\` or \`super::\` path belongs in a \`use\` item at the top of the` +
-    " module (AGENTS.md > General Rules); name the item itself where it is read."
+    `this edit does not import everything it names (${where}). A \`crate::\` or` +
+    " `super::` path belongs in a `use` item at the top of the module" +
+    " (AGENTS.md > General Rules); where the item is read, write its name."
   );
 }
 
@@ -33,8 +32,8 @@ if (import.meta.main) {
   try {
     reason = denialReason(JSON.parse(input)?.tool_input);
   } catch {
-    // A guard that cannot read the edit stays out of the way: the CI check and
-    // clippy still see whatever lands.
+    // A guard that cannot read the edit stays out of the way; clippy and the CI
+    // check still see what lands.
   }
   if (reason) {
     process.stdout.write(
