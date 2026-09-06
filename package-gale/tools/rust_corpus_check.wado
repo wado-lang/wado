@@ -152,8 +152,18 @@ export fn run() with (Stdout, Stderr, Environment, Preopens) {
             } else {
                 bad += 1;
                 let first = result.diagnostics[0];
+                // The rule stack, not the message: recovery restarts at an item
+                // boundary, so every failure inside one reports the same
+                // "expected KW_EXTERN" and the stack is what names the rule.
+                let mut stack = String::new();
+                for let rule of &first.rule_stack {
+                    if !stack.is_empty() {
+                        stack.push('<');
+                    }
+                    stack.push_str(rule);
+                }
                 println(
-                    `ng\t${*path}\t${result.diagnostics.len()}\t${line_of(&source, first.span.start)}\t${first.message}`,
+                    `ng\t${*path}\t${result.diagnostics.len()}\t${line_of(&source, first.span.start)}\t${first.message}\t${stack}`,
                 );
             }
         } else {
