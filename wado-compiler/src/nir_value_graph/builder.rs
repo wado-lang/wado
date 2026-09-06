@@ -438,6 +438,10 @@ struct Builder<'a> {
     /// Versions are monotonic and never reused, so a write or branch join
     /// bumps past a stale entry — no invalidation needed.
     field_store: IndexMap<(ValueId, u32, HeapVersion), ValueId>,
+    /// Serial number of this walk, so a `vg_field` seed line and a miss line
+    /// from one body can be told from two. The graph is per-body and rebuilt
+    /// across fixed-point rounds, and nothing else in it names which.
+    trace_id: u32,
     /// Reference-aliased locals; their field writes / calls invalidate
     /// conservatively. See [`build`].
     aliased: crate::hashmap::IndexSet<u32>,
@@ -497,6 +501,11 @@ impl<'a> Builder<'a> {
             current_value: IndexMap::default(),
             heap_state: HeapState::new(),
             field_store: IndexMap::default(),
+            trace_id: {
+                use std::sync::atomic::{AtomicU32, Ordering};
+                static NEXT: AtomicU32 = AtomicU32::new(0);
+                NEXT.fetch_add(1, Ordering::Relaxed)
+            },
             aliased: aliased.clone(),
             untrackable: untrackable.clone(),
             mut_escaped: mut_escaped.clone(),
@@ -1132,12 +1141,18 @@ impl<'a> Builder<'a> {
                 // Store→load forwarding: a value stored to this exact
                 // `(receiver, field, version)` is the value this read sees.
                 if let Some(&stored) = self.field_store.get(&(recv, field_index, heap_ver)) {
+                    crate::compiler_trace!(
+                        "vg_field",
+                        "[{}] hit: recv={recv:?} field={field_index} -> {stored:?}",
+                        self.trace_id
+                    );
                     return Some(stored);
                 }
                 crate::compiler_trace!(
                     "vg_field",
-                    "miss: recv={recv:?} field={field_index} root={root:?} ver={heap_ver:?}, \
+                    "[{}] miss: recv={recv:?} field={field_index} root={root:?} ver={heap_ver:?}, \
                      {} store(s) seeded for that field",
+                    self.trace_id,
                     self.field_store
                         .keys()
                         .filter(|(_, f, _)| *f == field_index)
@@ -1343,15 +1358,12 @@ impl<'a> Builder<'a> {
         // Clone out the (field_index, value-expr) pairs to release the body
         // borrow before mutating `field_store`.
         let pairs: Vec<(u32, Operand)> = fields.iter().map(|f| (f.field_index, f.value)).collect();
-        crate::compiler_trace!(
-            "vg_field",
-            "seed local {root}: {} fields of {}",
-            pairs.len(),
-            match &self.body.exprs[producer].kind {
-                ExprKind::StructLiteral { struct_name, .. } => struct_name.clone(),
-                _ => String::new(),
-            }
-        );
+        let struct_name = match &self.body.exprs[producer].kind {
+            ExprKind::StructLiteral { struct_name, .. } => struct_name.clone(),
+            _ => String::new(),
+        };
+        let attempted = pairs.len();
+        let mut seeded = 0;
         for (field_index, field_value) in pairs {
             // A promoted constant field is its own `ValueId`; a skeleton field is
             // resolved through `value_of`.
@@ -1362,8 +1374,14 @@ impl<'a> Builder<'a> {
             if let Some(fv) = fv {
                 let ver = self.heap_version_of(Some(root), field_index);
                 self.field_store.insert((recv, field_index, ver), fv);
+                seeded += 1;
             }
         }
+        crate::compiler_trace!(
+            "vg_field",
+            "[{}] seed local {root} ({struct_name}): {seeded} of {attempted} fields, recv={recv:?}",
+            self.trace_id
+        );
     }
 
     /// Copy `src`'s currently-live field slots onto the new binding

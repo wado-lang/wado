@@ -219,14 +219,17 @@ Missing optimizations, one entry per pass-shaped gap. Architectural work — com
       the branch afterwards, too late. Deleting the branch from `char::fmt`
       makes the template fold to a literal outright.
 
-      Measured, `WADO_TRACE=vg_field`: the `Formatter`'s nine fields *are*
-      seeded, and every `width` read still reports no store seeded for that
-      field — so seed and read do not meet, rather than a version invalidating
-      between them. Which of the two it is needs the trace to name its function;
-      it does not today, and the value graph has no other anchor. Hand-written
-      programs do not show it: the same shape at top level, in a labeled block,
-      through a trait method, with a `&mut` field and a non-inlinable `&mut`
-      call in the other arm, all fold.
+      Measured, `WADO_TRACE=vg_field`: the value graph forwards it. The
+      `Formatter` literal seeds eight of its nine fields (`buf`, a `&mut`, is
+      the one it cannot), and the `width` read hits that store. So the graph is
+      not what stops this — the consumer is, and where it stops is the next
+      thing to find: whether `store_load_forward` never sees the graph that
+      forwarded (`ensure_value_graph` caches per body, so a rule that ran before
+      the round the literal settled in reads an older one), or sees it and the
+      branch is pruned too late. Hand-written programs do not show any of it:
+      the same shape at top level, in a labeled block, through a trait method,
+      with a `&mut` field and a non-inlinable `&mut` call in the other arm, all
+      fold.
 
       `sroa` declines the same struct for its own reason — `&mut candidate` is a
       hard escape, exempting only a shared `&` argument to a non-storing callee
