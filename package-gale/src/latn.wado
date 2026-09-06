@@ -28,7 +28,12 @@ use {
     find_lexer_rule,
 } from "./ir.wado";
 use { Atn, AtnState, AtnTransition } from "./atn.wado";
-use { resolve_ci, fold_range_ci } from "./lexer_gen.wado";
+use {
+    resolve_ci,
+    fold_range_ci,
+    lexer_alts_scan,
+    lexer_alts_can_collide,
+} from "./lexer_gen.wado";
 use {
     ATN_BASIC,
     ATN_RULE_START,
@@ -85,8 +90,59 @@ pub fn grammar_needs_latn(grammar: &Grammar) -> bool {
 ///   holds the `(CMT|.)+?`). The simulator inlines referenced rules, so
 ///   handling this means flagging the owning token rule as the entry; left
 ///   for when a grammar needs it.
-pub fn lexer_rule_is_atn_class(rule: &LexerRule, all_rules: &List<LexerRule>) -> bool {
-    return scan_recursive_ng(&rule.name, &rule.body, all_rules);
+/// - A greedy repeat whose body alternation has arms that can both match at
+///   one position and reach different lengths is routed here too. That is the
+///   `'"' (~["] | '\\' ['"])* '"'` shape, and no static policy decides it:
+///   first-match takes the arm written first (the backslash alone, ending the
+///   token at an escaped quote), maximal munch takes the longest arm (which
+///   strands the suffix in `('a' | 'ab')* 'b'`), and scoring the arms on a
+///   forward scan needs that scan to make the same choice again. The rule
+///   class is regular, so the simulator decides it running the arms together,
+///   in one pass over the text.
+pub fn lexer_rule_is_atn_class(rule: &LexerRule, all_rules: &List<LexerRule>, ci: bool = false) -> bool {
+    return scan_recursive_ng(&rule.name, &rule.body, all_rules)
+        || scan_undecidable_arms(&rule.body, all_rules, ci);
+}
+
+/// A greedy repeat directly in `alts` whose body is an alternation the static
+/// emit cannot choose between: the arms overlap at a position and are not all
+/// the same length there. Fixed-length arms make first-match ANTLR4's answer,
+/// and arms that cannot both match make the choice no choice at all.
+fn scan_undecidable_arms(alts: &List<LexerAlternative>, all_rules: &List<LexerRule>, ci: bool) -> bool {
+    for let alt of alts {
+        for let elem of &alt.elements {
+            if scan_undecidable_arms_elem(elem, all_rules, ci) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+fn scan_undecidable_arms_elem(elem: &LexerElement, all_rules: &List<LexerRule>, ci: bool) -> bool {
+    match *elem {
+        Repeat(rep) => {
+            if !rep.non_greedy && rep.kind matches { Star | Plus } {
+                if let Group(inner) = &rep.element {
+                    if inner.len() >= 2
+                        && lexer_alts_scan(inner, all_rules) matches { Longest }
+                        && lexer_alts_can_collide(inner, all_rules, ci) {
+                        return true;
+                    }
+                }
+            }
+            return scan_undecidable_arms_elem(&rep.element, all_rules, ci);
+        },
+        Group(inner) => {
+            return scan_undecidable_arms(&inner, all_rules, ci);
+        },
+        Not(n) => {
+            return scan_undecidable_arms_elem(&n.element, all_rules, ci);
+        },
+        RuleRef(_) | Literal(_) | CharRange(_) | CharClass(_) | AnyChar => {
+            return false;
+        },
+    }
 }
 
 fn scan_recursive_ng(name: &String, alts: &List<LexerAlternative>, all_rules: &List<LexerRule>) -> bool {

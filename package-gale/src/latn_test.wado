@@ -12,14 +12,16 @@ fn cmt_match(grammar_src: String, input: String) -> i32 {
     return match_rule(grammar_src, "CMT", input);
 }
 
-fn match_rule(grammar_src: String, rule: String, input: String) -> i32 {
+/// `longest` is what a non-greedy subrule turns off: `CMT` ends at the first
+/// `*/`, not the last, so its accept is the earliest one and not the furthest.
+fn match_rule(grammar_src: String, rule: String, input: String, longest: bool = false) -> i32 {
     let g = parse(grammar_src).unwrap();
     let built = build_latn(&g);
     let blob = atn_blob_bytes(&built.atn);
     let sim = atn_decode(&blob);
     let idx = built.rule_index.get(rule).unwrap();
     let chars: List<char> = input.chars().collect();
-    return latn_match(&sim, idx, &chars, 0);
+    return latn_match(&sim, idx, &chars, 0, longest);
 }
 
 global PLUS_G: String = "lexer grammar L;
