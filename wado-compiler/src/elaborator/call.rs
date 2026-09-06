@@ -338,9 +338,8 @@ impl TypeSystem {
                 type_param_type_id: type_id,
             };
         }
-        // Consumed as a declaration name: `is_static_method` and
-        // `locate_static_method_impl` key on what an `impl` header
-        // writes, which carries no module.
+        // Consumed as a declaration name: the static resolution keys on what an
+        // `impl` header writes, which carries no module.
         let concrete_name = self.type_table.borrow().fq_type_name(type_id).to_display();
         CalleeIdentKind::Rewritten(format!("{concrete_name}::{suffix}"))
     }
@@ -1361,9 +1360,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let trait_name = method_ref.trait_name.clone();
                     let struct_module = method_ref.module.clone();
 
-                    // The bare `Type::method` branch records this edge, but
-                    // `is_static_method("ns", "Type::method")` declines, so a
-                    // namespaced call lands here instead. `ident` is
+                    // The bare `Type::method` branch records this edge, but the
+                    // spelling `ns::Type::method` resolves no static under the
+                    // name `ns`, so a namespaced call lands here. `ident` is
                     // `ns::Type::method`, so the method is its third segment —
                     // the position `record_namespaced_case` also reads.
                     if let Some(method_seg) = ident.segments.get(2)
@@ -1733,7 +1732,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // the same FunctionRef shape (module_source, mangled name,
         // method_info) without re-running the dispatch logic. The
         // static-method path already records via the early-return at
-        // the `is_static_method` arm; this covers the remaining
+        // its own arm; this covers the remaining
         // shapes (`println(x)`, `builtin::array_new(n)`,
         // `ns::foo(x)` for use-namespaced imports).
         let key = call.id;
@@ -1965,7 +1964,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         sig.decl.type_params.iter().map(|(_, id)| *id).collect(),
                     ));
                 }
-                // `is_static_method` above declines the `ns::Type::method`
+                // The signature read above declines the `ns::Type::method`
                 // shape, so the receiver resolves through the namespace instead.
                 if let Some((type_name, method_name)) = suffix.split_once("::")
                     && let Some(def) = self.namespace_member(prefix, type_name)

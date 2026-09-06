@@ -8,17 +8,18 @@ one of them has to answer the same questions — is this a static at all, which
 declaration does it name, what are its parameters, what does it return, what
 type parameters does it take.
 
-Thirteen lookups answered those questions, each walking its own subset of one
+Sixteen lookups answered those questions, each walking its own subset of one
 ladder in its own order:
 
 ```
-is_static_method_at / is_static_method     locate_static_method_impl
-has_inherent_static_method                 declares_method_directly
-qualified_method_sig_keyed                 unique_qualified_method_sig_keyed
-qualified_call_param_types                 lookup_static_method_param_types_keyed
-lookup_static_method_return_type           lookup_static_method_type_params
-find_blanket_static_method                 static_method_entry
-agreed_qualified_method_return
+is_static_method                 is_static_method_at
+locate_static_method_impl        has_inherent_static_method
+declares_method_directly         find_static_method_trait
+qualified_method_sig             qualified_method_sig_keyed
+unique_qualified_method_sig      unique_qualified_method_sig_keyed
+qualified_call_param_types       lookup_static_method_param_types_keyed
+lookup_static_method_return_type lookup_static_method_type_params
+agreed_qualified_method_return   find_blanket_static_method
 ```
 
 The rungs they walked are the same ones: the receiver's own declarations, its
@@ -52,27 +53,44 @@ is out of reach from a bare-name key.
 
 ### Four outcomes, each meaning one thing
 
-| | |
-| --- | --- |
-| `Found` with `params: Some` | one declaration, with lists read at the receiver |
-| `Found` with `params: None` | resolves, but no list this call can check against |
-| `Ambiguous` | several traits supply the name; no argument can pick |
-| `NotStatic` | a variant case or a flags member owns the name |
+|                             |                                                      |
+| --------------------------- | ---------------------------------------------------- |
+| `Found` with `params: Some` | one declaration, with lists read at the receiver     |
+| `Found` with `params: None` | resolves, but no list this call can check against    |
+| `Ambiguous`                 | several traits supply the name; no argument can pick |
+| `NotStatic`                 | a variant case or a flags member owns the name       |
 
-The thirteen lookups differed less on *where they looked* than on what they did
-when they did not fully find something, so each of these had to be named:
+The lookups differed less on _where they looked_ than on what they did when they
+did not fully find something, so each of these had to be named:
 
 - A rung that cannot resolve falls through to the next. It is not a spelling
   that names nothing.
 - A declaration whose slots the receiver has not filled resolves, and has a
   return type. Only its parameter list is unusable, so the optionality sits on
-  the list — `params: Option<CalleeParams>` — and never hides the rest.
-  `declared_param_types` carries the unfilled list for the call site to
-  substitute into.
+  the list — `params: Option<CalleeParams>` — and never hides the rest. An
+  unfilled list is not offered in its place: it says the call takes a `T`, which
+  no argument is.
 - An overloaded name picks no declaration until an argument does, so
   `method_ref` is `Option` too. Its return type still answers where every
   candidate agrees: each `From` impl on a receiver returns it.
 - An empty list is not "takes nothing".
+
+### A rule kept in structure has to be restated as data
+
+Choosing which lookup to call _was_ the rule. `has_inherent_static_method`
+existing as its own function was the shadowing rule; `impl_method_entries`'
+ordering was the qualifier that shadowing holds only within a kind;
+`locate_static_method_impl` returning the impl's module while `TraitSig` holds
+the trait's was how a call got the right one of the two. None of that survives
+the merge on its own, so the resolution states each:
+
+- An inherent declaration shadows an inherited one, and only of the same kind: a
+  receiver-less declaration beside an instance one is no alternative, since
+  different argument lists reach them.
+- A trait impl's declaration is mangled with its trait. Taken as inherent it
+  names a body nothing declares.
+- An inherited default body has two modules — the block's, where the body is
+  emitted and the call must point, and the trait's, where its defaults resolve.
 
 ### Resolving is not free
 
@@ -85,7 +103,7 @@ receiver up front made a lookup mutate state on paths that never used it, and
 
 ## Roadmap
 
-- [x] `resolve_static_callee` and the four outcomes.
+- [x] `resolve_static_callee` and its outcomes.
 - [x] The identity question: `is_static_method_at`, `is_static_method`.
 - [x] The signature questions: `lookup_static_method_type_params`,
       `static_callee_params`, `qualified_call_param_types`,
@@ -95,8 +113,13 @@ receiver up front made a lookup mutate state on paths that never used it, and
       different declarations.
 - [ ] The blanket path. `find_blanket_static_method` and the blanket arm of
       `lookup_static_method_param_types_keyed` key on the blanket's receiver
-      *parameter*, which no name written at a call site reaches. Folding them in
+      _parameter_, which no name written at a call site reaches. Folding them in
       means the resolution answers for a receiver it cannot key on directly.
+
+Thirteen of the sixteen lookups are gone. The three that remain ask a different
+question — the declaration's own frame, for a caller that will instantiate it,
+and the blanket keyed on its receiver parameter — and they agree with each
+other. Unifying them further is symmetry, not this WEP's decision.
 
 ## Known gaps
 

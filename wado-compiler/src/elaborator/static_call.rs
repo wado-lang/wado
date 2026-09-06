@@ -1,11 +1,7 @@
-//! The one walk behind a `Type::method(...)` spelling.
-//!
-//! Every question a static call asks — whether the spelling names a static at
-//! all, which declaration it picked, what that declaration's parameters, return
-//! type and type parameters are — is answered from a single resolution. The
-//! lookups this replaced each walked their own subset of the ladder in their
-//! own order, so two of them could disagree about one call: the spelling
-//! resolved, and its signature did not.
+//! The one walk behind a `Type::method(...)` spelling: whether it names a
+//! static, which declaration, and that declaration's parameters, return type
+//! and slots, all from a single resolution.
+//! See `docs/wep-2026-09-06-static-call-resolution.md`.
 
 use crate::ast;
 use crate::compiler_host::CompilerHost;
@@ -19,25 +15,18 @@ use super::trait_env::ImplTargetKey;
 
 /// What one `Type::method(...)` spelling names.
 pub(super) struct StaticCallee {
-    /// The declaration picked: where it lives, the trait it came through, and
-    /// the identity a call is mangled and a use→def edge recorded from.
-    ///
-    /// `None` alongside a `None` `params`: a name several declarations answer
-    /// to picks none of them until an argument does.
+    /// Where the declaration lives, the trait it came through, and the identity
+    /// a call is mangled and a use→def edge recorded from. `None` where several
+    /// declarations answer and only an argument separates them.
     pub(super) method_ref: Option<StaticMethodRef>,
-    /// The declaration's lists, read at the receiver: what the call checks and
-    /// pads against.
-    ///
-    /// `None` where the spelling resolves but no list it can be checked against
-    /// comes with it — several declarations an argument picks among, or a
-    /// generic block whose slots the receiver did not fill. The call site
-    /// substitutes from its own inference and counts its own arguments, as it
-    /// did before any lookup answered. The return type is known either way.
+    /// The lists the call checks and pads against, read at the receiver.
+    /// `None` where no list it can be checked against comes with the
+    /// resolution: the call site substitutes from its own inference and counts
+    /// its own arguments.
     pub(super) params: Option<CalleeParams>,
     /// The method's own slots as its declaration wrote them.
     pub(super) own_params: Vec<ast::GenericParam>,
     /// What the call evaluates to, read at the receiver as `params` is.
-    /// `UNKNOWN` where the declaration names no return type.
     pub(super) return_type: TypeId,
 }
 
@@ -104,38 +93,28 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             None => self.impl_target_at(site, receiver_name),
         };
 
-        // An inherent declaration shadows every inherited one, as dot syntax
-        // resolves it: selecting a trait's would mangle the call to a body the
-        // spelling does not name. Both kinds of method, receiver-less first —
-        // the spelling admits an instance one, writing the receiver as its
-        // first argument.
-        // Several declarations of one name are an overload only an argument
-        // separates. Committing to the first would decide it here, so the rung
-        // declines and the selection below — which reads the argument — picks.
+        // The receiver's own declaration, which shadows every inherited one as
+        // dot syntax does — but only of the same kind: a receiver-less
+        // declaration beside an instance one is no alternative, since different
+        // argument lists reach them. A trait impl's declaration falls to the
+        // selection below, which names the trait its call is mangled with, and
+        // several of one kind are an overload only an argument separates.
         let (inherent, overloaded) = {
             let entries: Vec<(DefId, bool, bool)> = self
                 .impl_method_entries(&key, method_name)
                 .map(|entry| (entry.method_id, entry.has_self, entry.is_inherent()))
                 .collect();
             let first = entries.first().copied();
-            // Only the same kind counts: two receiver-less declarations of one
-            // name are an overload an argument separates, while a receiver-less
-            // one beside an instance one is the per-kind shadowing the index has
-            // already applied — different argument lists reach them.
-            let alternatives = first.map_or(0, |(_, has_self, _)| {
+            let same_kind = first.map_or(0, |(_, has_self, _)| {
                 entries
                     .iter()
                     .filter(|(_, kind, _)| *kind == has_self)
                     .count()
             });
-            // Only a declaration the receiver makes itself: a trait impl's is
-            // reached through the selection below, which names the trait its
-            // call is mangled with. Named without one, the call reaches WIR
-            // build as a body nothing declares.
             let inherent = first
-                .filter(|&(_, _, inherent)| inherent && alternatives == 1)
+                .filter(|&(_, _, inherent)| inherent && same_kind == 1)
                 .map(|(def, _, _)| def);
-            (inherent, alternatives > 1)
+            (inherent, same_kind > 1)
         };
         if let Some(def) = inherent
             && let Some(resolved) =
@@ -175,20 +154,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return resolved;
         }
 
-        // An overload with no argument to read cannot be picked here at all:
-        // the selection below takes the first candidate, which is the wrong one
-        // as often as not. The call site resolves it from its arguments, and
-        // the return type still answers where every candidate agrees — each
-        // `From` impl returns the receiver, so the pick cannot change it.
+        // With no argument to read, the selection below would take the first
+        // candidate, which is the wrong one as often as not.
         if overloaded && arg_hint.is_none() {
             return self.overloaded_callee(&key, method_name);
         }
 
         // `receiver_key` as the caller gave it, not the key derived above: a
         // derived one narrows the search to a declaration the impls may not be
-        // indexed under, and a primitive's `impl FromStr for f32` is then out
-        // of reach. Where the caller resolved a key at its own reference site
-        // — a namespace-qualified receiver — that key is the vantage.
+        // indexed under, putting a primitive's `impl FromStr for f32` out of
+        // reach.
         let through_traits = self.resolve_static_callee_through_traits(
             receiver_name,
             &key,
@@ -235,17 +210,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         receiver_type: Option<TypeId>,
     ) -> StaticLookup {
         // Two traits supplying the name leaves the spelling naming neither.
-        // Unreported, the call is built to whichever impl came first and
-        // reaches codegen as a module nothing validates.
         let declaring = self.traits_inheriting_static(key, method_name);
         if declaring.len() > 1 {
             return StaticLookup::Ambiguous(
                 declaring.into_iter().map(|(_, _, name)| name).collect(),
             );
         }
-        // The one trait's own declaration is where an inherited method's
-        // signature lives: `method_sig` answers for what an `impl` block
-        // declares, and this method is declared nowhere but the trait.
+        // An inherited method is declared nowhere but the trait, so that is
+        // where its signature is read from.
         if let Some((decl, impl_def)) = declaring
             .first()
             .map(|&(decl, impl_def, _)| (decl, impl_def))
@@ -309,8 +281,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let declaring = self.tysys.signatures.trait_sig(trait_decl)?;
         // Two modules, and a call needs both: the body is emitted for the block
         // that inherits it, so that is what the call names, while the defaults
-        // are the trait's and resolve where it wrote them. Naming the trait's
-        // for both mints an extern stub for a body the package defines.
+        // are the trait's and resolve where it wrote them.
         let module = self.tysys.resolutions.defs().module(impl_def).clone();
         let sig = declaring.method(method_name)?.sig.clone();
         let mut params = CalleeParams::of_signature(Some(&sig));
@@ -425,11 +396,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let mut params = CalleeParams::of_signature(Some(&sig));
         let mut return_type = sig.decl.return_type.unwrap_or(TypeTable::UNIT);
         let mut listed = true;
-        // A trait's own declaration — the method a block inherits with its
-        // default body — is written in the trait's frame, where `Self` leads
-        // the slots. Read it at the receiver, or every type it names stays a
-        // slot the call site cannot check against. A caller asking only whether
-        // the spelling resolves brings no receiver type and reads neither.
+        // A trait's own declaration is written in the trait's frame, where
+        // `Self` leads the slots, so it is read at the receiver. A caller asking
+        // only whether the spelling resolves brings none, and reads neither.
         if sig.declaring_impl.is_none()
             && let Some(receiver_type) = receiver_type
         {
@@ -438,10 +407,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return_type = instantiated.return_type;
         }
         // A generic block's slots are the receiver's arguments — `ByteList`
-        // fills `List<T>`'s `T` with `u8`. Reported unfilled, the list says the
-        // call takes a `T`, which no argument is; reported empty, it says the
-        // call takes nothing. Where the receiver brings no arguments, this
-        // lookup has no list to offer at all.
+        // fills `List<T>`'s `T` with `u8`. Unfilled, the list says the call
+        // takes a `T`, which no argument is; empty, that it takes nothing. So
+        // where the receiver brings no arguments there is no list to offer.
         if let Some(impl_def) = sig.declaring_impl
             && let Some(declaring) = self.tysys.signatures.impl_sig(impl_def).cloned()
             && !declaring.target_type_args.is_empty()
