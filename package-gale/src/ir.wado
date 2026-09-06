@@ -187,6 +187,9 @@ pub struct Grammar {
     /// Grammar-level `@name { ... }` / `@scope::name { ... }` actions,
     /// in declaration order.
     pub named_actions: List<NamedAction>,
+    /// Grammars this one delegates to (`import S,T;`), in declaration order.
+    /// `compose_grammars` binds each to a supplied input declaring that name.
+    pub imports: List<String> = [],
     /// Host language of action / predicate bodies (`options { language = X }`).
     /// Defaulted `Java` (ANTLR4's default target and the corpus's language).
     pub action_language: ActionLanguage = ActionLanguage::Java,
@@ -1187,6 +1190,7 @@ pub fn merge_grammars(grammars: List<Grammar>) -> Grammar {
     let mut channels: List<String> = [];
     let mut options: List<GrammarOption> = [];
     let mut named_actions: List<NamedAction> = [];
+    let mut imports: List<String> = [];
     let mut pending_refs: List<PendingRef> = [];
     let mut source_files: List<String> = [];
     // Carry a non-default action language from whichever split declares one
@@ -1208,6 +1212,13 @@ pub fn merge_grammars(grammars: List<Grammar>) -> Grammar {
         // Concatenate source paths so every input contributes a provenance entry.
         for let sf of &g.source_files {
             source_files.push(*sf);
+        }
+        // Either half of a split grammar may name delegates; the composite
+        // imports the union, first declaration deciding the order.
+        for let im of &g.imports {
+            if !imports.contains(im) {
+                imports.push(*im);
+            }
         }
         // Concatenate pending refs from every split so `check_references`
         // can resolve cross-file references (token refs in a parser grammar
@@ -1236,42 +1247,10 @@ pub fn merge_grammars(grammars: List<Grammar>) -> Grammar {
         for let act of &g.named_actions {
             named_actions.push(scoped_by_declaring_kind(act, &g.kind));
         }
-        // Build mode index remapping table for this grammar
-        let mut remap: List<i32> = [];
-        for let mn of &g.mode_names {
-            let idx = find_or_add_mode(&mut mode_names, mn);
-            remap.push(idx);
-        }
-        // Build channel id remapping table. User channels start at id 2
-        // (0=DEFAULT, 1=HIDDEN). Preserve existing ids when names line up.
-        let mut chan_remap: List<i32> = [];
-        for let cn of &g.channels {
-            let id = find_or_add_channel(&mut channels, cn);
-            chan_remap.push(id);
-        }
         for let r of g.parser_rules {
             parser_rules.push(r);
         }
-        for let mut r of g.lexer_rules {
-            // Remap mode indices
-            r.mode = remap[r.mode];
-            if r.push_mode >= 0 {
-                r.push_mode = remap[r.push_mode];
-            }
-            if r.set_mode >= 0 {
-                r.set_mode = remap[r.set_mode];
-            }
-            // Remap NAME-declared channel ids (>= 2; 0 and 1 are predefined)
-            // to their position in the merged channel list. A numeric
-            // `channel(N)` literal is an explicit id that does not come from
-            // the source grammar's `channels { }` block, so it has no
-            // `chan_remap` entry — leave it unchanged rather than remapping.
-            if r.channel >= 2 {
-                let src_idx = r.channel - 2;
-                if src_idx < chan_remap.len() {
-                    r.channel = chan_remap[src_idx];
-                }
-            }
+        for let r of rebase_lexer_rules(g, &mut mode_names, &mut channels) {
             lexer_rules.push(r);
         }
     }
@@ -1294,6 +1273,7 @@ pub fn merge_grammars(grammars: List<Grammar>) -> Grammar {
         channels,
         options,
         named_actions,
+        imports,
         action_language,
         pending_refs,
         source_files,
@@ -1302,8 +1282,276 @@ pub fn merge_grammars(grammars: List<Grammar>) -> Grammar {
     };
 }
 
+/// Every supplied grammar as one: split halves concatenate, and a grammar
+/// another's `import` names folds in as a delegate. Contract in `import.md`.
+pub fn compose_grammars(grammars: List<Grammar>) -> Result<Grammar, ParseError> {
+    let by_name = index_by_name(&grammars)?;
+    let delegate_names = imported_names(&grammars);
+    if delegate_names.is_empty() {
+        return Result::Ok(merge_grammars(grammars));
+    }
+    let mut master_ids: List<i32> = [];
+    let mut masters: List<Grammar> = [];
+    for let mut i = 0; i < grammars.len(); i += 1 {
+        if !delegate_names.contains(&grammars[i].name) {
+            master_ids.push(i);
+            masters.push(grammars[i]);
+        }
+    }
+    if masters.is_empty() {
+        return Result::Err(
+            ParseError::new(
+                "every supplied grammar is imported by another — no master grammar to compose",
+                Span::new(0, 0),
+                ["a grammar that no import names"],
+            ),
+        );
+    }
+    let mut composite = merge_grammars(masters);
+    let order = delegate_order(&composite.imports, &grammars, &by_name)?;
+    check_all_reached(&grammars, &master_ids, &order)?;
+    for let idx of order {
+        import_delegate(&mut composite, &grammars[idx]);
+    }
+    drop_empty_modes(&mut composite);
+    return Result::Ok(composite);
+}
+
+/// Every name some grammar's `import` lists, in first-declaration order.
+fn imported_names(grammars: &List<Grammar>) -> List<String> {
+    let mut names: List<String> = [];
+    for let g of grammars {
+        for let im of &g.imports {
+            if !names.contains(im) {
+                names.push(*im);
+            }
+        }
+    }
+    return names;
+}
+
+/// Every input contributes to the composite, as a master or through an import.
+/// One in neither list was dropped, which composition must never do silently.
+fn check_all_reached(grammars: &List<Grammar>, master_ids: &List<i32>, order: &List<i32>) -> Result<(), ParseError> {
+    let mut reached: List<bool> = [];
+    for let mut i = 0; i < grammars.len(); i += 1 {
+        reached.push(false);
+    }
+    for let i of master_ids {
+        reached[*i] = true;
+    }
+    for let i of order {
+        reached[*i] = true;
+    }
+    for let mut i = 0; i < reached.len(); i += 1 {
+        if !reached[i] {
+            return Result::Err(
+                ParseError::new(
+                    `supplied grammar "${grammars[i].name}" reaches the composite neither as a master nor through an import`,
+                    Span::new(0, 0),
+                    ["a grammar the master imports, directly or transitively"],
+                ),
+            );
+        }
+    }
+    return Result::Ok(());
+}
+
+/// Each grammar's index by declared name. An import resolves through this, so
+/// building it is where a name two inputs both claim is caught.
+fn index_by_name(grammars: &List<Grammar>) -> Result<TreeMap<String, i32>, ParseError> {
+    let mut by_name = TreeMap::<String, i32>::new();
+    for let mut i = 0; i < grammars.len(); i += 1 {
+        if !by_name.try_insert(grammars[i].name, i) {
+            return Result::Err(
+                ParseError::new(
+                    `two supplied inputs declare grammar "${grammars[i].name}"`,
+                    Span::new(0, 0),
+                    ["one input per declared grammar name"],
+                ),
+            );
+        }
+    }
+    return Result::Ok(by_name);
+}
+
+/// Indices into `grammars` of every delegate the master reaches, depth-first
+/// in import order. This order decides which version of a rule survives.
+fn delegate_order(
+    imports: &List<String>,
+    grammars: &List<Grammar>,
+    by_name: &TreeMap<String, i32>,
+) -> Result<List<i32>, ParseError> {
+    let mut order: List<i32> = [];
+    let mut visited: List<String> = [];
+    for let name of imports {
+        visit_delegate(name, grammars, by_name, &mut order, &mut visited)?;
+    }
+    return Result::Ok(order);
+}
+
+fn visit_delegate(
+    name: &String,
+    grammars: &List<Grammar>,
+    by_name: &TreeMap<String, i32>,
+    order: &mut List<i32>,
+    visited: &mut List<String>,
+) -> Result<(), ParseError> {
+    if visited.contains(name) {
+        return Result::Ok(());
+    }
+    visited.push(*name);
+    let Some(found) = by_name.get(*name) else {
+        return Result::Err(
+            ParseError::new(
+                `imported grammar "${*name}" is not among the supplied inputs`,
+                Span::new(0, 0),
+                ["a supplied grammar declaring that name"],
+            ),
+        );
+    };
+    order.push(found);
+    for let im of &grammars[found].imports {
+        visit_delegate(im, grammars, by_name, order, visited)?;
+    }
+    return Result::Ok(());
+}
+
+/// Fold one delegate into the composite: every rule whose name is still free.
+/// A rule the composite already defines is dropped with its own references.
+fn import_delegate(acc: &mut Grammar, d: &Grammar) {
+    let mut dropped: List<String> = [];
+    for let r of &d.parser_rules {
+        if find_parser_rule(&acc.parser_rules, &r.name) matches { Some(_) } {
+            dropped.push(r.name);
+            continue;
+        }
+        acc.parser_rules.push(*r);
+    }
+
+    for let r of rebase_lexer_rules(d, &mut acc.mode_names, &mut acc.channels) {
+        let at = find_lexer_rule_index(&acc.lexer_rules, &r.name);
+        if at < 0 {
+            acc.lexer_rules.push(r);
+            continue;
+        }
+        // One token space: a `tokens { }` placeholder yields its slot to a real
+        // rule wherever that rule comes from, so `DelegatesSeeSameTokenType`
+        // composes three declarations of `A` into one token.
+        if acc.lexer_rules[at].is_virtual && !r.is_virtual {
+            acc.lexer_rules[at] = r;
+        } else {
+            dropped.push(r.name);
+        }
+    }
+
+    for let pr of &d.pending_refs {
+        if dropped.contains(&pr.containing_rule) {
+            continue;
+        }
+        acc.pending_refs.push(*pr);
+    }
+    for let act of &d.named_actions {
+        acc.named_actions.push(scoped_by_declaring_kind(act, &d.kind));
+    }
+    for let sf of &d.source_files {
+        acc.source_files.push(*sf);
+    }
+}
+
+/// Discard a mode an override emptied (`doc/grammars.md`). A mode a surviving
+/// `pushMode` / `mode` command targets is kept, or the command would dangle.
+fn drop_empty_modes(g: &mut Grammar) {
+    let mut used: List<bool> = [];
+    for let mut i = 0; i < g.mode_names.len(); i += 1 {
+        used.push(i == DEFAULT_MODE);
+    }
+    for let r of &g.lexer_rules {
+        used[r.mode] = true;
+        if r.push_mode >= 0 {
+            used[r.push_mode] = true;
+        }
+        if r.set_mode >= 0 {
+            used[r.set_mode] = true;
+        }
+    }
+    let mut names: List<String> = [];
+    let mut remap: List<i32> = [];
+    for let mut i = 0; i < g.mode_names.len(); i += 1 {
+        if used[i] {
+            remap.push(names.len());
+            names.push(g.mode_names[i]);
+        } else {
+            remap.push(NO_MODE);
+        }
+    }
+    if names.len() == g.mode_names.len() {
+        return;
+    }
+    g.mode_names = names;
+    for let mut i = 0; i < g.lexer_rules.len(); i += 1 {
+        let r = &mut g.lexer_rules[i];
+        r.mode = remap[r.mode];
+        assert r.mode >= 0, "a mode holding a rule cannot be discarded";
+        if r.push_mode >= 0 {
+            r.push_mode = remap[r.push_mode];
+        }
+        if r.set_mode >= 0 {
+            r.set_mode = remap[r.set_mode];
+        }
+    }
+}
+
+fn find_parser_rule(all_rules: &List<ParserRule>, name: &String) -> Option<&ParserRule> with stores[all_rules] {
+    return all_rules.iter_ref().find(|r: &ParserRule| r.name == *name);
+}
+
+fn find_lexer_rule_index(all_rules: &List<LexerRule>, name: &String) -> i32 {
+    for let mut i = 0; i < all_rules.len(); i += 1 {
+        if all_rules[i].name == *name {
+            return i;
+        }
+    }
+    return -1;
+}
+
 pub fn find_lexer_rule(all_rules: &List<LexerRule>, name: &String) -> Option<&LexerRule> with stores[all_rules] {
     return all_rules.iter_ref().find(|r: &LexerRule| r.name == *name);
+}
+
+/// `g`'s lexer rules with their mode indices and channel ids rebased onto the
+/// destination tables, interning each name it meets.
+fn rebase_lexer_rules(g: &Grammar, modes: &mut List<String>, channels: &mut List<String>) -> List<LexerRule> {
+    let mut mode_remap: List<i32> = [];
+    for let mn of &g.mode_names {
+        mode_remap.push(find_or_add_mode(modes, mn));
+    }
+    let mut chan_remap: List<i32> = [];
+    for let cn of &g.channels {
+        chan_remap.push(find_or_add_channel(channels, cn));
+    }
+    let mut out: List<LexerRule> = [];
+    for let mut r of g.lexer_rules {
+        r.mode = mode_remap[r.mode];
+        if r.push_mode >= 0 {
+            r.push_mode = mode_remap[r.push_mode];
+        }
+        if r.set_mode >= 0 {
+            r.set_mode = mode_remap[r.set_mode];
+        }
+        // A `channels { }` block is the grammar's own numbering, so inside its
+        // range an id and the name declared at that index are one channel and
+        // rebasing carries both. Past the range a numeric `channel(N)` has no
+        // entry behind it and stays as written.
+        if r.channel >= 2 {
+            let src_idx = r.channel - 2;
+            if src_idx < chan_remap.len() {
+                r.channel = chan_remap[src_idx];
+            }
+        }
+        out.push(r);
+    }
+    return out;
 }
 
 fn find_or_add_mode(modes: &mut List<String>, name: &String) -> i32 {

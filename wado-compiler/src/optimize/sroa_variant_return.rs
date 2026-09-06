@@ -104,6 +104,13 @@ impl Layout {
             .position(|n| n == case_name)
             .map(|i| u32::try_from(i).expect("variant case index overflow"))
     }
+
+    /// The payload a binding for `case_index` receives. `None` for a unit case,
+    /// which has no slot to read.
+    fn payload_read_type(&self, case_index: u32) -> Option<TypeId> {
+        self.case_slots[case_index as usize].flat()?;
+        Some(self.case_payloads[case_index as usize])
+    }
 }
 
 /// A confirmed candidate: the function and the layout its variant return maps
@@ -1594,7 +1601,11 @@ fn check_uses(
                     let via_call = call_callee(body, *scrut).filter(|f| candidates.contains_key(f));
                     if via_temp.is_some() || via_call.is_some() {
                         let arms = arms.clone();
-                        if !arms.iter().all(|a| arm_is_one_level(body, a, rebind)) {
+                        let rewritable = via_temp
+                            .or(via_call)
+                            .and_then(|f| candidates.get(&f))
+                            .is_some_and(|c| arms_are_one_level(body, &arms, rebind, &c.layout));
+                        if !rewritable {
                             invalid.extend(via_temp.into_iter().chain(via_call));
                         }
                         for a in &arms {
@@ -1673,8 +1684,9 @@ fn call_callee(body: &Body, op: Operand) -> Option<FuncId> {
 
 /// How a payload binding is re-minted as a `let` at the call site.
 enum Rebound<'a> {
-    /// The local holds the payload as the pattern spells it.
-    Direct,
+    /// The slot read lands in the local unchanged, under the local's own
+    /// declared type.
+    Direct { let_type: TypeId },
     /// The local's address is taken, so `lower::plan::boxing` promoted its slot
     /// to `Box<T>`; the re-minted binding boxes the slot read as lowering did.
     Boxed { box_type: TypeId, name: &'a str },
@@ -1683,12 +1695,16 @@ enum Rebound<'a> {
 /// Per-function facts deciding whether a payload binding can be re-minted, and
 /// in what form. A local a `stores` parameter aliases cannot: the alias is
 /// established outside this body, and the `let` would not re-establish it.
-/// Neither can one whose declared type is neither the pattern's own type nor a
-/// `Box` of it — local indices are pooled, so a declaration that matches
-/// nothing the pattern names belongs to another binding.
+/// Neither can one whose declared type is neither the payload nor a `Box` of it
+/// — local indices are pooled, so a declaration matching neither belongs to
+/// another binding.
 struct Rebind {
     aliased: IndexSet<u32>,
     local_types: Vec<TypeId>,
+    /// Each declared local type with its `&` / `&mut` layers stripped: `&T` is
+    /// `T` at WIR level (`wir_build::context`), what needs a cell arriving as
+    /// `Box<T>` instead.
+    peeled_types: Vec<TypeId>,
     /// Declared `Box<T>` local type → (`T`, the struct's rendered name).
     boxes: IndexMap<TypeId, (TypeId, String)>,
 }
@@ -1717,23 +1733,31 @@ impl Rebind {
                 _ => None,
             })
             .collect();
+        let peeled_types = local_types
+            .iter()
+            .map(|&t| peel_refs(t, type_table))
+            .collect();
         Self {
             aliased: func.stores_aliased_locals.clone(),
             local_types,
+            peeled_types,
             boxes,
         }
     }
 
-    fn rebound(&self, local: u32, binding_type: TypeId) -> Option<Rebound<'_>> {
+    /// `payload_type` is what the slot read produces. Never pass the pattern's
+    /// own type: `lower::plan::boxing` rewrites it along with the local, so the
+    /// two agreeing says nothing about the value that arrives.
+    fn rebound(&self, local: u32, payload_type: TypeId) -> Option<Rebound<'_>> {
         if self.aliased.contains(&local) {
             return None;
         }
         let declared = self.local_types[local as usize];
-        if declared == binding_type {
-            return Some(Rebound::Direct);
+        if self.peeled_types[local as usize] == payload_type {
+            return Some(Rebound::Direct { let_type: declared });
         }
         match self.boxes.get(&declared) {
-            Some((inner, name)) if *inner == binding_type => Some(Rebound::Boxed {
+            Some((inner, name)) if *inner == payload_type => Some(Rebound::Boxed {
                 box_type: declared,
                 name,
             }),
@@ -1742,20 +1766,35 @@ impl Rebind {
     }
 }
 
+fn peel_refs(mut ty: TypeId, type_table: &TypeTable) -> TypeId {
+    while let ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) = type_table.get(ty) {
+        ty = *inner;
+    }
+    ty
+}
+
+fn arms_are_one_level(body: &Body, arms: &[ArmData], rebind: &Rebind, layout: &Layout) -> bool {
+    arms.iter()
+        .all(|a| arm_is_one_level(body, a, rebind, layout))
+}
+
 /// One level deep over the scrutinee's own variant, binding at most one name
 /// the rewrite can re-mint. A nested pattern (`Ok(Some(x))`) is rejected rather
 /// than peeled — peeling is where the WIR pass's complexity lives.
-fn arm_is_one_level(body: &Body, arm: &ArmData, rebind: &Rebind) -> bool {
+fn arm_is_one_level(body: &Body, arm: &ArmData, rebind: &Rebind, layout: &Layout) -> bool {
     match &body.pats[arm.pattern].kind {
         PatKind::Wildcard => true,
-        PatKind::Variant { bindings, .. } => match bindings.as_slice() {
+        PatKind::Variant {
+            variant_name,
+            bindings,
+            ..
+        } => match bindings.as_slice() {
             [] => true,
             [b] => match body.pats[*b].kind {
-                PatKind::Binding {
-                    local_index,
-                    type_id,
-                    ..
-                } => rebind.rebound(local_index, type_id).is_some(),
+                PatKind::Binding { local_index, .. } => layout
+                    .case_index_of(variant_name)
+                    .and_then(|case| layout.payload_read_type(case))
+                    .is_some_and(|payload| rebind.rebound(local_index, payload).is_some()),
                 PatKind::Wildcard => true,
                 _ => false,
             },
@@ -2074,7 +2113,9 @@ fn rewrite_call_sites(
         let aliased = |local: &u32| {
             func.address_taken_locals.contains(local) || func.stores_aliased_locals.contains(local)
         };
-        bound.retain(|&local, _| !aliased(&local) && temp_uses_rewritable(&body, local, &rebind));
+        bound.retain(|&local, &mut f| {
+            !aliased(&local) && temp_uses_rewritable(&body, local, &rebind, &candidates[&f].layout)
+        });
         if !bound.is_empty() {
             for (&local, &f) in &bound {
                 let tuple_type = candidates[&f].layout.tuple_type;
@@ -2267,8 +2308,8 @@ fn collect_call_scrutinees(
     // variant patterns. Declining here leaves the site to `rebox_stragglers`.
     if let NodeRef::Expr(e) = node
         && let ExprKind::Match { expr: scrut, arms } = &body.exprs[e].kind
-        && call_callee(body, *scrut).is_some_and(|f| candidates.contains_key(&f))
-        && arms.iter().all(|a| arm_is_one_level(body, a, rebind))
+        && let Some(cand) = call_callee(body, *scrut).and_then(|f| candidates.get(&f))
+        && arms_are_one_level(body, arms, rebind, &cand.layout)
     {
         out.push(e);
     }
@@ -2363,13 +2404,27 @@ fn rewrite_temp_uses(body: &mut Body, node: NodeRef, cx: &mut SiteCx) -> bool {
 /// Whether every mention of `local` is one the rewrite lowers: a destructure, or
 /// a bare read it rebuilds the variant for. A `Match` arm deeper than one level
 /// has no tag form, and leaves the site to the rebox.
-fn temp_uses_rewritable(body: &Body, local: u32, rebind: &Rebind) -> bool {
+fn temp_uses_rewritable(body: &Body, local: u32, rebind: &Rebind, layout: &Layout) -> bool {
     let mut ok = true;
-    check_temp_uses(body, NodeRef::Block(body.root), local, rebind, &mut ok);
+    check_temp_uses(
+        body,
+        NodeRef::Block(body.root),
+        local,
+        rebind,
+        layout,
+        &mut ok,
+    );
     ok
 }
 
-fn check_temp_uses(body: &Body, node: NodeRef, local: u32, rebind: &Rebind, ok: &mut bool) {
+fn check_temp_uses(
+    body: &Body,
+    node: NodeRef,
+    local: u32,
+    rebind: &Rebind,
+    layout: &Layout,
+    ok: &mut bool,
+) {
     if !*ok {
         return;
     }
@@ -2397,7 +2452,7 @@ fn check_temp_uses(body: &Body, node: NodeRef, local: u32, rebind: &Rebind, ok: 
             }
             ExprKind::Match { expr: scrut, arms } => {
                 if is_local(body, *scrut, local) {
-                    if !arms.iter().all(|a| arm_is_one_level(body, a, rebind)) {
+                    if !arms_are_one_level(body, arms, rebind, layout) {
                         *ok = false;
                         return;
                     }
@@ -2406,10 +2461,10 @@ fn check_temp_uses(body: &Body, node: NodeRef, local: u32, rebind: &Rebind, ok: 
                         if let Some(g) = a.guard
                             && let Some(ge) = g.as_expr()
                         {
-                            check_temp_uses(body, NodeRef::Expr(ge), local, rebind, ok);
+                            check_temp_uses(body, NodeRef::Expr(ge), local, rebind, layout, ok);
                         }
                         if let Some(be) = a.body.as_expr() {
-                            check_temp_uses(body, NodeRef::Expr(be), local, rebind, ok);
+                            check_temp_uses(body, NodeRef::Expr(be), local, rebind, layout, ok);
                         }
                     }
                     return;
@@ -2421,7 +2476,9 @@ fn check_temp_uses(body: &Body, node: NodeRef, local: u32, rebind: &Rebind, ok: 
             _ => {}
         }
     }
-    body.for_each_child(node, |c| check_temp_uses(body, c, local, rebind, ok));
+    body.for_each_child(node, |c| {
+        check_temp_uses(body, c, local, rebind, layout, ok);
+    });
 }
 
 fn is_local(body: &Body, op: Operand, local: u32) -> bool {
@@ -2524,11 +2581,7 @@ fn rewrite_match_on_temp(
                     )
                 });
                 let binding = bindings.first().and_then(|&b| match &body.pats[b].kind {
-                    PatKind::Binding {
-                        local_index,
-                        type_id,
-                        ..
-                    } => Some((*local_index, *type_id)),
+                    PatKind::Binding { local_index, .. } => Some(*local_index),
                     _ => None,
                 });
                 (case_index, binding)
@@ -2584,18 +2637,20 @@ fn bind_payload_before(
     local: u32,
     layout: &Layout,
     case_index: u32,
-    binding: (u32, TypeId),
+    binding_local: u32,
     value: Operand,
     cx: &SiteCx,
 ) -> Operand {
-    let (binding_local, binding_type) = binding;
     let read = slot_read(body, local, layout, case_index, cx);
+    let payload_type = layout
+        .payload_read_type(case_index)
+        .expect("variant-return SROA: payload binding on a unit case");
     let (init, init_type) = match cx
         .rebind
-        .rebound(binding_local, binding_type)
+        .rebound(binding_local, payload_type)
         .expect("variant-return SROA: arm_is_one_level accepted an unbindable local")
     {
-        Rebound::Direct => (Operand::Expr(read), binding_type),
+        Rebound::Direct { let_type } => (Operand::Expr(read), let_type),
         Rebound::Boxed { box_type, name } => (
             Operand::Expr(body.exprs.push(ExprNode {
                 kind: ExprKind::StructLiteral {
