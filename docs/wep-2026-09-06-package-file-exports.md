@@ -109,6 +109,32 @@ selected in the `use { … }` list, and a file is not an interface.
   stays all-or-nothing: a dependency consumed through the CM path has no files
   to offer, and says so.
 
+### An exported submodule offers its `pub` items
+
+`pub` already means "public API"
+([Visibility](./wep-2026-06-25-visibility-internal-pub-export.md)); the
+allowlist decides which files carry it. A consumer that names an exported
+submodule may use every `pub` item in it, whether or not the `lib` entry
+re-exports that item. `internal` stays package-local, and a file the allowlist
+does not name offers nothing.
+
+A `pub` item that no exported file reaches is therefore public in name only. The
+compiler says so, as a lint in the unused family: the declaration claims an API
+the package does not offer, and the fix is to export the file or drop the item
+to `internal`.
+
+### Paths compare after NFC, and case must match
+
+A reference and an allowlist entry are compared after NFC normalization, so a
+name that round-trips through a decomposing filesystem still matches. Case is
+not folded: `grammar/wado.g4` does not name `grammar/Wado.g4`, on any
+filesystem. A case-insensitive filesystem would otherwise let a package build on
+its author's machine and fail on a consumer's, or the reverse.
+
+A case-only mismatch is an error like any other unlisted file. Naming the near
+match in the diagnostic is better ergonomics; it does not make the reference
+valid.
+
 ### Kiln
 
 - `from` and `inputs` accept an exported-file reference wherever they accept a
@@ -143,17 +169,24 @@ file is the mechanism, not the ceremony around it.
 Directory listing, already refused for local Kiln inputs. Writing into a
 dependency. Reaching a file of a dependency's dependency.
 
+Files from a reserved namespace. `core:` / `wasi:` / `web:` are bundled in the
+compiler and have no `wado.toml` to carry an allowlist, so they export nothing.
+Nothing rules it out later — a bundled allowlist would be a table in the
+compiler — but no need has come up, and the specifier rule is easier to state
+without the exception.
+
 ## Roadmap
 
 1. `[package].exports` in `wado-manifest`: parse, and validate each entry as a
-   package-root-relative path with an extension and no `..`. Done when a
-   manifest round-trips it and `wado publish` refuses a list naming a file the
-   package does not carry.
+   package-root-relative path with an extension and no `..`, NFC-normalized.
+   Done when a manifest round-trips it and `wado publish` refuses a list naming
+   a file the package does not carry.
 2. Specifier resolution: split `<coordinate>/<path.ext>` once (`kiln::parse_spec`
    already separates the segment), resolve the package through the dependency
-   index, check the allowlist, and refuse at package granularity. Done when
-   `use { … } from "lib:x/src/y.wado"` compiles against a path dependency and an
-   unlisted path produces the package-level diagnostic.
+   index, check the allowlist under NFC with case compared exactly, and refuse
+   at package granularity. Done when `use { … } from "lib:x/src/y.wado"`
+   compiles against a path dependency, and an unlisted path — a case-only
+   mismatch among them — produces the package-level diagnostic.
 3. Kiln `from` / `inputs`: accept the reference, key the cache and the header on
    the logical form, write outputs into the consumer's tree. Done when
    `grammar/Wado.g4` can be consumed from a second package with a warm,
@@ -163,24 +196,33 @@ dependency. Reaching a file of a dependency's dependency.
 5. Registry distribution: assets travel in the `wado:package` section and are
    extracted into the shared cache on fetch, so `CompilerHost::load_source`
    serves them like any other file.
-6. Binary assets through Kiln: `input-file.content` is a `string`, so an image
-   cannot cross the generator boundary. Done when the `core:kiln` world carries
-   bytes and its version bump invalidates the caches that need it.
+6. Binary assets through Kiln: `input-file.content` becomes a variant of text
+   and bytes ([Kiln](./wep-2026-04-12-kiln.md) §"Open questions"), so an image
+   can reach a generator. Done when the `core:kiln` world carries it and its
+   version bump invalidates the caches that need it.
+7. The unreachable-`pub` lint: a `pub` item that no exported file reaches,
+   reported in the unused family. Done when a package with a `pub` item outside
+   its `lib` reach and outside `exports` reports it, and adding the file to
+   `exports` clears it.
 
 ## Known gaps
 
 - A dependency's own Kiln invocations. The clause-harvest walks the local module
   graph and stops at the dependency edge, so a package that generates from its
-  own assets does not work when consumed. Closing it means harvesting through
-  dependency modules and anchoring their invocation paths and outputs in the
-  consuming project.
-- Whether an exported submodule may offer items its `lib` entry does not, and
-  how that interacts with `pub` / `export`
-  ([Visibility](./wep-2026-06-25-visibility-internal-pub-export.md)).
-- Reserved namespaces (`core:` / `wasi:` / `web:`) expose no files. Whether a
-  bundled asset should ever be nameable is unexamined.
-- Case-insensitive and Unicode-normalizing filesystems: the allowlist is
-  compared as bytes, and a path that matches on one machine may not on another.
+  own assets does not work when consumed — `package-gale-highlight-wado` is that
+  package today. What closes it is one decision with several downstream of it:
+  whether a dependency's generators run in the consuming build at all, or a
+  dependency is always consumed from its committed output the way a
+  consume-only host reads it. Running them settles nothing by itself — where
+  the outputs and cache state live, whose `[build-dependencies]` and lock pin
+  the generator, how deep the graph is followed, and whose diagnostic a
+  dependency's generator failure is, all follow from it.
+- Whether a `lib` entry and an exported submodule that reach the same file
+  resolve to one module identity. Two identities would make one declaration two
+  nominal types, which
+  [Module Loader](./wep-2026-01-24-module-loader.md) §"Canonical module
+  identity" avoids for local paths; the package boundary has not been checked
+  against it.
 
 ## References
 
