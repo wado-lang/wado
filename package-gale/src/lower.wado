@@ -3711,7 +3711,7 @@ fn pick_optional_specialised(
     owner: &DiagnosticOwner,
     ctx: &mut GenContext,
 ) -> Option<RepeatStrategy> {
-    let k_token = try_optional_k_token_lookahead(inner);
+    let k_token = try_optional_k_token_lookahead(inner, ctx);
     let shape = try_optional_shape_lookahead(inner, ctx);
     let scan_guard = try_optional_scan_guard(inner, ctx);
     if body_has_field {
@@ -3752,43 +3752,58 @@ fn warn_optional_scan_guard(owner: &DiagnosticOwner, ctx: &mut GenContext) {
 /// `gen_op_repeat_with_follow_override` emits the single-token
 /// guard directly from `body_admits`, so the specialisation is
 /// unnecessary there.
-fn try_optional_k_token_lookahead(inner: &Element) -> Option<RepeatStrategy> {
-    let tokens = collect_optional_leading_tokens(inner);
-    if tokens.is_empty() {
+fn try_optional_k_token_lookahead(inner: &Element, ctx: &mut GenContext) -> Option<RepeatStrategy> {
+    let sig = collect_optional_entry_signature(inner, ctx);
+    if sig.is_empty() {
         return null;
-    }
-    let mut sig: List<List<String>> = [];
-    for let tk of &tokens {
-        sig.push([*tk]);
     }
     return Option::Some(RepeatStrategy::OptionalLookahead(
         OptionalLookaheadStrategy { sig: sig },
     ));
 }
 
-/// Collect leading fixed-token kinds from an Optional's single-alt
-/// Group inner. Walks the alt's elements until the first non-fixed one.
-/// Returns `[]` for non-Group inners — leaf Optionals (`TokenRef?` /
-/// `Literal?`) are handled by `gen_op_repeat_with_follow_override`'s
-/// Optional+leaf arm using `inner_first` directly, so we keep their
-/// strategy at `Plain`.
-fn collect_optional_leading_tokens(inner: &Element) -> List<String> {
-    let mut tokens: List<String> = [];
+/// The per-position kind sets deciding whether to enter an Optional's
+/// single-alt Group inner. Each leading fixed token (`TokenRef` /
+/// `Literal`) contributes its own kind; the element that ends that run
+/// contributes its whole first set, and the walk stops there because a
+/// multi-token element leaves the next position naming whatever it ended
+/// with (the alignment rule `shape_signature_positions` follows).
+///
+/// That last position is what separates the body from a caller that opens
+/// on the same token: in `seg : ID (SEP args)?` inside
+/// `path : seg (SEP seg)*`, SEP alone commits to the optional and strands
+/// `a::b`, while FIRST(args) decides it. The walk stops before a nullable
+/// element instead, whose position may not be there to peek at.
+///
+/// Returns `[]` for non-Group inners and for a group with no leading
+/// fixed token — leaf Optionals (`TokenRef?` / `Literal?`) are handled by
+/// `gen_op_repeat_with_follow_override`'s Optional+leaf arm using
+/// `inner_first` directly, so we keep their strategy at `Plain`.
+fn collect_optional_entry_signature(inner: &Element, ctx: &mut GenContext) -> List<List<String>> {
+    let mut sig: List<List<String>> = [];
     if let Group(g) = inner {
         if g.alternatives.len() != 1 {
-            return tokens;
+            return sig;
         }
         for let elem of &g.alternatives[0].elements {
             if let TokenRef(t) = elem {
-                tokens.push(`TK_${t.name}`);
+                sig.push([`TK_${t.name}`]);
             } else if let Literal(l) = elem {
-                tokens.push(literal_const_name(&l.text));
+                sig.push([literal_const_name(&l.text)]);
             } else {
+                if sig.is_empty() || is_nullable(elem) {
+                    break;
+                }
+                let mut visiting: List<String> = [];
+                let first = ctx.first_of_element(elem, &mut visiting);
+                if !first.is_empty() {
+                    sig.push(first);
+                }
                 break;
             }
         }
     }
-    return tokens;
+    return sig;
 }
 
 /// Maximum number of nullable sub-elements for which shape enumeration

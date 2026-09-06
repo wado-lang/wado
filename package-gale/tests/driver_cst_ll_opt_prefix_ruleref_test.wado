@@ -1,0 +1,41 @@
+//! A greedy `?` whose fixed-token prefix ends at a RuleRef, against a caller
+//! loop that opens on the same token.
+//!
+//! `seg : ID (SEP args)?` inside `path : seg (SEP seg)*`. Committing to the
+//! optional on SEP alone leaves `a::b` with no way to reach the loop, and the
+//! parse dies asking for the LT that opens `args`. The body's first token is
+//! not the whole entry condition: FIRST(args) decides the second position.
+//!
+//! This is the shape `RustParser.g4` gives `pathExprSegment`, where it costs
+//! every multi-segment path (`std::process::exit`).
+
+use g from "./grammars/ll_opt_prefix_ruleref.g4"
+    with {
+        generator: { module: "../src/generator.wado", output_dir: "./generated/cst_ll_opt_prefix_ruleref" },
+    };
+
+fn assert_tree(input: &String, expected: &String) {
+    let result = g::parse(input);
+    assert result.ok(), `unexpected diagnostics for ${*input}: ${result.diagnostics:?}`;
+    let actual = g::to_string_tree(&result);
+    assert actual == *expected, `\ninput:    ${*input}\nexpected: ${*expected}\nactual:   ${actual}`;
+}
+
+test "a lone segment takes neither the optional nor the loop" {
+    assert_tree(&"a", &"(path (seg a))");
+}
+
+test "the loop claims a separator the optional cannot continue" {
+    assert_tree(&"a::b", &"(path (seg a) :: (seg b))");
+}
+
+test "the optional claims a separator its body can continue" {
+    assert_tree(&"a::<b>", &"(path (seg a :: (args < b >)))");
+}
+
+test "the two decisions alternate along one path" {
+    assert_tree(
+        &"a::<b>::c",
+        &"(path (seg a :: (args < b >)) :: (seg c))",
+    );
+}
