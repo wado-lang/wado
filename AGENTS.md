@@ -121,7 +121,7 @@ Wado-specific features:
 - `wado-manifest/` — `wado.toml` / `wado.lock` parsing, validation, and dependency resolution. Pure: no I/O; the disk reads live in `wado-lsp/src/host/discovery.rs`.
 - `wado-wasm-embed/` — prepares a core wasm asset for embedding in a component: memory definition to import, then a prune to the used exports.
 - `wado-bundled-libm/` — deterministic math, bundled into the compiler as a Wasm module. (`wado-bundled-icu/` is a not-yet-wired spike.)
-- `docs/` — the language spec (`docs/spec.md`), stdlib docs, and the Wado Evolution Proposals (`docs/wep-*.md`) recording significant language and architecture decisions.
+- `docs/` — the language spec (`docs/spec.md`), the compiler and formatter guides (`docs/compiler.md`, `docs/optimizer.md`, `docs/formatter.md`), stdlib docs, and the Wado Evolution Proposals (`docs/wep-*.md`) recording significant language and architecture decisions.
 - `benchmark/`, `wasm-size/` — performance and code-size measurement.
 - `cloudflare-worker/` — serves a `wasi:http/service` component from a Cloudflare
   Worker, via jco.
@@ -141,7 +141,7 @@ The ones you reach for while developing the toolchain:
 - `serve` — compile and serve an HTTP service.
 - `dump` — dump compiler internal state at every stage: AST, modules, symbols, types, TIR, NIR, WIR.
 - `query` — ask the language service for hover / definition / references / diagnostics, by position or by `MODULE#SYMBOL` notation. `query inlay-hints` splices the hints into the source, so a misplaced anchor is visible rather than a number to check by hand.
-- `format` — format Wado source code.
+- `format` — format Wado source code. Its rules are in `docs/formatter.md`.
 
 The rest (`init`, `update`, `fetch`, `build`, `publish`, `doc`, `wit`, `syntax`, `lsp`, `clean`) serve packaging, registry, and editor integration.
 

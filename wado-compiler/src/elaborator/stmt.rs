@@ -6,7 +6,7 @@ use crate::ast::{
     TaskReturnStmt, Type, WhileStmt,
 };
 use crate::compiler_host::CompilerHost;
-use crate::tir::{PrimitiveType, ResolvedType, TirPattern, TypeId, TypeTable};
+use crate::tir::{ResolvedType, TirPattern, TypeId, TypeTable};
 use crate::token::Span;
 
 use super::Elaborator;
@@ -2046,23 +2046,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         scrutinee_type: TypeId,
         span: Span,
     ) {
-        let scrutinee_resolved = self.tysys.type_table.borrow().get(scrutinee_type).clone();
-        let is_unsigned = matches!(
-            scrutinee_resolved,
-            ResolvedType::Primitive(
-                PrimitiveType::U8
-                    | PrimitiveType::U16
-                    | PrimitiveType::U32
-                    | PrimitiveType::U64
-                    | PrimitiveType::U128
-            )
-        ) || matches!(
-            scrutinee_resolved,
-            ResolvedType::Struct { def, .. } if self.tysys.type_table.borrow().struct_head_name(def) == "u128"
-        );
+        let is_unsigned = self
+            .tysys
+            .type_table
+            .borrow()
+            .is_unsigned_int(scrutinee_type);
 
-        let start_val = self.pattern_to_i128(start, is_unsigned);
-        let end_val = self.pattern_to_i128(end, is_unsigned);
+        let start_val = util::range_endpoint_to_i128(start, is_unsigned);
+        let end_val = util::range_endpoint_to_i128(end, is_unsigned);
 
         let (Some(start_val), Some(end_val)) = (start_val, end_val) else {
             let _ = self.emit(TypeError::InvalidPattern {
@@ -2074,53 +2065,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Check for reversed or empty range
         let inclusive = matches!(kind, crate::ast::RangeKind::Inclusive);
-        if start_val > end_val {
+        let order = util::range_endpoints_ordered(start_val, end_val, is_unsigned);
+        if order.is_gt() {
             let _ = self.emit(TypeError::InvalidPattern {
                 message: "reversed range pattern".to_string(),
                 span,
             });
             return;
         }
-        if !inclusive && start_val >= end_val {
+        if !inclusive && order.is_ge() {
             let _ = self.emit(TypeError::InvalidPattern {
                 message: "empty range pattern".to_string(),
                 span,
             });
         }
-    }
-
-    fn pattern_to_i128(&self, pattern: &Pattern, is_unsigned: bool) -> Option<i128> {
-        match pattern {
-            Pattern::Literal(Literal::Number(repr)) => {
-                if is_unsigned {
-                    util::parse_u128_literal(repr).ok().map(|v| v as i128)
-                } else {
-                    util::parse_i128_literal(repr).ok()
-                }
-            }
-            Pattern::Literal(Literal::Char(raw)) => {
-                util::unescape_char(raw).ok().map(|c| c as i128)
-            }
-            Pattern::Literal(Literal::Byte(raw)) => util::unescape_byte(raw).ok().map(i128::from),
-            Pattern::Variant {
-                variant_name,
-                variant_qualifier,
-                bindings,
-                ..
-            } if bindings.is_empty() => {
-                // Could be an associated constant like i32::MAX, i32::MIN
-                self.primitive_assoc_const_to_i128(variant_qualifier.as_ref(), variant_name)
-            }
-            _ => None,
-        }
-    }
-
-    fn primitive_assoc_const_to_i128(
-        &self,
-        qualifier: Option<&Type>,
-        const_name: &str,
-    ) -> Option<i128> {
-        primitive_assoc_const_to_i128(qualifier, const_name)
     }
 
     /// Get payload type for a variant case, substituting type parameters if needed
@@ -2794,7 +2752,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// resource / newtype): a type with no sound `&mut` element write-back.
     fn is_replace_on_assign_element(&self, type_id: TypeId) -> bool {
         match self.tysys.type_table.borrow().get(type_id).clone() {
-            ResolvedType::Primitive(p) => !matches!(p, PrimitiveType::I128 | PrimitiveType::U128),
+            ResolvedType::Primitive(_) => true,
             ResolvedType::Enum { .. }
             | ResolvedType::Variant { .. }
             | ResolvedType::Flags { .. }

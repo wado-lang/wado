@@ -65,7 +65,7 @@ impl PrimitiveKind {
             PrimitiveType::U64 => Self::I64Unsigned,
             PrimitiveType::F32 => Self::F32,
             PrimitiveType::F64 => Self::F64,
-            PrimitiveType::I128 | PrimitiveType::U128 | PrimitiveType::V128 => return None,
+            PrimitiveType::V128 => return None,
         })
     }
 }
@@ -377,8 +377,6 @@ impl FunctionTranslator<'_, '_> {
             | PrimitiveType::U32
             | PrimitiveType::I64
             | PrimitiveType::U64
-            | PrimitiveType::I128
-            | PrimitiveType::U128
             | PrimitiveType::F32
             | PrimitiveType::F64
             | PrimitiveType::V128

@@ -1,50 +1,32 @@
-//! Rewrite `match` on `i128` / `u128` scrutinees into if-else chains as
-//! the TIR → NIR translator walks them.
-//!
-//! Wasm has no native 128-bit comparison; the rewrite emits explicit
-//! `i128::from_i64(...)` literal constructors and `i128^Eq::eq` /
-//! `u128^Eq::eq` method calls, which the optimizer / `wir_build`
-//! lowers further.
+//! Rewrite `match` on an `i128` / `u128` scrutinee into an if-else chain as the
+//! TIR → NIR translator walks it. Wasm has no 128-bit comparison, so each arm
+//! becomes a comparison `convert_expr` turns into a prelude `Eq` / `Ord` call.
 
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use crate::lower::wide_int_literal::{create_i128_literal, create_u128_literal};
-use crate::module_source::ModuleSource;
-use crate::name::LocalMethodName;
+use crate::lower::wide_int_literal::create_literal;
 use crate::tir::{
-    CallArg, FunctionRef, ResolvedType, TirBinaryOp, TirBlock, TirExpr, TirExprKind,
-    TirLiteralPattern, TirMatchArm, TirPattern, TirStmt, TirStmtKind, TirUnaryOp, TypeId,
-    TypeTable,
+    TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirLiteralPattern, TirMatchArm, TirPattern,
+    TirStmt, TirStmtKind, TypeId, TypeTable,
 };
 use crate::token::Span;
 
-/// True when the scrutinee type is the i128/u128 wrapper struct and at
-/// least one arm uses an i128/u128 literal pattern. Wildcard / binding
-/// arms alone don't trigger the rewrite — a plain `match x { _ => ... }`
-/// on a wide-int value is fine to lower as a normal NIR `Match`.
+/// True for a wide-int scrutinee with at least one arm that tests its value. A
+/// `match x { _ => … }` lowers fine as a normal NIR `Match`.
 pub(super) fn should_rewrite(
     scrutinee_type: TypeId,
     arms: &[TirMatchArm],
     type_table: &TypeTable,
 ) -> bool {
-    let items = type_table.compiler_items();
-    let i128_name = items.struct_name(crate::compiler_item::CompilerItem::I128);
-    let u128_name = items.struct_name(crate::compiler_item::CompilerItem::U128);
-    let is_wide_int = match type_table.get(scrutinee_type) {
-        ResolvedType::Struct { def, .. } => {
-            let name = type_table.struct_head_name(*def);
-            name == i128_name || name == u128_name
-        }
-        _ => false,
-    };
-    if !is_wide_int {
+    if type_table.wide_int_item(scrutinee_type).is_none() {
         return false;
     }
     arms.iter().any(|arm| {
         matches!(
             &arm.pattern,
             TirPattern::Literal(TirLiteralPattern::I128(_) | TirLiteralPattern::U128(_))
+                | TirPattern::Range { .. }
         )
     })
 }
@@ -61,35 +43,19 @@ pub(super) fn build_if_chain(
 ) -> TirExpr {
     let mut else_expr: Option<TirExpr> = None;
     for arm in arms.iter().rev() {
+        // The refutable shapes differ only in the condition they test.
+        if let Some(condition) = arm_condition(&arm.pattern, scrutinee, span, type_table) {
+            let condition = with_guard(condition, arm.guard.as_ref(), span);
+            else_expr = Some(build_if(
+                condition,
+                &arm.body,
+                else_expr,
+                result_type_id,
+                span,
+            ));
+            continue;
+        }
         match &arm.pattern {
-            TirPattern::Literal(TirLiteralPattern::I128(value)) => {
-                let literal_expr =
-                    create_i128_literal(*value, scrutinee.type_id, &type_table.borrow(), span);
-                let eq_call =
-                    create_i128_eq_call(scrutinee.clone(), literal_expr, type_table, span);
-                let condition = with_guard(eq_call, arm.guard.as_ref(), span);
-                else_expr = Some(build_if(
-                    condition,
-                    &arm.body,
-                    else_expr,
-                    result_type_id,
-                    span,
-                ));
-            }
-            TirPattern::Literal(TirLiteralPattern::U128(value)) => {
-                let literal_expr =
-                    create_u128_literal(*value, scrutinee.type_id, &type_table.borrow(), span);
-                let eq_call =
-                    create_u128_eq_call(scrutinee.clone(), literal_expr, type_table, span);
-                let condition = with_guard(eq_call, arm.guard.as_ref(), span);
-                else_expr = Some(build_if(
-                    condition,
-                    &arm.body,
-                    else_expr,
-                    result_type_id,
-                    span,
-                ));
-            }
             TirPattern::Wildcard => {
                 if let Some(guard) = &arm.guard {
                     else_expr = Some(build_if(
@@ -151,18 +117,91 @@ pub(super) fn build_if_chain(
     else_expr.expect("wide-int match has at least one arm")
 }
 
+/// The condition an arm's pattern tests, or `None` for one that always matches
+/// and so needs no test.
+fn arm_condition(
+    pattern: &TirPattern,
+    scrutinee: &TirExpr,
+    span: Span,
+    type_table: &Rc<RefCell<TypeTable>>,
+) -> Option<TirExpr> {
+    match pattern {
+        TirPattern::Literal(TirLiteralPattern::I128(value)) => Some(compare(
+            scrutinee,
+            TirBinaryOp::Eq,
+            *value,
+            span,
+            type_table,
+        )),
+        TirPattern::Literal(TirLiteralPattern::U128(value)) => Some(compare(
+            scrutinee,
+            TirBinaryOp::Eq,
+            value.cast_signed(),
+            span,
+            type_table,
+        )),
+        TirPattern::Range {
+            start,
+            end,
+            inclusive,
+            ..
+        } => {
+            let upper_op = if *inclusive {
+                TirBinaryOp::LtEq
+            } else {
+                TirBinaryOp::Lt
+            };
+            Some(and(
+                compare(scrutinee, TirBinaryOp::GtEq, *start, span, type_table),
+                compare(scrutinee, upper_op, *end, span, type_table),
+                span,
+            ))
+        }
+        _ => None,
+    }
+}
+
+/// `scrutinee <op> <bits>` as a plain `Binary`. `convert_expr`'s wide-int arm
+/// turns it — and the literal operand — into the calls the prelude provides.
+fn compare(
+    scrutinee: &TirExpr,
+    op: TirBinaryOp,
+    bits: i128,
+    span: Span,
+    type_table: &Rc<RefCell<TypeTable>>,
+) -> TirExpr {
+    let item = type_table
+        .borrow()
+        .wide_int_item(scrutinee.type_id)
+        .expect("the caller checked the scrutinee is a wide integer");
+    let literal = create_literal(item, bits, scrutinee.type_id, &type_table.borrow(), span);
+    TirExpr::new(
+        TirExprKind::Binary {
+            op,
+            left: Box::new(scrutinee.clone()),
+            right: Box::new(literal),
+        },
+        TypeTable::BOOL,
+        span,
+    )
+}
+
+fn and(left: TirExpr, right: TirExpr, span: Span) -> TirExpr {
+    TirExpr::new(
+        TirExprKind::Binary {
+            op: TirBinaryOp::And,
+            left: Box::new(left),
+            right: Box::new(right),
+        },
+        TypeTable::BOOL,
+        span,
+    )
+}
+
 fn with_guard(condition: TirExpr, guard: Option<&TirExpr>, span: Span) -> TirExpr {
     match guard {
         None => condition,
-        Some(guard) => TirExpr::new(
-            TirExprKind::Binary {
-                op: TirBinaryOp::And,
-                left: Box::new(condition),
-                right: Box::new(guard.clone()),
-            },
-            TypeTable::BOOL,
-            span,
-        ),
+        Some(guard) => and(condition, guard.clone(), span),
     }
 }
 
@@ -191,112 +230,4 @@ fn expr_to_block(expr: &TirExpr, span: Span) -> TirBlock {
         stmts: vec![TirStmt::new(TirStmtKind::Expr(expr.clone()), span)],
         span,
     }
-}
-
-fn create_i128_eq_call(
-    left: TirExpr,
-    right: TirExpr,
-    type_table: &Rc<RefCell<TypeTable>>,
-    span: Span,
-) -> TirExpr {
-    let left_ref_type = type_table
-        .borrow_mut()
-        .intern(ResolvedType::Ref(left.type_id));
-    let receiver = TirExpr::new(
-        TirExprKind::Unary {
-            op: TirUnaryOp::Ref,
-            expr: Box::new(left),
-        },
-        left_ref_type,
-        span,
-    );
-    let right_ref_type = type_table
-        .borrow_mut()
-        .intern(ResolvedType::Ref(right.type_id));
-    let arg_ref = TirExpr::new(
-        TirExprKind::Unary {
-            op: TirUnaryOp::Ref,
-            expr: Box::new(right),
-        },
-        right_ref_type,
-        span,
-    );
-    let (eq_trait_name, i128_struct_name) = {
-        let tt = type_table.borrow();
-        (
-            tt.compiler_trait_fq(crate::compiler_item::CompilerItem::Eq),
-            tt.compiler_struct_fq_name(crate::compiler_item::CompilerItem::I128),
-        )
-    };
-    let method_info = LocalMethodName::new(i128_struct_name, Some(eq_trait_name), "eq".to_string());
-    let mangled_name = method_info.to_mangled_name();
-    TirExpr::new(
-        TirExprKind::method_call(
-            Box::new(receiver),
-            FunctionRef {
-                module_source: ModuleSource::int128(),
-                name: mangled_name,
-                monomorph_info: None,
-                method_info: Some(method_info),
-            },
-            vec![],
-            vec![CallArg::new(arg_ref, false)],
-        ),
-        TypeTable::BOOL,
-        span,
-    )
-}
-
-fn create_u128_eq_call(
-    left: TirExpr,
-    right: TirExpr,
-    type_table: &Rc<RefCell<TypeTable>>,
-    span: Span,
-) -> TirExpr {
-    let left_ref_type = type_table
-        .borrow_mut()
-        .intern(ResolvedType::Ref(left.type_id));
-    let receiver = TirExpr::new(
-        TirExprKind::Unary {
-            op: TirUnaryOp::Ref,
-            expr: Box::new(left),
-        },
-        left_ref_type,
-        span,
-    );
-    let right_ref_type = type_table
-        .borrow_mut()
-        .intern(ResolvedType::Ref(right.type_id));
-    let arg_ref = TirExpr::new(
-        TirExprKind::Unary {
-            op: TirUnaryOp::Ref,
-            expr: Box::new(right),
-        },
-        right_ref_type,
-        span,
-    );
-    let (eq_trait_name, u128_struct_name) = {
-        let tt = type_table.borrow();
-        (
-            tt.compiler_trait_fq(crate::compiler_item::CompilerItem::Eq),
-            tt.compiler_struct_fq_name(crate::compiler_item::CompilerItem::U128),
-        )
-    };
-    let method_info = LocalMethodName::new(u128_struct_name, Some(eq_trait_name), "eq".to_string());
-    let mangled_name = method_info.to_mangled_name();
-    TirExpr::new(
-        TirExprKind::method_call(
-            Box::new(receiver),
-            FunctionRef {
-                module_source: ModuleSource::int128(),
-                name: mangled_name,
-                monomorph_info: None,
-                method_info: Some(method_info),
-            },
-            vec![],
-            vec![CallArg::new(arg_ref, false)],
-        ),
-        TypeTable::BOOL,
-        span,
-    )
 }

@@ -3152,8 +3152,8 @@ fn lexer_element_has_action(elem: &LexerElement, all_rules: &List<LexerRule>) ->
         RuleRef(name) => match find_fragment(all_rules, &name) {
             Some(f) => !fragment_is_recursive(f, all_rules)
                 && f.body.iter_ref().any(
-                |a: &LexerAlternative| lexer_alt_has_any_action(a, all_rules),
-            ),
+                    |a: &LexerAlternative| lexer_alt_has_any_action(a, all_rules),
+                ),
             None => false,
         },
         Literal(_) | CharRange(_) | CharClass(_) | AnyChar => false,

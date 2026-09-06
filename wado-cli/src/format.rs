@@ -204,7 +204,9 @@ pub fn run(opts: FormatOptions) -> Result<(), CliExit> {
         let formatted = match wado_compiler::format(&original) {
             Ok(f) => f,
             Err(e) => {
-                eprintln!("{e}");
+                // `format` takes a string, so its errors carry no path, and
+                // under `format -w .` the message alone names no file.
+                eprintln!("{}", e.with_filename(&input.to_string()));
                 any_error = true;
                 continue;
             }

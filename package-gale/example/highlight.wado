@@ -1,0 +1,28 @@
+//! Three grammars highlighting one page.
+//!
+//! `MiniHtml.g4` imports the other two, so this one `use` builds a single
+//! recognizer: one lexer with three modes, one parser, one tree. The three
+//! queries ride in beside the grammars and are concatenated, so each language
+//! keeps its own `.scm`. There is no stitching code because composition did it
+//! all at generation time.
+//!
+//! What the example is for is in `MiniJs.highlights.scm`.
+
+use page from "./MiniHtml.g4"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            inputs: [
+                "./MiniCss.g4",
+                "./MiniJs.g4",
+                "./MiniHtml.highlights.scm",
+                "./MiniCss.highlights.scm",
+                "./MiniJs.highlights.scm",
+            ],
+        },
+    };
+
+/// Highlight a page as HTML `<span class="...">` runs.
+pub fn highlight_page(source: &String) -> String {
+    return page::highlight(source);
+}

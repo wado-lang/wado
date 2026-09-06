@@ -188,6 +188,24 @@ fn expr_is_container(expr: &Expr) -> bool {
     }
 }
 
+/// Whether a comment flush keeps the blank lines the source had above a
+/// comment. Only a comment still in the gap it was written in can:
+/// [`Spacing::Tight`] is for one being relocated, where the gap it described
+/// is not the gap it lands in and its blank lines would be invented.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Spacing {
+    Tight,
+    KeepBlankLines,
+}
+
+/// A point a speculative rendering can be rolled back to: the output written
+/// so far, and the comments emitted into it.
+#[derive(Clone, Copy)]
+struct Mark {
+    output: usize,
+    emitted: usize,
+}
+
 #[derive(Default)]
 pub struct Unparser<'a> {
     /// AstId-keyed trivia store, populated by the parser plus the
@@ -204,6 +222,19 @@ pub struct Unparser<'a> {
     indent_level: usize,
     emitted_comments: IndexSet<usize>,
     last_source_line: usize,
+    /// The span start of the one call whose arguments must take their wrapped
+    /// form. Keyed by span rather than set as a flag: what needs to wrap is the
+    /// call that *ends* the line, and a flag any nested rendering may consume
+    /// lands on whichever call the recursion reaches first instead.
+    force_wrap: Option<usize>,
+    /// `(output position, columns)`: what the caller will append to the line
+    /// the construct starting at that position ends on — the ` {` after an
+    /// `if` condition. The construct's own width decision counts those
+    /// columns, or the line it judged to fit ends up over budget and the next
+    /// format pass re-wraps it. A rendering *inside* the construct does not
+    /// count them: what follows it on the line is the rest of the construct,
+    /// not the caller's text.
+    reserved_width: Option<(usize, usize)>,
 }
 
 impl<'a> Unparser<'a> {
@@ -221,36 +252,166 @@ impl<'a> Unparser<'a> {
         self
     }
 
-    /// True if any comment sits strictly inside `(start, end)`.
+    /// True if a comment not yet emitted sits strictly inside `(start, end)`.
+    /// A construct asks this before rendering itself on one line: the compact
+    /// form has no slot for an interior comment, so it must take the form that
+    /// gives every entry its own line.
     fn has_comment_in_range(&self, start: usize, end: usize) -> bool {
-        self.all_comments
-            .iter()
-            .any(|c| c.span.start > start && c.span.start < end)
+        self.pending_comments(start, end).next().is_some()
     }
 
-    /// Emit every not-yet-emitted comment whose start is in `[lo, hi)`, each on
-    /// its own indented line. Used to place interior comments (e.g. between
-    /// collection elements) that node-keyed emission would miss.
-    fn emit_comments_in_range(&mut self, lo: usize, hi: usize) {
-        let comments: Vec<crate::comment::Comment> = self
-            .all_comments
+    /// Emit every comment starting before `pos` that no construct has placed,
+    /// each on its own indented line. The formatter's no-loss guarantee; the
+    /// rules it serves are in `docs/formatter.md`. Call it only where the
+    /// output is at the start of a line: a line comment written mid-line would
+    /// comment out what follows.
+    fn flush_comments_before(&mut self, pos: usize, spacing: Spacing) {
+        self.flush_comments_in(0, pos, spacing);
+    }
+
+    /// [`Self::flush_comments_before`] bounded below as well, for a construct
+    /// that must not adopt a comment written before it.
+    fn flush_comments_in(&mut self, lo: usize, hi: usize, spacing: Spacing) {
+        assert!(
+            self.output.is_empty() || self.output.ends_with('\n'),
+            "a comment flush must start at the start of a line",
+        );
+        for comment in &self.pending_comments_in(lo, hi) {
+            self.emitted_comments.insert(comment.span.start);
+            if spacing == Spacing::KeepBlankLines {
+                self.emit_blank_lines_to(comment.span.line);
+            }
+            self.write_indent();
+            self.emit_comment(comment);
+            self.output.push('\n');
+        }
+    }
+
+    /// Open a member's line: whatever the members before it had no slot for,
+    /// then its own leading comments — in that order, so nothing lands between
+    /// a doc comment and what it documents.
+    fn open_member(&mut self, id: crate::ast::AstId, start: usize) {
+        self.flush_comments_before(self.leading_start(id, start), Spacing::KeepBlankLines);
+        self.emit_leading_for(id);
+    }
+
+    /// Where `id`'s leading run begins: the first leading comment no construct
+    /// has placed, else `fallback`.
+    fn leading_start(&self, id: crate::ast::AstId, fallback: usize) -> usize {
+        self.first_unplaced_leading(id)
+            .map_or(fallback, |c| c.span.start)
+    }
+
+    /// The first leading comment of `id` no construct has placed. One emitted
+    /// elsewhere is no longer part of the run: it anchors nothing and bounds
+    /// nothing.
+    fn first_unplaced_leading(&self, id: crate::ast::AstId) -> Option<&'a crate::comment::Comment> {
+        self.leading_of(id)
             .iter()
-            .filter(|c| c.span.start >= lo && c.span.start < hi)
-            .cloned()
-            .collect();
-        for comment in &comments {
-            if self.emitted_comments.insert(comment.span.start) {
-                self.write_indent();
-                self.emit_comment(comment);
-                self.output.push('\n');
+            .find(|c| !self.emitted_comments.contains(&c.span.start))
+    }
+
+    /// Emit the unplaced comments in `lo..pos`, then the indent for the entry
+    /// that follows. A line comment takes a line of its own; a block comment
+    /// stays ahead of the entry, so `/*flag=*/false` reads as its annotation.
+    fn open_entry_line(&mut self, lo: usize, pos: usize) {
+        for comment in &self.pending_comments_in(lo, pos) {
+            self.emitted_comments.insert(comment.span.start);
+            self.indent_if_at_line_start();
+            self.emit_comment(comment);
+            match comment.kind {
+                CommentKind::Block => self.output.push(' '),
+                CommentKind::Line | CommentKind::DocLine | CommentKind::ModuleDoc => {
+                    self.output.push('\n');
+                }
             }
         }
+        self.indent_if_at_line_start();
+    }
+
+    /// Emit the unplaced block comments in `lo..hi` inline, each followed by a
+    /// space. A line comment cannot go inline, so it stays pending and the
+    /// caller's one-line rendering is rejected for leaving it there.
+    fn emit_inline_comments_in(&mut self, lo: usize, hi: usize) {
+        for comment in &self.pending_comments_in(lo, hi) {
+            if comment.kind != CommentKind::Block {
+                continue;
+            }
+            self.emitted_comments.insert(comment.span.start);
+            self.emit_comment(comment);
+            self.output.push(' ');
+        }
+    }
+
+    /// The comments in `lo..hi` no construct has placed, in source order.
+    fn pending_comments(
+        &self,
+        lo: usize,
+        hi: usize,
+    ) -> impl Iterator<Item = &crate::comment::Comment> {
+        self.all_comments.iter().filter(move |c| {
+            c.span.start >= lo
+                && c.span.start < hi
+                && !self.emitted_comments.contains(&c.span.start)
+        })
+    }
+
+    /// [`Self::pending_comments`] as an owned list, for a caller that emits
+    /// them and so cannot hold the borrow.
+    fn pending_comments_in(&self, lo: usize, hi: usize) -> Vec<crate::comment::Comment> {
+        self.pending_comments(lo, hi).cloned().collect()
+    }
+
+    /// Emit one entry of a delimited list per line, between the delimiters at
+    /// `open` and `close`. `anchors` gives each entry its source start and the
+    /// id a same-line trailing comment attaches to. Every wrapped list renders
+    /// here, so where an interior comment goes is decided once rather than per
+    /// construct.
+    fn emit_entries_per_line<T, A, E>(
+        &mut self,
+        entries: &[T],
+        open: usize,
+        close: usize,
+        anchors: A,
+        mut emit: E,
+    ) where
+        A: Fn(&T) -> (Option<usize>, Option<crate::ast::AstId>),
+        E: FnMut(&mut Self, &T),
+    {
+        let mut lo = open;
+        for entry in entries {
+            let (start, trailing_id) = anchors(entry);
+            match start {
+                Some(start) => {
+                    self.open_entry_line(lo, start);
+                    lo = start;
+                }
+                None => self.write_indent(),
+            }
+            emit(self, entry);
+            self.output.push(',');
+            if let Some(id) = trailing_id {
+                self.emit_trailing_for_inline(id);
+            }
+            self.output.push('\n');
+        }
+        // Whatever is left between the delimiters, a comment wedged inside an
+        // entry included: there is no finer place for it. Bounded by `open`,
+        // since a comment written before the list is not inside it.
+        self.flush_comments_in(open, close, Spacing::Tight);
     }
 
     /// Leading trivia for `id`, or an empty slice when no trivia map is
     /// attached or the id has no recorded leading comments.
     fn leading_of(&self, id: crate::ast::AstId) -> &'a [crate::comment::Comment] {
         self.trivia.map(|t| t.leading_of(id)).unwrap_or(&[])
+    }
+
+    /// The line `id`'s leading run starts on: its first still-unplaced leading
+    /// comment, else `fallback`.
+    fn leading_start_line(&self, id: crate::ast::AstId, fallback: usize) -> usize {
+        self.first_unplaced_leading(id)
+            .map_or(fallback, |c| c.span.line)
     }
 
     /// Trailing trivia for `id`. Same fallback as [`Self::leading_of`].
@@ -263,58 +424,6 @@ impl<'a> Unparser<'a> {
         self.trivia.map(|t| t.inner_tail_of(id)).unwrap_or(&[])
     }
 
-    /// Emit any leading block-trivia comments for `id` inline at the
-    /// current cursor, each followed by a single space. Used by
-    /// delimited-list emit (`emit_inline_arg_leading`,
-    /// `emit_multiline_arg_leading`) so `foo(/*x=*/1, /*y=*/2)` round-
-    /// trips. `Line` / `DocLine` / `ModuleDoc` comments would force a
-    /// newline mid-expression and are skipped here — those kinds are
-    /// not legal in inline position anyway.
-    fn emit_inline_leading_for(&mut self, id: crate::ast::AstId) {
-        // Collect into a local Vec to satisfy the borrow checker — the
-        // immutable borrow of `self.trivia` cannot live across the
-        // mutable `self.output` / `self.emitted_comments` writes below.
-        let comments: Vec<crate::comment::Comment> = self.leading_of(id).to_vec();
-        for comment in comments {
-            if !matches!(comment.kind, crate::comment::CommentKind::Block) {
-                continue;
-            }
-            if self.emitted_comments.insert(comment.span.start) {
-                self.emit_comment(&comment);
-                self.output.push(' ');
-            }
-        }
-    }
-
-    /// Emit leading trivia for an AST node that is about to be written
-    /// on its own line (e.g. inside a multiline call-args block where
-    /// each arg has been pre-indented). Block comments stay inline with
-    /// a trailing space — same as [`Self::emit_inline_leading_for`] —
-    /// while line / doc / module-doc comments get their own line with
-    /// matching indent so the textual position they had in the source
-    /// is preserved.
-    fn emit_multiline_leading_for(&mut self, id: crate::ast::AstId) {
-        let comments: Vec<crate::comment::Comment> = self.leading_of(id).to_vec();
-        for comment in comments {
-            if !self.emitted_comments.insert(comment.span.start) {
-                continue;
-            }
-            match comment.kind {
-                crate::comment::CommentKind::Block => {
-                    self.emit_comment(&comment);
-                    self.output.push(' ');
-                }
-                crate::comment::CommentKind::Line
-                | crate::comment::CommentKind::DocLine
-                | crate::comment::CommentKind::ModuleDoc => {
-                    self.emit_comment(&comment);
-                    self.output.push('\n');
-                    self.write_indent();
-                }
-            }
-        }
-    }
-
     /// Emit blank lines to reach the target line, updating `last_source_line`
     fn emit_blank_lines_to(&mut self, target_line: usize) {
         if self.last_source_line > 0 && target_line > self.last_source_line {
@@ -323,7 +432,10 @@ impl<'a> Unparser<'a> {
                 self.output.push('\n');
             }
         }
-        self.last_source_line = target_line;
+        // Never backwards. A construct written above what the output has
+        // already reached is one being moved down, and re-anchoring to its line
+        // would invent the gap below it.
+        self.last_source_line = self.last_source_line.max(target_line);
     }
 
     pub fn unparse(mut self, module: &Module) -> String {
@@ -364,26 +476,19 @@ impl<'a> Unparser<'a> {
             self.last_source_line = item_span.end_line();
         }
 
-        // Comments after the last item have no following node to lead, so flush
-        // the file-tail dangling comments here rather than dropping them.
-        let tail: Vec<Comment> = self
-            .trivia
-            .map(|t| t.dangling().to_vec())
-            .unwrap_or_default();
-        for comment in &tail {
-            if self.emitted_comments.insert(comment.span.start) {
-                self.emit_blank_lines_to(comment.span.line);
-                self.write_indent();
-                self.emit_comment(comment);
-                self.output.push('\n');
-                self.last_source_line = comment.span.line;
-            }
-        }
+        // Everything left: comments after the last item, plus anything no
+        // construct placed. Closes the no-loss guarantee for the whole file.
+        self.flush_comments_before(usize::MAX, Spacing::KeepBlankLines);
     }
 
     fn unparse_item(&mut self, item: &Item) {
         let id = get_item_id(item);
 
+        // Whatever the items before this one had no slot for, at the boundary
+        // the next parse will read it in, and above this item's leading run so
+        // that nothing lands between a doc comment and what it documents.
+        let leading_start = self.leading_start(id, get_item_span(item).start);
+        self.flush_comments_before(leading_start, Spacing::KeepBlankLines);
         let last_comment_was_doc = self.emit_leading_for_check_doc(id);
 
         // Anchor the leading-blank computation to the first attribute, not to
@@ -441,6 +546,17 @@ impl<'a> Unparser<'a> {
             &[(false, false), (true, false), (false, true), (true, true)]
         };
 
+        // A comment inside the `{ }` has no slot in the one-line item list, so
+        // drop the candidates that keep the items inline.
+        let comment_in_items = u
+            .items_span
+            .is_some_and(|s| self.has_comment_in_range(s.start, s.end));
+        let candidates: Vec<(bool, bool)> = candidates
+            .iter()
+            .copied()
+            .filter(|&(wrap_imports, _)| wrap_imports || !comment_in_items)
+            .collect();
+
         for (i, &(wrap_imports, with_multiline)) in candidates.iter().enumerate() {
             self.rollback(snap);
             if wrap_imports {
@@ -486,11 +602,20 @@ impl<'a> Unparser<'a> {
         }
         self.output.push_str("use {\n");
         self.indent_level += 1;
-        for item in &u.items {
-            self.write_indent();
-            self.unparse_use_item(item);
-            self.output.push_str(",\n");
-        }
+        let braces = u.items_span.unwrap_or(u.span);
+        self.emit_entries_per_line(
+            &u.items,
+            braces.start,
+            braces.end,
+            |item| {
+                let id = match item {
+                    UseItem::Simple { id, .. } => Some(*id),
+                    _ => None,
+                };
+                (item.start(), id)
+            },
+            Unparser::unparse_use_item,
+        );
         self.indent_level -= 1;
         self.write_indent();
         self.output.push('}');
@@ -538,6 +663,7 @@ impl<'a> Unparser<'a> {
             UseItem::InterfaceFunctions {
                 interface_name,
                 functions,
+                ..
             } => {
                 self.output.push_str(interface_name);
                 self.output.push_str("::{ ");
@@ -695,22 +821,33 @@ impl<'a> Unparser<'a> {
     /// check spans `emit_after` too, since a short parameter list can still push
     /// the line over once the return type is appended. On overflow the inline
     /// attempt is rolled back and re-emitted wrapped, the same width-aware
-    /// rollback the import list uses.
-    fn delimited_params<F: Fn(&mut Self)>(&mut self, params: &[Param], emit_after: F) {
-        let snap = self.snapshot();
-        self.delimited("(", ")", params, Unparser::unparse_param);
-        emit_after(self);
-        if params.is_empty() || !self.exceeds_width_since(snap) {
-            return;
+    /// rollback the import list uses. A comment inside `params_span` (the `(`
+    /// through `)`) forces the wrapped form too: the one-line form has no slot
+    /// for one.
+    fn delimited_params<F: Fn(&mut Self)>(
+        &mut self,
+        params: &[Param],
+        params_span: Span,
+        emit_after: F,
+    ) {
+        if !self.has_comment_in_range(params_span.start, params_span.end) {
+            let snap = self.snapshot();
+            self.delimited("(", ")", params, Unparser::unparse_param);
+            emit_after(self);
+            if params.is_empty() || !self.exceeds_width_since(snap) {
+                return;
+            }
+            self.rollback(snap);
         }
-        self.rollback(snap);
         self.output.push_str("(\n");
         self.indent_level += 1;
-        for param in params {
-            self.write_indent();
-            self.unparse_param(param);
-            self.output.push_str(",\n");
-        }
+        self.emit_entries_per_line(
+            params,
+            params_span.start,
+            params_span.end,
+            |p| (Some(p.span.start), Some(p.id)),
+            Unparser::unparse_param,
+        );
         self.indent_level -= 1;
         self.write_indent();
         self.output.push(')');
@@ -726,7 +863,7 @@ impl<'a> Unparser<'a> {
         self.output.push_str("fn ");
         self.output.push_str(&f.name);
         self.unparse_generic_params(&f.type_params);
-        self.delimited_params(&f.params, |s| {
+        self.delimited_params(&f.params, f.params_span, |s| {
             if let Some(ret) = &f.return_type
                 && !is_unit_type(ret)
             {
@@ -1037,10 +1174,7 @@ impl<'a> Unparser<'a> {
             if has_declarations && let Some(first) = i.methods.first() {
                 this.output.push('\n');
                 let first_effective_line = effective_start_line(&first.attrs, first.span.line);
-                this.last_source_line = this
-                    .leading_of(first.id)
-                    .first()
-                    .map_or(first_effective_line, |c| c.span.line);
+                this.last_source_line = this.leading_start_line(first.id, first_effective_line);
             }
 
             for (idx, method) in i.methods.iter().enumerate() {
@@ -1051,15 +1185,12 @@ impl<'a> Unparser<'a> {
                 // gap and advance `last_source_line` to the helper's
                 // anchor in the same way as the assoc-method gap above.
                 let effective_line = effective_start_line(&method.attrs, method.span.line);
-                let effective_start = this
-                    .leading_of(method.id)
-                    .first()
-                    .map_or(effective_line, |c| c.span.line);
+                let effective_start = this.leading_start_line(method.id, effective_line);
                 if idx > 0 && blank_lines_between(this.last_source_line, effective_start) == 0 {
                     this.output.push('\n');
                     this.last_source_line = effective_start;
                 }
-                this.emit_leading_for(method.id);
+                this.open_member(method.id, method.span.start);
                 this.emit_blank_lines_to(effective_line);
                 this.unparse_function(method);
                 this.last_source_line = method.span.end_line();
@@ -1106,7 +1237,7 @@ impl<'a> Unparser<'a> {
 
             for method in &t.methods {
                 let effective_line = effective_start_line(&method.attrs, method.span.line);
-                this.emit_leading_for(method.id);
+                this.open_member(method.id, method.span.start);
                 this.emit_blank_lines_to(effective_line);
                 this.unparse_function(method);
                 this.last_source_line = method.span.end_line();
@@ -1124,7 +1255,7 @@ impl<'a> Unparser<'a> {
         self.with_braced_body(e.span, |this| {
             for method in &e.methods {
                 let effective_line = effective_start_line(&method.attrs, method.span.line);
-                this.emit_leading_for(method.id);
+                this.open_member(method.id, method.span.start);
                 this.emit_blank_lines_to(effective_line);
                 this.unparse_function(method);
                 this.last_source_line = method.span.end_line();
@@ -1151,7 +1282,7 @@ impl<'a> Unparser<'a> {
 
         self.with_braced_body(r.span, |this| {
             for method in &r.methods {
-                this.emit_leading_for(method.id);
+                this.open_member(method.id, method.span.start);
                 this.unparse_function(method);
                 this.last_source_line = method.span.end_line();
             }
@@ -1192,7 +1323,7 @@ impl<'a> Unparser<'a> {
                         this.emit_kw_if(func.is_async, "async ");
                         this.output.push_str("fn ");
                         this.output.push_str(&func.name);
-                        this.delimited_params(&func.params, |s| {
+                        this.delimited_params(&func.params, func.params_span, |s| {
                             if let Some(ret) = &func.return_type
                                 && !is_unit_type(ret)
                             {
@@ -1251,6 +1382,14 @@ impl<'a> Unparser<'a> {
         for stmt in &block.stmts {
             let stmt_span = get_stmt_span(stmt);
             let stmt_id = stmt.id();
+            // Whatever the statements before this one had no slot for. Flushing
+            // at the next boundary rather than at the previous statement's end
+            // puts the comment where the next parse will read it — as this
+            // statement's leading trivia — so the output is a fixed point.
+            self.flush_comments_before(
+                self.leading_start(stmt_id, stmt_span.start),
+                Spacing::KeepBlankLines,
+            );
             self.emit_leading_for(stmt_id);
             self.emit_blank_lines_to(stmt_span.line);
             self.unparse_stmt(stmt);
@@ -1259,8 +1398,13 @@ impl<'a> Unparser<'a> {
         }
 
         // Comments that landed after the last stmt but before the closing brace
-        // would otherwise be dropped — flush them here.
+        // would otherwise be dropped — flush them here. Unbounded below, unlike
+        // the other closing-brace flushes: a comment in the signature above has
+        // no finer place, and stopping it here keeps it inside the function
+        // rather than in the next member's leading run, where the blank line
+        // between members would move it again on the following pass.
         self.emit_inner_tail_for(block.id);
+        self.flush_comments_before(block.span.end, Spacing::Tight);
 
         self.last_source_line = saved_line.max(block.span.end_line());
     }
@@ -1324,6 +1468,9 @@ impl<'a> Unparser<'a> {
 
         if let Some(ref v) = l.value {
             self.output.push_str(" = ");
+            // A block comment between `=` and the value annotates the value, so
+            // it stays there rather than moving into whatever the value is.
+            self.emit_inline_comments_in(l.span.start, v.span().start);
             self.unparse_expr(v);
         }
         if let Some(else_block) = &l.else_block {
@@ -1348,6 +1495,7 @@ impl<'a> Unparser<'a> {
         self.output.push_str("return");
         if let Some(value) = &r.value {
             self.output.push(' ');
+            self.emit_inline_comments_in(r.span.start, value.span().start);
             self.unparse_expr(value);
         }
         self.output.push_str(";\n");
@@ -1363,7 +1511,7 @@ impl<'a> Unparser<'a> {
     fn unparse_if_stmt(&mut self, i: &IfStmt) {
         self.write_indent();
         self.output.push_str("if ");
-        self.unparse_condition(&i.condition);
+        self.with_reserved_width(" {".len(), |s| s.unparse_condition(&i.condition));
         self.output.push_str(" {\n");
 
         self.indent_level += 1;
@@ -1397,7 +1545,7 @@ impl<'a> Unparser<'a> {
     /// This skips the initial indent and final newline since they're handled by the parent.
     fn unparse_if_stmt_continuation(&mut self, i: &IfStmt) {
         self.output.push_str("if ");
-        self.unparse_condition(&i.condition);
+        self.with_reserved_width(" {".len(), |s| s.unparse_condition(&i.condition));
         self.output.push_str(" {\n");
 
         self.indent_level += 1;
@@ -1460,7 +1608,7 @@ impl<'a> Unparser<'a> {
     fn unparse_while(&mut self, w: &WhileStmt) {
         self.write_indent();
         self.output.push_str("while ");
-        self.unparse_condition(&w.condition);
+        self.with_reserved_width(" {".len(), |s| s.unparse_condition(&w.condition));
         self.output.push_str(" {\n");
 
         self.indent_level += 1;
@@ -1719,11 +1867,11 @@ impl<'a> Unparser<'a> {
         if self.has_comment_in_range(c.span.start, c.span.end) {
             self.output.push_str(" {\n");
             self.indent_level += 1;
-            self.emit_comments_in_range(c.span.start, c.body.span().start);
+            self.flush_comments_in(c.span.start, c.body.span().start, Spacing::Tight);
             self.write_indent();
             self.unparse_expr(&c.body);
             self.output.push('\n');
-            self.emit_comments_in_range(c.body.span().end, c.span.end);
+            self.flush_comments_in(c.span.start, c.span.end, Spacing::Tight);
             self.indent_level -= 1;
             self.write_indent();
             self.output.push_str("}]");
@@ -1736,7 +1884,11 @@ impl<'a> Unparser<'a> {
 
     fn unparse_tuple_literal(&mut self, tuple_lit: &TupleLiteralExpr) {
         let elements = &tuple_lit.elements;
-        if elements.is_empty() {
+        // An empty array still has an interior a comment can sit in, and `[]`
+        // has no room for one.
+        if elements.is_empty()
+            && !self.has_comment_in_range(tuple_lit.span.start, tuple_lit.span.end)
+        {
             self.output.push_str("[]");
             return;
         }
@@ -1749,18 +1901,13 @@ impl<'a> Unparser<'a> {
         if self.has_comment_in_range(tuple_lit.span.start, tuple_lit.span.end) {
             self.output.push_str("[\n");
             self.indent_level += 1;
-            let mut lo = tuple_lit.span.start;
-            for elem in elements {
-                self.emit_comments_in_range(lo, elem.span().start);
-                self.write_indent();
-                self.unparse_expr(elem);
-                self.output.push(',');
-                self.emit_trailing_for_inline(elem.id());
-                self.output.push('\n');
-                lo = elem.span().end;
-            }
-            // Any comment after the last element, before the closing `]`.
-            self.emit_comments_in_range(lo, tuple_lit.span.end);
+            self.emit_entries_per_line(
+                elements,
+                tuple_lit.span.start,
+                tuple_lit.span.end,
+                |e| (Some(e.span().start), Some(e.id())),
+                Unparser::unparse_expr,
+            );
             self.indent_level -= 1;
             self.write_indent();
             self.output.push(']');
@@ -1776,7 +1923,7 @@ impl<'a> Unparser<'a> {
         if !has_container && call_elems <= 1 {
             let snap = self.snapshot();
             self.delimited("[", "]", elements, Unparser::unparse_expr);
-            if !self.output[snap..].contains('\n') && !self.exceeds_width_since(snap) {
+            if !self.added_since(snap).contains('\n') && !self.exceeds_width_since(snap) {
                 return;
             }
             self.rollback(snap);
@@ -1887,7 +2034,7 @@ impl<'a> Unparser<'a> {
         if matches!(b.op, BinaryOp::And | BinaryOp::Or) {
             let snap = self.snapshot();
             self.unparse_binary_inline(b);
-            if !self.output[snap..].contains('\n') && !self.exceeds_width_since(snap) {
+            if !self.added_since(snap).contains('\n') && !self.exceeds_width_since(snap) {
                 return;
             }
             self.rollback(snap);
@@ -1911,6 +2058,12 @@ impl<'a> Unparser<'a> {
         });
     }
 
+    /// One operand of a logical chain. The chain renders an operand more than
+    /// once to try another width, and every attempt must render it the same.
+    fn unparse_operand(&mut self, part: &Expr, parens: bool) {
+        self.with_parens_if(parens, |s| s.unparse_expr(part));
+    }
+
     fn unparse_logical_chain_multiline(&mut self, b: &BinaryExpr) {
         let op_str = binary_op_str(b.op);
         let parts = collect_logical_chain_binary(b);
@@ -1919,14 +2072,41 @@ impl<'a> Unparser<'a> {
             s.unparse_expr(parts[0]);
         });
 
-        for part in &parts[1..] {
+        for (i, part) in parts[1..].iter().enumerate() {
             self.output.push('\n');
+            // The operand's line is one level in from the chain, and it stays
+            // that way while the operand renders: what the operand wraps has to
+            // indent from the line it is on, not from the chain's own level.
             self.indent_level += 1;
             self.write_indent();
-            self.indent_level -= 1;
             self.output.push_str(op_str);
             self.output.push(' ');
-            self.with_parens_if(needs_parens(part, b.op, false), |s| s.unparse_expr(part));
+            let snap = self.snapshot();
+            let parens = needs_parens(part, b.op, false);
+            self.unparse_operand(part, parens);
+
+            // The last operand ends the chain, so the caller's ` {` lands on
+            // its line. Measure that line once the operand is rendered — only
+            // then is it known whether the operand ends it — and wrap the call
+            // that ends the line when the two together do not fit.
+            let last = i + 2 == parts.len();
+            if last
+                && self.last_line_exceeds_reserved()
+                && let Some(tail) = tail_call_span_start(part)
+            {
+                self.rollback(snap);
+                self.force_wrap = Some(tail);
+                self.unparse_operand(part, parens);
+                self.force_wrap = None;
+                // Wrapping the tail is worth it only if it bought the line
+                // back. A tail whose own arguments overflow leaves it over
+                // either way, and the compact form is the better of the two.
+                if self.last_line_exceeds_reserved() {
+                    self.rollback(snap);
+                    self.unparse_operand(part, parens);
+                }
+            }
+            self.indent_level -= 1;
         }
     }
 
@@ -2005,7 +2185,7 @@ impl<'a> Unparser<'a> {
             s.unparse_expr(&c.callee);
         });
         self.unparse_turbofish(&c.type_args);
-        self.unparse_call_args(&c.args, c.has_trailing_comma);
+        self.unparse_call_args(&c.args, c.has_trailing_comma, c.span);
     }
 
     fn unparse_method_call(&mut self, m: &MethodCallExpr) {
@@ -2013,7 +2193,7 @@ impl<'a> Unparser<'a> {
         self.output.push('.');
         self.output.push_str(&m.method);
         self.unparse_turbofish(&m.type_args);
-        self.unparse_call_args(&m.args, m.has_trailing_comma);
+        self.unparse_call_args(&m.args, m.has_trailing_comma, m.span);
     }
 
     fn unparse_static_method_call(&mut self, s: &StaticMethodCallExpr) {
@@ -2028,7 +2208,7 @@ impl<'a> Unparser<'a> {
         self.output.push_str("::");
         self.output.push_str(&s.method);
         self.unparse_turbofish(&s.type_args);
-        self.unparse_call_args(&s.args, s.has_trailing_comma);
+        self.unparse_call_args(&s.args, s.has_trailing_comma, s.span);
     }
 
     /// Emit `::<T1, T2, ...>` turbofish; emits nothing if `args` is empty.
@@ -2039,54 +2219,52 @@ impl<'a> Unparser<'a> {
         self.delimited("::<", ">", args, Unparser::unparse_type);
     }
 
-    fn unparse_call_args(&mut self, args: &[Expr], has_trailing_comma: bool) {
+    /// Emit `(args)`, one line per argument when the single-line form would
+    /// overflow, wrap anyway, or leave a comment inside the call unplaced.
+    /// `span` is the call expression's, so an empty argument list holding a
+    /// comment wraps too.
+    fn unparse_call_args(&mut self, args: &[Expr], has_trailing_comma: bool, span: Span) {
         // Multiline-with-trailing-comma is requested explicitly by the source;
-        // in that case we skip the single-line attempt entirely.
-        if !has_trailing_comma || args.is_empty() {
+        // in that case we skip the single-line attempt entirely, as does a
+        // caller that has measured the line and needs this call to wrap.
+        let forced = self.force_wrap == Some(span.start);
+        if forced {
+            self.force_wrap = None;
+        }
+        if (!has_trailing_comma || args.is_empty()) && !forced {
             let snap = self.snapshot();
-            self.emit_inline_call_args(args);
-            if !self.exceeds_width_since(snap) {
+            self.emit_inline_call_args(args, span.start);
+            if !self.exceeds_width_since(snap) && !self.has_comment_in_range(span.start, span.end) {
                 return;
             }
             self.rollback(snap);
         }
-        self.emit_multiline_call_args(args);
+        self.output.push_str("(\n");
+        self.indent_level += 1;
+        self.emit_entries_per_line(
+            args,
+            span.start,
+            span.end,
+            |a| (Some(a.span().start), Some(a.id())),
+            Unparser::unparse_expr,
+        );
+        self.indent_level -= 1;
+        self.write_indent();
+        self.output.push(')');
     }
 
-    /// Single-line `(arg1, arg2, ...)` form. Each argument's
-    /// AstId-keyed leading block trivia is emitted inline immediately
-    /// before its expression so `foo(/*x=*/1, /*y=*/2)` round-trips.
-    fn emit_inline_call_args(&mut self, args: &[Expr]) {
+    /// Single-line `(arg1, arg2, ...)` form. A block comment before an
+    /// argument is emitted inline immediately before it, so `foo(/*x=*/1)`
+    /// round-trips; anything else inside stays unplaced and the caller wraps.
+    fn emit_inline_call_args(&mut self, args: &[Expr], open: usize) {
         self.output.push('(');
         for (i, arg) in args.iter().enumerate() {
             if i > 0 {
                 self.output.push_str(", ");
             }
-            self.emit_inline_leading_for(arg.id());
+            self.emit_inline_comments_in(open, arg.span().start);
             self.unparse_expr(arg);
         }
-        self.output.push(')');
-    }
-
-    /// Emit `(arg1,\n arg2,\n ...)` with a trailing comma at the current indent.
-    /// Same comment-attachment rule as the single-line variant: leading
-    /// block trivia for each arg's `AstId` is emitted on the wrapped line
-    /// before the arg expression.
-    fn emit_multiline_call_args(&mut self, args: &[Expr]) {
-        self.output.push_str("(\n");
-        self.indent_level += 1;
-        for arg in args {
-            self.write_indent();
-            // Multiline form: line / doc comments must stay on their
-            // own line + indent (block comments stay inline with a
-            // trailing space). The single-line `inline_leading_for`
-            // would silently drop them.
-            self.emit_multiline_leading_for(arg.id());
-            self.unparse_expr(arg);
-            self.output.push_str(",\n");
-        }
-        self.indent_level -= 1;
-        self.write_indent();
         self.output.push(')');
     }
 
@@ -2175,7 +2353,7 @@ impl<'a> Unparser<'a> {
         self.unparse_expr(else_expr);
         self.output.push_str(" }");
 
-        if self.output[snap..].contains('\n') || self.exceeds_width_since(snap) {
+        if self.added_since(snap).contains('\n') || self.exceeds_width_since(snap) {
             self.rollback(snap);
             return false;
         }
@@ -2184,7 +2362,7 @@ impl<'a> Unparser<'a> {
 
     fn unparse_if_expr_multiline(&mut self, i: &IfExpr) {
         self.output.push_str("if ");
-        self.unparse_condition(&i.condition);
+        self.with_reserved_width(" {".len(), |s| s.unparse_condition(&i.condition));
         self.output.push_str(" {\n");
 
         self.indent_level += 1;
@@ -2244,7 +2422,7 @@ impl<'a> Unparser<'a> {
         self.comma_sep(&m.arms, Unparser::emit_match_arm_body);
         self.output.push_str(" }");
 
-        if self.output[snap..].contains('\n') || self.exceeds_width_since(snap) {
+        if self.added_since(snap).contains('\n') || self.exceeds_width_since(snap) {
             self.rollback(snap);
             return false;
         }
@@ -2406,8 +2584,15 @@ impl<'a> Unparser<'a> {
             match part {
                 // Literal segments are stored raw, escapes and all.
                 TemplatePart::String(s) => self.output.push_str(s),
-                TemplatePart::Interpolation { expr, format } => {
+                TemplatePart::Interpolation { expr, format, open } => {
                     self.output.push_str("${");
+                    // A comment inside these braces keeps its place, a line
+                    // comment on a line of its own like anywhere else — the
+                    // interpolation holds code, so a newline in it changes
+                    // nothing. The range starts at this interpolation's own
+                    // `${`, or a comment trailing the previous one would move
+                    // to this expression.
+                    self.open_entry_line(open.start, expr.span().start);
                     self.unparse_expr(expr);
                     if let Some(fmt) = format {
                         self.output.push(':');
@@ -2434,16 +2619,21 @@ impl<'a> Unparser<'a> {
             self.output.push(' ');
         }
 
-        if s.fields.is_empty() && s.spreads.is_empty() {
+        // An empty literal still has an interior a comment can sit in, and
+        // `{}` has no room for one.
+        if s.fields.is_empty()
+            && s.spreads.is_empty()
+            && !self.has_comment_in_range(s.span.start, s.span.end)
+        {
             self.output.push_str("{}");
             return;
         }
 
         // A struct literal breaks one field per line — never fills — when the
         // source asked for it (trailing comma), when a field value is a nested
-        // container (depth rule), or when more than one field bears a call. A
-        // flat, single-call-at-most struct is inline-first and only wraps on
-        // width.
+        // container (depth rule), when more than one field bears a call, or
+        // when a comment inside it needs a line of its own. A flat,
+        // single-call-at-most struct is inline-first and only wraps on width.
         let member_count = s.fields.len() + s.spreads.len();
         let has_container = s.fields.iter().any(|f| expr_is_container(&f.value));
         let call_fields = s.fields.iter().filter(|f| contains_call(&f.value)).count()
@@ -2451,10 +2641,14 @@ impl<'a> Unparser<'a> {
                 .iter()
                 .filter(|sp| contains_call(&sp.expr))
                 .count();
-        if !s.has_trailing_comma && !has_container && call_fields <= 1 {
+        if !s.has_trailing_comma
+            && !has_container
+            && call_fields <= 1
+            && !self.has_comment_in_range(s.span.start, s.span.end)
+        {
             let snap = self.snapshot();
             self.output.push_str("{ ");
-            for (i, member) in s.members().into_iter().enumerate() {
+            for (i, member) in s.members().iter().enumerate() {
                 if i > 0 {
                     self.output.push_str(", ");
                 }
@@ -2470,17 +2664,19 @@ impl<'a> Unparser<'a> {
 
         self.output.push_str("{\n");
         self.indent_level += 1;
-        for member in s.members() {
-            self.write_indent();
-            self.emit_literal_member(member);
-            self.output.push_str(",\n");
-        }
+        self.emit_entries_per_line(
+            &s.members(),
+            s.span.start,
+            s.span.end,
+            |m| (Some(m.span().start), Some(m.value_id())),
+            |s, m| s.emit_literal_member(m),
+        );
         self.indent_level -= 1;
         self.write_indent();
         self.output.push('}');
     }
 
-    fn emit_literal_member(&mut self, member: crate::ast::LiteralMember<'_>) {
+    fn emit_literal_member(&mut self, member: &crate::ast::LiteralMember<'_>) {
         match member {
             crate::ast::LiteralMember::Spread(_, sp) => {
                 self.output.push_str("..");
@@ -2501,6 +2697,14 @@ impl<'a> Unparser<'a> {
     fn write_indent(&mut self) {
         for _ in 0..self.indent_level {
             self.output.push_str("    ");
+        }
+    }
+
+    /// Indent only when the output is at the start of a line, so an entry that
+    /// follows an inline block comment is not indented a second time.
+    fn indent_if_at_line_start(&mut self) {
+        if self.output.is_empty() || self.output.ends_with('\n') {
+            self.write_indent();
         }
     }
 
@@ -2592,6 +2796,10 @@ impl<'a> Unparser<'a> {
 
         body(self);
 
+        // A comment between the last member and the closing brace, like a
+        // block's inner tail. Without it the comment leaves the declaration.
+        self.flush_comments_in(outer_span.start, outer_span.end, Spacing::Tight);
+
         self.indent_level -= 1;
         self.last_source_line = saved_line.max(outer_span.end_line());
         self.write_indent();
@@ -2606,7 +2814,7 @@ impl<'a> Unparser<'a> {
         F: FnOnce(&mut Self),
     {
         let effective_line = effective_start_line(attrs, span.line);
-        self.emit_leading_for(id);
+        self.open_member(id, span.start);
         self.emit_blank_lines_to(effective_line);
         body(self);
         self.emit_trailing_for_inline(id);
@@ -2614,30 +2822,82 @@ impl<'a> Unparser<'a> {
         self.last_source_line = span.end_line();
     }
 
-    /// Save current output position for snapshot/rollback.
-    fn snapshot(&self) -> usize {
-        self.output.len()
+    /// Save the current output position and emitted-comment count.
+    fn snapshot(&self) -> Mark {
+        Mark {
+            output: self.output.len(),
+            emitted: self.emitted_comments.len(),
+        }
     }
 
-    /// Rollback output to a saved snapshot.
-    fn rollback(&mut self, snapshot: usize) {
-        self.output.truncate(snapshot);
+    /// Rollback output and the emitted-comment set to a saved snapshot.
+    fn rollback(&mut self, mark: Mark) {
+        self.output.truncate(mark.output);
+        self.emitted_comments.truncate(mark.emitted);
     }
 
-    /// Check if any line since snapshot exceeds `MAX_LINE_WIDTH`.
-    fn exceeds_width_since(&self, snapshot: usize) -> bool {
-        let added = &self.output[snapshot..];
+    /// The output written since `mark`.
+    fn added_since(&self, mark: Mark) -> &str {
+        &self.output[mark.output..]
+    }
+
+    /// Check if any line since snapshot exceeds `MAX_LINE_WIDTH`, counting
+    /// [`Self::reserved_width`] on the last one: the caller's ` {` is not
+    /// written yet but lands there.
+    fn exceeds_width_since(&self, mark: Mark) -> bool {
+        let snapshot = mark.output;
+        let added = self.added_since(mark);
+        let last = added.rfind('\n').map_or(0, |nl| nl + 1);
+        // The reservation belongs to the line the caller will write on, so it
+        // counts only while the rendering is still on that line. Once the
+        // construct has broken, what follows the piece being measured is the
+        // rest of the construct, not the caller's ` {`.
+        let reserved = match self.reserved_width {
+            Some((base, extra))
+                if mark.output >= base && !self.output[base..mark.output].contains('\n') =>
+            {
+                extra
+            }
+            _ => 0,
+        };
         added.split('\n').any(|line| {
+            let tail = if line.as_ptr() as usize - added.as_ptr() as usize == last {
+                reserved
+            } else {
+                0
+            };
             if line.as_ptr() == added.as_ptr() {
                 // First chunk: column = position before snapshot + this chunk
                 self.output[..snapshot]
                     .rfind('\n')
                     .map_or(snapshot + line.len(), |nl| snapshot - nl - 1 + line.len())
+                    + tail
                     > MAX_LINE_WIDTH
             } else {
-                line.len() > MAX_LINE_WIDTH
+                line.len() + tail > MAX_LINE_WIDTH
             }
         })
+    }
+
+    /// True if the caller has text to append to the output's last line and the
+    /// two together are over budget. Only what the caller adds is at issue: a
+    /// line already over on its own is one no wrapping decision here can save.
+    fn last_line_exceeds_reserved(&self) -> bool {
+        let Some((_, reserved)) = self.reserved_width else {
+            return false;
+        };
+        let last = self.output.rfind('\n').map_or(0, |nl| nl + 1);
+        let line = self.output.len() - last;
+        line + reserved > MAX_LINE_WIDTH && line <= MAX_LINE_WIDTH
+    }
+
+    /// Render `f` knowing the caller will append `extra` columns to the line it
+    /// ends on.
+    fn with_reserved_width<F: FnOnce(&mut Self)>(&mut self, extra: usize, f: F) {
+        let saved = self.reserved_width;
+        self.reserved_width = Some((self.output.len(), extra));
+        f(self);
+        self.reserved_width = saved;
     }
 
     /// Emit `trivia.leading_of(id)` on its own indented line with the
@@ -2650,7 +2910,6 @@ impl<'a> Unparser<'a> {
                 self.write_indent();
                 self.emit_comment(comment);
                 self.output.push('\n');
-                self.last_source_line = comment.span.line;
             }
         }
     }
@@ -2668,7 +2927,6 @@ impl<'a> Unparser<'a> {
                 self.write_indent();
                 self.emit_comment(comment);
                 self.output.push('\n');
-                self.last_source_line = comment.span.line;
                 last_was_doc = comment.kind == CommentKind::DocLine;
             }
         }
@@ -2757,7 +3015,6 @@ impl<'a> Unparser<'a> {
                 self.write_indent();
                 self.emit_comment(comment);
                 self.output.push('\n');
-                self.last_source_line = comment.span.line;
             }
         }
     }
@@ -2978,6 +3235,23 @@ fn collect_logical_chain_expr<'a>(expr: &'a Expr, op: BinaryOp, parts: &mut Vec<
             collect_logical_chain_expr(&inner.right, op, parts);
         }
         _ => parts.push(expr),
+    }
+}
+
+/// The span start of the call whose `)` ends `expr`'s rendering, if a call
+/// does. That call is the only one whose wrapping shortens the line `expr`
+/// ends on, so it is the one a caller short of room forces. Follows the right
+/// spine, where the rendering's last token is, and stops at an operand the
+/// unparser would parenthesize: there the last token is the paren, not the
+/// call.
+fn tail_call_span_start(expr: &Expr) -> Option<usize> {
+    match expr {
+        Expr::Call(c) => Some(c.span.start),
+        Expr::MethodCall(m) => Some(m.span.start),
+        Expr::StaticMethodCall(s) => Some(s.span.start),
+        Expr::Binary(b) if !needs_parens(&b.right, b.op, false) => tail_call_span_start(&b.right),
+        Expr::ComparisonChain(chain) => tail_call_span_start(&chain.comparisons.last()?.right),
+        _ => None,
     }
 }
 
@@ -3451,7 +3725,7 @@ fn unparse_template_string_into(t: &TemplateStringExpr, output: &mut String) {
         match part {
             // Literal segments are stored raw, escapes and all.
             TemplatePart::String(s) => output.push_str(s),
-            TemplatePart::Interpolation { expr, format } => {
+            TemplatePart::Interpolation { expr, format, .. } => {
                 output.push_str("${");
                 unparse_expr_into(expr, output);
                 if let Some(fmt) = format {

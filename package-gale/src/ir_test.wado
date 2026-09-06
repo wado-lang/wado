@@ -19,6 +19,7 @@ use {
     synthesize_implicit_tokens,
     check_references,
     merge_grammars,
+    compose_grammars,
     assign_action_ids,
     alias_parser_literals,
     is_lexer_members,
@@ -124,6 +125,263 @@ test "merge_grammars tolerates a numeric channel id with no channels block" {
         }
     }
     assert found, "rule C not found in merged grammar";
+}
+
+fn compose(sources: List<String>) -> Grammar {
+    let mut grammars: List<Grammar> = [];
+    for let s of &sources {
+        grammars.push(parse(*s).unwrap());
+    }
+    return compose_grammars(grammars).unwrap();
+}
+
+fn rule_names(g: &Grammar) -> List<String> {
+    let mut out: List<String> = [];
+    for let r of &g.parser_rules {
+        out.push(r.name);
+    }
+    return out;
+}
+
+fn token_names(g: &Grammar) -> List<String> {
+    let mut out: List<String> = [];
+    for let r of &g.lexer_rules {
+        out.push(r.name);
+    }
+    return out;
+}
+
+fn channel_of(g: &Grammar, name: &String) -> i32 {
+    for let r of &g.lexer_rules {
+        if r.name == *name {
+            return r.channel;
+        }
+    }
+    assert false, `no lexer rule named ${name}`;
+    return -1;
+}
+
+test "compose_grammars leaves a grammar with no import on the merge path" {
+    let lexer = parse("lexer grammar FooLexer;\nA : 'a' ;").unwrap();
+    let parser = parse("parser grammar FooParser;\nr : A ;").unwrap();
+    let merged = merge_grammars([parser, lexer]);
+    let composed = compose_grammars([parser, lexer]).unwrap();
+    assert composed.name == merged.name;
+    assert rule_names(&composed) == rule_names(&merged);
+    assert token_names(&composed) == token_names(&merged);
+    assert composed.kind matches { Combined };
+}
+
+test "compose_grammars keeps the master's name and kind" {
+    let g = compose(["lexer grammar M;\nimport S;\nB : 'b' ;", "lexer grammar S;\nA : 'a' ;"]);
+    assert g.name == "M", `name=${g.name}`;
+    assert g.kind matches { Lexer };
+}
+
+test "compose_grammars puts master rules ahead of imported ones" {
+    // Lexer precedence is rule order: `KeywordVSIDOrder` needs the master's
+    // `A : 'abc'` to beat the imported `ID : 'a'..'z'+`.
+    let g = compose(["grammar M;\nimport S;\na : A ;\nA : 'abc' ;", "lexer grammar S;\nID : 'a'..'z'+ ;"]);
+    assert token_names(&g) == ["A", "ID"], `${token_names(&g):?}`;
+}
+
+test "compose_grammars resolves an import by declared name, not filename" {
+    // `DelegatorInvokesFirstVersionOfDelegateRule` writes `import S,T;` where
+    // the extracted files are `.slave1` (grammar T) and `.slave2` (grammar S).
+    let g = compose([
+        "grammar M;\nimport S,T;\ns : a ;\nB : 'b' ;", "parser grammar T;\na : B ;",
+        "parser grammar S;\na : b ;\nb : B ;",
+    ]);
+    // S comes first in import order, so its `a` is the version that survives
+    // — and it brings `b` with it.
+    assert rule_names(&g) == ["s", "a", "b"], `${rule_names(&g):?}`;
+}
+
+test "compose_grammars lets a master rule override a delegate's" {
+    let g = compose(["grammar M;\nimport S;\nb : 'b' | 'c' ;", "parser grammar S;\na : b ;\nb : B ;"]);
+    assert rule_names(&g) == ["b", "a"], `${rule_names(&g):?}`;
+    // The overridden `b : B` was the only reference to `B`, and it went with
+    // the rule — nothing is left to resolve.
+    for let pr of &g.pending_refs {
+        assert pr.referenced_name != "B", `stale ref to B from ${pr.containing_rule}`;
+    }
+}
+
+test "compose_grammars keeps a surviving reference from an overridden rule's sibling" {
+    let g = compose(["grammar M;\nimport S;\nb : 'b' ;\nB : 'b' ;", "parser grammar S;\na : b B ;\nb : B ;"]);
+    let mut refs_from_a = 0;
+    for let pr of &g.pending_refs {
+        if pr.containing_rule == "a" && pr.referenced_name == "B" {
+            refs_from_a += 1;
+        }
+    }
+    assert refs_from_a == 1, `refs from a: ${refs_from_a}`;
+}
+
+test "compose_grammars composes one token space out of tokens blocks" {
+    // `DelegatesSeeSameTokenType`: three declarations of `A`, one token.
+    let g = compose([
+        "grammar M;\nimport S,T;\ns : x y ;\nB : 'b' ;\nA : 'a' ;\nC : 'c' ;",
+        "parser grammar T;\ntokens { C, B, A }\ny : A ;", "parser grammar S;\ntokens { A, B, C }\nx : A ;",
+    ]);
+    assert token_names(&g) == ["B", "A", "C"], `${token_names(&g):?}`;
+    for let r of &g.lexer_rules {
+        assert !r.is_virtual, `${r.name} stayed virtual`;
+    }
+}
+
+test "compose_grammars lets a delegate's real rule take a master placeholder's slot" {
+    let g = compose(["grammar M;\nimport S;\ntokens { INT }\ns : INT ;", "lexer grammar S;\nINT : '0'..'9'+ ;"]);
+    assert token_names(&g) == ["INT"], `${token_names(&g):?}`;
+    assert !g.lexer_rules[0].is_virtual, "the real rule must win the slot";
+    assert !g.lexer_rules[0].body.is_empty(), "the real rule's body must survive";
+}
+
+test "compose_grammars inherits named actions but not options" {
+    // `doc/grammars.md`: named actions are merged, options are ignored.
+    let g = compose([
+        "grammar M;\nimport S;\ns : 'b' ;",
+        "parser grammar S;\noptions { superClass = Base; }\n@parser::members { int x; }\na : B ;",
+    ]);
+    let mut members = 0;
+    for let act of &g.named_actions {
+        if act.name == "members" {
+            members += 1;
+        }
+    }
+    assert members == 1, `@members count: ${members}`;
+    assert g.parser_superclass.is_empty(), `superclass=${g.parser_superclass}`;
+    for let o of &g.options {
+        assert o.name != "superClass", "delegate options must not be inherited";
+    }
+}
+
+test "compose_grammars keeps the master's action language" {
+    // `language` is an option, so it is not inherited either — a composite
+    // holds one action language, and the master picks it.
+    let g = compose(["grammar M;\nimport S;\ns : 'b' ;", "parser grammar S;\noptions { language = Wado; }\na : B ;"]);
+    assert g.action_language matches { Java }, `${g.action_language:?}`;
+}
+
+test "compose_grammars walks nested imports depth-first" {
+    // `doc/grammars.md`: Nested imports G1, G2; G1 imports G3 — the tool
+    // examines Nested, G1, G3, G2, and the first version of a rule wins.
+    let g = compose([
+        "grammar Nested;\nimport G1,G2;\ns : r ;", "parser grammar G1;\nimport G3;\na : r ;",
+        "parser grammar G2;\nr : B ;\nb2 : B ;", "parser grammar G3;\nr : B ;\nb3 : B ;",
+    ]);
+    assert rule_names(&g) == ["s", "a", "r", "b3", "b2"], `${rule_names(&g):?}`;
+}
+
+test "compose_grammars rejects two inputs declaring one grammar name" {
+    // The mirror of the unresolved import: a name that resolves to two inputs
+    // identifies neither. Rejected on both paths, since either half of a split
+    // grammar is looked up the same way.
+    let master = parse("grammar M;\nimport S;\ns : a ;").unwrap();
+    let first = parse("parser grammar S;\na : B ;").unwrap();
+    let second = parse("parser grammar S;\na : C ;").unwrap();
+    assert compose_grammars([master, first, second]) matches { Err(_) }, "a duplicate delegate name must be reported, not silently dropped";
+
+    let one = parse("grammar Dup;\nr : 'x' ;").unwrap();
+    let two = parse("grammar Dup;\nq : 'y' ;").unwrap();
+    assert compose_grammars([one, two]) matches { Err(_) }, "a duplicate name must be reported with no import in play too";
+}
+
+test "compose_grammars rejects an input the composite never reaches" {
+    // A cycle among inputs no master imports leaves them neither merged (their
+    // names are imported, so they are not masters) nor folded (nothing the
+    // master imports reaches them). Dropping them would be the silent omission
+    // the other failure modes are loud about.
+    let master = parse("grammar P;\np : ID ;").unwrap();
+    let m = parse("parser grammar M;\nimport S;\nm : ID ;").unwrap();
+    let s = parse("parser grammar S;\nimport M;\ns : ID ;").unwrap();
+    assert compose_grammars([master, m, s]) matches { Err(_) }, "an unreachable cycle must be reported, not dropped";
+
+    // A cycle the master does reach is not an error: the walk cuts it on the
+    // second visit.
+    let g = compose([
+        "grammar P2;\nimport M2;\np : m ;", "parser grammar M2;\nimport S2;\nm : s ;",
+        "parser grammar S2;\nimport M2;\ns : ID ;",
+    ]);
+    assert rule_names(&g) == ["p", "m", "s"], `${rule_names(&g):?}`;
+}
+
+test "an embedded delegate names its tokens rather than spelling them" {
+    // A parser literal aliases only to a DEFAULT_MODE rule. In a delegate whose
+    // rules live in a mode, `':'` therefore mints an anonymous DEFAULT_MODE
+    // token the lexer never reaches, and the parser waits for one that cannot
+    // arrive. The gate is deliberate: a parser rule is reached in whatever mode
+    // its caller pushed, and nothing records that.
+    let host = "grammar H;\nimport C;\nd : OPEN s CLOSE ;\nOPEN : '<' -> pushMode(M) ;";
+    let tail = "mode M;\nCLOSE : '>' -> popMode ;\nCOLON : ':' ;\nID : [a-z]+ ;";
+
+    let mut spelled = compose([host, `grammar C;\ns : ID ':' ID ;\n${tail}`]);
+    alias_parser_literals(&mut spelled);
+    assert has_literal(&spelled, &"s"), "a spelled literal stays one, and mints a token nothing emits";
+
+    let mut named = compose([host, `grammar C;\ns : ID COLON ID ;\n${tail}`]);
+    alias_parser_literals(&mut named);
+    assert !has_literal(&named, &"s"), "a named token is what the lexer produces";
+}
+
+/// Whether the named parser rule's first alternative still holds a `Literal`.
+fn has_literal(g: &Grammar, rule: &String) -> bool {
+    for let r of &g.parser_rules {
+        if r.name == *rule {
+            for let e of &r.alternatives[0].elements {
+                if e matches { Literal(_) } {
+                    return true;
+                }
+            }
+        }
+    }
+    return false;
+}
+
+test "compose_grammars rejects an import naming no supplied input" {
+    let master = parse("grammar M;\nimport S;\ns : ID ;").unwrap();
+    let result = compose_grammars([master]);
+    assert result matches { Err(_) }, "expected an unresolved import to be rejected";
+}
+
+test "compose_grammars discards a mode left empty by an override" {
+    let g = compose([
+        "lexer grammar M;\nimport S;\nOPEN : '<' ;",
+        "lexer grammar S;\nOPEN : '<' -> pushMode(TAG) ;\nmode TAG;\nCLOSE : '>' ;",
+    ]);
+    // `CLOSE` survives, so `TAG` keeps its rule and its name.
+    assert g.mode_names == ["DEFAULT_MODE", "TAG"], `${g.mode_names:?}`;
+
+    let empty = compose([
+        "lexer grammar M2;\nimport S2;\nCLOSE : '>' ;", "lexer grammar S2;\nOPEN : '<' ;\nmode TAG;\nCLOSE : '>' ;",
+    ]);
+    assert empty.mode_names == ["DEFAULT_MODE"], `${empty.mode_names:?}`;
+    for let r of &empty.lexer_rules {
+        assert r.mode == 0, `${r.name} mode=${r.mode}`;
+    }
+}
+
+test "compose_grammars gives each delegate's channels a slot of their own" {
+    let g = compose([
+        "lexer grammar M;\nimport S, T;\nchannels { A }\nM_C : 'm' -> channel(A) ;",
+        "lexer grammar S;\nchannels { B }\nS_C : 's' -> channel(B) ;",
+        "lexer grammar T;\nchannels { C }\nT_C : 't' -> channel(C) ;",
+    ]);
+    assert g.channels == ["A", "B", "C"], `${g.channels:?}`;
+    assert channel_of(&g, &"M_C") == 2;
+    assert channel_of(&g, &"S_C") == 3;
+    assert channel_of(&g, &"T_C") == 4;
+}
+
+test "compose_grammars merges two delegates naming one channel onto one slot" {
+    let g = compose([
+        "lexer grammar M;\nimport S, T;\nM_C : 'm' ;",
+        "lexer grammar S;\nchannels { NOTE }\nS_C : 's' -> channel(NOTE) ;",
+        "lexer grammar T;\nchannels { NOTE }\nT_C : 't' -> channel(NOTE) ;",
+    ]);
+    assert g.channels == ["NOTE"], `${g.channels:?}`;
+    assert channel_of(&g, &"S_C") == 2;
+    assert channel_of(&g, &"T_C") == 2;
 }
 
 test "Grammar construction" {

@@ -60,7 +60,7 @@ mod weight {
 }
 
 /// The Wasm value type a primitive occupies. `None` for one with no scalar
-/// shape of its own — a `v128`, a 128-bit pair, a reference.
+/// shape of its own — a `v128`, a reference.
 fn wasm_shape(type_table: &TypeTable, id: TypeId) -> Option<PrimitiveType> {
     let ResolvedType::Primitive(prim) = type_table.get(id) else {
         return None;
@@ -77,7 +77,7 @@ fn wasm_shape(type_table: &TypeTable, id: TypeId) -> Option<PrimitiveType> {
         PrimitiveType::I64 | PrimitiveType::U64 => Some(PrimitiveType::I64),
         PrimitiveType::F32 => Some(PrimitiveType::F32),
         PrimitiveType::F64 => Some(PrimitiveType::F64),
-        PrimitiveType::I128 | PrimitiveType::U128 | PrimitiveType::V128 => None,
+        PrimitiveType::V128 => None,
     }
 }
 

@@ -7,8 +7,8 @@ with no runtime to install and no version to keep in sync.
 
 The `.g4` format is ANTLR4's; for the full grammar language, see ANTLR4's
 [documentation](https://github.com/antlr/antlr4/tree/master/doc). Gale accepts
-every grammar ANTLR4 accepts — and a few it rejects, where the meaning is
-unambiguous (see [Design](#design)).
+every grammar ANTLR4 accepts bar one — and a few it rejects, where the meaning
+is unambiguous (see [Design](#design)).
 
 ## Design
 
@@ -22,6 +22,8 @@ with no remaining choice — e.g. a `.`- or `~X`-led left-recursive suffix like
 `mode` inside a combined `grammar`, which ANTLR4 restricts to a `lexer grammar`
 but which is unambiguous since a combined grammar already bundles a lexer. Where
 the meaning is not uniquely determined, Gale rejects loudly rather than guessing.
+That costs it one grammar ANTLR4 accepts, `import Foo = Bar;`, carved out under
+claim (a) in [`antlr4-compatibility.md`](./antlr4-compatibility.md).
 
 Self-contained output, no version drift. Gale inlines its entire runtime into
 every generated parser. There is no `gale-runtime` package to keep aligned with
@@ -435,6 +437,83 @@ and [`SQLite.highlights.scm`](./tests/grammars/SQLite.highlights.scm) for
 complete real examples, and
 [WEP: Gale Highlight Query](../docs/wep-2026-07-12-gale-highlight-query.md) for
 the design.
+
+### What the context tier buys
+
+The override form is the reason to highlight from a parse rather than a token
+stream. [`example/`](./example) carries a three-grammar demo of it.
+[`MiniHtml.g4`](./example/MiniHtml.g4) imports
+[`MiniCss.g4`](./example/MiniCss.g4) and [`MiniJs.g4`](./example/MiniJs.g4), so
+one `use` builds a single recognizer: one lexer with three modes, one parser,
+one tree. The three `.scm` queries ride in beside the grammars and are
+concatenated, so each language keeps its own.
+
+Embedding is the vehicle. The point is one line of
+[`MiniJs.highlights.scm`](./example/MiniJs.highlights.scm):
+
+```scheme
+(params (JS_IDENT) @variable.parameter)
+```
+
+`arrow` and `group` both open with `(`, so whether an identifier inside the
+parentheses is a parameter is settled by the `=>` after the closing paren:
+
+```js
+let add = (a, b = (1 + 2)) => a + b;   // a, b are parameters
+let one = ((a));                       // a is a variable
+```
+
+Two things stand between a highlighter and that answer. A lexer classifies the
+identifier when it reads it, before the deciding token exists, and no
+mode-stack state brings it closer. A regex highlighter does look ahead, and
+`\(([^)]*)\)\s*=>` would settle a flat parameter list. But a default value nests
+parentheses, so `[^)]*` stops at the inner `)` and misses the `=>`. Finding that
+closing paren means matching brackets, which no regular expression does.
+
+The parser matches them, and the query reads the answer off the rule stack.
+`MiniCss.highlights.scm` does the same in the small, though a stateful lexer
+could keep up there: one `CSS_IDENT` token becomes a selector, a property, or a
+value by where the parse put it.
+
+What you pay for it is that a context capture fires only where the enclosing
+rule parsed. Half-write a declaration as `a { b: }` and `b` falls back to no
+class, because nothing placed it under `declaration`. Defaults still apply and
+the text is preserved, so the file stays readable while you type; only the
+contextual half is lost.
+
+That also makes a grammar bug look like this limitation. If input the language
+allows loses its classes, the grammar rejected it. Check there first.
+
+The whole page's highlighted HTML is pinned in
+[`example/highlight_test.wado`](./example/highlight_test.wado):
+
+```sh
+wado test package-gale/example/highlight_test.wado
+```
+
+### Composing a grammar for an embedded language
+
+The example is also what `import` looks like for an embedded language. It needs
+no feature beyond composition itself; two conventions carry it:
+
+- **The embedded grammar's lexer rules live in a mode of its own** (`mode CSS;`).
+  A composite has one lexer, so without a mode `MiniHtml`'s `TEXT` would
+  swallow a stylesheet whole.
+- **Its token names are prefixed** (`CSS_IDENT`, `JS_IDENT`). A composite has
+  one token space, where the first rule of a given name wins and the rest are
+  dropped.
+- **Its parser rules name their tokens rather than spelling them**
+  (`CSS_COLON`, not `':'`). A parser literal aliases only to a `DEFAULT_MODE`
+  rule, so spelling one mints a token the delegate's mode never produces.
+
+The host owns the boundaries and nothing else: `MiniHtml.g4` declares
+`mode CSS` itself, holding just the `</style>` that leaves it, and composition
+unifies the two `mode CSS` declarations by name. So the host says where each
+language begins and ends, and neither delegate names its host.
+
+The trade is that an embedded grammar no longer works on its own, since its
+rules sit in a mode nothing enters. The full contract, and what a grammar
+usable both ways would need, are in [`import.md`](./import.md).
 
 ## Compatibility and further reading
 

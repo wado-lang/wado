@@ -7,6 +7,7 @@ use crate::hashmap::IndexMap;
 use std::cell::RefCell;
 
 use crate::ast::{CmBoundary, Function, Type};
+use crate::compiler_item::CompilerItem;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
 
 /// Information about a builtin function
@@ -169,24 +170,20 @@ impl BuiltinRegistry {
                         name: named.name.clone(),
                     });
                 }
-                // Otherwise, check for primitive types
+                if let Some(id) = TypeTable::primitive_by_name(&named.name) {
+                    return id;
+                }
+                // `i128` / `u128` are prelude struct declarations, which
+                // `core:builtin` imports like any other module's type — these
+                // arms are what honour that import, since the name is matched
+                // before the import list is consulted.
                 match named.name.as_str() {
-                    "i8" => TypeTable::I8,
-                    "i16" => TypeTable::I16,
-                    "i32" => TypeTable::I32,
-                    "i64" => TypeTable::I64,
-                    "i128" => TypeTable::I128,
-                    "u8" => TypeTable::U8,
-                    "u16" => TypeTable::U16,
-                    "u32" => TypeTable::U32,
-                    "u64" => TypeTable::U64,
-                    "u128" => TypeTable::U128,
-                    "f32" => TypeTable::F32,
-                    "f64" => TypeTable::F64,
-                    "bool" => TypeTable::BOOL,
-                    "char" => TypeTable::CHAR,
-                    "v128" => TypeTable::V128,
-                    "!" => TypeTable::NEVER,
+                    "i128" => type_table
+                        .borrow_mut()
+                        .make_compiler_struct(CompilerItem::I128),
+                    "u128" => type_table
+                        .borrow_mut()
+                        .make_compiler_struct(CompilerItem::U128),
                     _ => TypeTable::UNIT, // Unknown type defaults to UNIT
                 }
             }

@@ -1,0 +1,134 @@
+//! The pinned output of `highlight.wado`.
+//!
+//! Read the `add` line of `EXPECTED` next to the `one` line: the same `a`
+//! carries `variable parameter` in one and `variable` in the other, and the
+//! `=>` further right is what decides it. The default value nests parentheses,
+//! so reaching that `=>` means matching brackets.
+
+use { highlight_page } from "./highlight.wado";
+
+global PAGE: String = `<style>
+body { color: navy; }
+</style>
+<script>
+let add = (a, b = (1 + 2)) => a + b;
+let one = ((a));
+</script>
+<p>hi</p>
+`;
+
+global EXPECTED: String = `<span class="tag">&lt;style&gt;</span>
+<span class="type">body</span> <span class="punctuation bracket">{</span> <span class="property">color</span><span class="punctuation delimiter">:</span> <span class="constant">navy</span><span class="punctuation delimiter">;</span> <span class="punctuation bracket">}</span>
+<span class="tag">&lt;/style&gt;</span>
+<span class="tag">&lt;script&gt;</span>
+<span class="keyword">let</span> <span class="variable">add</span> <span class="operator">=</span> <span class="punctuation bracket">(</span><span class="variable parameter">a</span><span class="punctuation delimiter">,</span> <span class="variable parameter">b</span> <span class="operator">=</span> <span class="punctuation bracket">(</span><span class="number">1</span> <span class="operator">+</span> <span class="number">2</span><span class="punctuation bracket">)</span><span class="punctuation bracket">)</span> <span class="operator">=&gt;</span> <span class="variable">a</span> <span class="operator">+</span> <span class="variable">b</span><span class="punctuation delimiter">;</span>
+<span class="keyword">let</span> <span class="variable">one</span> <span class="operator">=</span> <span class="punctuation bracket">(</span><span class="punctuation bracket">(</span><span class="variable">a</span><span class="punctuation bracket">)</span><span class="punctuation bracket">)</span><span class="punctuation delimiter">;</span>
+<span class="tag">&lt;/script&gt;</span>
+<span class="tag">&lt;p&gt;</span>hi<span class="tag">&lt;/p&gt;</span>
+`;
+
+test "the page highlights through all three grammars" {
+    let html = highlight_page(&PAGE);
+    assert html == EXPECTED, `actual:\n${html}\nexpected:\n${EXPECTED}`;
+}
+
+test "an identifier is a parameter or a variable by a token past a nested paren" {
+    // Both open `(`, and both hold a `(` before their own closing one, so the
+    // `=>` that separates them is reachable only by matching brackets. That is
+    // past a lexer, which classifies the identifier before the `=>` exists, and
+    // past a regex, whose `[^)]*` stops at the inner `)`.
+    let param = highlight_page(&"<script>let f = (a = (1)) => a;</script>");
+    assert param.contains(`<span class="variable parameter">a</span>`), param;
+
+    let variable = highlight_page(&"<script>let f = ((a));</script>");
+    assert !variable.contains("parameter"), variable;
+    assert variable.contains(`<span class="variable">a</span>`), variable;
+}
+
+test "one CSS identifier token takes three classes by position" {
+    let html = highlight_page(&"<style>color { color: color; }</style>");
+    assert html.contains(`<span class="type">color</span>`), html;
+    assert html.contains(`<span class="property">color</span>`), html;
+    assert html.contains(`<span class="constant">color</span>`), html;
+}
+
+test "each language keeps its own token space" {
+    // `;` is `CSS_SEMI` inside `<style>` and `JS_SEMI` inside `<script>`. The
+    // lexer modes keep them apart; without them one language's rules would
+    // classify the other's text.
+    let css = highlight_page(&"<style>a { b: c; }</style>");
+    assert css.contains(`<span class="type">a</span>`), css;
+
+    let js = highlight_page(&"<script>a;</script>");
+    assert js.contains(`<span class="variable">a</span>`), js;
+}
+
+test "every form CSS allows keeps its classes" {
+    // The `;` after the last declaration is optional, and a block may be empty.
+    // Requiring the `;` cost `a { b: c }` its classes and read like a limit of
+    // parse-driven highlighting; it was this grammar getting the language wrong.
+    let forms: List<String> = [
+        "<style>a { b: c }</style>", "<style>a { b: c; }</style>", "<style>a { b: c; d: e }</style>",
+        "<style>a { b: c; d: e; }</style>",
+    ];
+    for let f of &forms {
+        let html = highlight_page(f);
+        assert html.contains(`<span class="property">b</span>`), html;
+        assert html.contains(`<span class="constant">c</span>`), html;
+    }
+    let empty = highlight_page(&"<style>a { }</style>");
+    assert empty.contains(`<span class="type">a</span>`), empty;
+}
+
+test "a context capture needs its enclosing rule to have parsed" {
+    // What classifying from a parse costs, on input the language really does
+    // reject. `b` keeps no class because nothing placed it under `declaration`;
+    // the defaults and the text survive, so the file stays readable while typed.
+    let half_written = highlight_page(&"<style>a { b: }</style>");
+    assert !half_written.contains(`<span class="property">b</span>`), half_written;
+    assert half_written.contains(`<span class="punctuation delimiter">:</span>`), half_written;
+    assert plain_text(&half_written) == "<style>a { b: }</style>", plain_text(&half_written);
+}
+
+test "a closing tag ends its block from inside a comment or a string" {
+    // The delegates' scanning rules stop at `<` so the host's terminator stays
+    // visible; otherwise the mode never pops and the rest of the document is
+    // lexed as CSS or JavaScript. See "Embedding a language" in `import.md`.
+    let tail = `<span class="tag">&lt;p&gt;</span>x<span class="tag">&lt;/p&gt;</span>`;
+    let line_comment = highlight_page(&"<script>// note </script><p>x</p>");
+    assert line_comment.ends_with(tail), line_comment;
+    let string = highlight_page(&`<script>let s = "</script><p>x</p>`);
+    assert string.ends_with(tail), string;
+    let block_comment = highlight_page(&"<style>a { /* x </style><p>x</p>");
+    assert block_comment.ends_with(tail), block_comment;
+}
+
+test "an ordinary comment and string still take their classes" {
+    let page = highlight_page(&`<style>a { /* c */ b: c }</style><script>let s = "hi";</script>`);
+    assert page.contains(`<span class="comment">/* c */</span>`), page;
+    assert page.contains(`<span class="string">&quot;hi&quot;</span>`), page;
+}
+
+test "highlighting is text-preserving" {
+    // Spans stripped and entities unescaped, the output is the input back.
+    let restored = plain_text(&highlight_page(&PAGE));
+    assert restored == PAGE, `actual:\n${restored}\nexpected:\n${PAGE}`;
+}
+
+/// The highlighted text with its spans stripped and its entities unescaped.
+fn plain_text(html: &String) -> String {
+    let mut text = String::new();
+    let mut in_tag = false;
+    for let c of html.chars() {
+        if in_tag {
+            if c == '>' {
+                in_tag = false;
+            }
+        } else if c == '<' {
+            in_tag = true;
+        } else {
+            text.push(c);
+        }
+    }
+    return text.replace("&lt;", "<").replace("&gt;", ">").replace("&quot;", "\"").replace("&amp;", "&");
+}

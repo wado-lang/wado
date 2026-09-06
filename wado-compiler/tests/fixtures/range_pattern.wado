@@ -104,3 +104,14 @@ test "a parenthesised range" {
     }
     assert sum == 6;
 }
+
+type Mask = u32;
+
+test "a range pattern on a newtype reads its base type's signedness" {
+    // Compared signed, a bound past `i32::MAX` never matches.
+    let m: Mask = 4294967290;
+    assert m matches { 0..=4294967295 };
+    assert !(m matches { 0..=4294967289 });
+    let plain: u32 = 4294967290;
+    assert plain matches { 0..=4294967295 };
+}

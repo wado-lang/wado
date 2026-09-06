@@ -596,6 +596,7 @@ mod tests {
             source_span: span(),
             source_id: AstId::fresh(),
             items: vec![UseItem::Wildcard],
+            items_span: None,
             attributes: Some(attrs),
             span: span(),
         };

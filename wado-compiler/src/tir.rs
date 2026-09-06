@@ -274,12 +274,10 @@ pub enum PrimitiveType {
     I16,
     I32,
     I64,
-    I128,
     U8,
     U16,
     U32,
     U64,
-    U128,
     F32,
     F64,
     Bool,
@@ -296,12 +294,10 @@ impl PrimitiveType {
             Self::I16 => "i16",
             Self::I32 => "i32",
             Self::I64 => "i64",
-            Self::I128 => "i128",
             Self::U8 => "u8",
             Self::U16 => "u16",
             Self::U32 => "u32",
             Self::U64 => "u64",
-            Self::U128 => "u128",
             Self::F32 => "f32",
             Self::F64 => "f64",
             Self::Bool => "bool",
@@ -316,10 +312,12 @@ impl PrimitiveType {
         Self::all_primitive_names().contains(&name)
     }
 
+    /// Every name this enum spells. `i128` and `u128` are absent: they are
+    /// prelude struct declarations, which write their own operator impls.
     pub fn all_primitive_names() -> &'static [&'static str] {
         &[
-            "i8", "i16", "i32", "i64", "i128", "u8", "u16", "u32", "u64", "u128", "f32", "f64",
-            "bool", "char", "v128",
+            "i8", "i16", "i32", "i64", "u8", "u16", "u32", "u64", "f32", "f64", "bool", "char",
+            "v128",
         ]
     }
 }
@@ -861,22 +859,20 @@ impl TypeTable {
     pub const I16: TypeId = TypeId(1);
     pub const I32: TypeId = TypeId(2);
     pub const I64: TypeId = TypeId(3);
-    pub const I128: TypeId = TypeId(4);
-    pub const U8: TypeId = TypeId(5);
-    pub const U16: TypeId = TypeId(6);
-    pub const U32: TypeId = TypeId(7);
-    pub const U64: TypeId = TypeId(8);
-    pub const U128: TypeId = TypeId(9);
-    pub const F32: TypeId = TypeId(10);
-    pub const F64: TypeId = TypeId(11);
-    pub const BOOL: TypeId = TypeId(12);
-    pub const CHAR: TypeId = TypeId(13);
-    pub const V128: TypeId = TypeId(14);
-    pub const UNIT: TypeId = TypeId(15);
-    pub const NEVER: TypeId = TypeId(16);
+    pub const U8: TypeId = TypeId(4);
+    pub const U16: TypeId = TypeId(5);
+    pub const U32: TypeId = TypeId(6);
+    pub const U64: TypeId = TypeId(7);
+    pub const F32: TypeId = TypeId(8);
+    pub const F64: TypeId = TypeId(9);
+    pub const BOOL: TypeId = TypeId(10);
+    pub const CHAR: TypeId = TypeId(11);
+    pub const V128: TypeId = TypeId(12);
+    pub const UNIT: TypeId = TypeId(13);
+    pub const NEVER: TypeId = TypeId(14);
     // STRING removed - String is now a user-defined struct in core:prelude/string.wado
-    pub const UNKNOWN: TypeId = TypeId(17);
-    pub const ERROR: TypeId = TypeId(18);
+    pub const UNKNOWN: TypeId = TypeId(15);
+    pub const ERROR: TypeId = TypeId(16);
 
     /// The primitive spelling → well-known `TypeId` mapping, the single
     /// source for every by-name primitive resolution. `i128` / `u128` are
@@ -977,12 +973,10 @@ impl TypeTable {
         table.intern(ResolvedType::Primitive(PrimitiveType::I16));
         table.intern(ResolvedType::Primitive(PrimitiveType::I32));
         table.intern(ResolvedType::Primitive(PrimitiveType::I64));
-        table.intern(ResolvedType::Primitive(PrimitiveType::I128));
         table.intern(ResolvedType::Primitive(PrimitiveType::U8));
         table.intern(ResolvedType::Primitive(PrimitiveType::U16));
         table.intern(ResolvedType::Primitive(PrimitiveType::U32));
         table.intern(ResolvedType::Primitive(PrimitiveType::U64));
-        table.intern(ResolvedType::Primitive(PrimitiveType::U128));
         table.intern(ResolvedType::Primitive(PrimitiveType::F32));
         table.intern(ResolvedType::Primitive(PrimitiveType::F64));
         table.intern(ResolvedType::Primitive(PrimitiveType::Bool));
@@ -1074,6 +1068,8 @@ impl TypeTable {
         self.types.iter()
     }
 
+    /// Whether `id` is one of the scalar integers. `i128` / `u128` answer
+    /// `false`: no Wasm integer instruction takes them.
     pub fn is_integer(&self, id: TypeId) -> bool {
         // Follow newtype chain to get ultimate base type
         let base_id = self.representation_head(id);
@@ -1084,12 +1080,10 @@ impl TypeTable {
                     | PrimitiveType::I16
                     | PrimitiveType::I32
                     | PrimitiveType::I64
-                    | PrimitiveType::I128
                     | PrimitiveType::U8
                     | PrimitiveType::U16
                     | PrimitiveType::U32
                     | PrimitiveType::U64
-                    | PrimitiveType::U128
             )
         )
     }
@@ -1302,14 +1296,13 @@ impl TypeTable {
     }
 
     /// Whether `&T` / `&mut T` is represented as a `Box<T>` cell rather than
-    /// `T`'s own GC handle: a primitive other than `i128` / `u128`, an enum, a
-    /// variant, or a function type (WEP 2026-06-13, Reference Representation).
-    /// The boxing pass and every consumer deciding by representation read this
-    /// one predicate.
+    /// `T`'s own GC handle (WEP 2026-06-13, Reference Representation). The
+    /// boxing pass and every consumer deciding by representation read this one
+    /// predicate.
     #[must_use]
     pub fn is_boxed_reference_target(&self, ty: TypeId) -> bool {
         match self.get(ty) {
-            ResolvedType::Primitive(p) => !matches!(p, PrimitiveType::I128 | PrimitiveType::U128),
+            ResolvedType::Primitive(_) => true,
             ResolvedType::Enum { .. }
             | ResolvedType::Variant { .. }
             | ResolvedType::Function { .. } => true,
@@ -1946,6 +1939,39 @@ impl TypeTable {
 
     pub fn compiler_trait_name(&self, item: crate::compiler_item::CompilerItem) -> &str {
         self.compiler_items.trait_name(item)
+    }
+
+    /// Whether `type_id` is an unsigned integer, `u128` included. An integer
+    /// literal pattern asks this to pick the `u128` over the `i128` comparison.
+    #[must_use]
+    pub fn is_unsigned_int(&self, type_id: TypeId) -> bool {
+        // Through the newtype chain, as `is_integer` reads it: a newtype over
+        // `u32` compares unsigned, or a bound past `i32::MAX` never matches.
+        let base_id = self.representation_head(type_id);
+        matches!(
+            self.get(base_id),
+            ResolvedType::Primitive(
+                PrimitiveType::U8 | PrimitiveType::U16 | PrimitiveType::U32 | PrimitiveType::U64
+            )
+        ) || self.wide_int_item(base_id) == Some(crate::compiler_item::CompilerItem::U128)
+    }
+
+    /// Which wide-integer prelude struct `type_id` is, `None` for anything else.
+    /// By declaration identity: a name match also answers for a user type.
+    #[must_use]
+    pub fn wide_int_item(&self, type_id: TypeId) -> Option<crate::compiler_item::CompilerItem> {
+        use crate::compiler_item::CompilerItem;
+        let ResolvedType::Struct {
+            def: StructDef::Decl(def),
+            ..
+        } = self.get(type_id)
+        else {
+            return None;
+        };
+        let def = *def;
+        [CompilerItem::I128, CompilerItem::U128]
+            .into_iter()
+            .find(|item| self.compiler_item_def(*item) == Some(def))
     }
 
     /// The compiler trait item as a mangled method name embeds it — named by

@@ -15,7 +15,7 @@ use {
     merge_grammars,
     check_references,
 } from "../ir.wado";
-use { parse, parse_checked } from "./parser.wado";
+use { parse, parse_checked, assemble_grammar } from "./parser.wado";
 
 test "parse JSON.g4" {
     let input = #include_str("../../tests/grammars/JSON.g4");
@@ -601,6 +601,30 @@ test "pipeline: parse followed by check_references without merge accepts a combi
     let merged = merge_grammars([g]);
     let result = check_references(&merged);
     assert result matches { Ok(_) }, "valid combined grammar should pass check_references";
+}
+
+test "pipeline: assemble_grammar composes a master with its imported delegate" {
+    // The whole `import S;` path a Kiln invocation takes: the master and every
+    // grammar its `inputs` supply arrive together, compose by declared name,
+    // and the composite is what `check_references` validates.
+    let inputs: List<[String, String]> = [
+        ["M.g4", "grammar M;\nimport S;\ns : a ;\nB : 'b' ;\nWS : (' '|'\\n') -> skip ;"],
+        ["S.g4", "parser grammar S;\na : B ;"],
+    ];
+    let g = assemble_grammar(&inputs).unwrap();
+    assert g.name == "M", `name=${g.name}`;
+    assert g.parser_rules.len() == 2;
+    assert g.parser_rules[0].name == "s";
+    assert g.parser_rules[1].name == "a";
+    assert g.source_files == ["M.g4", "S.g4"], `${g.source_files:?}`;
+}
+
+test "pipeline: assemble_grammar rejects an import naming no supplied input" {
+    let inputs: List<[String, String]> = [
+        ["M.g4", "grammar M;\nimport S;\ns : ID ;\nID : [a-z]+ ;"],
+    ];
+    let result = assemble_grammar(&inputs);
+    assert result matches { Err(Check(m)) && m.contains("not among the supplied inputs") }, "an unresolved import must be reported, not silently omitted";
 }
 
 // LL(*) regression-suite grammars (`tests/grammars/ll_*.g4`). Each is a
