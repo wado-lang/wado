@@ -280,6 +280,13 @@ impl EngineBuffers {
     }
 }
 
+/// What a value-graph walk reads where the session was told nothing. Empty is
+/// conservative — it leaves a call opaque — and shared, so asking costs no map.
+static NO_PURE_BUILTINS: std::sync::LazyLock<IndexSet<crate::nir::FuncId>> =
+    std::sync::LazyLock::new(IndexSet::default);
+static NO_CTFE_BUILTINS: std::sync::LazyLock<crate::niri::CtfeBuiltinMap> =
+    std::sync::LazyLock::new(crate::niri::CtfeBuiltinMap::default);
+
 /// An engine session over one function body: the arena plus the [`EngineBuffers`]
 /// scratch (parent map, use index, and worklist) the worklist discipline needs,
 /// and the function's `locals` list so rules can allocate fresh locals.
@@ -527,8 +534,6 @@ impl<'a> Engine<'a> {
         // ones for the same reason: a call this walk cannot call pure bumps
         // every escaped local's heap version, and a field read of one then
         // matches no store.
-        let empty_builtins = IndexSet::default();
-        let empty_builtin_map = crate::niri::CtfeBuiltinMap::default();
         let vo = builder::build_scoped(
             self.body,
             root,
@@ -539,10 +544,10 @@ impl<'a> Engine<'a> {
             &self.mut_escaped_locals,
             self.vg_type_table,
             builder::CallFacts {
-                pure_builtin: self.pure_builtin_callees.unwrap_or(&empty_builtins),
+                pure_builtin: self.pure_builtin_callees.unwrap_or(&NO_PURE_BUILTINS),
                 pure: &self.pure_calls,
                 receiver_immutable: &self.receiver_immutable_calls,
-                ctfe_builtins: self.ctfe_builtins.unwrap_or(&empty_builtin_map),
+                ctfe_builtins: self.ctfe_builtins.unwrap_or(&NO_CTFE_BUILTINS),
             },
             &mut scratch,
             None,
@@ -552,15 +557,12 @@ impl<'a> Engine<'a> {
         let mut fields_const = 0;
         let mut out = Vec::new();
         for (e, v) in vo {
-            if matches!(self.body.exprs[e].kind, ExprKind::FieldAccess { .. }) {
-                fields_seen += 1;
-                if builder::is_const_value(&self.body.values, v) {
-                    fields_const += 1;
-                }
-            }
+            let is_field = matches!(self.body.exprs[e].kind, ExprKind::FieldAccess { .. });
+            fields_seen += usize::from(is_field);
             if !builder::is_const_value(&self.body.values, v) {
                 continue;
             }
+            fields_const += usize::from(is_field);
             let keep = match &self.body.exprs[e].kind {
                 ExprKind::Local { index, .. } => forwardable.contains(index),
                 ExprKind::FieldAccess { .. } => include_fields,
@@ -598,8 +600,6 @@ impl<'a> Engine<'a> {
         let root = self.body.root;
         let mut scratch = self.body.values.clone();
         let empty = IndexMap::default();
-        let empty_builtins = IndexSet::default();
-        let empty_builtin_map = crate::niri::CtfeBuiltinMap::default();
         let scoped = builder::walk_scoped(
             self.body,
             root,
@@ -610,10 +610,10 @@ impl<'a> Engine<'a> {
             &self.mut_escaped_locals,
             self.vg_type_table,
             builder::CallFacts {
-                pure_builtin: self.pure_builtin_callees.unwrap_or(&empty_builtins),
+                pure_builtin: self.pure_builtin_callees.unwrap_or(&NO_PURE_BUILTINS),
                 pure: &self.pure_calls,
                 receiver_immutable: &self.receiver_immutable_calls,
-                ctfe_builtins: self.ctfe_builtins.unwrap_or(&empty_builtin_map),
+                ctfe_builtins: self.ctfe_builtins.unwrap_or(&NO_CTFE_BUILTINS),
             },
             &mut scratch,
             None,
@@ -796,8 +796,6 @@ impl<'a> Engine<'a> {
         if self.body.value_graph.is_some() {
             return;
         }
-        let empty_builtins = IndexSet::default();
-        let empty_builtin_map = crate::niri::CtfeBuiltinMap::default();
         let build = crate::nir_value_graph::builder::build(
             &mut *self.body,
             &self.param_locals,
@@ -805,10 +803,10 @@ impl<'a> Engine<'a> {
             &self.untrackable_locals,
             &self.mut_escaped_locals,
             crate::nir_value_graph::builder::CallFacts {
-                pure_builtin: self.pure_builtin_callees.unwrap_or(&empty_builtins),
+                pure_builtin: self.pure_builtin_callees.unwrap_or(&NO_PURE_BUILTINS),
                 pure: &self.pure_calls,
                 receiver_immutable: &self.receiver_immutable_calls,
-                ctfe_builtins: self.ctfe_builtins.unwrap_or(&empty_builtin_map),
+                ctfe_builtins: self.ctfe_builtins.unwrap_or(&NO_CTFE_BUILTINS),
             },
             self.vg_type_table,
         );

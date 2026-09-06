@@ -310,12 +310,7 @@ impl Interpreter<'_> {
         }
         let cut = Value::seq(*backing_type, elements[..used].to_vec())?;
         let previous = existing_fields(sink.body(), existing, type_id);
-        let slot = |index: SeqField| {
-            previous
-                .as_ref()
-                .and_then(|p| p.get(index.index() as usize).copied())
-                .flatten()
-        };
+        let slot = |index: SeqField| slot_at(&previous, index.index() as usize);
         let backing = self.write_value(sink, slot(SeqField::Backing), &cut, *backing_type, span)?;
         let len = self.write_value(sink, slot(SeqField::Len), length, TypeTable::I32, span)?;
         let fields = [(SeqField::Backing, backing), (SeqField::Len, len)];
@@ -384,15 +379,12 @@ impl Interpreter<'_> {
             if *recorded != index as u32 {
                 return None;
             }
-            let slot = previous
-                .as_ref()
-                .and_then(|p| p.get(index).copied())
-                .flatten();
+            let slot = slot_at(&previous, index);
             written.push((name, self.write_value(sink, slot, field, field_type, span)?));
         }
         if tuple.is_some() {
             let elements: Vec<Operand> = written.into_iter().map(|(_, op)| op).collect();
-            if previous.is_some_and(|p| p.iter().copied().eq(elements.iter().copied().map(Some))) {
+            if already_holds(&previous, elements.iter().copied()) {
                 return existing;
             }
             return Some(Operand::Expr(sink.alloc_expr(
@@ -444,13 +436,10 @@ impl Interpreter<'_> {
         let previous = existing_elements(sink.body(), existing);
         let mut written = Vec::with_capacity(elements.len());
         for (index, element) in elements.iter().enumerate() {
-            let slot = previous
-                .as_ref()
-                .and_then(|p| p.get(index).copied())
-                .flatten();
+            let slot = slot_at(&previous, index);
             written.push(self.write_value(sink, slot, element, element_type, span)?);
         }
-        if previous.is_some_and(|p| p.iter().copied().eq(written.iter().copied().map(Some))) {
+        if already_holds(&previous, written.iter().copied()) {
             return existing;
         }
         Some(Operand::Expr(sink.alloc_expr(
@@ -521,7 +510,7 @@ impl Interpreter<'_> {
         fields: Vec<(String, Operand)>,
         span: crate::token::Span,
     ) -> Option<Operand> {
-        if previous.is_some_and(|p| p.iter().copied().eq(fields.iter().map(|(_, op)| Some(*op)))) {
+        if already_holds(&previous, fields.iter().map(|(_, op)| *op)) {
             return existing;
         }
         Some(Operand::Expr(
@@ -1277,6 +1266,21 @@ fn existing_fields(
         *slots.get_mut(field.field_index as usize)? = Some(field.value);
     }
     Some(slots)
+}
+
+/// The operand `previous` holds at `index`, or `None` where it holds none.
+fn slot_at(previous: &Option<Vec<Option<Operand>>>, index: usize) -> Option<Operand> {
+    previous.as_ref()?.get(index).copied().flatten()
+}
+
+/// Whether `previous` already spells `written`, so the node holding it stands.
+fn already_holds(
+    previous: &Option<Vec<Option<Operand>>>,
+    written: impl IntoIterator<Item = Operand>,
+) -> bool {
+    previous
+        .as_ref()
+        .is_some_and(|p| p.iter().copied().eq(written.into_iter().map(Some)))
 }
 
 /// The operands a positional literal already holds. `None` when `existing` is

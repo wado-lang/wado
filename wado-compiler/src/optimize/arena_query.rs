@@ -244,6 +244,7 @@ pub(super) fn local_written_by(body: &Body, node: NodeRef) -> Option<u32> {
     }
 }
 
+/// [`Body::breaks_to`] under the name the optimizer's own walks use it by.
 pub(super) fn has_break_to(body: &Body, node: NodeRef, label: &str) -> bool {
     body.breaks_to(node, label)
 }

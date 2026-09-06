@@ -210,21 +210,14 @@ Missing optimizations, one entry per pass-shaped gap. Architectural work — com
       best, then nested. That reaches the hand-written dispatchers the
       synthesised `FieldSchema::lookup` tree does not. An atom that guards
       another's operand range has to be tested first, or a miss becomes a trap.
-- [ ] A length the graph could know. `` `${'x'}` `` builds its buffer with
-      `String::with_capacity`, so every append is guarded by
-      `n > array_len(buf.repr)` over a `repr` the same statement set to
-      `array_new(18)`. The graph names no builtin, so the length is opaque, the
-      guard survives, and the `String::grow` behind it bumps every escaped
-      local's heap version — which is what now stops `buf.used` forwarding
-      across an append, and with it the whole template folding to a literal.
-      `niri` already evaluates both builtins (`CtfeBuiltin::ArrayNew` /
-      `ArrayLen`) from its `CtfeBuiltinMap`; the graph would take the same map.
-
-      The other way in is `niri`'s, and it is
-      [that WEP](./wep-2026-04-27-nir-interpreter.md)'s stage 3: the region
-      containing all of this is refused because the `&mut` in
-      `Formatter { …, buf: &mut buffer }` is a write the frame does not perform.
-      Either one folds the template; the graph's is the smaller.
+- [ ] The `char` template's `&mut` field. `` `${'x'}` `` reaches WIR as a
+      `Formatter` over a fresh buffer, which `char::fmt` reads back out of the
+      `buf` field and appends through, where `` `${true}` `` folds to a
+      globalized literal. The capacity guard those appends used to carry is
+      gone, so the field is what is left, and it is
+      [the NIR interpreter WEP](./wep-2026-04-27-nir-interpreter.md)'s stage 3:
+      a `&mut` in a struct-literal field is a write the frame does not perform,
+      so the region abandons at the first append.
 
       `sroa` declines the same struct for its own reason — `&mut candidate` is a
       hard escape, exempting only a shared `&` argument to a non-storing callee

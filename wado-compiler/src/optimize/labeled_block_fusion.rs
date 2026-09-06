@@ -2524,7 +2524,7 @@ fn plan_slot_temp_sroa(
     };
     let (label, lb_block, role) = (label.clone(), *lb_block, *role);
 
-    // Checked before the read census below, which walks the whole body.
+    // Ordered ahead of the read census below, which walks the whole body.
     if falls_through(body, lb_block) {
         return None;
     }

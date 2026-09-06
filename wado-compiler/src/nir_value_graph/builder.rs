@@ -699,10 +699,7 @@ impl<'a> Builder<'a> {
                 let rv = recv
                     .as_expr()
                     .and_then(|ie| self.reference_lookthrough(ie).map(|(vn, _)| vn))
-                    .or_else(|| match recv {
-                        Operand::Value(v) => Some(v),
-                        Operand::Expr(e) => self.value_of.get(&e).copied(),
-                    });
+                    .or_else(|| self.walked_value(recv));
                 rv.and_then(|rv| self.field_ref_targets.get(&(rv, field_index)).copied())
             }
             _ => None,
@@ -1212,7 +1209,7 @@ impl<'a> Builder<'a> {
                 // names is a hazard of the break, not of the block: a jump out
                 // of the middle leaves the writes after it undone. Where
                 // nothing breaks to the label the statements simply run.
-                if block_breaks_to(self.body, block, label) {
+                if self.body.breaks_to(NodeRef::Block(block), label) {
                     self.walk_block(block);
                     self.dirty_all_writes_in_block(block);
                     self.heap_state.bump_all();
@@ -1466,7 +1463,9 @@ impl<'a> Builder<'a> {
                             label: Some(brk),
                             value: Some(value),
                         } if *brk == label => *value,
-                        StmtKind::Expr(tail) if !block_breaks_to(self.body, block, &label) => {
+                        StmtKind::Expr(tail)
+                            if !self.body.breaks_to(NodeRef::Block(block), &label) =>
+                        {
                             let Some(tail) = tail.as_expr() else { return };
                             producer = tail;
                             continue;
@@ -1504,10 +1503,6 @@ impl<'a> Builder<'a> {
         // Clone out the (field_index, value-expr) pairs to release the body
         // borrow before mutating `field_store`.
         let pairs: Vec<(u32, Operand)> = fields.iter().map(|f| (f.field_index, f.value)).collect();
-        let struct_name = match &self.body.exprs[producer].kind {
-            ExprKind::StructLiteral { struct_name, .. } => struct_name.clone(),
-            _ => String::new(),
-        };
         let attempted = pairs.len();
         let mut seeded = 0;
         for (field_index, field_value) in pairs {
@@ -1521,13 +1516,7 @@ impl<'a> Builder<'a> {
                 );
                 self.field_ref_targets.insert((recv, field_index), pointee);
             }
-            // A promoted constant field is its own `ValueId`; a skeleton field is
-            // resolved through `value_of`.
-            let fv = match field_value {
-                Operand::Value(v) => Some(v),
-                Operand::Expr(e) => self.value_of.get(&e).copied(),
-            };
-            if let Some(fv) = fv {
+            if let Some(fv) = self.walked_value(field_value) {
                 let ver = self.heap_version_of(Some(root), field_index);
                 self.field_store.insert((recv, field_index, ver), fv);
                 seeded += 1;
@@ -1538,8 +1527,12 @@ impl<'a> Builder<'a> {
         }
         crate::compiler_trace!(
             "vg_field",
-            "[{}] seed local {root} ({struct_name}): {seeded} of {attempted} fields, recv={recv:?}",
-            self.trace_id
+            "[{}] seed local {root} ({}): {seeded} of {attempted} fields, recv={recv:?}",
+            self.trace_id,
+            match &self.body.exprs[producer].kind {
+                ExprKind::StructLiteral { struct_name, .. } => struct_name.as_str(),
+                _ => "",
+            }
         );
     }
 
@@ -1942,7 +1935,8 @@ impl<'a> Builder<'a> {
             // early self-breaks, so scan the subtree too. Over-approximating
             // the break's reachability only adds an arm to the join (sound).
             StmtKind::LabeledBlock { block, label, .. } => {
-                self.block_falls_through(*block) || block_breaks_to(self.body, *block, label)
+                self.block_falls_through(*block)
+                    || self.body.breaks_to(NodeRef::Block(*block), label)
             }
             // A `Loop` falls through only via `break`, which we do not
             // analyse here; treat it as falling through.
@@ -2124,10 +2118,6 @@ fn writes_of_block(
     let rc = std::rc::Rc::new(out);
     cache.insert(block, std::rc::Rc::clone(&rc));
     rc
-}
-
-fn block_breaks_to(body: &Body, block: BlockId, label: &str) -> bool {
-    body.breaks_to(NodeRef::Block(block), label)
 }
 
 /// Every field index some `Assign` in `body` writes, over the whole arena: a

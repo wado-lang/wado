@@ -169,30 +169,16 @@ fn forward_at_root(
         // not the value, is used; forwarding the stored literal would destroy
         // the place and lose a callee's write-back (`g(&mut obj.f)` → `g(&mut
         // 5)`). Mirrors the sibling `extract::freeze_pure_arith` guard.
-        let field = match &engine.body.exprs[expr].kind {
-            ExprKind::FieldAccess { field_name, .. } => Some(field_name.clone()),
-            _ => None,
-        };
-        let field = field.filter(|n| n == "width");
         if super::extract::is_place_read(engine, expr) {
-            if field.is_some() {
-                crate::compiler_trace!("vg_field", "forward width {expr:?}: a place read");
-            }
             continue;
         }
         // A read not in `forwarded` has no re-emittable value.
         let Some(vid) = forwarded.get(&expr).copied() else {
-            if field.is_some() {
-                crate::compiler_trace!("vg_field", "forward width {expr:?}: no re-emittable value");
-            }
             continue;
         };
         // The constant promotes into `expr`'s parent operand slot (WEP: The Live
         // ValueGraph).
         let Some(value) = super::extract::extract_const(engine, vid, expr) else {
-            if field.is_some() {
-                crate::compiler_trace!("vg_field", "forward width {expr:?}: {vid:?} no extract");
-            }
             continue;
         };
         changed |= engine.replace_expr_with_value(expr, value);
