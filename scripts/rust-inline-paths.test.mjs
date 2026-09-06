@@ -65,3 +65,11 @@ test("blanks non-code without moving any later offset", () => {
   assert.equal(stripped.split("\n").length, source.split("\n").length);
   assert.equal(stripped.replace(/ +/g, " ").trim(), "let s = ;");
 });
+
+test("reads a capture list however much space precedes its angle bracket", () => {
+  // Rust allows any whitespace in `impl Trait + use <'a>`; read as an import,
+  // its span would swallow every path up to the next `;`.
+  const q = String.fromCharCode(39);
+  assert.deepEqual(texts(`fn f() -> impl Sized + use<${q}a> { crate::g() }`), ["crate::"]);
+  assert.deepEqual(texts(`fn f() -> impl Sized + use     <${q}a> { crate::g() }`), ["crate::"]);
+});

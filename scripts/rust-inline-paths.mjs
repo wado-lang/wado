@@ -109,12 +109,20 @@ export function stripNonCode(source) {
   return out.join("");
 }
 
+/** The first non-whitespace character at or after `at`, or "" past the end. */
+function nextNonSpace(code, at) {
+  let i = at;
+  while (i < code.length && /\s/.test(code[i])) i++;
+  return code[i] ?? "";
+}
+
 /** The half-open span of every `use` item, which may name a path freely. */
 function useItemSpans(code) {
   const spans = [];
   for (const match of code.matchAll(USE_KEYWORD)) {
-    // `impl Trait + use<'a, T>` is a capture list, not an import.
-    if (/^\s*</.test(code.slice(match.index + 3, match.index + 8))) continue;
+    // `impl Trait + use<'a, T>` is a capture list, not an import. Rust allows
+    // any whitespace before the `<`, so the scan cannot be given a width.
+    if (nextNonSpace(code, match.index + 3) === "<") continue;
     const semicolon = code.indexOf(";", match.index);
     spans.push([match.index, semicolon < 0 ? code.length : semicolon]);
   }
