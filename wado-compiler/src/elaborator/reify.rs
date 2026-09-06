@@ -9982,7 +9982,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         span: crate::token::Span,
         ctx: &mut FunctionContext,
     ) -> Option<TirPattern> {
-        use crate::tir::{ResolvedType, TirExpr, TirExprKind, TirLiteralPattern};
+        use crate::tir::{TirExpr, TirExprKind, TirLiteralPattern};
 
         let AssocConstSig {
             module: const_module,
@@ -9998,19 +9998,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         });
         match &resolved.kind {
             TirExprKind::IntLiteral { repr, .. } => {
-                let is_unsigned = matches!(
-                    self.tysys.type_table.borrow().get(scrutinee_type),
-                    ResolvedType::Primitive(
-                        crate::tir::PrimitiveType::U8
-                            | crate::tir::PrimitiveType::U16
-                            | crate::tir::PrimitiveType::U32
-                            | crate::tir::PrimitiveType::U64
-                            | crate::tir::PrimitiveType::U128
-                    ),
-                ) || matches!(
-                    self.tysys.type_table.borrow().get(scrutinee_type),
-                    ResolvedType::Struct { def, .. } if self.tysys.type_table.borrow().struct_head_name(*def) == "u128",
-                );
+                let is_unsigned = self
+                    .tysys
+                    .type_table
+                    .borrow()
+                    .is_unsigned_int(scrutinee_type);
                 if is_unsigned {
                     if let Ok(v) = super::util::parse_u128_literal(repr) {
                         return Some(TirPattern::Literal(TirLiteralPattern::U128(v)));
@@ -10032,14 +10024,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         })
     }
 
-    /// Resolve a range-pattern endpoint to its `i128` value. Literal
-    /// endpoints parse directly; an associated-constant endpoint
-    /// (`i32::MIN`, `TokenKind::FOO`) resolves through
-    /// `sem.decls.associated_constants` — mirroring the elaborator, which
-    /// inlines const range bounds to their values.
+    /// [`super::util::range_endpoint_to_i128`] plus the one endpoint shape only
+    /// reify reaches: a user associated constant (`TokenKind::FOO`).
     fn pattern_endpoint_value(
         &mut self,
         endpoint: &ast::Pattern,
+        is_unsigned: bool,
         ctx: &mut FunctionContext,
     ) -> i128 {
         use crate::tir::TirExprKind;
@@ -10050,32 +10040,26 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             ..
         } = endpoint
             && bindings.is_empty()
-        {
-            // Builtin primitive const (`i32::MIN`, `u8::MAX`): not in the
-            // user `associated_constants` map, resolved by value.
-            if let Some(v) =
-                super::stmt::primitive_assoc_const_to_i128(variant_qualifier.as_ref(), variant_name)
-            {
-                return v;
-            }
-            if let Some(AssocConstSig {
+            && super::stmt::primitive_assoc_const_to_i128(variant_qualifier.as_ref(), variant_name)
+                .is_none()
+            && let Some(AssocConstSig {
                 module: const_module,
                 ty: type_id,
                 value: const_expr,
                 ..
             }) = self.associated_constant_qualified(variant_qualifier.as_ref(), variant_name)
-            {
-                let resolved = self.with_const_module_perspective(&const_module, |this| {
-                    this.reify_expr(&const_expr, ctx, Some(type_id))
+        {
+            let resolved = self.with_const_module_perspective(&const_module, |this| {
+                this.reify_expr(&const_expr, ctx, Some(type_id))
+            });
+            if let TirExprKind::IntLiteral { repr, .. } = &resolved.kind {
+                return super::util::parse_int_bits(repr, is_unsigned).unwrap_or_else(|e| {
+                    panic!("a const range endpoint annotate accepted parses: {e}")
                 });
-                if let TirExprKind::IntLiteral { repr, .. } = &resolved.kind {
-                    return super::util::parse_i128_literal(repr)
-                        .or_else(|_| super::util::parse_u128_literal(repr).map(|v| v as i128))
-                        .unwrap_or(0);
-                }
             }
         }
-        pattern_endpoint_to_i128(endpoint)
+        super::util::range_endpoint_to_i128(endpoint, is_unsigned)
+            .expect("annotate diagnoses a range endpoint that denotes no integer")
     }
 
     /// [`super::types::newtype_member_owner`] for the declaration `prefix`
@@ -10294,45 +10278,30 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 }
             }
             ast::Pattern::Literal(lit) => {
-                use crate::tir::{PrimitiveType, ResolvedType, TirLiteralPattern};
-                // Mirror `Elaborator::resolve_if_pattern_inner`'s literal
-                // arm: wide-int literals follow the
-                // scrutinee's signedness (a `u128` scrutinee must compare
-                // via `u128::*`, not `i128::*`, or codegen emits a
-                // `(ref $u128)` vs `(ref $i128)` mismatch), and char /
-                // string literals decode their escapes. `null` on a
-                // variant scrutinee with a `None` case lowers to that
-                // case.
-                let scrutinee_is_unsigned = {
-                    let resolved = self.tysys.type_table.borrow().get(scrutinee_type).clone();
-                    matches!(
-                        resolved,
-                        ResolvedType::Primitive(
-                            PrimitiveType::U8
-                                | PrimitiveType::U16
-                                | PrimitiveType::U32
-                                | PrimitiveType::U64
-                                | PrimitiveType::U128
-                        )
-                    ) || matches!(resolved, ResolvedType::Struct { def, .. } if self.tysys.type_table.borrow().struct_head_name(def) == "u128")
-                };
-                let int_pattern = |value: u128| {
+                use crate::tir::TirLiteralPattern;
+                // Mirrors `Elaborator::resolve_if_pattern_inner`'s literal arm:
+                // char / string literals decode their escapes, and `null` on a
+                // variant scrutinee with a `None` case lowers to that case.
+                let scrutinee_is_unsigned = self
+                    .tysys
+                    .type_table
+                    .borrow()
+                    .is_unsigned_int(scrutinee_type);
+                let int_pattern = |bits: u128| {
                     if scrutinee_is_unsigned {
-                        TirLiteralPattern::U128(value)
+                        TirLiteralPattern::U128(bits)
                     } else {
-                        TirLiteralPattern::I128(value as i128)
+                        TirLiteralPattern::I128(bits.cast_signed())
                     }
                 };
                 let tir_lit = match lit {
-                    ast::Literal::Number(repr) => {
-                        if scrutinee_is_unsigned {
-                            int_pattern(super::util::parse_u128_literal(repr).unwrap_or(0))
-                        } else {
-                            TirLiteralPattern::I128(
-                                super::util::parse_i128_literal(repr).unwrap_or(0),
-                            )
-                        }
-                    }
+                    // A malformed literal is already diagnosed, so the value it
+                    // stands in with is never reached.
+                    ast::Literal::Number(repr) => int_pattern(
+                        super::util::parse_int_bits(repr, scrutinee_is_unsigned)
+                            .unwrap_or(0)
+                            .cast_unsigned(),
+                    ),
                     ast::Literal::Byte(raw) => {
                         int_pattern(u128::from(super::util::unescape_byte(raw).unwrap_or(0)))
                     }
@@ -10349,7 +10318,18 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                         }
                         TirLiteralPattern::Null
                     }
-                    _ => ast_literal_to_pattern(lit),
+                    // Not pattern literals in the surface grammar; the parser
+                    // rejects them, so reaching here is an invariant violation.
+                    ast::Literal::Unit
+                    | ast::Literal::Bytes(_)
+                    | ast::Literal::LocationFile
+                    | ast::Literal::LocationLine
+                    | ast::Literal::LocationFunction
+                    | ast::Literal::DataSection
+                    | ast::Literal::IncludeStr(_)
+                    | ast::Literal::IncludeBytes(_) => {
+                        panic!("literal kind {lit:?} is not valid in pattern position")
+                    }
                 };
                 TirPattern::Literal(tir_lit)
             }
@@ -10522,23 +10502,15 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 start, end, kind, ..
             } => {
                 use crate::ast::RangeKind;
-                use crate::tir::{PrimitiveType, ResolvedType};
                 let inclusive = matches!(kind, RangeKind::Inclusive);
-                let start_val = self.pattern_endpoint_value(start, ctx);
-                let end_val = self.pattern_endpoint_value(end, ctx);
-                let is_unsigned = matches!(
-                    self.tysys.type_table.borrow().get(scrutinee_type),
-                    ResolvedType::Primitive(
-                        PrimitiveType::U8
-                            | PrimitiveType::U16
-                            | PrimitiveType::U32
-                            | PrimitiveType::U64
-                            | PrimitiveType::U128,
-                    )
-                );
+                let is_unsigned = self
+                    .tysys
+                    .type_table
+                    .borrow()
+                    .is_unsigned_int(scrutinee_type);
                 TirPattern::Range {
-                    start: start_val,
-                    end: end_val,
+                    start: self.pattern_endpoint_value(start, is_unsigned, ctx),
+                    end: self.pattern_endpoint_value(end, is_unsigned, ctx),
                     inclusive,
                     is_unsigned,
                 }
@@ -10669,95 +10641,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .type_table
             .borrow_mut()
             .substitute_type_params(payload, &substitution)
-    }
-}
-
-/// Decode a range-pattern endpoint (`a..<b` / `a..=b`) into its
-/// `i128` value. The endpoint syntactic form is itself a `Pattern`:
-/// either a `Literal(Number)` or a `Literal(Char)` (for char-range
-/// patterns). Char endpoints lower to their codepoint as `i128`;
-/// numeric endpoints reuse the same hex / oct / bin recogniser as
-/// `ast_literal_to_pattern`'s integer decode. Non-literal endpoints
-/// are a parser-elaborator invariant violation — annotate has already
-/// diagnosed them — so reify panics with a labelled tripwire.
-fn pattern_endpoint_to_i128(endpoint: &ast::Pattern) -> i128 {
-    match endpoint {
-        ast::Pattern::Literal(ast::Literal::Number(repr)) => {
-            let digits = repr.replace('_', "");
-            if let Some(stripped) = digits.strip_prefix("0x") {
-                i128::from_str_radix(stripped, 16).unwrap_or(0)
-            } else if let Some(stripped) = digits.strip_prefix("0o") {
-                i128::from_str_radix(stripped, 8).unwrap_or(0)
-            } else if let Some(stripped) = digits.strip_prefix("0b") {
-                i128::from_str_radix(stripped, 2).unwrap_or(0)
-            } else {
-                digits.parse::<i128>().unwrap_or(0)
-            }
-        }
-        ast::Pattern::Literal(ast::Literal::Char(s)) => {
-            let ch = super::util::unescape_char(s).unwrap_or('\0');
-            i128::from(ch as u32)
-        }
-        ast::Pattern::Literal(ast::Literal::Byte(s)) => {
-            i128::from(super::util::unescape_byte(s).unwrap_or(0))
-        }
-        _ => panic!(
-            "pattern_endpoint_to_i128: non-literal range endpoint {endpoint:?} \
-             (annotate should have diagnosed)"
-        ),
-    }
-}
-
-/// Map an AST [`ast::Literal`] in pattern position to its
-/// [`crate::tir::TirLiteralPattern`] counterpart. Number literals
-/// decode into `I128` (parsed via the same hex / oct / bin prefix
-/// recogniser used by `reify_literal`), with negative sources kept
-/// as their parsed numeric value. The `Null` / `Unit` literals never
-/// appear in pattern position in the surface grammar — they panic
-/// here to surface a parser-elaborator invariant violation early.
-fn ast_literal_to_pattern(lit: &ast::Literal) -> crate::tir::TirLiteralPattern {
-    use crate::tir::TirLiteralPattern;
-    match lit {
-        ast::Literal::Number(repr) => {
-            // Mirror `reify_literal`'s numeric decode: prefer
-            // hex/oct/bin radix, else decimal. Pattern position
-            // never sees float literals (the elaborator rejects
-            // them earlier), so decode as integer.
-            let digits = repr.replace('_', "");
-            let value: i128 = if let Some(stripped) = digits.strip_prefix("0x") {
-                i128::from_str_radix(stripped, 16).unwrap_or(0)
-            } else if let Some(stripped) = digits.strip_prefix("0o") {
-                i128::from_str_radix(stripped, 8).unwrap_or(0)
-            } else if let Some(stripped) = digits.strip_prefix("0b") {
-                i128::from_str_radix(stripped, 2).unwrap_or(0)
-            } else {
-                digits.parse::<i128>().unwrap_or(0)
-            };
-            TirLiteralPattern::I128(value)
-        }
-        ast::Literal::String(s) => TirLiteralPattern::String(s.clone()),
-        ast::Literal::Char(s) => {
-            TirLiteralPattern::Char(super::util::unescape_char(s).unwrap_or('\0'))
-        }
-        ast::Literal::Byte(_) => {
-            panic!("ast_literal_to_pattern: byte literal must be reified scrutinee-aware")
-        }
-        ast::Literal::Bool(b) => TirLiteralPattern::Bool(*b),
-        ast::Literal::Null => TirLiteralPattern::Null,
-        // Unit / Location / Include literals don't appear as pattern
-        // literals in the surface grammar — the parser rejects them
-        // earlier. Falling here would be a parser-elaborator
-        // invariant violation; panic with a labelled tripwire.
-        ast::Literal::Unit
-        | ast::Literal::Bytes(_)
-        | ast::Literal::LocationFile
-        | ast::Literal::LocationLine
-        | ast::Literal::LocationFunction
-        | ast::Literal::DataSection
-        | ast::Literal::IncludeStr(_)
-        | ast::Literal::IncludeBytes(_) => {
-            panic!("ast_literal_to_pattern: literal kind {lit:?} not valid in pattern position")
-        }
     }
 }
 
@@ -11166,7 +11049,7 @@ fn build_int128_from_intermediate(
 /// `Ordering` variant against the one that makes the operator true:
 /// `<` → `cmp == Less`, `>` → `cmp == Greater`,
 /// `<=` → `cmp != Greater`, `>=` → `cmp != Less`.
-fn ord_bool_from_cmp(
+pub(crate) fn ord_bool_from_cmp(
     cmp_call: TirExpr,
     op: ast::BinaryOp,
     span: crate::token::Span,

@@ -579,12 +579,10 @@ fn check_cm_boundary_representable_inner(
         // classified explicitly.
         match type_table.get(type_id) {
             // No CM value representation in any world.
-            R::Primitive(PrimitiveType::I128 | PrimitiveType::U128 | PrimitiveType::V128) => {
-                Err(format!(
-                    "`{}` has no Component Model value representation",
-                    type_table.type_name(type_id)
-                ))
-            }
+            R::Primitive(PrimitiveType::V128) => Err(format!(
+                "`{}` has no Component Model value representation",
+                type_table.type_name(type_id)
+            )),
             // Scalars, plain discriminants, bitflags, and plain resource
             // handles lower to an i32 handle identically in every world.
             R::Primitive(_) | R::Unit | R::Enum { .. } | R::Flags { .. } | R::Resource { .. } => {
@@ -1089,9 +1087,6 @@ fn flat_types_from_type_id_inner(
             PrimitiveType::I64 | PrimitiveType::U64 => out.push(cm_abi::CmValType::I64),
             PrimitiveType::F32 => out.push(cm_abi::CmValType::F32),
             PrimitiveType::F64 => out.push(cm_abi::CmValType::F64),
-            PrimitiveType::I128 | PrimitiveType::U128 => {
-                panic!("i128/u128 cannot appear at CM boundary")
-            }
             PrimitiveType::V128 => {
                 panic!("v128 cannot appear at CM boundary")
             }

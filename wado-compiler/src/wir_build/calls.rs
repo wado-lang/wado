@@ -199,6 +199,40 @@ impl FunctionTranslator<'_, '_> {
         crate::nir::FunctionRef::from_resolved(&rec, rec.module_source.clone())
     }
 
+    /// The 128-bit pattern a constant `i128` / `u128` operand denotes, or `None`
+    /// for an operand that is not a literal. Two shapes reach here for one
+    /// source literal: the constructor call `lower::wide_int_literal` emits, and
+    /// the struct literal the inliner leaves once it has inlined that
+    /// constructor — matching only one would answer differently per `-O` level.
+    fn operand_const_wide_int(&self, op: Operand) -> Option<i128> {
+        use crate::lower::wide_int_literal::{WideIntCtor, classify_ctor};
+        use crate::nir_arena::ExprKind;
+
+        match &self.body.exprs[op.as_expr()?].kind {
+            ExprKind::Call { func_id, args, .. } => {
+                let ctor = classify_ctor(self.type_table, &self.callee_descriptor(*func_id).name)?;
+                let halves: Vec<u64> = args
+                    .iter()
+                    .map(|a| self.body.operand_const_int(a.expr))
+                    .collect::<Option<_>>()?;
+                Some(ctor.compose(&halves))
+            }
+            ExprKind::StructLiteral {
+                struct_type,
+                fields,
+                ..
+            } => {
+                self.type_table.wide_int_item(*struct_type)?;
+                let half = |index: u32| {
+                    let field = fields.iter().find(|f| f.field_index == index)?;
+                    self.body.operand_const_int(field.value)
+                };
+                Some(WideIntCtor::FromPair.compose(&[half(0)?, half(1)?]))
+            }
+            _ => None,
+        }
+    }
+
     /// For `builtin::array_clone::<T>(arr)` whose `arr` is typed as
     /// `BuiltinArray(elem)`, the `$value_copy$` helper to invoke on every
     /// element when `elem` is itself value-typed. `None` for a primitive
@@ -622,17 +656,10 @@ impl FunctionTranslator<'_, '_> {
                 })
             }
 
-            "builtin::v128_const" => {
-                // The argument is an i128 literal interpreted as v128 bit pattern.
-                let o = self.translate_operand(args[0].expr);
-                match &o {
-                    WirInstr::I32Const(v) => Some(WirInstr::V128Const(i128::from(*v))),
-                    WirInstr::I64Const(v) => Some(WirInstr::V128Const(i128::from(*v))),
-                    other => panic!(
-                        "[WIR] builtin::v128_const needs a constant bit pattern, got {other:?}"
-                    ),
-                }
-            }
+            "builtin::v128_const" => Some(WirInstr::V128Const(
+                self.operand_const_wide_int(args[0].expr)
+                    .expect("a v128 bit pattern must be an i128 / u128 literal"),
+            )),
             "builtin::memory_size" => Some(WirInstr::MemorySize),
             "builtin::memory_fill" => {
                 let dst = self.translate_operand(args[0].expr);

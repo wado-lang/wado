@@ -179,7 +179,7 @@ impl Value {
             PrimitiveType::F32 | PrimitiveType::F64 => Some(Self::Float { value: 0.0, prim }),
             PrimitiveType::Bool => Some(Self::Bool(false)),
             PrimitiveType::Char => Some(Self::Char('\0')),
-            PrimitiveType::I128 | PrimitiveType::U128 | PrimitiveType::V128 => None,
+            PrimitiveType::V128 => None,
         }
     }
 
@@ -579,8 +579,6 @@ fn trunc_to_int(value: f64, target: PrimitiveType) -> Option<u64> {
         | PrimitiveType::F64
         | PrimitiveType::Bool
         | PrimitiveType::Char
-        | PrimitiveType::I128
-        | PrimitiveType::U128
         | PrimitiveType::V128 => panic!("trunc_to_int: non-integer target {target:?}"),
     }
 }

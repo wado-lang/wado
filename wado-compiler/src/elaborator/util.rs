@@ -382,9 +382,60 @@ fn decode_surrogate_pair(high: u16, low: u16) -> u32 {
     0x10000 + (high << 10) + low
 }
 
+/// An integer literal's 128 bits, read as signed or unsigned per `is_unsigned`.
+/// Only the unsigned read reaches a value above `i128::MAX`.
+pub(super) fn parse_int_bits(repr: &str, is_unsigned: bool) -> Result<i128, String> {
+    if is_unsigned {
+        parse_u128_literal(repr).map(u128::cast_signed)
+    } else {
+        parse_i128_literal(repr)
+    }
+}
+
+/// A range-pattern endpoint's value, as the bits of the scrutinee's own type.
+/// `None` for an endpoint denoting no integer, which annotate diagnoses.
+pub(super) fn range_endpoint_to_i128(
+    pattern: &crate::ast::Pattern,
+    is_unsigned: bool,
+) -> Option<i128> {
+    use crate::ast::{Literal, Pattern};
+    match pattern {
+        Pattern::Literal(Literal::Number(repr)) => parse_int_bits(repr, is_unsigned).ok(),
+        Pattern::Literal(Literal::Char(raw)) => {
+            unescape_char(raw).ok().map(|c| i128::from(c as u32))
+        }
+        Pattern::Literal(Literal::Byte(raw)) => unescape_byte(raw).ok().map(i128::from),
+        // An associated constant (`i32::MAX`) resolved by value; a user constant
+        // needs the reify-side lookup its caller adds.
+        Pattern::Variant {
+            variant_name,
+            variant_qualifier,
+            bindings,
+            ..
+        } if bindings.is_empty() => {
+            super::stmt::primitive_assoc_const_to_i128(variant_qualifier.as_ref(), variant_name)
+        }
+        _ => None,
+    }
+}
+
+/// Order two endpoints [`range_endpoint_to_i128`] returned. An unsigned bound
+/// above `i128::MAX` reads negative, so a signed compare would call it reversed.
+pub(super) fn range_endpoints_ordered(
+    start: i128,
+    end: i128,
+    is_unsigned: bool,
+) -> std::cmp::Ordering {
+    if is_unsigned {
+        start.cast_unsigned().cmp(&end.cast_unsigned())
+    } else {
+        start.cmp(&end)
+    }
+}
+
 /// Parse an unsigned integer literal into a u128 value.
 /// Supports decimal, hex, binary, octal, and scientific notation (e.g., "1e10").
-pub(super) fn parse_u128_literal(repr: &str) -> Result<u128, String> {
+pub(crate) fn parse_u128_literal(repr: &str) -> Result<u128, String> {
     let clean = normalize_numeric_literal(repr);
 
     if let Some(hex) = clean.strip_prefix("0x") {
@@ -415,7 +466,7 @@ pub(super) fn parse_u128_literal(repr: &str) -> Result<u128, String> {
 /// Parse a signed integer literal into an i128 value.
 /// Supports decimal, hex, binary, octal, and scientific notation.
 /// For non-negative values, delegates to `parse_u128_literal` with an i128 range check.
-pub(super) fn parse_i128_literal(repr: &str) -> Result<i128, String> {
+pub(crate) fn parse_i128_literal(repr: &str) -> Result<i128, String> {
     let clean = normalize_numeric_literal(repr);
 
     if clean.starts_with('-') {

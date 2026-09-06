@@ -1,0 +1,100 @@
+// Wasm has no 128-bit compare, so every wide-int pattern lowers to an `Eq` /
+// `Ord` call: a literal or a range, at the top of a `match` or nested inside a
+// tuple, under `if let` or `matches`, with or without a guard.
+
+test "i128 range pattern" {
+    let x: i128 = 3;
+    let hit = match x {
+        1..=5 => true,
+        _ => false,
+    };
+    assert hit;
+    let miss = match x {
+        4..=5 => true,
+        _ => false,
+    };
+    assert !miss;
+}
+
+test "i128 exclusive range pattern excludes its end" {
+    let x: i128 = 5;
+    let exclusive = match x {
+        1..<5 => true,
+        _ => false,
+    };
+    assert !exclusive;
+    assert x matches { 1..=5 };
+}
+
+test "u128 range pattern" {
+    let y: u128 = 3;
+    assert y matches { 1..=5 };
+    if let 1..=5 = y {
+        assert true;
+    } else {
+        assert false;
+    }
+}
+
+test "wide range pattern past 64 bits" {
+    // 2^100, so a bound truncated to its low 64 bits would compare as 0.
+    let big: u128 = 1267650600228229401496703205377;
+    assert big matches { 1267650600228229401496703205376..=1267650600228229401496703205378 };
+    assert !(big matches { 0..=1267650600228229401496703205376 });
+}
+
+test "u128 range pattern above i128::MAX" {
+    // Bounds no signed decode holds: parsed as `i128` they overflow, and their
+    // bit patterns order the range backwards.
+    let huge: u128 = 340282366920938463463374607431768211454;
+    assert huge matches {
+        340282366920938463463374607431768211453..=340282366920938463463374607431768211455
+    };
+    assert !(huge matches { 0..=340282366920938463463374607431768211453 });
+    // Nested, where the same decoder answers for a sub-pattern.
+    let pair = [huge, huge];
+    let tag = match pair {
+        [0..=1, _] => 1,
+        [340282366920938463463374607431768211454..=340282366920938463463374607431768211455, _] => 2,
+        _ => 3,
+    };
+    assert tag == 2;
+}
+
+test "negative i128 range pattern" {
+    let neg: i128 = -1267650600228229401496703205376;
+    assert neg matches { -1267650600228229401496703205377..=0 };
+    assert !(neg matches { 0..=1 });
+}
+
+test "wide-int literal pattern nested in a tuple" {
+    let y: u128 = 3;
+    let pair = [y, y + 1];
+    let tag = match pair {
+        [1, _] => 1,
+        [3, 4] => 2,
+        _ => 3,
+    };
+    assert tag == 2;
+}
+
+test "wide-int range pattern nested in a tuple" {
+    let x: i128 = -7;
+    let pair = [x, x];
+    let tag = match pair {
+        [0..=10, _] => 1,
+        [-10..=-1, _] => 2,
+        _ => 3,
+    };
+    assert tag == 2;
+}
+
+test "wide-int range arm with a guard" {
+    let x: u128 = 8;
+    let tag = match x {
+        1..=10 && x % 2 == 0 => 1,
+        1..=10 => 2,
+        _ => 3,
+    };
+    assert tag == 1;
+}

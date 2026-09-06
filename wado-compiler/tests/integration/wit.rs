@@ -167,6 +167,22 @@ fn record_export_groups_into_default_interface() {
     );
 }
 
+/// `i128` / `u128` are prelude structs, so each crosses the Component Model
+/// boundary as its own record rather than being rejected as unrepresentable.
+#[test]
+fn wide_int_export_emits_its_prelude_record() {
+    check(
+        "use { i128 } from \"core:prelude/int128.wado\";\n\
+         export fn widen(v: i128) -> i128 { return v; }",
+        "package root:component;\n\n\
+         interface entry {\n  \
+           record i128 {\n    low: u64,\n    high: s64,\n  }\n  \
+           widen: func(v: i128) -> i128;\n\
+         }\n\n\
+         world command {\n  export entry;\n}",
+    );
+}
+
 #[test]
 fn cli_program_emits_faithful_world_imports_and_run_export() {
     // A `run` entry with `with Stdout` maps to the standard `wasi:cli/run`

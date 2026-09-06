@@ -4418,11 +4418,6 @@ pub fn type_id_to_valtype(type_id: TypeId) -> ValType {
         TypeTable::U8 | TypeTable::U16 | TypeTable::U32 => ValType::I32,
         TypeTable::BOOL | TypeTable::CHAR => ValType::I32,
         TypeTable::I64 | TypeTable::U64 => ValType::I64,
-        TypeTable::I128 | TypeTable::U128 => {
-            // 128-bit integers are handled specially in wide arithmetic
-            // Default to i64 for now (caller should handle specially)
-            ValType::I64
-        }
         TypeTable::F32 => ValType::F32,
         TypeTable::F64 => ValType::F64,
         TypeTable::UNIT | TypeTable::NEVER => {
