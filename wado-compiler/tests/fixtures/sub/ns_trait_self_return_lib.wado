@@ -1,0 +1,20 @@
+// The trait half of `ns_trait_self_return.wado`: an inherited default body that
+// returns `Self`, on a type reached only through a namespace.
+
+pub struct P {
+    pub n: i32,
+}
+
+pub trait Twice {
+    fn make(n: i32) -> Self;
+
+    fn twice(n: i32) -> Self {
+        return Self::make(n * 2);
+    }
+}
+
+impl Twice for P {
+    fn make(n: i32) -> P {
+        return P { n: n };
+    }
+}

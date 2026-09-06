@@ -1,0 +1,41 @@
+//! A generic block's static, called with the receiver's arguments left to
+//! inference. The slots stay as the block wrote them, so only the parameters
+//! whose types the call did fill are checked — but how many there are and which
+//! carry defaults come from the declaration, and hold either way.
+//!
+//! Reported as one all-or-nothing list, an unfilled slot dropped the count and
+//! the defaults with it: the call reached codegen unchecked and unpadded.
+
+struct Box2<T> {
+    value: T,
+}
+
+struct Plain2 {}
+
+impl<T> Box2<T> {
+    fn wrap(v: T, tag: i32 = 9) -> Box2<T> {
+        return Box2 { value: v };
+    }
+}
+
+impl Plain2 {
+    fn wrap(v: i32, tag: i32 = 9) -> i32 {
+        return v + tag;
+    }
+}
+
+test "the trailing default is padded with the slot unfilled" {
+    assert Box2::wrap(5).value == 5;
+}
+
+test "an argument written for the defaulted parameter" {
+    assert Box2::wrap(5, 6).value == 5;
+}
+
+test "the receiver's own arguments fill the slot" {
+    assert Box2::<i32>::wrap(5).value == 5;
+}
+
+test "a non-generic block is unaffected" {
+    assert Plain2::wrap(5) == 14;
+}

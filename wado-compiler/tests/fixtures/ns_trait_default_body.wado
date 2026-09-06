@@ -1,0 +1,15 @@
+//! `ns::Type::method()` naming a static the block inherits. The spelling took
+//! its identity and return type from the resolution but its parameter lists
+//! from a second lookup, which answers for no inherited method: the arity went
+//! unchecked and the default unpadded, and codegen emitted a call whose
+//! argument nothing had pushed.
+
+use lib from "./sub/ns_trait_default_body_lib.wado";
+
+test "the namespace spelling pads the trait's default" {
+    assert lib::P::made() == 7;
+}
+
+test "and takes an argument written for it" {
+    assert lib::P::made(2) == 2;
+}

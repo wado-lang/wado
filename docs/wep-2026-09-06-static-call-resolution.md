@@ -66,10 +66,15 @@ did not fully find something, so each of these had to be named:
 - A rung that cannot resolve falls through to the next. It is not a spelling
   that names nothing.
 - A declaration whose slots the receiver has not filled resolves, and has a
-  return type. Only its parameter list is unusable, so the optionality sits on
-  the list — `params: Option<CalleeParams>` — and never hides the rest. An
-  unfilled list is not offered in its place: it says the call takes a `T`, which
-  no argument is.
+  return type. Only the *types* wait on the receiver: how many parameters there
+  are, what they are called and which carry defaults are the declaration's own,
+  so the arity is enforced and the defaults padded either way. The optionality
+  belongs per parameter — a slot the call could not fill is skipped where the
+  argument is checked — and never on the list, still less on the resolution.
+- A name several declarations answer to picks none until an argument does, which
+  is not the same as one picked that no trait names: the first has no identity
+  to mangle, the second mangles without a trait segment. They are separate
+  outcomes, or the second's spelling is built for the first.
 - An overloaded name picks no declaration until an argument does, so
   `method_ref` is `Option` too. Its return type still answers where every
   candidate agrees: each `From` impl on a receiver returns it.
@@ -134,7 +139,21 @@ other. Unifying them further is symmetry, not this WEP's decision.
   argument pins `Self`. So where a case shadows an inherited static, a bound
   (`fn f<T: Tagged>() { T::tag(5) }`) is the only way left to reach it. The
   spelling is missing on its own, not just under shadowing.
-- `locate_static_method_impl` remains as the trait-selection rung, still
-  matching a `From` impl's source type by rendered name. TypeId matching is its
-  replacement ([Overload Resolution](./wep-2026-07-31-overload-resolution.md)
-  phase 4).
+- A trait implemented twice on one receiver (`impl Conv<A> for M` beside
+  `impl Conv<B> for M`) mangles both to one name, so `M::from_kind(a)` answers
+  `type 'M' does not implement trait 'Conv'`. Only `From` and `TryFrom` keep
+  their trait arguments in the segment, and which trait it is decides nothing —
+  how many times the receiver implements it decides everything. Closing it means
+  changing what a trait segment carries, in `src/name.rs`, so the definition,
+  DCE and the monomorphization key move with the call: changing the selection
+  alone turns the diagnostic into an unresolved call at WIR build.
+  ([Overload Resolution](./wep-2026-07-31-overload-resolution.md) phase 4
+  replaces the name matching this rung still does with `TypeId` matching.)
+- A trait-frame signature is read at the receiver, and where no caller supplies
+  one the rung resolves the receiver by bare name in the caller's frame — which
+  cannot name a namespace-imported type. A `Self`-returning static reached as
+  `lib::P::twice()` then binds `Self` to nothing. Closing it means threading the
+  receiver's `TypeId` from the site that already resolved it.
+- The ambiguity report dedupes by trait declaration, so one trait implemented
+  twice no longer names itself as both alternatives. No fixture drives it: every
+  shape reached so far fails earlier, in the selection above.

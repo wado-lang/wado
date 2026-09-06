@@ -975,23 +975,25 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     });
                     return TypeTable::ERROR;
                 }
-                // Only a list whose slots the receiver filled is checked
-                // against: an unfilled one says the call takes a `T`, which no
-                // argument is. Without one there is no count to enforce either.
-                let (raw_param_types, optional) =
-                    match resolved.found().and_then(|c| c.params.as_ref()) {
-                        Some(params) => (
-                            params.param_types.clone(),
-                            Some(
-                                params
-                                    .param_defaults
-                                    .iter()
-                                    .filter(|(_, default)| default.is_some())
-                                    .count(),
-                            ),
+                // The count and the defaults come from the declaration, so the
+                // arity is enforced whether or not the receiver filled the
+                // types. The types are checked per parameter below, where a
+                // slot this call could not fill is skipped rather than the
+                // whole list dropped.
+                let (raw_param_types, optional) = match resolved.found() {
+                    Some(callee) => (
+                        callee.params.param_types.clone(),
+                        Some(
+                            callee
+                                .params
+                                .param_defaults
+                                .iter()
+                                .filter(|(_, default)| default.is_some())
+                                .count(),
                         ),
-                        None => (Vec::new(), None),
-                    };
+                    ),
+                    None => (Vec::new(), None),
+                };
                 let substituted: Vec<TypeId> =
                     if method_type_args.is_empty() && impl_type_args_inferred.is_empty() {
                         raw_param_types
@@ -1025,7 +1027,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     return TypeTable::ERROR;
                 }
                 for (i, arg) in args.iter().enumerate() {
-                    if let Some(&expected) = substituted.get(i) {
+                    // A slot neither the receiver nor the turbofish filled says
+                    // only "whatever this instantiation binds", which every
+                    // argument satisfies. Checking against it rejects the call
+                    // the declaration was written to accept.
+                    if let Some(&expected) = substituted.get(i)
+                        && !self.is_unbound_type_param(expected)
+                    {
                         self.typecheck(
                             *arg,
                             expected,
@@ -1337,17 +1345,25 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let ns_key = self.namespace_member(prefix, type_name).map(|def| {
                         trait_env::ImplTargetKey::of_decl(self.tysys.resolutions.defs(), def)
                     });
+                    // The receiver's own type, off the declaration the namespace
+                    // named. A trait-frame signature is read at it, and the
+                    // importing module cannot name `Type` to re-resolve one.
+                    let ns_receiver_type =
+                        self.namespace_member(prefix, type_name).and_then(|def| {
+                            let ast_id = self.tysys.resolutions.defs().ast_id(def);
+                            self.tysys.type_table.borrow().type_of_symbol(&ast_id)
+                        });
                     let resolved = self.resolve_static_callee(
                         ident.segments.get(1).map(|segment| segment.id),
                         type_name,
                         ns_key.as_ref(),
                         method_name,
                         arg_type_hint.as_deref(),
-                        None,
+                        ns_receiver_type,
                     );
                     let method_ref = resolved
                         .found()
-                        .and_then(|callee| callee.method_ref.clone())
+                        .map(|callee| callee.method_ref.clone())
                         .unwrap_or_else(|| {
                             StaticMethodRef::new(
                                 ns_source.clone(),
@@ -1395,9 +1411,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         method_name,
                     );
 
-                    let mut return_type = resolved
-                        .found()
-                        .map_or(TypeTable::UNKNOWN, |callee| callee.return_type);
+                    let mut return_type = resolved.return_type();
                     if !method_type_args.is_empty() {
                         return_type = self
                             .tysys
@@ -1415,17 +1429,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         })
                     };
 
-                    let callee_key = self.static_receiver_key(type_name, ns_key.as_ref());
-                    let callee_sig =
-                        self.unique_qualified_method_sig_keyed(&callee_key, method_name);
-                    let declares_params = callee_sig.is_some();
-                    let CalleeParams {
-                        param_is_mut,
-                        param_defaults,
-                        param_types,
-                        self_in_args,
-                        defaults_module,
-                    } = CalleeParams::of_signature(callee_sig.as_ref());
+                    // From the same resolution the identity and the return type
+                    // came from. Asking a second lookup here left the spelling
+                    // resolved with no list behind it, so a method inherited
+                    // with its trait's default body went unchecked and unpadded.
+                    let (
+                        CalleeParams {
+                            param_is_mut,
+                            param_defaults,
+                            param_types,
+                            self_in_args,
+                            defaults_module,
+                        },
+                        declares_params,
+                    ) = resolved.params();
 
                     let func_ref = FunctionRef {
                         module_source: struct_module,

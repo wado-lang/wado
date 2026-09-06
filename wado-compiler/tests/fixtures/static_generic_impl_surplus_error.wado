@@ -1,0 +1,20 @@
+// The arity of a generic block's static is the declaration's, whether or not
+// the receiver filled its slots. Unenforced, the surplus argument reached
+// codegen and failed Wasm validation.
+
+struct Box2<T> {
+    value: T,
+}
+
+impl<T> Box2<T> {
+    fn wrap(v: T) -> Box2<T> {
+        return Box2 { value: v };
+    }
+}
+
+export fn run() {
+    assert Box2::wrap(5, 6).value == 5;
+}
+
+__DATA__
+{"compile_error": "expected 1 arguments, found 2"}

@@ -2131,7 +2131,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         );
         let selected = lookup
             .found()
-            .and_then(|callee| callee.method_ref.clone())
+            .map(|callee| callee.method_ref.clone())
             .filter(|method_ref| method_ref.trait_name.is_some());
         let trait_name_opt = selected.as_ref().and_then(|r| r.trait_name.clone());
 
@@ -2165,9 +2165,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             &static_call.method,
         );
 
-        let mut return_type = lookup
-            .found()
-            .map_or(TypeTable::UNKNOWN, |callee| callee.return_type);
+        let mut return_type = lookup.return_type();
 
         // A value blanket indexes statics under its receiver *param* name, so
         // the concrete receiver's own bucket misses.
@@ -3478,7 +3476,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         );
         let resolved = lookup
             .found()
-            .and_then(|callee| callee.method_ref.clone())
+            .map(|callee| callee.method_ref.clone())
             .filter(|method_ref| method_ref.trait_name.is_some());
         // The expected type that shaped the argument came from
         // `lookup_static_method_param_types_keyed`, which keys on (receiver,
@@ -3525,9 +3523,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             actual_mangled_name
         };
 
-        let mut return_type = lookup
-            .found()
-            .map_or(TypeTable::UNKNOWN, |callee| callee.return_type);
+        let mut return_type = lookup.return_type();
 
         // Substitute impl-level + method-level type parameters in return type.
         // `lookup_static_method_return_type` registers impl params at indices

@@ -6,6 +6,7 @@
 use crate::ast;
 use crate::compiler_host::CompilerHost;
 use crate::defs::DefId;
+use crate::module_source::ModuleSource;
 use crate::tir::{TypeId, TypeTable};
 
 use super::Elaborator;
@@ -16,14 +17,14 @@ use super::trait_env::ImplTargetKey;
 /// What one `Type::method(...)` spelling names.
 pub(super) struct StaticCallee {
     /// Where the declaration lives, the trait it came through, and the identity
-    /// a call is mangled and a use→def edge recorded from. `None` where several
-    /// declarations answer and only an argument separates them.
-    pub(super) method_ref: Option<StaticMethodRef>,
-    /// The lists the call checks and pads against, read at the receiver.
-    /// `None` where no list it can be checked against comes with the
-    /// resolution: the call site substitutes from its own inference and counts
-    /// its own arguments.
-    pub(super) params: Option<CalleeParams>,
+    /// a call is mangled and a use→def edge recorded from.
+    pub(super) method_ref: StaticMethodRef,
+    /// The lists the call checks and pads against. How many parameters there
+    /// are, what they are called and which carry defaults come from the
+    /// declaration, so an arity check and a default padding never wait on the
+    /// receiver. A type the receiver did not fill stays the slot the block
+    /// wrote, and the call site checks only what its own inference fills.
+    pub(super) params: CalleeParams,
     /// The method's own slots as its declaration wrote them.
     pub(super) own_params: Vec<ast::GenericParam>,
     /// What the call evaluates to, read at the receiver as `params` is.
@@ -35,6 +36,14 @@ pub(super) struct StaticCallee {
 /// its arguments.
 pub(super) enum StaticLookup {
     Found(Box<StaticCallee>),
+    /// Several declarations answer and only an argument separates them, and the
+    /// selection could not read one. No declaration is picked, so there is no
+    /// identity to mangle and no list to check — distinct from a declaration
+    /// picked that no trait names, which mangles without a trait segment. The
+    /// return type answers where every candidate agrees.
+    Overloaded {
+        return_type: TypeId,
+    },
     /// Several traits supply the name with a default body. No argument
     /// separates them, so the spelling names none: the call site reports it.
     Ambiguous(Vec<String>),
@@ -51,19 +60,29 @@ impl StaticLookup {
     pub(super) fn found(&self) -> Option<&StaticCallee> {
         match self {
             Self::Found(callee) => Some(callee),
-            Self::Ambiguous(_) | Self::NotStatic => None,
+            Self::Overloaded { .. } | Self::Ambiguous(_) | Self::NotStatic => None,
         }
     }
 
-    /// The parameters to check and pad against, and whether any came with the
-    /// resolution.
+    /// What the call evaluates to. An overload answers where its candidates
+    /// agree, which is what they do when each returns the receiver.
+    pub(super) fn return_type(&self) -> TypeId {
+        match self {
+            Self::Found(callee) => callee.return_type,
+            Self::Overloaded { return_type } => *return_type,
+            Self::Ambiguous(_) | Self::NotStatic => TypeTable::UNKNOWN,
+        }
+    }
+
+    /// The parameters to check and pad against, and whether a declaration
+    /// answered at all. A callee no declaration names — a variant case, a flags
+    /// member — counts its own arguments in its own arm.
     pub(super) fn params(self) -> (CalleeParams, bool) {
         match self {
-            Self::Found(callee) => match callee.params {
-                Some(params) => (params, true),
-                None => (CalleeParams::default(), false),
-            },
-            Self::Ambiguous(_) | Self::NotStatic => (CalleeParams::default(), false),
+            Self::Found(callee) => (callee.params, true),
+            Self::Overloaded { .. } | Self::Ambiguous(_) | Self::NotStatic => {
+                (CalleeParams::default(), false)
+            }
         }
     }
 }
@@ -161,8 +180,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return StaticLookup::NotStatic;
         }
 
-        // With no argument to read, the selection below would take the first
-        // candidate, which is the wrong one as often as not.
+        // With no argument to read, the selection below cannot pick among
+        // several declarations of one name: it would take the first, and a call
+        // site checking against that list rejects every argument the others
+        // accept. `i32::from(b)` names one `From` impl per source type, and the
+        // conversion preselect is what reads the argument.
         if overloaded && arg_hint.is_none() {
             return self.overloaded_callee(&key, method_name);
         }
@@ -216,12 +238,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         arg_hint: Option<&str>,
         receiver_type: Option<TypeId>,
     ) -> StaticLookup {
-        // Two traits supplying the name leaves the spelling naming neither.
+        // Two *traits* supplying the name leaves the spelling naming neither.
+        // One trait implemented twice (`impl Conv<i32> for Foo` beside
+        // `impl Conv<f64> for Foo`) supplies one body, and reporting the blocks
+        // would name that trait as both alternatives — a remedy nobody can
+        // write.
         let declaring = self.traits_inheriting_static(key, method_name);
-        if declaring.len() > 1 {
-            return StaticLookup::Ambiguous(
-                declaring.into_iter().map(|(_, _, name)| name).collect(),
-            );
+        let mut distinct: Vec<DefId> = declaring.iter().map(|&(decl, _, _)| decl).collect();
+        distinct.sort_unstable();
+        distinct.dedup();
+        if distinct.len() > 1 {
+            let mut named: Vec<String> = declaring.into_iter().map(|(_, _, name)| name).collect();
+            named.dedup();
+            return StaticLookup::Ambiguous(named);
         }
         // An inherited method is declared nowhere but the trait, so that is
         // where its signature is read from.
@@ -238,11 +267,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 drop(scope);
                 Some(resolved)
             });
+            let module = self.tysys.resolutions.defs().module(impl_def).clone();
             if let Some(callee) = self.callee_of_trait_declaration(
                 receiver_name,
                 method_name,
                 decl,
-                impl_def,
+                module,
                 receiver_type,
             ) {
                 return StaticLookup::Found(Box::new(callee));
@@ -253,18 +283,38 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self.locate_static_method_impl(receiver_name, method_name, arg_hint, written_key)
         {
             let found = match method_ref.method_id {
+                // The selection reaches a trait's own declaration too, where a
+                // block on the receiver declares the name under another trait
+                // and this one only inherits it. Two tables hold a method's
+                // signature and a `DefId` does not say which: the impl-declared
+                // ones are `method_sig`'s, a trait's own its `TraitSig`'s.
+                Some(def) if self.tysys.signatures.method_sig(def).is_none() => method_ref
+                    .trait_name
+                    .as_ref()
+                    .and_then(crate::name::FqTraitName::canonical)
+                    .and_then(|decl| {
+                        let module = method_ref.module.clone();
+                        self.callee_of_trait_declaration(
+                            receiver_name,
+                            method_name,
+                            decl,
+                            module,
+                            receiver_type,
+                        )
+                    })
+                    .map(|callee| StaticLookup::Found(Box::new(callee))),
                 Some(def) => self.callee_of_declaration(def, method_ref, receiver_type),
                 // The auto-derived `Default`: synthesis emits the body, so no
                 // declaration backs it. It takes no arguments and answers with
                 // the receiver's own type.
                 None => Some(StaticLookup::Found(Box::new(StaticCallee {
-                    params: Some(CalleeParams::default()),
+                    params: CalleeParams::default(),
                     own_params: Vec::new(),
                     return_type: self
                         .tysys
                         .auto_derive_default_struct_type(&self.type_lookup(), receiver_name)
                         .unwrap_or(TypeTable::UNKNOWN),
-                    method_ref: Some(method_ref),
+                    method_ref,
                 }))),
             };
             if let Some(resolved) = found {
@@ -277,19 +327,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// The resolution for a method a block inherits with the trait's default
     /// body. Its signature is written in the trait's frame, where `Self` leads
     /// the slots, so it is read at the receiver.
+    /// `module` is the block's, not the trait's: the body is emitted for the
+    /// block that inherits it, so that is what the call names, while the
+    /// defaults are the trait's and resolve where it wrote them.
     fn callee_of_trait_declaration(
         &mut self,
         receiver_name: &str,
         method_name: &str,
         trait_decl: DefId,
-        impl_def: DefId,
+        module: ModuleSource,
         receiver_type: Option<TypeId>,
     ) -> Option<StaticCallee> {
         let declaring = self.tysys.signatures.trait_sig(trait_decl)?;
-        // Two modules, and a call needs both: the body is emitted for the block
-        // that inherits it, so that is what the call names, while the defaults
-        // are the trait's and resolve where it wrote them.
-        let module = self.tysys.resolutions.defs().module(impl_def).clone();
         let sig = declaring.method(method_name)?.sig.clone();
         let mut params = CalleeParams::of_signature(Some(&sig));
         params.defaults_module = Some(declaring.module.clone());
@@ -302,16 +351,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let trait_name =
             crate::name::FqTraitName::declared(self.tysys.resolutions.defs(), trait_decl);
         Some(StaticCallee {
-            params: Some(params),
+            params,
             own_params: sig.own_params,
             return_type,
-            method_ref: Some(StaticMethodRef::new(
+            method_ref: StaticMethodRef::new(
                 module,
                 receiver_name,
                 method_name,
                 Some(trait_name),
                 Some(sig.def),
-            )),
+            ),
         })
     }
 
@@ -327,12 +376,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .next()
             .filter(|&first| returns.all(|r| r == first))
             .unwrap_or(TypeTable::UNKNOWN);
-        StaticLookup::Found(Box::new(StaticCallee {
-            params: None,
-            own_params: Vec::new(),
+        StaticLookup::Overloaded {
             return_type: agreed,
-            method_ref: None,
-        }))
+        }
     }
 
     /// The traits a block on the receiver implements that supply `method_name`
@@ -421,7 +467,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let sig = self.tysys.signatures.method_sig(def).cloned()?;
         let mut params = CalleeParams::of_signature(Some(&sig));
         let mut return_type = sig.decl.return_type.unwrap_or(TypeTable::UNIT);
-        let mut listed = true;
         // A trait's own declaration is written in the trait's frame, where
         // `Self` leads the slots, so it is read at the receiver. A caller asking
         // only whether the spelling resolves brings none, and reads neither.
@@ -433,40 +478,28 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return_type = instantiated.return_type;
         }
         // A generic block's slots are the receiver's arguments — `ByteList`
-        // fills `List<T>`'s `T` with `u8`. Unfilled, the list says the call
-        // takes a `T`, which no argument is; empty, that it takes nothing. So
-        // where the receiver brings no arguments there is no list to offer.
+        // fills `List<T>`'s `T` with `u8`. Where the receiver brings none they
+        // stay as the block wrote them, and the call site checks past them.
         if let Some(impl_def) = sig.declaring_impl
             && let Some(declaring) = self.tysys.signatures.impl_sig(impl_def).cloned()
             && !declaring.target_type_args.is_empty()
-        {
-            let receiver_args = receiver_type.and_then(|ty| {
+            && let Some(args) = receiver_type.and_then(|ty| {
                 self.tysys
                     .type_table
                     .borrow()
                     .nominal_type_args(self.tysys.get_base_type(ty))
-            });
-            match receiver_args {
-                Some(args) => {
-                    let instantiated = sig.instantiate_call_with(
-                        &self.tysys.type_table,
-                        Some(&declaring),
-                        &args,
-                        &[],
-                    );
-                    params.param_types = instantiated.param_types;
-                    return_type = instantiated.return_type;
-                }
-                // The return type is the declaration's own, as it was before
-                // any list came with it: only the list needs the slots filled.
-                None => listed = false,
-            }
+            })
+        {
+            let instantiated =
+                sig.instantiate_call_with(&self.tysys.type_table, Some(&declaring), &args, &[]);
+            params.param_types = instantiated.param_types;
+            return_type = instantiated.return_type;
         }
         Some(StaticLookup::Found(Box::new(StaticCallee {
-            params: listed.then_some(params),
+            params,
             own_params: sig.own_params,
             return_type,
-            method_ref: Some(method_ref),
+            method_ref,
         })))
     }
 }

@@ -1,0 +1,19 @@
+// A required parameter of a generic block's static is required with the slots
+// unfilled too: nothing about the receiver's arguments makes it optional.
+
+struct Box2<T> {
+    value: T,
+}
+
+impl<T> Box2<T> {
+    fn wrap(v: T, extra: i32) -> Box2<T> {
+        return Box2 { value: v };
+    }
+}
+
+export fn run() {
+    assert Box2::wrap(5).value == 5;
+}
+
+__DATA__
+{"compile_error": "expected 2 arguments, found 1"}

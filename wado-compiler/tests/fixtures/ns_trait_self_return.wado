@@ -1,0 +1,12 @@
+//! An inherited default body returning `Self`, reached as `ns::Type::method()`.
+//! Its signature is written in the trait's frame and read at the receiver, but
+//! no caller supplied one, so the rung re-resolved the receiver by bare name in
+//! the *caller's* frame — which cannot name a namespace-imported type. `Self`
+//! bound to nothing and the result typed as nothing.
+
+use lib from "./sub/ns_trait_self_return_lib.wado";
+
+test "an inherited Self-returning static through a namespace" {
+    let p = lib::P::twice(5);
+    assert p.n == 10;
+}
