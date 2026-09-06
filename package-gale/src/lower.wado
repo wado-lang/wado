@@ -249,8 +249,8 @@ fn greedy_optional_inner_follow(rep: &RepeatElement, follow_arg: FollowArg) -> F
 
 /// Give a greedy loop body's tail `RuleCall` the loop's iteration prefix: its
 /// continuation is another iteration, which the body's element list does not
-/// mention. Only the body's own tail qualifies — a nested group's tail
-/// continues inside that group, and would yield tokens its own alt still needs.
+/// mention. Only the body's own tail qualifies. A nested group's tail continues
+/// inside that group, and would yield tokens its own alt still needs.
 fn retarget_loop_tail_follow(op: Op, mask_id: i32) -> Op {
     return match op {
         RuleCall(rc) => {

@@ -961,15 +961,13 @@ fn emit_lr_overlap_branch(
     }
 }
 
-/// Open the arm for one leading token, chaining onto the arms before it.
-/// Returns the new "no arm yet" state.
-fn begin_lr_arm(w: &mut CodeWriter, site: &LrOverlapSite, tk: &String, first: bool) -> bool {
-    if first {
-        w.begin(&`if ${site.kind_expr} == ${*tk}`);
-    } else {
+/// Open the arm for one leading token, chaining onto any arm already open.
+fn begin_lr_arm(w: &mut CodeWriter, site: &LrOverlapSite, tk: &String, chained: bool) {
+    if chained {
         w.else_begin(&`else if ${site.kind_expr} == ${*tk}`);
+    } else {
+        w.begin(&`if ${site.kind_expr} == ${*tk}`);
     }
-    return false;
 }
 
 /// The suffix first sets of the valid LR alternatives, indexed the way
@@ -1048,7 +1046,7 @@ fn emit_lr_overlap(
     mid_operand_gated: bool,
 ) {
     let mut emitted = TreeSet::<String>::new();
-    let mut first_branch = true;
+    let mut chained = false;
 
     for let mut k = 0; k < group.len(); k += 1 {
         let this_first = &suffix_first_sets[group[k]];
@@ -1064,7 +1062,8 @@ fn emit_lr_overlap(
                 }
             }
             if !shared {
-                first_branch = begin_lr_arm(w, site, tk, first_branch);
+                begin_lr_arm(w, site, tk, chained);
+                chained = true;
                 let lr = &lr_alts[lr_dispatch.valid_lr_alts[group[k]]];
                 emit_lr_overlap_branch(w, site, lr, rule, ctx, nc, mid_operand_gated);
                 emitted.insert(*tk);
@@ -1082,7 +1081,8 @@ fn emit_lr_overlap(
         }
     }
     for let shared_tk of &shared_tokens {
-        first_branch = begin_lr_arm(w, site, shared_tk, first_branch);
+        begin_lr_arm(w, site, shared_tk, chained);
+        chained = true;
         let mut last_k = -1;
         for let mut k = 0; k < group.len(); k += 1 {
             if suffix_first_sets[group[k]].contains(shared_tk) {
@@ -1159,7 +1159,7 @@ fn emit_lr_overlap(
         }
         emitted.insert(*shared_tk);
     }
-    if !first_branch {
+    if chained {
         w.end();
     }
 }

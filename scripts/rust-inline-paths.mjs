@@ -1,10 +1,8 @@
 // A `crate::` or `super::` path belongs in a `use` item, not inline where the
-// item is read (AGENTS.md > General Rules). Clippy's `absolute_paths` reads only
-// the `crate::` half, and only once every dependency is named in an allow-list
-// it has no way to derive, so the whole rule lives here instead.
-//
-// The corpus predates the rule, so `rust-inline-paths.json` holds what each file
-// still carries and `--check` fails only on a file that grows past it.
+// item is read (AGENTS.md > General Rules, which also says why clippy is not
+// the gate). The corpus predates the rule, so `rust-inline-paths.json` holds
+// what each file still carries and `--check` fails only on a file that grows
+// past it.
 //
 // Usage: node scripts/rust-inline-paths.mjs [--check | --update | <file>…]
 

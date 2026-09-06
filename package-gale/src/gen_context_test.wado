@@ -498,11 +498,11 @@ test "deep_position_first_sets_from: recurses into single-alt RuleRef" {
 
 test "deep_position_first_sets_from: a multi-alt RuleRef contributes its head and halts" {
     // Multi-alt rules can have alt-specific prefixes that diverge past
-    // depth 0. Per-depth UNION across alts would over-yield there (the mask
-    // would match alt-mixing inputs that no real alt admits), so the walk
-    // stops. At the head the union is exact — a suffix that must match the
-    // rule starts in its first set, whichever alt it takes — so that one
-    // position is contributed before halting, and the cursor stays put.
+    // depth 0, where a per-depth UNION across alts would over-yield: the
+    // mask would match alt-mixing inputs that no real alt admits. So the
+    // walk stops there. At the head the union is exact. Whichever alt a
+    // suffix takes it starts in the rule's first set, so that one position
+    // is contributed before halting and the cursor stays put.
     //
     // Here `c` is multi-alt; `r : a c ; c : X | Y ;` deep-walked from
     // start=1 (at `c`) emits first(c) and stops.
@@ -532,7 +532,7 @@ test "deep_position_first_sets_from: a multi-alt RuleRef contributes its head an
 test "deep_position_first_sets_from: a nullable multi-alt RuleRef contributes nothing" {
     // `c : X | ;` may match nothing, so the position the walk is at can be
     // the next element's rather than `c`'s. Contributing first(c) there
-    // would reject a suffix that skips `c` — the head is exact only for a
+    // would reject a suffix that skips `c`. The head is exact only for a
     // rule the suffix must spend a token on.
     let c_rule = mk_rule("c", [
         alt([tk("X")]),

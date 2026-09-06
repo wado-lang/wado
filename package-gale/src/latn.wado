@@ -59,18 +59,17 @@ pub struct LatnResult {
     pub atn_class_rules: List<String>,
 }
 
-/// True when the grammar has at least one ATN-class lexer rule (a
-/// non-greedy repeat whose body recurses into its owning rule). Gates the
+/// True when the grammar has at least one ATN-class lexer rule. Gates the
 /// whole lexer-ATN path: builder, blob, runtime fragment.
 pub fn grammar_needs_latn(grammar: &Grammar) -> bool {
-    return grammar.lexer_rules.iter_ref().any(
-        |rule| !rule.is_virtual
-            && lexer_rule_is_atn_class(
-            rule,
-            &grammar.lexer_rules,
-            resolve_ci(&grammar.options, &rule.options),
-        ),
-    );
+    return grammar.lexer_rules.iter_ref().any(|rule| rule_needs_latn(grammar, rule));
+}
+
+/// `lexer_rule_is_atn_class` for a rule of this grammar, resolving its
+/// case-insensitivity against the grammar's.
+fn rule_needs_latn(grammar: &Grammar, rule: &LexerRule) -> bool {
+    return !rule.is_virtual
+        && lexer_rule_is_atn_class(rule, &grammar.lexer_rules, resolve_ci(&grammar.options, &rule.options));
 }
 
 /// A lexer rule is ATN-class when a non-greedy repeat *directly in its body*
@@ -90,15 +89,9 @@ pub fn grammar_needs_latn(grammar: &Grammar) -> bool {
 ///   holds the `(CMT|.)+?`). The simulator inlines referenced rules, so
 ///   handling this means flagging the owning token rule as the entry; left
 ///   for when a grammar needs it.
-/// - A greedy repeat whose body alternation has arms that can both match at
-///   one position and reach different lengths is routed here too. That is the
-///   `'"' (~["] | '\\' ['"])* '"'` shape, and no static policy decides it:
-///   first-match takes the arm written first (the backslash alone, ending the
-///   token at an escaped quote), maximal munch takes the longest arm (which
-///   strands the suffix in `('a' | 'ab')* 'b'`), and scoring the arms on a
-///   forward scan needs that scan to make the same choice again. The rule
-///   class is regular, so the simulator decides it running the arms together,
-///   in one pass over the text.
+/// - A greedy repeat whose body arms can both match at a position and reach
+///   different lengths (`'"' (~["] | '\\' ['"])* '"'`). No static policy
+///   decides it; see AGENTS.md, "Failed approaches".
 pub fn lexer_rule_is_atn_class(rule: &LexerRule, all_rules: &List<LexerRule>, ci: bool) -> bool {
     return scan_recursive_ng(&rule.name, &rule.body, all_rules) || scan_undecidable_arms(&rule.body, all_rules, ci);
 }
@@ -263,8 +256,7 @@ pub fn build_latn(grammar: &Grammar) -> LatnResult {
     let mut seen: List<String> = [];
     let mut atn_class_rules: List<String> = [];
     for let rule of &grammar.lexer_rules {
-        let rule_ci = resolve_ci(&grammar.options, &rule.options);
-        if !rule.is_virtual && lexer_rule_is_atn_class(rule, &grammar.lexer_rules, rule_ci) {
+        if rule_needs_latn(grammar, rule) {
             atn_class_rules.push(rule.name);
             collect_reachable(&rule.name, &grammar.lexer_rules, &mut incl, &mut seen);
         }

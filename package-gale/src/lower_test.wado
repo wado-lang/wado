@@ -2654,9 +2654,7 @@ test "lower: RuleCall before a token gets a Combined FollowArg; callee tail Repe
     let lowered = lower(&g, &no_lit_tokens());
     // No variant bodies are ever produced now.
     // `r`'s `a` call carries the local suffix ahead of whatever `r` was called
-    // with: the suffix is the callee's whole continuation only until it ends,
-    // and the depth past it is what separates a callee's own reading of a token
-    // from the caller's.
+    // with.
     if let Simple(s) = &lowered.parser_rules[0] {
         if let RuleCall(rc) = &s.body.ops[0] {
             assert rc.follow_arg matches { Combined(_) }, "expected Combined FollowArg at the `a` call";

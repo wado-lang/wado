@@ -991,8 +991,8 @@ fn gen_lexer_match_fn(
     if hm {
         w.line(&"let chars = &lx.chars;");
     }
-    // ATN-class rule (recursive non-greedy body): the static single-pass
-    // emitter cannot decide it, so delegate to the runtime lexer simulator.
+    // ATN-class rule: the static single-pass emitter cannot decide it, so
+    // delegate to the runtime lexer simulator.
     if let Some(idx) = atn_class.get(rule.name) {
         let longest = !lexer_rule_has_non_greedy(rule, all_rules);
         w.line(&`return latn_match(&LATN_SIM, ${idx}, chars, start, ${longest});`);
@@ -1650,12 +1650,9 @@ pub fn lexer_alts_emit(alts: &List<LexerAlternative>, all_rules: &List<LexerRule
     };
 }
 
-/// Whether the simulator should take this rule's longest match rather than its
-/// first accepting thread. A non-greedy subrule is what makes the earliest
-/// accept the answer — `CMT : '/*' (CMT | .)+? '*/'` ends at the first `*/`,
-/// not the last. With none, the rule is an ordinary maximal-munch token and
-/// stopping at the first accept ends it early: `'"' (~["] | ESC)* '"'` would
-/// close on the quote an escape owns.
+/// Whether a non-greedy subrule makes the earliest accept this rule's answer
+/// (`CMT : '/*' (CMT | .)+? '*/'` ends at the first `*/`). With none, the rule
+/// is an ordinary maximal-munch token and the simulator must take the longest.
 fn lexer_rule_has_non_greedy(rule: &LexerRule, all_rules: &List<LexerRule>) -> bool {
     let mut visiting: List<String> = [rule.name];
     return lexer_alts_have_non_greedy(&rule.body, all_rules, &mut visiting);

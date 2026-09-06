@@ -744,8 +744,8 @@ pub variant FollowArg {
     /// A local suffix stands between the callee and what the current rule was
     /// called with (`… callee X <end>`, `… callee X? <end>`): the continuation
     /// is `FOLLOW_MASK_<id>` followed by that. The forwarded half matters even
-    /// when the local suffix is mandatory — it is the depth past the suffix
-    /// that separates a callee's own reading of a token from the caller's.
+    /// when the local suffix is mandatory. What separates a callee's own
+    /// reading of a token from the caller's is the depth past the suffix.
     /// Emit passes `&follow_prepend(&FOLLOW_MASK_<id>, follow)`.
     Combined(i32),
     /// The callee's continuation is either `FOLLOW_MASK_<id>` or whatever the
