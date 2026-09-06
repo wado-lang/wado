@@ -1,0 +1,26 @@
+// A pure callee that fills a `List<i32>` and returns it folds to the list, not
+// to a loop the caller still runs. The engine holds the value either way; what
+// this exercises is writing an aggregate back into the IR.
+use { println, Stdout } from "core:cli";
+
+fn squares() -> List<i32> {
+    let mut out: List<i32> = [];
+    for let mut i = 0; i < 5; i += 1 {
+        out.push(i * i);
+    }
+    return out;
+}
+
+export fn run() with Stdout {
+    let t = squares();
+    // Opaque, so the list itself has to reach the IR rather than the element.
+    let i = builtin::black_box(2);
+    println(`${t[i]}`);
+}
+
+__DATA__
+{
+  "stdout": "4\n",
+  "wir_expect:O2": ["array.new_fixed<i32>(0, 1, 4, 9, 16)"],
+  "wir_not_expect:O2": ["builtin::array_set<i32>"]
+}

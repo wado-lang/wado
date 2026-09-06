@@ -208,9 +208,7 @@ pub fn build(
     aliased: &crate::hashmap::IndexSet<u32>,
     untrackable: &crate::hashmap::IndexSet<u32>,
     mut_escaped: &crate::hashmap::IndexSet<u32>,
-    pure_calls: &crate::hashmap::IndexSet<ExprId>,
-    pure_builtin_callees: &crate::hashmap::IndexSet<FuncId>,
-    receiver_immutable_calls: &crate::hashmap::IndexSet<ExprId>,
+    calls: CallFacts<'_>,
     type_table: Option<&crate::tir::TypeTable>,
 ) -> ValueGraphBuild {
     // Build into the body's own pool: take it out as the seed (so a promoted
@@ -220,10 +218,11 @@ pub fn build(
     let seed = std::mem::take(&mut body.values);
     let (pool, loop_entry_values) = {
         let mut b = Builder::new(&*body, aliased, untrackable, mut_escaped, type_table, seed);
-        b.pure_calls.clone_from(pure_calls);
-        b.pure_builtin_callees.clone_from(pure_builtin_callees);
+        b.pure_calls.clone_from(calls.pure);
+        b.pure_builtin_callees.clone_from(calls.pure_builtin);
         b.receiver_immutable_calls
-            .clone_from(receiver_immutable_calls);
+            .clone_from(calls.receiver_immutable);
+        b.ctfe_builtins.clone_from(calls.ctfe_builtins);
         b.seed_params(param_locals);
         b.walk_block(body.root);
         (b.pool, b.loop_entry_values)
@@ -248,7 +247,7 @@ pub(crate) fn build_scoped(
     untrackable: &crate::hashmap::IndexSet<u32>,
     mut_escaped: &crate::hashmap::IndexSet<u32>,
     type_table: Option<&crate::tir::TypeTable>,
-    pure_builtin_callees: &crate::hashmap::IndexSet<FuncId>,
+    calls: CallFacts<'_>,
     scratch: &mut ValuePool,
     heap_seed: Option<&HeapSnapshot>,
     live_base: u32,
@@ -262,7 +261,7 @@ pub(crate) fn build_scoped(
         untrackable,
         mut_escaped,
         type_table,
-        pure_builtin_callees,
+        calls,
         scratch,
         heap_seed,
     );
@@ -296,13 +295,21 @@ pub(crate) fn walk_scoped(
     untrackable: &crate::hashmap::IndexSet<u32>,
     mut_escaped: &crate::hashmap::IndexSet<u32>,
     type_table: Option<&crate::tir::TypeTable>,
-    pure_builtin_callees: &crate::hashmap::IndexSet<FuncId>,
+    calls: CallFacts<'_>,
     scratch: &mut ValuePool,
     heap_seed: Option<&HeapSnapshot>,
 ) -> ScopedWalk {
     let pool = std::mem::take(scratch);
     let mut b = Builder::new(body, aliased, untrackable, mut_escaped, type_table, pool);
-    b.pure_builtin_callees.clone_from(pure_builtin_callees);
+    // The same per-call verdicts the whole-body build gets. Withholding them
+    // does not merely forgo a forward: a call the walk cannot call pure bumps
+    // every escaped local's heap version, and a field read of one then matches
+    // no store — so the scoped walk forwarded no field read at all.
+    b.pure_builtin_callees.clone_from(calls.pure_builtin);
+    b.pure_calls.clone_from(calls.pure);
+    b.receiver_immutable_calls
+        .clone_from(calls.receiver_immutable);
+    b.ctfe_builtins.clone_from(calls.ctfe_builtins);
     b.current_value.clone_from(seed);
     // Seed the heap with the caller's version state at the call site so a
     // spliced field read carries the version a fresh whole-function build
@@ -438,6 +445,10 @@ struct Builder<'a> {
     /// Versions are monotonic and never reused, so a write or branch join
     /// bumps past a stale entry — no invalidation needed.
     field_store: IndexMap<(ValueId, u32, HeapVersion), ValueId>,
+    /// Serial number of this walk, so a `vg_field` seed line and a miss line
+    /// from one body can be told from two. The graph is per-body and rebuilt
+    /// across fixed-point rounds, and nothing else in it names which.
+    trace_id: u32,
     /// Reference-aliased locals; their field writes / calls invalidate
     /// conservatively. See [`build`].
     aliased: crate::hashmap::IndexSet<u32>,
@@ -456,6 +467,28 @@ struct Builder<'a> {
     /// so a reference whose target diverges becomes unknown rather than
     /// forwarding a stale pointee.
     ref_targets: IndexMap<u32, u32>,
+    /// `(receiver, field) → pointee local` for a struct literal field built from
+    /// `&x` / `&mut x`, so `let r = obj.f` reaches `x` the way `let r = &x`
+    /// does. A `Formatter`'s `buf` is the standing case: the buffer is read back
+    /// out of the field and every append goes through that read.
+    ///
+    /// Recorded only where no `Assign` in the body writes that field index, so a
+    /// field the program replaces never forwards a stale pointee. The entries
+    /// follow `ref_targets`' own discipline for the pointee.
+    field_ref_targets: IndexMap<(ValueId, u32), u32>,
+    /// Field indices some `Assign` in the body writes. See
+    /// [`Builder::field_ref_targets`].
+    assigned_fields: crate::hashmap::IndexSet<u32>,
+    /// Which sequence builtin each callee id is, so `array_len` over an array
+    /// this walk saw `array_new` allocate folds to the length it was given.
+    ctfe_builtins: crate::niri::CtfeBuiltinMap,
+    /// Locals a struct literal bound, whose value therefore names an object
+    /// rather than a datum. See [`Builder::bump_call_effects`].
+    seeded_aggregates: crate::hashmap::IndexSet<u32>,
+    /// `array value → its length value`, for the arrays this walk allocated.
+    /// The array is a fresh opaque per call, so a second allocation is a second
+    /// entry and a reassignment reaches neither.
+    array_lengths: IndexMap<ValueId, ValueId>,
     /// Type table for constant folding of pure arithmetic on literal operands
     /// (`Binary` / `Unary`). `None` disables folding (the value graph still
     /// builds structural nodes). See [`Builder::fold_binary_const`].
@@ -497,6 +530,11 @@ impl<'a> Builder<'a> {
             current_value: IndexMap::default(),
             heap_state: HeapState::new(),
             field_store: IndexMap::default(),
+            trace_id: {
+                use std::sync::atomic::{AtomicU32, Ordering};
+                static NEXT: AtomicU32 = AtomicU32::new(0);
+                NEXT.fetch_add(1, Ordering::Relaxed)
+            },
             aliased: aliased.clone(),
             untrackable: untrackable.clone(),
             mut_escaped: mut_escaped.clone(),
@@ -506,6 +544,11 @@ impl<'a> Builder<'a> {
                 v
             },
             ref_targets: IndexMap::default(),
+            field_ref_targets: IndexMap::default(),
+            assigned_fields: assigned_field_indices(body),
+            ctfe_builtins: crate::niri::CtfeBuiltinMap::default(),
+            seeded_aggregates: crate::hashmap::IndexSet::default(),
+            array_lengths: IndexMap::default(),
             type_table,
             loop_entry_values: IndexMap::default(),
             stmt_entry_version: IndexMap::default(),
@@ -642,15 +685,23 @@ impl<'a> Builder<'a> {
         // Reassigning `local` invalidates references that pointed at it.
         self.ref_targets.retain(|_, &mut pointee| pointee != local);
         let target = match &self.body.exprs[value].kind {
-            ExprKind::Unary {
-                op: NirUnaryOp::Ref | NirUnaryOp::MutRef,
-                expr: inner,
-            } => inner
-                .as_expr()
-                .and_then(|ie| match &self.body.exprs[ie].kind {
-                    ExprKind::Local { index, .. } => Some(*index),
-                    _ => None,
-                }),
+            ExprKind::Unary { .. } => self.borrowed_local(Operand::Expr(value)),
+            // `let r = obj.f` where the literal built `f` from `&x` reaches `x`
+            // exactly as `let r = &x` does.
+            ExprKind::FieldAccess {
+                expr: recv,
+                field_index,
+                ..
+            } => {
+                let (recv, field_index) = (*recv, *field_index);
+                // The receiver resolves as the read path resolves it, so a
+                // borrow of the literal's binding reaches the same entry.
+                let rv = recv
+                    .as_expr()
+                    .and_then(|ie| self.reference_lookthrough(ie).map(|(vn, _)| vn))
+                    .or_else(|| self.walked_value(recv));
+                rv.and_then(|rv| self.field_ref_targets.get(&(rv, field_index)).copied())
+            }
             _ => None,
         };
         match target {
@@ -660,6 +711,74 @@ impl<'a> Builder<'a> {
             _ => {
                 self.ref_targets.swap_remove(&local);
             }
+        }
+    }
+
+    /// The value the argument walk already gave `op`, never a fresh walk: a
+    /// call bumps the heap between the two, and a re-walk would read its
+    /// operand at the version the call itself invalidated.
+    fn walked_value(&self, op: Operand) -> Option<ValueId> {
+        match op {
+            Operand::Value(v) => Some(v),
+            Operand::Expr(e) => self.value_of.get(&e).copied(),
+        }
+    }
+
+    /// Name the array `array_new(len)` allocates, and remember its length. The
+    /// name is a fresh opaque, so two allocations never share one and nothing
+    /// re-emits it — only [`Builder::known_array_len`] reads it back.
+    fn allocated_array(&mut self, call: ExprId, len: Operand) -> Option<ValueId> {
+        let len = self.walked_value(len)?;
+        if !is_const_value(&self.pool, len) {
+            return None;
+        }
+        let array = self.pool.fresh_opaque_with_source(OpaqueSource::Expr(call));
+        crate::compiler_trace!("vg_field", "[{}] array_new -> len {len:?}", self.trace_id);
+        self.array_lengths.insert(array, len);
+        Some(array)
+    }
+
+    /// The recorded length of the array `op` names, looking through the borrow
+    /// `array_len(&xs)` passes it under.
+    fn known_array_len(&mut self, op: Operand) -> Option<ValueId> {
+        let inner = match op.as_expr().map(|e| &self.body.exprs[e].kind) {
+            Some(ExprKind::Unary {
+                op: NirUnaryOp::Ref | NirUnaryOp::MutRef,
+                expr,
+            }) => *expr,
+            _ => op,
+        };
+        let mut array = self.walked_value(inner)?;
+        // `array_new`'s result reaches its field through the `as Array<T>` the
+        // lower phase writes, which names the same allocation.
+        loop {
+            if let Some(len) = self.array_lengths.get(&array).copied() {
+                crate::compiler_trace!(
+                    "vg_field",
+                    "[{}] array_len {array:?} -> {len:?}",
+                    self.trace_id
+                );
+                return Some(len);
+            }
+            let ValueKind::Cast { operand, .. } = self.pool.kind(array) else {
+                return None;
+            };
+            array = *operand;
+        }
+    }
+
+    /// The local `&x` / `&mut x` borrows, or `None` for anything else.
+    fn borrowed_local(&self, op: Operand) -> Option<u32> {
+        let ExprKind::Unary {
+            op: NirUnaryOp::Ref | NirUnaryOp::MutRef,
+            expr: inner,
+        } = &self.body.exprs[op.as_expr()?].kind
+        else {
+            return None;
+        };
+        match &self.body.exprs[inner.as_expr()?].kind {
+            ExprKind::Local { index, .. } => Some(*index),
+            _ => None,
         }
     }
 
@@ -696,6 +815,7 @@ impl<'a> Builder<'a> {
             pure_builtin: &self.pure_builtin_callees,
             pure: &self.pure_calls,
             receiver_immutable: &self.receiver_immutable_calls,
+            ctfe_builtins: &self.ctfe_builtins,
         }
     }
 
@@ -710,6 +830,15 @@ impl<'a> Builder<'a> {
     /// call's arguments, since a mutable reference that escaped earlier may have
     /// been retained.
     fn bump_call_effects(&mut self, call: ExprId) {
+        // A sequence builtin reaches an array's elements, never a struct field:
+        // `array_set` writes into the object `repr` names and leaves `repr` and
+        // `used` alone. Since the versions here guard struct-field reads only,
+        // it invalidates none of them.
+        if let ExprKind::Call { func_id, .. } = &self.body.exprs[call].kind
+            && self.ctfe_builtins.contains_key(func_id)
+        {
+            return;
+        }
         let pure = self.pure_calls.contains(&call);
         // Iterate ascending local index, not `mut_escaped`'s insertion order:
         // opaque `ValueId`s and heap versions are handed out in visit order, so
@@ -727,6 +856,16 @@ impl<'a> Builder<'a> {
                     continue;
                 }
                 self.heap_state.bump_local(l);
+            }
+            // A local bound to an aggregate literal keeps its value across the
+            // call: the local *is* the storage, so a callee writing through a
+            // `&mut` of it changes fields, never which object it names. The
+            // version bump above already says the fields may have moved, and
+            // `field_store` is keyed by the receiver — so re-opaquing the
+            // receiver on top would lose every seeded field at the first call
+            // and leave the version saying nothing.
+            if self.seeded_aggregates.contains(&l) {
+                continue;
             }
             self.invalidate_local_with_source(l, Some(OpaqueSource::Local(l)));
         }
@@ -963,9 +1102,17 @@ impl<'a> Builder<'a> {
                             .expect("assign-target field receiver is a place");
                         let bare_local =
                             matches!(&self.body.exprs[recv_e].kind, ExprKind::Local { .. });
-                        let root = self.receiver_root(recv_e);
-                        let recv_v = self.walk_operand(*recv);
-                        Some((root, recv_v, bare_local))
+                        // Resolve the receiver as a read of it resolves — a
+                        // write through `&mut x` must seed `x`'s slot, or the
+                        // read that looks through the borrow finds nothing.
+                        if let Some((pointee_vn, pointee)) = self.reference_lookthrough(recv_e) {
+                            self.walk_operand(*recv);
+                            Some((Some(pointee), Some(pointee_vn), true))
+                        } else {
+                            let root = self.receiver_root(recv_e);
+                            let recv_v = self.walk_operand(*recv);
+                            Some((root, recv_v, bare_local))
+                        }
                     }
                     _ => {
                         self.walk_expr(target);
@@ -1025,26 +1172,6 @@ impl<'a> Builder<'a> {
             }
 
             // ---- Control-flow expressions ----
-            ExprKind::Block(block) => {
-                // A single-expression block `{ e }` (e.g. an inlined getter
-                // `{ x.used }`) forwards `e`'s value, so a later read unifies
-                // with the same access written directly. Multi-statement blocks
-                // stay opaque: forwarding the tail would let CSE drop the side
-                // effects of the leading statements (e.g. `{ cold_path(); e }`).
-                let tail = if let [only] = self.body.blocks[block].stmts[..]
-                    && let StmtKind::Expr(Operand::Expr(e)) = &self.body.stmts[only].kind
-                {
-                    Some(*e)
-                } else {
-                    None
-                };
-                if let Some(e) = tail {
-                    self.walk_expr(e)
-                } else {
-                    self.walk_block(block);
-                    None
-                }
-            }
             ExprKind::If {
                 condition,
                 then_branch,
@@ -1075,12 +1202,37 @@ impl<'a> Builder<'a> {
                 self.flow_join_two(cond_v, &pre, then_arm, else_arm);
                 None
             }
-            ExprKind::LabeledBlock { block, .. } => {
-                // Same break-only-write hazard as the `StmtKind::LabeledBlock` arm.
-                self.walk_block(block);
-                self.dirty_all_writes_in_block(block);
-                self.heap_state.bump_all();
-                None
+            ExprKind::LabeledBlock {
+                block, ref label, ..
+            } => {
+                // The break-only-write hazard the `StmtKind::LabeledBlock` arm
+                // names is a hazard of the break, not of the block: a jump out
+                // of the middle leaves the writes after it undone. Where
+                // nothing breaks to the label the statements simply run.
+                if self.body.breaks_to(NodeRef::Block(block), label) {
+                    self.walk_block(block);
+                    self.dirty_all_writes_in_block(block);
+                    self.heap_state.bump_all();
+                    return None;
+                }
+                // A single-expression block `{ e }` (e.g. an inlined getter
+                // `{ x.used }`) forwards `e`'s value, so a later read unifies
+                // with the same access written directly. Multi-statement blocks
+                // stay opaque: forwarding the tail would let CSE drop the side
+                // effects of the leading statements (e.g. `{ cold_path(); e }`).
+                let tail = if let [only] = self.body.blocks[block].stmts[..]
+                    && let StmtKind::Expr(Operand::Expr(e)) = &self.body.stmts[only].kind
+                {
+                    Some(*e)
+                } else {
+                    None
+                };
+                if let Some(e) = tail {
+                    self.walk_expr(e)
+                } else {
+                    self.walk_block(block);
+                    None
+                }
             }
             ExprKind::Match { expr: scrut, arms } => {
                 self.walk_operand(scrut);
@@ -1132,8 +1284,23 @@ impl<'a> Builder<'a> {
                 // Store→load forwarding: a value stored to this exact
                 // `(receiver, field, version)` is the value this read sees.
                 if let Some(&stored) = self.field_store.get(&(recv, field_index, heap_ver)) {
+                    crate::compiler_trace!(
+                        "vg_field",
+                        "[{}] hit: recv={recv:?} field={field_index} -> {stored:?}",
+                        self.trace_id
+                    );
                     return Some(stored);
                 }
+                crate::compiler_trace!(
+                    "vg_field",
+                    "[{}] miss: recv={recv:?} field={field_index} root={root:?} ver={heap_ver:?}, \
+                     {} store(s) seeded for that field",
+                    self.trace_id,
+                    self.field_store
+                        .keys()
+                        .filter(|(_, f, _)| *f == field_index)
+                        .count()
+                );
                 Some(self.pool.field_access(recv, field_index, heap_ver))
             }
             ExprKind::Index { expr: inner, index } => {
@@ -1182,12 +1349,22 @@ impl<'a> Builder<'a> {
             }
 
             // ---- Calls (effectful, may write the heap) ----
-            ExprKind::Call { args, .. } => {
+            ExprKind::Call { func_id, args, .. } => {
+                let builtin = self.ctfe_builtins.get(&func_id).copied();
+                let arg = args.first().map(|a| a.expr);
                 for a in args {
                     self.walk_operand(a.expr);
                 }
                 self.bump_call_effects(expr);
-                None
+                match (builtin, arg) {
+                    (Some(crate::niri::CtfeBuiltin::ArrayNew), Some(len)) => {
+                        self.allocated_array(expr, len)
+                    }
+                    (Some(crate::niri::CtfeBuiltin::ArrayLen), Some(array)) => {
+                        self.known_array_len(array)
+                    }
+                    _ => None,
+                }
             }
             ExprKind::CmRawCall { args, .. } => {
                 for a in args {
@@ -1242,6 +1419,7 @@ impl<'a> Builder<'a> {
     fn seed_struct_literal_fields(&mut self, root: u32, recv: ValueId, value_expr: ExprId) {
         // `untrackable` (`stores`-aliased) receivers never seed.
         if self.untrackable.contains(&root) {
+            crate::compiler_trace!("vg_field", "local {root}: untrackable, no field seeded");
             return;
         }
         let mut producer = value_expr;
@@ -1271,43 +1449,44 @@ impl<'a> Builder<'a> {
                     self.copy_local_field_slots(src, root, recv);
                     return;
                 }
-                ExprKind::Block(b) => {
-                    let Some(&last) = self.body.blocks[*b].stmts.last() else {
-                        return;
-                    };
-                    let StmtKind::Expr(Operand::Expr(tail)) = &self.body.stmts[last].kind else {
-                        return;
-                    };
-                    producer = *tail;
-                }
                 ExprKind::LabeledBlock { block, label, .. } => {
                     let (block, label) = (*block, label.clone());
                     let stmts = &self.body.blocks[block].stmts;
                     let Some(&last) = stmts.last() else {
                         return;
                     };
-                    let StmtKind::Break {
-                        label: Some(brk),
-                        value: Some(value),
-                    } = &self.body.stmts[last].kind
-                    else {
-                        return;
+                    // A block yields through its own `break label: v`, or —
+                    // where nothing breaks to it — through the trailing
+                    // statement.
+                    let value = match &self.body.stmts[last].kind {
+                        StmtKind::Break {
+                            label: Some(brk),
+                            value: Some(value),
+                        } if *brk == label => *value,
+                        StmtKind::Expr(tail)
+                            if !self.body.breaks_to(NodeRef::Block(block), &label) =>
+                        {
+                            let Some(tail) = tail.as_expr() else { return };
+                            producer = tail;
+                            continue;
+                        }
+                        _ => return,
                     };
-                    if *brk != label {
-                        return;
-                    }
-                    let value = *value;
                     // The trailing break must be the sole producer: no other
                     // break to this label anywhere else in the block or in
                     // the carried value.
                     let earlier_break = stmts[..stmts.len() - 1]
                         .iter()
-                        .any(|s| block_breaks_to_node(self.body, NodeRef::Stmt(*s), &label));
+                        .any(|s| self.body.breaks_to(NodeRef::Stmt(*s), &label));
                     if earlier_break
-                        || value.as_expr().is_some_and(|ve| {
-                            block_breaks_to_node(self.body, NodeRef::Expr(ve), &label)
-                        })
+                        || value
+                            .as_expr()
+                            .is_some_and(|ve| self.body.breaks_to(NodeRef::Expr(ve), &label))
                     {
+                        crate::compiler_trace!(
+                            "vg_field",
+                            "peel {root}: label has more than one break"
+                        );
                         return;
                     }
                     let Some(pe) = value.as_expr() else {
@@ -1324,18 +1503,46 @@ impl<'a> Builder<'a> {
         // Clone out the (field_index, value-expr) pairs to release the body
         // borrow before mutating `field_store`.
         let pairs: Vec<(u32, Operand)> = fields.iter().map(|f| (f.field_index, f.value)).collect();
+        let attempted = pairs.len();
+        let mut seeded = 0;
         for (field_index, field_value) in pairs {
-            // A promoted constant field is its own `ValueId`; a skeleton field is
-            // resolved through `value_of`.
-            let fv = match field_value {
-                Operand::Value(v) => Some(v),
-                Operand::Expr(e) => self.value_of.get(&e).copied(),
-            };
-            if let Some(fv) = fv {
+            if let Some(pointee) = self.borrowed_local(field_value)
+                && !self.assigned_fields.contains(&field_index)
+            {
+                // `assigned_fields` sees this body only, so a callee could
+                // repoint the field and leave the entry naming the old local.
+                // It reaches nothing: borrowing made the pointee escape, and an
+                // impure call moves the escaped generation, so the read that
+                // follows one matches no store this seeded.
+                assert!(
+                    self.aliased.contains(&pointee) || self.mut_escaped.contains(&pointee),
+                    "a borrowed local escapes, so a stale pointee outlives no call"
+                );
+                crate::compiler_trace!(
+                    "vg_field",
+                    "[{}] field {field_index} of {recv:?} borrows local {pointee}",
+                    self.trace_id
+                );
+                self.field_ref_targets.insert((recv, field_index), pointee);
+            }
+            if let Some(fv) = self.walked_value(field_value) {
                 let ver = self.heap_version_of(Some(root), field_index);
                 self.field_store.insert((recv, field_index, ver), fv);
+                seeded += 1;
             }
         }
+        if seeded > 0 {
+            self.seeded_aggregates.insert(root);
+        }
+        crate::compiler_trace!(
+            "vg_field",
+            "[{}] seed local {root} ({}): {seeded} of {attempted} fields, recv={recv:?}",
+            self.trace_id,
+            match &self.body.exprs[producer].kind {
+                ExprKind::StructLiteral { struct_name, .. } => struct_name.as_str(),
+                _ => "",
+            }
+        );
     }
 
     /// Copy `src`'s currently-live field slots onto the new binding
@@ -1737,7 +1944,8 @@ impl<'a> Builder<'a> {
             // early self-breaks, so scan the subtree too. Over-approximating
             // the break's reachability only adds an arm to the join (sound).
             StmtKind::LabeledBlock { block, label, .. } => {
-                self.block_falls_through(*block) || block_breaks_to(self.body, *block, label)
+                self.block_falls_through(*block)
+                    || self.body.breaks_to(NodeRef::Block(*block), label)
             }
             // A `Loop` falls through only via `break`, which we do not
             // analyse here; treat it as falling through.
@@ -1921,37 +2129,33 @@ fn writes_of_block(
     rc
 }
 
-/// Whether `block`'s subtree contains a `break` targeting `label`. Used by
-/// [`Builder::stmt_falls_through`] to classify a labeled block whose body
-/// exits via a break to its own label as falling through.
-fn block_breaks_to(body: &Body, block: BlockId, label: &str) -> bool {
-    block_breaks_to_node(body, NodeRef::Block(block), label)
-}
-
-fn block_breaks_to_node(body: &Body, node: NodeRef, label: &str) -> bool {
-    if let NodeRef::Stmt(s) = node
-        && let StmtKind::Break {
-            label: Some(brk), ..
-        } = &body.stmts[s].kind
-        && brk == label
-    {
-        return true;
+/// Every field index some `Assign` in `body` writes, over the whole arena: a
+/// field nothing replaces is one a recorded pointee outlives. Coarse by index
+/// rather than by type, which errs toward recording nothing.
+fn assigned_field_indices(body: &Body) -> crate::hashmap::IndexSet<u32> {
+    let mut set = crate::hashmap::IndexSet::default();
+    for (_, node) in &body.exprs {
+        if let ExprKind::Assign { target, .. } = &node.kind
+            && let ExprKind::FieldAccess { field_index, .. } = &body.exprs[*target].kind
+        {
+            set.insert(*field_index);
+        }
     }
-    let mut kids = Vec::new();
-    body.for_each_child(node, |c| kids.push(c));
-    kids.into_iter()
-        .any(|c| block_breaks_to_node(body, c, label))
+    set
 }
 
 /// The per-call verdicts the loop summary reads, bundled so it asks the same
 /// questions [`Builder::bump_call_effects`] asks of one call.
-struct CallFacts<'a> {
+pub struct CallFacts<'a> {
     /// Builtin intrinsics operating below the struct-field layer.
-    pure_builtin: &'a crate::hashmap::IndexSet<FuncId>,
+    pub pure_builtin: &'a crate::hashmap::IndexSet<FuncId>,
     /// Calls that mutate no caller local.
-    pure: &'a crate::hashmap::IndexSet<ExprId>,
+    pub pure: &'a crate::hashmap::IndexSet<ExprId>,
     /// Calls whose callee cannot write through the receiver.
-    receiver_immutable: &'a crate::hashmap::IndexSet<ExprId>,
+    pub receiver_immutable: &'a crate::hashmap::IndexSet<ExprId>,
+    /// Which sequence builtin each callee id is, so `array_len` over an array
+    /// the walk saw allocated folds to the length it was given.
+    pub ctfe_builtins: &'a crate::niri::CtfeBuiltinMap,
 }
 
 /// A loop body's heap-write effects, used to invalidate exactly the fields a
@@ -2334,6 +2538,7 @@ mod tests {
         builtin: crate::hashmap::IndexSet<FuncId>,
         pure: crate::hashmap::IndexSet<ExprId>,
         immutable: crate::hashmap::IndexSet<ExprId>,
+        ctfe_builtins: crate::niri::CtfeBuiltinMap,
     }
 
     impl TestFacts {
@@ -2356,6 +2561,7 @@ mod tests {
                 pure_builtin: &self.builtin,
                 pure: &self.pure,
                 receiver_immutable: &self.immutable,
+                ctfe_builtins: &self.ctfe_builtins,
             }
         }
     }
@@ -2482,6 +2688,7 @@ mod tests {
         let empty = IndexSet::default();
         let no_calls = IndexSet::default();
         let no_callees = IndexSet::default();
+        let no_builtin_map = crate::niri::CtfeBuiltinMap::default();
         let escaped = |order: [u32; 2]| order.into_iter().collect::<IndexSet<u32>>();
 
         let build_with = |mut_escaped: &IndexSet<u32>| {
@@ -2492,9 +2699,12 @@ mod tests {
                 &empty,
                 &empty,
                 mut_escaped,
-                &no_calls,
-                &no_callees,
-                &no_calls,
+                CallFacts {
+                    pure_builtin: &no_callees,
+                    pure: &no_calls,
+                    receiver_immutable: &no_calls,
+                    ctfe_builtins: &no_builtin_map,
+                },
                 None,
             );
             body.values.values

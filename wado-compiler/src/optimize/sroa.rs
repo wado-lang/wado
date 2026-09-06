@@ -152,6 +152,7 @@ fn sroa_at_root(engine: &mut Engine, rule: &SroaRule) -> bool {
     let mut reconstruct_set: IndexSet<u32> = IndexSet::default();
     for c in &candidates {
         if rule.stores_aliased.contains(&c.local_index) {
+            crate::compiler_trace!("sroa", "{}: stores-aliased", c.local_name);
             continue;
         }
         if !uses.escaped.contains(&c.local_index) {
@@ -159,6 +160,8 @@ fn sroa_at_root(engine: &mut Engine, rule: &SroaRule) -> bool {
         } else if soft_escaped.contains(&c.local_index) {
             decomposed.insert(c.local_index);
             reconstruct_set.insert(c.local_index);
+        } else {
+            crate::compiler_trace!("sroa", "{}: escaped, not soft", c.local_name);
         }
     }
     if decomposed.is_empty() {

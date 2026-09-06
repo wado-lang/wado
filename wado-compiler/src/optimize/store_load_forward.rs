@@ -1,8 +1,9 @@
 //! Store-to-Load Forwarding: replace a value-position `Local` or `FieldAccess`
 //! read with the literal reaching it. The `ValueGraph` handles reaching-defs,
 //! branch merges, and heap-write invalidation, so this rule only inspects each
-//! read's `ValueKind`. Address-taken and `stores`-aliased locals are excluded;
-//! a field read is safe already, its store seeded only for an unaliased receiver.
+//! read's `ValueKind`. Address-taken and `stores`-aliased locals are excluded
+//! from `Local` forwarding; a field read is safe already, its store seeded for
+//! any receiver but a `stores`-aliased one and versioned against writes.
 
 use std::cell::Cell;
 
@@ -21,6 +22,7 @@ pub fn forward_stores_to_loads_all(project: &mut NirPackage) -> bool {
     let first_param_types = super::alias::first_param_types(project);
     let call_immutability = super::alias::CallImmutability::new(project, &type_table);
     let pure_builtin_callees = project.pure_builtin_callee_ids();
+    let ctfe_builtins = crate::niri::build_ctfe_builtin_map(project);
     let mut buffers = EngineBuffers::default();
     let mut changed = false;
     for func_rc in &project.functions {
@@ -31,6 +33,7 @@ pub fn forward_stores_to_loads_all(project: &mut NirPackage) -> bool {
             &first_param_types,
             &call_immutability,
             &pure_builtin_callees,
+            &ctfe_builtins,
             &mut buffers,
         );
     }
@@ -45,6 +48,7 @@ fn forward_one(
     first_param_types: &super::alias::FirstParamTypes,
     call_immutability: &super::alias::CallImmutability,
     pure_builtin_callees: &crate::hashmap::IndexSet<crate::nir::FuncId>,
+    ctfe_builtins: &crate::niri::CtfeBuiltinMap,
     buffers: &mut EngineBuffers,
 ) -> bool {
     if func.body.is_none() {
@@ -84,12 +88,16 @@ fn forward_one(
     engine.set_alias_sets(aliased, untrackable, mut_escaped);
     engine.set_value_graph_type_table(type_table);
     engine.set_pure_builtin_callees(pure_builtin_callees);
+    engine.set_ctfe_builtins(ctfe_builtins);
     if is_cm_export {
         // `ensure_value_graph` never rebuilds, so what is seeded here is what
         // licm and `promote_fields` inherit.
         engine.set_param_locals(param_locals);
-        engine.build_value_graph_now();
     }
+    // Before the first query: `scoped_const_reads` only *grows* a graph that
+    // already exists, and this session is the one that set the real alias sets,
+    // so a body reaching it without one forwarded nothing at all.
+    engine.build_value_graph_now();
     unsafe_locals.extend(engine.body_address_taken().iter().copied());
     // The complement of the unsafe set: what disqualifies a local is being
     // address-taken or `stores`-aliased, not being an aggregate.
@@ -139,9 +147,13 @@ fn forward_at_root(
     unsafe_locals: &IndexSet<u32>,
     forwarded: &crate::hashmap::IndexMap<ExprId, crate::nir_value_graph::ValueId>,
 ) -> bool {
-    // Snapshot reads before rewriting. `FieldAccess` reads carry `None`:
-    // their alias safety is upstream — the builder never seeds an aliased
-    // receiver, so such a read never carries a re-emittable `ValueId`.
+    // Snapshot reads before rewriting. A `FieldAccess` carries no local index,
+    // so the `unsafe_locals` filter below never applies to one: a field read's
+    // safety is the value graph's, and it is by version rather than by refusing
+    // to seed. A `stores`-aliased receiver is the one the builder never seeds;
+    // a reference-aliased receiver is seeded and versioned against the escaped
+    // generation, which every impure call bumps, so a forward that survives to
+    // here is one no write could have reached.
     let mut reads: Vec<(ExprId, Option<u32>)> = Vec::new();
     collect_candidate_reads(engine.body, &mut reads);
 
@@ -186,7 +198,9 @@ fn collect_candidate_reads_node(body: &Body, node: NodeRef, out: &mut Vec<(ExprI
     if let NodeRef::Expr(id) = node {
         match &body.exprs[id].kind {
             ExprKind::Local { index, .. } => out.push((id, Some(*index))),
-            ExprKind::FieldAccess { .. } => out.push((id, None)),
+            // A call carries a value only where the graph was taught its
+            // builtin — an array length, which the capacity guard tests.
+            ExprKind::FieldAccess { .. } | ExprKind::Call { .. } => out.push((id, None)),
             _ => {}
         }
     }

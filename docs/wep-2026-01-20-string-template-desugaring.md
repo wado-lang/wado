@@ -21,7 +21,7 @@ tagged form reaches through `Hole::fmt`.
 The compiler directly emits an efficient sequence using a mutable string and labeled block expression. Every interpolation goes through a `Formatter` (see [Format Traits](./wep-2026-02-01-format-traits.md)), specifier or not. `Formatter` wraps `&mut String` and writes into the output buffer with no intermediate allocation.
 
 ```wado
-__tmpl: {
+$tmpl: {
     let mut __r = "Hello, ";
     name.fmt(&mut Formatter::new(&mut __r));
     __r.push_str("! You are ");
@@ -52,7 +52,7 @@ specifier sets no field beyond the type — width, precision, fill, alignment,
 Desugars to:
 
 ```wado
-__tmpl: {
+$tmpl: {
     let mut __r = "Pi is ";
     pi.fmt(&mut Formatter {
         fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false,

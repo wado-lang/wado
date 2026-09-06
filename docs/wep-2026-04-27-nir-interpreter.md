@@ -89,9 +89,9 @@ structs and tuples whose every field is constant, and the field reads projecting
 back out of one; enums, whose discriminant is the whole value, and variants,
 which carry a case and its payload. The lattice has three states: unevaluated,
 constant, non-constant. So an unreachable branch contributes nothing and a
-trapping arm does not contaminate a fold. An aggregate leaves the engine only
-where it has a literal shape to be written as; otherwise what reaches the IR is
-the scalars projected out of it.
+trapping arm does not contaminate a fold. An aggregate leaves the engine as the
+literal tree the lower phase would have emitted for it, where the node it
+replaces yields an object nothing else reaches.
 
 Bindings: immutable locals and globals whose initializer is constant, plus a
 global's separately known fields, such as a sequence global's length; and a
@@ -219,11 +219,11 @@ cannot reach.
 
 ## Roadmap
 
-The census counts 1 198 surviving regions across 9 of 22 files:
+The census counts 1 041 surviving regions across 9 of 22 files:
 
 | Cause                                 | Regions |
 | ------------------------------------- | ------- |
-| no call on its path explains it       | 900     |
+| no call on its path explains it       | 753     |
 | it writes a global                    | 240     |
 | `push_encoded_ranges` still runs      | 34      |
 | it writes a place rooting in no local | 13      |
@@ -232,34 +232,135 @@ The census counts 1 198 surviving regions across 9 of 22 files:
 | `general_category_ranges` still runs  | 2       |
 | `i32::fmt_decimal` still runs         | 1       |
 
-Two Gale-generated files hold 1 120 of them. That concentration is not a Gale
+Two Gale-generated files hold 976 of them. That concentration is not a Gale
 fact: what generated code does is call the same missing capability often.
 
 The largest row is also the least specific. A region naming no call is waiting on
 a value the engine cannot represent rather than a body it cannot run. It says
 which instrument to reach for next, not which capability is missing, so only
-`ctfe_stmt` turns those 900 into work.
+`ctfe_stmt` turns those 753 into work.
 
 ### 1. The aggregate exit
 
-Every callee the census names builds a `List<T>` from a constant:
-`push_encoded_ranges` (34), `union_char_ranges` (4), `binary_property_ranges`
-(4), `general_category_ranges` (2). A `List<T>` region is also what the no-call
-row reports, so the census points at this one capability twice over, once by
-name and once by the silence. A `List<T>` filled
-by a loop and returned does not fold, whether `T` is a scalar or a struct, while
-the same program over a `String` does. A `String`'s backing is a byte array the
-engine represents and can write back, and a `List<T>`'s is not.
+The engine represented an aggregate all along and had nowhere to put it, a
+`String`'s backing being the one shape it could write back. The exit gave it
+one, and the recount says which half of the census that was: the silent row
+fell 900 → 753 and every named callee stayed where it was. So the four
+`List<T>` builders the census names — `push_encoded_ranges` (34),
+`union_char_ranges` (4), `binary_property_ranges` (4),
+`general_category_ranges` (2) — were never waiting on the write-back. They are
+calls the engine still declines to run, which is stages 2 and 3.
 
-What stops is the list, not everything that touches one. A scalar the engine
-projects out of it still folds, so `` `${table().len()}` `` reaches the IR as the
-rendered literal while `` `${table():?}` ``, which needs the list itself, does
-not.
+#### What it writes
 
-- [ ] A `List<T>` of scalars written back as
-      [`ArrayLiteral`](./wep-2026-05-31-nir-array-literal.md) and a plain struct
-      as `StructLiteral`, each needing its own answer to "is this already the
-      literal the rewrite writes" so the worklist still settles.
+`commit_fold` is where a folded value becomes IR. A scalar promotes to a pooled
+operand; everything else goes to a walk of the value against its type, emitting
+the literal node NIR already has for each shape.
+
+| Value                       | Node               |
+| --------------------------- | ------------------ |
+| scalar                      | pooled operand     |
+| `Seq` of `u8`               | `PackedArray`      |
+| `Seq` otherwise             | `ArrayLiteral`     |
+| `Aggregate` of a tuple type | `TupleLiteral`     |
+| `Aggregate` otherwise       | `StructLiteral`    |
+| `Variant`                   | `VariantConstruct` |
+
+`wir_build` lowers all five node forms already, and
+[`ArrayLiteral`](./wep-2026-05-31-nir-array-literal.md) was added for a consumer
+of exactly this kind.
+
+Field order is load-bearing: `wir_build` lowers a struct literal's fields
+positionally, and SROA asserts their indices cover `0..N` once. So the writer
+emits in `field_index` order and refuses a value whose fields do not, which the
+lattice's reader makes unreachable — a NIR aggregate literal lists every field.
+
+#### The engine has no shape source
+
+Reading a literal into a value drops what writing one back needs. A
+`StructLiteral` field carries a name, a `VariantConstruct` a case index, and a
+pooled scalar operand the `TypeId` extraction reads its width from. `Value` keys
+a field by index, a case by name, and a scalar by `PrimitiveType`, which cannot
+name the enum, `flags` or newtype a field is declared as. Guessing a type is not
+a lost fold but a wrong one: `wir_build` resolves a tuple literal's struct type
+from its element types.
+
+`NirPackage`'s `structs` and `variants` hold the names, the case indices and the
+per-instance field types, and are where `wir_build` reads them. The exit takes
+the same information as a `TypeId` → fields index, built once per pass and
+carried on `ProgramFacts`, where an absent fact already costs folds rather than
+correctness. A tuple needs none of it: its element types are its own `type_args`.
+
+#### The writer answers whether it changed anything
+
+Recognizing a literal tree does not answer "is this already the literal the
+rewrite writes". A `List<u8>` written `[1, 2, 3]` reaches the engine as an
+`ArrayLiteral` of constants, and the writer's form for it is a `PackedArray`,
+which packs into a data segment — a literal tree the rewrite must still change.
+Only the writer knows which it would emit, so it decides: the walk compares each
+node against the node it would put there, allocates where they differ, and
+reports whether anything did. Nothing settles the question separately, so nothing
+can drift from it. Materializing leaves a tree the walk then matches, so the next
+visit writes nothing and reduction stays monotone and idempotent.
+
+The cost gate stays separate and may stay conservative: asking the lattice for a
+container literal's value is what `seq_literal_value` decides, and over-asking
+costs a query the writer then declines, never a loop.
+
+#### Identity
+
+A literal is a fresh object. Writing one over an expression that yields a shared
+one leaves the program two objects where it had one, and `ref.eq` tells them
+apart. So the exit writes only over a node that yields an object nothing else
+reaches: a call or a region, which hand back what they built; a literal, which is
+one already; and the single read of a local nothing borrows, since a second read
+or a `&p` beside one is the second reacher. Whether the copy planner would later
+copy a value read is not knowable here, which is why a second read counts as
+sharing whatever its type. A reference-shaped leaf is refused outright, at each
+leaf rather than at the root, since a field can hold one where the whole value
+does not.
+
+A scratch body needs none of this. It is read for the value it computes and then
+dropped, so nothing written over it runs.
+
+#### Storage is not a value
+
+A backing array reaches the IR as its container's field, where the length says
+how much of it is live, and never as a node of its own: writing a literal over
+the `array_new` that opens a buffer would hand the writes that follow a data
+segment's worth of zeros. For the same reason an empty container is left alone —
+a literal over one can only trade a buffer for a smaller buffer, and an opened
+buffer is what the region about to fill it is holding.
+
+Within a container the backing is cut to the length, capacity being an allocation
+detail. That is what puts a folded string's bytes in a data segment sized to the
+string.
+
+#### The budget
+
+The byte path needs none: a `PackedArray` within `MAX_SEQ_ELEMENTS` reaches WIR
+as one `array.new_data`. A general aggregate has no such floor. A
+thousand-element `List<i32>` built by a loop is a dozen instructions, and its
+literal is a thousand operands, which `array.new_fixed` packs into a data segment
+only where the elements are primitive. So the writer counts the operands it would
+place, charging a byte sequence one, and refuses past `MAX_MATERIALIZED_LEAVES`.
+
+It is a safety valve rather than a tuning knob. Swept over the benchmark and
+`wasm-size` corpora, every ceiling from 16 up emits the same bytes on every
+program: what the exit writes there is many small values, not a few wide ones.
+
+#### What it does not reach
+
+The exit writes values; it does not produce them. A callee the engine never folds
+to a value is unaffected — `HighlightVisitor::new` builds its table through
+`String::grow`, which abandons the evaluation, so it stays a call whatever the
+writer can emit. That one is stage 3's.
+
+- [x] The `TypeId` → fields index on `ProgramFacts`.
+- [x] The writer, reporting whether it changed the tree, and the identity,
+      storage and budget gates.
+- [x] The leaf ceiling, swept against wasm size.
+- [x] The recount, above.
 - [ ] A destructuring `let`; a body containing one is abandoned.
 
 Done when a constant `List` result and a constant struct result reach the IR as
@@ -279,24 +380,37 @@ literals, `Array::slice`'s computed bounds fold, and the corpus is recounted.
 
 ### 3. The frame owns storage
 
-`` `${'x'}` `` still leaves `Formatter::pad` standing, which the remark names,
-where `` `${true}` `` folds and reports nothing. With `` `${255:x}` `` it is
-what still pays for its formatter short of floats.
+`` `${'x'}` `` does not fold, where `` `${true}` `` does. The census names no
+call for it. With `` `${255:x}` `` the place-valued field is what still pays for
+a formatter short of floats, and there the census does name a call.
 
-- [ ] What distinguishes the `char` path from the `bool` one.
+Every template builds `Formatter { …, buf: &mut buffer }`, and a `&mut` in a
+struct-literal field is a write the frame does not perform, so the buffer is
+clobbered and the region abandons at its first append. `bool::fmt` writes the
+buffer straight, so inlining dissolves its `Formatter` and a later iteration
+folds the region; `char::fmt` reads `f.buf` back and appends through it, so the
+field outlives every pass. What the two once also differed by — a branch on
+`f.width` that no NIR pass folded — was two gaps in `store_load_forward`, since
+fixed, and the branch is gone.
+
+- [x] What distinguishes the `char` path from the `bool` one: reading the buffer
+      back out of the `&mut` field, which is the item below.
 - [ ] A place-valued field, so an aggregate can carry a reference. Today such an
       aggregate is not a constant, since a field holding the referent's value
       would take a write meant for the referent; what it needs to hold is the
-      place the frame already names elsewhere. The refusal is whole-value, so a
-      scalar field naming no storage is refused with the rest, which is why
-      `Array::slice`'s computed bounds stop folding. It is also what
-      `` `${255:x}` `` waits on: `Formatter::prepare_int_write` survives as a
-      call taking `&mut Formatter`, whose `buf` is such a field. A template
-      folds today only where inlining and SROA dissolve its `Formatter` first,
-      which the inliner's pricing decides, not the engine.
+      place the frame already names elsewhere — `place_aliases` records exactly
+      that pair for a `let`-bound borrow, and the gap is carrying one inside a
+      value. The refusal is whole-value, so a scalar field naming no storage is
+      refused with the rest. A template folds today only where inlining and SROA
+      dissolve its `Formatter` first, which the inliner's pricing decides, not
+      the engine.
 - [ ] `String::grow`, which reshapes the caller's container from a frame of its
       own and so abandons the evaluation whenever a buffer outgrows its
       reservation.
+
+A place names the frame's own storage and must not outlive it, so the aggregate
+exit refuses to write any value carrying one — a leaf gate beside the one that
+refuses a reference-shaped leaf.
 
 Upstream: the `stores`-gated temp and write-back carve-outs and divergences D1–D6
 in [Reference Representation](./wep-2026-06-13-reference-representation.md). The

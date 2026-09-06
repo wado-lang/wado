@@ -1,0 +1,44 @@
+// Test: a `break` whose target sits past a block Wasm does not emit.
+//
+// Inlining `classify` wraps its body in a labeled block and turns each `return`
+// into a `break` to that label. The `match` arms holding those breaks are
+// blocks nothing names, so `wir_build` emits their statements as a plain
+// sequence — no `block` instruction. A `br`'s operand is a relative depth, so
+// every one of those breaks has to be counted against the blocks actually
+// emitted; counting the elided arm too would branch a level too far out.
+//
+// `black_box` keeps the arguments off the constant-folding path, which would
+// otherwise settle each call at compile time and leave no `br` to mis-count.
+
+use { println, Stdout } from "core:cli";
+
+internal fn classify(n: i32) -> i32 {
+    match n {
+        0 => {
+            return 10
+        },
+        1 => {
+            return 20
+        },
+        _ => {},
+    }
+    return 30
+}
+
+export fn run() with Stdout {
+    let mut total = 0;
+    let mut i = builtin::black_box(0);
+    while i < 4 {
+        total = total + classify(i);
+        i = i + 1;
+    }
+    let a = classify(builtin::black_box(0));
+    let b = classify(builtin::black_box(1));
+    let c = classify(builtin::black_box(2));
+    println(`${a} ${b} ${c} ${total}`);
+}
+
+__DATA__
+{
+    "stdout": "10 20 30 90\n"
+}

@@ -331,27 +331,6 @@ fn parse_value_offset(engine: &Engine, v: crate::nir_value_graph::ValueId) -> Op
     }
 }
 
-/// The tail value operand of a block expression: `{ …; tail }` (the last
-/// statement is `Expr(tail)`) or a labeled block whose last statement is
-/// `break label tail`.
-fn block_tail_operand(body: &crate::nir_arena::Body, e: ExprId) -> Option<Operand> {
-    match &body.exprs[e].kind {
-        ExprKind::Block(block) => block_id_tail(body, *block),
-        ExprKind::LabeledBlock { label, block, .. } => {
-            let last = *body.blocks[*block].stmts.last()?;
-            let StmtKind::Break {
-                label: Some(bl),
-                value: Some(v),
-            } = &body.stmts[last].kind
-            else {
-                return None;
-            };
-            (bl == label).then_some(*v)
-        }
-        _ => None,
-    }
-}
-
 /// The initialiser operand of `recv.field`, when `recv` resolves (through copy
 /// temps and block tails) to a struct literal. Sound because `recv` reaching a
 /// `let` binding via [`Binds`] means it is never reassigned or `&mut`-escaped
@@ -368,7 +347,7 @@ fn struct_field_init(
         if matches!(&engine.body.exprs[e].kind, ExprKind::StructLiteral { .. }) {
             break;
         }
-        let tail = block_tail_operand(engine.body, e)?;
+        let tail = engine.body.block_yield(e)?;
         cur = resolve(engine, binds, tail);
     }
     let Operand::Expr(e) = cur else {
@@ -1443,9 +1422,17 @@ fn rbce_walk(engine: &mut Engine, node: NodeRef, facts: &mut Vec<ProvenLt>, bind
         return changed;
     }
 
+    // A block something breaks to is a fresh region: the break skips the rest of
+    // it, so a fact proven inside need not hold where the block's value lands.
+    // A block nothing breaks to runs straight through, and its facts flow like
+    // any other statement sequence — which is what the grouping blocks every
+    // index expression expands into depend on.
     let fresh_region = match node {
         NodeRef::Stmt(s) => matches!(engine.body.stmts[s].kind, StmtKind::Loop { .. }),
-        NodeRef::Expr(e) => matches!(engine.body.exprs[e].kind, ExprKind::LabeledBlock { .. }),
+        NodeRef::Expr(e) => {
+            matches!(engine.body.exprs[e].kind, ExprKind::LabeledBlock { .. })
+                && engine.body.unbroken_block(e).is_none()
+        }
         _ => false,
     };
     if fresh_region {

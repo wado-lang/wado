@@ -24,6 +24,11 @@ Filename: `docs/wep-YYYY-MM-DD-{feature-name}.md`
 Deciding is the human's role, to adopt and to refuse alike. Propose, and record
 what is still open as a gap; never write a decision of your own into a WEP.
 
+What an adopted decision already settles is not a second decision. Write out
+what follows from it — the mechanism it implies, the invariant it rests on, the
+case it forces — and say which decision it follows from where that is not
+obvious. A choice the adopted one leaves open is a gap, however small.
+
 It may include TODOs on WIP.
 
 A WEP states the design as it stands now; a change rewrites the affected

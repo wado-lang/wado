@@ -735,13 +735,17 @@ fn run_optimization_passes(
     // constant literal upstream) into the literal, before globalization. Runs
     // before `const_object_globalization` so it never sees the nullable
     // `GlobalVarGet`s globalization emits.
-    run_pass(
+    // Folding and pruning belong in the same loop: a forward decides a capacity
+    // guard, and it is *pruning* that guard which removes the call whose heap
+    // bump hides the next one. A run of appends folds one guard per pass
+    // otherwise, and its buffer's length stays unknown from the second on.
+    run_bounded_fixpoint(
         "nir/store_load_forward_post_scalarize",
         project,
         profiler,
-        forward_stores_to_loads_all,
+        |p| forward_stores_to_loads_all(p) | fold_constants_all(p) | prune_constant_branches(p),
     );
-    // Final cleanup: flatten any `__tmpl:` labeled blocks the fixpoint
+    // Final cleanup: flatten any `$tmpl:` labeled blocks the fixpoint
     // preserved as anchors for `tmpl_hoist`. `tmpl_hoist` has finished
     // by now (it runs inside the fixpoint loop), so the wrappers are
     // pure overhead — peel them so codegen emits the inner straight-line

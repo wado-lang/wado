@@ -210,6 +210,21 @@ Missing optimizations, one entry per pass-shaped gap. Architectural work — com
       best, then nested. That reaches the hand-written dispatchers the
       synthesised `FieldSchema::lookup` tree does not. An atom that guards
       another's operand range has to be tested first, or a miss becomes a trap.
+- [ ] The `char` template's `&mut` field. `` `${'x'}` `` reaches WIR as a
+      `Formatter` over a fresh buffer, which `char::fmt` reads back out of the
+      `buf` field and appends through, where `` `${true}` `` folds to a
+      globalized literal. The capacity guard those appends used to carry is
+      gone, so the field is what is left, and it is
+      [the NIR interpreter WEP](./wep-2026-04-27-nir-interpreter.md)'s stage 3:
+      a `&mut` in a struct-literal field is a write the frame does not perform,
+      so the region abandons at the first append.
+
+      `sroa` declines the same struct for its own reason — `&mut candidate` is a
+      hard escape, exempting only a shared `&` argument to a non-storing callee
+      — which is worth revisiting now that nothing else keeps the `Formatter`
+      alive. `WADO_TRACE=vg_field` reports what a field read forwarded to, what
+      a literal seeded, and which local a `&mut` field borrows;
+      `WADO_TRACE=sroa` and `copy_prop` report a declined candidate.
 - [ ] Tail call optimization (`return_call`).
 - [ ] Bounds-check elimination for chained sequential access (`arr[0]; arr[1]; arr[2]`).
 - [ ] Folding a `match` whose scrutinee is a syntactically known

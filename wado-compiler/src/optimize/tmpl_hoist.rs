@@ -1,4 +1,4 @@
-//! Template-string buffer hoisting: a `__tmpl` block inside a loop gets its
+//! Template-string buffer hoisting: a `$tmpl` block inside a loop gets its
 //! `String` allocation lifted before the loop and reused, each iteration
 //! resetting `used = 0` instead of building a fresh struct. Sound only when
 //! neither the template result nor the inner `__r` escapes the iteration, which
@@ -185,9 +185,9 @@ fn nearest_child_blocks(body: &Body, node: NodeRef, out: &mut Vec<BlockId>) {
     });
 }
 
-/// Information about a `__tmpl` block that can be hoisted.
+/// Information about a `$tmpl` block that can be hoisted.
 struct TmplCandidate {
-    /// Index of the `__r` local in the `__tmpl` block
+    /// Index of the `__r` local in the `$tmpl` block
     buf_local_index: u32,
     /// The init-value expression node id (e.g. `String { repr: array_new(N),
     /// used: 0 }`). Reused as the hoisted `Let`'s value — the original first
@@ -205,9 +205,9 @@ struct TmplCandidate {
     span: Span,
 }
 
-/// Information about a Formatter struct literal that can be hoisted out of a `__tmpl` block.
+/// Information about a Formatter struct literal that can be hoisted out of a `$tmpl` block.
 struct FmtCandidate {
-    /// Index of the statement inside the `__tmpl` block that creates the Formatter
+    /// Index of the statement inside the `$tmpl` block that creates the Formatter
     stmt_index: usize,
     /// The local index being assigned to (e.g., `__local_13`)
     fmt_local_index: u32,
@@ -222,7 +222,7 @@ struct FmtCandidate {
     span: Span,
 }
 
-/// Scan a loop body for `__tmpl` labeled blocks and hoist their buffer allocations.
+/// Scan a loop body for `$tmpl` labeled blocks and hoist their buffer allocations.
 /// Returns hoisting statements to prepend before the loop.
 fn hoist_tmpl_from_loop(
     engine: &mut Engine,
@@ -230,11 +230,11 @@ fn hoist_tmpl_from_loop(
     type_table: &RefCell<TypeTable>,
     idents: &TmplIdents,
 ) -> Vec<StmtId> {
-    // Phase 1: Collect all Let bindings whose value is a __tmpl LabeledBlock,
+    // Phase 1: Collect all Let bindings whose value is a $tmpl LabeledBlock,
     // and check if the bound variable escapes (used as a non-self argument).
     let escaping_locals = collect_escaping_locals(engine.body, loop_body);
 
-    // Phase 2: Transform safe __tmpl blocks
+    // Phase 2: Transform safe $tmpl blocks
     let mut hoist_stmts = Vec::new();
     transform_stmts_in_block(
         engine,
@@ -255,9 +255,9 @@ fn collect_escaping_locals(body: &Body, block: BlockId) -> IndexSet<u32> {
     scan.finish()
 }
 
-/// Whether the template's own `__r` buffer local escapes its `__tmpl` block
+/// Whether the template's own `__r` buffer local escapes its `$tmpl` block
 /// through any position other than the two shapes the transform itself
-/// rewrites: the verified trailing `break __tmpl: __r` (whose value becomes
+/// rewrites: the verified trailing `break $tmpl: __r` (whose value becomes
 /// the outer `let`, escape-checked separately) and Formatter `buf:` field
 /// linkage (normalized to the hoisted buffer by `extract_fmt_candidates`; a
 /// non-hoisted Formatter still only holds the buffer within the iteration).
@@ -279,7 +279,7 @@ struct EscapeScan<'a> {
     escaping: IndexSet<u32>,
     /// `(target, source)` per `let target = …source-chain…` binding.
     alias_edges: Vec<(u32, u32)>,
-    /// The template block's verified trailing `break __tmpl: __r`, exempt from
+    /// The template block's verified trailing `break $tmpl: __r`, exempt from
     /// break-value marking in the inner-buffer scan.
     exempt_break: Option<StmtId>,
     /// Exempt struct-literal fields named `buf` (Formatter linkage the
@@ -475,9 +475,7 @@ impl<'a> EscapeScan<'a> {
                     self.scan_block(*eb);
                 }
             }
-            ExprKind::LabeledBlock { block, .. } | ExprKind::Block(block) => {
-                self.scan_block(*block);
-            }
+            ExprKind::LabeledBlock { block, .. } => self.scan_block(*block),
             ExprKind::Match { expr: inner, arms } => {
                 self.scan_operand(*inner);
                 for arm in arms {
@@ -527,7 +525,6 @@ fn for_each_chain_local_expr(body: &Body, e: ExprId, f: &mut impl FnMut(u32)) {
         ExprKind::Unary { expr: inner, .. } | ExprKind::Cast { expr: inner, .. } => {
             for_each_chain_local(body, *inner, f);
         }
-        ExprKind::Block(block) => for_each_block_tail_chain(body, *block, f),
         ExprKind::If {
             then_branch,
             else_branch,
@@ -606,7 +603,7 @@ fn for_each_label_break_value(
     });
 }
 
-/// Recursively transform statements, looking for Let bindings with __tmpl blocks.
+/// Recursively transform statements, looking for Let bindings with $tmpl blocks.
 fn transform_stmts_in_block(
     engine: &mut Engine,
     block: BlockId,
@@ -628,7 +625,7 @@ fn transform_stmt(
     type_table: &RefCell<TypeTable>,
     idents: &TmplIdents,
 ) {
-    // `let x = __tmpl: { ... }` — the only statement shape that can hoist.
+    // `let x = $tmpl: { ... }` — the only statement shape that can hoist.
     let let_info = if let StmtKind::Let {
         local_index, value, ..
     } = &engine.body.stmts[s].kind
@@ -733,7 +730,7 @@ fn transform_expr(
     type_table: &RefCell<TypeTable>,
     idents: &TmplIdents,
 ) {
-    // Mirror the original's restricted arm set: __tmpl in non-Let contexts is
+    // Mirror the original's restricted arm set: $tmpl in non-Let contexts is
     // not hoisted, so only these shapes recurse.
     enum Walk {
         Exprs(Vec<ExprId>),
@@ -764,7 +761,7 @@ fn transform_expr(
             then_branch,
             else_branch,
         } => Walk::CondBlocks(condition.as_expr(), *then_branch, *else_branch),
-        ExprKind::LabeledBlock { block, .. } | ExprKind::Block(block) => Walk::Block(*block),
+        ExprKind::LabeledBlock { block, .. } => Walk::Block(*block),
         _ => Walk::None,
     };
     match walk {
@@ -803,10 +800,10 @@ fn transform_expr(
     }
 }
 
-/// Check if a `__tmpl` block has the expected pattern: `let mut __r =
+/// Check if a `$tmpl` block has the expected pattern: `let mut __r =
 /// String::with_capacity(N)` before lowering, or the inlined
 /// `String { repr: array_new<u8>(N), used: 0 }` after, both closing with
-/// `break __tmpl: __r`.
+/// `break $tmpl: __r`.
 fn extract_tmpl_candidate(
     body: &Body,
     block: BlockId,
@@ -924,7 +921,7 @@ struct FmtFields {
     value_span: Span,
 }
 
-/// Collect all Formatter struct literals in a `__tmpl` block that can be hoisted.
+/// Collect all Formatter struct literals in a `$tmpl` block that can be hoisted.
 ///
 /// Detects three patterns:
 ///   1. Assign: `__local_N = Formatter { ... }`
@@ -1133,43 +1130,15 @@ fn extract_formatter_fields(
                 value_span,
             })
         }
+        // `{ let buf = &mut __tmpl_buf; break label: Formatter { …, buf } }`, as
+        // the inlined `Formatter::new` leaves it, or the same block after
+        // `branch_prune`'s C3 rewrite turned the `break` into a trailing value.
         ExprKind::LabeledBlock { block, .. } => {
-            // Pattern: { let buf = &mut __tmpl_buf; break label: Formatter { ..., buf } }
-            // or: { __local = __tmpl_buf; break: Formatter { ..., buf: ref.as_non_null(__local) } }
             let block = *block;
-            let break_stmt = *body.blocks[block].stmts.last()?;
-            let break_value = match &body.stmts[break_stmt].kind {
-                StmtKind::Break { value: Some(v), .. } => *v,
-                _ => return None,
-            };
             extract_formatter_fields_from_block(
                 body,
                 block,
-                break_value.as_expr()?,
-                hoisted_buf_index,
-                value_type_id,
-                value_span,
-                idents,
-            )
-        }
-        ExprKind::Block(block) => {
-            // After `branch_prune`'s C3 rewrite flattens
-            // `__inline_Formatter__new_*: { …; break: Formatter { … } }`
-            // into a plain `Block { …; Expr(Formatter { … }) }`, the
-            // surface shape `extract_formatter_fields` used to match on
-            // (`LabeledBlock`) is gone. Defensively support the flattened
-            // shape here so a future change to the inliner (e.g. one that
-            // leaves a multi-use `buf` binding `copy_prop` can't fold) does
-            // not silently disable Formatter hoisting.
-            let block = *block;
-            let tail_stmt = *body.blocks[block].stmts.last()?;
-            let StmtKind::Expr(Operand::Expr(tail)) = &body.stmts[tail_stmt].kind else {
-                return None;
-            };
-            extract_formatter_fields_from_block(
-                body,
-                block,
-                *tail,
+                body.block_yield(value)?.as_expr()?,
                 hoisted_buf_index,
                 value_type_id,
                 value_span,
@@ -1180,11 +1149,8 @@ fn extract_formatter_fields(
     }
 }
 
-/// Shared "block carrying a `Formatter { … }` value" matcher used by both
-/// the `LabeledBlock` (inlined `Formatter::new`) and the post-C3 `Block`
-/// (flattened version of the same shape) arms of
-/// `extract_formatter_fields`. `value_expr` is the producing expression —
-/// either the broken value or the trailing `Expr` stmt.
+/// The `Formatter { … }` a block carries out, given the block and the
+/// expression producing that value.
 fn extract_formatter_fields_from_block(
     body: &Body,
     block: BlockId,
@@ -1370,7 +1336,7 @@ fn array_new_has_capacity(body: &Body, e: ExprId, idents: &TmplIdents) -> bool {
 /// capacity = N` binding plus the struct tail); the tail is the real
 /// constructor. Returns `e` unchanged when it is not a tail-yielding block.
 fn unwrap_block_tail(body: &Body, e: ExprId) -> ExprId {
-    let (ExprKind::Block(b) | ExprKind::LabeledBlock { block: b, .. }) = &body.exprs[e].kind else {
+    let ExprKind::LabeledBlock { block: b, .. } = &body.exprs[e].kind else {
         return e;
     };
     match body.blocks[*b].stmts.last().map(|s| &body.stmts[*s].kind) {
@@ -1379,7 +1345,7 @@ fn unwrap_block_tail(body: &Body, e: ExprId) -> ExprId {
     }
 }
 
-/// Transform a `__tmpl` block to reuse a hoisted String.
+/// Transform a `$tmpl` block to reuse a hoisted String.
 ///
 /// The entire String (not just the backing array) is hoisted before the loop.
 /// Inside the block, `let mut __r = String { ... }` is replaced with
@@ -1503,7 +1469,7 @@ fn build_field_reset(
     engine.alloc_stmt(StmtKind::Expr(assign.into()), span)
 }
 
-/// Hoist Formatter struct literals out of a `__tmpl` block.
+/// Hoist Formatter struct literals out of a `$tmpl` block.
 ///
 /// Each candidate gets its own hoisted local. Replaces the struct literal with an
 /// `indent` field reset, and renames all references to the hoisted local.
