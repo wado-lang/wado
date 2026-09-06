@@ -1,4 +1,5 @@
 use { Alternative, Element, Visibility } from "./ir.wado";
+use { FOLLOW_PARAM } from "./ident.wado";
 use { CodeWriter } from "./wadopoet.wado";
 use { unwrap_label } from "./lr_util.wado";
 pub use { escape_ident, to_pascal_case, to_snake_case, to_lower } from "./ident.wado";
@@ -635,13 +636,34 @@ pub fn element_field_info(elem: &Element) -> [String, String] {
     };
 }
 
-/// `", follow"` when the grammar emits FOLLOW machinery, else `""`.
-/// Appended after a call's fixed arguments so the forwarded `follow`
-/// is passed only when the callee actually declares the parameter
-/// (`ctx.emit_follow()`). See `GenContext::emit_follow`.
+/// Slots a continuation is carried in. Every mask constrains at least one
+/// position and the gate reads at most this many, so what a composition
+/// shifts out of the last slot begins past what the gate can consult.
+pub global FOLLOW_SLOTS: i32 = 4;
+
+/// Which slots open a fresh reading, as a bit per slot.
+pub global FOLLOW_SHAPE_PARAM: String = "fs";
+
+pub fn follow_slot_name(i: i32) -> String {
+    return `${FOLLOW_PARAM}${i}`;
+}
+
+/// The whole continuation forwarded unmoved.
+pub fn follow_forward_args() -> String {
+    let mut out: List<String> = [];
+    for let mut i = 0; i < FOLLOW_SLOTS; i += 1 {
+        out.push(follow_slot_name(i));
+    }
+    out.push(FOLLOW_SHAPE_PARAM);
+    return join_kinds(&out);
+}
+
+/// `", <forwarded continuation>"` when the grammar emits FOLLOW machinery,
+/// else `""`. Appended after a call's fixed arguments so the slots are passed
+/// only when the callee declares them (`ctx.emit_follow()`).
 pub fn follow_sep(emit_follow: bool) -> String {
     if emit_follow {
-        return ", follow";
+        return `, ${follow_forward_args()}`;
     }
     return "";
 }
