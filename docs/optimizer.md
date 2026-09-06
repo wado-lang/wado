@@ -210,6 +210,21 @@ Missing optimizations, one entry per pass-shaped gap. Architectural work — com
       best, then nested. That reaches the hand-written dispatchers the
       synthesised `FieldSchema::lookup` tree does not. An atom that guards
       another's operand range has to be tested first, or a miss becomes a trap.
+- [ ] Reading a `let`-bound borrow as a rename rather than an alias. `let f =
+      &mut s;` whose every use of `f` is a field projection names `s`'s place
+      and reaches no further, but it puts `s` in the value graph's `aliased`
+      set, so `f.width` is never seeded from `s`'s literal, and it is a hard
+      escape for `sroa`, so `s` is never scalarized. Both stop at the same edge.
+      Every template's `Formatter` has this shape, which is why
+      `` `${'x'}` `` does not fold while `` `${true}` `` does: `char::fmt`
+      branches on `f.width`, the branch cannot fold, its `else` arm keeps `f`
+      alive as `pad`'s receiver, and that keeps `s` aliased. Deleting the branch
+      from `char::fmt` makes the template fold to a literal outright. Hand-written
+      programs rarely show it — the borrow is usually collapsed first — so the
+      same shape written out at top level, in a labeled block, through a trait
+      method, with a `&mut` field and a non-inlinable `&mut` call in the other
+      arm, all fold. `niri`'s frame already reads such a borrow as a place
+      (`place_aliases`); this is that idea on the graph side.
 - [ ] Tail call optimization (`return_call`).
 - [ ] Bounds-check elimination for chained sequential access (`arr[0]; arr[1]; arr[2]`).
 - [ ] Folding a `match` whose scrutinee is a syntactically known
