@@ -1453,9 +1453,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// The lists a `Type::method(...)` call checks and pads against, and
     /// whether any declaration answered. Every static spelling asks this one
-    /// question, so none of them differs on the arity it checks or the defaults
-    /// it fills. A callee no declaration names — a variant case, a flags member
-    /// — answers `false` and owns its argument count in its own arm.
+    /// question, so none of them differs on the arity it checks. A variant
+    /// case or a flags member answers `false` and counts its own arguments.
     pub(super) fn static_callee_params(
         &self,
         receiver: &ImplTargetKey,
@@ -1474,16 +1473,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// The parameters `Type::method()` checks against when the block inherits
-    /// the method instead of declaring it — a trait's default-bodied static.
-    /// Its list lives on the trait alone, so no signature keyed on the receiver
-    /// answers, and the call site was left with no list at all: the arity went
-    /// unchecked and no default was padded, and codegen emitted a call whose
-    /// arguments nothing had pushed.
+    /// [`Self::static_callee_params`] where the block inherits the method with
+    /// the trait's default body: that list lives on the trait alone, so nothing
+    /// keyed on the receiver answers for it.
     ///
-    /// Read off the blocks on the receiver rather than resolved: the resolution
-    /// this stands in for is the one the call has not made yet, and running it
-    /// here would decide an overload and reach impls on other types.
+    /// Read off the blocks on the receiver rather than resolved. Resolving is
+    /// what the call has not done yet, and doing it here decides an overload
+    /// and reaches impls on other types.
     fn inherited_trait_static_params(
         &self,
         receiver: &ImplTargetKey,
@@ -1519,9 +1515,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let Some(declared) = declaring.method(method_name) else {
                 continue;
             };
-            // A required method the block does not declare is its own error,
-            // reported where the two are compared; an instance method reaches
-            // its receiver through the spelling's first argument.
+            // A required method the block leaves undeclared is its own error,
+            // reported where the two are compared.
             if declared.default_body.is_none() || declared.sig.self_kind != ast::SelfKind::None {
                 continue;
             }
