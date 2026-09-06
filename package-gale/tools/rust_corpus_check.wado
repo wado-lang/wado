@@ -1,0 +1,168 @@
+//! Corpus check: parse every `.rs` path given on the command line with the
+//! Gale-generated Rust parser and report each file's first diagnostic.
+//!
+//!     wado run package-gale/tools/rust_corpus_check.wado -- --paths-from list.txt
+//!
+//! One `ok` / `ng` line per file, plus a summary on stderr. `--paths-from`
+//! reads one path per line — the only form that survives a path with a space.
+//! Paths open relative to the first preopen, so run it from the repository root.
+
+use rust from "../tests/grammars/RustLexer.g4"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            inputs: ["../tests/grammars/RustParser.g4"],
+            output_dir: "../tests/generated/cst_rust",
+        },
+    };
+use { RustLexerBase, RustParserBase, LexerView, Parser } from "../tests/grammars/RustLexer.g4";
+use { args, println, eprintln, Stdout, Stderr, Environment } from "core:cli";
+use { Preopens, Descriptor, Filesize, PathFlags, OpenFlags, DescriptorFlags } from "wasi:filesystem";
+
+// The same ports the driver test installs; see `tests/driver_cst_rust_test.wado`.
+struct RustBase {
+}
+
+impl RustLexerBase for RustBase {
+    fn sof(&self, view: LexerView) -> bool {
+        resume view.la(-1) == -1;
+    }
+
+    fn float_literal_possible(&self, view: LexerView) -> bool {
+        resume view.la(-1) != '.' as i32;
+    }
+
+    fn float_dot_possible(&self, view: LexerView) -> bool {
+        let c = view.la(1);
+        if c == '.' as i32 || c == '_' as i32 {
+            resume false;
+        }
+        if c >= 'a' as i32 && c <= 'z' as i32 || c >= 'A' as i32 && c <= 'Z' as i32 {
+            resume false;
+        }
+        resume true;
+    }
+}
+
+struct RustPBase {
+}
+
+impl RustParserBase for RustPBase {
+    fn next_lt(&self, p: &Parser) -> bool {
+        resume p.token_start(p.lt(1)) - p.token_start(p.lt(0)) == 1;
+    }
+
+    fn next_gt(&self, p: &Parser) -> bool {
+        resume p.token_start(p.lt(1)) - p.token_start(p.lt(0)) == 1;
+    }
+}
+
+fn parse_rust(input: &String) -> rust::ParseResult {
+    let mut base = RustBase {};
+    let mut pbase = RustPBase {};
+    with RustLexerBase => &mut base, RustParserBase => &mut pbase do {
+        return rust::parse(input);
+    };
+}
+
+fn corpus_root() -> Option<Descriptor> with (Stderr, Preopens) {
+    let dirs = Preopens::get_directories();
+    if dirs.len() == 0 {
+        eprintln("error: no preopened directories available");
+        return null;
+    }
+    return Option::Some(dirs[0].0);
+}
+
+fn read_file(root: &Descriptor, path: &String) -> Option<String> with Stderr {
+    let file = match root.open_at(
+        PathFlags::none(),
+        *path,
+        OpenFlags::none(),
+        DescriptorFlags::Read,
+    ).wait() {
+        Ok(f) => f,
+        Err(e) => {
+            eprintln(`error: ${*path}: cannot open: ${e:?}`);
+            return null;
+        },
+    };
+    let [read_stream, _done] = file.read_via_stream(0 as Filesize);
+    let bytes = read_stream.read_to_end();
+    read_stream.drop();
+    return match String::from_utf8(bytes) {
+        Ok(s) => Option::Some(s),
+        Err(e) => {
+            eprintln(`error: ${*path}: not UTF-8: ${e}`);
+            return null;
+        },
+    };
+}
+
+fn collect_paths(root: &Descriptor, argv: &List<String>) -> List<String> with Stderr {
+    let mut paths: List<String> = [];
+    for let mut i = 0; i < argv.len(); i += 1 {
+        if argv[i] == "--paths-from" && i + 1 < argv.len() {
+            i += 1;
+            let list = match read_file(root, &argv[i]) {
+                Some(text) => text,
+                None => "",
+            };
+            for let line of list.lines() {
+                if !line.is_empty() {
+                    paths.push(line);
+                }
+            }
+        } else if argv[i].ends_with(".rs") {
+            paths.push(argv[i]);
+        }
+    }
+    return paths;
+}
+
+/// The 1-based line holding `offset`.
+fn line_of(source: &String, offset: usize) -> usize {
+    let mut line = 1;
+    let mut seen = 0;
+    for let text of source.lines() {
+        if seen > offset {
+            return line;
+        }
+        seen += text.len() + 1;
+        if seen > offset {
+            return line;
+        }
+        line += 1;
+    }
+    return line;
+}
+
+export fn run() with (Stdout, Stderr, Environment, Preopens) {
+    let root = match corpus_root() {
+        Some(dir) => dir,
+        None => {
+            return;
+        },
+    };
+    let paths = collect_paths(&root, &args());
+
+    let mut bad = 0;
+    for let path of &paths {
+        if let Some(source) = read_file(&root, path) {
+            let result = parse_rust(&source);
+            if result.diagnostics.len() == 0 {
+                println(`ok\t${*path}`);
+            } else {
+                bad += 1;
+                let first = result.diagnostics[0];
+                println(
+                    `ng\t${*path}\t${result.diagnostics.len()}\t${line_of(&source, first.span.start)}\t${first.message}`,
+                );
+            }
+        } else {
+            bad += 1;
+            println(`ng\t${*path}\t0\t0\tunreadable`);
+        }
+    }
+    eprintln(`summary: ${paths.len()} files, ${bad} with diagnostics`);
+}
