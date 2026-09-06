@@ -380,9 +380,10 @@ literals, `Array::slice`'s computed bounds fold, and the corpus is recounted.
 
 ### 3. The frame owns storage
 
-`` `${'x'}` `` still leaves `Formatter::pad` standing, which the remark names,
-where `` `${true}` `` folds and reports nothing. With `` `${255:x}` `` it is
-what still pays for its formatter short of floats.
+`` `${'x'}` `` does not fold, where `` `${true}` `` does. The census names no
+call for it: what survives is the buffer being filled byte by byte behind a
+`String::grow` cold path. With `` `${255:x}` `` it is what still pays for its
+formatter short of floats, and there the census does name a call.
 
 - [ ] What distinguishes the `char` path from the `bool` one.
 - [ ] A place-valued field, so an aggregate can carry a reference. Today such an
