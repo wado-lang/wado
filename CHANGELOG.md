@@ -1,5 +1,19 @@
 # Changelog
 
+## [v0.0.27](https://github.com/wado-lang/wado/compare/v0.0.26...v0.0.27) - 2026-09-06
+
+- feat(wado-from-idl): generate web:dom from a WebIDL snapshot (Tide M5) by @gfx in https://github.com/wado-lang/wado/pull/1971
+- docs(wep): Total Reflection — `TypeInfo` and `match type` by @gfx in https://github.com/wado-lang/wado/pull/1973
+- refactor(elaborator): resolve a qualified call from one declaration index by @gfx in https://github.com/wado-lang/wado/pull/1974
+- feat(niri): fold constant string templates, and report the regions that stay by @gfx in https://github.com/wado-lang/wado/pull/1969
+- feat(elaborator): let an operation declare parameter defaults by @gfx in https://github.com/wado-lang/wado/pull/1972
+- perf(optimizer): lower set-membership matches to a mask test, and release settled inline holds by @gfx in https://github.com/wado-lang/wado/pull/1975
+- chore(hooks): drive the review-response and distill steps from hooks by @gfx in https://github.com/wado-lang/wado/pull/1979
+- feat(compiler): tagged template literals over ReflectTemplate by @gfx in https://github.com/wado-lang/wado/pull/1978
+- fix(compiler): lower every `i128` / `u128` pattern, on one type-table spelling by @gfx in https://github.com/wado-lang/wado/pull/1980
+- feat(gale): compose `import S;` against the supplied inputs by @gfx in https://github.com/wado-lang/wado/pull/1982
+- fix(format): keep a comment in any token gap, by construction by @gfx in https://github.com/wado-lang/wado/pull/1983
+
 ## [v0.0.26](https://github.com/wado-lang/wado/compare/v0.0.25...v0.0.26) - 2026-09-05
 
 - chore: require npm 12, and update deps by @gfx in https://github.com/wado-lang/wado/pull/1904
