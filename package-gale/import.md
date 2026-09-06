@@ -63,12 +63,12 @@ it, given two conventions in the delegate:
   without a mode the host's catch-all text rule swallows the embedded body.
 - Its token names are prefixed. One token space means the first rule of a given
   name wins, so `CSS_IDENT` and `JS_IDENT` must differ to both survive.
-- Its parser rules name their tokens rather than spelling them. A string
-  literal in a parser rule aliases only to a `DEFAULT_MODE` rule, and mints an
-  anonymous `DEFAULT_MODE` token where none matches — one the lexer, sitting in
-  the delegate's mode, never produces. Write `CSS_COLON`, not `':'`. That gate
-  is deliberate: a parser rule is reached in whatever mode its caller pushed,
-  which nothing records, so a literal is read as the mode the parser starts in.
+- Its parser rules name their tokens rather than spelling them: `CSS_COLON`,
+  not `':'`. A parser literal aliases only to a `DEFAULT_MODE` rule, and mints
+  an anonymous `DEFAULT_MODE` token where none matches. The lexer, sitting in
+  the delegate's mode, never produces that token. The gate is deliberate: a
+  parser rule is reached in whatever mode its caller pushed, and nothing records
+  that, so a literal is read as the mode the parser starts in.
 
 The host declares the same mode name for the token that leaves it
 (`STYLE_CLOSE : '</style>' -> popMode ;` under its own `mode CSS;`), and the

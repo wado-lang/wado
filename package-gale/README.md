@@ -476,11 +476,11 @@ value by where the parse put it.
 What you pay for it is that a context capture fires only where the enclosing
 rule parsed. Half-write a declaration as `a { b: }` and `b` falls back to no
 class, because nothing placed it under `declaration`. Defaults still apply and
-the text is still preserved, so the file stays readable while you type; what
-you lose is the contextual half. Say what the language actually allows and that
-is all you lose: an earlier draft of `MiniCss.g4` required the `;` that CSS
-makes optional after the last declaration, which cost `a { b: c }` its classes
-and looked like the same limitation. It was a bug in the grammar.
+the text is preserved, so the file stays readable while you type; only the
+contextual half is lost.
+
+That also makes a grammar bug look like this limitation. If input the language
+allows loses its classes, the grammar rejected it. Check there first.
 
 The whole page's highlighted HTML is pinned in
 [`example/highlight_test.wado`](./example/highlight_test.wado):

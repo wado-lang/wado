@@ -297,32 +297,25 @@ test "compose_grammars rejects an input the composite never reaches" {
 }
 
 test "an embedded delegate names its tokens rather than spelling them" {
-    // A parser literal aliases only to a DEFAULT_MODE rule, so in a delegate
-    // whose rules live in a mode, `':'` mints an anonymous DEFAULT_MODE token
-    // the lexer never reaches — the parser then waits for a token that cannot
-    // arrive. The gate is deliberate (a parser rule is reached in whatever mode
-    // its caller pushed, which nothing records), so the recipe is to name the
-    // token.
-    let mut spelled = compose_grammars([
-        parse("grammar H;\nimport C;\nd : OPEN s CLOSE ;\nOPEN : '<' -> pushMode(M) ;").unwrap(),
-        parse("grammar C;\ns : ID ':' ID ;\nmode M;\nCLOSE : '>' -> popMode ;\nCOLON : ':' ;\nID : [a-z]+ ;").unwrap(),
-    ]).unwrap();
-    alias_parser_literals(&mut spelled);
-    assert sole_alt_has_literal(&spelled, &"s"), "a spelled literal stays a literal, and mints a dead token";
+    // A parser literal aliases only to a DEFAULT_MODE rule. In a delegate whose
+    // rules live in a mode, `':'` therefore mints an anonymous DEFAULT_MODE
+    // token the lexer never reaches, and the parser waits for one that cannot
+    // arrive. The gate is deliberate: a parser rule is reached in whatever mode
+    // its caller pushed, and nothing records that.
+    let host = "grammar H;\nimport C;\nd : OPEN s CLOSE ;\nOPEN : '<' -> pushMode(M) ;";
+    let tail = "mode M;\nCLOSE : '>' -> popMode ;\nCOLON : ':' ;\nID : [a-z]+ ;";
 
-    let mut named = compose_grammars(
-        [
-            parse("grammar H;\nimport C;\nd : OPEN s CLOSE ;\nOPEN : '<' -> pushMode(M) ;").unwrap(),
-            parse("grammar C;\ns : ID COLON ID ;\nmode M;\nCLOSE : '>' -> popMode ;\nCOLON : ':' ;\nID : [a-z]+ ;").unwrap(
-            ),
-        ],
-    ).unwrap();
+    let mut spelled = compose([host, `grammar C;\ns : ID ':' ID ;\n${tail}`]);
+    alias_parser_literals(&mut spelled);
+    assert has_literal(&spelled, &"s"), "a spelled literal stays one, and mints a token nothing emits";
+
+    let mut named = compose([host, `grammar C;\ns : ID COLON ID ;\n${tail}`]);
     alias_parser_literals(&mut named);
-    assert !sole_alt_has_literal(&named, &"s"), "a named token is what the lexer produces";
+    assert !has_literal(&named, &"s"), "a named token is what the lexer produces";
 }
 
-/// Whether the named parser rule's only alternative still holds a `Literal`.
-fn sole_alt_has_literal(g: &Grammar, rule: &String) -> bool {
+/// Whether the named parser rule's first alternative still holds a `Literal`.
+fn has_literal(g: &Grammar, rule: &String) -> bool {
     for let r of &g.parser_rules {
         if r.name == *rule {
             for let e of &r.alternatives[0].elements {

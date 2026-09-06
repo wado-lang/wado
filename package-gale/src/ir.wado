@@ -1286,27 +1286,16 @@ pub fn merge_grammars(grammars: List<Grammar>) -> Grammar {
 /// another's `import` names folds in as a delegate. Contract in `import.md`.
 pub fn compose_grammars(grammars: List<Grammar>) -> Result<Grammar, ParseError> {
     let by_name = index_by_name(&grammars)?;
-    let mut delegate_names: List<String> = [];
-    for let g of &grammars {
-        for let im of &g.imports {
-            if !delegate_names.contains(im) {
-                delegate_names.push(*im);
-            }
-        }
-    }
+    let delegate_names = imported_names(&grammars);
     if delegate_names.is_empty() {
         return Result::Ok(merge_grammars(grammars));
     }
-    // Every input reaches the composite, as a master or as a delegate the
-    // master imports. `reached` is what says so; anything left unmarked was
-    // dropped, which is the one outcome composition must not have.
-    let mut reached: List<bool> = [];
+    let mut master_ids: List<i32> = [];
     let mut masters: List<Grammar> = [];
-    for let g of &grammars {
-        let is_master = !delegate_names.contains(&g.name);
-        reached.push(is_master);
-        if is_master {
-            masters.push(*g);
+    for let mut i = 0; i < grammars.len(); i += 1 {
+        if !delegate_names.contains(&grammars[i].name) {
+            master_ids.push(i);
+            masters.push(grammars[i]);
         }
     }
     if masters.is_empty() {
@@ -1320,9 +1309,39 @@ pub fn compose_grammars(grammars: List<Grammar>) -> Result<Grammar, ParseError> 
     }
     let mut composite = merge_grammars(masters);
     let order = delegate_order(&composite.imports, &grammars, &by_name)?;
+    check_all_reached(&grammars, &master_ids, &order)?;
     for let idx of order {
-        reached[idx] = true;
         import_delegate(&mut composite, &grammars[idx]);
+    }
+    drop_empty_modes(&mut composite);
+    return Result::Ok(composite);
+}
+
+/// Every name some grammar's `import` lists, in first-declaration order.
+fn imported_names(grammars: &List<Grammar>) -> List<String> {
+    let mut names: List<String> = [];
+    for let g of grammars {
+        for let im of &g.imports {
+            if !names.contains(im) {
+                names.push(*im);
+            }
+        }
+    }
+    return names;
+}
+
+/// Every input contributes to the composite, as a master or through an import.
+/// One in neither list was dropped, which composition must never do silently.
+fn check_all_reached(grammars: &List<Grammar>, master_ids: &List<i32>, order: &List<i32>) -> Result<(), ParseError> {
+    let mut reached: List<bool> = [];
+    for let mut i = 0; i < grammars.len(); i += 1 {
+        reached.push(false);
+    }
+    for let i of master_ids {
+        reached[*i] = true;
+    }
+    for let i of order {
+        reached[*i] = true;
     }
     for let mut i = 0; i < reached.len(); i += 1 {
         if !reached[i] {
@@ -1335,8 +1354,7 @@ pub fn compose_grammars(grammars: List<Grammar>) -> Result<Grammar, ParseError> 
             );
         }
     }
-    drop_empty_modes(&mut composite);
-    return Result::Ok(composite);
+    return Result::Ok(());
 }
 
 /// Each grammar's index by declared name. An import resolves through this, so
