@@ -105,15 +105,14 @@ impl Layout {
             .map(|i| u32::try_from(i).expect("variant case index overflow"))
     }
 
-    /// The type [`slot_read`] yields for `case_index`, and so the type a payload
-    /// binding receives. `None` for a unit case, which has no slot to read.
+    /// The payload a binding for `case_index` receives, `None` for a unit case,
+    /// which has no slot to read. The slot's own type can be the nullable
+    /// widening [`slot_shape`] chose for it, which `wir_build` bridges; a
+    /// wrapper around the payload it never bridges, so that is what the binding
+    /// has to be measured against.
     fn payload_read_type(&self, case_index: u32) -> Option<TypeId> {
-        let slot = self.case_slots[case_index as usize].flat()?;
-        Some(if slot.wrap_in_some {
-            self.case_payloads[case_index as usize]
-        } else {
-            self.slot_types[slot.index]
-        })
+        self.case_slots[case_index as usize].flat()?;
+        Some(self.case_payloads[case_index as usize])
     }
 }
 
@@ -1692,12 +1691,19 @@ fn call_callee(body: &Body, op: Operand) -> Option<FuncId> {
 
 /// How a payload binding is re-minted as a `let` at the call site.
 enum Rebound<'a> {
-    /// The local's declared type is the payload's own, so the slot read lands
-    /// in it unchanged.
-    Direct,
+    /// The slot read lands in the local unchanged, under the local's own
+    /// declared type.
+    Direct { let_type: TypeId },
     /// The local's address is taken, so `lower::plan::boxing` promoted its slot
     /// to `Box<T>`; the re-minted binding boxes the slot read as lowering did.
     Boxed { box_type: TypeId, name: &'a str },
+}
+
+fn peel_refs(mut ty: TypeId, type_table: &TypeTable) -> TypeId {
+    while let ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) = type_table.get(ty) {
+        ty = *inner;
+    }
+    ty
 }
 
 /// Per-function facts deciding whether a payload binding can be re-minted, and
@@ -1709,6 +1715,11 @@ enum Rebound<'a> {
 struct Rebind {
     aliased: IndexSet<u32>,
     local_types: Vec<TypeId>,
+    /// Each declared local type with its `&` / `&mut` layers stripped. `&T` is
+    /// `T` at WIR level (`wir_build::context`), and everything needing a cell
+    /// reaches here already rewritten to `Box<T>`, so a reference binding takes
+    /// the payload as it stands.
+    peeled_types: Vec<TypeId>,
     /// Declared `Box<T>` local type → (`T`, the struct's rendered name).
     boxes: IndexMap<TypeId, (TypeId, String)>,
 }
@@ -1737,9 +1748,14 @@ impl Rebind {
                 _ => None,
             })
             .collect();
+        let peeled_types = local_types
+            .iter()
+            .map(|&t| peel_refs(t, type_table))
+            .collect();
         Self {
             aliased: func.stores_aliased_locals.clone(),
             local_types,
+            peeled_types,
             boxes,
         }
     }
@@ -1753,8 +1769,8 @@ impl Rebind {
             return None;
         }
         let declared = self.local_types[local as usize];
-        if declared == payload_type {
-            return Some(Rebound::Direct);
+        if self.peeled_types[local as usize] == payload_type {
+            return Some(Rebound::Direct { let_type: declared });
         }
         match self.boxes.get(&declared) {
             Some((inner, name)) if *inner == payload_type => Some(Rebound::Boxed {
@@ -2635,14 +2651,15 @@ fn bind_payload_before(
     cx: &SiteCx,
 ) -> Operand {
     let read = slot_read(body, local, layout, case_index, cx);
-    let payload_type = body.exprs[read].type_id;
-    debug_assert_eq!(Some(payload_type), layout.payload_read_type(case_index));
+    let payload_type = layout
+        .payload_read_type(case_index)
+        .expect("variant-return SROA: payload binding on a unit case");
     let (init, init_type) = match cx
         .rebind
         .rebound(binding_local, payload_type)
         .expect("variant-return SROA: arm_is_one_level accepted an unbindable local")
     {
-        Rebound::Direct => (Operand::Expr(read), payload_type),
+        Rebound::Direct { let_type } => (Operand::Expr(read), let_type),
         Rebound::Boxed { box_type, name } => (
             Operand::Expr(body.exprs.push(ExprNode {
                 kind: ExprKind::StructLiteral {
