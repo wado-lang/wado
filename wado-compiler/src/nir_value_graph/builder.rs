@@ -208,9 +208,7 @@ pub fn build(
     aliased: &crate::hashmap::IndexSet<u32>,
     untrackable: &crate::hashmap::IndexSet<u32>,
     mut_escaped: &crate::hashmap::IndexSet<u32>,
-    pure_calls: &crate::hashmap::IndexSet<ExprId>,
-    pure_builtin_callees: &crate::hashmap::IndexSet<FuncId>,
-    receiver_immutable_calls: &crate::hashmap::IndexSet<ExprId>,
+    calls: CallFacts<'_>,
     type_table: Option<&crate::tir::TypeTable>,
 ) -> ValueGraphBuild {
     // Build into the body's own pool: take it out as the seed (so a promoted
@@ -220,10 +218,11 @@ pub fn build(
     let seed = std::mem::take(&mut body.values);
     let (pool, loop_entry_values) = {
         let mut b = Builder::new(&*body, aliased, untrackable, mut_escaped, type_table, seed);
-        b.pure_calls.clone_from(pure_calls);
-        b.pure_builtin_callees.clone_from(pure_builtin_callees);
+        b.pure_calls.clone_from(calls.pure);
+        b.pure_builtin_callees.clone_from(calls.pure_builtin);
         b.receiver_immutable_calls
-            .clone_from(receiver_immutable_calls);
+            .clone_from(calls.receiver_immutable);
+        b.ctfe_builtins.clone_from(calls.ctfe_builtins);
         b.seed_params(param_locals);
         b.walk_block(body.root);
         (b.pool, b.loop_entry_values)
@@ -310,6 +309,7 @@ pub(crate) fn walk_scoped(
     b.pure_calls.clone_from(calls.pure);
     b.receiver_immutable_calls
         .clone_from(calls.receiver_immutable);
+    b.ctfe_builtins.clone_from(calls.ctfe_builtins);
     b.current_value.clone_from(seed);
     // Seed the heap with the caller's version state at the call site so a
     // spliced field read carries the version a fresh whole-function build
@@ -479,6 +479,13 @@ struct Builder<'a> {
     /// Field indices some `Assign` in the body writes. See
     /// [`Builder::field_ref_targets`].
     assigned_fields: crate::hashmap::IndexSet<u32>,
+    /// Which sequence builtin each callee id is, so `array_len` over an array
+    /// this walk saw `array_new` allocate folds to the length it was given.
+    ctfe_builtins: crate::niri::CtfeBuiltinMap,
+    /// `array value → its length value`, for the arrays this walk allocated.
+    /// The array is a fresh opaque per call, so a second allocation is a second
+    /// entry and a reassignment reaches neither.
+    array_lengths: IndexMap<ValueId, ValueId>,
     /// Type table for constant folding of pure arithmetic on literal operands
     /// (`Binary` / `Unary`). `None` disables folding (the value graph still
     /// builds structural nodes). See [`Builder::fold_binary_const`].
@@ -536,6 +543,8 @@ impl<'a> Builder<'a> {
             ref_targets: IndexMap::default(),
             field_ref_targets: IndexMap::default(),
             assigned_fields: assigned_field_indices(body),
+            ctfe_builtins: crate::niri::CtfeBuiltinMap::default(),
+            array_lengths: IndexMap::default(),
             type_table,
             loop_entry_values: IndexMap::default(),
             stmt_entry_version: IndexMap::default(),
@@ -704,6 +713,49 @@ impl<'a> Builder<'a> {
         }
     }
 
+    /// Name the array `array_new(len)` allocates, and remember its length. The
+    /// name is a fresh opaque, so two allocations never share one and nothing
+    /// re-emits it — only [`Builder::known_array_len`] reads it back.
+    fn allocated_array(&mut self, call: ExprId, len: Operand) -> Option<ValueId> {
+        let len = self.walk_operand(len)?;
+        if !is_const_value(&self.pool, len) {
+            return None;
+        }
+        let array = self.pool.fresh_opaque_with_source(OpaqueSource::Expr(call));
+        crate::compiler_trace!("vg_field", "[{}] array_new -> len {len:?}", self.trace_id);
+        self.array_lengths.insert(array, len);
+        Some(array)
+    }
+
+    /// The recorded length of the array `op` names, looking through the borrow
+    /// `array_len(&xs)` passes it under.
+    fn known_array_len(&mut self, op: Operand) -> Option<ValueId> {
+        let inner = match op.as_expr().map(|e| &self.body.exprs[e].kind) {
+            Some(ExprKind::Unary {
+                op: NirUnaryOp::Ref | NirUnaryOp::MutRef,
+                expr,
+            }) => *expr,
+            _ => op,
+        };
+        let mut array = self.walk_operand(inner)?;
+        // `array_new`'s result reaches its field through the `as Array<T>` the
+        // lower phase writes, which names the same allocation.
+        loop {
+            if let Some(len) = self.array_lengths.get(&array).copied() {
+                crate::compiler_trace!(
+                    "vg_field",
+                    "[{}] array_len {array:?} -> {len:?}",
+                    self.trace_id
+                );
+                return Some(len);
+            }
+            let ValueKind::Cast { operand, .. } = self.pool.kind(array) else {
+                return None;
+            };
+            array = *operand;
+        }
+    }
+
     /// The local `&x` / `&mut x` borrows, or `None` for anything else.
     fn borrowed_local(&self, op: Operand) -> Option<u32> {
         let ExprKind::Unary {
@@ -752,6 +804,7 @@ impl<'a> Builder<'a> {
             pure_builtin: &self.pure_builtin_callees,
             pure: &self.pure_calls,
             receiver_immutable: &self.receiver_immutable_calls,
+            ctfe_builtins: &self.ctfe_builtins,
         }
     }
 
@@ -1253,12 +1306,22 @@ impl<'a> Builder<'a> {
             }
 
             // ---- Calls (effectful, may write the heap) ----
-            ExprKind::Call { args, .. } => {
+            ExprKind::Call { func_id, args, .. } => {
+                let builtin = self.ctfe_builtins.get(&func_id).copied();
+                let arg = args.first().map(|a| a.expr);
                 for a in args {
                     self.walk_operand(a.expr);
                 }
                 self.bump_call_effects(expr);
-                None
+                match (builtin, arg) {
+                    (Some(crate::niri::CtfeBuiltin::ArrayNew), Some(len)) => {
+                        self.allocated_array(expr, len)
+                    }
+                    (Some(crate::niri::CtfeBuiltin::ArrayLen), Some(array)) => {
+                        self.known_array_len(array)
+                    }
+                    _ => None,
+                }
             }
             ExprKind::CmRawCall { args, .. } => {
                 for a in args {
@@ -2063,13 +2126,16 @@ fn assigned_field_indices(body: &Body) -> crate::hashmap::IndexSet<u32> {
 
 /// The per-call verdicts the loop summary reads, bundled so it asks the same
 /// questions [`Builder::bump_call_effects`] asks of one call.
-pub(crate) struct CallFacts<'a> {
+pub struct CallFacts<'a> {
     /// Builtin intrinsics operating below the struct-field layer.
-    pub(crate) pure_builtin: &'a crate::hashmap::IndexSet<FuncId>,
+    pub pure_builtin: &'a crate::hashmap::IndexSet<FuncId>,
     /// Calls that mutate no caller local.
-    pub(crate) pure: &'a crate::hashmap::IndexSet<ExprId>,
+    pub pure: &'a crate::hashmap::IndexSet<ExprId>,
     /// Calls whose callee cannot write through the receiver.
-    pub(crate) receiver_immutable: &'a crate::hashmap::IndexSet<ExprId>,
+    pub receiver_immutable: &'a crate::hashmap::IndexSet<ExprId>,
+    /// Which sequence builtin each callee id is, so `array_len` over an array
+    /// the walk saw allocated folds to the length it was given.
+    pub ctfe_builtins: &'a crate::niri::CtfeBuiltinMap,
 }
 
 /// A loop body's heap-write effects, used to invalidate exactly the fields a
@@ -2452,6 +2518,7 @@ mod tests {
         builtin: crate::hashmap::IndexSet<FuncId>,
         pure: crate::hashmap::IndexSet<ExprId>,
         immutable: crate::hashmap::IndexSet<ExprId>,
+        ctfe_builtins: crate::niri::CtfeBuiltinMap,
     }
 
     impl TestFacts {
@@ -2474,6 +2541,7 @@ mod tests {
                 pure_builtin: &self.builtin,
                 pure: &self.pure,
                 receiver_immutable: &self.immutable,
+                ctfe_builtins: &self.ctfe_builtins,
             }
         }
     }
@@ -2600,6 +2668,7 @@ mod tests {
         let empty = IndexSet::default();
         let no_calls = IndexSet::default();
         let no_callees = IndexSet::default();
+        let no_builtin_map = crate::niri::CtfeBuiltinMap::default();
         let escaped = |order: [u32; 2]| order.into_iter().collect::<IndexSet<u32>>();
 
         let build_with = |mut_escaped: &IndexSet<u32>| {
@@ -2610,9 +2679,12 @@ mod tests {
                 &empty,
                 &empty,
                 mut_escaped,
-                &no_calls,
-                &no_callees,
-                &no_calls,
+                CallFacts {
+                    pure_builtin: &no_callees,
+                    pure: &no_calls,
+                    receiver_immutable: &no_calls,
+                    ctfe_builtins: &no_builtin_map,
+                },
                 None,
             );
             body.values.values

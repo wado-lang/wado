@@ -22,6 +22,7 @@ pub fn forward_stores_to_loads_all(project: &mut NirPackage) -> bool {
     let first_param_types = super::alias::first_param_types(project);
     let call_immutability = super::alias::CallImmutability::new(project, &type_table);
     let pure_builtin_callees = project.pure_builtin_callee_ids();
+    let ctfe_builtins = crate::niri::build_ctfe_builtin_map(project);
     let mut buffers = EngineBuffers::default();
     let mut changed = false;
     for func_rc in &project.functions {
@@ -32,6 +33,7 @@ pub fn forward_stores_to_loads_all(project: &mut NirPackage) -> bool {
             &first_param_types,
             &call_immutability,
             &pure_builtin_callees,
+            &ctfe_builtins,
             &mut buffers,
         );
     }
@@ -46,6 +48,7 @@ fn forward_one(
     first_param_types: &super::alias::FirstParamTypes,
     call_immutability: &super::alias::CallImmutability,
     pure_builtin_callees: &crate::hashmap::IndexSet<crate::nir::FuncId>,
+    ctfe_builtins: &crate::niri::CtfeBuiltinMap,
     buffers: &mut EngineBuffers,
 ) -> bool {
     if func.body.is_none() {
@@ -85,6 +88,7 @@ fn forward_one(
     engine.set_alias_sets(aliased, untrackable, mut_escaped);
     engine.set_value_graph_type_table(type_table);
     engine.set_pure_builtin_callees(pure_builtin_callees);
+    engine.set_ctfe_builtins(ctfe_builtins);
     if is_cm_export {
         // `ensure_value_graph` never rebuilds, so what is seeded here is what
         // licm and `promote_fields` inherit.
@@ -208,7 +212,9 @@ fn collect_candidate_reads_node(body: &Body, node: NodeRef, out: &mut Vec<(ExprI
     if let NodeRef::Expr(id) = node {
         match &body.exprs[id].kind {
             ExprKind::Local { index, .. } => out.push((id, Some(*index))),
-            ExprKind::FieldAccess { .. } => out.push((id, None)),
+            // A call carries a value only where the graph was taught its
+            // builtin — an array length, which the capacity guard tests.
+            ExprKind::FieldAccess { .. } | ExprKind::Call { .. } => out.push((id, None)),
             _ => {}
         }
     }
