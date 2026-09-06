@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1788637233257,
+  "lastUpdate": 1788656199459,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -53781,6 +53781,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/6c883abb77017fa0223382d3020e22d57e620c62"
         },
         "date": 1788637232592,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 2013,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6560,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18891,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 277505,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "e47d83d7f26be559cee5530eeecea4a066b0706e",
+          "message": "Merge pull request #1980 from wado-lang/claude/wide-int-refactoring-18yc7s\n\nrefactor(compiler): give `i128` / `u128` one spelling in the type table",
+          "timestamp": "2026-09-06T09:41:14+09:00",
+          "tree_id": "c28c1b45942f27cc1dfd03a1ab24bd8bf61f8e09",
+          "url": "https://github.com/wado-lang/wado/commit/e47d83d7f26be559cee5530eeecea4a066b0706e"
+        },
+        "date": 1788656199163,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
