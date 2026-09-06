@@ -381,24 +381,40 @@ literals, `Array::slice`'s computed bounds fold, and the corpus is recounted.
 ### 3. The frame owns storage
 
 `` `${'x'}` `` does not fold, where `` `${true}` `` does. The census names no
-call for it: what survives is the buffer being filled byte by byte behind a
-`String::grow` cold path. With `` `${255:x}` `` it is what still pays for its
-formatter short of floats, and there the census does name a call.
+call for it. With `` `${255:x}` `` the place-valued field is what still pays for
+a formatter short of floats, and there the census does name a call.
 
-- [ ] What distinguishes the `char` path from the `bool` one.
+The two are one mechanism, which the `char` case shows in isolation. Every
+template builds `Formatter { …, buf: &mut buffer }`, and a `&mut` in a
+struct-literal field is a write the frame does not perform, so the buffer is
+clobbered and the region abandons at its first append. What differs is only how
+long that literal survives: `bool::fmt` writes the buffer straight, so inlining
+dissolves its `Formatter` and a later iteration folds the region, while
+`char::fmt` branches on `f.width`. That read does not fold in NIR — a field read
+through a borrow of a `let mut` local is a fold neither the engine nor the
+`ValueGraph` makes — so both arms survive every NIR pass, the `Formatter` with
+them, and WIR's const-forward collapses the branch too late for any of it.
+Deleting the branch from `char::fmt` makes `` `${'x'}` `` fold to a literal
+outright, and raising the iteration cap to 40 does not.
+
+- [x] What distinguishes the `char` path from the `bool` one: how long the
+      `Formatter` literal survives, not the `char` path itself.
 - [ ] A place-valued field, so an aggregate can carry a reference. Today such an
       aggregate is not a constant, since a field holding the referent's value
       would take a write meant for the referent; what it needs to hold is the
-      place the frame already names elsewhere. The refusal is whole-value, so a
-      scalar field naming no storage is refused with the rest, which is why
-      `Array::slice`'s computed bounds stop folding. It is also what
-      `` `${255:x}` `` waits on: `Formatter::prepare_int_write` survives as a
-      call taking `&mut Formatter`, whose `buf` is such a field. A template
-      folds today only where inlining and SROA dissolve its `Formatter` first,
-      which the inliner's pricing decides, not the engine.
+      place the frame already names elsewhere — `place_aliases` records exactly
+      that pair for a `let`-bound borrow, and the gap is carrying one inside a
+      value. The refusal is whole-value, so a scalar field naming no storage is
+      refused with the rest. A template folds today only where inlining and SROA
+      dissolve its `Formatter` first, which the inliner's pricing decides, not
+      the engine.
 - [ ] `String::grow`, which reshapes the caller's container from a frame of its
       own and so abandons the evaluation whenever a buffer outgrows its
       reservation.
+
+A place names the frame's own storage and must not outlive it, so the aggregate
+exit refuses to write any value carrying one — a leaf gate beside the one that
+refuses a reference-shaped leaf.
 
 Upstream: the `stores`-gated temp and write-back carve-outs and divergences D1–D6
 in [Reference Representation](./wep-2026-06-13-reference-representation.md). The
