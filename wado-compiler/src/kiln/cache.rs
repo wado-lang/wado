@@ -376,13 +376,13 @@ mod tests {
     #[test]
     fn gather_file_hashes_threads_errors() {
         let inv = Invocation {
-            decl_site: DeclSite {
+            decl_sites: vec![DeclSite {
                 module: "src/main.wado".to_string(),
+                source: InvocationPath::normalize("./schema.proto"),
                 synthetic_id: "kiln-proto".to_string(),
-            },
+            }],
             module: GeneratorModule::Spec("ns:p@1.0.0".into()),
             from: InvocationPath::normalize("schema.proto"),
-            source: InvocationPath::normalize("./schema.proto"),
             inputs: vec![InvocationPath::normalize("dep.proto")],
             output_dir: InvocationPath::normalize("build/kiln/proto"),
             options: crate::kiln::options_check::CanonicalOptions::default(),

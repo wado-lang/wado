@@ -17,6 +17,7 @@ use crate::logger::Logger;
 use crate::module_source::{CmNamespace, ModuleSource, ModuleSourceInterner, WasmAssetKind};
 use crate::name::{normalize_module_path, resolve_module_path};
 use crate::parser::Parser;
+use crate::path::is_cwd_relative;
 use crate::stdlib;
 
 /// Error that can occur during module loading
@@ -2120,13 +2121,6 @@ fn resolve_include_path_impl(
     } else {
         stripped.to_string()
     }
-}
-
-/// Wado's relative-path notation matches gitignore / shell convention:
-/// `./` is "next to me" and `../` is "up one". Anything else is interpreted
-/// by the host (`core:`, `wasi:`, absolute, ...) and is not our concern.
-fn is_cwd_relative(path: &str) -> bool {
-    path.starts_with("./") || path.starts_with("../")
 }
 
 /// Whether an include path keeps its module's directory as a prefix, or collapses

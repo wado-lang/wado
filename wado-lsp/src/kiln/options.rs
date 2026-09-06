@@ -39,7 +39,7 @@ pub(super) async fn check_all<H: CompilerHost>(
             continue;
         };
         let anchor = OptionsAnchor {
-            file: &invocation.decl_site.module,
+            file: &invocation.decl_site().module,
             span: invocation.options_span,
         };
         if let Err(diagnostics) =

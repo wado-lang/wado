@@ -75,6 +75,14 @@ fn split_root(path: &str) -> (String, &str) {
     (String::new(), path)
 }
 
+/// Wado's relative-path notation matches gitignore / shell convention:
+/// `./` is "next to me" and `../` is "up one". Anything else is interpreted
+/// by the host (`core:`, `wasi:`, absolute, ...) and is not our concern.
+#[must_use]
+pub fn is_cwd_relative(path: &str) -> bool {
+    path.starts_with("./") || path.starts_with("../")
+}
+
 /// Express `target` as a path relative to the directory `base`, lexically: after
 /// [`normalize`]ing both, the minimal `./`- or `../`-prefixed path that rejoins
 /// with `base` to give `target` back. `base` and `target` must share rootedness;

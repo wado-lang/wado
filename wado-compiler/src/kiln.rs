@@ -5,6 +5,7 @@
 //! files and maintains `wado.lock` lives in `wado-cli` and consumes these.
 
 pub mod cache;
+pub mod harvest;
 pub mod header;
 pub mod import_check;
 pub mod inline;
@@ -19,6 +20,7 @@ pub use cache::{
     encode_options_canonical, file_hash, gather_file_hashes, generator_identity,
     hash_options_canonical, hex_digest,
 };
+pub use harvest::{Harvest, harvest_module_graph, remap_decl_files};
 pub use header::{GeneratedHeader, has_generated_marker, parse_header};
 pub use inline::{InvocationIndex, collect_inline_invocations};
 pub use invocation::{
