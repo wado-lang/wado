@@ -1621,7 +1621,7 @@ fn scan_file_(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_F
             sg_0: {
                 if pos >= tokens.len() || tokens[pos] != TK_SEMICOLON { break sg_0; }
                 pos += 1;
-                pos = scan_item(tokens, pos, follow);
+                pos = scan_item(tokens, pos, &FOLLOW_MASK_0);
                 if pos < 0 { break sg_0; }
                 break sg_0_done;
             }
@@ -1660,7 +1660,7 @@ fn _parse_file___inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW)
                 sg_1: {
                     if pos >= tokens.len() || tokens[pos] != TK_SEMICOLON { break sg_1; }
                     pos += 1;
-                    pos = scan_item(tokens, pos, follow);
+                    pos = scan_item(tokens, pos, &FOLLOW_MASK_0);
                     if pos < 0 { break sg_1; }
                     break sg_1_done;
                 }
@@ -1671,7 +1671,7 @@ fn _parse_file___inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW)
         }
         if rep_scan_pos < 0 { break; }
         let semicolon = p.expect(TK_SEMICOLON, &SYNC_0);
-        let item = _parse_item(p, follow);
+        let item = _parse_item(p, &FOLLOW_MASK_0);
     }
     if p.peek_kind() == TK_SEMICOLON {
         let semicolon = p.expect(TK_SEMICOLON, &EMPTY_SYNC);
@@ -1776,4 +1776,6 @@ pub fn to_string_subtree(result: &ParseResult, rule: &String) -> String {
 global EMPTY_SYNC: List<i32> = [];
 global SYNC_0: List<i32> = [TK_A];
 global SYNC_1: List<i32> = [TK_B];
+
+global FOLLOW_MASK_0: List<List<i32>> = [[TK_SEMICOLON], [TK_A]];
 

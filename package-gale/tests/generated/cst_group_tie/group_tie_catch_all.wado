@@ -1543,7 +1543,7 @@ fn scan_s(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLO
                     sg_1: {
                         if pos >= tokens.len() || tokens[pos] != TK_LIT_COMMA { break sg_1; }
                         pos += 1;
-                        pos = scan_item(tokens, pos, follow);
+                        pos = scan_item(tokens, pos, &FOLLOW_MASK_0);
                         if pos < 0 { break sg_1; }
                         break sg_1_done;
                     }
@@ -1638,7 +1638,7 @@ fn _parse_s__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> 
                         sg_3: {
                             if pos >= tokens.len() || tokens[pos] != TK_LIT_COMMA { break sg_3; }
                             pos += 1;
-                            pos = scan_item(tokens, pos, follow);
+                            pos = scan_item(tokens, pos, &FOLLOW_MASK_0);
                             if pos < 0 { break sg_3; }
                             break sg_3_done;
                         }
@@ -1683,7 +1683,7 @@ fn _parse_s__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> 
                         sg_4: {
                             if pos >= tokens.len() || tokens[pos] != TK_LIT_COMMA { break sg_4; }
                             pos += 1;
-                            pos = scan_item(tokens, pos, follow);
+                            pos = scan_item(tokens, pos, &FOLLOW_MASK_0);
                             if pos < 0 { break sg_4; }
                             break sg_4_done;
                         }
@@ -1694,7 +1694,7 @@ fn _parse_s__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> 
                 }
                 if rep_scan_pos < 0 { break; }
                 p.expect(TK_LIT_COMMA, &SYNC_0);
-                _parse_item(p, follow);
+                _parse_item(p, &FOLLOW_MASK_0);
             }
         }
     } else {

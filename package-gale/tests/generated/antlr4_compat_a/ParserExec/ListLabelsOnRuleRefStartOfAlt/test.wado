@@ -1656,7 +1656,7 @@ fn scan_expression_lr_1(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> 
         sg_0: {
             if pos >= tokens.len() || tokens[pos] != TK_AND { break sg_0; }
             pos += 1;
-            pos = scan_expression(tokens, pos, follow, 3);
+            pos = scan_expression(tokens, pos, &FOLLOW_MASK_0, 3);
             if pos < 0 { break sg_0; }
             break sg_0_done;
         }
@@ -1668,7 +1668,7 @@ fn scan_expression_lr_1(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> 
             sg_1: {
                 if pos >= tokens.len() || tokens[pos] != TK_AND { break sg_1; }
                 pos += 1;
-                pos = scan_expression(tokens, pos, follow, 3);
+                pos = scan_expression(tokens, pos, &FOLLOW_MASK_0, 3);
                 if pos < 0 { break sg_1; }
                 break sg_1_done;
             }
@@ -1686,7 +1686,7 @@ fn scan_expression_lr_2(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> 
         sg_2: {
             if pos >= tokens.len() || tokens[pos] != TK_OR { break sg_2; }
             pos += 1;
-            pos = scan_expression(tokens, pos, follow, 2);
+            pos = scan_expression(tokens, pos, &FOLLOW_MASK_1, 2);
             if pos < 0 { break sg_2; }
             break sg_2_done;
         }
@@ -1698,7 +1698,7 @@ fn scan_expression_lr_2(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> 
             sg_3: {
                 if pos >= tokens.len() || tokens[pos] != TK_OR { break sg_3; }
                 pos += 1;
-                pos = scan_expression(tokens, pos, follow, 2);
+                pos = scan_expression(tokens, pos, &FOLLOW_MASK_1, 2);
                 if pos < 0 { break sg_3; }
                 break sg_3_done;
             }
@@ -1778,11 +1778,11 @@ fn _parse_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
                 p.b.start_node_at(_cp, RK_EXPRESSION, _start);
                 _first_iter: {
                     let op = p.expect(TK_AND, &EMPTY_SYNC);
-                    let args_item = _parse_expression(p, follow, 3);
+                    let args_item = _parse_expression(p, &FOLLOW_MASK_0, 3);
                 }
                 while !p.recovering && (!(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_AND)) {
                     let op = p.expect(TK_AND, &EMPTY_SYNC);
-                    let args_item = _parse_expression(p, follow, 3);
+                    let args_item = _parse_expression(p, &FOLLOW_MASK_0, 3);
                 }
                 p.b.finish_node(p.last_end());
             } else {
@@ -1796,11 +1796,11 @@ fn _parse_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
                 p.b.start_node_at(_cp, RK_EXPRESSION, _start);
                 _first_iter_2: {
                     let op = p.expect(TK_OR, &EMPTY_SYNC);
-                    let args_item = _parse_expression(p, follow, 2);
+                    let args_item = _parse_expression(p, &FOLLOW_MASK_1, 2);
                 }
                 while !p.recovering && (!(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_OR)) {
                     let op = p.expect(TK_OR, &EMPTY_SYNC);
-                    let args_item = _parse_expression(p, follow, 2);
+                    let args_item = _parse_expression(p, &FOLLOW_MASK_1, 2);
                 }
                 p.b.finish_node(p.last_end());
             } else {
@@ -1879,4 +1879,7 @@ pub fn to_string_subtree(result: &ParseResult, rule: &String) -> String {
 
 global EMPTY_SYNC: List<i32> = [];
 global SYNC_0: List<i32> = [TK_IDENTIFIER, TK_NOT];
+
+global FOLLOW_MASK_0: List<List<i32>> = [[TK_AND], [TK_IDENTIFIER, TK_NOT]];
+global FOLLOW_MASK_1: List<List<i32>> = [[TK_OR], [TK_IDENTIFIER, TK_NOT]];
 

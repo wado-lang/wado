@@ -1530,7 +1530,7 @@ fn scan_path(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FO
             sg_0: {
                 if pos >= tokens.len() || tokens[pos] != TK_SEP { break sg_0; }
                 pos += 1;
-                pos = scan_seg(tokens, pos, follow);
+                pos = scan_seg(tokens, pos, &FOLLOW_MASK_0);
                 if pos < 0 { break sg_0; }
                 break sg_0_done;
             }
@@ -1588,7 +1588,7 @@ fn _parse_path__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
                 sg_2: {
                     if pos >= tokens.len() || tokens[pos] != TK_SEP { break sg_2; }
                     pos += 1;
-                    pos = scan_seg(tokens, pos, follow);
+                    pos = scan_seg(tokens, pos, &FOLLOW_MASK_0);
                     if pos < 0 { break sg_2; }
                     break sg_2_done;
                 }
@@ -1599,7 +1599,7 @@ fn _parse_path__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
         }
         if rep_scan_pos < 0 { break; }
         p.expect(TK_SEP, &SYNC_0);
-        _parse_seg(p, follow);
+        _parse_seg(p, &FOLLOW_MASK_0);
     }
     p.expect(TK_EOF, &EMPTY_SYNC);
     return;
@@ -1720,4 +1720,6 @@ global SYNC_0: List<i32> = [TK_ID];
 global SYNC_1: List<i32> = [TK_SEP];
 global SYNC_2: List<i32> = [TK_LT];
 global SYNC_3: List<i32> = [TK_GT];
+
+global FOLLOW_MASK_0: List<List<i32>> = [[TK_SEP], [TK_ID]];
 

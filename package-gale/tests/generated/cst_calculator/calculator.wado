@@ -2147,7 +2147,7 @@ fn scan_pow_expression(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> =
             sg_4: {
                 if pos >= tokens.len() || tokens[pos] != TK_POW { break sg_4; }
                 pos += 1;
-                pos = scan_signed_atom(tokens, pos, follow);
+                pos = scan_signed_atom(tokens, pos, &FOLLOW_MASK_3);
                 if pos < 0 { break sg_4; }
                 break sg_4_done;
             }
@@ -2285,7 +2285,7 @@ fn scan_func_(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_F
             sg_5: {
                 if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sg_5; }
                 pos += 1;
-                pos = scan_expression(tokens, pos, follow);
+                pos = scan_expression(tokens, pos, &FOLLOW_MASK_6);
                 if pos < 0 { break sg_5; }
                 break sg_5_done;
             }
@@ -2467,7 +2467,7 @@ fn _parse_pow_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPT
                 sg_10: {
                     if pos >= tokens.len() || tokens[pos] != TK_POW { break sg_10; }
                     pos += 1;
-                    pos = scan_signed_atom(tokens, pos, follow);
+                    pos = scan_signed_atom(tokens, pos, &FOLLOW_MASK_3);
                     if pos < 0 { break sg_10; }
                     break sg_10_done;
                 }
@@ -2478,7 +2478,7 @@ fn _parse_pow_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPT
         }
         if rep_scan_pos < 0 { break; }
         p.expect(TK_POW, &SYNC_2);
-        _parse_signed_atom(p, follow);
+        _parse_signed_atom(p, &FOLLOW_MASK_3);
     }
     return;
 }
@@ -2643,7 +2643,7 @@ fn _parse_func___inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW)
                 sg_11: {
                     if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sg_11; }
                     pos += 1;
-                    pos = scan_expression(tokens, pos, follow);
+                    pos = scan_expression(tokens, pos, &FOLLOW_MASK_6);
                     if pos < 0 { break sg_11; }
                     break sg_11_done;
                 }
@@ -2654,7 +2654,7 @@ fn _parse_func___inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW)
         }
         if rep_scan_pos < 0 { break; }
         p.expect(TK_COMMA, &SYNC_2);
-        _parse_expression(p, follow);
+        _parse_expression(p, &FOLLOW_MASK_6);
     }
     p.expect(TK_RPAREN, &EMPTY_SYNC);
     return;
@@ -2857,4 +2857,5 @@ global FOLLOW_MASK_2: List<List<i32>> = [[TK_EOF]];
 global FOLLOW_MASK_3: List<List<i32>> = [[TK_POW], [TK_ACOS, TK_ASIN, TK_ATAN, TK_COS, TK_EULER, TK_I, TK_LN, TK_LOG, TK_LPAREN, TK_MINUS, TK_PI, TK_PLUS, TK_SCIENTIFIC_NUMBER, TK_SIN, TK_SQRT, TK_TAN, TK_VARIABLE]];
 global FOLLOW_MASK_4: List<List<i32>> = [[TK_RPAREN]];
 global FOLLOW_MASK_5: List<List<i32>> = [[TK_LPAREN], [TK_ACOS, TK_ASIN, TK_ATAN, TK_COS, TK_EULER, TK_I, TK_LN, TK_LOG, TK_LPAREN, TK_MINUS, TK_PI, TK_PLUS, TK_SCIENTIFIC_NUMBER, TK_SIN, TK_SQRT, TK_TAN, TK_VARIABLE]];
+global FOLLOW_MASK_6: List<List<i32>> = [[TK_COMMA], [TK_ACOS, TK_ASIN, TK_ATAN, TK_COS, TK_EULER, TK_I, TK_LN, TK_LOG, TK_LPAREN, TK_MINUS, TK_PI, TK_PLUS, TK_SCIENTIFIC_NUMBER, TK_SIN, TK_SQRT, TK_TAN, TK_VARIABLE]];
 

@@ -7020,7 +7020,7 @@ fn scan_type_parameter_list(tokens: &Array<i32>, pos: i32, follow: &List<List<i3
             sg_1: {
                 if pos >= tokens.len() || tokens[pos] != TK_Comma { break sg_1; }
                 pos += 1;
-                pos = scan_type_parameter(tokens, pos, follow);
+                pos = scan_type_parameter(tokens, pos, &FOLLOW_MASK_0);
                 if pos < 0 { break sg_1; }
                 break sg_1_done;
             }
@@ -7112,7 +7112,7 @@ fn scan_type_argument_list(tokens: &Array<i32>, pos: i32, follow: &List<List<i32
             sg_2: {
                 if pos >= tokens.len() || tokens[pos] != TK_Comma { break sg_2; }
                 pos += 1;
-                pos = scan_type_argument(tokens, pos, follow);
+                pos = scan_type_argument(tokens, pos, &FOLLOW_MASK_2);
                 if pos < 0 { break sg_2; }
                 break sg_2_done;
             }
@@ -7755,7 +7755,7 @@ fn scan_tuple_element_types(tokens: &Array<i32>, pos: i32, follow: &List<List<i3
             sg_8: {
                 if pos >= tokens.len() || tokens[pos] != TK_Comma { break sg_8; }
                 pos += 1;
-                pos = scan_type_(tokens, pos, follow);
+                pos = scan_type_(tokens, pos, &FOLLOW_MASK_2);
                 if pos < 0 { break sg_8; }
                 break sg_8_done;
             }
@@ -7979,7 +7979,7 @@ fn scan_parameter_list(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> =
                         sg_12: {
                             if pos >= tokens.len() || tokens[pos] != TK_Comma { break sg_12; }
                             pos += 1;
-                            pos = scan_parameter(tokens, pos, follow);
+                            pos = scan_parameter(tokens, pos, &FOLLOW_MASK_9);
                             if pos < 0 { break sg_12; }
                             break sg_12_done;
                         }
@@ -8419,7 +8419,7 @@ fn scan_class_or_interface_type_list(tokens: &Array<i32>, pos: i32, follow: &Lis
             sg_20: {
                 if pos >= tokens.len() || tokens[pos] != TK_Comma { break sg_20; }
                 pos += 1;
-                pos = scan_type_reference(tokens, pos, follow);
+                pos = scan_type_reference(tokens, pos, &FOLLOW_MASK_14);
                 if pos < 0 { break sg_20; }
                 break sg_20_done;
             }
@@ -8476,7 +8476,7 @@ fn scan_enum_member_list(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>>
             sg_21: {
                 if pos >= tokens.len() || tokens[pos] != TK_Comma { break sg_21; }
                 pos += 1;
-                pos = scan_enum_member(tokens, pos, follow);
+                pos = scan_enum_member(tokens, pos, &FOLLOW_MASK_17);
                 if pos < 0 { break sg_21; }
                 break sg_21_done;
             }
@@ -10411,7 +10411,7 @@ fn scan_default_clause(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> =
 
 fn scan_labelled_statement(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
-    pos = scan_identifier(tokens, pos, &FOLLOW_MASK_29);
+    pos = scan_identifier(tokens, pos, &FOLLOW_MASK_30);
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_Colon { return -1; }
     pos += 1;
@@ -10435,7 +10435,7 @@ fn scan_try_statement(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = 
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_Try { return -1; }
     pos += 1;
-    pos = scan_block(tokens, pos, &FOLLOW_MASK_30);
+    pos = scan_block(tokens, pos, &FOLLOW_MASK_31);
     if pos < 0 { return -1; }
     let gp_54 = pos;
     let sgk_54 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
@@ -10539,7 +10539,7 @@ fn scan_function_declaration(tokens: &Array<i32>, pos: i32, follow: &List<List<i
     }
     pos = scan_identifier(tokens, pos, &FOLLOW_MASK_20);
     if pos < 0 { return -1; }
-    pos = scan_call_signature(tokens, pos, &FOLLOW_MASK_31);
+    pos = scan_call_signature(tokens, pos, &FOLLOW_MASK_32);
     if pos < 0 { return -1; }
     let gp_58 = pos;
     let sgk_58 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
@@ -10746,7 +10746,7 @@ fn scan_class_element(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = 
 
 fn scan_property_member_declaration_alt_0(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
-    pos = scan_property_member_base(tokens, pos, &FOLLOW_MASK_32);
+    pos = scan_property_member_base(tokens, pos, &FOLLOW_MASK_33);
     if pos < 0 { return -1; }
     pos = scan_property_name(tokens, pos, &EMPTY_FOLLOW);
     if pos < 0 { return -1; }
@@ -10770,11 +10770,11 @@ fn scan_property_member_declaration_alt_0(tokens: &Array<i32>, pos: i32, follow:
 
 fn scan_property_member_declaration_alt_1(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
-    pos = scan_property_member_base(tokens, pos, &FOLLOW_MASK_32);
+    pos = scan_property_member_base(tokens, pos, &FOLLOW_MASK_33);
     if pos < 0 { return -1; }
     pos = scan_property_name(tokens, pos, &FOLLOW_MASK_20);
     if pos < 0 { return -1; }
-    pos = scan_call_signature(tokens, pos, &FOLLOW_MASK_31);
+    pos = scan_call_signature(tokens, pos, &FOLLOW_MASK_32);
     if pos < 0 { return -1; }
     let gp_63 = pos;
     let sgk_63 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
@@ -10987,7 +10987,7 @@ fn scan_generator_block(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> 
             sg_66: {
                 if pos >= tokens.len() || tokens[pos] != TK_Comma { break sg_66; }
                 pos += 1;
-                pos = scan_generator_definition(tokens, pos, follow);
+                pos = scan_generator_definition(tokens, pos, &FOLLOW_MASK_34);
                 if pos < 0 { break sg_66; }
                 break sg_66_done;
             }
@@ -11025,7 +11025,7 @@ fn scan_iterator_block(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> =
             sg_67: {
                 if pos >= tokens.len() || tokens[pos] != TK_Comma { break sg_67; }
                 pos += 1;
-                pos = scan_iterator_definition(tokens, pos, follow);
+                pos = scan_iterator_definition(tokens, pos, &FOLLOW_MASK_35);
                 if pos < 0 { break sg_67; }
                 break sg_67_done;
             }
@@ -11046,7 +11046,7 @@ fn scan_iterator_definition(tokens: &Array<i32>, pos: i32, follow: &List<List<i3
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_OpenBracket { return -1; }
     pos += 1;
-    pos = scan_single_expression(tokens, pos, &FOLLOW_MASK_33, 0);
+    pos = scan_single_expression(tokens, pos, &FOLLOW_MASK_36, 0);
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_CloseBracket { return -1; }
     pos += 1;
@@ -11414,7 +11414,7 @@ fn scan_object_literal(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> =
         let sp = pos;
         sg_76_done: {
             sg_76: {
-                pos = scan_property_assignment(tokens, pos, &FOLLOW_MASK_34);
+                pos = scan_property_assignment(tokens, pos, &FOLLOW_MASK_37);
                 if pos < 0 { break sg_76; }
                 while pos < tokens.len() && tokens[pos] == TK_Comma {
                     let sp = pos;
@@ -11422,7 +11422,7 @@ fn scan_object_literal(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> =
                         sg_77: {
                             if pos >= tokens.len() || tokens[pos] != TK_Comma { break sg_77; }
                             pos += 1;
-                            pos = scan_property_assignment(tokens, pos, follow);
+                            pos = scan_property_assignment(tokens, pos, &FOLLOW_MASK_37);
                             if pos < 0 { break sg_77; }
                             break sg_77_done;
                         }
@@ -11447,7 +11447,7 @@ fn scan_object_literal(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> =
 
 fn scan_property_assignment_alt_0(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
-    pos = scan_property_name(tokens, pos, &FOLLOW_MASK_35);
+    pos = scan_property_name(tokens, pos, &FOLLOW_MASK_38);
     if pos < 0 { return -1; }
     let gp_78 = pos;
     let sgk_78 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
@@ -11556,7 +11556,7 @@ fn scan_property_assignment(tokens: &Array<i32>, pos: i32, follow: &List<List<i3
             let mut best: i32 = -1;
             pos = start + 1;
             try_1: {
-                pos = scan_single_expression(tokens, pos, &FOLLOW_MASK_36, 0);
+                pos = scan_single_expression(tokens, pos, &FOLLOW_MASK_39, 0);
                 if pos < 0 { break try_1; }
                 if pos >= tokens.len() || tokens[pos] != TK_CloseBracket { break try_1; }
                 pos += 1;
@@ -11603,7 +11603,7 @@ fn scan_property_assignment(tokens: &Array<i32>, pos: i32, follow: &List<List<i3
 
 fn scan_get_accessor(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
-    pos = scan_getter(tokens, pos, &FOLLOW_MASK_37);
+    pos = scan_getter(tokens, pos, &FOLLOW_MASK_40);
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_OpenParen { return -1; }
     pos += 1;
@@ -11776,7 +11776,7 @@ fn scan_argument(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPT
 fn scan_expression_sequence(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let scan_start = pos;
     let mut pos = pos;
-    pos = scan_single_expression(tokens, pos, &FOLLOW_MASK_38, 0);
+    pos = scan_single_expression(tokens, pos, &FOLLOW_MASK_41, 0);
     if pos < 0 { return -1; }
     while pos < tokens.len() && tokens[pos] == TK_Comma && !(follow_yields(tokens, pos, follow, TK_EOF)) {
         let sp = pos;
@@ -11784,7 +11784,7 @@ fn scan_expression_sequence(tokens: &Array<i32>, pos: i32, follow: &List<List<i3
             sg_84: {
                 if pos >= tokens.len() || tokens[pos] != TK_Comma { break sg_84; }
                 pos += 1;
-                pos = scan_single_expression(tokens, pos, follow, 0);
+                pos = scan_single_expression(tokens, pos, &FOLLOW_MASK_41, 0);
                 if pos < 0 { break sg_84; }
                 break sg_84_done;
             }
@@ -12511,7 +12511,7 @@ fn scan_single_expression_lr_35(tokens: &Array<i32>, pos: i32, follow: &List<Lis
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_QuestionMark { return -1; }
     pos += 1;
-    pos = scan_single_expression(tokens, pos, &FOLLOW_MASK_39, 0);
+    pos = scan_single_expression(tokens, pos, &FOLLOW_MASK_42, 0);
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_Colon { return -1; }
     pos += 1;
@@ -13250,7 +13250,7 @@ fn scan_bigint_literal(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> =
 fn scan_getter(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let scan_start = pos;
     let mut pos = pos;
-    pos = scan_identifier(tokens, pos, &FOLLOW_MASK_40);
+    pos = scan_identifier(tokens, pos, &FOLLOW_MASK_43);
     if pos < 0 { return -1; }
     pos = scan_class_element_name(tokens, pos, follow);
     if pos < 0 { return -1; }
@@ -13261,7 +13261,7 @@ fn scan_getter(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_
 fn scan_setter(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let scan_start = pos;
     let mut pos = pos;
-    pos = scan_identifier(tokens, pos, &FOLLOW_MASK_40);
+    pos = scan_identifier(tokens, pos, &FOLLOW_MASK_43);
     if pos < 0 { return -1; }
     pos = scan_class_element_name(tokens, pos, follow);
     if pos < 0 { return -1; }
@@ -13510,7 +13510,7 @@ fn _parse_type_parameter_list__inner(p: &mut Parser, follow: &List<List<i32>> = 
                 sg_91: {
                     if pos >= tokens.len() || tokens[pos] != TK_Comma { break sg_91; }
                     pos += 1;
-                    pos = scan_type_parameter(tokens, pos, follow);
+                    pos = scan_type_parameter(tokens, pos, &FOLLOW_MASK_0);
                     if pos < 0 { break sg_91; }
                     break sg_91_done;
                 }
@@ -13521,7 +13521,7 @@ fn _parse_type_parameter_list__inner(p: &mut Parser, follow: &List<List<i32>> = 
         }
         if rep_scan_pos < 0 { break; }
         let comma = p.expect(TK_Comma, &SYNC_3);
-        let type_parameter = _parse_type_parameter(p, follow);
+        let type_parameter = _parse_type_parameter(p, &FOLLOW_MASK_0);
     }
     return;
 }
@@ -13680,7 +13680,7 @@ fn _parse_type_argument_list__inner(p: &mut Parser, follow: &List<List<i32>> = &
                 sg_92: {
                     if pos >= tokens.len() || tokens[pos] != TK_Comma { break sg_92; }
                     pos += 1;
-                    pos = scan_type_argument(tokens, pos, follow);
+                    pos = scan_type_argument(tokens, pos, &FOLLOW_MASK_2);
                     if pos < 0 { break sg_92; }
                     break sg_92_done;
                 }
@@ -13691,7 +13691,7 @@ fn _parse_type_argument_list__inner(p: &mut Parser, follow: &List<List<i32>> = &
         }
         if rep_scan_pos < 0 { break; }
         let comma = p.expect(TK_Comma, &SYNC_4);
-        let type_argument = _parse_type_argument(p, follow);
+        let type_argument = _parse_type_argument(p, &FOLLOW_MASK_2);
     }
     return;
 }
@@ -14659,7 +14659,7 @@ fn _parse_tuple_element_types__inner(p: &mut Parser, follow: &List<List<i32>> = 
                 sg_97: {
                     if pos >= tokens.len() || tokens[pos] != TK_Comma { break sg_97; }
                     pos += 1;
-                    pos = scan_type_(tokens, pos, follow);
+                    pos = scan_type_(tokens, pos, &FOLLOW_MASK_2);
                     if pos < 0 { break sg_97; }
                     break sg_97_done;
                 }
@@ -14670,7 +14670,7 @@ fn _parse_tuple_element_types__inner(p: &mut Parser, follow: &List<List<i32>> = 
         }
         if rep_scan_pos < 0 { break; }
         let comma = p.expect(TK_Comma, &SYNC_4);
-        let type_ = _parse_type_(p, follow);
+        let type_ = _parse_type_(p, &FOLLOW_MASK_2);
     }
     if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_Comma) {
         let comma = p.expect(TK_Comma, &EMPTY_SYNC);
@@ -14969,7 +14969,7 @@ fn _parse_parameter_list__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPT
                     sg_101: {
                         if pos >= tokens.len() || tokens[pos] != TK_Comma { break sg_101; }
                         pos += 1;
-                        pos = scan_parameter(tokens, pos, follow);
+                        pos = scan_parameter(tokens, pos, &FOLLOW_MASK_9);
                         if pos < 0 { break sg_101; }
                         break sg_101_done;
                     }
@@ -14980,7 +14980,7 @@ fn _parse_parameter_list__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPT
             }
             if rep_scan_pos < 0 { break; }
             let comma = p.expect(TK_Comma, &SYNC_19);
-            let parameter = _parse_parameter(p, follow);
+            let parameter = _parse_parameter(p, &FOLLOW_MASK_9);
         }
         if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_Comma && p.peek_at(1) == TK_Ellipsis) {
             let comma = p.expect(TK_Comma, &SYNC_20);
@@ -15513,7 +15513,7 @@ fn _parse_class_or_interface_type_list__inner(p: &mut Parser, follow: &List<List
                 sg_104: {
                     if pos >= tokens.len() || tokens[pos] != TK_Comma { break sg_104; }
                     pos += 1;
-                    pos = scan_type_reference(tokens, pos, follow);
+                    pos = scan_type_reference(tokens, pos, &FOLLOW_MASK_14);
                     if pos < 0 { break sg_104; }
                     break sg_104_done;
                 }
@@ -15524,7 +15524,7 @@ fn _parse_class_or_interface_type_list__inner(p: &mut Parser, follow: &List<List
         }
         if rep_scan_pos < 0 { break; }
         let comma = p.expect(TK_Comma, &SYNC_9);
-        let type_reference = _parse_type_reference(p, follow);
+        let type_reference = _parse_type_reference(p, &FOLLOW_MASK_14);
     }
     return;
 }
@@ -15597,7 +15597,7 @@ fn _parse_enum_member_list__inner(p: &mut Parser, follow: &List<List<i32>> = &EM
                 sg_105: {
                     if pos >= tokens.len() || tokens[pos] != TK_Comma { break sg_105; }
                     pos += 1;
-                    pos = scan_enum_member(tokens, pos, follow);
+                    pos = scan_enum_member(tokens, pos, &FOLLOW_MASK_17);
                     if pos < 0 { break sg_105; }
                     break sg_105_done;
                 }
@@ -15608,7 +15608,7 @@ fn _parse_enum_member_list__inner(p: &mut Parser, follow: &List<List<i32>> = &EM
         }
         if rep_scan_pos < 0 { break; }
         let comma = p.expect(TK_Comma, &SYNC_31);
-        let enum_member = _parse_enum_member(p, follow);
+        let enum_member = _parse_enum_member(p, &FOLLOW_MASK_17);
     }
     return;
 }
@@ -19001,7 +19001,7 @@ fn _parse_default_clause(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLO
 }
 
 fn _parse_labelled_statement__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () with TypeScriptParserBase {
-    let identifier = _parse_identifier(p, &FOLLOW_MASK_29);
+    let identifier = _parse_identifier(p, &FOLLOW_MASK_30);
     let colon = p.expect(TK_Colon, &SYNC_33);
     let statement = _parse_statement(p, follow);
     return;
@@ -19044,7 +19044,7 @@ fn _parse_throw_statement(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLL
 
 fn _parse_try_statement__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () with TypeScriptParserBase {
     let try = p.expect(TK_Try, &SYNC_57);
-    let block = _parse_block(p, &FOLLOW_MASK_30);
+    let block = _parse_block(p, &FOLLOW_MASK_31);
     let grp_kind = p.peek_kind();
     if grp_kind == TK_Catch {
         let catch_production = _parse_catch_production(p, follow);
@@ -19138,7 +19138,7 @@ fn _parse_function_declaration__inner(p: &mut Parser, follow: &List<List<i32>> =
         let multiply = p.expect(TK_Multiply, &EMPTY_SYNC);
     }
     let identifier = _parse_identifier(p, &FOLLOW_MASK_20);
-    let call_signature = _parse_call_signature(p, &FOLLOW_MASK_31);
+    let call_signature = _parse_call_signature(p, &FOLLOW_MASK_32);
     let grp_kind = p.peek_kind();
     if grp_kind == TK_OpenBrace {
         let openbrace = p.expect(TK_OpenBrace, &SYNC_29);
@@ -19467,7 +19467,7 @@ fn _parse_property_member_declaration__inner_scan_3(tokens: &Array<i32>, pos: i3
 
 fn _parse_property_member_declaration__inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () with TypeScriptParserBase {
     p.b.set_alt(0);
-    let property_member_base = _parse_property_member_base(p, &FOLLOW_MASK_32);
+    let property_member_base = _parse_property_member_base(p, &FOLLOW_MASK_33);
     let property_name = _parse_property_name(p, &EMPTY_FOLLOW);
     if p.peek_kind() == TK_QuestionMark {
         let questionmark = p.expect(TK_QuestionMark, &EMPTY_SYNC);
@@ -19484,7 +19484,7 @@ fn _parse_property_member_declaration__inner_alt_0(p: &mut Parser, follow: &List
 
 fn _parse_property_member_declaration__inner_scan_0(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
-    pos = scan_property_member_base(tokens, pos, &FOLLOW_MASK_32);
+    pos = scan_property_member_base(tokens, pos, &FOLLOW_MASK_33);
     if pos < 0 { return -1; }
     pos = scan_property_name(tokens, pos, &EMPTY_FOLLOW);
     if pos < 0 { return -1; }
@@ -19508,9 +19508,9 @@ fn _parse_property_member_declaration__inner_scan_0(tokens: &Array<i32>, pos: i3
 
 fn _parse_property_member_declaration__inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () with TypeScriptParserBase {
     p.b.set_alt(1);
-    let property_member_base = _parse_property_member_base(p, &FOLLOW_MASK_32);
+    let property_member_base = _parse_property_member_base(p, &FOLLOW_MASK_33);
     let property_name = _parse_property_name(p, &FOLLOW_MASK_20);
-    let call_signature = _parse_call_signature(p, &FOLLOW_MASK_31);
+    let call_signature = _parse_call_signature(p, &FOLLOW_MASK_32);
     let grp_kind = p.peek_kind();
     if grp_kind == TK_OpenBrace {
         let openbrace = p.expect(TK_OpenBrace, &SYNC_29);
@@ -19526,11 +19526,11 @@ fn _parse_property_member_declaration__inner_alt_1(p: &mut Parser, follow: &List
 
 fn _parse_property_member_declaration__inner_scan_1(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
-    pos = scan_property_member_base(tokens, pos, &FOLLOW_MASK_32);
+    pos = scan_property_member_base(tokens, pos, &FOLLOW_MASK_33);
     if pos < 0 { return -1; }
     pos = scan_property_name(tokens, pos, &FOLLOW_MASK_20);
     if pos < 0 { return -1; }
-    pos = scan_call_signature(tokens, pos, &FOLLOW_MASK_31);
+    pos = scan_call_signature(tokens, pos, &FOLLOW_MASK_32);
     if pos < 0 { return -1; }
     let gp_114 = pos;
     let sgk_114 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
@@ -19858,7 +19858,7 @@ fn _parse_generator_block__inner(p: &mut Parser, follow: &List<List<i32>> = &EMP
                 sg_117: {
                     if pos >= tokens.len() || tokens[pos] != TK_Comma { break sg_117; }
                     pos += 1;
-                    pos = scan_generator_definition(tokens, pos, follow);
+                    pos = scan_generator_definition(tokens, pos, &FOLLOW_MASK_34);
                     if pos < 0 { break sg_117; }
                     break sg_117_done;
                 }
@@ -19869,7 +19869,7 @@ fn _parse_generator_block__inner(p: &mut Parser, follow: &List<List<i32>> = &EMP
         }
         if rep_scan_pos < 0 { break; }
         let comma = p.expect(TK_Comma, &SYNC_62);
-        let generator_definition = _parse_generator_definition(p, follow);
+        let generator_definition = _parse_generator_definition(p, &FOLLOW_MASK_34);
     }
     if p.peek_kind() == TK_Comma {
         let comma = p.expect(TK_Comma, &EMPTY_SYNC);
@@ -19919,7 +19919,7 @@ fn _parse_iterator_block__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPT
                 sg_118: {
                     if pos >= tokens.len() || tokens[pos] != TK_Comma { break sg_118; }
                     pos += 1;
-                    pos = scan_iterator_definition(tokens, pos, follow);
+                    pos = scan_iterator_definition(tokens, pos, &FOLLOW_MASK_35);
                     if pos < 0 { break sg_118; }
                     break sg_118_done;
                 }
@@ -19930,7 +19930,7 @@ fn _parse_iterator_block__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPT
         }
         if rep_scan_pos < 0 { break; }
         let comma = p.expect(TK_Comma, &SYNC_63);
-        let iterator_definition = _parse_iterator_definition(p, follow);
+        let iterator_definition = _parse_iterator_definition(p, &FOLLOW_MASK_35);
     }
     if p.peek_kind() == TK_Comma {
         let comma = p.expect(TK_Comma, &EMPTY_SYNC);
@@ -19952,7 +19952,7 @@ fn _parse_iterator_block(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLO
 
 fn _parse_iterator_definition__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () with TypeScriptParserBase {
     let openbracket = p.expect(TK_OpenBracket, &SYNC_0);
-    let single_expression = _parse_single_expression(p, &FOLLOW_MASK_33);
+    let single_expression = _parse_single_expression(p, &FOLLOW_MASK_36);
     let closebracket = p.expect(TK_CloseBracket, &SYNC_26);
     let openparen = p.expect(TK_OpenParen, &SYNC_27);
     if _kind_set_14(p.peek_kind()) {
@@ -20538,7 +20538,7 @@ fn _parse_object_literal__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPT
     opt_scan: {
         let tokens = &p.kinds;
         let mut pos: i32 = p.pos;
-        pos = scan_property_assignment(tokens, pos, &FOLLOW_MASK_34);
+        pos = scan_property_assignment(tokens, pos, &FOLLOW_MASK_37);
         if pos < 0 { break opt_scan; }
         while pos < tokens.len() && tokens[pos] == TK_Comma {
             let sp = pos;
@@ -20546,7 +20546,7 @@ fn _parse_object_literal__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPT
                 sg_125: {
                     if pos >= tokens.len() || tokens[pos] != TK_Comma { break sg_125; }
                     pos += 1;
-                    pos = scan_property_assignment(tokens, pos, follow);
+                    pos = scan_property_assignment(tokens, pos, &FOLLOW_MASK_37);
                     if pos < 0 { break sg_125; }
                     break sg_125_done;
                 }
@@ -20561,7 +20561,7 @@ fn _parse_object_literal__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPT
         opt_scan_pos = pos;
     }
     if opt_scan_pos >= 0 {
-        let property_assignment = _parse_property_assignment(p, &FOLLOW_MASK_34);
+        let property_assignment = _parse_property_assignment(p, &FOLLOW_MASK_37);
         loop {
             if p.recovering { break; }
             let mut rep_scan_pos: i32 = -1;
@@ -20572,7 +20572,7 @@ fn _parse_object_literal__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPT
                     sg_126: {
                         if pos >= tokens.len() || tokens[pos] != TK_Comma { break sg_126; }
                         pos += 1;
-                        pos = scan_property_assignment(tokens, pos, follow);
+                        pos = scan_property_assignment(tokens, pos, &FOLLOW_MASK_37);
                         if pos < 0 { break sg_126; }
                         break sg_126_done;
                     }
@@ -20583,7 +20583,7 @@ fn _parse_object_literal__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPT
             }
             if rep_scan_pos < 0 { break; }
             let comma = p.expect(TK_Comma, &SYNC_69);
-            let property_assignment = _parse_property_assignment(p, follow);
+            let property_assignment = _parse_property_assignment(p, &FOLLOW_MASK_37);
         }
         if p.peek_kind() == TK_Comma {
             let comma = p.expect(TK_Comma, &EMPTY_SYNC);
@@ -20607,7 +20607,7 @@ fn _parse_object_literal(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLO
 fn _parse_property_assignment__inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () with TypeScriptParserBase {
     p.b.set_alt(1);
     let openbracket = p.expect(TK_OpenBracket, &SYNC_0);
-    let single_expression = _parse_single_expression(p, &FOLLOW_MASK_36);
+    let single_expression = _parse_single_expression(p, &FOLLOW_MASK_39);
     let closebracket = p.expect(TK_CloseBracket, &SYNC_18);
     let colon = p.expect(TK_Colon, &SYNC_0);
     let single_expression_2 = _parse_single_expression(p, follow);
@@ -20618,7 +20618,7 @@ fn _parse_property_assignment__inner_scan_1(tokens: &Array<i32>, pos: i32, follo
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_OpenBracket { return -1; }
     pos += 1;
-    pos = scan_single_expression(tokens, pos, &FOLLOW_MASK_36, 0);
+    pos = scan_single_expression(tokens, pos, &FOLLOW_MASK_39, 0);
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_CloseBracket { return -1; }
     pos += 1;
@@ -20696,7 +20696,7 @@ fn _parse_property_assignment__inner_scan_4(tokens: &Array<i32>, pos: i32, follo
 
 fn _parse_property_assignment__inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () with TypeScriptParserBase {
     p.b.set_alt(0);
-    let property_name = _parse_property_name(p, &FOLLOW_MASK_35);
+    let property_name = _parse_property_name(p, &FOLLOW_MASK_38);
     let colon_or_assign = p.expect_set(&SYNC_70);
     let single_expression = _parse_single_expression(p, follow);
     return;
@@ -20704,7 +20704,7 @@ fn _parse_property_assignment__inner_alt_0(p: &mut Parser, follow: &List<List<i3
 
 fn _parse_property_assignment__inner_scan_0(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
-    pos = scan_property_name(tokens, pos, &FOLLOW_MASK_35);
+    pos = scan_property_name(tokens, pos, &FOLLOW_MASK_38);
     if pos < 0 { return -1; }
     let gp_127 = pos;
     let sgk_127 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
@@ -21000,7 +21000,7 @@ fn _parse_property_assignment(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
 }
 
 fn _parse_get_accessor__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () with TypeScriptParserBase {
-    let getter = _parse_getter(p, &FOLLOW_MASK_37);
+    let getter = _parse_getter(p, &FOLLOW_MASK_40);
     let openparen = p.expect(TK_OpenParen, &SYNC_71);
     let closeparen = p.expect(TK_CloseParen, &SYNC_72);
     if p.peek_kind() == TK_Colon {
@@ -21229,7 +21229,7 @@ fn _parse_argument(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> 
 }
 
 fn _parse_expression_sequence__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () with TypeScriptParserBase {
-    let single_expression = _parse_single_expression(p, &FOLLOW_MASK_38);
+    let single_expression = _parse_single_expression(p, &FOLLOW_MASK_41);
     loop {
         if p.recovering { break; }
         if follow_yields(&p.kinds, p.pos, follow, TK_EOF) { break; }
@@ -21241,7 +21241,7 @@ fn _parse_expression_sequence__inner(p: &mut Parser, follow: &List<List<i32>> = 
                 sg_129: {
                     if pos >= tokens.len() || tokens[pos] != TK_Comma { break sg_129; }
                     pos += 1;
-                    pos = scan_single_expression(tokens, pos, follow, 0);
+                    pos = scan_single_expression(tokens, pos, &FOLLOW_MASK_41, 0);
                     if pos < 0 { break sg_129; }
                     break sg_129_done;
                 }
@@ -21252,7 +21252,7 @@ fn _parse_expression_sequence__inner(p: &mut Parser, follow: &List<List<i32>> = 
         }
         if rep_scan_pos < 0 { break; }
         let comma = p.expect(TK_Comma, &SYNC_0);
-        let single_expression = _parse_single_expression(p, follow);
+        let single_expression = _parse_single_expression(p, &FOLLOW_MASK_41);
     }
     return;
 }
@@ -22266,7 +22266,7 @@ fn _parse_single_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &E
                         p.b.start_node_at(_cp, RK_SINGLEEXPRESSION, _start);
                         p.b.set_alt(35);
                         let questionmark = p.expect(TK_QuestionMark, &EMPTY_SYNC);
-                        let single_expression_2 = _parse_single_expression(p, &FOLLOW_MASK_39, 0);
+                        let single_expression_2 = _parse_single_expression(p, &FOLLOW_MASK_42, 0);
                         let colon = p.expect(TK_Colon, &EMPTY_SYNC);
                         let single_expression_3 = _parse_single_expression(p, follow, 25);
                         p.b.finish_node(p.last_end());
@@ -23390,7 +23390,7 @@ fn _parse_getter__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW
             return;
         }
     }
-    let identifier = _parse_identifier(p, &FOLLOW_MASK_40);
+    let identifier = _parse_identifier(p, &FOLLOW_MASK_43);
     let class_element_name = _parse_class_element_name(p, follow);
     return;
 }
@@ -23413,7 +23413,7 @@ fn _parse_setter__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW
             return;
         }
     }
-    let identifier = _parse_identifier(p, &FOLLOW_MASK_40);
+    let identifier = _parse_identifier(p, &FOLLOW_MASK_43);
     let class_element_name = _parse_class_element_name(p, follow);
     return;
 }
@@ -24890,16 +24890,19 @@ global FOLLOW_MASK_25: List<List<i32>> = [[TK_In], [TK_Abstract, TK_Any, TK_As, 
 global FOLLOW_MASK_26: List<List<i32>> = [[TK_Abstract, TK_Any, TK_As, TK_Async, TK_Boolean, TK_Constructor, TK_From, TK_Identifier, TK_KeyOf, TK_Namespace, TK_Never, TK_Number, TK_Object, TK_Of, TK_String, TK_Symbol, TK_TypeAlias, TK_Undefined, TK_Unique, TK_Yield]];
 global FOLLOW_MASK_27: List<List<i32>> = [[TK_Abstract, TK_Any, TK_As, TK_Async, TK_Await, TK_BackTick, TK_BigBinaryIntegerLiteral, TK_BigDecimalIntegerLiteral, TK_BigHexIntegerLiteral, TK_BigOctalIntegerLiteral, TK_BinaryIntegerLiteral, TK_BitNot, TK_Boolean, TK_BooleanLiteral, TK_Break, TK_Case, TK_Catch, TK_Class, TK_Const, TK_Constructor, TK_Continue, TK_Debugger, TK_DecimalLiteral, TK_Default, TK_Delete, TK_Do, TK_Else, TK_Enum, TK_Export, TK_Extends, TK_Finally, TK_For, TK_From, TK_Function_, TK_HexIntegerLiteral, TK_Identifier, TK_If, TK_Implements, TK_Import, TK_In, TK_Instanceof, TK_Interface, TK_KeyOf, TK_LessThan, TK_Let, TK_Minus, TK_MinusMinus, TK_Module, TK_Namespace, TK_Never, TK_New, TK_Not, TK_NullLiteral, TK_Number, TK_Object, TK_OctalIntegerLiteral, TK_OctalIntegerLiteral2, TK_Of, TK_OpenBrace, TK_OpenBracket, TK_OpenParen, TK_Package, TK_Plus, TK_PlusPlus, TK_Private, TK_Protected, TK_Public, TK_ReadOnly, TK_RegularExpressionLiteral, TK_Require, TK_Return, TK_Static, TK_String, TK_StringLiteral, TK_Super, TK_Switch, TK_Symbol, TK_This, TK_Throw, TK_Try, TK_TypeAlias, TK_Typeof, TK_Undefined, TK_Unique, TK_Var, TK_Void, TK_While, TK_With, TK_Yield, TK_YieldStar]];
 global FOLLOW_MASK_28: List<List<i32>> = [[TK_CloseParen], [TK_OpenBrace]];
-global FOLLOW_MASK_29: List<List<i32>> = [[TK_Colon], [TK_Abstract, TK_Any, TK_As, TK_Async, TK_At, TK_Await, TK_BackTick, TK_BigBinaryIntegerLiteral, TK_BigDecimalIntegerLiteral, TK_BigHexIntegerLiteral, TK_BigOctalIntegerLiteral, TK_BinaryIntegerLiteral, TK_BitNot, TK_Boolean, TK_BooleanLiteral, TK_Break, TK_Case, TK_Catch, TK_Class, TK_Const, TK_Constructor, TK_Continue, TK_Debugger, TK_DecimalLiteral, TK_Declare, TK_Default, TK_Delete, TK_Do, TK_Else, TK_Enum, TK_Export, TK_Extends, TK_Finally, TK_For, TK_From, TK_Function_, TK_HexIntegerLiteral, TK_Identifier, TK_If, TK_Implements, TK_Import, TK_In, TK_Instanceof, TK_Interface, TK_KeyOf, TK_LessThan, TK_Let, TK_Minus, TK_MinusMinus, TK_Module, TK_Namespace, TK_Never, TK_New, TK_Not, TK_NullLiteral, TK_Number, TK_Object, TK_OctalIntegerLiteral, TK_OctalIntegerLiteral2, TK_Of, TK_OpenBrace, TK_OpenBracket, TK_OpenParen, TK_Package, TK_Plus, TK_PlusPlus, TK_Private, TK_Protected, TK_Public, TK_ReadOnly, TK_RegularExpressionLiteral, TK_Require, TK_Return, TK_SemiColon, TK_Static, TK_String, TK_StringLiteral, TK_Super, TK_Switch, TK_Symbol, TK_This, TK_Throw, TK_Try, TK_TypeAlias, TK_Typeof, TK_Undefined, TK_Unique, TK_Var, TK_Void, TK_While, TK_With, TK_Yield, TK_YieldStar]];
-global FOLLOW_MASK_30: List<List<i32>> = [[TK_Catch, TK_Finally]];
-global FOLLOW_MASK_31: List<List<i32>> = [[TK_OpenBrace, TK_SemiColon]];
-global FOLLOW_MASK_32: List<List<i32>> = [[TK_Abstract, TK_Any, TK_As, TK_Async, TK_Await, TK_BinaryIntegerLiteral, TK_Boolean, TK_BooleanLiteral, TK_Break, TK_Case, TK_Catch, TK_Class, TK_Const, TK_Constructor, TK_Continue, TK_Debugger, TK_DecimalLiteral, TK_Default, TK_Delete, TK_Do, TK_Else, TK_Enum, TK_Export, TK_Extends, TK_Finally, TK_For, TK_From, TK_Function_, TK_HexIntegerLiteral, TK_Identifier, TK_If, TK_Implements, TK_Import, TK_In, TK_Instanceof, TK_Interface, TK_KeyOf, TK_Let, TK_Module, TK_Namespace, TK_Never, TK_New, TK_NullLiteral, TK_Number, TK_Object, TK_OctalIntegerLiteral, TK_OctalIntegerLiteral2, TK_Of, TK_OpenBracket, TK_Package, TK_Private, TK_Protected, TK_Public, TK_ReadOnly, TK_Require, TK_Return, TK_Static, TK_String, TK_StringLiteral, TK_Super, TK_Switch, TK_Symbol, TK_This, TK_Throw, TK_Try, TK_TypeAlias, TK_Typeof, TK_Undefined, TK_Unique, TK_Var, TK_Void, TK_While, TK_With, TK_Yield]];
-global FOLLOW_MASK_33: List<List<i32>> = [[TK_CloseBracket], [TK_OpenParen]];
-global FOLLOW_MASK_34: List<List<i32>> = [[TK_Comma], [TK_Abstract, TK_Any, TK_As, TK_Async, TK_Await, TK_BackTick, TK_BigBinaryIntegerLiteral, TK_BigDecimalIntegerLiteral, TK_BigHexIntegerLiteral, TK_BigOctalIntegerLiteral, TK_BinaryIntegerLiteral, TK_BitNot, TK_Boolean, TK_BooleanLiteral, TK_Break, TK_Case, TK_Catch, TK_Class, TK_Const, TK_Constructor, TK_Continue, TK_Debugger, TK_DecimalLiteral, TK_Default, TK_Delete, TK_Do, TK_Ellipsis, TK_Else, TK_Enum, TK_Export, TK_Extends, TK_Finally, TK_For, TK_From, TK_Function_, TK_HexIntegerLiteral, TK_Identifier, TK_If, TK_Implements, TK_Import, TK_In, TK_Instanceof, TK_Interface, TK_KeyOf, TK_LessThan, TK_Let, TK_Minus, TK_MinusMinus, TK_Module, TK_Multiply, TK_Namespace, TK_Never, TK_New, TK_Not, TK_NullLiteral, TK_Number, TK_Object, TK_OctalIntegerLiteral, TK_OctalIntegerLiteral2, TK_Of, TK_OpenBrace, TK_OpenBracket, TK_OpenParen, TK_Package, TK_Plus, TK_PlusPlus, TK_Private, TK_Protected, TK_Public, TK_ReadOnly, TK_RegularExpressionLiteral, TK_Require, TK_Return, TK_Static, TK_String, TK_StringLiteral, TK_Super, TK_Switch, TK_Symbol, TK_This, TK_Throw, TK_Try, TK_TypeAlias, TK_Typeof, TK_Undefined, TK_Unique, TK_Var, TK_Void, TK_While, TK_With, TK_Yield, TK_YieldStar]];
-global FOLLOW_MASK_35: List<List<i32>> = [[TK_Assign, TK_Colon]];
-global FOLLOW_MASK_36: List<List<i32>> = [[TK_CloseBracket], [TK_Colon], [TK_Abstract, TK_Any, TK_As, TK_Async, TK_Await, TK_BackTick, TK_BigBinaryIntegerLiteral, TK_BigDecimalIntegerLiteral, TK_BigHexIntegerLiteral, TK_BigOctalIntegerLiteral, TK_BinaryIntegerLiteral, TK_BitNot, TK_Boolean, TK_BooleanLiteral, TK_Break, TK_Case, TK_Catch, TK_Class, TK_Const, TK_Constructor, TK_Continue, TK_Debugger, TK_DecimalLiteral, TK_Default, TK_Delete, TK_Do, TK_Else, TK_Enum, TK_Export, TK_Extends, TK_Finally, TK_For, TK_From, TK_Function_, TK_HexIntegerLiteral, TK_Identifier, TK_If, TK_Implements, TK_Import, TK_In, TK_Instanceof, TK_Interface, TK_KeyOf, TK_LessThan, TK_Let, TK_Minus, TK_MinusMinus, TK_Module, TK_Namespace, TK_Never, TK_New, TK_Not, TK_NullLiteral, TK_Number, TK_Object, TK_OctalIntegerLiteral, TK_OctalIntegerLiteral2, TK_Of, TK_OpenBrace, TK_OpenBracket, TK_OpenParen, TK_Package, TK_Plus, TK_PlusPlus, TK_Private, TK_Protected, TK_Public, TK_ReadOnly, TK_RegularExpressionLiteral, TK_Require, TK_Return, TK_Static, TK_String, TK_StringLiteral, TK_Super, TK_Switch, TK_Symbol, TK_This, TK_Throw, TK_Try, TK_TypeAlias, TK_Typeof, TK_Undefined, TK_Unique, TK_Var, TK_Void, TK_While, TK_With, TK_Yield, TK_YieldStar]];
-global FOLLOW_MASK_37: List<List<i32>> = [[TK_OpenParen], [TK_CloseParen]];
-global FOLLOW_MASK_38: List<List<i32>> = [[TK_Comma], [TK_Abstract, TK_Any, TK_As, TK_Async, TK_Await, TK_BackTick, TK_BigBinaryIntegerLiteral, TK_BigDecimalIntegerLiteral, TK_BigHexIntegerLiteral, TK_BigOctalIntegerLiteral, TK_BinaryIntegerLiteral, TK_BitNot, TK_Boolean, TK_BooleanLiteral, TK_Break, TK_Case, TK_Catch, TK_Class, TK_Const, TK_Constructor, TK_Continue, TK_Debugger, TK_DecimalLiteral, TK_Default, TK_Delete, TK_Do, TK_Else, TK_Enum, TK_Export, TK_Extends, TK_Finally, TK_For, TK_From, TK_Function_, TK_HexIntegerLiteral, TK_Identifier, TK_If, TK_Implements, TK_Import, TK_In, TK_Instanceof, TK_Interface, TK_KeyOf, TK_LessThan, TK_Let, TK_Minus, TK_MinusMinus, TK_Module, TK_Namespace, TK_Never, TK_New, TK_Not, TK_NullLiteral, TK_Number, TK_Object, TK_OctalIntegerLiteral, TK_OctalIntegerLiteral2, TK_Of, TK_OpenBrace, TK_OpenBracket, TK_OpenParen, TK_Package, TK_Plus, TK_PlusPlus, TK_Private, TK_Protected, TK_Public, TK_ReadOnly, TK_RegularExpressionLiteral, TK_Require, TK_Return, TK_Static, TK_String, TK_StringLiteral, TK_Super, TK_Switch, TK_Symbol, TK_This, TK_Throw, TK_Try, TK_TypeAlias, TK_Typeof, TK_Undefined, TK_Unique, TK_Var, TK_Void, TK_While, TK_With, TK_Yield, TK_YieldStar]];
-global FOLLOW_MASK_39: List<List<i32>> = [[TK_Colon], [TK_Abstract, TK_Any, TK_As, TK_Async, TK_Await, TK_BackTick, TK_BigBinaryIntegerLiteral, TK_BigDecimalIntegerLiteral, TK_BigHexIntegerLiteral, TK_BigOctalIntegerLiteral, TK_BinaryIntegerLiteral, TK_BitNot, TK_Boolean, TK_BooleanLiteral, TK_Break, TK_Case, TK_Catch, TK_Class, TK_Const, TK_Constructor, TK_Continue, TK_Debugger, TK_DecimalLiteral, TK_Default, TK_Delete, TK_Do, TK_Else, TK_Enum, TK_Export, TK_Extends, TK_Finally, TK_For, TK_From, TK_Function_, TK_HexIntegerLiteral, TK_Identifier, TK_If, TK_Implements, TK_Import, TK_In, TK_Instanceof, TK_Interface, TK_KeyOf, TK_LessThan, TK_Let, TK_Minus, TK_MinusMinus, TK_Module, TK_Namespace, TK_Never, TK_New, TK_Not, TK_NullLiteral, TK_Number, TK_Object, TK_OctalIntegerLiteral, TK_OctalIntegerLiteral2, TK_Of, TK_OpenBrace, TK_OpenBracket, TK_OpenParen, TK_Package, TK_Plus, TK_PlusPlus, TK_Private, TK_Protected, TK_Public, TK_ReadOnly, TK_RegularExpressionLiteral, TK_Require, TK_Return, TK_Static, TK_String, TK_StringLiteral, TK_Super, TK_Switch, TK_Symbol, TK_This, TK_Throw, TK_Try, TK_TypeAlias, TK_Typeof, TK_Undefined, TK_Unique, TK_Var, TK_Void, TK_While, TK_With, TK_Yield, TK_YieldStar]];
-global FOLLOW_MASK_40: List<List<i32>> = [[TK_Abstract, TK_Any, TK_As, TK_Async, TK_Await, TK_BinaryIntegerLiteral, TK_Boolean, TK_BooleanLiteral, TK_Break, TK_Case, TK_Catch, TK_Class, TK_Const, TK_Constructor, TK_Continue, TK_Debugger, TK_DecimalLiteral, TK_Default, TK_Delete, TK_Do, TK_Else, TK_Enum, TK_Export, TK_Extends, TK_Finally, TK_For, TK_From, TK_Function_, TK_Hashtag, TK_HexIntegerLiteral, TK_Identifier, TK_If, TK_Implements, TK_Import, TK_In, TK_Instanceof, TK_Interface, TK_KeyOf, TK_Let, TK_Module, TK_Namespace, TK_Never, TK_New, TK_NullLiteral, TK_Number, TK_Object, TK_OctalIntegerLiteral, TK_OctalIntegerLiteral2, TK_Of, TK_OpenBracket, TK_Package, TK_Private, TK_Protected, TK_Public, TK_ReadOnly, TK_Require, TK_Return, TK_Static, TK_String, TK_StringLiteral, TK_Super, TK_Switch, TK_Symbol, TK_This, TK_Throw, TK_Try, TK_TypeAlias, TK_Typeof, TK_Undefined, TK_Unique, TK_Var, TK_Void, TK_While, TK_With, TK_Yield]];
+global FOLLOW_MASK_29: List<List<i32>> = [[TK_Case], [TK_Abstract, TK_Any, TK_As, TK_Async, TK_Await, TK_BackTick, TK_BigBinaryIntegerLiteral, TK_BigDecimalIntegerLiteral, TK_BigHexIntegerLiteral, TK_BigOctalIntegerLiteral, TK_BinaryIntegerLiteral, TK_BitNot, TK_Boolean, TK_BooleanLiteral, TK_Break, TK_Case, TK_Catch, TK_Class, TK_Const, TK_Constructor, TK_Continue, TK_Debugger, TK_DecimalLiteral, TK_Default, TK_Delete, TK_Do, TK_Else, TK_Enum, TK_Export, TK_Extends, TK_Finally, TK_For, TK_From, TK_Function_, TK_HexIntegerLiteral, TK_Identifier, TK_If, TK_Implements, TK_Import, TK_In, TK_Instanceof, TK_Interface, TK_KeyOf, TK_LessThan, TK_Let, TK_Minus, TK_MinusMinus, TK_Module, TK_Namespace, TK_Never, TK_New, TK_Not, TK_NullLiteral, TK_Number, TK_Object, TK_OctalIntegerLiteral, TK_OctalIntegerLiteral2, TK_Of, TK_OpenBrace, TK_OpenBracket, TK_OpenParen, TK_Package, TK_Plus, TK_PlusPlus, TK_Private, TK_Protected, TK_Public, TK_ReadOnly, TK_RegularExpressionLiteral, TK_Require, TK_Return, TK_Static, TK_String, TK_StringLiteral, TK_Super, TK_Switch, TK_Symbol, TK_This, TK_Throw, TK_Try, TK_TypeAlias, TK_Typeof, TK_Undefined, TK_Unique, TK_Var, TK_Void, TK_While, TK_With, TK_Yield, TK_YieldStar]];
+global FOLLOW_MASK_30: List<List<i32>> = [[TK_Colon], [TK_Abstract, TK_Any, TK_As, TK_Async, TK_At, TK_Await, TK_BackTick, TK_BigBinaryIntegerLiteral, TK_BigDecimalIntegerLiteral, TK_BigHexIntegerLiteral, TK_BigOctalIntegerLiteral, TK_BinaryIntegerLiteral, TK_BitNot, TK_Boolean, TK_BooleanLiteral, TK_Break, TK_Case, TK_Catch, TK_Class, TK_Const, TK_Constructor, TK_Continue, TK_Debugger, TK_DecimalLiteral, TK_Declare, TK_Default, TK_Delete, TK_Do, TK_Else, TK_Enum, TK_Export, TK_Extends, TK_Finally, TK_For, TK_From, TK_Function_, TK_HexIntegerLiteral, TK_Identifier, TK_If, TK_Implements, TK_Import, TK_In, TK_Instanceof, TK_Interface, TK_KeyOf, TK_LessThan, TK_Let, TK_Minus, TK_MinusMinus, TK_Module, TK_Namespace, TK_Never, TK_New, TK_Not, TK_NullLiteral, TK_Number, TK_Object, TK_OctalIntegerLiteral, TK_OctalIntegerLiteral2, TK_Of, TK_OpenBrace, TK_OpenBracket, TK_OpenParen, TK_Package, TK_Plus, TK_PlusPlus, TK_Private, TK_Protected, TK_Public, TK_ReadOnly, TK_RegularExpressionLiteral, TK_Require, TK_Return, TK_SemiColon, TK_Static, TK_String, TK_StringLiteral, TK_Super, TK_Switch, TK_Symbol, TK_This, TK_Throw, TK_Try, TK_TypeAlias, TK_Typeof, TK_Undefined, TK_Unique, TK_Var, TK_Void, TK_While, TK_With, TK_Yield, TK_YieldStar]];
+global FOLLOW_MASK_31: List<List<i32>> = [[TK_Catch, TK_Finally]];
+global FOLLOW_MASK_32: List<List<i32>> = [[TK_OpenBrace, TK_SemiColon]];
+global FOLLOW_MASK_33: List<List<i32>> = [[TK_Abstract, TK_Any, TK_As, TK_Async, TK_Await, TK_BinaryIntegerLiteral, TK_Boolean, TK_BooleanLiteral, TK_Break, TK_Case, TK_Catch, TK_Class, TK_Const, TK_Constructor, TK_Continue, TK_Debugger, TK_DecimalLiteral, TK_Default, TK_Delete, TK_Do, TK_Else, TK_Enum, TK_Export, TK_Extends, TK_Finally, TK_For, TK_From, TK_Function_, TK_HexIntegerLiteral, TK_Identifier, TK_If, TK_Implements, TK_Import, TK_In, TK_Instanceof, TK_Interface, TK_KeyOf, TK_Let, TK_Module, TK_Namespace, TK_Never, TK_New, TK_NullLiteral, TK_Number, TK_Object, TK_OctalIntegerLiteral, TK_OctalIntegerLiteral2, TK_Of, TK_OpenBracket, TK_Package, TK_Private, TK_Protected, TK_Public, TK_ReadOnly, TK_Require, TK_Return, TK_Static, TK_String, TK_StringLiteral, TK_Super, TK_Switch, TK_Symbol, TK_This, TK_Throw, TK_Try, TK_TypeAlias, TK_Typeof, TK_Undefined, TK_Unique, TK_Var, TK_Void, TK_While, TK_With, TK_Yield]];
+global FOLLOW_MASK_34: List<List<i32>> = [[TK_Comma], [TK_Multiply], [TK_OpenBracket], [TK_Abstract, TK_Any, TK_As, TK_Async, TK_Await, TK_BackTick, TK_BigBinaryIntegerLiteral, TK_BigDecimalIntegerLiteral, TK_BigHexIntegerLiteral, TK_BigOctalIntegerLiteral, TK_BinaryIntegerLiteral, TK_BitNot, TK_Boolean, TK_BooleanLiteral, TK_Break, TK_Case, TK_Catch, TK_Class, TK_Const, TK_Constructor, TK_Continue, TK_Debugger, TK_DecimalLiteral, TK_Default, TK_Delete, TK_Do, TK_Else, TK_Enum, TK_Export, TK_Extends, TK_Finally, TK_For, TK_From, TK_Function_, TK_HexIntegerLiteral, TK_Identifier, TK_If, TK_Implements, TK_Import, TK_In, TK_Instanceof, TK_Interface, TK_KeyOf, TK_LessThan, TK_Let, TK_Minus, TK_MinusMinus, TK_Module, TK_Namespace, TK_Never, TK_New, TK_Not, TK_NullLiteral, TK_Number, TK_Object, TK_OctalIntegerLiteral, TK_OctalIntegerLiteral2, TK_Of, TK_OpenBrace, TK_OpenBracket, TK_OpenParen, TK_Package, TK_Plus, TK_PlusPlus, TK_Private, TK_Protected, TK_Public, TK_ReadOnly, TK_RegularExpressionLiteral, TK_Require, TK_Return, TK_Static, TK_String, TK_StringLiteral, TK_Super, TK_Switch, TK_Symbol, TK_This, TK_Throw, TK_Try, TK_TypeAlias, TK_Typeof, TK_Undefined, TK_Unique, TK_Var, TK_Void, TK_While, TK_With, TK_Yield, TK_YieldStar]];
+global FOLLOW_MASK_35: List<List<i32>> = [[TK_Comma], [TK_OpenBracket], [TK_Abstract, TK_Any, TK_As, TK_Async, TK_Await, TK_BackTick, TK_BigBinaryIntegerLiteral, TK_BigDecimalIntegerLiteral, TK_BigHexIntegerLiteral, TK_BigOctalIntegerLiteral, TK_BinaryIntegerLiteral, TK_BitNot, TK_Boolean, TK_BooleanLiteral, TK_Break, TK_Case, TK_Catch, TK_Class, TK_Const, TK_Constructor, TK_Continue, TK_Debugger, TK_DecimalLiteral, TK_Default, TK_Delete, TK_Do, TK_Else, TK_Enum, TK_Export, TK_Extends, TK_Finally, TK_For, TK_From, TK_Function_, TK_HexIntegerLiteral, TK_Identifier, TK_If, TK_Implements, TK_Import, TK_In, TK_Instanceof, TK_Interface, TK_KeyOf, TK_LessThan, TK_Let, TK_Minus, TK_MinusMinus, TK_Module, TK_Namespace, TK_Never, TK_New, TK_Not, TK_NullLiteral, TK_Number, TK_Object, TK_OctalIntegerLiteral, TK_OctalIntegerLiteral2, TK_Of, TK_OpenBrace, TK_OpenBracket, TK_OpenParen, TK_Package, TK_Plus, TK_PlusPlus, TK_Private, TK_Protected, TK_Public, TK_ReadOnly, TK_RegularExpressionLiteral, TK_Require, TK_Return, TK_Static, TK_String, TK_StringLiteral, TK_Super, TK_Switch, TK_Symbol, TK_This, TK_Throw, TK_Try, TK_TypeAlias, TK_Typeof, TK_Undefined, TK_Unique, TK_Var, TK_Void, TK_While, TK_With, TK_Yield, TK_YieldStar]];
+global FOLLOW_MASK_36: List<List<i32>> = [[TK_CloseBracket], [TK_OpenParen]];
+global FOLLOW_MASK_37: List<List<i32>> = [[TK_Comma], [TK_Abstract, TK_Any, TK_As, TK_Async, TK_Await, TK_BackTick, TK_BigBinaryIntegerLiteral, TK_BigDecimalIntegerLiteral, TK_BigHexIntegerLiteral, TK_BigOctalIntegerLiteral, TK_BinaryIntegerLiteral, TK_BitNot, TK_Boolean, TK_BooleanLiteral, TK_Break, TK_Case, TK_Catch, TK_Class, TK_Const, TK_Constructor, TK_Continue, TK_Debugger, TK_DecimalLiteral, TK_Default, TK_Delete, TK_Do, TK_Ellipsis, TK_Else, TK_Enum, TK_Export, TK_Extends, TK_Finally, TK_For, TK_From, TK_Function_, TK_HexIntegerLiteral, TK_Identifier, TK_If, TK_Implements, TK_Import, TK_In, TK_Instanceof, TK_Interface, TK_KeyOf, TK_LessThan, TK_Let, TK_Minus, TK_MinusMinus, TK_Module, TK_Multiply, TK_Namespace, TK_Never, TK_New, TK_Not, TK_NullLiteral, TK_Number, TK_Object, TK_OctalIntegerLiteral, TK_OctalIntegerLiteral2, TK_Of, TK_OpenBrace, TK_OpenBracket, TK_OpenParen, TK_Package, TK_Plus, TK_PlusPlus, TK_Private, TK_Protected, TK_Public, TK_ReadOnly, TK_RegularExpressionLiteral, TK_Require, TK_Return, TK_Static, TK_String, TK_StringLiteral, TK_Super, TK_Switch, TK_Symbol, TK_This, TK_Throw, TK_Try, TK_TypeAlias, TK_Typeof, TK_Undefined, TK_Unique, TK_Var, TK_Void, TK_While, TK_With, TK_Yield, TK_YieldStar]];
+global FOLLOW_MASK_38: List<List<i32>> = [[TK_Assign, TK_Colon]];
+global FOLLOW_MASK_39: List<List<i32>> = [[TK_CloseBracket], [TK_Colon], [TK_Abstract, TK_Any, TK_As, TK_Async, TK_Await, TK_BackTick, TK_BigBinaryIntegerLiteral, TK_BigDecimalIntegerLiteral, TK_BigHexIntegerLiteral, TK_BigOctalIntegerLiteral, TK_BinaryIntegerLiteral, TK_BitNot, TK_Boolean, TK_BooleanLiteral, TK_Break, TK_Case, TK_Catch, TK_Class, TK_Const, TK_Constructor, TK_Continue, TK_Debugger, TK_DecimalLiteral, TK_Default, TK_Delete, TK_Do, TK_Else, TK_Enum, TK_Export, TK_Extends, TK_Finally, TK_For, TK_From, TK_Function_, TK_HexIntegerLiteral, TK_Identifier, TK_If, TK_Implements, TK_Import, TK_In, TK_Instanceof, TK_Interface, TK_KeyOf, TK_LessThan, TK_Let, TK_Minus, TK_MinusMinus, TK_Module, TK_Namespace, TK_Never, TK_New, TK_Not, TK_NullLiteral, TK_Number, TK_Object, TK_OctalIntegerLiteral, TK_OctalIntegerLiteral2, TK_Of, TK_OpenBrace, TK_OpenBracket, TK_OpenParen, TK_Package, TK_Plus, TK_PlusPlus, TK_Private, TK_Protected, TK_Public, TK_ReadOnly, TK_RegularExpressionLiteral, TK_Require, TK_Return, TK_Static, TK_String, TK_StringLiteral, TK_Super, TK_Switch, TK_Symbol, TK_This, TK_Throw, TK_Try, TK_TypeAlias, TK_Typeof, TK_Undefined, TK_Unique, TK_Var, TK_Void, TK_While, TK_With, TK_Yield, TK_YieldStar]];
+global FOLLOW_MASK_40: List<List<i32>> = [[TK_OpenParen], [TK_CloseParen]];
+global FOLLOW_MASK_41: List<List<i32>> = [[TK_Comma], [TK_Abstract, TK_Any, TK_As, TK_Async, TK_Await, TK_BackTick, TK_BigBinaryIntegerLiteral, TK_BigDecimalIntegerLiteral, TK_BigHexIntegerLiteral, TK_BigOctalIntegerLiteral, TK_BinaryIntegerLiteral, TK_BitNot, TK_Boolean, TK_BooleanLiteral, TK_Break, TK_Case, TK_Catch, TK_Class, TK_Const, TK_Constructor, TK_Continue, TK_Debugger, TK_DecimalLiteral, TK_Default, TK_Delete, TK_Do, TK_Else, TK_Enum, TK_Export, TK_Extends, TK_Finally, TK_For, TK_From, TK_Function_, TK_HexIntegerLiteral, TK_Identifier, TK_If, TK_Implements, TK_Import, TK_In, TK_Instanceof, TK_Interface, TK_KeyOf, TK_LessThan, TK_Let, TK_Minus, TK_MinusMinus, TK_Module, TK_Namespace, TK_Never, TK_New, TK_Not, TK_NullLiteral, TK_Number, TK_Object, TK_OctalIntegerLiteral, TK_OctalIntegerLiteral2, TK_Of, TK_OpenBrace, TK_OpenBracket, TK_OpenParen, TK_Package, TK_Plus, TK_PlusPlus, TK_Private, TK_Protected, TK_Public, TK_ReadOnly, TK_RegularExpressionLiteral, TK_Require, TK_Return, TK_Static, TK_String, TK_StringLiteral, TK_Super, TK_Switch, TK_Symbol, TK_This, TK_Throw, TK_Try, TK_TypeAlias, TK_Typeof, TK_Undefined, TK_Unique, TK_Var, TK_Void, TK_While, TK_With, TK_Yield, TK_YieldStar]];
+global FOLLOW_MASK_42: List<List<i32>> = [[TK_Colon], [TK_Abstract, TK_Any, TK_As, TK_Async, TK_Await, TK_BackTick, TK_BigBinaryIntegerLiteral, TK_BigDecimalIntegerLiteral, TK_BigHexIntegerLiteral, TK_BigOctalIntegerLiteral, TK_BinaryIntegerLiteral, TK_BitNot, TK_Boolean, TK_BooleanLiteral, TK_Break, TK_Case, TK_Catch, TK_Class, TK_Const, TK_Constructor, TK_Continue, TK_Debugger, TK_DecimalLiteral, TK_Default, TK_Delete, TK_Do, TK_Else, TK_Enum, TK_Export, TK_Extends, TK_Finally, TK_For, TK_From, TK_Function_, TK_HexIntegerLiteral, TK_Identifier, TK_If, TK_Implements, TK_Import, TK_In, TK_Instanceof, TK_Interface, TK_KeyOf, TK_LessThan, TK_Let, TK_Minus, TK_MinusMinus, TK_Module, TK_Namespace, TK_Never, TK_New, TK_Not, TK_NullLiteral, TK_Number, TK_Object, TK_OctalIntegerLiteral, TK_OctalIntegerLiteral2, TK_Of, TK_OpenBrace, TK_OpenBracket, TK_OpenParen, TK_Package, TK_Plus, TK_PlusPlus, TK_Private, TK_Protected, TK_Public, TK_ReadOnly, TK_RegularExpressionLiteral, TK_Require, TK_Return, TK_Static, TK_String, TK_StringLiteral, TK_Super, TK_Switch, TK_Symbol, TK_This, TK_Throw, TK_Try, TK_TypeAlias, TK_Typeof, TK_Undefined, TK_Unique, TK_Var, TK_Void, TK_While, TK_With, TK_Yield, TK_YieldStar]];
+global FOLLOW_MASK_43: List<List<i32>> = [[TK_Abstract, TK_Any, TK_As, TK_Async, TK_Await, TK_BinaryIntegerLiteral, TK_Boolean, TK_BooleanLiteral, TK_Break, TK_Case, TK_Catch, TK_Class, TK_Const, TK_Constructor, TK_Continue, TK_Debugger, TK_DecimalLiteral, TK_Default, TK_Delete, TK_Do, TK_Else, TK_Enum, TK_Export, TK_Extends, TK_Finally, TK_For, TK_From, TK_Function_, TK_Hashtag, TK_HexIntegerLiteral, TK_Identifier, TK_If, TK_Implements, TK_Import, TK_In, TK_Instanceof, TK_Interface, TK_KeyOf, TK_Let, TK_Module, TK_Namespace, TK_Never, TK_New, TK_NullLiteral, TK_Number, TK_Object, TK_OctalIntegerLiteral, TK_OctalIntegerLiteral2, TK_Of, TK_OpenBracket, TK_Package, TK_Private, TK_Protected, TK_Public, TK_ReadOnly, TK_Require, TK_Return, TK_Static, TK_String, TK_StringLiteral, TK_Super, TK_Switch, TK_Symbol, TK_This, TK_Throw, TK_Try, TK_TypeAlias, TK_Typeof, TK_Undefined, TK_Unique, TK_Var, TK_Void, TK_While, TK_With, TK_Yield]];
 

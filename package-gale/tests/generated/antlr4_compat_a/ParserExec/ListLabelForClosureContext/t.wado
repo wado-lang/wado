@@ -1643,7 +1643,7 @@ fn scan_else_if_statement(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>
     pos += 1;
     if pos >= tokens.len() || tokens[pos] != TK_LIT_IF { return -1; }
     pos += 1;
-    pos = scan_expression(tokens, pos, &FOLLOW_MASK_1);
+    pos = scan_expression(tokens, pos, &FOLLOW_MASK_2);
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_LIT_THEN { return -1; }
     pos += 1;
@@ -1766,7 +1766,7 @@ fn _parse_if_statement(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW)
 fn _parse_else_if_statement__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let lit_else = p.expect(TK_LIT_ELSE, &SYNC_2);
     let lit_if = p.expect(TK_LIT_IF, &SYNC_0);
-    let expression = _parse_expression(p, &FOLLOW_MASK_1);
+    let expression = _parse_expression(p, &FOLLOW_MASK_2);
     let lit_then = p.expect(TK_LIT_THEN, &SYNC_0);
     loop {
         if p.recovering { break; }
@@ -1938,5 +1938,6 @@ global SYNC_2: List<i32> = [TK_LIT_IF];
 global SYNC_3: List<i32> = [TK_LIT_A, TK_LIT_THEN];
 
 global FOLLOW_MASK_0: List<List<i32>> = [[TK_LIT_A, TK_LIT_THEN]];
-global FOLLOW_MASK_1: List<List<i32>> = [[TK_LIT_THEN]];
+global FOLLOW_MASK_1: List<List<i32>> = [[TK_LIT_ELSE], [TK_LIT_IF], [TK_LIT_A], [TK_LIT_THEN]];
+global FOLLOW_MASK_2: List<List<i32>> = [[TK_LIT_THEN]];
 

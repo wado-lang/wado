@@ -1734,7 +1734,7 @@ fn scan_e_list(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_
             sg_0: {
                 if pos >= tokens.len() || tokens[pos] != TK_LIT_COMMA { break sg_0; }
                 pos += 1;
-                pos = scan_e(tokens, pos, follow, 0);
+                pos = scan_e(tokens, pos, &FOLLOW_MASK_1, 0);
                 if pos < 0 { break sg_0; }
                 break sg_0_done;
             }
@@ -1829,7 +1829,7 @@ fn _parse_e_list__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW
                 sg_1: {
                     if pos >= tokens.len() || tokens[pos] != TK_LIT_COMMA { break sg_1; }
                     pos += 1;
-                    pos = scan_e(tokens, pos, follow, 0);
+                    pos = scan_e(tokens, pos, &FOLLOW_MASK_1, 0);
                     if pos < 0 { break sg_1; }
                     break sg_1_done;
                 }
@@ -1840,7 +1840,7 @@ fn _parse_e_list__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW
         }
         if rep_scan_pos < 0 { break; }
         let comma = p.expect(TK_LIT_COMMA, &SYNC_0);
-        let e = _parse_e(p, follow);
+        let e = _parse_e(p, &FOLLOW_MASK_1);
     }
     return;
 }

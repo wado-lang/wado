@@ -4519,9 +4519,9 @@ fn scan_grammar_spec(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &
 
 fn scan_grammar_decl(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
-    pos = scan_grammar_type(tokens, pos, &FOLLOW_MASK_0);
+    pos = scan_grammar_type(tokens, pos, &FOLLOW_MASK_1);
     if pos < 0 { return -1; }
-    pos = scan_identifier(tokens, pos, &FOLLOW_MASK_1);
+    pos = scan_identifier(tokens, pos, &FOLLOW_MASK_2);
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_SEMI { return -1; }
     pos += 1;
@@ -4619,7 +4619,7 @@ fn scan_options_spec(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &
         let sp = pos;
         sg_0_done: {
             sg_0: {
-                pos = scan_option(tokens, pos, &FOLLOW_MASK_1);
+                pos = scan_option(tokens, pos, &FOLLOW_MASK_2);
                 if pos < 0 { break sg_0; }
                 if pos >= tokens.len() || tokens[pos] != TK_SEMI { break sg_0; }
                 pos += 1;
@@ -4637,7 +4637,7 @@ fn scan_options_spec(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &
 
 fn scan_option(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
-    pos = scan_identifier(tokens, pos, &FOLLOW_MASK_2);
+    pos = scan_identifier(tokens, pos, &FOLLOW_MASK_3);
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_ASSIGN { return -1; }
     pos += 1;
@@ -4654,7 +4654,7 @@ fn scan_option_value(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &
         if _kind_set_1(alt_kind) {
             pos = start;
             try_0: {
-                pos = scan_identifier(tokens, pos, &FOLLOW_MASK_3);
+                pos = scan_identifier(tokens, pos, &FOLLOW_MASK_4);
                 if pos < 0 { break try_0; }
                 while pos < tokens.len() && tokens[pos] == TK_DOT && !(follow_yields(tokens, pos, follow, TK_EOF)) {
                     let sp = pos;
@@ -4662,7 +4662,7 @@ fn scan_option_value(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &
                         sg_1: {
                             if pos >= tokens.len() || tokens[pos] != TK_DOT { break sg_1; }
                             pos += 1;
-                            pos = scan_identifier(tokens, pos, follow);
+                            pos = scan_identifier(tokens, pos, &FOLLOW_MASK_4);
                             if pos < 0 { break sg_1; }
                             break sg_1_done;
                         }
@@ -4707,7 +4707,7 @@ fn scan_delegate_grammars(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>
             sg_2: {
                 if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sg_2; }
                 pos += 1;
-                pos = scan_delegate_grammar(tokens, pos, follow);
+                pos = scan_delegate_grammar(tokens, pos, &FOLLOW_MASK_5);
                 if pos < 0 { break sg_2; }
                 break sg_2_done;
             }
@@ -4736,7 +4736,7 @@ fn scan_delegate_grammar(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>>
             }
             pos = start;
             try_0: {
-                pos = scan_identifier(tokens, pos, &FOLLOW_MASK_4);
+                pos = scan_identifier(tokens, pos, &FOLLOW_MASK_6);
                 if pos < 0 { break try_0; }
                 if pos >= tokens.len() || tokens[pos] != TK_ASSIGN { break try_0; }
                 pos += 1;
@@ -4792,7 +4792,7 @@ fn scan_id_list(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY
             sg_3: {
                 if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sg_3; }
                 pos += 1;
-                pos = scan_identifier(tokens, pos, follow);
+                pos = scan_identifier(tokens, pos, &FOLLOW_MASK_5);
                 if pos < 0 { break sg_3; }
                 break sg_3_done;
             }
@@ -4816,7 +4816,7 @@ fn scan_action_(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY
         let sp = pos;
         sg_4_done: {
             sg_4: {
-                pos = scan_action_scope_name(tokens, pos, &FOLLOW_MASK_6);
+                pos = scan_action_scope_name(tokens, pos, &FOLLOW_MASK_7);
                 if pos < 0 { break sg_4; }
                 if pos >= tokens.len() || tokens[pos] != TK_COLONCOLON { break sg_4; }
                 pos += 1;
@@ -4826,7 +4826,7 @@ fn scan_action_(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY
         }
         if pos < 0 { pos = sp; }
     }
-    pos = scan_identifier(tokens, pos, &FOLLOW_MASK_7);
+    pos = scan_identifier(tokens, pos, &FOLLOW_MASK_8);
     if pos < 0 { return -1; }
     pos = scan_action_block(tokens, pos, follow);
     if pos < 0 { return -1; }
@@ -4882,7 +4882,7 @@ fn scan_mode_spec(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMP
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_MODE { return -1; }
     pos += 1;
-    pos = scan_identifier(tokens, pos, &FOLLOW_MASK_1);
+    pos = scan_identifier(tokens, pos, &FOLLOW_MASK_2);
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_SEMI { return -1; }
     pos += 1;
@@ -4985,7 +4985,7 @@ fn scan_parser_rule_spec(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>>
     }
     if pos >= tokens.len() || tokens[pos] != TK_COLON { return -1; }
     pos += 1;
-    pos = scan_rule_block(tokens, pos, &FOLLOW_MASK_1);
+    pos = scan_rule_block(tokens, pos, &FOLLOW_MASK_2);
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_SEMI { return -1; }
     pos += 1;
@@ -5014,7 +5014,7 @@ fn scan_exception_handler(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_CATCH { return -1; }
     pos += 1;
-    pos = scan_arg_action_block(tokens, pos, &FOLLOW_MASK_7);
+    pos = scan_arg_action_block(tokens, pos, &FOLLOW_MASK_8);
     if pos < 0 { return -1; }
     pos = scan_action_block(tokens, pos, follow);
     if pos < 0 { return -1; }
@@ -5079,7 +5079,7 @@ fn scan_throws_spec(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &E
             sg_5: {
                 if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sg_5; }
                 pos += 1;
-                pos = scan_qualified_identifier(tokens, pos, follow);
+                pos = scan_qualified_identifier(tokens, pos, &FOLLOW_MASK_5);
                 if pos < 0 { break sg_5; }
                 break sg_5_done;
             }
@@ -5104,7 +5104,7 @@ fn scan_rule_action(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &E
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_AT { return -1; }
     pos += 1;
-    pos = scan_identifier(tokens, pos, &FOLLOW_MASK_7);
+    pos = scan_identifier(tokens, pos, &FOLLOW_MASK_8);
     if pos < 0 { return -1; }
     pos = scan_action_block(tokens, pos, follow);
     if pos < 0 { return -1; }
@@ -5197,7 +5197,7 @@ fn scan_lexer_rule_spec(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> 
     }
     if pos >= tokens.len() || tokens[pos] != TK_COLON { return -1; }
     pos += 1;
-    pos = scan_lexer_rule_block(tokens, pos, &FOLLOW_MASK_1);
+    pos = scan_lexer_rule_block(tokens, pos, &FOLLOW_MASK_2);
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_SEMI { return -1; }
     pos += 1;
@@ -5331,7 +5331,7 @@ fn scan_lexer_element(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = 
         } else if alt_kind == TK_ACTION {
             pos = start;
             try_2: {
-                pos = scan_action_block(tokens, pos, &follow_prepend(&FOLLOW_MASK_8, follow));
+                pos = scan_action_block(tokens, pos, &follow_prepend(&FOLLOW_MASK_10, follow));
                 if pos < 0 { break try_2; }
                 if pos < tokens.len() && tokens[pos] == TK_QUESTION && !(follow_yields(tokens, pos, follow, TK_EOF)) {
                     pos += 1;
@@ -5350,7 +5350,7 @@ fn scan_lexer_block(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &E
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_LPAREN { return -1; }
     pos += 1;
-    pos = scan_lexer_alt_list(tokens, pos, &FOLLOW_MASK_9);
+    pos = scan_lexer_alt_list(tokens, pos, &FOLLOW_MASK_11);
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_RPAREN { return -1; }
     pos += 1;
@@ -5361,7 +5361,7 @@ fn scan_lexer_commands(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> =
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_RARROW { return -1; }
     pos += 1;
-    pos = scan_lexer_command(tokens, pos, &FOLLOW_MASK_10);
+    pos = scan_lexer_command(tokens, pos, &FOLLOW_MASK_12);
     if pos < 0 { return -1; }
     while pos < tokens.len() && tokens[pos] == TK_COMMA && !(follow_yields(tokens, pos, follow, TK_EOF)) {
         let sp = pos;
@@ -5369,7 +5369,7 @@ fn scan_lexer_commands(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> =
             sg_9: {
                 if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sg_9; }
                 pos += 1;
-                pos = scan_lexer_command(tokens, pos, follow);
+                pos = scan_lexer_command(tokens, pos, &FOLLOW_MASK_12);
                 if pos < 0 { break sg_9; }
                 break sg_9_done;
             }
@@ -5396,11 +5396,11 @@ fn scan_lexer_command(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = 
             }
             pos = start;
             try_0: {
-                pos = scan_lexer_command_name(tokens, pos, &FOLLOW_MASK_11);
+                pos = scan_lexer_command_name(tokens, pos, &FOLLOW_MASK_13);
                 if pos < 0 { break try_0; }
                 if pos >= tokens.len() || tokens[pos] != TK_LPAREN { break try_0; }
                 pos += 1;
-                pos = scan_lexer_command_expr(tokens, pos, &FOLLOW_MASK_9);
+                pos = scan_lexer_command_expr(tokens, pos, &FOLLOW_MASK_11);
                 if pos < 0 { break try_0; }
                 if pos >= tokens.len() || tokens[pos] != TK_RPAREN { break try_0; }
                 pos += 1;
@@ -5606,7 +5606,7 @@ fn scan_predicate_options(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>
             sg_11: {
                 if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sg_11; }
                 pos += 1;
-                pos = scan_predicate_option(tokens, pos, follow);
+                pos = scan_predicate_option(tokens, pos, &FOLLOW_MASK_5);
                 if pos < 0 { break sg_11; }
                 break sg_11_done;
             }
@@ -5635,7 +5635,7 @@ fn scan_predicate_option(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>>
             }
             pos = start;
             try_1: {
-                pos = scan_identifier(tokens, pos, &FOLLOW_MASK_12);
+                pos = scan_identifier(tokens, pos, &FOLLOW_MASK_14);
                 if pos < 0 { break try_1; }
                 if pos >= tokens.len() || tokens[pos] != TK_ASSIGN { break try_1; }
                 pos += 1;
@@ -5682,7 +5682,7 @@ fn scan_predicate_option(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>>
 
 fn scan_labeled_element(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
-    pos = scan_identifier(tokens, pos, &FOLLOW_MASK_13);
+    pos = scan_identifier(tokens, pos, &FOLLOW_MASK_15);
     if pos < 0 { return -1; }
     let gp_13 = pos;
     let sgk_13 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
@@ -5951,7 +5951,7 @@ fn scan_block_set(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMP
             sg_15: {
                 if pos >= tokens.len() || tokens[pos] != TK_OR { break sg_15; }
                 pos += 1;
-                pos = scan_set_element(tokens, pos, follow);
+                pos = scan_set_element(tokens, pos, &FOLLOW_MASK_16);
                 if pos < 0 { break sg_15; }
                 break sg_15_done;
             }
@@ -6041,7 +6041,7 @@ fn scan_block(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_F
         }
         if pos < 0 { pos = sp; }
     }
-    pos = scan_alt_list(tokens, pos, &FOLLOW_MASK_9);
+    pos = scan_alt_list(tokens, pos, &FOLLOW_MASK_11);
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_RPAREN { return -1; }
     pos += 1;
@@ -6126,7 +6126,7 @@ fn scan_element_options(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> 
             sg_17: {
                 if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sg_17; }
                 pos += 1;
-                pos = scan_element_option(tokens, pos, follow);
+                pos = scan_element_option(tokens, pos, &FOLLOW_MASK_5);
                 if pos < 0 { break sg_17; }
                 break sg_17_done;
             }
@@ -6155,7 +6155,7 @@ fn scan_element_option(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> =
             }
             pos = start;
             try_1: {
-                pos = scan_identifier(tokens, pos, &FOLLOW_MASK_12);
+                pos = scan_identifier(tokens, pos, &FOLLOW_MASK_14);
                 if pos < 0 { break try_1; }
                 if pos >= tokens.len() || tokens[pos] != TK_ASSIGN { break try_1; }
                 pos += 1;
@@ -6210,7 +6210,7 @@ fn scan_identifier(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EM
 fn scan_qualified_identifier(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let scan_start = pos;
     let mut pos = pos;
-    pos = scan_identifier(tokens, pos, &FOLLOW_MASK_3);
+    pos = scan_identifier(tokens, pos, &FOLLOW_MASK_4);
     if pos < 0 { return -1; }
     while pos < tokens.len() && tokens[pos] == TK_DOT && !(follow_yields(tokens, pos, follow, TK_EOF)) {
         let sp = pos;
@@ -6218,7 +6218,7 @@ fn scan_qualified_identifier(tokens: &Array<i32>, pos: i32, follow: &List<List<i
             sg_19: {
                 if pos >= tokens.len() || tokens[pos] != TK_DOT { break sg_19; }
                 pos += 1;
-                pos = scan_identifier(tokens, pos, follow);
+                pos = scan_identifier(tokens, pos, &FOLLOW_MASK_4);
                 if pos < 0 { break sg_19; }
                 break sg_19_done;
             }
@@ -6306,8 +6306,8 @@ fn _parse_grammar_spec(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW)
 }
 
 fn _parse_grammar_decl__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    _parse_grammar_type(p, &FOLLOW_MASK_0);
-    _parse_identifier(p, &FOLLOW_MASK_1);
+    _parse_grammar_type(p, &FOLLOW_MASK_1);
+    _parse_identifier(p, &FOLLOW_MASK_2);
     p.expect(TK_SEMI, &EMPTY_SYNC);
     return;
 }
@@ -6409,7 +6409,7 @@ fn _parse_options_spec__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
             let mut pos: i32 = p.pos;
             sg_20_done: {
                 sg_20: {
-                    pos = scan_option(tokens, pos, &FOLLOW_MASK_1);
+                    pos = scan_option(tokens, pos, &FOLLOW_MASK_2);
                     if pos < 0 { break sg_20; }
                     if pos >= tokens.len() || tokens[pos] != TK_SEMI { break sg_20; }
                     pos += 1;
@@ -6421,7 +6421,7 @@ fn _parse_options_spec__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        _parse_option(p, &FOLLOW_MASK_1);
+        _parse_option(p, &FOLLOW_MASK_2);
         p.expect(TK_SEMI, &EMPTY_SYNC);
     }
     p.expect(TK_RBRACE, &EMPTY_SYNC);
@@ -6440,7 +6440,7 @@ fn _parse_options_spec(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW)
 }
 
 fn _parse_option__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    _parse_identifier(p, &FOLLOW_MASK_2);
+    _parse_identifier(p, &FOLLOW_MASK_3);
     p.expect(TK_ASSIGN, &SYNC_4);
     _parse_option_value(p, follow);
     return;
@@ -6460,7 +6460,7 @@ fn _parse_option(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> ()
 fn _parse_option_value__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     let kind = p.peek_kind();
     if _kind_set_1(kind) {
-        _parse_identifier(p, &FOLLOW_MASK_3);
+        _parse_identifier(p, &FOLLOW_MASK_4);
         loop {
             if p.recovering { break; }
             if follow_yields(&p.kinds, p.pos, follow, TK_EOF) { break; }
@@ -6472,7 +6472,7 @@ fn _parse_option_value__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
                     sg_21: {
                         if pos >= tokens.len() || tokens[pos] != TK_DOT { break sg_21; }
                         pos += 1;
-                        pos = scan_identifier(tokens, pos, follow);
+                        pos = scan_identifier(tokens, pos, &FOLLOW_MASK_4);
                         if pos < 0 { break sg_21; }
                         break sg_21_done;
                     }
@@ -6483,7 +6483,7 @@ fn _parse_option_value__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
             }
             if rep_scan_pos < 0 { break; }
             p.expect(TK_DOT, &SYNC_5);
-            _parse_identifier(p, follow);
+            _parse_identifier(p, &FOLLOW_MASK_4);
         }
         return;
     }
@@ -6531,7 +6531,7 @@ fn _parse_delegate_grammars__inner(p: &mut Parser, follow: &List<List<i32>> = &E
                 sg_22: {
                     if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sg_22; }
                     pos += 1;
-                    pos = scan_delegate_grammar(tokens, pos, follow);
+                    pos = scan_delegate_grammar(tokens, pos, &FOLLOW_MASK_5);
                     if pos < 0 { break sg_22; }
                     break sg_22_done;
                 }
@@ -6542,7 +6542,7 @@ fn _parse_delegate_grammars__inner(p: &mut Parser, follow: &List<List<i32>> = &E
         }
         if rep_scan_pos < 0 { break; }
         p.expect(TK_COMMA, &SYNC_5);
-        _parse_delegate_grammar(p, follow);
+        _parse_delegate_grammar(p, &FOLLOW_MASK_5);
     }
     p.expect(TK_SEMI, &EMPTY_SYNC);
     return;
@@ -6572,7 +6572,7 @@ fn _parse_delegate_grammar__inner_scan_1(tokens: &Array<i32>, pos: i32, follow: 
 }
 
 fn _parse_delegate_grammar__inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    _parse_identifier(p, &FOLLOW_MASK_4);
+    _parse_identifier(p, &FOLLOW_MASK_6);
     p.expect(TK_ASSIGN, &SYNC_5);
     _parse_identifier(p, follow);
     return;
@@ -6580,7 +6580,7 @@ fn _parse_delegate_grammar__inner_alt_0(p: &mut Parser, follow: &List<List<i32>>
 
 fn _parse_delegate_grammar__inner_scan_0(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
-    pos = scan_identifier(tokens, pos, &FOLLOW_MASK_4);
+    pos = scan_identifier(tokens, pos, &FOLLOW_MASK_6);
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_ASSIGN { return -1; }
     pos += 1;
@@ -6685,7 +6685,7 @@ fn _parse_id_list__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLO
                 sg_23: {
                     if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sg_23; }
                     pos += 1;
-                    pos = scan_identifier(tokens, pos, follow);
+                    pos = scan_identifier(tokens, pos, &FOLLOW_MASK_5);
                     if pos < 0 { break sg_23; }
                     break sg_23_done;
                 }
@@ -6696,7 +6696,7 @@ fn _parse_id_list__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLO
         }
         if rep_scan_pos < 0 { break; }
         p.expect(TK_COMMA, &SYNC_5);
-        _parse_identifier(p, follow);
+        _parse_identifier(p, &FOLLOW_MASK_5);
     }
     if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_COMMA) {
         p.expect(TK_COMMA, &EMPTY_SYNC);
@@ -6721,17 +6721,17 @@ fn _parse_action___inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLO
     opt_scan: {
         let tokens = &p.kinds;
         let mut pos: i32 = p.pos;
-        pos = scan_action_scope_name(tokens, pos, &FOLLOW_MASK_6);
+        pos = scan_action_scope_name(tokens, pos, &FOLLOW_MASK_7);
         if pos < 0 { break opt_scan; }
         if pos >= tokens.len() || tokens[pos] != TK_COLONCOLON { break opt_scan; }
         pos += 1;
         opt_scan_pos = pos;
     }
     if opt_scan_pos >= 0 {
-        _parse_action_scope_name(p, &FOLLOW_MASK_6);
+        _parse_action_scope_name(p, &FOLLOW_MASK_7);
         p.expect(TK_COLONCOLON, &EMPTY_SYNC);
     }
-    _parse_identifier(p, &FOLLOW_MASK_7);
+    _parse_identifier(p, &FOLLOW_MASK_8);
     _parse_action_block(p, follow);
     return;
 }
@@ -6818,7 +6818,7 @@ fn _parse_arg_action_block(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOL
 
 fn _parse_mode_spec__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     p.expect(TK_MODE, &SYNC_5);
-    _parse_identifier(p, &FOLLOW_MASK_1);
+    _parse_identifier(p, &FOLLOW_MASK_2);
     p.expect(TK_SEMI, &SYNC_8);
     loop {
         if p.recovering { break; }
@@ -7032,7 +7032,7 @@ fn _parse_parser_rule_spec__inner(p: &mut Parser, follow: &List<List<i32>> = &EM
         _parse_rule_prequel(p, &EMPTY_FOLLOW);
     }
     p.expect(TK_COLON, &SYNC_11);
-    _parse_rule_block(p, &FOLLOW_MASK_1);
+    _parse_rule_block(p, &FOLLOW_MASK_2);
     p.expect(TK_SEMI, &SYNC_12);
     _parse_exception_group(p, follow);
     return;
@@ -7098,7 +7098,7 @@ fn _parse_exception_group(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLL
 
 fn _parse_exception_handler__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     p.expect(TK_CATCH, &SYNC_13);
-    _parse_arg_action_block(p, &FOLLOW_MASK_7);
+    _parse_arg_action_block(p, &FOLLOW_MASK_8);
     _parse_action_block(p, follow);
     return;
 }
@@ -7191,7 +7191,7 @@ fn _parse_throws_spec__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
                 sg_24: {
                     if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sg_24; }
                     pos += 1;
-                    pos = scan_qualified_identifier(tokens, pos, follow);
+                    pos = scan_qualified_identifier(tokens, pos, &FOLLOW_MASK_5);
                     if pos < 0 { break sg_24; }
                     break sg_24_done;
                 }
@@ -7202,7 +7202,7 @@ fn _parse_throws_spec__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
         }
         if rep_scan_pos < 0 { break; }
         p.expect(TK_COMMA, &SYNC_5);
-        _parse_qualified_identifier(p, follow);
+        _parse_qualified_identifier(p, &FOLLOW_MASK_5);
     }
     return;
 }
@@ -7237,7 +7237,7 @@ fn _parse_locals_spec(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
 
 fn _parse_rule_action__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     p.expect(TK_AT, &SYNC_5);
-    _parse_identifier(p, &FOLLOW_MASK_7);
+    _parse_identifier(p, &FOLLOW_MASK_8);
     _parse_action_block(p, follow);
     return;
 }
@@ -7411,7 +7411,7 @@ fn _parse_lexer_rule_spec__inner(p: &mut Parser, follow: &List<List<i32>> = &EMP
         _parse_options_spec(p, &EMPTY_FOLLOW);
     }
     p.expect(TK_COLON, &SYNC_19);
-    _parse_lexer_rule_block(p, &FOLLOW_MASK_1);
+    _parse_lexer_rule_block(p, &FOLLOW_MASK_2);
     p.expect(TK_SEMI, &EMPTY_SYNC);
     return;
 }
@@ -7591,7 +7591,7 @@ fn _parse_lexer_element__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
         return;
     }
     if kind == TK_ACTION {
-        _parse_action_block(p, &follow_prepend(&FOLLOW_MASK_8, follow));
+        _parse_action_block(p, &follow_prepend(&FOLLOW_MASK_10, follow));
         if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_QUESTION) {
             p.expect(TK_QUESTION, &EMPTY_SYNC);
         }
@@ -7618,7 +7618,7 @@ fn _parse_lexer_element(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW
 
 fn _parse_lexer_block__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     p.expect(TK_LPAREN, &SYNC_22);
-    _parse_lexer_alt_list(p, &FOLLOW_MASK_9);
+    _parse_lexer_alt_list(p, &FOLLOW_MASK_11);
     p.expect(TK_RPAREN, &EMPTY_SYNC);
     return;
 }
@@ -7636,7 +7636,7 @@ fn _parse_lexer_block(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
 
 fn _parse_lexer_commands__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     p.expect(TK_RARROW, &SYNC_23);
-    _parse_lexer_command(p, &FOLLOW_MASK_10);
+    _parse_lexer_command(p, &FOLLOW_MASK_12);
     loop {
         if p.recovering { break; }
         if follow_yields(&p.kinds, p.pos, follow, TK_EOF) { break; }
@@ -7648,7 +7648,7 @@ fn _parse_lexer_commands__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPT
                 sg_27: {
                     if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sg_27; }
                     pos += 1;
-                    pos = scan_lexer_command(tokens, pos, follow);
+                    pos = scan_lexer_command(tokens, pos, &FOLLOW_MASK_12);
                     if pos < 0 { break sg_27; }
                     break sg_27_done;
                 }
@@ -7659,7 +7659,7 @@ fn _parse_lexer_commands__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPT
         }
         if rep_scan_pos < 0 { break; }
         p.expect(TK_COMMA, &SYNC_23);
-        _parse_lexer_command(p, follow);
+        _parse_lexer_command(p, &FOLLOW_MASK_12);
     }
     return;
 }
@@ -7688,20 +7688,20 @@ fn _parse_lexer_command__inner_scan_1(tokens: &Array<i32>, pos: i32, follow: &Li
 }
 
 fn _parse_lexer_command__inner_alt_0(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    _parse_lexer_command_name(p, &FOLLOW_MASK_11);
+    _parse_lexer_command_name(p, &FOLLOW_MASK_13);
     p.expect(TK_LPAREN, &SYNC_24);
-    _parse_lexer_command_expr(p, &FOLLOW_MASK_9);
+    _parse_lexer_command_expr(p, &FOLLOW_MASK_11);
     p.expect(TK_RPAREN, &EMPTY_SYNC);
     return;
 }
 
 fn _parse_lexer_command__inner_scan_0(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
-    pos = scan_lexer_command_name(tokens, pos, &FOLLOW_MASK_11);
+    pos = scan_lexer_command_name(tokens, pos, &FOLLOW_MASK_13);
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_LPAREN { return -1; }
     pos += 1;
-    pos = scan_lexer_command_expr(tokens, pos, &FOLLOW_MASK_9);
+    pos = scan_lexer_command_expr(tokens, pos, &FOLLOW_MASK_11);
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_RPAREN { return -1; }
     pos += 1;
@@ -8040,7 +8040,7 @@ fn _parse_predicate_options__inner(p: &mut Parser, follow: &List<List<i32>> = &E
                 sg_29: {
                     if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sg_29; }
                     pos += 1;
-                    pos = scan_predicate_option(tokens, pos, follow);
+                    pos = scan_predicate_option(tokens, pos, &FOLLOW_MASK_5);
                     if pos < 0 { break sg_29; }
                     break sg_29_done;
                 }
@@ -8051,7 +8051,7 @@ fn _parse_predicate_options__inner(p: &mut Parser, follow: &List<List<i32>> = &E
         }
         if rep_scan_pos < 0 { break; }
         p.expect(TK_COMMA, &SYNC_5);
-        _parse_predicate_option(p, follow);
+        _parse_predicate_option(p, &FOLLOW_MASK_5);
     }
     p.expect(TK_GT, &EMPTY_SYNC);
     return;
@@ -8081,7 +8081,7 @@ fn _parse_predicate_option__inner_scan_0(tokens: &Array<i32>, pos: i32, follow: 
 }
 
 fn _parse_predicate_option__inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    _parse_identifier(p, &FOLLOW_MASK_12);
+    _parse_identifier(p, &FOLLOW_MASK_14);
     p.expect(TK_ASSIGN, &SYNC_27);
     let grp_kind = p.peek_kind();
     if grp_kind == TK_ACTION {
@@ -8098,7 +8098,7 @@ fn _parse_predicate_option__inner_alt_1(p: &mut Parser, follow: &List<List<i32>>
 
 fn _parse_predicate_option__inner_scan_1(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
-    pos = scan_identifier(tokens, pos, &FOLLOW_MASK_12);
+    pos = scan_identifier(tokens, pos, &FOLLOW_MASK_14);
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_ASSIGN { return -1; }
     pos += 1;
@@ -8179,7 +8179,7 @@ fn _parse_predicate_option(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOL
 }
 
 fn _parse_labeled_element__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    _parse_identifier(p, &FOLLOW_MASK_13);
+    _parse_identifier(p, &FOLLOW_MASK_15);
     p.expect_set(&SYNC_28);
     let grp_kind = p.peek_kind();
     if _kind_set_13(grp_kind) {
@@ -8481,7 +8481,7 @@ fn _parse_block_set__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOL
                 sg_31: {
                     if pos >= tokens.len() || tokens[pos] != TK_OR { break sg_31; }
                     pos += 1;
-                    pos = scan_set_element(tokens, pos, follow);
+                    pos = scan_set_element(tokens, pos, &FOLLOW_MASK_16);
                     if pos < 0 { break sg_31; }
                     break sg_31_done;
                 }
@@ -8492,7 +8492,7 @@ fn _parse_block_set__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOL
         }
         if rep_scan_pos < 0 { break; }
         p.expect(TK_OR, &SYNC_35);
-        _parse_set_element(p, follow);
+        _parse_set_element(p, &FOLLOW_MASK_16);
     }
     p.expect(TK_RPAREN, &EMPTY_SYNC);
     return;
@@ -8650,7 +8650,7 @@ fn _parse_block__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW)
         }
         p.expect(TK_COLON, &EMPTY_SYNC);
     }
-    _parse_alt_list(p, &FOLLOW_MASK_9);
+    _parse_alt_list(p, &FOLLOW_MASK_11);
     p.expect(TK_RPAREN, &EMPTY_SYNC);
     return;
 }
@@ -8754,7 +8754,7 @@ fn _parse_element_options__inner(p: &mut Parser, follow: &List<List<i32>> = &EMP
                 sg_32: {
                     if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sg_32; }
                     pos += 1;
-                    pos = scan_element_option(tokens, pos, follow);
+                    pos = scan_element_option(tokens, pos, &FOLLOW_MASK_5);
                     if pos < 0 { break sg_32; }
                     break sg_32_done;
                 }
@@ -8765,7 +8765,7 @@ fn _parse_element_options__inner(p: &mut Parser, follow: &List<List<i32>> = &EMP
         }
         if rep_scan_pos < 0 { break; }
         p.expect(TK_COMMA, &SYNC_5);
-        _parse_element_option(p, follow);
+        _parse_element_option(p, &FOLLOW_MASK_5);
     }
     p.expect(TK_GT, &EMPTY_SYNC);
     return;
@@ -8795,7 +8795,7 @@ fn _parse_element_option__inner_scan_0(tokens: &Array<i32>, pos: i32, follow: &L
 }
 
 fn _parse_element_option__inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    _parse_identifier(p, &FOLLOW_MASK_12);
+    _parse_identifier(p, &FOLLOW_MASK_14);
     p.expect(TK_ASSIGN, &SYNC_43);
     let grp_kind = p.peek_kind();
     if _kind_set_1(grp_kind) {
@@ -8812,7 +8812,7 @@ fn _parse_element_option__inner_alt_1(p: &mut Parser, follow: &List<List<i32>> =
 
 fn _parse_element_option__inner_scan_1(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
-    pos = scan_identifier(tokens, pos, &FOLLOW_MASK_12);
+    pos = scan_identifier(tokens, pos, &FOLLOW_MASK_14);
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_ASSIGN { return -1; }
     pos += 1;
@@ -8918,7 +8918,7 @@ fn _parse_identifier(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -
 }
 
 fn _parse_qualified_identifier__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    _parse_identifier(p, &FOLLOW_MASK_3);
+    _parse_identifier(p, &FOLLOW_MASK_4);
     loop {
         if p.recovering { break; }
         if follow_yields(&p.kinds, p.pos, follow, TK_EOF) { break; }
@@ -8930,7 +8930,7 @@ fn _parse_qualified_identifier__inner(p: &mut Parser, follow: &List<List<i32>> =
                 sg_34: {
                     if pos >= tokens.len() || tokens[pos] != TK_DOT { break sg_34; }
                     pos += 1;
-                    pos = scan_identifier(tokens, pos, follow);
+                    pos = scan_identifier(tokens, pos, &FOLLOW_MASK_4);
                     if pos < 0 { break sg_34; }
                     break sg_34_done;
                 }
@@ -8941,7 +8941,7 @@ fn _parse_qualified_identifier__inner(p: &mut Parser, follow: &List<List<i32>> =
         }
         if rep_scan_pos < 0 { break; }
         p.expect(TK_DOT, &SYNC_5);
-        _parse_identifier(p, follow);
+        _parse_identifier(p, &FOLLOW_MASK_4);
     }
     return;
 }
@@ -9396,20 +9396,24 @@ global SYNC_41: List<i32> = [TK_STRING_LITERAL];
 global SYNC_42: List<i32> = [TK_STRING_LITERAL, TK_TOKEN_REF];
 global SYNC_43: List<i32> = [TK_INT, TK_RULE_REF, TK_STRING_LITERAL, TK_TOKEN_REF];
 
-global FOLLOW_MASK_0: List<List<i32>> = [[TK_RULE_REF, TK_TOKEN_REF]];
-global FOLLOW_MASK_1: List<List<i32>> = [[TK_SEMI]];
-global FOLLOW_MASK_2: List<List<i32>> = [[TK_ASSIGN], [TK_ACTION, TK_INT, TK_RULE_REF, TK_STRING_LITERAL, TK_TOKEN_REF]];
-global FOLLOW_MASK_3: List<List<i32>> = [[TK_DOT], [TK_RULE_REF, TK_TOKEN_REF]];
-global FOLLOW_MASK_4: List<List<i32>> = [[TK_ASSIGN], [TK_RULE_REF, TK_TOKEN_REF]];
+global FOLLOW_MASK_0: List<List<i32>> = [[TK_MODE], [TK_RULE_REF, TK_TOKEN_REF]];
+global FOLLOW_MASK_1: List<List<i32>> = [[TK_RULE_REF, TK_TOKEN_REF]];
+global FOLLOW_MASK_2: List<List<i32>> = [[TK_SEMI]];
+global FOLLOW_MASK_3: List<List<i32>> = [[TK_ASSIGN], [TK_ACTION, TK_INT, TK_RULE_REF, TK_STRING_LITERAL, TK_TOKEN_REF]];
+global FOLLOW_MASK_4: List<List<i32>> = [[TK_DOT], [TK_RULE_REF, TK_TOKEN_REF]];
 global FOLLOW_MASK_5: List<List<i32>> = [[TK_COMMA], [TK_RULE_REF, TK_TOKEN_REF]];
-global FOLLOW_MASK_6: List<List<i32>> = [[TK_COLONCOLON]];
-global FOLLOW_MASK_7: List<List<i32>> = [[TK_ACTION]];
-global FOLLOW_MASK_8: List<List<i32>> = [[TK_QUESTION]];
-global FOLLOW_MASK_9: List<List<i32>> = [[TK_RPAREN]];
-global FOLLOW_MASK_10: List<List<i32>> = [[TK_COMMA], [TK_MODE, TK_RULE_REF, TK_TOKEN_REF]];
-global FOLLOW_MASK_11: List<List<i32>> = [[TK_LPAREN], [TK_INT, TK_RULE_REF, TK_TOKEN_REF]];
-global FOLLOW_MASK_12: List<List<i32>> = [[TK_ASSIGN]];
-global FOLLOW_MASK_13: List<List<i32>> = [[TK_ASSIGN, TK_PLUS_ASSIGN]];
+global FOLLOW_MASK_6: List<List<i32>> = [[TK_ASSIGN], [TK_RULE_REF, TK_TOKEN_REF]];
+global FOLLOW_MASK_7: List<List<i32>> = [[TK_COLONCOLON]];
+global FOLLOW_MASK_8: List<List<i32>> = [[TK_ACTION]];
+global FOLLOW_MASK_9: List<List<i32>> = [[TK_CATCH], [TK_BEGIN_ARGUMENT]];
+global FOLLOW_MASK_10: List<List<i32>> = [[TK_QUESTION]];
+global FOLLOW_MASK_11: List<List<i32>> = [[TK_RPAREN]];
+global FOLLOW_MASK_12: List<List<i32>> = [[TK_COMMA], [TK_MODE, TK_RULE_REF, TK_TOKEN_REF]];
+global FOLLOW_MASK_13: List<List<i32>> = [[TK_LPAREN], [TK_INT, TK_RULE_REF, TK_TOKEN_REF]];
+global FOLLOW_MASK_14: List<List<i32>> = [[TK_ASSIGN]];
+global FOLLOW_MASK_15: List<List<i32>> = [[TK_ASSIGN, TK_PLUS_ASSIGN]];
+global FOLLOW_MASK_16: List<List<i32>> = [[TK_OR], [TK_LEXER_CHAR_SET, TK_STRING_LITERAL, TK_TOKEN_REF]];
+global FOLLOW_MASK_17: List<List<i32>> = [[TK_AT], [TK_RULE_REF, TK_TOKEN_REF]];
 
 global LATN_SIM: AtnSim = atn_decode(&b"\x08\x00\x00\x00\xca\x00\x00\x00\x02\x00\x04\x00\x06\x00\x08\x00\x0a\x00\x0c\x00\x0e\x00\x02\x03\x02\x03\x02\x03\x02\x03\x02\x03\x02\x03\x02\x03\x02\x03\x04\x05\x01\x01\x01\x06\x09\x04\x05\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x06\x09\x01\x01\x07\x01\x01\x01\x01\x01\x01\x01\x06\x09\x01\x01\x07\x01\x01\x01\x01\x01\x01\x01\x01\x07\x01\x01\x04\x05\x01\x01\x01\x06\x09\x04\x05\x01\x01\x01\x01\x01\x01\x07\x01\x01\x04\x05\x01\x01\x01\x04\x05\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x04\x05\x01\x01\x01\x04\x05\x04\x05\x01\x01\x01\x04\x05\x04\x05\x01\x01\x01\x04\x05\x04\x05\x01\x01\x01\x04\x05\x01\x01\x04\x05\x01\x01\x01\x04\x05\x01\x01\x01\x06\x09\x04\x05\x01\x01\x01\x01\x01\x01\x07\x01\x01\x04\x05\x01\x01\x01\x01\x01\x06\x09\x04\x05\x01\x01\x01\x01\x01\x01\x07\x01\x01\x01\x01\x04\x05\x01\x01\x01\x06\x09\x04\x05\x01\x01\x01\x01\x01\x01\x07\x01\x01\x01\x00\x00\x00\x01\x00\x00\x00\x01\x00\x00\x00\x01\x00\x00\x00\x01\x00\x00\x00\x01\x00\x00\x00\x01\x00\x00\x00\x01\x00\x00\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x09\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x03\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x06\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x02\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x05\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x04\x00\x01\x00\x01\x00\x08\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x03\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x02\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x05\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x02\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x02\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x05\x00\x01\x00\x01\x00\x01\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x04\x00\x00\x04\x00\x00\x04\x00\x00\x04\x00\x00\x04\x00\x00\x01\x01\x00\x00\x00\x00\x01\x00\x00\x01\x01\x00\x00\x01\x01\x00\x00\x00\x00\x01\x01\x01\x00\x00\x00\x01\x00\x01\x00\x00\x01\x01\x01\x01\x01\x01\x00\x00\x01\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x04\x00\x00\x01\x01\x01\x01\x01\x00\x00\x01\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x01\x01\x01\x01\x01\x01\x01\x01\x00\x00\x04\x00\x00\x01\x00\x00\x04\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x04\x00\x00\x00\x00\x00\x00\x00\x04\x00\x00\x00\x00\x00\x00\x00\x04\x00\x00\x00\x00\x04\x00\x00\x00\x00\x01\x01\x01\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x04\x00\x00\x01\x01\x01\x01\x01\x00\x00\x01\x00\x00\x00\x00\x01\x01\x01\x00\x00\x00\x00\x00\x00\x00\x00\x04\x00\x00\x01\x00\x00\x01\x01\x01\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x04\x00\x00\x01\x01\x01\x01\x01\x00\x00\x01\x00\x11\x00\x49\x00\x5b\x00\x6e\x00\x8c\x00\x91\x00\xa3\x00\xb9\x00\x13\x00\x02\x00\x14\x00\x15\x00\x16\x00\x17\x00\x18\x00\x47\x00\x1a\x00\x1d\x00\x20\x00\x23\x00\x26\x00\x29\x00\x35\x00\x3e\x00\x43\x00\x46\x00\x1b\x00\x01\x00\x19\x00\x1e\x00\x03\x00\x19\x00\x21\x00\x0b\x00\x19\x00\x24\x00\x0d\x00\x19\x00\x27\x00\x0f\x00\x19\x00\x2a\x00\x2b\x00\x2c\x00\x2d\x00\x2e\x00\x2f\x00\x32\x00\x30\x00\x31\x00\x2d\x00\x33\x00\x34\x00\x19\x00\x36\x00\x37\x00\x38\x00\x39\x00\x3b\x00\x3a\x00\x19\x00\x3c\x00\x3c\x00\x3c\x00\x3d\x00\x39\x00\x3f\x00\x40\x00\x41\x00\x42\x00\x19\x00\x44\x00\x45\x00\x45\x00\x45\x00\x45\x00\x45\x00\x45\x00\x19\x00\x16\x00\x48\x00\x12\x00\x4b\x00\x04\x00\x4c\x00\x4d\x00\x4e\x00\x50\x00\x4f\x00\x59\x00\x52\x00\x55\x00\x58\x00\x53\x00\x05\x00\x51\x00\x56\x00\x57\x00\x57\x00\x57\x00\x57\x00\x57\x00\x51\x00\x4e\x00\x5a\x00\x4a\x00\x5d\x00\x06\x00\x5e\x00\x5f\x00\x60\x00\x62\x00\x65\x00\x68\x00\x6b\x00\x5c\x00\x63\x00\x64\x00\x64\x00\x64\x00\x64\x00\x64\x00\x64\x00\x64\x00\x64\x00\x61\x00\x66\x00\x07\x00\x61\x00\x69\x00\x6a\x00\x61\x00\x6c\x00\x00\x00\x61\x00\x70\x00\x08\x00\x71\x00\x72\x00\x73\x00\x75\x00\x74\x00\x6f\x00\x77\x00\x74\x00\x78\x00\x09\x00\x7a\x00\x7c\x00\x7b\x00\x76\x00\x7e\x00\x7b\x00\x7f\x00\x09\x00\x81\x00\x83\x00\x82\x00\x7d\x00\x85\x00\x82\x00\x86\x00\x09\x00\x88\x00\x8a\x00\x89\x00\x84\x00\x09\x00\x89\x00\x8e\x00\x0a\x00\x8f\x00\x90\x00\x90\x00\x90\x00\x8d\x00\x93\x00\x0c\x00\x94\x00\x95\x00\x96\x00\x97\x00\x98\x00\xa1\x00\x9a\x00\x9d\x00\xa0\x00\x9b\x00\x05\x00\x99\x00\x9e\x00\x9f\x00\x9f\x00\x9f\x00\x9f\x00\x9f\x00\x99\x00\x96\x00\xa2\x00\x92\x00\xa5\x00\x0e\x00\xa6\x00\xa7\x00\xa8\x00\xa9\x00\xaa\x00\xab\x00\xac\x00\xb5\x00\xae\x00\xb1\x00\xb4\x00\xaf\x00\x05\x00\xad\x00\xb2\x00\xb3\x00\xad\x00\xaa\x00\xb6\x00\xb7\x00\xb8\x00\xa4\x00\xbb\x00\x10\x00\xbc\x00\xbd\x00\xbe\x00\xbf\x00\xc0\x00\xc9\x00\xc2\x00\xc5\x00\xc8\x00\xc3\x00\x05\x00\xc1\x00\xc6\x00\xc7\x00\xc7\x00\xc7\x00\xc7\x00\xc7\x00\xc1\x00\xbe\x00\xca\x00\xba\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x7c\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x02\x00\x00\x00\x00\x00\x00\x00\x00\x06\x00\x00\x00\x00\x00\x00\x00\x00\x07\x00\x00\x00\x00\x00\x00\x00\x00\x08\x00\x00\x00\x00\x00\x00\x00\x00\x30\x00\x00\x2b\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x2b\x00\x00\x30\x00\x00\x00\x00\x00\x00\x00\x00\x30\x00\x00\x30\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x0c\x00\x00\x0f\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x5d\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x24\x00\x00\x29\x00\x00\x5e\x00\x00\x62\x00\x00\x7d\x00\x00\x00\x00\x00\x00\x00\x00\x7e\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x28\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x03\x00\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x0c\x00\x00\x0f\x00\x00\x29\x00\x00\x5e\x00\x00\x00\x00\x00\x00\x00\x00\x28\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x5d\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x63\x00\x00\x75\x00\x00\x6f\x00\x00\x67\x00\x00\x73\x00\x00\x23\x00\x00\x28\x00\x00\x5d\x00\x00\x00\x00\x00\x00\x00\x00\x04\x00\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x76\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x05\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x05\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x05\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x05\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x31\x00\x00\x62\x00\x00\x42\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x23\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x03\x00\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x0c\x00\x00\x0f\x00\x00\x24\x00\x00\x5e\x00\x00\x00\x00\x00\x00\x00\x00\x23\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x23\x00\x00\x23\x00\x00\x23\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x03\x00\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x23\x00\x00\x23\x00\x00\x23\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x61\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x03\x00\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x0c\x00\x00\x0f\x00\x00\x24\x00\x00\x5e\x00\x00\x00\x00\x00\x00\x00\x00\x61\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x7c\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x1c\x00\x00\x00\x00\x00\x00\x00\x00\x1f\x00\x00\x00\x00\x00\x00\x00\x00\x22\x00\x00\x00\x00\x00\x00\x00\x00\x25\x00\x00\x00\x00\x00\x00\x00\x00\x28\x00\x00\x00\x00\x00\x00\x00\x00\x30\x00\x00\x2b\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x11\x00\x00\x00\x00\x00\x00\x2b\x00\x00\x30\x00\x00\x00\x00\x00\x00\x00\x00\x30\x00\x00\x30\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x0a\x00\x00\x0d\x00\x00\x00\x00\x11\x00\x00\x00\x00\x00\x00\x00\x00\x00\x5d\x00\x00\x00\x00\x00\x00\x00\x11\x00\x00\x00\x00\x00\x00\x22\x00\x00\x27\x00\x00\x5c\x00\x00\x60\x00\x00\x7b\x00\x00\x00\x00\x11\x00\x00\x00\x00\x00\x00\x7e\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x28\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x54\x00\x00\x00\x00\x00\x00\x00\x00\x0a\x00\x00\x0d\x00\x00\x27\x00\x00\x5c\x00\x00\x00\x00\x11\x00\x00\x00\x00\x00\x00\x28\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x5d\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x63\x00\x00\x75\x00\x00\x6f\x00\x00\x67\x00\x00\x73\x00\x00\x23\x00\x00\x28\x00\x00\x5d\x00\x00\x00\x00\x00\x00\x00\x00\x67\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x11\x00\x00\x00\x00\x00\x00\x6d\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x76\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x79\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x80\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x87\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x8b\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x3a\x00\x00\x67\x00\x00\x47\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x23\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x9c\x00\x00\x00\x00\x00\x00\x00\x00\x0a\x00\x00\x0d\x00\x00\x22\x00\x00\x5c\x00\x00\x00\x00\x11\x00\x00\x00\x00\x00\x00\x23\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x23\x00\x00\x23\x00\x00\x23\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\xb0\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x11\x00\x00\x00\x00\x00\x00\x23\x00\x00\x23\x00\x00\x23\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x61\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\xc4\x00\x00\x00\x00\x00\x00\x00\x00\x0a\x00\x00\x0d\x00\x00\x22\x00\x00\x5c\x00\x00\x00\x00\x11\x00\x00\x00\x00\x00\x00\x61\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00");
 
