@@ -92,14 +92,14 @@ impl InvocationIndex {
 /// entry validates and encodes the clause's `options` through the typed
 /// pipeline; a missing one yields an empty canonical blob.
 ///
-/// # Errors
-/// Diagnostics are batched, so one malformed clause does not stop the rest of
-/// the tree. `Err` only when at least one was `Severity::Error`.
+/// Returns what lowered alongside the diagnostics, so one malformed clause
+/// costs its own invocation and no other. A batch build refuses to proceed on
+/// an `Error`; an editor keeps the redirects it has.
 pub fn collect_inline_invocations<'a, I>(
     modules: I,
     descriptors: &IndexMap<String, OptionsDescriptor>,
     manifest_root: &str,
-) -> Result<Vec<Invocation>, Vec<Diagnostic>>
+) -> (Vec<Invocation>, Vec<Diagnostic>)
 where
     I: IntoIterator<Item = (&'a str, &'a Module)>,
 {
@@ -119,8 +119,14 @@ where
             match lower_inline(module_path, use_decl, gen_cfg, descriptors, manifest_root) {
                 Ok(invocation) => {
                     let tuple_key = identity_key(&invocation);
-                    if let Some(existing) = by_tuple.get(&tuple_key) {
-                        let _ = existing;
+                    if let Some(existing) = by_tuple.get_mut(&tuple_key) {
+                        // One invocation, one generator run — but every module
+                        // that declared it imports through it, so each keeps a
+                        // site to key its redirect by.
+                        let site = invocation.decl_site().clone();
+                        if !existing.decl_sites.contains(&site) {
+                            existing.decl_sites.push(site);
+                        }
                         continue;
                     }
                     let from_key = invocation.from.as_str().to_string();
@@ -149,10 +155,7 @@ where
         }
     }
 
-    if diagnostics.iter().any(|d| d.severity == Severity::Error) {
-        return Err(diagnostics);
-    }
-    Ok(by_tuple.into_iter().map(|(_, v)| v).collect())
+    (by_tuple.into_iter().map(|(_, v)| v).collect(), diagnostics)
 }
 
 fn use_decls_of(module: &Module) -> impl Iterator<Item = &UseDecl> {
@@ -355,13 +358,13 @@ fn lower_inline(
     });
 
     Ok(Invocation {
-        decl_site: DeclSite {
+        decl_sites: vec![DeclSite {
             module: module_path.to_string(),
+            source,
             synthetic_id,
-        },
+        }],
         module,
         from,
-        source,
         inputs,
         output_dir,
         options,
@@ -588,6 +591,26 @@ mod tests {
         Span::new(0, 0, 1, 1)
     }
 
+    /// The invocations of a collect that was meant to succeed.
+    fn expect_ok(collected: (Vec<Invocation>, Vec<Diagnostic>)) -> Vec<Invocation> {
+        let (invocations, diagnostics) = collected;
+        assert!(
+            diagnostics.is_empty(),
+            "expected a clean collect, got {diagnostics:#?}",
+        );
+        invocations
+    }
+
+    /// The diagnostics of a collect that was meant to reject a clause.
+    fn expect_errors(collected: (Vec<Invocation>, Vec<Diagnostic>)) -> Vec<Diagnostic> {
+        let (_, diagnostics) = collected;
+        assert!(
+            diagnostics.iter().any(|d| d.severity == Severity::Error),
+            "expected an error diagnostic, got {diagnostics:#?}",
+        );
+        diagnostics
+    }
+
     fn module_with_use(source: &str, attrs: ImportAttributes) -> Module {
         let use_decl = UseDecl {
             id: AstId::fresh(),
@@ -631,19 +654,18 @@ mod tests {
         let mut mods: IndexMap<String, Module> = IndexMap::default();
         mods.insert("src/main.wado".to_string(), module);
 
-        let result = collect_inline_invocations(
+        let result = expect_ok(collect_inline_invocations(
             mods.iter().map(|(k, v)| (k.as_str(), v)),
             &IndexMap::default(),
             "",
-        )
-        .unwrap();
+        ));
         assert_eq!(result.len(), 1);
         // `from` is resolved relative to the declaring file (`src/main.wado`).
         assert_eq!(result[0].from.as_str(), "src/schema.proto");
         // The literal source string is preserved for the loader redirect key.
-        assert_eq!(result[0].source.as_str(), "schema.proto");
+        assert_eq!(result[0].decl_site().source.as_str(), "schema.proto");
         assert_matches!(&result[0].module, GeneratorModule::Spec(s) if s.spec == "ns:gen@1.0.0");
-        assert_eq!(result[0].decl_site.module, "src/main.wado");
+        assert_eq!(result[0].decl_site().module, "src/main.wado");
     }
 
     #[test]
@@ -655,12 +677,11 @@ mod tests {
         let mut mods: IndexMap<String, Module> = IndexMap::default();
         mods.insert("src/main.wado".to_string(), module);
 
-        let result = collect_inline_invocations(
+        let result = expect_ok(collect_inline_invocations(
             mods.iter().map(|(k, v)| (k.as_str(), v)),
             &IndexMap::default(),
             "",
-        )
-        .unwrap();
+        ));
         assert_matches!(&result[0].module, GeneratorModule::Spec(s) if s.spec == "lib:gen");
     }
 
@@ -673,12 +694,11 @@ mod tests {
         let mut mods: IndexMap<String, Module> = IndexMap::default();
         mods.insert("src/main.wado".to_string(), module);
 
-        let errs = collect_inline_invocations(
+        let errs = expect_errors(collect_inline_invocations(
             mods.iter().map(|(k, v)| (k.as_str(), v)),
             &IndexMap::default(),
             "",
-        )
-        .unwrap_err();
+        ));
         assert!(
             errs.iter()
                 .any(|d| d.message.contains("bare name is not allowed")),
@@ -699,12 +719,11 @@ mod tests {
         let mut mods: IndexMap<String, Module> = IndexMap::default();
         mods.insert("src/main.wado".to_string(), module);
 
-        let result = collect_inline_invocations(
+        let result = expect_ok(collect_inline_invocations(
             mods.iter().map(|(k, v)| (k.as_str(), v)),
             &IndexMap::default(),
             "",
-        )
-        .unwrap();
+        ));
         match &result[0].module {
             GeneratorModule::Spec(s) => {
                 assert_eq!(s.spec, "wado-lang:gale");
@@ -726,12 +745,11 @@ mod tests {
         let mut mods: IndexMap<String, Module> = IndexMap::default();
         mods.insert("src/main.wado".to_string(), module);
 
-        let errs = collect_inline_invocations(
+        let errs = expect_errors(collect_inline_invocations(
             mods.iter().map(|(k, v)| (k.as_str(), v)),
             &IndexMap::default(),
             "",
-        )
-        .unwrap_err();
+        ));
         assert!(
             errs.iter().any(|d| d
                 .message
@@ -747,12 +765,11 @@ mod tests {
         let mut mods: IndexMap<String, Module> = IndexMap::default();
         mods.insert("src/main.wado".to_string(), module);
 
-        let errs = collect_inline_invocations(
+        let errs = expect_errors(collect_inline_invocations(
             mods.iter().map(|(k, v)| (k.as_str(), v)),
             &IndexMap::default(),
             "",
-        )
-        .unwrap_err();
+        ));
         assert!(
             errs.iter()
                 .any(|d| d.message.contains("requires a `module` field"))
@@ -770,12 +787,11 @@ mod tests {
         mods.insert("src/a.wado".to_string(), mk());
         mods.insert("src/b.wado".to_string(), mk());
 
-        let result = collect_inline_invocations(
+        let result = expect_ok(collect_inline_invocations(
             mods.iter().map(|(k, v)| (k.as_str(), v)),
             &IndexMap::default(),
             "",
-        )
-        .unwrap();
+        ));
         assert_eq!(result.len(), 1);
     }
 
@@ -793,13 +809,82 @@ mod tests {
         mods.insert("src/a.wado".to_string(), a);
         mods.insert("src/b.wado".to_string(), b);
 
-        let errs = collect_inline_invocations(
+        let errs = expect_errors(collect_inline_invocations(
             mods.iter().map(|(k, v)| (k.as_str(), v)),
             &IndexMap::default(),
             "",
-        )
-        .unwrap_err();
+        ));
         assert!(errs.iter().any(|d| d.message.contains("disagree")));
+    }
+
+    /// A malformed clause costs its own invocation and no other, so an editor
+    /// keeps the redirects it can still resolve.
+    #[test]
+    fn a_malformed_clause_leaves_the_others_standing() {
+        let good = module_with_use(
+            "./ok.proto",
+            attr_with_generator(&[("module", AttrValue::String("ns:gen@1.0.0".to_string()))]),
+        );
+        let bad = module_with_use(
+            "./broken.proto",
+            attr_with_generator(&[("module", AttrValue::String("gen".to_string()))]),
+        );
+        let mut mods: IndexMap<String, Module> = IndexMap::default();
+        mods.insert("src/good.wado".to_string(), good);
+        mods.insert("src/bad.wado".to_string(), bad);
+
+        let (invocations, diagnostics) = collect_inline_invocations(
+            mods.iter().map(|(k, v)| (k.as_str(), v)),
+            &IndexMap::default(),
+            "",
+        );
+
+        assert_eq!(invocations.len(), 1, "the sound clause still lowers");
+        assert_eq!(invocations[0].decl_site().module, "src/good.wado");
+        assert!(
+            diagnostics
+                .iter()
+                .any(|d| d.message.contains("bare name is not allowed")),
+            "{diagnostics:#?}"
+        );
+    }
+
+    /// Clauses that agree collapse to one invocation, but each declaring module
+    /// keeps a site: the redirect index is keyed per module, and two modules may
+    /// spell the same schema differently.
+    #[test]
+    fn identical_clauses_in_two_modules_keep_both_sites() {
+        let attrs =
+            attr_with_generator(&[("module", AttrValue::String("ns:gen@1.0.0".to_string()))]);
+        let mut mods: IndexMap<String, Module> = IndexMap::default();
+        mods.insert(
+            "src/a.wado".to_string(),
+            module_with_use("./schema.proto", attrs.clone()),
+        );
+        mods.insert(
+            "src/sub/b.wado".to_string(),
+            module_with_use("../schema.proto", attrs),
+        );
+
+        let result = expect_ok(collect_inline_invocations(
+            mods.iter().map(|(k, v)| (k.as_str(), v)),
+            &IndexMap::default(),
+            "",
+        ));
+
+        assert_eq!(result.len(), 1, "one schema, one generator run");
+        let sites: Vec<(&str, &str)> = result[0]
+            .decl_sites
+            .iter()
+            .map(|s| (s.module.as_str(), s.source.as_str()))
+            .collect();
+        assert_eq!(
+            sites,
+            [
+                ("src/a.wado", "schema.proto"),
+                ("src/sub/b.wado", "../schema.proto"),
+            ],
+        );
     }
 
     #[test]
@@ -810,12 +895,11 @@ mod tests {
         let mut mods: IndexMap<String, Module> = IndexMap::default();
         mods.insert("src/main.wado".to_string(), module);
 
-        let result = collect_inline_invocations(
+        let result = expect_ok(collect_inline_invocations(
             mods.iter().map(|(k, v)| (k.as_str(), v)),
             &IndexMap::default(),
             "",
-        )
-        .unwrap();
+        ));
         assert_eq!(result.len(), 1);
         match &result[0].module {
             GeneratorModule::LocalPath(p) => assert_eq!(p.as_str(), "gen.wado"),
@@ -834,15 +918,14 @@ mod tests {
         let mut mods: IndexMap<String, Module> = IndexMap::default();
         mods.insert("src/main.wado".to_string(), module);
 
-        let result = collect_inline_invocations(
+        let result = expect_ok(collect_inline_invocations(
             mods.iter().map(|(k, v)| (k.as_str(), v)),
             &IndexMap::default(),
             "",
-        )
-        .unwrap();
+        ));
         assert_eq!(result.len(), 1);
         assert_eq!(result[0].output_dir.as_str(), "src/generated");
-        assert_eq!(result[0].source.as_str(), "schema.proto");
+        assert_eq!(result[0].decl_site().source.as_str(), "schema.proto");
     }
 
     #[test]
@@ -860,12 +943,11 @@ mod tests {
         let mut mods: IndexMap<String, Module> = IndexMap::default();
         mods.insert("tests/deep/nested/calc_test.wado".to_string(), module);
 
-        let errs = collect_inline_invocations(
+        let errs = expect_errors(collect_inline_invocations(
             mods.iter().map(|(k, v)| (k.as_str(), v)),
             &IndexMap::default(),
             "",
-        )
-        .unwrap_err();
+        ));
         assert!(errs.iter().any(|d| {
             d.message.contains("generator.output_dir")
                 && d.message
@@ -882,12 +964,11 @@ mod tests {
         let mut mods: IndexMap<String, Module> = IndexMap::default();
         mods.insert("src/main.wado".to_string(), module);
 
-        let errs = collect_inline_invocations(
+        let errs = expect_errors(collect_inline_invocations(
             mods.iter().map(|(k, v)| (k.as_str(), v)),
             &IndexMap::default(),
             "",
-        )
-        .unwrap_err();
+        ));
         assert!(
             errs.iter()
                 .any(|d| d.message.contains("`from` must be a relative path"))
@@ -904,12 +985,11 @@ mod tests {
         let mut mods: IndexMap<String, Module> = IndexMap::default();
         mods.insert("src/main.wado".to_string(), module);
 
-        let errs = collect_inline_invocations(
+        let errs = expect_errors(collect_inline_invocations(
             mods.iter().map(|(k, v)| (k.as_str(), v)),
             &IndexMap::default(),
             "",
-        )
-        .unwrap_err();
+        ));
         assert!(errs.iter().any(|d| {
             d.message
                 .contains("`generator.output_dir` must be a string")
@@ -1013,12 +1093,11 @@ mod tests {
         let mut mods: IndexMap<String, Module> = IndexMap::default();
         mods.insert("main.wado".to_string(), module);
 
-        let result = collect_inline_invocations(
+        let result = expect_ok(collect_inline_invocations(
             mods.iter().map(|(k, v)| (k.as_str(), v)),
             &IndexMap::default(),
             ".",
-        )
-        .unwrap();
+        ));
         assert_eq!(result.len(), 1);
         assert_eq!(result[0].output_dir.as_str(), "generated");
         assert_eq!(result[0].from.as_str(), "schema.g4");

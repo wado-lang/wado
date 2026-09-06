@@ -22,14 +22,18 @@ pub struct Harvest {
     pub identities: IndexMap<String, String>,
 }
 
-/// Walk the local module graph from `entry_key`, parsing every `./` / `../`
-/// `.wado` import reachable from it and reading each through `load`.
+/// Walk the local module graph from `entry_key` and `entry_ast`, parsing every
+/// `./` / `../` `.wado` import reachable from them.
 ///
-/// `entry_ast` supplies the entry's already-parsed tree (the LSP's editor
-/// buffer, which `load` cannot see); `None` loads it like any other module. A
-/// module that fails to load, or whose parse recovered from an error, is
+/// `load` receives the loader identity of a module, the key
+/// [`crate::loader`] reads it under, so a host that matches paths exactly
+/// serves this walk and the loader from one set of keys. The caller supplies
+/// the entry's tree because the loader does not read the entry through a host
+/// either.
+///
+/// A module that fails to load, or whose parse recovered from an error, is
 /// skipped: a mid-edit source must not trigger codegen side effects.
-pub async fn harvest_module_graph<L>(entry_key: &str, entry_ast: Option<Module>, load: L) -> Harvest
+pub async fn harvest_module_graph<L>(entry_key: &str, entry_ast: Module, load: L) -> Harvest
 where
     L: AsyncFn(&str) -> Option<String>,
 {
@@ -42,8 +46,11 @@ where
     // resolve time — do not normalize it here.
     identities.insert(entry_key.to_string(), entry_key.to_string());
 
-    let mut queue: VecDeque<(String, String, Option<Module>)> =
-        VecDeque::from([(entry_key.to_string(), entry_key.to_string(), entry_ast)]);
+    let mut queue: VecDeque<(String, String, Option<Module>)> = VecDeque::from([(
+        entry_key.to_string(),
+        entry_key.to_string(),
+        Some(entry_ast),
+    )]);
     while let Some((key, loader_id, ast)) = queue.pop_front() {
         if modules.contains_key(&key) {
             continue;
@@ -51,7 +58,7 @@ where
         let ast = if let Some(ast) = ast {
             ast
         } else {
-            let Some(source) = load(&key).await else {
+            let Some(source) = load(&loader_id).await else {
                 continue;
             };
             let Ok(parsed) = crate::parse(&source).into_fail_fast() else {
@@ -152,19 +159,37 @@ mod tests {
         futures::executor::block_on(future)
     }
 
-    #[test]
-    fn walks_past_the_entry_into_imported_modules() {
-        let sources = [
-            ("src/main.wado", "use { a } from \"./lib.wado\";\n"),
-            ("src/lib.wado", "use { b } from \"./deep/util.wado\";\n"),
-            ("src/deep/util.wado", "pub fn b() {}\n"),
-        ];
-        let harvest = block_on(harvest_module_graph("src/main.wado", None, async |path| {
-            sources
+    fn parse(source: &str) -> Module {
+        crate::parse(source).ast
+    }
+
+    /// A host that matches its keys exactly, as the in-memory hosts do.
+    /// `FilesystemCompilerHost` would answer either spelling, and would hide a
+    /// walk that asks under keys the loader never uses.
+    fn exact(
+        sources: &'static [(&'static str, &'static str)],
+    ) -> impl AsyncFn(&str) -> Option<String> {
+        move |path: &str| {
+            let hit = sources
                 .iter()
                 .find(|(p, _)| *p == path)
-                .map(|(_, s)| (*s).to_string())
-        }));
+                .map(|(_, s)| (*s).to_string());
+            async move { hit }
+        }
+    }
+
+    #[test]
+    fn walks_past_the_entry_into_imported_modules() {
+        // Keyed the way the loader reads them: entry-dir-relative identities.
+        let sources: &[(&str, &str)] = &[
+            ("./lib.wado", "use { b } from \"./deep/util.wado\";\n"),
+            ("./deep/util.wado", "pub fn b() {}\n"),
+        ];
+        let harvest = block_on(harvest_module_graph(
+            "src/main.wado",
+            parse("use { a } from \"./lib.wado\";\n"),
+            exact(sources),
+        ));
 
         assert_eq!(
             harvest.modules.keys().collect::<Vec<_>>(),
@@ -180,16 +205,12 @@ mod tests {
 
     #[test]
     fn a_cycle_terminates() {
-        let sources = [
-            ("src/a.wado", "use { x } from \"./b.wado\";\n"),
-            ("src/b.wado", "use { y } from \"./a.wado\";\n"),
-        ];
-        let harvest = block_on(harvest_module_graph("src/a.wado", None, async |path| {
-            sources
-                .iter()
-                .find(|(p, _)| *p == path)
-                .map(|(_, s)| (*s).to_string())
-        }));
+        let sources: &[(&str, &str)] = &[("./b.wado", "use { y } from \"./a.wado\";\n")];
+        let harvest = block_on(harvest_module_graph(
+            "src/a.wado",
+            parse("use { x } from \"./b.wado\";\n"),
+            exact(sources),
+        ));
 
         assert_eq!(harvest.modules.len(), 2);
         // The back-reference keeps the entry's pinned identity.
@@ -272,7 +293,7 @@ mod tests {
     fn an_unloadable_module_is_skipped_not_fatal() {
         let harvest = block_on(harvest_module_graph(
             "main.wado",
-            Some(crate::parse("use { a } from \"./missing.wado\";\n").ast),
+            parse("use { a } from \"./missing.wado\";\n"),
             async |_| None,
         ));
 

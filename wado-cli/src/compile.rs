@@ -845,23 +845,30 @@ async fn collect_inline_invocations_for_entry_with_identities(
     Vec<wado_compiler::Diagnostic>,
 ) {
     let entry_key = entry_file.to_string_lossy().to_string();
-    let harvest = wado_compiler::kiln::harvest_module_graph(&entry_key, None, async |path| {
-        fs::read_to_string(path).ok()
-    })
-    .await;
+    // An unreadable entry, or one whose parse recovered from an error, harvests
+    // nothing; the compile that follows reports it.
+    let Ok(entry_source) = fs::read_to_string(entry_file) else {
+        return Default::default();
+    };
+    let Ok(entry) = wado_compiler::parse(&entry_source).into_fail_fast() else {
+        return Default::default();
+    };
+    // A loader identity is anchored on the entry's directory, so that is what
+    // an import joins onto.
+    let entry_dir = entry_file.parent().unwrap_or(Path::new(".")).to_path_buf();
+    let harvest =
+        wado_compiler::kiln::harvest_module_graph(&entry_key, entry.ast, async |identity| {
+            fs::read_to_string(entry_dir.join(identity)).ok()
+        })
+        .await;
 
     let descriptors = wado_compiler::hashmap::IndexMap::default();
     let manifest_root_str = manifest_root.to_string_lossy();
-    let (invocations, diagnostics) = match wado_compiler::kiln::collect_inline_invocations(
+    let (invocations, diagnostics) = wado_compiler::kiln::collect_inline_invocations(
         harvest.modules.iter().map(|(k, v)| (k.as_str(), v)),
         &descriptors,
         &manifest_root_str,
-    ) {
-        Ok(invs) => (invs, Vec::new()),
-        // Hand the diagnostics back for the caller to surface; a malformed
-        // clause produces no invocations.
-        Err(diags) => (Vec::new(), diags),
-    };
+    );
     (invocations, harvest.identities, diagnostics)
 }
 
@@ -1170,13 +1177,13 @@ mod kiln_dir_module_tests {
 
     fn local_invocation(module_path: &str) -> Invocation {
         Invocation {
-            decl_site: DeclSite {
+            decl_sites: vec![DeclSite {
                 module: "consumer.wado".to_string(),
+                source: InvocationPath::normalize("./grammar.g4"),
                 synthetic_id: "kiln-test".to_string(),
-            },
+            }],
             module: GeneratorModule::LocalPath(InvocationPath::normalize(module_path)),
             from: InvocationPath::normalize("grammar.g4"),
-            source: InvocationPath::normalize("./grammar.g4"),
             inputs: Vec::new(),
             output_dir: InvocationPath::normalize("build"),
             options: wado_compiler::kiln::CanonicalOptions::default(),
@@ -1313,12 +1320,12 @@ mod kiln_dir_module_tests {
             inv.from.as_str()
         );
         assert!(
-            inv.decl_site.module.ends_with("example/eval.wado"),
+            inv.decl_site().module.ends_with("example/eval.wado"),
             "decl_site.module should be eval.wado's full path, got {}",
-            inv.decl_site.module
+            inv.decl_site().module
         );
         assert_eq!(
-            identities.get(&inv.decl_site.module).map(String::as_str),
+            identities.get(&inv.decl_site().module).map(String::as_str),
             Some("./eval.wado"),
             "harvest key must map to the loader identity"
         );
@@ -1359,7 +1366,7 @@ mod kiln_dir_module_tests {
         let entry = root.join("src/main.wado");
         let (invs, identities, _d) = harvest(&entry, &root);
         assert_eq!(invs.len(), 1);
-        let parser_key = &invs[0].decl_site.module;
+        let parser_key = &invs[0].decl_site().module;
         assert_eq!(
             identities.get(parser_key).map(String::as_str),
             Some("./gen/parser.wado"),
@@ -1442,7 +1449,7 @@ mod kiln_dir_module_tests {
         let (invs, identities, _d) = harvest(&entry, &root);
 
         assert_eq!(invs.len(), 1, "the generator clause is harvested once");
-        let foo_key = &invs[0].decl_site.module;
+        let foo_key = &invs[0].decl_site().module;
         assert_eq!(
             identities.get(foo_key).map(String::as_str),
             Some("./a/foo.wado"),

@@ -287,7 +287,7 @@ pub async fn execute_with_mode<H: CompilerHost>(
                 {
                     emit_generated_regenerated_notice(
                         host,
-                        &invocation.decl_site.synthetic_id,
+                        &invocation.decl_site().synthetic_id,
                         normalized.as_str(),
                     );
                 }
@@ -365,6 +365,29 @@ fn to_meta_file_hash(f: &FileHash) -> MetaFileHash {
     MetaFileHash {
         path: f.path.clone(),
         hash: hex_digest(&f.hash),
+    }
+}
+
+/// Point every module that declared `invocation` at the generated entry it
+/// produced, keyed by the literal `from "<source>"` that module wrote — what
+/// the loader looks up, where `invocation.from` is the resolved path that
+/// loaded the input and keyed the cache.
+///
+/// Canonicalizing the path here means the loader needs neither the manifest
+/// root nor the importer's working directory at resolve time. The
+/// un-canonicalized join stands in when the file is not on disk (a stale-cache
+/// path), which keeps the URI well-formed enough for diagnostics.
+fn record_redirects(
+    index: &mut wado_compiler::kiln::InvocationIndex,
+    invocation: &Invocation,
+    manifest_root: &Path,
+    entry_path: &str,
+) {
+    let joined = manifest_root.join(entry_path);
+    let abs = std::fs::canonicalize(&joined).unwrap_or(joined);
+    let uri = path_to_kiln_uri(&abs);
+    for site in &invocation.decl_sites {
+        index.insert(&site.module, site.source.as_str(), &uri);
     }
 }
 
@@ -1064,23 +1087,12 @@ where
                 }
             }
             if let Some(entry_path) = metadata.outputs.iter().find(|o| o.entry).map(|o| &o.path) {
-                let decl_file = invocation.decl_site.module.clone();
-                // Compose a `file:` URI from the canonicalized absolute
-                // path. Canonicalizing here means the loader does not
-                // need to know the manifest root or the importer's
-                // working directory at resolve time. Falling back to the
-                // un-canonicalized join (rare: only when the file does
-                // not yet exist on disk, e.g. a stale-cache path) keeps
-                // the URI well-formed enough for diagnostics.
-                let joined = manifest_root.join(entry_path);
-                let abs = std::fs::canonicalize(&joined).unwrap_or(joined);
-                let uri = path_to_kiln_uri(&abs);
-                // Key by the literal `from "<source>"` string (frame-independent),
-                // which is what the loader looks up — `invocation.from` is the
-                // resolved path used for input loading and the cache key.
-                outcome
-                    .invocations
-                    .insert(&decl_file, invocation.source.as_str(), &uri);
+                record_redirects(
+                    &mut outcome.invocations,
+                    invocation,
+                    manifest_root,
+                    entry_path,
+                );
             }
             if executed
                 && let Err(source) = kiln_metadata::save(
@@ -1190,13 +1202,12 @@ where
         outcome.checked.push(invocation_name.clone());
 
         if let Some(entry_path) = run.outputs.iter().find(|o| o.is_entry).map(|o| &o.path) {
-            let decl_file = invocation.decl_site.module.clone();
-            let joined = manifest_root.join(entry_path);
-            let abs = std::fs::canonicalize(&joined).unwrap_or(joined);
-            let uri = path_to_kiln_uri(&abs);
-            outcome
-                .invocations
-                .insert(&decl_file, invocation.source.as_str(), &uri);
+            record_redirects(
+                &mut outcome.invocations,
+                invocation,
+                manifest_root,
+                entry_path,
+            );
         }
 
         for output in &run.outputs {
@@ -1367,7 +1378,7 @@ fn typed_encode_options<H: CompilerHost>(
             other => other,
         };
         let anchor = OptionsAnchor {
-            file: &inv.decl_site.module,
+            file: &inv.decl_site().module,
             span: inv.options_span,
         };
         match validate_options(&descriptor, supplied, anchor) {
@@ -1410,7 +1421,7 @@ where
 }
 
 fn invocation_id(inv: &Invocation) -> String {
-    inv.decl_site.synthetic_id.clone()
+    inv.decl_site().synthetic_id.clone()
 }
 
 fn emit_metadata_load_warning<H: CompilerHost>(
@@ -1494,13 +1505,13 @@ mod tests {
 
         fn sample_invocation() -> Invocation {
             Invocation {
-                decl_site: DeclSite {
+                decl_sites: vec![DeclSite {
                     module: "src/main.wado".to_string(),
+                    source: InvocationPath::normalize("./schema.proto"),
                     synthetic_id: "kiln-proto".to_string(),
-                },
+                }],
                 module: GeneratorModule::Spec("ns:proto@1.0.0".into()),
                 from: InvocationPath::normalize("schema.proto"),
-                source: InvocationPath::normalize("./schema.proto"),
                 inputs: vec![InvocationPath::normalize("dep.proto")],
                 output_dir: InvocationPath::normalize("build/kiln/proto"),
                 options: wado_compiler::kiln::CanonicalOptions::default(),
@@ -1724,13 +1735,13 @@ mod tests {
 
         fn sample_invocation() -> Invocation {
             Invocation {
-                decl_site: DeclSite {
+                decl_sites: vec![DeclSite {
                     module: "src/main.wado".to_string(),
+                    source: InvocationPath::normalize("./schema.proto"),
                     synthetic_id: "kiln-proto".to_string(),
-                },
+                }],
                 module: GeneratorModule::Spec("ns:proto@1.0.0".into()),
                 from: InvocationPath::normalize("schema.proto"),
-                source: InvocationPath::normalize("./schema.proto"),
                 inputs: vec![InvocationPath::normalize("dep.proto")],
                 output_dir: InvocationPath::normalize("build/kiln/proto"),
                 options: wado_compiler::kiln::CanonicalOptions::default(),

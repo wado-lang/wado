@@ -42,33 +42,27 @@ pub async fn prepare_invocations<H: CompilerHost>(
     };
 
     // The entry's tree comes from the editor buffer; every module it imports is
-    // read through the host, as the loader will read them.
-    let harvest = harvest_module_graph(entry_filename, Some(entry_ast.clone()), async |path| {
-        let bytes = host.load_source(path).await.ok()?;
+    // read through the host, under the identity the loader will read it by.
+    let harvest = harvest_module_graph(entry_filename, entry_ast.clone(), async |identity| {
+        let bytes = host.load_source(identity).await.ok()?;
         String::from_utf8(bytes).ok()
     })
     .await;
 
     let descriptors = wado_compiler::hashmap::IndexMap::default();
     let manifest_root_str = manifest_root.to_string_lossy();
-    let invocations = match collect_inline_invocations(
+    // A malformed clause costs its own redirect and no other. Its diagnostic is
+    // reported here because the semantics pass never re-runs this collector; no
+    // double-emit risk, since this is the sole `collect` call on the LSP path
+    // and each snapshot builds once.
+    let (invocations, diagnostics) = collect_inline_invocations(
         harvest.modules.iter().map(|(k, ast)| (k.as_str(), ast)),
         &descriptors,
         &manifest_root_str,
-    ) {
-        Ok(v) => v,
-        // A malformed inline clause (e.g. a bare, non-`./` path) is reported
-        // here: the semantics pass never re-runs this collector, so emitting
-        // the diagnostics through the host is the only way they reach the
-        // editor. No double-emit risk — this is the sole `collect` call on the
-        // LSP path, and each snapshot builds once.
-        Err(diags) => {
-            for d in diags {
-                host.emit_diagnostic(d);
-            }
-            return override_index.unwrap_or_default();
-        }
-    };
+    );
+    for diagnostic in diagnostics {
+        host.emit_diagnostic(diagnostic);
+    }
 
     options::check_all(&invocations, &manifest_root, host).await;
 
@@ -78,22 +72,24 @@ pub async fn prepare_invocations<H: CompilerHost>(
 
     let mut index = InvocationIndex::new();
     for invocation in &invocations {
-        let invocation_id = &invocation.decl_site.synthetic_id;
-        let decl_file = invocation.decl_site.module.as_str();
-        match resolve_invocation(&manifest_root, invocation, host).await {
-            Ok(entry_uri) => {
-                // Key by the literal `from "<source>"` string: the loader looks
-                // up redirects with the unresolved import path, while
-                // `invocation.from` is resolved relative to the declaring file.
-                index.insert(decl_file, invocation.source.as_str(), &entry_uri);
-            }
-            Err(reason) => {
-                let span = use_decl_span_for(
-                    harvest.modules.get(decl_file),
-                    &invocation.source,
-                    decl_file,
-                );
-                emit_stale(host, invocation_id, &reason, span);
+        let resolved = resolve_invocation(&manifest_root, invocation, host).await;
+        // One invocation, one generated module, but every module that declared
+        // it imports through it and needs its own redirect.
+        for site in &invocation.decl_sites {
+            let decl_file = site.module.as_str();
+            match &resolved {
+                Ok(entry_uri) => {
+                    // Key by the literal `from "<source>"` string this site
+                    // wrote: the loader looks up redirects with the unresolved
+                    // import path, while `invocation.from` is resolved relative
+                    // to the declaring file.
+                    index.insert(decl_file, site.source.as_str(), entry_uri);
+                }
+                Err(reason) => {
+                    let span =
+                        use_decl_span_for(harvest.modules.get(decl_file), &site.source, decl_file);
+                    emit_stale(host, &site.synthetic_id, reason, span);
+                }
             }
         }
     }

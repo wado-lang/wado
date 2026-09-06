@@ -105,6 +105,78 @@ fn sibling_consumers_resolve_their_own_schema() {
     );
 }
 
+/// Two modules declaring the same clause for the same schema collapse into one
+/// invocation — the generator runs once — but each of them still imports
+/// through it, so each needs its own redirect (WEP 2026-04-12 §"Use-site
+/// syntax").
+///
+/// The schema is not valid Wado on its own, so a module left unredirected fails
+/// to compile instead of accidentally parsing its schema as source.
+#[test]
+fn two_modules_sharing_one_schema_both_redirect() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path();
+    fs::write(
+        root.join("wado.toml"),
+        "[package]\nname = \"shared\"\nversion = \"0.1.0\"\n\n[world]\n\"wasi:cli/command\" = \"src/main.wado\"\n",
+    )
+    .unwrap();
+    fs::create_dir_all(root.join("src")).unwrap();
+    fs::write(
+        root.join("src/gen.wado"),
+        r#"use { Request, Response, OutputFile, Error } from "core:kiln";
+
+export fn generate(req: Request) -> Result<Response, Error> {
+    return Result::Ok(Response {
+        files: [OutputFile {
+            path: "out.wado",
+            content: `pub fn hello() -> i32 { return ${req.primary.content.trim()}; }`,
+            is_entry: true,
+        }],
+    });
+}
+"#,
+    )
+    .unwrap();
+    fs::write(root.join("src/grammar.g4"), "1\n").unwrap();
+
+    let consumer = |name: &str| {
+        format!(
+            "use {{ hello }} from \"./grammar.g4\"\n    with {{ generator: {{ module: \"./gen.wado\" }} }};\n\npub fn {name}() -> i32 {{ return hello(); }}\n"
+        )
+    };
+    fs::write(root.join("src/first.wado"), consumer("v1")).unwrap();
+    fs::write(root.join("src/second.wado"), consumer("v2")).unwrap();
+    fs::write(
+        root.join("src/main.wado"),
+        r#"use { println, Stdout } from "core:cli";
+use { v1 } from "./first.wado";
+use { v2 } from "./second.wado";
+
+export fn run() with Stdout {
+    println(`${v1() + v2()}`);
+}
+"#,
+    )
+    .unwrap();
+
+    wado_in(root)
+        .args(["run", "src/main.wado"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("2"));
+
+    let out_files: Vec<_> = walk(&root.join("build/kiln"))
+        .into_iter()
+        .filter(|p| p.file_name().is_some_and(|n| n == "out.wado"))
+        .collect();
+    assert_eq!(
+        out_files.len(),
+        1,
+        "one schema, one clause: the generator runs once, got {out_files:?}"
+    );
+}
+
 #[test]
 fn explicit_output_dir_is_relative_to_declaring_file() {
     let tmp = tempfile::tempdir().unwrap();

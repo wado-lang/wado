@@ -83,11 +83,17 @@ impl fmt::Display for InvocationPath {
 
 /// Where a generator invocation was declared in the source tree.
 ///
-/// Used for diagnostics; never part of the cache key.
+/// Never part of the cache key. `(module, source)` is the redirect key the
+/// loader looks an import up by.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DeclSite {
     /// Relative path of the Wado file containing the inline `with` clause.
     pub module: String,
+    /// The literal `from "<source>"` path as this clause wrote it, only
+    /// normalized. The loader matches `(decl_file, import_source)` without
+    /// resolving, so it must stay frame-independent — two modules may reach one
+    /// schema by different spellings.
+    pub source: InvocationPath,
     /// Synthesized id derived from the canonical invocation tuple.
     pub synthetic_id: String,
 }
@@ -176,18 +182,15 @@ impl GeneratorSpec {
 /// and `options_canonical` are byte-equal.
 #[derive(Debug, Clone)]
 pub struct Invocation {
-    pub decl_site: DeclSite,
+    /// Every clause that declared this invocation: agreeing clauses collapse so
+    /// the generator runs once, and each keeps the site its own redirect is
+    /// keyed by. Non-empty; the first is what diagnostics name.
+    pub decl_sites: Vec<DeclSite>,
     pub module: GeneratorModule,
     /// Primary schema file, resolved relative to the declaring `.wado` file
     /// (project-root-relative). Drives input loading, the cache key, and the
     /// default `output_dir`.
     pub from: InvocationPath,
-    /// The literal `from "<source>"` path as written, only normalized (not
-    /// resolved against the declaring file). Used solely as the loader-redirect
-    /// key: the loader matches `(decl_file, import_source)` against it without
-    /// resolving, so it must stay frame-independent. Excluded from
-    /// [`Invocation::identity_tuple`].
-    pub source: InvocationPath,
     /// Supplementary schema files, resolved relative to the declaring `.wado`
     /// file, preserving declaration order.
     pub inputs: Vec<InvocationPath>,
@@ -216,6 +219,18 @@ pub struct Invocation {
 }
 
 impl Invocation {
+    /// The site diagnostics name. Every site shares the synthesized id, which
+    /// is derived from the identity tuple.
+    ///
+    /// # Panics
+    /// If `decl_sites` is empty, which construction forbids.
+    #[must_use]
+    pub fn decl_site(&self) -> &DeclSite {
+        self.decl_sites
+            .first()
+            .expect("an invocation has at least one declaring site")
+    }
+
     /// Canonical byte encoding of [`Self::options`], for the invocation cache
     /// key and dedup identity. Deterministic and injective; not an interchange
     /// format (nothing decodes it — see
@@ -227,8 +242,8 @@ impl Invocation {
 
     /// The tuple used for dedup and cycle detection.
     ///
-    /// Does not include `decl_site`: two clauses in the same file with
-    /// identical invocation tuples merge into one invocation.
+    /// Does not include `decl_sites`: clauses with identical invocation tuples
+    /// merge into one invocation, wherever they were written.
     #[must_use]
     pub fn identity_tuple(&self) -> (&GeneratorModule, &str, &[InvocationPath], &str, Vec<u8>) {
         (
@@ -295,6 +310,7 @@ mod tests {
     fn decl_site_display_inline() {
         let site = DeclSite {
             module: "main.wado".to_string(),
+            source: InvocationPath::normalize("./s.proto"),
             synthetic_id: "kiln-deadbeef".to_string(),
         };
         assert_eq!(format!("{site}"), "main.wado (inline: kiln-deadbeef)");
@@ -303,13 +319,13 @@ mod tests {
     #[test]
     fn identity_tuple_ignores_decl_site() {
         let inv_a = Invocation {
-            decl_site: DeclSite {
+            decl_sites: vec![DeclSite {
                 module: "a.wado".to_string(),
+                source: InvocationPath::normalize("./s.proto"),
                 synthetic_id: "kiln-aaaa".to_string(),
-            },
+            }],
             module: GeneratorModule::Spec("ns:x@1.0.0".into()),
             from: InvocationPath::normalize("s.proto"),
-            source: InvocationPath::normalize("./s.proto"),
             inputs: vec![],
             output_dir: InvocationPath::normalize("build/kiln/a"),
             options: crate::kiln::options_check::CanonicalOptions::default(),
@@ -317,10 +333,11 @@ mod tests {
             options_span: crate::token::Span::default(),
         };
         let inv_b = Invocation {
-            decl_site: DeclSite {
+            decl_sites: vec![DeclSite {
                 module: "b.wado".to_string(),
+                source: InvocationPath::normalize("./s.proto"),
                 synthetic_id: "kiln-bbbb".to_string(),
-            },
+            }],
             ..inv_a.clone()
         };
         assert_eq!(inv_a.identity_tuple(), inv_b.identity_tuple());
