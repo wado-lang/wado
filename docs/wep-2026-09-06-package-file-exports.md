@@ -196,10 +196,10 @@ without the exception.
 5. Registry distribution: assets travel in the `wado:package` section and are
    extracted into the shared cache on fetch, so `CompilerHost::load_source`
    serves them like any other file.
-6. Binary assets through Kiln: `input-file.content` becomes a variant of text
-   and bytes ([Kiln](./wep-2026-04-12-kiln.md) §"Open questions"), so an image
-   can reach a generator. Done when the `core:kiln` world carries it and its
-   version bump invalidates the caches that need it.
+6. Binary assets through Kiln: `input-file.content` becomes `list<u8>`
+   ([Kiln](./wep-2026-04-12-kiln.md) §"Open questions"), so an image can reach a
+   generator. Done when the `core:kiln` world carries bytes and its version bump
+   invalidates the caches.
 7. The unreachable-`pub` lint: a `pub` item that no exported file reaches,
    reported in the unused family. Done when a package with a `pub` item outside
    its `lib` reach and outside `exports` reports it, and adding the file to
