@@ -21,10 +21,10 @@ not exist:
 - `wado publish` uploads a component and nothing else, so for a registry
   dependency there is no file on disk to reach even if the syntax existed.
 
-Two things are missing, and they are one thing: a way for a package to say which
-of its files are part of what it offers, and a way for a consumer to name one of
-them. A file reference looks like a filesystem path, but a package's directory
-layout must not become its API by accident.
+A package cannot say which of its files it offers, and a consumer cannot name
+one. Both are needed, and they have to arrive together: a file reference looks
+like a filesystem path, and a package's directory layout must not become its API
+by accident.
 
 ## Decision
 
@@ -44,14 +44,14 @@ exports = [
 ]
 ```
 
-An asset and a `.wado` submodule sit in one list because they differ only in
-what the consumer does with the file — import it as a module, feed it to a
-generator, or inline it — never in what the package is promising. Visibility is
-the package owner's, exactly as with `pub` and `export` on an item.
+One list covers assets and `.wado` submodules alike. What differs between them
+is what a consumer does with the file: import it as a module, feed it to a
+generator, inline it. What the package promises is the same either way, and
+deciding it is the owner's, as it is for `pub` and `export` on an item.
 
-Refusal names the package, not the path: reaching for an unlisted file is
-"package `X` exports no file `Y`", the same answer whether or not the file is
-there. A directory layout is not a directory listing.
+A refusal names the package, not the path. Reaching for an unlisted file answers
+"package `X` exports no file `Y`" whether or not the file is there, so the list
+never doubles as a directory listing.
 
 ### Naming an exported file
 
@@ -60,7 +60,7 @@ there. A directory layout is not a directory listing.
 ```
 
 The path is relative to the package root (the directory holding its
-`wado.toml`), forward-slash separated, and **carries its extension**:
+`wado.toml`), forward-slash separated, and carries its extension:
 
 ```wado
 use { highlight } from "wado-lang:gale-highlight-wado/src/highlight.wado";
@@ -73,9 +73,9 @@ let template = #include_str("wado-lang:my-pkg/templates/index.html");
 ```
 
 - A specifier with no path segment keeps its current meaning: the package's
-  `[package].lib` entry. The mandatory extension is what separates the two, so
-  it is load-bearing rather than stylistic — and it keeps a file reference from
-  ever reading like a WIT interface segment.
+  `[package].lib` entry. The extension separates the two forms, so it is
+  required rather than conventional. It also keeps a file reference from reading
+  like a WIT interface segment.
 - Every specifier form that can carry a package coordinate carries a path the
   same way: an open coordinate (`ns:name[@ver]`) and a `lib:` nickname alike.
 - `..` and absolute paths are rejected, not resolved. The path is a key into the
@@ -86,17 +86,17 @@ let template = #include_str("wado-lang:my-pkg/templates/index.html");
 
 This revises §"Specifier forms" of
 [Package and Module Specifier Syntax](./wep-2026-06-17-package-module-syntax.md):
-a specifier names a package, optionally followed by one exported file. The
-prohibition it states is on _interface_ segments, which stands — an interface is
+a specifier names a package, optionally followed by one exported file. Its
+prohibition is on interface segments, and that one stands. An interface is
 selected in the `use { … }` list, and a file is not an interface.
 
 ### The allowlist is API
 
 - Adding an entry is additive. Removing or renaming one breaks consumers, like
   removing an `export fn`.
-- `wado publish` ships every listed file, and refuses to publish a list naming a
-  file the package does not carry — the failure belongs to the publisher, not to
-  a consumer six months later.
+- `wado publish` ships every listed file, and refuses a list naming a file the
+  package does not carry. The publisher sees that failure, instead of a consumer
+  months later.
 - A source dependency (path / git) serves the files from its checkout. A
   registry dependency carries them in the `wado:package` section
   ([Provider Metadata](./wep-2026-07-26-provider-metadata.md)), which grows an
@@ -108,30 +108,30 @@ selected in the `use { … }` list, and a file is not an interface.
 
 - `from` and `inputs` accept an exported-file reference wherever they accept a
   `./` path today.
-- The invocation's identity — cache key, dedup tuple, and the `sources` of the
-  `#![generated]` header — records the logical reference (`ns:name@ver/path`),
-  never where the file happens to sit on this machine. A dependency's checkout
-  lives under `$WADO_ROOT` at a version-dependent path; hashing that path would
-  make the invocation cache machine-dependent and break the committed-cache
-  workflow ([Kiln](./wep-2026-04-12-kiln.md) §"Caching") the moment an input
-  came from a dependency.
+- The invocation's identity records the logical reference
+  (`ns:name@ver/path`), never where the file sits on this machine. That covers
+  the cache key, the dedup tuple, and the `sources` of the `#![generated]`
+  header. A dependency's checkout lives under `$WADO_ROOT` at a
+  version-dependent path, so hashing that path would make the cache
+  machine-dependent and break the committed-cache workflow
+  ([Kiln](./wep-2026-04-12-kiln.md) §"Caching").
 - Generated files land in the consuming project's output tree, exactly as they
   do for a local schema. A dependency's checkout is shared between projects and
   is never written to.
 - Kiln's design principles hold unchanged. Every input is still enumerated
-  literally at the use site (principle 2) — a package coordinate in front of the
-  path does not make the set dynamic — and the generator still receives its
-  inputs by value under the same sandbox (principle 1).
-- The clause stays the consumer's: naming a dependency's `.g4` means running the
+  literally at the use site (principle 2), since a package coordinate in front
+  of the path does not make the set dynamic, and the generator still receives
+  its inputs by value under the same sandbox (principle 1).
+- The clause stays the consumer's. Naming a dependency's `.g4` means running the
   generator yourself, with your options. A package that wants to own its own
-  generation runs Kiln on its own files and exports the resulting module — which
-  requires the harvest to cross the dependency edge (see Known gaps).
+  generation instead runs Kiln on its own files and exports the resulting
+  module, which needs the harvest to cross the dependency edge (see Known gaps).
 
 ### Deliberate omissions
 
-Globs at a use site, and directory listing: both are already refused for local
-Kiln inputs, and a package boundary is not the place to relax them. Writing into
-a dependency. Reaching a file of a dependency's dependency.
+Globs at a use site and directory listing, both already refused for local Kiln
+inputs: a package boundary is not the place to relax them. Writing into a
+dependency. Reaching a file of a dependency's dependency.
 
 ## Roadmap
 

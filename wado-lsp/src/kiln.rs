@@ -41,9 +41,8 @@ pub async fn prepare_invocations<H: CompilerHost>(
         return override_index.unwrap_or_default();
     };
 
-    // Kiln's unit is the module, so the clauses of every module the entry
-    // imports count too. The entry's tree comes from the editor buffer; the
-    // rest are read through the host, as the loader will read them.
+    // The entry's tree comes from the editor buffer; every module it imports is
+    // read through the host, as the loader will read them.
     let harvest = harvest_module_graph(entry_filename, Some(entry_ast.clone()), async |path| {
         let bytes = host.load_source(path).await.ok()?;
         String::from_utf8(bytes).ok()

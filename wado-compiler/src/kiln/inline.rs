@@ -395,7 +395,7 @@ fn resolve_or_reject(
     use_decl: &UseDecl,
     errors: &mut Vec<Diagnostic>,
 ) -> InvocationPath {
-    if raw.starts_with("./") || raw.starts_with("../") {
+    if crate::path::is_cwd_relative(raw) {
         return resolve_decl_relative(module_path, raw, manifest_root);
     }
     errors.push(Diagnostic {
@@ -457,7 +457,7 @@ fn lower_module_specifier(
     // resulting `LocalPath` is reliably reachable from the consuming
     // project — the provider resolves it as `manifest_root.join(path)`
     // when reading the file on disk and computing a stable cache key.
-    if spec.starts_with("./") || spec.starts_with("../") {
+    if crate::path::is_cwd_relative(spec) {
         return Some(GeneratorModule::LocalPath(resolve_decl_relative(
             module_path,
             spec,

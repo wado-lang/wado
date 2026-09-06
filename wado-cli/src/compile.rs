@@ -832,20 +832,10 @@ pub fn empty_manifest() -> wado_manifest::Manifest {
     }
 }
 
-/// Harvest inline Kiln invocations from `entry_file` *and its transitive local
-/// `.wado` imports*, plus the map needed to fix up the redirect index.
-///
-/// Kiln generation runs as a pre-pass before the loader, so a
-/// `with { generator: ... }` clause in an imported module (not just the entry)
-/// must be discovered here; otherwise that module's grammar `use` falls through
-/// to the Wado lexer.
-///
-/// Returns the invocations plus a `harvest_key → loader_identity` map: the
-/// harvest keys `decl_site.module` by full path, but the loader presents a
-/// base-relative identity at resolve time, so the caller rewrites the index's
-/// keys through this map (see `remap_index_decl_files`). The loader identity is
-/// canonical (see [`wado_compiler::name::canonical_local_path`]), so the map is
-/// single-valued.
+/// Harvest inline Kiln invocations from `entry_file` and its transitive local
+/// `.wado` imports, plus the `harvest_key → loader_identity` map the caller
+/// rewrites the redirect index through
+/// ([`wado_compiler::kiln::remap_decl_files`]).
 async fn collect_inline_invocations_for_entry_with_identities(
     entry_file: &Path,
     manifest_root: &Path,
@@ -854,9 +844,6 @@ async fn collect_inline_invocations_for_entry_with_identities(
     wado_compiler::hashmap::IndexMap<String, String>,
     Vec<wado_compiler::Diagnostic>,
 ) {
-    // The entry's harvest key must stay byte-identical to its
-    // `EntryPoint.filename` (interned verbatim by the loader), so the redirect
-    // it keys is found at resolve time — do not normalize it here.
     let entry_key = entry_file.to_string_lossy().to_string();
     let harvest = wado_compiler::kiln::harvest_module_graph(&entry_key, None, async |path| {
         fs::read_to_string(path).ok()

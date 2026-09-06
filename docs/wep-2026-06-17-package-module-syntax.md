@@ -58,12 +58,14 @@ exports:
 
 With no path segment it resolves to the package's `[package].lib` entry. With
 one, it names a file the package listed in `[package].exports` — an asset or a
-submodule — and the mandatory extension is what tells the two forms apart. The
-allowlist is the API: an unlisted file does not exist to a consumer, whatever
-the package directory holds
-([Package File Exports](./wep-2026-09-06-package-file-exports.md)). A package's
-_unlisted_ file layout stays a loader detail, as the bundled stdlib's
-`core:prelude/array.wado`-style splits are.
+submodule. The extension is mandatory, because it is what tells the two forms
+apart.
+
+The allowlist is the API. An unlisted file does not exist to a consumer,
+whatever the package directory holds
+([Package File Exports](./wep-2026-09-06-package-file-exports.md)), so an
+unlisted layout stays a loader detail — the bundled stdlib's
+`core:prelude/array.wado`-style splits, for instance.
 
 ### `lib:` is the sole home for indirection
 

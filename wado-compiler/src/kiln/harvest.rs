@@ -1,10 +1,5 @@
-//! The module-graph walk that finds every inline `with { generator }` clause.
-//!
-//! Kiln's unit is the module, not the entry: a clause in an imported module
-//! produces a generated module for that module's own imports (WEP 2026-04-12
-//! §"The loader redirect"). One walk serves every host — the CLI reads through
-//! the filesystem, the LSP through `CompilerHost` — so the two cannot disagree
-//! about which clauses exist.
+//! The module-graph walk behind every inline `with { generator }` clause.
+//! Kiln's unit is the module, not the entry, and one walk serves every host.
 
 use std::collections::VecDeque;
 
@@ -16,11 +11,11 @@ use crate::name::{
     canonical_local_path, module_parent_dir, normalize_module_path, resolve_local_identity,
     resolve_module_path,
 };
+use crate::path::is_cwd_relative;
 
-/// Every module the walk reached, keyed by the path it was reached through,
-/// plus the loader identity each key resolves to.
+/// Every module the walk reached, keyed by the path it was reached through.
 pub struct Harvest {
-    /// Module path (as the walk reached it) → parsed AST, entry first.
+    /// Module path → parsed AST, entry first.
     pub modules: IndexMap<String, Module>,
     /// Module path → the identity the loader resolves that module under, which
     /// is what an [`InvocationIndex`] key must be ([`remap_decl_files`]).
@@ -28,13 +23,12 @@ pub struct Harvest {
 }
 
 /// Walk the local module graph from `entry_key`, parsing every `./` / `../`
-/// `.wado` import reachable from it.
+/// `.wado` import reachable from it and reading each through `load`.
 ///
 /// `entry_ast` supplies the entry's already-parsed tree (the LSP's editor
-/// buffer, which `load` cannot see); `None` loads it like any other module.
-/// `load` reads a module by the path this walk resolved for it. A module that
-/// fails to load, or whose parse recovered from an error, is skipped: a
-/// mid-edit source must not trigger codegen side effects.
+/// buffer, which `load` cannot see); `None` loads it like any other module. A
+/// module that fails to load, or whose parse recovered from an error, is
+/// skipped: a mid-edit source must not trigger codegen side effects.
 pub async fn harvest_module_graph<L>(entry_key: &str, entry_ast: Option<Module>, load: L) -> Harvest
 where
     L: AsyncFn(&str) -> Option<String>,
@@ -48,14 +42,9 @@ where
     // resolve time — do not normalize it here.
     identities.insert(entry_key.to_string(), entry_key.to_string());
 
-    // (key, loader identity, pre-parsed AST, is_entry)
-    let mut queue: VecDeque<(String, String, Option<Module>, bool)> = VecDeque::from([(
-        entry_key.to_string(),
-        entry_key.to_string(),
-        entry_ast,
-        true,
-    )]);
-    while let Some((key, loader_id, ast, is_entry)) = queue.pop_front() {
+    let mut queue: VecDeque<(String, String, Option<Module>)> =
+        VecDeque::from([(entry_key.to_string(), entry_key.to_string(), entry_ast)]);
+    while let Some((key, loader_id, ast)) = queue.pop_front() {
         if modules.contains_key(&key) {
             continue;
         }
@@ -73,8 +62,10 @@ where
 
         for import in local_wado_imports(&ast) {
             let child_key = resolve_module_path(&key, import);
-            // Must match the loader's identity derivation (entry vs deeper).
-            let child_loader_id = if is_entry {
+            // Must match the loader's identity derivation, which anchors an
+            // entry import on the entry directory and a deeper one on the
+            // importing module.
+            let child_loader_id = if key == entry_key {
                 canonical_local_path(&entry_dir, &normalize_module_path(import))
             } else {
                 resolve_local_identity(&entry_dir, &loader_id, import)
@@ -83,9 +74,7 @@ where
             if child_key != entry_key {
                 identities.insert(child_key.clone(), child_loader_id.clone());
             }
-            if !modules.contains_key(&child_key) {
-                queue.push_back((child_key, child_loader_id, None, false));
-            }
+            queue.push_back((child_key, child_loader_id, None));
         }
         modules.insert(key, ast);
     }
@@ -96,30 +85,26 @@ where
     }
 }
 
-/// The `./` / `../` `.wado` imports of `module`. Non-`.wado` sources are the
-/// Kiln schemas themselves, and `core:` / `wasi:` / dependency specifiers name
-/// no module in this graph.
+/// The `./` / `../` `.wado` imports of `module`. A non-`.wado` source is a Kiln
+/// schema, and a `core:` / `wasi:` / dependency specifier names no module here.
 fn local_wado_imports(module: &Module) -> impl Iterator<Item = &str> {
     module.items.iter().filter_map(|item| {
         let Item::Use(use_decl) = item else {
             return None;
         };
         let src = use_decl.source.as_str();
-        ((src.starts_with("./") || src.starts_with("../"))
-            && src.to_ascii_lowercase().ends_with(".wado"))
-        .then_some(src)
+        (is_cwd_relative(src) && src.to_ascii_lowercase().ends_with(".wado")).then_some(src)
     })
 }
 
-/// Rewrite `index`'s `decl_file` keys from harvest keys to loader identities
-/// (keys absent from `identities` pass through), so the loader's lookup —
-/// which asks under the identity it resolved the declaring module by — hits.
+/// Rewrite `index`'s `decl_file` keys from harvest keys to loader identities,
+/// which is what the loader asks under. Keys absent from `identities` pass
+/// through.
 ///
-/// Returns a diagnostic for each *conflict* — two keys resolving to the same
-/// `(loader_identity, from)` but different targets — instead of silently
-/// dropping a redirect (last-write-wins); matching targets are a harmless
-/// duplicate. Unreachable with canonical identities; guards against a future
-/// identity-scheme regression.
+/// Two keys landing on one `(identity, from)` with different targets is
+/// reported rather than resolved last-write-wins; an identical target is a
+/// harmless duplicate. Canonical identities make the conflict unreachable, so
+/// this guards against a future identity-scheme regression.
 #[must_use]
 pub fn remap_decl_files(
     index: &mut InvocationIndex,

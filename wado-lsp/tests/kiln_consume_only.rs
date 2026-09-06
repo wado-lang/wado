@@ -47,19 +47,13 @@ const CLAUSE: &str = "use { parse } from \"./grammars/calc.g4\" with {\n    \
      },\n\
      };\n";
 
-fn entry_source() -> String {
-    format!("{CLAUSE}fn run() {{\n    let _x = parse();\n}}\n")
-}
-
 /// The entry when the clause lives one module deeper: it imports the
 /// re-export instead of declaring the clause itself.
-fn importer_entry_source() -> String {
-    "use { parse } from \"./lib.wado\";\nfn run() {\n    let _x = parse();\n}\n".to_string()
-}
+const IMPORTER_ENTRY: &str =
+    "use { parse } from \"./lib.wado\";\nfn run() {\n    let _x = parse();\n}\n";
 
-/// The imported module that declares the clause and re-exports its symbol.
-fn clause_module_source() -> String {
-    format!("pub {CLAUSE}")
+fn entry_source() -> String {
+    format!("{CLAUSE}fn run() {{\n    let _x = parse();\n}}\n")
 }
 
 fn hex_sha256(bytes: &[u8]) -> String {
@@ -88,8 +82,7 @@ struct FixtureSpec<'a> {
     /// `generator_identity` derives for the inline `module:`.
     metadata_generator: Option<&'a str>,
     /// Put the clause in `lib.wado`, which the entry imports, instead of
-    /// in the entry itself. Kiln's unit is the module, not the entry:
-    /// a clause anywhere in the graph must redirect.
+    /// in the entry itself.
     clause_in_imported_module: bool,
 }
 
@@ -152,8 +145,8 @@ fn build_fixture(spec: FixtureSpec<'_>) -> Fixture {
     .unwrap();
 
     let entry_text = if spec.clause_in_imported_module {
-        std::fs::write(root.join("lib.wado"), clause_module_source()).unwrap();
-        importer_entry_source()
+        std::fs::write(root.join("lib.wado"), format!("pub {CLAUSE}")).unwrap();
+        IMPORTER_ENTRY.to_string()
     } else {
         entry_source()
     };
