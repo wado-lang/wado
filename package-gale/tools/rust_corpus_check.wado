@@ -100,9 +100,11 @@ fn collect_paths(root: &Descriptor, argv: &List<String>) -> List<String> with St
     for let mut i = 0; i < argv.len(); i += 1 {
         if argv[i] == "--paths-from" && i + 1 < argv.len() {
             i += 1;
-            let list = match read_file(root, &argv[i]) {
-                Some(text) => text,
-                None => "",
+            // An unreadable list yields no paths, which would otherwise read as
+            // a clean run. Keep it as the one path that reports itself.
+            let Some(list) = read_file(root, &argv[i]) else {
+                paths.push(argv[i]);
+                continue;
             };
             for let line of list.lines() {
                 if !line.is_empty() {
@@ -163,7 +165,7 @@ export fn run() with (Stdout, Stderr, Environment, Preopens) {
             }
         } else {
             bad += 1;
-            println(`ng\t${*path}\t0\t0\tunreadable`);
+            println(`ng\t${*path}\t0\t0\tunreadable\t`);
         }
     }
     eprintln(`summary: ${paths.len()} files, ${bad} with diagnostics`);

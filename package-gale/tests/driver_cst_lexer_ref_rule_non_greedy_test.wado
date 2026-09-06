@@ -1,0 +1,19 @@
+//! A rule whose non-greedy repeat sits behind a reference to another token
+//! rule. `A : ('a' | 'ab')+ B ;` is ATN-class for its overlapping arms, and
+//! `B : 'x'+? ;` decides that `A` ends at its first accept.
+
+use g from "./grammars/lexer_ref_rule_non_greedy.g4"
+    with {
+        generator: { module: "../src/generator.wado", output_dir: "./generated/cst_lexer_ref_rule_non_greedy" },
+    };
+
+fn assert_tree(input: &String, expected: &String) {
+    let result = g::parse(input);
+    assert result.ok(), `unexpected diagnostics for ${*input}: ${result.diagnostics:?}`;
+    let actual = g::to_string_tree(&result);
+    assert actual == *expected, `\ninput:    ${*input}\nexpected: ${*expected}\nactual:   ${actual}`;
+}
+
+test "the referenced rule's non-greedy repeat ends the token at its first accept" {
+    assert_tree(&"axx", &"(start ax x)");
+}

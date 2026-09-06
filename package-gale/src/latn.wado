@@ -93,17 +93,24 @@ fn rule_needs_latn(grammar: &Grammar, rule: &LexerRule) -> bool {
 ///   different lengths (`'"' (~["] | '\\' ['"])* '"'`). No static policy
 ///   decides it; see AGENTS.md, "Failed approaches".
 pub fn lexer_rule_is_atn_class(rule: &LexerRule, all_rules: &List<LexerRule>, ci: bool) -> bool {
-    return scan_recursive_ng(&rule.name, &rule.body, all_rules) || scan_undecidable_arms(&rule.body, all_rules, ci);
+    let mut visiting: List<String> = [rule.name];
+    return scan_recursive_ng(&rule.name, &rule.body, all_rules)
+        || scan_undecidable_arms(&rule.body, all_rules, ci, &mut visiting);
 }
 
 /// A greedy repeat directly in `alts` whose body is an alternation the static
 /// emit cannot choose between: the arms overlap at a position and are not all
 /// the same length there. Fixed-length arms make first-match ANTLR4's answer,
 /// and arms that cannot both match make the choice no choice at all.
-fn scan_undecidable_arms(alts: &List<LexerAlternative>, all_rules: &List<LexerRule>, ci: bool) -> bool {
+fn scan_undecidable_arms(
+    alts: &List<LexerAlternative>,
+    all_rules: &List<LexerRule>,
+    ci: bool,
+    visiting: &mut List<String>,
+) -> bool {
     for let alt of alts {
         for let elem of &alt.elements {
-            if scan_undecidable_arms_elem(elem, all_rules, ci) {
+            if scan_undecidable_arms_elem(elem, all_rules, ci, visiting) {
                 return true;
             }
         }
@@ -111,7 +118,12 @@ fn scan_undecidable_arms(alts: &List<LexerAlternative>, all_rules: &List<LexerRu
     return false;
 }
 
-fn scan_undecidable_arms_elem(elem: &LexerElement, all_rules: &List<LexerRule>, ci: bool) -> bool {
+fn scan_undecidable_arms_elem(
+    elem: &LexerElement,
+    all_rules: &List<LexerRule>,
+    ci: bool,
+    visiting: &mut List<String>,
+) -> bool {
     match *elem {
         Repeat(rep) => {
             if !rep.non_greedy && rep.kind matches { Star | Plus } {
@@ -123,15 +135,30 @@ fn scan_undecidable_arms_elem(elem: &LexerElement, all_rules: &List<LexerRule>, 
                     }
                 }
             }
-            return scan_undecidable_arms_elem(&rep.element, all_rules, ci);
+            return scan_undecidable_arms_elem(&rep.element, all_rules, ci, visiting);
         },
         Group(inner) => {
-            return scan_undecidable_arms(&inner, all_rules, ci);
+            return scan_undecidable_arms(&inner, all_rules, ci, visiting);
         },
         Not(n) => {
-            return scan_undecidable_arms_elem(&n.element, all_rules, ci);
+            return scan_undecidable_arms_elem(&n.element, all_rules, ci, visiting);
         },
-        RuleRef(_) | Literal(_) | CharRange(_) | CharClass(_) | AnyChar => {
+        RuleRef(name) => {
+            // The arms are as undecidable behind a reference as in the body:
+            // the simulator inlines whatever `collect_reachable` resolves, so
+            // `STR : '"' BODY '"'` reaches the hazard `BODY` holds.
+            if visiting.contains(&name) {
+                return false;
+            }
+            let Some(r) = find_lexer_rule(all_rules, &name) else {
+                return false;
+            };
+            visiting.push(name);
+            let found = scan_undecidable_arms(&r.body, all_rules, ci, visiting);
+            visiting.pop();
+            return found;
+        },
+        Literal(_) | CharRange(_) | CharClass(_) | AnyChar => {
             return false;
         },
     }

@@ -12655,11 +12655,11 @@ fn scan_single_expression(tokens: &Array<i32>, pos: i32, follow: &List<i32> = &E
             }
         } else if _kind_set_66(suffix_kind) {
             if suffix_kind == TK_Not {
-                let second_kind = if pos + 1 < tokens.len() { tokens[pos + 1] } else { TK_EOF };
-                if second_kind == TK_Dot {
+                let _lr_scan_4 = scan_single_expression_lr_4(tokens, pos, follow);
+                if _lr_scan_4 >= 0 {
                     if 25 >= min_prec {
                         let lr_saved_pos = pos;
-                        pos = scan_single_expression_lr_4(tokens, pos, follow);
+                        pos = _lr_scan_4;
                         if pos < 0 { pos = lr_saved_pos; break; }
                     } else {
                         break;
@@ -22180,9 +22180,10 @@ fn _parse_single_expression__inner(p: &mut Parser, follow: &List<i32> = &EMPTY_F
             }
         } else if _kind_set_66(_sk) {
             if _sk == TK_Not {
-                if p.peek_at(1) == TK_Dot {
+                let _lr_scan_4 = scan_single_expression_lr_4(&p.kinds, p.pos, follow);
+                if _lr_scan_4 >= 0 {
                     if 25 >= min_prec {
-                        if scan_single_expression_lr_4(&p.kinds, p.pos, follow) < 0 {
+                        if _lr_scan_4 < 0 {
                             break;
                         }
                         p.b.start_node_at(_cp, RK_SINGLEEXPRESSION, _start);

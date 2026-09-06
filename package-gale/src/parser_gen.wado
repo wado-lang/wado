@@ -1113,7 +1113,7 @@ fn emit_lr_overlap(
                 &rule.alternatives[alt].elements,
                 &lr_scan_local(alt),
                 &site.second_expr,
-                lr_second_token_discriminates(k, group, shared_tk, &seconds),
+                lr_second_token_discriminates(k, group, shared_tk, &seconds, suffix_first_sets),
                 ctx,
             );
             conds.push([k, plan[0], plan[1]]);
@@ -6892,13 +6892,21 @@ fn lr_second_token_plan(
 }
 
 /// Whether candidate `k`'s second token separates it from the other candidates
-/// for `shared_tk` — no other one can show a token it also shows.
-fn lr_second_token_discriminates(k: i32, group: &List<i32>, shared_tk: &String, seconds: &List<List<String>>) -> bool {
+/// for `shared_tk`: none of them shows a token it also shows, and none is
+/// unmeasurable. An empty second set means "cannot say", so a check that
+/// commits to `k` over such a peer would leave the peer unreachable.
+fn lr_second_token_discriminates(
+    k: i32,
+    group: &List<i32>,
+    shared_tk: &String,
+    seconds: &List<List<String>>,
+    suffix_first_sets: &List<List<String>>,
+) -> bool {
     for let mut j = 0; j < group.len(); j += 1 {
-        if j == k {
+        if j == k || !suffix_first_sets[group[j]].contains(shared_tk) {
             continue;
         }
-        if sets_overlap(&seconds[k], &seconds[j]) {
+        if seconds[j].is_empty() || sets_overlap(&seconds[k], &seconds[j]) {
             return false;
         }
     }

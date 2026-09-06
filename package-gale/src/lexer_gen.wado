@@ -1690,7 +1690,11 @@ fn lexer_elem_has_non_greedy(elem: &LexerElement, all_rules: &List<LexerRule>, v
             if visiting.contains(&name) {
                 return false;
             }
-            let Some(f) = find_fragment(all_rules, &name) else {
+            // `collect_reachable` inlines whatever `find_lexer_rule` resolves,
+            // so a token rule reached from here is as much a part of the
+            // simulated rule as a fragment: the decision must walk the same
+            // graph the ATN is built from.
+            let Some(f) = find_lexer_rule(all_rules, &name) else {
                 return false;
             };
             visiting.push(name);

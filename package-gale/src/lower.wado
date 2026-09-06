@@ -349,6 +349,10 @@ fn greedy_loop_prefix(ctx: &mut GenContext, rep: &RepeatElement) -> List<List<St
     }
     let mut visiting: List<String> = [];
     let [prefix, _consumed] = ctx.deep_position_first_sets_from(&body_elements, 0, FOLLOW_MASK_MAX_K, &mut visiting);
+    // Two positions is the whole bar, not a stand-in for one. Demanding the
+    // walk span the body instead rejects `(SEP seg)`, whose second element is
+    // the rule the loop exists to re-enter, and takes the repair with it —
+    // `driver_cst_ll_opt_tail_caller_loop_test` is the case.
     if prefix.len() < 2 {
         return empty;
     }
@@ -3948,7 +3952,10 @@ fn collect_optional_entry_signature(inner: &Element, ctx: &mut GenContext) -> Li
             } else if let Literal(l) = elem {
                 sig.push([literal_const_name(&l.text)]);
             } else {
-                if sig.is_empty() || is_nullable(elem) {
+                // Deep: a `RuleRef` to a rule deriving epsilon matches nothing,
+                // so the position this would name may hold what follows it.
+                let mut null_visiting: List<String> = [];
+                if sig.is_empty() || ctx.element_is_nullable_deep(elem, &mut null_visiting) {
                     break;
                 }
                 let mut visiting: List<String> = [];

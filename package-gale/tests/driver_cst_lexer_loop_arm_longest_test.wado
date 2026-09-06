@@ -32,3 +32,10 @@ test "a string that is only an escaped quote" {
 test "the shorter arm still wins where the longer one strands the suffix" {
     assert_tree(&"ab", &"(start ab)");
 }
+
+// Two escapes exercise the simulator's rule-call guard: each closure is
+// computed afresh at its own position, so `ESC` being entered once already
+// does not stop the second escape from being read as one.
+test "a string with two escaped quotes stays one token" {
+    assert_tree(&"\"a\\\"b\\\"c\"", &"(start \"a\\\"b\\\"c\")");
+}
