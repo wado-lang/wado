@@ -2,9 +2,10 @@
 // page grammar. Composed into `MiniHtml.g4` by its `import`.
 // License: same as the Gale package.
 //
-// The mode and the `CSS_` prefixes are what make a grammar embeddable; both
-// are consequences of composition rather than features, and `import.md`
-// explains them. This grammar names no host.
+// The mode, the `CSS_` prefixes, and naming tokens instead of spelling them
+// (`CSS_COLON`, never `':'`) are what make a grammar embeddable; all three are
+// consequences of composition rather than features, and `import.md` explains
+// them. This grammar names no host.
 //
 // Every name here is the same `CSS_IDENT` token. What each one is — a selector,
 // a property, or a value — is where the parser put it, not anything the lexer

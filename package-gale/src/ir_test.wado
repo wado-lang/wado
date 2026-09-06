@@ -277,6 +277,64 @@ test "compose_grammars rejects two inputs declaring one grammar name" {
     assert compose_grammars([one, two]) matches { Err(_) }, "a duplicate name must be reported with no import in play too";
 }
 
+test "compose_grammars rejects an input the composite never reaches" {
+    // A cycle among inputs no master imports leaves them neither merged (their
+    // names are imported, so they are not masters) nor folded (nothing the
+    // master imports reaches them). Dropping them would be the silent omission
+    // the other failure modes are loud about.
+    let master = parse("grammar P;\np : ID ;").unwrap();
+    let m = parse("parser grammar M;\nimport S;\nm : ID ;").unwrap();
+    let s = parse("parser grammar S;\nimport M;\ns : ID ;").unwrap();
+    assert compose_grammars([master, m, s]) matches { Err(_) }, "an unreachable cycle must be reported, not dropped";
+
+    // A cycle the master does reach is not an error: the walk cuts it on the
+    // second visit.
+    let g = compose([
+        "grammar P2;\nimport M2;\np : m ;", "parser grammar M2;\nimport S2;\nm : s ;",
+        "parser grammar S2;\nimport M2;\ns : ID ;",
+    ]);
+    assert rule_names(&g) == ["p", "m", "s"], `${rule_names(&g):?}`;
+}
+
+test "an embedded delegate names its tokens rather than spelling them" {
+    // A parser literal aliases only to a DEFAULT_MODE rule, so in a delegate
+    // whose rules live in a mode, `':'` mints an anonymous DEFAULT_MODE token
+    // the lexer never reaches — the parser then waits for a token that cannot
+    // arrive. The gate is deliberate (a parser rule is reached in whatever mode
+    // its caller pushed, which nothing records), so the recipe is to name the
+    // token.
+    let mut spelled = compose_grammars([
+        parse("grammar H;\nimport C;\nd : OPEN s CLOSE ;\nOPEN : '<' -> pushMode(M) ;").unwrap(),
+        parse("grammar C;\ns : ID ':' ID ;\nmode M;\nCLOSE : '>' -> popMode ;\nCOLON : ':' ;\nID : [a-z]+ ;").unwrap(),
+    ]).unwrap();
+    alias_parser_literals(&mut spelled);
+    assert sole_alt_has_literal(&spelled, &"s"), "a spelled literal stays a literal, and mints a dead token";
+
+    let mut named = compose_grammars(
+        [
+            parse("grammar H;\nimport C;\nd : OPEN s CLOSE ;\nOPEN : '<' -> pushMode(M) ;").unwrap(),
+            parse("grammar C;\ns : ID COLON ID ;\nmode M;\nCLOSE : '>' -> popMode ;\nCOLON : ':' ;\nID : [a-z]+ ;").unwrap(
+            ),
+        ],
+    ).unwrap();
+    alias_parser_literals(&mut named);
+    assert !sole_alt_has_literal(&named, &"s"), "a named token is what the lexer produces";
+}
+
+/// Whether the named parser rule's only alternative still holds a `Literal`.
+fn sole_alt_has_literal(g: &Grammar, rule: &String) -> bool {
+    for let r of &g.parser_rules {
+        if r.name == *rule {
+            for let e of &r.alternatives[0].elements {
+                if e matches { Literal(_) } {
+                    return true;
+                }
+            }
+        }
+    }
+    return false;
+}
+
 test "compose_grammars rejects an import naming no supplied input" {
     let master = parse("grammar M;\nimport S;\ns : ID ;").unwrap();
     let result = compose_grammars([master]);

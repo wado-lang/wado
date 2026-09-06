@@ -704,8 +704,9 @@ struct TestChunkSpec {
     tree_helpers: List<String> = [],
     /// Slave grammars the descriptor brings (`import S;`). They become the
     /// invocation's `inputs`, which is where a Kiln generator resolves imports.
-    /// No default: a claim that leaves it out hands the generator the master
-    /// alone, and composition then fails on a file the descriptor supplied.
+    /// Defaulted nowhere, here or on the emitters that fill it: a claim that
+    /// leaves it out hands the generator the master alone, and composition then
+    /// fails on a file the descriptor supplied.
     slave_count: i32,
     test_label: String,
     triage: Triage,
@@ -908,7 +909,7 @@ fn emit_stage_b_test_chunk(
     expected_tree: &String,
     strip: bool,
     triage: &Triage,
-    slave_count: i32 = 0,
+    slave_count: i32,
 ) -> TestChunk {
     let mut doc_lines: List<String> = [triage_doc_line(&"stage_b")];
     for let line of &strip_doc_lines(strip) {
@@ -955,7 +956,7 @@ fn emit_stage_sub_b_test_chunk(
     sub_rule: &String,
     strip: bool,
     triage: &Triage,
-    slave_count: i32 = 0,
+    slave_count: i32,
 ) -> TestChunk {
     let mut doc_lines: List<String> = [
         triage_doc_line(&"stage_b"), "//", `// Stage B sub-tree: [output] is the labelled child '${*sub_rule}' subtree,`,
@@ -1001,7 +1002,7 @@ fn emit_stage_a_parse_test_chunk(
     input: &String,
     start: &String,
     triage: &Triage,
-    slave_count: i32 = 0,
+    slave_count: i32,
 ) -> TestChunk {
     let spec = TestChunkSpec {
         category: *category,
@@ -1074,7 +1075,7 @@ fn emit_stage_c_output_test_chunk(
     start: &String,
     strip: bool,
     triage: &Triage,
-    slave_count: i32 = 0,
+    slave_count: i32,
 ) -> TestChunk {
     let mut doc_lines: List<String> = [
         triage_doc_line(&"stage_c"), "//", "// Stage C claim: the generated parser's action-print output",
@@ -1260,7 +1261,7 @@ fn emit_stage_a_err_test_chunk(
     start: &String,
     is_lexer: bool,
     triage: &Triage,
-    slave_count: i32 = 0,
+    slave_count: i32,
 ) -> TestChunk {
     let spec = TestChunkSpec {
         category: *category,
@@ -1312,7 +1313,7 @@ fn emit_stage_a_tokens_test_chunk(
     input: &String,
     expected: &String,
     triage: &Triage,
-    slave_count: i32 = 0,
+    slave_count: i32,
 ) -> TestChunk {
     let spec = TestChunkSpec {
         category: *category,
@@ -2818,7 +2819,7 @@ test "emit_stage_b_oracle_test_chunk reproduces its committed chunk verbatim" {
 }
 
 test "emit_test_chunk: Todo triage decorates the test and wires Stage A paths" {
-    let src = emit_stage_a_parse_test_chunk(&"Foo", &"Bar", &"x", &"start", &Triage::Todo("flaky")).text;
+    let src = emit_stage_a_parse_test_chunk(&"Foo", &"Bar", &"x", &"start", &Triage::Todo("flaky"), 0).text;
     assert src.contains("#[TODO]"), src;
     assert src.contains("// triage: flaky"), src;
     assert src.contains("output_dir: \"../../../generated/antlr4_compat_a/Foo/Bar\""), src;
@@ -2830,20 +2831,20 @@ test "emit_test_chunk: Todo triage decorates the test and wires Stage A paths" {
 }
 
 test "emit_test_chunk: each descriptor calls through its own namespace" {
-    let b = emit_stage_b_test_chunk(&"C", &"N", &"i", &"", &"(t)", false, &Triage::Pass);
+    let b = emit_stage_b_test_chunk(&"C", &"N", &"i", &"", &"(t)", false, &Triage::Pass, 0);
     assert b.tree_helpers.contains(&"normalize_tree"), `${b.tree_helpers:?}`;
     assert b.text.contains("output_dir: \"../../../generated/antlr4_compat_b/C/N\""), b.text;
     assert b.text.contains("t_N::parse(&input)"), b.text;
 
-    let lexer_err = emit_stage_a_err_test_chunk(&"C", &"N", &"i", &"", true, &Triage::Pass).text;
+    let lexer_err = emit_stage_a_err_test_chunk(&"C", &"N", &"i", &"", true, &Triage::Pass, 0).text;
     assert lexer_err.contains("t_N::TK_ERROR"), lexer_err;
     assert lexer_err.contains("has_err"), lexer_err;
 
-    let parser_err = emit_stage_a_err_test_chunk(&"C", &"N", &"i", &"r", false, &Triage::Pass).text;
+    let parser_err = emit_stage_a_err_test_chunk(&"C", &"N", &"i", &"r", false, &Triage::Pass, 0).text;
     assert !parser_err.contains("t_N::TK_ERROR"), parser_err;
     assert parser_err.contains("expected parse to fail"), parser_err;
 
-    let tokens = emit_stage_a_tokens_test_chunk(&"C", &"N", &"i", &"[@0]", &Triage::Pass).text;
+    let tokens = emit_stage_a_tokens_test_chunk(&"C", &"N", &"i", &"[@0]", &Triage::Pass, 0).text;
     assert tokens.contains("t_N::to_lexer_string(&tokens, t_N::TK_EOF)"), tokens;
 }
 
@@ -2864,15 +2865,15 @@ test "emit_test_chunk: every claim names the descriptor's slave grammars" {
         assert chunk.text.contains(expected), chunk.text;
     }
     // A descriptor with no slaves keeps the single-grammar `use`.
-    let plain = emit_stage_a_parse_test_chunk(&"C", &"N", &"i", &"s", &Triage::Pass).text;
+    let plain = emit_stage_a_parse_test_chunk(&"C", &"N", &"i", &"s", &Triage::Pass, 0).text;
     assert !plain.contains("inputs:"), plain;
 }
 
 // Two grammars in one module is the point of the grouping: each keeps its own
 // namespace, and the `tree_compare` helpers they share are imported once.
 test "emit_category_test_file: one module carries many grammars" {
-    let first = emit_stage_b_test_chunk(&"C", &"One", &"i", &"", &"(t)", false, &Triage::Pass);
-    let second = emit_stage_b_test_chunk(&"C", &"Two", &"i", &"", &"(t)", false, &Triage::Pass);
+    let first = emit_stage_b_test_chunk(&"C", &"One", &"i", &"", &"(t)", false, &Triage::Pass, 0);
+    let second = emit_stage_b_test_chunk(&"C", &"Two", &"i", &"", &"(t)", false, &Triage::Pass, 0);
     let chunks: List<TestChunk> = [first, second];
     let src = emit_category_test_file(&generator_attr(), &"C", chunks.as_slice());
     assert src.contains("use t_One from"), src;

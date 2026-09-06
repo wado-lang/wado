@@ -500,6 +500,9 @@ no feature beyond composition itself; two conventions carry it:
 - **Its token names are prefixed** (`CSS_IDENT`, `JS_IDENT`). A composite has
   one token space, where the first rule of a given name wins and the rest are
   dropped.
+- **Its parser rules name their tokens rather than spelling them**
+  (`CSS_COLON`, not `':'`). A parser literal aliases only to a `DEFAULT_MODE`
+  rule, so spelling one mints a token the delegate's mode never produces.
 
 The host owns the boundaries and nothing else: `MiniHtml.g4` declares
 `mode CSS` itself, holding just the `</style>` that leaves it, and composition

@@ -1297,9 +1297,15 @@ pub fn compose_grammars(grammars: List<Grammar>) -> Result<Grammar, ParseError> 
     if delegate_names.is_empty() {
         return Result::Ok(merge_grammars(grammars));
     }
+    // Every input reaches the composite, as a master or as a delegate the
+    // master imports. `reached` is what says so; anything left unmarked was
+    // dropped, which is the one outcome composition must not have.
+    let mut reached: List<bool> = [];
     let mut masters: List<Grammar> = [];
     for let g of &grammars {
-        if !delegate_names.contains(&g.name) {
+        let is_master = !delegate_names.contains(&g.name);
+        reached.push(is_master);
+        if is_master {
             masters.push(*g);
         }
     }
@@ -1315,7 +1321,19 @@ pub fn compose_grammars(grammars: List<Grammar>) -> Result<Grammar, ParseError> 
     let mut composite = merge_grammars(masters);
     let order = delegate_order(&composite.imports, &grammars, &by_name)?;
     for let idx of order {
+        reached[idx] = true;
         import_delegate(&mut composite, &grammars[idx]);
+    }
+    for let mut i = 0; i < reached.len(); i += 1 {
+        if !reached[i] {
+            return Result::Err(
+                ParseError::new(
+                    `supplied grammar "${grammars[i].name}" reaches the composite neither as a master nor through an import`,
+                    Span::new(0, 0),
+                    ["a grammar the master imports, directly or transitively"],
+                ),
+            );
+        }
     }
     drop_empty_modes(&mut composite);
     return Result::Ok(composite);
