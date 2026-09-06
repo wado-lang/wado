@@ -1164,7 +1164,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// name a type private to that module (`<T = Priv>`), which the call site
     /// cannot resolve. The free-function path does the same
     /// ([`Self::fill_defaulted_fn_type_args`]).
-    fn fill_defaulted_method_type_args(
+    ///
+    /// Reports whether any slot took a default.
+    pub(super) fn fill_defaulted_method_type_args(
         &mut self,
         method_type_params: &[ast::GenericParam],
         receiver_type: TypeId,
@@ -1172,17 +1174,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         slots: &[TypeId],
         declaring_module: Option<ModuleSource>,
         inferred: &mut [TypeId],
-    ) {
+    ) -> bool {
         let receiver_type = self.tysys.get_base_type(receiver_type);
         if self.is_unbound_type_param(receiver_type) {
-            return;
+            return false;
         }
         let has_fillable = method_type_params
             .iter()
             .zip(inferred.iter())
             .any(|(p, &tid)| p.default.is_some() && self.is_unbound_type_param(tid));
         if !has_fillable {
-            return;
+            return false;
         }
         if let Some(trait_) = trait_decl {
             self.register_assoc_types_for_concrete_type_and_trait(receiver_type, trait_);
@@ -1203,6 +1205,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .collect()
             })
         });
+        let mut filled = false;
         for i in 0..inferred.len() {
             if self.is_unbound_type_param(inferred[i])
                 && let Some(default_ty) = defaults[i]
@@ -1214,8 +1217,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .contains_type_param(default_ty)
             {
                 inferred[i] = default_ty;
+                filled = true;
             }
         }
+        filled
     }
 
     /// Infer an instance call's method-level type arguments from the method's
@@ -1961,7 +1966,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     param_names,
                     consumes_self: self_kind == ast::SelfKind::Value,
                     inherent_visibility: None,
-                    defaults_module: method_sig.defaults_module.clone(),
+                    defaults_module: method_sig.defaults_module,
                 },
                 impl_module_source: impl_module_source.clone(),
                 blanket_type_param: blanket_type_param.clone(),
@@ -2653,6 +2658,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         struct_name: &str,
         method_name: &str,
     ) -> Vec<ast::GenericParam> {
+        // The signature dispatch would choose, so a trait-`impl` method reports
+        // the trait's bounds and defaults, which the block does not restate.
+        // The header scan below answers for the shapes no signature does.
+        if let Some(sig) = self.unique_qualified_method_sig(struct_name, method_name)
+            && !sig.own_params.is_empty()
+        {
+            return sig.own_params;
+        }
         for header in self.tysys.trait_env.impl_headers.values() {
             if super::trait_env::get_type_name_static(&header.ty) == struct_name {
                 for method in &header.methods {

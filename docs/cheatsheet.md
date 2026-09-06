@@ -764,9 +764,13 @@ export fn run() { ... }
 // Default args, trailing only
 fn connect(host: String, port: i32 = 8080) { ... }
 connect("localhost");           // → connect("localhost", 8080)
+
+// Type parameters take defaults too; Rust allows these on types only
+fn info<T: Serialize = NoFields>(message: String, fields: T = NoFields {}) { ... }
+info("started");                // → info::<NoFields>("started", NoFields {})
 ```
 
-A function must have `return` if it returns a value. Default expressions must be effect-free; `export fn` and closures cannot have defaults.
+A function must have `return` if it returns a value. Default expressions must be effect-free; `export fn` and closures cannot have defaults. On a trait method both kinds of default belong to the trait: the `impl` restates the parameters without them, and the call site fills them from the declaration.
 
 ### Local Items
 

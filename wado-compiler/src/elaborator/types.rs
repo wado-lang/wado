@@ -737,10 +737,9 @@ pub enum TypeError {
         span: Span,
     },
 
-    /// An `impl` method's receiver disagrees with the trait's declaration — an
-    /// added or dropped `self`. The same defect as an arity mismatch: the
-    /// receiver is an argument the call site does not write, so the call is
-    /// built to the trait's shape and only fails Wasm validation.
+    /// An `impl` method's receiver disagrees with the trait's declaration. The
+    /// same defect as an arity mismatch: no call site writes a receiver, so the
+    /// call is built to the trait's shape and only fails Wasm validation.
     TraitMethodReceiverMismatch {
         trait_name: String,
         method_name: String,
@@ -844,6 +843,14 @@ pub enum TypeError {
     /// Trait impl cannot re-specify a parameter default (defaults belong to
     /// the trait declaration).
     DefaultInTraitImpl {
+        method: String,
+        param: String,
+        span: Span,
+    },
+
+    /// [`Self::DefaultInTraitImpl`] for a type parameter's default: the trait
+    /// declares it and the call site fills it from there.
+    TypeParamDefaultInTraitImpl {
         method: String,
         param: String,
         span: Span,
@@ -1818,6 +1825,17 @@ impl TypeError {
                 Code::TypeMismatch,
                 format!(
                     "default value for parameter '{param}' in method '{method}' is not allowed; defaults belong to the trait declaration"
+                ),
+                *span,
+            ),
+            TypeError::TypeParamDefaultInTraitImpl {
+                method,
+                param,
+                span,
+            } => (
+                Code::TypeMismatch,
+                format!(
+                    "default for type parameter '{param}' in method '{method}' is not allowed; defaults belong to the trait declaration"
                 ),
                 *span,
             ),

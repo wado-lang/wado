@@ -1,0 +1,19 @@
+// The trait half of `default_type_param_trait_method.wado`: the type-parameter
+// default names a type this module keeps to itself.
+
+struct Tag {}
+
+impl Named for Tag {
+    fn name() -> String {
+        return "tag";
+    }
+}
+
+pub trait Named {
+    fn name() -> String;
+}
+
+pub trait Boxed {
+    fn boxed<T: Named = Tag>(&self) -> String;
+    fn made<T: Named = Tag>() -> String;
+}

@@ -2327,6 +2327,41 @@ make_rect(10.0);  // → make_rect(10.0, 10.0)
 - `export fn` cannot declare defaults — exported functions appear in the component's WIT signature where every parameter is required by the CM ABI. Split into a private helper plus a thin `export fn` wrapper if defaults are needed.
 - Trait methods may declare defaults only in the trait definition; implementations receive every parameter and cannot add, remove, or change defaults. Direct `impl Type { ... }` methods (not part of any trait) may declare defaults freely.
 
+#### Type Parameter Defaults
+
+A type parameter may declare a default with `= Type`, on a free function, an inherent method or a trait method. An omitted turbofish takes the default; a spelled one wins. `core:log` uses it:
+
+```wado
+pub fn info<T: Serialize = NoFields>(message: String, fields: T = NoFields {}, ...) { ... }
+
+info("started");                  // → info::<NoFields>("started", NoFields {})
+info::<Fields>("started", f);
+```
+
+Inference runs first and the default fills only what it left unbound, so an argument or an expected type always decides the slot it pins.
+
+A default resolves in the declaring module's scope, as a value default does. It may therefore name a type the call site cannot: `NoFields` above is private to `core:log`.
+
+A trait method's type parameter default belongs to the trait, exactly as its value defaults do. The implementation restates the parameter without the default, and every spelling of the call fills it from the trait's declaration:
+
+```wado
+pub trait Boxed {
+    fn boxed<T: Named = Tag>(&self) -> String;   // `Tag` is private to this module
+}
+
+impl Boxed for M {
+    fn boxed<T: Named>(&self) -> String {        // no default here
+        return T::name();
+    }
+}
+
+m.boxed();            // → m.boxed::<Tag>()
+m.boxed::<Local>();   // spelled, so `Local`
+M::made();            // the static spelling reads the same declaration
+```
+
+Rust rejects a type parameter default on every function, method and `impl` (rust-lang#36887), allowing them only on type and trait declarations. Wado accepts them wherever a parameter list is written.
+
 The same `= expr` syntax applies to struct fields; see [Struct Field Defaults](#struct-field-defaults).
 
 ### Tagged Template Literals

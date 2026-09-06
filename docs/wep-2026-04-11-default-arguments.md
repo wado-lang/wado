@@ -225,6 +225,27 @@ c.draw(0.5);
 
 Rationale: the caller sees the trait's interface, so the trait owns the defaults. This avoids ambiguity about which defaults apply when calling through a trait reference, and prevents implementations from silently changing call-site behavior.
 
+The rule covers a **type parameter's** default the same way. The trait declares it, the impl restates the parameter without it, and an omitted turbofish takes the trait's:
+
+```wado
+// in another module: `Tag` is private to it
+pub trait Boxed {
+    fn boxed<T: Named = Tag>(&self) -> String;
+}
+
+impl Boxed for M {
+    fn boxed<T: Named>(&self) -> String {   // no default here
+        return T::name();
+    }
+}
+
+m.boxed();          // → m.boxed::<Tag>()  — a type the caller cannot name
+m.boxed::<Local>(); // a spelled turbofish still wins
+M::made();          // the static spelling fills it from the same declaration
+```
+
+Both defaults reach every spelling a call takes: the instance form, `Type::method()`, `Type::<A>::method()`, `ns::Type::method()`, `T::method()` through a bound, and a value blanket's statics. An impl that writes either default is rejected (`DefaultInTraitImpl`, `TypeParamDefaultInTraitImpl`); a trait's own default-bodied method is the declaration, so it may write both.
+
 If a method is not part of a trait (a direct `impl` method), it may freely define defaults:
 
 ```wado
@@ -491,11 +512,6 @@ let resp = Fetch::fetch(url, init).read();
 | Serde             | Declared field default → optional on deserialize               |
 | Generics          | Default expressions are monomorphized per call site            |
 | Location literals | `#file`/`#line`/`#function` defaults evaluate at the call site |
-
-### Not in Scope
-
-- Named arguments — a separate feature that would complement defaults by allowing middle-parameter skipping.
-- Struct update syntax (`{ field: value, ..other }`) — copying fields from another instance is orthogonal to field defaults.
 
 ## Implementation Roadmap
 

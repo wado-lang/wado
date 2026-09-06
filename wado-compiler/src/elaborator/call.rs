@@ -2737,7 +2737,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if !method_args.is_empty() {
             return (Vec::new(), method_args);
         }
-        self.infer_static_method_type_args(prefix, suffix, raw_args, args, expected_type)
+        self.infer_static_method_type_args(prefix, suffix, raw_args, args, expected_type, span)
     }
 
     /// Infer a generic static method's type arguments, sharing the three-tier
@@ -2752,6 +2752,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         raw_args: &[Expr],
         args: &[TypeId],
         expected_type: Option<TypeId>,
+        span: crate::token::Span,
     ) -> (Vec<TypeId>, Vec<TypeId>) {
         let Some(sig) = self.qualified_method_sig(struct_name, method_name) else {
             return (vec![], vec![]);
@@ -2780,12 +2781,33 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Permissive solve — see `infer_fn_type_args` for the
         // TypeParam-forwarding rationale.
-        let (inferred, bindings) = infer.solve_with_bindings();
-        if !all_param_ids.iter().any(|p| bindings.contains_key(p)) {
+        let (mut inferred, bindings) = infer.solve_with_bindings();
+        let split = sig.declaring_split();
+
+        // A method-level slot the arguments do not pin takes the default its
+        // declaration wrote (WEP 2026-04-11), as the instance spelling does.
+        let mut defaulted = false;
+        if sig.own_params.iter().any(|p| p.default.is_some()) {
+            let receiver = self.resolve_unsited_type_name(struct_name, span);
+            let declaring_module = sig.defaults_module.clone().or_else(|| {
+                sig.declaring_impl
+                    .map(|impl_def| self.tysys.resolutions.defs().module(impl_def).clone())
+            });
+            let trait_decl = sig
+                .declaring_impl
+                .and_then(|impl_def| self.tysys.signatures.impl_sig(impl_def)?.trait_decl);
+            defaulted = self.fill_defaulted_method_type_args(
+                &sig.own_params,
+                receiver,
+                trait_decl,
+                &sig.own_type_param_ids(),
+                declaring_module,
+                &mut inferred[split..],
+            );
+        }
+        if !defaulted && !all_param_ids.iter().any(|p| bindings.contains_key(p)) {
             return (vec![], vec![]);
         }
-
-        let split = sig.declaring_split();
         (inferred[..split].to_vec(), inferred[split..].to_vec())
     }
 

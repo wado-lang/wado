@@ -1,0 +1,38 @@
+//! A `trait` method's type-parameter default is the trait's, like its value
+//! defaults: the `impl` restates the parameter without one, and an omitted
+//! turbofish fills it with a type the caller cannot name, resolved in the
+//! trait's own module.
+
+use { Boxed, Named } from "./sub/default_type_param_trait_lib.wado";
+
+struct M {}
+
+impl Boxed for M {
+    fn boxed<T: Named>(&self) -> String {
+        return T::name();
+    }
+
+    fn made<T: Named>() -> String {
+        return T::name();
+    }
+}
+
+struct Local {}
+
+impl Named for Local {
+    fn name() -> String {
+        return "local";
+    }
+}
+
+test "an omitted turbofish takes the trait's declared default" {
+    let m = M {};
+    assert m.boxed() == "tag";
+    assert M::made() == "tag";
+}
+
+test "a spelled turbofish still wins" {
+    let m = M {};
+    assert m.boxed::<Local>() == "local";
+    assert M::made::<Local>() == "local";
+}

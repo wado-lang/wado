@@ -115,25 +115,20 @@ impl Signatures {
         self.data_sections.get(module).map(String::as_str)
     }
 
-    /// Make a trait-`impl` method's parameters say what its trait declared:
-    /// the names and the defaults, by position, since only the trait may
-    /// declare a default (WEP 2026-04-11) and a default may name an earlier
-    /// parameter by the name the trait gave it. Filled here rather than in the
-    /// decl pass, because the trait may be declared in another module.
+    /// Make a trait-`impl` method's parameters say what its trait declared,
+    /// value and type parameters alike, names included: only the trait may
+    /// declare a default (WEP 2026-04-11), and a default names its neighbours
+    /// as the trait called them. Not the decl pass: the trait may be elsewhere.
     pub(crate) fn inherit_trait_param_defaults(&mut self, defs: &crate::defs::DefTable) {
-        let inherited: Vec<(crate::defs::DefId, ModuleSource, Vec<Param>)> = self
+        let inherited: Vec<(crate::defs::DefId, ModuleSource, MethodSig)> = self
             .method_sigs
             .values()
-            .filter(|sig| !sig.params.is_empty())
+            .filter(|sig| !sig.params.is_empty() || !sig.own_params.is_empty())
             .filter_map(|sig| {
                 let trait_decl = self.impl_sig(sig.declaring_impl?)?.trait_decl?;
                 let declaring = self.trait_sig(trait_decl)?;
                 let declared = declaring.method(defs.name(sig.def))?;
-                Some((
-                    sig.def,
-                    declaring.module.clone(),
-                    declared.sig.params.clone(),
-                ))
+                Some((sig.def, declaring.module.clone(), declared.sig.clone()))
             })
             .collect();
         for (def, module, declared) in inherited {
@@ -142,9 +137,14 @@ impl Signatures {
                 .get_mut(&def)
                 .expect("every key was just read from this map");
             sig.defaults_module = Some(module);
-            for (param, from_trait) in sig.params.iter_mut().zip(declared) {
+            for (param, from_trait) in sig.params.iter_mut().zip(declared.params) {
                 param.name = from_trait.name;
                 param.default = from_trait.default;
+            }
+            // Whole entries: bounds and default are both the trait's. The slots
+            // stay the impl's own, numbered in `decl.type_params`, untouched.
+            for (param, from_trait) in sig.own_params.iter_mut().zip(declared.own_params) {
+                *param = from_trait;
             }
         }
     }
@@ -192,10 +192,10 @@ pub(crate) struct MethodSig {
     /// reaches [`ImplSig::spelled_slots`], which aligns a spelled turbofish
     /// with the block's slots.
     pub(crate) declaring_impl: Option<crate::defs::DefId>,
-    /// The method's own slots as the declaration wrote them, parallel to
-    /// [`Self::own_type_params`]. Bounds and defaults are irreducibly AST and
-    /// live nowhere else, and a use site needs them to enforce the one and
-    /// fill the other.
+    /// The method's own slots as its declaration wrote them, parallel to
+    /// [`Self::own_type_params`] — on an impl of a trait, as the trait wrote
+    /// them. Bounds and defaults are irreducibly AST and live nowhere else, and
+    /// a use site needs them to enforce the one and fill the other.
     ///
     /// Carried rather than re-found by name. A name scan cannot tell which
     /// declaration dispatch actually chose, so it could answer with an
@@ -204,10 +204,10 @@ pub(crate) struct MethodSig {
     /// Canonical name from `#[cm("…")]`, resolved at the declaration.
     pub(crate) cm_name: Option<String>,
     pub(crate) is_async: bool,
-    /// Where [`Self::params`]' defaults were written, when another declaration
-    /// wrote them: the trait's module, for a method implementing one. A default
-    /// resolves in the scope that wrote it, so a call site pads from here
-    /// rather than from the module it reached the callee through.
+    /// Where this method's defaults were written, value and type parameters
+    /// alike, when another declaration wrote them: the trait's module, for a
+    /// method implementing one. A default resolves in the scope that wrote it,
+    /// so a call site pads from here, not from the module it reached it through.
     pub(crate) defaults_module: Option<ModuleSource>,
 }
 

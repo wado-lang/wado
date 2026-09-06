@@ -1,0 +1,23 @@
+// A trait impl cannot re-specify a type parameter's default, as it cannot
+// re-specify a value parameter's: the trait declares it and the call site
+// fills it from there.
+
+trait Boxed {
+    fn boxed<T = i32>(&self) -> i32;
+}
+
+struct M {}
+
+impl Boxed for M {
+    fn boxed<T = i32>(&self) -> i32 {
+        return 1;
+    }
+}
+
+export fn run() {
+    let m = M {};
+    assert m.boxed() == 1;
+}
+
+__DATA__
+{"compile_error": "type parameter"}

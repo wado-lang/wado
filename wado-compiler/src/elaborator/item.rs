@@ -2736,6 +2736,22 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 .collect(),
         };
 
+        // A type parameter's default is the trait's too, and the block restates
+        // the list without one. `recorded_sig` is `None` for a trait's own
+        // default-bodied method, elaborated here once per implementing type:
+        // that one is the declaration, so it may write the default.
+        if trait_name.is_some() && recorded_sig.is_some() {
+            for type_param in &func.type_params {
+                if let Some(default) = &type_param.default {
+                    let _ = scope.emit(TypeError::TypeParamDefaultInTraitImpl {
+                        method: func.name.clone(),
+                        param: type_param.name.clone(),
+                        span: default.span(),
+                    });
+                }
+            }
+        }
+
         // Resolve parameters (including &self). Defaults are resolved in the
         // method's lexical scope with earlier parameters already bound.
         let mut params = Vec::new();
