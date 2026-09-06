@@ -642,8 +642,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // parameter values and type-parameter defaults alike — resolve in,
         // since a default may name a type the call site cannot (WEP
         // 2026-04-11). The chain `method_module_source` takes below, without
-        // its inherited-owner steps. A default the method did not write itself
-        // — a trait's, on an impl of it — names its own declaring module.
+        // its inherited-owner steps. A default the method did not write itself,
+        // a trait's on an impl of it, names its own declaring module.
         let callee_module = defaults_module
             .clone()
             .or_else(|| trait_impl_module_source.clone())

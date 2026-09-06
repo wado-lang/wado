@@ -1158,11 +1158,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         }
 
         // An `impl` method whose parameter list differs from the trait's is
-        // never rejected downstream — the call is built to the trait's shape
-        // and only fails Wasm validation — so compare the two here, where every
+        // never rejected downstream: the call is built to the trait's shape and
+        // only fails Wasm validation. Compare the two here, where every
         // declaration and impl is in hand. The receiver counts as much as the
-        // rest: no call site writes it, so a `self` the trait does not declare
-        // leaves the callee reading an argument nothing pushed.
+        // rest, since no call site writes one the trait did not declare.
         //
         // The impl's trait is the one its header resolved to, so a module
         // implementing its own `Encode` is never checked against another
