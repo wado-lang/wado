@@ -322,7 +322,7 @@ fn tail_local(body: &Body, op: Operand) -> Option<u32> {
 fn const_seq_len(body: &Body, e: ExprId) -> Option<i32> {
     match &body.exprs[e].kind {
         ExprKind::ArrayLiteral { elements } => i32::try_from(elements.len()).ok(),
-        ExprKind::Block(b) | ExprKind::LabeledBlock { block: b, .. } => {
+        ExprKind::LabeledBlock { block: b, .. } => {
             let stmts = &body.blocks[*b].stmts;
             let (&last, rest) = stmts.split_last()?;
             if rest
@@ -619,8 +619,7 @@ impl GlobalStoreCollector<'_> {
         // (`elements = […]; List { repr: elements, … }`), so its `let`s are
         // bound before the tail reads them.
         if let Some(e) = value.as_expr()
-            && let ExprKind::Block(block) | ExprKind::LabeledBlock { block, .. } =
-                body.exprs[e].kind
+            && let ExprKind::LabeledBlock { block, .. } = body.exprs[e].kind
         {
             interpreter.bind_block_lets(body, block);
         }
@@ -651,8 +650,10 @@ enum ExprShape {
     If(Operand, BlockId, Option<BlockId>),
     Match(Operand, Vec<ArmData>),
     Switch(Operand, Vec<BlockId>, BlockId),
+    /// A block no `break` leaves early, so its statements all run in order.
     Block(BlockId),
-    Labeled(BlockId, String),
+    /// A block some `break` leaves early.
+    Labeled(BlockId),
     None,
 }
 
@@ -670,8 +671,13 @@ fn expr_shape(body: &Body, e: ExprId) -> ExprShape {
             default,
             ..
         } => ExprShape::Switch(*scrutinee, arms.clone(), *default),
-        ExprKind::Block(b) => ExprShape::Block(*b),
-        ExprKind::LabeledBlock { block, label, .. } => ExprShape::Labeled(*block, label.clone()),
+        ExprKind::LabeledBlock { block, label, .. } => {
+            if body.breaks_to(NodeRef::Block(*block), label) {
+                ExprShape::Labeled(*block)
+            } else {
+                ExprShape::Block(*block)
+            }
+        }
         _ => ExprShape::None,
     }
 }
@@ -828,7 +834,7 @@ impl ConstFoldVisitor<'_> {
             }
             // A `break L` inside means the statements after it did not run on
             // that path, so what the last one left is not what every path leaves.
-            ExprShape::Labeled(block, _label) => {
+            ExprShape::Labeled(block) => {
                 let writes = collect_write_effects(engine.body, NodeRef::Expr(e));
                 self.apply_loop_invalidations(&writes);
                 let mut changed = self.visit_block(engine, block);
@@ -1013,7 +1019,7 @@ impl ConstFoldVisitor<'_> {
                     };
                 }
                 ExprKind::Cast { expr: inner, .. } => inner.as_expr(),
-                ExprKind::Block(block) | ExprKind::LabeledBlock { block, .. } => {
+                ExprKind::LabeledBlock { block, .. } => {
                     body.blocks[*block].stmts.last().and_then(|last| {
                         match &body.stmts[*last].kind {
                             StmtKind::Expr(value) => value.as_expr(),
@@ -1044,7 +1050,7 @@ impl ConstFoldVisitor<'_> {
             | ExprKind::VariantPayload { expr: inner, .. }
             | ExprKind::Index { expr: inner, .. } => Self::borrowed_root_impl(body, *inner),
             ExprKind::Local { index, .. } => Some(*index),
-            ExprKind::Block(block) | ExprKind::LabeledBlock { block, .. } => {
+            ExprKind::LabeledBlock { block, .. } => {
                 let last = *body.blocks[*block].stmts.last()?;
                 let StmtKind::Expr(value) = &body.stmts[last].kind else {
                     return None;

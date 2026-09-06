@@ -51,7 +51,6 @@ pub(super) fn value_block_shape<'a>(
 /// type is the ordinary case.
 pub(super) fn block_shape(body: &Body, e: ExprId) -> Option<(BlockId, Option<&str>)> {
     match &body.exprs[e].kind {
-        ExprKind::Block(b) => Some((*b, None)),
         ExprKind::LabeledBlock { block, label, .. } => Some((*block, Some(label.as_str()))),
         _ => None,
     }

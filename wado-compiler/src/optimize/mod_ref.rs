@@ -371,10 +371,6 @@ impl ModRef {
             ExprKind::EnumConstruct { .. } => {}
 
             // === Control flow ===
-            ExprKind::Block(block) => {
-                let block = *block;
-                self.accumulate_block(body, block, scope);
-            }
             ExprKind::LabeledBlock { label, block, .. } => {
                 // Same capture discipline as the statement-position arm: an
                 // enclosed `break label;` resolves here, so its `NonLocal`

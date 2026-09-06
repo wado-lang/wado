@@ -428,8 +428,7 @@ fn walk_expr_for_leftmost(
         ExprKind::If { .. }
         | ExprKind::Match { .. }
         | ExprKind::Switch { .. }
-        | ExprKind::LabeledBlock { .. }
-        | ExprKind::Block(_) => LeftmostWalk::Blocked,
+        | ExprKind::LabeledBlock { .. } => LeftmostWalk::Blocked,
 
         ExprKind::Assign { target, value } => {
             let (target, value) = (*target, *value);

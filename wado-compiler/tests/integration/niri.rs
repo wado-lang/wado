@@ -1350,8 +1350,8 @@ fn reduce_local_rewrites_const_true_if_to_block() {
     );
     let (changed, body, e) = reduce_local_into(&mut interp, &expr);
     assert!(changed);
-    let ExprKind::Block(blk) = body.exprs[e].kind else {
-        panic!("expected Block, got {:?}", body.exprs[e].kind);
+    let ExprKind::LabeledBlock { block: blk, .. } = body.exprs[e].kind else {
+        panic!("expected a block, got {:?}", body.exprs[e].kind);
     };
     assert_eq!(body.blocks[blk].stmts.len(), 1);
     let s0 = body.blocks[blk].stmts[0];
@@ -1375,8 +1375,8 @@ fn reduce_local_rewrites_const_false_if_no_else_to_unit() {
     assert!(changed);
     // `if false {}` with no else evaluates to unit; the unit value has no node
     // form, so the skeleton result is an empty block.
-    let ExprKind::Block(blk) = body.exprs[e].kind else {
-        panic!("expected an empty Block, got {:?}", body.exprs[e].kind);
+    let ExprKind::LabeledBlock { block: blk, .. } = body.exprs[e].kind else {
+        panic!("expected an empty block, got {:?}", body.exprs[e].kind);
     };
     assert!(body.blocks[blk].stmts.is_empty());
 }
@@ -2664,8 +2664,8 @@ fn reduce_local_rewrites_const_match_to_arm_body_block() {
     );
     let (changed, body, e) = reduce_local_into(&mut interp, &expr);
     assert!(changed);
-    let ExprKind::Block(blk) = body.exprs[e].kind else {
-        panic!("expected Block, got {:?}", body.exprs[e].kind);
+    let ExprKind::LabeledBlock { block: blk, .. } = body.exprs[e].kind else {
+        panic!("expected a block, got {:?}", body.exprs[e].kind);
     };
     assert_eq!(body.blocks[blk].stmts.len(), 1);
     let s0 = body.blocks[blk].stmts[0];
@@ -2883,8 +2883,8 @@ fn reduce_local_recurses_into_match_arm_body() {
     // After reduce: the match collapsed to Block([Expr(1 + 2)]). The arm body's
     // `1 + 2` is folded by the bottom-up walk but, under the scratch `BodySink`,
     // left in its operand slot — the fold is observable as the tail's lattice.
-    let ExprKind::Block(blk) = body.exprs[e].kind else {
-        panic!("expected Block, got {:?}", body.exprs[e].kind);
+    let ExprKind::LabeledBlock { block: blk, .. } = body.exprs[e].kind else {
+        panic!("expected a block, got {:?}", body.exprs[e].kind);
     };
     let s0 = body.blocks[blk].stmts[0];
     let StmtKind::Expr(tail) = body.stmts[s0].kind else {
@@ -3048,8 +3048,8 @@ fn match_or_pattern_no_match_no_unknowns_is_definite_no() {
     );
     let (changed, body, e) = reduce_local_into(&mut interp, &expr);
     assert!(changed);
-    let ExprKind::Block(blk) = body.exprs[e].kind else {
-        panic!("expected Block");
+    let ExprKind::LabeledBlock { block: blk, .. } = body.exprs[e].kind else {
+        panic!("expected a block");
     };
     let s0 = body.blocks[blk].stmts[0];
     let StmtKind::Expr(tail) = body.stmts[s0].kind else {
@@ -5121,7 +5121,11 @@ fn block_expr_assigning_local(local_index: u32, type_id: TypeId, value: Build) -
             stmts: vec![stmt],
             span: Span::default(),
         });
-        Operand::Expr(pe(b, ExprKind::Block(block), TypeTable::UNIT))
+        Operand::Expr(pe(
+            b,
+            ExprKind::plain_block(block, TypeTable::UNIT, "test"),
+            TypeTable::UNIT,
+        ))
     })
 }
 
@@ -7363,7 +7367,11 @@ fn if_with_identical_zero_arms_collapses() {
 fn block_expr_of(stmts: Vec<StmtBuild>, type_id: TypeId) -> Build {
     Rc::new(move |b| {
         let block = block_of(b, &stmts);
-        Operand::Expr(pe(b, ExprKind::Block(block), type_id))
+        Operand::Expr(pe(
+            b,
+            ExprKind::plain_block(block, type_id, "test"),
+            type_id,
+        ))
     })
 }
 
@@ -7491,7 +7499,7 @@ fn a_region_writing_an_outer_local_is_refused() {
     let (mut body, e) = into_body_expr(&region);
     let lat = Interpreter::new(&table).reduce_to_lattice_full(&mut body, e);
     assert_eq!(lat, Lattice::Unevaluated);
-    assert_matches!(body.exprs[e].kind, ExprKind::Block(_));
+    assert_matches!(body.exprs[e].kind, ExprKind::LabeledBlock { .. });
 }
 
 #[test]
@@ -7848,7 +7856,7 @@ fn a_unit_typed_region_does_not_fold_to_its_last_value() {
         !interp.reduce_local_in_body(&mut body, e),
         "a block yielding nothing has no value to stand in for it",
     );
-    assert_matches!(body.exprs[e].kind, ExprKind::Block(_));
+    assert_matches!(body.exprs[e].kind, ExprKind::LabeledBlock { .. });
 
     // The same region typed as what it computes still folds, so the refusal
     // above is about the unit position and not about the shape.

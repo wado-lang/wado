@@ -265,6 +265,7 @@ impl MatchToBitsetRule<'_> {
             member
         };
         let tail = engine.alloc_stmt(StmtKind::Expr(result), span);
-        ExprKind::Block(engine.alloc_block(vec![let_key, let_off, tail], span))
+        let block = engine.alloc_block(vec![let_key, let_off, tail], span);
+        ExprKind::plain_block(block, TypeTable::BOOL, "bitset")
     }
 }

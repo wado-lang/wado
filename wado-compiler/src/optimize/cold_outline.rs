@@ -210,7 +210,7 @@ fn valueless_blocks(body: &Body, type_table: &TypeTable) -> Vec<(BlockId, bool)>
                     arms.extend(a.iter().copied());
                     arms.push(*default);
                 }
-                ExprKind::Block(b) | ExprKind::LabeledBlock { block: b, .. } => arms.push(*b),
+                ExprKind::LabeledBlock { block: b, .. } => arms.push(*b),
                 _ => {}
             },
             _ => {}

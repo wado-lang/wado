@@ -675,9 +675,9 @@ non-local jump: it replaces loop labels, labeled `continue`, and `goto`, and it
 is the block form that carries a value. See
 [the spec](./spec.md#labeled-blocks).
 
-The label is required, since an unlabeled `{ ... }` is a struct literal, and it
-cannot start with `__`. A nested block may reuse a label, and `break` takes the
-innermost. `break LABEL: ()` says what `break LABEL` says.
+The label is required, since an unlabeled `{ ... }` is a struct literal. A
+nested block may reuse a label, and `break` takes the innermost.
+`break LABEL: ()` says what `break LABEL` says.
 
 ```wado
 // Leave a whole loop nest with one break; the tail is the path no break took.

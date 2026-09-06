@@ -271,7 +271,11 @@ fn build_match(engine: &mut Engine, local: u32, cases: &[Case]) -> StmtId {
     let mut arms = Vec::with_capacity(cases.len() + 1);
     for case in cases {
         let pattern = engine.alloc_pat(PatKind::Literal(NirLiteralPattern::I128(case.key)), span);
-        let body = engine.alloc_expr(ExprKind::Block(case.then_block), TypeTable::UNIT, span);
+        let body = engine.alloc_expr(
+            ExprKind::plain_block(case.then_block, TypeTable::UNIT, "arm"),
+            TypeTable::UNIT,
+            span,
+        );
         arms.push(ArmData {
             pattern,
             guard: None,
@@ -280,7 +284,11 @@ fn build_match(engine: &mut Engine, local: u32, cases: &[Case]) -> StmtId {
         });
     }
     let default_block = engine.alloc_block(Vec::new(), span);
-    let default_body = engine.alloc_expr(ExprKind::Block(default_block), TypeTable::UNIT, span);
+    let default_body = engine.alloc_expr(
+        ExprKind::plain_block(default_block, TypeTable::UNIT, "default"),
+        TypeTable::UNIT,
+        span,
+    );
     arms.push(ArmData {
         pattern: engine.alloc_pat(PatKind::Wildcard, span),
         guard: None,

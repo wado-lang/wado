@@ -105,22 +105,20 @@ fn expr_has_break_to(body: &Body, expr: ExprId, label: &str) -> bool {
 /// sequence of collapses (e.g. C3 → `{ expr; }` → `expr`) still runs to a
 /// local fixed point.
 fn prune_expr_local(engine: &mut Engine, id: ExprId, mode: PruneMode) -> bool {
-    // `{ expr; }` → `expr` (single-expression unlabeled block). The tail
+    // `{ expr; }` → `expr`, for a block no `break` names. The tail
     // statement may carry a promoted `Operand::Value` (e.g. a value-graph-frozen
     // pure RHS) rather than a skeleton subtree; collapse that via `redirect_expr`
     // just as the labeled-block rules below do, instead of leaving the wrapper.
-    if let ExprKind::Block(block) = &engine.body.exprs[id].kind {
-        let block = *block;
-        if engine.body.blocks[block].stmts.len() == 1
-            && let StmtKind::Expr(op) = engine.body.stmts[engine.body.blocks[block].stmts[0]].kind
-        {
-            match op {
-                Operand::Expr(inner) => {
-                    engine.become_expr(id, inner);
-                    return true;
-                }
-                Operand::Value(_) => return engine.redirect_expr(id, op),
+    if let Some(block) = engine.body.unbroken_block(id)
+        && engine.body.blocks[block].stmts.len() == 1
+        && let StmtKind::Expr(op) = engine.body.stmts[engine.body.blocks[block].stmts[0]].kind
+    {
+        match op {
+            Operand::Expr(inner) => {
+                engine.become_expr(id, inner);
+                return true;
             }
+            Operand::Value(_) => return engine.redirect_expr(id, op),
         }
     }
 
@@ -176,7 +174,8 @@ fn prune_expr_local(engine: &mut Engine, id: ExprId, mode: PruneMode) -> bool {
                 let tail = engine.alloc_stmt(StmtKind::Expr(brk_value), bv_span);
                 stmts.push(tail);
                 engine.set_block_stmts(block, stmts);
-                engine.replace_expr_kind(id, ExprKind::Block(block));
+                let ty = engine.body.exprs[id].type_id;
+                engine.replace_expr_kind(id, ExprKind::plain_block(block, ty, "unbroken"));
                 return true;
             }
         }
@@ -295,7 +294,6 @@ fn stmt_dominated(body: &Body, stmt: StmtId, mode: PruneMode) -> bool {
             true
         }
         StmtKind::Expr(e) => match e.as_expr().map(|e| &body.exprs[e].kind) {
-            Some(ExprKind::Block(_)) => true,
             Some(ExprKind::LabeledBlock {
                 label, block, role, ..
             }) => unused_label_flattenable(body, label, *block, *role, mode),
@@ -417,19 +415,6 @@ fn eliminate_dead_stmts(engine: &mut Engine, block: BlockId, mode: PruneMode) ->
                 )
             })
         {
-            continue;
-        }
-        // Void block expression statement → flatten.
-        if let StmtKind::Expr(Operand::Expr(e)) = &engine.body.stmts[stmt].kind
-            && let ExprKind::Block(inner) = &engine.body.exprs[*e].kind
-        {
-            let inner = *inner;
-            let inner_stmts = engine.body.blocks[inner].stmts.clone();
-            if ends_with_terminator_stmt(engine.body, &inner_stmts) {
-                terminated = true;
-            }
-            new_stmts.extend(inner_stmts);
-            consumed_inner.push(inner);
             continue;
         }
         // Unused-label labeled-block expression statement → flatten.

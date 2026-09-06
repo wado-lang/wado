@@ -189,11 +189,10 @@ impl Collector<'_> {
 fn is_value_block(body: &Body, id: ExprId) -> bool {
     matches!(
         body.exprs[id].kind,
-        ExprKind::Block(_)
+        ExprKind::LabeledBlock { .. }
             | ExprKind::If { .. }
             | ExprKind::Match { .. }
             | ExprKind::Switch { .. }
-            | ExprKind::LabeledBlock { .. }
     )
 }
 

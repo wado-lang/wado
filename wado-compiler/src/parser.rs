@@ -2277,7 +2277,6 @@ impl Parser {
             .as_ident_name()
             .expect("parse_labeled_block_stmt called without identifier")
             .to_string();
-        self.check_label_available(&label, start_span)?;
 
         // Consume the colon
         self.expect(&TokenKind::Colon)?;
@@ -4039,7 +4038,6 @@ impl Parser {
                 return self.parse_qualified_path(start_span, name);
             } else if self.check(&TokenKind::Colon) && self.peek_nth(1).kind == TokenKind::LBrace {
                 // Labeled block expression: `label: { ... }`
-                self.check_label_available(&name, start_span)?;
                 self.advance(); // consume ':'
                 let block = self.parse_block()?;
                 let end_span = block.span;
@@ -6082,21 +6080,6 @@ impl Parser {
         })))
     }
 
-    /// Reject a label the compiler reserves for its synthesised blocks — passes
-    /// recognise those by label, so source must not be able to write one.
-    fn check_label_available(&mut self, label: &str, span: Span) -> ParseResult<()> {
-        if crate::name::is_reserved_label(label) {
-            return Err(ParseError {
-                message: format!(
-                    "label `{label}` is reserved for the compiler; a label cannot start with `{}`",
-                    crate::name::SYNTHETIC_LABEL_PREFIX
-                ),
-                span,
-            });
-        }
-        Ok(())
-    }
-
     /// Reject a malformed format specifier. `origin` is where the specifier
     /// starts in the file, so the offset [`crate::format_spec`] reports lands on
     /// the offending character.
@@ -6478,6 +6461,7 @@ mod tests {
     use super::*;
     use crate::ast::AstVisitor;
     use crate::lexer::lex;
+    use crate::name::SYNTHETIC_LABEL_PREFIX;
     use std::assert_matches;
 
     /// Parse helper for tests: maps the error-recovering parser back to a
@@ -7571,24 +7555,23 @@ mod tests {
         }
     }
 
-    /// `__` is the compiler's label namespace: passes recognise synthesised
-    /// blocks by it, so source cannot mint one.
+    /// The compiler's label namespace needs no reservation rule: no Wado
+    /// identifier starts with [`SYNTHETIC_LABEL_PREFIX`], so a pass that knows a
+    /// synthesised block by its label cannot be fooled by a written one.
     #[test]
-    fn test_reserved_label_rejected() {
+    fn test_synthetic_label_prefix_is_unwritable() {
+        let source = format!("fn f() {{ {SYNTHETIC_LABEL_PREFIX}tmpl: {{}} }}");
+        assert!(!lex(&source).errors.is_empty(), "{source} must not lex");
+
+        // Every label the source *can* spell is its own, `__` included.
         for source in [
+            "fn f() { outer: { break outer; } }",
             "fn f() { __tmpl: { break __tmpl; } }",
             "fn f() { let x = __tmpl: { break __tmpl: 1; }; }",
         ] {
             let (_, errors) = parse_recovering(source);
-            assert!(
-                errors
-                    .iter()
-                    .any(|e| e.message.contains("`__tmpl` is reserved")),
-                "{source}: {errors:?}"
-            );
+            assert!(errors.is_empty(), "{source}: {errors:?}");
         }
-        let (_, errors) = parse_recovering("fn f() { outer: { break outer; } }");
-        assert!(errors.is_empty(), "{errors:?}");
     }
 
     /// An empty interpolation points at the `${` that opens it.

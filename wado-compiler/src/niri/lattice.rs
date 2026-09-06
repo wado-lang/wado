@@ -311,7 +311,7 @@ impl Interpreter<'_> {
                 module_source,
                 name,
             } => self.global_lattice(module_source, name),
-            ExprKind::Block(b) => self.block_lattice(body, *b),
+            ExprKind::LabeledBlock { block, .. } => self.block_lattice(body, *block),
             ExprKind::If {
                 condition,
                 then_branch,

@@ -1,0 +1,38 @@
+// Regression test for `labeled_block_fusion` firing on a labeled block whose
+// value falls out of its tail rather than through `break L:` exits.
+//
+// The fusion rewrites the block exit by exit, so a block that reaches its end
+// produces a value no exit rewrite reaches. Such a block used to be an
+// unlabeled `ExprKind::Block` by the time the peephole saw it, and the
+// `LabeledBlock` pattern excluded it by accident; once every block carries a
+// label the exclusion had to be stated. Walking zero exits made
+// `check_lb_breaks_are_tagged_tuples` vacuously true, and the fusion then
+// deleted the `let` and the consumer without emitting either arm — both
+// `println` calls vanished at -O1 and above.
+
+use { println, Stdout } from "core:cli";
+
+fn classify(n: i32) -> Result<i32, i32> {
+    if n > 0 {
+        return Ok(n * 2);
+    }
+    return Err(n);
+}
+
+// The forwarding call is what leaves the inlined block ending in `break L:
+// <block>`; dropping that trailing break is what makes the value fall through.
+fn forward(n: i32) -> Result<i32, i32> {
+    return classify(n);
+}
+
+export fn run() with Stdout {
+    let r = forward(21);
+    if let Ok(v) = r {
+        println(`OK: ${v}`);
+    } else {
+        println("ERR");
+    }
+}
+
+__DATA__
+{"stdout": "OK: 42\n"}

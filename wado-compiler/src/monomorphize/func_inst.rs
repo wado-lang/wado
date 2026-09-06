@@ -4131,7 +4131,7 @@ impl Monomorphizer {
 
             iter_stmts.extend(elem_body.stmts);
 
-            let label = format!("__tuple_iter_{uid}_{i}");
+            let label = format!("$tuple_iter_{uid}_{i}");
             outer_stmts.push(TirStmt::new(
                 TirStmtKind::LabeledBlock {
                     label,
@@ -4141,7 +4141,7 @@ impl Monomorphizer {
             ));
         }
 
-        let outer_label = format!("__tuple_for_of_{uid}");
+        let outer_label = format!("$tuple_for_of_{uid}");
         vec![TirStmt::new(
             TirStmtKind::LabeledBlock {
                 label: outer_label,
@@ -4318,7 +4318,7 @@ impl Monomorphizer {
 
         let mut result_elements = Vec::with_capacity(elements.len());
         for (i, &elem_type) in elements.iter().enumerate() {
-            let element_label = format!("__comp_{uid}_{i}");
+            let element_label = format!("$comp_{uid}_{i}");
             let mut stmts = Vec::new();
 
             let field = TirExpr::new(
@@ -4535,7 +4535,7 @@ impl Monomorphizer {
             ));
         }
 
-        let outer_label = format!("__comp_{uid}_result");
+        let outer_label = format!("$comp_{uid}_result");
         let tuple = TirExpr::new(
             TirExprKind::TupleLiteral {
                 elements: result_elements,

@@ -255,19 +255,22 @@ pub const CLOSURE_STRUCT_PREFIX: &str = "__Closure_";
 
 /// Prefix every compiler-synthesised block label carries.
 ///
-/// Reserved in source — the parser rejects a label that starts with it — so a
-/// label is a sound marker for a synthesised block: a pass that recognises one
-/// by name cannot be fooled by a hand-written block wearing the same label.
-pub const SYNTHETIC_LABEL_PREFIX: &str = "__";
+/// `$` begins no Wado identifier, so the source cannot spell one of these
+/// whatever it tries — a pass that recognises a synthesised block by name
+/// cannot be fooled by a hand-written block wearing the same label, and the
+/// parser needs no rule to keep it that way.
+pub const SYNTHETIC_LABEL_PREFIX: &str = "$";
 
+/// The label a block no `break` names carries: `what` says which construct put
+/// the block there, `id` makes it unique within the body.
 #[must_use]
-pub fn is_reserved_label(label: &str) -> bool {
-    label.starts_with(SYNTHETIC_LABEL_PREFIX)
+pub fn plain_block_label(what: &str, id: usize) -> String {
+    format!("{SYNTHETIC_LABEL_PREFIX}{what}_{id}")
 }
 
 /// Label the template-string synthesiser stamps on the block wrapping an
 /// expanded `` `...` `` literal.
-pub const TEMPLATE_BLOCK_LABEL: &str = "__tmpl";
+pub const TEMPLATE_BLOCK_LABEL: &str = "$tmpl";
 
 /// Whether `label` marks the block an expanded template string breaks out of.
 /// Shared by the producer (`synthesis::template`) and lowering, which reads it

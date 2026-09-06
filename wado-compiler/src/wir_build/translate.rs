@@ -12,7 +12,7 @@ use crate::tir::{PrimitiveType, ResolvedType, TypeId, TypeTable};
 use crate::wir::{WirInstr, WirName, WirType, WirTypeDef, WirTypeId};
 
 use super::context::WirContext;
-use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, Operand, StmtId, StmtKind};
+use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, NodeRef, Operand, StmtId, StmtKind};
 
 pub(super) fn ref_binding_needs_boxing(
     binding_wir: &WirType,
@@ -1706,7 +1706,7 @@ impl FunctionTranslator<'_, '_> {
                 self.translate_expr(expr_id)
             }
             // Block with UNIT type but value-producing last expression
-            ExprKind::Block(block) => {
+            ExprKind::LabeledBlock { block, .. } => {
                 let block = *block;
                 if self.infer_stmts_result_type(block).is_some() {
                     let body = self.translate_stmts_as_value(&arena.blocks[block].stmts);
@@ -2581,15 +2581,6 @@ impl FunctionTranslator<'_, '_> {
                 self.translate_cast(*inner, self.operand_type_id(*inner), *target_type)
             }
 
-            ExprKind::Block(block) => {
-                let body = if self.is_stackless_type(expr.type_id) {
-                    self.translate_stmts(&arena.blocks[*block].stmts)
-                } else {
-                    self.translate_stmts_as_value(&arena.blocks[*block].stmts)
-                };
-                WirInstr::Seq(body)
-            }
-
             ExprKind::If {
                 condition,
                 then_branch,
@@ -2791,25 +2782,36 @@ impl FunctionTranslator<'_, '_> {
 
             ExprKind::LabeledBlock { label, block, .. } => {
                 let has_result = !self.is_stackless_type(expr.type_id);
-                self.label_stack.push(LabelEntry {
-                    label: Some(label.clone()),
-                    is_loop_break: false,
-                    is_loop_continue: false,
-                });
+                // A Wasm block only earns its keep as a `br` target. Where
+                // nothing breaks to the label — every synthesized block, and a
+                // written one whose `break` a pass removed — the statements
+                // are a plain sequence.
+                //
+                // `compute_break_depth` reads a `br`'s relative depth off the
+                // stack position, so an entry pushed for a block we do not emit
+                // would deepen every `br` under it by one. Nothing names this
+                // label, so leaving it off the stack loses no target.
+                let targeted = arena.breaks_to(NodeRef::Block(*block), label);
+                if targeted {
+                    self.label_stack.push(LabelEntry {
+                        label: Some(label.clone()),
+                        is_loop_break: false,
+                        is_loop_continue: false,
+                    });
+                }
                 let body = if has_result {
                     self.translate_stmts_as_value(&arena.blocks[*block].stmts)
                 } else {
                     self.translate_stmts(&arena.blocks[*block].stmts)
                 };
+                if !targeted {
+                    return WirInstr::Seq(body);
+                }
                 self.label_stack.pop();
-                let result_type = if self.is_stackless_type(expr.type_id) {
-                    None
-                } else {
-                    Some(self.ctx.type_id_to_wir_type(self.type_table, expr.type_id))
-                };
                 WirInstr::Block {
                     label: Some(label.clone()),
-                    result: result_type,
+                    result: has_result
+                        .then(|| self.ctx.type_id_to_wir_type(self.type_table, expr.type_id)),
                     body,
                 }
             }

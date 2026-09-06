@@ -2668,10 +2668,6 @@ fn walk_other_expr_kinds(
             walk_operand(body, inner, states, true, out, ctx);
             walk_operand(body, index, states, true, out, ctx);
         }
-        ExprKind::Block(block) => {
-            let block = *block;
-            walk_inline_block(body, block, states, result_used, ctx);
-        }
         ExprKind::If {
             condition,
             then_branch,
@@ -2768,16 +2764,6 @@ fn walk_other_expr_kinds(
 /// another expression. Sync stmts emitted inside the inner block stay
 /// inside the block (its own stmt sequence), so `walk_block` does the
 /// right thing.
-fn walk_inline_block(
-    body: &mut Body,
-    block: BlockId,
-    states: &mut ScalarStates,
-    _result_used: bool,
-    ctx: &mut WalkCtx,
-) {
-    walk_block(body, block, states, ctx);
-}
-
 /// Walk a labeled block, accounting for labeled breaks that bypass the sync
 /// emitted inside it. `walk_stmt` only records each break site (committing on
 /// every one over-syncs); here the fall-through and break states are joined and
@@ -2957,10 +2943,10 @@ fn wrap_expr_with_prefix_operand(body: &mut Body, op: Operand, prefix: Vec<StmtI
 }
 
 /// Prepend prefix stmts into an expression's evaluation by wrapping the
-/// expression node `e` in place into a Block holding the prefix stmts
+/// expression node `e` in place into a block holding the prefix stmts
 /// followed by the original expression (moved to a fresh node) as its
 /// value-producing stmt. The node id `e` is preserved so its parent still
-/// references it; it now carries a `Block` of the same type id.
+/// references it; it now carries a block of the same type id.
 fn wrap_expr_with_prefix(body: &mut Body, e: ExprId, prefix: Vec<StmtId>) {
     let expr_type = body.exprs[e].type_id;
     let expr_span = body.exprs[e].span;
@@ -2975,7 +2961,7 @@ fn wrap_expr_with_prefix(body: &mut Body, e: ExprId, prefix: Vec<StmtId>) {
         stmts,
         span: expr_span,
     });
-    body.exprs[e].kind = ExprKind::Block(blk);
+    body.exprs[e].kind = ExprKind::plain_block(blk, expr_type, "prefix");
 }
 
 fn emit_convergence_at_expr_end_operand(
@@ -2992,12 +2978,11 @@ fn emit_convergence_at_expr_end_operand(
 }
 
 /// Insert convergence sync at the end of an expression's evaluation (a
-/// match arm body, a match guard, or an `&&`/`||` RHS). If the expression
-/// is already a Block, append the sync stmts directly. Otherwise wrap it
-/// in a Block { `expr_as_stmt`; sync } (when unit-typed) or
-/// Block { let __tmp = expr; sync; __tmp } (when non-unit, so the temp
-/// preserves the value across the trailing sync). The temp uses the
-/// per-type pool.
+/// match arm body, a match guard, or an `&&`/`||` RHS). If the expression is
+/// already a block no `break` leaves early, append the sync stmts directly.
+/// Otherwise wrap it in a block `{ expr_as_stmt; sync }` (when unit-typed) or
+/// `{ let tmp = expr; sync; tmp }` (when non-unit, so the temp preserves the
+/// value across the trailing sync). The temp uses the per-type pool.
 fn emit_convergence_at_expr_end(
     body: &mut Body,
     arm_e: ExprId,
@@ -3015,16 +3000,18 @@ fn emit_convergence_at_expr_end(
     if sync_stmts.is_empty() {
         return;
     }
-    // Existing Block bodies: append sync to the block, preserving the
-    // block's trailing value if it has one (a non-unit Expr stmt).
-    if let ExprKind::Block(block) = body.exprs[arm_e].kind {
+    // Existing block bodies: append sync to the block, preserving the
+    // block's trailing value if it has one (a non-unit Expr stmt). A `break`
+    // to the label would jump over what we append, so that block is wrapped
+    // like any other expression instead.
+    if let Some(block) = body.unbroken_block(arm_e) {
         append_sync_preserving_block_value(body, block, sync_stmts, ctx);
         return;
     }
     let body_type = body.exprs[arm_e].type_id;
     let body_span = body.exprs[arm_e].span;
     if body_type == TypeTable::UNIT {
-        // Unit body: Block { Expr(body); sync... }
+        // Unit body: { Expr(body); sync... }
         let original_kind = std::mem::replace(&mut body.exprs[arm_e].kind, ExprKind::Dead);
         let original = push_expr(body, original_kind, body_type, body_span);
         let expr_stmt = push_stmt(body, StmtKind::Expr(original.into()), body_span);
@@ -3035,7 +3022,7 @@ fn emit_convergence_at_expr_end(
             stmts,
             span: body_span,
         });
-        body.exprs[arm_e].kind = ExprKind::Block(blk);
+        body.exprs[arm_e].kind = ExprKind::plain_block(blk, body_type, "sync");
         return;
     }
     let original_kind = std::mem::replace(&mut body.exprs[arm_e].kind, ExprKind::Dead);
@@ -3051,7 +3038,7 @@ fn emit_convergence_at_expr_end(
         stmts,
         span: body_span,
     });
-    body.exprs[arm_e].kind = ExprKind::Block(blk);
+    body.exprs[arm_e].kind = ExprKind::plain_block(blk, body_type, "sync");
     for (idx, ty) in temps {
         ctx.free_temp(idx, ty);
     }

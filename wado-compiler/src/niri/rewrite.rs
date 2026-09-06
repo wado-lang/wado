@@ -152,7 +152,6 @@ impl Interpreter<'_> {
     fn yields_own_object(&self, body: &Body, e: ExprId) -> bool {
         match &body.exprs[e].kind {
             ExprKind::Call { .. }
-            | ExprKind::Block(_)
             | ExprKind::LabeledBlock { .. }
             | ExprKind::StructLiteral { .. }
             | ExprKind::TupleLiteral { .. }
@@ -853,7 +852,8 @@ impl Interpreter<'_> {
         };
         let stmt = sink.alloc_stmt(StmtKind::Expr(body_op), span);
         let block = sink.alloc_block(vec![stmt], span);
-        sink.replace_kind(e, ExprKind::Block(block));
+        let ty = sink.body().exprs[e].type_id;
+        sink.replace_kind(e, ExprKind::plain_block(block, ty, "arm"));
         true
     }
 
@@ -960,13 +960,13 @@ fn splice_chosen_if_branch<S: EditSink>(
     then_branch: BlockId,
     else_branch: Option<BlockId>,
 ) {
-    let span = sink.body().exprs[e].span;
+    let ExprNode { span, type_id, .. } = sink.body().exprs[e];
     let block = match (taken, else_branch) {
         (true, _) => then_branch,
         (false, Some(eb)) => eb,
         (false, None) => sink.alloc_block(Vec::new(), span),
     };
-    sink.replace_kind(e, ExprKind::Block(block));
+    sink.replace_kind(e, ExprKind::plain_block(block, type_id, "branch"));
 }
 
 /// `if c { true } else { false }` ≡ `c`, and the mirrored form ≡ `!c`. Splicing
@@ -1199,10 +1199,7 @@ pub(super) fn is_discardable_operand(body: &Body, op: crate::nir_arena::Operand)
 /// forever — and the value is worth memoizing, since a revisit would otherwise
 /// run the body again.
 fn consumes_its_source(kind: &ExprKind) -> bool {
-    matches!(
-        kind,
-        ExprKind::Call { .. } | ExprKind::Block(_) | ExprKind::LabeledBlock { .. }
-    )
+    matches!(kind, ExprKind::Call { .. } | ExprKind::LabeledBlock { .. })
 }
 
 /// Charge `budget` one per operand writing `value` would place, failing as soon

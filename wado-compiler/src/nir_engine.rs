@@ -1494,7 +1494,6 @@ impl<'a> Engine<'a> {
                 expr: self.clone_operand(expr),
                 index: self.clone_operand(index),
             },
-            ExprKind::Block(b) => ExprKind::Block(self.clone_block(b)),
             ExprKind::If {
                 condition,
                 then_branch,

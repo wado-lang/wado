@@ -336,17 +336,18 @@ fn parse_value_offset(engine: &Engine, v: crate::nir_value_graph::ValueId) -> Op
 /// `break label tail`.
 fn block_tail_operand(body: &crate::nir_arena::Body, e: ExprId) -> Option<Operand> {
     match &body.exprs[e].kind {
-        ExprKind::Block(block) => block_id_tail(body, *block),
+        // A block yields through its own `break label: tail`, or — where nothing
+        // breaks to it, as for every synthesized one — through the trailing
+        // statement.
         ExprKind::LabeledBlock { label, block, .. } => {
             let last = *body.blocks[*block].stmts.last()?;
-            let StmtKind::Break {
-                label: Some(bl),
-                value: Some(v),
-            } = &body.stmts[last].kind
-            else {
-                return None;
-            };
-            (bl == label).then_some(*v)
+            match &body.stmts[last].kind {
+                StmtKind::Break {
+                    label: Some(bl),
+                    value: Some(v),
+                } => (bl == label).then_some(*v),
+                _ => block_id_tail(body, *block),
+            }
         }
         _ => None,
     }
@@ -1443,9 +1444,17 @@ fn rbce_walk(engine: &mut Engine, node: NodeRef, facts: &mut Vec<ProvenLt>, bind
         return changed;
     }
 
+    // A block something breaks to is a fresh region: the break skips the rest of
+    // it, so a fact proven inside need not hold where the block's value lands.
+    // A block nothing breaks to runs straight through, and its facts flow like
+    // any other statement sequence — which is what the grouping blocks every
+    // index expression expands into depend on.
     let fresh_region = match node {
         NodeRef::Stmt(s) => matches!(engine.body.stmts[s].kind, StmtKind::Loop { .. }),
-        NodeRef::Expr(e) => matches!(engine.body.exprs[e].kind, ExprKind::LabeledBlock { .. }),
+        NodeRef::Expr(e) => {
+            matches!(engine.body.exprs[e].kind, ExprKind::LabeledBlock { .. })
+                && engine.body.unbroken_block(e).is_none()
+        }
         _ => false,
     };
     if fresh_region {

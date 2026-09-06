@@ -1,4 +1,4 @@
-//! Template string expansion: `TirExprKind::TemplateString` becomes a `__tmpl`
+//! Template string expansion: `TirExprKind::TemplateString` becomes a `$tmpl`
 //! labeled block of `String::with_capacity`, `push_str` calls, `Formatter`
 //! construction, and `Display` / `Inspect` dispatch. Runs pre-monomorphize, so
 //! the emitted trait calls resolve there — no post-mono `has_trait_impl` check
@@ -443,7 +443,7 @@ impl crate::tir_visitor::TirOptVisitor for TemplateExpander<'_> {
 /// Reserved per interpolation, on top of the literal segments' exact length.
 const CAPACITY_PER_INTERPOLATION: i64 = 16;
 
-/// Build the `__tmpl: { ... }` labeled block for a template string.
+/// Build the `$tmpl: { ... }` labeled block for a template string.
 fn build_template_block(
     parts: Vec<TirTemplatePart>,
     string_type: TypeId,
@@ -580,7 +580,7 @@ fn build_template_block(
         }
     }
 
-    // break __tmpl: __r;
+    // break $tmpl: __r;
     stmts.push(TirStmt::new(
         TirStmtKind::Break {
             label: Some(label.clone()),

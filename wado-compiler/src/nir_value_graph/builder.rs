@@ -1175,26 +1175,6 @@ impl<'a> Builder<'a> {
             }
 
             // ---- Control-flow expressions ----
-            ExprKind::Block(block) => {
-                // A single-expression block `{ e }` (e.g. an inlined getter
-                // `{ x.used }`) forwards `e`'s value, so a later read unifies
-                // with the same access written directly. Multi-statement blocks
-                // stay opaque: forwarding the tail would let CSE drop the side
-                // effects of the leading statements (e.g. `{ cold_path(); e }`).
-                let tail = if let [only] = self.body.blocks[block].stmts[..]
-                    && let StmtKind::Expr(Operand::Expr(e)) = &self.body.stmts[only].kind
-                {
-                    Some(*e)
-                } else {
-                    None
-                };
-                if let Some(e) = tail {
-                    self.walk_expr(e)
-                } else {
-                    self.walk_block(block);
-                    None
-                }
-            }
             ExprKind::If {
                 condition,
                 then_branch,
@@ -1225,12 +1205,37 @@ impl<'a> Builder<'a> {
                 self.flow_join_two(cond_v, &pre, then_arm, else_arm);
                 None
             }
-            ExprKind::LabeledBlock { block, .. } => {
-                // Same break-only-write hazard as the `StmtKind::LabeledBlock` arm.
-                self.walk_block(block);
-                self.dirty_all_writes_in_block(block);
-                self.heap_state.bump_all();
-                None
+            ExprKind::LabeledBlock {
+                block, ref label, ..
+            } => {
+                // The break-only-write hazard the `StmtKind::LabeledBlock` arm
+                // names is a hazard of the break, not of the block: a jump out
+                // of the middle leaves the writes after it undone. Where
+                // nothing breaks to the label the statements simply run.
+                if block_breaks_to(self.body, block, label) {
+                    self.walk_block(block);
+                    self.dirty_all_writes_in_block(block);
+                    self.heap_state.bump_all();
+                    return None;
+                }
+                // A single-expression block `{ e }` (e.g. an inlined getter
+                // `{ x.used }`) forwards `e`'s value, so a later read unifies
+                // with the same access written directly. Multi-statement blocks
+                // stay opaque: forwarding the tail would let CSE drop the side
+                // effects of the leading statements (e.g. `{ cold_path(); e }`).
+                let tail = if let [only] = self.body.blocks[block].stmts[..]
+                    && let StmtKind::Expr(Operand::Expr(e)) = &self.body.stmts[only].kind
+                {
+                    Some(*e)
+                } else {
+                    None
+                };
+                if let Some(e) = tail {
+                    self.walk_expr(e)
+                } else {
+                    self.walk_block(block);
+                    None
+                }
             }
             ExprKind::Match { expr: scrut, arms } => {
                 self.walk_operand(scrut);
@@ -1447,47 +1452,37 @@ impl<'a> Builder<'a> {
                     self.copy_local_field_slots(src, root, recv);
                     return;
                 }
-                ExprKind::Block(b) => {
-                    let Some(&last) = self.body.blocks[*b].stmts.last() else {
-                        return;
-                    };
-                    let StmtKind::Expr(Operand::Expr(tail)) = &self.body.stmts[last].kind else {
-                        crate::compiler_trace!(
-                            "vg_field",
-                            "peel {root}: block tail is {:.60?}",
-                            self.body.stmts[last].kind
-                        );
-                        return;
-                    };
-                    producer = *tail;
-                }
                 ExprKind::LabeledBlock { block, label, .. } => {
                     let (block, label) = (*block, label.clone());
                     let stmts = &self.body.blocks[block].stmts;
                     let Some(&last) = stmts.last() else {
                         return;
                     };
-                    let StmtKind::Break {
-                        label: Some(brk),
-                        value: Some(value),
-                    } = &self.body.stmts[last].kind
-                    else {
-                        return;
+                    // A block yields through its own `break label: v`, or —
+                    // where nothing breaks to it — through the trailing
+                    // statement.
+                    let value = match &self.body.stmts[last].kind {
+                        StmtKind::Break {
+                            label: Some(brk),
+                            value: Some(value),
+                        } if *brk == label => *value,
+                        StmtKind::Expr(tail) if !block_breaks_to(self.body, block, &label) => {
+                            let Some(tail) = tail.as_expr() else { return };
+                            producer = tail;
+                            continue;
+                        }
+                        _ => return,
                     };
-                    if *brk != label {
-                        return;
-                    }
-                    let value = *value;
                     // The trailing break must be the sole producer: no other
                     // break to this label anywhere else in the block or in
                     // the carried value.
                     let earlier_break = stmts[..stmts.len() - 1]
                         .iter()
-                        .any(|s| block_breaks_to_node(self.body, NodeRef::Stmt(*s), &label));
+                        .any(|s| self.body.breaks_to(NodeRef::Stmt(*s), &label));
                     if earlier_break
-                        || value.as_expr().is_some_and(|ve| {
-                            block_breaks_to_node(self.body, NodeRef::Expr(ve), &label)
-                        })
+                        || value
+                            .as_expr()
+                            .is_some_and(|ve| self.body.breaks_to(NodeRef::Expr(ve), &label))
                     {
                         crate::compiler_trace!(
                             "vg_field",
@@ -2131,26 +2126,8 @@ fn writes_of_block(
     rc
 }
 
-/// Whether `block`'s subtree contains a `break` targeting `label`. Used by
-/// [`Builder::stmt_falls_through`] to classify a labeled block whose body
-/// exits via a break to its own label as falling through.
 fn block_breaks_to(body: &Body, block: BlockId, label: &str) -> bool {
-    block_breaks_to_node(body, NodeRef::Block(block), label)
-}
-
-fn block_breaks_to_node(body: &Body, node: NodeRef, label: &str) -> bool {
-    if let NodeRef::Stmt(s) = node
-        && let StmtKind::Break {
-            label: Some(brk), ..
-        } = &body.stmts[s].kind
-        && brk == label
-    {
-        return true;
-    }
-    let mut kids = Vec::new();
-    body.for_each_child(node, |c| kids.push(c));
-    kids.into_iter()
-        .any(|c| block_breaks_to_node(body, c, label))
+    body.breaks_to(NodeRef::Block(block), label)
 }
 
 /// Every field index some `Assign` in `body` writes, over the whole arena: a

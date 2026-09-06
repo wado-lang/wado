@@ -704,7 +704,7 @@ fn hoist_value_arg(
     });
 
     let wrap_block = set_then_get_block(body, inner, module_source, name, ty, guarded, span);
-    body.exprs[arg_expr].kind = ExprKind::Block(wrap_block);
+    body.exprs[arg_expr].kind = ExprKind::plain_block(wrap_block, ty, "globalize");
 }
 
 /// `{ GlobalVarSet(name, inner); GlobalVarGet(name) }` — the block that gives
@@ -808,7 +808,7 @@ fn hoist_inline_ref(
 
     let wrap_block = set_then_get_block(body, inner, module_source, name, ty, guarded, span);
     let block_expr = body.exprs.push(ExprNode {
-        kind: ExprKind::Block(wrap_block),
+        kind: ExprKind::plain_block(wrap_block, ty, "globalize"),
         type_id: ty,
         span,
     });
@@ -1308,9 +1308,7 @@ fn is_globalizable_const(
             is_globalizable_const_operand(body, *inner, gate, bound)
         }
         // The builder-temp block an array / list literal leaves.
-        ExprKind::Block(block) | ExprKind::LabeledBlock { block, .. } => {
-            block_is_const(body, *block, gate, bound)
-        }
+        ExprKind::LabeledBlock { block, .. } => block_is_const(body, *block, gate, bound),
         _ => false,
     }
 }
@@ -1373,7 +1371,7 @@ fn contains_aggregate(body: &Body, expr: ExprId, gate: &Gate<'_>) -> bool {
         ExprKind::Unary { expr: inner, .. } | ExprKind::Cast { expr: inner, .. } => {
             contains_aggregate_operand(body, *inner, gate)
         }
-        ExprKind::Block(block) | ExprKind::LabeledBlock { block, .. } => {
+        ExprKind::LabeledBlock { block, .. } => {
             let stmts = body.blocks[*block].stmts.clone();
             stmts.iter().any(|&s| match &body.stmts[s].kind {
                 StmtKind::Let { value, .. } => contains_aggregate_operand(body, *value, gate),
@@ -2041,9 +2039,7 @@ fn delivers_projection(body: &Body, expr: ExprId, roots: &[u32], gate: &Gate<'_>
         return true;
     }
     match &body.exprs[expr].kind {
-        ExprKind::Block(block) | ExprKind::LabeledBlock { block, .. } => {
-            block_tail_delivers(body, *block, roots, gate)
-        }
+        ExprKind::LabeledBlock { block, .. } => block_tail_delivers(body, *block, roots, gate),
         ExprKind::If {
             then_branch,
             else_branch,
@@ -2291,9 +2287,7 @@ fn expr_readonly(body: &Body, expr: ExprId, idx: u32, gate: &Gate<'_>) -> bool {
             !expr_mentions_local(body, target, idx) && expr_readonly_operand(body, value, idx, gate)
         }
 
-        ExprKind::Block(b) | ExprKind::LabeledBlock { block: b, .. } => {
-            block_readonly(body, *b, idx, gate)
-        }
+        ExprKind::LabeledBlock { block: b, .. } => block_readonly(body, *b, idx, gate),
         ExprKind::If {
             condition,
             then_branch,
@@ -2518,7 +2512,7 @@ fn inline_sibling_lets(
     stmts.push(tail);
     let block = body.blocks.push(BlockNode { stmts, span });
     let block_expr = body.exprs.push(ExprNode {
-        kind: ExprKind::Block(block),
+        kind: ExprKind::plain_block(block, value_ty, "sibling_lets"),
         type_id: value_ty,
         span,
     });

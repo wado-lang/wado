@@ -1232,28 +1232,20 @@ fn extract_alias_source(body: &Body, e: ExprId) -> Option<u32> {
         } => inner
             .as_expr()
             .and_then(|ie| extract_alias_source(body, ie)),
-        ExprKind::Block(block) => {
-            let tail = *body.blocks[*block].stmts.last()?;
-            let StmtKind::Expr(Operand::Expr(tail_expr)) = &body.stmts[tail].kind else {
-                return None;
-            };
-            extract_alias_source(body, *tail_expr)
-        }
+        // A block yields through its own `break label: v`, or — where nothing
+        // breaks to it — through the trailing statement.
         ExprKind::LabeledBlock { label, block, .. } => {
             let last = *body.blocks[*block].stmts.last()?;
-            let StmtKind::Break {
-                label: Some(brk_label),
-                value: Some(brk_value),
-            } = &body.stmts[last].kind
-            else {
-                return None;
-            };
-            if brk_label != label {
-                return None;
+            match &body.stmts[last].kind {
+                StmtKind::Break {
+                    label: Some(brk_label),
+                    value: Some(brk_value),
+                } if brk_label == label => brk_value
+                    .as_expr()
+                    .and_then(|e| extract_alias_source(body, e)),
+                StmtKind::Expr(Operand::Expr(tail_expr)) => extract_alias_source(body, *tail_expr),
+                _ => None,
             }
-            brk_value
-                .as_expr()
-                .and_then(|e| extract_alias_source(body, e))
         }
         _ => None,
     }
@@ -1586,9 +1578,6 @@ fn collect_modified_vars_in_expr(
             let index = *index;
             collect_modified_vars_in_operand(body, inner, modified, type_table);
             collect_modified_vars_in_operand(body, index, modified, type_table);
-        }
-        ExprKind::Block(block) => {
-            collect_modified_vars_in_block(body, *block, modified, type_table);
         }
         ExprKind::If {
             condition,
@@ -1994,7 +1983,6 @@ fn arith_structural_key(body: &Body, e: ExprId) -> ArithKey {
         | ExprKind::ClosureToCanonical { .. }
         | ExprKind::FieldAccess { .. }
         | ExprKind::Index { .. }
-        | ExprKind::Block(_)
         | ExprKind::If { .. }
         | ExprKind::Match { .. }
         | ExprKind::Switch { .. }
