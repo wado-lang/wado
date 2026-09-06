@@ -1,7 +1,8 @@
 //! Corpus check: parse every `.rs` path given on the command line with the
 //! Gale-generated Rust parser and report each file's first diagnostic.
 //!
-//!     wado run package-gale/tools/rust_corpus_check.wado -- --paths-from list.txt
+//!     git ls-files '*.rs' > target/rs-corpus.txt
+//!     wado run package-gale/tools/rust_corpus_check.wado -- --paths-from target/rs-corpus.txt
 //!
 //! One `ok` / `ng` line per file, plus a summary on stderr. `--paths-from`
 //! reads one path per line — the only form that survives a path with a space.
@@ -120,19 +121,15 @@ fn collect_paths(root: &Descriptor, argv: &List<String>) -> List<String> with St
     return paths;
 }
 
-/// The 1-based line holding `offset`.
-fn line_of(source: &String, offset: usize) -> usize {
+/// The 1-based line holding byte offset `at`.
+fn line_of(source: &String, at: i32) -> i32 {
     let mut line = 1;
-    let mut seen = 0;
-    for let text of source.lines() {
-        if seen > offset {
-            return line;
+    let mut i = 0;
+    while i < at && i < source.len() {
+        if source.get_byte_unchecked(i) == b'\n' {
+            line += 1;
         }
-        seen += text.len() + 1;
-        if seen > offset {
-            return line;
-        }
-        line += 1;
+        i += 1;
     }
     return line;
 }
