@@ -222,10 +222,11 @@ pub struct Unparser<'a> {
     indent_level: usize,
     emitted_comments: IndexSet<usize>,
     last_source_line: usize,
-    /// Set while re-rendering a construct that must take its wrapped form: the
-    /// first construct able to wrap consumes it, so only the outermost one is
-    /// forced and everything inside it decides by width as usual.
-    force_wrap: bool,
+    /// The span start of the one call whose arguments must take their wrapped
+    /// form. Keyed by span rather than set as a flag: what needs to wrap is the
+    /// call that *ends* the line, and a flag any nested rendering may consume
+    /// lands on whichever call the recursion reaches first instead.
+    force_wrap: Option<usize>,
     /// `(output position, columns)`: what the caller will append to the line
     /// the construct starting at that position ends on — the ` {` after an
     /// `if` condition. The construct's own width decision counts those
@@ -2057,6 +2058,12 @@ impl<'a> Unparser<'a> {
         });
     }
 
+    /// One operand of a logical chain. The chain renders an operand more than
+    /// once to try another width, and every attempt must render it the same.
+    fn unparse_operand(&mut self, part: &Expr, parens: bool) {
+        self.with_parens_if(parens, |s| s.unparse_expr(part));
+    }
+
     fn unparse_logical_chain_multiline(&mut self, b: &BinaryExpr) {
         let op_str = binary_op_str(b.op);
         let parts = collect_logical_chain_binary(b);
@@ -2067,25 +2074,39 @@ impl<'a> Unparser<'a> {
 
         for (i, part) in parts[1..].iter().enumerate() {
             self.output.push('\n');
+            // The operand's line is one level in from the chain, and it stays
+            // that way while the operand renders: what the operand wraps has to
+            // indent from the line it is on, not from the chain's own level.
             self.indent_level += 1;
             self.write_indent();
-            self.indent_level -= 1;
             self.output.push_str(op_str);
             self.output.push(' ');
             let snap = self.snapshot();
-            self.with_parens_if(needs_parens(part, b.op, false), |s| s.unparse_expr(part));
+            let parens = needs_parens(part, b.op, false);
+            self.unparse_operand(part, parens);
 
             // The last operand ends the chain, so the caller's ` {` lands on
             // its line. Measure that line once the operand is rendered — only
-            // then is it known whether the operand ends it — and let the
-            // operand wrap when the two together do not fit.
+            // then is it known whether the operand ends it — and wrap the call
+            // that ends the line when the two together do not fit.
             let last = i + 2 == parts.len();
-            if last && self.last_line_exceeds_reserved() {
+            if last
+                && self.last_line_exceeds_reserved()
+                && let Some(tail) = tail_call_span_start(part)
+            {
                 self.rollback(snap);
-                self.force_wrap = true;
-                self.with_parens_if(needs_parens(part, b.op, false), |s| s.unparse_expr(part));
-                self.force_wrap = false;
+                self.force_wrap = Some(tail);
+                self.unparse_operand(part, parens);
+                self.force_wrap = None;
+                // Wrapping the tail is worth it only if it bought the line
+                // back. A tail whose own arguments overflow leaves it over
+                // either way, and the compact form is the better of the two.
+                if self.last_line_exceeds_reserved() {
+                    self.rollback(snap);
+                    self.unparse_operand(part, parens);
+                }
             }
+            self.indent_level -= 1;
         }
     }
 
@@ -2206,7 +2227,10 @@ impl<'a> Unparser<'a> {
         // Multiline-with-trailing-comma is requested explicitly by the source;
         // in that case we skip the single-line attempt entirely, as does a
         // caller that has measured the line and needs this call to wrap.
-        let forced = std::mem::take(&mut self.force_wrap);
+        let forced = self.force_wrap == Some(span.start);
+        if forced {
+            self.force_wrap = None;
+        }
         if (!has_trailing_comma || args.is_empty()) && !forced {
             let snap = self.snapshot();
             self.emit_inline_call_args(args, span.start);
@@ -3211,6 +3235,23 @@ fn collect_logical_chain_expr<'a>(expr: &'a Expr, op: BinaryOp, parts: &mut Vec<
             collect_logical_chain_expr(&inner.right, op, parts);
         }
         _ => parts.push(expr),
+    }
+}
+
+/// The span start of the call whose `)` ends `expr`'s rendering, if a call
+/// does. That call is the only one whose wrapping shortens the line `expr`
+/// ends on, so it is the one a caller short of room forces. Follows the right
+/// spine, where the rendering's last token is, and stops at an operand the
+/// unparser would parenthesize: there the last token is the paren, not the
+/// call.
+fn tail_call_span_start(expr: &Expr) -> Option<usize> {
+    match expr {
+        Expr::Call(c) => Some(c.span.start),
+        Expr::MethodCall(m) => Some(m.span.start),
+        Expr::StaticMethodCall(s) => Some(s.span.start),
+        Expr::Binary(b) if !needs_parens(&b.right, b.op, false) => tail_call_span_start(&b.right),
+        Expr::ComparisonChain(chain) => tail_call_span_start(&chain.comparisons.last()?.right),
+        _ => None,
     }
 }
 

@@ -988,6 +988,65 @@ fn test_format_wraps_the_last_operand_of_a_condition_that_needs_its_brace() {
     assert_eq!(formatted, again, "format should be idempotent");
 }
 
+/// An operand of a wrapped logical chain sits one level in from the chain, so
+/// what it wraps indents from there. Measuring the width but not the indent
+/// leaves a call's arguments level with the `&&` that introduces them.
+#[test]
+fn test_format_indents_a_wrapped_operand_from_its_own_line() {
+    let source = format!(
+        "fn f() {{\n    if {} && check({}) {{\n    }}\n}}\n",
+        "a".repeat(60),
+        "c".repeat(101)
+    );
+    let formatted = wado_compiler::format(&source).expect("format failed");
+    let lines: Vec<&str> = formatted.lines().collect();
+    let open = lines
+        .iter()
+        .position(|l| l.trim_start().starts_with("&& check("))
+        .expect("the last operand should wrap");
+    assert_eq!(indent_of(lines[open]), 8, "operand line:\n{formatted}");
+    assert_eq!(
+        indent_of(lines[open + 1]),
+        12,
+        "argument line:\n{formatted}"
+    );
+    assert_eq!(
+        lines[open + 2].trim_end(),
+        "        ) {",
+        "closing line:\n{formatted}"
+    );
+}
+
+/// The brace lands after the operand's *last* line, so the wrap has to fall on
+/// the construct that ends it. A comparison ends with its right-hand call, and
+/// wrapping the left one indents arguments no one asked to see.
+#[test]
+fn test_format_wraps_the_tail_call_of_a_compared_last_operand() {
+    // The operand's line lands on exactly 120 columns, so only the ` {` after
+    // it is over budget: `8 + len("lhs(") + 40 + len(") == rhs(") + 58 + 1`.
+    let source = format!(
+        "fn f() {{\n    if {} && lhs({}) == rhs({}) {{\n    }}\n}}\n",
+        "a".repeat(20),
+        "b".repeat(40),
+        "c".repeat(58)
+    );
+    let formatted = wado_compiler::format(&source).expect("format failed");
+    assert!(
+        formatted.lines().all(|l| l.len() <= 120),
+        "a line went over the width budget:\n{formatted}"
+    );
+    assert!(
+        formatted.contains(&format!("lhs({})", "b".repeat(40))),
+        "the left call should stay inline:\n{formatted}"
+    );
+    let again = wado_compiler::format(&formatted).expect("reformat failed");
+    assert_eq!(formatted, again, "format should be idempotent");
+}
+
+fn indent_of(line: &str) -> usize {
+    line.len() - line.trim_start().len()
+}
+
 /// A line comment inside `${…}` stays inside it. The interpolation holds code,
 /// so the newline it needs changes nothing about the string.
 #[test]
