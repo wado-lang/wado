@@ -210,30 +210,22 @@ Missing optimizations, one entry per pass-shaped gap. Architectural work — com
       best, then nested. That reaches the hand-written dispatchers the
       synthesised `FieldSchema::lookup` tree does not. An atom that guards
       another's operand range has to be tested first, or a miss becomes a trap.
-- [ ] Forwarding a template `Formatter`'s field to the read that decides a
-      branch. `` `${'x'}` `` does not fold where `` `${true}` `` does:
-      `char::fmt` branches on `f.width` where `f = &mut __f` and `__f` is a
-      `Formatter` literal three statements above, and that read never folds in
-      NIR. The `else` arm therefore survives every NIR pass, keeps `f` alive as
-      `pad`'s receiver, and keeps `__f` borrowed; WIR's const-forward collapses
-      the branch afterwards, too late. Deleting the branch from `char::fmt`
-      makes the template fold to a literal outright.
-
-      Measured, `WADO_TRACE=vg_field`: the value graph forwards it. The
-      `Formatter` literal seeds eight of its nine fields (`buf`, a `&mut`, is
-      the one it cannot), and the `width` read hits that store. What drops it is
-      `store_load_forward`: the read arrives with no re-emittable value, so
-      `scoped_const_reads` did not return what the graph's own walk found. That
-      call re-walks in a scratch pool and keeps a read only when
-      `is_const_value` answers over the *live* pool, which is the next thing to
-      look at. Hand-written programs do not show any of it: the same shape at
-      top level, in a labeled block, through a trait method, with a `&mut` field
-      and a non-inlinable `&mut` call in the other arm, all fold.
+- [ ] Reading a `&mut` field as the place it holds. `` `${'x'}` `` reaches the
+      IR as a `Formatter` whose `buf: &mut String` is read back —
+      `let self = f.buf;` — and the writes go through that read. The literal
+      seeds eight of its nine fields; `buf` is the one it cannot, since a
+      reference is not a value the graph names. So the region stays a run-time
+      append where `` `${true}` `` folds to a literal. This is
+      [the NIR interpreter WEP](./wep-2026-04-27-nir-interpreter.md)'s
+      place-valued field seen from the graph side, and `niri`'s frame already
+      answers it for a `let`-bound borrow (`place_aliases`).
 
       `sroa` declines the same struct for its own reason — `&mut candidate` is a
       hard escape, exempting only a shared `&` argument to a non-storing callee
-      — but that is not what blocks this: the hand-written cases fold while
-      `sroa` declines them too (`WADO_TRACE=sroa`).
+      — which is worth revisiting now that nothing else keeps the `Formatter`
+      alive. `WADO_TRACE=vg_field` reports what a field read forwarded to and
+      what a literal seeded; `WADO_TRACE=sroa` and `copy_prop` report a declined
+      candidate.
 - [ ] Tail call optimization (`return_call`).
 - [ ] Bounds-check elimination for chained sequential access (`arr[0]; arr[1]; arr[2]`).
 - [ ] Folding a `match` whose scrutinee is a syntactically known

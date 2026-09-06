@@ -384,21 +384,17 @@ literals, `Array::slice`'s computed bounds fold, and the corpus is recounted.
 call for it. With `` `${255:x}` `` the place-valued field is what still pays for
 a formatter short of floats, and there the census does name a call.
 
-The two are one mechanism, which the `char` case shows in isolation. Every
-template builds `Formatter { …, buf: &mut buffer }`, and a `&mut` in a
+Every template builds `Formatter { …, buf: &mut buffer }`, and a `&mut` in a
 struct-literal field is a write the frame does not perform, so the buffer is
-clobbered and the region abandons at its first append. What differs is only how
-long that literal survives: `bool::fmt` writes the buffer straight, so inlining
-dissolves its `Formatter` and a later iteration folds the region, while
-`char::fmt` branches on `f.width`. That read does not fold in NIR — a field read
-through a borrow of a `let mut` local is a fold neither the engine nor the
-`ValueGraph` makes — so both arms survive every NIR pass, the `Formatter` with
-them, and WIR's const-forward collapses the branch too late for any of it.
-Deleting the branch from `char::fmt` makes `` `${'x'}` `` fold to a literal
-outright, and raising the iteration cap to 40 does not.
+clobbered and the region abandons at its first append. `bool::fmt` writes the
+buffer straight, so inlining dissolves its `Formatter` and a later iteration
+folds the region; `char::fmt` reads `f.buf` back and appends through it, so the
+field outlives every pass. What the two once also differed by — a branch on
+`f.width` that no NIR pass folded — was two gaps in `store_load_forward`, since
+fixed, and the branch is gone.
 
-- [x] What distinguishes the `char` path from the `bool` one: how long the
-      `Formatter` literal survives, not the `char` path itself.
+- [x] What distinguishes the `char` path from the `bool` one: reading the buffer
+      back out of the `&mut` field, which is the item below.
 - [ ] A place-valued field, so an aggregate can carry a reference. Today such an
       aggregate is not a constant, since a field holding the referent's value
       would take a write meant for the referent; what it needs to hold is the
