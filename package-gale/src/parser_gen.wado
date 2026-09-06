@@ -1007,6 +1007,17 @@ fn gen_lr_overlap_dispatch(
                 last_k = k;
             }
         }
+        // What each candidate for this leading token can show second — read by
+        // every candidate's plan, so a check is only used where it separates.
+        let mut seconds: List<List<String>> = [];
+        for let mut k = 0; k < group.len(); k += 1 {
+            if !suffix_first_sets[group[k]].contains(shared_tk) {
+                seconds.push([] as List<String>);
+                continue;
+            }
+            let lr_idx = valid_lr_indices[group[k]];
+            seconds.push(compute_lr_second_token(shared_tk, &rule.alternatives[lr_idx].elements, ctx));
+        }
         // Compute the sub-conditions before emitting: each local they read is
         // only declared when one of them reads it.
         let mut conds: List<[i32, String, String]> = [];
@@ -1020,6 +1031,7 @@ fn gen_lr_overlap_dispatch(
                 &rule.alternatives[lr_idx].elements,
                 &lr_scan_local(lr_idx),
                 &SECOND_KIND_LOCAL,
+                lr_second_token_discriminates(k, group, shared_tk, &seconds),
                 ctx,
             );
             conds.push([k, plan[0], plan[1]]);
@@ -3691,6 +3703,17 @@ fn emit_lr_overlap(
                 last_k = k;
             }
         }
+        // What each candidate for this leading token can show second — read by
+        // every candidate's plan, so a check is only used where it separates.
+        let mut seconds: List<List<String>> = [];
+        for let mut k = 0; k < group.len(); k += 1 {
+            if !first_sets[k].contains(shared_tk) {
+                seconds.push([] as List<String>);
+                continue;
+            }
+            let lr = &lr_alts[lr_dispatch.valid_lr_alts[group[k]]];
+            seconds.push(compute_lr_second_token(shared_tk, &rule.alternatives[lr.alt_index].elements, ctx));
+        }
         // Bind every fallback scan ahead of the chain, so the branch it guards
         // reuses the answer instead of re-running it.
         let mut conds: List<[i32, String, String]> = [];
@@ -3704,6 +3727,7 @@ fn emit_lr_overlap(
                 &rule.alternatives[lr.alt_index].elements,
                 &lr_scan_local(lr.alt_index),
                 &"p.peek_at(1)",
+                lr_second_token_discriminates(k, group, shared_tk, &seconds),
                 ctx,
             );
             conds.push([k, plan[0], plan[1]]);
@@ -6936,18 +6960,45 @@ fn suffix_second_token(elements: &List<Element>, start: i32, ctx: &mut GenContex
 
 /// One candidate's sub-dispatch condition as `[condition, scan_local]`: a
 /// second-token check, else its own suffix scan bound to `scan_local`.
+///
+/// `discriminates` is false when another candidate for the same leading token
+/// can show the same token second. The check would then commit to this
+/// candidate on a token both admit and leave the other unreachable —
+/// `e DOT ID LPAREN RPAREN` swallowing every `e DOT ID`. The scan is what
+/// separates them: it is the whole suffix, so it fails where the shorter
+/// candidate is the reading.
 fn lr_second_token_plan(
     shared_token: &String,
     elements: &List<Element>,
     scan_local: &String,
     accessor: &String,
+    discriminates: bool,
     ctx: &mut GenContext,
 ) -> [String, String] {
     let second = compute_lr_second_token(shared_token, elements, ctx);
-    if second.is_empty() {
+    if second.is_empty() || !discriminates {
         return [`${*scan_local} >= 0`, *scan_local];
     }
     return [ctx.kind_check_str(&second, accessor), ""];
+}
+
+/// Whether candidate `k`'s second token separates it from the other candidates
+/// for `shared_tk` — no other one can show a token it also shows.
+fn lr_second_token_discriminates(
+    k: i32,
+    group: &List<i32>,
+    shared_tk: &String,
+    seconds: &List<List<String>>,
+) -> bool {
+    for let mut j = 0; j < group.len(); j += 1 {
+        if j == k {
+            continue;
+        }
+        if sets_overlap(&seconds[k], &seconds[j]) {
+            return false;
+        }
+    }
+    return true;
 }
 
 /// The local a fallback sub-dispatch binds its suffix scan to.

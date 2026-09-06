@@ -1,0 +1,48 @@
+//! A greedy lexer loop whose body alternation has overlapping arms.
+//!
+//! `STR : '"' (~["] | ESC)* '"'` — at `\"` both arms match, and the escape is
+//! the reading. A first-match loop takes `~["]`'s single backslash, so the
+//! token ends at the escaped quote: `"a\"b"` lexes as `"a\"` plus `b` plus a
+//! stray quote. `RustLexer.g4`'s `STRING_LITERAL` is this rule, and every one
+//! of this repository's Rust files that writes an escaped quote fails on it.
+//!
+//! `HAZARD` is the rejection case, and it is the reason the arms are not simply
+//! scored longest-first: `('a' | 'ab')* 'b'` over `ab` matches only by taking
+//! the shorter arm, because the longer one eats the `b` the suffix needs.
+
+use g from "./grammars/lexer_loop_arm_longest.g4"
+    with {
+        generator: { module: "../src/generator.wado", output_dir: "./generated/cst_lexer_loop_arm_longest" },
+    };
+
+fn assert_tree(input: &String, expected: &String) {
+    let result = g::parse(input);
+    assert result.ok(), `unexpected diagnostics for ${*input}: ${result.diagnostics:?}`;
+    let actual = g::to_string_tree(&result);
+    assert actual == *expected, `\ninput:    ${*input}\nexpected: ${*expected}\nactual:   ${actual}`;
+}
+
+test "a string with no escape is one token" {
+    assert_tree(&"\"ab\"", &"(start \"ab\")");
+}
+
+// The loop plans its inner outside tail position (`plan_seq`), so the arms are
+// first-match and `~["]` takes the backslash alone. Planning it in tail position
+// gives the arms maximal munch, which breaks `HAZARD` below and does not reach
+// this shape anyway — a negated-set arm against a fragment reference is not one
+// `lexer_alts_emit` scores. What decides here is whether the loop can continue
+// after the longer arm, which is viability, not a length: `latn_match` is the
+// mechanism that answers it.
+#[TODO]
+test "an escaped quote stays inside the string" {
+    assert_tree(&"\"a\\\"b\"", &"(start \"a\\\"b\")");
+}
+
+#[TODO]
+test "a string that is only an escaped quote" {
+    assert_tree(&"\"\\\"\"", &"(start \"\\\"\")");
+}
+
+test "the shorter arm still wins where the longer one strands the suffix" {
+    assert_tree(&"ab", &"(start ab)");
+}
