@@ -1451,6 +1451,56 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         );
     }
 
+    /// The lists a `Type::method(...)` call checks and pads against, and
+    /// whether any declaration answered. Every static spelling asks this one
+    /// question, so none of them differs on the arity it checks or the defaults
+    /// it fills. A callee no declaration names — a variant case, a flags member
+    /// — answers `false` and owns its argument count in its own arm.
+    pub(super) fn static_callee_params(
+        &mut self,
+        receiver: &ImplTargetKey,
+        receiver_type: TypeId,
+        method_name: &str,
+        span: Span,
+    ) -> (super::sem::types::CalleeParams, bool) {
+        if let Some(sig) = self.unique_qualified_method_sig_keyed(receiver, method_name) {
+            return (
+                super::sem::types::CalleeParams::of_signature(Some(&sig)),
+                true,
+            );
+        }
+        match self.inherited_trait_static_params(receiver, receiver_type, method_name, span) {
+            Some(params) => (params, true),
+            None => (super::sem::types::CalleeParams::default(), false),
+        }
+    }
+
+    /// The parameters `Type::method()` checks against when the block inherits
+    /// the method instead of declaring it — a trait's default-bodied static.
+    /// Its list lives on the trait alone, so no signature keyed on the receiver
+    /// answers, and the call site was left with no list at all: the arity went
+    /// unchecked and no default was padded, and codegen emitted a call whose
+    /// arguments nothing had pushed.
+    pub(super) fn inherited_trait_static_params(
+        &mut self,
+        receiver: &ImplTargetKey,
+        receiver_type: TypeId,
+        method_name: &str,
+        span: Span,
+    ) -> Option<super::sem::types::CalleeParams> {
+        let found = self.find_trait_method_for_type(
+            receiver,
+            method_name,
+            None,
+            Some(receiver_type),
+            span,
+            None,
+            None,
+        )?;
+        (found.method_info.self_kind == ast::SelfKind::None)
+            .then(|| super::sem::types::CalleeParams::of_inherited_static(found.method_info))
+    }
+
     /// Find a trait method for a given type and method name, for when an
     /// inherent method is not found.
     ///

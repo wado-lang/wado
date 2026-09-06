@@ -717,6 +717,30 @@ impl CalleeParams {
     /// `sig` is `None` for a callee no signature lookup answers — a trait static
     /// on a primitive receiver, say. The lists are empty and a consumer reads
     /// the call's own arguments instead.
+    /// The same lists for a static reached through the trait that declares it,
+    /// which no `impl` block signature carries: one the block inherits with the
+    /// trait's default body. `info`'s types are instantiated at the receiver
+    /// already, and a static leads with no entry for one.
+    pub(in crate::elaborator) fn of_inherited_static(
+        info: crate::elaborator::types::MethodInfo,
+    ) -> Self {
+        assert!(
+            info.self_kind == ast::SelfKind::None,
+            "an inherited static declares no receiver"
+        );
+        Self {
+            param_is_mut: info.param_is_mut,
+            param_defaults: info
+                .param_names
+                .into_iter()
+                .zip(info.param_defaults)
+                .collect(),
+            param_types: info.param_types,
+            self_in_args: false,
+            defaults_module: info.defaults_module,
+        }
+    }
+
     pub(crate) fn of_signature(sig: Option<&crate::elaborator::sig::MethodSig>) -> Self {
         let Some(sig) = sig else {
             return Self::default();
@@ -743,16 +767,14 @@ impl CalleeParams {
 }
 
 impl StaticMethodDispatch {
-    /// The dispatch a call records for a callee it resolved to `sig`. The
-    /// per-parameter lists come from [`CalleeParams`], so the recorded fact
-    /// says what the call site checked against.
-    pub(crate) fn of_signature(
+    /// The dispatch a call records, from the same [`CalleeParams`] its site
+    /// checked against, so the recorded fact says what the call was built to.
+    pub(crate) fn of_params(
         method_def: Option<crate::defs::DefId>,
         function_ref: FunctionRef,
         type_args: Vec<TypeId>,
-        sig: Option<&crate::elaborator::sig::MethodSig>,
+        params: CalleeParams,
     ) -> Self {
-        let params = CalleeParams::of_signature(sig);
         Self {
             method_def,
             defaults_module: params

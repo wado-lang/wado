@@ -1453,17 +1453,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let callee_sig = static_receiver
             .as_ref()
             .and_then(|key| self.unique_qualified_method_sig_keyed(key, &static_call.method));
+        let (callee_params, declares_params) = match static_receiver.as_ref() {
+            Some(receiver) => self.static_callee_params(
+                receiver,
+                target_type_id,
+                &static_call.method,
+                static_call.span,
+            ),
+            None => (super::sem::types::CalleeParams::default(), false),
+        };
         let super::sem::types::CalleeParams {
             param_is_mut,
             param_defaults: static_method_defaults,
             mut param_types,
             self_in_args,
             defaults_module,
-        } = super::sem::types::CalleeParams::of_signature(callee_sig.as_ref());
-        // Whether a signature answered at all. A variant case or a flags member
-        // reaches this path with no signature behind it, and its own arm below
-        // owns its argument count; only a declared callee has one to check here.
-        let declares_params = callee_sig.is_some();
+        } = callee_params;
 
         // Literal preselect for a conversion call (WEP 2026-07-31 phase 4):
         // choose the impl before the argument is elaborated, so the expected
@@ -3683,16 +3688,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             })
         };
 
-        // The signature the spelling names, whichever kind of method it is. The
-        // dispatch derives its per-parameter lists from it, so they agree with
-        // each other and with where the receiver sits.
-        let callee_sig = self.qualified_method_sig(&actual_struct_name, method_name);
+        // The signature the spelling names, whichever kind of method it is: the
+        // `#[cm("...")]` import the callee binds is read off it. A static-only
+        // index answers for one kind of method, and an instance one reached
+        // qualified then lost its binding and left reify emitting a call to a
+        // name nothing declares.
+        let cm_name = self
+            .qualified_method_sig(&actual_struct_name, method_name)
+            .and_then(|sig| sig.cm_name);
 
-        // The `#[cm("...")]` import the callee binds, read off the same
-        // signature. A static-only index answers for one kind of method, and an
-        // instance one reached qualified then lost its binding and left reify
-        // emitting a call to a name nothing declares.
-        let cm_name = callee_sig.as_ref().and_then(|sig| sig.cm_name.clone());
+        // The lists the dispatch records, from the same answer the call site
+        // checked against, so the two agree on where the receiver sits.
+        let receiver_key = self.impl_target(&actual_struct_name);
+        let receiver_type = self.resolve_unsited_type_name(&actual_struct_name, span);
+        let (callee_params, _) =
+            self.static_callee_params(&receiver_key, receiver_type, method_name, span);
 
         let StaticMethodRef {
             module: struct_module,
@@ -3719,11 +3729,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // callee whose signature no lookup answers still needs the shape.
         self.sem.types.static_method_dispatch.insert(
             call_id,
-            super::sem::types::StaticMethodDispatch::of_signature(
+            super::sem::types::StaticMethodDispatch::of_params(
                 method_ref.method_id,
                 func_ref,
                 vec![],
-                callee_sig.as_ref(),
+                callee_params,
             ),
         );
 

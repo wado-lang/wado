@@ -2736,16 +2736,26 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 .collect(),
         };
 
-        // A type parameter's default is the trait's too, and the block restates
-        // the list without one. `recorded_sig` is `None` for a trait's own
-        // default-bodied method, elaborated here once per implementing type:
-        // that one is the declaration, so it may write the default.
+        // Defaults are the trait's, value and type parameters alike (WEP
+        // 2026-04-11), and the block restates the lists without one.
+        // `recorded_sig` is `None` for a trait's own default-bodied method,
+        // elaborated here once per implementing type: that one is the
+        // declaration, so it may write both.
         if trait_name.is_some() && recorded_sig.is_some() {
             for type_param in &func.type_params {
                 if let Some(default) = &type_param.default {
                     let _ = scope.emit(TypeError::TypeParamDefaultInTraitImpl {
                         method: func.name.clone(),
                         param: type_param.name.clone(),
+                        span: default.span(),
+                    });
+                }
+            }
+            for param in &func.params {
+                if let Some(default) = &param.default {
+                    let _ = scope.emit(TypeError::DefaultInTraitImpl {
+                        method: func.name.clone(),
+                        param: param.name.clone(),
                         span: default.span(),
                     });
                 }
@@ -2758,17 +2768,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         for (param, &type_id) in func.params.iter().zip(param_types.iter()) {
             if param.self_kind == ast::SelfKind::Value {
                 scope.check_self_by_value(type_id, param.span);
-            }
-            // Reject parameter defaults on trait-impl methods: defaults live
-            // on the trait declaration only (WEP 2026-04-11).
-            if trait_name.is_some()
-                && let Some(default_ast) = &param.default
-            {
-                let _ = scope.emit(TypeError::DefaultInTraitImpl {
-                    method: func.name.clone(),
-                    param: param.name.clone(),
-                    span: default_ast.span(),
-                });
             }
             // Walk the default for its side-effect fact recording; the
             // resolved TIR is discarded (reify re-emits it from the AST).

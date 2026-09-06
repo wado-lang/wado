@@ -1,0 +1,44 @@
+//! A trait's own default-bodied method is the declaration the defaults belong
+//! to, so writing one there is not an `impl` re-declaring it. The body is
+//! elaborated once per implementing type, and the rejection fired on it: any
+//! `trait` method that had both a default body and a default argument was
+//! rejected in every module that implemented it.
+
+trait Greet {
+    fn hello(name: String = "world") -> String {
+        return `hi ${name}`;
+    }
+
+    fn shout(&self, mark: String = "!") -> String {
+        return `${Self::hello()}${mark}`;
+    }
+}
+
+struct M {}
+
+impl Greet for M {}
+
+struct N {}
+
+impl Greet for N {
+    fn hello(name: String) -> String {
+        return `yo ${name}`;
+    }
+}
+
+test "an inherited default body keeps the trait's defaults" {
+    assert M::hello() == "hi world";
+    assert M::hello("wado") == "hi wado";
+}
+
+test "an inherited default body reaches its defaults through the receiver" {
+    let m = M {};
+    assert m.shout() == "hi world!";
+    assert m.shout("?") == "hi world?";
+}
+
+test "an override keeps the trait's defaults too" {
+    let n = N {};
+    assert N::hello() == "yo world";
+    assert n.shout() == "yo world!";
+}

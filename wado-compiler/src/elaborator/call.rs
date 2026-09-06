@@ -962,9 +962,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // i32/f64, so re-coerce once the substitution is known. A
                 // non-generic call is checked too, or a mismatch only shows at
                 // codegen, as an invalid module rather than at its own span.
-                let raw_param_types = self
-                    .qualified_call_param_types(prefix, suffix)
-                    .unwrap_or_default();
+                let receiver_key = self.impl_target(prefix);
+                let receiver_type = self.resolve_unsited_type_name(prefix, call.span);
+                let (callee_params, declares_params) =
+                    self.static_callee_params(&receiver_key, receiver_type, suffix, call.span);
+                let raw_param_types = if declares_params {
+                    callee_params.param_types.clone()
+                } else {
+                    self.qualified_call_param_types(prefix, suffix)
+                        .unwrap_or_default()
+                };
                 let substituted: Vec<TypeId> =
                     if method_type_args.is_empty() && impl_type_args_inferred.is_empty() {
                         raw_param_types
@@ -983,13 +990,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // module. `Self::arg_count_fits` is the same rule the other
                 // static spellings check.
                 //
-                // From the same lookup `raw_param_types` came from, so the two
-                // cannot disagree: an overloaded name yields no signature here,
-                // and so no count to check — the overload path picks the impl
-                // by argument, and reports its own mismatch.
-                let optional = self
-                    .unique_qualified_method_sig(prefix, suffix)
-                    .map(|sig| sig.params.iter().filter(|p| p.default.is_some()).count());
+                // From the same answer `raw_param_types` came from, so the two
+                // cannot disagree: an overloaded name yields none here, and so
+                // no count to check — the overload path picks the impl by
+                // argument, and reports its own mismatch.
+                let optional = declares_params.then(|| {
+                    callee_params
+                        .param_defaults
+                        .iter()
+                        .filter(|(_, default)| default.is_some())
+                        .count()
+                });
                 if let Some(optional) = optional
                     && !Self::arg_count_fits(args.len(), substituted.len(), optional)
                 {

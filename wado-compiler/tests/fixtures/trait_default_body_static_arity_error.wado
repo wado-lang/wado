@@ -1,0 +1,21 @@
+// A static the block inherits with the trait's default body is checked for
+// arity like any other. Its list lives on the trait alone, so no signature
+// keyed on the receiver answered and the count went unchecked: the call
+// reached codegen and failed Wasm validation instead of this span.
+
+trait Greet {
+    fn hello(name: String) -> String {
+        return `hi ${name}`;
+    }
+}
+
+struct M {}
+
+impl Greet for M {}
+
+export fn run() {
+    assert M::hello() == "hi world";
+}
+
+__DATA__
+{"compile_error": "expected 1 arguments, found 0"}
