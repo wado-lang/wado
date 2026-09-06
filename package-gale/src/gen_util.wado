@@ -658,6 +658,27 @@ pub fn follow_forward_args() -> String {
     return join_kinds(&out);
 }
 
+/// One continuation carrying `head` alone: the remaining slots are empty and
+/// no slot opens a reading.
+pub fn follow_single_args(head: &String) -> String {
+    let mut out: List<String> = [*head];
+    for let mut i = 1; i < FOLLOW_SLOTS; i += 1 {
+        out.push("&EMPTY_FOLLOW");
+    }
+    out.push("0");
+    return join_kinds(&out);
+}
+
+/// A `follow_yields` call on the forwarded continuation.
+pub fn follow_yields_call(tokens: &String, pos: &String) -> String {
+    return `follow_yields(${*tokens}, ${*pos}, ${follow_forward_args()}, &FOLLOW_SETS, TK_EOF)`;
+}
+
+/// A `follow_yields` call on a continuation held in one local.
+pub fn follow_yields_call_of(tokens: &String, pos: &String, head: &String) -> String {
+    return `follow_yields(${*tokens}, ${*pos}, ${follow_single_args(head)}, &FOLLOW_SETS, TK_EOF)`;
+}
+
 /// `", <forwarded continuation>"` when the grammar emits FOLLOW machinery,
 /// else `""`. Appended after a call's fixed arguments so the slots are passed
 /// only when the callee declares them (`ctx.emit_follow()`).

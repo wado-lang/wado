@@ -159,6 +159,33 @@ fn element_consumes_follow_arg(elem: &Element) -> bool {
     };
 }
 
+/// A position whose continuation ends with the element list it sits in — a
+/// rule's own alternative, or a group body a loop re-enters.
+global NO_OUTER_SUFFIX: List<Element> = [];
+
+/// The elements a position's continuation runs through: the alternative's own,
+/// then what follows the group holding it. Inside `(OR names? OR) body` the
+/// continuation of `names?` is `OR body`, and only the first half is in the
+/// list the group walks.
+fn follow_elements_of(elements: &List<Element>, outer_suffix: &List<Element>) -> List<Element> {
+    if outer_suffix.is_empty() {
+        return *elements;
+    }
+    let mut out = *elements;
+    for let elem of outer_suffix {
+        out.push(*elem);
+    }
+    return out;
+}
+
+fn elements_from(elements: &List<Element>, start: i32) -> List<Element> {
+    let mut out: List<Element> = [];
+    for let mut i = start; i < elements.len(); i += 1 {
+        out.push(elements[i]);
+    }
+    return out;
+}
+
 /// Compute the runtime FOLLOW argument a `RuleRef` call at index `i`
 /// in `elements` must supply to its callee. Instead of cloning the
 /// callee per mask (the retired `__follow_<id>` variant mechanism),
@@ -201,15 +228,13 @@ fn compute_follow_arg(ctx: &mut GenContext, elements: &List<Element>, i: i32) ->
         mask.push(one_tok);
     }
     if !ctx.tail_is_nullable_deep(elements, i + 1) {
-        // Nothing is appended at runtime, so this mask is the whole check: it
-        // proves completion only if it spans the suffix or opens on an element
-        // the caller must match. Short *and* optional-headed, a tail-greedy
-        // callee yielding on it gives up a token the caller cannot use — the
-        // nested `if` losing its `else` to a caller ending in the same
-        // `('else' block)?`.
+        // A mask that stops short of an optional head proves nothing: the token
+        // it names may be the callee's own, and yielding it strands the token
+        // where the caller declines the optional. Greedy is ANTLR4's answer for
+        // nested subrules — the inner `if` keeps the `else` its caller could
+        // also take.
         let mut head_visiting: List<String> = [];
-        let head_nullable = ctx.element_is_nullable_deep(&elements[i + 1], &mut head_visiting);
-        if head_nullable && !covers_suffix {
+        if !covers_suffix && ctx.element_is_nullable_deep(&elements[i + 1], &mut head_visiting) {
             return FollowArg::NoFollow;
         }
         // The local suffix is the whole continuation the callee must clear, but
@@ -218,7 +243,7 @@ fn compute_follow_arg(ctx: &mut GenContext, elements: &List<Element>, i: i32) ->
         // separates a callee's own reading from the caller's. `|a| b` and
         // `|a|b| c` are the same two tokens at the loop and differ at the third.
         if let Some(id) = ctx.intern_follow_mask(&mask) {
-            return sequenced_follow_arg(ctx, id);
+            return sequenced_follow_arg(ctx, id, covers_suffix);
         }
         return FollowArg::NoFollow;
     }
@@ -233,18 +258,29 @@ fn compute_follow_arg(ctx: &mut GenContext, elements: &List<Element>, i: i32) ->
             }
         }
     }
+    // A suffix that can vanish entirely is no continuation to gate on: yielding
+    // on its first token hands back one the caller may take none of. What the
+    // current rule was called with is the answer instead — the mask would say
+    // `htmlElement` is followed by `htmlChardata?` and nothing else, and `<p>`
+    // would give its text to the loop that called it.
+    if i + 1 < elements.len() && !covers_suffix {
+        return FollowArg::Forward;
+    }
     if let Some(id) = ctx.intern_follow_mask(&mask) {
-        return sequenced_follow_arg(ctx, id);
+        return sequenced_follow_arg(ctx, id, covers_suffix);
     }
     return FollowArg::Forward;
 }
 
-/// A local prefix followed by what the current rule was called with. A prefix
-/// that already spans `FOLLOW_MAX_DEPTH` leaves the forwarded half past every
-/// position `follow_yields` reads, so the static mask is the whole gate and the
-/// call site allocates nothing.
-fn sequenced_follow_arg(ctx: &GenContext, mask_id: i32) -> FollowArg {
-    if ctx.follow_mask_is_full(mask_id) {
+/// A local prefix followed by what the current rule was called with. The
+/// forwarded half is appended one position past the prefix, so it belongs there
+/// only when the prefix spans the suffix: a prefix halted by a multi-token
+/// element leaves tokens between the two, and `if EXPR blockExpression` would
+/// assert the caller's next token one past the `{`. A prefix already spanning
+/// `FOLLOW_MAX_DEPTH` puts the forwarded half past every position
+/// `follow_yields` reads. Either way the static mask is the whole gate.
+fn sequenced_follow_arg(ctx: &GenContext, mask_id: i32, covers_suffix: bool) -> FollowArg {
+    if !covers_suffix || ctx.follow_mask_is_full(mask_id) {
         return FollowArg::Mask(mask_id);
     }
     return FollowArg::Combined(mask_id);
@@ -258,6 +294,15 @@ fn greedy_optional_inner_follow(rep: &RepeatElement, follow_arg: FollowArg) -> F
         return follow_arg;
     }
     return FollowArg::NoFollow;
+}
+
+/// The suffix twin of `greedy_optional_inner_follow`: what continues past a
+/// loop is another iteration, which no enclosing suffix describes.
+fn greedy_optional_inner_suffix(rep: &RepeatElement, outer_suffix: &List<Element>) -> List<Element> {
+    if !rep.non_greedy && rep.kind matches { Optional } {
+        return *outer_suffix;
+    }
+    return NO_OUTER_SUFFIX;
 }
 
 /// Give a greedy loop body's tail `RuleCall` the loop's iteration prefix: its
@@ -1615,6 +1660,7 @@ fn lower_lr_alt_suffix(
             elem_follow_arg,
             elem_gate,
             elem_follow_exact,
+            &elements_from(&alt.elements, i + 1),
         );
         if let Repeat(rep_op) = &op {
             let basic_follow = ctx.first_of_elements_from(&alt.elements, i + 1);
@@ -2014,6 +2060,7 @@ fn lower_scan_element(
     follow_arg: FollowArg,
     gate_caller_follow: bool,
     follow_is_exact: bool = false,
+    outer_suffix: &List<Element> = &NO_OUTER_SUFFIX,
 ) -> ScanElement {
     return match *elem {
         TokenRef(t) => ScanElement::Token(ScanTokenElement { kind: `TK_${t.name}` }),
@@ -2037,6 +2084,7 @@ fn lower_scan_element(
             follow_arg,
             gate_caller_follow,
             follow_is_exact,
+            outer_suffix,
         ),
         Repeat(rep) => lower_scan_repeat(
             &rep,
@@ -2044,6 +2092,7 @@ fn lower_scan_element(
             outer_follow,
             follow_arg,
             gate_caller_follow,
+            outer_suffix,
         ),
         Group(g) => lower_scan_group(
             &g,
@@ -2051,6 +2100,7 @@ fn lower_scan_element(
             outer_follow,
             follow_is_exact,
             gate_caller_follow,
+            outer_suffix,
         ),
     };
 }
@@ -2066,12 +2116,14 @@ fn lower_scan_group(
     outer_follow: &List<String>,
     follow_is_exact: bool,
     enclosing_at_tail: bool = true,
+    outer_suffix: &List<Element> = &NO_OUTER_SUFFIX,
 ) -> ScanElement {
     let alts = &g.alternatives;
     match classify_group(alts) {
         Transparent => {
-            // The wrapper adds nothing, so the outer follow and its exactness
-            // pass through — the parse side reads them here too (invariant 9).
+            // The wrapper adds nothing, so the outer follow, its exactness and
+            // the enclosing suffix pass through — the parse side reads them
+            // here too (invariant 9).
             return lower_scan_element(
                 &alts[0].elements[0],
                 ctx,
@@ -2079,13 +2131,22 @@ fn lower_scan_group(
                 FollowArg::NoFollow,
                 false,
                 follow_is_exact,
+                outer_suffix,
             );
         },
         SingleAlt => {
             let alt = &alts[0];
             let mut elements: List<ScanElement> = [];
             for let mut i = 0; i < alt.elements.len(); i += 1 {
-                elements.push(lower_alt_scan_element(&alt.elements, i, ctx, false, enclosing_at_tail));
+                elements.push(lower_alt_scan_element(
+                    &alt.elements,
+                    i,
+                    ctx,
+                    false,
+                    enclosing_at_tail,
+                    &NO_PROBE_RULE,
+                    outer_suffix,
+                ));
             }
             return ScanElement::Group(ScanGroupElement {
                 alts: [
@@ -2115,7 +2176,14 @@ fn lower_scan_group(
             return lower_simple_cst_scan_group(alts, ctx, outer_follow, follow_is_exact);
         },
         General => {
-            return lower_general_scan_group(alts, ctx, outer_follow, follow_is_exact, enclosing_at_tail);
+            return lower_general_scan_group(
+                alts,
+                ctx,
+                outer_follow,
+                follow_is_exact,
+                enclosing_at_tail,
+                outer_suffix,
+            );
         },
     }
 }
@@ -2126,6 +2194,7 @@ fn lower_general_scan_group(
     outer_follow: &List<String>,
     follow_is_exact: bool,
     enclosing_at_tail: bool = true,
+    outer_suffix: &List<Element> = &NO_OUTER_SUFFIX,
 ) -> ScanElement {
     let mut bodies: List<ScanBody> = [];
     for let alt of alts {
@@ -2137,6 +2206,8 @@ fn lower_general_scan_group(
                 ctx,
                 false,
                 enclosing_at_tail,
+                &NO_PROBE_RULE,
+                outer_suffix,
             ));
         }
         bodies.push(ScanBody { elements });
@@ -2256,8 +2327,10 @@ fn lower_scan_repeat(
     outer_follow: &List<String>,
     follow_arg: FollowArg,
     gate_caller_follow: bool,
+    outer_suffix: &List<Element> = &NO_OUTER_SUFFIX,
 ) -> ScanElement {
     let inner_follow_arg = greedy_optional_inner_follow(rep, follow_arg);
+    let inner_suffix = greedy_optional_inner_suffix(rep, outer_suffix);
     // Greedy Optional + Group inner with nested optional sub-elements
     // is the shape-based-lookahead case: lower produces
     // `ScanElement::OptionalLookahead` so emit reads per-shape sigs
@@ -2306,6 +2379,8 @@ fn lower_scan_repeat(
         &iter_follow,
         inner_follow_arg,
         gate_caller_follow,
+        false,
+        &inner_suffix,
     );
     // The standalone `scan_<rule>` walks this copy while the parse function
     // walks `RepeatOp.scan_body`; both must give the body's tail call the same
@@ -2437,13 +2512,15 @@ fn lower_alt_scan_element(
     reaches_rule_tail: bool,
     enclosing_at_tail: bool = true,
     rule_name: &String = &NO_PROBE_RULE,
+    outer_suffix: &List<Element> = &NO_OUTER_SUFFIX,
 ) -> ScanElement {
     let elem_follow = ctx.compute_call_site_follow(alt_elements, i);
     // Mirror the parse side: the per-position `FollowArg` and the tail
     // Repeat's `gate_caller_follow` flag keep the scan tournament in
     // lockstep with the gated parse body, so the scan side doesn't
     // over-count a tail iteration the caller's continuation claims.
-    let elem_follow_arg = compute_follow_arg(ctx, alt_elements, i);
+    let follow_elements = follow_elements_of(alt_elements, outer_suffix);
+    let elem_follow_arg = compute_follow_arg(ctx, &follow_elements, i);
     let elem_gate = compute_gate_caller_follow(ctx, alt_elements, i) && enclosing_at_tail;
     let elem_follow_exact = ctx.call_site_follow_is_exact(alt_elements, i);
     let mut se = lower_scan_element(
@@ -2453,6 +2530,7 @@ fn lower_alt_scan_element(
         elem_follow_arg,
         elem_gate,
         elem_follow_exact,
+        &elements_from(&follow_elements, i + 1),
     );
     if let Repeat(_) = &se {
         let basic_follow = ctx.first_of_elements_from(alt_elements, i + 1);
@@ -2809,6 +2887,7 @@ fn lower_alt_body(
             elem_follow_arg,
             elem_gate,
             elem_follow_exact,
+            &elements_from(&alt.elements, i + 1),
         );
         // For Repeat ops, replace `caller_follow_first` with the basic
         // first set of the surrounding suffix. `compute_call_site_follow`
@@ -2873,6 +2952,7 @@ fn lower_op(
     follow_arg: FollowArg,
     gate_caller_follow: bool,
     follow_is_exact: bool = false,
+    outer_suffix: &List<Element> = &NO_OUTER_SUFFIX,
 ) -> Op {
     return match *elem {
         TokenRef(t) => Op::Token(TokenOp {
@@ -2919,6 +2999,7 @@ fn lower_op(
             outer_follow,
             follow_arg,
             gate_caller_follow,
+            outer_suffix,
         ),
         Group(g) => lower_group_op(
             &g,
@@ -2929,6 +3010,7 @@ fn lower_op(
             outer_follow,
             follow_is_exact,
             gate_caller_follow,
+            outer_suffix,
         ),
         Label(lab) => lower_label_op(
             &lab,
@@ -2940,6 +3022,7 @@ fn lower_op(
             follow_arg,
             gate_caller_follow,
             follow_is_exact,
+            outer_suffix,
         ),
     };
 }
@@ -2956,6 +3039,7 @@ fn lower_group_op(
     outer_follow: &List<String>,
     follow_is_exact: bool,
     enclosing_at_tail: bool = true,
+    outer_suffix: &List<Element> = &NO_OUTER_SUFFIX,
 ) -> Op {
     let alts = &g.alternatives;
     match classify_group(alts) {
@@ -2968,6 +3052,7 @@ fn lower_group_op(
                 group_counter,
                 outer_follow,
                 follow_is_exact,
+                outer_suffix,
             );
         },
         SingleAlt => {
@@ -2978,6 +3063,7 @@ fn lower_group_op(
                 ctx,
                 group_counter,
                 enclosing_at_tail,
+                outer_suffix,
             );
         },
         TokenOnly => {
@@ -2996,6 +3082,7 @@ fn lower_group_op(
                 outer_follow,
                 follow_is_exact,
                 enclosing_at_tail,
+                outer_suffix,
             );
         },
     }
@@ -3011,9 +3098,11 @@ fn lower_transparent_group(
     group_counter: &mut i32,
     outer_follow: &List<String>,
     follow_is_exact: bool,
+    outer_suffix: &List<Element> = &NO_OUTER_SUFFIX,
 ) -> Op {
     // A Transparent group adds nothing between the inner and the outer alt, so
-    // `outer_follow` and its exactness pass through verbatim.
+    // `outer_follow`, its exactness and the enclosing suffix pass through
+    // verbatim.
     //
     // TODO(redesign): forward the outer position's FollowArg/gate through
     // the transparent wrapper so `(RuleRef)` / `(e)*` at a rule tail still
@@ -3030,6 +3119,7 @@ fn lower_transparent_group(
         FollowArg::NoFollow,
         false,
         follow_is_exact,
+        outer_suffix,
     );
     let body = AltBody {
         alt_index: 0,
@@ -3047,6 +3137,8 @@ fn lower_transparent_group(
                 outer_follow,
                 FollowArg::NoFollow,
                 false,
+                false,
+                outer_suffix,
             ),
         ],
     };
@@ -3064,66 +3156,47 @@ fn lower_transparent_group(
     });
 }
 
-/// Single-alt with ≥ 2 elements: `(name=ID '=' expr)` lowers to a
-/// struct of its own (`NameIdEqualsExprItem`) bound under a single
-/// field in the outer alt. The struct's element bindings live in a
-/// fresh name scope — they don't pollute the outer alt's counts.
-///
-/// `owner_rule` records the surrounding rule's name so a nested `General`
-/// group inside this body resolves its monomorph table key
-/// (`<RuleName>Group<idx>`).
-fn lower_single_alt_group(
+/// One group alternative, parse ops and scan elements together, so both sides
+/// read the same per-position `FollowArg` and stay in lockstep. `owner_rule`
+/// names the monomorph table nested groups bake into; `rule_name` is the
+/// enclosing rule, which the Repeat post-pass reports diagnostics under.
+fn lower_group_alt(
     alt: &Alternative,
     name_counts: &mut List<[String, i32]>,
+    owner_rule: &String,
     rule_name: &String,
     ctx: &mut GenContext,
     group_counter: &mut i32,
-    enclosing_at_tail: bool = true,
-) -> Op {
-    // Nested elements are allowed: `(a (b c))` / `(a*)` /
-    // `(name=a b)`. Each elem is lowered through the standard
-    // `lower_op` recursion.
-
-    let struct_name = single_alt_group_type_name(alt);
-    let field = dedup_name(&single_alt_group_field_name(alt), name_counts);
-
-    // Canonical owner for this single-alt struct: when the same body
-    // appears in multiple rules CST emit deduplicates under the first
-    // rule that defines it (see `build_single_alt_owner_map`). Lower
-    // nested elements with the owner as `rule_name` so any inner
-    // `lower_general_group` bakes type names (`<Owner>Group<idx>`)
-    // that match the deduplicated CST types directly. Without this,
-    // emit had to re-derive the names through `ctx.current_rule_name`.
-    let owner_rule = ctx.general_group_rule_name(&struct_name, rule_name);
-
-    // Inner ops use a fresh name table — bindings inside the
-    // group's struct don't dedup against the outer alt.
-    let mut inner_counts: List<[String, i32]> = [];
+    enclosing_at_tail: bool,
+    outer_suffix: &List<Element>,
+) -> [List<Op>, List<ScanElement>] {
+    // The continuation of a position inside the group runs off the end of the
+    // group's alt into what follows it, so the FollowArg walk reads both.
+    let follow_elements = follow_elements_of(&alt.elements, outer_suffix);
     let mut ops: List<Op> = [];
     let mut scan_elements: List<ScanElement> = [];
     for let mut i = 0; i < alt.elements.len(); i += 1 {
         let elem = &alt.elements[i];
-        // Per-element follow inside the group: tokens that can
-        // appear immediately after this element. For non-last
-        // positions, that's the first-set of the suffix in the
-        // group's alt. The last position inherits the surrounding
-        // alt's `outer_follow`.
+        // Per-element follow inside the group: tokens that can appear
+        // immediately after this element. For non-last positions, that's the
+        // first-set of the suffix in the group's alt. The last position
+        // inherits the surrounding alt's `outer_follow`.
         let elem_follow = ctx.compute_call_site_follow(&alt.elements, i);
-        // Each inner position gets its own `FollowArg` / gate computed
-        // from the inner alt's suffix.
-        let elem_follow_arg = compute_follow_arg(ctx, &alt.elements, i);
+        let elem_follow_arg = compute_follow_arg(ctx, &follow_elements, i);
         let elem_gate = compute_gate_caller_follow(ctx, &alt.elements, i) && enclosing_at_tail;
         let elem_follow_exact = ctx.call_site_follow_is_exact(&alt.elements, i);
+        let inner_suffix = elements_from(&follow_elements, i + 1);
         let mut op = lower_op(
             elem,
-            &mut inner_counts,
-            &owner_rule,
+            name_counts,
+            owner_rule,
             ctx,
             group_counter,
             &elem_follow,
             elem_follow_arg,
             elem_gate,
             elem_follow_exact,
+            &inner_suffix,
         );
         let mut se = lower_scan_element(
             elem,
@@ -3132,6 +3205,7 @@ fn lower_single_alt_group(
             elem_follow_arg,
             elem_gate,
             elem_follow_exact,
+            &inner_suffix,
         );
         // Gate `basic_follow` on either side actually being a Repeat —
         // `first_of_elements_from` walks the suffix and isn't free.
@@ -3164,6 +3238,55 @@ fn lower_single_alt_group(
         ops.push(op);
         scan_elements.push(se);
     }
+    return [ops, scan_elements];
+}
+
+/// Single-alt with ≥ 2 elements: `(name=ID '=' expr)` lowers to a
+/// struct of its own (`NameIdEqualsExprItem`) bound under a single
+/// field in the outer alt. The struct's element bindings live in a
+/// fresh name scope — they don't pollute the outer alt's counts.
+///
+/// `owner_rule` records the surrounding rule's name so a nested `General`
+/// group inside this body resolves its monomorph table key
+/// (`<RuleName>Group<idx>`).
+fn lower_single_alt_group(
+    alt: &Alternative,
+    name_counts: &mut List<[String, i32]>,
+    rule_name: &String,
+    ctx: &mut GenContext,
+    group_counter: &mut i32,
+    enclosing_at_tail: bool = true,
+    outer_suffix: &List<Element> = &NO_OUTER_SUFFIX,
+) -> Op {
+    // Nested elements are allowed: `(a (b c))` / `(a*)` /
+    // `(name=a b)`. Each elem is lowered through the standard
+    // `lower_op` recursion.
+
+    let struct_name = single_alt_group_type_name(alt);
+    let field = dedup_name(&single_alt_group_field_name(alt), name_counts);
+
+    // Canonical owner for this single-alt struct: when the same body
+    // appears in multiple rules CST emit deduplicates under the first
+    // rule that defines it (see `build_single_alt_owner_map`). Lower
+    // nested elements with the owner as `rule_name` so any inner
+    // `lower_general_group` bakes type names (`<Owner>Group<idx>`)
+    // that match the deduplicated CST types directly. Without this,
+    // emit had to re-derive the names through `ctx.current_rule_name`.
+    let owner_rule = ctx.general_group_rule_name(&struct_name, rule_name);
+
+    // Inner ops use a fresh name table — bindings inside the
+    // group's struct don't dedup against the outer alt.
+    let mut inner_counts: List<[String, i32]> = [];
+    let [ops, scan_elements] = lower_group_alt(
+        alt,
+        &mut inner_counts,
+        &owner_rule,
+        rule_name,
+        ctx,
+        group_counter,
+        enclosing_at_tail,
+        outer_suffix,
+    );
 
     let body = AltBody {
         alt_index: 0,
@@ -3465,6 +3588,7 @@ fn lower_general_group(
     outer_follow: &List<String>,
     follow_is_exact: bool,
     enclosing_at_tail: bool = true,
+    outer_suffix: &List<Element> = &NO_OUTER_SUFFIX,
 ) -> Op {
     let group_index = *group_counter;
     *group_counter += 1;
@@ -3485,59 +3609,16 @@ fn lower_general_group(
         // `group_counter` — nested general groups inside this
         // alt take the next sequential ids.
         let mut inner_counts: List<[String, i32]> = [];
-        let mut ops: List<Op> = [];
-        let mut scan_elements: List<ScanElement> = [];
-        for let mut ei = 0; ei < alt.elements.len(); ei += 1 {
-            let elem = &alt.elements[ei];
-            let elem_follow = ctx.compute_call_site_follow(&alt.elements, ei);
-            // Each inner position gets its own `FollowArg` / gate from
-            // the inner alt's suffix.
-            let elem_follow_arg = compute_follow_arg(ctx, &alt.elements, ei);
-            let elem_gate = compute_gate_caller_follow(ctx, &alt.elements, ei) && enclosing_at_tail;
-            let elem_follow_exact = ctx.call_site_follow_is_exact(&alt.elements, ei);
-            let mut op = lower_op(
-                elem,
-                &mut inner_counts,
-                rule_name,
-                ctx,
-                group_counter,
-                &elem_follow,
-                elem_follow_arg,
-                elem_gate,
-                elem_follow_exact,
-            );
-            let mut se = lower_scan_element(
-                elem,
-                ctx,
-                &elem_follow,
-                elem_follow_arg,
-                elem_gate,
-                elem_follow_exact,
-            );
-            let op_is_repeat = op matches { Repeat(_) };
-            let se_is_repeat = se matches { Repeat(_) };
-            if op_is_repeat || se_is_repeat {
-                let basic_follow = ctx.first_of_elements_from(&alt.elements, ei + 1);
-                if let Repeat(rep_op) = &op {
-                    let basic_second = compute_caller_follow_second(&alt.elements, ei + 1, ctx);
-                    op = Op::Repeat(patch_repeat_op_caller_follow(
-                        rep_op,
-                        basic_follow,
-                        basic_second,
-                        &alt.elements,
-                        ei,
-                        ctx,
-                        false,
-                        rule_name,
-                    ));
-                }
-                if se_is_repeat {
-                    se = rebind_scan_repeat_caller_follow(se, basic_follow, &alt.elements, ei, ctx, false);
-                }
-            }
-            ops.push(op);
-            scan_elements.push(se);
-        }
+        let [ops, scan_elements] = lower_group_alt(
+            alt,
+            &mut inner_counts,
+            rule_name,
+            rule_name,
+            ctx,
+            group_counter,
+            enclosing_at_tail,
+            outer_suffix,
+        );
 
         bodies.push(AltBody {
             alt_index: i,
@@ -3604,8 +3685,10 @@ fn lower_repeat_op(
     outer_follow: &List<String>,
     follow_arg: FollowArg,
     gate_caller_follow: bool,
+    outer_suffix: &List<Element> = &NO_OUTER_SUFFIX,
 ) -> Op {
     let inner_follow_arg = greedy_optional_inner_follow(rep, follow_arg);
+    let inner_suffix = greedy_optional_inner_suffix(rep, outer_suffix);
     let outer_field = compute_repeat_outer_field(rep, name_counts, *group_counter);
     // Every shape decision below reads the body the op was lowered from, not
     // the label wrapping it — a label changes a repeat's typing, never its
@@ -3706,6 +3789,8 @@ fn lower_repeat_op(
                 &iter_follow,
                 inner_follow_arg,
                 gate_caller_follow,
+                false,
+                &inner_suffix,
             );
         } else {
             panic("repeat_inner_is_list_label returned true for non-Label");
@@ -3720,6 +3805,8 @@ fn lower_repeat_op(
             &iter_follow,
             inner_follow_arg,
             gate_caller_follow,
+            false,
+            &inner_suffix,
         );
     };
     let mut body_visiting: List<String> = [];
@@ -3737,6 +3824,8 @@ fn lower_repeat_op(
         &iter_follow,
         inner_follow_arg,
         gate_caller_follow,
+        false,
+        &inner_suffix,
     );
     let mut body = body;
     if let Some(mask_id) = ctx.intern_follow_mask(&greedy_loop_prefix(ctx, rep)) {
@@ -4352,6 +4441,7 @@ fn lower_label_op(
     follow_arg: FollowArg,
     gate_caller_follow: bool,
     follow_is_exact: bool = false,
+    outer_suffix: &List<Element> = &NO_OUTER_SUFFIX,
 ) -> Op {
     let label_field = dedup_name(&lab.field_name, name_counts);
     let mut inner_counts: List<[String, i32]> = [];
@@ -4370,6 +4460,7 @@ fn lower_label_op(
         follow_arg,
         gate_caller_follow,
         follow_is_exact,
+        outer_suffix,
     );
     if lab.list {
         // `name+=elem` outside a Repeat: the outer CST struct stores

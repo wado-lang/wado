@@ -1073,6 +1073,31 @@ pub global EMPTY_FOLLOW: List<i32> = [];
 
 pub global FOLLOW_MAX_DEPTH: i32 = 4;
 
+pub fn follow_bitsets(kinds: &List<List<i32>>) -> List<List<i32>> {
+    let mut out: List<List<i32>> = [];
+    for let set of kinds {
+        let mut words: List<i32> = [];
+        for let kind of set {
+            assert *kind >= 0, `follow_bitsets: negative token kind ${*kind}`;
+            let w = *kind >> 5;
+            while words.len() <= w {
+                words.push(0);
+            }
+            words[w] = words[w] | 1 << (*kind & 31);
+        }
+        out.push(words);
+    }
+    return out;
+}
+
+fn follow_set_has(set: &List<i32>, kind: i32) -> bool {
+    let w = kind >> 5;
+    if w >= set.len() {
+        return false;
+    }
+    return set[w] >> (kind & 31) & 1 == 1;
+}
+
 fn follow_slot_alive(
     part: &List<i32>,
     tokens: &Array<i32>,
@@ -1093,20 +1118,42 @@ fn follow_slot_alive(
             if !set.is_empty() {
                 let idx = pos + *depth;
                 let kind = if idx < tokens.len() { tokens[idx] } else { eof_kind };
-                let mut hit = false;
-                for let t of set {
-                    if kind == *t {
-                        hit = true;
-                        break;
-                    }
-                }
-                if !hit {
+                if !follow_set_has(set, kind) {
                     *alive = false;
                 }
             }
         }
         *depth += 1;
     }
+}
+
+fn follow_slot_step(
+    next: &List<i32>,
+    opens: bool,
+    more_opens: bool,
+    depth: &mut i32,
+    alive: &mut bool,
+    constrained: &mut bool,
+    verdict: &mut bool,
+) -> bool {
+    if next.is_empty() {
+        *verdict = *alive && *constrained;
+        return true;
+    }
+    if opens {
+        if *alive && *constrained {
+            *verdict = true;
+            return true;
+        }
+        *depth = 0;
+        *alive = true;
+        *constrained = false;
+    }
+    if !*alive && !more_opens {
+        *verdict = false;
+        return true;
+    }
+    return false;
 }
 
 pub fn follow_yields(
@@ -1126,32 +1173,18 @@ pub fn follow_yields(
     let mut depth = 0;
     let mut alive = true;
     let mut constrained = false;
+    let mut verdict = false;
     follow_slot_alive(f0, tokens, pos, sets, eof_kind, &mut depth, &mut alive, &mut constrained);
-    if fs >> 1 & 1 == 1 {
-        if alive && constrained {
-            return true;
-        }
-        depth = 0;
-        alive = true;
-        constrained = false;
+    if follow_slot_step(f1, fs >> 1 & 1 == 1, fs >> 2 != 0, &mut depth, &mut alive, &mut constrained, &mut verdict) {
+        return verdict;
     }
     follow_slot_alive(f1, tokens, pos, sets, eof_kind, &mut depth, &mut alive, &mut constrained);
-    if fs >> 2 & 1 == 1 {
-        if alive && constrained {
-            return true;
-        }
-        depth = 0;
-        alive = true;
-        constrained = false;
+    if follow_slot_step(f2, fs >> 2 & 1 == 1, fs >> 3 != 0, &mut depth, &mut alive, &mut constrained, &mut verdict) {
+        return verdict;
     }
     follow_slot_alive(f2, tokens, pos, sets, eof_kind, &mut depth, &mut alive, &mut constrained);
-    if fs >> 3 & 1 == 1 {
-        if alive && constrained {
-            return true;
-        }
-        depth = 0;
-        alive = true;
-        constrained = false;
+    if follow_slot_step(f3, fs >> 3 & 1 == 1, false, &mut depth, &mut alive, &mut constrained, &mut verdict) {
+        return verdict;
     }
     follow_slot_alive(f3, tokens, pos, sets, eof_kind, &mut depth, &mut alive, &mut constrained);
     return alive && constrained;
@@ -1694,5 +1727,6 @@ fn _kind_set_0(k: i32) -> bool {
 global EMPTY_SYNC: List<i32> = [];
 global SYNC_0: List<i32> = [TK_LIT_IF, TK_LIT_X];
 
-global FOLLOW_SETS: List<List<i32>> = [];
+global FOLLOW_KINDS: List<List<i32>> = [];
+global FOLLOW_SETS: List<List<i32>> = follow_bitsets(&FOLLOW_KINDS);
 

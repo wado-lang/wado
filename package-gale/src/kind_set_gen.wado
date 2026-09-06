@@ -110,11 +110,10 @@ pub fn gen_kind_set_helpers(w: &mut CodeWriter, lowered: &LoweredGrammar, ctx: &
     }
 }
 
-/// Emit the runtime FOLLOW tables: `FOLLOW_SETS` holds every distinct
-/// position set once, and each `FOLLOW_MASK_<id>` names its positions by
-/// index into it. A continuation is therefore a flat `List<i32>`, so
-/// `follow_prepend` and `follow_alt` join two of them without copying a
-/// token set.
+/// Emit the runtime FOLLOW tables: `FOLLOW_KINDS` holds every distinct
+/// position set once, `FOLLOW_SETS` is the same tables as bitsets for the
+/// gate's membership test, and each `FOLLOW_MASK_<id>` names its positions
+/// by index into them. A continuation is therefore a flat `List<i32>`.
 pub fn gen_follow_mask_globals(w: &mut CodeWriter, ctx: &GenContext) {
     // No caller-FOLLOW gate anywhere ⇒ no call site names either table.
     // A grammar that gates on a forwarded `follow` alone interns no mask
@@ -136,7 +135,8 @@ pub fn gen_follow_mask_globals(w: &mut CodeWriter, ctx: &GenContext) {
     for let set of &sets {
         rendered.push(`[${join_kinds(&ctx.token_names_of(set))}]`);
     }
-    w.line(&`global FOLLOW_SETS: List<List<i32>> = [${join_kinds(&rendered)}];`);
+    w.line(&`global FOLLOW_KINDS: List<List<i32>> = [${join_kinds(&rendered)}];`);
+    w.line(&"global FOLLOW_SETS: List<List<i32>> = follow_bitsets(&FOLLOW_KINDS);");
     for let mask of &masks {
         w.line(mask);
     }
