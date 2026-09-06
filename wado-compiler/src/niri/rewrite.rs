@@ -27,9 +27,9 @@ type LocalIndexSet = crate::hashmap::IndexSet<u32>;
 /// place. A value the engine holds is bounded per sequence and by nothing across
 /// nesting, and past this the loop that computes it is the smaller program.
 ///
-/// A safety valve rather than a tuning knob: over the benchmark and `wasm-size`
-/// corpora every value written comes in under 16 operands, so any ceiling from
-/// there up emits the same bytes.
+/// A safety valve rather than a tuning knob: the sweep that chose it measured
+/// every value written at under 16 operands across the benchmark and `wasm-size`
+/// corpora, and every ceiling from there up emitting the same bytes.
 const MAX_MATERIALIZED_LEAVES: usize = 1024;
 
 impl Interpreter<'_> {
@@ -1194,35 +1194,36 @@ fn consumes_its_source(kind: &ExprKind) -> bool {
 /// Charge `budget` one per operand writing `value` would place, failing as soon
 /// as it runs out.
 fn charge_leaves(value: &Value, type_table: &TypeTable, budget: &mut usize) -> Option<()> {
+    // The operand this value becomes wherever it sits; a composite also holds
+    // the operands under it.
+    *budget = budget.checked_sub(1)?;
     match value {
-        // A container is charged what `write_container` places: the length, and
-        // the backing cut to it. Capacity is never written, so a barely-filled
-        // buffer must not be priced by how big it was opened.
         Value::Aggregate { type_id, fields } => {
+            // A container is charged what `write_container` places: its length
+            // and its backing array beside the struct above, and the backing cut
+            // to that length. Capacity is never written, so a barely-filled
+            // buffer must not be priced by how big it was opened.
             if let Some((backing_type, live)) = container_backing(value, *type_id, type_table) {
-                *budget = budget.checked_sub(1)?;
-                return charge_seq(backing_type, live, type_table, budget);
+                *budget = budget.checked_sub(2)?;
+                return charge_elements(backing_type, live, type_table, budget);
             }
             for (_, field) in fields.iter() {
                 charge_leaves(field, type_table, budget)?;
             }
             Some(())
         }
-        Value::Seq { type_id, elements } => charge_seq(*type_id, elements, type_table, budget),
+        Value::Seq { type_id, elements } => charge_elements(*type_id, elements, type_table, budget),
         Value::Variant { payload, .. } => match payload.as_deref() {
             Some(payload) => charge_leaves(payload, type_table, budget),
             None => Some(()),
         },
-        _ => {
-            *budget = budget.checked_sub(1)?;
-            Some(())
-        }
+        _ => Some(()),
     }
 }
 
-/// Charge an array of `elements` at `type_id`. A byte array costs one, since it
-/// packs into a single `PackedArray` however long it is.
-fn charge_seq(
+/// Charge the operands inside an array literal — none where they pack into the
+/// single `PackedArray` a byte array becomes however long it is.
+fn charge_elements(
     type_id: TypeId,
     elements: &[Value],
     type_table: &TypeTable,
@@ -1232,7 +1233,6 @@ fn charge_seq(
         type_table.get(type_id),
         ResolvedType::BuiltinArray(e) if *e == TypeTable::U8
     ) {
-        *budget = budget.checked_sub(1)?;
         return Some(());
     }
     for element in elements {

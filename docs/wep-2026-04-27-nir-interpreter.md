@@ -345,9 +345,10 @@ literal is a thousand operands, which `array.new_fixed` packs into a data segmen
 only where the elements are primitive. So the writer counts the operands it would
 place, charging a byte sequence one, and refuses past `MAX_MATERIALIZED_LEAVES`.
 
-It is a safety valve rather than a tuning knob. Swept over the benchmark and
-`wasm-size` corpora, every ceiling from 16 up emits the same bytes on every
-program: what the exit writes there is many small values, not a few wide ones.
+It is a safety valve rather than a tuning knob. The sweep that chose it, over
+the benchmark and `wasm-size` corpora, found every ceiling from 16 up emitting
+the same bytes on every program: what the exit wrote there was many small
+values, not a few wide ones.
 
 #### What it does not reach
 

@@ -324,18 +324,17 @@ fn const_seq_len(body: &Body, e: ExprId) -> Option<i32> {
         ExprKind::ArrayLiteral { elements } => i32::try_from(elements.len()).ok(),
         ExprKind::LabeledBlock { block: b, .. } => {
             let stmts = &body.blocks[*b].stmts;
-            let (&last, rest) = stmts.split_last()?;
+            let (_, rest) = stmts.split_last()?;
             if rest
                 .iter()
                 .any(|&s| !matches!(body.stmts[s].kind, StmtKind::Let { .. }))
             {
                 return None;
             }
-            let tail = match &body.stmts[last].kind {
-                StmtKind::Expr(ex) => *ex,
-                StmtKind::Break { value: Some(v), .. } => *v,
-                _ => return None,
-            };
+            // The block's one value, so a second `break` to the label — or one
+            // naming an outer block — leaves the length unknown rather than
+            // reading the tail as if it always ran.
+            let tail = body.block_yield(e)?;
             if let Some(len) = const_seq_len_operand(body, tail) {
                 return Some(len);
             }

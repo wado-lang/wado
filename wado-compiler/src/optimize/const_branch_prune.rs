@@ -124,11 +124,14 @@ fn prune_expr_local(engine: &mut Engine, id: ExprId, mode: PruneMode) -> bool {
 
     // (C3) `label: { stmts...; break label: val; }` → `{ stmts...; val }`.
     if let ExprKind::LabeledBlock {
-        label, block, role, ..
+        label,
+        block,
+        result_type,
+        role,
     } = &engine.body.exprs[id].kind
     {
         let label = label.clone();
-        let (block, role) = (*block, *role);
+        let (block, result_type, role) = (*block, *result_type, *role);
         let go = mode.may_flatten(role)
             && engine.body.blocks[block].stmts.last().is_some_and(|&last| {
                 matches!(
@@ -174,8 +177,9 @@ fn prune_expr_local(engine: &mut Engine, id: ExprId, mode: PruneMode) -> bool {
                 let tail = engine.alloc_stmt(StmtKind::Expr(brk_value), bv_span);
                 stmts.push(tail);
                 engine.set_block_stmts(block, stmts);
-                let ty = engine.body.exprs[id].type_id;
-                engine.replace_expr_kind(id, ExprKind::plain_block(block, ty, "unbroken"));
+                // The block's own yield contract, which `sroa_variant_return`
+                // reads per label — not the type of the position `id` sits in.
+                engine.replace_expr_kind(id, ExprKind::plain_block(block, result_type, "unbroken"));
                 return true;
             }
         }
