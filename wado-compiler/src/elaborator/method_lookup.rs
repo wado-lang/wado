@@ -1488,6 +1488,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         method_name: &str,
         span: Span,
     ) -> Option<super::sem::types::CalleeParams> {
+        // Only where no impl on the receiver declares the name at all. Several
+        // is an overload the call site picks by argument, and resolving it here
+        // would both decide it and report an ambiguity the call does not have.
+        if self
+            .qualified_method_decl_ids(receiver, method_name)
+            .next()
+            .is_some()
+        {
+            return None;
+        }
         let found = self.find_trait_method_for_type(
             receiver,
             method_name,
