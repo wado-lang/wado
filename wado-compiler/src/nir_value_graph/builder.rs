@@ -467,6 +467,18 @@ struct Builder<'a> {
     /// so a reference whose target diverges becomes unknown rather than
     /// forwarding a stale pointee.
     ref_targets: IndexMap<u32, u32>,
+    /// `(receiver, field) → pointee local` for a struct literal field built from
+    /// `&x` / `&mut x`, so `let r = obj.f` reaches `x` the way `let r = &x`
+    /// does. A `Formatter`'s `buf` is the standing case: the buffer is read back
+    /// out of the field and every append goes through that read.
+    ///
+    /// Recorded only where no `Assign` in the body writes that field index, so a
+    /// field the program replaces never forwards a stale pointee. The entries
+    /// follow `ref_targets`' own discipline for the pointee.
+    field_ref_targets: IndexMap<(ValueId, u32), u32>,
+    /// Field indices some `Assign` in the body writes. See
+    /// [`Builder::field_ref_targets`].
+    assigned_fields: crate::hashmap::IndexSet<u32>,
     /// Type table for constant folding of pure arithmetic on literal operands
     /// (`Binary` / `Unary`). `None` disables folding (the value graph still
     /// builds structural nodes). See [`Builder::fold_binary_const`].
@@ -522,6 +534,8 @@ impl<'a> Builder<'a> {
                 v
             },
             ref_targets: IndexMap::default(),
+            field_ref_targets: IndexMap::default(),
+            assigned_fields: assigned_field_indices(body),
             type_table,
             loop_entry_values: IndexMap::default(),
             stmt_entry_version: IndexMap::default(),
@@ -658,15 +672,26 @@ impl<'a> Builder<'a> {
         // Reassigning `local` invalidates references that pointed at it.
         self.ref_targets.retain(|_, &mut pointee| pointee != local);
         let target = match &self.body.exprs[value].kind {
-            ExprKind::Unary {
-                op: NirUnaryOp::Ref | NirUnaryOp::MutRef,
-                expr: inner,
-            } => inner
-                .as_expr()
-                .and_then(|ie| match &self.body.exprs[ie].kind {
-                    ExprKind::Local { index, .. } => Some(*index),
-                    _ => None,
-                }),
+            ExprKind::Unary { .. } => self.borrowed_local(Operand::Expr(value)),
+            // `let r = obj.f` where the literal built `f` from `&x` reaches `x`
+            // exactly as `let r = &x` does.
+            ExprKind::FieldAccess {
+                expr: recv,
+                field_index,
+                ..
+            } => {
+                let (recv, field_index) = (*recv, *field_index);
+                // The receiver resolves as the read path resolves it, so a
+                // borrow of the literal's binding reaches the same entry.
+                let rv = recv
+                    .as_expr()
+                    .and_then(|ie| self.reference_lookthrough(ie).map(|(vn, _)| vn))
+                    .or_else(|| match recv {
+                        Operand::Value(v) => Some(v),
+                        Operand::Expr(e) => self.value_of.get(&e).copied(),
+                    });
+                rv.and_then(|rv| self.field_ref_targets.get(&(rv, field_index)).copied())
+            }
             _ => None,
         };
         match target {
@@ -676,6 +701,21 @@ impl<'a> Builder<'a> {
             _ => {
                 self.ref_targets.swap_remove(&local);
             }
+        }
+    }
+
+    /// The local `&x` / `&mut x` borrows, or `None` for anything else.
+    fn borrowed_local(&self, op: Operand) -> Option<u32> {
+        let ExprKind::Unary {
+            op: NirUnaryOp::Ref | NirUnaryOp::MutRef,
+            expr: inner,
+        } = &self.body.exprs[op.as_expr()?].kind
+        else {
+            return None;
+        };
+        match &self.body.exprs[inner.as_expr()?].kind {
+            ExprKind::Local { index, .. } => Some(*index),
+            _ => None,
         }
     }
 
@@ -1372,6 +1412,16 @@ impl<'a> Builder<'a> {
         let attempted = pairs.len();
         let mut seeded = 0;
         for (field_index, field_value) in pairs {
+            if let Some(pointee) = self.borrowed_local(field_value)
+                && !self.assigned_fields.contains(&field_index)
+            {
+                crate::compiler_trace!(
+                    "vg_field",
+                    "[{}] field {field_index} of {recv:?} borrows local {pointee}",
+                    self.trace_id
+                );
+                self.field_ref_targets.insert((recv, field_index), pointee);
+            }
             // A promoted constant field is its own `ValueId`; a skeleton field is
             // resolved through `value_of`.
             let fv = match field_value {
@@ -1994,6 +2044,21 @@ fn block_breaks_to_node(body: &Body, node: NodeRef, label: &str) -> bool {
     body.for_each_child(node, |c| kids.push(c));
     kids.into_iter()
         .any(|c| block_breaks_to_node(body, c, label))
+}
+
+/// Every field index some `Assign` in `body` writes, over the whole arena: a
+/// field nothing replaces is one a recorded pointee outlives. Coarse by index
+/// rather than by type, which errs toward recording nothing.
+fn assigned_field_indices(body: &Body) -> crate::hashmap::IndexSet<u32> {
+    let mut set = crate::hashmap::IndexSet::default();
+    for (_, node) in &body.exprs {
+        if let ExprKind::Assign { target, .. } = &node.kind
+            && let ExprKind::FieldAccess { field_index, .. } = &body.exprs[*target].kind
+        {
+            set.insert(*field_index);
+        }
+    }
+    set
 }
 
 /// The per-call verdicts the loop summary reads, bundled so it asks the same
