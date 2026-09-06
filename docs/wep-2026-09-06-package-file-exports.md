@@ -163,8 +163,8 @@ valid.
 A package may generate from its own assets and export what comes out. Its
 clauses then have to fire in a consuming build, since the loader meets that
 package's `use { … } from "./grammar/Wado.g4"` while compiling it. Clauses are
-therefore harvested across the dependency edge, and each one is resolved by the
-rule Kiln already applies to a local invocation
+therefore harvested across the dependency edge at any depth, and each one is
+resolved by the rule Kiln already applies to a local invocation
 ([Kiln](./wep-2026-04-12-kiln.md) §"Caching"):
 
 - A recorded output travels with the package — the generated `.wado` files and
@@ -188,6 +188,12 @@ acceptable because a generator is a pure function of its inputs, with no clock,
 no network, no filesystem and no environment (principle 1). Reusing a recorded
 output is acceptable for the same reason: purity is what makes the recorded
 bytes reproducible rather than a snapshot of someone's machine.
+
+What goes wrong inside a dependency is reported against that dependency: the
+package coordinate and its version, whatever the generator failed on. A path
+under `$WADO_ROOT` names a directory the user did not create and cannot edit,
+and it changes with the version — the coordinate is what tells them which
+package to pin, patch, or report to.
 
 ### Deliberate omissions
 
@@ -252,13 +258,6 @@ without the exception.
 
 ## Known gaps
 
-- How deep a dependency's generation is followed. Roadmap 4-6 cover a direct
-  dependency; whether a dependency of a dependency generating from its own
-  assets is reached the same way is unexamined, and the answer is one traversal
-  rule plus whatever the transitive build lock has to record.
-- Whose diagnostic a dependency's generator failure is. The span names a file
-  the consumer cannot edit, and the useful report is one that names the
-  dependency and its version rather than a path under `$WADO_ROOT`.
 - Whether a `lib` entry and an exported submodule that reach the same file
   resolve to one module identity. Two identities would make one declaration two
   nominal types, which
