@@ -221,6 +221,9 @@ directory — reformats it anyway, silently discarding a layout the test depends
 on. When the syntax is updated, make sure to add tests to
 `wado-compiler/tests/format.rs`.
 
+What the formatter decides — width, wrapping, comment placement — is in
+`docs/formatter.md`.
+
 ## Publish
 
 `wado publish` builds the package and uploads it through `wkg`. Credentials

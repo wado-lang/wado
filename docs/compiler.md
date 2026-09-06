@@ -3,6 +3,7 @@
 The Wado compiler (`wado-compiler/`) translates `.wado` source into a Wasm component binary. This document gives a high-level overview of the architecture; deeper topics live in their own docs:
 
 - Optimization passes: [optimizer.md](./optimizer.md)
+- `wado format` rules: [formatter.md](./formatter.md)
 - LSP architecture: [WEP 2026-04-18](./wep-2026-04-18-lsp-architecture.md)
 - Language features: [spec.md](./spec.md)
 
@@ -72,38 +73,9 @@ The loader runs `lexer → parser → bind` on every loaded module:
 - The parser builds a faithful AST. Compound assigns, comparison chains, struct shorthand, and `&self` parameters are kept verbatim so `wado format` round-trips.
 - `bind.rs` performs local name resolution, scope/mutability checking, and use-before-define detection.
 
-Comments are trivia. The lexer collects them, the parser keys them to the
-`AstId` they precede (`comment.rs`), and `unparse.rs` writes them back. A
-comment can sit in any gap between two tokens, and no node owns most of those
-gaps, so the unparser never relies on a construct remembering to emit one.
-`flush_comments_before(pos)` emits every comment before `pos` that nothing has
-placed. A construct places what it has a slot for — between two list entries,
-before a closing delimiter, at the end of an entry's line — and every boundary
-flushes the rest: the next statement, item or member before its own leading
-run, and each closing brace before it is written. One that ignores a comment
-can only move it out to the enclosing construct, never lose it.
-
-Three rules keep the output a fixed point, which is what a relocated comment
-threatens.
-
-- Flush at the _next_ boundary, not at the end of the construct that could not
-  place it. A comment emitted just before the next member is where the next
-  parse reads it — as that member's leading trivia — so the second pass agrees
-  with the first.
-- A construct that renders itself on one line refuses that form while an
-  unplaced comment sits inside its span (`has_comment_in_range`). Otherwise it
-  wraps for a comment it does not place, and the next pass, finding no comment
-  there, unwraps again.
-- A relocated comment carries no blank lines (`Spacing::Tight`) and anchors
-  nothing (`leading_start_line`): the gap its source line described is not the
-  gap it landed in.
-
-The lexer hides an interpolation's tokens behind the template's single token,
-so `Parser::absorb_comments` folds the comments inside one back into the file's
-stream and `lexer::comments_deep` is what the drop check counts — without both,
-a comment in `${…}` is invisible to everything downstream.
-`test_format_keeps_a_comment_wedged_in_any_token_gap` enumerates the gaps
-mechanically over the fixture corpus, interpolations included.
+Comments are trivia, collected by the lexer and keyed to the `AstId` they
+precede (`comment.rs`). `unparse.rs` writes them back, under the rules in
+[formatter.md](./formatter.md).
 
 The AST is parser-immutable from this point on. The desugar-replacement surface rewrites — compound assignment (`x += y` → `x = x + y`), `while` / C-style `for` → explicit `loop`, `for x of expr` iteration (the `.into_iter()` / `.next()` dispatch and the `match Some(x) => body, _ => break` shape), the `assert` statement, the `matches` operator, the comparison chain `a < b < c`, template-string interpolations, a tagged template's call on its minted type (`elaborator/tagged_template.rs`), `use … namespace` prefix stripping (`helper::foo`), and `Self::method` / `T::method` (T bound to concrete) static-call dispatch — produce no synthetic AST. Annotate resolves the user AST, tags the site with its `DesugarKind`, and records the facts the rewrite needs (the dispatched callee, the iterator info, the assert capture plan); reify reads those back and emits the `TirExpr` / `TirStmt` shape. The annotate implementations live in `elaborator/{stmt,operators,assert,matches}.rs` (`resolve_while`, `resolve_for`, `resolve_iterator_for_of`, `resolve_compound_assign`, `desugar_assert`, `desugar_matches_expr`, `desugar_comparison_chain`), `Elaborator::strip_ns_prefix` in `elaborator.rs`, and `CalleeIdentKind` / `classify_call_callee` in `elaborator/call.rs` (the prefix is resolved to its concrete type name before parameter-type lookup so argument resolution runs once with the correct expected-type hints). A rewrite that must dispatch a method the source never spells (the for-of `.into_iter()` / `.next()` calls today) reuses the same dispatch a written call takes, via `Elaborator::resolve_method_call_with` (`elaborator/method_call.rs`) — that helper takes a pre-resolved receiver plus a method name and signals "no source AST" with `method_id: None` so no use→def edge is recorded against the synthesis site. Keeping the AST parser-shaped is what lets LSP queries land on the user's text rather than on a synthesised replacement.
 
