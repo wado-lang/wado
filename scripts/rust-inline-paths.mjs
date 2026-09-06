@@ -12,9 +12,10 @@ import { fileURLToPath } from "node:url";
 
 const BASELINE_PATH = fileURLToPath(new URL("rust-inline-paths.json", import.meta.url));
 
-// `$crate` is macro hygiene, which no `use` can replace.
-const INLINE_PATH = /(?<![A-Za-z0-9_#$])(?:crate|super)::/g;
-const USE_KEYWORD = /(?<![A-Za-z0-9_#])use(?![A-Za-z0-9_])/g;
+// A Rust identifier runs over `XID_Continue`, so `αcrate` is one name and not
+// a path root. `$crate` is macro hygiene, which no `use` can replace.
+const INLINE_PATH = /(?<![\p{XID_Continue}#$])(?:crate|super)::/gu;
+const USE_KEYWORD = /(?<![\p{XID_Continue}#])use(?![\p{XID_Continue}])/gu;
 
 /** Index past the char literal at `at`, or -1 when the quote opens a lifetime. */
 function charLiteralEnd(source, at) {
@@ -174,10 +175,32 @@ function writeBaseline(counts) {
 
 const total = (counts) => Object.values(counts).reduce((sum, n) => sum + n, 0);
 
+/** Every file carrying more than its baseline allows, as `[file, was, now]`. */
+function grownFiles(counts, baseline) {
+  return Object.entries(counts)
+    .filter(([file, n]) => n > (baseline[file] ?? 0))
+    .map(([file, n]) => [file, baseline[file] ?? 0, n]);
+}
+
+function reportGrown(grown) {
+  console.error("error: inline `crate::` / `super::` paths added; import them with `use`:");
+  for (const [file, was, now] of grown) console.error(`  ${file}: ${was} -> ${now}`);
+  console.error("");
+  console.error("Run `node scripts/rust-inline-paths.mjs <file>` to list them.");
+}
+
 function main(argv) {
   const files = rustFiles();
   if (argv.includes("--update")) {
     const counts = census(files);
+    const baseline = readBaseline();
+    // The baseline only ever ratchets down. Recording a file that grew would
+    // license the paths `--check` is there to refuse.
+    const grown = grownFiles(counts, baseline);
+    if (grown.length > 0) {
+      reportGrown(grown);
+      return 1;
+    }
     writeBaseline(counts);
     console.log(`baseline: ${total(counts)} inline paths in ${Object.keys(counts).length} files`);
     return 0;
@@ -185,12 +208,9 @@ function main(argv) {
   if (argv.includes("--check")) {
     const counts = census(files);
     const baseline = readBaseline();
-    const grown = Object.entries(counts).filter(([file, n]) => n > (baseline[file] ?? 0));
+    const grown = grownFiles(counts, baseline);
     if (grown.length > 0) {
-      console.error("error: inline `crate::` / `super::` paths added; import them with `use`:");
-      for (const [file, n] of grown) console.error(`  ${file}: ${baseline[file] ?? 0} -> ${n}`);
-      console.error("");
-      console.error("Run `node scripts/rust-inline-paths.mjs <file>` to list them.");
+      reportGrown(grown);
       return 1;
     }
     const left = total(counts);

@@ -73,3 +73,11 @@ test("reads a capture list however much space precedes its angle bracket", () =>
   assert.deepEqual(texts(`fn f() -> impl Sized + use<${q}a> { crate::g() }`), ["crate::"]);
   assert.deepEqual(texts(`fn f() -> impl Sized + use     <${q}a> { crate::g() }`), ["crate::"]);
 });
+
+test("reads a Rust identifier to its end, Unicode included", () => {
+  // `αcrate` is one identifier, not a path root, and `αuse` is not an import:
+  // read as one, its span would swallow the path that follows.
+  const a = "α";
+  assert.deepEqual(texts(`let x: ${a}crate::T;`), []);
+  assert.deepEqual(texts(`let ${a}use = crate::g();`), ["crate::"]);
+});
