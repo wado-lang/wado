@@ -40,7 +40,7 @@ use {
     check_references,
     check_rule_shapes,
     synthesize_implicit_tokens,
-    merge_grammars,
+    compose_grammars,
     superclass_bases,
 } from "../ir.wado";
 use { G4Token } from "./token.wado";
@@ -63,6 +63,7 @@ pub struct G4Parser {
     channels: List<String>,
     options: List<GrammarOption>,
     named_actions: List<NamedAction>,
+    imports: List<String>,
     pending_refs: List<PendingRef>,
     current_rule: String,
     kind: GrammarKind,
@@ -169,6 +170,7 @@ impl G4Parser {
             channels: [],
             options: [],
             named_actions: [],
+            imports: [],
             pending_refs: [],
             current_rule: "",
             kind: GrammarKind::Combined,
@@ -349,6 +351,7 @@ impl G4Parser {
         let channels = self.channels;
         let options = self.options;
         let named_actions = self.named_actions;
+        let imports = self.imports;
         let pending_refs = self.pending_refs;
         let kind = self.kind;
         let source_files: List<String> = [];
@@ -364,6 +367,7 @@ impl G4Parser {
                 channels,
                 options,
                 named_actions,
+                imports,
                 action_language,
                 pending_refs,
                 source_files,
@@ -397,7 +401,7 @@ impl G4Parser {
                 }
                 if LexerSlice::eq_str(&"import", text) {
                     self.advance();
-                    self.parse_delegate_grammars();
+                    self.parse_delegate_grammars()?;
                     continue;
                 }
             }
@@ -471,17 +475,31 @@ impl G4Parser {
         return Result::<(), ParseError>::Ok(());
     }
 
-    fn parse_delegate_grammars(&mut self) {
+    /// `import S, T;` — record each delegate's declared name.
+    /// `compose_grammars` binds them; there is no filesystem to look in.
+    /// ANTLR4's aliased form `import Foo = Bar;` names the delegate for
+    /// qualified action references, which Gale has no counterpart for, so it
+    /// is rejected rather than silently composed as `import Bar;`.
+    fn parse_delegate_grammars(&mut self) -> Result<(), ParseError> {
         loop {
             if !self.is_kind(G4Token::Identifier) {
                 break;
             }
+            let name_tok = self.peek();
+            let name = name_tok.text.to_string();
+            let name_span = name_tok.span;
             self.advance();
             if self.is_kind(G4Token::Assign) {
-                self.advance();
-                if self.is_kind(G4Token::Identifier) {
-                    self.advance();
-                }
+                return Result::<(), ParseError>::Err(
+                    ParseError::new(
+                        `aliased grammar import "import ${name} = ...;" is not supported`,
+                        name_span,
+                        ["import <grammar name>"],
+                    ),
+                );
+            }
+            if !self.imports.contains(&name) {
+                self.imports.push(name);
             }
             if self.is_kind(G4Token::Comma) {
                 self.advance();
@@ -492,6 +510,7 @@ impl G4Parser {
         if self.is_kind(G4Token::Semicolon) {
             self.advance();
         }
+        return Result::<(), ParseError>::Ok(());
     }
 
     fn parse_options_block(&mut self) -> List<GrammarOption> {
@@ -1960,7 +1979,12 @@ pub fn assemble_grammar(inputs: &List<[String, String]>) -> Result<Grammar, Asse
             },
         }
     }
-    let mut merged = merge_grammars(grammars);
+    let mut merged = match compose_grammars(grammars) {
+        Ok(g) => g,
+        Err(e) => {
+            return Result::Err(AssembleError::Check(e.full_message()));
+        },
+    };
     match finish_grammar(&mut merged) {
         Ok(_) => {
         },

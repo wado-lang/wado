@@ -4,6 +4,7 @@ Open work towards full ANTLR4 compatibility and the performance budget it implie
 
 - [`antlr4-compatibility.md`](./antlr4-compatibility.md) — the compatibility contract, prediction / codegen design, soundness invariants, descriptor pipeline, and triage workflow.
 - [`AGENTS.md`](./AGENTS.md) — dev-cycle essentials and the prediction failed approaches.
+- [`import.md`](./import.md) — grammar composition: how `import S;` resolves and what a delegate contributes.
 - [`perf.md`](./perf.md) — runtime performance: benchmark state, live profile, what would move the needle, and measured perf dead-ends.
 
 This file lists what is **not yet done** at a behavioral level; find the code via search, not line pointers. Closed work belongs in commit history.
@@ -44,7 +45,7 @@ And the corpus side, which is extractor work rather than codegen work (see "Desc
 
 ## Descriptor corpus — coverage and re-triage
 
-The Stage B′ JVM-oracle infrastructure (design in [`antlr4-compatibility.md`](./antlr4-compatibility.md)) is in place and its pinned trees all pass — `[stage_b_oracle_todo]` is empty, so no prediction divergence is currently pinned there. Java is needed only at extract time, not in CI; the extract also needs the `vendor/antlr4` submodule initialized. Re-extract whenever both are at hand — it is what proves an entry is still blocked rather than merely old. Last run 2026-09-01, all three phases, 98/98 oracle invocations clean. That run also regrouped the corpus onto `DESCRIPTORS_PER_FILE` descriptors per entry module, so its diff is a rewrite rather than the usual no-op. The 933 tests are unchanged.
+The Stage B′ JVM-oracle infrastructure (design in [`antlr4-compatibility.md`](./antlr4-compatibility.md)) is in place and its pinned trees all pass — `[stage_b_oracle_todo]` is empty, so no prediction divergence is currently pinned there. Java is needed only at extract time, not in CI; the extract also needs the `vendor/antlr4` submodule initialized. Re-extract whenever both are at hand — it is what proves an entry is still blocked rather than merely old. Last full run 2026-09-01, all three phases, 98/98 oracle invocations clean; the 2026-09-05 re-extract for `import S;` ran phase 1 only and touched nothing outside the two composite categories.
 
 `[stage_b_oracle_skip]` has been re-triaged (2026-08-24) and is down to the seven descriptors whose oracle output is not a valid pin at all — TestRig encodes non-ASCII as `?` while Gale renders the real code points, so pinning would strictly worsen Gale. Those are permanent unless the oracle's output encoding is fixed upstream; nothing else is parked there.
 
@@ -52,16 +53,16 @@ Stage B′ is the **fallback** for descriptors Stage B cannot compare, not a par
 
 ### Claim strength — what the corpus does not compare
 
-Every one of the 357 upstream descriptors is extracted and carries claim (a). What varies is how much the behavioural claim actually asserts, measured 2026-09-01:
+Every one of the 357 upstream descriptors is extracted and carries claim (a). What varies is how much the behavioural claim actually asserts, measured 2026-09-05:
 
 | descriptors | strongest claim                                                    |
 | ----------- | ------------------------------------------------------------------ |
-| 241         | compares an output: tree, oracle tree, action print, or token dump |
+| 254         | compares an output: tree, oracle tree, action print, or token dump |
 | 35          | only that the parse fails                                          |
-| 33          | only that the parse succeeds                                       |
-| 48          | none; the `.g4` parses and nothing more                            |
+| 37          | only that the parse succeeds                                       |
+| 31          | none; the `.g4` parses and nothing more                            |
 
-The 33 are not a gap: each carries neither `[output]` nor `[errors]`, so the descriptor holds nothing further to compare. Of the 48, 17 are composite (below), 10 are `<DumpDFA()>` ATN traces, and 3 more are StringTemplate directives. Those are out of scope for the reasons above. What remains is a rule the extractor applies, not a per-descriptor accident:
+The 37 are not a gap: each carries neither `[output]` nor `[errors]`, so the descriptor holds nothing further to compare. Of the 31, 10 are `<DumpDFA()>` ATN traces and 3 more are StringTemplate directives. Those are out of scope for the reasons above. What remains is a rule the extractor applies, not a per-descriptor accident:
 
 - [ ] **An empty `[input]` is read as "nothing to feed the parser".** Ten descriptors lose their test to that one conjunct. Three are Lexer descriptors whose `[output]` is a real token dump for the empty string (`LexerExec/EOFByItself`, `EOFSuffixInFirstRule_1`, `EscapeTargetStringLiteral`), five are `ParserExec` ones with a non-empty expected print (`AStar_1`, `AorAStar_1`, `AorBStar_1`, `LL1OptionalBlock_1`, `ReferenceToATN_1`), and two are `ParserErrors` ones. The empty string is an input; the guard belongs on `[output]` alone. Two sites: the `!parsed.input.is_empty()` conjunct in each Stage A eligibility rule, and the shared `continue` gating Stage B / B′ / C.
 
@@ -78,25 +79,12 @@ Remaining:
 - **The `[skip]` bucket is down to three, each held by a directive that changes what the parser produces**: `ParseTrees/AltNum` (`contextSuperClass` + `<TreeNodeWithAltNumField>` render alt numbers into node names), `ParserExec/ParserProperty` (`<ParserPropertyMember()>` declares the member a semantic predicate calls), `LexerExec/PositionAdjustingLexer` (`<PositionAdjustingLexer()>` overrides `nextToken()`). Expanding any of them away would leave a test that no longer tests what the descriptor is for, so each needs the host-side construct genuinely modelled — or the judgement that it is target-language-specific and stays skipped.
 - **Stage B compares its expected trees through `normalize_tree`.** Stage B′ no longer does — it lost a real divergence that way (a token whose own text ends in a space). Stage B is exposed to the same class of masking; no committed Stage B expected tree currently contains whitespace inside token text, so this is latent rather than live.
 
-### Composite (slave-grammar) descriptors — the next priority
+### Composite (slave-grammar) descriptors
 
-**`import S;` is the next thing to build.** It is the largest actionable gap in the corpus (17 descriptors, the whole of `CompositeLexers` and `CompositeParsers`, none of which has any behavioural test today), it is unblocked, and it is the only entry here that also blocks a consumer outside the corpus. Everything else in this file is either parked behind ICU, parked as a known edge of static prediction, or a judgement call on what the compatibility contract covers.
+`import S;` has landed — design in [`import.md`](./import.md). All 17 `CompositeLexers` / `CompositeParsers` descriptors are under the ordinary eligibility rules: 15 claim (b), 2 claim (d) token dumps that pin the composite's token numbering, and 11 Stage C output-compares, none triaged. What is left:
 
-Every `CompositeLexers` / `CompositeParsers` descriptor short-circuits on the presence of imported slave grammars. Independent blockers:
-
-- **Importer multi-input plumbing.** A grammar import (`import S;`) must resolve against the sibling slave-grammar files — `parse_delegate_grammars` advances past the names and records nothing today. Kiln already supports multi-input; lift the short-circuit once resolution lands. The consumer outside the corpus: a Wado dialect grammar has to vendor a copy of `Wado.g4` and drift from it until `import Wado;` resolves, where `mise run check-grammar` holds only the original to the compiler's parser ([WEP: Markup Dialect](../docs/wep-2026-08-29-markup-dialect.md)).
-
-  Hand-off — what the corpus already settles:
-
-  - **Resolve by declared grammar name, not by filename.** A Kiln generator has no filesystem, so ANTLR4's `-lib` lookup has no analogue: an import binds to whichever supplied input declares that name in its header. The corpus forces the same answer — `DelegatorInvokesFirstVersionOfDelegateRule` writes `import S,T;` where the extracted files are `.slave1` (grammar T) and `.slave2` (grammar S). An import naming no supplied input is an error, not a silent omission.
-  - **Two merges, not one.** `merge_grammars` concatenates unconditionally — right for split halves (`RustLexer.g4` + `RustParser.g4`), wrong for a delegate, which needs override-by-name and the master's name and kind kept. Partition in one pass: an input whose declared name appears in any input's import list is a delegate, everything else a split half. A grammar with no `import` must stay byte-identical through today's path.
-  - **Master rules first, then delegates in import order.** Lexer precedence is rule order (`KeywordVSIDOrder` needs the master's `A : 'abc'` to beat the imported `ID : 'a'..'z'+`), and it keeps the composite's start rule the master's first rule.
-  - **An overridden rule takes its pending refs with it.** `DelegatorRuleOverridesDelegate` drops a slave `b : B` that is the only reference to `B`; a surviving ref fails `check_references`. References resolve after composition, over the whole composite (`DelegatorRuleOverridesLookaheadInDelegate`).
-  - **One token space.** A `tokens{}` entry must yield to a real rule anywhere in the composite; the dedup in `parse_grammar` is per-file, so `DelegatesSeeSameTokenType` composes three rules named `A` without it.
-  - **Unpinned — ask the oracle, do not infer**: whether `options` (and `superClass`, read out of them) are imported at all (`ImportedGrammarWithEmptyOptions` pins only that an empty block survives), the delegate order beyond one level, and what `import Foo = Bar;` means.
-  - **The exclusion is categorical**: three `slave_grammars.len() == 0` conjuncts in the Stage A eligibility rules plus one `continue` gating Stage B, Stage B′ and Stage C, all in `scripts/extract_antlr4_descriptors.wado`. Dropping them puts the 17 composite descriptors under the ordinary eligibility rules, with `inputs: [...]` added to the emitted `use`. The two `CompositeLexers` ones stay parse-only either way — a Lexer `[type]` with no token-dump `[output]` matches no claim.
-  - **What it does not give.** An override replaces a rule — there is no "add an alternative", so a dialect restates any rule it extends. And Kiln `inputs` are project-relative paths, so a dialect in its own repository still holds a copy of `Wado.g4`; resolution shrinks that from a drifting fork to a copy a checksum can hold, and the rest is a Kiln gap.
-- **Host-side output.** Every composite descriptor's expected output is a host-side artefact — action prints, token dumps, or empty — so none survive the Stage B output normalizer. Stage C has landed, so this is now the extractor work of comparing that output, not a codegen gap.
+- **Stage B′ does not oracle a composite.** `antlr4-oracle.sh` invokes the jar on one grammar file with no `-lib` slave lookup, so `stage_b_oracle_eligible` excludes them. Closing it means teaching the oracle script to stage the slaves beside the master and pass `-lib`; the extractor would then hand it composite candidates unchanged.
+- **The dialect consumer still holds a copy.** Kiln `inputs` are relative paths inside the project, so a dialect in its own repository cannot name `Wado.g4` inside a dependency package ([WEP: Markup Dialect](../docs/wep-2026-08-29-markup-dialect.md)). Resolution shrinks that from a drifting fork to a copy a checksum can hold; the rest is a Kiln gap, not a Gale one.
 
 ## LL prediction — parked gaps
 

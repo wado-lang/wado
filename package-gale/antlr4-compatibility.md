@@ -300,10 +300,11 @@ Triage state for Stage B′ lives in `status.toml`:
 Defaults: any single-grammar parser descriptor whose `[output]` would
 auto-skip from Stage B becomes a Stage B′ candidate automatically,
 unless it sits in `[stage_b_oracle_skip]`. Composite descriptors
-(slave grammars) remain out of scope until the importer learns to
-resolve them (see "Composite (slave-grammar) descriptors" in
-[`TODO.md`](./TODO.md)). Lexer descriptors stay on Stage A token-
-equivalence — there is no parse tree to compare.
+(slave grammars) compose and run under Stage A and Stage C
+([`import.md`](./import.md)) but stay out of Stage B′, because
+`antlr4-oracle.sh` invokes the jar on one grammar file with no `-lib`
+slave lookup. Lexer descriptors stay on Stage A token-equivalence —
+there is no parse tree to compare.
 
 When the oracle fails (parse error, codegen error after stripping,
 TestRig stderr non-empty), the extractor logs a warning to stderr and

@@ -553,12 +553,12 @@ rule : ID ;";
     assert g.parser_rules.len() == 1;
 }
 
-test "grammar with import and alias" {
+test "aliased grammar import is rejected" {
     let input = "grammar Test;
 import Foo = Bar, Baz;
 rule : ID ;";
-    let g = parse(input).unwrap();
-    assert g.parser_rules.len() == 1;
+    let result = parse(input);
+    assert result matches { Err(_) }, "expected `import Foo = Bar;` to be rejected";
 }
 
 test "grammar with at_header named action" {
@@ -674,6 +674,20 @@ channels { CHAN }
 rule : ID ;";
     let g = parse(input).unwrap();
     assert g.parser_rules.len() == 1;
+    assert g.imports == ["Foo"];
+}
+
+test "import records delegate names in declaration order" {
+    let input = "grammar M;
+import S,T;
+s : a ;";
+    let g = parse(input).unwrap();
+    assert g.imports == ["S", "T"];
+}
+
+test "a grammar without import has no delegates" {
+    let g = parse("grammar M;\ns : ID ;").unwrap();
+    assert g.imports.is_empty();
 }
 
 test "parser rule with arguments" {
