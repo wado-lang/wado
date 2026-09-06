@@ -2486,7 +2486,7 @@ fn check_temp_uses(
         }
     }
     body.for_each_child(node, |c| {
-        check_temp_uses(body, c, local, rebind, layout, ok)
+        check_temp_uses(body, c, local, rebind, layout, ok);
     });
 }
 
