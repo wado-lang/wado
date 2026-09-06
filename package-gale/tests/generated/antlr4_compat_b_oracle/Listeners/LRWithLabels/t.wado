@@ -1069,45 +1069,102 @@ fn line_col_from_starts(line_starts: &List<i32>, pos: i32) -> [i32, i32] {
     }
     return [lo + 1, pos - line_starts[lo]];
 }
-pub global EMPTY_FOLLOW: List<List<i32>> = [];
+pub global EMPTY_FOLLOW: List<i32> = [];
 
-pub fn follow_prepend(prefix: &List<List<i32>>, follow: &List<List<i32>>) -> List<List<i32>> {
-    if follow.is_empty() {
+pub global FOLLOW_ALT_MARK: i32 = -1;
+
+pub global FOLLOW_MAX_DEPTH: i32 = 4;
+
+fn append_capped(out: &mut List<i32>, follow: &List<i32>, start_depth: i32) {
+    let mut depth = start_depth;
+    for let set of follow {
+        if *set == FOLLOW_ALT_MARK {
+            out.push(*set);
+            depth = 0;
+        } else if depth < FOLLOW_MAX_DEPTH {
+            out.push(*set);
+            depth += 1;
+        }
+    }
+}
+
+pub fn follow_alt(first: &List<i32>, second: &List<i32>) -> List<i32> {
+    if first.is_empty() {
+        return *second;
+    }
+    if second.is_empty() {
+        return *first;
+    }
+    let mut joined: List<i32> = List::with_capacity(first.len() + second.len() + 1);
+    append_capped(&mut joined, first, 0);
+    joined.push(FOLLOW_ALT_MARK);
+    append_capped(&mut joined, second, 0);
+    return joined;
+}
+
+pub fn follow_prepend(prefix: &List<i32>, follow: &List<i32>) -> List<i32> {
+    if follow.is_empty() || prefix.len() >= FOLLOW_MAX_DEPTH {
         return *prefix;
     }
-    let mut combined: List<List<i32>> = List::with_capacity(prefix.len() + follow.len());
-    for let depth of prefix {
-        combined.push(*depth);
+    let mut combined: List<i32> = List::with_capacity(prefix.len() + follow.len());
+    for let set of prefix {
+        combined.push(*set);
     }
-    for let depth of follow {
-        combined.push(*depth);
+    let mut depth = prefix.len();
+    for let set of follow {
+        if *set == FOLLOW_ALT_MARK {
+            combined.push(*set);
+            for let head of prefix {
+                combined.push(*head);
+            }
+            depth = prefix.len();
+        } else if depth < FOLLOW_MAX_DEPTH {
+            combined.push(*set);
+            depth += 1;
+        }
     }
     return combined;
 }
 
-pub fn follow_yields(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>>, eof_kind: i32) -> bool {
+pub fn follow_yields(tokens: &Array<i32>, pos: i32, follow: &List<i32>, sets: &List<List<i32>>, eof_kind: i32) -> bool {
     if follow.is_empty() {
         return false;
     }
-    for let mut d = 0; d < follow.len(); d += 1 {
-        let set = &follow[d];
-        if set.is_empty() {
+    let mut depth = 0;
+    let mut alive = true;
+    let mut constrained = false;
+    for let mut i = 0; i < follow.len(); i += 1 {
+        if follow[i] == FOLLOW_ALT_MARK {
+            if alive && constrained {
+                return true;
+            }
+            depth = 0;
+            alive = true;
+            constrained = false;
             continue;
         }
-        let idx = pos + d;
-        let kind = if idx < tokens.len() { tokens[idx] } else { eof_kind };
-        let mut hit = false;
-        for let t of set {
-            if kind == *t {
-                hit = true;
-                break;
+        constrained = true;
+        if !alive {
+            continue;
+        }
+        let set = &sets[follow[i]];
+        if !set.is_empty() {
+            let idx = pos + depth;
+            let kind = if idx < tokens.len() { tokens[idx] } else { eof_kind };
+            let mut hit = false;
+            for let t of set {
+                if kind == *t {
+                    hit = true;
+                    break;
+                }
+            }
+            if !hit {
+                alive = false;
             }
         }
-        if !hit {
-            return false;
-        }
+        depth += 1;
     }
-    return true;
+    return alive && constrained;
 }
 pub enum TokenKind {
     MULT,
@@ -1672,7 +1729,7 @@ impl Parser {
     }
 }
 
-fn scan_s(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn scan_s(tokens: &Array<i32>, pos: i32, follow: &List<i32> = &EMPTY_FOLLOW) -> i32 {
     let scan_start = pos;
     let mut pos = pos;
     pos = scan_e(tokens, pos, follow, 0);
@@ -1681,25 +1738,25 @@ fn scan_s(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLO
     return pos;
 }
 
-fn scan_e_atom(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn scan_e_atom(tokens: &Array<i32>, pos: i32, follow: &List<i32> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_INT { return -1; }
     pos += 1;
     return pos;
 }
 
-fn scan_e_lr_0(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn scan_e_lr_0(tokens: &Array<i32>, pos: i32, follow: &List<i32> = &EMPTY_FOLLOW) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_LIT_LPAREN { return -1; }
     pos += 1;
-    pos = scan_e_list(tokens, pos, &FOLLOW_MASK_0);
+    pos = scan_e_list(tokens, pos, &follow_prepend(&FOLLOW_MASK_0, follow));
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_LIT_RPAREN { return -1; }
     pos += 1;
     return pos;
 }
 
-fn scan_e(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
+fn scan_e(tokens: &Array<i32>, pos: i32, follow: &List<i32> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> i32 {
     let mut pos = scan_e_atom(tokens, pos, follow);
     if pos < 0 { return -1; }
     loop {
@@ -1723,18 +1780,18 @@ fn scan_e(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLO
     return pos;
 }
 
-fn scan_e_list(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> i32 {
+fn scan_e_list(tokens: &Array<i32>, pos: i32, follow: &List<i32> = &EMPTY_FOLLOW) -> i32 {
     let scan_start = pos;
     let mut pos = pos;
-    pos = scan_e(tokens, pos, follow, 0);
+    pos = scan_e(tokens, pos, &follow_alt(&FOLLOW_MASK_1, follow), 0);
     if pos < 0 { return -1; }
-    while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA && !(follow_yields(tokens, pos, follow, TK_EOF)) {
+    while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
         let sp = pos;
         sg_0_done: {
             sg_0: {
                 if pos >= tokens.len() || tokens[pos] != TK_LIT_COMMA { break sg_0; }
                 pos += 1;
-                pos = scan_e(tokens, pos, follow, 0);
+                pos = scan_e(tokens, pos, &follow_alt(&FOLLOW_MASK_1, follow), 0);
                 if pos < 0 { break sg_0; }
                 break sg_0_done;
             }
@@ -1747,12 +1804,12 @@ fn scan_e_list(tokens: &Array<i32>, pos: i32, follow: &List<List<i32>> = &EMPTY_
     return pos;
 }
 
-fn _parse_s__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
+fn _parse_s__inner(p: &mut Parser, follow: &List<i32> = &EMPTY_FOLLOW) -> () {
     let r = _parse_e(p, follow);
     return;
 }
 
-fn _parse_s(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
+fn _parse_s(p: &mut Parser, follow: &List<i32> = &EMPTY_FOLLOW) -> () {
     if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_S, _start);
@@ -1763,7 +1820,7 @@ fn _parse_s(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     }
 }
 
-fn _parse_e__inner_atom(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> () {
+fn _parse_e__inner_atom(p: &mut Parser, follow: &List<i32> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> () {
     let kind = p.peek_kind();
     if kind == TK_INT {
         p.b.set_alt(1);
@@ -1778,7 +1835,7 @@ fn _parse_e__inner_atom(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW
     return;
 }
 
-fn _parse_e__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> () {
+fn _parse_e__inner(p: &mut Parser, follow: &List<i32> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> () {
     let _cp = p.b.checkpoint();
     let _start = p.peek_start();
     p.b.start_node(RK_E, _start);
@@ -1795,7 +1852,7 @@ fn _parse_e__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, min
                 p.b.start_node_at(_cp, RK_E, _start);
                 p.b.set_alt(0);
                 let lparen = p.expect(TK_LIT_LPAREN, &EMPTY_SYNC);
-                let e_list = _parse_e_list(p, &FOLLOW_MASK_0);
+                let e_list = _parse_e_list(p, &follow_prepend(&FOLLOW_MASK_0, follow));
                 let rparen = p.expect(TK_LIT_RPAREN, &EMPTY_SYNC);
                 p.b.finish_node(p.last_end());
             } else {
@@ -1808,7 +1865,7 @@ fn _parse_e__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, min
     return;
 }
 
-fn _parse_e(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> () {
+fn _parse_e(p: &mut Parser, follow: &List<i32> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> () {
     if p.recovering { return; }
     _parse_e__inner(p, follow, min_prec);
     if p.recovering {
@@ -1816,11 +1873,11 @@ fn _parse_e(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: 
     }
 }
 
-fn _parse_e_list__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    let e = _parse_e(p, follow);
+fn _parse_e_list__inner(p: &mut Parser, follow: &List<i32> = &EMPTY_FOLLOW) -> () {
+    let e = _parse_e(p, &follow_alt(&FOLLOW_MASK_1, follow));
     loop {
         if p.recovering { break; }
-        if follow_yields(&p.kinds, p.pos, follow, TK_EOF) { break; }
+        if follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) { break; }
         let mut rep_scan_pos: i32 = -1;
         rep_scan: {
             let tokens = &p.kinds;
@@ -1829,7 +1886,7 @@ fn _parse_e_list__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW
                 sg_1: {
                     if pos >= tokens.len() || tokens[pos] != TK_LIT_COMMA { break sg_1; }
                     pos += 1;
-                    pos = scan_e(tokens, pos, follow, 0);
+                    pos = scan_e(tokens, pos, &follow_alt(&FOLLOW_MASK_1, follow), 0);
                     if pos < 0 { break sg_1; }
                     break sg_1_done;
                 }
@@ -1840,12 +1897,12 @@ fn _parse_e_list__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW
         }
         if rep_scan_pos < 0 { break; }
         let comma = p.expect(TK_LIT_COMMA, &SYNC_0);
-        let e = _parse_e(p, follow);
+        let e = _parse_e(p, &follow_alt(&FOLLOW_MASK_1, follow));
     }
     return;
 }
 
-fn _parse_e_list(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
+fn _parse_e_list(p: &mut Parser, follow: &List<i32> = &EMPTY_FOLLOW) -> () {
     if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_ELIST, _start);
@@ -1923,5 +1980,7 @@ pub fn to_string_subtree(result: &ParseResult, rule: &String) -> String {
 global EMPTY_SYNC: List<i32> = [];
 global SYNC_0: List<i32> = [TK_INT];
 
-global FOLLOW_MASK_0: List<List<i32>> = [[TK_LIT_RPAREN]];
+global FOLLOW_SETS: List<List<i32>> = [[TK_LIT_RPAREN], [TK_LIT_COMMA], [TK_INT]];
+global FOLLOW_MASK_0: List<i32> = [0];
+global FOLLOW_MASK_1: List<i32> = [1, 2];
 

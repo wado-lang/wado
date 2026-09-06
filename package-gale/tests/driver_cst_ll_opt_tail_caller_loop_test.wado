@@ -1,0 +1,61 @@
+//! A greedy `?` at a rule's deep tail, against a caller loop opening on the
+//! same token — decided by the runtime caller-FOLLOW gate.
+//!
+//! `seg : ID SEP? (args | fn_)?` inside `path : seg (SEP seg)*`. Everything
+//! after the `SEP?` is nullable, so the callee ends there and the caller's
+//! continuation is what says whether the SEP was the callee's. One token of it
+//! says nothing — SEP opens both readings — so the mask has to reach FIRST(seg)
+//! at the second position.
+//!
+//! The rejection cases are the point: `a::<b>` and `a::()` must NOT yield, or
+//! the optional loses a SEP that only it can use. `RustParser.g4` has this
+//! shape in `typePathSegment`, where it costs every `type` that names a path.
+
+use g from "./grammars/ll_opt_tail_caller_loop.g4"
+    with {
+        generator: { module: "../src/generator.wado", output_dir: "./generated/cst_ll_opt_tail_caller_loop" },
+    };
+
+fn assert_tree(input: &String, expected: &String) {
+    let result = g::parse(input);
+    assert result.ok(), `unexpected diagnostics for ${*input}: ${result.diagnostics:?}`;
+    let actual = g::to_string_tree(&result);
+    assert actual == *expected, `\ninput:    ${*input}\nexpected: ${*expected}\nactual:   ${actual}`;
+}
+
+test "a lone segment takes neither the optional nor the loop" {
+    assert_tree(&"a", &"(start (path (seg a)))");
+}
+
+test "the caller loop claims a separator the callee cannot use" {
+    assert_tree(&"a::b", &"(start (path (seg a) :: (seg b)))");
+}
+
+// The `seg` at the loop body's own tail continues into another iteration, which
+// its element list does not mention — `lower_repeat_op` hands it the prefix
+// after lowering the body, being the only place that knows those ops are one.
+test "the loop keeps claiming separators past its first iteration" {
+    assert_tree(&"a::b::c", &"(start (path (seg a) :: (seg b) :: (seg c)))");
+}
+
+test "the optional keeps a separator its own body continues" {
+    assert_tree(&"a::<b>", &"(start (path (seg a :: (args < b >))))");
+}
+
+test "the optional keeps a separator its other alternative continues" {
+    assert_tree(&"a::()", &"(start (path (seg a :: (fn_ ( )))))");
+}
+
+test "the two readings alternate along one path" {
+    assert_tree(
+        &"a::<b>::c",
+        &"(start (path (seg a :: (args < b >)) :: (seg c)))",
+    );
+}
+
+test "the loop runs past a segment that took its own separator" {
+    assert_tree(
+        &"a::b::<c>",
+        &"(start (path (seg a) :: (seg b :: (args < c >))))",
+    );
+}

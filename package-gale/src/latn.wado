@@ -28,7 +28,7 @@ use {
     find_lexer_rule,
 } from "./ir.wado";
 use { Atn, AtnState, AtnTransition } from "./atn.wado";
-use { resolve_ci, fold_range_ci } from "./lexer_gen.wado";
+use { resolve_ci, fold_range_ci, lexer_alts_scan, lexer_alts_can_collide } from "./lexer_gen.wado";
 use {
     ATN_BASIC,
     ATN_RULE_START,
@@ -59,13 +59,17 @@ pub struct LatnResult {
     pub atn_class_rules: List<String>,
 }
 
-/// True when the grammar has at least one ATN-class lexer rule (a
-/// non-greedy repeat whose body recurses into its owning rule). Gates the
+/// True when the grammar has at least one ATN-class lexer rule. Gates the
 /// whole lexer-ATN path: builder, blob, runtime fragment.
 pub fn grammar_needs_latn(grammar: &Grammar) -> bool {
-    return grammar.lexer_rules.iter_ref().any(
-        |rule| !rule.is_virtual && lexer_rule_is_atn_class(rule, &grammar.lexer_rules),
-    );
+    return grammar.lexer_rules.iter_ref().any(|rule| rule_needs_latn(grammar, rule));
+}
+
+/// `lexer_rule_is_atn_class` for a rule of this grammar, resolving its
+/// case-insensitivity against the grammar's.
+fn rule_needs_latn(grammar: &Grammar, rule: &LexerRule) -> bool {
+    return !rule.is_virtual
+        && lexer_rule_is_atn_class(rule, &grammar.lexer_rules, resolve_ci(&grammar.options, &rule.options));
 }
 
 /// A lexer rule is ATN-class when a non-greedy repeat *directly in its body*
@@ -85,8 +89,79 @@ pub fn grammar_needs_latn(grammar: &Grammar) -> bool {
 ///   holds the `(CMT|.)+?`). The simulator inlines referenced rules, so
 ///   handling this means flagging the owning token rule as the entry; left
 ///   for when a grammar needs it.
-pub fn lexer_rule_is_atn_class(rule: &LexerRule, all_rules: &List<LexerRule>) -> bool {
-    return scan_recursive_ng(&rule.name, &rule.body, all_rules);
+/// - A greedy repeat whose body arms can both match at a position and reach
+///   different lengths (`'"' (~["] | '\\' ['"])* '"'`). No static policy
+///   decides it; see AGENTS.md, "Failed approaches".
+pub fn lexer_rule_is_atn_class(rule: &LexerRule, all_rules: &List<LexerRule>, ci: bool) -> bool {
+    let mut visiting: List<String> = [rule.name];
+    return scan_recursive_ng(&rule.name, &rule.body, all_rules)
+        || scan_undecidable_arms(&rule.body, all_rules, ci, &mut visiting);
+}
+
+/// A greedy repeat directly in `alts` whose body is an alternation the static
+/// emit cannot choose between: the arms overlap at a position and are not all
+/// the same length there. Fixed-length arms make first-match ANTLR4's answer,
+/// and arms that cannot both match make the choice no choice at all.
+fn scan_undecidable_arms(
+    alts: &List<LexerAlternative>,
+    all_rules: &List<LexerRule>,
+    ci: bool,
+    visiting: &mut List<String>,
+) -> bool {
+    for let alt of alts {
+        for let elem of &alt.elements {
+            if scan_undecidable_arms_elem(elem, all_rules, ci, visiting) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+fn scan_undecidable_arms_elem(
+    elem: &LexerElement,
+    all_rules: &List<LexerRule>,
+    ci: bool,
+    visiting: &mut List<String>,
+) -> bool {
+    match *elem {
+        Repeat(rep) => {
+            if !rep.non_greedy && rep.kind matches { Star | Plus } {
+                if let Group(inner) = &rep.element {
+                    if inner.len() >= 2
+                        && lexer_alts_scan(inner, all_rules) matches { Longest }
+                        && lexer_alts_can_collide(inner, all_rules, ci) {
+                        return true;
+                    }
+                }
+            }
+            return scan_undecidable_arms_elem(&rep.element, all_rules, ci, visiting);
+        },
+        Group(inner) => {
+            return scan_undecidable_arms(&inner, all_rules, ci, visiting);
+        },
+        Not(n) => {
+            return scan_undecidable_arms_elem(&n.element, all_rules, ci, visiting);
+        },
+        RuleRef(name) => {
+            // The arms are as undecidable behind a reference as in the body:
+            // the simulator inlines whatever `collect_reachable` resolves, so
+            // `STR : '"' BODY '"'` reaches the hazard `BODY` holds.
+            if visiting.contains(&name) {
+                return false;
+            }
+            let Some(r) = find_lexer_rule(all_rules, &name) else {
+                return false;
+            };
+            visiting.push(name);
+            let found = scan_undecidable_arms(&r.body, all_rules, ci, visiting);
+            visiting.pop();
+            return found;
+        },
+        Literal(_) | CharRange(_) | CharClass(_) | AnyChar => {
+            return false;
+        },
+    }
 }
 
 fn scan_recursive_ng(name: &String, alts: &List<LexerAlternative>, all_rules: &List<LexerRule>) -> bool {
@@ -208,7 +283,7 @@ pub fn build_latn(grammar: &Grammar) -> LatnResult {
     let mut seen: List<String> = [];
     let mut atn_class_rules: List<String> = [];
     for let rule of &grammar.lexer_rules {
-        if !rule.is_virtual && lexer_rule_is_atn_class(rule, &grammar.lexer_rules) {
+        if rule_needs_latn(grammar, rule) {
             atn_class_rules.push(rule.name);
             collect_reachable(&rule.name, &grammar.lexer_rules, &mut incl, &mut seen);
         }

@@ -1,0 +1,54 @@
+//! A tail-greedy loop on the token its caller closes with.
+//!
+//! `name : ID (OR ID)*` inside `block : OR names? OR ID`. After the first name
+//! the `|` can be another iteration of the loop or the closer `block` is
+//! waiting for, and nothing local separates them — the caller's continuation
+//! does, which is what the runtime FOLLOW gate threads.
+//!
+//! `RustParser.g4` has this shape as the or-pattern inside a closure's
+//! parameter list, where it costs every closure that names a parameter:
+//! `|e| e.to_string()` parses `e| e` as one or-pattern and then wants the
+//! closing `|` that is no longer there.
+
+use g from "./grammars/ll_loop_yields_closer.g4"
+    with {
+        generator: { module: "../src/generator.wado", output_dir: "./generated/cst_ll_loop_yields_closer" },
+    };
+
+fn assert_tree(input: &String, expected: &String) {
+    let result = g::parse(input);
+    assert result.ok(), `unexpected diagnostics for ${*input}: ${result.diagnostics:?}`;
+    let actual = g::to_string_tree(&result);
+    assert actual == *expected, `\ninput:    ${*input}\nexpected: ${*expected}\nactual:   ${actual}`;
+}
+
+test "an empty name list closes on its own bar" {
+    assert_tree(&"|| b", &"(start (block | | b))");
+}
+
+// Three things have to line up for the mask to reach the loop that decides
+// this. `block`'s `names?` passes its own continuation down (a greedy `?` runs
+// its body once, so the body continues where the repeat does). `names` hands
+// `name` the caller loop's prefix as an ALTERNATIVE to that, not a replacement
+// (`FollowArg::AltMask`) — the loop iterates again, or it ends and the closing
+// OR takes over, and neither alone decides. And the mask carries the caller's
+// own follow past the local suffix, because the depth is what separates the
+// two: `|a|` and `|a|b|` are the same two tokens at the loop and differ at the
+// third.
+test "one name yields the bar that closes the list" {
+    assert_tree(&"|a| b", &"(start (block | (names (name a)) | b))");
+}
+
+// The rejection case: the loop yields the closing bar exactly once, not every
+// bar. A repair that reads only the first two tokens at the loop cannot tell
+// this input from the one above.
+test "the loop keeps a bar the closer cannot be" {
+    assert_tree(&"|a|b| c", &"(start (block | (names (name a | b)) | c))");
+}
+
+test "a comma-separated list yields the closer too" {
+    assert_tree(
+        &"|a, b| c",
+        &"(start (block | (names (name a) , (name b)) | c))",
+    );
+}

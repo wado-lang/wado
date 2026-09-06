@@ -2628,7 +2628,7 @@ test "lower Tournament sorts longer alt first" {
 // carries `gate_caller_follow`. These two tests replace the retired
 // variant-registration / variant-body suppression tests.
 
-test "lower: RuleCall before a token gets a Mask FollowArg; callee tail Repeat gates" {
+test "lower: RuleCall before a token gets a Combined FollowArg; callee tail Repeat gates" {
     // `r : a X ; a : X* ;` — the call to `a` is followed by `X`
     // (non-nullable), so its continuation is the static mask `[{X}]`;
     // `a`'s `X*` sits at the rule tail, so it gates on the caller follow.
@@ -2653,10 +2653,11 @@ test "lower: RuleCall before a token gets a Mask FollowArg; callee tail Repeat g
 
     let lowered = lower(&g, &no_lit_tokens());
     // No variant bodies are ever produced now.
-    // `r`'s `a` call carries a static-mask FollowArg.
+    // `r`'s `a` call carries the local suffix ahead of whatever `r` was called
+    // with.
     if let Simple(s) = &lowered.parser_rules[0] {
         if let RuleCall(rc) = &s.body.ops[0] {
-            assert rc.follow_arg matches { Mask(_) }, "expected Mask FollowArg at the `a` call";
+            assert rc.follow_arg matches { Combined(_) }, "expected Combined FollowArg at the `a` call";
         } else {
             panic("expected RuleCall");
         }

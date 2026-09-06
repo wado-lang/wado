@@ -151,7 +151,11 @@ fn element_consumes_follow_arg(elem: &Element) -> bool {
     return match elem {
         RuleRef(_) => true,
         Label(lab) => element_consumes_follow_arg(&lab.element),
-        TokenRef(_) | Literal(_) | Group(_) | Repeat(_) | Wildcard(_) | Not(_) => false,
+        // A greedy `?` runs its body once, so `lower_repeat_op` hands its own
+        // continuation straight down to it. Every other kind loops, and what
+        // follows one iteration is another one.
+        Repeat(rep) => !rep.non_greedy && rep.kind matches { Optional } && element_consumes_follow_arg(&rep.element),
+        TokenRef(_) | Literal(_) | Group(_) | Wildcard(_) | Not(_) => false,
     };
 }
 
@@ -163,13 +167,16 @@ fn element_consumes_follow_arg(elem: &Element) -> bool {
 /// The callee's continuation past the call is the local suffix
 /// `elements[i+1..]`:
 ///
-///   - non-nullable suffix → a fully-local, statically-known prefix:
-///     `Mask(id)` (or `NoFollow` when the prefix carries no constraint);
-///   - nullable suffix → the local prefix followed by whatever the
-///     CURRENT rule was called with (the runtime `follow`):
-///       · empty local prefix (callee strictly at this rule's tail)
-///         → `Forward`;
-///       · non-empty local prefix → `Combined(id)` (runtime prepend).
+///   - a local prefix spanning `FOLLOW_MAX_DEPTH` → `Mask(id)`: it fills every
+///     position the gate reads, so nothing the caller adds is reachable;
+///   - a shorter non-empty local prefix → `Combined(id)`: the prefix ahead of
+///     whatever the CURRENT rule was called with (the runtime `follow`). The
+///     forwarded half is kept even for a non-nullable suffix, where the prefix
+///     already spans it: the depth past the suffix is what separates a callee's
+///     own reading of a token from the caller's;
+///   - empty local prefix, callee strictly at this rule's tail → `Forward`;
+///   - empty local prefix with a caller loop past it → `AltMask(id)`: another
+///     iteration or what follows the loop, whichever the input matches.
 fn compute_follow_arg(ctx: &mut GenContext, elements: &List<Element>, i: i32) -> FollowArg {
     if !element_consumes_follow_arg(&elements[i]) {
         return FollowArg::NoFollow;
@@ -205,15 +212,151 @@ fn compute_follow_arg(ctx: &mut GenContext, elements: &List<Element>, i: i32) ->
         if head_nullable && !covers_suffix {
             return FollowArg::NoFollow;
         }
+        // The local suffix is the whole continuation the callee must clear, but
+        // what the current rule was called with continues past it — appending
+        // that only ever makes the gate more selective, and the depth is what
+        // separates a callee's own reading from the caller's. `|a| b` and
+        // `|a|b| c` are the same two tokens at the loop and differ at the third.
         if let Some(id) = ctx.intern_follow_mask(&mask) {
-            return FollowArg::Mask(id);
+            return sequenced_follow_arg(ctx, id);
         }
         return FollowArg::NoFollow;
     }
+    // A caller loop past the callee is an alternative to what the current rule
+    // was called with, not a prefix of it: prepending asserts the loop's first
+    // token at a depth the other reading does not have it, and replacing loses
+    // that reading.
+    if mask.is_empty() && i + 1 < elements.len() {
+        if let Repeat(rep) = &elements[i + 1] {
+            if let Some(id) = ctx.intern_follow_mask(&greedy_loop_prefix(ctx, rep)) {
+                return FollowArg::AltMask(id);
+            }
+        }
+    }
     if let Some(id) = ctx.intern_follow_mask(&mask) {
-        return FollowArg::Combined(id);
+        return sequenced_follow_arg(ctx, id);
     }
     return FollowArg::Forward;
+}
+
+/// A local prefix followed by what the current rule was called with. A prefix
+/// that already spans `FOLLOW_MAX_DEPTH` leaves the forwarded half past every
+/// position `follow_yields` reads, so the static mask is the whole gate and the
+/// call site allocates nothing.
+fn sequenced_follow_arg(ctx: &GenContext, mask_id: i32) -> FollowArg {
+    if ctx.follow_mask_is_full(mask_id) {
+        return FollowArg::Mask(mask_id);
+    }
+    return FollowArg::Combined(mask_id);
+}
+
+/// What a repeat's body is told about its own continuation. A greedy `?` runs
+/// its body once, so it passes its own arg down; every other kind loops, and
+/// `retarget_loop_tail_follow` answers that instead.
+fn greedy_optional_inner_follow(rep: &RepeatElement, follow_arg: FollowArg) -> FollowArg {
+    if !rep.non_greedy && rep.kind matches { Optional } {
+        return follow_arg;
+    }
+    return FollowArg::NoFollow;
+}
+
+/// Give a greedy loop body's tail `RuleCall` the loop's iteration prefix: its
+/// continuation is another iteration, which the body's element list does not
+/// mention. Only the body's own tail qualifies. A nested group's tail continues
+/// inside that group, and would yield tokens its own alt still needs.
+fn retarget_loop_tail_follow(op: Op, mask_id: i32) -> Op {
+    return match op {
+        RuleCall(rc) => {
+            if rc.follow_arg matches { Forward } {
+                let mut call = rc;
+                call.follow_arg = FollowArg::AltMask(mask_id);
+                Op::RuleCall(call);
+            } else {
+                Op::RuleCall(rc);
+            }
+        },
+        Group(g) => {
+            if g.alts.len() != 1 || g.alts[0].ops.is_empty() {
+                Op::Group(g);
+            } else {
+                let mut group = g;
+                let mut alt = group.alts[0];
+                let last = alt.ops.len() - 1;
+                alt.ops[last] = retarget_loop_tail_follow(alt.ops[last], mask_id);
+                group.alts[0] = alt;
+                Op::Group(group);
+            }
+        },
+        ListLabel(ll) => {
+            let mut labelled = ll;
+            labelled.inner = retarget_loop_tail_follow(labelled.inner, mask_id);
+            Op::ListLabel(labelled);
+        },
+        Token(_) | Literal(_) | Wildcard(_) | Excluded(_) | Repeat(_) => op,
+    };
+}
+
+/// Scan-side mirror of `retarget_loop_tail_follow`. The two must move together:
+/// a scan that counts a tail iteration the parse yields makes the longest-match
+/// tournament pick an alt the parse then refuses.
+fn retarget_scan_loop_tail_follow(element: ScanElement, mask_id: i32) -> ScanElement {
+    return match element {
+        RuleCall(rc) => {
+            if rc.follow_arg matches { Forward } {
+                let mut call = rc;
+                call.follow_arg = FollowArg::AltMask(mask_id);
+                ScanElement::RuleCall(call);
+            } else {
+                ScanElement::RuleCall(rc);
+            }
+        },
+        Group(g) => {
+            if g.alts.len() != 1 || g.alts[0].elements.is_empty() {
+                ScanElement::Group(g);
+            } else {
+                let mut group = g;
+                let mut alt = group.alts[0];
+                let last = alt.elements.len() - 1;
+                alt.elements[last] = retarget_scan_loop_tail_follow(alt.elements[last], mask_id);
+                group.alts[0] = alt;
+                ScanElement::Group(group);
+            }
+        },
+        Token(_) | Wildcard | Excluded(_) | Repeat(_) | OptionalLookahead(_) => element,
+    };
+}
+
+/// The positions one iteration of `rep` consumes, or `[]` when the loop is not
+/// one this evidence covers: a non-greedy or `?` repeat decides elsewhere, a
+/// multi-alt body has no single prefix, and a one-position prefix is the
+/// over-approximation soundness invariant 1 rejects.
+fn greedy_loop_prefix(ctx: &mut GenContext, rep: &RepeatElement) -> List<List<String>> {
+    let empty: List<List<String>> = [];
+    if rep.non_greedy || rep.kind matches { Optional } {
+        return empty;
+    }
+    let mut body_elements: List<Element> = [];
+    match &rep.element {
+        Group(g) => {
+            if g.alternatives.len() != 1 {
+                return empty;
+            }
+            body_elements = g.alternatives[0].elements;
+        },
+        TokenRef(_) | Literal(_) | RuleRef(_) | Repeat(_) | Label(_) | Wildcard(_) | Not(_) => {
+            body_elements.push(rep.element);
+        },
+    }
+    let mut visiting: List<String> = [];
+    let [prefix, _consumed] = ctx.deep_position_first_sets_from(&body_elements, 0, FOLLOW_MASK_MAX_K, &mut visiting);
+    // Two positions is the whole bar, not a stand-in for one. Demanding the
+    // walk span the body instead rejects `(SEP seg)`, whose second element is
+    // the rule the loop exists to re-enter, and takes the repair with it —
+    // `driver_cst_ll_opt_tail_caller_loop_test` is the case.
+    if prefix.len() < 2 {
+        return empty;
+    }
+    return prefix;
 }
 
 /// Whether a tail-greedy `Repeat` at index `i` in `elements` should
@@ -1899,6 +2042,7 @@ fn lower_scan_element(
             &rep,
             ctx,
             outer_follow,
+            follow_arg,
             gate_caller_follow,
         ),
         Group(g) => lower_scan_group(
@@ -2110,8 +2254,10 @@ fn lower_scan_repeat(
     rep: &RepeatElement,
     ctx: &mut GenContext,
     outer_follow: &List<String>,
+    follow_arg: FollowArg,
     gate_caller_follow: bool,
 ) -> ScanElement {
+    let inner_follow_arg = greedy_optional_inner_follow(rep, follow_arg);
     // Greedy Optional + Group inner with nested optional sub-elements
     // is the shape-based-lookahead case: lower produces
     // `ScanElement::OptionalLookahead` so emit reads per-shape sigs
@@ -2154,13 +2300,20 @@ fn lower_scan_repeat(
 
     let iter_follow = union_kind_arrays(&inner_first, outer_follow);
 
-    let body = lower_scan_element(
+    let mut body = lower_scan_element(
         &rep.element,
         ctx,
         &iter_follow,
-        FollowArg::NoFollow,
+        inner_follow_arg,
         gate_caller_follow,
     );
+    // The standalone `scan_<rule>` walks this copy while the parse function
+    // walks `RepeatOp.scan_body`; both must give the body's tail call the same
+    // FOLLOW as the parse side, or the scan reports an end the parse walks past
+    // and the enclosing optional commits on a length that never happens.
+    if let Some(mask_id) = ctx.intern_follow_mask(&greedy_loop_prefix(ctx, rep)) {
+        body = retarget_scan_loop_tail_follow(body, mask_id);
+    }
     let effective_gate = gate_caller_follow && !rep.non_greedy;
     if effective_gate {
         ctx.mark_caller_follow_gate();
@@ -2764,6 +2917,7 @@ fn lower_op(
             ctx,
             group_counter,
             outer_follow,
+            follow_arg,
             gate_caller_follow,
         ),
         Group(g) => lower_group_op(
@@ -3448,8 +3602,10 @@ fn lower_repeat_op(
     ctx: &mut GenContext,
     group_counter: &mut i32,
     outer_follow: &List<String>,
+    follow_arg: FollowArg,
     gate_caller_follow: bool,
 ) -> Op {
+    let inner_follow_arg = greedy_optional_inner_follow(rep, follow_arg);
     let outer_field = compute_repeat_outer_field(rep, name_counts, *group_counter);
     // Every shape decision below reads the body the op was lowered from, not
     // the label wrapping it — a label changes a repeat's typing, never its
@@ -3548,7 +3704,7 @@ fn lower_repeat_op(
                 ctx,
                 group_counter,
                 &iter_follow,
-                FollowArg::NoFollow,
+                inner_follow_arg,
                 gate_caller_follow,
             );
         } else {
@@ -3562,7 +3718,7 @@ fn lower_repeat_op(
             ctx,
             group_counter,
             &iter_follow,
-            FollowArg::NoFollow,
+            inner_follow_arg,
             gate_caller_follow,
         );
     };
@@ -3575,13 +3731,18 @@ fn lower_repeat_op(
     // `gen_scan_*` walker graph. Uses the same `iter_follow` as the
     // parse side so per-position context (`caller_follow_first`
     // baked on nested `ScanRepeatElement`s) lines up.
-    let scan_body = lower_scan_element(
+    let mut scan_body = lower_scan_element(
         &rep.element,
         ctx,
         &iter_follow,
-        FollowArg::NoFollow,
+        inner_follow_arg,
         gate_caller_follow,
     );
+    let mut body = body;
+    if let Some(mask_id) = ctx.intern_follow_mask(&greedy_loop_prefix(ctx, rep)) {
+        body = retarget_loop_tail_follow(body, mask_id);
+        scan_body = retarget_scan_loop_tail_follow(scan_body, mask_id);
+    }
     let body_is_single_alt_group = if let Group(g) = body_elem {
         g.alternatives.len() == 1;
     } else {
@@ -3711,7 +3872,7 @@ fn pick_optional_specialised(
     owner: &DiagnosticOwner,
     ctx: &mut GenContext,
 ) -> Option<RepeatStrategy> {
-    let k_token = try_optional_k_token_lookahead(inner);
+    let k_token = try_optional_k_token_lookahead(inner, ctx);
     let shape = try_optional_shape_lookahead(inner, ctx);
     let scan_guard = try_optional_scan_guard(inner, ctx);
     if body_has_field {
@@ -3752,43 +3913,61 @@ fn warn_optional_scan_guard(owner: &DiagnosticOwner, ctx: &mut GenContext) {
 /// `gen_op_repeat_with_follow_override` emits the single-token
 /// guard directly from `body_admits`, so the specialisation is
 /// unnecessary there.
-fn try_optional_k_token_lookahead(inner: &Element) -> Option<RepeatStrategy> {
-    let tokens = collect_optional_leading_tokens(inner);
-    if tokens.is_empty() {
+fn try_optional_k_token_lookahead(inner: &Element, ctx: &mut GenContext) -> Option<RepeatStrategy> {
+    let sig = collect_optional_entry_signature(inner, ctx);
+    if sig.is_empty() {
         return null;
-    }
-    let mut sig: List<List<String>> = [];
-    for let tk of &tokens {
-        sig.push([*tk]);
     }
     return Option::Some(RepeatStrategy::OptionalLookahead(
         OptionalLookaheadStrategy { sig: sig },
     ));
 }
 
-/// Collect leading fixed-token kinds from an Optional's single-alt
-/// Group inner. Walks the alt's elements until the first non-fixed one.
-/// Returns `[]` for non-Group inners — leaf Optionals (`TokenRef?` /
-/// `Literal?`) are handled by `gen_op_repeat_with_follow_override`'s
-/// Optional+leaf arm using `inner_first` directly, so we keep their
-/// strategy at `Plain`.
-fn collect_optional_leading_tokens(inner: &Element) -> List<String> {
-    let mut tokens: List<String> = [];
+/// The per-position kind sets deciding whether to enter an Optional's
+/// single-alt Group inner. Each leading fixed token (`TokenRef` /
+/// `Literal`) contributes its own kind; the element that ends that run
+/// contributes its whole first set, and the walk stops there because a
+/// multi-token element leaves the next position naming whatever it ended
+/// with (the alignment rule `shape_signature_positions` follows).
+///
+/// That last position is what separates the body from a caller that opens
+/// on the same token: in `seg : ID (SEP args)?` inside
+/// `path : seg (SEP seg)*`, SEP alone commits to the optional and strands
+/// `a::b`, while FIRST(args) decides it. The walk stops before a nullable
+/// element instead, whose position may not be there to peek at.
+///
+/// Returns `[]` for non-Group inners and for a group with no leading
+/// fixed token — leaf Optionals (`TokenRef?` / `Literal?`) are handled by
+/// `gen_op_repeat_with_follow_override`'s Optional+leaf arm using
+/// `inner_first` directly, so we keep their strategy at `Plain`.
+fn collect_optional_entry_signature(inner: &Element, ctx: &mut GenContext) -> List<List<String>> {
+    let mut sig: List<List<String>> = [];
     if let Group(g) = inner {
         if g.alternatives.len() != 1 {
-            return tokens;
+            return sig;
         }
         for let elem of &g.alternatives[0].elements {
             if let TokenRef(t) = elem {
-                tokens.push(`TK_${t.name}`);
+                sig.push([`TK_${t.name}`]);
             } else if let Literal(l) = elem {
-                tokens.push(literal_const_name(&l.text));
+                sig.push([literal_const_name(&l.text)]);
             } else {
+                // Deep: a `RuleRef` to a rule deriving epsilon matches nothing,
+                // so the position this would name may hold what follows it.
+                let mut null_visiting: List<String> = [];
+                if sig.is_empty() || ctx.element_is_nullable_deep(elem, &mut null_visiting) {
+                    break;
+                }
+                let mut visiting: List<String> = [];
+                let first = ctx.first_of_element(elem, &mut visiting);
+                if !first.is_empty() {
+                    sig.push(first);
+                }
                 break;
             }
         }
     }
-    return tokens;
+    return sig;
 }
 
 /// Maximum number of nullable sub-elements for which shape enumeration

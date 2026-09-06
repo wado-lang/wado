@@ -1,0 +1,41 @@
+//! A greedy lexer loop whose body arms overlap: `STR : '"' (~["] | ESC)* '"'`,
+//! where at `\"` the escape is the reading. `RustLexer.g4`'s `STRING_LITERAL`
+//! is this rule. `HAZARD` is the rejection case; AGENTS.md, "Failed
+//! approaches", says why no static arm policy serves both.
+
+use g from "./grammars/lexer_loop_arm_longest.g4"
+    with {
+        generator: { module: "../src/generator.wado", output_dir: "./generated/cst_lexer_loop_arm_longest" },
+    };
+
+fn assert_tree(input: &String, expected: &String) {
+    let result = g::parse(input);
+    assert result.ok(), `unexpected diagnostics for ${*input}: ${result.diagnostics:?}`;
+    let actual = g::to_string_tree(&result);
+    assert actual == *expected, `\ninput:    ${*input}\nexpected: ${*expected}\nactual:   ${actual}`;
+}
+
+test "a string with no escape is one token" {
+    assert_tree(&"\"ab\"", &"(start \"ab\")");
+}
+
+// What decides is whether the loop can continue after the longer arm, which is
+// viability rather than length. `latn_match` answers it.
+test "an escaped quote stays inside the string" {
+    assert_tree(&"\"a\\\"b\"", &"(start \"a\\\"b\")");
+}
+
+test "a string that is only an escaped quote" {
+    assert_tree(&"\"\\\"\"", &"(start \"\\\"\")");
+}
+
+test "the shorter arm still wins where the longer one strands the suffix" {
+    assert_tree(&"ab", &"(start ab)");
+}
+
+// Two escapes exercise the simulator's rule-call guard: each closure is
+// computed afresh at its own position, so `ESC` being entered once already
+// does not stop the second escape from being read as one.
+test "a string with two escaped quotes stays one token" {
+    assert_tree(&"\"a\\\"b\\\"c\"", &"(start \"a\\\"b\\\"c\")");
+}

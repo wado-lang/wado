@@ -79,6 +79,15 @@ gale gen --trace Grammar.g4
 
 or `options: { trace: true }` in a Kiln `with { generator: ... }` block.
 
+`tools/rust_corpus_check.wado` parses a list of Rust files with the generated `RustParser.g4` parser and prints one `ok` / `ng` line each — path, diagnostic count, line, message, and the first diagnostic's rule stack — plus a summary on stderr. The stack is the part that carries information: recovery restarts at an item boundary, so most failures report the same `expected KW_EXTERN` whatever went wrong inside, and only the stack names the rule. Repository-wide it is the one number that says whether a prediction change helped.
+
+```sh
+git ls-files '*.rs' > target/rs-corpus.txt
+wado run package-gale/tools/rust_corpus_check.wado -- --paths-from target/rs-corpus.txt
+```
+
+`--paths-from` reads one path per line, the only form that survives a path with a space.
+
 ## Running tests
 
 ```sh
@@ -127,5 +136,9 @@ Prediction dead-ends — the static path always has edges (a decidability limit)
 
 - RuleRef expansion via a return stack (2026-03): expanding multi-token RuleRefs during SLL prediction to cut backtracking. Tokens from inside an expanded sub-rule can't be used at the decision point without an ATN-grade depth mapping, and dedup-by-alt merges alts that share a sub-rule. Left as zero-overhead scaffolding.
 - LL(\*) static variant emit (2026-05), three over-broad attempts at per-(rule, follow-mask) variants. Static analysis can't distinguish "tail-greedy that should yield to the caller" from "one that legitimately re-enters" — each over-broad guard silently broke a real grammar (`htmlContent`, CSS `selector`). Superseded by the runtime FOLLOW gate; pair any LL repair with a rejection-case fixture, not just a hit-case one.
+
+Lexer dead-ends:
+
+- Choosing statically between the arms of a greedy lexer loop (2026-09), for `STR : '"' (~["] | ESC)* '"'`. Every static policy loses a case: first-match ends the token at an escaped quote, maximal munch takes the longest arm and strands the suffix in `('a' | 'ab')* 'b'`, and scoring the arms against the suffix needs a forward scan that repeats the same choice. The class is regular, so the lexer ATN runs the arms together in one pass and decides it (`scan_undecidable_arms`). Pair any static retry with `lexer_loop_arm_longest.g4`, which holds both the hit case and the rejection case.
 
 Performance dead-ends (e.g. data-driven scan) live in [`perf.md`](./perf.md).
