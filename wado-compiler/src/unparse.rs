@@ -5479,4 +5479,3 @@ mod tests {
         assert_eq!(compound_op_str(CompoundAssignOp::Div), "/=");
     }
 }
-

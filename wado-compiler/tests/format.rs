@@ -922,7 +922,8 @@ fn test_format_moves_a_comment_out_but_never_in() {
         .position(|l| l.starts_with("/// Adds one."))
         .expect("doc kept");
     assert_eq!(
-        lines[doc + 1], "pub fn f(x: i32) -> i32 {",
+        lines[doc + 1],
+        "pub fn f(x: i32) -> i32 {",
         "nothing may come between a doc comment and its item:\n{formatted}"
     );
     assert!(
@@ -955,7 +956,10 @@ fn test_format_moves_a_comment_out_but_never_in() {
 /// condition is a call, whose own wrapping decision is one level in.
 #[test]
 fn test_format_wraps_a_call_condition_that_only_fits_without_its_brace() {
-    let source = format!("fn f() {{\n    if cond({}) {{\n    }}\n}}\n", "c".repeat(107));
+    let source = format!(
+        "fn f() {{\n    if cond({}) {{\n    }}\n}}\n",
+        "c".repeat(107)
+    );
     let formatted = wado_compiler::format(&source).expect("format failed");
     assert!(
         formatted.lines().all(|l| l.len() <= 120),

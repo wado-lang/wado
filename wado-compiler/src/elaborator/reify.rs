@@ -5195,7 +5195,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         }
 
         if template.parts.len() == 1
-            && let ast::TemplatePart::Interpolation { expr, format: None, .. } = &template.parts[0]
+            && let ast::TemplatePart::Interpolation {
+                expr, format: None, ..
+            } = &template.parts[0]
         {
             let resolved = self.reify_expr(expr, ctx, None);
             if resolved.type_id == string_type {
