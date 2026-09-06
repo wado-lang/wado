@@ -55,6 +55,14 @@ impl InvocationIndex {
             .insert((decl_file.to_string(), from), entry_uri.to_string());
     }
 
+    /// Record `entry_uri` for every module that declared `invocation`, each
+    /// under the literal that module wrote.
+    pub fn insert_invocation(&mut self, invocation: &Invocation, entry_uri: &str) {
+        for site in &invocation.decl_sites {
+            self.insert(&site.module, site.source.as_str(), entry_uri);
+        }
+    }
+
     /// Look up the entry URI for a `(decl_file, from)` pair. Returns the
     /// opaque URI of the entry module, or `None` if no invocation
     /// matches.
@@ -105,7 +113,9 @@ where
 {
     let mut diagnostics: Vec<Diagnostic> = Vec::new();
     let mut by_tuple: IndexMap<String, Invocation> = IndexMap::default();
-    let mut by_from: IndexMap<String, (Invocation, String)> = IndexMap::default();
+    // `from` path → the identity key it resolved to, and the module that
+    // claimed it first.
+    let mut by_from: IndexMap<String, (String, String)> = IndexMap::default();
 
     for (module_path, module) in modules {
         for use_decl in use_decls_of(module) {
@@ -120,9 +130,6 @@ where
                 Ok(invocation) => {
                     let tuple_key = identity_key(&invocation);
                     if let Some(existing) = by_tuple.get_mut(&tuple_key) {
-                        // One invocation, one generator run — but every module
-                        // that declared it imports through it, so each keeps a
-                        // site to key its redirect by.
                         let site = invocation.decl_site().clone();
                         if !existing.decl_sites.contains(&site) {
                             existing.decl_sites.push(site);
@@ -130,8 +137,8 @@ where
                         continue;
                     }
                     let from_key = invocation.from.as_str().to_string();
-                    if let Some((prior, prior_mod)) = by_from.get(&from_key)
-                        && identity_key(prior) != tuple_key
+                    if let Some((prior_key, prior_mod)) = by_from.get(&from_key)
+                        && *prior_key != tuple_key
                     {
                         diagnostics.push(Diagnostic {
                             severity: Severity::Error,
@@ -147,8 +154,8 @@ where
                         });
                         continue;
                     }
-                    by_tuple.insert(tuple_key.clone(), invocation.clone());
-                    by_from.insert(from_key, (invocation, module_path.to_string()));
+                    by_from.insert(from_key, (tuple_key.clone(), module_path.to_string()));
+                    by_tuple.insert(tuple_key, invocation);
                 }
                 Err(mut errs) => diagnostics.append(&mut errs),
             }

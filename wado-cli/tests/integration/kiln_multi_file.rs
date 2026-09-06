@@ -2,7 +2,7 @@
 //!
 //! A path written in a `.wado` file (`from`, `generator.inputs`,
 //! `generator.output_dir`) must resolve relative to that file — the same rule
-//! every other Wado path follows. These tests pin two consequences:
+//! every other Wado path follows. These tests pin three consequences:
 //!
 //! 1. A consumer in a subdirectory reads *its own* sibling schema, not a
 //!    same-named file at the project root.
@@ -10,6 +10,8 @@
 //!    "./grammar.g4"` get distinct default `output_dir`s instead of clobbering
 //!    each other (the original collision the `output_dir` override worked
 //!    around).
+//! 3. Two consumers that do name one schema share its invocation, and each
+//!    still resolves its own import through it.
 
 use std::fs;
 
@@ -19,7 +21,8 @@ use predicates::prelude::*;
 /// A pass-through generator: it emits the primary schema's contents verbatim as
 /// the entry module, so the grammar file *is* the generated Wado source. This
 /// makes a cross-read (reading the wrong sibling) observable as a wrong return
-/// value.
+/// value. It cannot show a *missing* redirect, though: the loader then parses
+/// the grammar as Wado and gets the same result.
 const PASSTHROUGH_GENERATOR: &str = r#"use { Request, Response, OutputFile, Error } from "core:kiln";
 
 export fn generate(req: Request) -> Result<Response, Error> {
@@ -106,12 +109,11 @@ fn sibling_consumers_resolve_their_own_schema() {
 }
 
 /// Two modules declaring the same clause for the same schema collapse into one
-/// invocation — the generator runs once — but each of them still imports
-/// through it, so each needs its own redirect (WEP 2026-04-12 §"Use-site
-/// syntax").
+/// invocation, so the generator runs once. Each still imports through it, so
+/// each needs its own redirect (WEP 2026-04-12 §"Use-site syntax").
 ///
-/// The schema is not valid Wado on its own, so a module left unredirected fails
-/// to compile instead of accidentally parsing its schema as source.
+/// The schema here is not valid Wado, so a module left unredirected fails to
+/// compile rather than parsing its schema as source and passing by accident.
 #[test]
 fn two_modules_sharing_one_schema_both_redirect() {
     let tmp = tempfile::tempdir().unwrap();

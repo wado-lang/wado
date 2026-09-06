@@ -89,10 +89,9 @@ impl fmt::Display for InvocationPath {
 pub struct DeclSite {
     /// Relative path of the Wado file containing the inline `with` clause.
     pub module: String,
-    /// The literal `from "<source>"` path as this clause wrote it, only
-    /// normalized. The loader matches `(decl_file, import_source)` without
-    /// resolving, so it must stay frame-independent — two modules may reach one
-    /// schema by different spellings.
+    /// The literal `from "<source>"` this clause wrote, only normalized. The
+    /// loader matches it unresolved, so it stays frame-independent: two modules
+    /// may reach one schema by different spellings.
     pub source: InvocationPath,
     /// Synthesized id derived from the canonical invocation tuple.
     pub synthetic_id: String,

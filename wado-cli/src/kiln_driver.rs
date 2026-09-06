@@ -369,14 +369,12 @@ fn to_meta_file_hash(f: &FileHash) -> MetaFileHash {
 }
 
 /// Point every module that declared `invocation` at the generated entry it
-/// produced, keyed by the literal `from "<source>"` that module wrote — what
-/// the loader looks up, where `invocation.from` is the resolved path that
-/// loaded the input and keyed the cache.
+/// produced, under `entry_path` in the output directory.
 ///
-/// Canonicalizing the path here means the loader needs neither the manifest
-/// root nor the importer's working directory at resolve time. The
-/// un-canonicalized join stands in when the file is not on disk (a stale-cache
-/// path), which keeps the URI well-formed enough for diagnostics.
+/// Canonicalizing here means the loader needs neither the manifest root nor the
+/// importer's working directory at resolve time. The un-canonicalized join
+/// stands in when the file is not on disk (a stale-cache path), keeping the URI
+/// well-formed enough for diagnostics.
 fn record_redirects(
     index: &mut wado_compiler::kiln::InvocationIndex,
     invocation: &Invocation,
@@ -385,10 +383,7 @@ fn record_redirects(
 ) {
     let joined = manifest_root.join(entry_path);
     let abs = std::fs::canonicalize(&joined).unwrap_or(joined);
-    let uri = path_to_kiln_uri(&abs);
-    for site in &invocation.decl_sites {
-        index.insert(&site.module, site.source.as_str(), &uri);
-    }
+    index.insert_invocation(invocation, &path_to_kiln_uri(&abs));
 }
 
 /// Compose the `kiln:` redirect URI for an absolute filesystem path.
