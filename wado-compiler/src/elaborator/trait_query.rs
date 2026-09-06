@@ -15,7 +15,7 @@ use crate::token::Span;
 use super::Elaborator;
 use super::callee::CalleeRef;
 use super::scope::{BinderInScope, Scope, TraitCheckFrame};
-use super::sig::TraitSig;
+use super::sig::{Param, TraitSig};
 use super::trait_env::InheritedBound;
 use super::types::{
     MethodInfo, MethodOwner, ResolvedTraitMethod, TraitMethodMatch, TypeError, TypeLookup,
@@ -2138,7 +2138,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 return_type: instantiated.return_type,
                 self_kind: sig.self_kind,
                 param_types: instantiated.param_types[first_value_param..].to_vec(),
-                param_is_mut: super::sig::Param::is_mut_flags(&sig.params),
+                param_is_mut: Param::is_mut_flags(&sig.params),
                 owner: MethodOwner::Receiver,
                 cm_name: None,
                 is_ref_impl: false,
@@ -2146,8 +2146,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 method_own_params: sig.own_params.clone(),
                 impl_module: None,
                 from_concrete_impl: false,
-                param_defaults: super::sig::Param::defaults(&sig.params),
-                param_names: super::sig::Param::names(&sig.params),
+                param_defaults: Param::defaults(&sig.params),
+                param_names: Param::names(&sig.params),
                 consumes_self: sig.self_kind == ast::SelfKind::Value,
                 inherent_visibility: None,
                 defaults_module: sig.defaults_module.clone(),

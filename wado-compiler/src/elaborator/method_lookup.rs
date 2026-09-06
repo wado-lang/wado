@@ -19,7 +19,8 @@ use crate::token::Span;
 use super::Elaborator;
 use super::infer::InferCtx;
 use super::instantiate::Instantiation;
-use super::sig::InstantiatedImplSig;
+use super::sem::types::CalleeParams;
+use super::sig::{InstantiatedImplSig, Param};
 use super::synth::{ArgClass, ArgProbe};
 use super::trait_env::{ImplHeader, TraitEnv};
 use super::types::{
@@ -105,6 +106,18 @@ pub(super) struct MethodInferenceInput<'a> {
     /// Call-site span, used to anchor a "cannot infer type parameter"
     /// diagnostic when inference leaves a method type parameter dangling.
     pub span: Span,
+}
+
+/// What [`Elaborator::static_callee_params`] found for a `Type::method(...)`
+/// spelling.
+pub(super) enum StaticCallee {
+    /// One declaration answered, with the lists to check and pad against.
+    Declared(CalleeParams),
+    /// Several implemented traits declare the name, in their impls' order.
+    /// The spelling names none of them, so only a trait-qualified call picks.
+    Ambiguous(Vec<String>),
+    /// None did. A variant case or a flags member owns its own count here.
+    Undeclared,
 }
 
 /// The positions an `impl` target writes, `None` for a target writing none.
@@ -1007,7 +1020,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return_type: instantiated.return_type,
             self_kind: sig.self_kind,
             param_types: instantiated.param_types[first_value..].to_vec(),
-            param_is_mut: super::sig::Param::is_mut_flags(&sig.params),
+            param_is_mut: Param::is_mut_flags(&sig.params),
             owner: MethodOwner::Receiver,
             cm_name: None,
             is_ref_impl: false,
@@ -1015,8 +1028,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             method_own_params: sig.own_params.clone(),
             impl_module: Some(self.impl_block_module_source(impl_ref)),
             from_concrete_impl: self.impl_is_concrete_instantiation(&header.ty),
-            param_defaults: super::sig::Param::defaults(&sig.params),
-            param_names: super::sig::Param::names(&sig.params),
+            param_defaults: Param::defaults(&sig.params),
+            param_names: Param::names(&sig.params),
             consumes_self: sig.self_kind == ast::SelfKind::Value,
             inherent_visibility: Some(method_header.visibility),
             defaults_module: sig.defaults_module.clone(),
@@ -1127,7 +1140,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return_type: instantiated.return_type,
             self_kind: sig.self_kind,
             param_types: instantiated.param_types[first_value..].to_vec(),
-            param_is_mut: super::sig::Param::is_mut_flags(&sig.params),
+            param_is_mut: Param::is_mut_flags(&sig.params),
             owner: MethodOwner::Receiver,
             cm_name: sig.cm_name,
             is_ref_impl: false,
@@ -1135,8 +1148,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             method_own_params: sig.own_params.clone(),
             impl_module: None,
             from_concrete_impl: false,
-            param_defaults: super::sig::Param::defaults(&sig.params),
-            param_names: super::sig::Param::names(&sig.params),
+            param_defaults: Param::defaults(&sig.params),
+            param_names: Param::names(&sig.params),
             consumes_self: sig.self_kind == ast::SelfKind::Value,
             inherent_visibility: None,
             defaults_module: sig.defaults_module.clone(),
@@ -1451,26 +1464,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         );
     }
 
-    /// The lists a `Type::method(...)` call checks and pads against, and
-    /// whether any declaration answered. Every static spelling asks this one
-    /// question, so none of them differs on the arity it checks. A variant
-    /// case or a flags member answers `false` and counts its own arguments.
+    /// The lists a `Type::method(...)` call checks and pads against. Every
+    /// static spelling asks this one question, so none of them differs on the
+    /// arity it checks.
     pub(super) fn static_callee_params(
         &self,
         receiver: &ImplTargetKey,
         receiver_type: TypeId,
         method_name: &str,
-    ) -> (super::sem::types::CalleeParams, bool) {
+    ) -> StaticCallee {
         if let Some(sig) = self.unique_qualified_method_sig_keyed(receiver, method_name) {
-            return (
-                super::sem::types::CalleeParams::of_signature(Some(&sig)),
-                true,
-            );
+            return StaticCallee::Declared(CalleeParams::of_signature(Some(&sig)));
         }
-        match self.inherited_trait_static_params(receiver, receiver_type, method_name) {
-            Some(params) => (params, true),
-            None => (super::sem::types::CalleeParams::default(), false),
-        }
+        self.inherited_trait_static_params(receiver, receiver_type, method_name)
     }
 
     /// [`Self::static_callee_params`] where the block inherits the method with
@@ -1485,7 +1491,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         receiver: &ImplTargetKey,
         receiver_type: TypeId,
         method_name: &str,
-    ) -> Option<super::sem::types::CalleeParams> {
+    ) -> StaticCallee {
         // Only where no block on the receiver declares the name. Several is an
         // overload the call site picks among by argument.
         if self
@@ -1493,16 +1499,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .next()
             .is_some()
         {
-            return None;
+            return StaticCallee::Undeclared;
         }
-        for impl_def in self
-            .tysys
-            .trait_env
-            .impl_index
-            .get(receiver)?
-            .iter()
-            .copied()
-        {
+        let Some(impls) = self.tysys.trait_env.impl_index.get(receiver) else {
+            return StaticCallee::Undeclared;
+        };
+        let mut answered = None;
+        let mut declaring_traits = Vec::new();
+        for impl_def in impls.iter().copied() {
             let Some(impl_sig) = self.tysys.signatures.impl_sig(impl_def) else {
                 continue;
             };
@@ -1520,23 +1524,35 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if declared.default_body.is_none() || declared.sig.self_kind != ast::SelfKind::None {
                 continue;
             }
-            // The trait's frame: `Self` leads its slots, the trait's own
-            // arguments follow, and the method's own stay open to inference.
-            let mut declaring_args = vec![receiver_type];
-            declaring_args.extend(impl_sig.trait_type_args.iter().copied());
-            let instantiated =
-                declared
-                    .sig
-                    .instantiate_call(&self.tysys.type_table, &declaring_args, &[]);
-            return Some(super::sem::types::CalleeParams {
-                param_is_mut: super::sig::Param::is_mut_flags(&declared.sig.params),
-                param_defaults: super::sig::Param::named_defaults(&declared.sig.params),
-                param_types: instantiated.param_types,
-                self_in_args: false,
-                defaults_module: Some(declaring.module.clone()),
-            });
+            if let Some(decl) = impl_sig.trait_decl {
+                declaring_traits.push(self.tysys.resolutions.defs().name(decl).to_string());
+            }
+            answered = Some((declared, impl_sig, declaring));
         }
-        None
+        // Two traits supplying the name leaves the spelling naming neither.
+        // Unreported, the call is built to whichever came first and reaches
+        // codegen as a module nothing validates.
+        if declaring_traits.len() > 1 {
+            return StaticCallee::Ambiguous(declaring_traits);
+        }
+        let Some((declared, impl_sig, declaring)) = answered else {
+            return StaticCallee::Undeclared;
+        };
+        // The trait's frame: `Self` leads its slots, the trait's own arguments
+        // follow, and the method's own stay open to inference.
+        let mut declaring_args = vec![receiver_type];
+        declaring_args.extend(impl_sig.trait_type_args.iter().copied());
+        let instantiated =
+            declared
+                .sig
+                .instantiate_call(&self.tysys.type_table, &declaring_args, &[]);
+        StaticCallee::Declared(CalleeParams {
+            param_is_mut: Param::is_mut_flags(&declared.sig.params),
+            param_defaults: Param::named_defaults(&declared.sig.params),
+            param_types: instantiated.param_types,
+            self_in_args: false,
+            defaults_module: Some(declaring.module.clone()),
+        })
     }
 
     /// Find a trait method for a given type and method name, for when an
@@ -2020,9 +2036,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .type_param_bounds
                     .shift_remove(&type_param.name);
             }
-            let param_is_mut = crate::elaborator::sig::Param::is_mut_flags(&method_sig.params);
-            let param_names = crate::elaborator::sig::Param::names(&method_sig.params);
-            let param_defaults = crate::elaborator::sig::Param::defaults(&method_sig.params);
+            let param_is_mut = Param::is_mut_flags(&method_sig.params);
+            let param_names = Param::names(&method_sig.params);
+            let param_defaults = Param::defaults(&method_sig.params);
             found_traits.push(TraitMethodMatch {
                 trait_name: scope.tysys.trait_env.fq_trait_named_by_impl(
                     crate::name::FqTraitName::declared(&defs, trait_decl).with_args(
@@ -2107,9 +2123,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         return_type: instantiated.return_type,
                         self_kind,
                         param_types: instantiated.param_types[first_value_param..].to_vec(),
-                        param_is_mut: crate::elaborator::sig::Param::is_mut_flags(
-                            &default_method.sig.params,
-                        ),
+                        param_is_mut: Param::is_mut_flags(&default_method.sig.params),
                         owner: MethodOwner::Receiver,
                         cm_name: None,
                         is_ref_impl: false,
@@ -2117,12 +2131,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         method_own_params: default_method.sig.own_params.clone(),
                         impl_module: Some(impl_module_source.clone()),
                         from_concrete_impl: impl_is_concrete,
-                        param_defaults: crate::elaborator::sig::Param::defaults(
-                            &default_method.sig.params,
-                        ),
-                        param_names: crate::elaborator::sig::Param::names(
-                            &default_method.sig.params,
-                        ),
+                        param_defaults: Param::defaults(&default_method.sig.params),
+                        param_names: Param::names(&default_method.sig.params),
                         consumes_self: self_kind == ast::SelfKind::Value,
                         inherent_visibility: None,
                         // The body and its defaults are the trait's, so both

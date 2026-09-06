@@ -1,0 +1,14 @@
+//! A namespace-qualified static (`ns::Type::method()`) that a trait declares.
+//! The impl was searched for by the bare type name, which the importing module
+//! never declares, so nothing was found and the callee lost its trait segment:
+//! it named a body nothing declares and WIR build reported an unresolved call.
+
+use lib from "./sub/ns_trait_static_lib.wado";
+
+test "a namespace-qualified trait static resolves to its impl" {
+    assert lib::P::make(3) == 3;
+}
+
+test "and fills the trait's declared default" {
+    assert lib::P::make() == 7;
+}

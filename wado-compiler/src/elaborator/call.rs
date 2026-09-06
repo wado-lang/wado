@@ -13,8 +13,10 @@ use super::callee::{CalleeRef, StaticMethodRef};
 use super::expr::BareCase;
 use super::infer::InferCtx;
 use super::instantiate::Instantiation;
+use super::method_lookup::StaticCallee;
 use super::scope::{BinderInScope, Scope};
-use super::sig::MethodSig;
+use super::sem::types::{CalleeParams, StaticMethodDispatch};
+use super::sig::{MethodSig, Param};
 use super::trait_env;
 use super::trait_env::ImplTargetKey;
 use super::types::{FunctionContext, TypeError};
@@ -965,7 +967,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let receiver_key = self.impl_target(prefix);
                 let receiver_type = self.resolve_unsited_type_name(prefix, call.span);
                 let (callee_params, declares_params) =
-                    self.static_callee_params(&receiver_key, receiver_type, suffix);
+                    match self.static_callee_params(&receiver_key, receiver_type, suffix) {
+                        StaticCallee::Declared(params) => (params, true),
+                        StaticCallee::Ambiguous(traits) => {
+                            let _ = self.emit(TypeError::AmbiguousTraitMethod {
+                                method: suffix.to_string(),
+                                traits,
+                                span: call.span,
+                            });
+                            return TypeTable::ERROR;
+                        }
+                        StaticCallee::Undeclared => (CalleeParams::default(), false),
+                    };
                 let raw_param_types = if declares_params {
                     callee_params.param_types.clone()
                 } else {
@@ -1317,11 +1330,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     } else {
                         None
                     };
+                    // The importing module never names `Type` on its own, so a
+                    // bare-name search reaches no impl on it: the callee then
+                    // loses its trait segment and names a body nothing
+                    // declares, which WIR build reports as an unresolved call.
+                    let ns_key = self.namespace_member(prefix, type_name).map(|def| {
+                        trait_env::ImplTargetKey::of_decl(self.tysys.resolutions.defs(), def)
+                    });
                     let resolved = self.locate_static_method_impl(
                         type_name,
                         method_name,
                         arg_type_hint.as_deref(),
-                        None,
+                        ns_key.as_ref(),
                     );
                     let method_ref = resolved.unwrap_or_else(|| {
                         StaticMethodRef::new(ns_source.clone(), type_name, method_name, None, None)
@@ -1383,23 +1403,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         })
                     };
 
-                    // The importing module never names `Type` on its own, so a
-                    // bare-name key reaches nothing and every fact below would
-                    // read as the callee declaring no parameters at all.
-                    let ns_key = self.namespace_member(prefix, type_name).map(|def| {
-                        trait_env::ImplTargetKey::of_decl(self.tysys.resolutions.defs(), def)
-                    });
                     let callee_key = self.static_receiver_key(type_name, ns_key.as_ref());
                     let callee_sig =
                         self.unique_qualified_method_sig_keyed(&callee_key, method_name);
                     let declares_params = callee_sig.is_some();
-                    let super::sem::types::CalleeParams {
+                    let CalleeParams {
                         param_is_mut,
                         param_defaults,
                         param_types,
                         self_in_args,
                         defaults_module,
-                    } = super::sem::types::CalleeParams::of_signature(callee_sig.as_ref());
+                    } = CalleeParams::of_signature(callee_sig.as_ref());
 
                     let func_ref = FunctionRef {
                         module_source: struct_module,
@@ -1442,7 +1456,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let key = call.id;
                     self.sem.types.static_method_dispatch.insert(
                         key,
-                        super::sem::types::StaticMethodDispatch {
+                        StaticMethodDispatch {
                             method_def: method_ref.method_id,
                             defaults_module: defaults_module
                                 .unwrap_or_else(|| func_ref.module_source.clone()),
@@ -1712,7 +1726,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let key = call.id;
         self.sem.types.static_method_dispatch.insert(
             key,
-            super::sem::types::StaticMethodDispatch {
+            StaticMethodDispatch {
                 // A free function, whose spelled callee already records the
                 // edge; this fact exists for reify's `FunctionRef` shape.
                 method_def: None,
@@ -2075,7 +2089,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .signatures
                 .resource_method_sig(decl, &method.name)
         {
-            let defaults = crate::elaborator::sig::Param::named_defaults(&sig.params);
+            let defaults = Param::named_defaults(&sig.params);
             let module = self.tysys.resolutions.defs().module(sig.def).clone();
             return (defaults, Some(module));
         }
@@ -2088,7 +2102,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // A default resolves in the declaring module's scope, which is the
         // callee's own — never the caller's, even under the same spelling.
         (
-            crate::elaborator::sig::Param::named_defaults(&sig.params),
+            Param::named_defaults(&sig.params),
             Some(self.tysys.resolutions.defs().module(def).clone()),
         )
     }
@@ -2106,7 +2120,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         self.free_function_sig_at(ident.id)
-            .map(|sig| crate::elaborator::sig::Param::is_mut_flags(&sig.params))
+            .map(|sig| Param::is_mut_flags(&sig.params))
             .unwrap_or_default()
     }
 
@@ -3256,7 +3270,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let key = call.id;
             self.sem.types.static_method_dispatch.insert(
                 key,
-                super::sem::types::StaticMethodDispatch {
+                StaticMethodDispatch {
                     method_def: method_info_result.method_def,
                     defaults_module: trait_module.unwrap_or_else(|| func_ref.module_source.clone()),
                     function_ref: func_ref,

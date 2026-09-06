@@ -12,8 +12,10 @@ use crate::token::Span;
 
 use super::Elaborator;
 use super::callee::StaticMethodRef;
-use super::method_lookup::MethodInferenceInput;
+use super::method_lookup::{MethodInferenceInput, StaticCallee};
 use super::reflect::ReflectDispatch;
+use super::sem::types::{CalleeParams, StaticMethodDispatch};
+use super::sig::Param;
 use super::types::{FunctionContext, MethodInfo, MethodOwner, TypeError};
 
 /// A static call named the way [symbol notation] writes it — the receiver's
@@ -1273,7 +1275,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self.record_call_param_types(call_id, param_types.clone());
             self.sem.types.static_method_dispatch.insert(
                 call_id,
-                super::sem::types::StaticMethodDispatch {
+                StaticMethodDispatch {
                     method_def: dispatched.method_def,
                     defaults_module: sig
                         .defaults_module
@@ -1453,13 +1455,25 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let callee_sig = static_receiver
             .as_ref()
             .and_then(|key| self.unique_qualified_method_sig_keyed(key, &static_call.method));
-        let (callee_params, declares_params) = match static_receiver.as_ref() {
-            Some(receiver) => {
+        let found = static_receiver
+            .as_ref()
+            .map(|receiver| {
                 self.static_callee_params(receiver, target_type_id, &static_call.method)
+            })
+            .unwrap_or(StaticCallee::Undeclared);
+        let (callee_params, declares_params) = match found {
+            StaticCallee::Declared(params) => (params, true),
+            StaticCallee::Ambiguous(traits) => {
+                let _ = self.emit(TypeError::AmbiguousTraitMethod {
+                    method: static_call.method.clone(),
+                    traits,
+                    span: static_call.span,
+                });
+                return TypeTable::ERROR;
             }
-            None => (super::sem::types::CalleeParams::default(), false),
+            StaticCallee::Undeclared => (CalleeParams::default(), false),
         };
-        let super::sem::types::CalleeParams {
+        let CalleeParams {
             param_is_mut,
             param_defaults: static_method_defaults,
             mut param_types,
@@ -2269,7 +2283,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let key = static_call.id;
         self.sem.types.static_method_dispatch.insert(
             key,
-            super::sem::types::StaticMethodDispatch {
+            StaticMethodDispatch {
                 method_def: selected.as_ref().and_then(|r| r.method_id),
                 // The scope annotate resolved these defaults in, so reify
                 // resolves them in the same one.
@@ -2321,7 +2335,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .and_then(|def| self.tysys.signatures.method_sig(def))
             .map(|sig| {
                 (
-                    super::sig::Param::named_defaults(&sig.params),
+                    Param::named_defaults(&sig.params),
                     sig.defaults_module.clone(),
                 )
             })
@@ -2391,7 +2405,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
         self.sem.types.static_method_dispatch.insert(
             call_id,
-            super::sem::types::StaticMethodDispatch {
+            StaticMethodDispatch {
                 method_def,
                 defaults_module: template_defaults_module
                     .unwrap_or_else(|| func_ref.module_source.clone()),
@@ -3696,10 +3710,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // The lists the dispatch records, from the same answer the call site
         // checked against, so the two agree on where the receiver sits.
+        // The ambiguous case is reported where the arguments are checked, which
+        // every spelling reaching here has already passed.
         let receiver_key = self.impl_target(&actual_struct_name);
         let receiver_type = self.resolve_unsited_type_name(&actual_struct_name, span);
-        let (callee_params, _) =
-            self.static_callee_params(&receiver_key, receiver_type, method_name);
+        let callee_params =
+            match self.static_callee_params(&receiver_key, receiver_type, method_name) {
+                StaticCallee::Declared(params) => params,
+                StaticCallee::Ambiguous(_) | StaticCallee::Undeclared => CalleeParams::default(),
+            };
 
         let StaticMethodRef {
             module: struct_module,
@@ -3726,12 +3745,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // callee whose signature no lookup answers still needs the shape.
         self.sem.types.static_method_dispatch.insert(
             call_id,
-            super::sem::types::StaticMethodDispatch::of_params(
-                method_ref.method_id,
-                func_ref,
-                vec![],
-                callee_params,
-            ),
+            StaticMethodDispatch::of_params(method_ref.method_id, func_ref, vec![], callee_params),
         );
 
         return_type
