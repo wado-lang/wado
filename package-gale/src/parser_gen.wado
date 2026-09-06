@@ -5675,9 +5675,9 @@ fn gen_iter_caller_follow_gate(w: &mut CodeWriter, rep_op: &RepeatOp, plus_flag:
 fn follow_arg_expr(arg: &FollowArg) -> String {
     return match arg {
         NoFollow => "&EMPTY_FOLLOW",
-        Mask(id) => `&FOLLOW_MASK_${id}`,
         Forward => "follow",
         Combined(id) => `&follow_prepend(&FOLLOW_MASK_${id}, follow)`,
+        AltMask(id) => `&follow_alt(&FOLLOW_MASK_${id}, follow)`,
     };
 }
 

@@ -731,24 +731,31 @@ pub struct LiteralOp {
 ///
 /// - `NoFollow` — non-repair call: emit passes nothing, the callee's
 ///   defaulted `&EMPTY_FOLLOW` disables its tail-greedy gate.
-/// - `Mask(id)` — the caller's continuation past the callee is a
-///   statically-known K-prefix; emit passes `&FOLLOW_MASK_<id>`.
 /// - `Forward` — the callee sits at THIS rule's tail, so its
 ///   continuation is whatever the current rule was itself called with;
 ///   emit forwards the current function's `follow` argument unchanged.
-/// - `Combined(id)` — the callee is at this rule's tail but a nullable
-///   local suffix precedes it; emit prepends `FOLLOW_MASK_<id>` to the
-///   forwarded `follow` (see the variant doc below).
+/// - `Combined(id)` — a local suffix precedes what the current rule was
+///   called with; emit prepends `FOLLOW_MASK_<id>` to the forwarded
+///   `follow` (see the variant doc below).
+/// - `AltMask(id)` — the two are alternatives rather than a sequence.
 pub variant FollowArg {
     NoFollow,
-    Mask(i32),
     Forward,
-    /// The callee sits at this rule's tail but a NULLABLE local suffix
-    /// precedes the tail (e.g. `… callee X? <end>`): the continuation is
-    /// the local prefix `FOLLOW_MASK_<id>` followed by whatever the
-    /// current rule was called with. Emit passes
-    /// `&follow_prepend(&FOLLOW_MASK_<id>, follow)`.
+    /// A local suffix stands between the callee and what the current rule was
+    /// called with (`… callee X <end>`, `… callee X? <end>`): the continuation
+    /// is `FOLLOW_MASK_<id>` followed by that. The forwarded half matters even
+    /// when the local suffix is mandatory — it is the depth past the suffix
+    /// that separates a callee's own reading of a token from the caller's.
+    /// Emit passes `&follow_prepend(&FOLLOW_MASK_<id>, follow)`.
     Combined(i32),
+    /// The callee's continuation is either `FOLLOW_MASK_<id>` or whatever the
+    /// current rule was called with — alternatives, not a sequence. A caller
+    /// loop is the case: `path : seg (SEP seg)*` continues into another
+    /// iteration or, when the loop ends, into what follows `path`. Neither
+    /// alone decides, and a mask holding both in sequence asserts the loop's
+    /// first token at a depth the other reading does not have it.
+    /// Emit passes `&follow_alt(&FOLLOW_MASK_<id>, follow)`.
+    AltMask(i32),
 }
 
 pub struct RuleCallOp {

@@ -26,36 +26,26 @@ test "an empty name list closes on its own bar" {
     assert_tree(&"|| b", &"(start (block | | b))");
 }
 
-// No mask reaches the loop that decides this. `block`'s `names?` is a Repeat,
-// which `element_consumes_follow_arg` refuses a `FollowArg` — `lower_repeat_op`
-// hands its body `NoFollow`. Passing a greedy `?` its own continuation gets the
-// mask as far as `names`, and there the caller-loop prefix `(COMMA name)*`
-// overwrites it, so `name` learns about the comma and not the closing bar. It
-// measured worse over this repository's Rust files (454 files with diagnostics
-// to 463), so it is not in.
-//
-// The two continuations are alternatives, not a sequence: another iteration of
-// the caller's loop, or what follows the loop. `follow_yields` reads one mask
-// and requires every depth of it, so it cannot express the choice — and the
-// depth is load-bearing, because `|a|` and `|a|b|` are the same two tokens at
-// the loop and differ only at the third. A disjunctive follow
-// (`follow_yields_any` over a list of masks) is the shape that would decide it.
-//
-// The loop yields nothing today, so every case that needs one fails.
-#[TODO]
+// Three things have to line up for the mask to reach the loop that decides
+// this. `block`'s `names?` passes its own continuation down (a greedy `?` runs
+// its body once, so the body continues where the repeat does). `names` hands
+// `name` the caller loop's prefix as an ALTERNATIVE to that, not a replacement
+// (`FollowArg::AltMask`) — the loop iterates again, or it ends and the closing
+// OR takes over, and neither alone decides. And the mask carries the caller's
+// own follow past the local suffix, because the depth is what separates the
+// two: `|a|` and `|a|b|` are the same two tokens at the loop and differ at the
+// third.
 test "one name yields the bar that closes the list" {
     assert_tree(&"|a| b", &"(start (block | (names (name a)) | b))");
 }
 
-// The rejection case: the loop must yield the closing bar exactly once, not
-// every bar. Today it yields none, so this fails the same way — it is here to
-// fail differently if a repair over-yields.
-#[TODO]
+// The rejection case: the loop yields the closing bar exactly once, not every
+// bar. A repair that reads only the first two tokens at the loop cannot tell
+// this input from the one above.
 test "the loop keeps a bar the closer cannot be" {
     assert_tree(&"|a|b| c", &"(start (block | (names (name a | b)) | c))");
 }
 
-#[TODO]
 test "a comma-separated list yields the closer too" {
     assert_tree(
         &"|a, b| c",
