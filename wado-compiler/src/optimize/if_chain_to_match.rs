@@ -237,7 +237,7 @@ fn subtree_writes_local(body: &Body, root: NodeRef, local: u32) -> bool {
             return true;
         }
         assert!(
-            !binds_local(body, node, local),
+            !body.binds_local(node, local),
             "local {local} is bound inside an arm that guards on it: \
              every binding site mints a fresh index, so a collision here is \
              broken local numbering rather than a scrutinee the arms rewrite"
@@ -245,19 +245,6 @@ fn subtree_writes_local(body: &Body, root: NodeRef, local: u32) -> bool {
         body.for_each_child(node, |c| stack.push(c));
     }
     false
-}
-
-/// Whether `node` binds `local` — a `let` or a pattern binding.
-fn binds_local(body: &Body, node: NodeRef, local: u32) -> bool {
-    match node {
-        NodeRef::Stmt(id) => {
-            matches!(&body.stmts[id].kind, StmtKind::Let { local_index, .. } if *local_index == local)
-        }
-        NodeRef::Pat(id) => {
-            matches!(&body.pats[id].kind, PatKind::Binding { local_index, .. } if *local_index == local)
-        }
-        NodeRef::Expr(_) | NodeRef::Block(_) => false,
-    }
 }
 
 /// Build `match local { K0 => { … }, …, _ => {} }` as one statement. The chain

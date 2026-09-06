@@ -167,7 +167,7 @@ impl Interpreter<'_> {
                     .and_then(Operand::as_expr)
                     .is_none_or(|inner| match &body.exprs[inner].kind {
                         ExprKind::Local { index, .. } => {
-                            binds_local(body, block, *index)
+                            block_binds_local(body, block, *index)
                                 || self.frame.unshared_locals.contains(*index)
                         }
                         _ => self.yields_own_object(body, inner),
@@ -300,33 +300,18 @@ impl Interpreter<'_> {
         if ty != type_id {
             return None;
         }
-        let Some(Value::Seq {
-            type_id: backing_type,
-            elements,
-        }) = value.field(SeqField::Backing.index())
-        else {
-            return None;
-        };
+        let (backing_type, live) = container_backing(value, type_id, self.type_table)?;
         let length = value.field(SeqField::Len.index())?;
-        // `Value::Int` holds the sign-extended bit pattern, so a negative length
-        // reads as a huge `u64` until it is decoded at its own width.
-        let (used, PrimitiveType::I32) = length.as_int()? else {
-            return None;
-        };
-        let used = usize::try_from(used as i32).ok()?;
-        if used > elements.len() {
-            return None;
-        }
         // An empty container carries nothing, so a literal over one can only
         // trade a buffer for a smaller buffer — and an opened buffer is exactly
         // what the region about to fill it is holding.
-        if used == 0 && existing.is_some() {
+        if live.is_empty() && existing.is_some() {
             return existing;
         }
-        let cut = Value::seq(*backing_type, elements[..used].to_vec())?;
+        let cut = Value::seq(backing_type, live.to_vec())?;
         let previous = existing_fields(sink.body(), existing, type_id);
         let slot = |index: SeqField| slot_at(&previous, index.index() as usize);
-        let backing = self.write_value(sink, slot(SeqField::Backing), &cut, *backing_type, span)?;
+        let backing = self.write_value(sink, slot(SeqField::Backing), &cut, backing_type, span)?;
         let len = self.write_value(sink, slot(SeqField::Len), length, TypeTable::I32, span)?;
         let fields = [(SeqField::Backing, backing), (SeqField::Len, len)];
         assert!(
@@ -1257,7 +1242,11 @@ fn charge_seq(
 }
 
 /// A sequence container's backing type and the elements its length keeps.
-/// `None` for anything else, which is charged field by field.
+/// Capacity past the length is not observable, so nothing writes or prices it.
+/// `None` for anything else, which is a plain aggregate.
+///
+/// `Value::Int` holds the sign-extended bit pattern, so a negative length reads
+/// as a huge `u64` until it is decoded at its own width.
 fn container_backing<'v>(
     value: &'v Value,
     type_id: TypeId,
@@ -1321,14 +1310,12 @@ fn existing_fields(
     Some(slots)
 }
 
-/// Whether a `let` inside `block` binds `local` — storage the block opened, as
+/// Whether anything inside `block` binds `local` — storage the block opened, as
 /// against a local it read from outside.
-fn binds_local(body: &Body, block: BlockId, local: u32) -> bool {
+fn block_binds_local(body: &Body, block: BlockId, local: u32) -> bool {
     let mut stack = vec![NodeRef::Block(block)];
     while let Some(node) = stack.pop() {
-        if let NodeRef::Stmt(s) = node
-            && matches!(&body.stmts[s].kind, StmtKind::Let { local_index, .. } if *local_index == local)
-        {
+        if body.binds_local(node, local) {
             return true;
         }
         body.for_each_child(node, |c| stack.push(c));

@@ -1482,6 +1482,20 @@ impl Body {
         (!self.breaks_to(NodeRef::Block(*block), label)).then_some(*block)
     }
 
+    /// Whether `node` binds `local` — a `let` or a pattern binding. A node, not
+    /// its subtree: what walks it is the caller's own walk.
+    pub fn binds_local(&self, node: NodeRef, local: u32) -> bool {
+        match node {
+            NodeRef::Stmt(id) => {
+                matches!(&self.stmts[id].kind, StmtKind::Let { local_index, .. } if *local_index == local)
+            }
+            NodeRef::Pat(id) => {
+                matches!(&self.pats[id].kind, PatKind::Binding { local_index, .. } if *local_index == local)
+            }
+            NodeRef::Expr(_) | NodeRef::Block(_) => false,
+        }
+    }
+
     /// The one operand `e` yields, or `None` where more than one point produces
     /// its value and no single operand names it. A block nothing breaks to
     /// yields its trailing statement; one whose trailing `break LABEL:` is the
@@ -1491,21 +1505,19 @@ impl Body {
             return None;
         };
         let (&last, rest) = self.blocks[*block].stmts.split_last()?;
-        if rest
-            .iter()
-            .any(|s| self.breaks_to(NodeRef::Stmt(*s), label))
-        {
-            return None;
-        }
         match &self.stmts[last].kind {
+            StmtKind::Expr(v) => self.unbroken_block(e).map(|_| *v),
             StmtKind::Break {
                 label: Some(bl),
                 value: Some(v),
-            } if bl == label => (!v
-                .as_expr()
-                .is_some_and(|ve| self.breaks_to(NodeRef::Expr(ve), label)))
-            .then_some(*v),
-            StmtKind::Expr(v) if !self.breaks_to(NodeRef::Stmt(last), label) => Some(*v),
+            } if bl == label => {
+                let second = rest
+                    .iter()
+                    .any(|s| self.breaks_to(NodeRef::Stmt(*s), label))
+                    || v.as_expr()
+                        .is_some_and(|ve| self.breaks_to(NodeRef::Expr(ve), label));
+                (!second).then_some(*v)
+            }
             _ => None,
         }
     }
