@@ -1,0 +1,56 @@
+// A payload binding whose local `lower::plan::boxing` promoted to `Box<T>`.
+//
+// `make` returns `Result<Big, Failure>`, which variant-return SROA flattens to
+// `[tag, Option<Big>, Option<Failure>]`. `err` is address-taken by `${err:?}`,
+// so lowering promotes its local to `Box<Failure>` and rewrites the pattern's
+// own type to match. Measuring the local against the pattern rather than
+// against the payload the slot yields therefore passed, and the raw read landed
+// in a `Box<Failure>` local: "type mismatch: expected (ref null $type), found
+// (ref $type)" at codegen.
+use { println, Stdout } from "core:cli";
+
+variant Failure {
+    Pair([String, String]),
+    Message(String),
+}
+
+struct Big {
+    name: String,
+    items: List<String>,
+}
+
+// A loop with an early return is what puts `make` under the multi-value ABI.
+#[inline(never)]
+fn make(inputs: &List<[String, String]>) -> Result<Big, Failure> {
+    let mut items: List<String> = [];
+    for let inp of inputs {
+        if inp.0.is_empty() {
+            return Result::<Big, Failure>::Err(Failure::Pair(*inp));
+        }
+        if inp.1.is_empty() {
+            return Result::<Big, Failure>::Err(Failure::Message(inp.0));
+        }
+        items.push(inp.1);
+    }
+    return Result::<Big, Failure>::Ok(Big { name: items[0], items });
+}
+
+fn describe(inputs: &List<[String, String]>) -> String {
+    let result = make(inputs);
+    if let Err(err) = &result {
+        return `failed: ${err:?}`;
+    }
+    if let Ok(big) = &result {
+        return `ok: ${big.name}`;
+    }
+    return "unreachable";
+}
+
+export fn run() with Stdout {
+    println(describe(&[[builtin::black_box("a"), "x"], ["b", "y"]]));
+    println(describe(&[["a", "x"], ["", "y"]]));
+    println(describe(&[["a", "x"], ["b", ""]]));
+}
+
+__DATA__
+{ "stdout": "ok: x\nfailed: &Failure::Pair([\"\", \"y\"])\nfailed: &Failure::Message(\"b\")\n" }
