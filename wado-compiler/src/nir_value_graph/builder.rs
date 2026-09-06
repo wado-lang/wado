@@ -1134,6 +1134,15 @@ impl<'a> Builder<'a> {
                 if let Some(&stored) = self.field_store.get(&(recv, field_index, heap_ver)) {
                     return Some(stored);
                 }
+                crate::compiler_trace!(
+                    "vg_field",
+                    "miss: recv={recv:?} field={field_index} root={root:?} ver={heap_ver:?}, \
+                     {} store(s) seeded for that field",
+                    self.field_store
+                        .keys()
+                        .filter(|(_, f, _)| *f == field_index)
+                        .count()
+                );
                 Some(self.pool.field_access(recv, field_index, heap_ver))
             }
             ExprKind::Index { expr: inner, index } => {
@@ -1242,6 +1251,7 @@ impl<'a> Builder<'a> {
     fn seed_struct_literal_fields(&mut self, root: u32, recv: ValueId, value_expr: ExprId) {
         // `untrackable` (`stores`-aliased) receivers never seed.
         if self.untrackable.contains(&root) {
+            crate::compiler_trace!("vg_field", "local {root}: untrackable, no field seeded");
             return;
         }
         let mut producer = value_expr;
