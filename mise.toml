@@ -68,6 +68,14 @@ run = "scripts/check-highlight.sh"
 description = "Fail if the Gale highlight query drifts from the compiler's syntax registries"
 run = "cargo run --bin wado-dev-tools -- highlight-vocab"
 
+[tasks.check-rust-paths]
+description = "Fail if a Rust file gained a `crate::` / `super::` path written outside a `use` item"
+run = "node scripts/rust-inline-paths.mjs --check"
+
+[tasks.update-rust-paths-baseline]
+description = "Record what each Rust file still carries, ratcheting the inline-path baseline down"
+run = "node scripts/rust-inline-paths.mjs --update"
+
 [tasks.check-deps]
 description = "Fail if wasm-tools crates drift off wasmtime's generation (duplicate 0.x trees)"
 run = """
@@ -192,8 +200,8 @@ fi
 """
 
 [tasks.test-hooks]
-description = "Run the Claude Code hook tests"
-run = "node --test .claude/hooks/*.test.mts"
+description = "Run the Claude Code hook and repo script tests"
+run = "node --test .claude/hooks/*.test.mts scripts/*.test.mjs"
 
 [tasks.test-gale-o3]
 description = "Run package-gale tests with -O3"
