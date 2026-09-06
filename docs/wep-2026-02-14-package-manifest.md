@@ -70,6 +70,7 @@ an open coordinate `ns:pkg`, or a `lib:` nickname for indirection. Bare keys
 | `authors`              | `string[]` | No       | Contact details of the people or organization responsible                                     |
 | `wado-version`         | `string`   | No       | Minimum Wado compiler version required to build (e.g., `">=0.5"`)                             |
 | `publish`              | `bool`     | No       | `false` opts a namespaced package out of publishing. Default `true`                           |
+| `exports`              | `string[]` | No       | Files consumers may name: assets and submodules, package-root-relative, extension required    |
 
 `namespace` and `name` together form the registry identity (`namespace:name`, e.g., `myorg:my-app`). Without `namespace`, the package cannot be published to a registry — this is the natural state for closed-source applications and internal tools. A namespaced package can still opt out explicitly with `publish = false`.
 
@@ -82,6 +83,10 @@ Both `namespace` and `name` must match `[a-zA-Z0-9_-]+` (minimum 1 character, ma
 Dependency keys in `[dependencies]` are quoted specifiers — an open coordinate `"ns:pkg"` or a `"lib:nick"` nickname — each segment matching the same `[a-zA-Z0-9_-]+` rule. The `lib:`-or-coordinate form makes a real registry identity and a local indirection distinguishable on sight.
 
 A package must declare at least one world: a `[world]` entry, `[package].lib`, or both.
+
+#### `exports`
+
+`exports` is the allowlist of files outside the entry module that a consumer may name — a grammar, a schema, a template, an image, or a `.wado` submodule. A file not listed does not exist to a consumer, and the refusal names the package rather than the path. The list is API: adding to it is additive, removing from it breaks consumers, and `wado publish` ships exactly what it names. See [Package File Exports](./wep-2026-09-06-package-file-exports.md).
 
 #### Unknown keys
 

@@ -20,7 +20,7 @@ let icon: List<u8> = #include_bytes("./assets/logo.png");
 let cert = #include_bytes("./certs/root.der");
 ```
 
-The argument is a string literal (not a runtime expression). The path is resolved relative to the source file containing the expression — the same convention as `#file`.
+The argument is a string literal (not a runtime expression). A `./` or `../` path is resolved relative to the source file containing the expression — the same convention as `#file`. A file a dependency exports is named the way every other specifier names it (`#include_str("ns:pkg@ver/templates/index.html")`, see [Package File Exports](./wep-2026-09-06-package-file-exports.md)); an unlisted file is refused at the package, not reported as missing.
 
 Unlike the argument-free compile-time literals (`#file`, `#line`, `#function`, `#data`), `#include_str` and `#include_bytes` take a parenthesized string literal argument. The parser distinguishes argument-free from argument-taking forms by looking ahead for `(` after the identifier.
 

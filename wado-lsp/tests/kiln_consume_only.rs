@@ -39,16 +39,27 @@ const SCHEMA_BODY: &str = "// dummy calc grammar — body content is irrelevant\
 const GENERATED_BODY: &str = "#![generated(by = \"fake:gen@0.1\", sources = [\"grammars/calc.g4\"])]\n\
      pub fn parse() -> i32 { return 42; }\n";
 
-fn entry_source() -> &'static str {
-    "use { parse } from \"./grammars/calc.g4\" with {\n    \
+/// The `use … with { generator }` clause, as written wherever it lives.
+const CLAUSE: &str = "use { parse } from \"./grammars/calc.g4\" with {\n    \
      generator: {\n        \
      module: \"fake:gen@0.1\",\n        \
      output_dir: \"./tests/generated\",\n    \
      },\n\
-     };\n\
-     fn run() {\n    \
-     let _x = parse();\n\
-     }\n"
+     };\n";
+
+fn entry_source() -> String {
+    format!("{CLAUSE}fn run() {{\n    let _x = parse();\n}}\n")
+}
+
+/// The entry when the clause lives one module deeper: it imports the
+/// re-export instead of declaring the clause itself.
+fn importer_entry_source() -> String {
+    "use { parse } from \"./lib.wado\";\nfn run() {\n    let _x = parse();\n}\n".to_string()
+}
+
+/// The imported module that declares the clause and re-exports its symbol.
+fn clause_module_source() -> String {
+    format!("pub {CLAUSE}")
 }
 
 fn hex_sha256(bytes: &[u8]) -> String {
@@ -58,6 +69,7 @@ fn hex_sha256(bytes: &[u8]) -> String {
 struct Fixture {
     root: tempfile::TempDir,
     entry_uri: String,
+    entry_text: String,
 }
 
 /// Knobs the builder consults to materialize the workspace state. Each
@@ -75,6 +87,10 @@ struct FixtureSpec<'a> {
     /// Defaults to `"fake:gen@0.1"` so it matches what
     /// `generator_identity` derives for the inline `module:`.
     metadata_generator: Option<&'a str>,
+    /// Put the clause in `lib.wado`, which the entry imports, instead of
+    /// in the entry itself. Kiln's unit is the module, not the entry:
+    /// a clause anywhere in the graph must redirect.
+    clause_in_imported_module: bool,
 }
 
 impl Default for FixtureSpec<'_> {
@@ -83,6 +99,7 @@ impl Default for FixtureSpec<'_> {
             schema_on_disk: SCHEMA_BODY,
             generated_on_disk: GENERATED_BODY,
             metadata_generator: None,
+            clause_in_imported_module: false,
         }
     }
 }
@@ -134,19 +151,26 @@ fn build_fixture(spec: FixtureSpec<'_>) -> Fixture {
     )
     .unwrap();
 
+    let entry_text = if spec.clause_in_imported_module {
+        std::fs::write(root.join("lib.wado"), clause_module_source()).unwrap();
+        importer_entry_source()
+    } else {
+        entry_source()
+    };
     let entry_path = root.join("main.wado");
-    std::fs::write(&entry_path, entry_source()).unwrap();
+    std::fs::write(&entry_path, &entry_text).unwrap();
 
     Fixture {
         root: tmp,
         entry_uri: format!("file://{}", entry_path.display()),
+        entry_text,
     }
 }
 
 fn engine_with(fixture: &Fixture) -> (Engine, FilesystemCompilerHost) {
     let host = FilesystemCompilerHost::new(fixture.root.path().to_path_buf());
     let mut engine = Engine::new();
-    engine.open_document(&fixture.entry_uri, entry_source().to_string());
+    engine.open_document(&fixture.entry_uri, fixture.entry_text.clone());
     (engine, host)
 }
 
@@ -182,6 +206,24 @@ fn assert_redirected_clean(diags: &[wado_lsp::Diagnostic]) {
 fn artifact_present_redirects_without_warning() {
     futures::executor::block_on(async {
         let fixture = build_fixture(FixtureSpec::default());
+        let (engine, host) = engine_with(&fixture);
+
+        let diags = engine.diagnostics(&fixture.entry_uri, &host).await;
+
+        assert_redirected_clean(&diags);
+    });
+}
+
+#[test]
+fn clause_in_an_imported_module_redirects() {
+    futures::executor::block_on(async {
+        // Kiln's unit is the module, not the entry: a `with` clause in an
+        // imported module produces a generated module for *that* module's
+        // imports (WEP 2026-04-12 §"The loader redirect").
+        let fixture = build_fixture(FixtureSpec {
+            clause_in_imported_module: true,
+            ..FixtureSpec::default()
+        });
         let (engine, host) = engine_with(&fixture);
 
         let diags = engine.diagnostics(&fixture.entry_uri, &host).await;

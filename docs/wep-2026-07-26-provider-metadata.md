@@ -25,10 +25,13 @@ The package's Wado source travels in a custom section named `wado:package`:
 | Compiler version              | Producing compiler, for the degradation rule below |
 | `wado.toml`                   | The package's own dependencies and entry points    |
 | The package's `.wado` sources | Bodies for `pub` items, and everything they reach  |
+| The files `exports` names     | Assets a consumer may name, verbatim               |
 
 The section content is deterministic: sorted file order, no timestamps, fixed compression level. Same input, same bytes, same digest — otherwise `integrity` and reproducible builds break.
 
 Sources are included whole rather than pruned to the `pub`-reachable set. A `pub` generic body calls `internal` helpers, so most of a package is reachable anyway; pruning can follow if size proves to matter.
+
+An asset travels because naming it is how a consumer uses it: a dependency's `.g4` fed to a Kiln generator, a template inlined with `#include_str` ([Package File Exports](./wep-2026-09-06-package-file-exports.md)). Assets are bytes, not text, so the section carries them verbatim rather than as UTF-8. A consumer on the CM path has no section and therefore no files, which is the same all-or-nothing selection the rest of this WEP describes.
 
 A custom section is not instantiated, so this costs distribution bytes only, never runtime size.
 

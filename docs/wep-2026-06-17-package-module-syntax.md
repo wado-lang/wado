@@ -38,17 +38,32 @@ remote URL. Two principles anchor the rest:
 | `core:…` `wasi:…` `web:…` | Reserved → compiler-bundled                   |
 | `ns:pkg[@ver]` (open ns)  | Default registry, or `with`/manifest override |
 | `lib:nick`                | Indirection: alias / rename / private dep     |
+| `<coordinate>/<path.ext>` | One file the package exports                  |
 | `./` `../`                | Local file                                    |
 | `http(s)://`              | Remote                                        |
 
 `core:`/`wasi:`/`web:` are not a separate scheme — they are coordinates whose
 namespace happens to be bundled. Nested namespaces (`a:b:pkg`) follow WIT.
 
-A specifier names a **package only**; it carries no interface segment.
-Interfaces and their members are selected in the `use { ... }` list (`Iface`,
-`Iface::{op}`), as Wado already does. A package's internal file layout (the
-bundled stdlib's `core:prelude/array.wado`-style splits) is a loader detail,
-never a user-facing specifier.
+A specifier carries no interface segment. Interfaces and their members are
+selected in the `use { ... }` list (`Iface`, `Iface::{op}`), as Wado already
+does.
+
+A specifier names a package, optionally followed by one file that package
+exports:
+
+```
+<coordinate>[/<path.ext>]
+```
+
+With no path segment it resolves to the package's `[package].lib` entry. With
+one, it names a file the package listed in `[package].exports` — an asset or a
+submodule — and the mandatory extension is what tells the two forms apart. The
+allowlist is the API: an unlisted file does not exist to a consumer, whatever
+the package directory holds
+([Package File Exports](./wep-2026-09-06-package-file-exports.md)). A package's
+_unlisted_ file layout stays a loader detail, as the bundled stdlib's
+`core:prelude/array.wado`-style splits are.
 
 ### `lib:` is the sole home for indirection
 
