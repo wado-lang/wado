@@ -14,13 +14,19 @@
 //
 // all three are spelled identically, and `MiniCss.highlights.scm` reads them
 // apart off the rule stack.
+// Deliberately left out, so a reader does not read a subset boundary as a
+// limitation: class / id / descendant selectors, multi-token values, at-rules.
+// What this grammar does accept, it accepts in every form CSS allows.
 grammar MiniCss;
 
 // No `EOF`: a stylesheet is a fragment of the host document, not a file.
 stylesheet  : ruleset* ;
-ruleset     : selector CSS_LBRACE declaration* CSS_RBRACE ;
+ruleset     : selector CSS_LBRACE declarations? CSS_RBRACE ;
 selector    : CSS_IDENT (CSS_COMMA CSS_IDENT)* ;
-declaration : property CSS_COLON value CSS_SEMI ;
+// `;` separates declarations and is optional after the last, per the CSS
+// grammar: `a { b: c }` is as valid as `a { b: c; }`.
+declarations : declaration (CSS_SEMI declaration)* CSS_SEMI? ;
+declaration : property CSS_COLON value ;
 property    : CSS_IDENT ;
 value       : CSS_IDENT | CSS_NUMBER | CSS_HASH ;
 

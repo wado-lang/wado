@@ -17,6 +17,9 @@
 // `term` therefore builds with a shared-lookahead warning: `arrow` and `group`
 // are not token-led, so the generated parser settles them with a longest-match
 // scan tournament. That warning is the demo working, not a defect.
+// Deliberately left out, so a reader does not read a subset boundary as a
+// limitation: automatic semicolon insertion (a statement needs its `;`),
+// control flow, `function`, and every precedence level but one.
 grammar MiniJs;
 
 // No `EOF`: a script is a fragment of the host document, not a file.

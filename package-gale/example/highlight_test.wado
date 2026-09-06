@@ -63,18 +63,31 @@ test "each language keeps its own token space" {
     assert js.contains(`<span class="variable">a</span>`), js;
 }
 
-test "a context capture needs its enclosing rule to have parsed" {
-    // What classifying from a parse costs. The parser recovers a tree from the
-    // missing `;`, but the names no longer sit under `declaration`, so the
-    // overrides that class them do not fire. Should recovery place them there
-    // one day, this test says so by failing.
-    let ok = highlight_page(&"<style>a { b: c; }</style>");
-    assert ok.contains(`<span class="property">b</span>`), ok;
+test "every form CSS allows keeps its classes" {
+    // The `;` after the last declaration is optional, and a block may be empty.
+    // Requiring the `;` cost `a { b: c }` its classes and read like a limit of
+    // parse-driven highlighting; it was this grammar getting the language wrong.
+    let forms: List<String> = [
+        "<style>a { b: c }</style>", "<style>a { b: c; }</style>", "<style>a { b: c; d: e }</style>",
+        "<style>a { b: c; d: e; }</style>",
+    ];
+    for let f of &forms {
+        let html = highlight_page(f);
+        assert html.contains(`<span class="property">b</span>`), html;
+        assert html.contains(`<span class="constant">c</span>`), html;
+    }
+    let empty = highlight_page(&"<style>a { }</style>");
+    assert empty.contains(`<span class="type">a</span>`), empty;
+}
 
-    let broken = highlight_page(&"<style>a { b: c }</style>");
-    assert !broken.contains(`<span class="property">b</span>`), broken;
-    // The text itself survives either way.
-    assert plain_text(&broken) == "<style>a { b: c }</style>", plain_text(&broken);
+test "a context capture needs its enclosing rule to have parsed" {
+    // What classifying from a parse costs, on input the language really does
+    // reject. `b` keeps no class because nothing placed it under `declaration`;
+    // the defaults and the text survive, so the file stays readable while typed.
+    let half_written = highlight_page(&"<style>a { b: }</style>");
+    assert !half_written.contains(`<span class="property">b</span>`), half_written;
+    assert half_written.contains(`<span class="punctuation delimiter">:</span>`), half_written;
+    assert plain_text(&half_written) == "<style>a { b: }</style>", plain_text(&half_written);
 }
 
 test "highlighting is text-preserving" {

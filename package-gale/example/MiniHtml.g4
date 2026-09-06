@@ -15,6 +15,9 @@
 // Gale accepts `mode` in a combined grammar; ANTLR4 wants a separate `lexer
 // grammar` for it. A combined grammar already bundles a lexer, so the
 // desugaring is unambiguous — see the compatibility principle in AGENTS.md.
+// Deliberately left out, so a reader does not read a subset boundary as a
+// limitation: a tag is one opaque token (attributes are not parsed), nesting is
+// not checked, and there are no comments, doctype or entities.
 grammar MiniHtml;
 
 import MiniCss, MiniJs;
