@@ -120,10 +120,11 @@ ignores comments is caught here, not by a user whose file stops formatting.
 promises. It formats the source, compares the parsed trees ignoring positions,
 and asserts the fixed point. Reach for it in any test that adds a syntax.
 
-The golden tests pair a `tests/format.fixtures/*_dirty.wado` input with its
-expected output under `tests/generated/format.fixtures/`. They are where a
-layout rule is pinned exactly, which is what a single style buys. Add a fixture
-when a rule is added or changed, then regenerate with
+The golden tests pair a `wado-compiler/tests/format.fixtures/*_dirty.wado`
+input with its expected output under
+`wado-compiler/tests/generated/format.fixtures/`. They are where a layout rule
+is pinned exactly, which is what a single style buys. Add a fixture when a rule
+is added or changed, then regenerate with
 `mise run update-golden-format-fixtures` and read the diff.
 
 `test_format_idempotent_all_fixtures` and `test_no_dropped_comments_in_corpus`

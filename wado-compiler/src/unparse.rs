@@ -222,6 +222,10 @@ pub struct Unparser<'a> {
     indent_level: usize,
     emitted_comments: IndexSet<usize>,
     last_source_line: usize,
+    /// Set while re-rendering a construct that must take its wrapped form: the
+    /// first construct able to wrap consumes it, so only the outermost one is
+    /// forced and everything inside it decides by width as usual.
+    force_wrap: bool,
     /// `(output position, columns)`: what the caller will append to the line
     /// the construct starting at that position ends on — the ` {` after an
     /// `if` condition. The construct's own width decision counts those
@@ -2061,14 +2065,27 @@ impl<'a> Unparser<'a> {
             s.unparse_expr(parts[0]);
         });
 
-        for part in &parts[1..] {
+        for (i, part) in parts[1..].iter().enumerate() {
             self.output.push('\n');
             self.indent_level += 1;
             self.write_indent();
             self.indent_level -= 1;
             self.output.push_str(op_str);
             self.output.push(' ');
+            let snap = self.snapshot();
             self.with_parens_if(needs_parens(part, b.op, false), |s| s.unparse_expr(part));
+
+            // The last operand ends the chain, so the caller's ` {` lands on
+            // its line. Measure that line once the operand is rendered — only
+            // then is it known whether the operand ends it — and let the
+            // operand wrap when the two together do not fit.
+            let last = i + 2 == parts.len();
+            if last && self.last_line_exceeds_reserved() {
+                self.rollback(snap);
+                self.force_wrap = true;
+                self.with_parens_if(needs_parens(part, b.op, false), |s| s.unparse_expr(part));
+                self.force_wrap = false;
+            }
         }
     }
 
@@ -2187,8 +2204,10 @@ impl<'a> Unparser<'a> {
     /// comment wraps too.
     fn unparse_call_args(&mut self, args: &[Expr], has_trailing_comma: bool, span: Span) {
         // Multiline-with-trailing-comma is requested explicitly by the source;
-        // in that case we skip the single-line attempt entirely.
-        if !has_trailing_comma || args.is_empty() {
+        // in that case we skip the single-line attempt entirely, as does a
+        // caller that has measured the line and needs this call to wrap.
+        let forced = std::mem::take(&mut self.force_wrap);
+        if (!has_trailing_comma || args.is_empty()) && !forced {
             let snap = self.snapshot();
             self.emit_inline_call_args(args, span.start);
             if !self.exceeds_width_since(snap) && !self.has_comment_in_range(span.start, span.end) {
@@ -2543,12 +2562,13 @@ impl<'a> Unparser<'a> {
                 TemplatePart::String(s) => self.output.push_str(s),
                 TemplatePart::Interpolation { expr, format, open } => {
                     self.output.push_str("${");
-                    // A block comment inside these braces keeps its place; a
-                    // line comment would end the template, so it stays unplaced
-                    // and the enclosing statement flushes it. The range starts
-                    // at this interpolation's own `${`, or a comment trailing
-                    // the previous one would move to this expression.
-                    self.emit_inline_comments_in(open.start, expr.span().start);
+                    // A comment inside these braces keeps its place, a line
+                    // comment on a line of its own like anywhere else — the
+                    // interpolation holds code, so a newline in it changes
+                    // nothing. The range starts at this interpolation's own
+                    // `${`, or a comment trailing the previous one would move
+                    // to this expression.
+                    self.open_entry_line(open.start, expr.span().start);
                     self.unparse_expr(expr);
                     if let Some(fmt) = format {
                         self.output.push(':');
@@ -2833,6 +2853,18 @@ impl<'a> Unparser<'a> {
                 line.len() + tail > MAX_LINE_WIDTH
             }
         })
+    }
+
+    /// True if the caller has text to append to the output's last line and the
+    /// two together are over budget. Only what the caller adds is at issue: a
+    /// line already over on its own is one no wrapping decision here can save.
+    fn last_line_exceeds_reserved(&self) -> bool {
+        let Some((_, reserved)) = self.reserved_width else {
+            return false;
+        };
+        let last = self.output.rfind('\n').map_or(0, |nl| nl + 1);
+        let line = self.output.len() - last;
+        line + reserved > MAX_LINE_WIDTH && line <= MAX_LINE_WIDTH
     }
 
     /// Render `f` knowing the caller will append `extra` columns to the line it

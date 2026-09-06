@@ -969,6 +969,35 @@ fn test_format_wraps_a_call_condition_that_only_fits_without_its_brace() {
     assert_eq!(formatted, again, "format should be idempotent");
 }
 
+/// A wrapped condition's last operand ends the caller's line, so it is measured
+/// with the ` {` too — the operand's own wrapping is what keeps that line in
+/// budget.
+#[test]
+fn test_format_wraps_the_last_operand_of_a_condition_that_needs_its_brace() {
+    let source = format!(
+        "fn f() {{\n    if {} && check({}) {{\n    }}\n}}\n",
+        "a".repeat(60),
+        "c".repeat(101)
+    );
+    let formatted = wado_compiler::format(&source).expect("format failed");
+    assert!(
+        formatted.lines().all(|l| l.len() <= 120),
+        "a line went over the width budget:\n{formatted}"
+    );
+    let again = wado_compiler::format(&formatted).expect("reformat failed");
+    assert_eq!(formatted, again, "format should be idempotent");
+}
+
+/// A line comment inside `${…}` stays inside it. The interpolation holds code,
+/// so the newline it needs changes nothing about the string.
+#[test]
+fn test_format_keeps_a_line_comment_inside_an_interpolation() {
+    let source = "fn f(value: i32) -> String {\n    return `x ${// note\n    value}`;\n}\n";
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert_eq!(formatted, source, "got:\n{formatted}");
+    assert_format_preserves_ast(source);
+}
+
 /// A comment a member's own constructs cannot place stops inside the
 /// declaration it was written in, not past its closing brace.
 #[test]

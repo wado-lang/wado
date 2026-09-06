@@ -6086,7 +6086,8 @@ impl Parser {
                         origin.offset,
                         origin.line,
                         origin.column.saturating_sub("${".len()),
-                    );
+                    )
+                    .in_space(self.ast_id_space);
                     parts.push(TemplatePart::Interpolation {
                         expr: Box::new(parsed),
                         format: format_spec,
