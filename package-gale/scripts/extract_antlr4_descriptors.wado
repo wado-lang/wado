@@ -615,8 +615,11 @@ fn emit_test_file_for_category(category: &String, entries: &List<DescriptorEntry
     w.line(&`// Source category: ${*category} (ANTLR4 runtime-testsuite).`);
     w.line(&"// Triage data: package-gale/tests/antlr4-compat/status.toml");
     w.blank();
-    w.line(&`use \{ ${join_names(&claim_a_imports(entries))} \} from "../../src/g4/parser.wado";`);
-    w.blank();
+    let imports = claim_a_imports(entries);
+    if !imports.is_empty() {
+        w.line(&`use \{ ${join_names(&imports)} \} from "../../src/g4/parser.wado";`);
+        w.blank();
+    }
     let mut needs_separator = false;
     for let e of entries {
         match &e.triage {
@@ -671,18 +674,20 @@ fn emit_test_file_for_category(category: &String, entries: &List<DescriptorEntry
     return w.to_string();
 }
 
-/// What a category's claim (a) module imports: `assemble_grammar` only where
-/// a composite entry calls it, so no file carries an unused import.
+/// What a category's claim (a) module imports: whichever entry point its
+/// emitted tests actually call, so no file carries an unused import.
 fn claim_a_imports(entries: &List<DescriptorEntry>) -> List<String> {
+    let mut names: List<String> = [];
     for let e of entries {
         if e.triage matches { Skip(_) } {
             continue;
         }
-        if !e.slave_relpaths.is_empty() {
-            return ["parse", "assemble_grammar"];
+        let needed = if e.slave_relpaths.is_empty() { "parse" } else { "assemble_grammar" };
+        if !names.contains(&needed) {
+            names.push(needed);
         }
     }
-    return ["parse"];
+    return names;
 }
 
 /// The parts of a per-descriptor chunk that vary by claim. `emit_test_chunk`
@@ -699,7 +704,9 @@ struct TestChunkSpec {
     tree_helpers: List<String> = [],
     /// Slave grammars the descriptor brings (`import S;`). They become the
     /// invocation's `inputs`, which is where a Kiln generator resolves imports.
-    slave_count: i32 = 0,
+    /// No default: a claim that leaves it out hands the generator the master
+    /// alone, and composition then fails on a file the descriptor supplied.
+    slave_count: i32,
     test_label: String,
     triage: Triage,
 }
@@ -901,6 +908,7 @@ fn emit_stage_b_test_chunk(
     expected_tree: &String,
     strip: bool,
     triage: &Triage,
+    slave_count: i32 = 0,
 ) -> TestChunk {
     let mut doc_lines: List<String> = [triage_doc_line(&"stage_b")];
     for let line of &strip_doc_lines(strip) {
@@ -912,6 +920,7 @@ fn emit_stage_b_test_chunk(
         doc_lines: doc_lines,
         output_subdir: "antlr4_compat_b",
         tree_helpers: tree_import_names(strip),
+        slave_count,
         test_label: "stage_b",
         triage: *triage,
     };
@@ -946,6 +955,7 @@ fn emit_stage_sub_b_test_chunk(
     sub_rule: &String,
     strip: bool,
     triage: &Triage,
+    slave_count: i32 = 0,
 ) -> TestChunk {
     let mut doc_lines: List<String> = [
         triage_doc_line(&"stage_b"), "//", `// Stage B sub-tree: [output] is the labelled child '${*sub_rule}' subtree,`,
@@ -960,6 +970,7 @@ fn emit_stage_sub_b_test_chunk(
         doc_lines: doc_lines,
         output_subdir: "antlr4_compat_b",
         tree_helpers: tree_import_names(strip),
+        slave_count,
         test_label: "stage_b_sub",
         triage: *triage,
     };
@@ -1871,6 +1882,7 @@ export fn run() with (Stdout, Stderr, Environment, Preopens, Exit) {
                     &sub_rule,
                     descriptor_deletes_tokens(&parsed),
                     &stage_b_triage,
+                    parsed.slave_grammars.len(),
                 ));
             } else {
                 stage_b_chunks.push(emit_stage_b_test_chunk(
@@ -1881,6 +1893,7 @@ export fn run() with (Stdout, Stderr, Environment, Preopens, Exit) {
                     &normalised,
                     descriptor_deletes_tokens(&parsed),
                     &stage_b_triage,
+                    parsed.slave_grammars.len(),
                 ));
             }
             if let Todo(_) = &stage_b_triage {
@@ -2181,6 +2194,8 @@ fn emit_stage_b_oracle_test_chunk(
     triage: &Triage,
     oracle_version: &String,
 ) -> TestChunk {
+    // `stage_b_oracle_eligible` excludes a composite, so no Stage B′ candidate
+    // brings slaves.
     let spec = TestChunkSpec {
         category: *category,
         name: *name,
@@ -2189,6 +2204,7 @@ fn emit_stage_b_oracle_test_chunk(
             triage_doc_line(&"stage_b_oracle"),
         ],
         output_subdir: "antlr4_compat_b_oracle",
+        slave_count: 0,
         test_label: "stage_b_oracle",
         triage: *triage,
     };
@@ -2829,6 +2845,28 @@ test "emit_test_chunk: each descriptor calls through its own namespace" {
 
     let tokens = emit_stage_a_tokens_test_chunk(&"C", &"N", &"i", &"[@0]", &Triage::Pass).text;
     assert tokens.contains("t_N::to_lexer_string(&tokens, t_N::TK_EOF)"), tokens;
+}
+
+// Every claim's `use` must name every grammar the descriptor supplies, or the
+// generator is handed the master alone and composition fails on a file that was
+// there. No corpus descriptor reaches Stage B with slaves today, so only this
+// covers those two.
+test "emit_test_chunk: every claim names the descriptor's slave grammars" {
+    let chunks: List<TestChunk> = [
+        emit_stage_a_parse_test_chunk(&"C", &"N", &"i", &"s", &Triage::Pass, 2),
+        emit_stage_a_err_test_chunk(&"C", &"N", &"i", &"s", false, &Triage::Pass, 2),
+        emit_stage_a_tokens_test_chunk(&"C", &"N", &"i", &"[@0]", &Triage::Pass, 2),
+        emit_stage_c_output_test_chunk(&"C", &"N", &"i", &"o", &"s", false, &Triage::Pass, 2),
+        emit_stage_b_test_chunk(&"C", &"N", &"i", &"s", &"(t)", false, &Triage::Pass, 2),
+        emit_stage_sub_b_test_chunk(&"C", &"N", &"i", &"s", &"(t)", &"c", false, &Triage::Pass, 2),
+    ];
+    let expected = "inputs: [\"../../grammars/C/N.slave1.g4\", \"../../grammars/C/N.slave2.g4\"],";
+    for let chunk of &chunks {
+        assert chunk.text.contains(expected), chunk.text;
+    }
+    // A descriptor with no slaves keeps the single-grammar `use`.
+    let plain = emit_stage_a_parse_test_chunk(&"C", &"N", &"i", &"s", &Triage::Pass).text;
+    assert !plain.contains("inputs:"), plain;
 }
 
 // Two grammars in one module is the point of the grouping: each keeps its own
