@@ -624,8 +624,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             param_types = self.instantiate_types(&param_types, inst);
         }
 
-        // Literal preselect for a conversion call (WEP 2026-07-31 phase 4):
-        // see `resolve_static_method_call` — same rule, for the
+        // Literal preselect for a one-argument static call (WEP 2026-07-31
+        // phase 4): see `resolve_static_method_call` — same rule, for the
         // `Wrapper::from(42)` spelling that arrives as a plain call.
         if let Some(pos) = effective_name.find("::")
             && call.args.len() == 1
@@ -634,7 +634,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 effective_name[..pos].to_string(),
                 effective_name[pos + 2..].to_string(),
             );
-            if self.try_conversion_preselect(
+            if self.try_static_arg_preselect(
                 &recv_name,
                 &method_name,
                 &call.args[0],
@@ -801,12 +801,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // them. It covers trait impls only; an inherent static has no
                 // selection and reaches the index instead.
                 if let Some(suffix_seg) = ident.segments.get(1) {
-                    let arg_hint = if (suffix == "from" || suffix == "try_from") && args.len() == 1
-                    {
-                        Some(self.tysys.type_table.borrow().type_name(args[0]))
-                    } else {
-                        None
-                    };
+                    let arg_hint = (args.len() == 1)
+                        .then(|| self.tysys.type_table.borrow().type_name(args[0]));
                     let method_def = self
                         .locate_static_method_impl(prefix, suffix, arg_hint.as_deref(), None)
                         .and_then(|r| r.method_id)
@@ -1331,13 +1327,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     }
 
                     // Find the impl module via the trait env (global index)
-                    let arg_type_hint = if (method_name == "from" || method_name == "try_from")
-                        && args.len() == 1
-                    {
-                        Some(self.tysys.type_table.borrow().type_name(args[0]))
-                    } else {
-                        None
-                    };
+                    let arg_type_hint = (args.len() == 1)
+                        .then(|| self.tysys.type_table.borrow().type_name(args[0]));
                     // The importing module never names `Type` on its own, so a
                     // bare-name search reaches no impl on it: the callee then
                     // loses its trait segment and names a body nothing

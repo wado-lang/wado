@@ -15,7 +15,7 @@ use super::callee::StaticMethodRef;
 use super::method_lookup::MethodInferenceInput;
 use super::reflect::ReflectDispatch;
 use super::sem::types::{CalleeParams, StaticMethodDispatch};
-use super::sig::Param;
+use super::sig::{MethodSig, Param};
 use super::static_call::StaticLookup;
 use super::types::{FunctionContext, MethodInfo, MethodOwner, TypeError};
 
@@ -1480,14 +1480,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             defaults_module,
         } = callee_params;
 
-        // Literal preselect for a conversion call (WEP 2026-07-31 phase 4):
-        // choose the impl before the argument is elaborated, so the expected
-        // type comes from the selected impl instead of whichever the
+        // Literal preselect for a one-argument static call (WEP 2026-07-31
+        // phase 4): choose the impl before the argument is elaborated, so the
+        // expected type comes from the selected impl instead of whichever the
         // name-keyed index returns first — the circular ordering this WEP
         // diagnoses. The name hint below then finds the same impl.
         if static_call.args.len() == 1
             && let Some(recv_name) = struct_name_for_lookup.clone()
-            && self.try_conversion_preselect(
+            && self.try_static_arg_preselect(
                 &recv_name,
                 &static_call.method,
                 &static_call.args[0],
@@ -2104,14 +2104,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Find trait name: if the static method belongs to a trait impl, include the
         // trait name in the mangled function name so WIR can resolve it correctly.
-        // For From/TryFrom, disambiguate by matching the first argument's type.
-        let arg_type_hint = if (static_call.method == "from" || static_call.method == "try_from")
-            && args.len() == 1
-        {
-            Some(self.tysys.type_table.borrow().type_name(args[0]))
-        } else {
-            None
-        };
+        // The argument separates same-named declarations whatever the method
+        // is called: `from` is not a privileged name, it was the only one anyone
+        // had written twice on one receiver.
+        let arg_type_hint =
+            (args.len() == 1).then(|| self.tysys.type_table.borrow().type_name(args[0]));
         // Keep the whole selection: its trait names the mangled function, and
         // its `method_id` is what the use→def edge below is recorded against.
         // A name lookup cannot stand in — two conversion impls on one type
@@ -2137,7 +2134,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // The expected type that shaped the argument came from
         // `lookup_static_method_param_types_keyed`, which keys on (receiver,
-        // method) alone — with two conversion impls it can be a different
+        // method) alone — with two impls of one trait it can be a different
         // impl's than the one the argument's type then selects. Left alone the
         // mangled name loses its trait and reaches WIR build unresolved, so the
         // disagreement is reported here instead of ICE-ing there.
@@ -2148,7 +2145,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 &static_call.method,
                 Some(&receiver_key),
             )
-            && self.report_unmatched_conversion(
+            && self.report_unmatched_static_arg(
                 &struct_name,
                 &static_call.method,
                 arg_type,
@@ -2849,8 +2846,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .unwrap_or_default()
     }
 
-    /// Find the trait name for a static method on a struct, if the method belongs to a trait impl.
-    /// Returns `None` for inherent static methods, `Some(trait_name)` for trait static methods.
+    /// Whether a `From<arg_type>` impl for `target_type` is pending synthesis,
+    /// so a call may name a conversion no impl block declares yet.
     pub(super) fn has_from_synthesis_request(
         &self,
         target_type: &ast::Type,
@@ -2882,26 +2879,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         })
     }
 
-    /// Which conversion trait a static `from` / `try_from` call names.
-    pub(super) fn conversion_trait_name(&self, method_name: &str) -> String {
-        if method_name == "try_from" {
-            "TryFrom".to_string()
-        } else {
-            self.tysys
-                .type_table
-                .borrow()
-                .compiler_trait_name(crate::compiler_item::CompilerItem::From)
-                .to_string()
-        }
-    }
-
-    /// Report why a conversion call's argument matched no impl, when the
-    /// receiver's conversion impls explain it: a blanket impl this path
-    /// cannot instantiate, or concrete impls none of which accept the
-    /// argument's type. Returns whether an error was emitted — the caller
-    /// then stops instead of building an unresolvable mangled name (an ICE
-    /// at WIR build).
-    pub(super) fn report_unmatched_conversion(
+    /// Report why a static call's argument matched no impl, when the
+    /// receiver's impls explain it: a blanket impl this path cannot
+    /// instantiate, or concrete impls none of which accept the argument's
+    /// type. Returns whether an error was emitted — the caller then stops
+    /// instead of building an unresolvable mangled name (an ICE at WIR build).
+    pub(super) fn report_unmatched_static_arg(
         &mut self,
         struct_name: &str,
         method_name: &str,
@@ -2909,11 +2892,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         span: Span,
         target_hint: Option<&ImplTargetKey>,
     ) -> bool {
-        let (candidates, has_blanket) =
-            self.conversion_impl_survey(struct_name, method_name, target_hint);
-        if has_blanket {
-            let _ = self.emit(TypeError::UnsupportedBlanketConversion {
-                trait_name: self.conversion_trait_name(method_name),
+        let survey = self.static_arg_survey(struct_name, method_name, target_hint);
+        if let Some(trait_name) = survey.blanket_trait {
+            let _ = self.emit(TypeError::UnsupportedBlanketInstantiation {
+                trait_name,
                 receiver: struct_name.to_string(),
                 method: method_name.to_string(),
                 arg_type: arg_type.to_string(),
@@ -2921,13 +2903,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             });
             return true;
         }
-        if !candidates.is_empty() {
+        // The trait the first candidate names. Where several traits supply the
+        // name the call is an overload, reported before it reaches here.
+        if let Some(trait_name) = survey.candidates.first().map(|c| c.trait_name.clone()) {
             let _ = self.emit(TypeError::NoMatchingTraitArgument {
-                trait_name: self.conversion_trait_name(method_name),
+                trait_name,
                 receiver: struct_name.to_string(),
                 method: method_name.to_string(),
                 arg_type: arg_type.to_string(),
-                candidates: candidates.into_iter().map(|c| c.spelling).collect(),
+                candidates: survey.candidates.into_iter().map(|c| c.spelling).collect(),
                 span,
             });
             return true;
@@ -2935,12 +2919,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         false
     }
 
-    /// The shared preselect entry for a one-argument conversion call
+    /// The shared preselect entry for a one-argument static call
     /// (`Wrapper::from(42)`, in either its static-call or plain-call
-    /// spelling): `Selected` installs the chosen impl's source type as the
+    /// spelling): `Selected` installs the chosen impl's parameter type as the
     /// argument's expected type; `Ambiguous` reports and returns `true` so
     /// the caller stops.
-    pub(super) fn try_conversion_preselect(
+    pub(super) fn try_static_arg_preselect(
         &mut self,
         recv_name: &str,
         method_name: &str,
@@ -2950,19 +2934,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         param_types: &mut Vec<TypeId>,
         target_hint: Option<&ImplTargetKey>,
     ) -> bool {
-        if (method_name != "from" && method_name != "try_from")
-            || self.has_inherent_static_method(recv_name, method_name, target_hint)
-        {
+        if self.has_inherent_static_method(recv_name, method_name, target_hint) {
             return false;
         }
         let class = self.synthesize_arg_class(arg, ctx);
-        match self.conversion_preselect(recv_name, method_name, &class, target_hint) {
-            ConversionPreselect::Selected(source) => {
+        match self.static_arg_preselect(recv_name, method_name, &class, target_hint) {
+            ArgPreselect::Selected(source) => {
                 *param_types = vec![source];
                 false
             }
-            ConversionPreselect::Ambiguous(candidates) => {
-                let _ = self.emit(TypeError::AmbiguousConversionArgument {
+            ArgPreselect::Ambiguous(candidates) => {
+                let _ = self.emit(TypeError::AmbiguousStaticArgument {
                     receiver: recv_name.to_string(),
                     method: method_name.to_string(),
                     candidates,
@@ -2970,7 +2952,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 });
                 true
             }
-            ConversionPreselect::Pass => false,
+            ArgPreselect::Pass => false,
         }
     }
 
@@ -2989,25 +2971,25 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .any(super::trait_env::ImplMethodEntry::is_inherent)
     }
 
-    /// The argument preselect over a receiver's conversion impls: `Selected` and
+    /// The argument preselect over a receiver's impls: `Selected` and
     /// `Ambiguous` short-circuit resolution, so it decides calls. It must run
     /// *before* the argument is elaborated — the expected type shaping a literal
     /// comes from the selected impl. Admissibility is [`Elaborator::class_admits`]
-    /// over each impl's *resolved* source type, since spelling under-admits.
-    pub(super) fn conversion_preselect(
+    /// over each impl's *resolved* parameter type, since spelling under-admits.
+    pub(super) fn static_arg_preselect(
         &mut self,
         struct_name: &str,
         method_name: &str,
         class: &super::synth::ArgClass,
         target_hint: Option<&ImplTargetKey>,
-    ) -> ConversionPreselect {
+    ) -> ArgPreselect {
         use super::synth::ArgClass;
         if matches!(class, ArgClass::Opaque(_)) {
-            return ConversionPreselect::Pass;
+            return ArgPreselect::Pass;
         }
-        let (candidates, _has_blanket) =
-            self.conversion_impl_survey(struct_name, method_name, target_hint);
-        let admitted: Vec<ConversionCandidate> = candidates
+        let admitted: Vec<ArgCandidate> = self
+            .static_arg_survey(struct_name, method_name, target_hint)
+            .candidates
             .into_iter()
             .filter(|c| {
                 c.source != TypeTable::UNKNOWN
@@ -3016,91 +2998,78 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             })
             .collect();
         match admitted.as_slice() {
-            [] => ConversionPreselect::Pass,
-            [only] => ConversionPreselect::Selected(only.source),
+            [] => ArgPreselect::Pass,
+            [only] => ArgPreselect::Selected(only.source),
             // A `Head` names a family, not a type — `Pair { a: 5 }` is a
             // `Pair` of something — so several same-head impls are the expected
             // answer, not a tie. Only a class denoting one type may call two
             // candidates ambiguous; elaborating the argument decides the rest.
-            _ if matches!(class, ArgClass::Head(_)) => ConversionPreselect::Pass,
-            _ => ConversionPreselect::Ambiguous(admitted.into_iter().map(|c| c.spelling).collect()),
+            _ if matches!(class, ArgClass::Head(_)) => ArgPreselect::Pass,
+            _ => ArgPreselect::Ambiguous(admitted.into_iter().map(|c| c.spelling).collect()),
         }
     }
 
-    /// The source types the receiver's conversion impls accept
-    /// (`From<String>` beside `From<i64>`), each with its spelling (for
-    /// diagnostics) and its type resolved in the impl's own frame (for
-    /// admissibility), in candidate order, plus whether a blanket conversion
-    /// impl exists. It walks the impls directly rather than sharing
+    /// The first-parameter types the receiver's trait impls declare for
+    /// `method_name` (`From<String>`'s `String` beside `From<i64>`'s `i64`,
+    /// `Enc<A>`'s `A` beside `Enc<B>`'s `B`), in candidate order, plus the
+    /// trait of any blanket among them. The parameter is read from the
+    /// declaration rather than off the trait reference: a conversion trait's
+    /// source type is also its trait argument, but no other trait's is.
+    ///
+    /// It walks the impls directly rather than sharing
     /// [`Self::locate_static_method_impl`]'s early-return traversal, because
     /// its consumers need the full candidate list.
-    pub(super) fn conversion_impl_survey(
+    pub(super) fn static_arg_survey(
         &self,
         struct_name: &str,
         method_name: &str,
         target_hint: Option<&ImplTargetKey>,
-    ) -> (Vec<ConversionCandidate>, bool) {
-        let from_trait_name = self
-            .tysys
-            .type_table
-            .borrow()
-            .compiler_trait_name(crate::compiler_item::CompilerItem::From)
-            .to_string();
-        let mut candidates: Vec<ConversionCandidate> = Vec::new();
-        let mut has_blanket = false;
+    ) -> StaticArgSurvey {
+        let mut survey = StaticArgSurvey::default();
         for impl_def in self.trait_impls_for_receiver(struct_name, target_hint) {
             let header = &self.tysys.trait_env.impl_headers[&impl_def];
-            let module = self.tysys.resolutions.defs().module(impl_def).clone();
-            let trait_type = header
-                .trait_type
-                .as_ref()
-                .expect("trait_impls_for_receiver yields trait impls alone");
-            let base = super::trait_env::get_type_name_static(trait_type);
-            if (base != from_trait_name && base != "TryFrom")
-                || !header.methods.iter().any(|m| m.name == method_name)
-            {
-                continue;
-            }
-            let ast::Type::Generic(g) = trait_type else {
+            let Some(method) = header.methods.iter().find(|m| m.name == method_name) else {
                 continue;
             };
-            let Some(arg) = g.args.first() else {
-                continue;
-            };
-            // A source mentioning one of the impl's type parameters is a
-            // blanket: it accepts (a family of) everything, its presence means
-            // the trait-less path can resolve the call through the blanket
-            // resolver, and it is never an unmatched alternative worth listing.
-            if ast_type_mentions_param(arg, &header.type_params) {
-                has_blanket = true;
-                continue;
-            }
-            // Full spelling with the head un-aliased, so the alternatives read
-            // `List<i32>`, not a bare `List`.
-            let head = super::trait_env::get_type_name_static(arg);
-            let head = self.import_original_name(&head, &module);
-            let mut rendered = String::new();
-            crate::unparse::unparse_type_into(arg, &mut rendered);
-            let spelling = match rendered.split_once('<') {
-                Some((_, args)) => format!("{head}<{args}"),
-                None => head,
-            };
-            if candidates.iter().any(|c| c.spelling == spelling) {
-                continue;
-            }
-            // The source type as the impl's own frame resolved it, so a
-            // private or aliased name means what the impl wrote.
-            let source = *self
+            let sig = self
                 .tysys
                 .signatures
-                .impl_sig(impl_def)
-                .expect("the decl pass records every impl block's declaration facts")
-                .trait_type_args
-                .first()
-                .expect("the trait reference is generic, so its arguments were resolved");
-            candidates.push(ConversionCandidate { spelling, source });
+                .method_sig(method.def)
+                .expect("the decl pass records every impl-declared method's signature");
+            if sig.self_kind != ast::SelfKind::None {
+                continue;
+            }
+            let Some(&source) = sig.decl.param_types.first() else {
+                continue;
+            };
+            let trait_name = || {
+                header
+                    .trait_name
+                    .clone()
+                    .expect("trait_impls_for_receiver yields trait impls alone")
+            };
+            // A parameter left open is a blanket: it accepts a family rather
+            // than a type, its presence means the trait-less path can resolve
+            // the call through the blanket resolver, and it is never an
+            // unmatched alternative worth listing.
+            let table = self.tysys.type_table.borrow();
+            if table.contains_type_param(source) {
+                survey.blanket_trait.get_or_insert_with(trait_name);
+                continue;
+            }
+            // The parameter as the impl's own frame resolved it, so a private
+            // or aliased name means what the impl wrote.
+            let spelling = table.type_name(source);
+            if survey.candidates.iter().any(|c| c.spelling == spelling) {
+                continue;
+            }
+            survey.candidates.push(ArgCandidate {
+                spelling,
+                source,
+                trait_name: trait_name(),
+            });
         }
-        (candidates, has_blanket)
+        survey
     }
 
     /// The original (un-aliased) name `name` resolves to *within `module`* — its
@@ -3136,14 +3105,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.import_original_name(&head, impl_module)
     }
 
-    /// Whether `rendered` names `param` as a whole segment — the spelling-level
-    /// stand-in for "this type mentions the impl's type parameter".
-    fn mentions_type_param(rendered: &str, param: &str) -> bool {
-        rendered
-            .split(|c: char| !c.is_alphanumeric() && c != '_')
-            .any(|seg| seg == param)
-    }
-
     pub(super) fn locate_static_method_impl(
         &self,
         struct_name: &str,
@@ -3159,121 +3120,78 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return None;
         }
         let impl_defs = self.trait_impls_for_receiver(struct_name, target_hint);
-        let from_trait_name = self
-            .tysys
-            .type_table
-            .borrow()
-            .compiler_trait_name(crate::compiler_item::CompilerItem::From)
-            .to_string();
-        let is_from_or_try_from =
-            |base: &str| -> bool { base == from_trait_name || base == "TryFrom" };
-        // A `From` / `TryFrom` impl discriminates its methods by the source
-        // type, so its trait segment keeps the argument; every other trait
-        // names the declaration alone.
+        // The trait reference as the block wrote it, arguments included — the
+        // form `resolve_method` emitted the method under, so that `impl Conv<A>`
+        // and `impl Conv<B>` on one receiver stay apart. Dropping them here
+        // names a body nothing declares, and the two impls collide on it.
         let resolve_trait_name =
             |header: &super::trait_env::ImplHeader| -> Option<crate::name::FqTraitName> {
-                let fq = self
-                    .tysys
+                self.tysys
                     .trait_env
-                    .fq_trait_of_impl(header, &self.tysys.resolutions)?;
-                Some(if is_from_or_try_from(fq.base_name()) {
-                    fq
-                } else {
-                    fq.head_only()
-                })
+                    .fq_trait_of_impl(header, &self.tysys.resolutions)
             };
 
-        let matches_arg_type = |trait_type: &ast::Type,
-                                impl_ty: &ast::Type,
-                                impl_module: &ModuleSource,
-                                type_params: &[ast::GenericParam]|
-         -> bool {
+        // Which declaration the argument picks. The *parameter* answers, not
+        // the trait: `From<T>`'s source type is also its trait argument, which
+        // is why `from` and `try_from` were the only names ever discriminated
+        // here — but every trait implemented twice on one receiver poses the
+        // same question, and the parameter states it for all of them. Both
+        // sides are resolved types, the parameter in the impl's own frame, so
+        // an alias on either is already gone.
+        //
+        // Two answers are not a mismatch. A parameter that *is* one of the
+        // block's own slots belongs to a blanket, whose unsubstituted spelling
+        // must not be baked into a mangled name: rejecting it sends the call
+        // down the trait-less path, where `resolve_blanket_static_method`
+        // instantiates it, or to the diagnostic that says the instantiation is
+        // not selectable. A parameter whose type never resolved states nothing
+        // either, and is declined for the same reason. A parameter that merely
+        // mentions a slot (`impl From<Array<T>> for List<T>`) equals no
+        // instantiation verbatim, and the mangled name carries the impl's
+        // spelling either way, so it is kept.
+        //
+        // Comparing names is this mechanism's ceiling; `TypeId` matching is
+        // the replacement (WEP 2026-07-31 phase 4).
+        let param_admits_arg = |sig: &MethodSig| -> bool {
             let Some(expected) = arg_type_name else {
                 return true;
             };
-            let base = super::trait_env::get_type_name_static(trait_type);
-            if is_from_or_try_from(&base)
-                && let ast::Type::Generic(g) = trait_type
-                && let Some(arg) = g.args.first()
-            {
-                // A blanket source (`impl<T: Display> From<T> for Wrapper`)
-                // is deliberately NOT matched here: baking its unsubstituted
-                // `From<T>` spelling into the mangled name defeats the
-                // instantiation `resolve_blanket_static_method` performs.
-                // Rejecting it sends the call down the trait-less path, where
-                // the blanket resolver picks it up.
-                if let ast::Type::Named(n) = arg
-                    && type_params.iter().any(|p| p.name == n.name)
-                {
-                    return false;
-                }
-                // Un-alias the impl's source-type head *in the impl's module*
-                // before comparing: `impl From<ClockInstant>` (where
-                // `ClockInstant` is `use { Instant as ClockInstant }`) must match
-                // a call whose argument's real name is `Instant`, regardless of
-                // the alias the caller used. The verbatim name would miss the
-                // impl and fall back to a (non-existent) inherent `Type::from`.
-                let head = super::trait_env::get_type_name_static(arg);
-                let head = self.import_original_name(&head, impl_module);
-                let expected_head = expected.split('<').next().unwrap_or(expected);
-                if head != expected_head {
-                    return false;
-                }
-                // A bare-head argument spelling is fully compared already. A
-                // generic one must match its arguments too (whitespace
-                // ignored), or two impls sharing a head (`From<List<i32>>`
-                // beside `From<List<String>>`) both answer and the first one
-                // wins wrongly. Nested aliasing can make the spellings
-                // disagree and miss an impl — the name-based hint mechanism's
-                // ceiling; TypeId matching is the replacement
-                // (WEP 2026-07-31 phase 4).
-                if !expected.contains('<') {
-                    return true;
-                }
-                let mut rendered = String::new();
-                crate::unparse::unparse_type_into(arg, &mut rendered);
-                // A source type generic in the impl's own parameters
-                // (`impl From<Array<T>> for List<T>`) is spelled with those
-                // parameters, so no instantiation ever equals it verbatim. The
-                // head is what separates it from a sibling impl, and the
-                // mangled name carries the impl's spelling either way.
-                let declared = self.tysys.build_declared_type_params(impl_ty, type_params);
-                if declared
-                    .iter()
-                    .any(|name| Self::mentions_type_param(&rendered, name))
-                {
-                    return true;
-                }
-                let full: String = match rendered.split_once('<') {
-                    Some((_, args)) => format!("{head}<{args}"),
-                    None => head,
-                };
-                let strip = |t: &str| t.replace(' ', "");
-                return strip(&full) == strip(expected);
+            let Some(&param) = sig.decl.param_types.first() else {
+                return true;
+            };
+            let table = self.tysys.type_table.borrow();
+            if matches!(
+                table.get(param),
+                ResolvedType::TypeParam { .. }
+                    | ResolvedType::TypePack { .. }
+                    | ResolvedType::Unknown
+                    | ResolvedType::Error
+            ) {
+                return false;
             }
-            !is_from_or_try_from(&base)
+            table.contains_type_param(param) || table.type_name(param) == expected
         };
 
         // Returns the trait the impl names and the method it declares there —
         // the identity of what this selection picked, so a caller recording a
         // use→def edge names the impl the argument chose rather than the
         // receiver's first same-named method.
-        let check_impl = |header: &super::trait_env::ImplHeader,
-                          impl_module: &ModuleSource|
+        let check_impl = |header: &super::trait_env::ImplHeader|
          -> Option<(crate::name::FqTraitName, crate::defs::DefId)> {
             let trait_type = header.trait_type.as_ref()?;
-            if !matches_arg_type(trait_type, &header.ty, impl_module, &header.type_params) {
-                return None;
-            }
             for method in header.methods.iter().filter(|m| m.name == method_name) {
                 let sig = self
                     .tysys
                     .signatures
                     .method_sig(method.def)
                     .expect("the decl pass records every impl-declared method's signature");
-                if sig.self_kind == ast::SelfKind::None {
-                    return Some((resolve_trait_name(header)?, method.def));
+                if sig.self_kind != ast::SelfKind::None {
+                    continue;
                 }
+                if !param_admits_arg(sig) {
+                    return None;
+                }
+                return Some((resolve_trait_name(header)?, method.def));
             }
             // Fall back to the trait declaration's default methods: when
             // `impl Trait for Type` does not override a defaulted static
@@ -3296,7 +3214,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         for impl_def in impl_defs {
             let header = &self.tysys.trait_env.impl_headers[&impl_def];
             let module_source = self.tysys.resolutions.defs().module(impl_def).clone();
-            if let Some((trait_name, method_id)) = check_impl(header, &module_source) {
+            if let Some((trait_name, method_id)) = check_impl(header) {
                 return Some(StaticMethodRef::new(
                     module_source,
                     struct_name,
@@ -3447,16 +3365,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
         let impl_type_args = impl_type_args_owned.as_slice();
 
-        // Find trait name and the module where the impl block lives.
-        // For From/TryFrom, disambiguate by matching the first argument's type so that
-        // user-defined `impl From<MyType> for i32` is resolved to its actual defining module
-        // rather than the default `ModuleSource::primitive()` for `i32`.
+        // Find the trait name and the module where the impl block lives. The
+        // argument separates same-named declarations — a user-defined
+        // `impl From<MyType> for i32` from the primitive's, and `impl Conv<A>`
+        // from `impl Conv<B>` — so it is read whatever the method is called.
         let arg_type_hint =
-            if (method_name == "from" || method_name == "try_from") && args.len() == 1 {
-                Some(self.tysys.type_table.borrow().type_name(args[0]))
-            } else {
-                None
-            };
+            (args.len() == 1).then(|| self.tysys.type_table.borrow().type_name(args[0]));
         // A newtype's static call dispatches to its base, whose name is not
         // the caller's to resolve — that frame can hold a same-named
         // declaration of its own.
@@ -3480,7 +3394,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .filter(|method_ref| method_ref.trait_name.is_some());
         // The expected type that shaped the argument came from
         // `lookup_static_method_param_types_keyed`, which keys on (receiver,
-        // method) alone — with two conversion impls it can be a different
+        // method) alone — with two impls of one trait it can be a different
         // impl's than the one the argument's type then selects. Left alone the
         // mangled name loses its trait and reaches WIR build unresolved, so the
         // disagreement is reported here instead of ICE-ing there.
@@ -3491,7 +3405,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 method_name,
                 receiver_key.as_ref(),
             )
-            && self.report_unmatched_conversion(
+            && self.report_unmatched_static_arg(
                 &actual_struct_name,
                 method_name,
                 arg_type,
@@ -3610,10 +3524,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 }
 
-/// See [`Elaborator::conversion_preselect`].
-pub(super) enum ConversionPreselect {
-    /// Exactly one conversion impl admits the literal: elaborate the argument
-    /// against this source type, and the name hint then finds the same impl.
+/// See [`Elaborator::static_arg_preselect`].
+pub(super) enum ArgPreselect {
+    /// Exactly one impl admits the literal: elaborate the argument against
+    /// this parameter type, and the name hint then finds the same impl.
     Selected(TypeId),
     /// Several impls admit the literal — a literal never selects, so the call
     /// is reported with the admitted alternatives.
@@ -3623,28 +3537,21 @@ pub(super) enum ConversionPreselect {
     Pass,
 }
 
-/// One non-blanket conversion impl's source type: the spelling for
-/// diagnostics, the resolved type for admissibility. See
-/// [`Elaborator::conversion_impl_survey`].
-pub(super) struct ConversionCandidate {
+/// One non-blanket impl's declared first parameter: the spelling for
+/// diagnostics, the resolved type for admissibility, and the trait the impl
+/// names so a report says which one it failed to match. See
+/// [`Elaborator::static_arg_survey`].
+pub(super) struct ArgCandidate {
     pub(super) spelling: String,
     pub(super) source: TypeId,
+    pub(super) trait_name: String,
 }
 
-/// Whether an AST type syntactically mentions one of `params`. Shapes the
-/// walk does not descend into count as mentioning, so a caller skipping
-/// resolution for open types never resolves one by mistake.
-fn ast_type_mentions_param(ty: &ast::Type, params: &[ast::GenericParam]) -> bool {
-    match ty {
-        ast::Type::Named(n) => params.iter().any(|p| p.name == n.name),
-        ast::Type::Generic(g) => {
-            params.iter().any(|p| p.name == g.name)
-                || g.args.iter().any(|a| ast_type_mentions_param(a, params))
-        }
-        ast::Type::Tuple(elems) => elems.iter().any(|e| ast_type_mentions_param(e, params)),
-        ast::Type::Reference(inner) | ast::Type::MutReference(inner) => {
-            ast_type_mentions_param(inner, params)
-        }
-        _ => !params.is_empty(),
-    }
+/// What a receiver's trait impls accept as a static's first argument.
+#[derive(Default)]
+pub(super) struct StaticArgSurvey {
+    pub(super) candidates: Vec<ArgCandidate>,
+    /// The trait of a blanket impl among them, which admits every argument and
+    /// is therefore no alternative to list.
+    pub(super) blanket_trait: Option<String>,
 }

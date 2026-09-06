@@ -66,7 +66,7 @@ did not fully find something, so each of these had to be named:
 - A rung that cannot resolve falls through to the next. It is not a spelling
   that names nothing.
 - A declaration whose slots the receiver has not filled resolves, and has a
-  return type. Only the *types* wait on the receiver: how many parameters there
+  return type. Only the _types_ wait on the receiver: how many parameters there
   are, what they are called and which carry defaults are the declaration's own,
   so the arity is enforced and the defaults padded either way. The optionality
   belongs per parameter — a slot the call could not fill is skipped where the
@@ -101,6 +101,29 @@ the merge on its own, so the resolution states each:
   names a body nothing declares.
 - An inherited default body has two modules — the block's, where the body is
   emitted and the call must point, and the trait's, where its defaults resolve.
+
+### The argument picks a declaration, not a trait
+
+A one-argument static call is selected by the parameter the impl declares.
+`From<T>`'s source type is also its trait argument, which is why `from` and
+`try_from` were the only method names ever discriminated here — but a trait
+implemented twice on one receiver (`impl Conv<A> for M` beside
+`impl Conv<B> for M`) poses the same question, and only the parameter states it
+for every trait. Reading it off the declaration also removes the alias handling
+the trait-reference spelling needed: the parameter is resolved in the impl's own
+frame, so both sides of the comparison are already canonical.
+
+The trait segment of a mangled name keeps the trait's arguments for the same
+reason. Dropping them collapses two declarations of one method name onto one
+body, and how many times the receiver implements the trait decides that — never
+which trait it is.
+
+Two parameter shapes are not a mismatch. One that _is_ a slot of the impl block
+belongs to a blanket, whose unsubstituted spelling must not be baked into a
+mangled name; rejecting it sends the call to the blanket resolver, which
+instantiates it. One that merely mentions a slot (`impl From<Array<T>> for
+List<T>`) equals no instantiation verbatim, and the mangled name carries the
+impl's spelling either way.
 
 ### Resolving is not free
 
@@ -139,21 +162,20 @@ other. Unifying them further is symmetry, not this WEP's decision.
   argument pins `Self`. So where a case shadows an inherited static, a bound
   (`fn f<T: Tagged>() { T::tag(5) }`) is the only way left to reach it. The
   spelling is missing on its own, not just under shadowing.
-- A trait implemented twice on one receiver (`impl Conv<A> for M` beside
-  `impl Conv<B> for M`) mangles both to one name, so `M::from_kind(a)` answers
-  `type 'M' does not implement trait 'Conv'`. Only `From` and `TryFrom` keep
-  their trait arguments in the segment, and which trait it is decides nothing —
-  how many times the receiver implements it decides everything. Closing it means
-  changing what a trait segment carries, in `src/name.rs`, so the definition,
-  DCE and the monomorphization key move with the call: changing the selection
-  alone turns the diagnostic into an unresolved call at WIR build.
-  ([Overload Resolution](./wep-2026-07-31-overload-resolution.md) phase 4
-  replaces the name matching this rung still does with `TypeId` matching.)
+- The selection compares the parameter's type _name_ with the argument's, so
+  two distinct types printing the same name are one candidate to it.
+  [Overload Resolution](./wep-2026-07-31-overload-resolution.md) phase 4
+  replaces that with `TypeId` matching; threading the argument's `TypeId` from
+  the four sites that already hold it is what closing it takes.
+- Only the first argument selects. A static declaring two parameters whose
+  second is what separates two impls has no selection, and the first candidate
+  wins. No fixture drives it, and the preselect that shapes a literal is
+  first-argument-only for the same reason.
 - A trait-frame signature is read at the receiver, and where no caller supplies
   one the rung resolves the receiver by bare name in the caller's frame — which
   cannot name a namespace-imported type. A `Self`-returning static reached as
   `lib::P::twice()` then binds `Self` to nothing. Closing it means threading the
   receiver's `TypeId` from the site that already resolved it.
 - The ambiguity report dedupes by trait declaration, so one trait implemented
-  twice no longer names itself as both alternatives. No fixture drives it: every
-  shape reached so far fails earlier, in the selection above.
+  twice no longer names itself as both alternatives. No fixture drives it: the
+  argument selects one of the two before the report is reached.

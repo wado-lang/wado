@@ -1,0 +1,59 @@
+//! One generic trait implemented twice on one receiver. Both impls declare
+//! `make`, so only the argument separates them, and the trait segment of the
+//! mangled name has to keep the trait's arguments or the two bodies collide
+//! under one name.
+//!
+//! `from` was never a privileged name: it was the only generic trait anyone
+//! had written twice on one receiver, so it was the only one whose argument
+//! the selection read.
+
+trait Enc<T> {
+    fn make(v: T) -> i32;
+}
+
+struct M {}
+
+struct A {}
+
+struct B {}
+
+impl Enc<A> for M {
+    fn make(v: A) -> i32 {
+        return 1;
+    }
+}
+
+impl Enc<B> for M {
+    fn make(v: B) -> i32 {
+        return 2;
+    }
+}
+
+trait Wrap<T> {
+    fn hold(v: T) -> i32;
+}
+
+impl Wrap<i64> for M {
+    fn hold(v: i64) -> i32 {
+        return 3;
+    }
+}
+
+impl Wrap<String> for M {
+    fn hold(v: String) -> i32 {
+        return 4;
+    }
+}
+
+test "the argument reaches the impl that declares it" {
+    assert M::make(A {}) == 1;
+}
+
+test "and the sibling impl is reached by its own" {
+    assert M::make(B {}) == 2;
+}
+
+test "a literal is shaped by the impl its class admits" {
+    assert M::hold(5) == 3;
+    assert M::hold("x") == 4;
+}

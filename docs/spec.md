@@ -3170,6 +3170,19 @@ why `List<T>` implements `IndexValue<i32>`, `IndexValue<RangeExclusive<i32>>`,
 and `IndexValue<RangeInclusive<i32>>` at once — and why the same impls answer
 the method spelling, `l.index_value(i)`.
 
+A trait's associated function obeys the same rule, selected on its first
+argument. There is no receiver to fix `Self`, so the type is written and the
+argument chooses among the impls declaring the function — Rust needs
+`<M as Enc<A>>::make` here:
+
+```wado
+impl Enc<A> for M { fn make(v: A) -> i32 { … } }
+impl Enc<B> for M { fn make(v: B) -> i32 { … } }
+
+M::make(A { })               // selects Enc<A>
+M::make(B { })               // selects Enc<B>
+```
+
 Two _different_ traits declaring one method name for one receiver is a
 separate case and is always reported: name the trait
 (`Alpha::describe(&x)`). Argument selection never crosses trait lines —

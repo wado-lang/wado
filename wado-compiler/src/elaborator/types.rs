@@ -518,12 +518,12 @@ pub enum TypeError {
         span: Span,
     },
 
-    /// A conversion reachable only through a blanket impl generic in its
-    /// source type (`impl<T: Display> From<T> for Wrapper`). Selecting the
-    /// instantiation from the argument's type is phase-4 work
+    /// A static reachable only through a blanket impl generic in the
+    /// parameter it declares (`impl<T: Display> From<T> for Wrapper`).
+    /// Selecting the instantiation from the argument's type is phase-4 work
     /// (WEP 2026-07-31); until then the call is rejected rather than reaching
     /// WIR build unresolved.
-    UnsupportedBlanketConversion {
+    UnsupportedBlanketInstantiation {
         trait_name: String,
         receiver: String,
         method: String,
@@ -531,12 +531,12 @@ pub enum TypeError {
         span: Span,
     },
 
-    /// A conversion call whose literal argument admits several impls
+    /// A static call whose literal argument admits several impls
     /// (`Wrapper::from(42)` against `From<i32>` beside `From<i64>`). A literal
     /// never selects between the widths it could coerce to (WEP 2026-07-31),
-    /// and `from` has no `self`, so the trait turbofish escape does not apply
-    /// — the fix is annotating the argument.
-    AmbiguousConversionArgument {
+    /// and a static has no `self`, so the trait turbofish escape does not
+    /// apply — the fix is annotating the argument.
+    AmbiguousStaticArgument {
         receiver: String,
         method: String,
         /// The admitted source types, in candidate order.
@@ -1401,7 +1401,7 @@ impl TypeError {
                 ),
                 *span,
             ),
-            TypeError::AmbiguousConversionArgument {
+            TypeError::AmbiguousStaticArgument {
                 receiver,
                 method,
                 candidates,
@@ -1418,7 +1418,7 @@ impl TypeError {
                 ),
                 *span,
             ),
-            TypeError::UnsupportedBlanketConversion {
+            TypeError::UnsupportedBlanketInstantiation {
                 trait_name,
                 receiver,
                 method,
