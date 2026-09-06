@@ -16122,7 +16122,7 @@ fn _parse_use_declaration(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLL
 
 fn _parse_use_tree__inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () with RustParserBase {
     let simple_path = _parse_simple_path(p, follow);
-    if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_KW_AS) {
+    if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_KW_AS && _kind_set_44(p.peek_at(1))) {
         let kw_as = p.expect(TK_KW_AS, &SYNC_22);
         let grp_kind = p.peek_kind();
         if _kind_set_4(grp_kind) {
@@ -16928,7 +16928,7 @@ fn _parse_type_alias__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
     if p.peek_kind() == TK_KW_WHERE {
         let where_clause = _parse_where_clause(p, &EMPTY_FOLLOW);
     }
-    if p.peek_kind() == TK_EQ {
+    if p.peek_kind() == TK_EQ && _kind_set_18(p.peek_at(1)) {
         let eq = p.expect(TK_EQ, &SYNC_33);
         let type_ = _parse_type_(p, follow);
     }
@@ -17515,7 +17515,7 @@ fn _parse_constant_item__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
     }
     let colon = p.expect(TK_COLON, &SYNC_33);
     let type_ = _parse_type_(p, &EMPTY_FOLLOW);
-    if p.peek_kind() == TK_EQ {
+    if p.peek_kind() == TK_EQ && _kind_set_31(p.peek_at(1)) {
         let eq = p.expect(TK_EQ, &SYNC_42);
         let expression = _parse_expression(p, follow);
     }
@@ -17542,7 +17542,7 @@ fn _parse_static_item__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
     let identifier = _parse_identifier(p, &FOLLOW_MASK_13);
     let colon = p.expect(TK_COLON, &SYNC_33);
     let type_ = _parse_type_(p, &EMPTY_FOLLOW);
-    if p.peek_kind() == TK_EQ {
+    if p.peek_kind() == TK_EQ && _kind_set_31(p.peek_at(1)) {
         let eq = p.expect(TK_EQ, &SYNC_42);
         let expression = _parse_expression(p, follow);
     }
@@ -18228,7 +18228,7 @@ fn _parse_lifetime_param__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPT
         let outer_attribute = _parse_outer_attribute(p, &EMPTY_FOLLOW);
     }
     let lifetime_or_label = p.expect(TK_LIFETIME_OR_LABEL, &SYNC_32);
-    if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_COLON) {
+    if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_COLON && _kind_set_16(p.peek_at(1))) {
         let colon = p.expect(TK_COLON, &SYNC_31);
         let lifetime_bounds = _parse_lifetime_bounds(p, follow);
     }
@@ -18257,7 +18257,7 @@ fn _parse_type_param__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
             let type_param_bounds = _parse_type_param_bounds(p, &EMPTY_FOLLOW);
         }
     }
-    if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_EQ) {
+    if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_EQ && _kind_set_18(p.peek_at(1))) {
         let eq = p.expect(TK_EQ, &SYNC_33);
         let type_ = _parse_type_(p, follow);
     }
@@ -18854,11 +18854,11 @@ fn _parse_let_statement__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
     }
     let kw_let = p.expect(TK_KW_LET, &SYNC_60);
     let pattern_no_top_alt = _parse_pattern_no_top_alt(p, &EMPTY_FOLLOW);
-    if p.peek_kind() == TK_COLON {
+    if p.peek_kind() == TK_COLON && _kind_set_18(p.peek_at(1)) {
         let colon = p.expect(TK_COLON, &SYNC_33);
         let type_ = _parse_type_(p, follow);
     }
-    if p.peek_kind() == TK_EQ {
+    if p.peek_kind() == TK_EQ && _kind_set_31(p.peek_at(1)) {
         let eq = p.expect(TK_EQ, &SYNC_42);
         let expression = _parse_expression(p, follow);
     }
@@ -21465,7 +21465,7 @@ fn _parse_closure_param__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
         let outer_attribute = _parse_outer_attribute(p, &EMPTY_FOLLOW);
     }
     let pattern = _parse_pattern(p, follow);
-    if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_COLON) {
+    if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_COLON && _kind_set_18(p.peek_at(1))) {
         let colon = p.expect(TK_COLON, &SYNC_33);
         let type_ = _parse_type_(p, follow);
     }
@@ -21643,7 +21643,7 @@ fn _parse_if_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
     let kw_if = p.expect(TK_KW_IF, &SYNC_42);
     let expression = _parse_expression(p, &FOLLOW_MASK_19);
     let block_expression = _parse_block_expression(p, follow);
-    if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_KW_ELSE) {
+    if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_KW_ELSE && _kind_set_98(p.peek_at(1))) {
         let kw_else = p.expect(TK_KW_ELSE, &SYNC_88);
         let grp_kind = p.peek_kind();
         if grp_kind == TK_LCURLYBRACE {
@@ -21710,7 +21710,7 @@ fn _parse_if_let_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &E
     let eq = p.expect(TK_EQ, &SYNC_42);
     let expression = _parse_expression(p, &FOLLOW_MASK_19);
     let block_expression = _parse_block_expression(p, follow);
-    if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_KW_ELSE) {
+    if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_KW_ELSE && _kind_set_98(p.peek_at(1))) {
         let kw_else = p.expect(TK_KW_ELSE, &SYNC_88);
         let grp_kind = p.peek_kind();
         if grp_kind == TK_LCURLYBRACE {
@@ -22078,7 +22078,7 @@ fn _parse_pattern_no_top_alt__inner_scan_0(tokens: &Array<i32>, pos: i32, follow
 
 fn _parse_pattern_no_top_alt__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () with RustParserBase {
     let kind = p.peek_kind();
-    if _kind_set_98(kind) {
+    if _kind_set_99(kind) {
         if _kind_set_79(kind) {
             let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
@@ -22211,7 +22211,7 @@ fn _parse_pattern_without_range__inner(p: &mut Parser, follow: &List<List<i32>> 
         let literal_pattern = _parse_literal_pattern(p, follow);
         return;
     }
-    if _kind_set_99(kind) {
+    if _kind_set_100(kind) {
         if _kind_set_80(kind) {
             return _parse_pattern_without_range__inner_alt_1(p, follow);
         } else if _kind_set_4(kind) {
@@ -22450,7 +22450,7 @@ fn _parse_literal_pattern__inner(p: &mut Parser, follow: &List<List<i32>> = &EMP
         let raw_byte_string_literal = p.expect(TK_RAW_BYTE_STRING_LITERAL, &EMPTY_SYNC);
         return;
     }
-    if _kind_set_100(kind) {
+    if _kind_set_101(kind) {
         if kind == TK_MINUS {
             if p.peek_at(1) == TK_INTEGER_LITERAL {
                 return _parse_literal_pattern__inner_alt_8(p, follow);
@@ -22511,7 +22511,7 @@ fn _parse_identifier_pattern__inner(p: &mut Parser, follow: &List<List<i32>> = &
         let kw_mut = p.expect(TK_KW_MUT, &EMPTY_SYNC);
     }
     let identifier = _parse_identifier(p, follow);
-    if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_AT) {
+    if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_AT && _kind_set_42(p.peek_at(1))) {
         let at = p.expect(TK_AT, &SYNC_87);
         let pattern = _parse_pattern(p, follow);
     }
@@ -22712,7 +22712,7 @@ fn _parse_range_pattern_bound__inner(p: &mut Parser, follow: &List<List<i32>> = 
         let byte_literal = p.expect(TK_BYTE_LITERAL, &EMPTY_SYNC);
         return;
     }
-    if _kind_set_100(kind) {
+    if _kind_set_101(kind) {
         if kind == TK_MINUS {
             if p.peek_at(1) == TK_INTEGER_LITERAL {
                 return _parse_range_pattern_bound__inner_alt_2(p, follow);
@@ -23661,7 +23661,7 @@ fn _parse_type_no_bounds__inner_scan_9(tokens: &Array<i32>, pos: i32, follow: &L
 
 fn _parse_type_no_bounds__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () with RustParserBase {
     let kind = p.peek_kind();
-    if _kind_set_101(kind) {
+    if _kind_set_102(kind) {
         if kind == TK_LPAREN {
             let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
@@ -24756,7 +24756,7 @@ fn _parse_path_in_expression(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
 
 fn _parse_path_expr_segment__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () with RustParserBase {
     let path_ident_segment = _parse_path_ident_segment(p, follow);
-    if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_PATHSEP) {
+    if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_PATHSEP && p.peek_at(1) == TK_LT) {
         let pathsep = p.expect(TK_PATHSEP, &SYNC_54);
         let generic_args = _parse_generic_args(p, follow);
     }
@@ -24822,11 +24822,11 @@ fn _parse_path_ident_segment(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
 fn _parse_generic_args__inner_alt_1(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () with RustParserBase {
     let lt = p.expect(TK_LT, &SYNC_31);
     let generic_args_lifetimes = _parse_generic_args_lifetimes(p, &EMPTY_FOLLOW);
-    if p.peek_kind() == TK_COMMA {
+    if p.peek_kind() == TK_COMMA && _kind_set_18(p.peek_at(1)) {
         let comma = p.expect(TK_COMMA, &SYNC_33);
         let generic_args_types = _parse_generic_args_types(p, follow);
     }
-    if p.peek_kind() == TK_COMMA {
+    if p.peek_kind() == TK_COMMA && _kind_set_4(p.peek_at(1)) {
         let comma = p.expect(TK_COMMA, &SYNC_12);
         let generic_args_bindings = _parse_generic_args_bindings(p, follow);
     }
@@ -24882,7 +24882,7 @@ fn _parse_generic_args__inner_scan_1(tokens: &Array<i32>, pos: i32, follow: &Lis
 fn _parse_generic_args__inner_alt_2(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () with RustParserBase {
     let lt = p.expect(TK_LT, &SYNC_33);
     let generic_args_types = _parse_generic_args_types(p, &EMPTY_FOLLOW);
-    if p.peek_kind() == TK_COMMA {
+    if p.peek_kind() == TK_COMMA && _kind_set_4(p.peek_at(1)) {
         let comma = p.expect(TK_COMMA, &SYNC_12);
         let generic_args_bindings = _parse_generic_args_bindings(p, follow);
     }
@@ -25417,7 +25417,7 @@ fn _parse_qualified_path_in_expression(p: &mut Parser, follow: &List<List<i32>> 
 fn _parse_qualified_path_type__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () with RustParserBase {
     let lt = p.expect(TK_LT, &SYNC_33);
     let type_ = _parse_type_(p, &EMPTY_FOLLOW);
-    if p.peek_kind() == TK_KW_AS {
+    if p.peek_kind() == TK_KW_AS && _kind_set_32(p.peek_at(1)) {
         let kw_as = p.expect(TK_KW_AS, &SYNC_74);
         let type_path = _parse_type_path(p, follow);
     }
@@ -25579,7 +25579,7 @@ fn _parse_type_path_fn__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
         let type_path_inputs = _parse_type_path_inputs(p, &EMPTY_FOLLOW);
     }
     let rparen = p.expect(TK_RPAREN, &SYNC_103);
-    if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_RARROW) {
+    if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_RARROW && _kind_set_18(p.peek_at(1))) {
         let rarrow = p.expect(TK_RARROW, &SYNC_33);
         let type_ = _parse_type_(p, follow);
     }
@@ -25642,7 +25642,7 @@ fn _parse_type_path_inputs(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOL
 
 fn _parse_visibility__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () with RustParserBase {
     let kw_pub = p.expect(TK_KW_PUB, &SYNC_6);
-    if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_LPAREN) {
+    if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_LPAREN && _kind_set_103(p.peek_at(1))) {
         let lparen = p.expect(TK_LPAREN, &SYNC_113);
         let grp_kind = p.peek_kind();
         if grp_kind == TK_KW_CRATE {
@@ -27124,19 +27124,27 @@ fn _kind_set_97(k: i32) -> bool {
 }
 
 fn _kind_set_98(k: i32) -> bool {
-    return k matches { TK_AND | TK_ANDAND | TK_BYTE_LITERAL | TK_BYTE_STRING_LITERAL | TK_CHAR_LITERAL | TK_DOTDOT | TK_FLOAT_LITERAL | TK_INTEGER_LITERAL | TK_KW_CRATE | TK_KW_DOLLARCRATE | TK_KW_FALSE | TK_KW_MACRORULES | TK_KW_MUT | TK_KW_REF | TK_KW_SELFTYPE | TK_KW_SELFVALUE | TK_KW_SUPER | TK_KW_TRUE | TK_LPAREN | TK_LSQUAREBRACKET | TK_LT | TK_MINUS | TK_NON_KEYWORD_IDENTIFIER | TK_PATHSEP | TK_RAW_BYTE_STRING_LITERAL | TK_RAW_IDENTIFIER | TK_RAW_STRING_LITERAL | TK_STRING_LITERAL | TK_UNDERSCORE };
+    return k matches { TK_KW_IF | TK_LCURLYBRACE };
 }
 
 fn _kind_set_99(k: i32) -> bool {
-    return k matches { TK_KW_CRATE | TK_KW_DOLLARCRATE | TK_KW_MACRORULES | TK_KW_MUT | TK_KW_REF | TK_KW_SELFTYPE | TK_KW_SELFVALUE | TK_KW_SUPER | TK_LT | TK_NON_KEYWORD_IDENTIFIER | TK_PATHSEP | TK_RAW_IDENTIFIER };
+    return k matches { TK_AND | TK_ANDAND | TK_BYTE_LITERAL | TK_BYTE_STRING_LITERAL | TK_CHAR_LITERAL | TK_DOTDOT | TK_FLOAT_LITERAL | TK_INTEGER_LITERAL | TK_KW_CRATE | TK_KW_DOLLARCRATE | TK_KW_FALSE | TK_KW_MACRORULES | TK_KW_MUT | TK_KW_REF | TK_KW_SELFTYPE | TK_KW_SELFVALUE | TK_KW_SUPER | TK_KW_TRUE | TK_LPAREN | TK_LSQUAREBRACKET | TK_LT | TK_MINUS | TK_NON_KEYWORD_IDENTIFIER | TK_PATHSEP | TK_RAW_BYTE_STRING_LITERAL | TK_RAW_IDENTIFIER | TK_RAW_STRING_LITERAL | TK_STRING_LITERAL | TK_UNDERSCORE };
 }
 
 fn _kind_set_100(k: i32) -> bool {
-    return k matches { TK_FLOAT_LITERAL | TK_INTEGER_LITERAL | TK_MINUS };
+    return k matches { TK_KW_CRATE | TK_KW_DOLLARCRATE | TK_KW_MACRORULES | TK_KW_MUT | TK_KW_REF | TK_KW_SELFTYPE | TK_KW_SELFVALUE | TK_KW_SUPER | TK_LT | TK_NON_KEYWORD_IDENTIFIER | TK_PATHSEP | TK_RAW_IDENTIFIER };
 }
 
 fn _kind_set_101(k: i32) -> bool {
+    return k matches { TK_FLOAT_LITERAL | TK_INTEGER_LITERAL | TK_MINUS };
+}
+
+fn _kind_set_102(k: i32) -> bool {
     return k matches { TK_KW_CRATE | TK_KW_DOLLARCRATE | TK_KW_DYN | TK_KW_EXTERN | TK_KW_FN | TK_KW_FOR | TK_KW_MACRORULES | TK_KW_SELFTYPE | TK_KW_SELFVALUE | TK_KW_SUPER | TK_KW_UNSAFE | TK_LPAREN | TK_NON_KEYWORD_IDENTIFIER | TK_PATHSEP | TK_QUESTION | TK_RAW_IDENTIFIER };
+}
+
+fn _kind_set_103(k: i32) -> bool {
+    return k matches { TK_KW_CRATE | TK_KW_IN | TK_KW_SELFVALUE | TK_KW_SUPER };
 }
 
 global EMPTY_SYNC: List<i32> = [];

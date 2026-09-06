@@ -1773,7 +1773,7 @@ fn _parse_if_statement__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
     let lit_if = p.expect(TK_LIT_IF, &SYNC_1);
     let lit_y = p.expect(TK_LIT_Y, &SYNC_0);
     let statement = _parse_statement(p, follow);
-    if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_LIT_ELSE) {
+    if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_LIT_ELSE && _kind_set_0(p.peek_at(1))) {
         let lit_else = p.expect(TK_LIT_ELSE, &SYNC_0);
         let statement = _parse_statement(p, follow);
     }

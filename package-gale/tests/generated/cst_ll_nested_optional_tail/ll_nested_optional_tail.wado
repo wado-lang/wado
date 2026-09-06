@@ -1750,10 +1750,10 @@ fn _parse_prog(p: &mut Parser) -> () {
 fn _parse_stmt__inner(p: &mut Parser) -> () {
     p.expect(TK_LIT_LET, &SYNC_0);
     p.expect(TK_ID, &SYNC_1);
-    if p.peek_kind() == TK_LIT_EQ {
+    if p.peek_kind() == TK_LIT_EQ && _kind_set_0(p.peek_at(1)) {
         p.expect(TK_LIT_EQ, &SYNC_2);
         _parse_expr(p);
-        if p.peek_kind() == TK_LIT_ELSE {
+        if p.peek_kind() == TK_LIT_ELSE && p.peek_at(1) == TK_LIT_LBRACE {
             p.expect(TK_LIT_ELSE, &SYNC_3);
             _parse_block(p);
         }

@@ -14475,7 +14475,7 @@ fn _parse_type_member__inner_scan_0(tokens: &Array<i32>, pos: i32, follow: &List
 
 fn _parse_type_member__inner_alt_4(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () with TypeScriptParserBase {
     let method_signature = _parse_method_signature(p, follow);
-    if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_ARROW) {
+    if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_ARROW && _kind_set_1(p.peek_at(1))) {
         let arrow = p.expect(TK_ARROW, &SYNC_4);
         let type_ = _parse_type_(p, follow);
     }
@@ -14889,7 +14889,7 @@ fn _parse_property_signatur__inner(p: &mut Parser, follow: &List<List<i32>> = &E
     if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_Colon) {
         let type_annotation = _parse_type_annotation(p, &EMPTY_FOLLOW);
     }
-    if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_ARROW) {
+    if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_ARROW && _kind_set_1(p.peek_at(1))) {
         let arrow = p.expect(TK_ARROW, &SYNC_4);
         let type_ = _parse_type_(p, follow);
     }
@@ -14982,7 +14982,7 @@ fn _parse_parameter_list__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPT
             let comma = p.expect(TK_Comma, &SYNC_19);
             let parameter = _parse_parameter(p, follow);
         }
-        if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_Comma) {
+        if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_Comma && p.peek_at(1) == TK_Ellipsis) {
             let comma = p.expect(TK_Comma, &SYNC_20);
             let rest_parameter = _parse_rest_parameter(p, follow);
         }
@@ -15626,7 +15626,7 @@ fn _parse_enum_member_list(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOL
 
 fn _parse_enum_member__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () with TypeScriptParserBase {
     let property_name = _parse_property_name(p, follow);
-    if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_Assign) {
+    if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_Assign && _kind_set_27(p.peek_at(1))) {
         let assign = p.expect(TK_Assign, &SYNC_0);
         let single_expression = _parse_single_expression(p, follow);
     }
@@ -17509,7 +17509,7 @@ fn _parse_import_module_items(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
 
 fn _parse_import_alias_name__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () with TypeScriptParserBase {
     let module_export_name = _parse_module_export_name(p, follow);
-    if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_As) {
+    if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_As && _kind_set_48(p.peek_at(1))) {
         let as_ = p.expect(TK_As, &SYNC_39);
         let imported_binding = _parse_imported_binding(p, follow);
     }
@@ -17607,7 +17607,7 @@ fn _parse_import_namespace__inner(p: &mut Parser, follow: &List<List<i32>> = &EM
     } else {
         p.no_viable("no viable alternative", p.peek_span(), &SYNC_41);
     }
-    if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_As) {
+    if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_As && _kind_set_8(p.peek_at(1))) {
         let as_ = p.expect(TK_As, &SYNC_17);
         let identifier_name = _parse_identifier_name(p, follow);
     }
@@ -17644,7 +17644,7 @@ fn _parse_import_from(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) 
 
 fn _parse_alias_name__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () with TypeScriptParserBase {
     let identifier_name = _parse_identifier_name(p, follow);
-    if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_As) {
+    if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_As && _kind_set_8(p.peek_at(1))) {
         let as_ = p.expect(TK_As, &SYNC_17);
         let identifier_name = _parse_identifier_name(p, follow);
     }
@@ -17913,7 +17913,7 @@ fn _parse_export_module_items(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
 
 fn _parse_export_alias_name__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () with TypeScriptParserBase {
     let module_export_name = _parse_module_export_name(p, follow);
-    if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_As) {
+    if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_As && _kind_set_23(p.peek_at(1))) {
         let as_ = p.expect(TK_As, &SYNC_40);
         let module_export_name = _parse_module_export_name(p, follow);
     }
@@ -18285,7 +18285,7 @@ fn _parse_if_statement__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_
     let expression_sequence = _parse_expression_sequence(p, &FOLLOW_MASK_1);
     let closeparen = p.expect(TK_CloseParen, &SYNC_33);
     let statement = _parse_statement(p, follow);
-    if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_Else) {
+    if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_Else && _kind_set_17(p.peek_at(1))) {
         let else_ = p.expect(TK_Else, &SYNC_33);
         let statement = _parse_statement(p, follow);
     }
@@ -18370,7 +18370,7 @@ fn _parse_iteration_statement__inner_alt_7(p: &mut Parser, follow: &List<List<i3
         }
     }
     let expression_sequence = _parse_expression_sequence(p, &EMPTY_FOLLOW);
-    if p.peek_kind() == TK_As {
+    if p.peek_kind() == TK_As && _kind_set_1(p.peek_at(1)) {
         let as_ = p.expect(TK_As, &SYNC_4);
         let type_ = _parse_type_(p, follow);
     }
@@ -18485,7 +18485,7 @@ fn _parse_iteration_statement__inner_alt_6(p: &mut Parser, follow: &List<List<i3
         }
     }
     let expression_sequence = _parse_expression_sequence(p, &EMPTY_FOLLOW);
-    if p.peek_kind() == TK_As {
+    if p.peek_kind() == TK_As && _kind_set_1(p.peek_at(1)) {
         let as_ = p.expect(TK_As, &SYNC_4);
         let type_ = _parse_type_(p, follow);
     }
@@ -19072,7 +19072,7 @@ fn _parse_try_statement(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW
 
 fn _parse_catch_production__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () with TypeScriptParserBase {
     let catch = p.expect(TK_Catch, &SYNC_60);
-    if p.peek_kind() == TK_OpenParen {
+    if p.peek_kind() == TK_OpenParen && _kind_set_19(p.peek_at(1)) {
         let openparen = p.expect(TK_OpenParen, &SYNC_9);
         let identifier = _parse_identifier(p, &EMPTY_FOLLOW);
         if p.peek_kind() == TK_Colon {
@@ -20060,7 +20060,7 @@ fn _parse_formal_parameter_list__inner_alt_0(p: &mut Parser, follow: &List<List<
         let comma = p.expect(TK_Comma, &SYNC_65);
         let formal_parameter_arg = _parse_formal_parameter_arg(p, follow);
     }
-    if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_Comma) {
+    if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_Comma && p.peek_at(1) == TK_Ellipsis) {
         let comma = p.expect(TK_Comma, &SYNC_20);
         let last_formal_parameter_arg = _parse_last_formal_parameter_arg(p, follow);
     }
@@ -20111,7 +20111,7 @@ fn _parse_formal_parameter_list__inner_scan_0(tokens: &Array<i32>, pos: i32, fol
 
 fn _parse_formal_parameter_list__inner_alt_3(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () with TypeScriptParserBase {
     let object_literal = _parse_object_literal(p, follow);
-    if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_Colon) {
+    if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_Colon && _kind_set_14(p.peek_at(1))) {
         let colon = p.expect(TK_Colon, &SYNC_66);
         let formal_parameter_list = _parse_formal_parameter_list(p, follow);
     }
@@ -20256,7 +20256,7 @@ fn _parse_formal_parameter_arg__inner(p: &mut Parser, follow: &List<List<i32>> =
     if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_Colon) {
         let type_annotation = _parse_type_annotation(p, &EMPTY_FOLLOW);
     }
-    if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_Assign) {
+    if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_Assign && _kind_set_27(p.peek_at(1))) {
         let assign = p.expect(TK_Assign, &SYNC_0);
         let single_expression = _parse_single_expression(p, follow);
     }

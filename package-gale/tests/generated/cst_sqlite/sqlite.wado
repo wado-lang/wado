@@ -9843,7 +9843,7 @@ fn _parse_compound_select_stmt__inner(p: &mut Parser, follow: &List<List<i32>> =
         }
         _parse_select_core(p, follow);
     }
-    if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_K_ORDER && p.peek_at(1) == TK_K_BY) {
+    if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_K_ORDER && p.peek_at(1) == TK_K_BY && _kind_set_8(p.peek_at(2))) {
         p.expect(TK_K_ORDER, &SYNC_13);
         p.expect(TK_K_BY, &SYNC_7);
         _parse_ordering_term(p, follow);
@@ -9872,7 +9872,7 @@ fn _parse_compound_select_stmt__inner(p: &mut Parser, follow: &List<List<i32>> =
             _parse_ordering_term(p, follow);
         }
     }
-    if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_K_LIMIT) {
+    if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_K_LIMIT && _kind_set_8(p.peek_at(1))) {
         p.expect(TK_K_LIMIT, &SYNC_7);
         _parse_expr(p, follow);
         let mut opt_scan_pos: i32 = -1;
@@ -9979,7 +9979,7 @@ fn _parse_create_index_stmt__inner(p: &mut Parser, follow: &List<List<i32>> = &E
         _parse_indexed_column(p, follow);
     }
     p.expect(TK_CLOSE_PAR, &SYNC_18);
-    if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_K_WHERE) {
+    if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_K_WHERE && _kind_set_8(p.peek_at(1))) {
         p.expect(TK_K_WHERE, &SYNC_7);
         _parse_expr(p, follow);
     }
@@ -10155,7 +10155,7 @@ fn _parse_create_trigger_stmt__inner(p: &mut Parser, follow: &List<List<i32>> = 
         p.expect(TK_K_INSERT, &EMPTY_SYNC);
     } else if grp_kind == TK_K_UPDATE {
         p.expect(TK_K_UPDATE, &SYNC_27);
-        if p.peek_kind() == TK_K_OF {
+        if p.peek_kind() == TK_K_OF && _kind_set_4(p.peek_at(1)) {
             p.expect(TK_K_OF, &SYNC_4);
             _parse_column_name(p, follow);
             loop {
@@ -10206,7 +10206,7 @@ fn _parse_create_trigger_stmt__inner(p: &mut Parser, follow: &List<List<i32>> = 
         p.expect(TK_K_EACH, &SYNC_30);
         p.expect(TK_K_ROW, &EMPTY_SYNC);
     }
-    if p.peek_kind() == TK_K_WHEN {
+    if p.peek_kind() == TK_K_WHEN && _kind_set_8(p.peek_at(1)) {
         p.expect(TK_K_WHEN, &SYNC_7);
         _parse_expr(p, follow);
     }
@@ -10427,7 +10427,7 @@ fn _parse_create_virtual_table_stmt__inner(p: &mut Parser, follow: &List<List<i3
     _parse_table_name(p, &FOLLOW_MASK_7);
     p.expect(TK_K_USING, &SYNC_4);
     _parse_module_name(p, follow);
-    if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_OPEN_PAR) {
+    if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_OPEN_PAR && _kind_set_8(p.peek_at(1))) {
         p.expect(TK_OPEN_PAR, &SYNC_7);
         _parse_module_argument(p, &EMPTY_FOLLOW);
         loop {
@@ -10476,7 +10476,7 @@ fn _parse_delete_stmt__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
     p.expect(TK_K_DELETE, &SYNC_34);
     p.expect(TK_K_FROM, &SYNC_4);
     _parse_qualified_table_name(p, follow);
-    if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_K_WHERE) {
+    if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_K_WHERE && _kind_set_8(p.peek_at(1))) {
         p.expect(TK_K_WHERE, &SYNC_7);
         _parse_expr(p, follow);
     }
@@ -10501,7 +10501,7 @@ fn _parse_delete_stmt_limited__inner(p: &mut Parser, follow: &List<List<i32>> = 
     p.expect(TK_K_DELETE, &SYNC_34);
     p.expect(TK_K_FROM, &SYNC_4);
     _parse_qualified_table_name(p, follow);
-    if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_K_WHERE) {
+    if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_K_WHERE && _kind_set_8(p.peek_at(1))) {
         p.expect(TK_K_WHERE, &SYNC_7);
         _parse_expr(p, follow);
     }
@@ -10582,7 +10582,7 @@ fn _parse_delete_stmt_limited__inner(p: &mut Parser, follow: &List<List<i32>> = 
         opt_scan_pos = pos;
     }
     if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (opt_scan_pos >= 0) {
-        if p.peek_kind() == TK_K_ORDER && p.peek_at(1) == TK_K_BY {
+        if p.peek_kind() == TK_K_ORDER && p.peek_at(1) == TK_K_BY && _kind_set_8(p.peek_at(2)) {
             p.expect(TK_K_ORDER, &SYNC_13);
             p.expect(TK_K_BY, &SYNC_7);
             _parse_ordering_term(p, follow);
@@ -10855,7 +10855,7 @@ fn _parse_factored_select_stmt__inner(p: &mut Parser, follow: &List<List<i32>> =
         _parse_compound_operator(p, &FOLLOW_MASK_8);
         _parse_select_core(p, follow);
     }
-    if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_K_ORDER && p.peek_at(1) == TK_K_BY) {
+    if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_K_ORDER && p.peek_at(1) == TK_K_BY && _kind_set_8(p.peek_at(2))) {
         p.expect(TK_K_ORDER, &SYNC_13);
         p.expect(TK_K_BY, &SYNC_7);
         _parse_ordering_term(p, follow);
@@ -10884,7 +10884,7 @@ fn _parse_factored_select_stmt__inner(p: &mut Parser, follow: &List<List<i32>> =
             _parse_ordering_term(p, follow);
         }
     }
-    if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_K_LIMIT) {
+    if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_K_LIMIT && _kind_set_8(p.peek_at(1))) {
         p.expect(TK_K_LIMIT, &SYNC_7);
         _parse_expr(p, follow);
         let mut opt_scan_pos: i32 = -1;
@@ -11098,7 +11098,7 @@ fn _parse_insert_stmt__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
         p.expect(TK_DOT, &EMPTY_SYNC);
     }
     _parse_table_name(p, &EMPTY_FOLLOW);
-    if p.peek_kind() == TK_OPEN_PAR {
+    if p.peek_kind() == TK_OPEN_PAR && _kind_set_4(p.peek_at(1)) {
         p.expect(TK_OPEN_PAR, &SYNC_4);
         _parse_column_name(p, &EMPTY_FOLLOW);
         loop {
@@ -11622,7 +11622,7 @@ fn _parse_simple_select_stmt__inner(p: &mut Parser, follow: &List<List<i32>> = &
         _parse_with_clause(p, &EMPTY_FOLLOW);
     }
     _parse_select_core(p, follow);
-    if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_K_ORDER && p.peek_at(1) == TK_K_BY) {
+    if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_K_ORDER && p.peek_at(1) == TK_K_BY && _kind_set_8(p.peek_at(2))) {
         p.expect(TK_K_ORDER, &SYNC_13);
         p.expect(TK_K_BY, &SYNC_7);
         _parse_ordering_term(p, follow);
@@ -11651,7 +11651,7 @@ fn _parse_simple_select_stmt__inner(p: &mut Parser, follow: &List<List<i32>> = &
             _parse_ordering_term(p, follow);
         }
     }
-    if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_K_LIMIT) {
+    if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_K_LIMIT && _kind_set_8(p.peek_at(1))) {
         p.expect(TK_K_LIMIT, &SYNC_7);
         _parse_expr(p, follow);
         let mut opt_scan_pos: i32 = -1;
@@ -11733,7 +11733,7 @@ fn _parse_select_stmt__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
         _parse_compound_operator(p, &FOLLOW_MASK_8);
         _parse_select_or_values(p, follow);
     }
-    if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_K_ORDER && p.peek_at(1) == TK_K_BY) {
+    if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_K_ORDER && p.peek_at(1) == TK_K_BY && _kind_set_8(p.peek_at(2))) {
         p.expect(TK_K_ORDER, &SYNC_13);
         p.expect(TK_K_BY, &SYNC_7);
         _parse_ordering_term(p, follow);
@@ -11762,7 +11762,7 @@ fn _parse_select_stmt__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
             _parse_ordering_term(p, follow);
         }
     }
-    if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_K_LIMIT) {
+    if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_K_LIMIT && _kind_set_8(p.peek_at(1))) {
         p.expect(TK_K_LIMIT, &SYNC_7);
         _parse_expr(p, follow);
         let mut opt_scan_pos: i32 = -1;
@@ -11847,7 +11847,7 @@ fn _parse_select_or_values__inner(p: &mut Parser, follow: &List<List<i32>> = &EM
             p.expect(TK_COMMA, &SYNC_51);
             _parse_result_column(p, follow);
         }
-        if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_K_FROM) {
+        if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_K_FROM && _kind_set_4(p.peek_at(1))) {
             p.expect(TK_K_FROM, &SYNC_4);
             let grp_kind = p.peek_kind();
             if _kind_set_4(grp_kind) {
@@ -11930,11 +11930,11 @@ fn _parse_select_or_values__inner(p: &mut Parser, follow: &List<List<i32>> = &EM
                 p.no_viable("no viable alternative", p.peek_span(), &SYNC_4);
             }
         }
-        if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_K_WHERE) {
+        if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_K_WHERE && _kind_set_8(p.peek_at(1))) {
             p.expect(TK_K_WHERE, &SYNC_7);
             _parse_expr(p, follow);
         }
-        if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_K_GROUP && p.peek_at(1) == TK_K_BY) {
+        if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_K_GROUP && p.peek_at(1) == TK_K_BY && _kind_set_8(p.peek_at(2))) {
             p.expect(TK_K_GROUP, &SYNC_13);
             p.expect(TK_K_BY, &SYNC_7);
             _parse_expr(p, follow);
@@ -11962,7 +11962,7 @@ fn _parse_select_or_values__inner(p: &mut Parser, follow: &List<List<i32>> = &EM
                 p.expect(TK_COMMA, &SYNC_7);
                 _parse_expr(p, follow);
             }
-            if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_K_HAVING) {
+            if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_K_HAVING && _kind_set_8(p.peek_at(1))) {
                 p.expect(TK_K_HAVING, &SYNC_7);
                 _parse_expr(p, follow);
             }
@@ -12233,7 +12233,7 @@ fn _parse_update_stmt__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
         p.expect(TK_ASSIGN, &SYNC_7);
         _parse_expr(p, follow);
     }
-    if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_K_WHERE) {
+    if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_K_WHERE && _kind_set_8(p.peek_at(1))) {
         p.expect(TK_K_WHERE, &SYNC_7);
         _parse_expr(p, follow);
     }
@@ -12398,7 +12398,7 @@ fn _parse_update_stmt_limited__inner(p: &mut Parser, follow: &List<List<i32>> = 
         p.expect(TK_ASSIGN, &SYNC_7);
         _parse_expr(p, follow);
     }
-    if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_K_WHERE) {
+    if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_K_WHERE && _kind_set_8(p.peek_at(1))) {
         p.expect(TK_K_WHERE, &SYNC_7);
         _parse_expr(p, follow);
     }
@@ -12479,7 +12479,7 @@ fn _parse_update_stmt_limited__inner(p: &mut Parser, follow: &List<List<i32>> = 
         opt_scan_pos = pos;
     }
     if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (opt_scan_pos >= 0) {
-        if p.peek_kind() == TK_K_ORDER && p.peek_at(1) == TK_K_BY {
+        if p.peek_kind() == TK_K_ORDER && p.peek_at(1) == TK_K_BY && _kind_set_8(p.peek_at(2)) {
             p.expect(TK_K_ORDER, &SYNC_13);
             p.expect(TK_K_BY, &SYNC_7);
             _parse_ordering_term(p, follow);
@@ -12771,7 +12771,7 @@ fn _parse_type_name(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) ->
 }
 
 fn _parse_column_constraint__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    if p.peek_kind() == TK_K_CONSTRAINT {
+    if p.peek_kind() == TK_K_CONSTRAINT && _kind_set_4(p.peek_at(1)) {
         p.expect(TK_K_CONSTRAINT, &SYNC_4);
         _parse_name(p, follow);
     }
@@ -12870,7 +12870,7 @@ fn _parse_column_constraint(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FO
 }
 
 fn _parse_conflict_clause__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_K_ON && p.peek_at(1) == TK_K_CONFLICT) {
+    if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_K_ON && p.peek_at(1) == TK_K_CONFLICT && _kind_set_57(p.peek_at(2))) {
         p.expect(TK_K_ON, &SYNC_61);
         p.expect(TK_K_CONFLICT, &SYNC_62);
         p.expect_set(&SYNC_62);
@@ -12954,7 +12954,7 @@ fn _parse_expr__inner_alt_22(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
         p.expect(TK_K_THEN, &SYNC_7);
         _parse_expr(p, follow);
     }
-    if p.peek_kind() == TK_K_ELSE {
+    if p.peek_kind() == TK_K_ELSE && _kind_set_8(p.peek_at(1)) {
         p.expect(TK_K_ELSE, &SYNC_7);
         _parse_expr(p, follow);
     }
@@ -13353,7 +13353,7 @@ fn _parse_expr__inner_scan_2(tokens: &Array<i32>, pos: i32, follow: &List<List<i
 
 fn _parse_expr__inner_atom(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_prec: i32 = 0) -> () {
     let kind = p.peek_kind();
-    if _kind_set_57(kind) {
+    if _kind_set_58(kind) {
         if kind == TK_OPEN_PAR {
             let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
@@ -13874,7 +13874,7 @@ fn _parse_expr__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, 
                     }
                     let _ = p.expect_set(&SYNC_69);
                     _parse_expr(p, follow, 0);
-                    if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_K_ESCAPE) {
+                    if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_K_ESCAPE && _kind_set_8(p.peek_at(1))) {
                         p.expect(TK_K_ESCAPE, &EMPTY_SYNC);
                         _parse_expr(p, follow, 5);
                     }
@@ -13893,7 +13893,7 @@ fn _parse_expr__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, 
                     }
                     let _ = p.expect_set(&SYNC_69);
                     _parse_expr(p, follow, 0);
-                    if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_K_ESCAPE) {
+                    if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_K_ESCAPE && _kind_set_8(p.peek_at(1))) {
                         p.expect(TK_K_ESCAPE, &EMPTY_SYNC);
                         _parse_expr(p, follow, 5);
                     }
@@ -13912,7 +13912,7 @@ fn _parse_expr__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, 
                     }
                     let _ = p.expect_set(&SYNC_69);
                     _parse_expr(p, follow, 0);
-                    if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_K_ESCAPE) {
+                    if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_K_ESCAPE && _kind_set_8(p.peek_at(1))) {
                         p.expect(TK_K_ESCAPE, &EMPTY_SYNC);
                         _parse_expr(p, follow, 5);
                     }
@@ -13931,7 +13931,7 @@ fn _parse_expr__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, 
                     }
                     let _ = p.expect_set(&SYNC_69);
                     _parse_expr(p, follow, 0);
-                    if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_K_ESCAPE) {
+                    if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_K_ESCAPE && _kind_set_8(p.peek_at(1))) {
                         p.expect(TK_K_ESCAPE, &EMPTY_SYNC);
                         _parse_expr(p, follow, 5);
                     }
@@ -14195,7 +14195,7 @@ fn _parse_expr__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, 
                         }
                         let _ = p.expect_set(&SYNC_69);
                         _parse_expr(p, follow, 0);
-                        if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_K_ESCAPE) {
+                        if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_K_ESCAPE && _kind_set_8(p.peek_at(1))) {
                             p.expect(TK_K_ESCAPE, &EMPTY_SYNC);
                             _parse_expr(p, follow, 5);
                         }
@@ -14312,7 +14312,7 @@ fn _parse_expr(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW, min_pre
 fn _parse_foreign_key_clause__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     p.expect(TK_K_REFERENCES, &SYNC_4);
     _parse_foreign_table(p, follow);
-    if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_OPEN_PAR) {
+    if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_OPEN_PAR && _kind_set_4(p.peek_at(1))) {
         p.expect(TK_OPEN_PAR, &SYNC_4);
         _parse_column_name(p, &EMPTY_FOLLOW);
         loop {
@@ -14758,7 +14758,7 @@ fn _parse_raise_function(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLO
 
 fn _parse_indexed_column__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     _parse_column_name(p, follow);
-    if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_K_COLLATE) {
+    if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_K_COLLATE && _kind_set_4(p.peek_at(1))) {
         p.expect(TK_K_COLLATE, &SYNC_4);
         _parse_collation_name(p, follow);
     }
@@ -14780,7 +14780,7 @@ fn _parse_indexed_column(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLO
 }
 
 fn _parse_table_constraint__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
-    if p.peek_kind() == TK_K_CONSTRAINT {
+    if p.peek_kind() == TK_K_CONSTRAINT && _kind_set_4(p.peek_at(1)) {
         p.expect(TK_K_CONSTRAINT, &SYNC_4);
         _parse_name(p, follow);
     }
@@ -14990,7 +14990,7 @@ fn _parse_qualified_table_name(p: &mut Parser, follow: &List<List<i32>> = &EMPTY
 
 fn _parse_ordering_term__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     _parse_expr(p, follow);
-    if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_K_COLLATE) {
+    if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_K_COLLATE && _kind_set_4(p.peek_at(1))) {
         p.expect(TK_K_COLLATE, &SYNC_4);
         _parse_collation_name(p, follow);
     }
@@ -15086,7 +15086,7 @@ fn _parse_pragma_value(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW)
 
 fn _parse_common_table_expression__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_FOLLOW) -> () {
     _parse_table_name(p, &EMPTY_FOLLOW);
-    if p.peek_kind() == TK_OPEN_PAR {
+    if p.peek_kind() == TK_OPEN_PAR && _kind_set_4(p.peek_at(1)) {
         p.expect(TK_OPEN_PAR, &SYNC_4);
         _parse_column_name(p, &EMPTY_FOLLOW);
         loop {
@@ -16050,7 +16050,7 @@ fn _parse_select_core__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
             p.expect(TK_COMMA, &SYNC_51);
             _parse_result_column(p, follow);
         }
-        if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_K_FROM) {
+        if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_K_FROM && _kind_set_4(p.peek_at(1))) {
             p.expect(TK_K_FROM, &SYNC_4);
             let grp_kind = p.peek_kind();
             if _kind_set_4(grp_kind) {
@@ -16133,11 +16133,11 @@ fn _parse_select_core__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
                 p.no_viable("no viable alternative", p.peek_span(), &SYNC_4);
             }
         }
-        if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_K_WHERE) {
+        if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_K_WHERE && _kind_set_8(p.peek_at(1))) {
             p.expect(TK_K_WHERE, &SYNC_7);
             _parse_expr(p, follow);
         }
-        if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_K_GROUP && p.peek_at(1) == TK_K_BY) {
+        if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_K_GROUP && p.peek_at(1) == TK_K_BY && _kind_set_8(p.peek_at(2))) {
             p.expect(TK_K_GROUP, &SYNC_13);
             p.expect(TK_K_BY, &SYNC_7);
             _parse_expr(p, follow);
@@ -16165,7 +16165,7 @@ fn _parse_select_core__inner(p: &mut Parser, follow: &List<List<i32>> = &EMPTY_F
                 p.expect(TK_COMMA, &SYNC_7);
                 _parse_expr(p, follow);
             }
-            if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_K_HAVING) {
+            if !(follow_yields(&p.kinds, p.pos, follow, TK_EOF)) && (p.peek_kind() == TK_K_HAVING && _kind_set_8(p.peek_at(1))) {
                 p.expect(TK_K_HAVING, &SYNC_7);
                 _parse_expr(p, follow);
             }
@@ -17521,6 +17521,10 @@ fn _kind_set_56(k: i32) -> bool {
 }
 
 fn _kind_set_57(k: i32) -> bool {
+    return k matches { TK_K_ABORT | TK_K_FAIL | TK_K_IGNORE | TK_K_REPLACE | TK_K_ROLLBACK };
+}
+
+fn _kind_set_58(k: i32) -> bool {
     return k matches { TK_BLOB_LITERAL | TK_IDENTIFIER | TK_K_ABORT | TK_K_ACTION | TK_K_ADD | TK_K_AFTER | TK_K_ALL | TK_K_ALTER | TK_K_ANALYZE | TK_K_AND | TK_K_AS | TK_K_ASC | TK_K_ATTACH | TK_K_AUTOINCREMENT | TK_K_BEFORE | TK_K_BEGIN | TK_K_BETWEEN | TK_K_BY | TK_K_CASCADE | TK_K_CASE | TK_K_CAST | TK_K_CHECK | TK_K_COLLATE | TK_K_COLUMN | TK_K_COMMIT | TK_K_CONFLICT | TK_K_CONSTRAINT | TK_K_CREATE | TK_K_CROSS | TK_K_CURRENT_DATE | TK_K_CURRENT_TIME | TK_K_CURRENT_TIMESTAMP | TK_K_DATABASE | TK_K_DEFAULT | TK_K_DEFERRABLE | TK_K_DEFERRED | TK_K_DELETE | TK_K_DESC | TK_K_DETACH | TK_K_DISTINCT | TK_K_DROP | TK_K_EACH | TK_K_ELSE | TK_K_END | TK_K_ESCAPE | TK_K_EXCEPT | TK_K_EXCLUSIVE | TK_K_EXISTS | TK_K_EXPLAIN | TK_K_FAIL | TK_K_FOR | TK_K_FOREIGN | TK_K_FROM | TK_K_FULL | TK_K_GLOB | TK_K_GROUP | TK_K_HAVING | TK_K_IF | TK_K_IGNORE | TK_K_IMMEDIATE | TK_K_IN | TK_K_INDEX | TK_K_INDEXED | TK_K_INITIALLY | TK_K_INNER | TK_K_INSERT | TK_K_INSTEAD | TK_K_INTERSECT | TK_K_INTO | TK_K_IS | TK_K_ISNULL | TK_K_JOIN | TK_K_KEY | TK_K_LEFT | TK_K_LIKE | TK_K_LIMIT | TK_K_MATCH | TK_K_NATURAL | TK_K_NO | TK_K_NOT | TK_K_NOTNULL | TK_K_NULL | TK_K_OF | TK_K_OFFSET | TK_K_ON | TK_K_OR | TK_K_ORDER | TK_K_OUTER | TK_K_PLAN | TK_K_PRAGMA | TK_K_PRIMARY | TK_K_QUERY | TK_K_RAISE | TK_K_RECURSIVE | TK_K_REFERENCES | TK_K_REGEXP | TK_K_REINDEX | TK_K_RELEASE | TK_K_RENAME | TK_K_REPLACE | TK_K_RESTRICT | TK_K_RIGHT | TK_K_ROLLBACK | TK_K_ROW | TK_K_SAVEPOINT | TK_K_SELECT | TK_K_SET | TK_K_TABLE | TK_K_TEMP | TK_K_TEMPORARY | TK_K_THEN | TK_K_TO | TK_K_TRANSACTION | TK_K_TRIGGER | TK_K_UNION | TK_K_UNIQUE | TK_K_UPDATE | TK_K_USING | TK_K_VACUUM | TK_K_VALUES | TK_K_VIEW | TK_K_VIRTUAL | TK_K_WHEN | TK_K_WHERE | TK_K_WITH | TK_K_WITHOUT | TK_MINUS | TK_NUMERIC_LITERAL | TK_OPEN_PAR | TK_PLUS | TK_STRING_LITERAL | TK_TILDE };
 }
 
