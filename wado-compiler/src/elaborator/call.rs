@@ -13,6 +13,7 @@ use super::callee::{CalleeRef, StaticMethodRef};
 use super::expr::BareCase;
 use super::infer::InferCtx;
 use super::instantiate::Instantiation;
+use super::method_call::PreselectedArg;
 use super::scope::{BinderInScope, Scope};
 use super::sem::types::{CalleeParams, StaticMethodDispatch};
 use super::sig::{MethodSig, Param};
@@ -624,26 +625,33 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             param_types = self.instantiate_types(&param_types, inst);
         }
 
-        // Literal preselect for a one-argument static call (WEP 2026-07-31
+        // Literal preselect on a static call's first argument (WEP 2026-07-31
         // phase 4): see `resolve_static_method_call` — same rule, for the
         // `Wrapper::from(42)` spelling that arrives as a plain call.
         if let Some(pos) = effective_name.find("::")
-            && call.args.len() == 1
+            && let Some(first_arg) = call.args.first()
         {
             let (recv_name, method_name) = (
                 effective_name[..pos].to_string(),
                 effective_name[pos + 2..].to_string(),
             );
-            if self.try_static_arg_preselect(
+            match self.preselect_static_arg(
                 &recv_name,
                 &method_name,
-                &call.args[0],
+                first_arg,
                 call.span,
                 ctx,
-                &mut param_types,
                 None,
             ) {
-                return TypeTable::ERROR;
+                PreselectedArg::Reported => return TypeTable::ERROR,
+                // The first parameter only: a callee may declare further
+                // parameters the defaults fill, and replacing the list left
+                // their arity unchecked and their defaults unpadded.
+                PreselectedArg::Type(source) => match param_types.first_mut() {
+                    Some(first) => *first = source,
+                    None => param_types.push(source),
+                },
+                PreselectedArg::Undecided => {}
             }
         }
 
@@ -801,8 +809,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // them. It covers trait impls only; an inherent static has no
                 // selection and reaches the index instead.
                 if let Some(suffix_seg) = ident.segments.get(1) {
-                    let arg_hint = (args.len() == 1)
-                        .then(|| self.tysys.type_table.borrow().type_name(args[0]));
+                    let arg_hint = args
+                        .first()
+                        .map(|&arg| self.tysys.type_table.borrow().type_name(arg));
                     let method_def = self
                         .locate_static_method_impl(prefix, suffix, arg_hint.as_deref(), None)
                         .and_then(|r| r.method_id)
@@ -961,8 +970,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // codegen, as an invalid module rather than at its own span.
                 let receiver_key = self.impl_target(prefix);
                 let receiver_type = self.resolve_unsited_type_name(prefix, call.span);
-                let resolved =
-                    self.static_callee_params(&receiver_key, receiver_type, suffix, prefix);
+                // The same argument the selection above read: without it this
+                // re-check resolves a different declaration than the call was
+                // mangled to.
+                let arg_hint = args
+                    .first()
+                    .map(|&arg| self.tysys.type_table.borrow().type_name(arg));
+                let resolved = self.static_callee_params(
+                    &receiver_key,
+                    receiver_type,
+                    suffix,
+                    prefix,
+                    arg_hint.as_deref(),
+                );
                 if let StaticLookup::Ambiguous(traits) = resolved {
                     let _ = self.emit(TypeError::AmbiguousTraitMethod {
                         method: suffix.to_string(),
@@ -1352,6 +1372,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         arg_type_hint.as_deref(),
                         ns_receiver_type,
                     );
+                    // Reported here rather than mangled: a spelling several
+                    // traits answer names none of them, and the trait-less name
+                    // below would reach WIR build as an unresolved call. The
+                    // bare spelling reports it at its own site; through a
+                    // namespace it used to fall through to that name.
+                    if let StaticLookup::Ambiguous(traits) = &resolved {
+                        let _ = self.emit(TypeError::AmbiguousTraitMethod {
+                            method: method_name.to_string(),
+                            traits: traits.clone(),
+                            span: call.span,
+                        });
+                        return TypeTable::ERROR;
+                    }
                     let method_ref = resolved
                         .found()
                         .map(|callee| callee.method_ref.clone())

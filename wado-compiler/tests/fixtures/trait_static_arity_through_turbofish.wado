@@ -1,0 +1,25 @@
+//! The literal preselect shapes the *first* argument; it does not say how many
+//! parameters the callee has. Installing its answer as the whole parameter list
+//! left a three-parameter static looking like a one-parameter one, so the arity
+//! went unchecked and the call reached codegen as an invalid core module.
+
+trait Triple<T> {
+    fn triple(a: T, b: i32, c: i32) -> i32;
+}
+
+struct Boxed<T> {
+    v: T,
+}
+
+impl Triple<i32> for Boxed<i32> {
+    fn triple(a: i32, b: i32, c: i32) -> i32 {
+        return a + b + c;
+    }
+}
+
+export fn run() {
+    assert Boxed::<i32>::triple(1) == 6;
+}
+
+__DATA__
+{"compile_error": "expected 3 arguments, found 1"}

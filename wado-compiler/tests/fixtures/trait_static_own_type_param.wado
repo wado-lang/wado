@@ -1,0 +1,22 @@
+//! A concrete impl whose static carries type parameters of its own. The
+//! selection declines a parameter the *block* fills — a blanket, whose
+//! unsubstituted spelling must not be mangled — and a method's own slot looks
+//! exactly like one once neither resolves. Only the block's written slots say
+//! which it is, so a block with none can never be a blanket.
+
+trait Codec {
+    fn build<T: Display>(v: T) -> String;
+}
+
+struct M {}
+
+impl Codec for M {
+    fn build<T: Display>(v: T) -> String {
+        return `${v}`;
+    }
+}
+
+test "a concrete impl's method-generic static is not a blanket" {
+    assert M::build(42) == "42";
+    assert M::build(true) == "true";
+}

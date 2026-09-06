@@ -1,0 +1,36 @@
+//! One trait implemented twice, with a second trait between the two blocks.
+//! The report deduped an unsorted list of names, so the trait whose blocks were
+//! not adjacent was named twice — an alternative list a reader cannot act on.
+//! Deduping by declaration rather than by rendered name settles it whatever the
+//! order.
+
+trait Alpha<T> {
+    fn make() -> i32 {
+        return 1;
+    }
+}
+
+trait Beta {
+    fn make() -> i32 {
+        return 2;
+    }
+}
+
+struct X {}
+
+struct Y {}
+
+struct M {}
+
+impl Alpha<X> for M {}
+
+impl Beta for M {}
+
+impl Alpha<Y> for M {}
+
+export fn run() {
+    assert M::make() == 1;
+}
+
+__DATA__
+{"compile_error": "ambiguous method 'make': declared by 'Alpha' and 'Beta';"}

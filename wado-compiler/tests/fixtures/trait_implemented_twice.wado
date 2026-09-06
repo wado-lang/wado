@@ -57,3 +57,29 @@ test "a literal is shaped by the impl its class admits" {
     assert M::hold(5) == 3;
     assert M::hold("x") == 4;
 }
+
+trait Pad<T> {
+    fn pack(v: T, pad: i32 = 7) -> i32;
+}
+
+impl Pad<A> for M {
+    fn pack(v: A, pad: i32) -> i32 {
+        return pad;
+    }
+}
+
+impl Pad<B> for M {
+    fn pack(v: B, pad: i32) -> i32 {
+        return pad + 1;
+    }
+}
+
+test "the selected impl's own defaults are the ones padded" {
+    assert M::pack(A { }) == 7;
+    assert M::pack(B { }) == 8;
+}
+
+test "and the first argument selects however many follow it" {
+    assert M::pack(A { }, 5) == 5;
+    assert M::pack(B { }, 5) == 6;
+}

@@ -53,12 +53,12 @@ is out of reach from a bare-name key.
 
 ### Four outcomes, each meaning one thing
 
-|                             |                                                      |
-| --------------------------- | ---------------------------------------------------- |
-| `Found` with `params: Some` | one declaration, with lists read at the receiver     |
-| `Found` with `params: None` | resolves, but no list this call can check against    |
-| `Ambiguous`                 | several traits supply the name; no argument can pick |
-| `NotStatic`                 | a variant case or a flags member owns the name       |
+|              |                                                        |
+| ------------ | ------------------------------------------------------ |
+| `Found`      | one declaration, with its lists read at the receiver   |
+| `Overloaded` | one trait, several impls; the argument had none to say |
+| `Ambiguous`  | several traits supply the name; no argument can pick   |
+| `NotStatic`  | a variant case or a flags member owns the name         |
 
 The lookups differed less on _where they looked_ than on what they did when they
 did not fully find something, so each of these had to be named:
@@ -75,10 +75,12 @@ did not fully find something, so each of these had to be named:
   is not the same as one picked that no trait names: the first has no identity
   to mangle, the second mangles without a trait segment. They are separate
   outcomes, or the second's spelling is built for the first.
-- An overloaded name picks no declaration until an argument does, so
-  `method_ref` is `Option` too. Its return type still answers where every
-  candidate agrees: each `From` impl on a receiver returns it.
-- An empty list is not "takes nothing".
+- An overloaded name picks no declaration until an argument does, so it carries
+  none to mangle. Its return type still answers where every candidate agrees:
+  each `From` impl on a receiver returns it.
+- An empty list is not "takes nothing", and neither is a partial answer taken
+  for a whole one. A site that reads only `Found` and defaults the rest turns
+  every other outcome into a name nothing declares.
 
 ### A rule kept in structure has to be restated as data
 
@@ -104,26 +106,49 @@ the merge on its own, so the resolution states each:
 
 ### The argument picks a declaration, not a trait
 
-A one-argument static call is selected by the parameter the impl declares.
-`From<T>`'s source type is also its trait argument, which is why `from` and
-`try_from` were the only method names ever discriminated here — but a trait
-implemented twice on one receiver (`impl Conv<A> for M` beside
-`impl Conv<B> for M`) poses the same question, and only the parameter states it
-for every trait. Reading it off the declaration also removes the alias handling
-the trait-reference spelling needed: the parameter is resolved in the impl's own
-frame, so both sides of the comparison are already canonical.
+A static call is selected by the parameter the impl declares, compared against
+the call's _first_ argument — however many arguments follow it. `From<T>`'s
+source type is also its trait argument, and `from` takes exactly one, which is
+why the two names were the only ones discriminated and one argument the only
+arity read. A trait implemented twice on one receiver (`impl Conv<A> for M`
+beside `impl Conv<B> for M`) poses the same question at any arity, and only the
+parameter states it for every trait. Reading it off the declaration also removes
+the alias handling the trait-reference spelling needed: the parameter is
+resolved in the impl's own frame, so both sides of the comparison are already
+canonical.
 
 The trait segment of a mangled name keeps the trait's arguments for the same
 reason. Dropping them collapses two declarations of one method name onto one
 body, and how many times the receiver implements the trait decides that — never
-which trait it is.
+which trait it is. That holds for a body the block inherits as much as one it
+writes: the segment comes from the block's own trait reference, never minted
+afresh from the trait declaration, which has no arguments to give.
 
-Two parameter shapes are not a mismatch. One that _is_ a slot of the impl block
-belongs to a blanket, whose unsubstituted spelling must not be baked into a
-mangled name; rejecting it sends the call to the blanket resolver, which
-instantiates it. One that merely mentions a slot (`impl From<Array<T>> for
-List<T>`) equals no instantiation verbatim, and the mangled name carries the
-impl's spelling either way.
+A parameter the block fills is not a mismatch but a blanket, whose
+unsubstituted spelling must not be baked into a mangled name; declining it sends
+the call to the blanket resolver, which instantiates it. Only the _block's_ own
+slots make a parameter its to fill — a concrete impl whose method carries slots
+(`fn build<T: Display>(v: T)`) is filled at the call — and once neither resolves
+the two look alike, so the question goes to the block's written slots, never to
+the shape of the parameter's type. A slot reached only inside a constructor
+(`impl From<Array<T>> for List<T>`) leaves a concrete head to mangle and is
+kept; a reference to a slot (`From<&T>`) is the slot, and is peeled before the
+question is asked.
+
+### One call, one resolution
+
+The literal preselect runs before the callee is resolved and keys it. Resolving
+the parameter lists without the argument and mangling the name with it is two
+answers for one call — the disagreement this WEP exists to remove. Folding
+sixteen lookups into one resolver does not prevent it, because two _calls_ to
+that resolver disagree just as well.
+
+For the same reason a spelling several traits answer is reported before the
+overload an argument settles, and reported whether each trait declares a body or
+leaves its default to answer, since which of the two it is separates nothing.
+Every site that mangles a name has to consume that report: one built from the
+`Found` answer alone and fell back to a trait-less name, which names a body
+nothing declares.
 
 ### Resolving is not free
 
@@ -167,15 +192,16 @@ other. Unifying them further is symmetry, not this WEP's decision.
   [Overload Resolution](./wep-2026-07-31-overload-resolution.md) phase 4
   replaces that with `TypeId` matching; threading the argument's `TypeId` from
   the four sites that already hold it is what closing it takes.
-- Only the first argument selects. A static declaring two parameters whose
-  second is what separates two impls has no selection, and the first candidate
-  wins. No fixture drives it, and the preselect that shapes a literal is
-  first-argument-only for the same reason.
+- Only the first argument selects. Two impls a call separates only by its
+  _second_ argument have no selection, and the first candidate wins. The
+  preselect that shapes a literal reads the first argument for the same reason.
+  No fixture drives it: closing it is the same `TypeId` migration above, over
+  the argument list rather than one name.
 - A trait-frame signature is read at the receiver, and where no caller supplies
   one the rung resolves the receiver by bare name in the caller's frame — which
   cannot name a namespace-imported type. A `Self`-returning static reached as
   `lib::P::twice()` then binds `Self` to nothing. Closing it means threading the
   receiver's `TypeId` from the site that already resolved it.
-- The ambiguity report dedupes by trait declaration, so one trait implemented
-  twice no longer names itself as both alternatives. No fixture drives it: the
-  argument selects one of the two before the report is reached.
+- The ambiguity report names each trait once and in the order the blocks were
+  written. Deduping by `DefId` rather than by the rendered name is what makes
+  that hold when a trait's two blocks are not adjacent.

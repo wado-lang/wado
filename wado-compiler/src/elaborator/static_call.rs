@@ -50,6 +50,16 @@ pub(super) enum StaticLookup {
     NotStatic,
 }
 
+/// One block on the receiver whose trait supplies a static of the name asked
+/// for. Read off the block, before anything is resolved.
+pub(super) struct TraitSupply {
+    trait_decl: DefId,
+    impl_def: DefId,
+    trait_name: String,
+    /// The block declares no body of its own, so the trait's default answers.
+    inherited: bool,
+}
+
 impl StaticLookup {
     /// Whether the spelling names a static at all. An ambiguity does: the call
     /// site reports it, where a `NotStatic` would read as a missing function.
@@ -93,8 +103,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ///
     /// `receiver_key` is the key the caller's own reference site resolved to,
     /// where it has one; deriving a second key here would answer from another
-    /// vantage than the call. `arg_hint` names the sole argument's type for the
-    /// `From` / `TryFrom` overloads that only an argument separates.
+    /// vantage than the call. `arg_hint` names the *first* argument's type,
+    /// which is what separates several impls of one trait — however many
+    /// arguments follow it. Both are the call's one vantage: a site that
+    /// resolves without them and mangles with them gets two answers.
     pub(super) fn resolve_static_callee(
         &mut self,
         site: Option<ast::AstId>,
@@ -180,6 +192,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return StaticLookup::NotStatic;
         }
 
+        // Two *traits* supplying the name leaves the spelling naming neither,
+        // and no argument can separate traits — impls of different traits share
+        // no contract. Asked before the overload below, which is the case an
+        // argument *does* separate: one trait implemented several times. Asked
+        // over blocks that declare a body and blocks that inherit the trait's
+        // alike, since which of the two it is decides nothing here.
+        let supplies = self.traits_supplying_static(&key, method_name);
+        if let Some(alternatives) = Self::ambiguous_alternatives(&supplies) {
+            return StaticLookup::Ambiguous(alternatives);
+        }
+
         // With no argument to read, the selection below cannot pick among
         // several declarations of one name: it would take the first, and a call
         // site checking against that list rejects every argument the others
@@ -195,11 +218,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // reach.
         let through_traits = self.resolve_static_callee_through_traits(
             receiver_name,
-            &key,
             receiver_key,
             method_name,
             arg_hint,
             receiver_type,
+            &supplies,
         );
         if through_traits.found().is_some() || matches!(through_traits, StaticLookup::Ambiguous(_))
         {
@@ -232,31 +255,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     fn resolve_static_callee_through_traits(
         &mut self,
         receiver_name: &str,
-        key: &ImplTargetKey,
         written_key: Option<&ImplTargetKey>,
         method_name: &str,
         arg_hint: Option<&str>,
         receiver_type: Option<TypeId>,
+        supplies: &[TraitSupply],
     ) -> StaticLookup {
-        // Two *traits* supplying the name leaves the spelling naming neither.
-        // One trait implemented twice (`impl Conv<i32> for Foo` beside
-        // `impl Conv<f64> for Foo`) supplies one body, and reporting the blocks
-        // would name that trait as both alternatives — a remedy nobody can
-        // write.
-        let declaring = self.traits_inheriting_static(key, method_name);
-        let mut distinct: Vec<DefId> = declaring.iter().map(|&(decl, _, _)| decl).collect();
-        distinct.sort_unstable();
-        distinct.dedup();
-        if distinct.len() > 1 {
-            let mut named: Vec<String> = declaring.into_iter().map(|(_, _, name)| name).collect();
-            named.dedup();
-            return StaticLookup::Ambiguous(named);
-        }
         // An inherited method is declared nowhere but the trait, so that is
-        // where its signature is read from.
-        if let Some((decl, impl_def)) = declaring
-            .first()
-            .map(|&(decl, impl_def, _)| (decl, impl_def))
+        // where its signature is read from. Only one trait reaches here: the
+        // caller reported the ambiguity.
+        if let Some((decl, impl_def)) = supplies
+            .iter()
+            .find(|supply| supply.inherited)
+            .map(|supply| (supply.trait_decl, supply.impl_def))
         {
             // Resolved here rather than asked of every caller: the name costs a
             // scope to resolve, and this is the one rung whose frame needs it.
@@ -268,12 +279,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 Some(resolved)
             });
             let module = self.tysys.resolutions.defs().module(impl_def).clone();
+            // The block's own trait reference, arguments included — the form
+            // the body is emitted under. Minting one from the trait declaration
+            // instead drops them, and `impl Enc<A> for M` inheriting a default
+            // body then names `Enc::make` where `Enc<A>::make` was emitted.
+            let trait_name = {
+                let header = &self.tysys.trait_env.impl_headers[&impl_def];
+                self.tysys
+                    .trait_env
+                    .fq_trait_of_impl(header, &self.tysys.resolutions)
+            };
             if let Some(callee) = self.callee_of_trait_declaration(
                 receiver_name,
                 method_name,
                 decl,
                 module,
                 receiver_type,
+                trait_name,
             ) {
                 return StaticLookup::Found(Box::new(callee));
             }
@@ -294,12 +316,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .and_then(crate::name::FqTraitName::canonical)
                     .and_then(|decl| {
                         let module = method_ref.module.clone();
+                        // The selection's own trait reference, not one re-minted
+                        // from `decl`: it is the form the body was emitted under.
+                        let trait_name = method_ref.trait_name.clone();
                         self.callee_of_trait_declaration(
                             receiver_name,
                             method_name,
                             decl,
                             module,
                             receiver_type,
+                            trait_name,
                         )
                     })
                     .map(|callee| StaticLookup::Found(Box::new(callee))),
@@ -337,6 +363,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         trait_decl: DefId,
         module: ModuleSource,
         receiver_type: Option<TypeId>,
+        trait_name: Option<crate::name::FqTraitName>,
     ) -> Option<StaticCallee> {
         let declaring = self.tysys.signatures.trait_sig(trait_decl)?;
         let sig = declaring.method(method_name)?.sig.clone();
@@ -348,8 +375,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             params.param_types = instantiated.param_types;
             return_type = instantiated.return_type;
         }
-        let trait_name =
-            crate::name::FqTraitName::declared(self.tysys.resolutions.defs(), trait_decl);
         Some(StaticCallee {
             params,
             own_params: sig.own_params,
@@ -358,9 +383,35 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 module,
                 receiver_name,
                 method_name,
-                Some(trait_name),
+                trait_name,
                 Some(sig.def),
             ),
+        })
+    }
+
+    /// The traits to report when several supply one name, deduped by
+    /// declaration and in the order the blocks were written. `None` where one
+    /// trait answers, however many times it is implemented: naming it as both
+    /// alternatives is a remedy nobody can write.
+    ///
+    /// Deduping by `DefId` rather than by the rendered name: two blocks of one
+    /// trait need not be adjacent, and a name-keyed pass over an unsorted list
+    /// let the trait through twice.
+    fn ambiguous_alternatives(supplies: &[TraitSupply]) -> Option<Vec<String>> {
+        let mut alternatives: Vec<&TraitSupply> = Vec::new();
+        for supply in supplies {
+            if !alternatives
+                .iter()
+                .any(|seen| seen.trait_decl == supply.trait_decl)
+            {
+                alternatives.push(supply);
+            }
+        }
+        (alternatives.len() > 1).then(|| {
+            alternatives
+                .into_iter()
+                .map(|s| s.trait_name.clone())
+                .collect()
         })
     }
 
@@ -382,21 +433,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// The traits a block on the receiver implements that supply `method_name`
-    /// with a default body, none of the blocks declaring it themselves. Read
-    /// off the blocks rather than resolved: resolving is what the call has not
-    /// done yet, and doing it here decides an overload.
-    fn traits_inheriting_static(
-        &self,
-        key: &ImplTargetKey,
-        method_name: &str,
-    ) -> Vec<(DefId, DefId, String)> {
-        if self
-            .qualified_method_decl_ids(key, method_name)
-            .next()
-            .is_some()
-        {
-            return Vec::new();
-        }
+    /// as a static, whether the block declares its own body or leaves the
+    /// trait's default to answer. Read off the blocks rather than resolved:
+    /// resolving is what the call has not done yet, and doing it here decides
+    /// an overload.
+    fn traits_supplying_static(&self, key: &ImplTargetKey, method_name: &str) -> Vec<TraitSupply> {
         let Some(impls) = self.tysys.trait_env.impl_index.get(key) else {
             return Vec::new();
         };
@@ -404,18 +445,27 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .iter()
             .filter_map(|&impl_def| {
                 let impl_sig = self.tysys.signatures.impl_sig(impl_def)?;
-                let decl = impl_sig.trait_decl?;
-                let declared = self.tysys.signatures.trait_sig(decl)?.method(method_name)?;
+                let trait_decl = impl_sig.trait_decl?;
+                let declared = self
+                    .tysys
+                    .signatures
+                    .trait_sig(trait_decl)?
+                    .method(method_name)?;
+                if declared.sig.self_kind != ast::SelfKind::None {
+                    return None;
+                }
+                let written_here = self.tysys.trait_env.impl_headers[&impl_def]
+                    .methods
+                    .iter()
+                    .any(|m| m.name == method_name);
                 // A required method the block leaves undeclared is its own
                 // error, reported where the two are compared.
-                (declared.default_body.is_some() && declared.sig.self_kind == ast::SelfKind::None)
-                    .then(|| {
-                        (
-                            decl,
-                            impl_def,
-                            self.tysys.resolutions.defs().name(decl).to_string(),
-                        )
-                    })
+                (written_here || declared.default_body.is_some()).then(|| TraitSupply {
+                    trait_decl,
+                    impl_def,
+                    trait_name: self.tysys.resolutions.defs().name(trait_decl).to_string(),
+                    inherited: !written_here,
+                })
             })
             .collect()
     }

@@ -1,0 +1,34 @@
+//! Two traits declaring one static on one receiver: no argument separates
+//! traits, so the spelling names neither. The ambiguity was asked only of
+//! traits supplying a *default body*, so a pair that each declared one fell
+//! through to an overload carrying no declaration — and the mangled name, left
+//! without its trait segment, reached WIR build as an unresolved call.
+
+trait Alpha {
+    fn make() -> i32;
+}
+
+trait Beta {
+    fn make() -> i32;
+}
+
+struct M {}
+
+impl Alpha for M {
+    fn make() -> i32 {
+        return 1;
+    }
+}
+
+impl Beta for M {
+    fn make() -> i32 {
+        return 2;
+    }
+}
+
+export fn run() {
+    assert M::make() == 1;
+}
+
+__DATA__
+{"compile_error": "ambiguous method 'make': declared by 'Alpha' and 'Beta'"}
