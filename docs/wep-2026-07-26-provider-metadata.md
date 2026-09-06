@@ -19,19 +19,22 @@ A published package is a source package with a prebuilt CM binary attached, deli
 
 The package's Wado source travels in a custom section named `wado:package`:
 
-| Content                       | Purpose                                            |
-| ----------------------------- | -------------------------------------------------- |
-| Format version                | Consumer compatibility gate                        |
-| Compiler version              | Producing compiler, for the degradation rule below |
-| `wado.toml`                   | The package's own dependencies and entry points    |
-| The package's `.wado` sources | Bodies for `pub` items, and everything they reach  |
-| The files `exports` names     | Assets a consumer may name, verbatim               |
+| Content                       | Purpose                                                   |
+| ----------------------------- | --------------------------------------------------------- |
+| Format version                | Consumer compatibility gate                               |
+| Compiler version              | Producing compiler, for the degradation rule below        |
+| `wado.toml`                   | The package's own dependencies and entry points           |
+| The package's `.wado` sources | Bodies for `pub` items, and everything they reach         |
+| The files `exports` names     | Assets a consumer may name, verbatim                      |
+| Committed Kiln cache records  | So a consuming build reuses the output, not the generator |
 
 The section content is deterministic: sorted file order, no timestamps, fixed compression level. Same input, same bytes, same digest — otherwise `integrity` and reproducible builds break.
 
 Sources are included whole rather than pruned to the `pub`-reachable set. A `pub` generic body calls `internal` helpers, so most of a package is reachable anyway; pruning can follow if size proves to matter.
 
 Assets travel because consumers name them: a dependency's `.g4` feeds a Kiln generator, a template is inlined with `#include_str` ([Package File Exports](./wep-2026-09-06-package-file-exports.md)). They are bytes rather than text, so the section carries them verbatim. A consumer on the CM path has no section, and therefore no files — the same all-or-nothing selection as everything else here.
+
+A package whose Kiln output is committed also carries each `<primary>.kiln.json` beside the generated `.wado` files those records describe. Without the record a consuming build cannot tell which generated module an import resolves to, and would run the generator to find out.
 
 A custom section is not instantiated, so this costs distribution bytes only, never runtime size.
 

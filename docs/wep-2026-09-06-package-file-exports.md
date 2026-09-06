@@ -22,9 +22,9 @@ not exist:
   dependency there is no file on disk to reach even if the syntax existed.
 
 A package cannot say which of its files it offers, and a consumer cannot name
-one. Both are needed, and they have to arrive together: a file reference looks
-like a filesystem path, and a package's directory layout must not become its API
-by accident.
+one. Neither half is useful alone: a reference reads as a filesystem path, so
+adding one without the list would make a package's directory layout its API by
+accident.
 
 ## Decision
 
@@ -46,8 +46,8 @@ exports = [
 
 One list covers assets and `.wado` submodules alike. What differs between them
 is what a consumer does with the file: import it as a module, feed it to a
-generator, inline it. What the package promises is the same either way, and
-deciding it is the owner's, as it is for `pub` and `export` on an item.
+generator, inline it. The package promises the same thing either way, and its
+owner decides, exactly as `pub` and `export` decide for an item.
 
 The key is `exports`, after npm's field of the same name and meaning. It sits
 beside the `export` visibility keyword without colliding: `export` marks one
@@ -82,7 +82,7 @@ let template = #include_str("wado-lang:my-pkg/templates/index.html");
   required rather than conventional. It also keeps a file reference from reading
   like a WIT interface segment.
 - Every specifier form that can carry a package coordinate carries a path the
-  same way: an open coordinate (`ns:name[@ver]`) and a `lib:` nickname alike.
+  same way: an open coordinate (`ns:pkg[@ver]`) and a `lib:` nickname alike.
 - `..` and absolute paths are rejected, not resolved. The path is a key into the
   allowlist, not a traversal that happens to start at the package root.
 - The reference resolves against the consuming manifest's own `[dependencies]`
@@ -140,7 +140,7 @@ valid.
 - `from` and `inputs` accept an exported-file reference wherever they accept a
   `./` path today.
 - The invocation's identity records the logical reference
-  (`ns:name@ver/path`), never where the file sits on this machine. That covers
+  (`ns:pkg@ver/path`), never where the file sits on this machine. That covers
   the cache key, the dedup tuple, and the `sources` of the `#![generated]`
   header. A dependency's checkout lives under `$WADO_ROOT` at a
   version-dependent path, so hashing that path would make the cache
@@ -155,8 +155,7 @@ valid.
   its inputs by value under the same sandbox (principle 1).
 - Naming a dependency's `.g4` yourself means running the generator yourself,
   with your options. A package that wants to own its generation instead runs
-  Kiln on its own files and exports the resulting module, which is the next
-  section.
+  Kiln on its own files and exports the resulting module.
 
 ### A dependency's own invocations follow the cache rule
 
@@ -167,7 +166,7 @@ therefore harvested across the dependency edge at any depth, and each one is
 resolved by the rule Kiln already applies to a local invocation
 ([Kiln](./wep-2026-04-12-kiln.md) §"Caching"):
 
-- A recorded output travels with the package — the generated `.wado` files and
+- A recorded output travels with the package: the generated `.wado` files and
   the `<primary>.kiln.json` beside them. The consuming build uses them and
   resolves no generator at all.
 - Nothing recorded, and the consuming build runs the generator: it resolves it
@@ -176,12 +175,12 @@ resolved by the rule Kiln already applies to a local invocation
 
 Which arm a package takes is the one it already chose with `output_dir`: a
 tracked directory commits the output and ships it, the default gitignored one
-does not. No new switch, and no policy the boundary invents for itself.
+does not. The boundary adds no switch of its own.
 
 A recorded output is trusted, not verified. Re-deriving its cache key means
 resolving and hashing the dependency's generator, which is the work the record
-exists to avoid — the same reasoning consume-only mode already runs on. Keeping
-that record fresh is the dependency's own `wado check`.
+exists to avoid. Consume-only mode already trusts an artifact on that reasoning.
+Keeping the record fresh is the dependency's own `wado check`.
 
 Both arms rest on the sandbox. Running a generator the consumer never named is
 acceptable because a generator is a pure function of its inputs, with no clock,
@@ -191,8 +190,8 @@ bytes reproducible rather than a snapshot of someone's machine.
 
 What goes wrong inside a dependency is reported against that dependency: the
 package coordinate and its version, whatever the generator failed on. A path
-under `$WADO_ROOT` names a directory the user did not create and cannot edit,
-and it changes with the version — the coordinate is what tells them which
+under `$WADO_ROOT` names a directory the user did not create, cannot edit, and
+will not see again after a version bump. The coordinate is what tells them which
 package to pin, patch, or report to.
 
 ### Deliberate omissions
@@ -204,7 +203,10 @@ dropped in becomes API and a file renamed silently stops being it. Naming each
 file is the mechanism, not the ceremony around it.
 
 Directory listing, already refused for local Kiln inputs. Writing into a
-dependency. Reaching a file of a dependency's dependency.
+dependency. Naming a file of a dependency's dependency: a reference resolves
+against your own `[dependencies]`, and a package you did not declare offers you
+nothing. (Its own generation still runs, at whatever depth it sits — that is the
+package's business, not a file you named.)
 
 Files from a reserved namespace. `core:` / `wasi:` / `web:` are bundled in the
 compiler and have no `wado.toml` to carry an allowlist, so they export nothing.
@@ -222,8 +224,8 @@ without the exception.
    already separates the segment), resolve the package through the dependency
    index, check the allowlist under NFC with case compared exactly, and refuse
    at package granularity. Done when `use { … } from "lib:x/src/y.wado"`
-   compiles against a path dependency, and an unlisted path — a case-only
-   mismatch among them — produces the package-level diagnostic.
+   compiles against a path dependency, and an unlisted path produces the
+   package-level diagnostic, a case-only mismatch among them.
 3. Kiln `from` / `inputs`: accept the reference, key the cache and the header on
    the logical form, write outputs into the consumer's tree. Done when
    `grammar/Wado.g4` can be consumed from a second package with a warm,
