@@ -152,12 +152,27 @@ impl Interpreter<'_> {
     fn yields_own_object(&self, body: &Body, e: ExprId) -> bool {
         match &body.exprs[e].kind {
             ExprKind::Call { .. }
-            | ExprKind::LabeledBlock { .. }
             | ExprKind::StructLiteral { .. }
             | ExprKind::TupleLiteral { .. }
             | ExprKind::ArrayLiteral { .. }
             | ExprKind::PackedArray(_)
             | ExprKind::VariantConstruct { .. } => true,
+            // A block hands back what it yields, so it owns an object only where
+            // that does. A region whose exits no single operand names built its
+            // value, and so did one yielding a local it bound itself; `{ p }`
+            // around a local from outside is that local's read.
+            ExprKind::LabeledBlock { block, .. } => {
+                let block = *block;
+                body.block_yield(e)
+                    .and_then(Operand::as_expr)
+                    .is_none_or(|inner| match &body.exprs[inner].kind {
+                        ExprKind::Local { index, .. } => {
+                            binds_local(body, block, *index)
+                                || self.frame.unshared_locals.contains(*index)
+                        }
+                        _ => self.yields_own_object(body, inner),
+                    })
+            }
             ExprKind::Local { index, .. } => self.frame.unshared_locals.contains(*index),
             _ => false,
         }
@@ -1192,41 +1207,79 @@ fn consumes_its_source(kind: &ExprKind) -> bool {
 }
 
 /// Charge `budget` one per operand writing `value` would place, failing as soon
-/// as it runs out. A byte sequence costs one, since it packs into a single
-/// `PackedArray` however long it is.
+/// as it runs out.
 fn charge_leaves(value: &Value, type_table: &TypeTable, budget: &mut usize) -> Option<()> {
-    let children: &[Value] = match value {
-        Value::Aggregate { fields, .. } => {
+    match value {
+        // A container is charged what `write_container` places: the length, and
+        // the backing cut to it. Capacity is never written, so a barely-filled
+        // buffer must not be priced by how big it was opened.
+        Value::Aggregate { type_id, fields } => {
+            if let Some((backing_type, live)) = container_backing(value, *type_id, type_table) {
+                *budget = budget.checked_sub(1)?;
+                return charge_seq(backing_type, live, type_table, budget);
+            }
             for (_, field) in fields.iter() {
                 charge_leaves(field, type_table, budget)?;
             }
-            return Some(());
+            Some(())
         }
-        Value::Seq { type_id, elements } => {
-            if matches!(
-                type_table.get(*type_id),
-                ResolvedType::BuiltinArray(e) if *e == TypeTable::U8
-            ) {
-                *budget = budget.checked_sub(1)?;
-                return Some(());
-            }
-            elements
-        }
-        Value::Variant { payload, .. } => {
-            return match payload.as_deref() {
-                Some(payload) => charge_leaves(payload, type_table, budget),
-                None => Some(()),
-            };
-        }
+        Value::Seq { type_id, elements } => charge_seq(*type_id, elements, type_table, budget),
+        Value::Variant { payload, .. } => match payload.as_deref() {
+            Some(payload) => charge_leaves(payload, type_table, budget),
+            None => Some(()),
+        },
         _ => {
             *budget = budget.checked_sub(1)?;
-            return Some(());
+            Some(())
         }
-    };
-    for child in children {
-        charge_leaves(child, type_table, budget)?;
+    }
+}
+
+/// Charge an array of `elements` at `type_id`. A byte array costs one, since it
+/// packs into a single `PackedArray` however long it is.
+fn charge_seq(
+    type_id: TypeId,
+    elements: &[Value],
+    type_table: &TypeTable,
+    budget: &mut usize,
+) -> Option<()> {
+    if matches!(
+        type_table.get(type_id),
+        ResolvedType::BuiltinArray(e) if *e == TypeTable::U8
+    ) {
+        *budget = budget.checked_sub(1)?;
+        return Some(());
+    }
+    for element in elements {
+        charge_leaves(element, type_table, budget)?;
     }
     Some(())
+}
+
+/// A sequence container's backing type and the elements its length keeps.
+/// `None` for anything else, which is charged field by field.
+fn container_backing<'v>(
+    value: &'v Value,
+    type_id: TypeId,
+    type_table: &TypeTable,
+) -> Option<(TypeId, &'v [Value])> {
+    if !type_table.is_seq_container(type_id) {
+        return None;
+    }
+    let (used, PrimitiveType::I32) = value.field(SeqField::Len.index())?.as_int()? else {
+        return None;
+    };
+    let Value::Seq {
+        type_id: backing,
+        elements,
+    } = value.field(SeqField::Backing.index())?
+    else {
+        return None;
+    };
+    Some((
+        *backing,
+        elements.get(..usize::try_from(used as i32).ok()?)?,
+    ))
 }
 
 /// The pooled constant a scalar becomes at `ty`. `None` for an aggregate, which
@@ -1266,6 +1319,21 @@ fn existing_fields(
         *slots.get_mut(field.field_index as usize)? = Some(field.value);
     }
     Some(slots)
+}
+
+/// Whether a `let` inside `block` binds `local` — storage the block opened, as
+/// against a local it read from outside.
+fn binds_local(body: &Body, block: BlockId, local: u32) -> bool {
+    let mut stack = vec![NodeRef::Block(block)];
+    while let Some(node) = stack.pop() {
+        if let NodeRef::Stmt(s) = node
+            && matches!(&body.stmts[s].kind, StmtKind::Let { local_index, .. } if *local_index == local)
+        {
+            return true;
+        }
+        body.for_each_child(node, |c| stack.push(c));
+    }
+    false
 }
 
 /// The operand `previous` holds at `index`, or `None` where it holds none.

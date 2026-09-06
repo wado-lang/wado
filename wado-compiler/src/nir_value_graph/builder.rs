@@ -1509,6 +1509,15 @@ impl<'a> Builder<'a> {
             if let Some(pointee) = self.borrowed_local(field_value)
                 && !self.assigned_fields.contains(&field_index)
             {
+                // `assigned_fields` sees this body only, so a callee could
+                // repoint the field and leave the entry naming the old local.
+                // It reaches nothing: borrowing made the pointee escape, and an
+                // impure call moves the escaped generation, so the read that
+                // follows one matches no store this seeded.
+                assert!(
+                    self.aliased.contains(&pointee) || self.mut_escaped.contains(&pointee),
+                    "a borrowed local escapes, so a stale pointee outlives no call"
+                );
                 crate::compiler_trace!(
                     "vg_field",
                     "[{}] field {field_index} of {recv:?} borrows local {pointee}",

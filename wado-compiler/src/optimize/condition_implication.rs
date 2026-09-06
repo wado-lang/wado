@@ -331,28 +331,6 @@ fn parse_value_offset(engine: &Engine, v: crate::nir_value_graph::ValueId) -> Op
     }
 }
 
-/// The tail value operand of a block expression: `{ …; tail }` (the last
-/// statement is `Expr(tail)`) or a labeled block whose last statement is
-/// `break label tail`.
-fn block_tail_operand(body: &crate::nir_arena::Body, e: ExprId) -> Option<Operand> {
-    match &body.exprs[e].kind {
-        // A block yields through its own `break label: tail`, or — where nothing
-        // breaks to it, as for every synthesized one — through the trailing
-        // statement.
-        ExprKind::LabeledBlock { label, block, .. } => {
-            let last = *body.blocks[*block].stmts.last()?;
-            match &body.stmts[last].kind {
-                StmtKind::Break {
-                    label: Some(bl),
-                    value: Some(v),
-                } => (bl == label).then_some(*v),
-                _ => block_id_tail(body, *block),
-            }
-        }
-        _ => None,
-    }
-}
-
 /// The initialiser operand of `recv.field`, when `recv` resolves (through copy
 /// temps and block tails) to a struct literal. Sound because `recv` reaching a
 /// `let` binding via [`Binds`] means it is never reassigned or `&mut`-escaped
@@ -369,7 +347,7 @@ fn struct_field_init(
         if matches!(&engine.body.exprs[e].kind, ExprKind::StructLiteral { .. }) {
             break;
         }
-        let tail = block_tail_operand(engine.body, e)?;
+        let tail = engine.body.block_yield(e)?;
         cur = resolve(engine, binds, tail);
     }
     let Operand::Expr(e) = cur else {

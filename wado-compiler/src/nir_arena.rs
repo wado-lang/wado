@@ -1482,6 +1482,34 @@ impl Body {
         (!self.breaks_to(NodeRef::Block(*block), label)).then_some(*block)
     }
 
+    /// The one operand `e` yields, or `None` where more than one point produces
+    /// its value and no single operand names it. A block nothing breaks to
+    /// yields its trailing statement; one whose trailing `break LABEL:` is the
+    /// only break to that label yields what the break carries.
+    pub fn block_yield(&self, e: ExprId) -> Option<Operand> {
+        let ExprKind::LabeledBlock { label, block, .. } = &self.exprs[e].kind else {
+            return None;
+        };
+        let (&last, rest) = self.blocks[*block].stmts.split_last()?;
+        if rest
+            .iter()
+            .any(|s| self.breaks_to(NodeRef::Stmt(*s), label))
+        {
+            return None;
+        }
+        match &self.stmts[last].kind {
+            StmtKind::Break {
+                label: Some(bl),
+                value: Some(v),
+            } if bl == label => (!v
+                .as_expr()
+                .is_some_and(|ve| self.breaks_to(NodeRef::Expr(ve), label)))
+            .then_some(*v),
+            StmtKind::Expr(v) if !self.breaks_to(NodeRef::Stmt(last), label) => Some(*v),
+            _ => None,
+        }
+    }
+
     /// Invoke `f` on every operand slot of `node`, in source order — including
     /// a promoted [`Operand::Value`], which [`Body::for_each_child`] drops for
     /// want of a skeleton node. Non-operand id slots (`Assign::target`) and

@@ -1705,8 +1705,13 @@ impl FunctionTranslator<'_, '_> {
                 }
                 self.translate_expr(expr_id)
             }
-            // Block with UNIT type but value-producing last expression
-            ExprKind::LabeledBlock { block, .. } => {
+            // Block with UNIT type but value-producing last expression. Only
+            // where nothing breaks to the label: `Seq` emits no `block`, and
+            // pushing no `LabelEntry` for it leaves an enclosed `break` with no
+            // target — the same accounting the value arm keeps.
+            ExprKind::LabeledBlock { label, block, .. }
+                if !arena.breaks_to(NodeRef::Block(*block), label) =>
+            {
                 let block = *block;
                 if self.infer_stmts_result_type(block).is_some() {
                     let body = self.translate_stmts_as_value(&arena.blocks[block].stmts);

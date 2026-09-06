@@ -311,7 +311,13 @@ impl Interpreter<'_> {
                 module_source,
                 name,
             } => self.global_lattice(module_source, name),
-            ExprKind::LabeledBlock { block, .. } => self.block_lattice(body, *block),
+            // `block_lattice` reads the trailing statement, which is the block's
+            // value only where no `break` produces one from further up.
+            ExprKind::LabeledBlock { .. } => body
+                .unbroken_block(e)
+                .map_or(Lattice::Unevaluated, |block| {
+                    self.block_lattice(body, block)
+                }),
             ExprKind::If {
                 condition,
                 then_branch,

@@ -1232,21 +1232,10 @@ fn extract_alias_source(body: &Body, e: ExprId) -> Option<u32> {
         } => inner
             .as_expr()
             .and_then(|ie| extract_alias_source(body, ie)),
-        // A block yields through its own `break label: v`, or — where nothing
-        // breaks to it — through the trailing statement.
-        ExprKind::LabeledBlock { label, block, .. } => {
-            let last = *body.blocks[*block].stmts.last()?;
-            match &body.stmts[last].kind {
-                StmtKind::Break {
-                    label: Some(brk_label),
-                    value: Some(brk_value),
-                } if brk_label == label => brk_value
-                    .as_expr()
-                    .and_then(|e| extract_alias_source(body, e)),
-                StmtKind::Expr(Operand::Expr(tail_expr)) => extract_alias_source(body, *tail_expr),
-                _ => None,
-            }
-        }
+        ExprKind::LabeledBlock { .. } => body
+            .block_yield(e)
+            .and_then(Operand::as_expr)
+            .and_then(|inner| extract_alias_source(body, inner)),
         _ => None,
     }
 }

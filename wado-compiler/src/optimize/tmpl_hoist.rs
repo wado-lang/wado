@@ -1135,15 +1135,10 @@ fn extract_formatter_fields(
         // `branch_prune`'s C3 rewrite turned the `break` into a trailing value.
         ExprKind::LabeledBlock { block, .. } => {
             let block = *block;
-            let tail = *body.blocks[block].stmts.last()?;
-            let value = match &body.stmts[tail].kind {
-                StmtKind::Break { value: Some(v), .. } | StmtKind::Expr(v) => *v,
-                _ => return None,
-            };
             extract_formatter_fields_from_block(
                 body,
                 block,
-                value.as_expr()?,
+                body.block_yield(value)?.as_expr()?,
                 hoisted_buf_index,
                 value_type_id,
                 value_span,
