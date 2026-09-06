@@ -263,6 +263,20 @@ test "compose_grammars walks nested imports depth-first" {
     assert rule_names(&g) == ["s", "a", "r", "b3", "b2"], `${rule_names(&g):?}`;
 }
 
+test "compose_grammars rejects two inputs declaring one grammar name" {
+    // The mirror of the unresolved import: a name that resolves to two inputs
+    // identifies neither. Rejected on both paths, since either half of a split
+    // grammar is looked up the same way.
+    let master = parse("grammar M;\nimport S;\ns : a ;").unwrap();
+    let first = parse("parser grammar S;\na : B ;").unwrap();
+    let second = parse("parser grammar S;\na : C ;").unwrap();
+    assert compose_grammars([master, first, second]) matches { Err(_) }, "a duplicate delegate name must be reported, not silently dropped";
+
+    let one = parse("grammar Dup;\nr : 'x' ;").unwrap();
+    let two = parse("grammar Dup;\nq : 'y' ;").unwrap();
+    assert compose_grammars([one, two]) matches { Err(_) }, "a duplicate name must be reported with no import in play too";
+}
+
 test "compose_grammars rejects an import naming no supplied input" {
     let master = parse("grammar M;\nimport S;\ns : ID ;").unwrap();
     let result = compose_grammars([master]);

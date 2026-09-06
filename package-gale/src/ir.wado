@@ -1285,6 +1285,22 @@ pub fn merge_grammars(grammars: List<Grammar>) -> Grammar {
 /// Every supplied grammar as one: split halves concatenate, and a grammar
 /// another's `import` names folds in as a delegate. Contract in `import.md`.
 pub fn compose_grammars(grammars: List<Grammar>) -> Result<Grammar, ParseError> {
+    // Resolution is by declared name, so a name has to identify one input.
+    // A second input of the same name is otherwise neither merged nor folded:
+    // `delegate_order` binds the first match and the rest vanish silently.
+    for let mut i = 0; i < grammars.len(); i += 1 {
+        for let mut j = i + 1; j < grammars.len(); j += 1 {
+            if grammars[i].name == grammars[j].name {
+                return Result::Err(
+                    ParseError::new(
+                        `two supplied inputs declare grammar "${grammars[i].name}"`,
+                        Span::new(0, 0),
+                        ["one input per declared grammar name"],
+                    ),
+                );
+            }
+        }
+    }
     let mut delegate_names: List<String> = [];
     for let g of &grammars {
         for let im of &g.imports {

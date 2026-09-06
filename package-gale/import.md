@@ -12,7 +12,9 @@ use { Parser } from "./M.g4" with {
 };
 ```
 
-`import S;` binds to whichever supplied input declares `grammar S` in its header — never to a filename. The corpus forces this: `DelegatorInvokesFirstVersionOfDelegateRule` writes `import S,T;` where the extracted files are `.slave1` (grammar `T`) and `.slave2` (grammar `S`). An import naming no supplied input is a loud error, not a silent omission.
+`import S;` binds to whichever supplied input declares `grammar S` in its header — never to a filename. The corpus forces this: `DelegatorInvokesFirstVersionOfDelegateRule` writes `import S,T;` where the extracted files are `.slave1` (grammar `T`) and `.slave2` (grammar `S`).
+
+A name therefore has to identify exactly one input, and both ways of failing that are loud. An import naming no supplied input is an error rather than a silent omission, and two inputs declaring one name are rejected before anything is composed — otherwise the second is neither merged nor folded, and vanishes.
 
 Two composition rules run over the same input list, and `compose_grammars` partitions in one pass:
 
