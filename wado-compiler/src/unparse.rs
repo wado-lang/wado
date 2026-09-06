@@ -1399,7 +1399,11 @@ impl<'a> Unparser<'a> {
         }
 
         // Comments that landed after the last stmt but before the closing brace
-        // would otherwise be dropped — flush them here.
+        // would otherwise be dropped — flush them here. Unbounded below, unlike
+        // the other closing-brace flushes: a comment in the signature above has
+        // no finer place, and stopping it here keeps it inside the function
+        // rather than in the next member's leading run, where the blank line
+        // between members would move it again on the following pass.
         self.emit_inner_tail_for(block.id);
         self.flush_comments_before(block.span.end, Spacing::Tight);
 
@@ -1864,11 +1868,11 @@ impl<'a> Unparser<'a> {
         if self.has_comment_in_range(c.span.start, c.span.end) {
             self.output.push_str(" {\n");
             self.indent_level += 1;
-            self.flush_comments_before(c.body.span().start, Spacing::Tight);
+            self.flush_comments_in(c.span.start, c.body.span().start, Spacing::Tight);
             self.write_indent();
             self.unparse_expr(&c.body);
             self.output.push('\n');
-            self.flush_comments_before(c.span.end, Spacing::Tight);
+            self.flush_comments_in(c.span.start, c.span.end, Spacing::Tight);
             self.indent_level -= 1;
             self.write_indent();
             self.output.push_str("}]");
@@ -2756,7 +2760,7 @@ impl<'a> Unparser<'a> {
 
         // A comment between the last member and the closing brace, like a
         // block's inner tail. Without it the comment leaves the declaration.
-        self.flush_comments_before(outer_span.end, Spacing::Tight);
+        self.flush_comments_in(outer_span.start, outer_span.end, Spacing::Tight);
 
         self.indent_level -= 1;
         self.last_source_line = saved_line.max(outer_span.end_line());
