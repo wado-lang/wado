@@ -482,6 +482,9 @@ struct Builder<'a> {
     /// Which sequence builtin each callee id is, so `array_len` over an array
     /// this walk saw `array_new` allocate folds to the length it was given.
     ctfe_builtins: crate::niri::CtfeBuiltinMap,
+    /// Locals a struct literal bound, whose value therefore names an object
+    /// rather than a datum. See [`Builder::bump_call_effects`].
+    seeded_aggregates: crate::hashmap::IndexSet<u32>,
     /// `array value → its length value`, for the arrays this walk allocated.
     /// The array is a fresh opaque per call, so a second allocation is a second
     /// entry and a reassignment reaches neither.
@@ -544,6 +547,7 @@ impl<'a> Builder<'a> {
             field_ref_targets: IndexMap::default(),
             assigned_fields: assigned_field_indices(body),
             ctfe_builtins: crate::niri::CtfeBuiltinMap::default(),
+            seeded_aggregates: crate::hashmap::IndexSet::default(),
             array_lengths: IndexMap::default(),
             type_table,
             loop_entry_values: IndexMap::default(),
@@ -713,11 +717,21 @@ impl<'a> Builder<'a> {
         }
     }
 
+    /// The value the argument walk already gave `op`, never a fresh walk: a
+    /// call bumps the heap between the two, and a re-walk would read its
+    /// operand at the version the call itself invalidated.
+    fn walked_value(&self, op: Operand) -> Option<ValueId> {
+        match op {
+            Operand::Value(v) => Some(v),
+            Operand::Expr(e) => self.value_of.get(&e).copied(),
+        }
+    }
+
     /// Name the array `array_new(len)` allocates, and remember its length. The
     /// name is a fresh opaque, so two allocations never share one and nothing
     /// re-emits it — only [`Builder::known_array_len`] reads it back.
     fn allocated_array(&mut self, call: ExprId, len: Operand) -> Option<ValueId> {
-        let len = self.walk_operand(len)?;
+        let len = self.walked_value(len)?;
         if !is_const_value(&self.pool, len) {
             return None;
         }
@@ -737,7 +751,7 @@ impl<'a> Builder<'a> {
             }) => *expr,
             _ => op,
         };
-        let mut array = self.walk_operand(inner)?;
+        let mut array = self.walked_value(inner)?;
         // `array_new`'s result reaches its field through the `as Array<T>` the
         // lower phase writes, which names the same allocation.
         loop {
@@ -819,6 +833,15 @@ impl<'a> Builder<'a> {
     /// call's arguments, since a mutable reference that escaped earlier may have
     /// been retained.
     fn bump_call_effects(&mut self, call: ExprId) {
+        // A sequence builtin reaches an array's elements, never a struct field:
+        // `array_set` writes into the object `repr` names and leaves `repr` and
+        // `used` alone. Since the versions here guard struct-field reads only,
+        // it invalidates none of them.
+        if let ExprKind::Call { func_id, .. } = &self.body.exprs[call].kind
+            && self.ctfe_builtins.contains_key(func_id)
+        {
+            return;
+        }
         let pure = self.pure_calls.contains(&call);
         // Iterate ascending local index, not `mut_escaped`'s insertion order:
         // opaque `ValueId`s and heap versions are handed out in visit order, so
@@ -836,6 +859,16 @@ impl<'a> Builder<'a> {
                     continue;
                 }
                 self.heap_state.bump_local(l);
+            }
+            // A local bound to an aggregate literal keeps its value across the
+            // call: the local *is* the storage, so a callee writing through a
+            // `&mut` of it changes fields, never which object it names. The
+            // version bump above already says the fields may have moved, and
+            // `field_store` is keyed by the receiver — so re-opaquing the
+            // receiver on top would lose every seeded field at the first call
+            // and leave the version saying nothing.
+            if self.seeded_aggregates.contains(&l) {
+                continue;
             }
             self.invalidate_local_with_source(l, Some(OpaqueSource::Local(l)));
         }
@@ -1072,9 +1105,17 @@ impl<'a> Builder<'a> {
                             .expect("assign-target field receiver is a place");
                         let bare_local =
                             matches!(&self.body.exprs[recv_e].kind, ExprKind::Local { .. });
-                        let root = self.receiver_root(recv_e);
-                        let recv_v = self.walk_operand(*recv);
-                        Some((root, recv_v, bare_local))
+                        // Resolve the receiver as a read of it resolves — a
+                        // write through `&mut x` must seed `x`'s slot, or the
+                        // read that looks through the borrow finds nothing.
+                        if let Some((pointee_vn, pointee)) = self.reference_lookthrough(recv_e) {
+                            self.walk_operand(*recv);
+                            Some((Some(pointee), Some(pointee_vn), true))
+                        } else {
+                            let root = self.receiver_root(recv_e);
+                            let recv_v = self.walk_operand(*recv);
+                            Some((root, recv_v, bare_local))
+                        }
                     }
                     _ => {
                         self.walk_expr(target);
@@ -1496,6 +1537,9 @@ impl<'a> Builder<'a> {
                 self.field_store.insert((recv, field_index, ver), fv);
                 seeded += 1;
             }
+        }
+        if seeded > 0 {
+            self.seeded_aggregates.insert(root);
         }
         crate::compiler_trace!(
             "vg_field",
