@@ -1,0 +1,56 @@
+//! A loop whose caller's closing token sits inside a group, with more of the
+//! enclosing alternative after it.
+//!
+//! `block : (OR names? OR) body`. `driver_cst_ll_loop_yields_closer_test`
+//! pins the flat spelling of the same language and passes; here the closer is
+//! one element of a group and `body` follows the group, so the continuation
+//! `names` needs is partly outside the element list the group walks.
+//!
+//! `RustParser.g4` spells `closureExpression` this way — the parameter list is
+//! in `(OROR | OR closureParameters? OR)` and the body follows the group — so
+//! this is what still fails for `g(|e| e)` once `let y = |e| e` parses.
+
+use g from "./grammars/ll_group_tail_outer_suffix.g4"
+    with {
+        generator: { module: "../src/generator.wado", output_dir: "./generated/cst_ll_group_tail_outer_suffix" },
+    };
+
+fn assert_tree(input: &String, expected: &String) {
+    let result = g::parse(input);
+    assert result.ok(), `unexpected diagnostics for ${*input}: ${result.diagnostics:?}`;
+    let actual = g::to_string_tree(&result);
+    assert actual == *expected, `\ninput:    ${*input}\nexpected: ${*expected}\nactual:   ${actual}`;
+}
+
+test "an empty name list closes on its own bar" {
+    assert_tree(&"|| b", &"(start (block | | (body b)))");
+}
+
+// `compute_follow_arg` reads the element list it is given, and inside a group
+// that list is the group's alternative — `[OR, names?, OR]`. So `names?` is
+// told its continuation is the group's own OR and then whatever the RULE was
+// called with, skipping `body` entirely, and the mask that reaches the loop
+// names a token that cannot be there.
+//
+// Closing it means threading the enclosing alternative's remaining elements
+// into the group's lowering, parse side and scan side together, so the walk
+// can run off the end of the group into what follows it. `outer_follow` is
+// already threaded but is one token, which is a depth short of the rejection
+// case below: `|a|` and `|a|b|` agree at the first two.
+#[TODO]
+test "one name yields the bar that closes the list" {
+    assert_tree(&"|a| b", &"(start (block | (names (name a)) | (body b)))");
+}
+
+#[TODO]
+test "the loop keeps a bar the closer cannot be" {
+    assert_tree(&"|a|b| c", &"(start (block | (names (name a | b)) | (body c)))");
+}
+
+#[TODO]
+test "a comma-separated list yields the closer too" {
+    assert_tree(
+        &"|a, b| c",
+        &"(start (block | (names (name a) , (name b)) | (body c)))",
+    );
+}
