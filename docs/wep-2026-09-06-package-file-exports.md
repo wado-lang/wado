@@ -153,10 +153,41 @@ valid.
   literally at the use site (principle 2), since a package coordinate in front
   of the path does not make the set dynamic, and the generator still receives
   its inputs by value under the same sandbox (principle 1).
-- The clause stays the consumer's. Naming a dependency's `.g4` means running the
-  generator yourself, with your options. A package that wants to own its own
-  generation instead runs Kiln on its own files and exports the resulting
-  module, which needs the harvest to cross the dependency edge (see Known gaps).
+- Naming a dependency's `.g4` yourself means running the generator yourself,
+  with your options. A package that wants to own its generation instead runs
+  Kiln on its own files and exports the resulting module, which is the next
+  section.
+
+### A dependency's own invocations follow the cache rule
+
+A package may generate from its own assets and export what comes out. Its
+clauses then have to fire in a consuming build, since the loader meets that
+package's `use { … } from "./grammar/Wado.g4"` while compiling it. Clauses are
+therefore harvested across the dependency edge, and each one is resolved by the
+rule Kiln already applies to a local invocation
+([Kiln](./wep-2026-04-12-kiln.md) §"Caching"):
+
+- A recorded output travels with the package — the generated `.wado` files and
+  the `<primary>.kiln.json` beside them. The consuming build uses them and
+  resolves no generator at all.
+- Nothing recorded, and the consuming build runs the generator: it resolves it
+  through the _dependency's_ `[build-dependencies]`, and writes the output into
+  the consuming project's tree.
+
+Which arm a package takes is the one it already chose with `output_dir`: a
+tracked directory commits the output and ships it, the default gitignored one
+does not. No new switch, and no policy the boundary invents for itself.
+
+A recorded output is trusted, not verified. Re-deriving its cache key means
+resolving and hashing the dependency's generator, which is the work the record
+exists to avoid — the same reasoning consume-only mode already runs on. Keeping
+that record fresh is the dependency's own `wado check`.
+
+Both arms rest on the sandbox. Running a generator the consumer never named is
+acceptable because a generator is a pure function of its inputs, with no clock,
+no network, no filesystem and no environment (principle 1). Reusing a recorded
+output is acceptable for the same reason: purity is what makes the recorded
+bytes reproducible rather than a snapshot of someone's machine.
 
 ### Deliberate omissions
 
@@ -191,32 +222,43 @@ without the exception.
    the logical form, write outputs into the consumer's tree. Done when
    `grammar/Wado.g4` can be consumed from a second package with a warm,
    machine-independent cache.
-4. `#include_str` / `#include_bytes`: the same reference, resolved through the
+4. Harvest across the dependency edge: walk a dependency's modules, anchor each
+   clause's paths on that dependency's package root as `ns:pkg@ver/path`, and
+   key its redirect by the identity the loader gives that module. Done when a
+   consuming build reports a dependency's malformed clause instead of ignoring
+   it.
+5. Consume a recorded output: resolve a dependency's invocation from the
+   `<primary>.kiln.json` beside its committed output, as consume-only mode does.
+   Done when `package-gale-highlight-wado` builds as a dependency with no
+   generator run in the consuming build.
+6. Run what has no record: resolve the generator through the dependency's own
+   `[build-dependencies]`, pin it in the consuming project's lock as part of the
+   transitive build graph, and write the output into that project's tree. Done
+   when a dependency that commits no output builds in a consumer, and a second
+   build of it hits a warm cache.
+7. `#include_str` / `#include_bytes`: the same reference, resolved through the
    same path.
-5. Registry distribution: assets travel in the `wado:package` section and are
-   extracted into the shared cache on fetch, so `CompilerHost::load_source`
-   serves them like any other file.
-6. Binary assets through Kiln: `input-file.content` becomes `list<u8>`
+8. Registry distribution: assets and recorded Kiln outputs travel in the
+   `wado:package` section and are extracted into the shared cache on fetch, so
+   `CompilerHost::load_source` serves them like any other file.
+9. Binary assets through Kiln: `input-file.content` becomes `list<u8>`
    ([Kiln](./wep-2026-04-12-kiln.md) §"Open questions"), so an image can reach a
    generator. Done when the `core:kiln` world carries bytes and its version bump
    invalidates the caches.
-7. The unreachable-`pub` lint: a `pub` item that no exported file reaches,
-   reported in the unused family. Done when a package with a `pub` item outside
-   its `lib` reach and outside `exports` reports it, and adding the file to
-   `exports` clears it.
+10. The unreachable-`pub` lint: a `pub` item that no exported file reaches,
+    reported in the unused family. Done when a package with a `pub` item outside
+    its `lib` reach and outside `exports` reports it, and adding the file to
+    `exports` clears it.
 
 ## Known gaps
 
-- A dependency's own Kiln invocations. The clause-harvest walks the local module
-  graph and stops at the dependency edge, so a package that generates from its
-  own assets does not work when consumed — `package-gale-highlight-wado` is that
-  package today. What closes it is one decision with several downstream of it:
-  whether a dependency's generators run in the consuming build at all, or a
-  dependency is always consumed from its committed output the way a
-  consume-only host reads it. Running them settles nothing by itself — where
-  the outputs and cache state live, whose `[build-dependencies]` and lock pin
-  the generator, how deep the graph is followed, and whose diagnostic a
-  dependency's generator failure is, all follow from it.
+- How deep a dependency's generation is followed. Roadmap 4-6 cover a direct
+  dependency; whether a dependency of a dependency generating from its own
+  assets is reached the same way is unexamined, and the answer is one traversal
+  rule plus whatever the transitive build lock has to record.
+- Whose diagnostic a dependency's generator failure is. The span names a file
+  the consumer cannot edit, and the useful report is one that names the
+  dependency and its version rather than a path under `$WADO_ROOT`.
 - Whether a `lib` entry and an exported submodule that reach the same file
   resolve to one module identity. Two identities would make one declaration two
   nominal types, which
