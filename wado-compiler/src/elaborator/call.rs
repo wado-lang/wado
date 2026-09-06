@@ -13,10 +13,10 @@ use super::callee::{CalleeRef, StaticMethodRef};
 use super::expr::BareCase;
 use super::infer::InferCtx;
 use super::instantiate::Instantiation;
-use super::method_lookup::StaticCallee;
 use super::scope::{BinderInScope, Scope};
 use super::sem::types::{CalleeParams, StaticMethodDispatch};
 use super::sig::{MethodSig, Param};
+use super::static_call::StaticLookup;
 use super::trait_env;
 use super::trait_env::ImplTargetKey;
 use super::types::{FunctionContext, TypeError};
@@ -966,19 +966,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // codegen, as an invalid module rather than at its own span.
                 let receiver_key = self.impl_target(prefix);
                 let receiver_type = self.resolve_unsited_type_name(prefix, call.span);
-                let (callee_params, declares_params) =
-                    match self.static_callee_params(&receiver_key, receiver_type, suffix) {
-                        StaticCallee::Declared(params) => (params, true),
-                        StaticCallee::Ambiguous(traits) => {
-                            let _ = self.emit(TypeError::AmbiguousTraitMethod {
-                                method: suffix.to_string(),
-                                traits,
-                                span: call.span,
-                            });
-                            return TypeTable::ERROR;
-                        }
-                        StaticCallee::Undeclared => (CalleeParams::default(), false),
-                    };
+                let resolved =
+                    self.static_callee_params(&receiver_key, receiver_type, suffix, prefix);
+                if let StaticLookup::Ambiguous(traits) = resolved {
+                    let _ = self.emit(TypeError::AmbiguousTraitMethod {
+                        method: suffix.to_string(),
+                        traits,
+                        span: call.span,
+                    });
+                    return TypeTable::ERROR;
+                }
+                let (callee_params, declares_params) = resolved.params();
                 let raw_param_types = if declares_params {
                     callee_params.param_types.clone()
                 } else {

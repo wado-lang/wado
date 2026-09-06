@@ -19,7 +19,6 @@ use crate::token::Span;
 use super::Elaborator;
 use super::infer::InferCtx;
 use super::instantiate::Instantiation;
-use super::sem::types::CalleeParams;
 use super::sig::{InstantiatedImplSig, Param};
 use super::synth::{ArgClass, ArgProbe};
 use super::trait_env::{ImplHeader, TraitEnv};
@@ -106,18 +105,6 @@ pub(super) struct MethodInferenceInput<'a> {
     /// Call-site span, used to anchor a "cannot infer type parameter"
     /// diagnostic when inference leaves a method type parameter dangling.
     pub span: Span,
-}
-
-/// What [`Elaborator::static_callee_params`] found for a `Type::method(...)`
-/// spelling.
-pub(super) enum StaticCallee {
-    /// One declaration answered, with the lists to check and pad against.
-    Declared(CalleeParams),
-    /// Several implemented traits declare the name, in their impls' order.
-    /// The spelling names none of them, so only a trait-qualified call picks.
-    Ambiguous(Vec<String>),
-    /// None did. A variant case or a flags member owns its own count here.
-    Undeclared,
 }
 
 /// The positions an `impl` target writes, `None` for a target writing none.
@@ -1468,91 +1455,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// static spelling asks this one question, so none of them differs on the
     /// arity it checks.
     pub(super) fn static_callee_params(
-        &self,
+        &mut self,
         receiver: &ImplTargetKey,
         receiver_type: TypeId,
         method_name: &str,
-    ) -> StaticCallee {
-        if let Some(sig) = self.unique_qualified_method_sig_keyed(receiver, method_name) {
-            return StaticCallee::Declared(CalleeParams::of_signature(Some(&sig)));
-        }
-        self.inherited_trait_static_params(receiver, receiver_type, method_name)
-    }
-
-    /// [`Self::static_callee_params`] where the block inherits the method with
-    /// the trait's default body: that list lives on the trait alone, so nothing
-    /// keyed on the receiver answers for it.
-    ///
-    /// Read off the blocks on the receiver rather than resolved. Resolving is
-    /// what the call has not done yet, and doing it here decides an overload
-    /// and reaches impls on other types.
-    fn inherited_trait_static_params(
-        &self,
-        receiver: &ImplTargetKey,
-        receiver_type: TypeId,
-        method_name: &str,
-    ) -> StaticCallee {
-        // Only where no block on the receiver declares the name. Several is an
-        // overload the call site picks among by argument.
-        if self
-            .qualified_method_decl_ids(receiver, method_name)
-            .next()
-            .is_some()
-        {
-            return StaticCallee::Undeclared;
-        }
-        let Some(impls) = self.tysys.trait_env.impl_index.get(receiver) else {
-            return StaticCallee::Undeclared;
-        };
-        let mut answered = None;
-        let mut declaring_traits = Vec::new();
-        for impl_def in impls.iter().copied() {
-            let Some(impl_sig) = self.tysys.signatures.impl_sig(impl_def) else {
-                continue;
-            };
-            let Some(declaring) = impl_sig
-                .trait_decl
-                .and_then(|decl| self.tysys.signatures.trait_sig(decl))
-            else {
-                continue;
-            };
-            let Some(declared) = declaring.method(method_name) else {
-                continue;
-            };
-            // A required method the block leaves undeclared is its own error,
-            // reported where the two are compared.
-            if declared.default_body.is_none() || declared.sig.self_kind != ast::SelfKind::None {
-                continue;
-            }
-            if let Some(decl) = impl_sig.trait_decl {
-                declaring_traits.push(self.tysys.resolutions.defs().name(decl).to_string());
-            }
-            answered = Some((declared, impl_sig, declaring));
-        }
-        // Two traits supplying the name leaves the spelling naming neither.
-        // Unreported, the call is built to whichever came first and reaches
-        // codegen as a module nothing validates.
-        if declaring_traits.len() > 1 {
-            return StaticCallee::Ambiguous(declaring_traits);
-        }
-        let Some((declared, impl_sig, declaring)) = answered else {
-            return StaticCallee::Undeclared;
-        };
-        // The trait's frame: `Self` leads its slots, the trait's own arguments
-        // follow, and the method's own stay open to inference.
-        let mut declaring_args = vec![receiver_type];
-        declaring_args.extend(impl_sig.trait_type_args.iter().copied());
-        let instantiated =
-            declared
-                .sig
-                .instantiate_call(&self.tysys.type_table, &declaring_args, &[]);
-        StaticCallee::Declared(CalleeParams {
-            param_is_mut: Param::is_mut_flags(&declared.sig.params),
-            param_defaults: Param::named_defaults(&declared.sig.params),
-            param_types: instantiated.param_types,
-            self_in_args: false,
-            defaults_module: Some(declaring.module.clone()),
-        })
+        receiver_name: &str,
+    ) -> super::static_call::StaticLookup {
+        self.resolve_static_callee(
+            None,
+            receiver_name,
+            Some(receiver),
+            method_name,
+            None,
+            Some(receiver_type),
+        )
     }
 
     /// Find a trait method for a given type and method name, for when an
@@ -2748,32 +2664,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         )
     }
 
-    /// Look up the type parameters of a static method from its impl header.
-    /// Scans the pre-digested impl headers for `impl StructName { fn method_name<...> }`;
-    /// `impl_headers` already covers every loaded module (including the current one).
+    /// The method's own slots as its declaration wrote them, read off the
+    /// declaration [`Elaborator::resolve_static_callee`] picked: a trait-`impl`
+    /// method reports the trait's bounds and defaults, which the block itself
+    /// does not restate.
     pub(super) fn lookup_static_method_type_params(
-        &self,
+        &mut self,
         struct_name: &str,
         method_name: &str,
     ) -> Vec<ast::GenericParam> {
-        // The signature dispatch would choose, so a trait-`impl` method reports
-        // the trait's bounds and defaults, which the block does not restate.
-        // The header scan below answers for the shapes no signature does.
-        if let Some(sig) = self.unique_qualified_method_sig(struct_name, method_name)
-            && !sig.own_params.is_empty()
-        {
-            return sig.own_params;
-        }
-        for header in self.tysys.trait_env.impl_headers.values() {
-            if super::trait_env::get_type_name_static(&header.ty) == struct_name {
-                for method in &header.methods {
-                    if method.name == method_name && !method.type_params.is_empty() {
-                        return method.type_params.clone();
-                    }
-                }
-            }
-        }
-        vec![]
+        self.resolve_static_callee(None, struct_name, None, method_name, None, None)
+            .found()
+            .map(|callee| callee.own_params.clone())
+            .unwrap_or_default()
     }
 
     /// Look up the type parameters of a function from its AST definition.

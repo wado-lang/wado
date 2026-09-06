@@ -12,10 +12,11 @@ use crate::token::Span;
 
 use super::Elaborator;
 use super::callee::StaticMethodRef;
-use super::method_lookup::{MethodInferenceInput, StaticCallee};
+use super::method_lookup::MethodInferenceInput;
 use super::reflect::ReflectDispatch;
 use super::sem::types::{CalleeParams, StaticMethodDispatch};
 use super::sig::Param;
+use super::static_call::StaticLookup;
 use super::types::{FunctionContext, MethodInfo, MethodOwner, TypeError};
 
 /// A static call named the way [symbol notation] writes it — the receiver's
@@ -1455,24 +1456,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let callee_sig = static_receiver
             .as_ref()
             .and_then(|key| self.unique_qualified_method_sig_keyed(key, &static_call.method));
-        let found = static_receiver
-            .as_ref()
-            .map(|receiver| {
-                self.static_callee_params(receiver, target_type_id, &static_call.method)
-            })
-            .unwrap_or(StaticCallee::Undeclared);
-        let (callee_params, declares_params) = match found {
-            StaticCallee::Declared(params) => (params, true),
-            StaticCallee::Ambiguous(traits) => {
-                let _ = self.emit(TypeError::AmbiguousTraitMethod {
-                    method: static_call.method.clone(),
-                    traits,
-                    span: static_call.span,
-                });
-                return TypeTable::ERROR;
+        let resolved = match (&static_receiver, &struct_name_for_lookup) {
+            (Some(receiver), Some(name)) => {
+                let name = name.clone();
+                self.static_callee_params(receiver, target_type_id, &static_call.method, &name)
             }
-            StaticCallee::Undeclared => (CalleeParams::default(), false),
+            _ => StaticLookup::NotStatic,
         };
+        if let StaticLookup::Ambiguous(traits) = resolved {
+            let _ = self.emit(TypeError::AmbiguousTraitMethod {
+                method: static_call.method.clone(),
+                traits,
+                span: static_call.span,
+            });
+            return TypeTable::ERROR;
+        }
+        let (callee_params, declares_params) = resolved.params();
         let CalleeParams {
             param_is_mut,
             param_defaults: static_method_defaults,
@@ -3424,84 +3423,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Get the operator trait and method name for a binary operator.
-    pub(super) fn is_static_method(&self, struct_name: &str, method_name: &str) -> bool {
+    pub(super) fn is_static_method(&mut self, struct_name: &str, method_name: &str) -> bool {
         self.is_static_method_at(None, struct_name, method_name)
     }
 
-    /// [`Self::is_static_method`] for a receiver written at a reference site.
-    /// The site decides which declaration `struct_name` names; see
-    /// [`Elaborator::impl_target_at`].
+    /// Whether `struct_name::method_name` names a declaration at all — the
+    /// resolution [`Elaborator::resolve_static_callee`] performs, asked for its
+    /// outcome alone. The site decides which declaration `struct_name` names;
+    /// see [`Elaborator::impl_target_at`].
     pub(super) fn is_static_method_at(
-        &self,
+        &mut self,
         site: Option<crate::ast::AstId>,
         struct_name: &str,
         method_name: &str,
     ) -> bool {
-        // O(1) lookup via the impl-method index, both kinds: the spelling names
-        // a receiver-taking method too, passing the receiver first.
-        // Canonicalise so a same-named struct in another module doesn't
-        // accidentally claim this name.
-        let static_key = self.impl_target_at(site, struct_name);
-        if self
-            .impl_method_entries(&static_key, method_name)
-            .next()
-            .is_some()
-        {
-            return true;
-        }
-
-        if self
-            .tysys
-            .trait_env
-            .resource_static(&static_key, method_name)
-            .is_some()
-        {
-            return true;
-        }
-
-        // Same walk as `lookup_static_method_return_type`: the index holds
-        // only the declaring resource's own methods.
-        if let super::trait_env::ImplTargetKey::Decl(def) = &static_key
-            && self.resource_instance_method(*def, method_name).is_some()
-        {
-            return true;
-        }
-
-        // For newtypes/flags, check if the base type has the static method
-        if let Some((_, base_name)) = self.newtype_base(struct_name)
-            && self.is_static_method(&base_name, method_name)
-        {
-            return true;
-        }
-
-        // Auto-derived `Default::default()` for structs whose fields all have
-        // default expressions. No user impl exists (previous checks would have
-        // caught it), but `synthesis::traits` will emit the body.
-        if method_name == "default"
-            && self
-                .tysys
-                .auto_derive_default_struct_type(&self.type_lookup(), struct_name)
-                .is_some()
-        {
-            return true;
-        }
-
-        // `ReflectStruct` metadata is reachable only through the trait-qualified form
-        // `ReflectStruct::<T>::method()` (see `resolve_call`), never as a bare
-        // `T::method()` static method — that keeps struct namespaces clean.
-
-        // Defaulted trait method: when `impl Trait for Type` does not
-        // override a static method that the trait provides a default for,
-        // `Type::method` must still resolve. `locate_static_method_impl`
-        // applies the same fallback to find the trait name and module.
-        if self
-            .locate_static_method_impl(struct_name, method_name, None, None)
-            .is_some()
-        {
-            return true;
-        }
-
-        false
+        self.resolve_static_callee(site, struct_name, None, method_name, None, None)
+            .resolves()
     }
 
     /// Resolve a static method call from a qualified name like `Point::origin()`
@@ -3714,11 +3651,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // every spelling reaching here has already passed.
         let receiver_key = self.impl_target(&actual_struct_name);
         let receiver_type = self.resolve_unsited_type_name(&actual_struct_name, span);
-        let callee_params =
-            match self.static_callee_params(&receiver_key, receiver_type, method_name) {
-                StaticCallee::Declared(params) => params,
-                StaticCallee::Ambiguous(_) | StaticCallee::Undeclared => CalleeParams::default(),
-            };
+        let (callee_params, _) = self
+            .static_callee_params(
+                &receiver_key,
+                receiver_type,
+                method_name,
+                &actual_struct_name,
+            )
+            .params();
 
         let StaticMethodRef {
             module: struct_module,

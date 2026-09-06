@@ -28,6 +28,7 @@ mod scope;
 pub(crate) mod sem;
 pub(crate) mod sig;
 mod solver_bridge;
+mod static_call;
 mod stmt;
 mod synth;
 mod tagged_template;
