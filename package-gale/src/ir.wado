@@ -1539,8 +1539,10 @@ fn rebase_lexer_rules(g: &Grammar, modes: &mut List<String>, channels: &mut List
         if r.set_mode >= 0 {
             r.set_mode = mode_remap[r.set_mode];
         }
-        // A numeric `channel(N)` literal is an explicit id with no
-        // `channels { }` entry behind it, so it has no remap slot.
+        // A `channels { }` block is the grammar's own numbering, so inside its
+        // range an id and the name declared at that index are one channel and
+        // rebasing carries both. Past the range a numeric `channel(N)` has no
+        // entry behind it and stays as written.
         if r.channel >= 2 {
             let src_idx = r.channel - 2;
             if src_idx < chan_remap.len() {

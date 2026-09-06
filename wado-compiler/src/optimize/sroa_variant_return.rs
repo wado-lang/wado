@@ -105,11 +105,8 @@ impl Layout {
             .map(|i| u32::try_from(i).expect("variant case index overflow"))
     }
 
-    /// The payload a binding for `case_index` receives, `None` for a unit case,
-    /// which has no slot to read. The slot's own type can be the nullable
-    /// widening [`slot_shape`] chose for it, which `wir_build` bridges; a
-    /// wrapper around the payload it never bridges, so that is what the binding
-    /// has to be measured against.
+    /// The payload a binding for `case_index` receives. `None` for a unit case,
+    /// which has no slot to read.
     fn payload_read_type(&self, case_index: u32) -> Option<TypeId> {
         self.case_slots[case_index as usize].flat()?;
         Some(self.case_payloads[case_index as usize])
@@ -1608,10 +1605,7 @@ fn check_uses(
                         let rewritable = via_temp
                             .or(via_call)
                             .and_then(|f| candidates.get(&f))
-                            .is_some_and(|c| {
-                                arms.iter()
-                                    .all(|a| arm_is_one_level(body, a, rebind, &c.layout))
-                            });
+                            .is_some_and(|c| arms_are_one_level(body, &arms, rebind, &c.layout));
                         if !rewritable {
                             invalid.extend(via_temp.into_iter().chain(via_call));
                         }
@@ -1699,26 +1693,18 @@ enum Rebound<'a> {
     Boxed { box_type: TypeId, name: &'a str },
 }
 
-fn peel_refs(mut ty: TypeId, type_table: &TypeTable) -> TypeId {
-    while let ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) = type_table.get(ty) {
-        ty = *inner;
-    }
-    ty
-}
-
 /// Per-function facts deciding whether a payload binding can be re-minted, and
 /// in what form. A local a `stores` parameter aliases cannot: the alias is
 /// established outside this body, and the `let` would not re-establish it.
-/// Neither can one whose declared type is neither the pattern's own type nor a
-/// `Box` of it — local indices are pooled, so a declaration that matches
-/// nothing the pattern names belongs to another binding.
+/// Neither can one whose declared type is neither the payload nor a `Box` of it
+/// — local indices are pooled, so a declaration matching neither belongs to
+/// another binding.
 struct Rebind {
     aliased: IndexSet<u32>,
     local_types: Vec<TypeId>,
-    /// Each declared local type with its `&` / `&mut` layers stripped. `&T` is
-    /// `T` at WIR level (`wir_build::context`), and everything needing a cell
-    /// reaches here already rewritten to `Box<T>`, so a reference binding takes
-    /// the payload as it stands.
+    /// Each declared local type with its `&` / `&mut` layers stripped: `&T` is
+    /// `T` at WIR level (`wir_build::context`), what needs a cell arriving as
+    /// `Box<T>` instead.
     peeled_types: Vec<TypeId>,
     /// Declared `Box<T>` local type → (`T`, the struct's rendered name).
     boxes: IndexMap<TypeId, (TypeId, String)>,
@@ -1760,10 +1746,9 @@ impl Rebind {
         }
     }
 
-    /// `payload_type` is what the slot read produces, never what the pattern
-    /// spells: `lower::plan::boxing` rewrites an address-taken binding's pattern
-    /// type along with its local, so the two agreeing proves nothing about the
-    /// value that arrives.
+    /// `payload_type` is what the slot read produces. Never pass the pattern's
+    /// own type: `lower::plan::boxing` rewrites it along with the local, so the
+    /// two agreeing says nothing about the value that arrives.
     fn rebound(&self, local: u32, payload_type: TypeId) -> Option<Rebound<'_>> {
         if self.aliased.contains(&local) {
             return None;
@@ -1780,6 +1765,18 @@ impl Rebind {
             _ => None,
         }
     }
+}
+
+fn peel_refs(mut ty: TypeId, type_table: &TypeTable) -> TypeId {
+    while let ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) = type_table.get(ty) {
+        ty = *inner;
+    }
+    ty
+}
+
+fn arms_are_one_level(body: &Body, arms: &[ArmData], rebind: &Rebind, layout: &Layout) -> bool {
+    arms.iter()
+        .all(|a| arm_is_one_level(body, a, rebind, layout))
 }
 
 /// One level deep over the scrutinee's own variant, binding at most one name
@@ -2313,9 +2310,7 @@ fn collect_call_scrutinees(
     if let NodeRef::Expr(e) = node
         && let ExprKind::Match { expr: scrut, arms } = &body.exprs[e].kind
         && let Some(cand) = call_callee(body, *scrut).and_then(|f| candidates.get(&f))
-        && arms
-            .iter()
-            .all(|a| arm_is_one_level(body, a, rebind, &cand.layout))
+        && arms_are_one_level(body, arms, rebind, &cand.layout)
     {
         out.push(e);
     }
@@ -2458,10 +2453,7 @@ fn check_temp_uses(
             }
             ExprKind::Match { expr: scrut, arms } => {
                 if is_local(body, *scrut, local) {
-                    if !arms
-                        .iter()
-                        .all(|a| arm_is_one_level(body, a, rebind, layout))
-                    {
+                    if !arms_are_one_level(body, arms, rebind, layout) {
                         *ok = false;
                         return;
                     }

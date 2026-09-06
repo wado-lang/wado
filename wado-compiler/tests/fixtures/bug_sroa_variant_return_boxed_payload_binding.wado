@@ -3,10 +3,10 @@
 // `make` returns `Result<Big, Failure>`, which variant-return SROA flattens to
 // `[tag, Option<Big>, Option<Failure>]`. `err` is address-taken by `${err:?}`,
 // so lowering promotes its local to `Box<Failure>` and rewrites the pattern's
-// own type to match. The rewrite asked whether the local's declared type equals
-// the pattern's, which both hold after that promotion, and bound the raw slot
-// read into a `Box<Failure>` local: "type mismatch: expected (ref null $type),
-// found (ref $type)" at codegen. The question is what the slot read produces.
+// own type to match. Measuring the local against the pattern rather than
+// against the payload the slot yields therefore passed, and the raw read landed
+// in a `Box<Failure>` local: "type mismatch: expected (ref null $type), found
+// (ref $type)" at codegen.
 use { println, Stdout } from "core:cli";
 
 variant Failure {

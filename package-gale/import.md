@@ -69,15 +69,14 @@ it, given four conventions in the delegate:
   the delegate's mode, never produces that token. The gate is deliberate: a
   parser rule is reached in whatever mode its caller pushed, and nothing records
   that, so a literal is read as the mode the parser starts in.
-- No token of its own may span the host's terminator. A composite has one lexer,
-  so inside the mode a delegate rule is matched like any other: a
-  `JS_COMMENT : '//' ~[\r\n]*` runs straight through `</script>`, the mode never
-  pops, and the rest of the document is lexed as JavaScript. A mode cannot
-  express HTML's rule that a closing tag ends raw text whatever the embedded
-  language thinks — deciding that needs lookahead a mode does not have. So a
-  scanning rule stops at `<`, and the `<` it then rejects inside a string or a
-  comment is a stated hole in the delegate rather than a document in the wrong
-  mode.
+- No token of its own may span the host's terminator. Inside the mode a delegate
+  rule is matched like any other, so a `JS_COMMENT : '//' ~[\r\n]*` runs straight
+  through `</script>`. The mode then never pops, and the rest of the document is
+  lexed as JavaScript. A lexer mode cannot express HTML's rule that a closing tag
+  ends raw text whatever the embedded language thinks, because deciding that
+  needs lookahead the mode does not have. So a scanning rule stops at `<`, and
+  the `<` it then rejects inside a string or a comment is a stated hole in the
+  delegate rather than a document in the wrong mode.
 
 The host declares the same mode name for the token that leaves it
 (`STYLE_CLOSE : '</style>' -> popMode ;` under its own `mode CSS;`), and the
