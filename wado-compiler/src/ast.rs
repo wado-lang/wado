@@ -1636,9 +1636,8 @@ pub enum UseItem {
 }
 
 impl UseItem {
-    /// Where the item starts in source, for the formatter to tell which gap a
-    /// comment sits in. `None` for the forms that *are* the whole import list
-    /// (`use _`, `use name`) and so have no gap to sit in.
+    /// Where the item starts in source. `None` for the forms that *are* the
+    /// whole import list (`use _`, `use name`), which have no gap to sit in.
     pub fn start(&self) -> Option<usize> {
         match self {
             UseItem::Simple { name_span, .. } => Some(name_span.start),

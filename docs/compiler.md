@@ -72,18 +72,20 @@ The loader runs `lexer → parser → bind` on every loaded module:
 - The parser builds a faithful AST. Compound assigns, comparison chains, struct shorthand, and `&self` parameters are kept verbatim so `wado format` round-trips.
 - `bind.rs` performs local name resolution, scope/mutability checking, and use-before-define detection.
 
-Comments are trivia: the lexer collects them, the parser keys them to the
+Comments are trivia. The lexer collects them, the parser keys them to the
 `AstId` they precede (`comment.rs`), and `unparse.rs` writes them back. A
-comment can sit in any gap between two tokens, most of which no node owns, so
-the unparser never relies on a construct remembering to emit one:
+comment can sit in any gap between two tokens, and no node owns most of those
+gaps, so the unparser never relies on a construct remembering to emit one.
 `flush_comments_before(pos)` emits every comment before `pos` that nothing has
-placed, and each statement, item and the module itself flushes at its end. A
-construct places what it has a slot for — between two list entries, before a
-closing delimiter, at the end of the entry's line — and a construct that
-ignores comments can only *relocate* one to its enclosing statement, never lose
-it. A construct that renders itself on one line must therefore refuse that form
-when a comment sits inside its span (`has_comment_in_range`), or it will wrap
-for a comment it does not place and formatting will not be idempotent.
+placed, and each statement, item and the module flushes at its end. A construct
+places what it has a slot for: between two list entries, before a closing
+delimiter, at the end of an entry's line. One that ignores a comment can only
+move it out to the enclosing statement, never lose it.
+
+A construct that renders itself on one line must refuse that form while an
+unplaced comment sits inside its span (`has_comment_in_range`). Otherwise it
+wraps for a comment it does not place, and the second format pass, finding no
+comment there, unwraps again.
 `test_format_keeps_a_comment_wedged_in_any_token_gap` enumerates the gaps
 mechanically over the fixture corpus.
 

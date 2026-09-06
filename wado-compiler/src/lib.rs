@@ -2056,8 +2056,7 @@ pub fn format(source: &str) -> Result<String, CompileError> {
     let formatted = unparser.unparse(&ast);
 
     // The unparser places every comment or flushes it at the enclosing
-    // statement, item or module, so this is a backstop, not a design element:
-    // it fires only if that guarantee is broken.
+    // statement, item or module, so this fires only if that guarantee breaks.
     if let Some(missing) = dropped_comment(source, &formatted) {
         return Err(CompileError::Format {
             message: format!("formatting would drop a comment (`{}`)", missing.text),
@@ -2104,8 +2103,7 @@ fn dropped_comment(before: &str, after: &str) -> Option<DroppedComment> {
         let key = (delim(c.kind), c.text.as_str());
         let before_count = before_bag.get(&key).copied().unwrap_or(0);
         if before_count > after_bag.get(&key).copied().unwrap_or(0) {
-            // Keep the text as written — a trimmed one does not match a grep
-            // for the comment the user is looking for.
+            // As written: a trimmed text does not match a grep for it.
             let snippet: String = c.text.chars().take(40).collect();
             return Some(DroppedComment {
                 text: format!("{}{snippet}", delim(c.kind)),
@@ -2244,9 +2242,8 @@ impl CompileError {
         )
     }
 
-    /// Name the file the error is in. [`format`] parses a string and has no
-    /// path to record, so its caller attaches one here rather than prefixing
-    /// the rendered message, which would double the separators.
+    /// Name the file the error is in, for a caller that has a path where the
+    /// erroring API — [`format`], which takes a string — did not.
     pub fn with_filename(mut self, path: &str) -> Self {
         let slot = match &mut self {
             CompileError::Io { .. } => None,

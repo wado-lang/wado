@@ -834,79 +834,59 @@ fn test_format_preserves_array_element_comments() {
     assert_eq!(formatted, formatted2, "should be idempotent");
 }
 
-/// A comment wedged between tokens has no AST node to own it. The construct
-/// it sits in places it where it can; whatever has no slot for it is flushed
-/// by the enclosing statement, item or module — kept, never dropped, and never
-/// an error.
+/// A comment between two entries of a struct literal, a parameter list or a
+/// `use { }` keeps its place, and the list takes the one-entry-per-line form
+/// that has a slot for it even though it would fit on one line. The three
+/// constructs of #1981.
 #[test]
-fn test_format_keeps_comment_with_no_node_to_own_it() {
-    let formatted =
-        wado_compiler::format("fn run() {\n    let z = foo(/*gone*/);\n}\n").expect("format failed");
-    assert!(formatted.contains("/*gone*/"), "got:\n{formatted}");
-    let again = wado_compiler::format(&formatted).expect("reformat failed");
-    assert_eq!(formatted, again, "format should be idempotent");
+fn test_format_keeps_a_comment_between_list_entries() {
+    for source in [
+        concat!(
+            "fn make() -> S {\n",
+            "    return S {\n",
+            "        a: 1,\n",
+            "        // why b is 2\n",
+            "        b: 2,  // and this is b\n",
+            "    };\n",
+            "}\n",
+        ),
+        concat!(
+            "fn f(\n",
+            "    a: i32,\n",
+            "    // the divisor\n",
+            "    b: i32,  // and this is b\n",
+            ") -> i32 {\n",
+            "    return a / b;\n",
+            "}\n",
+        ),
+        concat!(
+            "use {\n",
+            "    println,\n",
+            "    // for stderr\n",
+            "    eprintln,  // and this is eprintln\n",
+            "} from \"core:cli\";\n",
+        ),
+    ] {
+        let formatted = wado_compiler::format(source).expect("format failed");
+        assert_eq!(formatted, source, "got:\n{formatted}");
+        assert_format_preserves_ast(source);
+    }
 }
 
-/// A comment between two struct-literal fields keeps its place, and the
-/// literal takes the one-field-per-line form that has a slot for it.
+/// A comment no node owns — inside an empty list, or between two tokens of one
+/// expression — is kept wherever the enclosing construct has room for it,
+/// rather than dropped or refused.
 #[test]
-fn test_format_keeps_comment_between_struct_literal_fields() {
-    let source = concat!(
-        "fn make() -> S {\n",
-        "    return S {\n",
-        "        a: 1,\n",
-        "        // why b is 2\n",
-        "        b: 2,  // and this is b\n",
-        "    };\n",
-        "}\n",
-    );
-    let formatted = wado_compiler::format(source).expect("format failed");
-    assert_eq!(formatted, source, "got:\n{formatted}");
-    assert_format_preserves_ast(source);
-}
-
-/// A comment between two parameters keeps its place, wrapping the parameter
-/// list even though it would otherwise fit on one line.
-#[test]
-fn test_format_keeps_comment_between_params() {
-    let source = concat!(
-        "fn f(\n",
-        "    a: i32,\n",
-        "    // the divisor\n",
-        "    b: i32,  // and this is b\n",
-        ") -> i32 {\n",
-        "    return a / b;\n",
-        "}\n",
-    );
-    let formatted = wado_compiler::format(source).expect("format failed");
-    assert_eq!(formatted, source, "got:\n{formatted}");
-    assert_format_preserves_ast(source);
-}
-
-/// A comment between two `use { }` items keeps its place, wrapping the import
-/// list even though it would otherwise fit on one line.
-#[test]
-fn test_format_keeps_comment_between_use_items() {
-    let source = concat!(
-        "use {\n",
-        "    println,\n",
-        "    // for stderr\n",
-        "    eprintln,  // and this is eprintln\n",
-        "} from \"core:cli\";\n",
-    );
-    let formatted = wado_compiler::format(source).expect("format failed");
-    assert_eq!(formatted, source, "got:\n{formatted}");
-    assert_format_preserves_ast(source);
-}
-
-/// An empty delimited list is still a place a comment can sit.
-#[test]
-fn test_format_keeps_comment_in_empty_param_list() {
-    let source = "fn f(\n    // nothing yet\n) {\n}\n";
-    let formatted = wado_compiler::format(source).expect("format failed");
-    assert!(formatted.contains("// nothing yet"), "got:\n{formatted}");
-    let again = wado_compiler::format(&formatted).expect("reformat failed");
-    assert_eq!(formatted, again, "format should be idempotent");
+fn test_format_keeps_a_comment_no_node_owns() {
+    for (source, comment) in [
+        ("fn run() {\n    let z = foo(/*gone*/);\n}\n", "/*gone*/"),
+        ("fn f(\n    // nothing yet\n) {\n}\n", "// nothing yet"),
+    ] {
+        let formatted = wado_compiler::format(source).expect("format failed");
+        assert!(formatted.contains(comment), "got:\n{formatted}");
+        let again = wado_compiler::format(&formatted).expect("reformat failed");
+        assert_eq!(formatted, again, "format should be idempotent");
+    }
 }
 
 /// `(!x) matches {P}` (`Matches(Unary)`) must keep its parens: bare
@@ -2125,7 +2105,8 @@ fn test_no_dropped_comments_in_corpus() {
         {
             return;
         }
-        if let Err(e @ wado_compiler::CompileError::Format { .. }) = wado_compiler::format(&source) {
+        if let Err(e @ wado_compiler::CompileError::Format { .. }) = wado_compiler::format(&source)
+        {
             failures.push(format!("{}:{e}", path.display()));
         }
     }
@@ -3197,11 +3178,10 @@ fn test_format_effect_row_parentheses() {
 }
 
 /// Every gap between two tokens is a place a user can put a comment, and the
-/// formatter keeps a comment in all of them: a construct places it where it
-/// has a slot, and the enclosing statement, item or module flushes whatever it
-/// does not. This wedges a comment into every gap of the fixture corpus, which
-/// enumerates the class mechanically — a construct that ignores comments is
-/// caught here rather than by a user whose file stops formatting.
+/// formatter keeps one in all of them. Wedging a comment into every gap of the
+/// fixture corpus enumerates that class mechanically, so a construct that
+/// ignores comments is caught here rather than by a user whose file stops
+/// formatting.
 #[test]
 fn test_format_keeps_a_comment_wedged_in_any_token_gap() {
     let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/format.fixtures");
@@ -3219,8 +3199,9 @@ fn test_format_keeps_a_comment_wedged_in_any_token_gap() {
         let source = fs::read_to_string(&path).expect("read fixture");
         wado_compiler::format(&source)
             .unwrap_or_else(|e| panic!("{}: fixture does not format: {e}", path.display()));
+        let tokens = wado_compiler::lexer::lex(&source).tokens;
         for wedge in ["// WEDGE\n", "/*WEDGE*/"] {
-            for token in &wado_compiler::lexer::lex(&source).tokens {
+            for token in &tokens {
                 let at = token.span.start;
                 if at == 0 || at >= source.len() || !source.is_char_boundary(at) {
                     continue;
@@ -3269,11 +3250,6 @@ fn test_format_keeps_a_comment_wedged_in_any_token_gap() {
         failures.is_empty(),
         "{} of {probed} comment positions are not preserved:\n{}",
         failures.len(),
-        failures
-            .iter()
-            .take(20)
-            .cloned()
-            .collect::<Vec<_>>()
-            .join("\n")
+        failures[..failures.len().min(5)].join("\n")
     );
 }

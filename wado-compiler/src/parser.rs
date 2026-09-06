@@ -1947,11 +1947,9 @@ impl Parser {
             None
         };
 
-        // Through the last token consumed, not the child node's span: a
-        // `Type::Function` reports the span of its first parameter type, and a
-        // parameter span that stops short loses every trailing comment and
-        // every position query past that point.
-        let end_span = self.tokens[self.pos - 1].span;
+        // Through the last token consumed, never the child's span:
+        // `Type::Function` reports only its first parameter type's span, and a
+        // parameter that stops short loses everything past that point.
         Ok(Param {
             id,
             name,
@@ -1960,7 +1958,7 @@ impl Parser {
             self_kind: SelfKind::None,
             is_mut,
             default,
-            span: start_span.merge(&end_span),
+            span: start_span.merge(&self.tokens[self.pos - 1].span),
         })
     }
 
@@ -5288,12 +5286,9 @@ impl Parser {
                 None
             };
 
-            // Field span covers the full declaration — the first token
-            // through the last one consumed. Deriving the end from the child
-            // node instead would stop short of a `fn(A) -> B` type, whose
-            // span is its first parameter's, and a parent span shorter than
-            // its descendants breaks the AstId-keyed trivia attribution that
-            // picks the outermost node ending on the comment's line.
+            // Through the last token consumed, as a parameter does: a parent
+            // shorter than its descendants breaks the AstId-keyed trivia
+            // attribution that picks the outermost node ending on a line.
             let span = start_span.merge(&self.tokens[self.pos - 1].span);
 
             fields.push(StructField {
