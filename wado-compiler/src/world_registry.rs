@@ -420,6 +420,7 @@ mod tests {
                 name: "run".to_string(),
                 is_async: true,
                 params: vec![],
+                params_span: make_span(),
                 return_type: Some(Type::Generic(crate::ast::GenericType {
                     id: crate::ast::AstId::fresh(),
                     name: "Result".to_string(),

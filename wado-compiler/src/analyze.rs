@@ -921,6 +921,7 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                         UseItem::InterfaceFunctions {
                             interface_name,
                             functions,
+                            ..
                         } => {
                             for func_item in functions {
                                 let source_name = format!("{}::{}", interface_name, func_item.name);
@@ -1136,6 +1137,7 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                         UseItem::InterfaceFunctions {
                             interface_name,
                             functions,
+                            ..
                         } => {
                             for func_item in functions {
                                 let lookup_name = format!("{}::{}", interface_name, func_item.name);

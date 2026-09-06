@@ -1,0 +1,58 @@
+// Comments in every list-shaped construct, including the gaps that have no
+// AST node of their own. The formatter keeps all of them: a construct places
+// what it has a slot for, the enclosing statement or item flushes the rest.
+use {
+    println,
+    // for stderr
+    eprintln,  // trailing on the last item
+} from "core:cli";
+
+struct Point {
+    // leading on a field
+    x: i32,  // trailing on a field
+    y: i32,
+}
+
+fn divide(
+    a: i32,
+    // the divisor
+    b: i32,  // trailing on the last parameter
+) -> i32 {
+    return a / b;
+}
+
+fn no_params(
+    // nothing to declare yet
+) {
+}
+
+fn make() -> Point {
+    return Point {
+        x: 1,
+        // why y is 2
+        y: 2,  // trailing on the last field
+    };
+}
+
+fn call_and_collect() {
+    let xs = [
+        // leading on an element
+        1,
+        2,  // trailing on an element
+    ];
+    let n = divide(
+        // leading on an argument
+        10,
+        /*by=*/ 2,
+    );
+    let m = `${describe(n)}${xs.len()}`;
+    assert m != "";
+}
+
+fn describe(n: i32) -> String {
+    return match n {
+        // zero is special
+        0 => "zero",
+        _ => "some",
+    };
+}
