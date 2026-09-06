@@ -2095,8 +2095,8 @@ fn dropped_comment(before: &str, after: &str) -> Option<DroppedComment> {
         }
         bag
     }
-    let before_comments = lexer::lex(before).comments;
-    let after_comments = lexer::lex(after).comments;
+    let before_comments = lexer::comments_deep(before);
+    let after_comments = lexer::comments_deep(after);
     let before_bag = bag(&before_comments);
     let after_bag = bag(&after_comments);
     for c in &before_comments {

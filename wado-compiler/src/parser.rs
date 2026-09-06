@@ -6171,7 +6171,38 @@ impl Parser {
         // so what it read as a keyword belongs to the enclosing module.
         self.contextual_keywords
             .append(&mut parser.contextual_keywords);
+        // Its comments belong to the file too. The outer lex hides them behind
+        // the template's single token, so without this they reach no trivia
+        // map and the formatter drops them with nothing to detect it. The
+        // second list is what a nested interpolation absorbed in turn.
+        self.absorb_comments(lex_result.comments);
+        let nested = std::mem::take(&mut parser.comments);
+        self.absorb_comments(nested);
         Ok(expr)
+    }
+
+    /// Merge `comments` into this parse's stream, keeping it ordered by
+    /// position. A comment already there — the same fragment re-parsed after a
+    /// speculative branch backtracked — is skipped.
+    fn absorb_comments(&mut self, comments: Vec<crate::comment::Comment>) {
+        for comment in comments {
+            let at = self
+                .comments
+                .partition_point(|c| c.span.start < comment.span.start);
+            if self
+                .comments
+                .get(at)
+                .is_some_and(|c| c.span.start == comment.span.start)
+            {
+                continue;
+            }
+            assert!(
+                at >= self.comment_cursor,
+                "an interpolation's comments sit inside the template token being parsed, \
+                 so the cursor cannot have passed them",
+            );
+            self.comments.insert(at, comment);
+        }
     }
 
     /// Parse struct literal: `Point { x: 10, y: 20 }` or `Point { x, y }` (shorthand)

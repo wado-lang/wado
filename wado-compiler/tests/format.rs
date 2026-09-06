@@ -875,18 +875,105 @@ fn test_format_keeps_a_comment_between_list_entries() {
 
 /// A comment no node owns — inside an empty list, or between two tokens of one
 /// expression — is kept wherever the enclosing construct has room for it,
-/// rather than dropped or refused.
+/// rather than dropped or refused. An empty list has an interior too.
 #[test]
 fn test_format_keeps_a_comment_no_node_owns() {
     for (source, comment) in [
         ("fn run() {\n    let z = foo(/*gone*/);\n}\n", "/*gone*/"),
         ("fn f(\n    // nothing yet\n) {\n}\n", "// nothing yet"),
+        ("fn run() {\n    let p = P { /*empty*/ };\n}\n", "/*empty*/"),
+        ("fn run() {\n    let xs = [ /*none*/ ];\n}\n", "/*none*/"),
+        (
+            "fn run() {\n    let z = g(h(/*inner*/), x);\n}\n",
+            "/*inner*/",
+        ),
     ] {
         let formatted = wado_compiler::format(source).expect("format failed");
         assert!(formatted.contains(comment), "got:\n{formatted}");
         let again = wado_compiler::format(&formatted).expect("reformat failed");
         assert_eq!(formatted, again, "format should be idempotent");
     }
+}
+
+/// A comment inside a template interpolation keeps its place. The outer lex
+/// hides the interpolation's tokens behind the template's single token, so
+/// nothing downstream — the drop check included — sees such a comment unless
+/// the parser folds it into the file's comment stream.
+#[test]
+fn test_format_keeps_a_comment_in_a_template_interpolation() {
+    let source = "fn f(s: &String, n: i32) -> String {\n    return `a: ${/*why*/ *s} b: ${`in ${/*deep*/ n}`}`;\n}\n";
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert_eq!(formatted, source, "got:\n{formatted}");
+    assert_format_preserves_ast(source);
+}
+
+/// A comment a member's own constructs cannot place stops inside the
+/// declaration it was written in, not past its closing brace.
+#[test]
+fn test_format_keeps_a_comment_inside_the_declaration_it_was_written_in() {
+    let source = "impl S {\n    fn m<T, // note\n>(self, t: T) {\n    }\n}\n";
+    let formatted = wado_compiler::format(source).expect("format failed");
+    let inside = formatted
+        .lines()
+        .position(|l| l.contains("// note"))
+        .expect("comment kept");
+    let closing = formatted
+        .lines()
+        .position(|l| l == "}")
+        .expect("impl closes");
+    assert!(inside < closing, "comment left the impl:\n{formatted}");
+    let again = wado_compiler::format(&formatted).expect("reformat failed");
+    assert_eq!(formatted, again, "format should be idempotent");
+}
+
+/// A comment relocated out of a construct does not carry the blank lines that
+/// described the gap it came from, and the next member keeps its own spacing.
+#[test]
+fn test_format_relocated_comment_invents_no_blank_lines() {
+    let source = concat!(
+        "impl E {\n",
+        "    pub fn name(&self) -> String {\n",
+        "        return match self { A => \"a\", B => \"b\",\n",
+        "        /*W*/};\n",
+        "    }\n",
+        "\n",
+        "    /// Uppercase label.\n",
+        "    pub fn label(&self) -> String { return \"x\"; }\n",
+        "}\n",
+    );
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert!(
+        !formatted.contains("\n\n\n"),
+        "relocating a comment must not invent blank lines:\n{formatted}"
+    );
+    let again = wado_compiler::format(&formatted).expect("reformat failed");
+    assert_eq!(formatted, again, "format should be idempotent");
+}
+
+/// A trailing comment on the last call argument stays on that argument's line
+/// instead of escaping the call.
+#[test]
+fn test_format_keeps_a_trailing_comment_on_the_last_call_argument() {
+    let source = "fn f() {\n    let g = call(\n        1,\n        2,  // about two\n    );\n    let h = 1;\n}\n";
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert_eq!(formatted, source, "got:\n{formatted}");
+    assert_format_preserves_ast(source);
+}
+
+/// The width budget counts the ` {` the caller appends after a condition. A
+/// condition that fits in 120 columns only until the brace lands must wrap, or
+/// the next format pass unwraps it and overflows the line.
+#[test]
+fn test_format_wraps_a_condition_that_only_fits_without_its_brace() {
+    let long = "a".repeat(56);
+    let source = format!("fn f() {{\n    if {long} && {long} {{\n    }}\n}}\n");
+    let formatted = wado_compiler::format(&source).expect("format failed");
+    assert!(
+        formatted.lines().all(|l| l.len() <= 120),
+        "a line went over the width budget:\n{formatted}"
+    );
+    let again = wado_compiler::format(&formatted).expect("reformat failed");
+    assert_eq!(formatted, again, "format should be idempotent");
 }
 
 /// `(!x) matches {P}` (`Matches(Unary)`) must keep its parens: bare
@@ -3177,6 +3264,35 @@ fn test_format_effect_row_parentheses() {
     assert_format_preserves_ast(source);
 }
 
+/// `(byte offset, line, column)` of every token start in `source`, descending
+/// into template interpolations — the outer lex hides those tokens behind the
+/// template's single token, and a comment can sit between them like anywhere
+/// else.
+fn token_starts(source: &str) -> Vec<(usize, usize, usize)> {
+    use wado_compiler::token::{TemplateTokenPart, Token, TokenKind};
+
+    fn collect(tokens: &[Token], out: &mut Vec<(usize, usize, usize)>) {
+        for token in tokens {
+            out.push((token.span.start, token.span.line, token.span.column));
+            let TokenKind::TemplateStringLit(parts) = &token.kind else {
+                continue;
+            };
+            for part in parts {
+                let TemplateTokenPart::Interpolation { expr, origin, .. } = part else {
+                    continue;
+                };
+                let nested =
+                    wado_compiler::lexer::lex_interpolation(expr, *origin, token.span.space);
+                collect(&nested.tokens, out);
+            }
+        }
+    }
+
+    let mut out = Vec::new();
+    collect(&wado_compiler::lexer::lex(source).tokens, &mut out);
+    out
+}
+
 /// Every gap between two tokens is a place a user can put a comment, and the
 /// formatter keeps one in all of them. Wedging a comment into every gap of the
 /// fixture corpus enumerates that class mechanically, so a construct that
@@ -3199,10 +3315,9 @@ fn test_format_keeps_a_comment_wedged_in_any_token_gap() {
         let source = fs::read_to_string(&path).expect("read fixture");
         wado_compiler::format(&source)
             .unwrap_or_else(|e| panic!("{}: fixture does not format: {e}", path.display()));
-        let tokens = wado_compiler::lexer::lex(&source).tokens;
+        let starts = token_starts(&source);
         for wedge in ["// WEDGE\n", "/*WEDGE*/"] {
-            for token in &tokens {
-                let at = token.span.start;
+            for &(at, line, column) in &starts {
                 if at == 0 || at >= source.len() || !source.is_char_boundary(at) {
                     continue;
                 }
@@ -3213,13 +3328,7 @@ fn test_format_keeps_a_comment_wedged_in_any_token_gap() {
                     continue;
                 }
                 probed += 1;
-                let site = format!(
-                    "{}:{}:{} [{}]",
-                    path.display(),
-                    token.span.line,
-                    token.span.column,
-                    wedge.trim()
-                );
+                let site = format!("{}:{line}:{column} [{}]", path.display(), wedge.trim());
                 let formatted = match wado_compiler::format(&variant) {
                     Ok(f) => f,
                     Err(e) => {
