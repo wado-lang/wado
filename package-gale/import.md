@@ -40,7 +40,7 @@ Master rules come first in the composite, then delegates in that order. Two thin
 | Named actions (`@members`)               | Concatenated, each tagged with the recognizer that declared it                               |
 | Options (incl. `superClass`, `language`) | Not inherited — "ANTLR also ignores any options in imported grammars"                        |
 
-`language` follows the other options, so the master alone picks the action translator. A composite holds one action language. A delegate that declares a different one has its bodies translated as the master's, which the translator reports rather than mistranslates.
+`language` follows the other options, so the master alone picks the action translator. A composite holds one action language today. A delegate that declares a different one has its bodies translated as the master's, which the translator reports rather than mistranslates. Letting a delegate bring its own is queued in [`TODO.md`](./TODO.md).
 
 An overridden rule takes its own references with it. `DelegatorRuleOverridesDelegate` drops a delegate's `b : B` that is the only reference to `B`. Keeping that reference would fail `check_references`, which runs once over the whole composite.
 
@@ -48,7 +48,7 @@ A mode that an override emptied is discarded, and the remaining modes are renumb
 
 ## What is rejected
 
-`import Foo = Bar;`. ANTLR4's aliased form names the delegate for qualified action references (`gFoo.x`), and Gale has no counterpart for those. Composing it as `import Bar;` would be a guess about a form no corpus descriptor and no real grammar exercises, so it is a loud error.
+`import Foo = Bar;`. ANTLR4's aliased form names the delegate for qualified action references (`gFoo.x`), and Gale has no counterpart for those. Accepting it while dropping what the alias means would be worse than refusing it, so it is a loud error for now. Closing that is queued in [`TODO.md`](./TODO.md); it is the one place Gale rejects a grammar ANTLR4 compiles.
 
 ## Known gaps
 
