@@ -2121,12 +2121,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // leaves without that name at all.
         let receiver_key =
             self.impl_target_of(target_type_id, &crate::name::DeclName::new(&struct_name));
-        let selected = self.locate_static_method_impl(
+        let lookup = self.resolve_static_callee(
+            None,
             &struct_name,
+            Some(&receiver_key),
             &static_call.method,
             arg_type_hint.as_deref(),
-            Some(&receiver_key),
+            None,
         );
+        let selected = lookup
+            .found()
+            .and_then(|callee| callee.method_ref.clone())
+            .filter(|method_ref| method_ref.trait_name.is_some());
         let trait_name_opt = selected.as_ref().and_then(|r| r.trait_name.clone());
 
         // The expected type that shaped the argument came from
@@ -2159,17 +2165,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             &static_call.method,
         );
 
-        let method_ref = StaticMethodRef::new(
-            struct_module.clone(),
-            struct_name.clone(),
-            static_call.method.clone(),
-            trait_name_opt.clone(),
-            selected.as_ref().and_then(|r| r.method_id),
-        );
-
-        // Look up return type
-        let mut return_type =
-            self.lookup_static_method_return_type(&method_ref, &mangled_struct_name);
+        let mut return_type = lookup
+            .found()
+            .map_or(TypeTable::UNKNOWN, |callee| callee.return_type);
 
         // A value blanket indexes statics under its receiver *param* name, so
         // the concrete receiver's own bucket misses.
@@ -3475,12 +3473,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 &crate::name::DeclName::new(&actual_struct_name),
             )
         });
-        let resolved = self.locate_static_method_impl(
+        let lookup = self.resolve_static_callee(
+            None,
             &actual_struct_name,
+            receiver_key.as_ref(),
             method_name,
             arg_type_hint.as_deref(),
-            receiver_key.as_ref(),
+            None,
         );
+        let resolved = lookup
+            .found()
+            .and_then(|callee| callee.method_ref.clone())
+            .filter(|method_ref| method_ref.trait_name.is_some());
         // The expected type that shaped the argument came from
         // `lookup_static_method_param_types_keyed`, which keys on (receiver,
         // method) alone — with two conversion impls it can be a different
@@ -3526,8 +3530,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             actual_mangled_name
         };
 
-        // Look up return type using the actual struct name
-        let mut return_type = self.lookup_static_method_return_type(&method_ref, &actual_struct_fq);
+        let mut return_type = lookup
+            .found()
+            .map_or(TypeTable::UNKNOWN, |callee| callee.return_type);
 
         // Substitute impl-level + method-level type parameters in return type.
         // `lookup_static_method_return_type` registers impl params at indices

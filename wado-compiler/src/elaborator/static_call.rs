@@ -13,15 +13,18 @@ use crate::defs::DefId;
 use crate::tir::{TypeId, TypeTable};
 
 use super::Elaborator;
+use super::callee::StaticMethodRef;
 use super::sem::types::CalleeParams;
 use super::trait_env::ImplTargetKey;
 
 /// What one `Type::method(...)` spelling names.
-///
-/// The declaration picked, its return type and the `#[cm]` name it binds are
-/// resolved here too; they are not carried yet, because the sites that ask for
-/// them still walk their own lookups.
 pub(super) struct StaticCallee {
+    /// The declaration picked: where it lives, the trait it came through, and
+    /// the identity a call is mangled and a use→def edge recorded from.
+    ///
+    /// `None` alongside a `None` `params`: a name several declarations answer
+    /// to picks none of them until an argument does.
+    pub(super) method_ref: Option<StaticMethodRef>,
     /// The declaration's lists, read at the receiver: what the call checks and
     /// pads against.
     ///
@@ -109,16 +112,34 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Several declarations of one name are an overload only an argument
         // separates. Committing to the first would decide it here, so the rung
         // declines and the selection below — which reads the argument — picks.
-        let (first, overloaded) = {
-            let mut entries = self
+        let (inherent, overloaded) = {
+            let entries: Vec<(DefId, bool, bool)> = self
                 .impl_method_entries(&key, method_name)
-                .map(|entry| entry.method_id);
-            let first = entries.next();
-            (first, entries.next().is_some())
+                .map(|entry| (entry.method_id, entry.has_self, entry.is_inherent()))
+                .collect();
+            let first = entries.first().copied();
+            // Only the same kind counts: two receiver-less declarations of one
+            // name are an overload an argument separates, while a receiver-less
+            // one beside an instance one is the per-kind shadowing the index has
+            // already applied — different argument lists reach them.
+            let alternatives = first.map_or(0, |(_, has_self, _)| {
+                entries
+                    .iter()
+                    .filter(|(_, kind, _)| *kind == has_self)
+                    .count()
+            });
+            // Only a declaration the receiver makes itself: a trait impl's is
+            // reached through the selection below, which names the trait its
+            // call is mangled with. Named without one, the call reaches WIR
+            // build as a body nothing declares.
+            let inherent = first
+                .filter(|&(_, _, inherent)| inherent && alternatives == 1)
+                .map(|(def, _, _)| def);
+            (inherent, alternatives > 1)
         };
-        let inherent = first.filter(|_| !overloaded);
         if let Some(def) = inherent
-            && let Some(resolved) = self.callee_of_declaration(def, receiver_type)
+            && let Some(resolved) =
+                self.callee_of_own_declaration(receiver_name, method_name, def, receiver_type)
         {
             return resolved;
         }
@@ -133,7 +154,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 Some(self.tysys.signatures.resource_method_sig(decl, &name)?.def)
             });
         if let Some(def) = resource_static
-            && let Some(resolved) = self.callee_of_declaration(def, receiver_type)
+            && let Some(resolved) =
+                self.callee_of_own_declaration(receiver_name, method_name, def, receiver_type)
         {
             return resolved;
         }
@@ -147,7 +169,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             _ => None,
         };
         if let Some(def) = inherited
-            && let Some(resolved) = self.callee_of_declaration(def, receiver_type)
+            && let Some(resolved) =
+                self.callee_of_own_declaration(receiver_name, method_name, def, receiver_type)
         {
             return resolved;
         }
@@ -216,12 +239,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // reaches codegen as a module nothing validates.
         let declaring = self.traits_inheriting_static(key, method_name);
         if declaring.len() > 1 {
-            return StaticLookup::Ambiguous(declaring.into_iter().map(|(_, name)| name).collect());
+            return StaticLookup::Ambiguous(
+                declaring.into_iter().map(|(_, _, name)| name).collect(),
+            );
         }
         // The one trait's own declaration is where an inherited method's
         // signature lives: `method_sig` answers for what an `impl` block
         // declares, and this method is declared nowhere but the trait.
-        if let Some(decl) = declaring.first().map(|(decl, _)| *decl) {
+        if let Some((decl, impl_def)) = declaring
+            .first()
+            .map(|&(decl, impl_def, _)| (decl, impl_def))
+        {
             // Resolved here rather than asked of every caller: the name costs a
             // scope to resolve, and this is the one rung whose frame needs it.
             let receiver_type = receiver_type.or_else(|| {
@@ -231,8 +259,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 drop(scope);
                 Some(resolved)
             });
-            if let Some(callee) = self.callee_of_trait_declaration(method_name, decl, receiver_type)
-            {
+            if let Some(callee) = self.callee_of_trait_declaration(
+                receiver_name,
+                method_name,
+                decl,
+                impl_def,
+                receiver_type,
+            ) {
                 return StaticLookup::Found(Box::new(callee));
             }
         }
@@ -241,7 +274,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self.locate_static_method_impl(receiver_name, method_name, arg_hint, written_key)
         {
             let found = match method_ref.method_id {
-                Some(def) => self.callee_of_declaration(def, receiver_type),
+                Some(def) => self.callee_of_declaration(def, method_ref, receiver_type),
                 // The auto-derived `Default`: synthesis emits the body, so no
                 // declaration backs it. It takes no arguments and answers with
                 // the receiver's own type.
@@ -252,6 +285,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .tysys
                         .auto_derive_default_struct_type(&self.type_lookup(), receiver_name)
                         .unwrap_or(TypeTable::UNKNOWN),
+                    method_ref: Some(method_ref),
                 }))),
             };
             if let Some(resolved) = found {
@@ -266,26 +300,40 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// the slots, so it is read at the receiver.
     fn callee_of_trait_declaration(
         &mut self,
+        receiver_name: &str,
         method_name: &str,
         trait_decl: DefId,
+        impl_def: DefId,
         receiver_type: Option<TypeId>,
     ) -> Option<StaticCallee> {
         let declaring = self.tysys.signatures.trait_sig(trait_decl)?;
-        let module = declaring.module.clone();
+        // Two modules, and a call needs both: the body is emitted for the block
+        // that inherits it, so that is what the call names, while the defaults
+        // are the trait's and resolve where it wrote them. Naming the trait's
+        // for both mints an extern stub for a body the package defines.
+        let module = self.tysys.resolutions.defs().module(impl_def).clone();
         let sig = declaring.method(method_name)?.sig.clone();
         let mut params = CalleeParams::of_signature(Some(&sig));
-        // The defaults are the trait's, and resolve where it wrote them.
-        params.defaults_module = Some(module);
+        params.defaults_module = Some(declaring.module.clone());
         let mut return_type = sig.decl.return_type.unwrap_or(TypeTable::UNIT);
         if let Some(receiver_type) = receiver_type {
             let instantiated = sig.instantiate_call(&self.tysys.type_table, &[receiver_type], &[]);
             params.param_types = instantiated.param_types;
             return_type = instantiated.return_type;
         }
+        let trait_name =
+            crate::name::FqTraitName::declared(self.tysys.resolutions.defs(), trait_decl);
         Some(StaticCallee {
             params: Some(params),
             own_params: sig.own_params,
             return_type,
+            method_ref: Some(StaticMethodRef::new(
+                module,
+                receiver_name,
+                method_name,
+                Some(trait_name),
+                Some(sig.def),
+            )),
         })
     }
 
@@ -305,6 +353,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             params: None,
             own_params: Vec::new(),
             return_type: agreed,
+            method_ref: None,
         }))
     }
 
@@ -316,7 +365,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &self,
         key: &ImplTargetKey,
         method_name: &str,
-    ) -> Vec<(DefId, String)> {
+    ) -> Vec<(DefId, DefId, String)> {
         if self
             .qualified_method_decl_ids(key, method_name)
             .next()
@@ -336,9 +385,29 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // A required method the block leaves undeclared is its own
                 // error, reported where the two are compared.
                 (declared.default_body.is_some() && declared.sig.self_kind == ast::SelfKind::None)
-                    .then(|| (decl, self.tysys.resolutions.defs().name(decl).to_string()))
+                    .then(|| {
+                        (
+                            decl,
+                            impl_def,
+                            self.tysys.resolutions.defs().name(decl).to_string(),
+                        )
+                    })
             })
             .collect()
+    }
+
+    /// [`Self::callee_of_declaration`] for a declaration the receiver makes
+    /// itself, which no trait names and whose module is its own.
+    fn callee_of_own_declaration(
+        &mut self,
+        receiver_name: &str,
+        method_name: &str,
+        def: DefId,
+        receiver_type: Option<TypeId>,
+    ) -> Option<StaticLookup> {
+        let module = self.tysys.resolutions.defs().module(def).clone();
+        let method_ref = StaticMethodRef::new(module, receiver_name, method_name, None, Some(def));
+        self.callee_of_declaration(def, method_ref, receiver_type)
     }
 
     /// The resolution for a declaration already picked: its signature, read at
@@ -346,6 +415,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     fn callee_of_declaration(
         &mut self,
         def: DefId,
+        method_ref: StaticMethodRef,
         receiver_type: Option<TypeId>,
     ) -> Option<StaticLookup> {
         // `None` falls through to the next rung rather than ending the walk: a
@@ -402,6 +472,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             params: listed.then_some(params),
             own_params: sig.own_params,
             return_type,
+            method_ref: Some(method_ref),
         })))
     }
 }

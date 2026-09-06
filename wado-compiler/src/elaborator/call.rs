@@ -976,13 +976,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     });
                     return TypeTable::ERROR;
                 }
-                let (callee_params, declares_params) = resolved.params();
-                let raw_param_types = if declares_params {
-                    callee_params.param_types.clone()
-                } else {
-                    self.qualified_call_param_types(prefix, suffix)
-                        .unwrap_or_default()
-                };
+                // Only a list whose slots the receiver filled is checked
+                // against: an unfilled one says the call takes a `T`, which no
+                // argument is. Without one there is no count to enforce either.
+                let (raw_param_types, optional) =
+                    match resolved.found().and_then(|c| c.params.as_ref()) {
+                        Some(params) => (
+                            params.param_types.clone(),
+                            Some(
+                                params
+                                    .param_defaults
+                                    .iter()
+                                    .filter(|(_, default)| default.is_some())
+                                    .count(),
+                            ),
+                        ),
+                        None => (Vec::new(), None),
+                    };
                 let substituted: Vec<TypeId> =
                     if method_type_args.is_empty() && impl_type_args_inferred.is_empty() {
                         raw_param_types
@@ -1002,16 +1012,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // static spellings check.
                 //
                 // From the same answer `raw_param_types` came from, so the two
-                // cannot disagree: an overloaded name yields none here, and so
-                // no count to check — the overload path picks the impl by
-                // argument, and reports its own mismatch.
-                let optional = declares_params.then(|| {
-                    callee_params
-                        .param_defaults
-                        .iter()
-                        .filter(|(_, default)| default.is_some())
-                        .count()
-                });
+                // cannot disagree: an overloaded name yields no count to check
+                // — the overload path picks the impl by argument, and reports
+                // its own mismatch.
                 if let Some(optional) = optional
                     && !Self::arg_count_fits(args.len(), substituted.len(), optional)
                 {
@@ -1335,15 +1338,26 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let ns_key = self.namespace_member(prefix, type_name).map(|def| {
                         trait_env::ImplTargetKey::of_decl(self.tysys.resolutions.defs(), def)
                     });
-                    let resolved = self.locate_static_method_impl(
+                    let resolved = self.resolve_static_callee(
+                        ident.segments.get(1).map(|segment| segment.id),
                         type_name,
+                        ns_key.as_ref(),
                         method_name,
                         arg_type_hint.as_deref(),
-                        ns_key.as_ref(),
+                        None,
                     );
-                    let method_ref = resolved.unwrap_or_else(|| {
-                        StaticMethodRef::new(ns_source.clone(), type_name, method_name, None, None)
-                    });
+                    let method_ref = resolved
+                        .found()
+                        .and_then(|callee| callee.method_ref.clone())
+                        .unwrap_or_else(|| {
+                            StaticMethodRef::new(
+                                ns_source.clone(),
+                                type_name,
+                                method_name,
+                                None,
+                                None,
+                            )
+                        });
                     let trait_name = method_ref.trait_name.clone();
                     let struct_module = method_ref.module.clone();
 
@@ -1382,8 +1396,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         method_name,
                     );
 
-                    let mut return_type =
-                        self.lookup_static_method_return_type(&method_ref, &receiver);
+                    let mut return_type = resolved
+                        .found()
+                        .map_or(TypeTable::UNKNOWN, |callee| callee.return_type);
                     if !method_type_args.is_empty() {
                         return_type = self
                             .tysys
@@ -2960,22 +2975,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         self.resource_instance_method(def, method_name)
             .map(|(_, sig)| sig)
-    }
-
-    /// The parameter types a `Type::method(...)` call's arguments check against:
-    /// the declaration's whole list, since the spelling writes the receiver as
-    /// the first argument when the method declares one. An overloaded name
-    /// answers `None` — its call site picks the impl by argument, and coercing
-    /// toward the first indexed one would decide that here.
-    pub(super) fn qualified_call_param_types(
-        &mut self,
-        struct_name: &str,
-        method_name: &str,
-    ) -> Option<Vec<TypeId>> {
-        if let Some(sig) = self.unique_qualified_method_sig(struct_name, method_name) {
-            return Some(sig.decl.param_types);
-        }
-        self.lookup_static_method_param_types_keyed(struct_name, method_name, None)
     }
 
     /// `Type::method()` reaching a value blanket's static, which is indexed

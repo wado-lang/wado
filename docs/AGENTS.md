@@ -176,3 +176,4 @@ omission goes in Decision.
 - [Trait Resolution — One Order, Written Down](./wep-2026-09-01-trait-resolution.md)
 - [JSON Web Tokens (`core:jwt`)](./wep-2026-09-02-core-jwt.md)
 - [Total Reflection — `TypeInfo` and `match type`](./wep-2026-09-05-total-reflection.md)
+- [Static Call Resolution — One Walk, Four Answers](./wep-2026-09-06-static-call-resolution.md)
