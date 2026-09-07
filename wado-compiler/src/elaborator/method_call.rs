@@ -1480,10 +1480,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // The preselect shapes argument zero alone, so this names that one and
         // no more: a receiver-taking candidate reads argument one and finds
         // nothing here, which admits it.
-        let arg_hints: Vec<String> = preselected
-            .map(|source| self.tysys.type_table.borrow().type_name(source))
-            .into_iter()
-            .collect();
+        let arg_types: Vec<TypeId> = preselected.into_iter().collect();
 
         let callee_sig = static_receiver
             .as_ref()
@@ -1496,7 +1493,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     target_type_id,
                     &static_call.method,
                     &name,
-                    &arg_hints,
+                    &arg_types,
                 )
             }
             _ => StaticLookup::NotStatic,
@@ -2143,14 +2140,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // The receiver comes off the resolved type: re-deriving it from
         // `struct_name` searches the caller's frame, which an aliased import
         // leaves without that name at all.
-        let arg_type_hints = self.arg_hints(&args);
         let receiver_key =
             self.impl_target_of(target_type_id, &crate::name::DeclName::new(&struct_name));
         let Ok(resolution) = self.static_trait_ref(
             &struct_name,
             &static_call.method,
             Some(&receiver_key),
-            &arg_type_hints,
+            &args,
             static_call.span,
         ) else {
             return TypeTable::ERROR;
@@ -2910,17 +2906,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let Some(trait_name) = survey.candidates.first().map(|c| c.trait_name.clone()) else {
             return false;
         };
-        // A candidate the argument matches is one the selection kept, so the
-        // call did not fail on this argument: it failed because nothing after
-        // it separates what the argument admitted. Reporting the unmatched case
-        // here said the opposite of what happened, naming the argument as both
-        // unaccepted and available.
+        // An impl the first argument matches is one the selection kept, so the
+        // call did not fail on that argument: it failed on the list. Reporting
+        // the unmatched case here named the argument as both unaccepted and
+        // available.
         if survey.candidates.iter().any(|c| c.spelling == arg_type) {
-            let _ = self.emit(TypeError::OverloadUnsettledByLaterArgs {
+            let _ = self.emit(TypeError::NoMatchingArgumentList {
                 trait_name,
                 receiver: struct_name.to_string(),
                 method: method_name.to_string(),
-                arg_type: arg_type.to_string(),
                 span,
             });
             return true;
@@ -3067,7 +3061,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     survey.blanket_trait.get_or_insert_with(trait_name);
                     continue;
                 }
-                Selector::Type(source) => source,
+                Selector::Params(params) => params[0],
             };
             let table = self.tysys.type_table.borrow();
             // The parameter as the impl's own frame resolved it, so a private
@@ -3116,15 +3110,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return head;
         }
         self.import_original_name(&head, impl_module)
-    }
-
-    /// The arguments by type name, which is what separates several impls of one
-    /// trait. *Which* of them a declaration is checked against is the
-    /// declaration's to say and not this function's: one reached as
-    /// `Type::method(&recv, …)` has the receiver at argument zero.
-    pub(super) fn arg_hints(&self, args: &[TypeId]) -> Vec<String> {
-        let table = self.tysys.type_table.borrow();
-        args.iter().map(|&arg| table.type_name(arg)).collect()
     }
 
     /// Whether `name` appears anywhere in `ty` as written.
@@ -3329,7 +3314,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // newtype's static call dispatches to its base, whose name is not the
         // caller's to resolve — that frame can hold a same-named declaration of
         // its own.
-        let arg_type_hints = self.arg_hints(args);
         let receiver_key = newtype_dispatch.as_ref().map(|(_, base_type_id, _)| {
             self.impl_target_of(
                 *base_type_id,
@@ -3340,7 +3324,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             &actual_struct_name,
             method_name,
             receiver_key.as_ref(),
-            &arg_type_hints,
+            args,
             span,
         ) else {
             return TypeTable::ERROR;
@@ -3421,7 +3405,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 receiver_type,
                 method_name,
                 &actual_struct_name,
-                &arg_type_hints,
+                args,
             )
             .params();
 

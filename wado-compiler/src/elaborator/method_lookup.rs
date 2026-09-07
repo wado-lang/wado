@@ -1460,14 +1460,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         receiver_type: TypeId,
         method_name: &str,
         receiver_name: &str,
-        arg_hints: &[String],
+        arg_types: &[TypeId],
     ) -> super::static_call::StaticLookup {
         self.resolve_static_callee(
             None,
             receiver_name,
             Some(receiver),
             method_name,
-            arg_hints,
+            arg_types,
             Some(receiver_type),
         )
     }

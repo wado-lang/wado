@@ -140,9 +140,9 @@ resolution states:
 
 ### The argument picks a declaration, not a trait
 
-A static call is selected by the parameter the impl declares, compared against
-the first argument that reaches it. Arguments after that one do not narrow it
-further.
+A static call is selected by the parameters the impl declares, each compared
+against the argument written for it. The comparison is by `TypeId`, so two
+distinct types that print one name are two candidates.
 
 `From<T>` made that rule look like two narrower ones. Its source type is also
 its trait argument, so the trait reference could stand in for the parameter, and
@@ -189,11 +189,11 @@ Shadowing holds within a kind, so an inherent method leaves a trait's associated
 function of the same name alone — the rule the receiver's own declarations
 already follow above.
 
-Which argument the selection reads follows from the kind rather than from the
+Where the selection starts reading follows from the kind rather than from the
 call: a receiver-taking declaration has the receiver at argument zero, so its
-own first parameter is checked against argument one. Reading argument zero for
-both kinds compares a receiver against the parameter two impls differ on, which
-separates nothing and admits nothing.
+own parameters begin at argument one. Reading from argument zero for both kinds
+compares a receiver against the parameter two impls differ on, which separates
+nothing and admits nothing.
 
 ### An inherited body is read in the trait's own frame
 
@@ -284,18 +284,11 @@ walk rungs of their own, and that is the open roadmap item above.
   argument pins `Self`. So where a case shadows an inherited static, a bound
   (`fn f<T: Tagged>() { T::tag(5) }`) is the only way left to reach it. The
   spelling is missing on its own, not just under shadowing.
-- The selection compares the parameter's type _name_ with the argument's, so
-  two distinct types printing the same name are one candidate to it.
-  [Overload Resolution](./wep-2026-07-31-overload-resolution.md) phase 4
-  replaces that with `TypeId` matching; threading the argument's `TypeId` from
-  the four sites that already hold it is what closing it takes.
-- Only one argument selects — the first that reaches the declaration, which the
-  candidate's kind decides. Two impls a call separates only by a _later_
-  argument are an overload nothing settles, so the call is refused and the
-  report says which argument was read and that the ones after it are not. The
-  preselect that shapes a literal reads argument zero for the same reason.
-  Closing it is the same `TypeId` migration above, over the argument list
-  rather than one name.
+- The preselect that shapes a literal reads argument zero alone. A literal
+  after the first is shaped by whatever the resolution then picks, so two impls
+  a _literal_ in second position would separate are still an overload to it.
+  The selection itself reads the whole list, so this is the preselect's own
+  limit, not the rule pass's.
 - A static's own type parameters are never inferred from its arguments. Where
   the block declares no slots the method's are numbered from zero and the
   substitution reaches them anyway; where it declares some, an unspelled one

@@ -14,6 +14,7 @@ use super::Elaborator;
 use super::callee::StaticMethodRef;
 use super::sem::types::CalleeParams;
 use super::sig::MethodSig;
+use super::synth::ArgClass;
 use super::trait_env::{ImplHeader, ImplTargetKey};
 use super::types::TypeError;
 
@@ -100,16 +101,18 @@ enum Selection {
     None,
 }
 
-/// What the call's first argument is checked against.
+/// What the call's arguments are checked against.
 pub(super) enum Selector {
-    /// The declaration has no parameter there, so every argument reaches it.
+    /// The declaration takes no arguments, so every call reaches it.
     Absent,
-    /// Only the argument can fill this parameter — a blanket. Its
+    /// Only an argument can fill one of these parameters — a blanket. Its
     /// unsubstituted spelling must not be mangled, so the candidate declines
     /// and the blanket resolver instantiates it instead.
     Blanket,
-    /// The parameter as the block resolved it, its trait arguments substituted.
-    Type(TypeId),
+    /// The declaration's value parameters, as the block resolved them and with
+    /// its trait arguments substituted. Compared by `TypeId`: two distinct
+    /// types printing one name are two candidates, not one.
+    Params(Vec<TypeId>),
 }
 
 /// One declaration a block on the receiver supplies for the name: the facts the
@@ -177,7 +180,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// that used to ask its own question.
     ///
     /// `receiver_key` is the key the caller's own reference site resolved to;
-    /// `arg_hints` names its argument types, which is what separates several
+    /// `arg_types` are its arguments, which is what separates several
     /// impls of one trait. Both are the call's one vantage — resolving without
     /// them and mangling with them gives two answers for one call.
     pub(super) fn resolve_static_callee(
@@ -186,7 +189,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         receiver_name: &str,
         receiver_key: Option<&ImplTargetKey>,
         method_name: &str,
-        arg_hints: &[String],
+        arg_types: &[TypeId],
         receiver_type: Option<TypeId>,
     ) -> StaticLookup {
         // One vantage: the key the caller resolved, else the one its reference
@@ -237,7 +240,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // answers for a different receiver, hiding a declaration it never saw
         // or admitting one it should have hidden.
         let shadow_key = self.static_receiver_key(receiver_name, receiver_key);
-        let through_traits = match self.select_candidate(candidates, arg_hints, |kind| {
+        let through_traits = match self.select_candidate(candidates, arg_types, |kind| {
             self.inherent_shadows(&shadow_key, method_name, kind == CandidateKind::Instance)
         }) {
             Selection::One(candidate) => {
@@ -280,7 +283,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 &base_name,
                 None,
                 method_name,
-                arg_hints,
+                arg_types,
                 receiver_type,
             ),
             None => StaticLookup::NotStatic,
@@ -406,7 +409,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         receiver_name: &str,
         method_name: &str,
         receiver_key: Option<&ImplTargetKey>,
-        arg_hints: &[String],
+        arg_types: &[TypeId],
         span: Span,
     ) -> Result<StaticTraitRef, Reported> {
         let lookup = self.resolve_static_callee(
@@ -414,7 +417,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             receiver_name,
             receiver_key,
             method_name,
-            arg_hints,
+            arg_types,
             None,
         );
         let return_type = lookup.return_type();
@@ -422,8 +425,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .found()
             .map(|callee| callee.method_ref.clone())
             .filter(|method_ref| method_ref.trait_name.is_some());
+        // The report names the argument the survey reads, which is a static's
+        // first — the same one it compares its candidates on.
+        let first_arg = arg_types
+            .first()
+            .map(|&arg| self.tysys.type_table.borrow().type_name(arg));
         if selected.is_none()
-            && let Some(arg_type) = arg_hints.first().map(String::as_str)
+            && let Some(arg_type) = first_arg.as_deref()
             && !self.has_inherent_static_method(receiver_name, method_name, receiver_key)
             && self.report_unmatched_static_arg(
                 receiver_name,
@@ -466,7 +474,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     fn select_candidate(
         &self,
         mut candidates: Vec<Candidate>,
-        arg_hints: &[String],
+        arg_types: &[TypeId],
         shadowed: impl Fn(CandidateKind) -> bool,
     ) -> Selection {
         // An inherent declaration shadows an inherited one of the same kind: a
@@ -479,16 +487,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if let Some(alternatives) = self.ambiguous_alternatives(&candidates) {
             return Selection::Ambiguous(alternatives);
         }
-        // The argument picks among the declarations, reading the parameter the
-        // impl declares rather than the trait it names. Which argument follows
-        // from the kind: a receiver-taking declaration has the receiver at
-        // argument zero, so its own parameter is checked against argument one.
+        // The arguments pick among the declarations, read against the parameters
+        // the impl declares rather than the trait it names. Where they start
+        // follows from the kind: a receiver-taking declaration has the receiver
+        // at argument zero, so its own parameters begin at argument one.
         candidates.retain(|c| {
-            let hint = match c.kind {
-                CandidateKind::Static => arg_hints.first(),
-                CandidateKind::Instance => arg_hints.get(1),
+            let args = match c.kind {
+                CandidateKind::Static => arg_types,
+                CandidateKind::Instance => arg_types.get(1..).unwrap_or_default(),
             };
-            self.selector_admits(&c.selector, hint.map(String::as_str))
+            self.selector_admits(&c.selector, args)
         });
         // Among what the argument admits, a written body outranks an inherited
         // one.
@@ -501,25 +509,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// Whether the argument reaches this parameter. A parameter still carrying
-    /// an open slot equals no instantiation verbatim, and the mangled name
-    /// carries the impl's spelling either way.
+    /// Whether the arguments reach these parameters, each against the one it is
+    /// written for. A call supplying fewer than the declaration takes is checked
+    /// as far as it goes: the rest are defaults, and arity is the call site's.
     ///
-    /// Comparing names is this mechanism's ceiling; `TypeId` matching is the
-    /// replacement (WEP 2026-07-31 phase 4).
-    fn selector_admits(&self, selector: &Selector, hint: Option<&str>) -> bool {
-        // Nothing to select on, so every declaration of the name stays and
-        // several of them are the overload the call site settles.
-        let Some(hint) = hint else {
-            return true;
-        };
+    /// [`Elaborator::class_admits`] answers per parameter, so an open slot, an
+    /// unresolved parameter and `&mut T` against `&T` mean here what they mean
+    /// to every other argument check.
+    fn selector_admits(&self, selector: &Selector, args: &[TypeId]) -> bool {
         match selector {
             Selector::Absent => true,
-            Selector::Blanket => false,
-            Selector::Type(param) => {
-                let table = self.tysys.type_table.borrow();
-                table.contains_type_param(*param) || table.type_name(*param) == hint
-            }
+            // Nothing to select on leaves every declaration of the name, and
+            // several of them are the overload the call site settles.
+            Selector::Blanket => args.is_empty(),
+            Selector::Params(params) => params
+                .iter()
+                .zip(args)
+                .all(|(&param, &arg)| self.class_admits(param, &ArgClass::Exact(arg))),
         }
     }
 
@@ -623,11 +629,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// declaration's first parameter past any receiver, unless only the
     /// argument can fill it.
     pub(super) fn written_selector(&self, header: &ImplHeader, sig: &MethodSig) -> Selector {
-        match sig.decl.param_types.get(sig.first_value_param()) {
-            None => Selector::Absent,
-            Some(&param) if self.param_filled_by_block(header, sig, param) => Selector::Blanket,
-            Some(&param) => Selector::Type(param),
+        let first = sig.first_value_param().min(sig.decl.param_types.len());
+        let params = &sig.decl.param_types[first..];
+        if params.is_empty() {
+            return Selector::Absent;
         }
+        if params
+            .iter()
+            .any(|&param| self.param_filled_by_block(header, sig, param))
+        {
+            return Selector::Blanket;
+        }
+        Selector::Params(params.to_vec())
     }
 
     /// The candidate for the trait's default body, where the block wrote none.
@@ -662,10 +675,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             declared.sig.def,
             CandidateKind::of(declared.sig.self_kind),
             CandidateOrigin::Inherited,
-            instantiated
-                .param_types
-                .get(declared.sig.first_value_param())
-                .map_or(Selector::Absent, |&p| Selector::Type(p)),
+            match instantiated.param_types.get(
+                declared
+                    .sig
+                    .first_value_param()
+                    .min(instantiated.param_types.len())..,
+            ) {
+                Some([]) | None => Selector::Absent,
+                Some(params) => Selector::Params(params.to_vec()),
+            },
         ))
     }
 

@@ -1,0 +1,32 @@
+//! Two distinct types that print the same name, one impl each. Selection
+//! compared the parameter's type *name* with the argument's, so both impls
+//! looked like one candidate and the call was refused. It compares `TypeId`s
+//! now, which is what tells the two `Item`s apart.
+
+use { Item as AItem } from "./sub/same_name_item_a.wado";
+use { Item as BItem } from "./sub/same_name_item_b.wado";
+
+trait Conv<T> {
+    fn make(v: T) -> i32;
+}
+
+struct M {}
+
+impl Conv<AItem> for M {
+    fn make(v: AItem) -> i32 {
+        return 1;
+    }
+}
+
+impl Conv<BItem> for M {
+    fn make(v: BItem) -> i32 {
+        return 2;
+    }
+}
+
+test "the argument's identity separates them, not its printed name" {
+    let a = AItem { v: 0 };
+    let b = BItem { v: 0 };
+    assert M::make(a) == 1;
+    assert M::make(b) == 2;
+}

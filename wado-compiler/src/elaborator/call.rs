@@ -804,19 +804,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // them. It covers trait impls only; an inherent static has no
                 // selection and reaches the index instead.
                 if let Some(suffix_seg) = ident.segments.get(1) {
-                    let arg_hints = self.arg_hints(&args);
                     // The same resolution the call itself uses, not a second
                     // one: two resolutions of one call disagree, which is what
                     // the edge then records.
                     let selected = self
-                        .resolve_static_callee(
-                            receiver_site,
-                            prefix,
-                            None,
-                            suffix,
-                            &arg_hints,
-                            None,
-                        )
+                        .resolve_static_callee(receiver_site, prefix, None, suffix, &args, None)
                         .found()
                         .and_then(|callee| callee.method_ref.method_id);
                     let method_def = selected
@@ -978,14 +970,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // The same argument the selection above read: without it this
                 // re-check resolves a different declaration than the call was
                 // mangled to.
-                let arg_hints = self.arg_hints(&args);
-                let resolved = self.static_callee_params(
-                    &receiver_key,
-                    receiver_type,
-                    suffix,
-                    prefix,
-                    &arg_hints,
-                );
+                let resolved =
+                    self.static_callee_params(&receiver_key, receiver_type, suffix, prefix, &args);
                 if self.report_ambiguous_static(&resolved, suffix, call.span) {
                     return TypeTable::ERROR;
                 }
@@ -1344,7 +1330,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         );
                     }
 
-                    let arg_type_hints = self.arg_hints(&args);
                     // The importing module never names `Type` on its own, so a
                     // bare-name search reaches no impl on it: the callee then
                     // loses its trait segment and names a body nothing
@@ -1365,7 +1350,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         type_name,
                         ns_key.as_ref(),
                         method_name,
-                        &arg_type_hints,
+                        &args,
                         ns_receiver_type,
                     );
                     if self.report_ambiguous_static(&resolved, method_name, call.span) {

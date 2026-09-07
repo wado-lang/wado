@@ -570,14 +570,13 @@ pub enum TypeError {
         span: Span,
     },
 
-    /// Several impls of one trait accept the argument the selection reads, and
-    /// only that argument selects — so the arguments after it, which is all
-    /// that tells the impls apart, are never consulted.
-    OverloadUnsettledByLaterArgs {
+    /// An impl of the trait accepts the first argument, but none accepts the
+    /// list. Distinct from [`Self::NoMatchingTraitArgument`], which is the
+    /// first argument matching nothing at all.
+    NoMatchingArgumentList {
         trait_name: String,
         receiver: String,
         method: String,
-        arg_type: String,
         span: Span,
     },
 
@@ -1485,16 +1484,15 @@ impl TypeError {
                 ),
                 *span,
             ),
-            TypeError::OverloadUnsettledByLaterArgs {
+            TypeError::NoMatchingArgumentList {
                 trait_name,
                 receiver,
                 method,
-                arg_type,
                 span,
             } => (
                 Code::TypeMismatch,
                 format!(
-                    "several impls of '{trait_name}' for '{receiver}' declare '{method}' taking '{arg_type}' here; only that argument selects, so the ones after it cannot separate them"
+                    "no impl of '{trait_name}' for '{receiver}' declares '{method}' for these arguments"
                 ),
                 *span,
             ),
