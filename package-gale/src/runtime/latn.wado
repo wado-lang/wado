@@ -41,7 +41,11 @@ fn latn_closure(
             for let mut i = 0; i < stack.len() - 1; i += 1 {
                 rest.push(stack[i]);
             }
-            latn_closure(sim, out, visited, ret, &rest, open);
+            let mut rest_open: List<i32> = [];
+            for let mut i = 0; i < open.len() - 1; i += 1 {
+                rest_open.push(open[i]);
+            }
+            latn_closure(sim, out, visited, ret, &rest, &rest_open);
         }
         return;
     }

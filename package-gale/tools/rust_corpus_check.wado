@@ -98,7 +98,10 @@ fn read_file(root: &Descriptor, path: &String) -> Option<String> with Stderr {
 fn collect_paths(root: &Descriptor, argv: &List<String>) -> List<String> with Stderr {
     let mut paths: List<String> = [];
     for let mut i = 0; i < argv.len(); i += 1 {
-        if argv[i] == "--paths-from" && i + 1 < argv.len() {
+        if argv[i] == "--paths-from" {
+            // Without this the option falls through the `.rs` arm and the run
+            // reports a clean zero files.
+            assert i + 1 < argv.len(), "--paths-from needs a file";
             i += 1;
             // An unreadable list yields no paths, which would otherwise read as
             // a clean run. Keep it as the one path that reports itself.
@@ -152,13 +155,7 @@ export fn run() with (Stdout, Stderr, Environment, Preopens) {
                 // The rule stack, not the message: recovery restarts at an item
                 // boundary, so every failure inside one reports the same
                 // "expected KW_EXTERN" and the stack is what names the rule.
-                let mut stack = String::new();
-                for let rule of &first.rule_stack {
-                    if !stack.is_empty() {
-                        stack.push('<');
-                    }
-                    stack.push_str(rule);
-                }
+                let stack = first.rule_path();
                 println(
                     `ng\t${*path}\t${result.diagnostics.len()}\t${line_of(&source, first.span.start)}\t${first.message}\t${stack}`,
                 );
