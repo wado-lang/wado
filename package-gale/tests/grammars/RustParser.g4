@@ -41,10 +41,15 @@ parser grammar RustParser;
 // Scrutinee that excludes struct expressions; expressed here as the depth
 // counter, which is what an ANTLR4 grammar has to use.
 //
-// Non-zero across the head of `if` / `while` / `for` / `match` and a let
-// chain's scrutinee. Bracketing does not reset it, so a struct literal nested
-// in a condition's own parentheses or call arguments is refused where Rust
-// allows one; no source in this repository writes that.
+// Set across the head of `if` / `while` / `for` / `match` and a let chain's
+// scrutinee, and cleared by any bracketing — `(…)`, `[…]`, a call's arguments,
+// a block — where Rust allows a struct literal again.
+//
+// A flag, not a depth: clearing on the way into a bracket never restores, so
+// the ban does not resume after one inside the same head (`if f(x) + P { y: 1 }`
+// is accepted where Rust rejects it). That direction only ever accepts more,
+// which is the safe one for a parser; a depth would need a stack per frame,
+// which an ANTLR4 members block has no room for.
 @parser::members {
     int noStruct = 0;
 }
@@ -475,7 +480,7 @@ expression
     | expression DOT tupleIndex                                      # TupleIndexingExpression       // 8.2.7
     | expression DOT KW_AWAIT                                        # AwaitExpression               // 8.2.18
     | expression LPAREN callParams? RPAREN                           # CallExpression                // 8.2.9
-    | expression LSQUAREBRACKET expression RSQUAREBRACKET            # IndexExpression               // 8.2.6
+    | expression LSQUAREBRACKET {noStruct = 0;} expression RSQUAREBRACKET # IndexExpression           // 8.2.6
     | expression QUESTION                                            # ErrorPropagationExpression    // 8.2.4
     | (AND | ANDAND) KW_MUT? expression                              # BorrowExpression              // 8.2.4
     | STAR expression                                                # DereferenceExpression         // 8.2.4
@@ -499,7 +504,7 @@ expression
     | KW_CONTINUE LIFETIME_OR_LABEL? expression?                     # ContinueExpression            // 8.2.13
     | KW_BREAK LIFETIME_OR_LABEL? expression?                        # BreakExpression               // 8.2.13
     | KW_RETURN expression?                                          # ReturnExpression              // 8.2.17
-    | LPAREN innerAttribute* expression RPAREN                       # GroupedExpression             // 8.2.5
+    | LPAREN {noStruct = 0;} innerAttribute* expression RPAREN       # GroupedExpression             // 8.2.5
     | LSQUAREBRACKET innerAttribute* arrayElements? RSQUAREBRACKET   # ArrayExpression               // 8.2.6
     | LPAREN innerAttribute* tupleElements? RPAREN                   # TupleExpression               // 8.2.7
     | {noStruct == 0}? structExpression                              # StructExpression_             // 8.2.8
@@ -563,8 +568,10 @@ pathExpression
     ;
 
 // 8.2.3
+// LOCAL: `{noStruct = 0;}` — a brace is bracketing too, so a struct literal is
+// legal again inside the block a condition guards.
 blockExpression
-    : LCURLYBRACE innerAttribute* statements? RCURLYBRACE
+    : LCURLYBRACE {noStruct = 0;} innerAttribute* statements? RCURLYBRACE
     ;
 
 statements
@@ -581,14 +588,16 @@ unsafeBlockExpression
     ;
 
 // 8.2.6
+// LOCAL: `{noStruct = 0;}` — inside the brackets a struct literal is legal.
 arrayElements
-    : expression (COMMA expression)* COMMA?
-    | expression SEMI expression
+    : {noStruct = 0;} expression (COMMA expression)* COMMA?
+    | {noStruct = 0;} expression SEMI expression
     ;
 
 // 8.2.7
+// LOCAL: `{noStruct = 0;}` — inside the parentheses a struct literal is legal.
 tupleElements
-    : (expression COMMA)+ expression?
+    : {noStruct = 0;} (expression COMMA)+ expression?
     ;
 
 tupleIndex
@@ -655,8 +664,10 @@ enumExprFieldless
     ;
 
 // 8.2.9
+// LOCAL: `{noStruct = 0;}` — a call's arguments are bracketing, so
+// `if f(Point { x: 1 }) { … }` is the struct literal Rust reads there.
 callParams
-    : expression (COMMA expression)* COMMA?
+    : {noStruct = 0;} expression (COMMA expression)* COMMA?
     ;
 
 // 8.2.12
@@ -688,19 +699,19 @@ infiniteLoopExpression
 
 // LOCAL: `letChainTail*` — the `while` half of the let chain above.
 predicateLoopExpression
-    : KW_WHILE {noStruct = noStruct + 1;} expression {noStruct = noStruct - 1;} (
+    : KW_WHILE {noStruct = 1;} expression {noStruct = 0;} (
         letChainTail* blockExpression
     )
     ;
 
 predicatePatternLoopExpression
-    : KW_WHILE KW_LET pattern EQ {noStruct = noStruct + 1;} expression {noStruct = noStruct - 1;} (
+    : KW_WHILE KW_LET pattern EQ {noStruct = 1;} expression {noStruct = 0;} (
         letChainTail* blockExpression
     )
     ;
 
 iteratorLoopExpression
-    : KW_FOR pattern KW_IN {noStruct = noStruct + 1;} expression {noStruct = noStruct - 1;} blockExpression
+    : KW_FOR pattern KW_IN {noStruct = 1;} expression {noStruct = 0;} blockExpression
     ;
 
 loopLabel
@@ -722,24 +733,24 @@ loopLabel
 // what stops `if return { 1 }` eating its own block. Grouped, the suffix head
 // is mandatory again. The group is transparent, so no tree changes.
 ifExpression
-    : KW_IF {noStruct = noStruct + 1;} expression {noStruct = noStruct - 1;} (
+    : KW_IF {noStruct = 1;} expression {noStruct = 0;} (
         letChainTail* blockExpression
     ) (KW_ELSE (blockExpression | ifExpression | ifLetExpression))?
     ;
 
 ifLetExpression
-    : KW_IF KW_LET pattern EQ {noStruct = noStruct + 1;} expression {noStruct = noStruct - 1;} (
+    : KW_IF KW_LET pattern EQ {noStruct = 1;} expression {noStruct = 0;} (
         letChainTail* blockExpression
     ) (KW_ELSE (blockExpression | ifExpression | ifLetExpression))?
     ;
 
 letChainTail
-    : ANDAND KW_LET pattern EQ {noStruct = noStruct + 1;} expression {noStruct = noStruct - 1;}
+    : ANDAND KW_LET pattern EQ {noStruct = 1;} expression {noStruct = 0;}
     ;
 
 // 8.2.16
 matchExpression
-    : KW_MATCH {noStruct = noStruct + 1;} expression {noStruct = noStruct - 1;} LCURLYBRACE innerAttribute* matchArms?
+    : KW_MATCH {noStruct = 1;} expression {noStruct = 0;} LCURLYBRACE innerAttribute* matchArms?
         RCURLYBRACE
     ;
 
