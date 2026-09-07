@@ -7,8 +7,8 @@ use super::needs_value_copy;
 use super::ownership::BuiltinConventions;
 use crate::hashmap::IndexMap;
 use crate::tir::{
-    ResolvedType, TirExpr, TirExprKind, TirFunction, TirPattern, TirStmt, TirStmtKind, TirUnaryOp,
-    TypeId, TypeTable,
+    FunctionRef, ResolvedType, TirExpr, TirExprKind, TirFunction, TirPattern, TirStmt, TirStmtKind,
+    TirUnaryOp, TypeId, TypeTable,
 };
 use crate::tir_visitor::TirRefVisitor;
 
@@ -266,7 +266,7 @@ impl<'a> Resolver<'a> {
     /// The parameter a `core:builtin` call hands its result out of, from that
     /// builtin's `#[returns(part_of(p))]`.
     #[must_use]
-    pub fn builtin_part_of(&self, func: &crate::tir::FunctionRef) -> Option<usize> {
+    pub fn builtin_part_of(&self, func: &FunctionRef) -> Option<usize> {
         self.builtins.part_of(func)
     }
 
