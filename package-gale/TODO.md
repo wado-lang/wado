@@ -89,6 +89,17 @@ Remaining:
 - **Stage B′ does not oracle a composite.** `antlr4-oracle.sh` invokes the jar on one grammar file with no `-lib` slave lookup, so `stage_b_oracle_eligible` excludes them. Closing it means teaching the oracle script to stage the slaves beside the master and pass `-lib`. The extractor would then hand it composite candidates unchanged.
 - **The dialect consumer still holds a copy.** Kiln `inputs` are relative paths inside the project, so a dialect in its own repository cannot name `Wado.g4` inside a dependency package ([WEP: Markup Dialect](../docs/wep-2026-08-29-markup-dialect.md)). Resolution shrinks that from a drifting fork to a copy a checksum can hold. The rest is a Kiln gap, not a Gale one.
 
+## Rust corpus — this repository's own `.rs`
+
+`tools/rust_corpus_check.wado` over `git ls-files '*.rs'` (`AGENTS.md` has the invocation) is the repository-wide number. Measured 2026-09-07 at `e925ee58bf`: **494 files, 451 with diagnostics**, 449 of them reporting exactly one — every failing file dies once and recovery carries the rest, so a class closed is that many files clean.
+
+Two classes cover 413 of the 451. Each entry carries the minimal `.rs` that reproduces it; the stack is where the check reports, which recovery can move away from the cause.
+
+- [ ] **`use a::b::*;` and `use a::b::{…};` do not parse** — 362 files, `crate > item > visItem > useDeclaration > useTree`, "expected LCURLYBRACE or STAR; no viable alternative". One segment is fine (`use a::*;`, `use a::{x, y};` both parse), as is the alternative with no group at all (`use a::b::c;`). `useTree : (simplePath? PATHSEP)? (STAR | LCURLYBRACE …) | simplePath …`, and `simplePath`'s own `(PATHSEP simplePathSegment)*` sits at the enclosing group's tail, so the trailing `::` is the one the group needs.
+- [ ] **A `match` whose last arm carries a trailing comma does not parse** — 51 files (17 reported at `matchArm > pattern > patternNoTopAlt`, 34 as "expected KW_EXTERN" after recovery lands at an item boundary, so the stack names `externBlock` rather than the match). `fn a() { match x { A => 1, } }` fails at the closing `}`; dropping the comma parses. `matchArms : (matchArm FATARROW matchArmExpression)* matchArm FATARROW expression COMMA?` — the loop's `matchArmExpression` admits the trailing `COMMA`, so it takes the arm the mandatory tail needs.
+
+The rest is a long tail: 10 reporting `ifExpression > blockExpression` as `expected LCURLYBRACE; got "0"`, 14 at `letStatement`, 8 as `expected SEMI; got "#"`, and singletons below that.
+
 ## LL prediction — parked gaps
 
 Not queued work: both are known edges of the static path, and the complete answer is the runtime ATN simulator (`AGENTS.md` records three over-broad static repairs that each silently broke a real grammar). Revisit only when a descriptor or a real grammar surfaces a regression, and pair any repair with a rejection-case fixture.
