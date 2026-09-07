@@ -111,7 +111,7 @@ pub fn array_get_ref<T>(arr: &Array<T>, idx: i32) -> &T;
 pub fn array_get_ref_mut<T: RefMut>(arr: &mut Array<T>, idx: i32) -> &mut T;
 
 /// Sets an element in a Array<T> at the given index.
-pub fn array_set<T>(arr: &mut Array<T>, idx: i32, value: T);
+pub fn array_set<T>(arr: &mut Array<T>, idx: i32, value: T) with stores[value];
 
 /// Copies elements between builtin::arrays.
 /// Copies `len` elements from src[src_offset..] to dst[dst_offset..].
@@ -132,7 +132,7 @@ pub fn array_clone_prefix<T>(src: &Array<T>, len: i32) -> Array<T>;
 
 /// Fills a Array<T> with a value.
 /// Fills `len` elements starting at `offset` with `value`.
-pub fn array_fill<T>(arr: &mut Array<T>, offset: i32, value: T, len: i32);
+pub fn array_fill<T>(arr: &mut Array<T>, offset: i32, value: T, len: i32) with stores[value];
 /// Loads an i32 from linear memory (Wasm i32.load).
 pub fn i32_load(addr: i32) -> i32;
 

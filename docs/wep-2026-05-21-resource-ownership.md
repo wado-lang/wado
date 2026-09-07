@@ -301,6 +301,12 @@ where it cannot prove move / share / fresh; no elision pass):
   builtin call, so that was every function that indexes an array — including
   `String::cmp`, and so `TreeMap::find_index`, whose key every lookup then
   deep-copied.
+
+  What a builtin keeps of what it was passed is read from its `with stores[p]`,
+  the same clause a body carries. `array_set` and `array_fill` store their
+  `value` into the array; nothing else a builtin is handed outlives the call.
+  Link snapshots the positions alongside the return convention, since
+  monomorphization drops the declarations either fact would be read from.
 - Where a stored reference lands — `stores.rs` separates the position a callee
   routes into its _return value_ from one that reaches a global or is written
   through a reference the caller owns. A caller must assume the union, but the
@@ -631,17 +637,17 @@ Verified against the tree.
       `sqlite_parse` finds 0%. Only a program passing deeply nested aggregates by
       value pays it.
 
-- [ ] Say which by-value argument a builtin stores into a `&mut` one.
-      `confine::raise_builtin_sides` infers it instead: every by-value aggregate
-      leaks once any `&mut` operand is present. That over-marks, which costs a
-      copy. It is exact over the whole population: `array_set`, `array_fill` and
-      `array_copy`. A builtin that retains an argument by some other route goes
-      unmarked, and that one is unsound rather than slow.
-      Closing the gap means a declaration, as the result's origin has. The
-      obligation cannot be checked the same way: a builtin that stores and one
-      that does not have the same signature, so no predicate says where an
-      omission is wrong. Such a declaration puts the fact where its author will
-      look. It does not buy the guarantee the result's origin gets.
+- [ ] Say which _field_ a stored parameter is stored into. `stores[p]` records
+      that `p` outlives the call, not where it lands, and `array_copy(dst, _,
+      src, _, _)` is the case that needs the difference: for a reference `T` its
+      elements reach `dst` afterwards, so `src` escapes into a place the caller
+      may still hold.
+      Written with what exists, `with stores[src]` marks the whole reference
+      borrow-escaped at all twenty call sites. Fifteen are `Array<u8>`, where a
+      scalar element escapes nothing. The other five are the backing-array swap
+      in `List::grow` and its neighbours, which hand elements from an array they
+      then discard — the hottest paths in the stdlib, paying for a leak none of
+      them has. So the declaration to add is not this one; the granularity is.
 
 ## Deferred: the `move` and `unique` keywords
 

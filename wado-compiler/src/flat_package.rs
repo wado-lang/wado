@@ -13,7 +13,7 @@ use crate::component_model::CmInterfaceRegistry;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::tir::{
-    ReturnConvention, TirEnum, TirFlags, TirFunction, TirGlobal, TirImport, TirStruct, TirTest,
+    BuiltinDeclaration, TirEnum, TirFlags, TirFunction, TirGlobal, TirImport, TirStruct, TirTest,
     TirVariantDecl, TypeId, TypeTable,
 };
 use crate::wir_build::component_plan::ComponentPlan;
@@ -60,10 +60,10 @@ pub struct FlatPackage {
     pub tests: Vec<TirTest>,
     /// Map of module source to wasm module name (from `#![wasm_module("name")]`)
     pub wasm_module_sources: IndexMap<ModuleSource, String>,
-    /// `#[returns(...)]` on each bodyless `core:builtin` declaration, by name.
+    /// What each bodyless `core:builtin` declared about storage, by name.
     /// Snapshotted here because monomorphization drops a generic bodyless
     /// declaration, leaving the plan phase nothing to read it from.
-    pub builtin_return_conventions: IndexMap<String, ReturnConvention>,
+    pub builtin_declarations: IndexMap<String, BuiltinDeclaration>,
 
     /// Module name for the output (derived from filename)
     pub module_name: String,

@@ -14,8 +14,9 @@ use super::place::{carries_storage, is_reference};
 use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::tir::{
-    FunctionKind, FunctionRef, ReturnConvention, TirBlock, TirExpr, TirExprKind, TirFunction,
-    TirParam, TirStmt, TirStmtKind, TirUnaryOp, TypeId, TypeTable, matches_builtin,
+    BuiltinDeclaration, FunctionKind, FunctionRef, ReturnConvention, TirBlock, TirExpr,
+    TirExprKind, TirFunction, TirParam, TirStmt, TirStmtKind, TirUnaryOp, TypeId, TypeTable,
+    matches_builtin,
 };
 use crate::tir_visitor::TirRefVisitor;
 
@@ -43,32 +44,37 @@ fn declares_owned(func: &TirFunction) -> bool {
     func.body.is_none() && func.declared_return_convention == Some(ReturnConvention::Owned)
 }
 
-/// What each builtin declared with `#[returns(...)]`, resolved from a call.
-/// Reads [`FlatPackage::builtin_return_conventions`], which link snapshots
-/// before monomorphization drops the generic declarations.
+/// What each builtin declared about storage, resolved from a call. Reads
+/// [`FlatPackage::builtin_declarations`], which link snapshots before
+/// monomorphization drops the generic declarations.
 #[derive(Default)]
-pub struct BuiltinConventions(IndexMap<String, ReturnConvention>);
+pub struct BuiltinConventions(IndexMap<String, BuiltinDeclaration>);
 
 impl BuiltinConventions {
     pub fn collect(project: &FlatPackage) -> Self {
-        Self(project.builtin_return_conventions.clone())
+        Self(project.builtin_declarations.clone())
     }
 
-    /// The convention declared for `func`, or `None` where it declared none.
-    pub fn get(&self, func: &FunctionRef) -> Option<ReturnConvention> {
+    /// What `func` declared, or `None` where it declared nothing.
+    fn get(&self, func: &FunctionRef) -> Option<&BuiltinDeclaration> {
         self.0
             .iter()
             .find(|(base, _)| matches_builtin(&func.name, func.monomorph_info.as_ref(), base))
-            .map(|(_, convention)| *convention)
+            .map(|(_, declaration)| declaration)
     }
 
     /// The parameter a builtin's result is a component of, for a call that
     /// declared `#[returns(part_of(p))]`.
     pub fn part_of(&self, func: &FunctionRef) -> Option<usize> {
-        match self.get(func) {
-            Some(ReturnConvention::PartOf(param)) => Some(param),
-            Some(ReturnConvention::Owned) | None => None,
+        match self.get(func)?.returns? {
+            ReturnConvention::PartOf(param) => Some(param),
+            ReturnConvention::Owned => None,
         }
+    }
+
+    /// The parameters a builtin keeps beyond the call, from `with stores[p]`.
+    pub fn stored_params(&self, func: &FunctionRef) -> &[usize] {
+        self.get(func).map_or(&[], |d| &d.stores)
     }
 }
 

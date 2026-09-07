@@ -11,11 +11,12 @@
 use super::callgraph::CallGraph;
 use super::funcset::FuncKeyMap;
 use super::needs_value_copy;
+use super::ownership::BuiltinConventions;
 use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::tir::{
     FunctionKind, FunctionRef, ResolvedType, TirBlock, TirExpr, TirExprKind, TirStmt, TirStmtKind,
-    TirUnaryOp, TypeId, TypeTable,
+    TypeId, TypeTable,
 };
 use crate::tir_visitor::TirRefVisitor;
 
@@ -48,7 +49,11 @@ enum Kind {
     Opaque,
 }
 
-pub fn compute_confined_params(project: &FlatPackage, call_graph: &CallGraph) -> ConfinedParams {
+pub fn compute_confined_params(
+    project: &FlatPackage,
+    call_graph: &CallGraph,
+    builtins: &BuiltinConventions,
+) -> ConfinedParams {
     let type_table = project.type_table.borrow();
     let kinds = classify_functions(project);
 
@@ -75,6 +80,7 @@ pub fn compute_confined_params(project: &FlatPackage, call_graph: &CallGraph) ->
         };
         let ctx = Ctx {
             type_table: &type_table,
+            builtins,
             kinds: &kinds,
             funcs: &funcs,
         };
@@ -125,6 +131,7 @@ fn classify_functions(project: &FlatPackage) -> FuncKeyMap<Kind> {
 
 struct Ctx<'a> {
     type_table: &'a TypeTable,
+    builtins: &'a BuiltinConventions,
     kinds: &'a FuncKeyMap<Kind>,
     funcs: &'a FuncKeyMap<ParamEscape>,
 }
@@ -245,7 +252,7 @@ impl SinkWalker<'_> {
     fn raise_call_sides(&mut self, func: &FunctionRef, operands: &[&TirExpr]) {
         match self.ctx.kind(func) {
             Kind::ValueCopy => {}
-            Kind::Builtin => self.raise_builtin_sides(operands),
+            Kind::Builtin => self.raise_builtin_sides(func, operands),
             Kind::Opaque => {
                 for op in operands {
                     self.raise_side(op);
@@ -261,20 +268,11 @@ impl SinkWalker<'_> {
         }
     }
 
-    /// A store builtin leaks its by-value aggregate operands into a `&mut`
-    /// aggregate the caller retains.
-    fn raise_builtin_sides(&mut self, operands: &[&TirExpr]) {
-        let has_mut_aggregate = operands
-            .iter()
-            .any(|op| is_mut_ref(op, self.ctx.type_table));
-        if !has_mut_aggregate {
-            return;
-        }
-        for op in operands {
-            if is_ref_typed(op, self.ctx.type_table) {
-                continue;
-            }
-            if needs_value_copy(op.type_id, self.ctx.type_table) {
+    /// A store builtin keeps the arguments its `with stores[p]` names, into the
+    /// `&mut` one it was handed. Nothing else a builtin is passed outlives it.
+    fn raise_builtin_sides(&mut self, func: &FunctionRef, operands: &[&TirExpr]) {
+        for &p in self.ctx.builtins.stored_params(func) {
+            if let Some(op) = operands.get(p) {
                 self.raise_side(op);
             }
         }
@@ -478,28 +476,6 @@ fn carries_identity(type_id: TypeId, type_table: &TypeTable) -> bool {
         || matches!(
             type_table.get(type_id),
             ResolvedType::Ref(_) | ResolvedType::MutRef(_)
-        )
-}
-
-fn is_mut_ref(expr: &TirExpr, type_table: &TypeTable) -> bool {
-    matches!(type_table.get(expr.type_id), ResolvedType::MutRef(_))
-        || matches!(
-            &expr.kind,
-            TirExprKind::Unary {
-                op: TirUnaryOp::MutRef,
-                ..
-            }
-        )
-}
-
-fn is_ref_typed(expr: &TirExpr, type_table: &TypeTable) -> bool {
-    super::is_reference_type(expr.type_id, type_table)
-        || matches!(
-            &expr.kind,
-            TirExprKind::Unary {
-                op: TirUnaryOp::Ref | TirUnaryOp::MutRef,
-                ..
-            }
         )
 }
 

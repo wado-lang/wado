@@ -5846,6 +5846,17 @@ pub enum ReturnConvention {
     PartOf(usize),
 }
 
+/// What a bodyless `core:builtin` declared about storage, by parameter position.
+/// Link snapshots it because monomorphization drops the generic declarations.
+#[derive(Debug, Clone, Default)]
+pub struct BuiltinDeclaration {
+    /// `#[returns(...)]`, or `None` where the declaration states none.
+    pub returns: Option<ReturnConvention>,
+    /// `with stores[p]` — the parameters this call keeps beyond it, into the
+    /// `&mut` one it was handed.
+    pub stores: Vec<usize>,
+}
+
 impl TirFunction {
     /// Returns true if this is a method (belongs to a struct)
     #[inline]

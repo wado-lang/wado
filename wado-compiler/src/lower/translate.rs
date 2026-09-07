@@ -84,7 +84,7 @@ pub fn translate(flat: FlatPackage, plan: LowerPlan) -> NirPackage {
         imports,
         tests,
         wasm_module_sources,
-        builtin_return_conventions: _,
+        builtin_declarations: _,
         module_name,
         cm_interface_registry,
         world_registry,
