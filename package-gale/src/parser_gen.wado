@@ -38,6 +38,7 @@ use {
     elements_match,
 } from "./gen_util.wado";
 use { PARSER_HANDLE, DISPATCH_KIND_LOCAL, FOLLOW_PARAM } from "./ident.wado";
+use { SCAN_GATE_HANDLE } from "./scan_gate.wado";
 use {
     join_kinds,
     follow_composed,
@@ -108,6 +109,7 @@ use {
     ListLabelOp,
     ScanBody,
     ScanElement,
+    ScanGate,
     ScanRuleCallElement,
     ScanRepeatElement,
     ScanGroupElement,
@@ -346,7 +348,15 @@ fn gen_alt_scan_if_possible(
     // and including it here would over-match. Inner self-refs, by
     // contrast, are bounded by surrounding tokens (e.g. `K_WHEN expr
     // K_THEN expr` inside `case_expr`) and need a full scan.
-    gen_alt_scan_op_elements(w, &scan_body.elements, prefix_len, rule_name, ctx);
+    gen_alt_scan_op_elements(
+        w,
+        &scan_body.elements,
+        prefix_len,
+        rule_name,
+        ctx,
+        &scan_body.gates,
+        &scan_body.gate_cond,
+    );
 
     w.line(&"return pos;");
     w.end();
@@ -514,7 +524,16 @@ fn gen_scan_function_named(
             w.line(&"let scan_start = pos;");
         }
         w.line(&"let mut pos = pos;");
-        gen_scan_op_elements(w, &scan_body.elements, 0, scan_body.elements.len(), ctx, &"return -1;");
+        gen_scan_op_elements(
+            w,
+            &scan_body.elements,
+            0,
+            scan_body.elements.len(),
+            ctx,
+            &"return -1;",
+            &scan_body.gates,
+            &scan_body.gate_cond,
+        );
         if non_nullable {
             w.line(&"if pos == scan_start { return -1; }");
         }
@@ -619,7 +638,16 @@ fn gen_scan_lr_functions(
     } else if non_lr_alts.len() == 1 {
         w.line(&"let mut pos = pos;");
         let body = &atom_scan_alts[0];
-        gen_scan_op_elements(w, &body.elements, 0, body.elements.len(), ctx, &"return -1;");
+        gen_scan_op_elements(
+            w,
+            &body.elements,
+            0,
+            body.elements.len(),
+            ctx,
+            &"return -1;",
+            &body.gates,
+            &body.gate_cond,
+        );
         w.line(&"return pos;");
     } else {
         let plan = if let Some(p) = atom_plan {
@@ -1358,7 +1386,16 @@ fn gen_scan_alt_helpers(
         f.emit_begin(w);
         w.line(&"let mut pos = pos;");
         let body = &scan_alts[*i];
-        gen_scan_op_elements(w, &body.elements, 0, body.elements.len(), ctx, &"return -1;");
+        gen_scan_op_elements(
+            w,
+            &body.elements,
+            0,
+            body.elements.len(),
+            ctx,
+            &"return -1;",
+            &body.gates,
+            &body.gate_cond,
+        );
         w.line(&"return pos;");
         w.end();
         w.blank();
@@ -1554,7 +1591,7 @@ fn gen_scan_alt_candidate(
     ctx: &mut GenContext,
     commit_stmt: &String,
 ) -> bool {
-    if skip && body.elements.len() == 1 {
+    if skip && body.elements.len() == 1 && body.gates.is_empty() && body.gate_cond.is_empty() {
         w.line(&"pos = start + 1;");
         w.line(commit_stmt);
         return false;
@@ -1563,7 +1600,16 @@ fn gen_scan_alt_candidate(
     w.line(&if skip { "pos = start + 1;" } else { "pos = start;" });
     w.begin(&`${label}:`);
     let from = if skip { 1 } else { 0 };
-    gen_scan_op_elements_in_block(w, &body.elements, from, body.elements.len(), ctx, &label);
+    gen_scan_op_elements_in_block(
+        w,
+        &body.elements,
+        from,
+        body.elements.len(),
+        ctx,
+        &label,
+        &body.gates,
+        &body.gate_cond,
+    );
     w.line(commit_stmt);
     w.end();
     return true;
@@ -1591,14 +1637,19 @@ pub fn gen_alt_scan_op_elements(
     end: i32,
     rule_name: &String,
     ctx: &mut GenContext,
+    gates: &List<ScanGate> = &NO_SCAN_GATES,
+    gate_cond: &String = &NO_SCAN_GATE_COND,
 ) {
     let covers_whole_alt = end == scan_elems.len();
+    gen_scan_gate_check(w, gate_cond, &"return -1;");
     for let mut i = 0; i < end; i += 1 {
         let se = &scan_elems[i];
+        gen_scan_gates_in(w, gates, if i == 0 { i32::MIN } else { i }, i + 1);
         let is_last_self_ref = covers_whole_alt && i == end - 1 && is_self_ref_scan_call(se, rule_name);
         let min_prec_override = if is_last_self_ref { i32::MAX } else { 0 };
         gen_scan_op_element(w, se, ctx, &"return -1;", min_prec_override);
     }
+    gen_scan_gates_in(w, gates, end, i32::MAX);
 }
 
 /// True iff `se` is a top-level `ScanRuleCall` targeting `rule_name`.
@@ -2153,9 +2204,64 @@ fn gen_scan_op_elements(
     end: i32,
     ctx: &mut GenContext,
     fail_stmt: &String,
+    gates: &List<ScanGate> = &NO_SCAN_GATES,
+    gate_cond: &String = &NO_SCAN_GATE_COND,
 ) {
+    gen_scan_gate_check(w, gate_cond, fail_stmt);
     for let mut i = start; i < end; i += 1 {
+        gen_scan_gates_in(w, gates, if i == start { i32::MIN } else { i }, i + 1);
         gen_scan_op_element(w, &scan_elems[i], ctx, fail_stmt);
+    }
+    gen_scan_gates_in(w, gates, end, i32::MAX);
+}
+
+/// No gates — the default for every emit site whose body carries none, which is
+/// every site in a grammar without a simulable gate member.
+global NO_SCAN_GATES: List<ScanGate> = [];
+global NO_SCAN_GATE_COND: String = "";
+
+/// Score a gated alternative as no match where the scan's copy of the members
+/// says it does not exist. The parse side's twin is the `alt_initial_gate`
+/// guard on the tournament; both have to be present or the measurement and the
+/// parse disagree about which alternatives are in the running.
+fn gen_scan_gate_check(w: &mut CodeWriter, gate_cond: &String, fail_stmt: &String) {
+    if gate_cond.is_empty() {
+        return;
+    }
+    w.line(&`if !(${*gate_cond}) \{ ${*fail_stmt} \}`);
+}
+
+/// Seed the scan's copy of the gate members from the parser, at the point the
+/// parse hands the token array to a scan.
+///
+/// This is what makes the simulation start from the truth. A scan reached from
+/// inside another scan inherits its caller's value and is not seeded — that is
+/// the simulation. A scan reached from the parse starts from where the parse
+/// actually is, so a head the parse has already entered is not re-derived, and
+/// nothing a previous scan left behind survives to be read.
+fn gen_scan_gate_seed(w: &mut CodeWriter, ctx: &GenContext) {
+    if !ctx.emit_scan_gate() {
+        return;
+    }
+    for let f of ctx.scan_gate_fields() {
+        w.line(&`${SCAN_GATE_HANDLE}.${*f} = ${PARSER_HANDLE}.${*f};`);
+    }
+}
+
+/// Run the gate actions positioned in `[lo, hi)`. A gate consumes no tokens, so
+/// this is the whole of the scan's simulation: assign, and walk on.
+///
+/// The bounds are half-open on both ends of the body rather than a single index
+/// because the body emitted is not always the whole alternative: a token-led
+/// candidate skips its leading token, and a gate ahead of that token still has
+/// to run — the parse ran it, so the scan's copy must hold the same value. The
+/// trailing call takes everything left for the same reason: a tail gate is what
+/// restores the flag the head closed.
+fn gen_scan_gates_in(w: &mut CodeWriter, gates: &List<ScanGate>, lo: i32, hi: i32) {
+    for let g of gates {
+        if g.before_index >= lo && g.before_index < hi {
+            w.line(&`${SCAN_GATE_HANDLE}.${g.field} = ${g.value};`);
+        }
     }
 }
 
@@ -2169,11 +2275,16 @@ fn gen_scan_op_elements_in_block(
     end: i32,
     ctx: &mut GenContext,
     label: &String,
+    gates: &List<ScanGate> = &NO_SCAN_GATES,
+    gate_cond: &String = &NO_SCAN_GATE_COND,
 ) {
     let fail = `break ${*label};`;
+    gen_scan_gate_check(w, gate_cond, &fail);
     for let mut i = start; i < end; i += 1 {
+        gen_scan_gates_in(w, gates, if i == start { i32::MIN } else { i }, i + 1);
         gen_scan_op_element(w, &scan_elems[i], ctx, &fail);
     }
+    gen_scan_gates_in(w, gates, end, i32::MAX);
 }
 
 /// A rule's non-LR alt indices, their FIRST sets, and the overlap groups over
@@ -3794,6 +3905,7 @@ fn gen_viability_probe(
 ) {
     let label = dedup_name(label_base, nc);
     w.begin(&`${label}:`);
+    gen_scan_gate_seed(w, ctx);
     w.line(&"let tokens = &p.kinds;");
     w.line(&"let mut pos: i32 = p.pos;");
     let fail = `break ${label};`;
@@ -3997,6 +4109,7 @@ fn gen_shape_entry_conditions(
         let label = dedup_name(&"shape_scan", name_counts);
         w.line(&`let mut ${pos_var}: i32 = -1;`);
         w.begin(&`${label}:`);
+        gen_scan_gate_seed(w, ctx);
         w.line(&"let tokens = &p.kinds;");
         w.line(&"let mut pos: i32 = p.pos;");
         let fail = `break ${label};`;
@@ -4224,12 +4337,22 @@ fn gen_op_opt_scan_guard_for_group(
     let scan_label = dedup_name(&"opt_scan", name_counts);
     w.line(&`let mut ${scan_pos_var}: i32 = -1;`);
     w.begin(&`${scan_label}:`);
+    gen_scan_gate_seed(w, ctx);
     w.line(&"let tokens = &p.kinds;");
     w.line(&"let mut pos: i32 = p.pos;");
     let scan_group = &g_op.scan_group;
     if scan_group.alts.len() == 1 {
         let body = &scan_group.alts[0];
-        gen_scan_op_elements_in_block(w, &body.elements, 0, body.elements.len(), ctx, &scan_label);
+        gen_scan_op_elements_in_block(
+            w,
+            &body.elements,
+            0,
+            body.elements.len(),
+            ctx,
+            &scan_label,
+            &body.gates,
+            &body.gate_cond,
+        );
     } else {
         gen_scan_op_group(w, scan_group, ctx, &`break ${scan_label};`, scan_group.lenient);
     }
@@ -6081,6 +6204,7 @@ fn gen_scan_guard_with_prefix(
     let scan_label = dedup_name(label_prefix, name_counts);
     w.line(&`let mut ${scan_pos_var}: i32 = -1;`);
     w.begin(&`${scan_label}:`);
+    gen_scan_gate_seed(w, ctx);
     w.line(&"let tokens = &p.kinds;");
     w.line(&"let mut pos: i32 = p.pos;");
     let fail = `break ${scan_label};`;
@@ -6433,9 +6557,19 @@ fn gen_scan_alt_end(
 ) {
     let scan_label = dedup_name(&"gd_scan", name_counts);
     w.begin(&`${scan_label}:`);
+    gen_scan_gate_seed(w, ctx);
     w.line(&"let tokens = &p.kinds;");
     w.line(&"let mut pos: i32 = p.pos;");
-    gen_scan_op_elements_in_block(w, &sb.elements, 0, sb.elements.len(), ctx, &scan_label);
+    gen_scan_op_elements_in_block(
+        w,
+        &sb.elements,
+        0,
+        sb.elements.len(),
+        ctx,
+        &scan_label,
+        &sb.gates,
+        &sb.gate_cond,
+    );
     w.line(&`${*end_var} = pos;`);
     w.end();
 }
@@ -7082,6 +7216,7 @@ fn emit_scan_tournament(
     fall_through_on_no_match: bool = false,
 ) {
     let fsep = follow_sep(ctx.current_rule_reads_follow());
+    gen_scan_gate_seed(w, ctx);
     w.line(&"let _sd_tokens = &p.kinds;");
     w.line(&"let _sd_pos = p.pos;");
     for let mut i = 0; i < sorted_indices.len(); i += 1 {

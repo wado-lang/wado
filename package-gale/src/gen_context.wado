@@ -217,6 +217,9 @@ pub struct GenContext {
     /// field reads against real declarations. Set once at codegen entry.
     grammar_name: String,
     action_members: MemberNames,
+    /// The members fields a scan simulates: assigned only integer literals, so
+    /// a walk can run their actions without a parser. See `scan_gate.wado`.
+    scan_gate_fields: List<String>,
     /// The lexer's `superClass` base effect-interface name, or `""` when none.
     /// See `action.md`, "SuperClass — an effect interface".
     superclass_name: String,
@@ -312,6 +315,7 @@ impl GenContext {
             action_language: ActionLanguage::Wado,
             grammar_name: "",
             action_members: MemberNames {},
+            scan_gate_fields: [],
             superclass_name: "",
             superclass_ops: [],
             parser_superclass_name: "",
@@ -681,6 +685,21 @@ impl GenContext {
 
     pub fn action_members(&self) -> &MemberNames with stores[self] {
         return &self.action_members;
+    }
+
+    /// The members fields a scan simulates as it walks — see `scan_gate.wado`.
+    pub fn set_scan_gate_fields(&mut self, fields: List<String>) {
+        self.scan_gate_fields = fields;
+    }
+
+    pub fn scan_gate_fields(&self) -> &List<String> with stores[self] {
+        return &self.scan_gate_fields;
+    }
+
+    /// Whether the generated parser carries the `SCAN_GATE` global at all. Off
+    /// leaves every scan byte-identical to one emitted before it existed.
+    pub fn emit_scan_gate(&self) -> bool {
+        return self.emit_actions && !self.scan_gate_fields.is_empty();
     }
 
     pub fn set_superclass(&mut self, name: &String, ops: List<SuperOp>) {

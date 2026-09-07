@@ -1,0 +1,49 @@
+use { gate_assignment } from "./scan_gate.wado";
+
+test "gate_assignment: a bare constant assignment" {
+    let hit = gate_assignment(&"noStruct = 1;");
+    assert hit matches { Some(_) }, `${hit:?}`;
+    if let Some(h) = hit {
+        assert h.0 == "no_struct", &h.0;
+        assert h.1 == 1, `${h.1}`;
+    }
+}
+
+test "gate_assignment: whitespace and a missing semicolon" {
+    let hit = gate_assignment(&"  noStruct   =   0  ");
+    assert hit matches { Some(_) }, `${hit:?}`;
+    if let Some(h) = hit {
+        assert h.0 == "no_struct", &h.0;
+        assert h.1 == 0, `${h.1}`;
+    }
+}
+
+test "gate_assignment: a negative constant" {
+    let hit = gate_assignment(&"depth = -1;");
+    assert hit matches { Some(_) }, `${hit:?}`;
+    if let Some(h) = hit {
+        assert h.1 == -1, `${h.1}`;
+    }
+}
+
+// The rejection cases. Each is a body a scan cannot run by walking alone, so
+// simulating it would answer with a value the parse never holds.
+test "gate_assignment: a comparison is not an assignment" {
+    assert gate_assignment(&"noStruct == 0") matches { None };
+}
+
+test "gate_assignment: an expression right-hand side" {
+    assert gate_assignment(&"noStruct = noStruct + 1;") matches { None };
+}
+
+test "gate_assignment: a second statement" {
+    assert gate_assignment(&"noStruct = 1; depth = 2;") matches { None };
+}
+
+test "gate_assignment: a call" {
+    assert gate_assignment(&"reset();") matches { None };
+}
+
+test "gate_assignment: a field write through a receiver" {
+    assert gate_assignment(&"this.noStruct = 1;") matches { None };
+}

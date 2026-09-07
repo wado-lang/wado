@@ -1161,6 +1161,15 @@ pub struct GeneralShape {
 /// parse side but drops the storage decisions.
 pub struct ScanBody {
     pub elements: List<ScanElement>,
+    /// The gate actions this alternative runs as the scan walks it. Empty
+    /// unless the grammar has a simulable gate member, which keeps every other
+    /// grammar's scan byte-identical.
+    pub gates: List<ScanGate> = [],
+    /// The alt-initial gate this body has to clear, rendered against the scan's
+    /// copy of the members, or `""` for none. Its parse-side twin is
+    /// `alt_initial_gate_conditions`; the two must agree or the tournament
+    /// commits to a length the parse refuses.
+    pub gate_cond: String = "",
 }
 
 pub variant ScanElement {
@@ -1176,6 +1185,18 @@ pub variant ScanElement {
     /// parse-side `OptionalLookaheadStrategy`. Exists in scan IR
     /// because scan-side has its own `gen_scan_optional_with_lookahead`.
     OptionalLookahead(ScanOptionalLookaheadElement),
+}
+
+/// A gate action the scan runs as it walks, so a tournament measuring a stretch
+/// that crosses one measures it under the gate the parse will apply. Positioned
+/// into `elements` the way `AltAction` is into the surface elements, and held in
+/// a sidecar for the same reason: it consumes nothing, and every index-based
+/// analysis over the element sequence stays unchanged. See `scan_gate.wado`.
+pub struct ScanGate {
+    pub field: String,
+    pub value: i32,
+    /// Runs after `elements[before_index - 1]` and before `elements[before_index]`.
+    pub before_index: i32,
 }
 
 pub struct ScanTokenElement {

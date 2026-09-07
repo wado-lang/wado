@@ -1,0 +1,168 @@
+//! The scan-side twin of a parser gate member.
+//!
+//! An alt-initial predicate gates an alternative out of a dispatch, and
+//! `action_gen` already evaluates it where the parser is in scope. A scan is
+//! not: it is a pure `(tokens, pos, follow) -> i32` walk, so a tournament that
+//! measures a stretch crossing a gate action measures it with the gate open and
+//! commits to a length the parse then refuses.
+//!
+//! Passing the parser in does not fix it. The flag is parse-time state and the
+//! scan is lookahead, so an outer tournament scanning over an `if` head reads
+//! the value from before the head. The scan has to *simulate* the action as it
+//! walks — which is possible exactly when the action needs nothing but the walk.
+//!
+//! That is the shape this module recognises: `field = <int literal>`. It needs
+//! no parser, no token, and no evaluation order beyond the element sequence, so
+//! a scan can run it. Anything else leaves the gate unsimulated, which is the
+//! behaviour before this existed.
+//!
+//! The simulated fields live in one generated struct global, whose fields carry
+//! the same names as the parser's. That is what keeps the two conditions in
+//! step: the java2wado front end renders a member as `<handle>.<field>`, so
+//! pointing the handle at the global produces the scan's condition from the
+//! parser's own predicate text, with no second translator.
+
+use { Grammar } from "./ir.wado";
+use { to_snake_case } from "./ident.wado";
+
+/// The generated global the scan mutates, and its struct type.
+pub global SCAN_GATE_HANDLE: String = "SCAN_GATE";
+pub global SCAN_GATE_TYPE: String = "ScanGate";
+
+/// `field = <int literal>`, with an optional trailing `;` and any surrounding
+/// whitespace — the whole body, not a prefix of it. Returns the snake_cased
+/// field and the value.
+pub fn gate_assignment(text: &String) -> Option<[String, i32]> {
+    let chars: List<char> = text.chars().collect();
+    let n = chars.len();
+    let mut i = skip_ws(&chars, 0, n);
+    let name_start = i;
+    while i < n && is_ident_char(chars[i]) {
+        i += 1;
+    }
+    if i == name_start {
+        return null;
+    }
+    let name = collect(&chars, name_start, i);
+    i = skip_ws(&chars, i, n);
+    if i >= n || chars[i] != '=' {
+        return null;
+    }
+    i += 1;
+    // `==` is a comparison, not an assignment; `=+`/`=-` are not Java at all.
+    if i < n && chars[i] == '=' {
+        return null;
+    }
+    i = skip_ws(&chars, i, n);
+    let mut negative = false;
+    if i < n && chars[i] == '-' {
+        negative = true;
+        i += 1;
+        i = skip_ws(&chars, i, n);
+    }
+    let digits_start = i;
+    let mut value = 0;
+    while i < n && chars[i] >= '0' && chars[i] <= '9' {
+        value = value * 10 + (chars[i] as i32 - '0' as i32);
+        i += 1;
+    }
+    if i == digits_start {
+        return null;
+    }
+    i = skip_ws(&chars, i, n);
+    if i < n && chars[i] == ';' {
+        i = skip_ws(&chars, i + 1, n);
+    }
+    if i != n {
+        return null;
+    }
+    return Option::Some([to_snake_case(&name), if negative { -value } else { value }]);
+}
+
+/// Every field the grammar's parser actions assign an integer literal to,
+/// snake_cased, first-assignment order. A field assigned anywhere by anything
+/// else is not here: a scan that simulated only some of a field's writes would
+/// answer with a value the parse never holds.
+pub fn scan_gate_fields(grammar: &Grammar) -> List<String> {
+    let mut simulable: List<String> = [];
+    let mut rejected: List<String> = [];
+    for let rule of &grammar.parser_rules {
+        for let alt of &rule.alternatives {
+            for let a of &alt.actions {
+                if a.kind matches { Predicate } {
+                    continue;
+                }
+                match gate_assignment(&a.source.text) {
+                    Some(hit) => {
+                        if !simulable.contains(&hit.0) {
+                            simulable.push(hit.0);
+                        }
+                    },
+                    None => {
+                        for let name of assigned_names(&a.source.text) {
+                            if !rejected.contains(&name) {
+                                rejected.push(name);
+                            }
+                        }
+                    },
+                }
+            }
+        }
+    }
+    return simulable.iter_ref().filter(|f| !rejected.contains(f)).map(|f| *f).collect();
+}
+
+/// The snake_cased names an action body assigns to, however it does it — the
+/// disqualifying set. Deliberately generous: it takes every `name` left of a
+/// `=` that is not `==`, so a compound assignment or a write buried in a
+/// multi-statement body still disqualifies the field.
+fn assigned_names(text: &String) -> List<String> {
+    let chars: List<char> = text.chars().collect();
+    let n = chars.len();
+    let mut out: List<String> = [];
+    let mut i = 0;
+    while i < n {
+        if !is_ident_start(chars[i]) {
+            i += 1;
+            continue;
+        }
+        let start = i;
+        while i < n && is_ident_char(chars[i]) {
+            i += 1;
+        }
+        let name = collect(&chars, start, i);
+        let mut j = skip_ws(&chars, i, n);
+        // A compound assignment is `name <op>= value`; `==`/`!=`/`<=`/`>=` are not.
+        if j < n && (chars[j] == '+' || chars[j] == '-' || chars[j] == '*' || chars[j] == '/') {
+            j += 1;
+        }
+        if j < n && chars[j] == '=' && !(j + 1 < n && chars[j + 1] == '=') {
+            out.push(to_snake_case(&name));
+        }
+    }
+    return out;
+}
+
+fn skip_ws(chars: &List<char>, from: i32, n: i32) -> i32 {
+    let mut i = from;
+    while i < n && (chars[i] == ' ' || chars[i] == '\t' || chars[i] == '\n' || chars[i] == '\r') {
+        i += 1;
+    }
+    return i;
+}
+
+fn is_ident_start(c: char) -> bool {
+    return c == '_' || c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z';
+}
+
+fn is_ident_char(c: char) -> bool {
+    return is_ident_start(c) || c >= '0' && c <= '9';
+}
+
+fn collect(chars: &List<char>, from: i32, to: i32) -> String {
+    let mut s = String::new();
+    for let mut i = from; i < to; i += 1 {
+        s.push(chars[i]);
+    }
+    return s;
+}

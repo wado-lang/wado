@@ -56,7 +56,8 @@ use {
     scan_decision_branches,
     sort_group_by_element_count,
 } from "./alt_grouping.wado";
-use { alt_has_gate } from "./action_gen.wado";
+use { alt_has_gate, alt_scan_gate_conditions } from "./action_gen.wado";
+use { gate_assignment } from "./scan_gate.wado";
 use {
     rule_type_name,
     literal_const_name,
@@ -99,6 +100,7 @@ use {
     DispatchBranch,
     TournamentDispatch,
     ScanBody,
+    ScanGate,
     ScanElement,
     ScanTokenElement,
     ScanRuleCallElement,
@@ -1113,7 +1115,7 @@ fn stamp_lr_self_ref_min_prec(
             }
         }
         lr_alts[i].suffix.ops = new_ops;
-        lr_alts[i].scan_suffix = ScanBody { elements: new_scan };
+        lr_alts[i].scan_suffix = ScanBody { ..lr_alts[i].scan_suffix, elements: new_scan };
     }
     return mid_operand_gated;
 }
@@ -1509,7 +1511,7 @@ fn stamp_scan_follow(
                         pos_follow,
                     ));
                 }
-                new_alts.push(ScanBody { elements: new_elements });
+                new_alts.push(ScanBody { ..*scan_alt, elements: new_elements });
             }
             g.alts = new_alts;
             ScanElement::Group(g);
@@ -1528,7 +1530,7 @@ fn stamp_scan_follow(
                         pos_follow,
                     ));
                 }
-                new_bodies.push(ScanBody { elements: new_elements });
+                new_bodies.push(ScanBody { ..*body, elements: new_elements });
             }
             ole.bodies = new_bodies;
             ScanElement::OptionalLookahead(ole);
@@ -1774,7 +1776,7 @@ fn lower_lr_alt_scan_suffix(rule: &ParserRule, alt_index: i32, ctx: &mut GenCont
             false,
         ));
     }
-    return ScanBody { elements };
+    return ScanBody { elements, gates: scan_gates_for(alt, ctx, 1) };
 }
 
 /// Index (within `alt.elements`) of the LAST self-reference to
@@ -2117,7 +2119,38 @@ fn lower_scan_body(alt: &Alternative, ctx: &mut GenContext, rule_name: &String, 
             rule_name,
         ));
     }
-    return ScanBody { elements };
+    return ScanBody {
+        elements,
+        gates: scan_gates_for(alt, ctx),
+        gate_cond: alt_scan_gate_conditions(alt, ctx),
+    };
+}
+
+/// The gate actions of `alt` a scan can run by walking — see `scan_gate.wado`.
+/// Empty unless the grammar declares a simulable gate member, so a grammar
+/// without one lowers exactly as before.
+///
+/// `from` is the surface index the scan body starts at, so an LR suffix — which
+/// walks `elements[1..]` — positions its gates against what it actually emits.
+/// A gate ahead of `from` still runs, at the body's start: the parse ran it
+/// before this body, and the scan's copy has to hold the same value on entry.
+pub fn scan_gates_for(alt: &Alternative, ctx: &GenContext, from: i32 = 0) -> List<ScanGate> {
+    if !ctx.emit_scan_gate() {
+        return [];
+    }
+    let mut gates: List<ScanGate> = [];
+    for let a of &alt.actions {
+        if a.kind matches { Predicate } {
+            continue;
+        }
+        if let Some(hit) = gate_assignment(&a.source.text) {
+            if ctx.scan_gate_fields().contains(&hit.0) {
+                let at = if a.before_index > from { a.before_index - from } else { 0 };
+                gates.push(ScanGate { field: hit.0, value: hit.1, before_index: at });
+            }
+        }
+    }
+    return gates;
 }
 
 fn lower_scan_element(

@@ -57,6 +57,7 @@ use {
 use { gen_highlight } from "./highlight_gen.wado";
 use { HighlightRule } from "./highlight_query.wado";
 use { GenContext } from "./gen_context.wado";
+use { SCAN_GATE_HANDLE, SCAN_GATE_TYPE, scan_gate_fields } from "./scan_gate.wado";
 use { CodeWriter, EnumSpec, Vis } from "./wadopoet.wado";
 use { lower } from "./lower.wado";
 use { build_atn_with, atn_blob_bytes, Atn, empty_atn, lr_loop_entry_decision, rule_body_decision } from "./atn.wado";
@@ -157,6 +158,7 @@ pub fn analysis_context(grammar: &Grammar, lit_tokens: &List<LitToken>, token_ki
     ctx.set_vocab_names(vocab_display_names(&grammar.lexer_rules, lit_tokens, ctx.token_kind_names()));
     ctx.set_action_language(&grammar.action_language);
     ctx.set_grammar_name(&grammar.name);
+    ctx.set_scan_gate_fields(scan_gate_fields(grammar));
     return ctx;
 }
 
@@ -329,6 +331,9 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
     // runtime lexer simulator (`latn_match`).
     if needs_latn {
         gen_latn_data_global(&mut w, &latn.atn);
+    }
+    if ctx.emit_scan_gate() {
+        gen_scan_gate_global(&mut w, ctx.scan_gate_fields());
     }
     // Read the full diagnostic set from `ctx`, not `lowered.diagnostics`:
     // the latter is a lowering-time snapshot, and the emit walk's
@@ -561,6 +566,22 @@ fn gen_atn_data_global(w: &mut CodeWriter, atn: &Atn, emit_scan_globals: bool) {
     if emit_scan_globals {
         w.line(&"global mut SCAN_STACK: List<i32> = [];");
     }
+    w.blank();
+}
+
+/// Emit the scan's copy of the parser's gate members: one struct global the
+/// scan walk mutates. Its fields carry the parser's own names, which is what
+/// lets one predicate text render for both sides — see `scan_gate.wado`.
+///
+/// The parse seeds it from `p` before each scan, so nothing here has to
+/// survive a scan the tournament abandons.
+fn gen_scan_gate_global(w: &mut CodeWriter, fields: &List<String>) {
+    w.begin(&`struct ${SCAN_GATE_TYPE}`);
+    for let f of fields {
+        w.line(&`${*f}: i32 = 0,`);
+    }
+    w.end();
+    w.line(&`global mut ${SCAN_GATE_HANDLE}: ${SCAN_GATE_TYPE} = ${SCAN_GATE_TYPE} \{\};`);
     w.blank();
 }
 

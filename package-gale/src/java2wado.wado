@@ -93,12 +93,17 @@ pub fn translate_predicate(
     grammar_name: &String,
     members: &MemberNames,
     at_alt_end: bool = false,
+    /// The receiver a bare member name resolves against. The scan's copy of the
+    /// gate members carries the parser's own field names, so pointing this at
+    /// that global renders the scan's condition from the same predicate text —
+    /// see `scan_gate.wado`.
+    handle: &String = &PARSER_HANDLE,
 ) -> Result<String, String> {
     return match lang {
         Wado => translate_wado_action(rule, rules, body, vals_in_scope, bindings),
         Java => {
             let env = JEnv {
-                this_bind: PARSER_HANDLE,
+                this_bind: *handle,
                 grammar: *grammar_name,
                 methods: members.methods,
                 fields: members.fields,

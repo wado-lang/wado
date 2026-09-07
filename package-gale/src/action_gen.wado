@@ -50,6 +50,7 @@ use { MemberDecls } from "./java2wado/jmembers.wado";
 use { find_attr_refs } from "./attr_scan.wado";
 use { body_is_base_calls_only, body_names_this, opaque_span_end } from "./superclass.wado";
 use { escape_ident, PARSER_HANDLE } from "./ident.wado";
+use { SCAN_GATE_HANDLE } from "./scan_gate.wado";
 
 /// The callee-local parameter name a rule argument binds to. `escape_ident`
 /// keeps a keyword-named arg (`type`) a legal identifier; the value is stored
@@ -653,6 +654,118 @@ fn gate_condition_for(a: &AltAction, ctx: &GenContext) -> Option<String> {
 
 fn is_gateable_alt_initial_predicate(a: &AltAction, ctx: &GenContext) -> bool {
     return gate_condition_for(a, ctx) matches { Some(_) };
+}
+
+/// An alt's gate conditions rendered against the scan's copy of the members,
+/// joined — or `""` when the scan cannot answer them.
+///
+/// A scan has no parser, so it can only evaluate a condition that reads nothing
+/// but simulated fields. `translate_predicate` renders a member as
+/// `<handle>.<field>`, so the scan's condition is the parser's own predicate
+/// text with the handle pointed at `SCAN_GATE`; what that leaves behind is the
+/// check. A condition naming anything else — a method, an unsimulated field, a
+/// token — leaves the scan ungated, which is the behaviour before this existed.
+pub fn alt_scan_gate_conditions(alt: &Alternative, ctx: &GenContext) -> String {
+    if !ctx.emit_scan_gate() {
+        return String::new();
+    }
+    let mut conds: List<String> = [];
+    for let a of &alt.actions {
+        if a.before_index != 0 || a.kind matches { Action } {
+            continue;
+        }
+        // Only the Java front end resolves a bare member against a receiver; a
+        // Wado body already names `p` and no rebinding reaches inside it.
+        if !ctx.action_language() matches { Java } || body_names_unwired_base(&a.source.text, ctx) {
+            return String::new();
+        }
+        let ridx = ctx.current_rule_index();
+        if ridx < 0 {
+            return String::new();
+        }
+        let rule = &ctx.parser_rules()[ridx];
+        match translate_predicate(
+            &ctx.action_language(),
+            rule,
+            ctx.parser_rules(),
+            &a.source.text,
+            rule_emits_vals(ctx, rule),
+            ctx.alt_bindings(),
+            ctx.grammar_name(),
+            ctx.action_members(),
+            false,
+            &SCAN_GATE_HANDLE,
+        ) {
+            Ok(code) => {
+                if !reads_only_scan_gate_fields(&code, ctx.scan_gate_fields()) {
+                    return String::new();
+                }
+                conds.push(code);
+            },
+            Err(_) => {
+                return String::new();
+            },
+        }
+    }
+    if conds.is_empty() {
+        return String::new();
+    }
+    return join_gate_conds(&conds);
+}
+
+/// Whether a rendered condition reads nothing but simulated gate fields: every
+/// `SCAN_GATE.` reaches one, and no parser handle survives. A condition that
+/// fails this would compile against a field the global does not have, or read
+/// a `p` the scan does not hold.
+fn reads_only_scan_gate_fields(code: &String, fields: &List<String>) -> bool {
+    let chars: List<char> = code.chars().collect();
+    let n = chars.len();
+    let mut i = 0;
+    while i < n {
+        if !is_word_start(chars[i]) {
+            i += 1;
+            continue;
+        }
+        let start = i;
+        while i < n && is_word_char(chars[i]) {
+            i += 1;
+        }
+        let word = collect_chars(&chars, start, i);
+        if word == PARSER_HANDLE {
+            return false;
+        }
+        if word != SCAN_GATE_HANDLE {
+            continue;
+        }
+        if i >= n || chars[i] != '.' {
+            return false;
+        }
+        i += 1;
+        let fstart = i;
+        while i < n && is_word_char(chars[i]) {
+            i += 1;
+        }
+        if !fields.contains(&collect_chars(&chars, fstart, i)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+fn is_word_start(c: char) -> bool {
+    return c == '_' || c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z';
+}
+
+fn is_word_char(c: char) -> bool {
+    return is_word_start(c) || c >= '0' && c <= '9';
+}
+
+fn collect_chars(chars: &List<char>, from: i32, to: i32) -> String {
+    let mut s = String::new();
+    for let mut i = from; i < to; i += 1 {
+        s.push(chars[i]);
+    }
+    return s;
 }
 
 /// The name of a predicate's standalone fn (`pred_<action_id>`).
