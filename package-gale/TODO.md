@@ -117,6 +117,20 @@ The generator row is spread across the correctness work rather than
 concentrated: disabling the decline lowering alone — the largest single
 addition, 88 sites in the Rust parser — recovers about a quarter of it.
 
+## `x += (a*)` panics instead of emitting
+
+A list label over a _block_ holding a repeat lowers to
+`Op::ListLabel(Repeat(_))`, and `gen_op_list_label` then panics in
+`element_field_info`. A suffix binds outside a label, so `x += a*` is the
+label _inside_ the repeat and takes a different path; only the parenthesised
+form reaches this one.
+
+ANTLR4 accepts the form, so a panic is a compatibility gap — and a panic rather
+than a diagnostic is the worse half. Found while checking whether the parse and
+scan sides stamp the same loops for that shape: they now do, but nothing can
+reach the divergence while the emitter dies first, which is why that fix carries
+no fixture.
+
 ## LL prediction — parked gaps
 
 Not queued work: both are known edges of the static path, and the complete answer is the runtime ATN simulator (`AGENTS.md` records three over-broad static repairs that each silently broke a real grammar). Revisit only when a descriptor or a real grammar surfaces a regression, and pair any repair with a rejection-case fixture.
