@@ -557,11 +557,8 @@ fn resolve_imports(
         }
     }
 
-    let is_builtin_func = |f: &FreeFunctionName| {
-        f.module_source.is_core_builtin()
-            || f.module_source.is_wasm_asset()
-            || f.name.starts_with("builtin::")
-    };
+    let is_builtin_func =
+        |f: &FreeFunctionName| f.module_source.is_builtin() || f.name.starts_with("builtin::");
 
     // Mark an ambient stdio function used when its `log_*` (panic /
     // assert-diagnostic) builtin is reachable and the world provides that
