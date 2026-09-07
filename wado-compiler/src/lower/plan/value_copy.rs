@@ -168,8 +168,12 @@ pub fn plan(
         &seed_conventions.returns_owned,
         &builtin_conventions,
     );
-    let conventions =
-        ownership::compute_return_conventions(flat, &call_graph, &return_paths, &builtin_conventions);
+    let conventions = ownership::compute_return_conventions(
+        flat,
+        &call_graph,
+        &return_paths,
+        &builtin_conventions,
+    );
     let stored_params = stores::compute_stored_params(flat, &call_graph);
     let mut mut_receiver_methods = FuncKeySet::default();
     let mut mut_ref_params = FuncKeyMap::default();

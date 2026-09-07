@@ -157,11 +157,7 @@ pub fn compute_return_paths(
         let Some(Names::Place(place)) = returned.names else {
             return false;
         };
-        let Some(param) = func
-            .params
-            .iter()
-            .position(|p| p.local_index == place.root)
-        else {
+        let Some(param) = func.params.iter().position(|p| p.local_index == place.root) else {
             return false;
         };
         paths.insert(

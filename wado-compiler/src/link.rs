@@ -7,9 +7,9 @@ use std::rc::Rc;
 
 use crate::flat_package::FlatPackage;
 use crate::hashmap::IndexMap;
+use crate::lower::plan::value_copy::ownership::hands_out_storage;
 use crate::module_source::ModuleSource;
 use crate::package::Package;
-use crate::lower::plan::value_copy::ownership::hands_out_storage;
 use crate::tir::{ReturnConvention, TypeTable};
 use crate::wir_build::component_plan;
 

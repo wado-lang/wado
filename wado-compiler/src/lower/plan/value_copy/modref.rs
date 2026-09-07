@@ -125,8 +125,14 @@ pub fn compute_mod_ref(
     )> = Vec::new();
     for func_rc in &flat.functions {
         let func = func_rc.borrow();
-        let (writes, callees, pending) =
-            scan(&func, &type_table, &defined, return_paths, returns_owned, builtins);
+        let (writes, callees, pending) = scan(
+            &func,
+            &type_table,
+            &defined,
+            return_paths,
+            returns_owned,
+            builtins,
+        );
         direct.push((
             func.module_source.clone(),
             func.name.clone(),
