@@ -15,6 +15,7 @@ use crate::nir_arena::{
 };
 use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
+use crate::nir_value_graph::ValueId;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
 
 use super::arena_query::{MutRefAliases, RootMutation, for_each_mutated_root};
@@ -72,7 +73,7 @@ enum CopySource {
     /// `let x = Operand::Value(v)` — a copy of a promoted operand. `x`'s reads
     /// forward to `Operand::Value(v)` directly; the pooled value is immutable so
     /// the copy is unconditionally stable.
-    Promoted(crate::nir_value_graph::ValueId),
+    Promoted(ValueId),
     /// `let x = &place` / `&mut place` (a pure `FieldAccess` chain rooted at
     /// `root_local`), re-materialized at `x`'s single use. Single-use +
     /// `source_scope_stable` keep capture-at-binding semantics: a root reassigned
@@ -667,7 +668,7 @@ fn can_propagate_copy(
 /// pass drops the bindings, over the targets
 /// [`CopyBinding::promoted_reads_substitutable`] approved.
 fn substitute_promoted_reads(engine: &mut Engine, substitutions: &IndexMap<u32, CopySource>) {
-    let mut plan: Vec<(NodeRef, crate::nir_value_graph::ValueId, CopySource)> = Vec::new();
+    let mut plan: Vec<(NodeRef, ValueId, CopySource)> = Vec::new();
     for node in super::arena_query::reachable_nodes(engine.body) {
         let body = &*engine.body;
         body.for_each_operand(node, |op| {
