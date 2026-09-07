@@ -1,0 +1,31 @@
+//! A gate action inside a left-recursive suffix, which the scan must run too.
+//!
+//! The precedence loop scans a suffix before committing to it, so an action the
+//! parse runs there and the scan does not makes the two disagree about what the
+//! suffix matches -- and the loop declines a suffix the parse would have taken.
+
+use g from "./grammars/lr_suffix_gate_action.g4"
+    with {
+        generator: { module: "../src/generator.wado", output_dir: "./generated/cst_lr_suffix_gate_action" },
+    };
+
+fn assert_tree(input: &String, expected: &String) {
+    let result = g::parse(input);
+    assert result.ok(), `unexpected diagnostics for ${*input}: ${result.diagnostics:?}`;
+    let actual = g::to_string_tree(&result);
+    assert actual == *expected, `\ninput:    ${*input}\nexpected: ${*expected}\nactual:   ${actual}`;
+}
+
+// The hit case: inside the `IF` head the subscript's brackets lift the ban, so
+// `b { c }` is the braced form and the `{ d }` after `]` is the head's block.
+test "a suffix action the scan runs too" {
+    assert_tree(
+        &"if a[b { c }] { d }",
+        &"(start (stmt if (expr (expr a) [ (expr b { c }) ]) (block { d })))",
+    );
+}
+
+// The rejection case: the ban still applies where the suffix does not lift it.
+test "the head's own ban is unchanged" {
+    assert_tree(&"if a { b }", &"(start (stmt if (expr a) (block { b })))");
+}

@@ -10640,6 +10640,7 @@ fn scan_expression_lr_8(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_LSQUAREBRACKET { return -1; }
     pos += 1;
+    SCAN_GATE.no_struct = 0;
     pos = scan_expression(tokens, pos, (FOLLOW_MASK_33 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK, 0);
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_RSQUAREBRACKET { return -1; }

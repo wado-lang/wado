@@ -732,9 +732,16 @@ fn gen_scan_lr_suffix_helpers(
         // `stamp_lr_self_ref_min_prec`) and `caller_follow_first`
         // for Optionals (via the alt-walker's `lower_scan_*` post-
         // pass + `gen_scan_op_repeat`'s subtraction).
-        for let scan_elem of &lr_alt.scan_suffix.elements {
-            gen_scan_op_element(w, scan_elem, ctx, &"return -1;");
-        }
+        gen_scan_op_elements(
+            w,
+            &lr_alt.scan_suffix.elements,
+            0,
+            lr_alt.scan_suffix.elements.len(),
+            ctx,
+            &"return -1;",
+            &lr_alt.scan_suffix.gates,
+            &lr_alt.scan_suffix.gate_cond,
+        );
         w.line(&"return pos;");
         w.end();
         w.blank();
