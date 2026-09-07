@@ -1601,7 +1601,7 @@ fn gen_scan_partition_body(
     // The gate travels with `best` for the same reason the group's does: every
     // candidate runs, so the global holds the last one's value and not the
     // winner's.
-    gen_scan_gate_declare_best(w, ctx, &"best");
+    gen_scan_gate_save(w, ctx, &"best", /*mutable=*/ true);
     let mut all_idx: List<i32> = [];
     for let i of guarded_alts {
         all_idx.push(*i);
@@ -1630,7 +1630,7 @@ fn gen_scan_partition_body(
     if ctx.emit_scan_gate() {
         w.begin(&"if best >= 0");
         w.line(&"pos = best;");
-        gen_scan_gate_restore_best(w, ctx, &"best");
+        gen_scan_gate_restore(w, ctx, &"best");
         w.line(&"break scan_alts;");
         w.end();
     } else {
@@ -2317,7 +2317,7 @@ fn gen_scan_op_group(w: &mut CodeWriter, ge: &ScanGroupElement, ctx: &mut GenCon
     // starts from the entry gate, so committing to the winner's position while
     // the global holds the last arm's value hands the enclosing walk a gate from
     // a reading it did not take.
-    gen_scan_gate_declare_best(w, ctx, &best_var);
+    gen_scan_gate_save(w, ctx, &best_var, /*mutable=*/ true);
     for let mut i = 0; i < branches.len(); i += 1 {
         open_decision_branch(w, &branches, i, &kind_var, ctx);
         for let ai of &branches[i].alts {
@@ -2333,7 +2333,7 @@ fn gen_scan_op_group(w: &mut CodeWriter, ge: &ScanGroupElement, ctx: &mut GenCon
     close_decision_chain(w, &branches);
     w.begin(&`if ${best_var} >= 0`);
     w.line(&`pos = ${best_var};`);
-    gen_scan_gate_restore_best(w, ctx, &best_var);
+    gen_scan_gate_restore(w, ctx, &best_var);
     w.else_begin(&"else");
     if lenient {
         w.line(&`pos = ${gp_var};`);
@@ -6301,34 +6301,23 @@ fn gen_rep_decline_stranded(
     w.end();
 }
 
-/// Save the scan's gate beside a position the scan may rewind to, and put it
-/// back with that position.
+/// Save the scan's gate beside a position the scan may rewind to, so
+/// `gen_scan_gate_restore` can put it back with that position.
 ///
-/// The gate is part of where the scan is, so it rewinds with the position. An
-/// arm that rewinds one and not the other hands the next arm a value from a
-/// walk that did not happen: an `if` head it entered and never left, whose ban
-/// the parse will not apply.
-fn gen_scan_gate_save(w: &mut CodeWriter, ctx: &GenContext, slot: &String) {
+/// The gate is part of where the scan is. An arm that rewinds one and not the
+/// other hands the next arm a value from a walk that did not happen: an `if`
+/// head it entered and never left, whose ban the parse will not apply.
+///
+/// A tournament needs `mutable`, because its slot is refilled by each candidate
+/// that takes the lead — the gate travels with `best` the way the position does,
+/// since every candidate runs and the global ends up holding the last one's.
+fn gen_scan_gate_save(w: &mut CodeWriter, ctx: &GenContext, slot: &String, mutable: bool = false) {
     if !ctx.emit_scan_gate() {
         return;
     }
+    let decl = if mutable { "let mut" } else { "let" };
     for let f of ctx.scan_gate_fields() {
-        w.line(&`let ${*slot}_${*f} = ${SCAN_GATE_HANDLE}.${*f};`);
-    }
-}
-
-/// The gate that goes with a longest-match winner.
-///
-/// A tournament runs every candidate, so the global holds the last one's value
-/// rather than the winner's. These three carry the gate alongside the winning
-/// position the same way `best` carries the position itself: declare a slot,
-/// fill it whenever a candidate takes the lead, and restore from it on commit.
-fn gen_scan_gate_declare_best(w: &mut CodeWriter, ctx: &GenContext, best: &String) {
-    if !ctx.emit_scan_gate() {
-        return;
-    }
-    for let f of ctx.scan_gate_fields() {
-        w.line(&`let mut ${*best}_${*f} = ${SCAN_GATE_HANDLE}.${*f};`);
+        w.line(&`${decl} ${*slot}_${*f} = ${SCAN_GATE_HANDLE}.${*f};`);
     }
 }
 
@@ -6342,15 +6331,6 @@ fn scan_gate_best_commit(ctx: &GenContext, best: &String, wins: &String, end: &S
         }
     }
     return `if ${*wins} \{ ${body} \}`;
-}
-
-fn gen_scan_gate_restore_best(w: &mut CodeWriter, ctx: &GenContext, best: &String) {
-    if !ctx.emit_scan_gate() {
-        return;
-    }
-    for let f of ctx.scan_gate_fields() {
-        w.line(&`${SCAN_GATE_HANDLE}.${*f} = ${*best}_${*f};`);
-    }
 }
 
 /// Undo an iteration the scan is abandoning: the position it started at, and
