@@ -145,15 +145,25 @@ NEWLINE    : ('\r\n' | [\r\n]) -> channel(HIDDEN);
 // tokens char and string
 CHAR_LITERAL: '\'' ( ~['\\\n\r\t] | QUOTE_ESCAPE | ASCII_ESCAPE | UNICODE_ESCAPE) '\'';
 
-STRING_LITERAL: '"' ( ~["] | QUOTE_ESCAPE | ASCII_ESCAPE | UNICODE_ESCAPE | ESC_NEWLINE)* '"';
+// LOCAL: `~["\\]`, not `~["]`. A catch-all that admits the backslash makes the
+// rule ambiguous with its own escape arms, and the longest reading wins: in
+// `"\\\\"` the first three backslashes go to the catch-all and the fourth pairs
+// with the closing quote as a QUOTE_ESCAPE, so the token runs on to the next
+// string in the file. `CHAR_LITERAL` above already excludes it; these two did
+// not. An escape is the only way to spell a backslash, so nothing is lost.
+STRING_LITERAL: '"' ( ~["\\] | QUOTE_ESCAPE | ASCII_ESCAPE | UNICODE_ESCAPE | ESC_NEWLINE)* '"';
 
 RAW_STRING_LITERAL: 'r' RAW_STRING_CONTENT;
 
 fragment RAW_STRING_CONTENT: '#' RAW_STRING_CONTENT '#' | '"' .*? '"';
 
-BYTE_LITERAL: 'b\'' (. | QUOTE_ESCAPE | BYTE_ESCAPE) '\'';
+// LOCAL: `~['\\]`, not `.` — same ambiguity as the two above, and the same
+// answer `CHAR_LITERAL` already gives: `b'\''` needs the escape arm to take the
+// `\'`, which a catch-all admitting the backslash beats it to.
+BYTE_LITERAL: 'b\'' (~['\\] | QUOTE_ESCAPE | BYTE_ESCAPE) '\'';
 
-BYTE_STRING_LITERAL: 'b"' (~["] | QUOTE_ESCAPE | BYTE_ESCAPE)* '"';
+// LOCAL: `~["\\]` — the byte-string twin of the `STRING_LITERAL` note above.
+BYTE_STRING_LITERAL: 'b"' (~["\\] | QUOTE_ESCAPE | BYTE_ESCAPE)* '"';
 
 RAW_BYTE_STRING_LITERAL: 'br' RAW_STRING_CONTENT;
 

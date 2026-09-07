@@ -4138,6 +4138,7 @@ fn try_BYTE_LITERAL(chars: &List<char>, start: i32) -> i32 {
     la_alt_40_0: {
         pos = la_saved_40;
         if pos >= chars.len() { break la_alt_40_0; }
+        if (chars[pos] matches { '\'' | '\\' }) { break la_alt_40_0; }
         pos += 1;
         let la_arm_40_0 = pos;
         let mut la_tot_40_0: i32 = -1;
@@ -7210,7 +7211,7 @@ fn scan_macro_invocation_semi(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
-        if _kind_set_8(alt_kind) {
+        if _kind_set_9(alt_kind) {
             let mut best: i32 = -1;
             pos = start;
             try_0: {
@@ -7685,7 +7686,6 @@ fn scan_item(tokens: &Array<i32>, pos: i32) -> i32 {
             if pos < 0 { break sg_3_0; }
             if pos > sg_3_best { sg_3_best = pos; }
         }
-    } else if _kind_set_8(sgk_3) {
         pos = gp_3;
         sg_3_1: {
             pos = scan_macro_item(tokens, pos, 0);
@@ -7713,7 +7713,7 @@ fn scan_vis_item(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let gp_4 = pos;
     let sgk_4 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     let mut sg_4_best = -1;
-    if _kind_set_9(sgk_4) {
+    if _kind_set_8(sgk_4) {
         pos = gp_4;
         sg_4_0: {
             pos = scan_module(tokens, pos, 0);
@@ -7992,7 +7992,7 @@ fn scan_use_declaration(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
 fn scan_use_tree_alt_0(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     osl_8_done: {
-        if pos < tokens.len() && _kind_set_8(tokens[pos]) {
+        if pos < tokens.len() && _kind_set_9(tokens[pos]) {
             let sol_9_save = pos;
             sol_9: {
                 pos = scan_simple_path(tokens, pos, 0);
@@ -8076,7 +8076,7 @@ fn scan_use_tree(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
-        if _kind_set_8(alt_kind) {
+        if _kind_set_9(alt_kind) {
             let mut best: i32 = -1;
             let try_0_end = scan_use_tree_alt_0(tokens, start, follow);
             if try_0_end > best { best = try_0_end; }
@@ -9286,7 +9286,7 @@ fn scan_external_item(tokens: &Array<i32>, pos: i32) -> i32 {
     let gp_45 = pos;
     let sgk_45 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     let mut sg_45_best = -1;
-    if _kind_set_8(sgk_45) {
+    if _kind_set_9(sgk_45) {
         pos = gp_45;
         sg_45_0: {
             pos = scan_macro_invocation_semi(tokens, pos);
@@ -9686,7 +9686,7 @@ fn scan_associated_item(tokens: &Array<i32>, pos: i32) -> i32 {
     let gp_59 = pos;
     let sgk_59 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     let mut sg_59_best = -1;
-    if _kind_set_8(sgk_59) {
+    if _kind_set_9(sgk_59) {
         pos = gp_59;
         sg_59_0: {
             pos = scan_macro_invocation_semi(tokens, pos);
@@ -9863,7 +9863,7 @@ fn scan_statement(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
             if try_3_end > best { best = try_3_end; }
             if best >= 0 { pos = best; break scan_alts; }
             return -1;
-        } else if _kind_set_8(alt_kind) {
+        } else if _kind_set_9(alt_kind) {
             let mut best: i32 = -1;
             let try_1_end = scan_statement_alt_1(tokens, start, follow);
             if try_1_end > best { best = try_1_end; }
@@ -10061,7 +10061,7 @@ fn scan_expression_atom(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
                 break scan_alts;
             }
             return -1;
-        } else if _kind_set_8(alt_kind) {
+        } else if _kind_set_9(alt_kind) {
             let mut best: i32 = -1;
             let try_2_end = scan_expression_atom_alt_2(tokens, start, follow);
             if try_2_end > best { best = try_2_end; }
@@ -13273,7 +13273,7 @@ fn scan_type_no_bounds(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
             if try_12_end > best { best = try_12_end; }
             if best >= 0 { pos = best; break scan_alts; }
             return -1;
-        } else if _kind_set_8(alt_kind) {
+        } else if _kind_set_9(alt_kind) {
             let mut best: i32 = -1;
             let try_2_end = scan_type_no_bounds_alt_2(tokens, start, follow);
             if try_2_end > best { best = try_2_end; }
@@ -14678,6 +14678,13 @@ fn scan_keyword(tokens: &Array<i32>, pos: i32) -> i32 {
     return -1;
 }
 
+fn scan_macro_identifier_like_token_alt_0(tokens: &Array<i32>, pos: i32) -> i32 {
+    let mut pos = pos;
+    pos = scan_keyword(tokens, pos);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
 fn scan_macro_identifier_like_token_alt_1(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
     pos = scan_identifier(tokens, pos);
@@ -14690,15 +14697,19 @@ fn scan_macro_identifier_like_token(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
-        if _kind_set_92(alt_kind) {
-            pos = start;
-            try_0: {
-                pos = scan_keyword(tokens, pos);
-                if pos < 0 { break try_0; }
-                break scan_alts;
-            }
+        if _kind_set_93(alt_kind) {
+            pos = scan_macro_identifier_like_token_alt_0(tokens, start);
+            if pos >= 0 { break scan_alts; }
             return -1;
-        } else if _kind_set_93(alt_kind) {
+        } else if alt_kind == TK_KW_UNION {
+            let mut best: i32 = -1;
+            let try_0_end = scan_macro_identifier_like_token_alt_0(tokens, start);
+            if try_0_end > best { best = try_0_end; }
+            let try_1_end = scan_macro_identifier_like_token_alt_1(tokens, start);
+            if try_1_end > best { best = try_1_end; }
+            if best >= 0 { pos = best; break scan_alts; }
+            return -1;
+        } else if _kind_set_94(alt_kind) {
             pos = scan_macro_identifier_like_token_alt_1(tokens, start);
             if pos >= 0 { break scan_alts; }
             return -1;
@@ -15067,7 +15078,7 @@ fn _parse_token_tree_token__inner_scan_0(tokens: &Array<i32>, pos: i32) -> i32 {
 
 fn _parse_token_tree_token__inner(p: &mut Parser) -> () with RustParserBase {
     let kind = p.peek_kind();
-    if _kind_set_94(kind) {
+    if _kind_set_95(kind) {
         if _kind_set_53(kind) {
             return _parse_token_tree_token__inner_alt_1(p);
         } else if _kind_set_52(kind) {
@@ -15297,8 +15308,8 @@ fn _parse_macro_invocation_semi__inner_scan_2(tokens: &Array<i32>, pos: i32) -> 
 
 fn _parse_macro_invocation_semi__inner(p: &mut Parser) -> () with RustParserBase {
     let kind = p.peek_kind();
-    if _kind_set_8(kind) {
-        if _kind_set_8(kind) {
+    if _kind_set_9(kind) {
+        if _kind_set_9(kind) {
             let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
             let _sd_p_0 = _parse_macro_invocation_semi__inner_scan_0(_sd_tokens, _sd_pos);
@@ -15689,7 +15700,7 @@ fn _parse_macro_match__inner(p: &mut Parser, follow: i64 = 0) -> () with RustPar
     }
     if kind == TK_DOLLAR {
         p.pos += 1;
-        if _kind_set_95(p.peek_kind()) {
+        if _kind_set_96(p.peek_kind()) {
             p.pos -= 1;
             return _parse_macro_match__inner_alt_2(p, follow);
         } else if p.peek_kind() == TK_LPAREN {
@@ -15742,7 +15753,7 @@ fn _parse_macro_match_token__inner_scan_0(tokens: &Array<i32>, pos: i32) -> i32 
 
 fn _parse_macro_match_token__inner(p: &mut Parser) -> () with RustParserBase {
     let kind = p.peek_kind();
-    if _kind_set_94(kind) {
+    if _kind_set_95(kind) {
         if _kind_set_53(kind) {
             return _parse_macro_match_token__inner_alt_1(p);
         } else if _kind_set_52(kind) {
@@ -15837,7 +15848,7 @@ fn _parse_macro_rep_sep__inner_scan_0(tokens: &Array<i32>, pos: i32) -> i32 {
 
 fn _parse_macro_rep_sep__inner(p: &mut Parser) -> () with RustParserBase {
     let kind = p.peek_kind();
-    if _kind_set_94(kind) {
+    if _kind_set_95(kind) {
         if _kind_set_53(kind) {
             return _parse_macro_rep_sep__inner_alt_1(p);
         } else if _kind_set_52(kind) {
@@ -15962,9 +15973,42 @@ fn _parse_item__inner(p: &mut Parser) -> () with RustParserBase {
     }
     let grp_kind = p.peek_kind();
     if _kind_set_7(grp_kind) {
-        let vis_item = _parse_vis_item(p, 0);
-    } else if _kind_set_8(grp_kind) {
-        let macro_item = _parse_macro_item(p, 0);
+        let mut gd_winner: i32 = -1;
+        let mut gd_best: i32 = -1;
+        gd_tourney: {
+            let mut gd_end: i32 = -1;
+            gd_scan: {
+                let tokens = &p.kinds;
+                let mut pos: i32 = p.pos;
+                pos = scan_vis_item(tokens, pos, 0);
+                if pos < 0 { break gd_scan; }
+                gd_end = pos;
+            }
+            if gd_end > gd_best {
+                gd_best = gd_end;
+                gd_winner = 0;
+            }
+            if gd_best >= p.kinds.len() {
+                break gd_tourney;
+            }
+            let mut gd_end_2: i32 = -1;
+            gd_scan_2: {
+                let tokens = &p.kinds;
+                let mut pos: i32 = p.pos;
+                pos = scan_macro_item(tokens, pos, 0);
+                if pos < 0 { break gd_scan_2; }
+                gd_end_2 = pos;
+            }
+            if gd_end_2 > gd_best {
+                gd_best = gd_end_2;
+                gd_winner = 1;
+            }
+        }
+        if gd_winner == 0 {
+            let vis_item = _parse_vis_item(p, 0);
+        } else {
+            let macro_item = _parse_macro_item(p, 0);
+        }
     } else {
         p.no_viable("no viable alternative", p.peek_span(), &SYNC_17);
     }
@@ -15987,7 +16031,7 @@ fn _parse_vis_item__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParser
         let visibility = _parse_visibility(p, FOLLOW_MASK_14);
     }
     let grp_kind = p.peek_kind();
-    if _kind_set_9(grp_kind) {
+    if _kind_set_8(grp_kind) {
         let mut gd_winner: i32 = -1;
         let mut gd_best: i32 = -1;
         gd_tourney: {
@@ -16164,7 +16208,7 @@ fn _parse_macro_item__inner_scan_0(tokens: &Array<i32>, pos: i32, follow: i64 = 
 
 fn _parse_macro_item__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
     let kind = p.peek_kind();
-    if _kind_set_8(kind) {
+    if _kind_set_9(kind) {
         if kind == TK_KW_MACRORULES {
             let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
@@ -16550,7 +16594,7 @@ fn _parse_use_tree__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () with Rust
 fn _parse_use_tree__inner_scan_0(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     osl_166_done: {
-        if pos < tokens.len() && _kind_set_8(tokens[pos]) {
+        if pos < tokens.len() && _kind_set_9(tokens[pos]) {
             let sol_167_save = pos;
             sol_167: {
                 pos = scan_simple_path(tokens, pos, 0);
@@ -17962,7 +18006,7 @@ fn _parse_implementation__inner_scan_1(tokens: &Array<i32>, pos: i32, follow: i6
 
 fn _parse_implementation__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
     let kind = p.peek_kind();
-    if _kind_set_96(kind) {
+    if _kind_set_97(kind) {
         if kind == TK_KW_IMPL {
             let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
@@ -18364,7 +18408,7 @@ fn _parse_external_item__inner(p: &mut Parser) -> () with RustParserBase {
         let outer_attribute = _parse_outer_attribute(p, 0);
     }
     let grp_kind = p.peek_kind();
-    if _kind_set_8(grp_kind) {
+    if _kind_set_9(grp_kind) {
         let macro_invocation_semi = _parse_macro_invocation_semi(p);
     } else if _kind_set_25(grp_kind) {
         if p.peek_kind() == TK_KW_PUB {
@@ -18894,7 +18938,7 @@ fn _parse_associated_item__inner(p: &mut Parser) -> () with RustParserBase {
         let outer_attribute = _parse_outer_attribute(p, 0);
     }
     let grp_kind = p.peek_kind();
-    if _kind_set_8(grp_kind) {
+    if _kind_set_9(grp_kind) {
         let macro_invocation_semi = _parse_macro_invocation_semi(p);
     } else if _kind_set_29(grp_kind) {
         if p.peek_kind() == TK_KW_PUB {
@@ -19102,7 +19146,7 @@ fn _parse_statement__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParse
         let semi = p.expect(TK_SEMI, &EMPTY_SYNC);
         return;
     }
-    if _kind_set_97(kind) {
+    if _kind_set_98(kind) {
         if kind == TK_POUND {
             let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
@@ -19132,7 +19176,7 @@ fn _parse_statement__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParse
             return _parse_statement__inner_alt_3(p, follow);
         } else if kind == TK_KW_LET {
             return _parse_statement__inner_alt_2(p, follow);
-        } else if _kind_set_8(kind) {
+        } else if _kind_set_9(kind) {
             let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
             let _sd_p_1 = _parse_statement__inner_scan_1(_sd_tokens, _sd_pos, follow);
@@ -19653,7 +19697,7 @@ fn _parse_expression__inner_atom(p: &mut Parser, follow: i64 = 0, min_prec: i32 
         return;
     }
     if _kind_set_82(kind) {
-        if _kind_set_8(kind) {
+        if _kind_set_9(kind) {
             let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
             let _sd_p_2 = _parse_expression__inner_scan_2(_sd_tokens, _sd_pos, follow);
@@ -22256,7 +22300,7 @@ fn _parse_if_expression__inner(p: &mut Parser, follow: i64 = 0) -> () with RustP
         let let_chain_tail = _parse_let_chain_tail(p, 0);
     }
     let block_expression = _parse_block_expression(p, follow);
-    if !(follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF)) && (p.peek_kind() == TK_KW_ELSE && _kind_set_98(p.peek_at(1))) {
+    if !(follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF)) && (p.peek_kind() == TK_KW_ELSE && _kind_set_99(p.peek_at(1))) {
         let kw_else = p.expect(TK_KW_ELSE, &SYNC_87);
         let grp_kind = p.peek_kind();
         if grp_kind == TK_LCURLYBRACE {
@@ -22351,7 +22395,7 @@ fn _parse_if_let_expression__inner(p: &mut Parser, follow: i64 = 0) -> () with R
         let let_chain_tail = _parse_let_chain_tail(p, 0);
     }
     let block_expression = _parse_block_expression(p, follow);
-    if !(follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF)) && (p.peek_kind() == TK_KW_ELSE && _kind_set_98(p.peek_at(1))) {
+    if !(follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF)) && (p.peek_kind() == TK_KW_ELSE && _kind_set_99(p.peek_at(1))) {
         let kw_else = p.expect(TK_KW_ELSE, &SYNC_87);
         let grp_kind = p.peek_kind();
         if grp_kind == TK_LCURLYBRACE {
@@ -22759,7 +22803,7 @@ fn _parse_pattern_no_top_alt__inner_scan_0(tokens: &Array<i32>, pos: i32, follow
 
 fn _parse_pattern_no_top_alt__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
     let kind = p.peek_kind();
-    if _kind_set_99(kind) {
+    if _kind_set_100(kind) {
         if _kind_set_79(kind) {
             let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
@@ -22892,7 +22936,7 @@ fn _parse_pattern_without_range__inner(p: &mut Parser, follow: i64 = 0) -> () wi
         let literal_pattern = _parse_literal_pattern(p, follow);
         return;
     }
-    if _kind_set_100(kind) {
+    if _kind_set_101(kind) {
         if _kind_set_80(kind) {
             return _parse_pattern_without_range__inner_alt_1(p, follow);
         } else if _kind_set_4(kind) {
@@ -23131,7 +23175,7 @@ fn _parse_literal_pattern__inner(p: &mut Parser, follow: i64 = 0) -> () with Rus
         let raw_byte_string_literal = p.expect(TK_RAW_BYTE_STRING_LITERAL, &EMPTY_SYNC);
         return;
     }
-    if _kind_set_101(kind) {
+    if _kind_set_102(kind) {
         if kind == TK_MINUS {
             if p.peek_at(1) == TK_INTEGER_LITERAL {
                 return _parse_literal_pattern__inner_alt_8(p, follow);
@@ -23393,7 +23437,7 @@ fn _parse_range_pattern_bound__inner(p: &mut Parser, follow: i64 = 0) -> () with
         let byte_literal = p.expect(TK_BYTE_LITERAL, &EMPTY_SYNC);
         return;
     }
-    if _kind_set_101(kind) {
+    if _kind_set_102(kind) {
         if kind == TK_MINUS {
             if p.peek_at(1) == TK_INTEGER_LITERAL {
                 return _parse_range_pattern_bound__inner_alt_2(p, follow);
@@ -24342,7 +24386,7 @@ fn _parse_type_no_bounds__inner_scan_9(tokens: &Array<i32>, pos: i32, follow: i6
 
 fn _parse_type_no_bounds__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
     let kind = p.peek_kind();
-    if _kind_set_102(kind) {
+    if _kind_set_103(kind) {
         if kind == TK_LPAREN {
             let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
@@ -24391,7 +24435,7 @@ fn _parse_type_no_bounds__inner(p: &mut Parser, follow: i64 = 0) -> () with Rust
             return _parse_type_no_bounds__inner_alt_12(p, follow);
         } else if _kind_set_88(kind) {
             return _parse_type_no_bounds__inner_alt_12(p, follow);
-        } else if _kind_set_8(kind) {
+        } else if _kind_set_9(kind) {
             let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
             let _sd_p_2 = _parse_type_no_bounds__inner_scan_2(_sd_tokens, _sd_pos, follow);
@@ -26360,7 +26404,7 @@ fn _parse_type_path_inputs(p: &mut Parser, follow: i64 = 0) -> () with RustParse
 
 fn _parse_visibility__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
     let kw_pub = p.expect(TK_KW_PUB, &SYNC_6);
-    if !(follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF)) && (p.peek_kind() == TK_LPAREN && _kind_set_103(p.peek_at(1))) {
+    if !(follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF)) && (p.peek_kind() == TK_LPAREN && _kind_set_104(p.peek_at(1))) {
         let lparen = p.expect(TK_LPAREN, &SYNC_111);
         let grp_kind = p.peek_kind();
         if grp_kind == TK_KW_CRATE {
@@ -26453,6 +26497,18 @@ fn _parse_macro_identifier_like_token__inner_scan_1(tokens: &Array<i32>, pos: i3
     return pos;
 }
 
+fn _parse_macro_identifier_like_token__inner_alt_0(p: &mut Parser) -> () with RustParserBase {
+    let keyword = _parse_keyword(p);
+    return;
+}
+
+fn _parse_macro_identifier_like_token__inner_scan_0(tokens: &Array<i32>, pos: i32) -> i32 {
+    let mut pos = pos;
+    pos = scan_keyword(tokens, pos);
+    if pos < 0 { return -1; }
+    return pos;
+}
+
 fn _parse_macro_identifier_like_token__inner_alt_2(p: &mut Parser) -> () with RustParserBase {
     let kw_macrorules = p.expect(TK_KW_MACRORULES, &EMPTY_SYNC);
     return;
@@ -26467,11 +26523,7 @@ fn _parse_macro_identifier_like_token__inner_scan_2(tokens: &Array<i32>, pos: i3
 
 fn _parse_macro_identifier_like_token__inner(p: &mut Parser) -> () with RustParserBase {
     let kind = p.peek_kind();
-    if _kind_set_92(kind) {
-        let keyword = _parse_keyword(p);
-        return;
-    }
-    if _kind_set_4(kind) {
+    if _kind_set_105(kind) {
         if kind == TK_KW_MACRORULES {
             let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
@@ -26491,8 +26543,29 @@ fn _parse_macro_identifier_like_token__inner(p: &mut Parser) -> () with RustPars
                 return _parse_macro_identifier_like_token__inner_alt_1(p);
             }
             return _parse_macro_identifier_like_token__inner_alt_2(p);
-        } else if _kind_set_93(kind) {
+        } else if _kind_set_94(kind) {
             return _parse_macro_identifier_like_token__inner_alt_1(p);
+        } else if kind == TK_KW_UNION {
+            let _sd_tokens = &p.kinds;
+            let _sd_pos = p.pos;
+            let _sd_p_0 = _parse_macro_identifier_like_token__inner_scan_0(_sd_tokens, _sd_pos);
+            let _sd_p_1 = _parse_macro_identifier_like_token__inner_scan_1(_sd_tokens, _sd_pos);
+            let mut _sd_best_i: i32 = -1;
+            let mut _sd_best_p: i32 = -1;
+            if _sd_p_0 > _sd_best_p {
+                _sd_best_p = _sd_p_0;
+                _sd_best_i = 0;
+            }
+            if _sd_p_1 > _sd_best_p {
+                _sd_best_p = _sd_p_1;
+                _sd_best_i = 1;
+            }
+            if _sd_best_i == 0 {
+                return _parse_macro_identifier_like_token__inner_alt_0(p);
+            }
+            return _parse_macro_identifier_like_token__inner_alt_1(p);
+        } else if _kind_set_93(kind) {
+            return _parse_macro_identifier_like_token__inner_alt_0(p);
         }
     }
     if kind == TK_KW_UNDERLINELIFETIME {
@@ -27470,7 +27543,7 @@ fn _kind_set_3(k: i32) -> bool {
 }
 
 fn _kind_set_4(k: i32) -> bool {
-    return k matches { TK_KW_MACRORULES | TK_NON_KEYWORD_IDENTIFIER | TK_RAW_IDENTIFIER };
+    return k matches { TK_KW_MACRORULES | TK_KW_UNION | TK_NON_KEYWORD_IDENTIFIER | TK_RAW_IDENTIFIER };
 }
 
 fn _kind_set_5(k: i32) -> bool {
@@ -27482,27 +27555,27 @@ fn _kind_set_6(k: i32) -> bool {
 }
 
 fn _kind_set_7(k: i32) -> bool {
-    return k matches { TK_KW_ASYNC | TK_KW_CONST | TK_KW_ENUM | TK_KW_EXTERN | TK_KW_FN | TK_KW_IMPL | TK_KW_MOD | TK_KW_PUB | TK_KW_STATIC | TK_KW_STRUCT | TK_KW_TRAIT | TK_KW_TYPE | TK_KW_UNION | TK_KW_UNSAFE | TK_KW_USE };
+    return k matches { TK_KW_ASYNC | TK_KW_CONST | TK_KW_CRATE | TK_KW_DOLLARCRATE | TK_KW_ENUM | TK_KW_EXTERN | TK_KW_FN | TK_KW_IMPL | TK_KW_MACRORULES | TK_KW_MOD | TK_KW_PUB | TK_KW_SELFVALUE | TK_KW_STATIC | TK_KW_STRUCT | TK_KW_SUPER | TK_KW_TRAIT | TK_KW_TYPE | TK_KW_UNION | TK_KW_UNSAFE | TK_KW_USE | TK_NON_KEYWORD_IDENTIFIER | TK_PATHSEP | TK_RAW_IDENTIFIER };
 }
 
 fn _kind_set_8(k: i32) -> bool {
-    return k matches { TK_KW_CRATE | TK_KW_DOLLARCRATE | TK_KW_MACRORULES | TK_KW_SELFVALUE | TK_KW_SUPER | TK_NON_KEYWORD_IDENTIFIER | TK_PATHSEP | TK_RAW_IDENTIFIER };
-}
-
-fn _kind_set_9(k: i32) -> bool {
     return k matches { TK_KW_ASYNC | TK_KW_CONST | TK_KW_EXTERN | TK_KW_FN | TK_KW_IMPL | TK_KW_MOD | TK_KW_TRAIT | TK_KW_UNSAFE };
 }
 
+fn _kind_set_9(k: i32) -> bool {
+    return k matches { TK_KW_CRATE | TK_KW_DOLLARCRATE | TK_KW_MACRORULES | TK_KW_SELFVALUE | TK_KW_SUPER | TK_KW_UNION | TK_NON_KEYWORD_IDENTIFIER | TK_PATHSEP | TK_RAW_IDENTIFIER };
+}
+
 fn _kind_set_10(k: i32) -> bool {
-    return k matches { TK_KW_CRATE | TK_KW_DOLLARCRATE | TK_KW_MACRORULES | TK_KW_SELFVALUE | TK_KW_SUPER | TK_NON_KEYWORD_IDENTIFIER | TK_RAW_IDENTIFIER };
+    return k matches { TK_KW_CRATE | TK_KW_DOLLARCRATE | TK_KW_MACRORULES | TK_KW_SELFVALUE | TK_KW_SUPER | TK_KW_UNION | TK_NON_KEYWORD_IDENTIFIER | TK_RAW_IDENTIFIER };
 }
 
 fn _kind_set_11(k: i32) -> bool {
-    return k matches { TK_KW_CRATE | TK_KW_DOLLARCRATE | TK_KW_MACRORULES | TK_KW_SELFVALUE | TK_KW_SUPER | TK_LCURLYBRACE | TK_NON_KEYWORD_IDENTIFIER | TK_PATHSEP | TK_RAW_IDENTIFIER | TK_STAR };
+    return k matches { TK_KW_CRATE | TK_KW_DOLLARCRATE | TK_KW_MACRORULES | TK_KW_SELFVALUE | TK_KW_SUPER | TK_KW_UNION | TK_LCURLYBRACE | TK_NON_KEYWORD_IDENTIFIER | TK_PATHSEP | TK_RAW_IDENTIFIER | TK_STAR };
 }
 
 fn _kind_set_12(k: i32) -> bool {
-    return k matches { TK_AND | TK_ANDAND | TK_BYTE_LITERAL | TK_BYTE_STRING_LITERAL | TK_CHAR_LITERAL | TK_DOTDOT | TK_DOTDOTDOT | TK_FLOAT_LITERAL | TK_INTEGER_LITERAL | TK_KW_CRATE | TK_KW_DOLLARCRATE | TK_KW_DYN | TK_KW_EXTERN | TK_KW_FALSE | TK_KW_FN | TK_KW_FOR | TK_KW_IMPL | TK_KW_MACRORULES | TK_KW_MUT | TK_KW_REF | TK_KW_SELFTYPE | TK_KW_SELFVALUE | TK_KW_STATICLIFETIME | TK_KW_SUPER | TK_KW_TRUE | TK_KW_UNDERLINELIFETIME | TK_KW_UNSAFE | TK_LIFETIME_OR_LABEL | TK_LPAREN | TK_LSQUAREBRACKET | TK_LT | TK_MINUS | TK_NON_KEYWORD_IDENTIFIER | TK_NOT | TK_OR | TK_PATHSEP | TK_POUND | TK_QUESTION | TK_RAW_BYTE_STRING_LITERAL | TK_RAW_IDENTIFIER | TK_RAW_STRING_LITERAL | TK_STAR | TK_STRING_LITERAL | TK_UNDERSCORE };
+    return k matches { TK_AND | TK_ANDAND | TK_BYTE_LITERAL | TK_BYTE_STRING_LITERAL | TK_CHAR_LITERAL | TK_DOTDOT | TK_DOTDOTDOT | TK_FLOAT_LITERAL | TK_INTEGER_LITERAL | TK_KW_CRATE | TK_KW_DOLLARCRATE | TK_KW_DYN | TK_KW_EXTERN | TK_KW_FALSE | TK_KW_FN | TK_KW_FOR | TK_KW_IMPL | TK_KW_MACRORULES | TK_KW_MUT | TK_KW_REF | TK_KW_SELFTYPE | TK_KW_SELFVALUE | TK_KW_STATICLIFETIME | TK_KW_SUPER | TK_KW_TRUE | TK_KW_UNDERLINELIFETIME | TK_KW_UNION | TK_KW_UNSAFE | TK_LIFETIME_OR_LABEL | TK_LPAREN | TK_LSQUAREBRACKET | TK_LT | TK_MINUS | TK_NON_KEYWORD_IDENTIFIER | TK_NOT | TK_OR | TK_PATHSEP | TK_POUND | TK_QUESTION | TK_RAW_BYTE_STRING_LITERAL | TK_RAW_IDENTIFIER | TK_RAW_STRING_LITERAL | TK_STAR | TK_STRING_LITERAL | TK_UNDERSCORE };
 }
 
 fn _kind_set_13(k: i32) -> bool {
@@ -27522,19 +27595,19 @@ fn _kind_set_16(k: i32) -> bool {
 }
 
 fn _kind_set_17(k: i32) -> bool {
-    return k matches { TK_AND | TK_ANDAND | TK_BYTE_LITERAL | TK_BYTE_STRING_LITERAL | TK_CHAR_LITERAL | TK_DOTDOT | TK_FLOAT_LITERAL | TK_INTEGER_LITERAL | TK_KW_CRATE | TK_KW_DOLLARCRATE | TK_KW_DYN | TK_KW_EXTERN | TK_KW_FALSE | TK_KW_FN | TK_KW_FOR | TK_KW_IMPL | TK_KW_MACRORULES | TK_KW_MUT | TK_KW_REF | TK_KW_SELFTYPE | TK_KW_SELFVALUE | TK_KW_STATICLIFETIME | TK_KW_SUPER | TK_KW_TRUE | TK_KW_UNDERLINELIFETIME | TK_KW_UNSAFE | TK_LIFETIME_OR_LABEL | TK_LPAREN | TK_LSQUAREBRACKET | TK_LT | TK_MINUS | TK_NON_KEYWORD_IDENTIFIER | TK_NOT | TK_OR | TK_PATHSEP | TK_QUESTION | TK_RAW_BYTE_STRING_LITERAL | TK_RAW_IDENTIFIER | TK_RAW_STRING_LITERAL | TK_STAR | TK_STRING_LITERAL | TK_UNDERSCORE };
+    return k matches { TK_AND | TK_ANDAND | TK_BYTE_LITERAL | TK_BYTE_STRING_LITERAL | TK_CHAR_LITERAL | TK_DOTDOT | TK_FLOAT_LITERAL | TK_INTEGER_LITERAL | TK_KW_CRATE | TK_KW_DOLLARCRATE | TK_KW_DYN | TK_KW_EXTERN | TK_KW_FALSE | TK_KW_FN | TK_KW_FOR | TK_KW_IMPL | TK_KW_MACRORULES | TK_KW_MUT | TK_KW_REF | TK_KW_SELFTYPE | TK_KW_SELFVALUE | TK_KW_STATICLIFETIME | TK_KW_SUPER | TK_KW_TRUE | TK_KW_UNDERLINELIFETIME | TK_KW_UNION | TK_KW_UNSAFE | TK_LIFETIME_OR_LABEL | TK_LPAREN | TK_LSQUAREBRACKET | TK_LT | TK_MINUS | TK_NON_KEYWORD_IDENTIFIER | TK_NOT | TK_OR | TK_PATHSEP | TK_QUESTION | TK_RAW_BYTE_STRING_LITERAL | TK_RAW_IDENTIFIER | TK_RAW_STRING_LITERAL | TK_STAR | TK_STRING_LITERAL | TK_UNDERSCORE };
 }
 
 fn _kind_set_18(k: i32) -> bool {
-    return k matches { TK_AND | TK_ANDAND | TK_KW_CRATE | TK_KW_DOLLARCRATE | TK_KW_DYN | TK_KW_EXTERN | TK_KW_FN | TK_KW_FOR | TK_KW_IMPL | TK_KW_MACRORULES | TK_KW_SELFTYPE | TK_KW_SELFVALUE | TK_KW_STATICLIFETIME | TK_KW_SUPER | TK_KW_UNDERLINELIFETIME | TK_KW_UNSAFE | TK_LIFETIME_OR_LABEL | TK_LPAREN | TK_LSQUAREBRACKET | TK_LT | TK_NON_KEYWORD_IDENTIFIER | TK_NOT | TK_PATHSEP | TK_QUESTION | TK_RAW_IDENTIFIER | TK_STAR | TK_UNDERSCORE };
+    return k matches { TK_AND | TK_ANDAND | TK_KW_CRATE | TK_KW_DOLLARCRATE | TK_KW_DYN | TK_KW_EXTERN | TK_KW_FN | TK_KW_FOR | TK_KW_IMPL | TK_KW_MACRORULES | TK_KW_SELFTYPE | TK_KW_SELFVALUE | TK_KW_STATICLIFETIME | TK_KW_SUPER | TK_KW_UNDERLINELIFETIME | TK_KW_UNION | TK_KW_UNSAFE | TK_LIFETIME_OR_LABEL | TK_LPAREN | TK_LSQUAREBRACKET | TK_LT | TK_NON_KEYWORD_IDENTIFIER | TK_NOT | TK_PATHSEP | TK_QUESTION | TK_RAW_IDENTIFIER | TK_STAR | TK_UNDERSCORE };
 }
 
 fn _kind_set_19(k: i32) -> bool {
-    return k matches { TK_KW_MACRORULES | TK_KW_PUB | TK_NON_KEYWORD_IDENTIFIER | TK_POUND | TK_RAW_IDENTIFIER };
+    return k matches { TK_KW_MACRORULES | TK_KW_PUB | TK_KW_UNION | TK_NON_KEYWORD_IDENTIFIER | TK_POUND | TK_RAW_IDENTIFIER };
 }
 
 fn _kind_set_20(k: i32) -> bool {
-    return k matches { TK_AND | TK_ANDAND | TK_KW_CRATE | TK_KW_DOLLARCRATE | TK_KW_DYN | TK_KW_EXTERN | TK_KW_FN | TK_KW_FOR | TK_KW_IMPL | TK_KW_MACRORULES | TK_KW_PUB | TK_KW_SELFTYPE | TK_KW_SELFVALUE | TK_KW_STATICLIFETIME | TK_KW_SUPER | TK_KW_UNDERLINELIFETIME | TK_KW_UNSAFE | TK_LIFETIME_OR_LABEL | TK_LPAREN | TK_LSQUAREBRACKET | TK_LT | TK_NON_KEYWORD_IDENTIFIER | TK_NOT | TK_PATHSEP | TK_POUND | TK_QUESTION | TK_RAW_IDENTIFIER | TK_STAR | TK_UNDERSCORE };
+    return k matches { TK_AND | TK_ANDAND | TK_KW_CRATE | TK_KW_DOLLARCRATE | TK_KW_DYN | TK_KW_EXTERN | TK_KW_FN | TK_KW_FOR | TK_KW_IMPL | TK_KW_MACRORULES | TK_KW_PUB | TK_KW_SELFTYPE | TK_KW_SELFVALUE | TK_KW_STATICLIFETIME | TK_KW_SUPER | TK_KW_UNDERLINELIFETIME | TK_KW_UNION | TK_KW_UNSAFE | TK_LIFETIME_OR_LABEL | TK_LPAREN | TK_LSQUAREBRACKET | TK_LT | TK_NON_KEYWORD_IDENTIFIER | TK_NOT | TK_PATHSEP | TK_POUND | TK_QUESTION | TK_RAW_IDENTIFIER | TK_STAR | TK_UNDERSCORE };
 }
 
 fn _kind_set_21(k: i32) -> bool {
@@ -27542,15 +27615,15 @@ fn _kind_set_21(k: i32) -> bool {
 }
 
 fn _kind_set_22(k: i32) -> bool {
-    return k matches { TK_KW_CRATE | TK_KW_DOLLARCRATE | TK_KW_FOR | TK_KW_MACRORULES | TK_KW_SELFTYPE | TK_KW_SELFVALUE | TK_KW_STATICLIFETIME | TK_KW_SUPER | TK_KW_UNDERLINELIFETIME | TK_LIFETIME_OR_LABEL | TK_LPAREN | TK_NON_KEYWORD_IDENTIFIER | TK_PATHSEP | TK_QUESTION | TK_RAW_IDENTIFIER };
+    return k matches { TK_KW_CRATE | TK_KW_DOLLARCRATE | TK_KW_FOR | TK_KW_MACRORULES | TK_KW_SELFTYPE | TK_KW_SELFVALUE | TK_KW_STATICLIFETIME | TK_KW_SUPER | TK_KW_UNDERLINELIFETIME | TK_KW_UNION | TK_LIFETIME_OR_LABEL | TK_LPAREN | TK_NON_KEYWORD_IDENTIFIER | TK_PATHSEP | TK_QUESTION | TK_RAW_IDENTIFIER };
 }
 
 fn _kind_set_23(k: i32) -> bool {
-    return k matches { TK_KW_ASYNC | TK_KW_CONST | TK_KW_CRATE | TK_KW_DOLLARCRATE | TK_KW_EXTERN | TK_KW_FN | TK_KW_MACRORULES | TK_KW_PUB | TK_KW_SELFVALUE | TK_KW_SUPER | TK_KW_TYPE | TK_KW_UNSAFE | TK_NON_KEYWORD_IDENTIFIER | TK_PATHSEP | TK_POUND | TK_RAW_IDENTIFIER };
+    return k matches { TK_KW_ASYNC | TK_KW_CONST | TK_KW_CRATE | TK_KW_DOLLARCRATE | TK_KW_EXTERN | TK_KW_FN | TK_KW_MACRORULES | TK_KW_PUB | TK_KW_SELFVALUE | TK_KW_SUPER | TK_KW_TYPE | TK_KW_UNION | TK_KW_UNSAFE | TK_NON_KEYWORD_IDENTIFIER | TK_PATHSEP | TK_POUND | TK_RAW_IDENTIFIER };
 }
 
 fn _kind_set_24(k: i32) -> bool {
-    return k matches { TK_KW_ASYNC | TK_KW_CONST | TK_KW_CRATE | TK_KW_DOLLARCRATE | TK_KW_EXTERN | TK_KW_FN | TK_KW_MACRORULES | TK_KW_PUB | TK_KW_SELFVALUE | TK_KW_STATIC | TK_KW_SUPER | TK_KW_UNSAFE | TK_NON_KEYWORD_IDENTIFIER | TK_PATHSEP | TK_POUND | TK_RAW_IDENTIFIER };
+    return k matches { TK_KW_ASYNC | TK_KW_CONST | TK_KW_CRATE | TK_KW_DOLLARCRATE | TK_KW_EXTERN | TK_KW_FN | TK_KW_MACRORULES | TK_KW_PUB | TK_KW_SELFVALUE | TK_KW_STATIC | TK_KW_SUPER | TK_KW_UNION | TK_KW_UNSAFE | TK_NON_KEYWORD_IDENTIFIER | TK_PATHSEP | TK_POUND | TK_RAW_IDENTIFIER };
 }
 
 fn _kind_set_25(k: i32) -> bool {
@@ -27562,11 +27635,11 @@ fn _kind_set_26(k: i32) -> bool {
 }
 
 fn _kind_set_27(k: i32) -> bool {
-    return k matches { TK_KW_CONST | TK_KW_MACRORULES | TK_LIFETIME_OR_LABEL | TK_NON_KEYWORD_IDENTIFIER | TK_POUND | TK_RAW_IDENTIFIER };
+    return k matches { TK_KW_CONST | TK_KW_MACRORULES | TK_KW_UNION | TK_LIFETIME_OR_LABEL | TK_NON_KEYWORD_IDENTIFIER | TK_POUND | TK_RAW_IDENTIFIER };
 }
 
 fn _kind_set_28(k: i32) -> bool {
-    return k matches { TK_KW_MACRORULES | TK_LIFETIME_OR_LABEL | TK_NON_KEYWORD_IDENTIFIER | TK_POUND | TK_RAW_IDENTIFIER };
+    return k matches { TK_KW_MACRORULES | TK_KW_UNION | TK_LIFETIME_OR_LABEL | TK_NON_KEYWORD_IDENTIFIER | TK_POUND | TK_RAW_IDENTIFIER };
 }
 
 fn _kind_set_29(k: i32) -> bool {
@@ -27578,11 +27651,11 @@ fn _kind_set_30(k: i32) -> bool {
 }
 
 fn _kind_set_31(k: i32) -> bool {
-    return k matches { TK_AND | TK_ANDAND | TK_BYTE_LITERAL | TK_BYTE_STRING_LITERAL | TK_CHAR_LITERAL | TK_DOTDOT | TK_DOTDOTEQ | TK_FLOAT_LITERAL | TK_INTEGER_LITERAL | TK_KW_ASYNC | TK_KW_BREAK | TK_KW_CONTINUE | TK_KW_CRATE | TK_KW_DOLLARCRATE | TK_KW_FALSE | TK_KW_FOR | TK_KW_IF | TK_KW_LOOP | TK_KW_MACRORULES | TK_KW_MATCH | TK_KW_MOVE | TK_KW_RETURN | TK_KW_SELFTYPE | TK_KW_SELFVALUE | TK_KW_SUPER | TK_KW_TRUE | TK_KW_UNSAFE | TK_KW_WHILE | TK_LCURLYBRACE | TK_LIFETIME_OR_LABEL | TK_LPAREN | TK_LSQUAREBRACKET | TK_LT | TK_MINUS | TK_NON_KEYWORD_IDENTIFIER | TK_NOT | TK_OR | TK_OROR | TK_PATHSEP | TK_POUND | TK_RAW_BYTE_STRING_LITERAL | TK_RAW_IDENTIFIER | TK_RAW_STRING_LITERAL | TK_STAR | TK_STRING_LITERAL };
+    return k matches { TK_AND | TK_ANDAND | TK_BYTE_LITERAL | TK_BYTE_STRING_LITERAL | TK_CHAR_LITERAL | TK_DOTDOT | TK_DOTDOTEQ | TK_FLOAT_LITERAL | TK_INTEGER_LITERAL | TK_KW_ASYNC | TK_KW_BREAK | TK_KW_CONTINUE | TK_KW_CRATE | TK_KW_DOLLARCRATE | TK_KW_FALSE | TK_KW_FOR | TK_KW_IF | TK_KW_LOOP | TK_KW_MACRORULES | TK_KW_MATCH | TK_KW_MOVE | TK_KW_RETURN | TK_KW_SELFTYPE | TK_KW_SELFVALUE | TK_KW_SUPER | TK_KW_TRUE | TK_KW_UNION | TK_KW_UNSAFE | TK_KW_WHILE | TK_LCURLYBRACE | TK_LIFETIME_OR_LABEL | TK_LPAREN | TK_LSQUAREBRACKET | TK_LT | TK_MINUS | TK_NON_KEYWORD_IDENTIFIER | TK_NOT | TK_OR | TK_OROR | TK_PATHSEP | TK_POUND | TK_RAW_BYTE_STRING_LITERAL | TK_RAW_IDENTIFIER | TK_RAW_STRING_LITERAL | TK_STAR | TK_STRING_LITERAL };
 }
 
 fn _kind_set_32(k: i32) -> bool {
-    return k matches { TK_KW_CRATE | TK_KW_DOLLARCRATE | TK_KW_MACRORULES | TK_KW_SELFTYPE | TK_KW_SELFVALUE | TK_KW_SUPER | TK_NON_KEYWORD_IDENTIFIER | TK_PATHSEP | TK_RAW_IDENTIFIER };
+    return k matches { TK_KW_CRATE | TK_KW_DOLLARCRATE | TK_KW_MACRORULES | TK_KW_SELFTYPE | TK_KW_SELFVALUE | TK_KW_SUPER | TK_KW_UNION | TK_NON_KEYWORD_IDENTIFIER | TK_PATHSEP | TK_RAW_IDENTIFIER };
 }
 
 fn _kind_set_33(k: i32) -> bool {
@@ -27590,27 +27663,27 @@ fn _kind_set_33(k: i32) -> bool {
 }
 
 fn _kind_set_34(k: i32) -> bool {
-    return k matches { TK_INTEGER_LITERAL | TK_KW_MACRORULES | TK_NON_KEYWORD_IDENTIFIER | TK_POUND | TK_RAW_IDENTIFIER };
+    return k matches { TK_INTEGER_LITERAL | TK_KW_MACRORULES | TK_KW_UNION | TK_NON_KEYWORD_IDENTIFIER | TK_POUND | TK_RAW_IDENTIFIER };
 }
 
 fn _kind_set_35(k: i32) -> bool {
-    return k matches { TK_DOTDOT | TK_INTEGER_LITERAL | TK_KW_MACRORULES | TK_NON_KEYWORD_IDENTIFIER | TK_POUND | TK_RAW_IDENTIFIER };
+    return k matches { TK_DOTDOT | TK_INTEGER_LITERAL | TK_KW_MACRORULES | TK_KW_UNION | TK_NON_KEYWORD_IDENTIFIER | TK_POUND | TK_RAW_IDENTIFIER };
 }
 
 fn _kind_set_36(k: i32) -> bool {
-    return k matches { TK_INTEGER_LITERAL | TK_KW_MACRORULES | TK_NON_KEYWORD_IDENTIFIER | TK_RAW_IDENTIFIER };
+    return k matches { TK_INTEGER_LITERAL | TK_KW_MACRORULES | TK_KW_UNION | TK_NON_KEYWORD_IDENTIFIER | TK_RAW_IDENTIFIER };
 }
 
 fn _kind_set_37(k: i32) -> bool {
-    return k matches { TK_AND | TK_ANDAND | TK_BYTE_LITERAL | TK_BYTE_STRING_LITERAL | TK_CHAR_LITERAL | TK_DOTDOT | TK_FLOAT_LITERAL | TK_INTEGER_LITERAL | TK_KW_CRATE | TK_KW_DOLLARCRATE | TK_KW_FALSE | TK_KW_MACRORULES | TK_KW_MUT | TK_KW_REF | TK_KW_SELFTYPE | TK_KW_SELFVALUE | TK_KW_SUPER | TK_KW_TRUE | TK_LPAREN | TK_LSQUAREBRACKET | TK_LT | TK_MINUS | TK_NON_KEYWORD_IDENTIFIER | TK_OR | TK_PATHSEP | TK_POUND | TK_RAW_BYTE_STRING_LITERAL | TK_RAW_IDENTIFIER | TK_RAW_STRING_LITERAL | TK_STRING_LITERAL | TK_UNDERSCORE };
+    return k matches { TK_AND | TK_ANDAND | TK_BYTE_LITERAL | TK_BYTE_STRING_LITERAL | TK_CHAR_LITERAL | TK_DOTDOT | TK_FLOAT_LITERAL | TK_INTEGER_LITERAL | TK_KW_CRATE | TK_KW_DOLLARCRATE | TK_KW_FALSE | TK_KW_MACRORULES | TK_KW_MUT | TK_KW_REF | TK_KW_SELFTYPE | TK_KW_SELFVALUE | TK_KW_SUPER | TK_KW_TRUE | TK_KW_UNION | TK_LPAREN | TK_LSQUAREBRACKET | TK_LT | TK_MINUS | TK_NON_KEYWORD_IDENTIFIER | TK_OR | TK_PATHSEP | TK_POUND | TK_RAW_BYTE_STRING_LITERAL | TK_RAW_IDENTIFIER | TK_RAW_STRING_LITERAL | TK_STRING_LITERAL | TK_UNDERSCORE };
 }
 
 fn _kind_set_38(k: i32) -> bool {
-    return k matches { TK_AND | TK_ANDAND | TK_BYTE_LITERAL | TK_BYTE_STRING_LITERAL | TK_CHAR_LITERAL | TK_DOTDOT | TK_FLOAT_LITERAL | TK_INTEGER_LITERAL | TK_KW_CRATE | TK_KW_DOLLARCRATE | TK_KW_FALSE | TK_KW_MACRORULES | TK_KW_MUT | TK_KW_REF | TK_KW_SELFTYPE | TK_KW_SELFVALUE | TK_KW_SUPER | TK_KW_TRUE | TK_LPAREN | TK_LSQUAREBRACKET | TK_LT | TK_MINUS | TK_NON_KEYWORD_IDENTIFIER | TK_PATHSEP | TK_POUND | TK_RAW_BYTE_STRING_LITERAL | TK_RAW_IDENTIFIER | TK_RAW_STRING_LITERAL | TK_STRING_LITERAL | TK_UNDERSCORE };
+    return k matches { TK_AND | TK_ANDAND | TK_BYTE_LITERAL | TK_BYTE_STRING_LITERAL | TK_CHAR_LITERAL | TK_DOTDOT | TK_FLOAT_LITERAL | TK_INTEGER_LITERAL | TK_KW_CRATE | TK_KW_DOLLARCRATE | TK_KW_FALSE | TK_KW_MACRORULES | TK_KW_MUT | TK_KW_REF | TK_KW_SELFTYPE | TK_KW_SELFVALUE | TK_KW_SUPER | TK_KW_TRUE | TK_KW_UNION | TK_LPAREN | TK_LSQUAREBRACKET | TK_LT | TK_MINUS | TK_NON_KEYWORD_IDENTIFIER | TK_PATHSEP | TK_POUND | TK_RAW_BYTE_STRING_LITERAL | TK_RAW_IDENTIFIER | TK_RAW_STRING_LITERAL | TK_STRING_LITERAL | TK_UNDERSCORE };
 }
 
 fn _kind_set_40(k: i32) -> bool {
-    return k matches { TK_DOTDOT | TK_INTEGER_LITERAL | TK_KW_MACRORULES | TK_KW_MUT | TK_KW_REF | TK_NON_KEYWORD_IDENTIFIER | TK_POUND | TK_RAW_IDENTIFIER };
+    return k matches { TK_DOTDOT | TK_INTEGER_LITERAL | TK_KW_MACRORULES | TK_KW_MUT | TK_KW_REF | TK_KW_UNION | TK_NON_KEYWORD_IDENTIFIER | TK_POUND | TK_RAW_IDENTIFIER };
 }
 
 fn _kind_set_41(k: i32) -> bool {
@@ -27618,31 +27691,31 @@ fn _kind_set_41(k: i32) -> bool {
 }
 
 fn _kind_set_42(k: i32) -> bool {
-    return k matches { TK_KW_MACRORULES | TK_KW_MUT | TK_KW_REF | TK_NON_KEYWORD_IDENTIFIER | TK_RAW_IDENTIFIER };
+    return k matches { TK_KW_MACRORULES | TK_KW_MUT | TK_KW_REF | TK_KW_UNION | TK_NON_KEYWORD_IDENTIFIER | TK_RAW_IDENTIFIER };
 }
 
 fn _kind_set_43(k: i32) -> bool {
-    return k matches { TK_AND | TK_ANDAND | TK_BYTE_LITERAL | TK_BYTE_STRING_LITERAL | TK_CHAR_LITERAL | TK_DOTDOT | TK_FLOAT_LITERAL | TK_INTEGER_LITERAL | TK_KW_CRATE | TK_KW_DOLLARCRATE | TK_KW_FALSE | TK_KW_MACRORULES | TK_KW_MUT | TK_KW_REF | TK_KW_SELFTYPE | TK_KW_SELFVALUE | TK_KW_SUPER | TK_KW_TRUE | TK_LPAREN | TK_LSQUAREBRACKET | TK_LT | TK_MINUS | TK_NON_KEYWORD_IDENTIFIER | TK_OR | TK_PATHSEP | TK_RAW_BYTE_STRING_LITERAL | TK_RAW_IDENTIFIER | TK_RAW_STRING_LITERAL | TK_STRING_LITERAL | TK_UNDERSCORE };
+    return k matches { TK_AND | TK_ANDAND | TK_BYTE_LITERAL | TK_BYTE_STRING_LITERAL | TK_CHAR_LITERAL | TK_DOTDOT | TK_FLOAT_LITERAL | TK_INTEGER_LITERAL | TK_KW_CRATE | TK_KW_DOLLARCRATE | TK_KW_FALSE | TK_KW_MACRORULES | TK_KW_MUT | TK_KW_REF | TK_KW_SELFTYPE | TK_KW_SELFVALUE | TK_KW_SUPER | TK_KW_TRUE | TK_KW_UNION | TK_LPAREN | TK_LSQUAREBRACKET | TK_LT | TK_MINUS | TK_NON_KEYWORD_IDENTIFIER | TK_OR | TK_PATHSEP | TK_RAW_BYTE_STRING_LITERAL | TK_RAW_IDENTIFIER | TK_RAW_STRING_LITERAL | TK_STRING_LITERAL | TK_UNDERSCORE };
 }
 
 fn _kind_set_44(k: i32) -> bool {
-    return k matches { TK_AND | TK_ANDAND | TK_KW_CRATE | TK_KW_DOLLARCRATE | TK_KW_DYN | TK_KW_EXTERN | TK_KW_FN | TK_KW_FOR | TK_KW_IMPL | TK_KW_MACRORULES | TK_KW_SELFTYPE | TK_KW_SELFVALUE | TK_KW_STATICLIFETIME | TK_KW_SUPER | TK_KW_UNDERLINELIFETIME | TK_KW_UNSAFE | TK_LIFETIME_OR_LABEL | TK_LPAREN | TK_LSQUAREBRACKET | TK_LT | TK_NON_KEYWORD_IDENTIFIER | TK_NOT | TK_PATHSEP | TK_POUND | TK_QUESTION | TK_RAW_IDENTIFIER | TK_STAR | TK_UNDERSCORE };
+    return k matches { TK_AND | TK_ANDAND | TK_KW_CRATE | TK_KW_DOLLARCRATE | TK_KW_DYN | TK_KW_EXTERN | TK_KW_FN | TK_KW_FOR | TK_KW_IMPL | TK_KW_MACRORULES | TK_KW_SELFTYPE | TK_KW_SELFVALUE | TK_KW_STATICLIFETIME | TK_KW_SUPER | TK_KW_UNDERLINELIFETIME | TK_KW_UNION | TK_KW_UNSAFE | TK_LIFETIME_OR_LABEL | TK_LPAREN | TK_LSQUAREBRACKET | TK_LT | TK_NON_KEYWORD_IDENTIFIER | TK_NOT | TK_PATHSEP | TK_POUND | TK_QUESTION | TK_RAW_IDENTIFIER | TK_STAR | TK_UNDERSCORE };
 }
 
 fn _kind_set_45(k: i32) -> bool {
-    return k matches { TK_KW_MACRORULES | TK_NON_KEYWORD_IDENTIFIER | TK_RAW_IDENTIFIER | TK_UNDERSCORE };
+    return k matches { TK_KW_MACRORULES | TK_KW_UNION | TK_NON_KEYWORD_IDENTIFIER | TK_RAW_IDENTIFIER | TK_UNDERSCORE };
 }
 
 fn _kind_set_46(k: i32) -> bool {
-    return k matches { TK_KW_CRATE | TK_KW_DOLLARCRATE | TK_KW_FOR | TK_KW_MACRORULES | TK_KW_SELFTYPE | TK_KW_SELFVALUE | TK_KW_SUPER | TK_LPAREN | TK_NON_KEYWORD_IDENTIFIER | TK_PATHSEP | TK_QUESTION | TK_RAW_IDENTIFIER };
+    return k matches { TK_KW_CRATE | TK_KW_DOLLARCRATE | TK_KW_FOR | TK_KW_MACRORULES | TK_KW_SELFTYPE | TK_KW_SELFVALUE | TK_KW_SUPER | TK_KW_UNION | TK_LPAREN | TK_NON_KEYWORD_IDENTIFIER | TK_PATHSEP | TK_QUESTION | TK_RAW_IDENTIFIER };
 }
 
 fn _kind_set_47(k: i32) -> bool {
-    return k matches { TK_KW_CRATE | TK_KW_DOLLARCRATE | TK_KW_FOR | TK_KW_MACRORULES | TK_KW_SELFTYPE | TK_KW_SELFVALUE | TK_KW_SUPER | TK_NON_KEYWORD_IDENTIFIER | TK_PATHSEP | TK_QUESTION | TK_RAW_IDENTIFIER };
+    return k matches { TK_KW_CRATE | TK_KW_DOLLARCRATE | TK_KW_FOR | TK_KW_MACRORULES | TK_KW_SELFTYPE | TK_KW_SELFVALUE | TK_KW_SUPER | TK_KW_UNION | TK_NON_KEYWORD_IDENTIFIER | TK_PATHSEP | TK_QUESTION | TK_RAW_IDENTIFIER };
 }
 
 fn _kind_set_48(k: i32) -> bool {
-    return k matches { TK_AND | TK_ANDAND | TK_BYTE_LITERAL | TK_BYTE_STRING_LITERAL | TK_CHAR_LITERAL | TK_FLOAT_LITERAL | TK_INTEGER_LITERAL | TK_KW_CRATE | TK_KW_DOLLARCRATE | TK_KW_DYN | TK_KW_EXTERN | TK_KW_FALSE | TK_KW_FN | TK_KW_FOR | TK_KW_IMPL | TK_KW_MACRORULES | TK_KW_SELFTYPE | TK_KW_SELFVALUE | TK_KW_STATICLIFETIME | TK_KW_SUPER | TK_KW_TRUE | TK_KW_UNDERLINELIFETIME | TK_KW_UNSAFE | TK_LCURLYBRACE | TK_LIFETIME_OR_LABEL | TK_LPAREN | TK_LSQUAREBRACKET | TK_LT | TK_MINUS | TK_NON_KEYWORD_IDENTIFIER | TK_NOT | TK_PATHSEP | TK_QUESTION | TK_RAW_BYTE_STRING_LITERAL | TK_RAW_IDENTIFIER | TK_RAW_STRING_LITERAL | TK_STAR | TK_STRING_LITERAL | TK_UNDERSCORE };
+    return k matches { TK_AND | TK_ANDAND | TK_BYTE_LITERAL | TK_BYTE_STRING_LITERAL | TK_CHAR_LITERAL | TK_FLOAT_LITERAL | TK_INTEGER_LITERAL | TK_KW_CRATE | TK_KW_DOLLARCRATE | TK_KW_DYN | TK_KW_EXTERN | TK_KW_FALSE | TK_KW_FN | TK_KW_FOR | TK_KW_IMPL | TK_KW_MACRORULES | TK_KW_SELFTYPE | TK_KW_SELFVALUE | TK_KW_STATICLIFETIME | TK_KW_SUPER | TK_KW_TRUE | TK_KW_UNDERLINELIFETIME | TK_KW_UNION | TK_KW_UNSAFE | TK_LCURLYBRACE | TK_LIFETIME_OR_LABEL | TK_LPAREN | TK_LSQUAREBRACKET | TK_LT | TK_MINUS | TK_NON_KEYWORD_IDENTIFIER | TK_NOT | TK_PATHSEP | TK_QUESTION | TK_RAW_BYTE_STRING_LITERAL | TK_RAW_IDENTIFIER | TK_RAW_STRING_LITERAL | TK_STAR | TK_STRING_LITERAL | TK_UNDERSCORE };
 }
 
 fn _kind_set_49(k: i32) -> bool {
@@ -27674,7 +27747,7 @@ fn _kind_set_55(k: i32) -> bool {
 }
 
 fn _kind_set_56(k: i32) -> bool {
-    return k matches { TK_KW_CRATE | TK_KW_DOLLARCRATE | TK_KW_SELFVALUE | TK_KW_SUPER | TK_NON_KEYWORD_IDENTIFIER | TK_PATHSEP | TK_RAW_IDENTIFIER };
+    return k matches { TK_KW_CRATE | TK_KW_DOLLARCRATE | TK_KW_SELFVALUE | TK_KW_SUPER | TK_KW_UNION | TK_NON_KEYWORD_IDENTIFIER | TK_PATHSEP | TK_RAW_IDENTIFIER };
 }
 
 fn _kind_set_57(k: i32) -> bool {
@@ -27682,7 +27755,7 @@ fn _kind_set_57(k: i32) -> bool {
 }
 
 fn _kind_set_58(k: i32) -> bool {
-    return k matches { TK_ANDAND | TK_BYTE_LITERAL | TK_BYTE_STRING_LITERAL | TK_CHAR_LITERAL | TK_DOTDOT | TK_DOTDOTDOT | TK_FLOAT_LITERAL | TK_INTEGER_LITERAL | TK_KW_CRATE | TK_KW_DOLLARCRATE | TK_KW_DYN | TK_KW_EXTERN | TK_KW_FALSE | TK_KW_FN | TK_KW_FOR | TK_KW_IMPL | TK_KW_MACRORULES | TK_KW_REF | TK_KW_SELFTYPE | TK_KW_STATICLIFETIME | TK_KW_SUPER | TK_KW_TRUE | TK_KW_UNDERLINELIFETIME | TK_KW_UNSAFE | TK_LIFETIME_OR_LABEL | TK_LPAREN | TK_LSQUAREBRACKET | TK_LT | TK_MINUS | TK_NON_KEYWORD_IDENTIFIER | TK_NOT | TK_OR | TK_PATHSEP | TK_QUESTION | TK_RAW_BYTE_STRING_LITERAL | TK_RAW_IDENTIFIER | TK_RAW_STRING_LITERAL | TK_STAR | TK_STRING_LITERAL | TK_UNDERSCORE };
+    return k matches { TK_ANDAND | TK_BYTE_LITERAL | TK_BYTE_STRING_LITERAL | TK_CHAR_LITERAL | TK_DOTDOT | TK_DOTDOTDOT | TK_FLOAT_LITERAL | TK_INTEGER_LITERAL | TK_KW_CRATE | TK_KW_DOLLARCRATE | TK_KW_DYN | TK_KW_EXTERN | TK_KW_FALSE | TK_KW_FN | TK_KW_FOR | TK_KW_IMPL | TK_KW_MACRORULES | TK_KW_REF | TK_KW_SELFTYPE | TK_KW_STATICLIFETIME | TK_KW_SUPER | TK_KW_TRUE | TK_KW_UNDERLINELIFETIME | TK_KW_UNION | TK_KW_UNSAFE | TK_LIFETIME_OR_LABEL | TK_LPAREN | TK_LSQUAREBRACKET | TK_LT | TK_MINUS | TK_NON_KEYWORD_IDENTIFIER | TK_NOT | TK_OR | TK_PATHSEP | TK_QUESTION | TK_RAW_BYTE_STRING_LITERAL | TK_RAW_IDENTIFIER | TK_RAW_STRING_LITERAL | TK_STAR | TK_STRING_LITERAL | TK_UNDERSCORE };
 }
 
 fn _kind_set_59(k: i32) -> bool {
@@ -27690,7 +27763,7 @@ fn _kind_set_59(k: i32) -> bool {
 }
 
 fn _kind_set_60(k: i32) -> bool {
-    return k matches { TK_AND | TK_ANDAND | TK_KW_CRATE | TK_KW_DOLLARCRATE | TK_KW_DYN | TK_KW_EXTERN | TK_KW_FN | TK_KW_FOR | TK_KW_IMPL | TK_KW_MACRORULES | TK_KW_SELFTYPE | TK_KW_SELFVALUE | TK_KW_SUPER | TK_KW_UNSAFE | TK_LPAREN | TK_LSQUAREBRACKET | TK_LT | TK_NON_KEYWORD_IDENTIFIER | TK_NOT | TK_PATHSEP | TK_QUESTION | TK_RAW_IDENTIFIER | TK_STAR | TK_UNDERSCORE };
+    return k matches { TK_AND | TK_ANDAND | TK_KW_CRATE | TK_KW_DOLLARCRATE | TK_KW_DYN | TK_KW_EXTERN | TK_KW_FN | TK_KW_FOR | TK_KW_IMPL | TK_KW_MACRORULES | TK_KW_SELFTYPE | TK_KW_SELFVALUE | TK_KW_SUPER | TK_KW_UNION | TK_KW_UNSAFE | TK_LPAREN | TK_LSQUAREBRACKET | TK_LT | TK_NON_KEYWORD_IDENTIFIER | TK_NOT | TK_PATHSEP | TK_QUESTION | TK_RAW_IDENTIFIER | TK_STAR | TK_UNDERSCORE };
 }
 
 fn _kind_set_61(k: i32) -> bool {
@@ -27698,7 +27771,7 @@ fn _kind_set_61(k: i32) -> bool {
 }
 
 fn _kind_set_62(k: i32) -> bool {
-    return k matches { TK_KW_CONST | TK_KW_ENUM | TK_KW_EXTERN | TK_KW_FN | TK_KW_IMPL | TK_KW_MOD | TK_KW_PUB | TK_KW_STATIC | TK_KW_STRUCT | TK_KW_TRAIT | TK_KW_TYPE | TK_KW_UNION | TK_KW_USE };
+    return k matches { TK_KW_CONST | TK_KW_ENUM | TK_KW_EXTERN | TK_KW_FN | TK_KW_IMPL | TK_KW_MOD | TK_KW_PUB | TK_KW_STATIC | TK_KW_STRUCT | TK_KW_TRAIT | TK_KW_TYPE | TK_KW_USE };
 }
 
 fn _kind_set_63(k: i32) -> bool {
@@ -27714,7 +27787,7 @@ fn _kind_set_65(k: i32) -> bool {
 }
 
 fn _kind_set_66(k: i32) -> bool {
-    return k matches { TK_AND | TK_ANDAND | TK_BYTE_LITERAL | TK_BYTE_STRING_LITERAL | TK_CHAR_LITERAL | TK_DOTDOT | TK_DOTDOTEQ | TK_FLOAT_LITERAL | TK_INTEGER_LITERAL | TK_KW_BREAK | TK_KW_CONTINUE | TK_KW_CRATE | TK_KW_DOLLARCRATE | TK_KW_FALSE | TK_KW_MACRORULES | TK_KW_MOVE | TK_KW_RETURN | TK_KW_SELFTYPE | TK_KW_SELFVALUE | TK_KW_SUPER | TK_KW_TRUE | TK_LPAREN | TK_LSQUAREBRACKET | TK_LT | TK_MINUS | TK_NON_KEYWORD_IDENTIFIER | TK_NOT | TK_OR | TK_OROR | TK_PATHSEP | TK_RAW_BYTE_STRING_LITERAL | TK_RAW_IDENTIFIER | TK_RAW_STRING_LITERAL | TK_STAR | TK_STRING_LITERAL };
+    return k matches { TK_AND | TK_ANDAND | TK_BYTE_LITERAL | TK_BYTE_STRING_LITERAL | TK_CHAR_LITERAL | TK_DOTDOT | TK_DOTDOTEQ | TK_FLOAT_LITERAL | TK_INTEGER_LITERAL | TK_KW_BREAK | TK_KW_CONTINUE | TK_KW_CRATE | TK_KW_DOLLARCRATE | TK_KW_FALSE | TK_KW_MACRORULES | TK_KW_MOVE | TK_KW_RETURN | TK_KW_SELFTYPE | TK_KW_SELFVALUE | TK_KW_SUPER | TK_KW_TRUE | TK_KW_UNION | TK_LPAREN | TK_LSQUAREBRACKET | TK_LT | TK_MINUS | TK_NON_KEYWORD_IDENTIFIER | TK_NOT | TK_OR | TK_OROR | TK_PATHSEP | TK_RAW_BYTE_STRING_LITERAL | TK_RAW_IDENTIFIER | TK_RAW_STRING_LITERAL | TK_STAR | TK_STRING_LITERAL };
 }
 
 fn _kind_set_67(k: i32) -> bool {
@@ -27758,7 +27831,7 @@ fn _kind_set_76(k: i32) -> bool {
 }
 
 fn _kind_set_77(k: i32) -> bool {
-    return k matches { TK_KW_CONST | TK_KW_ENUM | TK_KW_EXTERN | TK_KW_FN | TK_KW_IMPL | TK_KW_LET | TK_KW_MOD | TK_KW_PUB | TK_KW_STATIC | TK_KW_STRUCT | TK_KW_TRAIT | TK_KW_TYPE | TK_KW_UNION | TK_KW_USE | TK_SEMI };
+    return k matches { TK_KW_CONST | TK_KW_ENUM | TK_KW_EXTERN | TK_KW_FN | TK_KW_IMPL | TK_KW_LET | TK_KW_MOD | TK_KW_PUB | TK_KW_STATIC | TK_KW_STRUCT | TK_KW_TRAIT | TK_KW_TYPE | TK_KW_USE | TK_SEMI };
 }
 
 fn _kind_set_78(k: i32) -> bool {
@@ -27766,7 +27839,7 @@ fn _kind_set_78(k: i32) -> bool {
 }
 
 fn _kind_set_79(k: i32) -> bool {
-    return k matches { TK_BYTE_LITERAL | TK_CHAR_LITERAL | TK_FLOAT_LITERAL | TK_INTEGER_LITERAL | TK_KW_CRATE | TK_KW_DOLLARCRATE | TK_KW_MACRORULES | TK_KW_SELFTYPE | TK_KW_SELFVALUE | TK_KW_SUPER | TK_LT | TK_MINUS | TK_NON_KEYWORD_IDENTIFIER | TK_PATHSEP | TK_RAW_IDENTIFIER };
+    return k matches { TK_BYTE_LITERAL | TK_CHAR_LITERAL | TK_FLOAT_LITERAL | TK_INTEGER_LITERAL | TK_KW_CRATE | TK_KW_DOLLARCRATE | TK_KW_MACRORULES | TK_KW_SELFTYPE | TK_KW_SELFVALUE | TK_KW_SUPER | TK_KW_UNION | TK_LT | TK_MINUS | TK_NON_KEYWORD_IDENTIFIER | TK_PATHSEP | TK_RAW_IDENTIFIER };
 }
 
 fn _kind_set_80(k: i32) -> bool {
@@ -27778,19 +27851,19 @@ fn _kind_set_81(k: i32) -> bool {
 }
 
 fn _kind_set_82(k: i32) -> bool {
-    return k matches { TK_KW_CRATE | TK_KW_DOLLARCRATE | TK_KW_MACRORULES | TK_KW_SELFTYPE | TK_KW_SELFVALUE | TK_KW_SUPER | TK_LT | TK_NON_KEYWORD_IDENTIFIER | TK_PATHSEP | TK_RAW_IDENTIFIER };
+    return k matches { TK_KW_CRATE | TK_KW_DOLLARCRATE | TK_KW_MACRORULES | TK_KW_SELFTYPE | TK_KW_SELFVALUE | TK_KW_SUPER | TK_KW_UNION | TK_LT | TK_NON_KEYWORD_IDENTIFIER | TK_PATHSEP | TK_RAW_IDENTIFIER };
 }
 
 fn _kind_set_83(k: i32) -> bool {
-    return k matches { TK_INTEGER_LITERAL | TK_KW_MACRORULES | TK_KW_MUT | TK_KW_REF | TK_NON_KEYWORD_IDENTIFIER | TK_RAW_IDENTIFIER };
+    return k matches { TK_INTEGER_LITERAL | TK_KW_MACRORULES | TK_KW_MUT | TK_KW_REF | TK_KW_UNION | TK_NON_KEYWORD_IDENTIFIER | TK_RAW_IDENTIFIER };
 }
 
 fn _kind_set_84(k: i32) -> bool {
-    return k matches { TK_AND | TK_ANDAND | TK_BYTE_LITERAL | TK_BYTE_STRING_LITERAL | TK_CHAR_LITERAL | TK_FLOAT_LITERAL | TK_INTEGER_LITERAL | TK_KW_CRATE | TK_KW_DOLLARCRATE | TK_KW_FALSE | TK_KW_MACRORULES | TK_KW_MUT | TK_KW_REF | TK_KW_SELFTYPE | TK_KW_SELFVALUE | TK_KW_SUPER | TK_KW_TRUE | TK_LPAREN | TK_LSQUAREBRACKET | TK_LT | TK_MINUS | TK_NON_KEYWORD_IDENTIFIER | TK_OR | TK_PATHSEP | TK_RAW_BYTE_STRING_LITERAL | TK_RAW_IDENTIFIER | TK_RAW_STRING_LITERAL | TK_STRING_LITERAL | TK_UNDERSCORE };
+    return k matches { TK_AND | TK_ANDAND | TK_BYTE_LITERAL | TK_BYTE_STRING_LITERAL | TK_CHAR_LITERAL | TK_FLOAT_LITERAL | TK_INTEGER_LITERAL | TK_KW_CRATE | TK_KW_DOLLARCRATE | TK_KW_FALSE | TK_KW_MACRORULES | TK_KW_MUT | TK_KW_REF | TK_KW_SELFTYPE | TK_KW_SELFVALUE | TK_KW_SUPER | TK_KW_TRUE | TK_KW_UNION | TK_LPAREN | TK_LSQUAREBRACKET | TK_LT | TK_MINUS | TK_NON_KEYWORD_IDENTIFIER | TK_OR | TK_PATHSEP | TK_RAW_BYTE_STRING_LITERAL | TK_RAW_IDENTIFIER | TK_RAW_STRING_LITERAL | TK_STRING_LITERAL | TK_UNDERSCORE };
 }
 
 fn _kind_set_85(k: i32) -> bool {
-    return k matches { TK_KW_CRATE | TK_KW_DOLLARCRATE | TK_KW_DYN | TK_KW_FOR | TK_KW_MACRORULES | TK_KW_SELFTYPE | TK_KW_SELFVALUE | TK_KW_SUPER | TK_LPAREN | TK_NON_KEYWORD_IDENTIFIER | TK_PATHSEP | TK_QUESTION | TK_RAW_IDENTIFIER };
+    return k matches { TK_KW_CRATE | TK_KW_DOLLARCRATE | TK_KW_DYN | TK_KW_FOR | TK_KW_MACRORULES | TK_KW_SELFTYPE | TK_KW_SELFVALUE | TK_KW_SUPER | TK_KW_UNION | TK_LPAREN | TK_NON_KEYWORD_IDENTIFIER | TK_PATHSEP | TK_QUESTION | TK_RAW_IDENTIFIER };
 }
 
 fn _kind_set_86(k: i32) -> bool {
@@ -27822,47 +27895,55 @@ fn _kind_set_92(k: i32) -> bool {
 }
 
 fn _kind_set_93(k: i32) -> bool {
-    return k matches { TK_NON_KEYWORD_IDENTIFIER | TK_RAW_IDENTIFIER };
+    return k matches { TK_KW_ABSTRACT | TK_KW_AS | TK_KW_ASYNC | TK_KW_AWAIT | TK_KW_BECOME | TK_KW_BOX | TK_KW_BREAK | TK_KW_CONST | TK_KW_CONTINUE | TK_KW_CRATE | TK_KW_DO | TK_KW_DYN | TK_KW_ELSE | TK_KW_ENUM | TK_KW_EXTERN | TK_KW_FALSE | TK_KW_FINAL | TK_KW_FN | TK_KW_FOR | TK_KW_IF | TK_KW_IMPL | TK_KW_IN | TK_KW_LET | TK_KW_LOOP | TK_KW_MACRO | TK_KW_MATCH | TK_KW_MOD | TK_KW_MOVE | TK_KW_MUT | TK_KW_OVERRIDE | TK_KW_PRIV | TK_KW_PUB | TK_KW_REF | TK_KW_RETURN | TK_KW_SELFTYPE | TK_KW_SELFVALUE | TK_KW_STATIC | TK_KW_STATICLIFETIME | TK_KW_STRUCT | TK_KW_SUPER | TK_KW_TRAIT | TK_KW_TRUE | TK_KW_TRY | TK_KW_TYPE | TK_KW_TYPEOF | TK_KW_UNSAFE | TK_KW_UNSIZED | TK_KW_USE | TK_KW_VIRTUAL | TK_KW_WHERE | TK_KW_WHILE | TK_KW_YIELD };
 }
 
 fn _kind_set_94(k: i32) -> bool {
-    return k matches { TK_BYTE_LITERAL | TK_BYTE_STRING_LITERAL | TK_CHAR_LITERAL | TK_FLOAT_LITERAL | TK_INTEGER_LITERAL | TK_KW_ABSTRACT | TK_KW_AS | TK_KW_ASYNC | TK_KW_AWAIT | TK_KW_BECOME | TK_KW_BOX | TK_KW_BREAK | TK_KW_CONST | TK_KW_CONTINUE | TK_KW_CRATE | TK_KW_DO | TK_KW_DOLLARCRATE | TK_KW_DYN | TK_KW_ELSE | TK_KW_ENUM | TK_KW_EXTERN | TK_KW_FALSE | TK_KW_FINAL | TK_KW_FN | TK_KW_FOR | TK_KW_IF | TK_KW_IMPL | TK_KW_IN | TK_KW_LET | TK_KW_LOOP | TK_KW_MACRO | TK_KW_MACRORULES | TK_KW_MATCH | TK_KW_MOD | TK_KW_MOVE | TK_KW_MUT | TK_KW_OVERRIDE | TK_KW_PRIV | TK_KW_PUB | TK_KW_REF | TK_KW_RETURN | TK_KW_SELFTYPE | TK_KW_SELFVALUE | TK_KW_STATIC | TK_KW_STATICLIFETIME | TK_KW_STRUCT | TK_KW_SUPER | TK_KW_TRAIT | TK_KW_TRUE | TK_KW_TRY | TK_KW_TYPE | TK_KW_TYPEOF | TK_KW_UNDERLINELIFETIME | TK_KW_UNION | TK_KW_UNSAFE | TK_KW_UNSIZED | TK_KW_USE | TK_KW_VIRTUAL | TK_KW_WHERE | TK_KW_WHILE | TK_KW_YIELD | TK_LIFETIME_OR_LABEL | TK_NON_KEYWORD_IDENTIFIER | TK_RAW_BYTE_STRING_LITERAL | TK_RAW_IDENTIFIER | TK_RAW_STRING_LITERAL | TK_STRING_LITERAL };
+    return k matches { TK_NON_KEYWORD_IDENTIFIER | TK_RAW_IDENTIFIER };
 }
 
 fn _kind_set_95(k: i32) -> bool {
-    return k matches { TK_KW_MACRORULES | TK_KW_SELFVALUE | TK_NON_KEYWORD_IDENTIFIER | TK_RAW_IDENTIFIER };
+    return k matches { TK_BYTE_LITERAL | TK_BYTE_STRING_LITERAL | TK_CHAR_LITERAL | TK_FLOAT_LITERAL | TK_INTEGER_LITERAL | TK_KW_ABSTRACT | TK_KW_AS | TK_KW_ASYNC | TK_KW_AWAIT | TK_KW_BECOME | TK_KW_BOX | TK_KW_BREAK | TK_KW_CONST | TK_KW_CONTINUE | TK_KW_CRATE | TK_KW_DO | TK_KW_DOLLARCRATE | TK_KW_DYN | TK_KW_ELSE | TK_KW_ENUM | TK_KW_EXTERN | TK_KW_FALSE | TK_KW_FINAL | TK_KW_FN | TK_KW_FOR | TK_KW_IF | TK_KW_IMPL | TK_KW_IN | TK_KW_LET | TK_KW_LOOP | TK_KW_MACRO | TK_KW_MACRORULES | TK_KW_MATCH | TK_KW_MOD | TK_KW_MOVE | TK_KW_MUT | TK_KW_OVERRIDE | TK_KW_PRIV | TK_KW_PUB | TK_KW_REF | TK_KW_RETURN | TK_KW_SELFTYPE | TK_KW_SELFVALUE | TK_KW_STATIC | TK_KW_STATICLIFETIME | TK_KW_STRUCT | TK_KW_SUPER | TK_KW_TRAIT | TK_KW_TRUE | TK_KW_TRY | TK_KW_TYPE | TK_KW_TYPEOF | TK_KW_UNDERLINELIFETIME | TK_KW_UNION | TK_KW_UNSAFE | TK_KW_UNSIZED | TK_KW_USE | TK_KW_VIRTUAL | TK_KW_WHERE | TK_KW_WHILE | TK_KW_YIELD | TK_LIFETIME_OR_LABEL | TK_NON_KEYWORD_IDENTIFIER | TK_RAW_BYTE_STRING_LITERAL | TK_RAW_IDENTIFIER | TK_RAW_STRING_LITERAL | TK_STRING_LITERAL };
 }
 
 fn _kind_set_96(k: i32) -> bool {
-    return k matches { TK_KW_IMPL | TK_KW_UNSAFE };
+    return k matches { TK_KW_MACRORULES | TK_KW_SELFVALUE | TK_KW_UNION | TK_NON_KEYWORD_IDENTIFIER | TK_RAW_IDENTIFIER };
 }
 
 fn _kind_set_97(k: i32) -> bool {
-    return k matches { TK_AND | TK_ANDAND | TK_BYTE_LITERAL | TK_BYTE_STRING_LITERAL | TK_CHAR_LITERAL | TK_DOTDOT | TK_DOTDOTEQ | TK_FLOAT_LITERAL | TK_INTEGER_LITERAL | TK_KW_ASYNC | TK_KW_BREAK | TK_KW_CONST | TK_KW_CONTINUE | TK_KW_CRATE | TK_KW_DOLLARCRATE | TK_KW_ENUM | TK_KW_EXTERN | TK_KW_FALSE | TK_KW_FN | TK_KW_FOR | TK_KW_IF | TK_KW_IMPL | TK_KW_LET | TK_KW_LOOP | TK_KW_MACRORULES | TK_KW_MATCH | TK_KW_MOD | TK_KW_MOVE | TK_KW_PUB | TK_KW_RETURN | TK_KW_SELFTYPE | TK_KW_SELFVALUE | TK_KW_STATIC | TK_KW_STRUCT | TK_KW_SUPER | TK_KW_TRAIT | TK_KW_TRUE | TK_KW_TYPE | TK_KW_UNION | TK_KW_UNSAFE | TK_KW_USE | TK_KW_WHILE | TK_LCURLYBRACE | TK_LIFETIME_OR_LABEL | TK_LPAREN | TK_LSQUAREBRACKET | TK_LT | TK_MINUS | TK_NON_KEYWORD_IDENTIFIER | TK_NOT | TK_OR | TK_OROR | TK_PATHSEP | TK_POUND | TK_RAW_BYTE_STRING_LITERAL | TK_RAW_IDENTIFIER | TK_RAW_STRING_LITERAL | TK_STAR | TK_STRING_LITERAL };
+    return k matches { TK_KW_IMPL | TK_KW_UNSAFE };
 }
 
 fn _kind_set_98(k: i32) -> bool {
-    return k matches { TK_KW_IF | TK_LCURLYBRACE };
+    return k matches { TK_AND | TK_ANDAND | TK_BYTE_LITERAL | TK_BYTE_STRING_LITERAL | TK_CHAR_LITERAL | TK_DOTDOT | TK_DOTDOTEQ | TK_FLOAT_LITERAL | TK_INTEGER_LITERAL | TK_KW_ASYNC | TK_KW_BREAK | TK_KW_CONST | TK_KW_CONTINUE | TK_KW_CRATE | TK_KW_DOLLARCRATE | TK_KW_ENUM | TK_KW_EXTERN | TK_KW_FALSE | TK_KW_FN | TK_KW_FOR | TK_KW_IF | TK_KW_IMPL | TK_KW_LET | TK_KW_LOOP | TK_KW_MACRORULES | TK_KW_MATCH | TK_KW_MOD | TK_KW_MOVE | TK_KW_PUB | TK_KW_RETURN | TK_KW_SELFTYPE | TK_KW_SELFVALUE | TK_KW_STATIC | TK_KW_STRUCT | TK_KW_SUPER | TK_KW_TRAIT | TK_KW_TRUE | TK_KW_TYPE | TK_KW_UNION | TK_KW_UNSAFE | TK_KW_USE | TK_KW_WHILE | TK_LCURLYBRACE | TK_LIFETIME_OR_LABEL | TK_LPAREN | TK_LSQUAREBRACKET | TK_LT | TK_MINUS | TK_NON_KEYWORD_IDENTIFIER | TK_NOT | TK_OR | TK_OROR | TK_PATHSEP | TK_POUND | TK_RAW_BYTE_STRING_LITERAL | TK_RAW_IDENTIFIER | TK_RAW_STRING_LITERAL | TK_STAR | TK_STRING_LITERAL };
 }
 
 fn _kind_set_99(k: i32) -> bool {
-    return k matches { TK_AND | TK_ANDAND | TK_BYTE_LITERAL | TK_BYTE_STRING_LITERAL | TK_CHAR_LITERAL | TK_DOTDOT | TK_FLOAT_LITERAL | TK_INTEGER_LITERAL | TK_KW_CRATE | TK_KW_DOLLARCRATE | TK_KW_FALSE | TK_KW_MACRORULES | TK_KW_MUT | TK_KW_REF | TK_KW_SELFTYPE | TK_KW_SELFVALUE | TK_KW_SUPER | TK_KW_TRUE | TK_LPAREN | TK_LSQUAREBRACKET | TK_LT | TK_MINUS | TK_NON_KEYWORD_IDENTIFIER | TK_PATHSEP | TK_RAW_BYTE_STRING_LITERAL | TK_RAW_IDENTIFIER | TK_RAW_STRING_LITERAL | TK_STRING_LITERAL | TK_UNDERSCORE };
+    return k matches { TK_KW_IF | TK_LCURLYBRACE };
 }
 
 fn _kind_set_100(k: i32) -> bool {
-    return k matches { TK_KW_CRATE | TK_KW_DOLLARCRATE | TK_KW_MACRORULES | TK_KW_MUT | TK_KW_REF | TK_KW_SELFTYPE | TK_KW_SELFVALUE | TK_KW_SUPER | TK_LT | TK_NON_KEYWORD_IDENTIFIER | TK_PATHSEP | TK_RAW_IDENTIFIER };
+    return k matches { TK_AND | TK_ANDAND | TK_BYTE_LITERAL | TK_BYTE_STRING_LITERAL | TK_CHAR_LITERAL | TK_DOTDOT | TK_FLOAT_LITERAL | TK_INTEGER_LITERAL | TK_KW_CRATE | TK_KW_DOLLARCRATE | TK_KW_FALSE | TK_KW_MACRORULES | TK_KW_MUT | TK_KW_REF | TK_KW_SELFTYPE | TK_KW_SELFVALUE | TK_KW_SUPER | TK_KW_TRUE | TK_KW_UNION | TK_LPAREN | TK_LSQUAREBRACKET | TK_LT | TK_MINUS | TK_NON_KEYWORD_IDENTIFIER | TK_PATHSEP | TK_RAW_BYTE_STRING_LITERAL | TK_RAW_IDENTIFIER | TK_RAW_STRING_LITERAL | TK_STRING_LITERAL | TK_UNDERSCORE };
 }
 
 fn _kind_set_101(k: i32) -> bool {
-    return k matches { TK_FLOAT_LITERAL | TK_INTEGER_LITERAL | TK_MINUS };
+    return k matches { TK_KW_CRATE | TK_KW_DOLLARCRATE | TK_KW_MACRORULES | TK_KW_MUT | TK_KW_REF | TK_KW_SELFTYPE | TK_KW_SELFVALUE | TK_KW_SUPER | TK_KW_UNION | TK_LT | TK_NON_KEYWORD_IDENTIFIER | TK_PATHSEP | TK_RAW_IDENTIFIER };
 }
 
 fn _kind_set_102(k: i32) -> bool {
-    return k matches { TK_KW_CRATE | TK_KW_DOLLARCRATE | TK_KW_DYN | TK_KW_EXTERN | TK_KW_FN | TK_KW_FOR | TK_KW_MACRORULES | TK_KW_SELFTYPE | TK_KW_SELFVALUE | TK_KW_SUPER | TK_KW_UNSAFE | TK_LPAREN | TK_NON_KEYWORD_IDENTIFIER | TK_PATHSEP | TK_QUESTION | TK_RAW_IDENTIFIER };
+    return k matches { TK_FLOAT_LITERAL | TK_INTEGER_LITERAL | TK_MINUS };
 }
 
 fn _kind_set_103(k: i32) -> bool {
+    return k matches { TK_KW_CRATE | TK_KW_DOLLARCRATE | TK_KW_DYN | TK_KW_EXTERN | TK_KW_FN | TK_KW_FOR | TK_KW_MACRORULES | TK_KW_SELFTYPE | TK_KW_SELFVALUE | TK_KW_SUPER | TK_KW_UNION | TK_KW_UNSAFE | TK_LPAREN | TK_NON_KEYWORD_IDENTIFIER | TK_PATHSEP | TK_QUESTION | TK_RAW_IDENTIFIER };
+}
+
+fn _kind_set_104(k: i32) -> bool {
     return k matches { TK_KW_CRATE | TK_KW_IN | TK_KW_SELFVALUE | TK_KW_SUPER };
+}
+
+fn _kind_set_105(k: i32) -> bool {
+    return k matches { TK_KW_ABSTRACT | TK_KW_AS | TK_KW_ASYNC | TK_KW_AWAIT | TK_KW_BECOME | TK_KW_BOX | TK_KW_BREAK | TK_KW_CONST | TK_KW_CONTINUE | TK_KW_CRATE | TK_KW_DO | TK_KW_DYN | TK_KW_ELSE | TK_KW_ENUM | TK_KW_EXTERN | TK_KW_FALSE | TK_KW_FINAL | TK_KW_FN | TK_KW_FOR | TK_KW_IF | TK_KW_IMPL | TK_KW_IN | TK_KW_LET | TK_KW_LOOP | TK_KW_MACRO | TK_KW_MACRORULES | TK_KW_MATCH | TK_KW_MOD | TK_KW_MOVE | TK_KW_MUT | TK_KW_OVERRIDE | TK_KW_PRIV | TK_KW_PUB | TK_KW_REF | TK_KW_RETURN | TK_KW_SELFTYPE | TK_KW_SELFVALUE | TK_KW_STATIC | TK_KW_STATICLIFETIME | TK_KW_STRUCT | TK_KW_SUPER | TK_KW_TRAIT | TK_KW_TRUE | TK_KW_TRY | TK_KW_TYPE | TK_KW_TYPEOF | TK_KW_UNION | TK_KW_UNSAFE | TK_KW_UNSIZED | TK_KW_USE | TK_KW_VIRTUAL | TK_KW_WHERE | TK_KW_WHILE | TK_KW_YIELD | TK_NON_KEYWORD_IDENTIFIER | TK_RAW_IDENTIFIER };
 }
 
 global EMPTY_SYNC: List<i32> = [];
@@ -27876,10 +27957,10 @@ global SYNC_6: List<i32> = [TK_LPAREN];
 global SYNC_7: List<i32> = [TK_SEMI];
 global SYNC_8: List<i32> = [TK_LSQUAREBRACKET];
 global SYNC_9: List<i32> = [TK_LCURLYBRACE];
-global SYNC_10: List<i32> = [TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_MACRORULES, TK_KW_SELFVALUE, TK_KW_SUPER, TK_NON_KEYWORD_IDENTIFIER, TK_PATHSEP, TK_RAW_IDENTIFIER];
+global SYNC_10: List<i32> = [TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_MACRORULES, TK_KW_SELFVALUE, TK_KW_SUPER, TK_KW_UNION, TK_NON_KEYWORD_IDENTIFIER, TK_PATHSEP, TK_RAW_IDENTIFIER];
 global SYNC_11: List<i32> = [TK_NOT];
-global SYNC_12: List<i32> = [TK_KW_MACRORULES, TK_NON_KEYWORD_IDENTIFIER, TK_RAW_IDENTIFIER];
-global SYNC_13: List<i32> = [TK_KW_MACRORULES, TK_KW_SELFVALUE, TK_NON_KEYWORD_IDENTIFIER, TK_RAW_IDENTIFIER];
+global SYNC_12: List<i32> = [TK_KW_MACRORULES, TK_KW_UNION, TK_NON_KEYWORD_IDENTIFIER, TK_RAW_IDENTIFIER];
+global SYNC_13: List<i32> = [TK_KW_MACRORULES, TK_KW_SELFVALUE, TK_KW_UNION, TK_NON_KEYWORD_IDENTIFIER, TK_RAW_IDENTIFIER];
 global SYNC_14: List<i32> = [TK_AND, TK_ANDAND, TK_ANDEQ, TK_AT, TK_BYTE_LITERAL, TK_BYTE_STRING_LITERAL, TK_CARET, TK_CARETEQ, TK_CHAR_LITERAL, TK_COLON, TK_COMMA, TK_DOT, TK_DOTDOT, TK_DOTDOTDOT, TK_DOTDOTEQ, TK_EQ, TK_EQEQ, TK_FATARROW, TK_FLOAT_LITERAL, TK_GE, TK_GT, TK_INTEGER_LITERAL, TK_KW_ABSTRACT, TK_KW_AS, TK_KW_ASYNC, TK_KW_AWAIT, TK_KW_BECOME, TK_KW_BOX, TK_KW_BREAK, TK_KW_CONST, TK_KW_CONTINUE, TK_KW_CRATE, TK_KW_DO, TK_KW_DOLLARCRATE, TK_KW_DYN, TK_KW_ELSE, TK_KW_ENUM, TK_KW_EXTERN, TK_KW_FALSE, TK_KW_FINAL, TK_KW_FN, TK_KW_FOR, TK_KW_IF, TK_KW_IMPL, TK_KW_IN, TK_KW_LET, TK_KW_LOOP, TK_KW_MACRO, TK_KW_MACRORULES, TK_KW_MATCH, TK_KW_MOD, TK_KW_MOVE, TK_KW_MUT, TK_KW_OVERRIDE, TK_KW_PRIV, TK_KW_PUB, TK_KW_REF, TK_KW_RETURN, TK_KW_SELFTYPE, TK_KW_SELFVALUE, TK_KW_STATIC, TK_KW_STATICLIFETIME, TK_KW_STRUCT, TK_KW_SUPER, TK_KW_TRAIT, TK_KW_TRUE, TK_KW_TRY, TK_KW_TYPE, TK_KW_TYPEOF, TK_KW_UNDERLINELIFETIME, TK_KW_UNION, TK_KW_UNSAFE, TK_KW_UNSIZED, TK_KW_USE, TK_KW_VIRTUAL, TK_KW_WHERE, TK_KW_WHILE, TK_KW_YIELD, TK_LE, TK_LIFETIME_OR_LABEL, TK_LT, TK_MINUS, TK_MINUSEQ, TK_NE, TK_NON_KEYWORD_IDENTIFIER, TK_NOT, TK_OR, TK_OREQ, TK_OROR, TK_PATHSEP, TK_PERCENT, TK_PERCENTEQ, TK_PLUS, TK_PLUSEQ, TK_POUND, TK_QUESTION, TK_RARROW, TK_RAW_BYTE_STRING_LITERAL, TK_RAW_IDENTIFIER, TK_RAW_STRING_LITERAL, TK_SEMI, TK_SHLEQ, TK_SHREQ, TK_SLASH, TK_SLASHEQ, TK_STAR, TK_STAREQ, TK_STRING_LITERAL, TK_UNDERSCORE];
 global SYNC_15: List<i32> = [TK_AND, TK_ANDAND, TK_ANDEQ, TK_AT, TK_BYTE_LITERAL, TK_BYTE_STRING_LITERAL, TK_CARET, TK_CARETEQ, TK_CHAR_LITERAL, TK_COLON, TK_COMMA, TK_DOLLAR, TK_DOT, TK_DOTDOT, TK_DOTDOTDOT, TK_DOTDOTEQ, TK_EQ, TK_EQEQ, TK_FATARROW, TK_FLOAT_LITERAL, TK_GE, TK_GT, TK_INTEGER_LITERAL, TK_KW_ABSTRACT, TK_KW_AS, TK_KW_ASYNC, TK_KW_AWAIT, TK_KW_BECOME, TK_KW_BOX, TK_KW_BREAK, TK_KW_CONST, TK_KW_CONTINUE, TK_KW_CRATE, TK_KW_DO, TK_KW_DOLLARCRATE, TK_KW_DYN, TK_KW_ELSE, TK_KW_ENUM, TK_KW_EXTERN, TK_KW_FALSE, TK_KW_FINAL, TK_KW_FN, TK_KW_FOR, TK_KW_IF, TK_KW_IMPL, TK_KW_IN, TK_KW_LET, TK_KW_LOOP, TK_KW_MACRO, TK_KW_MACRORULES, TK_KW_MATCH, TK_KW_MOD, TK_KW_MOVE, TK_KW_MUT, TK_KW_OVERRIDE, TK_KW_PRIV, TK_KW_PUB, TK_KW_REF, TK_KW_RETURN, TK_KW_SELFTYPE, TK_KW_SELFVALUE, TK_KW_STATIC, TK_KW_STATICLIFETIME, TK_KW_STRUCT, TK_KW_SUPER, TK_KW_TRAIT, TK_KW_TRUE, TK_KW_TRY, TK_KW_TYPE, TK_KW_TYPEOF, TK_KW_UNDERLINELIFETIME, TK_KW_UNION, TK_KW_UNSAFE, TK_KW_UNSIZED, TK_KW_USE, TK_KW_VIRTUAL, TK_KW_WHERE, TK_KW_WHILE, TK_KW_YIELD, TK_LE, TK_LIFETIME_OR_LABEL, TK_LT, TK_MINUS, TK_MINUSEQ, TK_NE, TK_NON_KEYWORD_IDENTIFIER, TK_NOT, TK_OR, TK_OREQ, TK_OROR, TK_PATHSEP, TK_PERCENT, TK_PERCENTEQ, TK_PLUSEQ, TK_POUND, TK_RARROW, TK_RAW_BYTE_STRING_LITERAL, TK_RAW_IDENTIFIER, TK_RAW_STRING_LITERAL, TK_SEMI, TK_SHLEQ, TK_SHREQ, TK_SLASH, TK_SLASHEQ, TK_STAREQ, TK_STRING_LITERAL, TK_UNDERSCORE];
 global SYNC_16: List<i32> = [TK_PLUS, TK_QUESTION, TK_STAR];
@@ -27888,101 +27969,101 @@ global SYNC_18: List<i32> = [TK_KW_ASYNC, TK_KW_CONST, TK_KW_ENUM, TK_KW_EXTERN,
 global SYNC_19: List<i32> = [TK_KW_ASYNC, TK_KW_CONST, TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_ENUM, TK_KW_EXTERN, TK_KW_FN, TK_KW_IMPL, TK_KW_MACRORULES, TK_KW_MOD, TK_KW_PUB, TK_KW_SELFVALUE, TK_KW_STATIC, TK_KW_STRUCT, TK_KW_SUPER, TK_KW_TRAIT, TK_KW_TYPE, TK_KW_UNION, TK_KW_UNSAFE, TK_KW_USE, TK_NON_KEYWORD_IDENTIFIER, TK_PATHSEP, TK_POUND, TK_RAW_IDENTIFIER, TK_RCURLYBRACE];
 global SYNC_20: List<i32> = [TK_LCURLYBRACE, TK_SEMI];
 global SYNC_21: List<i32> = [TK_KW_CRATE];
-global SYNC_22: List<i32> = [TK_KW_MACRORULES, TK_NON_KEYWORD_IDENTIFIER, TK_RAW_IDENTIFIER, TK_UNDERSCORE];
-global SYNC_23: List<i32> = [TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_MACRORULES, TK_KW_SELFVALUE, TK_KW_SUPER, TK_LCURLYBRACE, TK_NON_KEYWORD_IDENTIFIER, TK_PATHSEP, TK_RAW_IDENTIFIER, TK_STAR];
-global SYNC_24: List<i32> = [TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_MACRORULES, TK_KW_SELFVALUE, TK_KW_SUPER, TK_LCURLYBRACE, TK_NON_KEYWORD_IDENTIFIER, TK_PATHSEP, TK_RAW_IDENTIFIER, TK_RCURLYBRACE, TK_STAR];
+global SYNC_22: List<i32> = [TK_KW_MACRORULES, TK_KW_UNION, TK_NON_KEYWORD_IDENTIFIER, TK_RAW_IDENTIFIER, TK_UNDERSCORE];
+global SYNC_23: List<i32> = [TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_MACRORULES, TK_KW_SELFVALUE, TK_KW_SUPER, TK_KW_UNION, TK_LCURLYBRACE, TK_NON_KEYWORD_IDENTIFIER, TK_PATHSEP, TK_RAW_IDENTIFIER, TK_STAR];
+global SYNC_24: List<i32> = [TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_MACRORULES, TK_KW_SELFVALUE, TK_KW_SUPER, TK_KW_UNION, TK_LCURLYBRACE, TK_NON_KEYWORD_IDENTIFIER, TK_PATHSEP, TK_RAW_IDENTIFIER, TK_RCURLYBRACE, TK_STAR];
 global SYNC_25: List<i32> = [TK_LCURLYBRACE, TK_STAR];
-global SYNC_26: List<i32> = [TK_AND, TK_ANDAND, TK_BYTE_LITERAL, TK_BYTE_STRING_LITERAL, TK_CHAR_LITERAL, TK_DOTDOT, TK_DOTDOTDOT, TK_FLOAT_LITERAL, TK_INTEGER_LITERAL, TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_DYN, TK_KW_EXTERN, TK_KW_FALSE, TK_KW_FN, TK_KW_FOR, TK_KW_IMPL, TK_KW_MACRORULES, TK_KW_MUT, TK_KW_REF, TK_KW_SELFTYPE, TK_KW_SELFVALUE, TK_KW_STATICLIFETIME, TK_KW_SUPER, TK_KW_TRUE, TK_KW_UNDERLINELIFETIME, TK_KW_UNSAFE, TK_LIFETIME_OR_LABEL, TK_LPAREN, TK_LSQUAREBRACKET, TK_LT, TK_MINUS, TK_NON_KEYWORD_IDENTIFIER, TK_NOT, TK_OR, TK_PATHSEP, TK_POUND, TK_QUESTION, TK_RAW_BYTE_STRING_LITERAL, TK_RAW_IDENTIFIER, TK_RAW_STRING_LITERAL, TK_RPAREN, TK_STAR, TK_STRING_LITERAL, TK_UNDERSCORE];
+global SYNC_26: List<i32> = [TK_AND, TK_ANDAND, TK_BYTE_LITERAL, TK_BYTE_STRING_LITERAL, TK_CHAR_LITERAL, TK_DOTDOT, TK_DOTDOTDOT, TK_FLOAT_LITERAL, TK_INTEGER_LITERAL, TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_DYN, TK_KW_EXTERN, TK_KW_FALSE, TK_KW_FN, TK_KW_FOR, TK_KW_IMPL, TK_KW_MACRORULES, TK_KW_MUT, TK_KW_REF, TK_KW_SELFTYPE, TK_KW_SELFVALUE, TK_KW_STATICLIFETIME, TK_KW_SUPER, TK_KW_TRUE, TK_KW_UNDERLINELIFETIME, TK_KW_UNION, TK_KW_UNSAFE, TK_LIFETIME_OR_LABEL, TK_LPAREN, TK_LSQUAREBRACKET, TK_LT, TK_MINUS, TK_NON_KEYWORD_IDENTIFIER, TK_NOT, TK_OR, TK_PATHSEP, TK_POUND, TK_QUESTION, TK_RAW_BYTE_STRING_LITERAL, TK_RAW_IDENTIFIER, TK_RAW_STRING_LITERAL, TK_RPAREN, TK_STAR, TK_STRING_LITERAL, TK_UNDERSCORE];
 global SYNC_27: List<i32> = [TK_KW_WHERE, TK_LCURLYBRACE, TK_RARROW, TK_SEMI];
 global SYNC_28: List<i32> = [TK_RAW_STRING_LITERAL, TK_STRING_LITERAL];
-global SYNC_29: List<i32> = [TK_AND, TK_ANDAND, TK_BYTE_LITERAL, TK_BYTE_STRING_LITERAL, TK_CHAR_LITERAL, TK_DOTDOT, TK_DOTDOTDOT, TK_FLOAT_LITERAL, TK_INTEGER_LITERAL, TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_DYN, TK_KW_EXTERN, TK_KW_FALSE, TK_KW_FN, TK_KW_FOR, TK_KW_IMPL, TK_KW_MACRORULES, TK_KW_MUT, TK_KW_REF, TK_KW_SELFTYPE, TK_KW_SELFVALUE, TK_KW_STATICLIFETIME, TK_KW_SUPER, TK_KW_TRUE, TK_KW_UNDERLINELIFETIME, TK_KW_UNSAFE, TK_LIFETIME_OR_LABEL, TK_LPAREN, TK_LSQUAREBRACKET, TK_LT, TK_MINUS, TK_NON_KEYWORD_IDENTIFIER, TK_NOT, TK_OR, TK_PATHSEP, TK_POUND, TK_QUESTION, TK_RAW_BYTE_STRING_LITERAL, TK_RAW_IDENTIFIER, TK_RAW_STRING_LITERAL, TK_STAR, TK_STRING_LITERAL, TK_UNDERSCORE];
+global SYNC_29: List<i32> = [TK_AND, TK_ANDAND, TK_BYTE_LITERAL, TK_BYTE_STRING_LITERAL, TK_CHAR_LITERAL, TK_DOTDOT, TK_DOTDOTDOT, TK_FLOAT_LITERAL, TK_INTEGER_LITERAL, TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_DYN, TK_KW_EXTERN, TK_KW_FALSE, TK_KW_FN, TK_KW_FOR, TK_KW_IMPL, TK_KW_MACRORULES, TK_KW_MUT, TK_KW_REF, TK_KW_SELFTYPE, TK_KW_SELFVALUE, TK_KW_STATICLIFETIME, TK_KW_SUPER, TK_KW_TRUE, TK_KW_UNDERLINELIFETIME, TK_KW_UNION, TK_KW_UNSAFE, TK_LIFETIME_OR_LABEL, TK_LPAREN, TK_LSQUAREBRACKET, TK_LT, TK_MINUS, TK_NON_KEYWORD_IDENTIFIER, TK_NOT, TK_OR, TK_PATHSEP, TK_POUND, TK_QUESTION, TK_RAW_BYTE_STRING_LITERAL, TK_RAW_IDENTIFIER, TK_RAW_STRING_LITERAL, TK_STAR, TK_STRING_LITERAL, TK_UNDERSCORE];
 global SYNC_30: List<i32> = [TK_AND, TK_KW_MUT, TK_KW_SELFVALUE];
 global SYNC_31: List<i32> = [TK_KW_STATICLIFETIME, TK_KW_UNDERLINELIFETIME, TK_LIFETIME_OR_LABEL];
 global SYNC_32: List<i32> = [TK_COLON];
-global SYNC_33: List<i32> = [TK_AND, TK_ANDAND, TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_DYN, TK_KW_EXTERN, TK_KW_FN, TK_KW_FOR, TK_KW_IMPL, TK_KW_MACRORULES, TK_KW_SELFTYPE, TK_KW_SELFVALUE, TK_KW_STATICLIFETIME, TK_KW_SUPER, TK_KW_UNDERLINELIFETIME, TK_KW_UNSAFE, TK_LIFETIME_OR_LABEL, TK_LPAREN, TK_LSQUAREBRACKET, TK_LT, TK_NON_KEYWORD_IDENTIFIER, TK_NOT, TK_PATHSEP, TK_QUESTION, TK_RAW_IDENTIFIER, TK_STAR, TK_UNDERSCORE];
-global SYNC_34: List<i32> = [TK_AND, TK_ANDAND, TK_BYTE_LITERAL, TK_BYTE_STRING_LITERAL, TK_CHAR_LITERAL, TK_DOTDOT, TK_DOTDOTDOT, TK_FLOAT_LITERAL, TK_INTEGER_LITERAL, TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_DYN, TK_KW_EXTERN, TK_KW_FALSE, TK_KW_FN, TK_KW_FOR, TK_KW_IMPL, TK_KW_MACRORULES, TK_KW_MUT, TK_KW_REF, TK_KW_SELFTYPE, TK_KW_SELFVALUE, TK_KW_STATICLIFETIME, TK_KW_SUPER, TK_KW_TRUE, TK_KW_UNDERLINELIFETIME, TK_KW_UNSAFE, TK_LIFETIME_OR_LABEL, TK_LPAREN, TK_LSQUAREBRACKET, TK_LT, TK_MINUS, TK_NON_KEYWORD_IDENTIFIER, TK_NOT, TK_OR, TK_PATHSEP, TK_QUESTION, TK_RAW_BYTE_STRING_LITERAL, TK_RAW_IDENTIFIER, TK_RAW_STRING_LITERAL, TK_STAR, TK_STRING_LITERAL, TK_UNDERSCORE];
-global SYNC_35: List<i32> = [TK_AND, TK_ANDAND, TK_DOTDOTDOT, TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_DYN, TK_KW_EXTERN, TK_KW_FN, TK_KW_FOR, TK_KW_IMPL, TK_KW_MACRORULES, TK_KW_SELFTYPE, TK_KW_SELFVALUE, TK_KW_STATICLIFETIME, TK_KW_SUPER, TK_KW_UNDERLINELIFETIME, TK_KW_UNSAFE, TK_LIFETIME_OR_LABEL, TK_LPAREN, TK_LSQUAREBRACKET, TK_LT, TK_NON_KEYWORD_IDENTIFIER, TK_NOT, TK_PATHSEP, TK_QUESTION, TK_RAW_IDENTIFIER, TK_STAR, TK_UNDERSCORE];
+global SYNC_33: List<i32> = [TK_AND, TK_ANDAND, TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_DYN, TK_KW_EXTERN, TK_KW_FN, TK_KW_FOR, TK_KW_IMPL, TK_KW_MACRORULES, TK_KW_SELFTYPE, TK_KW_SELFVALUE, TK_KW_STATICLIFETIME, TK_KW_SUPER, TK_KW_UNDERLINELIFETIME, TK_KW_UNION, TK_KW_UNSAFE, TK_LIFETIME_OR_LABEL, TK_LPAREN, TK_LSQUAREBRACKET, TK_LT, TK_NON_KEYWORD_IDENTIFIER, TK_NOT, TK_PATHSEP, TK_QUESTION, TK_RAW_IDENTIFIER, TK_STAR, TK_UNDERSCORE];
+global SYNC_34: List<i32> = [TK_AND, TK_ANDAND, TK_BYTE_LITERAL, TK_BYTE_STRING_LITERAL, TK_CHAR_LITERAL, TK_DOTDOT, TK_DOTDOTDOT, TK_FLOAT_LITERAL, TK_INTEGER_LITERAL, TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_DYN, TK_KW_EXTERN, TK_KW_FALSE, TK_KW_FN, TK_KW_FOR, TK_KW_IMPL, TK_KW_MACRORULES, TK_KW_MUT, TK_KW_REF, TK_KW_SELFTYPE, TK_KW_SELFVALUE, TK_KW_STATICLIFETIME, TK_KW_SUPER, TK_KW_TRUE, TK_KW_UNDERLINELIFETIME, TK_KW_UNION, TK_KW_UNSAFE, TK_LIFETIME_OR_LABEL, TK_LPAREN, TK_LSQUAREBRACKET, TK_LT, TK_MINUS, TK_NON_KEYWORD_IDENTIFIER, TK_NOT, TK_OR, TK_PATHSEP, TK_QUESTION, TK_RAW_BYTE_STRING_LITERAL, TK_RAW_IDENTIFIER, TK_RAW_STRING_LITERAL, TK_STAR, TK_STRING_LITERAL, TK_UNDERSCORE];
+global SYNC_35: List<i32> = [TK_AND, TK_ANDAND, TK_DOTDOTDOT, TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_DYN, TK_KW_EXTERN, TK_KW_FN, TK_KW_FOR, TK_KW_IMPL, TK_KW_MACRORULES, TK_KW_SELFTYPE, TK_KW_SELFVALUE, TK_KW_STATICLIFETIME, TK_KW_SUPER, TK_KW_UNDERLINELIFETIME, TK_KW_UNION, TK_KW_UNSAFE, TK_LIFETIME_OR_LABEL, TK_LPAREN, TK_LSQUAREBRACKET, TK_LT, TK_NON_KEYWORD_IDENTIFIER, TK_NOT, TK_PATHSEP, TK_QUESTION, TK_RAW_IDENTIFIER, TK_STAR, TK_UNDERSCORE];
 global SYNC_36: List<i32> = [TK_KW_STRUCT];
-global SYNC_37: List<i32> = [TK_KW_MACRORULES, TK_KW_PUB, TK_NON_KEYWORD_IDENTIFIER, TK_POUND, TK_RAW_IDENTIFIER, TK_RCURLYBRACE];
-global SYNC_38: List<i32> = [TK_AND, TK_ANDAND, TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_DYN, TK_KW_EXTERN, TK_KW_FN, TK_KW_FOR, TK_KW_IMPL, TK_KW_MACRORULES, TK_KW_PUB, TK_KW_SELFTYPE, TK_KW_SELFVALUE, TK_KW_STATICLIFETIME, TK_KW_SUPER, TK_KW_UNDERLINELIFETIME, TK_KW_UNSAFE, TK_LIFETIME_OR_LABEL, TK_LPAREN, TK_LSQUAREBRACKET, TK_LT, TK_NON_KEYWORD_IDENTIFIER, TK_NOT, TK_PATHSEP, TK_POUND, TK_QUESTION, TK_RAW_IDENTIFIER, TK_RPAREN, TK_STAR, TK_UNDERSCORE];
+global SYNC_37: List<i32> = [TK_KW_MACRORULES, TK_KW_PUB, TK_KW_UNION, TK_NON_KEYWORD_IDENTIFIER, TK_POUND, TK_RAW_IDENTIFIER, TK_RCURLYBRACE];
+global SYNC_38: List<i32> = [TK_AND, TK_ANDAND, TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_DYN, TK_KW_EXTERN, TK_KW_FN, TK_KW_FOR, TK_KW_IMPL, TK_KW_MACRORULES, TK_KW_PUB, TK_KW_SELFTYPE, TK_KW_SELFVALUE, TK_KW_STATICLIFETIME, TK_KW_SUPER, TK_KW_UNDERLINELIFETIME, TK_KW_UNION, TK_KW_UNSAFE, TK_LIFETIME_OR_LABEL, TK_LPAREN, TK_LSQUAREBRACKET, TK_LT, TK_NON_KEYWORD_IDENTIFIER, TK_NOT, TK_PATHSEP, TK_POUND, TK_QUESTION, TK_RAW_IDENTIFIER, TK_RPAREN, TK_STAR, TK_UNDERSCORE];
 global SYNC_39: List<i32> = [TK_KW_WHERE, TK_SEMI];
-global SYNC_40: List<i32> = [TK_KW_MACRORULES, TK_KW_PUB, TK_NON_KEYWORD_IDENTIFIER, TK_POUND, TK_RAW_IDENTIFIER];
-global SYNC_41: List<i32> = [TK_AND, TK_ANDAND, TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_DYN, TK_KW_EXTERN, TK_KW_FN, TK_KW_FOR, TK_KW_IMPL, TK_KW_MACRORULES, TK_KW_PUB, TK_KW_SELFTYPE, TK_KW_SELFVALUE, TK_KW_STATICLIFETIME, TK_KW_SUPER, TK_KW_UNDERLINELIFETIME, TK_KW_UNSAFE, TK_LIFETIME_OR_LABEL, TK_LPAREN, TK_LSQUAREBRACKET, TK_LT, TK_NON_KEYWORD_IDENTIFIER, TK_NOT, TK_PATHSEP, TK_POUND, TK_QUESTION, TK_RAW_IDENTIFIER, TK_STAR, TK_UNDERSCORE];
-global SYNC_42: List<i32> = [TK_AND, TK_ANDAND, TK_BYTE_LITERAL, TK_BYTE_STRING_LITERAL, TK_CHAR_LITERAL, TK_DOTDOT, TK_DOTDOTEQ, TK_FLOAT_LITERAL, TK_INTEGER_LITERAL, TK_KW_ASYNC, TK_KW_BREAK, TK_KW_CONTINUE, TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_FALSE, TK_KW_FOR, TK_KW_IF, TK_KW_LOOP, TK_KW_MACRORULES, TK_KW_MATCH, TK_KW_MOVE, TK_KW_RETURN, TK_KW_SELFTYPE, TK_KW_SELFVALUE, TK_KW_SUPER, TK_KW_TRUE, TK_KW_UNSAFE, TK_KW_WHILE, TK_LCURLYBRACE, TK_LIFETIME_OR_LABEL, TK_LPAREN, TK_LSQUAREBRACKET, TK_LT, TK_MINUS, TK_NON_KEYWORD_IDENTIFIER, TK_NOT, TK_OR, TK_OROR, TK_PATHSEP, TK_POUND, TK_RAW_BYTE_STRING_LITERAL, TK_RAW_IDENTIFIER, TK_RAW_STRING_LITERAL, TK_STAR, TK_STRING_LITERAL];
-global SYNC_43: List<i32> = [TK_KW_MACRORULES, TK_KW_MUT, TK_NON_KEYWORD_IDENTIFIER, TK_RAW_IDENTIFIER];
-global SYNC_44: List<i32> = [TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_FOR, TK_KW_MACRORULES, TK_KW_SELFTYPE, TK_KW_SELFVALUE, TK_KW_STATICLIFETIME, TK_KW_SUPER, TK_KW_UNDERLINELIFETIME, TK_LIFETIME_OR_LABEL, TK_LPAREN, TK_NON_KEYWORD_IDENTIFIER, TK_PATHSEP, TK_QUESTION, TK_RAW_IDENTIFIER];
-global SYNC_45: List<i32> = [TK_KW_ASYNC, TK_KW_CONST, TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_EXTERN, TK_KW_FN, TK_KW_MACRORULES, TK_KW_PUB, TK_KW_SELFVALUE, TK_KW_SUPER, TK_KW_TYPE, TK_KW_UNSAFE, TK_NON_KEYWORD_IDENTIFIER, TK_PATHSEP, TK_POUND, TK_RAW_IDENTIFIER, TK_RCURLYBRACE];
+global SYNC_40: List<i32> = [TK_KW_MACRORULES, TK_KW_PUB, TK_KW_UNION, TK_NON_KEYWORD_IDENTIFIER, TK_POUND, TK_RAW_IDENTIFIER];
+global SYNC_41: List<i32> = [TK_AND, TK_ANDAND, TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_DYN, TK_KW_EXTERN, TK_KW_FN, TK_KW_FOR, TK_KW_IMPL, TK_KW_MACRORULES, TK_KW_PUB, TK_KW_SELFTYPE, TK_KW_SELFVALUE, TK_KW_STATICLIFETIME, TK_KW_SUPER, TK_KW_UNDERLINELIFETIME, TK_KW_UNION, TK_KW_UNSAFE, TK_LIFETIME_OR_LABEL, TK_LPAREN, TK_LSQUAREBRACKET, TK_LT, TK_NON_KEYWORD_IDENTIFIER, TK_NOT, TK_PATHSEP, TK_POUND, TK_QUESTION, TK_RAW_IDENTIFIER, TK_STAR, TK_UNDERSCORE];
+global SYNC_42: List<i32> = [TK_AND, TK_ANDAND, TK_BYTE_LITERAL, TK_BYTE_STRING_LITERAL, TK_CHAR_LITERAL, TK_DOTDOT, TK_DOTDOTEQ, TK_FLOAT_LITERAL, TK_INTEGER_LITERAL, TK_KW_ASYNC, TK_KW_BREAK, TK_KW_CONTINUE, TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_FALSE, TK_KW_FOR, TK_KW_IF, TK_KW_LOOP, TK_KW_MACRORULES, TK_KW_MATCH, TK_KW_MOVE, TK_KW_RETURN, TK_KW_SELFTYPE, TK_KW_SELFVALUE, TK_KW_SUPER, TK_KW_TRUE, TK_KW_UNION, TK_KW_UNSAFE, TK_KW_WHILE, TK_LCURLYBRACE, TK_LIFETIME_OR_LABEL, TK_LPAREN, TK_LSQUAREBRACKET, TK_LT, TK_MINUS, TK_NON_KEYWORD_IDENTIFIER, TK_NOT, TK_OR, TK_OROR, TK_PATHSEP, TK_POUND, TK_RAW_BYTE_STRING_LITERAL, TK_RAW_IDENTIFIER, TK_RAW_STRING_LITERAL, TK_STAR, TK_STRING_LITERAL];
+global SYNC_43: List<i32> = [TK_KW_MACRORULES, TK_KW_MUT, TK_KW_UNION, TK_NON_KEYWORD_IDENTIFIER, TK_RAW_IDENTIFIER];
+global SYNC_44: List<i32> = [TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_FOR, TK_KW_MACRORULES, TK_KW_SELFTYPE, TK_KW_SELFVALUE, TK_KW_STATICLIFETIME, TK_KW_SUPER, TK_KW_UNDERLINELIFETIME, TK_KW_UNION, TK_LIFETIME_OR_LABEL, TK_LPAREN, TK_NON_KEYWORD_IDENTIFIER, TK_PATHSEP, TK_QUESTION, TK_RAW_IDENTIFIER];
+global SYNC_45: List<i32> = [TK_KW_ASYNC, TK_KW_CONST, TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_EXTERN, TK_KW_FN, TK_KW_MACRORULES, TK_KW_PUB, TK_KW_SELFVALUE, TK_KW_SUPER, TK_KW_TYPE, TK_KW_UNION, TK_KW_UNSAFE, TK_NON_KEYWORD_IDENTIFIER, TK_PATHSEP, TK_POUND, TK_RAW_IDENTIFIER, TK_RCURLYBRACE];
 global SYNC_46: List<i32> = [TK_KW_IMPL, TK_KW_UNSAFE];
-global SYNC_47: List<i32> = [TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_MACRORULES, TK_KW_SELFTYPE, TK_KW_SELFVALUE, TK_KW_SUPER, TK_LT, TK_NON_KEYWORD_IDENTIFIER, TK_NOT, TK_PATHSEP, TK_RAW_IDENTIFIER];
+global SYNC_47: List<i32> = [TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_MACRORULES, TK_KW_SELFTYPE, TK_KW_SELFVALUE, TK_KW_SUPER, TK_KW_UNION, TK_LT, TK_NON_KEYWORD_IDENTIFIER, TK_NOT, TK_PATHSEP, TK_RAW_IDENTIFIER];
 global SYNC_48: List<i32> = [TK_LCURLYBRACE, TK_RAW_STRING_LITERAL, TK_STRING_LITERAL];
-global SYNC_49: List<i32> = [TK_KW_ASYNC, TK_KW_CONST, TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_EXTERN, TK_KW_FN, TK_KW_MACRORULES, TK_KW_PUB, TK_KW_SELFVALUE, TK_KW_STATIC, TK_KW_SUPER, TK_KW_UNSAFE, TK_NON_KEYWORD_IDENTIFIER, TK_PATHSEP, TK_POUND, TK_RAW_IDENTIFIER, TK_RCURLYBRACE];
+global SYNC_49: List<i32> = [TK_KW_ASYNC, TK_KW_CONST, TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_EXTERN, TK_KW_FN, TK_KW_MACRORULES, TK_KW_PUB, TK_KW_SELFVALUE, TK_KW_STATIC, TK_KW_SUPER, TK_KW_UNION, TK_KW_UNSAFE, TK_NON_KEYWORD_IDENTIFIER, TK_PATHSEP, TK_POUND, TK_RAW_IDENTIFIER, TK_RCURLYBRACE];
 global SYNC_50: List<i32> = [TK_KW_ASYNC, TK_KW_CONST, TK_KW_EXTERN, TK_KW_FN, TK_KW_STATIC, TK_KW_UNSAFE];
-global SYNC_51: List<i32> = [TK_KW_ASYNC, TK_KW_CONST, TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_EXTERN, TK_KW_FN, TK_KW_MACRORULES, TK_KW_PUB, TK_KW_SELFVALUE, TK_KW_STATIC, TK_KW_SUPER, TK_KW_UNSAFE, TK_NON_KEYWORD_IDENTIFIER, TK_PATHSEP, TK_RAW_IDENTIFIER];
-global SYNC_52: List<i32> = [TK_GT, TK_KW_CONST, TK_KW_MACRORULES, TK_LIFETIME_OR_LABEL, TK_NON_KEYWORD_IDENTIFIER, TK_POUND, TK_RAW_IDENTIFIER];
-global SYNC_53: List<i32> = [TK_KW_CONST, TK_KW_MACRORULES, TK_LIFETIME_OR_LABEL, TK_NON_KEYWORD_IDENTIFIER, TK_POUND, TK_RAW_IDENTIFIER];
+global SYNC_51: List<i32> = [TK_KW_ASYNC, TK_KW_CONST, TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_EXTERN, TK_KW_FN, TK_KW_MACRORULES, TK_KW_PUB, TK_KW_SELFVALUE, TK_KW_STATIC, TK_KW_SUPER, TK_KW_UNION, TK_KW_UNSAFE, TK_NON_KEYWORD_IDENTIFIER, TK_PATHSEP, TK_RAW_IDENTIFIER];
+global SYNC_52: List<i32> = [TK_GT, TK_KW_CONST, TK_KW_MACRORULES, TK_KW_UNION, TK_LIFETIME_OR_LABEL, TK_NON_KEYWORD_IDENTIFIER, TK_POUND, TK_RAW_IDENTIFIER];
+global SYNC_53: List<i32> = [TK_KW_CONST, TK_KW_MACRORULES, TK_KW_UNION, TK_LIFETIME_OR_LABEL, TK_NON_KEYWORD_IDENTIFIER, TK_POUND, TK_RAW_IDENTIFIER];
 global SYNC_54: List<i32> = [TK_LT];
 global SYNC_55: List<i32> = [TK_KW_ASYNC, TK_KW_CONST, TK_KW_EXTERN, TK_KW_FN, TK_KW_TYPE, TK_KW_UNSAFE];
-global SYNC_56: List<i32> = [TK_KW_ASYNC, TK_KW_CONST, TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_EXTERN, TK_KW_FN, TK_KW_MACRORULES, TK_KW_PUB, TK_KW_SELFVALUE, TK_KW_SUPER, TK_KW_TYPE, TK_KW_UNSAFE, TK_NON_KEYWORD_IDENTIFIER, TK_PATHSEP, TK_RAW_IDENTIFIER];
+global SYNC_56: List<i32> = [TK_KW_ASYNC, TK_KW_CONST, TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_EXTERN, TK_KW_FN, TK_KW_MACRORULES, TK_KW_PUB, TK_KW_SELFVALUE, TK_KW_SUPER, TK_KW_TYPE, TK_KW_UNION, TK_KW_UNSAFE, TK_NON_KEYWORD_IDENTIFIER, TK_PATHSEP, TK_RAW_IDENTIFIER];
 global SYNC_57: List<i32> = [TK_BYTE_LITERAL, TK_BYTE_STRING_LITERAL, TK_CHAR_LITERAL, TK_FLOAT_LITERAL, TK_INTEGER_LITERAL, TK_KW_FALSE, TK_KW_TRUE, TK_RAW_BYTE_STRING_LITERAL, TK_RAW_STRING_LITERAL, TK_STRING_LITERAL];
 global SYNC_58: List<i32> = [TK_EQ, TK_LCURLYBRACE, TK_LPAREN, TK_LSQUAREBRACKET];
 global SYNC_59: List<i32> = [TK_AND, TK_ANDAND, TK_BYTE_LITERAL, TK_BYTE_STRING_LITERAL, TK_CHAR_LITERAL, TK_DOTDOT, TK_DOTDOTEQ, TK_FLOAT_LITERAL, TK_INTEGER_LITERAL, TK_KW_ASYNC, TK_KW_BREAK, TK_KW_CONST, TK_KW_CONTINUE, TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_ENUM, TK_KW_EXTERN, TK_KW_FALSE, TK_KW_FN, TK_KW_FOR, TK_KW_IF, TK_KW_IMPL, TK_KW_LET, TK_KW_LOOP, TK_KW_MACRORULES, TK_KW_MATCH, TK_KW_MOD, TK_KW_MOVE, TK_KW_PUB, TK_KW_RETURN, TK_KW_SELFTYPE, TK_KW_SELFVALUE, TK_KW_STATIC, TK_KW_STRUCT, TK_KW_SUPER, TK_KW_TRAIT, TK_KW_TRUE, TK_KW_TYPE, TK_KW_UNION, TK_KW_UNSAFE, TK_KW_USE, TK_KW_WHILE, TK_LCURLYBRACE, TK_LIFETIME_OR_LABEL, TK_LPAREN, TK_LSQUAREBRACKET, TK_LT, TK_MINUS, TK_NON_KEYWORD_IDENTIFIER, TK_NOT, TK_OR, TK_OROR, TK_PATHSEP, TK_POUND, TK_RAW_BYTE_STRING_LITERAL, TK_RAW_IDENTIFIER, TK_RAW_STRING_LITERAL, TK_SEMI, TK_STAR, TK_STRING_LITERAL];
-global SYNC_60: List<i32> = [TK_AND, TK_ANDAND, TK_BYTE_LITERAL, TK_BYTE_STRING_LITERAL, TK_CHAR_LITERAL, TK_DOTDOT, TK_FLOAT_LITERAL, TK_INTEGER_LITERAL, TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_FALSE, TK_KW_MACRORULES, TK_KW_MUT, TK_KW_REF, TK_KW_SELFTYPE, TK_KW_SELFVALUE, TK_KW_SUPER, TK_KW_TRUE, TK_LPAREN, TK_LSQUAREBRACKET, TK_LT, TK_MINUS, TK_NON_KEYWORD_IDENTIFIER, TK_PATHSEP, TK_RAW_BYTE_STRING_LITERAL, TK_RAW_IDENTIFIER, TK_RAW_STRING_LITERAL, TK_STRING_LITERAL, TK_UNDERSCORE];
-global SYNC_61: List<i32> = [TK_AND, TK_ANDAND, TK_BYTE_LITERAL, TK_BYTE_STRING_LITERAL, TK_CHAR_LITERAL, TK_DOTDOT, TK_DOTDOTEQ, TK_FLOAT_LITERAL, TK_INTEGER_LITERAL, TK_KW_ASYNC, TK_KW_BREAK, TK_KW_CONTINUE, TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_FALSE, TK_KW_FOR, TK_KW_IF, TK_KW_LOOP, TK_KW_MACRORULES, TK_KW_MATCH, TK_KW_MOVE, TK_KW_RETURN, TK_KW_SELFTYPE, TK_KW_SELFVALUE, TK_KW_SUPER, TK_KW_TRUE, TK_KW_UNSAFE, TK_KW_WHILE, TK_LCURLYBRACE, TK_LIFETIME_OR_LABEL, TK_LPAREN, TK_LSQUAREBRACKET, TK_LT, TK_MINUS, TK_NON_KEYWORD_IDENTIFIER, TK_NOT, TK_OR, TK_OROR, TK_PATHSEP, TK_POUND, TK_RAW_BYTE_STRING_LITERAL, TK_RAW_IDENTIFIER, TK_RAW_STRING_LITERAL, TK_RPAREN, TK_STAR, TK_STRING_LITERAL];
+global SYNC_60: List<i32> = [TK_AND, TK_ANDAND, TK_BYTE_LITERAL, TK_BYTE_STRING_LITERAL, TK_CHAR_LITERAL, TK_DOTDOT, TK_FLOAT_LITERAL, TK_INTEGER_LITERAL, TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_FALSE, TK_KW_MACRORULES, TK_KW_MUT, TK_KW_REF, TK_KW_SELFTYPE, TK_KW_SELFVALUE, TK_KW_SUPER, TK_KW_TRUE, TK_KW_UNION, TK_LPAREN, TK_LSQUAREBRACKET, TK_LT, TK_MINUS, TK_NON_KEYWORD_IDENTIFIER, TK_PATHSEP, TK_RAW_BYTE_STRING_LITERAL, TK_RAW_IDENTIFIER, TK_RAW_STRING_LITERAL, TK_STRING_LITERAL, TK_UNDERSCORE];
+global SYNC_61: List<i32> = [TK_AND, TK_ANDAND, TK_BYTE_LITERAL, TK_BYTE_STRING_LITERAL, TK_CHAR_LITERAL, TK_DOTDOT, TK_DOTDOTEQ, TK_FLOAT_LITERAL, TK_INTEGER_LITERAL, TK_KW_ASYNC, TK_KW_BREAK, TK_KW_CONTINUE, TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_FALSE, TK_KW_FOR, TK_KW_IF, TK_KW_LOOP, TK_KW_MACRORULES, TK_KW_MATCH, TK_KW_MOVE, TK_KW_RETURN, TK_KW_SELFTYPE, TK_KW_SELFVALUE, TK_KW_SUPER, TK_KW_TRUE, TK_KW_UNION, TK_KW_UNSAFE, TK_KW_WHILE, TK_LCURLYBRACE, TK_LIFETIME_OR_LABEL, TK_LPAREN, TK_LSQUAREBRACKET, TK_LT, TK_MINUS, TK_NON_KEYWORD_IDENTIFIER, TK_NOT, TK_OR, TK_OROR, TK_PATHSEP, TK_POUND, TK_RAW_BYTE_STRING_LITERAL, TK_RAW_IDENTIFIER, TK_RAW_STRING_LITERAL, TK_RPAREN, TK_STAR, TK_STRING_LITERAL];
 global SYNC_62: List<i32> = [TK_AND, TK_ANDAND];
 global SYNC_63: List<i32> = [TK_MINUS, TK_NOT];
-global SYNC_64: List<i32> = [TK_AND, TK_ANDAND, TK_BYTE_LITERAL, TK_BYTE_STRING_LITERAL, TK_CHAR_LITERAL, TK_DOTDOT, TK_DOTDOTEQ, TK_FLOAT_LITERAL, TK_INTEGER_LITERAL, TK_KW_ASYNC, TK_KW_BREAK, TK_KW_CONTINUE, TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_FALSE, TK_KW_FOR, TK_KW_IF, TK_KW_LOOP, TK_KW_MACRORULES, TK_KW_MATCH, TK_KW_MOVE, TK_KW_RETURN, TK_KW_SELFTYPE, TK_KW_SELFVALUE, TK_KW_SUPER, TK_KW_TRUE, TK_KW_UNSAFE, TK_KW_WHILE, TK_LCURLYBRACE, TK_LIFETIME_OR_LABEL, TK_LPAREN, TK_LSQUAREBRACKET, TK_LT, TK_MINUS, TK_NON_KEYWORD_IDENTIFIER, TK_NOT, TK_OR, TK_OROR, TK_PATHSEP, TK_POUND, TK_RAW_BYTE_STRING_LITERAL, TK_RAW_IDENTIFIER, TK_RAW_STRING_LITERAL, TK_RSQUAREBRACKET, TK_STAR, TK_STRING_LITERAL];
+global SYNC_64: List<i32> = [TK_AND, TK_ANDAND, TK_BYTE_LITERAL, TK_BYTE_STRING_LITERAL, TK_CHAR_LITERAL, TK_DOTDOT, TK_DOTDOTEQ, TK_FLOAT_LITERAL, TK_INTEGER_LITERAL, TK_KW_ASYNC, TK_KW_BREAK, TK_KW_CONTINUE, TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_FALSE, TK_KW_FOR, TK_KW_IF, TK_KW_LOOP, TK_KW_MACRORULES, TK_KW_MATCH, TK_KW_MOVE, TK_KW_RETURN, TK_KW_SELFTYPE, TK_KW_SELFVALUE, TK_KW_SUPER, TK_KW_TRUE, TK_KW_UNION, TK_KW_UNSAFE, TK_KW_WHILE, TK_LCURLYBRACE, TK_LIFETIME_OR_LABEL, TK_LPAREN, TK_LSQUAREBRACKET, TK_LT, TK_MINUS, TK_NON_KEYWORD_IDENTIFIER, TK_NOT, TK_OR, TK_OROR, TK_PATHSEP, TK_POUND, TK_RAW_BYTE_STRING_LITERAL, TK_RAW_IDENTIFIER, TK_RAW_STRING_LITERAL, TK_RSQUAREBRACKET, TK_STAR, TK_STRING_LITERAL];
 global SYNC_65: List<i32> = [TK_PERCENT, TK_SLASH, TK_STAR];
 global SYNC_66: List<i32> = [TK_MINUS, TK_PLUS];
 global SYNC_67: List<i32> = [TK_GT, TK_LT];
 global SYNC_68: List<i32> = [TK_EQEQ, TK_GE, TK_GT, TK_LE, TK_LT, TK_NE];
 global SYNC_69: List<i32> = [TK_ANDEQ, TK_CARETEQ, TK_MINUSEQ, TK_OREQ, TK_PERCENTEQ, TK_PLUSEQ, TK_SHLEQ, TK_SHREQ, TK_SLASHEQ, TK_STAREQ];
 global SYNC_70: List<i32> = [TK_KW_ASYNC, TK_KW_FOR, TK_KW_IF, TK_KW_LOOP, TK_KW_MATCH, TK_KW_UNSAFE, TK_KW_WHILE, TK_LCURLYBRACE, TK_LIFETIME_OR_LABEL, TK_POUND];
-global SYNC_71: List<i32> = [TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_MACRORULES, TK_KW_SELFTYPE, TK_KW_SELFVALUE, TK_KW_SUPER, TK_LT, TK_NON_KEYWORD_IDENTIFIER, TK_PATHSEP, TK_RAW_IDENTIFIER];
+global SYNC_71: List<i32> = [TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_MACRORULES, TK_KW_SELFTYPE, TK_KW_SELFVALUE, TK_KW_SUPER, TK_KW_UNION, TK_LT, TK_NON_KEYWORD_IDENTIFIER, TK_PATHSEP, TK_RAW_IDENTIFIER];
 global SYNC_72: List<i32> = [TK_AND, TK_ANDAND, TK_BYTE_LITERAL, TK_BYTE_STRING_LITERAL, TK_CHAR_LITERAL, TK_DOTDOT, TK_DOTDOTEQ, TK_FLOAT_LITERAL, TK_INTEGER_LITERAL, TK_KW_ASYNC, TK_KW_BREAK, TK_KW_CONST, TK_KW_CONTINUE, TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_ENUM, TK_KW_EXTERN, TK_KW_FALSE, TK_KW_FN, TK_KW_FOR, TK_KW_IF, TK_KW_IMPL, TK_KW_LET, TK_KW_LOOP, TK_KW_MACRORULES, TK_KW_MATCH, TK_KW_MOD, TK_KW_MOVE, TK_KW_PUB, TK_KW_RETURN, TK_KW_SELFTYPE, TK_KW_SELFVALUE, TK_KW_STATIC, TK_KW_STRUCT, TK_KW_SUPER, TK_KW_TRAIT, TK_KW_TRUE, TK_KW_TYPE, TK_KW_UNION, TK_KW_UNSAFE, TK_KW_USE, TK_KW_WHILE, TK_LCURLYBRACE, TK_LIFETIME_OR_LABEL, TK_LPAREN, TK_LSQUAREBRACKET, TK_LT, TK_MINUS, TK_NON_KEYWORD_IDENTIFIER, TK_NOT, TK_OR, TK_OROR, TK_PATHSEP, TK_POUND, TK_RAW_BYTE_STRING_LITERAL, TK_RAW_IDENTIFIER, TK_RAW_STRING_LITERAL, TK_RCURLYBRACE, TK_SEMI, TK_STAR, TK_STRING_LITERAL];
 global SYNC_73: List<i32> = [TK_KW_MOVE, TK_LCURLYBRACE];
-global SYNC_74: List<i32> = [TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_MACRORULES, TK_KW_SELFTYPE, TK_KW_SELFVALUE, TK_KW_SUPER, TK_NON_KEYWORD_IDENTIFIER, TK_PATHSEP, TK_RAW_IDENTIFIER];
-global SYNC_75: List<i32> = [TK_DOTDOT, TK_INTEGER_LITERAL, TK_KW_MACRORULES, TK_NON_KEYWORD_IDENTIFIER, TK_POUND, TK_RAW_IDENTIFIER, TK_RCURLYBRACE];
-global SYNC_76: List<i32> = [TK_INTEGER_LITERAL, TK_KW_MACRORULES, TK_NON_KEYWORD_IDENTIFIER, TK_POUND, TK_RAW_IDENTIFIER];
+global SYNC_74: List<i32> = [TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_MACRORULES, TK_KW_SELFTYPE, TK_KW_SELFVALUE, TK_KW_SUPER, TK_KW_UNION, TK_NON_KEYWORD_IDENTIFIER, TK_PATHSEP, TK_RAW_IDENTIFIER];
+global SYNC_75: List<i32> = [TK_DOTDOT, TK_INTEGER_LITERAL, TK_KW_MACRORULES, TK_KW_UNION, TK_NON_KEYWORD_IDENTIFIER, TK_POUND, TK_RAW_IDENTIFIER, TK_RCURLYBRACE];
+global SYNC_76: List<i32> = [TK_INTEGER_LITERAL, TK_KW_MACRORULES, TK_KW_UNION, TK_NON_KEYWORD_IDENTIFIER, TK_POUND, TK_RAW_IDENTIFIER];
 global SYNC_77: List<i32> = [TK_DOTDOT];
-global SYNC_78: List<i32> = [TK_INTEGER_LITERAL, TK_KW_MACRORULES, TK_NON_KEYWORD_IDENTIFIER, TK_RAW_IDENTIFIER];
-global SYNC_79: List<i32> = [TK_INTEGER_LITERAL, TK_KW_MACRORULES, TK_NON_KEYWORD_IDENTIFIER, TK_RAW_IDENTIFIER, TK_RCURLYBRACE];
-global SYNC_80: List<i32> = [TK_AND, TK_ANDAND, TK_BYTE_LITERAL, TK_BYTE_STRING_LITERAL, TK_CHAR_LITERAL, TK_DOTDOT, TK_FLOAT_LITERAL, TK_INTEGER_LITERAL, TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_FALSE, TK_KW_MACRORULES, TK_KW_MUT, TK_KW_REF, TK_KW_SELFTYPE, TK_KW_SELFVALUE, TK_KW_SUPER, TK_KW_TRUE, TK_LPAREN, TK_LSQUAREBRACKET, TK_LT, TK_MINUS, TK_NON_KEYWORD_IDENTIFIER, TK_OR, TK_PATHSEP, TK_POUND, TK_RAW_BYTE_STRING_LITERAL, TK_RAW_IDENTIFIER, TK_RAW_STRING_LITERAL, TK_STRING_LITERAL, TK_UNDERSCORE];
+global SYNC_78: List<i32> = [TK_INTEGER_LITERAL, TK_KW_MACRORULES, TK_KW_UNION, TK_NON_KEYWORD_IDENTIFIER, TK_RAW_IDENTIFIER];
+global SYNC_79: List<i32> = [TK_INTEGER_LITERAL, TK_KW_MACRORULES, TK_KW_UNION, TK_NON_KEYWORD_IDENTIFIER, TK_RAW_IDENTIFIER, TK_RCURLYBRACE];
+global SYNC_80: List<i32> = [TK_AND, TK_ANDAND, TK_BYTE_LITERAL, TK_BYTE_STRING_LITERAL, TK_CHAR_LITERAL, TK_DOTDOT, TK_FLOAT_LITERAL, TK_INTEGER_LITERAL, TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_FALSE, TK_KW_MACRORULES, TK_KW_MUT, TK_KW_REF, TK_KW_SELFTYPE, TK_KW_SELFVALUE, TK_KW_SUPER, TK_KW_TRUE, TK_KW_UNION, TK_LPAREN, TK_LSQUAREBRACKET, TK_LT, TK_MINUS, TK_NON_KEYWORD_IDENTIFIER, TK_OR, TK_PATHSEP, TK_POUND, TK_RAW_BYTE_STRING_LITERAL, TK_RAW_IDENTIFIER, TK_RAW_STRING_LITERAL, TK_STRING_LITERAL, TK_UNDERSCORE];
 global SYNC_81: List<i32> = [TK_OR, TK_OROR];
-global SYNC_82: List<i32> = [TK_AND, TK_ANDAND, TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_DYN, TK_KW_EXTERN, TK_KW_FN, TK_KW_FOR, TK_KW_IMPL, TK_KW_MACRORULES, TK_KW_SELFTYPE, TK_KW_SELFVALUE, TK_KW_SUPER, TK_KW_UNSAFE, TK_LPAREN, TK_LSQUAREBRACKET, TK_LT, TK_NON_KEYWORD_IDENTIFIER, TK_NOT, TK_PATHSEP, TK_QUESTION, TK_RAW_IDENTIFIER, TK_STAR, TK_UNDERSCORE];
-global SYNC_83: List<i32> = [TK_AND, TK_ANDAND, TK_BYTE_LITERAL, TK_BYTE_STRING_LITERAL, TK_CHAR_LITERAL, TK_DOTDOT, TK_DOTDOTEQ, TK_FLOAT_LITERAL, TK_INTEGER_LITERAL, TK_KW_ASYNC, TK_KW_BREAK, TK_KW_CONTINUE, TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_FALSE, TK_KW_FOR, TK_KW_IF, TK_KW_LOOP, TK_KW_MACRORULES, TK_KW_MATCH, TK_KW_MOVE, TK_KW_RETURN, TK_KW_SELFTYPE, TK_KW_SELFVALUE, TK_KW_SUPER, TK_KW_TRUE, TK_KW_UNSAFE, TK_KW_WHILE, TK_LCURLYBRACE, TK_LIFETIME_OR_LABEL, TK_LPAREN, TK_LSQUAREBRACKET, TK_LT, TK_MINUS, TK_NON_KEYWORD_IDENTIFIER, TK_NOT, TK_OR, TK_OROR, TK_PATHSEP, TK_POUND, TK_RARROW, TK_RAW_BYTE_STRING_LITERAL, TK_RAW_IDENTIFIER, TK_RAW_STRING_LITERAL, TK_STAR, TK_STRING_LITERAL];
+global SYNC_82: List<i32> = [TK_AND, TK_ANDAND, TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_DYN, TK_KW_EXTERN, TK_KW_FN, TK_KW_FOR, TK_KW_IMPL, TK_KW_MACRORULES, TK_KW_SELFTYPE, TK_KW_SELFVALUE, TK_KW_SUPER, TK_KW_UNION, TK_KW_UNSAFE, TK_LPAREN, TK_LSQUAREBRACKET, TK_LT, TK_NON_KEYWORD_IDENTIFIER, TK_NOT, TK_PATHSEP, TK_QUESTION, TK_RAW_IDENTIFIER, TK_STAR, TK_UNDERSCORE];
+global SYNC_83: List<i32> = [TK_AND, TK_ANDAND, TK_BYTE_LITERAL, TK_BYTE_STRING_LITERAL, TK_CHAR_LITERAL, TK_DOTDOT, TK_DOTDOTEQ, TK_FLOAT_LITERAL, TK_INTEGER_LITERAL, TK_KW_ASYNC, TK_KW_BREAK, TK_KW_CONTINUE, TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_FALSE, TK_KW_FOR, TK_KW_IF, TK_KW_LOOP, TK_KW_MACRORULES, TK_KW_MATCH, TK_KW_MOVE, TK_KW_RETURN, TK_KW_SELFTYPE, TK_KW_SELFVALUE, TK_KW_SUPER, TK_KW_TRUE, TK_KW_UNION, TK_KW_UNSAFE, TK_KW_WHILE, TK_LCURLYBRACE, TK_LIFETIME_OR_LABEL, TK_LPAREN, TK_LSQUAREBRACKET, TK_LT, TK_MINUS, TK_NON_KEYWORD_IDENTIFIER, TK_NOT, TK_OR, TK_OROR, TK_PATHSEP, TK_POUND, TK_RARROW, TK_RAW_BYTE_STRING_LITERAL, TK_RAW_IDENTIFIER, TK_RAW_STRING_LITERAL, TK_STAR, TK_STRING_LITERAL];
 global SYNC_84: List<i32> = [TK_KW_FOR, TK_KW_LOOP, TK_KW_WHILE];
 global SYNC_85: List<i32> = [TK_KW_LET];
-global SYNC_86: List<i32> = [TK_AND, TK_ANDAND, TK_BYTE_LITERAL, TK_BYTE_STRING_LITERAL, TK_CHAR_LITERAL, TK_DOTDOT, TK_FLOAT_LITERAL, TK_INTEGER_LITERAL, TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_FALSE, TK_KW_MACRORULES, TK_KW_MUT, TK_KW_REF, TK_KW_SELFTYPE, TK_KW_SELFVALUE, TK_KW_SUPER, TK_KW_TRUE, TK_LPAREN, TK_LSQUAREBRACKET, TK_LT, TK_MINUS, TK_NON_KEYWORD_IDENTIFIER, TK_OR, TK_PATHSEP, TK_RAW_BYTE_STRING_LITERAL, TK_RAW_IDENTIFIER, TK_RAW_STRING_LITERAL, TK_STRING_LITERAL, TK_UNDERSCORE];
+global SYNC_86: List<i32> = [TK_AND, TK_ANDAND, TK_BYTE_LITERAL, TK_BYTE_STRING_LITERAL, TK_CHAR_LITERAL, TK_DOTDOT, TK_FLOAT_LITERAL, TK_INTEGER_LITERAL, TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_FALSE, TK_KW_MACRORULES, TK_KW_MUT, TK_KW_REF, TK_KW_SELFTYPE, TK_KW_SELFVALUE, TK_KW_SUPER, TK_KW_TRUE, TK_KW_UNION, TK_LPAREN, TK_LSQUAREBRACKET, TK_LT, TK_MINUS, TK_NON_KEYWORD_IDENTIFIER, TK_OR, TK_PATHSEP, TK_RAW_BYTE_STRING_LITERAL, TK_RAW_IDENTIFIER, TK_RAW_STRING_LITERAL, TK_STRING_LITERAL, TK_UNDERSCORE];
 global SYNC_87: List<i32> = [TK_KW_IF, TK_LCURLYBRACE];
-global SYNC_88: List<i32> = [TK_AND, TK_ANDAND, TK_BYTE_LITERAL, TK_BYTE_STRING_LITERAL, TK_CHAR_LITERAL, TK_DOTDOT, TK_FLOAT_LITERAL, TK_INTEGER_LITERAL, TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_FALSE, TK_KW_MACRORULES, TK_KW_MUT, TK_KW_REF, TK_KW_SELFTYPE, TK_KW_SELFVALUE, TK_KW_SUPER, TK_KW_TRUE, TK_LPAREN, TK_LSQUAREBRACKET, TK_LT, TK_MINUS, TK_NON_KEYWORD_IDENTIFIER, TK_OR, TK_PATHSEP, TK_POUND, TK_RAW_BYTE_STRING_LITERAL, TK_RAW_IDENTIFIER, TK_RAW_STRING_LITERAL, TK_RCURLYBRACE, TK_STRING_LITERAL, TK_UNDERSCORE];
+global SYNC_88: List<i32> = [TK_AND, TK_ANDAND, TK_BYTE_LITERAL, TK_BYTE_STRING_LITERAL, TK_CHAR_LITERAL, TK_DOTDOT, TK_FLOAT_LITERAL, TK_INTEGER_LITERAL, TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_FALSE, TK_KW_MACRORULES, TK_KW_MUT, TK_KW_REF, TK_KW_SELFTYPE, TK_KW_SELFVALUE, TK_KW_SUPER, TK_KW_TRUE, TK_KW_UNION, TK_LPAREN, TK_LSQUAREBRACKET, TK_LT, TK_MINUS, TK_NON_KEYWORD_IDENTIFIER, TK_OR, TK_PATHSEP, TK_POUND, TK_RAW_BYTE_STRING_LITERAL, TK_RAW_IDENTIFIER, TK_RAW_STRING_LITERAL, TK_RCURLYBRACE, TK_STRING_LITERAL, TK_UNDERSCORE];
 global SYNC_89: List<i32> = [TK_BYTE_LITERAL, TK_BYTE_STRING_LITERAL, TK_CHAR_LITERAL, TK_FLOAT_LITERAL, TK_INTEGER_LITERAL, TK_KW_FALSE, TK_KW_TRUE, TK_MINUS, TK_RAW_BYTE_STRING_LITERAL, TK_RAW_STRING_LITERAL, TK_STRING_LITERAL];
-global SYNC_90: List<i32> = [TK_BYTE_LITERAL, TK_CHAR_LITERAL, TK_FLOAT_LITERAL, TK_INTEGER_LITERAL, TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_MACRORULES, TK_KW_SELFTYPE, TK_KW_SELFVALUE, TK_KW_SUPER, TK_LT, TK_MINUS, TK_NON_KEYWORD_IDENTIFIER, TK_PATHSEP, TK_RAW_IDENTIFIER];
-global SYNC_91: List<i32> = [TK_DOTDOT, TK_INTEGER_LITERAL, TK_KW_MACRORULES, TK_KW_MUT, TK_KW_REF, TK_NON_KEYWORD_IDENTIFIER, TK_POUND, TK_RAW_IDENTIFIER, TK_RCURLYBRACE];
+global SYNC_90: List<i32> = [TK_BYTE_LITERAL, TK_CHAR_LITERAL, TK_FLOAT_LITERAL, TK_INTEGER_LITERAL, TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_MACRORULES, TK_KW_SELFTYPE, TK_KW_SELFVALUE, TK_KW_SUPER, TK_KW_UNION, TK_LT, TK_MINUS, TK_NON_KEYWORD_IDENTIFIER, TK_PATHSEP, TK_RAW_IDENTIFIER];
+global SYNC_91: List<i32> = [TK_DOTDOT, TK_INTEGER_LITERAL, TK_KW_MACRORULES, TK_KW_MUT, TK_KW_REF, TK_KW_UNION, TK_NON_KEYWORD_IDENTIFIER, TK_POUND, TK_RAW_IDENTIFIER, TK_RCURLYBRACE];
 global SYNC_92: List<i32> = [TK_DOTDOT, TK_POUND];
-global SYNC_93: List<i32> = [TK_DOTDOT, TK_INTEGER_LITERAL, TK_KW_MACRORULES, TK_KW_MUT, TK_KW_REF, TK_NON_KEYWORD_IDENTIFIER, TK_POUND, TK_RAW_IDENTIFIER];
-global SYNC_94: List<i32> = [TK_INTEGER_LITERAL, TK_KW_MACRORULES, TK_KW_MUT, TK_KW_REF, TK_NON_KEYWORD_IDENTIFIER, TK_POUND, TK_RAW_IDENTIFIER];
-global SYNC_95: List<i32> = [TK_INTEGER_LITERAL, TK_KW_MACRORULES, TK_KW_MUT, TK_KW_REF, TK_NON_KEYWORD_IDENTIFIER, TK_RAW_IDENTIFIER];
-global SYNC_96: List<i32> = [TK_AND, TK_ANDAND, TK_BYTE_LITERAL, TK_BYTE_STRING_LITERAL, TK_CHAR_LITERAL, TK_DOTDOT, TK_FLOAT_LITERAL, TK_INTEGER_LITERAL, TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_FALSE, TK_KW_MACRORULES, TK_KW_MUT, TK_KW_REF, TK_KW_SELFTYPE, TK_KW_SELFVALUE, TK_KW_SUPER, TK_KW_TRUE, TK_LPAREN, TK_LSQUAREBRACKET, TK_LT, TK_MINUS, TK_NON_KEYWORD_IDENTIFIER, TK_OR, TK_PATHSEP, TK_RAW_BYTE_STRING_LITERAL, TK_RAW_IDENTIFIER, TK_RAW_STRING_LITERAL, TK_RPAREN, TK_STRING_LITERAL, TK_UNDERSCORE];
-global SYNC_97: List<i32> = [TK_AND, TK_ANDAND, TK_BYTE_LITERAL, TK_BYTE_STRING_LITERAL, TK_CHAR_LITERAL, TK_DOTDOT, TK_FLOAT_LITERAL, TK_INTEGER_LITERAL, TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_FALSE, TK_KW_MACRORULES, TK_KW_MUT, TK_KW_REF, TK_KW_SELFTYPE, TK_KW_SELFVALUE, TK_KW_SUPER, TK_KW_TRUE, TK_LPAREN, TK_LSQUAREBRACKET, TK_LT, TK_MINUS, TK_NON_KEYWORD_IDENTIFIER, TK_OR, TK_PATHSEP, TK_RAW_BYTE_STRING_LITERAL, TK_RAW_IDENTIFIER, TK_RAW_STRING_LITERAL, TK_RSQUAREBRACKET, TK_STRING_LITERAL, TK_UNDERSCORE];
-global SYNC_98: List<i32> = [TK_AND, TK_ANDAND, TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_DYN, TK_KW_EXTERN, TK_KW_FN, TK_KW_FOR, TK_KW_IMPL, TK_KW_MACRORULES, TK_KW_SELFTYPE, TK_KW_SELFVALUE, TK_KW_STATICLIFETIME, TK_KW_SUPER, TK_KW_UNDERLINELIFETIME, TK_KW_UNSAFE, TK_LIFETIME_OR_LABEL, TK_LPAREN, TK_LSQUAREBRACKET, TK_LT, TK_NON_KEYWORD_IDENTIFIER, TK_NOT, TK_PATHSEP, TK_QUESTION, TK_RAW_IDENTIFIER, TK_RPAREN, TK_STAR, TK_UNDERSCORE];
+global SYNC_93: List<i32> = [TK_DOTDOT, TK_INTEGER_LITERAL, TK_KW_MACRORULES, TK_KW_MUT, TK_KW_REF, TK_KW_UNION, TK_NON_KEYWORD_IDENTIFIER, TK_POUND, TK_RAW_IDENTIFIER];
+global SYNC_94: List<i32> = [TK_INTEGER_LITERAL, TK_KW_MACRORULES, TK_KW_MUT, TK_KW_REF, TK_KW_UNION, TK_NON_KEYWORD_IDENTIFIER, TK_POUND, TK_RAW_IDENTIFIER];
+global SYNC_95: List<i32> = [TK_INTEGER_LITERAL, TK_KW_MACRORULES, TK_KW_MUT, TK_KW_REF, TK_KW_UNION, TK_NON_KEYWORD_IDENTIFIER, TK_RAW_IDENTIFIER];
+global SYNC_96: List<i32> = [TK_AND, TK_ANDAND, TK_BYTE_LITERAL, TK_BYTE_STRING_LITERAL, TK_CHAR_LITERAL, TK_DOTDOT, TK_FLOAT_LITERAL, TK_INTEGER_LITERAL, TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_FALSE, TK_KW_MACRORULES, TK_KW_MUT, TK_KW_REF, TK_KW_SELFTYPE, TK_KW_SELFVALUE, TK_KW_SUPER, TK_KW_TRUE, TK_KW_UNION, TK_LPAREN, TK_LSQUAREBRACKET, TK_LT, TK_MINUS, TK_NON_KEYWORD_IDENTIFIER, TK_OR, TK_PATHSEP, TK_RAW_BYTE_STRING_LITERAL, TK_RAW_IDENTIFIER, TK_RAW_STRING_LITERAL, TK_RPAREN, TK_STRING_LITERAL, TK_UNDERSCORE];
+global SYNC_97: List<i32> = [TK_AND, TK_ANDAND, TK_BYTE_LITERAL, TK_BYTE_STRING_LITERAL, TK_CHAR_LITERAL, TK_DOTDOT, TK_FLOAT_LITERAL, TK_INTEGER_LITERAL, TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_FALSE, TK_KW_MACRORULES, TK_KW_MUT, TK_KW_REF, TK_KW_SELFTYPE, TK_KW_SELFVALUE, TK_KW_SUPER, TK_KW_TRUE, TK_KW_UNION, TK_LPAREN, TK_LSQUAREBRACKET, TK_LT, TK_MINUS, TK_NON_KEYWORD_IDENTIFIER, TK_OR, TK_PATHSEP, TK_RAW_BYTE_STRING_LITERAL, TK_RAW_IDENTIFIER, TK_RAW_STRING_LITERAL, TK_RSQUAREBRACKET, TK_STRING_LITERAL, TK_UNDERSCORE];
+global SYNC_98: List<i32> = [TK_AND, TK_ANDAND, TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_DYN, TK_KW_EXTERN, TK_KW_FN, TK_KW_FOR, TK_KW_IMPL, TK_KW_MACRORULES, TK_KW_SELFTYPE, TK_KW_SELFVALUE, TK_KW_STATICLIFETIME, TK_KW_SUPER, TK_KW_UNDERLINELIFETIME, TK_KW_UNION, TK_KW_UNSAFE, TK_LIFETIME_OR_LABEL, TK_LPAREN, TK_LSQUAREBRACKET, TK_LT, TK_NON_KEYWORD_IDENTIFIER, TK_NOT, TK_PATHSEP, TK_QUESTION, TK_RAW_IDENTIFIER, TK_RPAREN, TK_STAR, TK_UNDERSCORE];
 global SYNC_99: List<i32> = [TK_KW_CONST, TK_KW_MUT];
-global SYNC_100: List<i32> = [TK_AND, TK_ANDAND, TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_DYN, TK_KW_EXTERN, TK_KW_FN, TK_KW_FOR, TK_KW_IMPL, TK_KW_MACRORULES, TK_KW_SELFTYPE, TK_KW_SELFVALUE, TK_KW_STATICLIFETIME, TK_KW_SUPER, TK_KW_UNDERLINELIFETIME, TK_KW_UNSAFE, TK_LIFETIME_OR_LABEL, TK_LPAREN, TK_LSQUAREBRACKET, TK_LT, TK_NON_KEYWORD_IDENTIFIER, TK_NOT, TK_PATHSEP, TK_POUND, TK_QUESTION, TK_RAW_IDENTIFIER, TK_RPAREN, TK_STAR, TK_UNDERSCORE];
+global SYNC_100: List<i32> = [TK_AND, TK_ANDAND, TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_DYN, TK_KW_EXTERN, TK_KW_FN, TK_KW_FOR, TK_KW_IMPL, TK_KW_MACRORULES, TK_KW_SELFTYPE, TK_KW_SELFVALUE, TK_KW_STATICLIFETIME, TK_KW_SUPER, TK_KW_UNDERLINELIFETIME, TK_KW_UNION, TK_KW_UNSAFE, TK_LIFETIME_OR_LABEL, TK_LPAREN, TK_LSQUAREBRACKET, TK_LT, TK_NON_KEYWORD_IDENTIFIER, TK_NOT, TK_PATHSEP, TK_POUND, TK_QUESTION, TK_RAW_IDENTIFIER, TK_RPAREN, TK_STAR, TK_UNDERSCORE];
 global SYNC_101: List<i32> = [TK_RARROW];
-global SYNC_102: List<i32> = [TK_AND, TK_ANDAND, TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_DYN, TK_KW_EXTERN, TK_KW_FN, TK_KW_FOR, TK_KW_IMPL, TK_KW_MACRORULES, TK_KW_SELFTYPE, TK_KW_SELFVALUE, TK_KW_STATICLIFETIME, TK_KW_SUPER, TK_KW_UNDERLINELIFETIME, TK_KW_UNSAFE, TK_LIFETIME_OR_LABEL, TK_LPAREN, TK_LSQUAREBRACKET, TK_LT, TK_NON_KEYWORD_IDENTIFIER, TK_NOT, TK_PATHSEP, TK_POUND, TK_QUESTION, TK_RAW_IDENTIFIER, TK_STAR, TK_UNDERSCORE];
+global SYNC_102: List<i32> = [TK_AND, TK_ANDAND, TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_DYN, TK_KW_EXTERN, TK_KW_FN, TK_KW_FOR, TK_KW_IMPL, TK_KW_MACRORULES, TK_KW_SELFTYPE, TK_KW_SELFVALUE, TK_KW_STATICLIFETIME, TK_KW_SUPER, TK_KW_UNDERLINELIFETIME, TK_KW_UNION, TK_KW_UNSAFE, TK_LIFETIME_OR_LABEL, TK_LPAREN, TK_LSQUAREBRACKET, TK_LT, TK_NON_KEYWORD_IDENTIFIER, TK_NOT, TK_PATHSEP, TK_POUND, TK_QUESTION, TK_RAW_IDENTIFIER, TK_STAR, TK_UNDERSCORE];
 global SYNC_103: List<i32> = [TK_DOTDOTDOT, TK_POUND];
-global SYNC_104: List<i32> = [TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_FOR, TK_KW_MACRORULES, TK_KW_SELFTYPE, TK_KW_SELFVALUE, TK_KW_SUPER, TK_LPAREN, TK_NON_KEYWORD_IDENTIFIER, TK_PATHSEP, TK_QUESTION, TK_RAW_IDENTIFIER];
-global SYNC_105: List<i32> = [TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_FOR, TK_KW_MACRORULES, TK_KW_SELFTYPE, TK_KW_SELFVALUE, TK_KW_SUPER, TK_NON_KEYWORD_IDENTIFIER, TK_PATHSEP, TK_QUESTION, TK_RAW_IDENTIFIER];
-global SYNC_106: List<i32> = [TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_MACRORULES, TK_KW_SELFVALUE, TK_KW_SUPER, TK_NON_KEYWORD_IDENTIFIER, TK_RAW_IDENTIFIER];
-global SYNC_107: List<i32> = [TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_MACRORULES, TK_KW_SELFTYPE, TK_KW_SELFVALUE, TK_KW_SUPER, TK_NON_KEYWORD_IDENTIFIER, TK_RAW_IDENTIFIER];
-global SYNC_108: List<i32> = [TK_AND, TK_ANDAND, TK_BYTE_LITERAL, TK_BYTE_STRING_LITERAL, TK_CHAR_LITERAL, TK_FLOAT_LITERAL, TK_INTEGER_LITERAL, TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_DYN, TK_KW_EXTERN, TK_KW_FALSE, TK_KW_FN, TK_KW_FOR, TK_KW_IMPL, TK_KW_MACRORULES, TK_KW_SELFTYPE, TK_KW_SELFVALUE, TK_KW_STATICLIFETIME, TK_KW_SUPER, TK_KW_TRUE, TK_KW_UNDERLINELIFETIME, TK_KW_UNSAFE, TK_LCURLYBRACE, TK_LIFETIME_OR_LABEL, TK_LPAREN, TK_LSQUAREBRACKET, TK_LT, TK_MINUS, TK_NON_KEYWORD_IDENTIFIER, TK_NOT, TK_PATHSEP, TK_QUESTION, TK_RAW_BYTE_STRING_LITERAL, TK_RAW_IDENTIFIER, TK_RAW_STRING_LITERAL, TK_STAR, TK_STRING_LITERAL, TK_UNDERSCORE];
+global SYNC_104: List<i32> = [TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_FOR, TK_KW_MACRORULES, TK_KW_SELFTYPE, TK_KW_SELFVALUE, TK_KW_SUPER, TK_KW_UNION, TK_LPAREN, TK_NON_KEYWORD_IDENTIFIER, TK_PATHSEP, TK_QUESTION, TK_RAW_IDENTIFIER];
+global SYNC_105: List<i32> = [TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_FOR, TK_KW_MACRORULES, TK_KW_SELFTYPE, TK_KW_SELFVALUE, TK_KW_SUPER, TK_KW_UNION, TK_NON_KEYWORD_IDENTIFIER, TK_PATHSEP, TK_QUESTION, TK_RAW_IDENTIFIER];
+global SYNC_106: List<i32> = [TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_MACRORULES, TK_KW_SELFVALUE, TK_KW_SUPER, TK_KW_UNION, TK_NON_KEYWORD_IDENTIFIER, TK_RAW_IDENTIFIER];
+global SYNC_107: List<i32> = [TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_MACRORULES, TK_KW_SELFTYPE, TK_KW_SELFVALUE, TK_KW_SUPER, TK_KW_UNION, TK_NON_KEYWORD_IDENTIFIER, TK_RAW_IDENTIFIER];
+global SYNC_108: List<i32> = [TK_AND, TK_ANDAND, TK_BYTE_LITERAL, TK_BYTE_STRING_LITERAL, TK_CHAR_LITERAL, TK_FLOAT_LITERAL, TK_INTEGER_LITERAL, TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_DYN, TK_KW_EXTERN, TK_KW_FALSE, TK_KW_FN, TK_KW_FOR, TK_KW_IMPL, TK_KW_MACRORULES, TK_KW_SELFTYPE, TK_KW_SELFVALUE, TK_KW_STATICLIFETIME, TK_KW_SUPER, TK_KW_TRUE, TK_KW_UNDERLINELIFETIME, TK_KW_UNION, TK_KW_UNSAFE, TK_LCURLYBRACE, TK_LIFETIME_OR_LABEL, TK_LPAREN, TK_LSQUAREBRACKET, TK_LT, TK_MINUS, TK_NON_KEYWORD_IDENTIFIER, TK_NOT, TK_PATHSEP, TK_QUESTION, TK_RAW_BYTE_STRING_LITERAL, TK_RAW_IDENTIFIER, TK_RAW_STRING_LITERAL, TK_STAR, TK_STRING_LITERAL, TK_UNDERSCORE];
 global SYNC_109: List<i32> = [TK_GT];
-global SYNC_110: List<i32> = [TK_BYTE_LITERAL, TK_BYTE_STRING_LITERAL, TK_CHAR_LITERAL, TK_FLOAT_LITERAL, TK_INTEGER_LITERAL, TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_FALSE, TK_KW_MACRORULES, TK_KW_SELFVALUE, TK_KW_SUPER, TK_KW_TRUE, TK_LCURLYBRACE, TK_MINUS, TK_NON_KEYWORD_IDENTIFIER, TK_RAW_BYTE_STRING_LITERAL, TK_RAW_IDENTIFIER, TK_RAW_STRING_LITERAL, TK_STRING_LITERAL];
+global SYNC_110: List<i32> = [TK_BYTE_LITERAL, TK_BYTE_STRING_LITERAL, TK_CHAR_LITERAL, TK_FLOAT_LITERAL, TK_INTEGER_LITERAL, TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_FALSE, TK_KW_MACRORULES, TK_KW_SELFVALUE, TK_KW_SUPER, TK_KW_TRUE, TK_KW_UNION, TK_LCURLYBRACE, TK_MINUS, TK_NON_KEYWORD_IDENTIFIER, TK_RAW_BYTE_STRING_LITERAL, TK_RAW_IDENTIFIER, TK_RAW_STRING_LITERAL, TK_STRING_LITERAL];
 global SYNC_111: List<i32> = [TK_KW_CRATE, TK_KW_IN, TK_KW_SELFVALUE, TK_KW_SUPER];
 global SYNC_112: List<i32> = [TK_KW_ABSTRACT, TK_KW_AS, TK_KW_ASYNC, TK_KW_AWAIT, TK_KW_BECOME, TK_KW_BOX, TK_KW_BREAK, TK_KW_CONST, TK_KW_CONTINUE, TK_KW_CRATE, TK_KW_DO, TK_KW_DYN, TK_KW_ELSE, TK_KW_ENUM, TK_KW_EXTERN, TK_KW_FALSE, TK_KW_FINAL, TK_KW_FN, TK_KW_FOR, TK_KW_IF, TK_KW_IMPL, TK_KW_IN, TK_KW_LET, TK_KW_LOOP, TK_KW_MACRO, TK_KW_MATCH, TK_KW_MOD, TK_KW_MOVE, TK_KW_MUT, TK_KW_OVERRIDE, TK_KW_PRIV, TK_KW_PUB, TK_KW_REF, TK_KW_RETURN, TK_KW_SELFTYPE, TK_KW_SELFVALUE, TK_KW_STATIC, TK_KW_STATICLIFETIME, TK_KW_STRUCT, TK_KW_SUPER, TK_KW_TRAIT, TK_KW_TRUE, TK_KW_TRY, TK_KW_TYPE, TK_KW_TYPEOF, TK_KW_UNION, TK_KW_UNSAFE, TK_KW_UNSIZED, TK_KW_USE, TK_KW_VIRTUAL, TK_KW_WHERE, TK_KW_WHILE, TK_KW_YIELD];
 global SYNC_113: List<i32> = [TK_KW_ABSTRACT, TK_KW_AS, TK_KW_ASYNC, TK_KW_AWAIT, TK_KW_BECOME, TK_KW_BOX, TK_KW_BREAK, TK_KW_CONST, TK_KW_CONTINUE, TK_KW_CRATE, TK_KW_DO, TK_KW_DOLLARCRATE, TK_KW_DYN, TK_KW_ELSE, TK_KW_ENUM, TK_KW_EXTERN, TK_KW_FALSE, TK_KW_FINAL, TK_KW_FN, TK_KW_FOR, TK_KW_IF, TK_KW_IMPL, TK_KW_IN, TK_KW_LET, TK_KW_LOOP, TK_KW_MACRO, TK_KW_MACRORULES, TK_KW_MATCH, TK_KW_MOD, TK_KW_MOVE, TK_KW_MUT, TK_KW_OVERRIDE, TK_KW_PRIV, TK_KW_PUB, TK_KW_REF, TK_KW_RETURN, TK_KW_SELFTYPE, TK_KW_SELFVALUE, TK_KW_STATIC, TK_KW_STATICLIFETIME, TK_KW_STRUCT, TK_KW_SUPER, TK_KW_TRAIT, TK_KW_TRUE, TK_KW_TRY, TK_KW_TYPE, TK_KW_TYPEOF, TK_KW_UNDERLINELIFETIME, TK_KW_UNION, TK_KW_UNSAFE, TK_KW_UNSIZED, TK_KW_USE, TK_KW_VIRTUAL, TK_KW_WHERE, TK_KW_WHILE, TK_KW_YIELD, TK_LIFETIME_OR_LABEL, TK_NON_KEYWORD_IDENTIFIER, TK_RAW_IDENTIFIER];
 global SYNC_114: List<i32> = [TK_AND, TK_ANDAND, TK_ANDEQ, TK_AT, TK_CARET, TK_CARETEQ, TK_COLON, TK_COMMA, TK_DOT, TK_DOTDOT, TK_DOTDOTDOT, TK_DOTDOTEQ, TK_EQ, TK_EQEQ, TK_FATARROW, TK_GE, TK_GT, TK_LE, TK_LT, TK_MINUS, TK_MINUSEQ, TK_NE, TK_NOT, TK_OR, TK_OREQ, TK_OROR, TK_PATHSEP, TK_PERCENT, TK_PERCENTEQ, TK_PLUSEQ, TK_POUND, TK_RARROW, TK_SEMI, TK_SHLEQ, TK_SHREQ, TK_SLASH, TK_SLASHEQ, TK_STAREQ, TK_UNDERSCORE];
 
-global FOLLOW_KINDS: List<List<i32>> = [[TK_POUND], [TK_NOT], [TK_LSQUAREBRACKET], [TK_LCURLYBRACE, TK_LPAREN, TK_LSQUAREBRACKET], [TK_LPAREN], [TK_LCURLYBRACE], [TK_RPAREN], [TK_SEMI], [TK_RSQUAREBRACKET], [TK_RCURLYBRACE], [TK_FATARROW], [TK_COLON], [TK_KW_MACRORULES, TK_NON_KEYWORD_IDENTIFIER, TK_RAW_IDENTIFIER], [TK_PLUS, TK_QUESTION, TK_STAR], [TK_KW_ASYNC, TK_KW_CONST, TK_KW_ENUM, TK_KW_EXTERN, TK_KW_FN, TK_KW_IMPL, TK_KW_MOD, TK_KW_STATIC, TK_KW_STRUCT, TK_KW_TRAIT, TK_KW_TYPE, TK_KW_UNION, TK_KW_UNSAFE, TK_KW_USE], [TK_LCURLYBRACE, TK_SEMI], [TK_PATHSEP], [TK_LCURLYBRACE, TK_STAR], [TK_COMMA], [TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_MACRORULES, TK_KW_SELFVALUE, TK_KW_SUPER, TK_LCURLYBRACE, TK_NON_KEYWORD_IDENTIFIER, TK_PATHSEP, TK_RAW_IDENTIFIER, TK_STAR], [TK_KW_FN], [TK_AND, TK_ANDAND, TK_DOTDOTDOT, TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_DYN, TK_KW_EXTERN, TK_KW_FN, TK_KW_FOR, TK_KW_IMPL, TK_KW_MACRORULES, TK_KW_SELFTYPE, TK_KW_SELFVALUE, TK_KW_STATICLIFETIME, TK_KW_SUPER, TK_KW_UNDERLINELIFETIME, TK_KW_UNSAFE, TK_LIFETIME_OR_LABEL, TK_LPAREN, TK_LSQUAREBRACKET, TK_LT, TK_NON_KEYWORD_IDENTIFIER, TK_NOT, TK_PATHSEP, TK_QUESTION, TK_RAW_IDENTIFIER, TK_STAR, TK_UNDERSCORE], [TK_AND, TK_ANDAND, TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_DYN, TK_KW_EXTERN, TK_KW_FN, TK_KW_FOR, TK_KW_IMPL, TK_KW_MACRORULES, TK_KW_SELFTYPE, TK_KW_SELFVALUE, TK_KW_STATICLIFETIME, TK_KW_SUPER, TK_KW_UNDERLINELIFETIME, TK_KW_UNSAFE, TK_LIFETIME_OR_LABEL, TK_LPAREN, TK_LSQUAREBRACKET, TK_LT, TK_NON_KEYWORD_IDENTIFIER, TK_NOT, TK_PATHSEP, TK_QUESTION, TK_RAW_IDENTIFIER, TK_STAR, TK_UNDERSCORE], [TK_KW_FOR], [TK_KW_ASYNC, TK_KW_CONST, TK_KW_EXTERN, TK_KW_FN, TK_KW_STATIC, TK_KW_UNSAFE], [TK_LIFETIME_OR_LABEL], [TK_KW_ASYNC, TK_KW_CONST, TK_KW_EXTERN, TK_KW_FN, TK_KW_TYPE, TK_KW_UNSAFE], [TK_AND, TK_ANDAND, TK_BYTE_LITERAL, TK_BYTE_STRING_LITERAL, TK_CHAR_LITERAL, TK_DOTDOT, TK_DOTDOTEQ, TK_FLOAT_LITERAL, TK_INTEGER_LITERAL, TK_KW_ASYNC, TK_KW_BREAK, TK_KW_CONTINUE, TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_FALSE, TK_KW_FOR, TK_KW_IF, TK_KW_LOOP, TK_KW_MACRORULES, TK_KW_MATCH, TK_KW_MOVE, TK_KW_RETURN, TK_KW_SELFTYPE, TK_KW_SELFVALUE, TK_KW_SUPER, TK_KW_TRUE, TK_KW_UNSAFE, TK_KW_WHILE, TK_LCURLYBRACE, TK_LIFETIME_OR_LABEL, TK_LPAREN, TK_LSQUAREBRACKET, TK_LT, TK_MINUS, TK_NON_KEYWORD_IDENTIFIER, TK_NOT, TK_OR, TK_OROR, TK_PATHSEP, TK_POUND, TK_RAW_BYTE_STRING_LITERAL, TK_RAW_IDENTIFIER, TK_RAW_STRING_LITERAL, TK_STAR, TK_STRING_LITERAL], [TK_INTEGER_LITERAL, TK_KW_MACRORULES, TK_NON_KEYWORD_IDENTIFIER, TK_RAW_IDENTIFIER], [TK_OR], [TK_AND, TK_ANDAND, TK_BYTE_LITERAL, TK_BYTE_STRING_LITERAL, TK_CHAR_LITERAL, TK_DOTDOT, TK_DOTDOTEQ, TK_FLOAT_LITERAL, TK_INTEGER_LITERAL, TK_KW_ASYNC, TK_KW_BREAK, TK_KW_CONTINUE, TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_FALSE, TK_KW_FOR, TK_KW_IF, TK_KW_LOOP, TK_KW_MACRORULES, TK_KW_MATCH, TK_KW_MOVE, TK_KW_RETURN, TK_KW_SELFTYPE, TK_KW_SELFVALUE, TK_KW_SUPER, TK_KW_TRUE, TK_KW_UNSAFE, TK_KW_WHILE, TK_LCURLYBRACE, TK_LIFETIME_OR_LABEL, TK_LPAREN, TK_LSQUAREBRACKET, TK_LT, TK_MINUS, TK_NON_KEYWORD_IDENTIFIER, TK_NOT, TK_OR, TK_OROR, TK_PATHSEP, TK_POUND, TK_RARROW, TK_RAW_BYTE_STRING_LITERAL, TK_RAW_IDENTIFIER, TK_RAW_STRING_LITERAL, TK_STAR, TK_STRING_LITERAL], [TK_KW_FOR, TK_KW_LOOP, TK_KW_WHILE], [TK_ANDAND, TK_LCURLYBRACE], [TK_ANDAND], [TK_KW_LET], [TK_EQ], [TK_KW_IN], [TK_AND, TK_ANDAND, TK_BYTE_LITERAL, TK_BYTE_STRING_LITERAL, TK_CHAR_LITERAL, TK_DOTDOT, TK_FLOAT_LITERAL, TK_INTEGER_LITERAL, TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_FALSE, TK_KW_MACRORULES, TK_KW_MUT, TK_KW_REF, TK_KW_SELFTYPE, TK_KW_SELFVALUE, TK_KW_SUPER, TK_KW_TRUE, TK_LPAREN, TK_LSQUAREBRACKET, TK_LT, TK_MINUS, TK_NON_KEYWORD_IDENTIFIER, TK_PATHSEP, TK_RAW_BYTE_STRING_LITERAL, TK_RAW_IDENTIFIER, TK_RAW_STRING_LITERAL, TK_STRING_LITERAL, TK_UNDERSCORE], [TK_DOTDOTEQ], [TK_BYTE_LITERAL, TK_CHAR_LITERAL, TK_FLOAT_LITERAL, TK_INTEGER_LITERAL, TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_MACRORULES, TK_KW_SELFTYPE, TK_KW_SELFVALUE, TK_KW_SUPER, TK_LT, TK_MINUS, TK_NON_KEYWORD_IDENTIFIER, TK_PATHSEP, TK_RAW_IDENTIFIER], [TK_DOTDOT], [TK_DOTDOTDOT], [TK_PLUS], [TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_FOR, TK_KW_MACRORULES, TK_KW_SELFTYPE, TK_KW_SELFVALUE, TK_KW_STATICLIFETIME, TK_KW_SUPER, TK_KW_UNDERLINELIFETIME, TK_LIFETIME_OR_LABEL, TK_LPAREN, TK_NON_KEYWORD_IDENTIFIER, TK_PATHSEP, TK_QUESTION, TK_RAW_IDENTIFIER], [TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_MACRORULES, TK_KW_SELFTYPE, TK_KW_SELFVALUE, TK_KW_SUPER, TK_NON_KEYWORD_IDENTIFIER, TK_PATHSEP, TK_RAW_IDENTIFIER], [TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_MACRORULES, TK_KW_SELFVALUE, TK_KW_SUPER, TK_NON_KEYWORD_IDENTIFIER, TK_RAW_IDENTIFIER], [TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_MACRORULES, TK_KW_SELFTYPE, TK_KW_SELFVALUE, TK_KW_SUPER, TK_NON_KEYWORD_IDENTIFIER, TK_RAW_IDENTIFIER], [TK_KW_STATICLIFETIME, TK_KW_UNDERLINELIFETIME, TK_LIFETIME_OR_LABEL], [TK_GT]];
+global FOLLOW_KINDS: List<List<i32>> = [[TK_POUND], [TK_NOT], [TK_LSQUAREBRACKET], [TK_LCURLYBRACE, TK_LPAREN, TK_LSQUAREBRACKET], [TK_LPAREN], [TK_LCURLYBRACE], [TK_RPAREN], [TK_SEMI], [TK_RSQUAREBRACKET], [TK_RCURLYBRACE], [TK_FATARROW], [TK_COLON], [TK_KW_MACRORULES, TK_KW_UNION, TK_NON_KEYWORD_IDENTIFIER, TK_RAW_IDENTIFIER], [TK_PLUS, TK_QUESTION, TK_STAR], [TK_KW_ASYNC, TK_KW_CONST, TK_KW_ENUM, TK_KW_EXTERN, TK_KW_FN, TK_KW_IMPL, TK_KW_MOD, TK_KW_STATIC, TK_KW_STRUCT, TK_KW_TRAIT, TK_KW_TYPE, TK_KW_UNION, TK_KW_UNSAFE, TK_KW_USE], [TK_LCURLYBRACE, TK_SEMI], [TK_PATHSEP], [TK_LCURLYBRACE, TK_STAR], [TK_COMMA], [TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_MACRORULES, TK_KW_SELFVALUE, TK_KW_SUPER, TK_KW_UNION, TK_LCURLYBRACE, TK_NON_KEYWORD_IDENTIFIER, TK_PATHSEP, TK_RAW_IDENTIFIER, TK_STAR], [TK_KW_FN], [TK_AND, TK_ANDAND, TK_DOTDOTDOT, TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_DYN, TK_KW_EXTERN, TK_KW_FN, TK_KW_FOR, TK_KW_IMPL, TK_KW_MACRORULES, TK_KW_SELFTYPE, TK_KW_SELFVALUE, TK_KW_STATICLIFETIME, TK_KW_SUPER, TK_KW_UNDERLINELIFETIME, TK_KW_UNION, TK_KW_UNSAFE, TK_LIFETIME_OR_LABEL, TK_LPAREN, TK_LSQUAREBRACKET, TK_LT, TK_NON_KEYWORD_IDENTIFIER, TK_NOT, TK_PATHSEP, TK_QUESTION, TK_RAW_IDENTIFIER, TK_STAR, TK_UNDERSCORE], [TK_AND, TK_ANDAND, TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_DYN, TK_KW_EXTERN, TK_KW_FN, TK_KW_FOR, TK_KW_IMPL, TK_KW_MACRORULES, TK_KW_SELFTYPE, TK_KW_SELFVALUE, TK_KW_STATICLIFETIME, TK_KW_SUPER, TK_KW_UNDERLINELIFETIME, TK_KW_UNION, TK_KW_UNSAFE, TK_LIFETIME_OR_LABEL, TK_LPAREN, TK_LSQUAREBRACKET, TK_LT, TK_NON_KEYWORD_IDENTIFIER, TK_NOT, TK_PATHSEP, TK_QUESTION, TK_RAW_IDENTIFIER, TK_STAR, TK_UNDERSCORE], [TK_KW_FOR], [TK_KW_ASYNC, TK_KW_CONST, TK_KW_EXTERN, TK_KW_FN, TK_KW_STATIC, TK_KW_UNSAFE], [TK_LIFETIME_OR_LABEL], [TK_KW_ASYNC, TK_KW_CONST, TK_KW_EXTERN, TK_KW_FN, TK_KW_TYPE, TK_KW_UNSAFE], [TK_AND, TK_ANDAND, TK_BYTE_LITERAL, TK_BYTE_STRING_LITERAL, TK_CHAR_LITERAL, TK_DOTDOT, TK_DOTDOTEQ, TK_FLOAT_LITERAL, TK_INTEGER_LITERAL, TK_KW_ASYNC, TK_KW_BREAK, TK_KW_CONTINUE, TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_FALSE, TK_KW_FOR, TK_KW_IF, TK_KW_LOOP, TK_KW_MACRORULES, TK_KW_MATCH, TK_KW_MOVE, TK_KW_RETURN, TK_KW_SELFTYPE, TK_KW_SELFVALUE, TK_KW_SUPER, TK_KW_TRUE, TK_KW_UNION, TK_KW_UNSAFE, TK_KW_WHILE, TK_LCURLYBRACE, TK_LIFETIME_OR_LABEL, TK_LPAREN, TK_LSQUAREBRACKET, TK_LT, TK_MINUS, TK_NON_KEYWORD_IDENTIFIER, TK_NOT, TK_OR, TK_OROR, TK_PATHSEP, TK_POUND, TK_RAW_BYTE_STRING_LITERAL, TK_RAW_IDENTIFIER, TK_RAW_STRING_LITERAL, TK_STAR, TK_STRING_LITERAL], [TK_INTEGER_LITERAL, TK_KW_MACRORULES, TK_KW_UNION, TK_NON_KEYWORD_IDENTIFIER, TK_RAW_IDENTIFIER], [TK_OR], [TK_AND, TK_ANDAND, TK_BYTE_LITERAL, TK_BYTE_STRING_LITERAL, TK_CHAR_LITERAL, TK_DOTDOT, TK_DOTDOTEQ, TK_FLOAT_LITERAL, TK_INTEGER_LITERAL, TK_KW_ASYNC, TK_KW_BREAK, TK_KW_CONTINUE, TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_FALSE, TK_KW_FOR, TK_KW_IF, TK_KW_LOOP, TK_KW_MACRORULES, TK_KW_MATCH, TK_KW_MOVE, TK_KW_RETURN, TK_KW_SELFTYPE, TK_KW_SELFVALUE, TK_KW_SUPER, TK_KW_TRUE, TK_KW_UNION, TK_KW_UNSAFE, TK_KW_WHILE, TK_LCURLYBRACE, TK_LIFETIME_OR_LABEL, TK_LPAREN, TK_LSQUAREBRACKET, TK_LT, TK_MINUS, TK_NON_KEYWORD_IDENTIFIER, TK_NOT, TK_OR, TK_OROR, TK_PATHSEP, TK_POUND, TK_RARROW, TK_RAW_BYTE_STRING_LITERAL, TK_RAW_IDENTIFIER, TK_RAW_STRING_LITERAL, TK_STAR, TK_STRING_LITERAL], [TK_KW_FOR, TK_KW_LOOP, TK_KW_WHILE], [TK_ANDAND, TK_LCURLYBRACE], [TK_ANDAND], [TK_KW_LET], [TK_EQ], [TK_KW_IN], [TK_AND, TK_ANDAND, TK_BYTE_LITERAL, TK_BYTE_STRING_LITERAL, TK_CHAR_LITERAL, TK_DOTDOT, TK_FLOAT_LITERAL, TK_INTEGER_LITERAL, TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_FALSE, TK_KW_MACRORULES, TK_KW_MUT, TK_KW_REF, TK_KW_SELFTYPE, TK_KW_SELFVALUE, TK_KW_SUPER, TK_KW_TRUE, TK_KW_UNION, TK_LPAREN, TK_LSQUAREBRACKET, TK_LT, TK_MINUS, TK_NON_KEYWORD_IDENTIFIER, TK_PATHSEP, TK_RAW_BYTE_STRING_LITERAL, TK_RAW_IDENTIFIER, TK_RAW_STRING_LITERAL, TK_STRING_LITERAL, TK_UNDERSCORE], [TK_DOTDOTEQ], [TK_BYTE_LITERAL, TK_CHAR_LITERAL, TK_FLOAT_LITERAL, TK_INTEGER_LITERAL, TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_MACRORULES, TK_KW_SELFTYPE, TK_KW_SELFVALUE, TK_KW_SUPER, TK_KW_UNION, TK_LT, TK_MINUS, TK_NON_KEYWORD_IDENTIFIER, TK_PATHSEP, TK_RAW_IDENTIFIER], [TK_DOTDOT], [TK_DOTDOTDOT], [TK_PLUS], [TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_FOR, TK_KW_MACRORULES, TK_KW_SELFTYPE, TK_KW_SELFVALUE, TK_KW_STATICLIFETIME, TK_KW_SUPER, TK_KW_UNDERLINELIFETIME, TK_KW_UNION, TK_LIFETIME_OR_LABEL, TK_LPAREN, TK_NON_KEYWORD_IDENTIFIER, TK_PATHSEP, TK_QUESTION, TK_RAW_IDENTIFIER], [TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_MACRORULES, TK_KW_SELFTYPE, TK_KW_SELFVALUE, TK_KW_SUPER, TK_KW_UNION, TK_NON_KEYWORD_IDENTIFIER, TK_PATHSEP, TK_RAW_IDENTIFIER], [TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_MACRORULES, TK_KW_SELFVALUE, TK_KW_SUPER, TK_KW_UNION, TK_NON_KEYWORD_IDENTIFIER, TK_RAW_IDENTIFIER], [TK_KW_CRATE, TK_KW_DOLLARCRATE, TK_KW_MACRORULES, TK_KW_SELFTYPE, TK_KW_SELFVALUE, TK_KW_SUPER, TK_KW_UNION, TK_NON_KEYWORD_IDENTIFIER, TK_RAW_IDENTIFIER], [TK_KW_STATICLIFETIME, TK_KW_UNDERLINELIFETIME, TK_LIFETIME_OR_LABEL], [TK_GT]];
 global FOLLOW_SETS: List<List<i32>> = follow_bitsets(&FOLLOW_KINDS);
 global FOLLOW_MASK_0: i64 = 197121;
 global FOLLOW_MASK_1: i64 = 1026;
@@ -28046,5 +28127,5 @@ global FOLLOW_MASK_58: i64 = 5924;
 global FOLLOW_MASK_59: i64 = 17;
 global FOLLOW_MASK_60: i64 = 49;
 
-global LATN_SIM: AtnSim = atn_decode(&b"\x11\x00\x00\x00\x3d\x01\x00\x00\x02\x00\x04\x00\x06\x00\x08\x00\x0a\x00\x0c\x00\x0e\x00\x10\x00\x12\x00\x14\x00\x16\x00\x18\x00\x1a\x00\x1c\x00\x1e\x00\x20\x00\x02\x03\x02\x03\x02\x03\x02\x03\x02\x03\x02\x03\x02\x03\x02\x03\x02\x03\x02\x03\x02\x03\x02\x03\x02\x03\x02\x03\x02\x03\x02\x03\x02\x03\x04\x05\x01\x04\x05\x01\x01\x01\x01\x04\x05\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x06\x09\x04\x05\x01\x01\x01\x01\x01\x01\x07\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x04\x05\x01\x04\x05\x01\x01\x01\x01\x01\x01\x01\x01\x01\x04\x05\x01\x01\x01\x01\x01\x06\x09\x04\x05\x01\x01\x01\x01\x01\x01\x07\x01\x01\x01\x04\x05\x01\x01\x01\x01\x01\x04\x05\x01\x01\x01\x01\x01\x01\x06\x09\x04\x05\x01\x01\x01\x01\x01\x01\x07\x01\x01\x01\x04\x05\x01\x01\x01\x06\x09\x04\x05\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x07\x01\x01\x04\x05\x01\x01\x01\x01\x01\x04\x05\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x04\x05\x01\x01\x01\x04\x05\x01\x01\x01\x04\x05\x01\x01\x01\x01\x01\x04\x05\x01\x01\x01\x01\x01\x01\x01\x04\x05\x01\x01\x04\x05\x01\x01\x04\x05\x01\x01\x04\x05\x01\x01\x04\x05\x01\x01\x01\x01\x04\x05\x01\x01\x01\x01\x01\x04\x05\x01\x01\x01\x01\x01\x04\x05\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x06\x09\x01\x01\x07\x01\x01\x04\x05\x01\x01\x01\x01\x06\x09\x04\x05\x01\x01\x01\x01\x01\x01\x01\x01\x01\x07\x01\x01\x04\x05\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x04\x05\x01\x01\x01\x01\x01\x01\x01\x00\x00\x00\x01\x00\x00\x00\x01\x00\x00\x00\x01\x00\x00\x00\x01\x00\x00\x00\x01\x00\x00\x00\x01\x00\x00\x00\x01\x00\x00\x00\x01\x00\x00\x00\x01\x00\x00\x00\x01\x00\x00\x00\x01\x00\x00\x00\x01\x00\x00\x00\x01\x00\x00\x00\x01\x00\x00\x00\x01\x00\x00\x00\x01\x00\x00\x00\x01\x00\x01\x00\x01\x00\x03\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x03\x00\x01\x00\x01\x00\x03\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x02\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x03\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x02\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x01\x00\x02\x00\x01\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x02\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x05\x00\x01\x00\x01\x00\x02\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x02\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x03\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x05\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x03\x00\x01\x00\x01\x00\x02\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\x01\x00\x00\x00\x00\x00\x00\x01\x01\x01\x00\x00\x01\x01\x00\x00\x04\x00\x00\x00\x00\x00\x00\x00\x00\x04\x00\x00\x01\x01\x00\x00\x01\x01\x00\x00\x01\x01\x01\x01\x00\x00\x01\x01\x01\x01\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x04\x00\x00\x04\x00\x00\x04\x00\x00\x00\x00\x01\x01\x01\x00\x00\x00\x00\x00\x00\x00\x00\x04\x00\x00\x01\x01\x00\x00\x01\x01\x00\x00\x00\x00\x01\x01\x01\x00\x00\x00\x00\x00\x01\x01\x00\x00\x04\x00\x00\x00\x00\x00\x00\x00\x00\x04\x00\x00\x01\x01\x00\x00\x01\x01\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\x01\x00\x00\x04\x00\x00\x04\x00\x00\x04\x00\x00\x04\x00\x00\x01\x00\x00\x00\x00\x01\x00\x01\x01\x00\x00\x00\x00\x00\x01\x01\x00\x04\x00\x04\x00\x00\x04\x00\x00\x00\x00\x01\x00\x00\x00\x00\x01\x01\x01\x00\x00\x00\x00\x01\x00\x01\x01\x01\x01\x01\x00\x00\x00\x00\x01\x01\x01\x00\x04\x00\x00\x00\x00\x04\x00\x00\x00\x00\x04\x00\x00\x00\x00\x04\x00\x00\x00\x00\x04\x00\x00\x00\x00\x04\x00\x01\x00\x00\x00\x00\x01\x00\x01\x00\x00\x00\x00\x01\x00\x04\x00\x00\x00\x00\x00\x01\x00\x04\x00\x01\x00\x00\x01\x00\x00\x00\x00\x01\x00\x00\x01\x00\x00\x00\x00\x01\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\x01\x00\x00\x04\x00\x00\x04\x00\x00\x01\x00\x00\x00\x00\x00\x01\x01\x00\x04\x00\x04\x00\x00\x04\x00\x00\x00\x00\x01\x01\x00\x04\x00\x23\x00\x53\x00\x61\x00\x76\x00\x93\x00\xae\x00\xb5\x00\xc2\x00\xc7\x00\xcc\x00\xd3\x00\xf2\x00\xf9\x00\x00\x01\x13\x01\x29\x01\x36\x01\x25\x00\x02\x00\x26\x00\x28\x00\x46\x00\x4c\x00\x24\x00\x29\x00\x2a\x00\x2b\x00\x2c\x00\x2e\x00\x31\x00\x35\x00\x38\x00\x2f\x00\x30\x00\x30\x00\x30\x00\x2d\x00\x32\x00\x33\x00\x34\x00\x2d\x00\x36\x00\x03\x00\x2d\x00\x39\x00\x3a\x00\x43\x00\x3c\x00\x3f\x00\x42\x00\x3d\x00\x03\x00\x3b\x00\x40\x00\x41\x00\x41\x00\x3b\x00\x38\x00\x44\x00\x45\x00\x27\x00\x47\x00\x48\x00\x49\x00\x4a\x00\x4b\x00\x27\x00\x4d\x00\x4e\x00\x4f\x00\x50\x00\x51\x00\x52\x00\x27\x00\x55\x00\x04\x00\x56\x00\x58\x00\x5b\x00\x5e\x00\x54\x00\x59\x00\x01\x00\x57\x00\x5c\x00\x05\x00\x57\x00\x5f\x00\x07\x00\x57\x00\x63\x00\x06\x00\x64\x00\x65\x00\x66\x00\x67\x00\x68\x00\x69\x00\x6a\x00\x73\x00\x6c\x00\x6f\x00\x72\x00\x6d\x00\x03\x00\x6b\x00\x70\x00\x71\x00\x71\x00\x6b\x00\x68\x00\x74\x00\x75\x00\x62\x00\x78\x00\x08\x00\x79\x00\x7a\x00\x7b\x00\x7c\x00\x7d\x00\x7f\x00\x82\x00\x85\x00\x80\x00\x81\x00\x81\x00\x7e\x00\x83\x00\x03\x00\x7e\x00\x86\x00\x87\x00\x90\x00\x89\x00\x8c\x00\x8f\x00\x8a\x00\x03\x00\x88\x00\x8d\x00\x8e\x00\x8e\x00\x88\x00\x85\x00\x91\x00\x92\x00\x77\x00\x95\x00\x0a\x00\x96\x00\x97\x00\x98\x00\x9a\x00\x99\x00\xac\x00\x9c\x00\x9f\x00\xa2\x00\xa5\x00\xa8\x00\xab\x00\x9d\x00\x9e\x00\x9e\x00\x9b\x00\xa0\x00\x0b\x00\x9b\x00\xa3\x00\x0d\x00\x9b\x00\xa6\x00\x15\x00\x9b\x00\xa9\x00\x17\x00\x9b\x00\x98\x00\xad\x00\x94\x00\xb0\x00\x0c\x00\xb1\x00\xb2\x00\xb3\x00\xb4\x00\xb4\x00\xaf\x00\xb7\x00\xbf\x00\x0e\x00\xb8\x00\xb9\x00\xba\x00\xbb\x00\x0f\x00\xbd\x00\x11\x00\xb6\x00\xc0\x00\x13\x00\xb6\x00\xc4\x00\x10\x00\xc5\x00\xc6\x00\xc3\x00\xc9\x00\x12\x00\xca\x00\xcb\x00\xcb\x00\xcb\x00\xc8\x00\xce\x00\x14\x00\xcf\x00\xd0\x00\xd1\x00\xd2\x00\xd2\x00\xd2\x00\xd2\x00\xd2\x00\xcd\x00\xd5\x00\x16\x00\xd6\x00\xd7\x00\xd8\x00\xd9\x00\xda\x00\x11\x00\xdc\x00\xde\x00\xdd\x00\xe0\x00\x11\x00\xdd\x00\xe2\x00\xe1\x00\xe4\x00\x11\x00\xe1\x00\xe6\x00\xe5\x00\xe8\x00\x11\x00\xe5\x00\xea\x00\xe9\x00\xec\x00\x11\x00\xe9\x00\xee\x00\xed\x00\xf0\x00\x11\x00\xed\x00\xf1\x00\xd4\x00\xf4\x00\x18\x00\xf5\x00\xf6\x00\xf7\x00\xf8\x00\xf3\x00\xfb\x00\x1a\x00\xfc\x00\xfd\x00\xfe\x00\x1b\x00\xfa\x00\x02\x01\x09\x01\x1c\x00\x03\x01\x04\x01\x05\x01\x1b\x00\x07\x01\x08\x01\x01\x01\x0a\x01\x0b\x01\x0c\x01\x0d\x01\x0e\x01\x11\x01\x0f\x01\x10\x01\x0c\x01\x12\x01\x01\x01\x15\x01\x1e\x00\x16\x01\x17\x01\x18\x01\x19\x01\x1b\x01\x1a\x01\x27\x01\x1d\x01\x20\x01\x23\x01\x26\x01\x1e\x01\x1f\x01\x1f\x01\x1c\x01\x21\x01\x0b\x00\x1c\x01\x24\x01\x1f\x00\x1c\x01\x19\x01\x28\x01\x14\x01\x2b\x01\x33\x01\x20\x00\x2c\x01\x2d\x01\x2e\x01\x2f\x01\x11\x00\x31\x01\x11\x00\x2a\x01\x34\x01\x13\x00\x2a\x01\x38\x01\x22\x00\x39\x01\x3a\x01\x3b\x01\x3c\x01\x1b\x00\x37\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x30\x00\x00\x2b\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x23\x00\x00\x2c\x00\x00\x00\x00\x00\x00\x00\x00\x2b\x00\x00\x2b\x00\x00\x00\x00\x00\x00\x00\x00\x02\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x02\x00\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x2c\x00\x00\x00\x00\x00\x00\x00\x00\x2b\x00\x00\x30\x00\x00\x00\x00\x00\x00\x00\x00\x30\x00\x00\x2b\x00\x00\x2b\x00\x00\x30\x00\x00\x00\x00\x00\x00\x00\x00\x30\x00\x00\x2b\x00\x00\x2b\x00\x00\x2b\x00\x00\x30\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x03\x00\x00\x00\x00\x00\x00\x00\x00\x04\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x30\x00\x00\x2b\x00\x00\x22\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x02\x00\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x2c\x00\x00\x00\x00\x00\x00\x00\x00\x2b\x00\x00\x30\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x30\x00\x00\x2b\x00\x00\x2b\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x2c\x00\x00\x00\x00\x00\x00\x00\x00\x02\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x02\x00\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x2c\x00\x00\x00\x00\x00\x00\x00\x00\x2b\x00\x00\x30\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x23\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x24\x00\x00\x00\x00\x00\x00\x00\x00\x06\x00\x00\x00\x00\x00\x00\x00\x00\x07\x00\x00\x00\x00\x00\x00\x00\x00\x0b\x00\x00\x00\x00\x00\x00\x00\x00\x0c\x00\x00\x00\x00\x00\x00\x00\x00\x23\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x5d\x00\x00\x00\x00\x00\x28\x00\x00\x23\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x5d\x00\x00\x79\x00\x00\x00\x00\x00\x08\x00\x00\x00\x00\x00\x09\x00\x00\x00\x00\x00\x00\x00\x00\x0a\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x31\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x31\x00\x00\x62\x00\x00\x42\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x5d\x00\x00\x00\x00\x00\x6f\x00\x00\x73\x00\x00\x75\x00\x00\x5d\x00\x00\x31\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x5d\x00\x00\x76\x00\x00\x7c\x00\x00\x00\x00\x00\x09\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x09\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x09\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x09\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x09\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x09\x00\x00\x00\x00\x00\x7e\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x5d\x00\x00\x00\x00\x00\x0b\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x73\x00\x00\x00\x00\x00\x0e\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x24\x00\x00\x00\x00\x00\x0e\x00\x00\x00\x00\x00\x24\x00\x00\x00\x00\x00\x00\x00\x00\x23\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x23\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x63\x00\x00\x23\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x24\x00\x00\x00\x00\x00\x00\x00\x00\x06\x00\x00\x00\x00\x00\x00\x00\x00\x10\x00\x00\x00\x00\x00\x00\x00\x00\x23\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x5d\x00\x00\x79\x00\x00\x00\x00\x00\x09\x00\x00\x00\x00\x00\x09\x00\x00\x00\x00\x00\x00\x00\x00\x0a\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x63\x00\x00\x73\x00\x00\x00\x00\x00\x0e\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x30\x00\x00\x2b\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x21\x00\x00\x2a\x00\x00\x00\x00\x11\x00\x00\x00\x00\x00\x00\x2b\x00\x00\x2b\x00\x00\x00\x00\x00\x00\x00\x00\x37\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x3e\x00\x00\x00\x00\x00\x00\x00\x00\x2a\x00\x00\x00\x00\x11\x00\x00\x00\x00\x00\x00\x2b\x00\x00\x30\x00\x00\x00\x00\x00\x00\x00\x00\x30\x00\x00\x2b\x00\x00\x2b\x00\x00\x30\x00\x00\x00\x00\x00\x00\x00\x00\x30\x00\x00\x2b\x00\x00\x2b\x00\x00\x2b\x00\x00\x30\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x5a\x00\x00\x00\x00\x00\x00\x00\x00\x5d\x00\x00\x00\x00\x00\x00\x00\x00\x60\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x30\x00\x00\x2b\x00\x00\x22\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x6e\x00\x00\x00\x00\x00\x00\x00\x00\x2a\x00\x00\x00\x00\x11\x00\x00\x00\x00\x00\x00\x2b\x00\x00\x30\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x30\x00\x00\x2b\x00\x00\x2b\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x2a\x00\x00\x00\x00\x11\x00\x00\x00\x00\x00\x00\x84\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x8b\x00\x00\x00\x00\x00\x00\x00\x00\x2a\x00\x00\x00\x00\x11\x00\x00\x00\x00\x00\x00\x2b\x00\x00\x30\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x23\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x22\x00\x00\x00\x00\x11\x00\x00\x00\x00\x00\x00\xa1\x00\x00\x00\x00\x00\x00\x00\x00\xa4\x00\x00\x00\x00\x00\x00\x00\x00\xa7\x00\x00\x00\x00\x00\x00\x00\x00\xaa\x00\x00\x00\x00\x00\x00\x00\x00\x23\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x5d\x00\x00\x00\x00\x00\x28\x00\x00\x23\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x5d\x00\x00\x79\x00\x00\x00\x00\x00\xbc\x00\x00\x00\x00\x00\xbe\x00\x00\x00\x00\x00\x00\x00\x00\xc1\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x38\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x3a\x00\x00\x67\x00\x00\x47\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x5d\x00\x00\x00\x00\x00\x6f\x00\x00\x73\x00\x00\x75\x00\x00\x5d\x00\x00\x31\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x5d\x00\x00\x76\x00\x00\x7c\x00\x00\x00\x00\x00\xdb\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\xdf\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\xe3\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\xe7\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\xeb\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\xef\x00\x00\x00\x00\x00\x7e\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x5d\x00\x00\x00\x00\x00\x0b\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x73\x00\x00\x00\x00\x00\xff\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x24\x00\x00\x00\x00\x00\x06\x01\x00\x00\x00\x00\x24\x00\x00\x00\x00\x00\x00\x00\x00\x23\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x11\x00\x00\x00\x00\x00\x00\x23\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x63\x00\x00\x23\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x22\x00\x00\x00\x00\x11\x00\x00\x00\x00\x00\x00\x22\x01\x00\x00\x00\x00\x00\x00\x00\x25\x01\x00\x00\x00\x00\x00\x00\x00\x23\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x5d\x00\x00\x79\x00\x00\x00\x00\x00\x30\x01\x00\x00\x00\x00\x32\x01\x00\x00\x00\x00\x00\x00\x00\x35\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x63\x00\x00\x73\x00\x00\x00\x00\x00\x3d\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00");
+global LATN_SIM: AtnSim = atn_decode(&b"\x11\x00\x00\x00\x3d\x01\x00\x00\x02\x00\x04\x00\x06\x00\x08\x00\x0a\x00\x0c\x00\x0e\x00\x10\x00\x12\x00\x14\x00\x16\x00\x18\x00\x1a\x00\x1c\x00\x1e\x00\x20\x00\x02\x03\x02\x03\x02\x03\x02\x03\x02\x03\x02\x03\x02\x03\x02\x03\x02\x03\x02\x03\x02\x03\x02\x03\x02\x03\x02\x03\x02\x03\x02\x03\x02\x03\x04\x05\x01\x04\x05\x01\x01\x01\x01\x04\x05\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x06\x09\x04\x05\x01\x01\x01\x01\x01\x01\x07\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x04\x05\x01\x04\x05\x01\x01\x01\x01\x01\x01\x01\x01\x01\x04\x05\x01\x01\x01\x01\x01\x06\x09\x04\x05\x01\x01\x01\x01\x01\x01\x07\x01\x01\x01\x04\x05\x01\x01\x01\x01\x01\x04\x05\x01\x01\x01\x01\x01\x01\x06\x09\x04\x05\x01\x01\x01\x01\x01\x01\x07\x01\x01\x01\x04\x05\x01\x01\x01\x06\x09\x04\x05\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x07\x01\x01\x04\x05\x01\x01\x01\x01\x01\x04\x05\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x04\x05\x01\x01\x01\x04\x05\x01\x01\x01\x04\x05\x01\x01\x01\x01\x01\x04\x05\x01\x01\x01\x01\x01\x01\x01\x04\x05\x01\x01\x04\x05\x01\x01\x04\x05\x01\x01\x04\x05\x01\x01\x04\x05\x01\x01\x01\x01\x04\x05\x01\x01\x01\x01\x01\x04\x05\x01\x01\x01\x01\x01\x04\x05\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x06\x09\x01\x01\x07\x01\x01\x04\x05\x01\x01\x01\x01\x06\x09\x04\x05\x01\x01\x01\x01\x01\x01\x01\x01\x01\x07\x01\x01\x04\x05\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x04\x05\x01\x01\x01\x01\x01\x01\x01\x00\x00\x00\x01\x00\x00\x00\x01\x00\x00\x00\x01\x00\x00\x00\x01\x00\x00\x00\x01\x00\x00\x00\x01\x00\x00\x00\x01\x00\x00\x00\x01\x00\x00\x00\x01\x00\x00\x00\x01\x00\x00\x00\x01\x00\x00\x00\x01\x00\x00\x00\x01\x00\x00\x00\x01\x00\x00\x00\x01\x00\x00\x00\x01\x00\x00\x00\x01\x00\x01\x00\x01\x00\x03\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x03\x00\x01\x00\x01\x00\x03\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x02\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x03\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x02\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x01\x00\x02\x00\x01\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x02\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x05\x00\x01\x00\x01\x00\x03\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x02\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x03\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x05\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x03\x00\x01\x00\x01\x00\x03\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\x01\x00\x00\x00\x00\x00\x00\x01\x01\x01\x00\x00\x01\x01\x00\x00\x04\x00\x00\x00\x00\x00\x00\x00\x00\x04\x00\x00\x01\x01\x00\x00\x01\x01\x00\x00\x01\x01\x01\x01\x00\x00\x01\x01\x01\x01\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x04\x00\x00\x04\x00\x00\x04\x00\x00\x00\x00\x01\x01\x01\x00\x00\x00\x00\x00\x00\x00\x00\x04\x00\x00\x01\x01\x00\x00\x01\x01\x00\x00\x00\x00\x01\x01\x01\x00\x00\x00\x00\x00\x01\x01\x00\x00\x04\x00\x00\x00\x00\x00\x00\x00\x00\x04\x00\x00\x01\x01\x00\x00\x01\x01\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\x01\x01\x00\x00\x04\x00\x00\x04\x00\x00\x04\x00\x00\x04\x00\x00\x01\x00\x00\x00\x00\x01\x00\x01\x01\x00\x00\x00\x00\x00\x01\x01\x00\x04\x00\x04\x00\x00\x04\x00\x00\x00\x00\x01\x00\x00\x00\x00\x01\x01\x01\x00\x00\x00\x00\x01\x00\x01\x01\x01\x01\x01\x00\x00\x00\x00\x01\x01\x01\x00\x04\x00\x00\x00\x00\x04\x00\x00\x00\x00\x04\x00\x00\x00\x00\x04\x00\x00\x00\x00\x04\x00\x00\x00\x00\x04\x00\x01\x00\x00\x00\x00\x01\x00\x01\x00\x00\x00\x00\x01\x00\x04\x00\x00\x00\x00\x00\x01\x00\x04\x00\x01\x00\x00\x01\x00\x00\x00\x00\x01\x00\x00\x01\x00\x00\x00\x00\x01\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\x01\x01\x00\x00\x04\x00\x00\x04\x00\x00\x01\x00\x00\x00\x00\x00\x01\x01\x00\x04\x00\x04\x00\x00\x04\x00\x00\x00\x00\x01\x01\x00\x04\x00\x23\x00\x53\x00\x61\x00\x76\x00\x93\x00\xae\x00\xb5\x00\xc2\x00\xc7\x00\xcc\x00\xd3\x00\xf2\x00\xf9\x00\x00\x01\x13\x01\x29\x01\x36\x01\x25\x00\x02\x00\x26\x00\x28\x00\x46\x00\x4c\x00\x24\x00\x29\x00\x2a\x00\x2b\x00\x2c\x00\x2e\x00\x31\x00\x35\x00\x38\x00\x2f\x00\x30\x00\x30\x00\x30\x00\x2d\x00\x32\x00\x33\x00\x34\x00\x2d\x00\x36\x00\x03\x00\x2d\x00\x39\x00\x3a\x00\x43\x00\x3c\x00\x3f\x00\x42\x00\x3d\x00\x03\x00\x3b\x00\x40\x00\x41\x00\x41\x00\x3b\x00\x38\x00\x44\x00\x45\x00\x27\x00\x47\x00\x48\x00\x49\x00\x4a\x00\x4b\x00\x27\x00\x4d\x00\x4e\x00\x4f\x00\x50\x00\x51\x00\x52\x00\x27\x00\x55\x00\x04\x00\x56\x00\x58\x00\x5b\x00\x5e\x00\x54\x00\x59\x00\x01\x00\x57\x00\x5c\x00\x05\x00\x57\x00\x5f\x00\x07\x00\x57\x00\x63\x00\x06\x00\x64\x00\x65\x00\x66\x00\x67\x00\x68\x00\x69\x00\x6a\x00\x73\x00\x6c\x00\x6f\x00\x72\x00\x6d\x00\x03\x00\x6b\x00\x70\x00\x71\x00\x71\x00\x6b\x00\x68\x00\x74\x00\x75\x00\x62\x00\x78\x00\x08\x00\x79\x00\x7a\x00\x7b\x00\x7c\x00\x7d\x00\x7f\x00\x82\x00\x85\x00\x80\x00\x81\x00\x81\x00\x7e\x00\x83\x00\x03\x00\x7e\x00\x86\x00\x87\x00\x90\x00\x89\x00\x8c\x00\x8f\x00\x8a\x00\x03\x00\x88\x00\x8d\x00\x8e\x00\x8e\x00\x88\x00\x85\x00\x91\x00\x92\x00\x77\x00\x95\x00\x0a\x00\x96\x00\x97\x00\x98\x00\x9a\x00\x99\x00\xac\x00\x9c\x00\x9f\x00\xa2\x00\xa5\x00\xa8\x00\xab\x00\x9d\x00\x9e\x00\x9e\x00\x9e\x00\x9b\x00\xa0\x00\x0b\x00\x9b\x00\xa3\x00\x0d\x00\x9b\x00\xa6\x00\x15\x00\x9b\x00\xa9\x00\x17\x00\x9b\x00\x98\x00\xad\x00\x94\x00\xb0\x00\x0c\x00\xb1\x00\xb2\x00\xb3\x00\xb4\x00\xb4\x00\xaf\x00\xb7\x00\xbf\x00\x0e\x00\xb8\x00\xb9\x00\xba\x00\xbb\x00\x0f\x00\xbd\x00\x11\x00\xb6\x00\xc0\x00\x13\x00\xb6\x00\xc4\x00\x10\x00\xc5\x00\xc6\x00\xc3\x00\xc9\x00\x12\x00\xca\x00\xcb\x00\xcb\x00\xcb\x00\xc8\x00\xce\x00\x14\x00\xcf\x00\xd0\x00\xd1\x00\xd2\x00\xd2\x00\xd2\x00\xd2\x00\xd2\x00\xcd\x00\xd5\x00\x16\x00\xd6\x00\xd7\x00\xd8\x00\xd9\x00\xda\x00\x11\x00\xdc\x00\xde\x00\xdd\x00\xe0\x00\x11\x00\xdd\x00\xe2\x00\xe1\x00\xe4\x00\x11\x00\xe1\x00\xe6\x00\xe5\x00\xe8\x00\x11\x00\xe5\x00\xea\x00\xe9\x00\xec\x00\x11\x00\xe9\x00\xee\x00\xed\x00\xf0\x00\x11\x00\xed\x00\xf1\x00\xd4\x00\xf4\x00\x18\x00\xf5\x00\xf6\x00\xf7\x00\xf8\x00\xf3\x00\xfb\x00\x1a\x00\xfc\x00\xfd\x00\xfe\x00\x1b\x00\xfa\x00\x02\x01\x09\x01\x1c\x00\x03\x01\x04\x01\x05\x01\x1b\x00\x07\x01\x08\x01\x01\x01\x0a\x01\x0b\x01\x0c\x01\x0d\x01\x0e\x01\x11\x01\x0f\x01\x10\x01\x0c\x01\x12\x01\x01\x01\x15\x01\x1e\x00\x16\x01\x17\x01\x18\x01\x19\x01\x1b\x01\x1a\x01\x27\x01\x1d\x01\x20\x01\x23\x01\x26\x01\x1e\x01\x1f\x01\x1f\x01\x1f\x01\x1c\x01\x21\x01\x0b\x00\x1c\x01\x24\x01\x1f\x00\x1c\x01\x19\x01\x28\x01\x14\x01\x2b\x01\x33\x01\x20\x00\x2c\x01\x2d\x01\x2e\x01\x2f\x01\x11\x00\x31\x01\x11\x00\x2a\x01\x34\x01\x13\x00\x2a\x01\x38\x01\x22\x00\x39\x01\x3a\x01\x3b\x01\x3c\x01\x1b\x00\x37\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x30\x00\x00\x2b\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x23\x00\x00\x2c\x00\x00\x00\x00\x00\x00\x00\x00\x2b\x00\x00\x2b\x00\x00\x00\x00\x00\x00\x00\x00\x02\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x02\x00\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x2c\x00\x00\x00\x00\x00\x00\x00\x00\x2b\x00\x00\x30\x00\x00\x00\x00\x00\x00\x00\x00\x30\x00\x00\x2b\x00\x00\x2b\x00\x00\x30\x00\x00\x00\x00\x00\x00\x00\x00\x30\x00\x00\x2b\x00\x00\x2b\x00\x00\x2b\x00\x00\x30\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x03\x00\x00\x00\x00\x00\x00\x00\x00\x04\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x30\x00\x00\x2b\x00\x00\x22\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x02\x00\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x2c\x00\x00\x00\x00\x00\x00\x00\x00\x2b\x00\x00\x30\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x30\x00\x00\x2b\x00\x00\x2b\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x2c\x00\x00\x00\x00\x00\x00\x00\x00\x02\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x02\x00\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x2c\x00\x00\x00\x00\x00\x00\x00\x00\x2b\x00\x00\x30\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x23\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x24\x00\x00\x5e\x00\x00\x00\x00\x00\x00\x00\x00\x06\x00\x00\x00\x00\x00\x00\x00\x00\x07\x00\x00\x00\x00\x00\x00\x00\x00\x0b\x00\x00\x00\x00\x00\x00\x00\x00\x0c\x00\x00\x00\x00\x00\x00\x00\x00\x23\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x5d\x00\x00\x00\x00\x00\x28\x00\x00\x23\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x5d\x00\x00\x79\x00\x00\x00\x00\x00\x08\x00\x00\x00\x00\x00\x09\x00\x00\x00\x00\x00\x00\x00\x00\x0a\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x31\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x31\x00\x00\x62\x00\x00\x42\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x5d\x00\x00\x00\x00\x00\x6f\x00\x00\x73\x00\x00\x75\x00\x00\x5d\x00\x00\x31\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x5d\x00\x00\x76\x00\x00\x7c\x00\x00\x00\x00\x00\x09\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x09\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x09\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x09\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x09\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x09\x00\x00\x00\x00\x00\x7e\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x5d\x00\x00\x00\x00\x00\x0b\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x73\x00\x00\x00\x00\x00\x0e\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x24\x00\x00\x00\x00\x00\x0e\x00\x00\x00\x00\x00\x24\x00\x00\x00\x00\x00\x00\x00\x00\x23\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x23\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x63\x00\x00\x23\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x24\x00\x00\x5e\x00\x00\x00\x00\x00\x00\x00\x00\x06\x00\x00\x00\x00\x00\x00\x00\x00\x10\x00\x00\x00\x00\x00\x00\x00\x00\x23\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x5d\x00\x00\x79\x00\x00\x00\x00\x00\x09\x00\x00\x00\x00\x00\x09\x00\x00\x00\x00\x00\x00\x00\x00\x0a\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x63\x00\x00\x73\x00\x00\x00\x00\x00\x0e\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x30\x00\x00\x2b\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x21\x00\x00\x2a\x00\x00\x00\x00\x11\x00\x00\x00\x00\x00\x00\x2b\x00\x00\x2b\x00\x00\x00\x00\x00\x00\x00\x00\x37\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x3e\x00\x00\x00\x00\x00\x00\x00\x00\x2a\x00\x00\x00\x00\x11\x00\x00\x00\x00\x00\x00\x2b\x00\x00\x30\x00\x00\x00\x00\x00\x00\x00\x00\x30\x00\x00\x2b\x00\x00\x2b\x00\x00\x30\x00\x00\x00\x00\x00\x00\x00\x00\x30\x00\x00\x2b\x00\x00\x2b\x00\x00\x2b\x00\x00\x30\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x5a\x00\x00\x00\x00\x00\x00\x00\x00\x5d\x00\x00\x00\x00\x00\x00\x00\x00\x60\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x30\x00\x00\x2b\x00\x00\x22\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x6e\x00\x00\x00\x00\x00\x00\x00\x00\x2a\x00\x00\x00\x00\x11\x00\x00\x00\x00\x00\x00\x2b\x00\x00\x30\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x30\x00\x00\x2b\x00\x00\x2b\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x2a\x00\x00\x00\x00\x11\x00\x00\x00\x00\x00\x00\x84\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x8b\x00\x00\x00\x00\x00\x00\x00\x00\x2a\x00\x00\x00\x00\x11\x00\x00\x00\x00\x00\x00\x2b\x00\x00\x30\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x23\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x22\x00\x00\x5c\x00\x00\x00\x00\x11\x00\x00\x00\x00\x00\x00\xa1\x00\x00\x00\x00\x00\x00\x00\x00\xa4\x00\x00\x00\x00\x00\x00\x00\x00\xa7\x00\x00\x00\x00\x00\x00\x00\x00\xaa\x00\x00\x00\x00\x00\x00\x00\x00\x23\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x5d\x00\x00\x00\x00\x00\x28\x00\x00\x23\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x5d\x00\x00\x79\x00\x00\x00\x00\x00\xbc\x00\x00\x00\x00\x00\xbe\x00\x00\x00\x00\x00\x00\x00\x00\xc1\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x38\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x3a\x00\x00\x67\x00\x00\x47\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x5d\x00\x00\x00\x00\x00\x6f\x00\x00\x73\x00\x00\x75\x00\x00\x5d\x00\x00\x31\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x5d\x00\x00\x76\x00\x00\x7c\x00\x00\x00\x00\x00\xdb\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\xdf\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\xe3\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\xe7\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\xeb\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\xef\x00\x00\x00\x00\x00\x7e\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x5d\x00\x00\x00\x00\x00\x0b\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x73\x00\x00\x00\x00\x00\xff\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x24\x00\x00\x00\x00\x00\x06\x01\x00\x00\x00\x00\x24\x00\x00\x00\x00\x00\x00\x00\x00\x23\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x11\x00\x00\x00\x00\x00\x00\x23\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x63\x00\x00\x23\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x22\x00\x00\x5c\x00\x00\x00\x00\x11\x00\x00\x00\x00\x00\x00\x22\x01\x00\x00\x00\x00\x00\x00\x00\x25\x01\x00\x00\x00\x00\x00\x00\x00\x23\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x5d\x00\x00\x79\x00\x00\x00\x00\x00\x30\x01\x00\x00\x00\x00\x32\x01\x00\x00\x00\x00\x00\x00\x00\x35\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x63\x00\x00\x73\x00\x00\x00\x00\x00\x3d\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00");
 

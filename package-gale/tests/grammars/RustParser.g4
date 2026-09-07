@@ -1099,10 +1099,15 @@ visibility
     ;
 
 // technical
+// LOCAL: `KW_UNION`. `union` is a weak keyword — it opens an item only in
+// `union Foo { … }`, and is an ordinary identifier everywhere else. Upstream
+// admits `macro_rules` for the same reason and stopped there, so `fn union(…)`
+// and `facts.union()` had no parse at all.
 identifier
     : NON_KEYWORD_IDENTIFIER
     | RAW_IDENTIFIER
     | KW_MACRORULES
+    | KW_UNION
     ;
 
 keyword

@@ -101,7 +101,11 @@ What is left, each minimized:
 
   Rust spells it out with a condition that excludes struct expressions; the vendored grammar only marks it `/*except structExpression*/` on `predicateLoopExpression`, and ANTLR4 mis-parses it the same way — so this is not a compatibility divergence, it is context-sensitivity neither grammar encodes.
 
-  A caller-FOLLOW tier on the scan tournament closes it and is not the answer; `AGENTS.md`, "Failed approaches", records why the jar disagrees. Two routes remain. The grammar can grow the condition rule Rust's own has, which needs the exclusion to travel into `expression` — a rule argument on an LR rule, or the parser-base flag other grammars-v4 grammars use. Or the decision goes to the ATN, where full-context simulation answers it and the dangling `ELSE` together.
+  A caller-FOLLOW tier on the scan tournament closes it and is not the answer; `AGENTS.md`, "Failed approaches", records why the jar disagrees.
+
+  The grammar route works and is blocked on one gale defect. Rust's rule is the depth counter every ANTLR4 grammar with this problem uses, and gale takes all three pieces on their own — `@parser::members { int noStruct = 0; }`, the mid-rule `{noStruct = noStruct + 1;}` (not `++`, which java2wado refuses), and `{noStruct == 0}?` gating `structExprStruct`. Together with `superClass` they do not:
+
+- [ ] **A parser `superClass` and parser actions cannot coexist.** Adding any `@parser::members` / action body to `RustParser.g4` makes gale report `superClass 'RustParserBase' is called from a body carrying host code the grammar's action language has no translator for, so the base is not wired`, and the generated module stops exporting `RustParserBase` — so `shl` / `shr` lose the predicates they are built on and the grammar no longer compiles against its own base. It is not the `this.` form: a bare member reference reports the same. Reproduce by adding an empty `@parser::members` block to any `superClass` grammar. Closing this unblocks the struct-literal class above, which is the whole remainder.
 
 The rest is one item: `wado-compiler/src/unparse.rs`'s `escape_char`, a `match` over character escapes with a guarded arm.
 
