@@ -1446,30 +1446,52 @@ impl Body {
         });
     }
 
-    /// Whether some `break label` in `node`'s subtree names `label`. A nested
-    /// block re-using the label takes its own breaks, so the walk stops there.
-    ///
-    /// Every block in the IR is labeled, so this is what tells a block that
-    /// merely groups statements from one a `break` can exit early.
-    pub fn breaks_to(&self, node: NodeRef, label: &str) -> bool {
+    /// Invoke `f` on what every `break label` in `node`'s subtree carries. A
+    /// nested block re-using the label takes its own breaks, so the walk stops
+    /// there. `f` returns `false` to stop the walk, and so does this.
+    fn walk_breaks_to(
+        &self,
+        node: NodeRef,
+        label: &str,
+        f: &mut impl FnMut(Option<Operand>) -> bool,
+    ) -> bool {
         match node {
             NodeRef::Stmt(s) => match &self.stmts[s].kind {
-                StmtKind::Break { label: Some(l), .. } if l == label => return true,
-                StmtKind::LabeledBlock { label: l, .. } if l == label => return false,
+                StmtKind::Break {
+                    label: Some(l),
+                    value,
+                } if l == label => {
+                    if !f(*value) {
+                        return false;
+                    }
+                }
+                StmtKind::LabeledBlock { label: l, .. } if l == label => return true,
                 _ => {}
             },
             NodeRef::Expr(e) => {
                 if let ExprKind::LabeledBlock { label: l, .. } = &self.exprs[e].kind
                     && l == label
                 {
-                    return false;
+                    return true;
                 }
             }
             _ => {}
         }
-        let mut found = false;
-        self.for_each_child(node, |c| found |= self.breaks_to(c, label));
-        found
+        let mut go = true;
+        self.for_each_child(node, |c| {
+            if go {
+                go = self.walk_breaks_to(c, label, f);
+            }
+        });
+        go
+    }
+
+    /// Whether some `break label` in `node`'s subtree names `label`.
+    ///
+    /// Every block in the IR is labeled, so this is what tells a block that
+    /// merely groups statements from one a `break` can exit early.
+    pub fn breaks_to(&self, node: NodeRef, label: &str) -> bool {
+        !self.walk_breaks_to(node, label, &mut |_| false)
     }
 
     /// `e` as a block whose value is its tail statement — the shape a pass may
@@ -1518,7 +1540,10 @@ impl Body {
             return None;
         };
         let mut out = Vec::new();
-        self.collect_exits(NodeRef::Block(*block), label, &mut out);
+        self.walk_breaks_to(NodeRef::Block(*block), label, &mut |v| {
+            out.push(v);
+            true
+        });
         // An `Expr` tail is never a terminator, so reaching it is the same
         // question as it being there.
         if let Some(&last) = self.blocks[*block].stmts.last()
@@ -1527,31 +1552,6 @@ impl Body {
             out.push(Some(v));
         }
         Some(out)
-    }
-
-    fn collect_exits(&self, node: NodeRef, label: &str, out: &mut Vec<Option<Operand>>) {
-        match node {
-            NodeRef::Stmt(s) => match &self.stmts[s].kind {
-                StmtKind::Break {
-                    label: Some(l),
-                    value,
-                } if l == label => {
-                    out.push(*value);
-                    // The carried value can break out past this one.
-                }
-                StmtKind::LabeledBlock { label: l, .. } if l == label => return,
-                _ => {}
-            },
-            NodeRef::Expr(e) => {
-                if let ExprKind::LabeledBlock { label: l, .. } = &self.exprs[e].kind
-                    && l == label
-                {
-                    return;
-                }
-            }
-            _ => {}
-        }
-        self.for_each_child(node, |c| self.collect_exits(c, label, out));
     }
 
     /// The one operand `e` yields, or `None` where more than one point produces

@@ -904,7 +904,9 @@ impl<'a> Interpreter<'a> {
     }
 }
 
-/// What a `let` binding borrows into, as [`Interpreter::record_ref_root`] reads it.
+/// What a `let` binding borrows into, as [`Interpreter::record_ref_root`] reads
+/// it. Also a lattice: two answers that differ join to `Unrooted`.
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub enum BorrowRoot {
     NotABorrow,
     /// A borrow whose referent no tracked local holds.
