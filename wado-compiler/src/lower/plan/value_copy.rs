@@ -102,9 +102,8 @@ pub struct ValueCopyPlan {
     /// finalized by `.build()` is not defensively copied. Superset of
     /// `returns_owned`.
     pub returns_self_projection: FuncKeySet,
-    /// The builtins that declared `#[returns(owned)]`: they allocate while
-    /// reading through a reference, which the call-site reading cannot tell
-    /// from a read of one.
+    /// Where each builtin said its result comes from: a fresh place, or a
+    /// component of one named parameter.
     pub builtin_conventions: ownership::BuiltinConventions,
     /// Per-callee, per-position reference-storage: which parameter positions a
     /// callee may persist a reference to. A local whose `&`/`&mut` is passed at
