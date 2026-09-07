@@ -148,7 +148,13 @@ OUTER_BLOCK_DOC:
 
 BLOCK_COMMENT_OR_DOC: ( BLOCK_COMMENT | INNER_BLOCK_DOC | OUTER_BLOCK_DOC) -> channel (HIDDEN);
 
-SHEBANG: {this.SOF()}? '\ufeff'? '#!' ~[\r\n]* -> channel(HIDDEN);
+// LOCAL: `~[\[\r\n]` for the character after `#!`. Rust strips a shebang only
+// when the token after `#!` is not `[`, which is what separates it from a
+// crate-level inner attribute. Upstream accepts any character there, so maximal
+// munch gave `#![allow(...)]` to this rule: on one line the whole attribute
+// vanished onto the hidden channel, and across two the rule stopped at the
+// newline and left `)]` behind.
+SHEBANG: {this.SOF()}? '\ufeff'? '#!' ~[\[\r\n] ~[\r\n]* -> channel(HIDDEN);
 
 // whitespace https://doc.rust-lang.org/reference/whitespace.html
 WHITESPACE : [\p{Zs}]          -> channel(HIDDEN);

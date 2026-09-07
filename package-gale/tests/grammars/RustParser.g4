@@ -433,8 +433,12 @@ outerAttribute
     : POUND LSQUAREBRACKET attr RSQUAREBRACKET
     ;
 
+// LOCAL: `KW_UNSAFE` — the unsafe attribute `#[unsafe(no_mangle)]` (Rust 2024,
+// and required there for the attributes that were always unsafe). `unsafe` is a
+// keyword, so `simplePath` cannot start with it.
 attr
-    : simplePath attrInput?
+    : KW_UNSAFE LPAREN attr RPAREN
+    | simplePath attrInput?
     ;
 
 attrInput

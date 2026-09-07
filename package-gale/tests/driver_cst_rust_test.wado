@@ -766,3 +766,39 @@ test "comparison: a bare < is not a shift" {
     let r = rlex_prs(&"const X: bool = 1 < 2;");
     assert r.ok(), `unexpected diagnostics: ${r.diagnostics:?}`;
 }
+
+// A shebang is stripped only when what follows `#!` is not `[`, which is what
+// separates it from a crate-level inner attribute. Reading any character there
+// gave the whole first line to the hidden channel, so an attribute on one line
+// vanished without a diagnostic and one across two lines left `)]` behind.
+test "shebang: a crate-level inner attribute is not a shebang" {
+    let r = rlex_prs(&"#![allow(dead_code)]\nfn main() {}");
+    assert r.ok(), `unexpected diagnostics: ${r.diagnostics:?}`;
+    let actual = rust::to_string_tree(&r);
+    assert actual.contains("innerAttribute"), `the attribute went to the hidden channel: ${actual}`;
+}
+
+test "shebang: an inner attribute spanning lines keeps its closing bracket" {
+    let r = rlex_prs(&"#![allow(\n    dead_code\n)]\nfn main() {}");
+    assert r.ok(), `unexpected diagnostics: ${r.diagnostics:?}`;
+}
+
+// The rejection case: a real shebang is still stripped.
+test "shebang: a real one is still hidden" {
+    let r = rlex_prs(&"#!/usr/bin/env run-cargo-script\nfn main() {}");
+    assert r.ok(), `unexpected diagnostics: ${r.diagnostics:?}`;
+    let actual = rust::to_string_tree(&r);
+    assert !actual.contains("innerAttribute"), `a real shebang is not an attribute: ${actual}`;
+}
+
+// `#[unsafe(...)]` wraps the attributes that were always unsafe (Rust 2024).
+// `unsafe` is a keyword, so `attr`'s `simplePath` cannot start with it.
+test "attr: the unsafe attribute wrapper" {
+    let r = rlex_prs(&"#[unsafe(no_mangle)]\npub extern \"C\" fn f() {}");
+    assert r.ok(), `unexpected diagnostics: ${r.diagnostics:?}`;
+}
+
+test "attr: an unsafe attribute with a value" {
+    let r = rlex_prs(&"#[unsafe(export_name = \"g\")]\npub fn f() {}");
+    assert r.ok(), `unexpected diagnostics: ${r.diagnostics:?}`;
+}
