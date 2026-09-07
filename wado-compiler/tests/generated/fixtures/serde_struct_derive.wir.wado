@@ -6726,13 +6726,14 @@ fn "core:json/core:json/JsonDeserializer::scan_string_run$scalar"(self, from) {
 }
 
 fn "core:serde/serde_struct_derive.wado/User^core:serde/Serialize::serialize<core:json/JsonSerializer>$scalar$spec0"(self, s) {
+    let value_9: ref "core:prelude/string.wado//String";
     let __qm_e_11: ref "core:serde//SerializeError";
     let __local_18: ref "core:serde//SerializeError";
     let new_used_30: i32;
     let start_31: i32;
-    let v_47: ref "core:prelude/string.wado//String";
-    let new_used_67: i32;
-    let start_68: i32;
+    let v_48: ref "core:prelude/string.wado//String";
+    let new_used_68: i32;
+    let start_69: i32;
     new_used_30 = s.used + 1;
     if @unlikely(new_used_30 > builtin::array_len(s.repr)) {
         cold_path;
@@ -6741,9 +6742,10 @@ fn "core:serde/serde_struct_derive.wado/User^core:serde/Serialize::serialize<cor
     start_31 = s.used;
     s.used = new_used_30;
     builtin::array_set_u8(s.repr, start_31, 123);
-    v_47 = self.name;
+    v_48 = self.name;
+    value_9 = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_1: ref Array<u8>; __array_clone_src_1 = v_48.repr; let __array_clone_len_3: i32; __array_clone_len_3 = v_48.used; let __array_clone_dst_2: ref Array<u8>; __array_clone_dst_2 = builtin::array_new<u8>(__array_clone_len_3); builtin::array_copy<u8>(__array_clone_dst_2, 0, __array_clone_src_1, 0, __array_clone_len_3); __array_clone_dst_2), used: v_48.used };
     "core:json/write_plain_key$spec1"(s, global:core:serde::__const_obj_172, 0);
-    "core:json/write_escaped_string"(s, v_47);
+    "core:json/write_escaped_string"(s, value_9);
     if @likely(ref.is_null(ref.null none)) {
     } else {
         __qm_e_11 = ref.as_non_null(ref.null none);
@@ -6758,10 +6760,10 @@ fn "core:serde/serde_struct_derive.wado/User^core:serde/Serialize::serialize<cor
         cold_path;
         return __local_18;
     }
-    return new_used_67 = s.used + 1, if @unlikely(new_used_67 > builtin::array_len(s.repr)) {
+    return new_used_68 = s.used + 1, if @unlikely(new_used_68 > builtin::array_len(s.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(s, new_used_67);
-    }, start_68 = s.used, s.used = new_used_67, builtin::array_set_u8(s.repr, start_68, 125), ref.null none;
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(s, new_used_68);
+    }, start_69 = s.used, s.used = new_used_68, builtin::array_set_u8(s.repr, start_69, 125), ref.null none;
 }
 
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write$spec0$scalar"(self, is_negative, alt_prefix, digit_count) {

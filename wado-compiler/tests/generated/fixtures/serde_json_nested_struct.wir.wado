@@ -6453,10 +6453,12 @@ fn "core:serde/serde_json_nested_struct.wado/Line^core:serde/Serialize::serializ
     let __local_18: ref "core:serde//SerializeError";
     let new_used_30: i32;
     let start_31: i32;
-    let new_used_67: i32;
-    let start_68: i32;
-    let r_79: ref null "core:serde//SerializeError";
-    let r_86: ref null "core:serde//SerializeError";
+    let v_46: ref "serde_json_nested_struct.wado//Point";
+    let v_58: ref "serde_json_nested_struct.wado//Point";
+    let new_used_69: i32;
+    let start_70: i32;
+    let r_81: ref null "core:serde//SerializeError";
+    let r_88: ref null "core:serde//SerializeError";
     new_used_30 = s.used + 1;
     if @unlikely(new_used_30 > builtin::array_len(s.repr)) {
         cold_path;
@@ -6468,31 +6470,33 @@ fn "core:serde/serde_json_nested_struct.wado/Line^core:serde/Serialize::serializ
     if ref.is_null(global:core:serde::__const_obj_87) {
         global:core:serde::__const_obj_87 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("startPoint"), used: 10 };
     }
-    value_9 = self.start_point;
+    v_46 = self.start_point;
+    value_9 = struct.new "serde_json_nested_struct.wado//Point" { x: v_46.x, y: v_46.y };
     "core:json/write_plain_key$spec1"(s, global:core:serde::__const_obj_87, 0);
-    r_79 = "core:serde/serde_json_nested_struct.wado/Point^core:serde/Serialize::serialize<core:json/JsonSerializer>$scalar"(value_9, s);
-    if @likely(ref.is_null(r_79)) {
+    r_81 = "core:serde/serde_json_nested_struct.wado/Point^core:serde/Serialize::serialize<core:json/JsonSerializer>$scalar"(value_9, s);
+    if @likely(ref.is_null(r_81)) {
     } else {
-        __qm_e_11 = ref.as_non_null(r_79);
+        __qm_e_11 = ref.as_non_null(r_81);
         cold_path;
         return __qm_e_11;
     }
     if ref.is_null(global:core:serde::__const_obj_86) {
         global:core:serde::__const_obj_86 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("endPoint"), used: 8 };
     }
-    value_16 = self.end_point;
+    v_58 = self.end_point;
+    value_16 = struct.new "serde_json_nested_struct.wado//Point" { x: v_58.x, y: v_58.y };
     "core:json/write_plain_key$spec0"(s, global:core:serde::__const_obj_86, 1);
-    r_86 = "core:serde/serde_json_nested_struct.wado/Point^core:serde/Serialize::serialize<core:json/JsonSerializer>$scalar"(value_16, s);
-    if @likely(ref.is_null(r_86)) {
+    r_88 = "core:serde/serde_json_nested_struct.wado/Point^core:serde/Serialize::serialize<core:json/JsonSerializer>$scalar"(value_16, s);
+    if @likely(ref.is_null(r_88)) {
     } else {
-        __local_18 = ref.as_non_null(r_86);
+        __local_18 = ref.as_non_null(r_88);
         cold_path;
         return __local_18;
     }
-    return new_used_67 = s.used + 1, if @unlikely(new_used_67 > builtin::array_len(s.repr)) {
+    return new_used_69 = s.used + 1, if @unlikely(new_used_69 > builtin::array_len(s.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(s, new_used_67);
-    }, start_68 = s.used, s.used = new_used_67, builtin::array_set_u8(s.repr, start_68, 125), ref.null none;
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(s, new_used_69);
+    }, start_70 = s.used, s.used = new_used_69, builtin::array_set_u8(s.repr, start_70, 125), ref.null none;
 }
 
 fn "core:prelude/primitive.wado/f64::fmt_into$scalar$spec0$scalar"(self, f) {
