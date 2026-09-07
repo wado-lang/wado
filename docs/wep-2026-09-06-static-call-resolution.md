@@ -107,48 +107,67 @@ the merge on its own, so the resolution states each:
 ### The argument picks a declaration, not a trait
 
 A static call is selected by the parameter the impl declares, compared against
-the call's _first_ argument — however many arguments follow it. `From<T>`'s
-source type is also its trait argument, and `from` takes exactly one, which is
-why the two names were the only ones discriminated and one argument the only
-arity read. A trait implemented twice on one receiver (`impl Conv<A> for M`
-beside `impl Conv<B> for M`) poses the same question at any arity, and only the
-parameter states it for every trait. Reading it off the declaration also removes
-the alias handling the trait-reference spelling needed: the parameter is
-resolved in the impl's own frame, so both sides of the comparison are already
-canonical.
+the call's first argument. Arguments after the first do not narrow it further.
 
-The trait segment of a mangled name keeps the trait's arguments for the same
-reason. Dropping them collapses two declarations of one method name onto one
-body, and how many times the receiver implements the trait decides that — never
-which trait it is. That holds for a body the block inherits as much as one it
-writes: the segment comes from the block's own trait reference, never minted
-afresh from the trait declaration, which has no arguments to give.
+`From<T>` made that rule look like two narrower ones. Its source type is also
+its trait argument, so the trait reference could stand in for the parameter, and
+`from` takes exactly one argument, so one argument looked like the whole list.
+Neither holds for any other trait. A trait implemented twice on one receiver
+(`impl Conv<A> for M` beside `impl Conv<B> for M`) poses the same question at
+any arity, and the declared parameter is what answers it.
 
-A parameter the block fills is not a mismatch but a blanket, whose
-unsubstituted spelling must not be baked into a mangled name; declining it sends
-the call to the blanket resolver, which instantiates it. Only the _block's_ own
-slots make a parameter its to fill — a concrete impl whose method carries slots
-(`fn build<T: Display>(v: T)`) is filled at the call — and once neither resolves
-the two look alike, so the question goes to the block's written slots, never to
-the shape of the parameter's type. A slot reached only inside a constructor
-(`impl From<Array<T>> for List<T>`) leaves a concrete head to mangle and is
-kept; a reference to a slot (`From<&T>`) is the slot, and is peeled before the
-question is asked.
+Reading the parameter also removes the alias handling the trait-reference
+spelling needed. The parameter is resolved in the impl's own frame, so both
+sides of the comparison are already canonical.
+
+The trait segment of a mangled name keeps the trait's arguments. Dropping them
+collapses two declarations of one method name onto one body. What decides this
+is how many times the receiver implements the trait, never which trait it is,
+and it holds for a body the block inherits as much as one it writes: the segment
+comes from the block's own trait reference. Minting one from the trait
+declaration drops the arguments, because a declaration has none to give.
+
+A parameter the block fills is a blanket, not a mismatch. Its unsubstituted
+spelling must not be baked into a mangled name, so declining it sends the call
+to the blanket resolver, which instantiates it. Only the block's own slots make
+a parameter its to fill. A concrete impl whose method carries slots
+(`fn build<T: Display>(v: T)`) is filled at the call instead, and once neither
+resolves the two look alike, so the question goes to the block's written slots
+rather than to the shape of the parameter's type. Two shapes settle the rest: a
+slot reached only inside a constructor (`impl From<Array<T>> for List<T>`)
+leaves a concrete head to mangle and is kept, and a reference to a slot
+(`From<&T>`) is the slot, peeled before the question is asked.
 
 ### One call, one resolution
 
-The literal preselect runs before the callee is resolved and keys it. Resolving
-the parameter lists without the argument and mangling the name with it is two
-answers for one call — the disagreement this WEP exists to remove. Folding
-sixteen lookups into one resolver does not prevent it, because two _calls_ to
-that resolver disagree just as well.
+The literal preselect runs before the callee is resolved, and keys it. Resolving
+the parameter lists without the argument and mangling the name with it gives two
+answers for one call, which is the disagreement this WEP exists to remove.
+Folding sixteen lookups into one resolver does not prevent it, because two
+_calls_ to that resolver disagree just as well.
 
-For the same reason a spelling several traits answer is reported before the
-overload an argument settles, and reported whether each trait declares a body or
-leaves its default to answer, since which of the two it is separates nothing.
-Every site that mangles a name has to consume that report: one built from the
-`Found` answer alone and fell back to a trait-less name, which names a body
-nothing declares.
+A spelling several traits answer is reported for the same reason, and reported
+before the overload an argument settles. Whether each trait declares a body or
+leaves its default to answer makes no difference, because neither separates the
+traits. Every site that mangles a name has to consume that report. One built its
+name from the `Found` answer alone and fell back to a trait-less name, which
+names a body nothing declares.
+
+The report names each trait once, in the order the blocks were written. It
+dedupes by declaration rather than by rendered name, because a trait's two
+blocks need not be adjacent.
+
+### A checked argument is a source change
+
+An inherited default-bodied static used to answer with no parameter list, so its
+arguments went unchecked. They are checked now. That is visible to anyone
+calling such a static: `Instant::from_str("…")`, against a declaration taking
+`&String`, has to be written `&"…"`. `lib/core/temporal_test.wado` moved with
+it, to the spelling `int128_test.wado` and `primitive_test.wado` already used.
+
+The tightening is the point rather than a side effect. An argument no list
+describes is an argument nothing can reject. It is the one change here a caller
+outside the compiler sees.
 
 ### Resolving is not free
 
@@ -202,6 +221,3 @@ other. Unifying them further is symmetry, not this WEP's decision.
   cannot name a namespace-imported type. A `Self`-returning static reached as
   `lib::P::twice()` then binds `Self` to nothing. Closing it means threading the
   receiver's `TypeId` from the site that already resolved it.
-- The ambiguity report names each trait once and in the order the blocks were
-  written. Deduping by `DefId` rather than by the rendered name is what makes
-  that hold when a trait's two blocks are not adjacent.

@@ -635,23 +635,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 effective_name[..pos].to_string(),
                 effective_name[pos + 2..].to_string(),
             );
-            match self.preselect_static_arg(
+            let preselected = self.preselect_static_arg(
                 &recv_name,
                 &method_name,
                 first_arg,
                 call.span,
                 ctx,
                 None,
-            ) {
-                PreselectedArg::Reported => return TypeTable::ERROR,
-                // The first parameter only: a callee may declare further
-                // parameters the defaults fill, and replacing the list left
-                // their arity unchecked and their defaults unpadded.
-                PreselectedArg::Type(source) => match param_types.first_mut() {
-                    Some(first) => *first = source,
-                    None => param_types.push(source),
-                },
-                PreselectedArg::Undecided => {}
+            );
+            if matches!(preselected, PreselectedArg::Reported) {
+                return TypeTable::ERROR;
+            }
+            if let Some(source) = preselected.picked() {
+                PreselectedArg::shape_first(&mut param_types, source);
             }
         }
 
@@ -809,9 +805,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // them. It covers trait impls only; an inherent static has no
                 // selection and reaches the index instead.
                 if let Some(suffix_seg) = ident.segments.get(1) {
-                    let arg_hint = args
-                        .first()
-                        .map(|&arg| self.tysys.type_table.borrow().type_name(arg));
+                    let arg_hint = self.first_arg_hint(&args);
                     let method_def = self
                         .locate_static_method_impl(prefix, suffix, arg_hint.as_deref(), None)
                         .and_then(|r| r.method_id)
@@ -973,9 +967,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // The same argument the selection above read: without it this
                 // re-check resolves a different declaration than the call was
                 // mangled to.
-                let arg_hint = args
-                    .first()
-                    .map(|&arg| self.tysys.type_table.borrow().type_name(arg));
+                let arg_hint = self.first_arg_hint(&args);
                 let resolved = self.static_callee_params(
                     &receiver_key,
                     receiver_type,
@@ -1346,9 +1338,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         );
                     }
 
-                    // Find the impl module via the trait env (global index)
-                    let arg_type_hint = (args.len() == 1)
-                        .then(|| self.tysys.type_table.borrow().type_name(args[0]));
+                    let arg_type_hint = self.first_arg_hint(&args);
                     // The importing module never names `Type` on its own, so a
                     // bare-name search reaches no impl on it: the callee then
                     // loses its trait segment and names a body nothing
@@ -1372,11 +1362,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         arg_type_hint.as_deref(),
                         ns_receiver_type,
                     );
-                    // Reported here rather than mangled: a spelling several
-                    // traits answer names none of them, and the trait-less name
-                    // below would reach WIR build as an unresolved call. The
-                    // bare spelling reports it at its own site; through a
-                    // namespace it used to fall through to that name.
+                    // A spelling several traits answer names none of them, so it
+                    // is reported rather than mangled: the trait-less name below
+                    // reaches WIR build as an unresolved call.
                     if let StaticLookup::Ambiguous(traits) = &resolved {
                         let _ = self.emit(TypeError::AmbiguousTraitMethod {
                             method: method_name.to_string(),
@@ -1454,9 +1442,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     };
 
                     // From the same resolution the identity and the return type
-                    // came from. Asking a second lookup here left the spelling
-                    // resolved with no list behind it, so a method inherited
-                    // with its trait's default body went unchecked and unpadded.
+                    // came from: a second lookup here answers with no list, and
+                    // an inherited default body then goes unchecked.
                     let (
                         CalleeParams {
                             param_is_mut,

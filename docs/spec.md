@@ -3171,8 +3171,8 @@ and `IndexValue<RangeInclusive<i32>>` at once — and why the same impls answer
 the method spelling, `l.index_value(i)`.
 
 A trait's associated function obeys the same rule, selected on its first
-argument. There is no receiver to fix `Self`, so the type is written and the
-argument chooses among the impls declaring the function — Rust needs
+argument. It has no receiver to fix `Self`, so the type is written out and the
+argument chooses among the impls that declare the function. Rust needs
 `<M as Enc<A>>::make` here:
 
 ```wado

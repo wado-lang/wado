@@ -19,11 +19,8 @@ pub(super) struct StaticCallee {
     /// Where the declaration lives, the trait it came through, and the identity
     /// a call is mangled and a use→def edge recorded from.
     pub(super) method_ref: StaticMethodRef,
-    /// The lists the call checks and pads against. How many parameters there
-    /// are, what they are called and which carry defaults come from the
-    /// declaration, so an arity check and a default padding never wait on the
-    /// receiver. A type the receiver did not fill stays the slot the block
-    /// wrote, and the call site checks only what its own inference fills.
+    /// The lists the call checks and pads against. Read from the declaration,
+    /// so arity and defaults never wait on the receiver filling a slot.
     pub(super) params: CalleeParams,
     /// The method's own slots as its declaration wrote them.
     pub(super) own_params: Vec<ast::GenericParam>,
@@ -36,16 +33,14 @@ pub(super) struct StaticCallee {
 /// its arguments.
 pub(super) enum StaticLookup {
     Found(Box<StaticCallee>),
-    /// Several declarations answer and only an argument separates them, and the
-    /// selection could not read one. No declaration is picked, so there is no
-    /// identity to mangle and no list to check — distinct from a declaration
-    /// picked that no trait names, which mangles without a trait segment. The
-    /// return type answers where every candidate agrees.
+    /// One trait, several impls, and no argument to separate them. Nothing is
+    /// picked, so there is no identity to mangle and no list to check; the
+    /// return type still answers where every candidate agrees.
     Overloaded {
         return_type: TypeId,
     },
-    /// Several traits supply the name with a default body. No argument
-    /// separates them, so the spelling names none: the call site reports it.
+    /// Several traits supply the name, which no argument can separate. The
+    /// spelling names none of them and the call site reports it.
     Ambiguous(Vec<String>),
     NotStatic,
 }
@@ -55,7 +50,6 @@ pub(super) enum StaticLookup {
 pub(super) struct TraitSupply {
     trait_decl: DefId,
     impl_def: DefId,
-    trait_name: String,
     /// The block declares no body of its own, so the trait's default answers.
     inherited: bool,
 }
@@ -101,12 +95,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Resolve what `receiver_name::method_name` names, once, for every site
     /// that used to ask its own question.
     ///
-    /// `receiver_key` is the key the caller's own reference site resolved to,
-    /// where it has one; deriving a second key here would answer from another
-    /// vantage than the call. `arg_hint` names the *first* argument's type,
-    /// which is what separates several impls of one trait — however many
-    /// arguments follow it. Both are the call's one vantage: a site that
-    /// resolves without them and mangles with them gets two answers.
+    /// `receiver_key` is the key the caller's own reference site resolved to;
+    /// `arg_hint` names its first argument's type, which is what separates
+    /// several impls of one trait. Both are the call's one vantage — resolving
+    /// without them and mangling with them gives two answers for one call.
     pub(super) fn resolve_static_callee(
         &mut self,
         site: Option<ast::AstId>,
@@ -199,7 +191,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // over blocks that declare a body and blocks that inherit the trait's
         // alike, since which of the two it is decides nothing here.
         let supplies = self.traits_supplying_static(&key, method_name);
-        if let Some(alternatives) = Self::ambiguous_alternatives(&supplies) {
+        if let Some(alternatives) = self.ambiguous_alternatives(&supplies) {
             return StaticLookup::Ambiguous(alternatives);
         }
 
@@ -389,28 +381,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         })
     }
 
-    /// The traits to report when several supply one name, deduped by
-    /// declaration and in the order the blocks were written. `None` where one
-    /// trait answers, however many times it is implemented: naming it as both
-    /// alternatives is a remedy nobody can write.
-    ///
-    /// Deduping by `DefId` rather than by the rendered name: two blocks of one
-    /// trait need not be adjacent, and a name-keyed pass over an unsorted list
-    /// let the trait through twice.
-    fn ambiguous_alternatives(supplies: &[TraitSupply]) -> Option<Vec<String>> {
-        let mut alternatives: Vec<&TraitSupply> = Vec::new();
+    /// The traits to name when several supply one static, in the order the
+    /// blocks were written. `None` where one trait answers, however many times
+    /// it is implemented: naming it as both alternatives is a remedy nobody can
+    /// write.
+    fn ambiguous_alternatives(&self, supplies: &[TraitSupply]) -> Option<Vec<String>> {
+        let mut distinct: Vec<DefId> = Vec::new();
         for supply in supplies {
-            if !alternatives
-                .iter()
-                .any(|seen| seen.trait_decl == supply.trait_decl)
-            {
-                alternatives.push(supply);
+            if !distinct.contains(&supply.trait_decl) {
+                distinct.push(supply.trait_decl);
             }
         }
-        (alternatives.len() > 1).then(|| {
-            alternatives
+        (distinct.len() > 1).then(|| {
+            distinct
                 .into_iter()
-                .map(|s| s.trait_name.clone())
+                .map(|decl| self.tysys.resolutions.defs().name(decl).to_string())
                 .collect()
         })
     }
@@ -460,10 +445,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .any(|m| m.name == method_name);
                 // A required method the block leaves undeclared is its own
                 // error, reported where the two are compared.
-                (written_here || declared.default_body.is_some()).then(|| TraitSupply {
+                (written_here || declared.default_body.is_some()).then_some(TraitSupply {
                     trait_decl,
                     impl_def,
-                    trait_name: self.tysys.resolutions.defs().name(trait_decl).to_string(),
                     inherited: !written_here,
                 })
             })

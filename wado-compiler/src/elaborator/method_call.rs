@@ -1476,10 +1476,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if matches!(preselected, PreselectedArg::Reported) {
             return TypeTable::ERROR;
         }
-        let preselected = match preselected {
-            PreselectedArg::Type(source) => Some(source),
-            PreselectedArg::Undecided | PreselectedArg::Reported => None,
-        };
+        let preselected = preselected.picked();
         let arg_hint = preselected.map(|source| self.tysys.type_table.borrow().type_name(source));
 
         let callee_sig = static_receiver
@@ -1515,15 +1512,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             defaults_module,
         } = callee_params;
 
-        // The preselected parameter shapes the sole written argument. Only the
-        // first entry: a callee may declare further parameters the defaults
-        // fill, and replacing the list left a three-parameter static looking
-        // like a one-parameter one — an unchecked arity and an unpadded default.
         if let Some(source) = preselected {
-            match param_types.first_mut() {
-                Some(first) => *first = source,
-                None => param_types.push(source),
-            }
+            PreselectedArg::shape_first(&mut param_types, source);
         }
 
         // The module those defaults were written in, so their bodies answer to
@@ -2128,14 +2118,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
             };
 
-        // Find trait name: if the static method belongs to a trait impl, include the
-        // trait name in the mangled function name so WIR can resolve it correctly.
-        // The argument separates same-named declarations whatever the method
-        // is called: `from` is not a privileged name, it was the only one anyone
-        // had written twice on one receiver.
-        let arg_type_hint = args
-            .first()
-            .map(|&arg| self.tysys.type_table.borrow().type_name(arg));
+        // A trait impl's static is mangled with its trait, so WIR resolves it.
+        let arg_type_hint = self.first_arg_hint(&args);
         // Keep the whole selection: its trait names the mangled function, and
         // its `method_id` is what the use→def edge below is recorded against.
         // A name lookup cannot stand in — two conversion impls on one type
@@ -3072,11 +3056,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .expect("trait_impls_for_receiver yields trait impls alone")
             };
             // A parameter the block fills is a blanket: it accepts a family
-            // rather than a type, its presence means the trait-less path can
-            // resolve the call through the blanket resolver, and it is never an
-            // unmatched alternative worth listing. The same question the
-            // selection asks, asked the same way — the two answering it
-            // differently is what let a blanket be selected and then mangled.
+            // rather than a type, the blanket resolver is what answers such a
+            // call, and it is never an unmatched alternative worth listing.
+            // The selection's question, asked the same way — the two answering
+            // differently selects a blanket the diagnostic calls unsupported.
             if self.param_filled_by_block(header.type_params.len(), source) {
                 survey.blanket_trait.get_or_insert_with(trait_name);
                 continue;
@@ -3130,18 +3113,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.import_original_name(&head, impl_module)
     }
 
-    /// Whether the *block*, not the call, fills this parameter — the mark of a
-    /// blanket, whose unsubstituted spelling must not be baked into a mangled
-    /// name. References are peeled first: `impl<T> From<&T>` is as much the
-    /// block's `T` as `impl<T> From<T>` is. A slot reached only inside a
-    /// constructor (`impl From<Array<T>> for List<T>`) leaves a concrete head
-    /// to mangle, so the block does not fill it.
-    ///
-    /// Only the block's own slots count, and `block_slots` is how many it
-    /// wrote. A concrete impl whose *method* carries slots of its own
-    /// (`fn build<T: Display>(v: T)`) is filled at the call, not by the block —
-    /// a distinction the parameter's type cannot show, since a blanket's
-    /// parameter and a method-generic one look alike once neither resolves.
+    /// The first argument's type name, which is what separates several impls of
+    /// one trait — however many arguments follow it.
+    pub(super) fn first_arg_hint(&self, args: &[TypeId]) -> Option<String> {
+        args.first()
+            .map(|&arg| self.tysys.type_table.borrow().type_name(arg))
+    }
+
+    /// Whether the block, not the call, fills this parameter — the mark of a
+    /// blanket. `block_slots` is how many slots the block wrote: a concrete
+    /// impl's own `fn build<T>(v: T)` is filled at the call, and the parameter's
+    /// type cannot show which it is once neither resolves.
     fn param_filled_by_block(&self, block_slots: usize, param: TypeId) -> bool {
         if block_slots == 0 {
             return false;
@@ -3186,22 +3168,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .fq_trait_of_impl(header, &self.tysys.resolutions)
             };
 
-        // Which declaration the argument picks. The *parameter* answers, not
-        // the trait: `From<T>`'s source type is also its trait argument, which
-        // is why `from` and `try_from` were the only names ever discriminated
-        // here — but every trait implemented twice on one receiver poses the
-        // same question, and the parameter states it for all of them. Both
-        // sides are resolved types, the parameter in the impl's own frame, so
-        // an alias on either is already gone.
-        //
-        // Two answers are not a mismatch. A parameter the block fills belongs
-        // to a blanket: declining it sends the call down the trait-less path,
-        // where `resolve_blanket_static_method` instantiates it, or to the
-        // diagnostic that says the instantiation is not selectable. A parameter
-        // still carrying an open slot (`impl From<Array<T>> for List<T>`, and a
-        // concrete impl's own `fn build<T>(v: T)`) equals no instantiation
-        // verbatim, and the mangled name carries the impl's spelling either
-        // way, so it is kept.
+        // Which declaration the argument picks: the parameter answers, not the
+        // trait. Both sides are resolved types, the parameter in the impl's own
+        // frame, so an alias on either is already gone. A parameter the block
+        // fills declines, and one still carrying an open slot is kept — it
+        // equals no instantiation verbatim, and the mangled name carries the
+        // impl's spelling either way.
         //
         // Comparing names is this mechanism's ceiling; `TypeId` matching is
         // the replacement (WEP 2026-07-31 phase 4).
@@ -3412,13 +3384,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
         let impl_type_args = impl_type_args_owned.as_slice();
 
-        // Find the trait name and the module where the impl block lives. The
-        // argument separates same-named declarations — a user-defined
-        // `impl From<MyType> for i32` from the primitive's, and `impl Conv<A>`
-        // from `impl Conv<B>` — so it is read whatever the method is called.
-        let arg_type_hint = args
-            .first()
-            .map(|&arg| self.tysys.type_table.borrow().type_name(arg));
+        // The trait the impl names and the module its block lives in. The
+        // argument separates a user-defined `impl From<MyType> for i32` from
+        // the primitive's, and `impl Conv<A>` from `impl Conv<B>`.
+        let arg_type_hint = self.first_arg_hint(args);
         // A newtype's static call dispatches to its base, whose name is not
         // the caller's to resolve — that frame can hold a same-named
         // declaration of its own.
@@ -3531,10 +3500,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // every spelling reaching here has already passed.
         let receiver_key = self.impl_target(&actual_struct_name);
         let receiver_type = self.resolve_unsited_type_name(&actual_struct_name, span);
-        // Keyed by the same argument the selection above read. Resolving here
-        // without it answered `Overloaded` for a name the call had already
-        // mangled to one impl, so the recorded lists and the checked ones
-        // described different declarations.
+        // Keyed by the same argument the selection above read, or the lists
+        // recorded here describe a different declaration than the one mangled.
         let (callee_params, _) = self
             .static_callee_params(
                 &receiver_key,
@@ -3588,6 +3555,25 @@ pub(super) enum PreselectedArg {
     Undecided,
     /// Reported as ambiguous. The caller stops.
     Reported,
+}
+
+impl PreselectedArg {
+    pub(super) fn picked(self) -> Option<TypeId> {
+        match self {
+            Self::Type(source) => Some(source),
+            Self::Undecided | Self::Reported => None,
+        }
+    }
+
+    /// Install a picked parameter as the first argument's expected type. Only
+    /// the first: a callee may declare further parameters the defaults fill,
+    /// and replacing the list left their arity unchecked and defaults unpadded.
+    pub(super) fn shape_first(param_types: &mut Vec<TypeId>, source: TypeId) {
+        match param_types.first_mut() {
+            Some(first) => *first = source,
+            None => param_types.push(source),
+        }
+    }
 }
 
 /// See [`Elaborator::static_arg_preselect`].

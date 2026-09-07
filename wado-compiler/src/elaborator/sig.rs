@@ -120,7 +120,12 @@ impl Signatures {
     /// declare a default (WEP 2026-04-11), and a default names its neighbours
     /// as the trait called them. Not the decl pass: the trait may be elsewhere.
     pub(crate) fn inherit_trait_param_defaults(&mut self, defs: &crate::defs::DefTable) {
-        let inherited: Vec<(crate::defs::DefId, ModuleSource, MethodSig)> = self
+        let inherited: Vec<(
+            crate::defs::DefId,
+            ModuleSource,
+            Vec<Param>,
+            Vec<crate::ast::GenericParam>,
+        )> = self
             .method_sigs
             .values()
             .filter(|sig| !sig.params.is_empty() || !sig.own_params.is_empty())
@@ -128,22 +133,27 @@ impl Signatures {
                 let trait_decl = self.impl_sig(sig.declaring_impl?)?.trait_decl?;
                 let declaring = self.trait_sig(trait_decl)?;
                 let declared = declaring.method(defs.name(sig.def))?;
-                Some((sig.def, declaring.module.clone(), declared.sig.clone()))
+                Some((
+                    sig.def,
+                    declaring.module.clone(),
+                    declared.sig.params.clone(),
+                    declared.sig.own_params.clone(),
+                ))
             })
             .collect();
-        for (def, module, declared) in inherited {
+        for (def, module, params, own_params) in inherited {
             let sig = self
                 .method_sigs
                 .get_mut(&def)
                 .expect("every key was just read from this map");
             sig.defaults_module = Some(module);
-            for (param, from_trait) in sig.params.iter_mut().zip(declared.params) {
+            for (param, from_trait) in sig.params.iter_mut().zip(params) {
                 param.name = from_trait.name;
                 param.default = from_trait.default;
             }
             // Whole entries: bounds and default are both the trait's. The slots
             // stay the impl's own, numbered in `decl.type_params`, untouched.
-            for (param, from_trait) in sig.own_params.iter_mut().zip(declared.own_params) {
+            for (param, from_trait) in sig.own_params.iter_mut().zip(own_params) {
                 *param = from_trait;
             }
         }
