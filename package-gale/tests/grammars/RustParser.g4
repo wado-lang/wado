@@ -909,8 +909,12 @@ sliceType
     ;
 
 // 10.1.13
+// LOCAL: `ANDAND` — `&&str` lexes as one token, and in type position it is
+// always two references. `borrowExpression` and `referencePattern` already
+// spell the pair this way; this rule was the one that did not, so no `&&T`
+// parsed at all.
 referenceType
-    : AND lifetime? KW_MUT? typeNoBounds
+    : (AND | ANDAND) lifetime? KW_MUT? typeNoBounds
     ;
 
 rawPointerType

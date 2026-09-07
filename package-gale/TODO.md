@@ -97,10 +97,13 @@ Remaining:
 
 What is left, each minimized:
 
-- [ ] **A struct literal wins the condition of an `if` / `while`.** `if any_error { None } else { … }` reads `any_error { None }` as a struct expression, because the alternative tournament takes the longest and nothing tells it the caller still needs a block. Rust's grammar spells this out with a condition that excludes struct expressions; the vendored one only marks it `/*except structExpression*/` on `predicateLoopExpression`, and ANTLR4 mis-parses it the same way — so this is not a compatibility divergence but the context-sensitivity neither grammar encodes. Measured at ~12 files directly and 4 net (the files behind it hit the next class). A caller-FOLLOW tier on the tournament closes it and is not the answer: `AGENTS.md`, "Failed approaches", records why the jar disagrees. Either the grammar grows the condition rule Rust's own does, or the decision goes to the ATN.
-- [ ] **`|p: &&str|` does not parse** — 3 files, `letStatement > expression > closureExpression`, "expected OR; got `:`". `&&` lexes as `ANDAND`, and `referenceType : AND …` never splits it, so a doubly-referenced type has no rule. ANTLR4 has the same gap here; `shl` / `shr` show the grammar's own answer for the mirror case on `<` / `>`, through the parser base.
+- [ ] **A struct literal wins the head of an `if` / `while` / `for`.** `if any_error { None }` reads `any_error { None }` as a struct expression, and `for id in b { … }` reads `b { … }` as one, because the alternative tournament takes the longest and nothing tells it the caller still owes a block. This is now essentially the whole remainder: splitting the 24 files that report `externBlock` into their top-level items leaves 33 failing items, and **32 of the 33 are this**.
 
-The remaining ~30 are a long tail: 5 `expected RCURLYBRACE; got "("` under `matchExpression`, 3 `expected SEMI; got "("`, 2 `expected SEMI; got "<"`, 2 `no alternative of identifier matches`, and singletons.
+  Rust spells it out with a condition that excludes struct expressions; the vendored grammar only marks it `/*except structExpression*/` on `predicateLoopExpression`, and ANTLR4 mis-parses it the same way — so this is not a compatibility divergence, it is context-sensitivity neither grammar encodes.
+
+  A caller-FOLLOW tier on the scan tournament closes it and is not the answer; `AGENTS.md`, "Failed approaches", records why the jar disagrees. Two routes remain. The grammar can grow the condition rule Rust's own has, which needs the exclusion to travel into `expression` — a rule argument on an LR rule, or the parser-base flag other grammars-v4 grammars use. Or the decision goes to the ATN, where full-context simulation answers it and the dangling `ELSE` together.
+
+The rest is one item: `wado-compiler/src/unparse.rs`'s `escape_char`, a `match` over character escapes with a guarded arm.
 
 ## LL prediction — parked gaps
 
