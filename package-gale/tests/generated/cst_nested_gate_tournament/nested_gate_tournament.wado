@@ -1712,12 +1712,13 @@ fn scan_stmts(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     scan_alts: {
         if _kind_set_0(alt_kind) {
             let mut best: i32 = -1;
+            let mut best_no_brace = SCAN_GATE.no_brace;
             pos = start;
             SCAN_GATE.no_brace = start_no_brace;
             try_1: {
                 pos = scan_expr(tokens, pos, 0);
                 if pos < 0 { break try_1; }
-                if pos > best { best = pos; }
+                if pos > best { best = pos; best_no_brace = SCAN_GATE.no_brace; }
             }
             pos = start;
             SCAN_GATE.no_brace = start_no_brace;
@@ -1737,6 +1738,7 @@ fn scan_stmts(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
                     let dk_0 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
                     if !(_kind_set_0(dk_0) || _kind_set_0(dk_0) || dk_0 == TK_RB) {
                         let dc_0 = pos;
+                        let dc_0_no_brace = SCAN_GATE.no_brace;
                         let mut dc_0_exit = false;
                         pos = sp;
                         dcl_0: {
@@ -1752,8 +1754,13 @@ fn scan_stmts(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
                             let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
                             if (follow == 0 || follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) && (probe_kind == TK_RB) { dc_0_exit = true; }
                         }
-                        if dc_0_exit { pos = sp; break; }
+                        if dc_0_exit {
+                            pos = sp;
+                            SCAN_GATE.no_brace = sp_no_brace;
+                            break;
+                        }
                         pos = dc_0;
+                        SCAN_GATE.no_brace = dc_0_no_brace;
                     }
                 }
                 if pos < tokens.len() && _kind_set_0(tokens[pos]) && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
@@ -1765,9 +1772,13 @@ fn scan_stmts(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
                         SCAN_GATE.no_brace = sp_no_brace;
                     }
                 }
-                if pos > best { best = pos; }
+                if pos > best { best = pos; best_no_brace = SCAN_GATE.no_brace; }
             }
-            if best >= 0 { pos = best; break scan_alts; }
+            if best >= 0 {
+                pos = best;
+                SCAN_GATE.no_brace = best_no_brace;
+                break scan_alts;
+            }
             return -1;
         } else {
             return -1;
@@ -1817,6 +1828,7 @@ fn scan_expr_atom(tokens: &Array<i32>, pos: i32) -> i32 {
             return -1;
         } else if alt_kind == TK_ID {
             let mut best: i32 = -1;
+            let mut best_no_brace = SCAN_GATE.no_brace;
             pos = start + 1;
             SCAN_GATE.no_brace = start_no_brace;
             try_1: {
@@ -1827,12 +1839,16 @@ fn scan_expr_atom(tokens: &Array<i32>, pos: i32) -> i32 {
                 pos += 1;
                 if pos >= tokens.len() || tokens[pos] != TK_RB { break try_1; }
                 pos += 1;
-                if pos > best { best = pos; }
+                if pos > best { best = pos; best_no_brace = SCAN_GATE.no_brace; }
             }
             pos = start + 1;
             SCAN_GATE.no_brace = start_no_brace;
-            if pos > best { best = pos; }
-            if best >= 0 { pos = best; break scan_alts; }
+            if pos > best { best = pos; best_no_brace = SCAN_GATE.no_brace; }
+            if best >= 0 {
+                pos = best;
+                SCAN_GATE.no_brace = best_no_brace;
+                break scan_alts;
+            }
             return -1;
         } else {
             return -1;
@@ -2002,6 +2018,7 @@ fn _parse_stmts__inner_scan_0(tokens: &Array<i32>, pos: i32, follow: i64 = 0) ->
         let dk_1 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
         if !(_kind_set_0(dk_1) || _kind_set_0(dk_1) || dk_1 == TK_RB) {
             let dc_1 = pos;
+            let dc_1_no_brace = SCAN_GATE.no_brace;
             let mut dc_1_exit = false;
             pos = sp;
             dcl_1: {
@@ -2017,8 +2034,13 @@ fn _parse_stmts__inner_scan_0(tokens: &Array<i32>, pos: i32, follow: i64 = 0) ->
                 let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
                 if (follow == 0 || follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) && (probe_kind == TK_RB) { dc_1_exit = true; }
             }
-            if dc_1_exit { pos = sp; break; }
+            if dc_1_exit {
+                pos = sp;
+                SCAN_GATE.no_brace = sp_no_brace;
+                break;
+            }
             pos = dc_1;
+            SCAN_GATE.no_brace = dc_1_no_brace;
         }
     }
     if pos < tokens.len() && _kind_set_0(tokens[pos]) && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {

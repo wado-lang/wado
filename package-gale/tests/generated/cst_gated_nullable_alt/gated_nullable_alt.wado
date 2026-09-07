@@ -1654,6 +1654,7 @@ fn scan_body(tokens: &Array<i32>, pos: i32) -> i32 {
     let gp_0_on = SCAN_GATE.on;
     let sgk_0 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     let mut sg_0_best = -1;
+    let mut sg_0_best_on = SCAN_GATE.on;
     if sgk_0 == TK_ID {
         pos = gp_0;
         SCAN_GATE.on = gp_0_on;
@@ -1661,7 +1662,7 @@ fn scan_body(tokens: &Array<i32>, pos: i32) -> i32 {
             if pos < tokens.len() && tokens[pos] == TK_ID {
                 pos += 1;
             }
-            if pos > sg_0_best { sg_0_best = pos; }
+            if pos > sg_0_best { sg_0_best = pos; sg_0_best_on = SCAN_GATE.on; }
         }
     } else if sgk_0 == TK_LP {
         pos = gp_0;
@@ -1669,11 +1670,12 @@ fn scan_body(tokens: &Array<i32>, pos: i32) -> i32 {
         sg_0_1: {
             if pos >= tokens.len() || tokens[pos] != TK_LP { break sg_0_1; }
             pos += 1;
-            if pos > sg_0_best { sg_0_best = pos; }
+            if pos > sg_0_best { sg_0_best = pos; sg_0_best_on = SCAN_GATE.on; }
         }
     }
     if sg_0_best >= 0 {
         pos = sg_0_best;
+        SCAN_GATE.on = sg_0_best_on;
     } else {
         pos = gp_0;
         SCAN_GATE.on = gp_0_on;
