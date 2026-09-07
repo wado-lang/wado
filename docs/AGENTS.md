@@ -181,9 +181,5 @@ omission goes in Decision.
 - [Trait Resolution — One Order, Written Down](./wep-2026-09-01-trait-resolution.md)
 - [JSON Web Tokens (`core:jwt`)](./wep-2026-09-02-core-jwt.md)
 - [Total Reflection — `TypeInfo` and `match type`](./wep-2026-09-05-total-reflection.md)
-<<<<<<< HEAD
 - [Static Call Resolution — One Walk, Four Answers](./wep-2026-09-06-static-call-resolution.md)
-||||||| 6c883abb7
-=======
 - [Package File Exports — Assets and Submodules as API](./wep-2026-09-06-package-file-exports.md)
->>>>>>> origin/main
