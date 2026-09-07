@@ -3181,13 +3181,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return false;
         }
         let table = self.tysys.type_table.borrow();
-        let mut ty = param;
-        while let ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) = table.get(ty) {
-            ty = *inner;
-        }
-        // A slot the receiver mentions is the receiver's to fill, not the
-        // argument's, and one at or past `declaring_slot_count` is the method's.
-        match table.get(ty) {
+        // A reference to a slot is the slot. A slot the receiver mentions is the
+        // receiver's to fill, not the argument's, and one at or past
+        // `declaring_slot_count` is the method's.
+        match table.get(table.peel_refs(param)) {
             ResolvedType::TypeParam { index, name }
             | ResolvedType::TypePack { index, name, .. } => {
                 *index < sig.declaring_slot_count && !Self::type_mentions(&header.ty, name)

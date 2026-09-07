@@ -133,7 +133,7 @@ to the blanket resolver, which instantiates it.
 
 Three things fill a slot, and only one of them is the argument. The receiver
 fills a slot it mentions, so `impl<T> Make<T> for Wrap<T>` is no blanket to
-`Wrap::<i32>::make`. The call fills a slot the *method* declares, so a block's
+`Wrap::<i32>::make`. The call fills a slot the _method_ declares, so a block's
 own `fn build<T>(v: T)` is not one either — `declaring_slot_count` is where the
 block's slots end and the method's begin. What is left is a block slot the
 receiver never names, as in `impl<T: Display> From<T> for ByAny`, and only that
@@ -144,21 +144,23 @@ the question is asked.
 
 ### A written body outranks an inherited one
 
-The trait's default body consults no argument. Answering it while walking the
-impls therefore lets the first block seen win over the one the argument names,
-so both questions are asked over every impl in turn: the written declarations
-first, the inherited defaults only where none was written. The rule used to be
-the shape of a walk that returned nothing at all once any block declared the
-method; generalising that walk to answer the ambiguity question dissolved the
-shape, and the rule with it.
+A body the block writes answers before one it inherits. Each question is asked
+over every impl in turn — the written declarations first, the trait's defaults
+only where no block wrote one — because the default consults no argument.
+Answering it while walking the impls would let the first block seen win over the
+one the argument names.
 
 ### The spelling names both kinds
 
 `Type::method(recv, …)` reaches a trait's instance method as well as its static,
-passing the receiver first. The resolution answers statics first and this last,
-so a receiver-less declaration of the name still wins. The ladder was assembled
-from the questions the sixteen lookups answered, and one of them covered this
-spelling in a comment rather than in a signature, so folding them in dropped it.
+passing the receiver first. Statics answer first, so a receiver-less declaration
+of the name still wins.
+
+An inherent method shadows a trait's for this spelling, as it does for dot
+syntax: `Q::tag(&q)` names `impl Q`'s and the trait's is spelled `Tag::tag(&q)`.
+Shadowing holds within a kind, so an inherent method leaves a trait's associated
+function of the same name alone — the rule the receiver's own declarations
+already follow above.
 
 ### One call, one resolution
 
@@ -181,15 +183,16 @@ blocks need not be adjacent.
 
 ### A checked argument is a source change
 
-An inherited default-bodied static used to answer with no parameter list, so its
-arguments went unchecked. They are checked now. That is visible to anyone
-calling such a static: `Instant::from_str("…")`, against a declaration taking
-`&String`, has to be written `&"…"`. `lib/core/temporal_test.wado` moved with
-it, to the spelling `int128_test.wado` and `primitive_test.wado` already used.
+An inherited default-bodied static checks its arguments, because it now answers
+with the trait's parameter list. It previously answered with none, so those
+arguments went unchecked, and callers written against that see a break:
+`Instant::from_str("…")` against a declaration taking `&String` has to be
+written `&"…"`. `lib/core/temporal_test.wado` moved with it, to the spelling
+`int128_test.wado` and `primitive_test.wado` already used.
 
-The tightening is the point rather than a side effect. An argument no list
-describes is an argument nothing can reject. It is the one change here a caller
-outside the compiler sees.
+An argument no list describes is an argument nothing can reject, so the
+tightening is the point rather than a side effect. It is the one change here a
+caller outside the compiler sees.
 
 ### Resolving is not free
 

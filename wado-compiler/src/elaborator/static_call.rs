@@ -6,6 +6,7 @@
 use crate::ast;
 use crate::compiler_host::CompilerHost;
 use crate::defs::DefId;
+use crate::hashmap::IndexSet;
 use crate::module_source::ModuleSource;
 use crate::name::FqTraitName;
 use crate::tir::{TypeId, TypeTable};
@@ -397,12 +398,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// it is implemented: naming it as both alternatives is a remedy nobody can
     /// write.
     fn ambiguous_alternatives(&self, supplies: &[TraitSupply]) -> Option<Vec<String>> {
-        let mut distinct: Vec<DefId> = Vec::new();
-        for supply in supplies {
-            if !distinct.contains(&supply.trait_decl) {
-                distinct.push(supply.trait_decl);
-            }
-        }
+        let distinct: IndexSet<DefId> = supplies.iter().map(|s| s.trait_decl).collect();
         (distinct.len() > 1).then(|| {
             distinct
                 .into_iter()
