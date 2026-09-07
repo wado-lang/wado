@@ -1079,6 +1079,8 @@ pub global FOLLOW_OPENS_BIT: i64 = 128;
 
 pub global FOLLOW_CONT_MASK: i64 = 0x00FF_FFFF_FFFF_FFFF;
 
+pub global FOLLOW_SEQUENCED: i64 = 0x007F_7F7F_7F7F_7F7F;
+
 pub fn follow_bitsets(kinds: &List<List<i32>>) -> List<List<i32>> {
     let mut out: List<List<i32>> = [];
     for let set of kinds {
@@ -1546,7 +1548,7 @@ impl Parser {
 
 fn scan_prog(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let mut pos = pos;
-    pos = scan_stmt(tokens, pos, (FOLLOW_MASK_0 | follow << 8) & FOLLOW_CONT_MASK);
+    pos = scan_stmt(tokens, pos, (FOLLOW_MASK_0 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_EOF { return -1; }
     pos += 1;
@@ -1561,7 +1563,7 @@ fn scan_stmt(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
         if alt_kind == TK_LIT_KEEP {
             pos = start + 1;
             try_0: {
-                pos = scan_a(tokens, pos, (FOLLOW_MASK_1 | follow << 16) & FOLLOW_CONT_MASK);
+                pos = scan_a(tokens, pos, (FOLLOW_MASK_1 | (follow & FOLLOW_SEQUENCED) << 16) & FOLLOW_CONT_MASK);
                 if pos < 0 { break try_0; }
                 pos = scan_t(tokens, pos);
                 if pos < 0 { break try_0; }
@@ -1619,7 +1621,7 @@ fn scan_t(tokens: &Array<i32>, pos: i32) -> i32 {
 }
 
 fn _parse_prog__inner(p: &mut Parser, follow: i64 = 0) -> () {
-    _parse_stmt(p, (FOLLOW_MASK_0 | follow << 8) & FOLLOW_CONT_MASK);
+    _parse_stmt(p, (FOLLOW_MASK_0 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
     p.expect(TK_EOF, &EMPTY_SYNC);
     return;
 }
@@ -1639,7 +1641,7 @@ fn _parse_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
     let kind = p.peek_kind();
     if kind == TK_LIT_KEEP {
         p.expect(TK_LIT_KEEP, &SYNC_0);
-        _parse_a(p, (FOLLOW_MASK_1 | follow << 16) & FOLLOW_CONT_MASK);
+        _parse_a(p, (FOLLOW_MASK_1 | (follow & FOLLOW_SEQUENCED) << 16) & FOLLOW_CONT_MASK);
         _parse_t(p);
         p.expect(TK_LIT_SEMI, &EMPTY_SYNC);
         return;

@@ -1079,6 +1079,8 @@ pub global FOLLOW_OPENS_BIT: i64 = 128;
 
 pub global FOLLOW_CONT_MASK: i64 = 0x00FF_FFFF_FFFF_FFFF;
 
+pub global FOLLOW_SEQUENCED: i64 = 0x007F_7F7F_7F7F_7F7F;
+
 pub fn follow_bitsets(kinds: &List<List<i32>>) -> List<List<i32>> {
     let mut out: List<List<i32>> = [];
     for let set of kinds {
@@ -1512,7 +1514,7 @@ fn scan_r(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     if sgk_0 == TK_X {
         pos = gp_0;
         sg_0_0: {
-            pos = scan_a(tokens, pos, (FOLLOW_MASK_0 | follow << 16) & FOLLOW_CONT_MASK);
+            pos = scan_a(tokens, pos, (FOLLOW_MASK_0 | (follow & FOLLOW_SEQUENCED) << 16) & FOLLOW_CONT_MASK);
             if pos < 0 { break sg_0_0; }
             pos = scan_b(tokens, pos);
             if pos < 0 { break sg_0_0; }
@@ -1520,7 +1522,7 @@ fn scan_r(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
         }
         pos = gp_0;
         sg_0_1: {
-            pos = scan_a(tokens, pos, (FOLLOW_MASK_1 | follow << 8) & FOLLOW_CONT_MASK);
+            pos = scan_a(tokens, pos, (FOLLOW_MASK_1 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
             if pos < 0 { break sg_0_1; }
             if pos > sg_0_best { sg_0_best = pos; }
         }
@@ -1562,7 +1564,7 @@ fn _parse_r__inner(p: &mut Parser, follow: i64 = 0) -> () {
             gd_scan: {
                 let tokens = &p.kinds;
                 let mut pos: i32 = p.pos;
-                pos = scan_a(tokens, pos, (FOLLOW_MASK_0 | follow << 16) & FOLLOW_CONT_MASK);
+                pos = scan_a(tokens, pos, (FOLLOW_MASK_0 | (follow & FOLLOW_SEQUENCED) << 16) & FOLLOW_CONT_MASK);
                 if pos < 0 { break gd_scan; }
                 pos = scan_b(tokens, pos);
                 if pos < 0 { break gd_scan; }
@@ -1579,7 +1581,7 @@ fn _parse_r__inner(p: &mut Parser, follow: i64 = 0) -> () {
             gd_scan_2: {
                 let tokens = &p.kinds;
                 let mut pos: i32 = p.pos;
-                pos = scan_a(tokens, pos, (FOLLOW_MASK_1 | follow << 8) & FOLLOW_CONT_MASK);
+                pos = scan_a(tokens, pos, (FOLLOW_MASK_1 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
                 if pos < 0 { break gd_scan_2; }
                 gd_end_2 = pos;
             }
@@ -1589,10 +1591,10 @@ fn _parse_r__inner(p: &mut Parser, follow: i64 = 0) -> () {
             }
         }
         if gd_winner == 0 {
-            _parse_a(p, (FOLLOW_MASK_0 | follow << 16) & FOLLOW_CONT_MASK);
+            _parse_a(p, (FOLLOW_MASK_0 | (follow & FOLLOW_SEQUENCED) << 16) & FOLLOW_CONT_MASK);
             _parse_b(p);
         } else {
-            _parse_a(p, (FOLLOW_MASK_1 | follow << 8) & FOLLOW_CONT_MASK);
+            _parse_a(p, (FOLLOW_MASK_1 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
         }
     } else {
         p.no_viable("no viable alternative", p.peek_span(), &SYNC_0);

@@ -1079,6 +1079,8 @@ pub global FOLLOW_OPENS_BIT: i64 = 128;
 
 pub global FOLLOW_CONT_MASK: i64 = 0x00FF_FFFF_FFFF_FFFF;
 
+pub global FOLLOW_SEQUENCED: i64 = 0x007F_7F7F_7F7F_7F7F;
+
 pub fn follow_bitsets(kinds: &List<List<i32>>) -> List<List<i32>> {
     let mut out: List<List<i32>> = [];
     for let set of kinds {
@@ -1719,7 +1721,7 @@ fn scan_e_lr_0(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_LIT_LPAREN { return -1; }
     pos += 1;
-    pos = scan_e_list(tokens, pos, (FOLLOW_MASK_0 | follow << 8) & FOLLOW_CONT_MASK);
+    pos = scan_e_list(tokens, pos, (FOLLOW_MASK_0 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_LIT_RPAREN { return -1; }
     pos += 1;
@@ -1753,7 +1755,7 @@ fn scan_e(tokens: &Array<i32>, pos: i32, follow: i64 = 0, min_prec: i32 = 0) -> 
 fn scan_e_list(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let scan_start = pos;
     let mut pos = pos;
-    pos = scan_e(tokens, pos, (FOLLOW_MASK_1 | (follow | FOLLOW_OPENS_BIT) << 16) & FOLLOW_CONT_MASK, 0);
+    pos = scan_e(tokens, pos, (FOLLOW_MASK_1 | (follow & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << 16) & FOLLOW_CONT_MASK, 0);
     if pos < 0 { return -1; }
     while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
         let sp = pos;
@@ -1761,7 +1763,7 @@ fn scan_e_list(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
             sg_0: {
                 if pos >= tokens.len() || tokens[pos] != TK_LIT_COMMA { break sg_0; }
                 pos += 1;
-                pos = scan_e(tokens, pos, (FOLLOW_MASK_1 | (follow | FOLLOW_OPENS_BIT) << 16) & FOLLOW_CONT_MASK, 0);
+                pos = scan_e(tokens, pos, (FOLLOW_MASK_1 | (follow & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << 16) & FOLLOW_CONT_MASK, 0);
                 if pos < 0 { break sg_0; }
                 break sg_0_done;
             }
@@ -1822,7 +1824,7 @@ fn _parse_e__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) -> () {
                 p.b.start_node_at(_cp, RK_E, _start);
                 p.b.set_alt(0);
                 let lparen = p.expect(TK_LIT_LPAREN, &EMPTY_SYNC);
-                let e_list = _parse_e_list(p, (FOLLOW_MASK_0 | follow << 8) & FOLLOW_CONT_MASK);
+                let e_list = _parse_e_list(p, (FOLLOW_MASK_0 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
                 let rparen = p.expect(TK_LIT_RPAREN, &EMPTY_SYNC);
                 p.b.finish_node(p.last_end());
             } else {
@@ -1844,7 +1846,7 @@ fn _parse_e(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) -> () {
 }
 
 fn _parse_e_list__inner(p: &mut Parser, follow: i64 = 0) -> () {
-    let e = _parse_e(p, (FOLLOW_MASK_1 | (follow | FOLLOW_OPENS_BIT) << 16) & FOLLOW_CONT_MASK);
+    let e = _parse_e(p, (FOLLOW_MASK_1 | (follow & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << 16) & FOLLOW_CONT_MASK);
     loop {
         if p.recovering { break; }
         if follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) { break; }
@@ -1856,7 +1858,7 @@ fn _parse_e_list__inner(p: &mut Parser, follow: i64 = 0) -> () {
                 sg_1: {
                     if pos >= tokens.len() || tokens[pos] != TK_LIT_COMMA { break sg_1; }
                     pos += 1;
-                    pos = scan_e(tokens, pos, (FOLLOW_MASK_1 | (follow | FOLLOW_OPENS_BIT) << 16) & FOLLOW_CONT_MASK, 0);
+                    pos = scan_e(tokens, pos, (FOLLOW_MASK_1 | (follow & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << 16) & FOLLOW_CONT_MASK, 0);
                     if pos < 0 { break sg_1; }
                     break sg_1_done;
                 }
@@ -1867,7 +1869,7 @@ fn _parse_e_list__inner(p: &mut Parser, follow: i64 = 0) -> () {
         }
         if rep_scan_pos < 0 { break; }
         let comma = p.expect(TK_LIT_COMMA, &SYNC_0);
-        let e = _parse_e(p, (FOLLOW_MASK_1 | (follow | FOLLOW_OPENS_BIT) << 16) & FOLLOW_CONT_MASK);
+        let e = _parse_e(p, (FOLLOW_MASK_1 | (follow & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << 16) & FOLLOW_CONT_MASK);
     }
     return;
 }

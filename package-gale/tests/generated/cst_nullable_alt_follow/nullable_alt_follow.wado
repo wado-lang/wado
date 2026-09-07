@@ -1079,6 +1079,8 @@ pub global FOLLOW_OPENS_BIT: i64 = 128;
 
 pub global FOLLOW_CONT_MASK: i64 = 0x00FF_FFFF_FFFF_FFFF;
 
+pub global FOLLOW_SEQUENCED: i64 = 0x007F_7F7F_7F7F_7F7F;
+
 pub fn follow_bitsets(kinds: &List<List<i32>>) -> List<List<i32>> {
     let mut out: List<List<i32>> = [];
     for let set of kinds {
@@ -1590,7 +1592,7 @@ fn scan_s(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
                 if _kind_set_0(sgk_1) {
                     pos = gp_1;
                     sg_1_0: {
-                        pos = scan_x(tokens, pos, (FOLLOW_MASK_0 | follow << 16) & FOLLOW_CONT_MASK);
+                        pos = scan_x(tokens, pos, (FOLLOW_MASK_0 | (follow & FOLLOW_SEQUENCED) << 16) & FOLLOW_CONT_MASK);
                         if pos < 0 { break sg_1_0; }
                         if pos > sg_1_best { sg_1_best = pos; }
                     }
@@ -1651,7 +1653,7 @@ fn _parse_s__inner(p: &mut Parser, follow: i64 = 0) -> () {
         p.expect(TK_LIT_M, &SYNC_0);
         let grp_kind = p.peek_kind();
         if _kind_set_0(grp_kind) {
-            _parse_x(p, (FOLLOW_MASK_0 | follow << 16) & FOLLOW_CONT_MASK);
+            _parse_x(p, (FOLLOW_MASK_0 | (follow & FOLLOW_SEQUENCED) << 16) & FOLLOW_CONT_MASK);
         } else if grp_kind == TK_B {
             p.expect(TK_B, &EMPTY_SYNC);
         } else {

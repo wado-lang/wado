@@ -6,9 +6,11 @@
 
 use sha2::{Digest, Sha256};
 
-use crate::ast::{AttrObject, AttrValue, Module, UseDecl, attr_value};
+use crate::ast::{AttrObject, AttrValue, Item, Module, UseDecl, attr_value};
 use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
 use crate::hashmap::IndexMap;
+use crate::name::resolve_module_path;
+use crate::path::is_cwd_relative;
 
 use super::cache::{encode_options_canonical, hex_digest};
 use super::invocation::{DeclSite, GeneratorModule, GeneratorSpec, Invocation, InvocationPath};
@@ -167,7 +169,7 @@ where
 
 fn use_decls_of(module: &Module) -> impl Iterator<Item = &UseDecl> {
     module.items.iter().filter_map(|it| match it {
-        crate::ast::Item::Use(u) => Some(u),
+        Item::Use(u) => Some(u),
         _ => None,
     })
 }
@@ -386,7 +388,7 @@ fn lower_inline(
 /// must ensure `raw` is `./`/`../`-prefixed (the `module` form gates on the
 /// prefix; `from`/`inputs`/`output_dir` go through [`resolve_or_reject`]).
 fn resolve_decl_relative(module_path: &str, raw: &str, manifest_root: &str) -> InvocationPath {
-    let resolved = crate::name::resolve_module_path(module_path, raw);
+    let resolved = resolve_module_path(module_path, raw);
     let manifest_relative = strip_manifest_root_prefix(manifest_root, &resolved);
     InvocationPath::normalize(&manifest_relative)
 }
@@ -405,7 +407,7 @@ fn resolve_or_reject(
     use_decl: &UseDecl,
     errors: &mut Vec<Diagnostic>,
 ) -> InvocationPath {
-    if crate::path::is_cwd_relative(raw) {
+    if is_cwd_relative(raw) {
         return resolve_decl_relative(module_path, raw, manifest_root);
     }
     errors.push(Diagnostic {
@@ -467,7 +469,7 @@ fn lower_module_specifier(
     // resulting `LocalPath` is reliably reachable from the consuming
     // project — the provider resolves it as `manifest_root.join(path)`
     // when reading the file on disk and computing a stable cache key.
-    if crate::path::is_cwd_relative(spec) {
+    if is_cwd_relative(spec) {
         return Some(GeneratorModule::LocalPath(resolve_decl_relative(
             module_path,
             spec,
@@ -590,7 +592,7 @@ fn attr_kind(v: &AttrValue) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ast::{AstId, AttrEntry, ImportAttributes, Item, UseDecl, UseItem};
+    use crate::ast::{AstId, AttrEntry, ImportAttributes, Item, UseDecl, UseItem, Visibility};
     use crate::token::Span;
     use std::assert_matches;
 
@@ -621,7 +623,7 @@ mod tests {
     fn module_with_use(source: &str, attrs: ImportAttributes) -> Module {
         let use_decl = UseDecl {
             id: AstId::fresh(),
-            visibility: crate::ast::Visibility::Private,
+            visibility: Visibility::Private,
             source: source.to_string(),
             source_span: span(),
             source_id: AstId::fresh(),

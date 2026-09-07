@@ -1082,6 +1082,8 @@ pub global FOLLOW_OPENS_BIT: i64 = 128;
 
 pub global FOLLOW_CONT_MASK: i64 = 0x00FF_FFFF_FFFF_FFFF;
 
+pub global FOLLOW_SEQUENCED: i64 = 0x007F_7F7F_7F7F_7F7F;
+
 pub fn follow_bitsets(kinds: &List<List<i32>>) -> List<List<i32>> {
     let mut out: List<List<i32>> = [];
     for let set of kinds {
@@ -28139,7 +28141,7 @@ fn scan_universal(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos < tokens.len() && _kind_set_9(tokens[pos]) {
         let sp = pos;
-        pos = scan_type_namespace_prefix(tokens, pos, (FOLLOW_MASK_11 | follow << 8) & FOLLOW_CONT_MASK);
+        pos = scan_type_namespace_prefix(tokens, pos, (FOLLOW_MASK_11 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
         if pos < 0 {
             pos = sp;
         } else {
@@ -28267,7 +28269,7 @@ fn scan_attrib(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
                             } else {
                                 pos = gp_32;
                             }
-                            pos = scan_ws(tokens, pos, (FOLLOW_MASK_13 | follow << 8) & FOLLOW_CONT_MASK);
+                            pos = scan_ws(tokens, pos, (FOLLOW_MASK_13 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
                             if pos < 0 { break sg_30; }
                             break sg_30_done;
                         }
@@ -28367,7 +28369,7 @@ fn scan_attrib(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
                 } else {
                     pos = gp_35;
                 }
-                pos = scan_ws(tokens, pos, (FOLLOW_MASK_13 | follow << 8) & FOLLOW_CONT_MASK);
+                pos = scan_ws(tokens, pos, (FOLLOW_MASK_13 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
                 if pos < 0 { break sg_33; }
                 break sg_33_done;
             }
@@ -28419,7 +28421,7 @@ fn scan_functional_pseudo(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32
     pos += 1;
     pos = scan_ws(tokens, pos, FOLLOW_MASK_14);
     if pos < 0 { return -1; }
-    pos = scan_expression(tokens, pos, (FOLLOW_MASK_8 | follow << 8) & FOLLOW_CONT_MASK);
+    pos = scan_expression(tokens, pos, (FOLLOW_MASK_8 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_CloseParen { return -1; }
     pos += 1;
@@ -28578,7 +28580,7 @@ fn scan_negation(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     if pos < 0 { return -1; }
     pos = scan_negation_arg(tokens, pos, 0);
     if pos < 0 { return -1; }
-    pos = scan_ws(tokens, pos, (FOLLOW_MASK_8 | follow << 8) & FOLLOW_CONT_MASK);
+    pos = scan_ws(tokens, pos, (FOLLOW_MASK_8 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_CloseParen { return -1; }
     pos += 1;
@@ -29944,7 +29946,7 @@ fn scan_supports_condition_in_parens(tokens: &Array<i32>, pos: i32, follow: i64 
                 if pos < 0 { break try_0; }
                 pos = scan_supports_condition(tokens, pos, 0);
                 if pos < 0 { break try_0; }
-                pos = scan_ws(tokens, pos, (FOLLOW_MASK_8 | follow << 8) & FOLLOW_CONT_MASK);
+                pos = scan_ws(tokens, pos, (FOLLOW_MASK_8 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
                 if pos < 0 { break try_0; }
                 if pos >= tokens.len() || tokens[pos] != TK_CloseParen { break try_0; }
                 pos += 1;
@@ -30104,7 +30106,7 @@ fn scan_supports_declaration_condition(tokens: &Array<i32>, pos: i32, follow: i6
     pos += 1;
     pos = scan_ws(tokens, pos, FOLLOW_MASK_25);
     if pos < 0 { return -1; }
-    pos = scan_declaration(tokens, pos, (FOLLOW_MASK_8 | follow << 8) & FOLLOW_CONT_MASK);
+    pos = scan_declaration(tokens, pos, (FOLLOW_MASK_8 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_CloseParen { return -1; }
     pos += 1;
@@ -30181,7 +30183,7 @@ fn scan_url(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
                 if pos < 0 { break try_0; }
                 if pos >= tokens.len() || tokens[pos] != TK_String_ { break try_0; }
                 pos += 1;
-                pos = scan_ws(tokens, pos, (FOLLOW_MASK_8 | follow << 8) & FOLLOW_CONT_MASK);
+                pos = scan_ws(tokens, pos, (FOLLOW_MASK_8 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
                 if pos < 0 { break try_0; }
                 if pos >= tokens.len() || tokens[pos] != TK_CloseParen { break try_0; }
                 pos += 1;
@@ -32699,7 +32701,7 @@ fn _parse_universal__inner(p: &mut Parser, follow: i64 = 0) -> () {
         opt_enter_scan: {
             let tokens = &p.kinds;
             let mut pos: i32 = p.pos;
-            pos = scan_type_namespace_prefix(tokens, pos, (FOLLOW_MASK_11 | follow << 8) & FOLLOW_CONT_MASK);
+            pos = scan_type_namespace_prefix(tokens, pos, (FOLLOW_MASK_11 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
             if pos < 0 { break opt_enter_scan; }
             if pos >= tokens.len() || tokens[pos] != TK_Multiply { break opt_enter_scan; }
             pos += 1;
@@ -32708,7 +32710,7 @@ fn _parse_universal__inner(p: &mut Parser, follow: i64 = 0) -> () {
         }
     }
     if opt_enter {
-        _parse_type_namespace_prefix(p, (FOLLOW_MASK_11 | follow << 8) & FOLLOW_CONT_MASK);
+        _parse_type_namespace_prefix(p, (FOLLOW_MASK_11 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
     }
     p.expect(TK_Multiply, &EMPTY_SYNC);
     return;
@@ -32836,7 +32838,7 @@ fn _parse_attrib__inner(p: &mut Parser, follow: i64 = 0) -> () {
                         } else {
                             pos = gp_103;
                         }
-                        pos = scan_ws(tokens, pos, (FOLLOW_MASK_13 | follow << 8) & FOLLOW_CONT_MASK);
+                        pos = scan_ws(tokens, pos, (FOLLOW_MASK_13 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
                         if pos < 0 { break sg_101; }
                         break sg_101_done;
                     }
@@ -32935,7 +32937,7 @@ fn _parse_attrib__inner(p: &mut Parser, follow: i64 = 0) -> () {
         } else {
             pos = gp_105;
         }
-        pos = scan_ws(tokens, pos, (FOLLOW_MASK_13 | follow << 8) & FOLLOW_CONT_MASK);
+        pos = scan_ws(tokens, pos, (FOLLOW_MASK_13 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
         if pos < 0 { break opt_scan; }
         opt_scan_pos = pos;
     }
@@ -32950,7 +32952,7 @@ fn _parse_attrib__inner(p: &mut Parser, follow: i64 = 0) -> () {
         } else {
             p.no_viable("no viable alternative", p.peek_span(), &SYNC_27);
         }
-        _parse_ws(p, (FOLLOW_MASK_13 | follow << 8) & FOLLOW_CONT_MASK);
+        _parse_ws(p, (FOLLOW_MASK_13 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
     }
     p.expect(TK_CloseBracket, &EMPTY_SYNC);
     return;
@@ -32997,7 +32999,7 @@ fn _parse_pseudo(p: &mut Parser, follow: i64 = 0) -> () {
 fn _parse_functional_pseudo__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.expect(TK_Function_, &SYNC_30);
     _parse_ws(p, FOLLOW_MASK_14);
-    _parse_expression(p, (FOLLOW_MASK_8 | follow << 8) & FOLLOW_CONT_MASK);
+    _parse_expression(p, (FOLLOW_MASK_8 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
     p.expect(TK_CloseParen, &EMPTY_SYNC);
     return;
 }
@@ -33133,7 +33135,7 @@ fn _parse_negation__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.expect(TK_PseudoNot, &SYNC_32);
     _parse_ws(p, FOLLOW_MASK_15);
     _parse_negation_arg(p, 0);
-    _parse_ws(p, (FOLLOW_MASK_8 | follow << 8) & FOLLOW_CONT_MASK);
+    _parse_ws(p, (FOLLOW_MASK_8 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
     p.expect(TK_CloseParen, &EMPTY_SYNC);
     return;
 }
@@ -34868,7 +34870,7 @@ fn _parse_supports_condition_in_parens__inner_alt_0(p: &mut Parser, follow: i64 
     p.expect(TK_OpenParen, &SYNC_50);
     _parse_ws(p, FOLLOW_MASK_19);
     _parse_supports_condition(p, 0);
-    _parse_ws(p, (FOLLOW_MASK_8 | follow << 8) & FOLLOW_CONT_MASK);
+    _parse_ws(p, (FOLLOW_MASK_8 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
     p.expect(TK_CloseParen, &EMPTY_SYNC);
     return;
 }
@@ -34881,7 +34883,7 @@ fn _parse_supports_condition_in_parens__inner_scan_0(tokens: &Array<i32>, pos: i
     if pos < 0 { return -1; }
     pos = scan_supports_condition(tokens, pos, 0);
     if pos < 0 { return -1; }
-    pos = scan_ws(tokens, pos, (FOLLOW_MASK_8 | follow << 8) & FOLLOW_CONT_MASK);
+    pos = scan_ws(tokens, pos, (FOLLOW_MASK_8 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_CloseParen { return -1; }
     pos += 1;
@@ -35112,7 +35114,7 @@ fn _parse_supports_disjunction(p: &mut Parser, follow: i64 = 0) -> () {
 fn _parse_supports_declaration_condition__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.expect(TK_OpenParen, &SYNC_18);
     _parse_ws(p, FOLLOW_MASK_25);
-    _parse_declaration(p, (FOLLOW_MASK_8 | follow << 8) & FOLLOW_CONT_MASK);
+    _parse_declaration(p, (FOLLOW_MASK_8 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
     p.expect(TK_CloseParen, &EMPTY_SYNC);
     return;
 }
@@ -35182,7 +35184,7 @@ fn _parse_url__inner(p: &mut Parser, follow: i64 = 0) -> () {
         p.expect(TK_Url_, &SYNC_1);
         _parse_ws(p, FOLLOW_MASK_0);
         p.expect(TK_String_, &SYNC_56);
-        _parse_ws(p, (FOLLOW_MASK_8 | follow << 8) & FOLLOW_CONT_MASK);
+        _parse_ws(p, (FOLLOW_MASK_8 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
         p.expect(TK_CloseParen, &EMPTY_SYNC);
         return;
     }

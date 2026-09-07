@@ -654,8 +654,16 @@ pub fn follow_forward_args() -> String {
 /// `prefix` ahead of the caller's continuation, which therefore starts at the
 /// `positions` the prefix already constrains. `opens` marks that start as a
 /// fresh reading rather than more of the same one.
+///
+/// The forwarded half is masked down to its positions first. A reading it opens
+/// begins where the alternation was written, and `prefix` moves that point
+/// without moving the mark, so the gate would revive the reading `prefix`
+/// positions early — `{ x, y }` inside `[ … ]` handing its own comma to the
+/// list, whose next iteration also starts with one. Only the reading this
+/// composition opens is at a position the gate can still place.
 pub fn follow_composed(prefix: &String, positions: i32, opens: bool) -> String {
-    let shifted = if opens { `(${FOLLOW_PARAM} | FOLLOW_OPENS_BIT)` } else { FOLLOW_PARAM };
+    let sequenced = `${FOLLOW_PARAM} & FOLLOW_SEQUENCED`;
+    let shifted = if opens { `(${sequenced} | FOLLOW_OPENS_BIT)` } else { `(${sequenced})` };
     return `(${*prefix} | ${shifted} << ${positions * FOLLOW_SLOT_BITS}) & FOLLOW_CONT_MASK`;
 }
 

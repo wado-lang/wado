@@ -1079,6 +1079,8 @@ pub global FOLLOW_OPENS_BIT: i64 = 128;
 
 pub global FOLLOW_CONT_MASK: i64 = 0x00FF_FFFF_FFFF_FFFF;
 
+pub global FOLLOW_SEQUENCED: i64 = 0x007F_7F7F_7F7F_7F7F;
+
 pub fn follow_bitsets(kinds: &List<List<i32>>) -> List<List<i32>> {
     let mut out: List<List<i32>> = [];
     for let set of kinds {
@@ -1536,7 +1538,7 @@ impl Parser {
 
 fn scan_start(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let mut pos = pos;
-    pos = scan_block(tokens, pos, (FOLLOW_MASK_0 | follow << 8) & FOLLOW_CONT_MASK);
+    pos = scan_block(tokens, pos, (FOLLOW_MASK_0 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_EOF { return -1; }
     pos += 1;
@@ -1551,7 +1553,7 @@ fn scan_block(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
             pos += 1;
             if pos < tokens.len() && tokens[pos] == TK_ID {
                 let sp = pos;
-                pos = scan_names(tokens, pos, (FOLLOW_MASK_1 | follow << 16) & FOLLOW_CONT_MASK);
+                pos = scan_names(tokens, pos, (FOLLOW_MASK_1 | (follow & FOLLOW_SEQUENCED) << 16) & FOLLOW_CONT_MASK);
                 if pos < 0 { pos = sp; }
             }
             if pos >= tokens.len() || tokens[pos] != TK_OR { break sg_0; }
@@ -1568,7 +1570,7 @@ fn scan_block(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
 fn scan_names(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let scan_start = pos;
     let mut pos = pos;
-    pos = scan_name(tokens, pos, (FOLLOW_MASK_2 | (follow | FOLLOW_OPENS_BIT) << 16) & FOLLOW_CONT_MASK);
+    pos = scan_name(tokens, pos, (FOLLOW_MASK_2 | (follow & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << 16) & FOLLOW_CONT_MASK);
     if pos < 0 { return -1; }
     while pos < tokens.len() && tokens[pos] == TK_COMMA && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
         let sp = pos;
@@ -1576,7 +1578,7 @@ fn scan_names(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
             sg_1: {
                 if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sg_1; }
                 pos += 1;
-                pos = scan_name(tokens, pos, (FOLLOW_MASK_2 | (follow | FOLLOW_OPENS_BIT) << 16) & FOLLOW_CONT_MASK);
+                pos = scan_name(tokens, pos, (FOLLOW_MASK_2 | (follow & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << 16) & FOLLOW_CONT_MASK);
                 if pos < 0 { break sg_1; }
                 break sg_1_done;
             }
@@ -1619,7 +1621,7 @@ fn scan_body(tokens: &Array<i32>, pos: i32) -> i32 {
 }
 
 fn _parse_start__inner(p: &mut Parser, follow: i64 = 0) -> () {
-    _parse_block(p, (FOLLOW_MASK_0 | follow << 8) & FOLLOW_CONT_MASK);
+    _parse_block(p, (FOLLOW_MASK_0 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
     p.expect(TK_EOF, &EMPTY_SYNC);
     return;
 }
@@ -1638,7 +1640,7 @@ fn _parse_start(p: &mut Parser, follow: i64 = 0) -> () {
 fn _parse_block__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.expect(TK_OR, &SYNC_0);
     if p.peek_kind() == TK_ID {
-        _parse_names(p, (FOLLOW_MASK_1 | follow << 16) & FOLLOW_CONT_MASK);
+        _parse_names(p, (FOLLOW_MASK_1 | (follow & FOLLOW_SEQUENCED) << 16) & FOLLOW_CONT_MASK);
     }
     p.expect(TK_OR, &EMPTY_SYNC);
     _parse_body(p);
@@ -1657,7 +1659,7 @@ fn _parse_block(p: &mut Parser, follow: i64 = 0) -> () {
 }
 
 fn _parse_names__inner(p: &mut Parser, follow: i64 = 0) -> () {
-    _parse_name(p, (FOLLOW_MASK_2 | (follow | FOLLOW_OPENS_BIT) << 16) & FOLLOW_CONT_MASK);
+    _parse_name(p, (FOLLOW_MASK_2 | (follow & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << 16) & FOLLOW_CONT_MASK);
     loop {
         if p.recovering { break; }
         if follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) { break; }
@@ -1669,7 +1671,7 @@ fn _parse_names__inner(p: &mut Parser, follow: i64 = 0) -> () {
                 sg_3: {
                     if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sg_3; }
                     pos += 1;
-                    pos = scan_name(tokens, pos, (FOLLOW_MASK_2 | (follow | FOLLOW_OPENS_BIT) << 16) & FOLLOW_CONT_MASK);
+                    pos = scan_name(tokens, pos, (FOLLOW_MASK_2 | (follow & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << 16) & FOLLOW_CONT_MASK);
                     if pos < 0 { break sg_3; }
                     break sg_3_done;
                 }
@@ -1680,7 +1682,7 @@ fn _parse_names__inner(p: &mut Parser, follow: i64 = 0) -> () {
         }
         if rep_scan_pos < 0 { break; }
         p.expect(TK_COMMA, &SYNC_1);
-        _parse_name(p, (FOLLOW_MASK_2 | (follow | FOLLOW_OPENS_BIT) << 16) & FOLLOW_CONT_MASK);
+        _parse_name(p, (FOLLOW_MASK_2 | (follow & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << 16) & FOLLOW_CONT_MASK);
     }
     return;
 }

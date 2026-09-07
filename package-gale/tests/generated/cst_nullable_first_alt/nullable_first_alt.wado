@@ -1079,6 +1079,8 @@ pub global FOLLOW_OPENS_BIT: i64 = 128;
 
 pub global FOLLOW_CONT_MASK: i64 = 0x00FF_FFFF_FFFF_FFFF;
 
+pub global FOLLOW_SEQUENCED: i64 = 0x007F_7F7F_7F7F_7F7F;
+
 pub fn follow_bitsets(kinds: &List<List<i32>>) -> List<List<i32>> {
     let mut out: List<List<i32>> = [];
     for let set of kinds {
@@ -1533,7 +1535,7 @@ fn scan_s(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
         if alt_kind == TK_LIT_P {
             pos = start + 1;
             try_0: {
-                pos = scan_r(tokens, pos, (FOLLOW_MASK_0 | follow << 16) & FOLLOW_CONT_MASK);
+                pos = scan_r(tokens, pos, (FOLLOW_MASK_0 | (follow & FOLLOW_SEQUENCED) << 16) & FOLLOW_CONT_MASK);
                 if pos < 0 { break try_0; }
                 if pos >= tokens.len() || tokens[pos] != TK_B { break try_0; }
                 pos += 1;
@@ -1545,7 +1547,7 @@ fn scan_s(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
         } else if alt_kind == TK_LIT_Q {
             pos = start + 1;
             try_1: {
-                pos = scan_r(tokens, pos, (FOLLOW_MASK_1 | follow << 8) & FOLLOW_CONT_MASK);
+                pos = scan_r(tokens, pos, (FOLLOW_MASK_1 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
                 if pos < 0 { break try_1; }
                 if pos >= tokens.len() || tokens[pos] != TK_EOF { break try_1; }
                 pos += 1;
@@ -1593,14 +1595,14 @@ fn _parse_s__inner(p: &mut Parser, follow: i64 = 0) -> () {
     let kind = p.peek_kind();
     if kind == TK_LIT_P {
         p.expect(TK_LIT_P, &SYNC_0);
-        _parse_r(p, (FOLLOW_MASK_0 | follow << 16) & FOLLOW_CONT_MASK);
+        _parse_r(p, (FOLLOW_MASK_0 | (follow & FOLLOW_SEQUENCED) << 16) & FOLLOW_CONT_MASK);
         p.expect(TK_B, &SYNC_1);
         p.expect(TK_EOF, &EMPTY_SYNC);
         return;
     }
     if kind == TK_LIT_Q {
         p.expect(TK_LIT_Q, &SYNC_2);
-        _parse_r(p, (FOLLOW_MASK_1 | follow << 8) & FOLLOW_CONT_MASK);
+        _parse_r(p, (FOLLOW_MASK_1 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
         p.expect(TK_EOF, &EMPTY_SYNC);
         return;
     }

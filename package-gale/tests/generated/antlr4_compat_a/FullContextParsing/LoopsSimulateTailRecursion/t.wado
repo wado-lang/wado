@@ -1079,6 +1079,8 @@ pub global FOLLOW_OPENS_BIT: i64 = 128;
 
 pub global FOLLOW_CONT_MASK: i64 = 0x00FF_FFFF_FFFF_FFFF;
 
+pub global FOLLOW_SEQUENCED: i64 = 0x007F_7F7F_7F7F_7F7F;
+
 pub fn follow_bitsets(kinds: &List<List<i32>>) -> List<List<i32>> {
     let mut out: List<List<i32>> = [];
     for let set of kinds {
@@ -2504,7 +2506,7 @@ fn scan_expr_or_assign(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
             }
             pos = start;
             try_0: {
-                pos = scan_expr(tokens, pos, (FOLLOW_MASK_0 | follow << 8) & FOLLOW_CONT_MASK);
+                pos = scan_expr(tokens, pos, (FOLLOW_MASK_0 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
                 if pos < 0 { break try_0; }
                 if pos >= tokens.len() || tokens[pos] != TK_LIT_PLUSPLUS { break try_0; }
                 pos += 1;
@@ -2653,7 +2655,7 @@ fn _parse_expr_or_assign__inner_alt_0(p: &mut Parser, follow: i64 = 0, vals: Exp
     let mut vals = vals;
     vals._span_lo_expr = p.pos;
     p.atn_ret_pending = 20;
-    let expr = _parse_expr(p, (FOLLOW_MASK_0 | follow << 8) & FOLLOW_CONT_MASK);
+    let expr = _parse_expr(p, (FOLLOW_MASK_0 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
     vals._span_hi_expr = p.pos - 1;
     let lit_plusplus = p.expect(TK_LIT_PLUSPLUS, &EMPTY_SYNC);
     if !p.speculating {
@@ -2664,7 +2666,7 @@ fn _parse_expr_or_assign__inner_alt_0(p: &mut Parser, follow: i64 = 0, vals: Exp
 
 fn _parse_expr_or_assign__inner_scan_0(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let mut pos = pos;
-    pos = scan_expr(tokens, pos, (FOLLOW_MASK_0 | follow << 8) & FOLLOW_CONT_MASK);
+    pos = scan_expr(tokens, pos, (FOLLOW_MASK_0 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_LIT_PLUSPLUS { return -1; }
     pos += 1;

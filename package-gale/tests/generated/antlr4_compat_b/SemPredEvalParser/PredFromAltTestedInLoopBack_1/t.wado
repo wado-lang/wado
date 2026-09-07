@@ -1079,6 +1079,8 @@ pub global FOLLOW_OPENS_BIT: i64 = 128;
 
 pub global FOLLOW_CONT_MASK: i64 = 0x00FF_FFFF_FFFF_FFFF;
 
+pub global FOLLOW_SEQUENCED: i64 = 0x007F_7F7F_7F7F_7F7F;
+
 pub fn follow_bitsets(kinds: &List<List<i32>>) -> List<List<i32>> {
     let mut out: List<List<i32>> = [];
     for let set of kinds {
@@ -1582,7 +1584,7 @@ fn scan_file_(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_para(tokens, pos, FOLLOW_MASK_0);
     if pos < 0 { return -1; }
-    pos = scan_para(tokens, pos, (FOLLOW_MASK_1 | follow << 8) & FOLLOW_CONT_MASK);
+    pos = scan_para(tokens, pos, (FOLLOW_MASK_1 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_EOF { return -1; }
     pos += 1;
@@ -1591,7 +1593,7 @@ fn scan_file_(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
 
 fn scan_para(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let mut pos = pos;
-    pos = scan_para_content(tokens, pos, (FOLLOW_MASK_2 | follow << 16) & FOLLOW_CONT_MASK);
+    pos = scan_para_content(tokens, pos, (FOLLOW_MASK_2 | (follow & FOLLOW_SEQUENCED) << 16) & FOLLOW_CONT_MASK);
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_NL { return -1; }
     pos += 1;
@@ -1681,7 +1683,7 @@ fn scan_s(tokens: &Array<i32>, pos: i32) -> i32 {
 
 fn _parse_file___inner(p: &mut Parser, follow: i64 = 0) -> () {
     let para = _parse_para(p, FOLLOW_MASK_0);
-    let para_2 = _parse_para(p, (FOLLOW_MASK_1 | follow << 8) & FOLLOW_CONT_MASK);
+    let para_2 = _parse_para(p, (FOLLOW_MASK_1 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
     let eof = p.expect(TK_EOF, &EMPTY_SYNC);
     if !p.speculating {
         p.emit(`${p.rule_string_tree()}\n`);
@@ -1701,7 +1703,7 @@ fn _parse_file_(p: &mut Parser, follow: i64 = 0) -> () {
 }
 
 fn _parse_para__inner(p: &mut Parser, follow: i64 = 0) -> () {
-    let para_content = _parse_para_content(p, (FOLLOW_MASK_2 | follow << 16) & FOLLOW_CONT_MASK);
+    let para_content = _parse_para_content(p, (FOLLOW_MASK_2 | (follow & FOLLOW_SEQUENCED) << 16) & FOLLOW_CONT_MASK);
     let nl = p.expect(TK_NL, &SYNC_0);
     let nl_2 = p.expect(TK_NL, &EMPTY_SYNC);
     return;
