@@ -30,15 +30,15 @@ import memory (1) from "mem/memory";
 global mut global:nested_variant_match_ref_test.wado::__modules_initialized: bool = 0;
 
 fn "nested_variant_match_ref_test.wado/__cm_export____test_0_nested_variant_match_on_reference"() {
-    let node: ref "nested_variant_match_ref_test.wado//Outer";
-    __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:nested_variant_match_ref_test.wado::__modules_initialized);
+    $inline___initialize_modules_0: block {
+        break_if $inline___initialize_modules_0 @likely(global:nested_variant_match_ref_test.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:nested_variant_match_ref_test.wado::__modules_initialized = 1;
     };
-    node = struct.new "nested_variant_match_ref_test.wado//Outer::W" { discriminant: 0, payload_0: struct.new "nested_variant_match_ref_test.wado//Inner" { 0 } };
-    drop(ref.cast "nested_variant_match_ref_test.wado//Outer::W"(node).payload_0);
+    let __match_scrut_0: ref "nested_variant_match_ref_test.wado//Outer";
+    __match_scrut_0 = struct.new "nested_variant_match_ref_test.wado//Outer::W" { discriminant: 0, payload_0: struct.new "nested_variant_match_ref_test.wado//Inner" { 0 } };
+    drop(ref.cast "nested_variant_match_ref_test.wado//Outer::W"(__match_scrut_0).payload_0);
     "wasi/task-return"(0);
 }
 

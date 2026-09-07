@@ -633,11 +633,22 @@ fn can_propagate_copy(
         }
         CopySource::Ref { index, .. } | CopySource::MutRef { index, .. } => {
             if target_usage.read_count != 1 {
+                crate::compiler_trace!(
+                    "copy_prop",
+                    "borrow {} of {index}: {} reads",
+                    binding.target_local,
+                    target_usage.read_count
+                );
                 return false;
             }
             if let Some(su) = usage.get(index)
                 && su.is_assigned
             {
+                crate::compiler_trace!(
+                    "copy_prop",
+                    "borrow {} of {index}: referent is assigned",
+                    binding.target_local
+                );
                 return false;
             }
             true

@@ -8,6 +8,7 @@ use cranelift_entity::{EntityRef, PrimaryMap, entity_impl};
 
 use crate::canonical::CmCallTarget;
 use crate::hashmap::IndexSet;
+use crate::name::plain_block_label;
 use crate::nir::{NirBinaryOp, NirLocal, NirUnaryOp};
 use crate::nir_value_graph::{ValueId, ValueKind, ValuePool};
 use crate::tir::TypeId;
@@ -249,7 +250,6 @@ pub enum ExprKind {
         expr: Operand,
         index: Operand,
     },
-    Block(BlockId),
     If {
         condition: Operand,
         then_branch: BlockId,
@@ -291,6 +291,13 @@ pub enum ExprKind {
         case_index: u32,
         case_name: String,
     },
+    /// NIR's only block expression. A block a `break` never names carries a
+    /// label all the same — see [`ExprKind::plain_block`] — so every block in
+    /// the IR is one a dump, a trace or a pass can say the name of.
+    ///
+    /// `result_type` is the block's own contract — the type every `break LABEL:`
+    /// and the trailing statement agree on — not the type of the position the
+    /// node sits in, which is what the `ExprNode` carries.
     LabeledBlock {
         label: String,
         block: BlockId,
@@ -319,6 +326,22 @@ pub enum ExprKind {
 }
 
 impl ExprKind {
+    /// A block no `break` names. `what` says which construct put the block
+    /// there — the caller is the only one who knows — and the block id makes
+    /// the label unique within the body; [`plain_block_label`] spells it.
+    ///
+    /// A serial alone would name the block without saying anything about it,
+    /// which is what an unlabeled block already did.
+    #[must_use]
+    pub fn plain_block(block: BlockId, result_type: TypeId, what: &str) -> Self {
+        Self::LabeledBlock {
+            label: plain_block_label(what, block.index()),
+            block,
+            result_type,
+            role: BlockRole::Plain,
+        }
+    }
+
     /// Build `recv.m(args)`: the receiver heads the argument list, carrying the
     /// callee's `self` mutability as its own `is_mut`.
     pub fn method_call(
@@ -843,7 +866,6 @@ impl Body {
                 expr: self.clone_operand(expr),
                 index: self.clone_operand(index),
             },
-            ExprKind::Block(b) => ExprKind::Block(self.clone_block(b)),
             ExprKind::If {
                 condition,
                 then_branch,
@@ -1357,7 +1379,6 @@ impl Body {
                 | ExprKind::Local { .. }
                 | ExprKind::GlobalVarGet { .. }
                 | ExprKind::EnumConstruct { .. }
-                | ExprKind::Block(_)
                 | ExprKind::LabeledBlock { .. } => {}
             },
         }
@@ -1423,6 +1444,129 @@ impl Body {
             Slot::Operand(Operand::Value(_)) => {}
             Slot::Node(child) => f(child),
         });
+    }
+
+    /// Invoke `f` on what every `break label` in `node`'s subtree carries. A
+    /// nested block re-using the label takes its own breaks, so the walk stops
+    /// there. `f` returns `false` to stop the walk, and so does this.
+    fn walk_breaks_to(
+        &self,
+        node: NodeRef,
+        label: &str,
+        f: &mut impl FnMut(Option<Operand>) -> bool,
+    ) -> bool {
+        match node {
+            NodeRef::Stmt(s) => match &self.stmts[s].kind {
+                StmtKind::Break {
+                    label: Some(l),
+                    value,
+                } if l == label => {
+                    if !f(*value) {
+                        return false;
+                    }
+                }
+                StmtKind::LabeledBlock { label: l, .. } if l == label => return true,
+                _ => {}
+            },
+            NodeRef::Expr(e) => {
+                if let ExprKind::LabeledBlock { label: l, .. } = &self.exprs[e].kind
+                    && l == label
+                {
+                    return true;
+                }
+            }
+            _ => {}
+        }
+        let mut go = true;
+        self.for_each_child(node, |c| {
+            if go {
+                go = self.walk_breaks_to(c, label, f);
+            }
+        });
+        go
+    }
+
+    /// Whether some `break label` in `node`'s subtree names `label`.
+    ///
+    /// Every block in the IR is labeled, so this is what tells a block that
+    /// merely groups statements from one a `break` can exit early.
+    pub fn breaks_to(&self, node: NodeRef, label: &str) -> bool {
+        !self.walk_breaks_to(node, label, &mut |_| false)
+    }
+
+    /// `e` as a block whose value is its tail statement — the shape a pass may
+    /// look through. A `break LABEL: v` produces the block's value too, from a
+    /// point the tail never reaches, so a block one names is not one of these.
+    pub fn unbroken_block(&self, e: ExprId) -> Option<BlockId> {
+        let ExprKind::LabeledBlock { block, label, .. } = &self.exprs[e].kind else {
+            return None;
+        };
+        (!self.breaks_to(NodeRef::Block(*block), label)).then_some(*block)
+    }
+
+    /// Whether `node` binds `local` — a `let` or a pattern binding. A node, not
+    /// its subtree: what walks it is the caller's own walk.
+    pub fn binds_local(&self, node: NodeRef, local: u32) -> bool {
+        match node {
+            NodeRef::Stmt(id) => {
+                matches!(&self.stmts[id].kind, StmtKind::Let { local_index, .. } if *local_index == local)
+            }
+            NodeRef::Pat(id) => {
+                matches!(&self.pats[id].kind, PatKind::Binding { local_index, .. } if *local_index == local)
+            }
+            NodeRef::Expr(_) | NodeRef::Block(_) => false,
+        }
+    }
+
+    /// Whether `s` takes control elsewhere, so nothing after it runs.
+    pub fn terminates(&self, s: StmtId) -> bool {
+        matches!(
+            self.stmts[s].kind,
+            StmtKind::Break { .. } | StmtKind::Return { .. } | StmtKind::Continue
+        )
+    }
+
+    /// Whether `block` can reach its end and produce a value there.
+    pub fn falls_through(&self, block: BlockId) -> bool {
+        !self.blocks[block]
+            .stmts
+            .last()
+            .is_some_and(|s| self.terminates(*s))
+    }
+
+    /// Every point that produces the value of the labeled block at `e`: what
+    /// each `break LABEL:` carries — `None` for a value-less one — and the
+    /// trailing statement where control can reach it. `None` for anything but a
+    /// labeled block.
+    ///
+    /// A nested block re-using the label takes its own breaks, so the walk stops
+    /// there, as [`Body::breaks_to`] does.
+    pub fn block_exits(&self, e: ExprId) -> Option<Vec<Option<Operand>>> {
+        let ExprKind::LabeledBlock { label, block, .. } = &self.exprs[e].kind else {
+            return None;
+        };
+        let mut out = Vec::new();
+        self.walk_breaks_to(NodeRef::Block(*block), label, &mut |v| {
+            out.push(v);
+            true
+        });
+        // An `Expr` tail is never a terminator, so reaching it is the same
+        // question as it being there.
+        if let Some(&last) = self.blocks[*block].stmts.last()
+            && let StmtKind::Expr(v) = self.stmts[last].kind
+        {
+            out.push(Some(v));
+        }
+        Some(out)
+    }
+
+    /// The one operand `e` yields, or `None` where more than one point produces
+    /// its value and no single operand names it.
+    pub fn block_yield(&self, e: ExprId) -> Option<Operand> {
+        match self.block_exits(e)?.as_slice() {
+            [Some(one)] => Some(*one),
+            _ => None,
+        }
     }
 
     /// Invoke `f` on every operand slot of `node`, in source order — including
@@ -1542,7 +1686,6 @@ impl Body {
                         f(Slot::Operand(*a));
                     }
                 }
-                ExprKind::Block(b) => f(Slot::Node(NodeRef::Block(*b))),
                 ExprKind::If {
                     condition,
                     then_branch,

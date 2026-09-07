@@ -244,23 +244,9 @@ pub(super) fn local_written_by(body: &Body, node: NodeRef) -> Option<u32> {
     }
 }
 
-/// Whether the subtree at `node` contains a `Break` targeting `label`. A full
-/// subtree search, so nested blocks that rebind the same label are still
-/// searched — the conservative behaviour the sync-placement passes rely on.
+/// [`Body::breaks_to`] under the name the optimizer's own walks use it by.
 pub(super) fn has_break_to(body: &Body, node: NodeRef, label: &str) -> bool {
-    if let NodeRef::Stmt(s) = node
-        && let StmtKind::Break { label: Some(l), .. } = &body.stmts[s].kind
-        && l == label
-    {
-        return true;
-    }
-    let mut found = false;
-    body.for_each_child(node, |c| {
-        if !found {
-            found = has_break_to(body, c, label);
-        }
-    });
-    found
+    body.breaks_to(node, label)
 }
 
 /// Strip outer auto-ref / deref wrappers (`&`, `&mut`, `*`) from an expression,
@@ -466,9 +452,7 @@ pub(super) fn is_pure_expr(body: &Body, id: ExprId) -> bool {
         ExprKind::VariantConstruct { payload, .. } => {
             payload.is_none_or(|p| is_pure_operand(body, p))
         }
-        ExprKind::Block(block) | ExprKind::LabeledBlock { block, .. } => {
-            is_pure_block(body, *block)
-        }
+        ExprKind::LabeledBlock { block, .. } => is_pure_block(body, *block),
         ExprKind::If {
             condition,
             then_branch,
@@ -593,7 +577,6 @@ pub(super) fn expr_node_may_trap(body: &Body, id: ExprId) -> bool {
         | ExprKind::ArrayLiteral { .. }
         | ExprKind::VariantConstruct { .. }
         | ExprKind::ClosureToCanonical { .. }
-        | ExprKind::Block(_)
         | ExprKind::LabeledBlock { .. }
         | ExprKind::If { .. }
         | ExprKind::Match { .. }
@@ -989,7 +972,7 @@ fn node_yields_value(engine: &Engine, node: NodeRef) -> bool {
     };
     match parent {
         NodeRef::Expr(pe) => match &engine.body.exprs[pe].kind {
-            ExprKind::Block(_) | ExprKind::LabeledBlock { .. } => inherits(pe),
+            ExprKind::LabeledBlock { .. } => inherits(pe),
             // What a branching construct tests is read whatever the construct
             // yields; only what it selects among inherits its position. A
             // scrutinee read as a branch is what strips an `if` condition of

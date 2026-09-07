@@ -67,7 +67,7 @@ fully lowered. The pass:
   every assignment to a global is constant, it moves the value into the global's
   eager `init`, marks it immutable, and drops the `GlobalSet`s.
 - Recurses into nested instructions: an inlined `__initialize_module` puts its
-  `GlobalSet` inside an `__inline___initialize_modules` guard block, duplicated
+  `GlobalSet` inside an `$inline___initialize_modules` guard block, duplicated
   per entry export, which a top-level-only scan would leave lazy.
 
 `dce` / `cleanup` reclaim the emptied init body and the

@@ -3724,7 +3724,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         ctx.next_assert_id += 1;
         vec![TirStmt::new(
             TirStmtKind::LabeledBlock {
-                label: format!("__assert_{assert_serial}"),
+                label: format!("$assert_{assert_serial}"),
                 block: TirBlock::new(inner_stmts, span),
             },
             span,
@@ -3781,7 +3781,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let saved_continue = std::mem::take(&mut ctx.for_continue_labels);
         let unique_id = ctx.next_local;
         let iter_var = format!("__iter_{unique_id}");
-        let label = format!("__for_of_{unique_id}");
+        let label = format!("$for_of_{unique_id}");
 
         let into_iter_receiver = self.reify_expr(&for_of.iterable, ctx, None);
         let into_iter_receiver = adjust_receiver_for_self_kind(
@@ -4137,14 +4137,14 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
             outer_stmts.push(TirStmt::new(
                 TirStmtKind::LabeledBlock {
-                    label: format!("__tuple_iter_{unique_id}_{i}"),
+                    label: format!("$tuple_iter_{unique_id}_{i}"),
                     block: TirBlock::new(block_stmts, span),
                 },
                 span,
             ));
         }
 
-        let label = format!("__tuple_for_of_{unique_id}");
+        let label = format!("$tuple_for_of_{unique_id}");
         ctx.active_labels.push(label.clone());
         let result = vec![TirStmt::new(
             TirStmtKind::LabeledBlock {
@@ -4472,7 +4472,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let span = f.span;
         let loop_id = ctx.next_loop_id;
         ctx.next_loop_id += 1;
-        let body_label = format!("__for_{loop_id}_body");
+        let body_label = format!("$for_{loop_id}_body");
 
         let saved_continue = std::mem::take(&mut ctx.for_continue_labels);
         ctx.enter_scope();
@@ -5356,7 +5356,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             return call;
         }
 
-        let label = format!("__tagged_{unique_id}");
+        let label = format!("$tagged_{unique_id}");
         stmts.push(TirStmt::new(
             TirStmtKind::Break {
                 label: Some(label.clone()),

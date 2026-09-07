@@ -145,8 +145,8 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
 global mut global:serde_sub_serializer.wado::__modules_initialized: bool = 0;
 global global:serde_sub_serializer.wado::__const_obj_1: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97, 103, 101), used: 3 };
-global global:serde_sub_serializer.wado::__const_obj_2: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(65, 108, 105, 99, 101), used: 5 };
-global global:serde_sub_serializer.wado::__const_obj_3: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(110, 97, 109, 101), used: 4 };
+global global:serde_sub_serializer.wado::__const_obj_2: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(110, 97, 109, 101), used: 4 };
+global mut global:serde_sub_serializer.wado::__const_obj_3: ref null "core:prelude/string.wado//String" = ref.null none;
 global global:core:prelude/primitive.wado::__const_obj_6: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
 
 fn "serde_sub_serializer.wado/run"() with Stdout {
@@ -176,8 +176,6 @@ fn "serde_sub_serializer.wado/run"() with Stdout {
     let new_used_107: i32;
     let start_108: i32;
     let handle_119: i32;
-    let new_used_124: i32;
-    let start_125: i32;
     let other_158: ref "core:prelude/string.wado//String";
     let self_161: i32;
     let new_used_164: i32;
@@ -192,8 +190,6 @@ fn "serde_sub_serializer.wado/run"() with Stdout {
     let new_used_198: i32;
     let start_199: i32;
     let handle_210: i32;
-    let new_used_215: i32;
-    let start_216: i32;
     let other_267: ref "core:prelude/string.wado//String";
     let self_270: i32;
     let new_used_273: i32;
@@ -212,8 +208,8 @@ fn "serde_sub_serializer.wado/run"() with Stdout {
     let self_363: ref "core:prelude/string.wado//String";
     let new_used_368: i32;
     let start_369: i32;
-    __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:serde_sub_serializer.wado::__modules_initialized);
+    $inline___initialize_modules_0: block {
+        break_if $inline___initialize_modules_0 @likely(global:serde_sub_serializer.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:serde_sub_serializer.wado::__modules_initialized = 1;
@@ -312,24 +308,18 @@ fn "serde_sub_serializer.wado/run"() with Stdout {
     } else {
     }
     __local_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
-    new_used_124 = 0 + 5;
-    if @unlikely(new_used_124 > builtin::array_len(__local_10.repr)) {
-        cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(__local_10, new_used_124);
-    }
-    start_125 = __local_10.used;
-    __local_10.used = new_used_124;
-    builtin::array_set_u8(__local_10.repr, start_125, 115);
-    builtin::array_set_u8(__local_10.repr, start_125 + 1, 101);
-    builtin::array_set_u8(__local_10.repr, start_125 + 2, 113);
-    builtin::array_set_u8(__local_10.repr, start_125 + 3, 58);
-    builtin::array_set_u8(__local_10.repr, start_125 + 4, 32);
-    __inline_core_prelude_string_wado_String__push_str_52: block {
+    __local_10.used = 5;
+    builtin::array_set_u8(__local_10.repr, 0, 115);
+    builtin::array_set_u8(__local_10.repr, 0 + 1, 101);
+    builtin::array_set_u8(__local_10.repr, 0 + 2, 113);
+    builtin::array_set_u8(__local_10.repr, 0 + 3, 58);
+    builtin::array_set_u8(__local_10.repr, 0 + 4, 32);
+    $inline_core_prelude_string_wado_String__push_str_52: block {
         other_158 = ser.buf;
         self_161 = other_158.used;
-        break_if __inline_core_prelude_string_wado_String__push_str_52 self_161 == 0;
-        new_used_164 = __local_10.used + self_161;
-        if @unlikely(new_used_164 > builtin::array_len(__local_10.repr)) {
+        break_if $inline_core_prelude_string_wado_String__push_str_52 self_161 == 0;
+        new_used_164 = 5 + self_161;
+        if @unlikely(new_used_164 > 21) {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(__local_10, new_used_164);
         }
@@ -359,7 +349,10 @@ fn "serde_sub_serializer.wado/run"() with Stdout {
     if ref.test "core:prelude/types.wado//Result<serde_sub_serializer.wado/TextStructSerializer,serde_sub_serializer.wado/SerializeError>::Ok"(__match_15) {
         __local_13 = ref.cast "core:prelude/types.wado//Result<serde_sub_serializer.wado/TextStructSerializer,serde_sub_serializer.wado/SerializeError>::Ok"(__match_15).payload_0;
         s_7 = struct.new "serde_sub_serializer.wado//TextStructSerializer" { parent: __local_13.parent, count: __local_13.count };
-        drop("serde_sub_serializer.wado/serde_sub_serializer.wado/TextStructSerializer^serde_sub_serializer.wado/SerializeStruct::field<core:prelude/string.wado/String>"(s_7, global:serde_sub_serializer.wado::__const_obj_3, global:serde_sub_serializer.wado::__const_obj_2));
+        if ref.is_null(global:serde_sub_serializer.wado::__const_obj_3) {
+            global:serde_sub_serializer.wado::__const_obj_3 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Alice"), used: 5 };
+        }
+        drop("serde_sub_serializer.wado/serde_sub_serializer.wado/TextStructSerializer^serde_sub_serializer.wado/SerializeStruct::field<core:prelude/string.wado/String>"(s_7, global:serde_sub_serializer.wado::__const_obj_2, global:serde_sub_serializer.wado::__const_obj_3));
         drop("serde_sub_serializer.wado/serde_sub_serializer.wado/TextStructSerializer^serde_sub_serializer.wado/SerializeStruct::field<i32>$scalar"(s_7, global:serde_sub_serializer.wado::__const_obj_1, 30));
         self_193 = s_7.parent.buf;
         new_used_198 = self_193.used + 1;
@@ -374,27 +367,21 @@ fn "serde_sub_serializer.wado/run"() with Stdout {
     } else {
     }
     __local_11 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(24), used: 0 };
-    new_used_215 = 0 + 8;
-    if @unlikely(new_used_215 > builtin::array_len(__local_11.repr)) {
-        cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(__local_11, new_used_215);
-    }
-    start_216 = __local_11.used;
-    __local_11.used = new_used_215;
-    builtin::array_set_u8(__local_11.repr, start_216, 115);
-    builtin::array_set_u8(__local_11.repr, start_216 + 1, 116);
-    builtin::array_set_u8(__local_11.repr, start_216 + 2, 114);
-    builtin::array_set_u8(__local_11.repr, start_216 + 3, 117);
-    builtin::array_set_u8(__local_11.repr, start_216 + 4, 99);
-    builtin::array_set_u8(__local_11.repr, start_216 + 5, 116);
-    builtin::array_set_u8(__local_11.repr, start_216 + 6, 58);
-    builtin::array_set_u8(__local_11.repr, start_216 + 7, 32);
-    __inline_core_prelude_string_wado_String__push_str_92: block {
+    __local_11.used = 8;
+    builtin::array_set_u8(__local_11.repr, 0, 115);
+    builtin::array_set_u8(__local_11.repr, 0 + 1, 116);
+    builtin::array_set_u8(__local_11.repr, 0 + 2, 114);
+    builtin::array_set_u8(__local_11.repr, 0 + 3, 117);
+    builtin::array_set_u8(__local_11.repr, 0 + 4, 99);
+    builtin::array_set_u8(__local_11.repr, 0 + 5, 116);
+    builtin::array_set_u8(__local_11.repr, 0 + 6, 58);
+    builtin::array_set_u8(__local_11.repr, 0 + 7, 32);
+    $inline_core_prelude_string_wado_String__push_str_92: block {
         other_267 = ser.buf;
         self_270 = other_267.used;
-        break_if __inline_core_prelude_string_wado_String__push_str_92 self_270 == 0;
-        new_used_273 = __local_11.used + self_270;
-        if @unlikely(new_used_273 > builtin::array_len(__local_11.repr)) {
+        break_if $inline_core_prelude_string_wado_String__push_str_92 self_270 == 0;
+        new_used_273 = 8 + self_270;
+        if @unlikely(new_used_273 > 24) {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(__local_11, new_used_273);
         }
@@ -414,8 +401,8 @@ fn "serde_sub_serializer.wado/__cm_binding__Stdout_write_via_stream"(data) with 
 }
 
 fn "serde_sub_serializer.wado/__cm_export__run"() {
-    __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:serde_sub_serializer.wado::__modules_initialized);
+    $inline___initialize_modules_0: block {
+        break_if $inline___initialize_modules_0 @likely(global:serde_sub_serializer.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:serde_sub_serializer.wado::__modules_initialized = 1;
@@ -481,8 +468,6 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(self, ot
 fn "serde_sub_serializer.wado/serde_sub_serializer.wado/TextSerializer^serde_sub_serializer.wado/Serializer::serialize_string"(self, v) {
     let __local_2: ref "core:prelude/string.wado//String";
     let self_5: ref "core:prelude/string.wado//String";
-    let new_used_15: i32;
-    let start_16: i32;
     let self_24: i32;
     let new_used_27: i32;
     let start_28: i32;
@@ -490,20 +475,14 @@ fn "serde_sub_serializer.wado/serde_sub_serializer.wado/TextSerializer^serde_sub
     let self_40: i32;
     let new_used_43: i32;
     let start_44: i32;
-    __inline_core_prelude_string_wado_String__push_str_0: block {
+    $inline_core_prelude_string_wado_String__push_str_0: block {
         self_5 = self.buf;
         __local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(18), used: 0 };
-        new_used_15 = 0 + 1;
-        if @unlikely(new_used_15 > builtin::array_len(__local_2.repr)) {
-            cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(__local_2, new_used_15);
-        }
-        start_16 = __local_2.used;
-        __local_2.used = new_used_15;
-        builtin::array_set_u8(__local_2.repr, start_16, 34);
+        __local_2.used = 1;
+        builtin::array_set_u8(__local_2.repr, 0, 34);
         self_24 = v.used;
-        new_used_27 = __local_2.used + (1 + self_24);
-        if @unlikely(new_used_27 > builtin::array_len(__local_2.repr)) {
+        new_used_27 = 1 + (1 + self_24);
+        if @unlikely(new_used_27 > 18) {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(__local_2, new_used_27);
         }
@@ -513,7 +492,7 @@ fn "serde_sub_serializer.wado/serde_sub_serializer.wado/TextSerializer^serde_sub
         builtin::array_copy<u8>(self_30, start_28, v.repr, 0, self_24);
         builtin::array_set_u8(__local_2.repr, start_28 + self_24, 34);
         self_40 = __local_2.used;
-        break_if __inline_core_prelude_string_wado_String__push_str_0 self_40 == 0;
+        break_if $inline_core_prelude_string_wado_String__push_str_0 self_40 == 0;
         new_used_43 = self_5.used + self_40;
         if @unlikely(new_used_43 > builtin::array_len(self_5.repr)) {
             cold_path;
@@ -532,7 +511,6 @@ fn "serde_sub_serializer.wado/serde_sub_serializer.wado/TextStructSerializer^ser
     let new_used_11: i32;
     let start_12: i32;
     let self_20: ref "core:prelude/string.wado//String";
-    let start_31: i32;
     let self_39: i32;
     let new_used_42: i32;
     let start_43: i32;
@@ -552,19 +530,14 @@ fn "serde_sub_serializer.wado/serde_sub_serializer.wado/TextStructSerializer^ser
         self_6.used = new_used_11;
         builtin::array_set_u8(self_6.repr, start_12, 44);
     }
-    __inline_core_prelude_string_wado_String__push_str_5: block {
+    $inline_core_prelude_string_wado_String__push_str_5: block {
         self_20 = self.parent.buf;
         __local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(19), used: 0 };
-        if @unlikely(1 > builtin::array_len(__local_3.repr)) {
-            cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(__local_3, 1);
-        }
-        start_31 = __local_3.used;
         __local_3.used = 1;
-        builtin::array_set_u8(__local_3.repr, start_31, 34);
+        builtin::array_set_u8(__local_3.repr, 0, 34);
         self_39 = name.used;
-        new_used_42 = __local_3.used + (2 + self_39);
-        if @unlikely(new_used_42 > builtin::array_len(__local_3.repr)) {
+        new_used_42 = 1 + (2 + self_39);
+        if @unlikely(new_used_42 > 19) {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(__local_3, new_used_42);
         }
@@ -575,7 +548,7 @@ fn "serde_sub_serializer.wado/serde_sub_serializer.wado/TextStructSerializer^ser
         builtin::array_set_u8(__local_3.repr, start_43 + self_39, 34);
         builtin::array_set_u8(__local_3.repr, start_43 + (1 + self_39), 58);
         self_61 = __local_3.used;
-        break_if __inline_core_prelude_string_wado_String__push_str_5 self_61 == 0;
+        break_if $inline_core_prelude_string_wado_String__push_str_5 self_61 == 0;
         new_used_64 = self_20.used + self_61;
         if @unlikely(new_used_64 > builtin::array_len(self_20.repr)) {
             cold_path;
@@ -618,14 +591,14 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
     end_3 = _av_50 + (_av_51 - _av_50);
     offset = data.start;
     block {
-        l35: loop {
+        l32: loop {
             __sroa_data_start = offset;
-            ptr_14 = builtin::i32_wrap_i64(local.tee packed_13(len_23 = end_3 - __sroa_data_start; ptr_24 = "mem/realloc"(0, 0, 1, len_23); i = 0; b36: block {
-                l37: loop {
-                    break_if b36 i >= len_23;
+            ptr_14 = builtin::i32_wrap_i64(local.tee packed_13(len_23 = end_3 - __sroa_data_start; ptr_24 = "mem/realloc"(0, 0, 1, len_23); i = 0; b33: block {
+                l34: loop {
+                    break_if b33 i >= len_23;
                     builtin::store_u8(ptr_24 + i, builtin::array_get_value_u8(repr_2, __sroa_data_start + i));
                     i = i + 1;
-                    continue l37;
+                    continue l34;
                 };
             }; builtin::i64_extend_i32_s(ptr_24) | (builtin::i64_extend_i32_s(len_23) << 32_i64)));
             raw_len = builtin::i32_wrap_i64(packed_13 >> 32_i64);
@@ -641,23 +614,23 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
                 "wasi/waitable-set-drop"(ws);
                 result = status_41;
             }
-            written_16 = struct.new "core:prelude/types.wado//StreamWrite" { count: result >> 4, result: __inline_cm_copy_result_14: block -> "core:prelude/types.wado//enum:CopyResult" {
+            written_16 = struct.new "core:prelude/types.wado//StreamWrite" { count: result >> 4, result: $inline_cm_copy_result_14: block -> "core:prelude/types.wado//enum:CopyResult" {
                 let __match_scrut_0: i32;
                 __match_scrut_0 = result & 15;
                 if __match_scrut_0 == 0 {
-                    break __inline_cm_copy_result_14: 0;
+                    break $inline_cm_copy_result_14: 0;
                 } else if __match_scrut_0 == 1 {
-                    break __inline_cm_copy_result_14: 1;
+                    break $inline_cm_copy_result_14: 1;
                 } else {
                 }
-                break __inline_cm_copy_result_14: 2;
+                break $inline_cm_copy_result_14: 2;
             } };
             drop("mem/realloc"(ptr_14, raw_len, 1, 0));
             offset = offset + written_16.count;
             if select i32(select i32(written_16.result != 0, 1, written_16.count <= 0), 1, offset >= end_3) {
                 return written_16.result;
             }
-            continue l35;
+            continue l32;
         };
     };
 }
@@ -668,7 +641,6 @@ fn "serde_sub_serializer.wado/serde_sub_serializer.wado/TextStructSerializer^ser
     let new_used_11: i32;
     let start_12: i32;
     let self_20: ref "core:prelude/string.wado//String";
-    let start_31: i32;
     let self_39: i32;
     let new_used_42: i32;
     let start_43: i32;
@@ -689,19 +661,14 @@ fn "serde_sub_serializer.wado/serde_sub_serializer.wado/TextStructSerializer^ser
         self_6.used = new_used_11;
         builtin::array_set_u8(self_6.repr, start_12, 44);
     }
-    __inline_core_prelude_string_wado_String__push_str_5: block {
+    $inline_core_prelude_string_wado_String__push_str_5: block {
         self_20 = self.parent.buf;
         __local_3_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(19), used: 0 };
-        if @unlikely(1 > builtin::array_len(__local_3_3.repr)) {
-            cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(__local_3_3, 1);
-        }
-        start_31 = __local_3_3.used;
         __local_3_3.used = 1;
-        builtin::array_set_u8(__local_3_3.repr, start_31, 34);
+        builtin::array_set_u8(__local_3_3.repr, 0, 34);
         self_39 = name.used;
-        new_used_42 = __local_3_3.used + (2 + self_39);
-        if @unlikely(new_used_42 > builtin::array_len(__local_3_3.repr)) {
+        new_used_42 = 1 + (2 + self_39);
+        if @unlikely(new_used_42 > 19) {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(__local_3_3, new_used_42);
         }
@@ -712,7 +679,7 @@ fn "serde_sub_serializer.wado/serde_sub_serializer.wado/TextStructSerializer^ser
         builtin::array_set_u8(__local_3_3.repr, start_43 + self_39, 34);
         builtin::array_set_u8(__local_3_3.repr, start_43 + (1 + self_39), 58);
         self_61 = __local_3_3.used;
-        break_if __inline_core_prelude_string_wado_String__push_str_5 self_61 == 0;
+        break_if $inline_core_prelude_string_wado_String__push_str_5 self_61 == 0;
         new_used_64 = self_20.used + self_61;
         if @unlikely(new_used_64 > builtin::array_len(self_20.repr)) {
             cold_path;
@@ -765,35 +732,35 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(self, f) {
     is_negative = self < 0;
     val_6 = builtin::i64_extend_i32_s(self);
     abs_val = select i64(val_6 < 0_i64, 0_i64 - val_6, val_6);
-    digit_count_4 = __inline_count_digits_u64_1: block -> i32 {
+    digit_count_4 = $inline_count_digits_u64_1: block -> i32 {
         if abs_val == 0_i64 {
-            break __inline_count_digits_u64_1: 1;
+            break $inline_count_digits_u64_1: 1;
         }
         n = 0;
         t_9 = abs_val;
-        b51: block {
-            l52: loop {
-                break_if b51 t_9 <=u 0_i64;
+        b47: block {
+            l48: loop {
+                break_if b47 t_9 <=u 0_i64;
                 n = n + 1;
                 t_9 = t_9 /u 10_i64;
-                continue l52;
+                continue l48;
             };
         };
-        break __inline_count_digits_u64_1: n;
+        break $inline_count_digits_u64_1: n;
     };
     offset_5 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write$spec0$scalar"(f, is_negative, global:core:prelude/primitive.wado::__const_obj_6, digit_count_4);
     arr = f.repr;
     pos = offset_5 + digit_count_4;
     t_15 = abs_val;
     i = 0;
-    b53: block {
-        l54: loop {
-            break_if b53 i >= digit_count_4;
+    b49: block {
+        l50: loop {
+            break_if b49 i >= digit_count_4;
             pos = pos - 1;
             builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(t_15 %u 10_i64)) & 255);
             t_15 = t_15 /u 10_i64;
             i = i + 1;
-            continue l54;
+            continue l50;
         };
     };
 }

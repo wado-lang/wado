@@ -1523,7 +1523,8 @@ impl Rewriter<'_, '_> {
                 .try_expand_call_stmt(engine, e, span)
                 .expect("decomposed-candidate writer call must expand");
             let block = engine.alloc_block(stmts, span);
-            engine.replace_expr_kind(e, ExprKind::Block(block));
+            let ty = engine.body.exprs[e].type_id;
+            engine.replace_expr_kind(e, ExprKind::plain_block(block, ty, "writer"));
             return;
         }
 

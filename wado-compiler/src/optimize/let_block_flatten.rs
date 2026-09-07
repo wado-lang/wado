@@ -90,10 +90,8 @@ fn flattenable_inner_block(body: &Body, sid: StmtId) -> Option<(ExprId, BlockId)
         return None;
     };
     let value_e = value.as_expr()?;
-    let ExprKind::Block(inner) = &body.exprs[value_e].kind else {
-        return None;
-    };
-    let inner = *inner;
+    // Flattening a block a `break` names would strip the target the jump needs.
+    let inner = body.unbroken_block(value_e)?;
     let (&tail, leading) = body.blocks[inner].stmts.split_last()?;
     if leading.is_empty() {
         return None;
@@ -258,7 +256,7 @@ mod tests {
                 elements: vec![Operand::Expr(q1), Operand::Expr(q2)],
             },
         );
-        let block_b = expr(&mut body, ExprKind::Block(b));
+        let block_b = expr(&mut body, ExprKind::plain_block(b, TypeTable::UNIT, "test"));
         let arg_p = expr(&mut body, call_expr());
         let p_use = expr(
             &mut body,
@@ -280,7 +278,7 @@ mod tests {
                 elements: vec![Operand::Expr(p_use), Operand::Expr(y_use)],
             },
         );
-        let block_a = expr(&mut body, ExprKind::Block(a));
+        let block_a = expr(&mut body, ExprKind::plain_block(a, TypeTable::UNIT, "test"));
 
         let s_letq = body.stmts.push(let_stmt("q", 1, Operand::Expr(arg_q)));
         let s_tailb = body.stmts.push(StmtNode {

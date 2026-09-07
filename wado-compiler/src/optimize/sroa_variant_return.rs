@@ -414,6 +414,15 @@ fn collect_call_sites(
     });
 }
 
+/// Retype a block expression and the contract its exits agree on.
+fn retype_block(body: &mut Body, e: ExprId, ty: TypeId) {
+    body.exprs[e].type_id = ty;
+    let ExprKind::LabeledBlock { result_type, .. } = &mut body.exprs[e].kind else {
+        unreachable!("every block expression is a labeled block")
+    };
+    *result_type = ty;
+}
+
 /// Every call a consumer's value reaches in tail position: bare, through a block
 /// tail, an `If` branch, or a `Match` / `Switch` arm — exactly the positions
 /// [`return_value_scalarizable`] accepts and [`rewrite_return_value`] rewrites.
@@ -426,6 +435,10 @@ fn collect_return_tail_calls(body: &Body, op: Operand, expected: TypeId, out: &m
             collect_return_tail_calls(body, inner, expected, out);
         }
     };
+    if let Some(b) = body.unbroken_block(e) {
+        tail_of(b, out);
+        return;
+    }
     match &body.exprs[e].kind {
         ExprKind::Call { func_id, .. } => out.push(CallSite {
             call: e,
@@ -434,7 +447,6 @@ fn collect_return_tail_calls(body: &Body, op: Operand, expected: TypeId, out: &m
             bound_local: None,
             bindable: true,
         }),
-        ExprKind::Block(b) => tail_of(*b, out),
         ExprKind::If {
             then_branch,
             else_branch,
@@ -565,7 +577,7 @@ fn rebox_call(
         stmts: vec![let_stmt, tail],
         span,
     });
-    body.exprs[call].kind = ExprKind::Block(block);
+    body.exprs[call].kind = ExprKind::plain_block(block, variant_type, "rebox");
     body.exprs[call].type_id = variant_type;
 }
 
@@ -755,15 +767,15 @@ fn debug_assert_call_sites_rewritten(_: &NirPackage) {}
 /// a one-call wrapper, and `let_block_flatten` when it hoists a receiver.
 fn tail_call_site(body: &Body, op: Operand) -> Option<(FuncId, ExprId)> {
     let e = op.as_expr()?;
+    if let Some(b) = body.unbroken_block(e) {
+        let last = *body.blocks[b].stmts.last()?;
+        let StmtKind::Expr(inner) = &body.stmts[last].kind else {
+            return None;
+        };
+        return tail_call_site(body, *inner);
+    }
     match &body.exprs[e].kind {
         ExprKind::Call { func_id, .. } => Some((*func_id, e)),
-        ExprKind::Block(b) => {
-            let last = *body.blocks[*b].stmts.last()?;
-            match &body.stmts[last].kind {
-                StmtKind::Expr(inner) => tail_call_site(body, *inner),
-                _ => None,
-            }
-        }
         _ => None,
     }
 }
@@ -1297,21 +1309,16 @@ fn return_value_scalarizable(
     if body.exprs[expr].type_id == TypeTable::NEVER {
         return true;
     }
+    if let Some(b) = body.unbroken_block(expr) {
+        return returns_are_scalarizable(body, b, cand, tail_ok)
+            && block_tail_scalarizable(body, b, cand, tail_ok);
+    }
     match &body.exprs[expr].kind {
         ExprKind::VariantConstruct { variant_type, .. } => *variant_type == cand.variant_type,
         // `return g(x)` where `g` shares the variant, hence the layout: `g`
         // already returns this function's tuple, whichever round rewrote it.
         ExprKind::Call { func_id, .. } => tail_ok.get(func_id) == Some(&cand.variant_type),
         ExprKind::Local { index, .. } => single_def_variant_construct(body, *index, cand).is_some(),
-        // A plain block's value is its tail statement. A `LabeledBlock`'s is
-        // not: a `break L: v` anywhere inside also produces it, and those exits
-        // are neither validated nor rewritten here — so the whole shape is
-        // rejected rather than half-handled.
-        ExprKind::Block(b) => {
-            let b = *b;
-            returns_are_scalarizable(body, b, cand, tail_ok)
-                && block_tail_scalarizable(body, b, cand, tail_ok)
-        }
         ExprKind::If {
             then_branch,
             else_branch,
@@ -1889,6 +1896,11 @@ fn rewrite_return_value(
     if body.exprs[expr].type_id == TypeTable::NEVER {
         return None;
     }
+    if let Some(b) = body.unbroken_block(expr) {
+        retype_block(body, expr, cand.layout.tuple_type);
+        rewrite_block_tail(body, b, cand, span, retyped);
+        return None;
+    }
     match body.exprs[expr].kind.clone() {
         ExprKind::VariantConstruct {
             case_index,
@@ -1909,10 +1921,6 @@ fn rewrite_return_value(
                 body.exprs[expr].type_id = cand.layout.tuple_type;
                 retyped.push(index);
             }
-        }
-        ExprKind::Block(b) => {
-            body.exprs[expr].type_id = cand.layout.tuple_type;
-            rewrite_block_tail(body, b, cand, span, retyped);
         }
         ExprKind::If {
             then_branch,
@@ -2291,7 +2299,7 @@ fn hoist_call_scrutinees(
             stmts: vec![let_stmt, tail],
             span,
         });
-        body.exprs[match_expr].kind = ExprKind::Block(block);
+        body.exprs[match_expr].kind = ExprKind::plain_block(block, match_type, "scrutinee");
     }
     true
 }
@@ -2692,7 +2700,7 @@ fn bind_payload_before(
         span: cx.span,
     });
     Operand::Expr(body.exprs.push(ExprNode {
-        kind: ExprKind::Block(block),
+        kind: ExprKind::plain_block(block, value_type, "payload"),
         type_id: value_type,
         span: cx.span,
     }))

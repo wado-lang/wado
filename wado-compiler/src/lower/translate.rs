@@ -1479,7 +1479,7 @@ impl FunctionTranslator<'_, '_> {
         if let Some(nir) = self.try_boxing_rewrite(expr) {
             return nir;
         }
-        let kind = self.convert_expr_kind(&expr.kind);
+        let kind = self.convert_expr_kind(&expr.kind, expr.type_id);
         self.alloc_expr(kind, expr.type_id, expr.span)
     }
 
@@ -1518,7 +1518,9 @@ impl FunctionTranslator<'_, '_> {
         self.convert_operand(arg)
     }
 
-    fn convert_expr_kind(&self, kind: &TirExprKind) -> ExprKind {
+    /// `result_type` is the converted expression's own type, which an unlabeled
+    /// TIR block needs to become a labelled NIR one.
+    fn convert_expr_kind(&self, kind: &TirExprKind, result_type: tir::TypeId) -> ExprKind {
         match kind {
             // Pure scalar literals are interned into the `ValuePool` and born as
             // `Operand::Value` by `convert_operand`; every literal-bearing
@@ -1620,7 +1622,9 @@ impl FunctionTranslator<'_, '_> {
                 expr: self.convert_operand(expr),
                 index: self.convert_operand(index),
             },
-            TirExprKind::Block(block) => ExprKind::Block(self.convert_block(block)),
+            TirExprKind::Block(block) => {
+                ExprKind::plain_block(self.convert_block(block), result_type, "block")
+            }
             TirExprKind::If {
                 condition,
                 then_branch,

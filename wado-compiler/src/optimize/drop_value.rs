@@ -90,11 +90,7 @@ fn plan_labeled_block(engine: &Engine, s: StmtId) -> Option<(String, BlockId, Bl
     let (label, block, role) = (label.clone(), *block, *role);
     // A fall-through would leave the value in the tail statement, which is not
     // an exit this pass rewrites.
-    let last = *engine.body.blocks[block].stmts.last()?;
-    if !matches!(
-        engine.body.stmts[last].kind,
-        StmtKind::Break { .. } | StmtKind::Return { .. }
-    ) {
+    if engine.body.falls_through(block) {
         return None;
     }
     strippable(engine, block, &label).then_some((label, block, role))

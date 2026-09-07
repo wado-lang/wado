@@ -1,0 +1,31 @@
+// A pure callee returning a struct folds to the struct literal, nested `String`
+// and all. The field names and types come from the declaration, which the value
+// itself does not carry.
+use { println, Stdout } from "core:cli";
+
+struct Config {
+    width: i32,
+    name: String,
+}
+
+fn config() -> Config {
+    let mut width = 0;
+    for let mut i = 1; i <= 4; i += 1 {
+        width += i;
+    }
+    return Config { width, name: "wide" };
+}
+
+export fn run() with Stdout {
+    // Opaque, so the struct itself has to reach the IR rather than its fields.
+    let c = builtin::black_box(config());
+    println(`${c.width} ${c.name}`);
+}
+
+__DATA__
+{
+  "stdout": "10 wide\n",
+  "wir_expect:O2": [
+    "struct.new \"ctfe_struct_result.wado//Config\" { width: 10, name: struct.new \"core:prelude/string.wado//String\" { repr: array.new_fixed<u8>(119, 105, 100, 101), used: 4 } }"
+  ]
+}

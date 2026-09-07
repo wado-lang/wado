@@ -752,8 +752,7 @@ it. It is Wado's only non-local jump, and it replaces loop labels, labeled
 
 `LABEL: { ... }`, in statement or expression position.
 
-- The label is an identifier followed by a colon, and cannot start with `__`,
-  which is reserved for the blocks the compiler synthesises
+- The label is an identifier followed by a colon
 - `break LABEL;` leaves the block; `break LABEL: expr;` leaves it with a value
 - `()` is a value like any other, so `break LABEL: ()` says what `break LABEL`
   says, and `break ()` says what `break` says

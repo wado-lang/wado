@@ -137,15 +137,13 @@ fn "opt_string_append_fuse.wado/run"() with Stdout {
     let rx_33: i32;
     let tx_34: i32;
     let start_48: i32;
-    let self_56: i32;
-    let new_used_59: i32;
     let start_60: i32;
     let handle_75: i32;
     let packed_77: i64;
     let rx_78: i32;
     let tx_79: i32;
-    __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:opt_string_append_fuse.wado::__modules_initialized);
+    $inline___initialize_modules_0: block {
+        break_if $inline___initialize_modules_0 @likely(global:opt_string_append_fuse.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:opt_string_append_fuse.wado::__modules_initialized = 1;
@@ -184,16 +182,14 @@ fn "opt_string_append_fuse.wado/run"() with Stdout {
     start_48 = s_2.used;
     s_2.used = 3;
     builtin::array_set_u8(s_2.repr, start_48, 60);
-    self_56 = s_2.used;
-    new_used_59 = s_2.used + (1 + self_56);
-    if @unlikely(new_used_59 > builtin::array_len(s_2.repr)) {
+    if @unlikely(7 > builtin::array_len(s_2.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(s_2, new_used_59);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(s_2, 7);
     }
     start_60 = s_2.used;
-    s_2.used = new_used_59;
-    builtin::array_copy<u8>(s_2.repr, start_60, s_2.repr, 0, self_56);
-    builtin::array_set_u8(s_2.repr, start_60 + self_56, 62);
+    s_2.used = 7;
+    builtin::array_copy<u8>(s_2.repr, start_60, s_2.repr, 0, 3);
+    builtin::array_set_u8(s_2.repr, start_60 + 3, 62);
     rx_78 = builtin::i32_wrap_i64(local.tee packed_77("wasi/stream-new"()));
     tx_79 = builtin::i32_wrap_i64(packed_77 >> 32_i64);
     handle_75 = "opt_string_append_fuse.wado/__cm_binding__Stdout_write_via_stream"(rx_78);
@@ -206,8 +202,8 @@ fn "opt_string_append_fuse.wado/__cm_binding__Stdout_write_via_stream"(data) wit
 }
 
 fn "opt_string_append_fuse.wado/__cm_export__run"() {
-    __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:opt_string_append_fuse.wado::__modules_initialized);
+    $inline___initialize_modules_0: block {
+        break_if $inline___initialize_modules_0 @likely(global:opt_string_append_fuse.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:opt_string_append_fuse.wado::__modules_initialized = 1;
@@ -302,16 +298,16 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
                 "wasi/waitable-set-drop"(ws);
                 result = status_41;
             }
-            written_16 = struct.new "core:prelude/types.wado//StreamWrite" { count: result >> 4, result: __inline_cm_copy_result_14: block -> "core:prelude/types.wado//enum:CopyResult" {
+            written_16 = struct.new "core:prelude/types.wado//StreamWrite" { count: result >> 4, result: $inline_cm_copy_result_14: block -> "core:prelude/types.wado//enum:CopyResult" {
                 let __match_scrut_0: i32;
                 __match_scrut_0 = result & 15;
                 if __match_scrut_0 == 0 {
-                    break __inline_cm_copy_result_14: 0;
+                    break $inline_cm_copy_result_14: 0;
                 } else if __match_scrut_0 == 1 {
-                    break __inline_cm_copy_result_14: 1;
+                    break $inline_cm_copy_result_14: 1;
                 } else {
                 }
-                break __inline_cm_copy_result_14: 2;
+                break $inline_cm_copy_result_14: 2;
             } };
             drop("mem/realloc"(ptr_14, raw_len, 1, 0));
             offset = offset + written_16.count;

@@ -101,7 +101,6 @@ fn "generic_impls_at_two_trait_args.wado/run"() with Stdout {
     let __cond: bool;
     let p_4: ref "generic_impls_at_two_trait_args.wado//W<i32>";
     let __local_7: ref "core:prelude/string.wado//String";
-    let elements: ref "Array<generic_impls_at_two_trait_args.wado/W<i32>>";
     let self_11: ref "core:prelude/slice.wado//SliceValueIter<generic_impls_at_two_trait_args.wado/W<i32>>";
     let handle: i32;
     let self_22: ref "core:prelude/slice.wado//SliceValueIter<generic_impls_at_two_trait_args.wado/W<i32>>";
@@ -109,15 +108,16 @@ fn "generic_impls_at_two_trait_args.wado/run"() with Stdout {
     let packed: i64;
     let rx_26: i32;
     let tx_27: i32;
-    __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:generic_impls_at_two_trait_args.wado::__modules_initialized);
+    let __sroa_xs_repr: ref "Array<generic_impls_at_two_trait_args.wado/W<i32>>";
+    $inline___initialize_modules_0: block {
+        break_if $inline___initialize_modules_0 @likely(global:generic_impls_at_two_trait_args.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:generic_impls_at_two_trait_args.wado::__modules_initialized = 1;
     };
-    elements = array.new_fixed<ref "generic_impls_at_two_trait_args.wado//W<i32>">(struct.new "generic_impls_at_two_trait_args.wado//W<i32>" { v: 2 }, struct.new "generic_impls_at_two_trait_args.wado//W<i32>" { v: 3 });
+    __sroa_xs_repr = array.new_fixed<ref "generic_impls_at_two_trait_args.wado//W<i32>">(struct.new "generic_impls_at_two_trait_args.wado//W<i32>" { v: 2 }, struct.new "generic_impls_at_two_trait_args.wado//W<i32>" { v: 3 });
     let __match_scrut_0: ref null "generic_impls_at_two_trait_args.wado//W<i32>";
-    self_11 = struct.new "core:prelude/slice.wado//SliceValueIter<generic_impls_at_two_trait_args.wado/W<i32>>" { repr: elements, index: 0, end: 2 };
+    self_11 = struct.new "core:prelude/slice.wado//SliceValueIter<generic_impls_at_two_trait_args.wado/W<i32>>" { repr: __sroa_xs_repr, index: 0, end: 2 };
     __match_scrut_0 = "core:prelude/traits.wado/generic_impls_at_two_trait_args.wado/W<i32>^core:prelude/traits.wado/Product::product_iter<core:prelude/slice.wado/SliceValueIter<generic_impls_at_two_trait_args.wado/W<i32>>>"(self_11);
     __cond = (if ref.is_null(__match_scrut_0) == 0 -> bool {
         p_1 = ref.as_non_null(__match_scrut_0);
@@ -132,7 +132,7 @@ fn "generic_impls_at_two_trait_args.wado/run"() with Stdout {
     }
     __local_7 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     let __match_scrut_1: ref null "generic_impls_at_two_trait_args.wado//W<i32>";
-    self_22 = struct.new "core:prelude/slice.wado//SliceValueIter<generic_impls_at_two_trait_args.wado/W<i32>>" { repr: elements, index: 0, end: 2 };
+    self_22 = struct.new "core:prelude/slice.wado//SliceValueIter<generic_impls_at_two_trait_args.wado/W<i32>>" { repr: __sroa_xs_repr, index: 0, end: 2 };
     __match_scrut_1 = "core:prelude/traits.wado/generic_impls_at_two_trait_args.wado/W<i32>^core:prelude/traits.wado/Product::product_iter<core:prelude/slice.wado/SliceValueIter<generic_impls_at_two_trait_args.wado/W<i32>>>"(self_22);
     self_23 = (if ref.is_null(__match_scrut_1) == 0 -> bool {
         p_4 = ref.as_non_null(__match_scrut_1);
@@ -157,8 +157,8 @@ fn "generic_impls_at_two_trait_args.wado/__cm_binding__Stdout_write_via_stream"(
 }
 
 fn "generic_impls_at_two_trait_args.wado/__cm_export__run"() {
-    __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:generic_impls_at_two_trait_args.wado::__modules_initialized);
+    $inline___initialize_modules_0: block {
+        break_if $inline___initialize_modules_0 @likely(global:generic_impls_at_two_trait_args.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:generic_impls_at_two_trait_args.wado::__modules_initialized = 1;
@@ -274,16 +274,16 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
                 "wasi/waitable-set-drop"(ws);
                 result = status_41;
             }
-            written_16 = struct.new "core:prelude/types.wado//StreamWrite" { count: result >> 4, result: __inline_cm_copy_result_14: block -> "core:prelude/types.wado//enum:CopyResult" {
+            written_16 = struct.new "core:prelude/types.wado//StreamWrite" { count: result >> 4, result: $inline_cm_copy_result_14: block -> "core:prelude/types.wado//enum:CopyResult" {
                 let __match_scrut_0: i32;
                 __match_scrut_0 = result & 15;
                 if __match_scrut_0 == 0 {
-                    break __inline_cm_copy_result_14: 0;
+                    break $inline_cm_copy_result_14: 0;
                 } else if __match_scrut_0 == 1 {
-                    break __inline_cm_copy_result_14: 1;
+                    break $inline_cm_copy_result_14: 1;
                 } else {
                 }
-                break __inline_cm_copy_result_14: 2;
+                break $inline_cm_copy_result_14: 2;
             } };
             drop("mem/realloc"(ptr_14, raw_len, 1, 0));
             offset = offset + written_16.count;
@@ -303,13 +303,13 @@ fn "core:prelude/traits.wado/generic_impls_at_two_trait_args.wado/W<i32>^core:pr
     let _licm_repr_18: ref "Array<generic_impls_at_two_trait_args.wado/W<i32>>";
     let _av_20: i32;
     let _av_21: i32;
-    return __inline_core_prelude_slice_wado_SliceValueIter_generic_impls_at_two_trait_args_wado_W_i32___core_prelude_traits_wado_Iterator__reduce___Closure_0_0: block -> ref null "generic_impls_at_two_trait_args.wado//W<i32>" {
-        __fused___inline_core_prelude_slice_wado_SliceValueIter_generic_impls_at_two_trait_args_wado_W_i32___core_prelude_traits_wado_Iterator__next_1: block {
+    return $inline_core_prelude_slice_wado_SliceValueIter_generic_impls_at_two_trait_args_wado_W_i32___core_prelude_traits_wado_Iterator__reduce___Closure_0_0: block -> ref null "generic_impls_at_two_trait_args.wado//W<i32>" {
+        $fused_$inline_core_prelude_slice_wado_SliceValueIter_generic_impls_at_two_trait_args_wado_W_i32___core_prelude_traits_wado_Iterator__next_1: block {
             _av_20 = iter.index;
-            break_if __fused___inline_core_prelude_slice_wado_SliceValueIter_generic_impls_at_two_trait_args_wado_W_i32___core_prelude_traits_wado_Iterator__next_1 _av_20 >= iter.end;
+            break_if $fused_$inline_core_prelude_slice_wado_SliceValueIter_generic_impls_at_two_trait_args_wado_W_i32___core_prelude_traits_wado_Iterator__next_1 _av_20 >= iter.end;
             v_10 = builtin::array_get_value<ref "generic_impls_at_two_trait_args.wado//W<i32>">(iter.repr, _av_20);
             item_9 = struct.new "generic_impls_at_two_trait_args.wado//W<i32>" { v: v_10.v };
-            iter.index = iter.index + 1;
+            iter.index = _av_20 + 1;
             acc = item_9;
             _licm_end_17 = iter.end;
             _licm_repr_18 = iter.repr;
@@ -318,14 +318,14 @@ fn "core:prelude/traits.wado/generic_impls_at_two_trait_args.wado/W<i32>^core:pr
                     _av_21 = iter.index;
                     break_if b15 _av_21 >= _licm_end_17;
                     drop(builtin::array_get_value<ref "generic_impls_at_two_trait_args.wado//W<i32>">(_licm_repr_18, _av_21));
-                    iter.index = iter.index + 1;
+                    iter.index = _av_21 + 1;
                     acc = struct.new "generic_impls_at_two_trait_args.wado//W<i32>" { v: acc.v };
                     continue l16;
                 };
             };
-            break __inline_core_prelude_slice_wado_SliceValueIter_generic_impls_at_two_trait_args_wado_W_i32___core_prelude_traits_wado_Iterator__reduce___Closure_0_0: acc;
+            break $inline_core_prelude_slice_wado_SliceValueIter_generic_impls_at_two_trait_args_wado_W_i32___core_prelude_traits_wado_Iterator__reduce___Closure_0_0: acc;
         };
-        break __inline_core_prelude_slice_wado_SliceValueIter_generic_impls_at_two_trait_args_wado_W_i32___core_prelude_traits_wado_Iterator__reduce___Closure_0_0: ref.null none;
+        break $inline_core_prelude_slice_wado_SliceValueIter_generic_impls_at_two_trait_args_wado_W_i32___core_prelude_traits_wado_Iterator__reduce___Closure_0_0: ref.null none;
     };
 }
 
@@ -333,9 +333,9 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad$spec0$scala
     let self_12: i32;
     let new_used_15: i32;
     let start_16: i32;
-    __inline_core_prelude_string_wado_String__push_str_0: block {
+    $inline_core_prelude_string_wado_String__push_str_0: block {
         self_12 = content.used;
-        break_if __inline_core_prelude_string_wado_String__push_str_0 self_12 == 0;
+        break_if $inline_core_prelude_string_wado_String__push_str_0 self_12 == 0;
         new_used_15 = self.used + self_12;
         if @unlikely(new_used_15 > builtin::array_len(self.repr)) {
             cold_path;
