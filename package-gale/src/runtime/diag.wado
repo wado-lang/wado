@@ -1,4 +1,4 @@
-use { Span } from "./lex.wado";
+use { Span, rule_path_of } from "./lex.wado";
 
 pub enum Severity {
     Error,
@@ -81,6 +81,10 @@ impl Diagnostic {
 
     pub fn is_error(&self) -> bool {
         return self.severity matches { Error };
+    }
+
+    pub fn rule_path(&self) -> String {
+        return rule_path_of(&self.rule_stack);
     }
 }
 

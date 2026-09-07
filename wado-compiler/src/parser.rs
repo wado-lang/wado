@@ -20,7 +20,7 @@ use crate::ast::{
     WorldExportFn, WorldExportInterface, WorldImport,
 };
 use crate::compiler_host::{Code, DiagnosticSpan, Severity};
-use crate::token::{Span, TemplateTokenPart, Token, TokenKind, TokenKind as T};
+use crate::token::{Position, Span, TemplateTokenPart, Token, TokenKind, TokenKind as T};
 
 pub struct Parser {
     tokens: Vec<Token>,
@@ -6044,7 +6044,7 @@ impl Parser {
     /// Parse structured template token parts into AST template parts.
     fn parse_template_string_parts(
         &mut self,
-        token_parts: Vec<crate::token::TemplateTokenPart>,
+        token_parts: Vec<TemplateTokenPart>,
         span: Span,
     ) -> ParseResult<Expr> {
         let mut parts = Vec::new();
@@ -6105,7 +6105,7 @@ impl Parser {
     /// Reject a malformed format specifier. `origin` is where the specifier
     /// starts in the file, so the offset [`crate::format_spec`] reports lands on
     /// the offending character.
-    fn check_format_spec(&mut self, spec: &str, origin: crate::token::Position) -> ParseResult<()> {
+    fn check_format_spec(&mut self, spec: &str, origin: Position) -> ParseResult<()> {
         let Err(error) = crate::format_spec::parse(spec) else {
             return Ok(());
         };
@@ -6129,8 +6129,8 @@ impl Parser {
     fn parse_interpolation_expr(
         &mut self,
         expr_str: &str,
-        open: crate::token::Position,
-        origin: crate::token::Position,
+        open: Position,
+        origin: Position,
     ) -> ParseResult<Expr> {
         if expr_str.is_empty() {
             return Err(ParseError {
@@ -6319,7 +6319,7 @@ impl Parser {
 
 /// The span of `ch` at `at` in `space`'s text; zero-width when there is no
 /// character left to blame, so an error past the end of the text claims no byte.
-fn span_of(at: crate::token::Position, ch: Option<char>, space: crate::ast::AstIdSpace) -> Span {
+fn span_of(at: Position, ch: Option<char>, space: crate::ast::AstIdSpace) -> Span {
     let width = ch.map_or(0, char::len_utf8);
     Span::with_end(
         at.offset,
@@ -6334,7 +6334,7 @@ fn span_of(at: crate::token::Position, ch: Option<char>, space: crate::ast::AstI
 
 /// The span of the `${` whose expression starts at `origin` — both ASCII, and
 /// always on the expression's own line, so the opening column is two back.
-fn span_of_open_brace(origin: crate::token::Position, space: crate::ast::AstIdSpace) -> Span {
+fn span_of_open_brace(origin: Position, space: crate::ast::AstIdSpace) -> Span {
     assert!(
         origin.offset >= 2 && origin.column >= 3,
         "an interpolation origin always follows `${{`"

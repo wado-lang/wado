@@ -366,22 +366,26 @@ impl ParseError {
     }
 
     pub fn rule_path(&self) -> String {
-        let mut out = String::with_capacity(self.rule_stack.len() * 8);
-        let n = self.rule_stack.len();
-        let mut written = 0;
-        for let mut i = 0; i < n; i += 1 {
-            let name = &self.rule_stack[n - 1 - i];
-            if written > 0 && *name == self.rule_stack[n - i] {
-                continue;
-            }
-            if written > 0 {
-                out.push_str(&" > ");
-            }
-            out.push_str(name);
-            written += 1;
-        }
-        return out;
+        return rule_path_of(&self.rule_stack);
     }
+}
+
+pub fn rule_path_of(stack: &List<String>) -> String {
+    let mut out = String::with_capacity(stack.len() * 8);
+    let n = stack.len();
+    let mut written = 0;
+    for let mut i = 0; i < n; i += 1 {
+        let name = &stack[n - 1 - i];
+        if written > 0 && *name == stack[n - i] {
+            continue;
+        }
+        if written > 0 {
+            out.push_str(&" > ");
+        }
+        out.push_str(name);
+        written += 1;
+    }
+    return out;
 }
 
 fn join_expected(names: &List<String>) -> String {
@@ -486,6 +490,10 @@ impl Diagnostic {
 
     pub fn is_error(&self) -> bool {
         return self.severity matches { Error };
+    }
+
+    pub fn rule_path(&self) -> String {
+        return rule_path_of(&self.rule_stack);
     }
 }
 
@@ -1750,10 +1758,10 @@ fn _parse_prog(p: &mut Parser) -> () {
 fn _parse_stmt__inner(p: &mut Parser) -> () {
     p.expect(TK_LIT_LET, &SYNC_0);
     p.expect(TK_ID, &SYNC_1);
-    if p.peek_kind() == TK_LIT_EQ {
+    if p.peek_kind() == TK_LIT_EQ && _kind_set_0(p.peek_at(1)) {
         p.expect(TK_LIT_EQ, &SYNC_2);
         _parse_expr(p);
-        if p.peek_kind() == TK_LIT_ELSE {
+        if p.peek_kind() == TK_LIT_ELSE && p.peek_at(1) == TK_LIT_LBRACE {
             p.expect(TK_LIT_ELSE, &SYNC_3);
             _parse_block(p);
         }

@@ -1,0 +1,29 @@
+//! An optional whose entry signature runs into a rule deriving epsilon.
+//!
+//! `field : ID (COLON mods)?` with `mods : PUB?`. A signature naming
+//! FIRST(mods) one past COLON asserts a token the empty `mods` never spends,
+//! so the walk has to stop at a deeply nullable element, not just a `?`.
+
+use g from "./grammars/ll_opt_sig_nullable_ruleref.g4"
+    with {
+        generator: { module: "../src/generator.wado", output_dir: "./generated/cst_ll_opt_sig_nullable_ruleref" },
+    };
+
+fn assert_tree(input: &String, expected: &String) {
+    let result = g::parse(input);
+    assert result.ok(), `unexpected diagnostics for ${*input}: ${result.diagnostics:?}`;
+    let actual = g::to_string_tree(&result);
+    assert actual == *expected, `\ninput:    ${*input}\nexpected: ${*expected}\nactual:   ${actual}`;
+}
+
+test "the optional is taken when the nullable rule spends nothing" {
+    assert_tree(&"a:", &"(start (field a : mods))");
+}
+
+test "the optional is taken when the nullable rule spends its token" {
+    assert_tree(&"a: pub", &"(start (field a : (mods pub)))");
+}
+
+test "the optional is left alone when its own first token is absent" {
+    assert_tree(&"a", &"(start (field a))");
+}

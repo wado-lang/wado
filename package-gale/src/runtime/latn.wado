@@ -41,7 +41,11 @@ fn latn_closure(
             for let mut i = 0; i < stack.len() - 1; i += 1 {
                 rest.push(stack[i]);
             }
-            latn_closure(sim, out, visited, ret, &rest, open);
+            let mut rest_open: List<i32> = [];
+            for let mut i = 0; i < open.len() - 1; i += 1 {
+                rest_open.push(open[i]);
+            }
+            latn_closure(sim, out, visited, ret, &rest, &rest_open);
         }
         return;
     }
@@ -76,7 +80,7 @@ fn latn_closure(
     }
 }
 
-pub fn latn_match(sim: &AtnSim, start_rule: i32, chars: &List<char>, start: i32) -> i32 {
+pub fn latn_match(sim: &AtnSim, start_rule: i32, chars: &List<char>, start: i32, longest: bool) -> i32 {
     let mut best = -1;
     let mut clist: List<LThread> = [];
     let mut seed = TreeSet::<String>::new();
@@ -95,7 +99,7 @@ pub fn latn_match(sim: &AtnSim, start_rule: i32, chars: &List<char>, start: i32)
             let th = &clist[i];
             if th.accept {
                 best = pos;
-                stop = true;
+                stop = !longest;
             } else {
                 let ts = sim.state_tr_start[th.state];
                 let tc = sim.state_tr_count[th.state];

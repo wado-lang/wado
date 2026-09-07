@@ -10,6 +10,11 @@ fn assert_tree(input: &String, expected: &String) {
     assert actual == *expected, `\ninput:    ${*input}\nexpected: ${*expected}\nactual:   ${actual}`;
 }
 
-test "tree: X Y picks (a b?) under LL" {
-    assert_tree(&"X Y", &"(r (a X) (b Y))");
+// Pinned against the published jar: `antlr4-oracle.sh ll_nullable_suffix.g4 r`
+// on `X Y` prints `(r (a X Y) <EOF>)`. Both readings complete, so `Y?` is a
+// greedy subrule over an ambiguity and takes the token —
+// `driver_cst_ll_greedy_optional_cross_rule_test` is the same rule with the
+// `else`.
+test "tree: X Y is the greedy subrule's, not the caller's b?" {
+    assert_tree(&"X Y", &"(r (a X Y))");
 }

@@ -944,22 +944,28 @@ match, ties to the first alternative. Fixture: `lr_atn_shared_op.g4`.
 Which gaps stay static is a cost decision as much as a correctness one — one
 prediction is a full closure over the grammar; see [`perf.md`](./perf.md).
 
-## Lexer ATN — recursive non-greedy wildcard rules
+## Lexer ATN — rules one pass cannot decide
 
-The lexer has its own case that needs runtime matching to agree with
-ANTLR4: a rule whose non-greedy repeat body recurses into itself — the
+Two lexer shapes need runtime matching to agree with ANTLR4.
+
+The first is a rule whose non-greedy repeat body recurses into itself, the
 nested-comment pattern `CMT : '/*' (CMT | .)+? '*' '/'`. Whether an inner
 `/*` opens a nested comment or is just wildcard text needs unbounded
 lookahead, which a single-pass lexer cannot decide (it over-consumes).
 These are the `LexerExec/RecursiveLexerRuleRefWithWildcard{Plus,Star}_1`
 descriptors.
 
+The second is a greedy loop whose body arms overlap and reach different
+lengths, `STR : '"' (~["] | ESC)* '"'`. Which arm to take depends on
+whether the loop can go on after it, so no fixed policy over the arms
+answers it; AGENTS.md, "Failed approaches", lists the ones that fail.
+
 Gale reproduces ANTLR4's result: leftmost-first alternation and the usual
 greedy / non-greedy loop semantics (greedy takes the longest match,
 non-greedy the shortest that still completes the rule). The behaviour was
 characterized clean-room against the published jar as a black box
-(License hygiene: run it, never read it). Rules without this
-recursive-wildcard shape are unaffected. The implementation lives in the lexer ATN runtime module.
+(License hygiene: run it, never read it). Every other rule stays on the
+static path. The implementation lives in the lexer ATN runtime module.
 
 ## The Descriptor Pipeline
 

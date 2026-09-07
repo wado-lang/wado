@@ -11,6 +11,7 @@ use crate::name::{
     canonical_local_path, module_parent_dir, normalize_module_path, resolve_local_identity,
     resolve_module_path,
 };
+use crate::parse;
 use crate::path::is_cwd_relative;
 
 /// Every module the walk reached, keyed by the path it was reached through.
@@ -61,7 +62,7 @@ where
             let Some(source) = load(&loader_id).await else {
                 continue;
             };
-            let Ok(parsed) = crate::parse(&source).into_fail_fast() else {
+            let Ok(parsed) = parse(&source).into_fail_fast() else {
                 continue;
             };
             parsed.ast
@@ -159,8 +160,8 @@ mod tests {
         futures::executor::block_on(future)
     }
 
-    fn parse(source: &str) -> Module {
-        crate::parse(source).ast
+    fn ast_of(source: &str) -> Module {
+        parse(source).ast
     }
 
     /// A host that matches its keys exactly, as the in-memory hosts do.
@@ -187,7 +188,7 @@ mod tests {
         ];
         let harvest = block_on(harvest_module_graph(
             "src/main.wado",
-            parse("use { a } from \"./lib.wado\";\n"),
+            ast_of("use { a } from \"./lib.wado\";\n"),
             exact(sources),
         ));
 
@@ -208,7 +209,7 @@ mod tests {
         let sources: &[(&str, &str)] = &[("./b.wado", "use { y } from \"./a.wado\";\n")];
         let harvest = block_on(harvest_module_graph(
             "src/a.wado",
-            parse("use { x } from \"./b.wado\";\n"),
+            ast_of("use { x } from \"./b.wado\";\n"),
             exact(sources),
         ));
 
@@ -293,7 +294,7 @@ mod tests {
     fn an_unloadable_module_is_skipped_not_fatal() {
         let harvest = block_on(harvest_module_graph(
             "main.wado",
-            parse("use { a } from \"./missing.wado\";\n"),
+            ast_of("use { a } from \"./missing.wado\";\n"),
             async |_| None,
         ));
 

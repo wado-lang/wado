@@ -1,0 +1,41 @@
+//! Two left-recursive suffixes where one is the other's prefix.
+//!
+//! `e DOT ID LPAREN RPAREN` and `e DOT ID` share DOT and the ID after it. The
+//! call is decided by the LPAREN past them; the field is decided by that LPAREN
+//! being absent, which the enclosing rule owns — so the shorter suffix wins only
+//! when the longer one is checked to the end and fails.
+//!
+//! `RustParser.g4` has this shape in `expression`, where the field access
+//! (`self.x`) is the one that loses.
+
+use g from "./grammars/lr_suffix_prefix_overlap.g4"
+    with {
+        generator: { module: "../src/generator.wado", output_dir: "./generated/cst_lr_suffix_prefix_overlap" },
+    };
+
+fn assert_tree(input: &String, expected: &String) {
+    let result = g::parse(input);
+    assert result.ok(), `unexpected diagnostics for ${*input}: ${result.diagnostics:?}`;
+    let actual = g::to_string_tree(&result);
+    assert actual == *expected, `\ninput:    ${*input}\nexpected: ${*expected}\nactual:   ${actual}`;
+}
+
+test "a bare name takes neither suffix" {
+    assert_tree(&"a", &"(start (e a))");
+}
+
+test "the longer suffix wins when its tail is there" {
+    assert_tree(&"a.b()", &"(start (e (e a) . b ( )))");
+}
+
+test "the shorter suffix wins when the longer one cannot finish" {
+    assert_tree(&"a.b", &"(start (e (e a) . b))");
+}
+
+test "the two alternate along one chain" {
+    assert_tree(&"a.b().c", &"(start (e (e (e a) . b ( )) . c))");
+}
+
+test "the shorter suffix chains into the longer one" {
+    assert_tree(&"a.b.c()", &"(start (e (e (e a) . b) . c ( )))");
+}

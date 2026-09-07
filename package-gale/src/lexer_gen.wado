@@ -991,10 +991,11 @@ fn gen_lexer_match_fn(
     if hm {
         w.line(&"let chars = &lx.chars;");
     }
-    // ATN-class rule (recursive non-greedy body): the static single-pass
-    // emitter cannot decide it, so delegate to the runtime lexer simulator.
+    // ATN-class rule: the static single-pass emitter cannot decide it, so
+    // delegate to the runtime lexer simulator.
     if let Some(idx) = atn_class.get(rule.name) {
-        w.line(&`return latn_match(&LATN_SIM, ${idx}, chars, start);`);
+        let longest = !lexer_rule_has_non_greedy(rule, all_rules);
+        w.line(&`return latn_match(&LATN_SIM, ${idx}, chars, start, ${longest});`);
         w.end();
         w.blank();
         return;
@@ -1649,6 +1650,64 @@ pub fn lexer_alts_emit(alts: &List<LexerAlternative>, all_rules: &List<LexerRule
     };
 }
 
+/// Whether a non-greedy subrule makes the earliest accept this rule's answer
+/// (`CMT : '/*' (CMT | .)+? '*/'` ends at the first `*/`). With none, the rule
+/// is an ordinary maximal-munch token and the simulator must take the longest.
+fn lexer_rule_has_non_greedy(rule: &LexerRule, all_rules: &List<LexerRule>) -> bool {
+    let mut visiting: List<String> = [rule.name];
+    return lexer_alts_have_non_greedy(&rule.body, all_rules, &mut visiting);
+}
+
+fn lexer_alts_have_non_greedy(
+    alts: &List<LexerAlternative>,
+    all_rules: &List<LexerRule>,
+    visiting: &mut List<String>,
+) -> bool {
+    for let alt of alts {
+        for let elem of &alt.elements {
+            if lexer_elem_has_non_greedy(elem, all_rules, visiting) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+/// `visiting` guards a fragment that reaches itself — the recursive comment
+/// fragment walks forever without it.
+fn lexer_elem_has_non_greedy(elem: &LexerElement, all_rules: &List<LexerRule>, visiting: &mut List<String>) -> bool {
+    match *elem {
+        Repeat(rep) => {
+            return rep.non_greedy || lexer_elem_has_non_greedy(&rep.element, all_rules, visiting);
+        },
+        Group(alts) => {
+            return lexer_alts_have_non_greedy(&alts, all_rules, visiting);
+        },
+        Not(n) => {
+            return lexer_elem_has_non_greedy(&n.element, all_rules, visiting);
+        },
+        RuleRef(name) => {
+            if visiting.contains(&name) {
+                return false;
+            }
+            // `collect_reachable` inlines whatever `find_lexer_rule` resolves,
+            // so a token rule reached from here is as much a part of the
+            // simulated rule as a fragment: the decision must walk the same
+            // graph the ATN is built from.
+            let Some(f) = find_lexer_rule(all_rules, &name) else {
+                return false;
+            };
+            visiting.push(name);
+            let found = lexer_alts_have_non_greedy(&f.body, all_rules, visiting);
+            visiting.pop();
+            return found;
+        },
+        Literal(_) | CharRange(_) | CharClass(_) | AnyChar => {
+            return false;
+        },
+    }
+}
+
 /// Whether `alt` carries a semantic predicate at its own level or anywhere the
 /// emit inlines below it (a group's arms, a non-recursive fragment's body). A
 /// nested predicate constrains the emit exactly as a top-level one does, so both
@@ -2299,7 +2358,7 @@ struct LeadingChars {
 /// first-match emit already gives ANTLR4's answer and the arms need not be
 /// scored against the suffix. An arm whose leading chars are unknown, or that
 /// can match empty, answers "yes".
-fn lexer_alts_can_collide(alts: &List<LexerAlternative>, all_rules: &List<LexerRule>, ci: bool) -> bool {
+pub fn lexer_alts_can_collide(alts: &List<LexerAlternative>, all_rules: &List<LexerRule>, ci: bool) -> bool {
     let mut sets: List<LeadingChars> = [];
     for let alt of alts {
         let mut visiting: List<String> = [];
