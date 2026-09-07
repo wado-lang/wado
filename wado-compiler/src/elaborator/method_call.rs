@@ -1501,12 +1501,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             _ => StaticLookup::NotStatic,
         };
-        if let StaticLookup::Ambiguous(traits) = resolved {
-            let _ = self.emit(TypeError::AmbiguousTraitMethod {
-                method: static_call.method.clone(),
-                traits,
-                span: static_call.span,
-            });
+        if self.report_ambiguous_static(&resolved, &static_call.method, static_call.span) {
             return TypeTable::ERROR;
         }
         let (callee_params, declares_params) = resolved.params();
@@ -2145,53 +2140,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             };
 
         // A trait impl's static is mangled with its trait, so WIR resolves it.
-        let arg_type_hints = self.arg_hints(&args);
-        // Keep the whole selection: its trait names the mangled function, and
-        // its `method_id` is what the use→def edge below is recorded against.
-        // A name lookup cannot stand in — two conversion impls on one type
-        // declare the same `from`, and only the argument's type separates
-        // them. The receiver comes off the resolved type: re-deriving it from
+        // The receiver comes off the resolved type: re-deriving it from
         // `struct_name` searches the caller's frame, which an aliased import
         // leaves without that name at all.
+        let arg_type_hints = self.arg_hints(&args);
         let receiver_key =
             self.impl_target_of(target_type_id, &crate::name::DeclName::new(&struct_name));
-        let lookup = self.resolve_static_callee(
-            None,
+        let Ok(resolution) = self.static_trait_ref(
             &struct_name,
-            Some(&receiver_key),
             &static_call.method,
+            Some(&receiver_key),
             &arg_type_hints,
-            None,
-        );
-        let selected = lookup
-            .found()
-            .map(|callee| callee.method_ref.clone())
-            .filter(|method_ref| method_ref.trait_name.is_some());
-        let trait_name_opt = selected.as_ref().and_then(|r| r.trait_name.clone());
-
-        // The expected type that shaped the argument came from
-        // `lookup_static_method_param_types_keyed`, which keys on (receiver,
-        // method) alone — with two impls of one trait it can be a different
-        // impl's than the one the argument's type then selects. Left alone the
-        // mangled name loses its trait and reaches WIR build unresolved, so the
-        // disagreement is reported here instead of ICE-ing there.
-        if trait_name_opt.is_none()
-            && let Some(arg_type) = arg_type_hints.first().map(String::as_str)
-            && !self.has_inherent_static_method(
-                &struct_name,
-                &static_call.method,
-                Some(&receiver_key),
-            )
-            && self.report_unmatched_static_arg(
-                &struct_name,
-                &static_call.method,
-                arg_type,
-                static_call.span,
-                Some(&receiver_key),
-            )
-        {
+            static_call.span,
+        ) else {
             return TypeTable::ERROR;
-        }
+        };
+        let selected = resolution.selected;
+        let trait_name_opt = selected.as_ref().and_then(|r| r.trait_name.clone());
 
         let mangled_func_name = MethodName::format_local(
             &mangled_struct_name,
@@ -2199,7 +2164,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             &static_call.method,
         );
 
-        let mut return_type = lookup.return_type();
+        let mut return_type = resolution.return_type;
 
         // A value blanket indexes statics under its receiver *param* name, so
         // the concrete receiver's own bucket misses.
@@ -3359,60 +3324,33 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
         let impl_type_args = impl_type_args_owned.as_slice();
 
-        // The trait the impl names and the module its block lives in. The
-        // argument separates a user-defined `impl From<MyType> for i32` from
-        // the primitive's, and `impl Conv<A>` from `impl Conv<B>`.
+        // The argument separates a user-defined `impl From<MyType> for i32`
+        // from the primitive's, and `impl Conv<A>` from `impl Conv<B>`. A
+        // newtype's static call dispatches to its base, whose name is not the
+        // caller's to resolve — that frame can hold a same-named declaration of
+        // its own.
         let arg_type_hints = self.arg_hints(args);
-        // A newtype's static call dispatches to its base, whose name is not
-        // the caller's to resolve — that frame can hold a same-named
-        // declaration of its own.
         let receiver_key = newtype_dispatch.as_ref().map(|(_, base_type_id, _)| {
             self.impl_target_of(
                 *base_type_id,
                 &crate::name::DeclName::new(&actual_struct_name),
             )
         });
-        let lookup = self.resolve_static_callee(
-            None,
+        let Ok(resolution) = self.static_trait_ref(
             &actual_struct_name,
-            receiver_key.as_ref(),
             method_name,
+            receiver_key.as_ref(),
             &arg_type_hints,
-            None,
-        );
-        let resolved = lookup
-            .found()
-            .map(|callee| callee.method_ref.clone())
-            .filter(|method_ref| method_ref.trait_name.is_some());
-        // The expected type that shaped the argument came from
-        // `lookup_static_method_param_types_keyed`, which keys on (receiver,
-        // method) alone — with two impls of one trait it can be a different
-        // impl's than the one the argument's type then selects. Left alone the
-        // mangled name loses its trait and reaches WIR build unresolved, so the
-        // disagreement is reported here instead of ICE-ing there.
-        if resolved.is_none()
-            && let Some(arg_type) = arg_type_hints.first().map(String::as_str)
-            && !self.has_inherent_static_method(
-                &actual_struct_name,
-                method_name,
-                receiver_key.as_ref(),
-            )
-            && self.report_unmatched_static_arg(
-                &actual_struct_name,
-                method_name,
-                arg_type,
-                span,
-                receiver_key.as_ref(),
-            )
-        {
+            span,
+        ) else {
             return TypeTable::ERROR;
-        }
+        };
 
         // An inherent impl may live in any module of the package that owns the
         // type, and its methods are registered under that module. So the
         // fallback takes the impl's module where one is indexed, and the type's
         // home only where none is (`cross_module_inherent_static.wado`).
-        let method_ref = resolved.unwrap_or_else(|| {
+        let method_ref = resolution.selected.unwrap_or_else(|| {
             let target = self.static_receiver_key(&actual_struct_name, receiver_key.as_ref());
             let module = self
                 .static_method_entries(&target, method_name)
@@ -3429,7 +3367,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             actual_mangled_name
         };
 
-        let mut return_type = lookup.return_type();
+        let mut return_type = resolution.return_type;
 
         // Substitute impl-level + method-level type parameters in return type.
         // `lookup_static_method_return_type` registers impl params at indices

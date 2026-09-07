@@ -17,7 +17,6 @@ use super::method_call::PreselectedArg;
 use super::scope::{BinderInScope, Scope};
 use super::sem::types::{CalleeParams, StaticMethodDispatch};
 use super::sig::{MethodSig, Param};
-use super::static_call::StaticLookup;
 use super::trait_env;
 use super::trait_env::ImplTargetKey;
 use super::types::{FunctionContext, TypeError};
@@ -987,12 +986,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     prefix,
                     &arg_hints,
                 );
-                if let StaticLookup::Ambiguous(traits) = resolved {
-                    let _ = self.emit(TypeError::AmbiguousTraitMethod {
-                        method: suffix.to_string(),
-                        traits,
-                        span: call.span,
-                    });
+                if self.report_ambiguous_static(&resolved, suffix, call.span) {
                     return TypeTable::ERROR;
                 }
                 // The count and the defaults come from the declaration, so the
@@ -1374,15 +1368,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         &arg_type_hints,
                         ns_receiver_type,
                     );
-                    // A spelling several traits answer names none of them, so it
-                    // is reported rather than mangled: the trait-less name below
-                    // reaches WIR build as an unresolved call.
-                    if let StaticLookup::Ambiguous(traits) = &resolved {
-                        let _ = self.emit(TypeError::AmbiguousTraitMethod {
-                            method: method_name.to_string(),
-                            traits: traits.clone(),
-                            span: call.span,
-                        });
+                    if self.report_ambiguous_static(&resolved, method_name, call.span) {
                         return TypeTable::ERROR;
                     }
                     let method_ref = resolved

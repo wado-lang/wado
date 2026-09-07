@@ -462,7 +462,7 @@ impl<'a> Engine<'a> {
         Some(v)
     }
 
-    /// The [`ValueId`](ValueId) of an operand: the
+    /// The [`ValueId`] of an operand: the
     /// promoted value directly, or the skeleton expr's value from the graph.
     pub fn operand_value(&mut self, op: Operand) -> Option<ValueId> {
         match op {

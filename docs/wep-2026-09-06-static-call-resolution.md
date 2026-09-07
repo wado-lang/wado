@@ -262,10 +262,11 @@ receiver up front made a lookup mutate state on paths that never used it, and
       _parameter_, which no name written at a call site reaches. Folding them in
       means the resolution answers for a receiver it cannot key on directly.
 
-Thirteen of the sixteen lookups are gone. The three that remain ask a different
-question — the declaration's own frame, for a caller that will instantiate it,
-and the blanket keyed on its receiver parameter — and they agree with each
-other. Unifying them further is symmetry, not this WEP's decision.
+Five of the sixteen names are gone outright. The rest no longer walk a ladder of
+their own: each reads the resolution's answer, or asks one rung through the
+shared `impl_method_entries` walk. The exception is the blanket path —
+`find_blanket_static_method` and `lookup_static_method_param_types_keyed` still
+walk rungs of their own, and that is the open roadmap item above.
 
 ## Known gaps
 

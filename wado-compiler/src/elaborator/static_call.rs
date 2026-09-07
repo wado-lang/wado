@@ -15,6 +15,7 @@ use super::callee::StaticMethodRef;
 use super::sem::types::CalleeParams;
 use super::sig::MethodSig;
 use super::trait_env::{ImplHeader, ImplTargetKey};
+use super::types::TypeError;
 
 /// What one `Type::method(...)` spelling names.
 pub(super) struct StaticCallee {
@@ -74,6 +75,18 @@ enum CandidateOrigin {
     Written,
     /// The block leaves the trait's default to answer.
     Inherited,
+}
+
+/// A diagnostic was emitted and the caller has nothing left to build.
+pub(super) struct Reported;
+
+/// What a call about to mangle a name needs, from one resolution: the
+/// declaration a trait supplies, and what the call evaluates to.
+pub(super) struct StaticTraitRef {
+    /// `None` where no trait supplies the name, which an inherent declaration
+    /// answers with a trait-less one.
+    pub(super) selected: Option<StaticMethodRef>,
+    pub(super) return_type: TypeId,
 }
 
 /// What the rules made of the candidates.
@@ -379,6 +392,73 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return_type,
             method_ref,
         })
+    }
+
+    /// What a call about to mangle a name needs, resolved once so the identity
+    /// and the return type cannot name different declarations.
+    ///
+    /// A spelling no trait answers and no inherent declaration either mangles
+    /// without a trait segment and reaches WIR build unresolved. Where an
+    /// argument was there to select and matched nothing, that is reported here
+    /// rather than left to ICE there, and the caller stops.
+    pub(super) fn static_trait_ref(
+        &mut self,
+        receiver_name: &str,
+        method_name: &str,
+        receiver_key: Option<&ImplTargetKey>,
+        arg_hints: &[String],
+        span: Span,
+    ) -> Result<StaticTraitRef, Reported> {
+        let lookup = self.resolve_static_callee(
+            None,
+            receiver_name,
+            receiver_key,
+            method_name,
+            arg_hints,
+            None,
+        );
+        let return_type = lookup.return_type();
+        let selected = lookup
+            .found()
+            .map(|callee| callee.method_ref.clone())
+            .filter(|method_ref| method_ref.trait_name.is_some());
+        if selected.is_none()
+            && let Some(arg_type) = arg_hints.first().map(String::as_str)
+            && !self.has_inherent_static_method(receiver_name, method_name, receiver_key)
+            && self.report_unmatched_static_arg(
+                receiver_name,
+                method_name,
+                arg_type,
+                span,
+                receiver_key,
+            )
+        {
+            return Err(Reported);
+        }
+        Ok(StaticTraitRef {
+            selected,
+            return_type,
+        })
+    }
+
+    /// Report a spelling several traits answer, which names none of them.
+    /// Every site that mangles a name has to consume this, or it builds a name
+    /// with no trait segment and WIR resolves it to nothing.
+    pub(super) fn report_ambiguous_static(
+        &mut self,
+        lookup: &StaticLookup,
+        method_name: &str,
+        span: Span,
+    ) -> bool {
+        let StaticLookup::Ambiguous(traits) = lookup else {
+            return false;
+        };
+        let _ = self.emit(TypeError::AmbiguousTraitMethod {
+            method: method_name.to_string(),
+            traits: traits.clone(),
+            span,
+        });
+        true
     }
 
     /// The rules, applied once to every candidate whatever rung produced it.

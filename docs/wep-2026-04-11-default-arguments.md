@@ -231,10 +231,15 @@ The rule covers a **type parameter's** default the same way. The trait declares 
 // in another module: `Tag` is private to it
 pub trait Boxed {
     fn boxed<T: Named = Tag>(&self) -> String;
+    fn made<T: Named = Tag>() -> String;
 }
 
 impl Boxed for M {
     fn boxed<T: Named>(&self) -> String {   // no default here
+        return T::name();
+    }
+
+    fn made<T: Named>() -> String {
         return T::name();
     }
 }

@@ -18,16 +18,10 @@ mkdir -p target
 lock="target/.$name.lock"
 exec 9>>"$lock"
 if ! flock -n 9; then
-    # Who holds it now, not the pid this file records. Every process the run
-    # spawns inherits fd 9, so an orphaned test binary outlives the pid written
-    # here and keeps the lock — and it is named for its own binary, which no
-    # search for `$name` finds.
-    # Let go of our own handle before asking who holds the lock. This script
-    # opened fd 9 to test it and every subshell inherits that, so `fuser`
-    # counted the asker and its own pipeline beside the real holder — pids
-    # already gone by the time anyone reads the message, and a `kill` on one
-    # the system has since reused. Nothing below needs the descriptor: the
-    # lock is not ours and this path only reports and exits.
+    # Report who holds the lock now: an orphaned test binary inherits fd 9 and
+    # outlives the pid this file records. Close our own handle first, or `fuser`
+    # counts this script and its pipeline among the holders. Nothing below needs
+    # the descriptor — the lock is not ours and this path only reports and exits.
     exec 9>&-
     holders=""
     if command -v fuser >/dev/null; then
