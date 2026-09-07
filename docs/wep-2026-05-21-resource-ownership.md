@@ -621,6 +621,16 @@ Verified against the tree.
       `sqlite_parse` finds 0%. Only a program passing deeply nested aggregates by
       value pays it.
 
+- [ ] Say which by-value argument a builtin stores into a `&mut` one.
+      `confine::raise_builtin_sides` infers it — every by-value aggregate leaks
+      once any `&mut` operand is present — which is exact over `array_set`,
+      `array_fill` and `array_copy`, the whole population, and silently wrong for
+      a builtin added later. Closing it means a declaration, as the result's
+      origin has. The obligation cannot be checked the same way: a builtin that
+      stores and one that does not have the same signature, so no predicate says
+      where silence is wrong, and silence here is unsound rather than merely
+      pessimistic.
+
 ## Deferred: the `move` and `unique` keywords
 
 Intentionally not implemented. Move-only semantics need no syntax: transfer is
