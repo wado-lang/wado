@@ -20,15 +20,19 @@ use crate::tir_visitor::TirRefVisitor;
 /// element types of `array_clone::<T>(...)` calls that codegen
 /// routes through the same helper.
 ///
-/// Runs before the return-convention fixpoint, so it uses a conservative
-/// oracle (only builtins are owned). That over-collects seed types — a helper
-/// the precise fold never calls is dead-code-eliminated — but never misses one.
-pub fn collect_seed_types(project: &FlatPackage) -> IndexSet<TypeId> {
+/// Runs before the return-convention fixpoint, so no body function is known
+/// owned yet. That over-collects seed types — a helper the precise fold never
+/// calls is dead-code-eliminated — but never misses one. The builtin
+/// conventions are the real ones: they are declared, not inferred, and reading
+/// an empty set instead would take every builtin for fresh, which under-collects.
+pub fn collect_seed_types(
+    project: &FlatPackage,
+    builtins: &BuiltinConventions,
+) -> IndexSet<TypeId> {
     let type_table = project.type_table.borrow();
     let no_owned = FuncKeySet::default();
     let no_self_proj = FuncKeySet::default();
-    let no_builtin_conventions = BuiltinConventions::default();
-    let oracle = OwnedCalls::new(&no_owned, &no_self_proj, &no_builtin_conventions);
+    let oracle = OwnedCalls::new(&no_owned, &no_self_proj, builtins);
     let mut walker = SeedWalker {
         type_table: &type_table,
         oracle: &oracle,

@@ -145,7 +145,8 @@ pub fn plan(
     ref_receiver_methods: FuncKeySet,
 ) -> ValueCopyPlan {
     register_variant_cases(flat);
-    let seed = analyze::collect_seed_types(flat);
+    let builtin_conventions = ownership::BuiltinConventions::collect(flat);
+    let seed = analyze::collect_seed_types(flat, &builtin_conventions);
     let helpers = synthesize::synthesize_helpers(flat, seed);
     // Built after synthesis so the value-copy helpers (always owned) are present
     // in `flat.functions`, and shared: every summary below is a monotone
@@ -154,7 +155,6 @@ pub fn plan(
     // Three passes, because the paths gate the conventions
     // ([`hands_out_payload`]) and the conventions place the paths: a seed pass
     // without the gate breaks the knot.
-    let builtin_conventions = ownership::BuiltinConventions::collect(flat);
     let seed_conventions = ownership::compute_return_conventions(
         flat,
         &call_graph,
