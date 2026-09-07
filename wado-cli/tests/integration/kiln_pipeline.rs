@@ -133,13 +133,13 @@ fn invocation(
     output_dir: &str,
 ) -> Invocation {
     Invocation {
-        decl_site: DeclSite {
+        decl_sites: vec![DeclSite {
             module: decl_file.to_string(),
+            source: InvocationPath::normalize(from),
             synthetic_id: synthetic_id.to_string(),
-        },
+        }],
         module,
         from: InvocationPath::normalize(from),
-        source: InvocationPath::normalize(from),
         inputs: vec![],
         output_dir: InvocationPath::normalize(output_dir),
         options: wado_compiler::kiln::CanonicalOptions::default(),
@@ -289,7 +289,7 @@ fn each_invocation_writes_its_own_metadata_file() {
     run(&m, tmp.path(), &host, &provider, invs.clone());
 
     for inv in &invs {
-        let id = inv.decl_site.synthetic_id.as_str();
+        let id = inv.decl_site().synthetic_id.as_str();
         let meta = kiln_metadata::load(tmp.path(), inv.output_dir.as_str(), inv.from.as_str())
             .unwrap()
             .unwrap_or_else(|| panic!("missing metadata for {id}"));
@@ -389,13 +389,13 @@ fn pipeline_invocations_feed_compiler_options_for_use_redirect() {
     let m = empty_manifest();
 
     let inline_inv = Invocation {
-        decl_site: DeclSite {
+        decl_sites: vec![DeclSite {
             module: "entry.wado".to_string(),
+            source: InvocationPath::normalize("./schema.proto"),
             synthetic_id: "kiln-abc12345".to_string(),
-        },
+        }],
         module: GeneratorModule::LocalPath(InvocationPath::normalize("../gen")),
         from: InvocationPath::normalize("./schema.proto"),
-        source: InvocationPath::normalize("./schema.proto"),
         inputs: vec![],
         output_dir: InvocationPath::normalize("build/kiln/kiln-abc12345"),
         options: wado_compiler::kiln::CanonicalOptions::default(),
@@ -452,13 +452,13 @@ fn inline_invocation_populates_invocation_index_for_redirect() {
     let m = empty_manifest();
 
     let inline_inv = Invocation {
-        decl_site: DeclSite {
+        decl_sites: vec![DeclSite {
             module: "entry.wado".to_string(),
+            source: InvocationPath::normalize("./sample.proto"),
             synthetic_id: "kiln-deadbeef".to_string(),
-        },
+        }],
         module: GeneratorModule::LocalPath(InvocationPath::normalize("../gen")),
         from: InvocationPath::normalize("./sample.proto"),
-        source: InvocationPath::normalize("./sample.proto"),
         inputs: vec![],
         output_dir: InvocationPath::normalize("build/kiln/kiln-deadbeef"),
         options: wado_compiler::kiln::CanonicalOptions::default(),

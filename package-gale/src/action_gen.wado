@@ -985,7 +985,7 @@ fn emit_gated_pick(w: &mut CodeWriter, idx: i32, fn_name: &String, ctx: &GenCont
     if ctx.is_trace() {
         w.line(&`trace_pick(p, &${str_lit(*rule_display)}, ${idx});`);
     }
-    w.line(&`return ${*fn_name}_alt_${idx}(p${follow_sep(ctx.emit_follow())}${alt_vals_arg(ctx)});`);
+    w.line(&`return ${*fn_name}_alt_${idx}(p${follow_sep(ctx.current_rule_reads_follow())}${alt_vals_arg(ctx)});`);
 }
 
 /// Join predicate conditions into one short-circuit `(c0) && (c1)` guard.

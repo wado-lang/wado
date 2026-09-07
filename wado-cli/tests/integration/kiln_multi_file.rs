@@ -2,7 +2,7 @@
 //!
 //! A path written in a `.wado` file (`from`, `generator.inputs`,
 //! `generator.output_dir`) must resolve relative to that file — the same rule
-//! every other Wado path follows. These tests pin two consequences:
+//! every other Wado path follows. These tests pin three consequences:
 //!
 //! 1. A consumer in a subdirectory reads *its own* sibling schema, not a
 //!    same-named file at the project root.
@@ -10,6 +10,8 @@
 //!    "./grammar.g4"` get distinct default `output_dir`s instead of clobbering
 //!    each other (the original collision the `output_dir` override worked
 //!    around).
+//! 3. Two consumers that do name one schema share its invocation, and each
+//!    still resolves its own import through it.
 
 use std::fs;
 
@@ -19,7 +21,8 @@ use predicates::prelude::*;
 /// A pass-through generator: it emits the primary schema's contents verbatim as
 /// the entry module, so the grammar file *is* the generated Wado source. This
 /// makes a cross-read (reading the wrong sibling) observable as a wrong return
-/// value.
+/// value. It cannot show a *missing* redirect, though: the loader then parses
+/// the grammar as Wado and gets the same result.
 const PASSTHROUGH_GENERATOR: &str = r#"use { Request, Response, OutputFile, Error } from "core:kiln";
 
 export fn generate(req: Request) -> Result<Response, Error> {
@@ -102,6 +105,77 @@ fn sibling_consumers_resolve_their_own_schema() {
         out_files.len(),
         2,
         "each sibling consumer must get its own generated entry, got {out_files:?}"
+    );
+}
+
+/// Two modules declaring the same clause for the same schema collapse into one
+/// invocation, so the generator runs once. Each still imports through it, so
+/// each needs its own redirect (WEP 2026-04-12 §"Use-site syntax").
+///
+/// The schema here is not valid Wado, so a module left unredirected fails to
+/// compile rather than parsing its schema as source and passing by accident.
+#[test]
+fn two_modules_sharing_one_schema_both_redirect() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path();
+    fs::write(
+        root.join("wado.toml"),
+        "[package]\nname = \"shared\"\nversion = \"0.1.0\"\n\n[world]\n\"wasi:cli/command\" = \"src/main.wado\"\n",
+    )
+    .unwrap();
+    fs::create_dir_all(root.join("src")).unwrap();
+    fs::write(
+        root.join("src/gen.wado"),
+        r#"use { Request, Response, OutputFile, Error } from "core:kiln";
+
+export fn generate(req: Request) -> Result<Response, Error> {
+    return Result::Ok(Response {
+        files: [OutputFile {
+            path: "out.wado",
+            content: `pub fn hello() -> i32 { return ${req.primary.content.trim()}; }`,
+            is_entry: true,
+        }],
+    });
+}
+"#,
+    )
+    .unwrap();
+    fs::write(root.join("src/grammar.g4"), "1\n").unwrap();
+
+    let consumer = |name: &str| {
+        format!(
+            "use {{ hello }} from \"./grammar.g4\"\n    with {{ generator: {{ module: \"./gen.wado\" }} }};\n\npub fn {name}() -> i32 {{ return hello(); }}\n"
+        )
+    };
+    fs::write(root.join("src/first.wado"), consumer("v1")).unwrap();
+    fs::write(root.join("src/second.wado"), consumer("v2")).unwrap();
+    fs::write(
+        root.join("src/main.wado"),
+        r#"use { println, Stdout } from "core:cli";
+use { v1 } from "./first.wado";
+use { v2 } from "./second.wado";
+
+export fn run() with Stdout {
+    println(`${v1() + v2()}`);
+}
+"#,
+    )
+    .unwrap();
+
+    wado_in(root)
+        .args(["run", "src/main.wado"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("2"));
+
+    let out_files: Vec<_> = walk(&root.join("build/kiln"))
+        .into_iter()
+        .filter(|p| p.file_name().is_some_and(|n| n == "out.wado"))
+        .collect();
+    assert_eq!(
+        out_files.len(),
+        1,
+        "one schema, one clause: the generator runs once, got {out_files:?}"
     );
 }
 

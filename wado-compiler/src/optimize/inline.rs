@@ -60,7 +60,7 @@ mod weight {
 }
 
 /// The Wasm value type a primitive occupies. `None` for one with no scalar
-/// shape of its own — a `v128`, a 128-bit pair, a reference.
+/// shape of its own — a `v128`, a reference.
 fn wasm_shape(type_table: &TypeTable, id: TypeId) -> Option<PrimitiveType> {
     let ResolvedType::Primitive(prim) = type_table.get(id) else {
         return None;
@@ -77,7 +77,7 @@ fn wasm_shape(type_table: &TypeTable, id: TypeId) -> Option<PrimitiveType> {
         PrimitiveType::I64 | PrimitiveType::U64 => Some(PrimitiveType::I64),
         PrimitiveType::F32 => Some(PrimitiveType::F32),
         PrimitiveType::F64 => Some(PrimitiveType::F64),
-        PrimitiveType::I128 | PrimitiveType::U128 | PrimitiveType::V128 => None,
+        PrimitiveType::V128 => None,
     }
 }
 
@@ -334,8 +334,7 @@ impl<'a> CostWalk<'a> {
                 view.foldable.get(func_id.index()).copied().unwrap_or(false)
                     && args.iter().all(|a| self.folds(a.expr))
             }
-            ExprKind::Block(_)
-            | ExprKind::LabeledBlock { .. }
+            ExprKind::LabeledBlock { .. }
             | ExprKind::If { .. }
             | ExprKind::Match { .. }
             | ExprKind::Switch { .. }
@@ -645,9 +644,7 @@ impl<'a> CostWalk<'a> {
             }
 
             // Structural: no instruction of its own.
-            ExprKind::Block(block) | ExprKind::LabeledBlock { block, .. } => {
-                self.block(*block, seen)
-            }
+            ExprKind::LabeledBlock { block, .. } => self.block(*block, seen),
         }
     }
 }
@@ -949,7 +946,6 @@ fn is_constant_arg(body: &Body, op: Operand, const_locals: &IndexSet<u32>) -> bo
             | ExprKind::CmRawCall { .. }
             | ExprKind::IndirectCall { .. }
             | ExprKind::ClosureToCanonical { .. }
-            | ExprKind::Block(_)
             | ExprKind::LabeledBlock { .. }
             | ExprKind::If { .. }
             | ExprKind::Match { .. }
@@ -2158,7 +2154,6 @@ impl InlineCtx<'_> {
     }
 }
 
-/// A spliced inlined block to re-value at the splice point (Method A): walk
 /// A spliced inlined block, recorded so the post-splice graph-preserving gate
 /// can classify it (the call's purity + whether the block introduces a loop).
 pub(super) struct InlineRevalInfo {
@@ -2194,7 +2189,7 @@ fn build_inlined_labeled_block(
             }
         })
         .collect();
-    let label = format!("__inline_{}_{}", sanitized_name, *inline_counter);
+    let label = format!("$inline_{}_{}", sanitized_name, *inline_counter);
     *inline_counter += 1;
 
     let local_offset = frame.local_count;
@@ -2855,7 +2850,6 @@ fn splice_expr(caller: &mut Body, callee: &Body, id: ExprId, ctx: &InlineCtx) ->
                 index: splice_operand(caller, callee, i, ctx),
             }
         }
-        ExprKind::Block(b) => ExprKind::Block(splice_block(caller, callee, *b, ctx)),
         ExprKind::If {
             condition,
             then_branch,

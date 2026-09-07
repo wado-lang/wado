@@ -1052,7 +1052,7 @@ fn register_flags(_ctx: &mut WirContext<'_>) {
 /// - A canonical func type: `(ref struct, P1, P2, ...) -> R`
 /// - A canonical closure struct: `{ env: ref struct, func: ref $func_type }`
 fn register_canonical_closure_types(ctx: &mut WirContext<'_>) {
-    use crate::tir::{PrimitiveType, ResolvedType};
+    use crate::tir::ResolvedType;
     use crate::wir::WirType;
 
     // Every unique function signature in the shared type table, each carrying
@@ -1078,20 +1078,6 @@ fn register_canonical_closure_types(ctx: &mut WirContext<'_>) {
                 if params.iter().any(|p| type_table.contains_type_param(*p))
                     || type_table.contains_type_param(*return_type)
                 {
-                    continue;
-                }
-
-                // Skip i128/u128 params/returns
-                let has_i128 = params.iter().any(|p| {
-                    matches!(
-                        type_table.get(*p),
-                        ResolvedType::Primitive(PrimitiveType::I128 | PrimitiveType::U128)
-                    )
-                }) || matches!(
-                    type_table.get(*return_type),
-                    ResolvedType::Primitive(PrimitiveType::I128 | PrimitiveType::U128)
-                );
-                if has_i128 {
                     continue;
                 }
 

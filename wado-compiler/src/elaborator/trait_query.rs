@@ -1123,9 +1123,9 @@ impl TypeSystem {
     /// reference (WEP 2026-01-20). A `Newtype` follows its base type.
     pub(super) fn is_ref_identity(&self, resolved: &ResolvedType) -> bool {
         match resolved {
-            ResolvedType::Primitive(p) => {
-                matches!(p, PrimitiveType::I128 | PrimitiveType::U128)
-            }
+            // `i128` / `u128` are prelude structs, so they answer through the
+            // `Struct` arm rather than here.
+            ResolvedType::Primitive(_) => false,
             ResolvedType::Struct { .. }
             | ResolvedType::Variant { .. }
             | ResolvedType::GenericInstance { .. }

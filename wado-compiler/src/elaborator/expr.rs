@@ -2935,20 +2935,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// True when the scrutinee is an unsigned integer type (governs literal
-    /// parsing). Mirrors the `is_unsigned` check in `resolve_if_pattern_inner`.
     fn exh_is_unsigned(&self, scrutinee_type: TypeId) -> bool {
-        let resolved = self.tysys.type_table.borrow().get(scrutinee_type).clone();
-        matches!(
-            resolved,
-            ResolvedType::Primitive(
-                crate::tir::PrimitiveType::U8
-                    | crate::tir::PrimitiveType::U16
-                    | crate::tir::PrimitiveType::U32
-                    | crate::tir::PrimitiveType::U64
-                    | crate::tir::PrimitiveType::U128
-            )
-        ) || matches!(resolved, ResolvedType::Struct { def, .. } if self.tysys.type_table.borrow().struct_head_name(def) == "u128")
+        self.tysys
+            .type_table
+            .borrow()
+            .is_unsigned_int(scrutinee_type)
     }
 
     fn exh_literal(&self, lit: &Literal, scrutinee_type: TypeId) -> ExhPattern {
@@ -3101,48 +3092,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> ExhPattern {
         let is_unsigned = self.exh_is_unsigned(scrutinee_type);
         let (Some(start_val), Some(end_val)) = (
-            self.exh_pattern_to_i128(start, is_unsigned),
-            self.exh_pattern_to_i128(end, is_unsigned),
+            util::range_endpoint_to_i128(start, is_unsigned),
+            util::range_endpoint_to_i128(end, is_unsigned),
         ) else {
             // Bad bounds → old path returned `Wildcard` (catch-all).
             return ExhPattern::CatchAll;
         };
         let inclusive = matches!(kind, ast::RangeKind::Inclusive);
         // Reversed / empty ranges → old path returned `Wildcard` (catch-all).
-        if start_val > end_val || (!inclusive && start_val >= end_val) {
+        let order = util::range_endpoints_ordered(start_val, end_val, is_unsigned);
+        if order.is_gt() || (!inclusive && order.is_ge()) {
             return ExhPattern::CatchAll;
         }
         let hi = if inclusive { end_val } else { end_val - 1 };
         ExhPattern::Range(start_val, hi)
-    }
-
-    /// Resolve a range-bound AST pattern to its `i128` value. Mirrors
-    /// `Elaborator::pattern_to_i128`.
-    fn exh_pattern_to_i128(&self, pattern: &ast::Pattern, is_unsigned: bool) -> Option<i128> {
-        match pattern {
-            ast::Pattern::Literal(Literal::Number(repr)) => {
-                if is_unsigned {
-                    util::parse_u128_literal(repr).ok().map(|v| v as i128)
-                } else {
-                    util::parse_i128_literal(repr).ok()
-                }
-            }
-            ast::Pattern::Literal(Literal::Char(raw)) => {
-                util::unescape_char(raw).ok().map(|c| c as i128)
-            }
-            ast::Pattern::Literal(Literal::Byte(raw)) => {
-                util::unescape_byte(raw).ok().map(i128::from)
-            }
-            ast::Pattern::Variant {
-                variant_name,
-                variant_qualifier,
-                bindings,
-                ..
-            } if bindings.is_empty() => {
-                super::stmt::primitive_assoc_const_to_i128(variant_qualifier.as_ref(), variant_name)
-            }
-            _ => None,
-        }
     }
 
     fn check_variant_exhaustiveness(

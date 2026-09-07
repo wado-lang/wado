@@ -1,0 +1,25 @@
+use g from "./grammars/lexer_seq_nullable_ref.g4"
+    with {
+        generator: { module: "../src/generator.wado", output_dir: "./generated/cst_lexer_seq_nullable_ref" },
+    };
+
+fn assert_ok(input: &String) {
+    let result = g::parse(input);
+    assert result.ok(), `unexpected diagnostics for ${*input}: ${result.diagnostics:?}`;
+}
+
+test "both nullable calls take a dash" {
+    assert_ok(&"\"--a\"");
+}
+
+test "one takes a dash and the other is empty" {
+    assert_ok(&"\"-a\"");
+}
+
+test "both are empty" {
+    assert_ok(&"\"a\"");
+}
+
+test "the other arm still runs" {
+    assert_ok(&"\"\\\"a\"");
+}

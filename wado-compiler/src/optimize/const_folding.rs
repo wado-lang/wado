@@ -23,9 +23,9 @@ use crate::nir_arena::{
 use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
 use crate::niri::{
-    BorrowRoot, CalleeMap, CtfeBuiltinMap, EditSink, GlobalEnv, GlobalFieldEnv, GlobalKey,
-    Interpreter, Lattice, MaterializingGlobals, build_callee_map, build_ctfe_builtin_map,
-    materializing_globals,
+    AggregateShapes, BorrowRoot, CalleeMap, CtfeBuiltinMap, EditSink, GlobalEnv, GlobalFieldEnv,
+    GlobalKey, Interpreter, Lattice, MaterializingGlobals, build_callee_map,
+    build_ctfe_builtin_map, materializing_globals,
 };
 use crate::tir::{PrimitiveType, ResolvedType, TypeId, TypeTable};
 
@@ -40,6 +40,7 @@ struct FoldMaps {
     callees: CalleeMap,
     ctfe_builtins: CtfeBuiltinMap,
     declared_globals: GlobalEnv,
+    shapes: AggregateShapes,
 }
 
 fn build_fold_maps(project: &NirPackage, type_table: &TypeTable) -> FoldMaps {
@@ -58,6 +59,7 @@ fn build_fold_maps(project: &NirPackage, type_table: &TypeTable) -> FoldMaps {
         callees,
         ctfe_builtins,
         declared_globals,
+        shapes: AggregateShapes::of(project, type_table),
     }
 }
 
@@ -137,6 +139,7 @@ fn new_visitor<'a>(
     };
     visitor.interpreter.with_callees(&maps.callees);
     visitor.interpreter.with_ctfe_builtins(&maps.ctfe_builtins);
+    visitor.interpreter.with_shapes(&maps.shapes);
     visitor
         .interpreter
         .with_globals(&globals.values)
@@ -220,6 +223,9 @@ struct EngineSink<'e, 'a> {
 impl EditSink for EngineSink<'_, '_> {
     fn body(&self) -> &Body {
         self.engine.body
+    }
+    fn edits_the_program(&self) -> bool {
+        true
     }
     fn replace_kind(&mut self, e: ExprId, kind: ExprKind) {
         self.engine.replace_expr_kind(e, kind);
@@ -316,20 +322,19 @@ fn tail_local(body: &Body, op: Operand) -> Option<u32> {
 fn const_seq_len(body: &Body, e: ExprId) -> Option<i32> {
     match &body.exprs[e].kind {
         ExprKind::ArrayLiteral { elements } => i32::try_from(elements.len()).ok(),
-        ExprKind::Block(b) | ExprKind::LabeledBlock { block: b, .. } => {
+        ExprKind::LabeledBlock { block: b, .. } => {
             let stmts = &body.blocks[*b].stmts;
-            let (&last, rest) = stmts.split_last()?;
+            let (_, rest) = stmts.split_last()?;
             if rest
                 .iter()
                 .any(|&s| !matches!(body.stmts[s].kind, StmtKind::Let { .. }))
             {
                 return None;
             }
-            let tail = match &body.stmts[last].kind {
-                StmtKind::Expr(ex) => *ex,
-                StmtKind::Break { value: Some(v), .. } => *v,
-                _ => return None,
-            };
+            // The block's one value, so a second `break` to the label — or one
+            // naming an outer block — leaves the length unknown rather than
+            // reading the tail as if it always ran.
+            let tail = body.block_yield(e)?;
             if let Some(len) = const_seq_len_operand(body, tail) {
                 return Some(len);
             }
@@ -338,9 +343,10 @@ fn const_seq_len(body: &Body, e: ExprId) -> Option<i32> {
             // binding. If that binding is non-const, the length is unknown —
             // scanning past it to an earlier const `let` would return a stale
             // length for a value the nearest binding already replaced.
-            let nearest = rest.iter().rev().find(|&&s| {
-                matches!(&body.stmts[s].kind, StmtKind::Let { local_index, .. } if *local_index == index)
-            })?;
+            let nearest = rest
+                .iter()
+                .rev()
+                .find(|&&s| body.binds_local(NodeRef::Stmt(s), index))?;
             let StmtKind::Let { value, .. } = &body.stmts[*nearest].kind else {
                 unreachable!("`nearest` matched a `let` of `index` above")
             };
@@ -613,8 +619,7 @@ impl GlobalStoreCollector<'_> {
         // (`elements = […]; List { repr: elements, … }`), so its `let`s are
         // bound before the tail reads them.
         if let Some(e) = value.as_expr()
-            && let ExprKind::Block(block) | ExprKind::LabeledBlock { block, .. } =
-                body.exprs[e].kind
+            && let ExprKind::LabeledBlock { block, .. } = body.exprs[e].kind
         {
             interpreter.bind_block_lets(body, block);
         }
@@ -645,8 +650,10 @@ enum ExprShape {
     If(Operand, BlockId, Option<BlockId>),
     Match(Operand, Vec<ArmData>),
     Switch(Operand, Vec<BlockId>, BlockId),
+    /// A block no `break` leaves early, so its statements all run in order.
     Block(BlockId),
-    Labeled(BlockId, String),
+    /// A block some `break` leaves early.
+    Labeled(BlockId),
     None,
 }
 
@@ -664,8 +671,13 @@ fn expr_shape(body: &Body, e: ExprId) -> ExprShape {
             default,
             ..
         } => ExprShape::Switch(*scrutinee, arms.clone(), *default),
-        ExprKind::Block(b) => ExprShape::Block(*b),
-        ExprKind::LabeledBlock { block, label, .. } => ExprShape::Labeled(*block, label.clone()),
+        ExprKind::LabeledBlock { block, label, .. } => {
+            if body.breaks_to(NodeRef::Block(*block), label) {
+                ExprShape::Labeled(*block)
+            } else {
+                ExprShape::Block(*block)
+            }
+        }
         _ => ExprShape::None,
     }
 }
@@ -822,7 +834,7 @@ impl ConstFoldVisitor<'_> {
             }
             // A `break L` inside means the statements after it did not run on
             // that path, so what the last one left is not what every path leaves.
-            ExprShape::Labeled(block, _label) => {
+            ExprShape::Labeled(block) => {
                 let writes = collect_write_effects(engine.body, NodeRef::Expr(e));
                 self.apply_loop_invalidations(&writes);
                 let mut changed = self.visit_block(engine, block);
@@ -995,33 +1007,44 @@ impl ConstFoldVisitor<'_> {
         let Some(mut e) = op.as_expr() else {
             return BorrowRoot::NotABorrow;
         };
-        loop {
-            let next = match &body.exprs[e].kind {
-                ExprKind::Unary {
-                    op: NirUnaryOp::Ref | NirUnaryOp::MutRef,
-                    expr: inner,
-                } => {
-                    return match Self::borrowed_root_impl(body, *inner) {
-                        Some(root) => BorrowRoot::Local(root),
-                        None => BorrowRoot::Unrooted,
-                    };
-                }
-                ExprKind::Cast { expr: inner, .. } => inner.as_expr(),
-                ExprKind::Block(block) | ExprKind::LabeledBlock { block, .. } => {
-                    body.blocks[*block].stmts.last().and_then(|last| {
-                        match &body.stmts[*last].kind {
-                            StmtKind::Expr(value) => value.as_expr(),
-                            _ => None,
-                        }
-                    })
-                }
-                _ => None,
+        // A cast keeps the referent it converts.
+        while let ExprKind::Cast { expr: inner, .. } = &body.exprs[e].kind {
+            let Some(inner) = inner.as_expr() else {
+                return BorrowRoot::NotABorrow;
             };
-            match next {
-                Some(inner) => e = inner,
-                None => return BorrowRoot::NotABorrow,
-            }
+            e = inner;
         }
+        match &body.exprs[e].kind {
+            ExprKind::Unary {
+                op: NirUnaryOp::Ref | NirUnaryOp::MutRef,
+                expr: inner,
+            } => match Self::borrowed_root_impl(body, *inner) {
+                Some(root) => BorrowRoot::Local(root),
+                None => BorrowRoot::Unrooted,
+            },
+            ExprKind::LabeledBlock { .. } => Self::joined_exit_root(body, e),
+            _ => BorrowRoot::NotABorrow,
+        }
+    }
+
+    /// What every exit of the labeled block at `e` agrees its value borrows
+    /// into, joined: the write lands wherever the exit that ran pointed.
+    fn joined_exit_root(body: &Body, e: ExprId) -> BorrowRoot {
+        let Some(exits) = body.block_exits(e) else {
+            return BorrowRoot::NotABorrow;
+        };
+        let mut joined: Option<BorrowRoot> = None;
+        for exit in exits {
+            // A value-less exit carries no borrow.
+            let one = exit.map_or(BorrowRoot::NotABorrow, |op| Self::borrowed_root(body, op));
+            joined = Some(match joined {
+                None => one,
+                Some(prev) if prev == one => prev,
+                Some(_) => BorrowRoot::Unrooted,
+            });
+        }
+        // A block that produces no value borrows nothing.
+        joined.unwrap_or(BorrowRoot::NotABorrow)
     }
 
     /// The local a borrow bottoms out at, following the accessor calls that
@@ -1038,13 +1061,10 @@ impl ConstFoldVisitor<'_> {
             | ExprKind::VariantPayload { expr: inner, .. }
             | ExprKind::Index { expr: inner, .. } => Self::borrowed_root_impl(body, *inner),
             ExprKind::Local { index, .. } => Some(*index),
-            ExprKind::Block(block) | ExprKind::LabeledBlock { block, .. } => {
-                let last = *body.blocks[*block].stmts.last()?;
-                let StmtKind::Expr(value) = &body.stmts[last].kind else {
-                    return None;
-                };
-                Self::borrowed_root_impl(body, *value)
-            }
+            ExprKind::LabeledBlock { .. } => match Self::joined_exit_root(body, e) {
+                BorrowRoot::Local(root) => Some(root),
+                BorrowRoot::NotABorrow | BorrowRoot::Unrooted => None,
+            },
             ExprKind::Call { args, .. } => {
                 let mut found = None;
                 for arg in args {

@@ -1262,7 +1262,6 @@ fn collect_aliased_node(body: &Body, node: NodeRef, out: &mut LocalSet) {
             | ExprKind::CmRawCall { .. }
             | ExprKind::IndirectCall { .. }
             | ExprKind::ClosureToCanonical { .. }
-            | ExprKind::Block(_)
             | ExprKind::LabeledBlock { .. }
             | ExprKind::If { .. }
             | ExprKind::Match { .. }

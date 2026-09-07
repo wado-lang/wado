@@ -5,7 +5,7 @@
 // already an unconditional branch.
 //
 // Tested at `-O0` because at higher levels `prune_template_block_wrappers`
-// flattens the `__tmpl:` wrapper before WIR translation, so the C1 path
+// flattens the `$tmpl:` wrapper before WIR translation, so the C1 path
 // in `wir_build/translate.rs` would never be exercised.
 
 use { println, Stdout } from "core:cli";
@@ -22,10 +22,10 @@ __DATA__
 {
     "stdout": "n=42\n",
     "wir_expect:O0": [
-        "break __tmpl: __local_1;\n    };"
+        "break $tmpl: __local_1;\n    };"
     ],
     "wir_not_expect:O0": [
-        "break __tmpl: __local_1;\n        unreachable;",
-        "break __tmpl: __local_1;\n    unreachable;"
+        "break $tmpl: __local_1;\n        unreachable;",
+        "break $tmpl: __local_1;\n    unreachable;"
     ]
 }

@@ -24,6 +24,11 @@ Filename: `docs/wep-YYYY-MM-DD-{feature-name}.md`
 Deciding is the human's role, to adopt and to refuse alike. Propose, and record
 what is still open as a gap; never write a decision of your own into a WEP.
 
+What an adopted decision already settles is not a second decision. Write out
+what follows from it — the mechanism it implies, the invariant it rests on, the
+case it forces — and say which decision it follows from where that is not
+obvious. A choice the adopted one leaves open is a gap, however small.
+
 It may include TODOs on WIP.
 
 A WEP states the design as it stands now; a change rewrites the affected
@@ -176,4 +181,9 @@ omission goes in Decision.
 - [Trait Resolution — One Order, Written Down](./wep-2026-09-01-trait-resolution.md)
 - [JSON Web Tokens (`core:jwt`)](./wep-2026-09-02-core-jwt.md)
 - [Total Reflection — `TypeInfo` and `match type`](./wep-2026-09-05-total-reflection.md)
+<<<<<<< HEAD
 - [Static Call Resolution — One Walk, Four Answers](./wep-2026-09-06-static-call-resolution.md)
+||||||| 6c883abb7
+=======
+- [Package File Exports — Assets and Submodules as API](./wep-2026-09-06-package-file-exports.md)
+>>>>>>> origin/main

@@ -12,7 +12,7 @@ use crate::compiler_item::CompilerItem;
 use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::logger::{Bail, Logger};
-use crate::lower::wide_int_literal::{create_i128_literal, create_u128_literal};
+use crate::lower::wide_int_literal::create_literal;
 use crate::tir::{TirExpr, TirExprKind, TypeId, TypeTable};
 use crate::token::Span;
 
@@ -240,11 +240,23 @@ fn convert_builtin(
     }
     if ty == builtins.i128 {
         let v = parse_lenient_int(raw)?;
-        return Some(create_i128_literal(v, ty, &type_table.borrow(), span));
+        return Some(create_literal(
+            CompilerItem::I128,
+            v,
+            ty,
+            &type_table.borrow(),
+            span,
+        ));
     }
     if ty == builtins.u128 {
         let v = parse_lenient_uint(raw)?;
-        return Some(create_u128_literal(v, ty, &type_table.borrow(), span));
+        return Some(create_literal(
+            CompilerItem::U128,
+            v.cast_signed(),
+            ty,
+            &type_table.borrow(),
+            span,
+        ));
     }
     match ty {
         TypeTable::BOOL => {

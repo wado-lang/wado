@@ -280,6 +280,13 @@ impl EngineBuffers {
     }
 }
 
+/// What a value-graph walk reads where the session was told nothing. Empty is
+/// conservative — it leaves a call opaque — and shared, so asking costs no map.
+static NO_PURE_BUILTINS: std::sync::LazyLock<IndexSet<crate::nir::FuncId>> =
+    std::sync::LazyLock::new(IndexSet::default);
+static NO_CTFE_BUILTINS: std::sync::LazyLock<crate::niri::CtfeBuiltinMap> =
+    std::sync::LazyLock::new(crate::niri::CtfeBuiltinMap::default);
+
 /// An engine session over one function body: the arena plus the [`EngineBuffers`]
 /// scratch (parent map, use index, and worklist) the worklist discipline needs,
 /// and the function's `locals` list so rules can allocate fresh locals.
@@ -323,6 +330,9 @@ pub struct Engine<'a> {
     /// Calls whose callee cannot write through the receiver. Empty is
     /// conservative.
     receiver_immutable_calls: IndexSet<crate::nir_arena::ExprId>,
+    /// Which sequence builtin each callee id is. `None` leaves every array
+    /// length opaque, which costs a fold rather than correctness.
+    ctfe_builtins: Option<&'a crate::niri::CtfeBuiltinMap>,
     /// Type table for the `ValueGraph` builder's constant folding of pure
     /// arithmetic. `None` (the default) disables folding. Set via
     /// [`Engine::set_value_graph_type_table`] before the first value query.
@@ -372,6 +382,7 @@ impl<'a> Engine<'a> {
             param_locals: Vec::new(),
             pure_calls: IndexSet::default(),
             receiver_immutable_calls: IndexSet::default(),
+            ctfe_builtins: None,
             vg_type_table: None,
             panic_callee_ids: None,
             pure_builtin_callees: None,
@@ -519,9 +530,10 @@ impl<'a> Engine<'a> {
         // (`bump_call_effects`), destroying a local's reaching value across the
         // calls between its store and a later read. A SROA scalar is
         // non-escaping, so the real sets leave it untouched by calls — exactly
-        // the forwarding we need to recover. (`pure_calls` is left empty here:
-        // bumping at every call is conservative — it only forgoes a forward.)
-        let empty_builtins = IndexSet::default();
+        // the forwarding we need to recover. The per-call verdicts are the real
+        // ones for the same reason: a call this walk cannot call pure bumps
+        // every escaped local's heap version, and a field read of one then
+        // matches no store.
         let vo = builder::build_scoped(
             self.body,
             root,
@@ -531,25 +543,44 @@ impl<'a> Engine<'a> {
             &self.untrackable_locals,
             &self.mut_escaped_locals,
             self.vg_type_table,
-            self.pure_builtin_callees.unwrap_or(&empty_builtins),
+            builder::CallFacts {
+                pure_builtin: self.pure_builtin_callees.unwrap_or(&NO_PURE_BUILTINS),
+                pure: &self.pure_calls,
+                receiver_immutable: &self.receiver_immutable_calls,
+                ctfe_builtins: self.ctfe_builtins.unwrap_or(&NO_CTFE_BUILTINS),
+            },
             &mut scratch,
             None,
             live_base,
         );
+        let mut fields_seen = 0;
+        let mut fields_const = 0;
         let mut out = Vec::new();
         for (e, v) in vo {
+            let is_field = matches!(self.body.exprs[e].kind, ExprKind::FieldAccess { .. });
+            fields_seen += usize::from(is_field);
             if !builder::is_const_value(&self.body.values, v) {
                 continue;
             }
+            fields_const += usize::from(is_field);
             let keep = match &self.body.exprs[e].kind {
                 ExprKind::Local { index, .. } => forwardable.contains(index),
                 ExprKind::FieldAccess { .. } => include_fields,
+                // A call reaches a constant only where the walk was taught the
+                // builtin it is, and every one it was taught is pure — so the
+                // call the constant replaces computes nothing else.
+                ExprKind::Call { .. } => true,
                 _ => false,
             };
             if keep {
                 out.push((e, v));
             }
         }
+        crate::compiler_trace!(
+            "vg_field",
+            "scoped reads: {fields_const} of {fields_seen} field reads are const, {} kept",
+            out.len()
+        );
         out
     }
 
@@ -569,7 +600,6 @@ impl<'a> Engine<'a> {
         let root = self.body.root;
         let mut scratch = self.body.values.clone();
         let empty = IndexMap::default();
-        let empty_builtins = IndexSet::default();
         let scoped = builder::walk_scoped(
             self.body,
             root,
@@ -579,7 +609,12 @@ impl<'a> Engine<'a> {
             &self.untrackable_locals,
             &self.mut_escaped_locals,
             self.vg_type_table,
-            self.pure_builtin_callees.unwrap_or(&empty_builtins),
+            builder::CallFacts {
+                pure_builtin: self.pure_builtin_callees.unwrap_or(&NO_PURE_BUILTINS),
+                pure: &self.pure_calls,
+                receiver_immutable: &self.receiver_immutable_calls,
+                ctfe_builtins: self.ctfe_builtins.unwrap_or(&NO_CTFE_BUILTINS),
+            },
             &mut scratch,
             None,
         );
@@ -727,6 +762,13 @@ impl<'a> Engine<'a> {
         self.pure_builtin_callees = Some(ids);
     }
 
+    /// Install the sequence-builtin lookup, so `array_len` over an array the
+    /// walk saw allocated folds to the length it was given. Without it the
+    /// length stays opaque and every capacity guard survives.
+    pub fn set_ctfe_builtins(&mut self, map: &'a crate::niri::CtfeBuiltinMap) {
+        self.ctfe_builtins = Some(map);
+    }
+
     /// Whether `func_id` is one of the supplied panic / `unreachable` callees.
     /// `false` when no set was supplied.
     pub fn is_panic_callee(&self, func_id: crate::nir::FuncId) -> bool {
@@ -754,16 +796,18 @@ impl<'a> Engine<'a> {
         if self.body.value_graph.is_some() {
             return;
         }
-        let empty_builtins = IndexSet::default();
         let build = crate::nir_value_graph::builder::build(
             &mut *self.body,
             &self.param_locals,
             &self.aliased_locals,
             &self.untrackable_locals,
             &self.mut_escaped_locals,
-            &self.pure_calls,
-            self.pure_builtin_callees.unwrap_or(&empty_builtins),
-            &self.receiver_immutable_calls,
+            crate::nir_value_graph::builder::CallFacts {
+                pure_builtin: self.pure_builtin_callees.unwrap_or(&NO_PURE_BUILTINS),
+                pure: &self.pure_calls,
+                receiver_immutable: &self.receiver_immutable_calls,
+                ctfe_builtins: self.ctfe_builtins.unwrap_or(&NO_CTFE_BUILTINS),
+            },
             self.vg_type_table,
         );
         self.body.value_graph = Some(build);
@@ -1448,7 +1492,6 @@ impl<'a> Engine<'a> {
                 expr: self.clone_operand(expr),
                 index: self.clone_operand(index),
             },
-            ExprKind::Block(b) => ExprKind::Block(self.clone_block(b)),
             ExprKind::If {
                 condition,
                 then_branch,

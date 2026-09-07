@@ -10,7 +10,9 @@ use crate::hashmap::IndexSet;
 use crate::nir::NirUnaryOp;
 use crate::nir_arena::{Body, ExprId, ExprKind, LocalSet, NodeRef, Operand, StmtId, StmtKind};
 
-use super::place::{borrowed_place_operand, lvalue_root_local, peel_wrappers, place_of};
+use super::place::{
+    borrowed_place_operand, lvalue_root_local, peel_wrappers, place_of, write_root_local,
+};
 use crate::nir_visitor::reachable_exprs;
 use crate::tir::TypeTable;
 
@@ -473,10 +475,50 @@ fn shared_reference_root(body: &Body, op: Operand, type_table: &TypeTable) -> Op
     Some(*index)
 }
 
+/// Locals whose object no second expression reaches: read exactly once, and
+/// never borrowed. A constant one may be written over at that read, since
+/// nothing is left to tell the fresh literal from what the binding held —
+/// where two reads, or a `&p` beside one, leave the program two objects where
+/// it had one, which `ref.eq` tells apart.
+///
+/// Whether the copy planner will later copy a value read is not knowable here,
+/// so a second read counts as sharing whatever its type.
+fn unshared_locals(body: &Body) -> LocalSet {
+    let mut once = LocalSet::default();
+    let mut shared = LocalSet::default();
+    for e in reachable_exprs(body) {
+        match &body.exprs[e].kind {
+            ExprKind::Local { index, .. } => {
+                if !once.insert(*index) {
+                    shared.insert(*index);
+                }
+            }
+            ExprKind::Unary {
+                op: NirUnaryOp::Ref | NirUnaryOp::MutRef,
+                expr,
+            } => {
+                if let Some(index) = write_root_local(body, *expr) {
+                    shared.insert(index);
+                }
+            }
+            _ => {}
+        }
+    }
+    let mut set = LocalSet::default();
+    for index in once.iter() {
+        if !shared.contains(index) {
+            set.insert(index);
+        }
+    }
+    set
+}
+
 /// What a walk of a body may hold values for: which locals may bind an
 /// aggregate constant, and which ones a compile-time frame cannot track.
 pub(super) struct Trackability {
     pub(super) aggregate_locals: LocalSet,
+    /// See [`unshared_locals`].
+    pub(super) unshared: LocalSet,
     pub(super) clobbered: LocalSet,
     /// Locals some `Assign` names as its whole target. A binding one of these
     /// carries can be displaced, so it cannot stand for a place; one nothing
@@ -491,6 +533,7 @@ impl Trackability {
         let reached = Reached::in_frame(body, facts, &reassigned);
         Self {
             aggregate_locals: aggregate_safe_locals(body, &reached, type_table),
+            unshared: unshared_locals(body),
             clobbered: clobbered_locals(body, &reached, type_table),
             reassigned,
         }
@@ -506,6 +549,7 @@ impl Trackability {
         let reached = Reached::outside_frame(body, facts);
         Self {
             aggregate_locals: aggregate_safe_locals(body, &reached, type_table),
+            unshared: unshared_locals(body),
             clobbered: LocalSet::default(),
             reassigned: reassigned_locals(body),
         }

@@ -35,6 +35,7 @@ impl FrameState {
     fn for_call(track: Trackability, params: impl IntoIterator<Item = (u32, Value)>) -> Self {
         let mut state = Self {
             aggregate_locals: track.aggregate_locals,
+            unshared_locals: track.unshared,
             reassigned: track.reassigned,
             ..Self::default()
         };
@@ -543,18 +544,14 @@ impl Interpreter<'_> {
     /// operand is projected. A block-shaped operand executes instead, so its
     /// reads reduce as each statement runs, not against the pre-block env.
     fn eval_operand(&mut self, body: &mut Body, op: Operand) -> Lattice {
-        match op.as_expr() {
-            Some(e) => match &body.exprs[e].kind {
-                ExprKind::Block(_) | ExprKind::LabeledBlock { .. } => {
-                    self.exec_value_block(body, e)
-                }
-                _ => {
-                    self.reduce_in_place(body, e);
-                    self.reduce_to_lattice(body, e)
-                }
-            },
-            None => self.operand_to_lattice(body, op),
+        let Some(e) = op.as_expr() else {
+            return self.operand_to_lattice(body, op);
+        };
+        if matches!(body.exprs[e].kind, ExprKind::LabeledBlock { .. }) {
+            return self.exec_value_block(body, e);
         }
+        self.reduce_in_place(body, e);
+        self.reduce_to_lattice(body, e)
     }
 
     /// Evaluate a block in expression position by executing its statements —

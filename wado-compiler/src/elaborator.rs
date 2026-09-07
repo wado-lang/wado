@@ -39,7 +39,7 @@ mod type_resolution;
 mod typecheck;
 pub(crate) mod types;
 mod tysys;
-mod util;
+pub(crate) mod util;
 mod written;
 
 use std::cell::RefCell;

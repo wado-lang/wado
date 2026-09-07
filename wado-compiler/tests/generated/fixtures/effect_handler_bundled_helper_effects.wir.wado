@@ -138,8 +138,8 @@ fn "effect_handler_bundled_helper_effects.wado/run"() with Stdout {
     let packed: i64;
     let rx_70: i32;
     let tx_71: i32;
-    __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:effect_handler_bundled_helper_effects.wado::__modules_initialized);
+    $inline___initialize_modules_0: block {
+        break_if $inline___initialize_modules_0 @likely(global:effect_handler_bundled_helper_effects.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:effect_handler_bundled_helper_effects.wado::__modules_initialized = 1;
@@ -151,7 +151,7 @@ fn "effect_handler_bundled_helper_effects.wado/run"() with Stdout {
     __local_7 = global:effect_handler_bundled_helper_effects.wado::__effect_B;
     __local_8 = struct.new "effect_handler_bundled_helper_effects.wado//__Dispatch_B" { outer: __local_7, op_b: struct.new "canonical//CanonicalClosure_0" { env: struct.new "effect_handler_bundled_helper_effects.wado//__Closure_1" { __capture_0: m }, func: ref.func "closure/effect_handler_bundled_helper_effects.wado/__closure_wrapper_1" } };
     global:effect_handler_bundled_helper_effects.wado::__effect_B = __local_8;
-    __local_9 = __inline___effect_dispatch__A__a_2: block -> i32 {
+    __local_9 = $inline___effect_dispatch__A__a_2: block -> i32 {
         __local_0_11 = global:effect_handler_bundled_helper_effects.wado::__effect_A;
         if @likely(ref.is_null(__local_0_11) == 0) {
             __local_1_12 = ref.as_non_null(__local_0_11);
@@ -162,13 +162,13 @@ fn "effect_handler_bundled_helper_effects.wado/run"() with Stdout {
                 call_ref "functype/$canonical_closure_fn_0"(__indirect_call_1.func, __indirect_call_1.env);
             };
             global:effect_handler_bundled_helper_effects.wado::__effect_A = __local_0_11;
-            break __inline___effect_dispatch__A__a_2: __local_2_13;
+            break $inline___effect_dispatch__A__a_2: __local_2_13;
         } else {
             "core:rt/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("no handler installed for `A::a`"), used: 31 });
             unreachable;
         }
         unreachable;
-    } + __inline___effect_dispatch__B__b_3: block -> i32 {
+    } + $inline___effect_dispatch__B__b_3: block -> i32 {
         __local_0_14 = global:effect_handler_bundled_helper_effects.wado::__effect_B;
         if @likely(ref.is_null(__local_0_14) == 0) {
             __local_1_15 = ref.as_non_null(__local_0_14);
@@ -179,7 +179,7 @@ fn "effect_handler_bundled_helper_effects.wado/run"() with Stdout {
                 call_ref "functype/$canonical_closure_fn_0"(__indirect_call_2.func, __indirect_call_2.env);
             };
             global:effect_handler_bundled_helper_effects.wado::__effect_B = __local_0_14;
-            break __inline___effect_dispatch__B__b_3: __local_2_16;
+            break $inline___effect_dispatch__B__b_3: __local_2_16;
         } else {
             "core:rt/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("no handler installed for `B::b`"), used: 31 });
             unreachable;
@@ -215,8 +215,8 @@ fn "effect_handler_bundled_helper_effects.wado/__cm_binding__Stdout_write_via_st
 }
 
 fn "effect_handler_bundled_helper_effects.wado/__cm_export__run"() {
-    __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:effect_handler_bundled_helper_effects.wado::__modules_initialized);
+    $inline___initialize_modules_0: block {
+        break_if $inline___initialize_modules_0 @likely(global:effect_handler_bundled_helper_effects.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:effect_handler_bundled_helper_effects.wado::__modules_initialized = 1;
@@ -325,16 +325,16 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
                 "wasi/waitable-set-drop"(ws);
                 result = status_41;
             }
-            written_16 = struct.new "core:prelude/types.wado//StreamWrite" { count: result >> 4, result: __inline_cm_copy_result_14: block -> "core:prelude/types.wado//enum:CopyResult" {
+            written_16 = struct.new "core:prelude/types.wado//StreamWrite" { count: result >> 4, result: $inline_cm_copy_result_14: block -> "core:prelude/types.wado//enum:CopyResult" {
                 let __match_scrut_0: i32;
                 __match_scrut_0 = result & 15;
                 if __match_scrut_0 == 0 {
-                    break __inline_cm_copy_result_14: 0;
+                    break $inline_cm_copy_result_14: 0;
                 } else if __match_scrut_0 == 1 {
-                    break __inline_cm_copy_result_14: 1;
+                    break $inline_cm_copy_result_14: 1;
                 } else {
                 }
-                break __inline_cm_copy_result_14: 2;
+                break $inline_cm_copy_result_14: 2;
             } };
             drop("mem/realloc"(ptr_14, raw_len, 1, 0));
             offset = offset + written_16.count;
@@ -371,9 +371,9 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(self, f) {
     is_negative = self < 0;
     val_6 = builtin::i64_extend_i32_s(self);
     abs_val = select i64(val_6 < 0_i64, 0_i64 - val_6, val_6);
-    digit_count_4 = __inline_count_digits_u64_1: block -> i32 {
+    digit_count_4 = $inline_count_digits_u64_1: block -> i32 {
         if abs_val == 0_i64 {
-            break __inline_count_digits_u64_1: 1;
+            break $inline_count_digits_u64_1: 1;
         }
         n = 0;
         t_9 = abs_val;
@@ -385,7 +385,7 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(self, f) {
                 continue l18;
             };
         };
-        break __inline_count_digits_u64_1: n;
+        break $inline_count_digits_u64_1: n;
     };
     offset_5 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write$spec0$scalar"(f, is_negative, global:core:prelude/primitive.wado::__const_obj_3, digit_count_4);
     arr = f.repr;

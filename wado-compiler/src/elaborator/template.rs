@@ -41,7 +41,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let mut sound = true;
         for part in &template.parts {
             match part {
-                ast::TemplatePart::Interpolation { expr, format } => {
+                ast::TemplatePart::Interpolation { expr, format, .. } => {
                     let ty = self.resolve_expr(expr, ctx, None);
                     segments.push(std::mem::take(&mut pending));
                     holes.push((

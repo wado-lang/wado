@@ -6,7 +6,9 @@
 // write a raw code point where a UTF-8 sequence belongs.
 //
 // The two ASCII pushes are adjacent, so the append fusion gives them one
-// shared reservation; the non-ASCII `push` ends the run.
+// shared reservation; the non-ASCII `push` ends the run. The buffer starts
+// empty and nothing else writes it, so that reservation's new length is the
+// constant 2 rather than a `new_used` read.
 //
 // This guards the direct-push path specifically: `opt_string_push_short_literal`
 // only exercises pushes derived from `push_str`, so a regression in how char
@@ -27,7 +29,7 @@ __DATA__
 {
     "stdout": "aZ€\n",
     "wir_expect:O2": [
-        "buf.used = new_used;",
+        "buf.used = 2;",
         "array_set_u8(buf.repr,",
         ", 97)",
         ", 90)",

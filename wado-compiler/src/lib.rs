@@ -2055,19 +2055,30 @@ pub fn format(source: &str) -> Result<String, CompileError> {
     let unparser = unparse::Unparser::new().with_trivia(&trivia);
     let formatted = unparser.unparse(&ast);
 
-    // Refuse to emit output that loses a comment (comments are node-attached,
-    // so one wedged between tokens can be dropped).
+    // The unparser places every comment or flushes it at the enclosing
+    // statement, item or module, so this fires only if that guarantee breaks.
     if let Some(missing) = dropped_comment(source, &formatted) {
         return Err(CompileError::Format {
-            message: format!("formatting would drop a comment ({missing})"),
+            message: format!("formatting would drop a comment (`{}`)", missing.text),
+            line: missing.line,
+            column: missing.column,
+            filename: None,
         });
     }
     Ok(formatted)
 }
 
+/// A comment the formatter would drop, with where it sits in the source.
+struct DroppedComment {
+    /// The comment as written, delimiter included, cut to a readable length.
+    text: String,
+    line: usize,
+    column: usize,
+}
+
 /// A comment present in `before` but missing from `after` (by delimiter+text
 /// multiset; `emit_comment` is verbatim so relocation keeps the same key).
-fn dropped_comment(before: &str, after: &str) -> Option<String> {
+fn dropped_comment(before: &str, after: &str) -> Option<DroppedComment> {
     use crate::hashmap::IndexMap;
     fn delim(kind: comment::CommentKind) -> &'static str {
         match kind {
@@ -2077,19 +2088,28 @@ fn dropped_comment(before: &str, after: &str) -> Option<String> {
             comment::CommentKind::Block => "/*",
         }
     }
-    fn bag(src: &str) -> IndexMap<(&'static str, String), usize> {
+    fn bag(comments: &[comment::Comment]) -> IndexMap<(&'static str, &str), usize> {
         let mut bag = IndexMap::default();
-        for c in lexer::lex(src).comments {
-            *bag.entry((delim(c.kind), c.text)).or_default() += 1;
+        for c in comments {
+            *bag.entry((delim(c.kind), c.text.as_str())).or_default() += 1;
         }
         bag
     }
-    let after_bag = bag(after);
-    for (key, before_count) in bag(before) {
+    let before_comments = lexer::comments_deep(before);
+    let after_comments = lexer::comments_deep(after);
+    let before_bag = bag(&before_comments);
+    let after_bag = bag(&after_comments);
+    for c in &before_comments {
+        let key = (delim(c.kind), c.text.as_str());
+        let before_count = before_bag.get(&key).copied().unwrap_or(0);
         if before_count > after_bag.get(&key).copied().unwrap_or(0) {
-            let (delim, text) = key;
-            let snippet: String = text.trim().chars().take(40).collect();
-            return Some(format!("`{delim}{snippet}`"));
+            // As written: a trimmed text does not match a grep for it.
+            let snippet: String = c.text.chars().take(40).collect();
+            return Some(DroppedComment {
+                text: format!("{}{snippet}", delim(c.kind)),
+                line: c.span.line,
+                column: c.span.column,
+            });
         }
     }
     None
@@ -2202,7 +2222,12 @@ pub enum CompileError {
     },
     /// The formatter would not round-trip the input (e.g. it would drop a
     /// comment). Reported instead of silently emitting lossy output.
-    Format { message: String },
+    Format {
+        message: String,
+        line: usize,
+        column: usize,
+        filename: Option<String>,
+    },
 }
 
 impl CompileError {
@@ -2215,6 +2240,23 @@ impl CompileError {
                 ..
             }
         )
+    }
+
+    /// Name the file the error is in, for a caller that has a path where the
+    /// erroring API — [`format`], which takes a string — did not.
+    pub fn with_filename(mut self, path: &str) -> Self {
+        let slot = match &mut self {
+            CompileError::Io { .. } => None,
+            CompileError::Lexer { filename, .. }
+            | CompileError::Parser { filename, .. }
+            | CompileError::Bind { filename, .. }
+            | CompileError::Analyzer { filename, .. }
+            | CompileError::Format { filename, .. } => Some(filename),
+        };
+        if let Some(filename) = slot {
+            *filename = Some(path.to_string());
+        }
+        self
     }
 
     /// Build a `CompileError::Lexer` from a recovered [`lexer::LexError`].
@@ -2299,7 +2341,18 @@ impl std::fmt::Display for CompileError {
                     write!(f, "analysis error: {message}")
                 }
             }
-            CompileError::Format { message } => write!(f, "format error: {message}"),
+            CompileError::Format {
+                message,
+                line,
+                column,
+                filename,
+            } => {
+                if let Some(file) = filename {
+                    write!(f, "{file}:{line}:{column}: format error: {message}")
+                } else {
+                    write!(f, "{line}:{column}: format error: {message}")
+                }
+            }
         }
     }
 }

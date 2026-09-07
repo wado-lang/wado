@@ -775,15 +775,6 @@ impl<'a> NirUnparser<'a> {
                 self.unparse_operand(body, index);
                 self.output.push(']');
             }
-            ExprKind::Block(block) => {
-                let block = *block;
-                self.output.push_str("{\n");
-                self.indent_level += 1;
-                self.unparse_block(body, block);
-                self.indent_level -= 1;
-                self.write_indent();
-                self.output.push('}');
-            }
             ExprKind::If {
                 condition,
                 then_branch,

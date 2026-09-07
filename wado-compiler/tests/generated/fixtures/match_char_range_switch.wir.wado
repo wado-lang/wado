@@ -409,8 +409,8 @@ fn "match_char_range_switch.wado/run"() with Stdout {
     let __fused_slot_58: char;
     let __sroa___iter_2_byte_index: i32;
     let __sroa_v_repr: ref Array<u8>;
-    __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:match_char_range_switch.wado::__modules_initialized);
+    $inline___initialize_modules_0: block {
+        break_if $inline___initialize_modules_0 @likely(global:match_char_range_switch.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:match_char_range_switch.wado::__modules_initialized = 1;
@@ -426,32 +426,32 @@ fn "match_char_range_switch.wado/run"() with Stdout {
             break_if b78 __sroa___iter_2_byte_index >= 5;
             __sroa_slot_56 = 0;
             __sroa_slot_57 = 0;
-            __inline_decode_char_at_5: block {
+            $inline_decode_char_at_5: block {
                 b0 = builtin::array_get_value<u8>(__sroa_v_repr, __sroa___iter_2_byte_index);
                 if b0 <u 128 {
                     __sroa_slot_56 = b0;
                     __sroa_slot_57 = 1;
-                    break __inline_decode_char_at_5;
+                    break $inline_decode_char_at_5;
                 }
                 if b0 <u 224 {
                     b1_17 = builtin::array_get_value<u8>(__sroa_v_repr, __sroa___iter_2_byte_index + 1);
                     __sroa_slot_56 = ((b0 & 31) << 6) | (b1_17 & 63);
                     __sroa_slot_57 = 2;
-                    break __inline_decode_char_at_5;
+                    break $inline_decode_char_at_5;
                 }
                 if b0 <u 240 {
                     b1_18 = builtin::array_get_value<u8>(__sroa_v_repr, __sroa___iter_2_byte_index + 1);
                     b2_19 = builtin::array_get_value<u8>(__sroa_v_repr, __sroa___iter_2_byte_index + 2);
                     __sroa_slot_56 = (((b0 & 15) << 12) | ((b1_18 & 63) << 6)) | (b2_19 & 63);
                     __sroa_slot_57 = 3;
-                    break __inline_decode_char_at_5;
+                    break $inline_decode_char_at_5;
                 }
                 b1_20 = builtin::array_get_value<u8>(__sroa_v_repr, __sroa___iter_2_byte_index + 1);
                 b2_21 = builtin::array_get_value<u8>(__sroa_v_repr, __sroa___iter_2_byte_index + 2);
                 b3 = builtin::array_get_value<u8>(__sroa_v_repr, __sroa___iter_2_byte_index + 3);
                 __sroa_slot_56 = ((((b0 & 7) << 18) | ((b1_20 & 63) << 12)) | ((b2_21 & 63) << 6)) | (b3 & 63);
                 __sroa_slot_57 = 4;
-                break __inline_decode_char_at_5;
+                break $inline_decode_char_at_5;
             };
             __sroa___iter_2_byte_index = __sroa___iter_2_byte_index + __sroa_slot_57;
             __fused_slot_58 = __sroa_slot_56;
@@ -473,8 +473,8 @@ fn "match_char_range_switch.wado/__cm_binding__Stdout_write_via_stream"(data) wi
 }
 
 fn "match_char_range_switch.wado/__cm_export__run"() {
-    __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:match_char_range_switch.wado::__modules_initialized);
+    $inline___initialize_modules_0: block {
+        break_if $inline___initialize_modules_0 @likely(global:match_char_range_switch.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:match_char_range_switch.wado::__modules_initialized = 1;
@@ -569,16 +569,16 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
                 "wasi/waitable-set-drop"(ws);
                 result = status_41;
             }
-            written_16 = struct.new "core:prelude/types.wado//StreamWrite" { count: result >> 4, result: __inline_cm_copy_result_14: block -> "core:prelude/types.wado//enum:CopyResult" {
+            written_16 = struct.new "core:prelude/types.wado//StreamWrite" { count: result >> 4, result: $inline_cm_copy_result_14: block -> "core:prelude/types.wado//enum:CopyResult" {
                 let __match_scrut_0: i32;
                 __match_scrut_0 = result & 15;
                 if __match_scrut_0 == 0 {
-                    break __inline_cm_copy_result_14: 0;
+                    break $inline_cm_copy_result_14: 0;
                 } else if __match_scrut_0 == 1 {
-                    break __inline_cm_copy_result_14: 1;
+                    break $inline_cm_copy_result_14: 1;
                 } else {
                 }
-                break __inline_cm_copy_result_14: 2;
+                break $inline_cm_copy_result_14: 2;
             } };
             drop("mem/realloc"(ptr_14, raw_len, 1, 0));
             offset = offset + written_16.count;
@@ -605,9 +605,9 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(self, f) {
     is_negative = self < 0;
     val_6 = builtin::i64_extend_i32_s(self);
     abs_val = select i64(val_6 < 0_i64, 0_i64 - val_6, val_6);
-    digit_count_4 = __inline_count_digits_u64_1: block -> i32 {
+    digit_count_4 = $inline_count_digits_u64_1: block -> i32 {
         if abs_val == 0_i64 {
-            break __inline_count_digits_u64_1: 1;
+            break $inline_count_digits_u64_1: 1;
         }
         n = 0;
         t_9 = abs_val;
@@ -619,7 +619,7 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(self, f) {
                 continue l96;
             };
         };
-        break __inline_count_digits_u64_1: n;
+        break $inline_count_digits_u64_1: n;
     };
     offset_5 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write$spec0$scalar"(f, is_negative, global:core:prelude/primitive.wado::__const_obj_4, digit_count_4);
     arr = f.repr;

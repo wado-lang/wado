@@ -1,27 +1,13 @@
-// LL(*) gap: tail-greedy Optional with a NULLABLE next sibling.
+// Source: hand-written for Gale's LL prediction tests.
+// License: same as the Gale package.
 //
-// Pattern: like `ll_basic.g4` but the next sibling is itself optional.
-// At the call site of `a` in alt 0 (`a b?`), `b?` is nullable. Static
-// analysis cannot prove `Y` is required, so v1 declines to emit a
-// variant — and Gale falls back to SLL/greedy, picking `a` alone and
-// leaving `Y` unconsumed (then EOF expects nothing but sees `Y`).
+// A tail-greedy Optional whose caller's next sibling is optional on the same
+// token: `a`'s `Y?` and alt 0's `b?` both want the `Y`. Both readings complete
+// — `(a X Y)` with `b?` empty, or `(a X)` then `(b Y)` — so the decision is an
+// ambiguity, and ANTLR4's greedy subrule gives the token to the innermost.
+// `ll_greedy_optional_cross_rule.g4` is the same rule with an `else`.
 //
-// ANTLR4 LL would consider full context: alt 0's `b?` plus the outer
-// `EOF` show that consuming `Y` here means the whole parse succeeds via
-// alt 0, while leaving `Y` for the outer `EOF` fails. So LL picks alt 0
-// with `b?` firing.
-//
-//   Input "X Y":
-//     ANTLR4 LL  → (r (a X) (b Y))   (alt 0, b? fires)
-//     Gale v1    → parse error       (alt 0 / alt 1 both fail)
-//
-// Gap: `gen_alt_elements`'s `is_suffix_nullable` guard prevents
-// `intern_follow_variant` from registering the variant. Closing this
-// gap requires either:
-//   - propagating CTX_FOLLOW (outer rule's follow) into the analysis,
-//     so the suffix-nullable case can still be variant-emitted; or
-//   - a 2-token lookahead variant that distinguishes `Y EOF` (alt 0
-//     wants `b?` to fire) from `Y` followed by something else.
+//   Input "X Y" → (r (a X Y))   [pinned against the jar]
 
 grammar LlNullableSuffix;
 

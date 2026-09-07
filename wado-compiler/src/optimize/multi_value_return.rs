@@ -35,18 +35,16 @@ pub(crate) fn block_tail_call(
     prefix: &mut Vec<StmtId>,
 ) -> Option<(FuncId, TypeId, ExprId)> {
     let e = op.as_expr()?;
+    if let Some(block) = body.unbroken_block(e) {
+        let (&last, lead) = body.blocks[block].stmts.split_last()?;
+        let StmtKind::Expr(inner) = &body.stmts[last].kind else {
+            return None;
+        };
+        prefix.extend_from_slice(lead);
+        return block_tail_call(body, *inner, prefix);
+    }
     match &body.exprs[e].kind {
         ExprKind::Call { func_id, .. } => Some((*func_id, body.exprs[e].type_id, e)),
-        ExprKind::Block(b) => {
-            let (&last, lead) = body.blocks[*b].stmts.split_last()?;
-            match &body.stmts[last].kind {
-                StmtKind::Expr(inner) => {
-                    prefix.extend_from_slice(lead);
-                    block_tail_call(body, *inner, prefix)
-                }
-                _ => None,
-            }
-        }
         _ => None,
     }
 }
@@ -445,11 +443,6 @@ fn expr_returns_match(body: &Body, expr: ExprId, expected: &ExpectedShape<'_>) -
             Some(t) => *struct_type == t && fields.len() == expected.arity,
             None => false,
         },
-        ExprKind::Block(b) => {
-            let b = *b;
-            all_returns_match_shape(body, b, expected)
-                && block_tail_returns_match(body, b, expected)
-        }
         ExprKind::LabeledBlock { block: b, .. } => {
             let b = *b;
             all_returns_match_shape(body, b, expected)
@@ -743,7 +736,7 @@ fn validate_tail_return(
         {
             walk_call_args_for_uses(body, e, cx, invalid, tracked);
         }
-        ExprKind::Block(b) | ExprKind::LabeledBlock { block: b, .. } => {
+        ExprKind::LabeledBlock { block: b, .. } => {
             validate_tail_block(body, *b, ours, cx, invalid, tracked);
         }
         ExprKind::If {
@@ -878,7 +871,7 @@ fn walk_expr_for_uses(
                 walk_expr_for_uses_operand(body, a, cx, invalid, tracked);
             }
         }
-        ExprKind::Block(b) | ExprKind::LabeledBlock { block: b, .. } => {
+        ExprKind::LabeledBlock { block: b, .. } => {
             let b = *b;
             let mut inner = tracked.clone();
             for (i, &s) in body.blocks[b].stmts.clone().iter().enumerate() {

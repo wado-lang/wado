@@ -80,11 +80,11 @@ fn dedup_invocations(invocations: Vec<Invocation>) -> Result<Vec<Invocation>, Pl
             continue;
         }
         let first = &invocations[indices[0]];
-        let mut sites = vec![first.decl_site.clone()];
+        let mut sites = vec![first.decl_site().clone()];
         let mut all_equal = true;
         for &i in &indices[1..] {
             let other = &invocations[i];
-            sites.push(other.decl_site.clone());
+            sites.push(other.decl_site().clone());
             if other.identity_tuple() != first.identity_tuple() {
                 all_equal = false;
             }
@@ -156,7 +156,7 @@ fn topo_sort(invocations: Vec<Invocation>) -> Result<Plan, PlanError> {
         // real cycle report fires in practice.
         let participants: Vec<DeclSite> = (0..n)
             .filter(|&i| !processed[i])
-            .map(|i| invocations[i].decl_site.clone())
+            .map(|i| invocations[i].decl_site().clone())
             .collect();
         return Err(PlanError::Cycle { participants });
     }
@@ -210,13 +210,13 @@ mod tests {
 
     fn inv(name: &str, from: &str, inputs: &[&str], out: &str) -> Invocation {
         Invocation {
-            decl_site: DeclSite {
+            decl_sites: vec![DeclSite {
                 module: format!("src/{name}.wado"),
+                source: InvocationPath::normalize(from),
                 synthetic_id: format!("kiln-{name}"),
-            },
+            }],
             module: GeneratorModule::Spec(format!("ns:{name}@1.0.0").into()),
             from: InvocationPath::normalize(from),
-            source: InvocationPath::normalize(from),
             inputs: inputs
                 .iter()
                 .map(|p| InvocationPath::normalize(p))
@@ -291,7 +291,7 @@ mod tests {
         let positions: Vec<_> = plan
             .order
             .iter()
-            .map(|i| i.decl_site.synthetic_id.clone())
+            .map(|i| i.decl_site().synthetic_id.clone())
             .collect();
         let producer_pos = positions.iter().position(|s| s == "kiln-producer").unwrap();
         let consumer_pos = positions.iter().position(|s| s == "kiln-consumer").unwrap();
@@ -343,7 +343,7 @@ mod tests {
     fn names(plan: &Plan) -> Vec<String> {
         plan.order
             .iter()
-            .map(|i| i.decl_site.synthetic_id.clone())
+            .map(|i| i.decl_site().synthetic_id.clone())
             .collect()
     }
 

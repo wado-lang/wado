@@ -57,6 +57,7 @@ mise run report-wasm-size  # measures the size of the generated Wasm files and r
   - Invariants: state them as assertions, not comments. An assert is checked; a comment goes stale.
   - Docs: keep them concise. Don't document implementation details.
 - Avoid ad-hoc workarounds. Write proper code based on a sound design.
+- Name an item, don't spell out its path: a `crate::` or `super::` path belongs in a `use` item at the top of the module, never inline where the item is read. `mise run check-rust-paths` gates this in CI against `scripts/rust-inline-paths.json`, which holds what each file has left to migrate. Clippy is not the gate: `absolute_paths` sees only the `crate::` half of the rule, and it also flags paths into other crates unless every dependency is named in an allow-list nothing maintains.
 - Perform red/green TDD.
 - A compiler bug is always P0 — no exceptions. The instant you suspect one, stop all other work, and as the top priority write a minimal reproducible e2e fixture and fix it. A workaround that lets the current task proceed is never a reason to skip or defer any of these.
 - A pre-existing issue — whether you find it or a reviewer points it out — must be fixed, with TDD when practical.
@@ -121,7 +122,7 @@ Wado-specific features:
 - `wado-manifest/` — `wado.toml` / `wado.lock` parsing, validation, and dependency resolution. Pure: no I/O; the disk reads live in `wado-lsp/src/host/discovery.rs`.
 - `wado-wasm-embed/` — prepares a core wasm asset for embedding in a component: memory definition to import, then a prune to the used exports.
 - `wado-bundled-libm/` — deterministic math, bundled into the compiler as a Wasm module. (`wado-bundled-icu/` is a not-yet-wired spike.)
-- `docs/` — the language spec (`docs/spec.md`), stdlib docs, and the Wado Evolution Proposals (`docs/wep-*.md`) recording significant language and architecture decisions.
+- `docs/` — the language spec (`docs/spec.md`), the compiler and formatter guides (`docs/compiler.md`, `docs/optimizer.md`, `docs/formatter.md`), stdlib docs, and the Wado Evolution Proposals (`docs/wep-*.md`) recording significant language and architecture decisions.
 - `benchmark/`, `wasm-size/` — performance and code-size measurement.
 - `cloudflare-worker/` — serves a `wasi:http/service` component from a Cloudflare
   Worker, via jco.
@@ -141,7 +142,7 @@ The ones you reach for while developing the toolchain:
 - `serve` — compile and serve an HTTP service.
 - `dump` — dump compiler internal state at every stage: AST, modules, symbols, types, TIR, NIR, WIR.
 - `query` — ask the language service for hover / definition / references / diagnostics, by position or by `MODULE#SYMBOL` notation. `query inlay-hints` splices the hints into the source, so a misplaced anchor is visible rather than a number to check by hand.
-- `format` — format Wado source code.
+- `format` — format Wado source code. Its rules are in `docs/formatter.md`.
 
 The rest (`init`, `update`, `fetch`, `build`, `publish`, `doc`, `wit`, `syntax`, `lsp`, `clean`) serve packaging, registry, and editor integration.
 

@@ -1,0 +1,33 @@
+// A pure callee returning a variant folds to the construction. The case index
+// is the declaration's; the value names its case only by name.
+use { println, Stdout } from "core:cli";
+
+variant Shape {
+    Circle(i32),
+    Square(i32),
+}
+
+fn pick() -> Shape {
+    let mut n = 1;
+    for let mut i = 0; i < 3; i += 1 {
+        n *= 3;
+    }
+    return Shape::Circle(n);
+}
+
+export fn run() with Stdout {
+    // Opaque, so the variant itself has to reach the IR rather than the arm.
+    let s = builtin::black_box(pick());
+    match s {
+        Shape::Circle(r) => println(`circle ${r}`),
+        Shape::Square(a) => println(`square ${a}`),
+    }
+}
+
+__DATA__
+{
+  "stdout": "circle 27\n",
+  "wir_expect:O2": [
+    "struct.new \"ctfe_variant_result.wado//Shape::Circle\" { discriminant: 0, payload_0: 27 }"
+  ]
+}

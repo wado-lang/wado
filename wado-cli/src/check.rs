@@ -141,6 +141,7 @@ pub async fn run(opts: CheckOptions) -> Result<(), CliExit> {
     // Same setup `wado compile` runs its generators through — only the pipeline
     // below differs: `check` dry-runs and byte-compares instead of writing.
     let kiln = crate::compile::prepare_kiln(path, &host, opts.knobs.no_cache, manifest_pair)
+        .await
         .map_err(silent_or_reported)?;
     let outcome = match kiln {
         None => CheckOutcome::default(),

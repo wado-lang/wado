@@ -90,8 +90,6 @@ global global:variant_eq_user_impl.wado::__const_obj_3: ref null "core:prelude/s
 
 fn "variant_eq_user_impl.wado/run"() with Stdout {
     let c3: ref "variant_eq_user_impl.wado//Color";
-    let c4: ref "variant_eq_user_impl.wado//Color";
-    let c5: ref "variant_eq_user_impl.wado//Color";
     let handle_12: i32;
     let packed_14: i64;
     let rx_15: i32;
@@ -110,15 +108,13 @@ fn "variant_eq_user_impl.wado/run"() with Stdout {
     let packed_62: i64;
     let rx_63: i32;
     let tx_64: i32;
-    __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:variant_eq_user_impl.wado::__modules_initialized);
+    $inline___initialize_modules_0: block {
+        break_if $inline___initialize_modules_0 @likely(global:variant_eq_user_impl.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:variant_eq_user_impl.wado::__modules_initialized = 1;
     };
     c3 = struct.new "variant_eq_user_impl.wado//Color::Blue" { discriminant: 2, payload_0: 42 };
-    c4 = struct.new "variant_eq_user_impl.wado//Color::Blue" { discriminant: 2, payload_0: 42 };
-    c5 = struct.new "variant_eq_user_impl.wado//Color::Blue" { discriminant: 2, payload_0: 7 };
     rx_15 = builtin::i32_wrap_i64(local.tee packed_14("wasi/stream-new"()));
     tx_16 = builtin::i32_wrap_i64(packed_14 >> 32_i64);
     handle_12 = "variant_eq_user_impl.wado/__cm_binding__Stdout_write_via_stream"(rx_15);
@@ -129,14 +125,16 @@ fn "variant_eq_user_impl.wado/run"() with Stdout {
     handle_28 = "variant_eq_user_impl.wado/__cm_binding__Stdout_write_via_stream"(rx_31);
     "core:rt/write_string_to_stream"(tx_32, global:variant_eq_user_impl.wado::__const_obj_2, 1);
     "wasi/future-drop-readable:transmission-cli"(handle_28);
-    if __inline_variant_eq_user_impl_wado_Color_core_prelude_traits_wado_Eq__eq_scalar_11: block -> bool {
+    if $inline_variant_eq_user_impl_wado_Color_core_prelude_traits_wado_Eq__eq_scalar_11: block -> bool {
         if @likely(ref.test "variant_eq_user_impl.wado//Color::Blue"(c3)) {
             b1_39 = ref.cast "variant_eq_user_impl.wado//Color::Blue"(c3).payload_0;
-            if ref.test "variant_eq_user_impl.wado//Color::Blue"(c4) {
-                break __inline_variant_eq_user_impl_wado_Color_core_prelude_traits_wado_Eq__eq_scalar_11: b1_39 == ref.cast "variant_eq_user_impl.wado//Color::Blue"(c4).payload_0;
+            let __match_scrut_1: ref "variant_eq_user_impl.wado//Color";
+            __match_scrut_1 = struct.new "variant_eq_user_impl.wado//Color::Blue" { discriminant: 2, payload_0: 42 };
+            if ref.test "variant_eq_user_impl.wado//Color::Blue"(__match_scrut_1) {
+                break $inline_variant_eq_user_impl_wado_Color_core_prelude_traits_wado_Eq__eq_scalar_11: b1_39 == ref.cast "variant_eq_user_impl.wado//Color::Blue"(__match_scrut_1).payload_0;
             } else {
             }
-            break __inline_variant_eq_user_impl_wado_Color_core_prelude_traits_wado_Eq__eq_scalar_11: 0;
+            break $inline_variant_eq_user_impl_wado_Color_core_prelude_traits_wado_Eq__eq_scalar_11: 0;
         } else {
         }
         cold_path;
@@ -149,14 +147,16 @@ fn "variant_eq_user_impl.wado/run"() with Stdout {
         "core:rt/write_string_to_stream"(tx_48, global:variant_eq_user_impl.wado::__const_obj_1, 1);
         "wasi/future-drop-readable:transmission-cli"(handle_44);
     }
-    if __inline_variant_eq_user_impl_wado_Color_core_prelude_traits_wado_Eq__eq_scalar_16: block -> bool {
+    if $inline_variant_eq_user_impl_wado_Color_core_prelude_traits_wado_Eq__eq_scalar_16: block -> bool {
         if @likely(ref.test "variant_eq_user_impl.wado//Color::Blue"(c3)) {
             b1_55 = ref.cast "variant_eq_user_impl.wado//Color::Blue"(c3).payload_0;
-            if ref.test "variant_eq_user_impl.wado//Color::Blue"(c5) {
-                break __inline_variant_eq_user_impl_wado_Color_core_prelude_traits_wado_Eq__eq_scalar_16: b1_55 == ref.cast "variant_eq_user_impl.wado//Color::Blue"(c5).payload_0;
+            let __match_scrut_3: ref "variant_eq_user_impl.wado//Color";
+            __match_scrut_3 = struct.new "variant_eq_user_impl.wado//Color::Blue" { discriminant: 2, payload_0: 7 };
+            if ref.test "variant_eq_user_impl.wado//Color::Blue"(__match_scrut_3) {
+                break $inline_variant_eq_user_impl_wado_Color_core_prelude_traits_wado_Eq__eq_scalar_16: b1_55 == ref.cast "variant_eq_user_impl.wado//Color::Blue"(__match_scrut_3).payload_0;
             } else {
             }
-            break __inline_variant_eq_user_impl_wado_Color_core_prelude_traits_wado_Eq__eq_scalar_16: 0;
+            break $inline_variant_eq_user_impl_wado_Color_core_prelude_traits_wado_Eq__eq_scalar_16: 0;
         } else {
         }
         cold_path;
@@ -176,8 +176,8 @@ fn "variant_eq_user_impl.wado/__cm_binding__Stdout_write_via_stream"(data) with 
 }
 
 fn "variant_eq_user_impl.wado/__cm_export__run"() {
-    __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:variant_eq_user_impl.wado::__modules_initialized);
+    $inline___initialize_modules_0: block {
+        break_if $inline___initialize_modules_0 @likely(global:variant_eq_user_impl.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:variant_eq_user_impl.wado::__modules_initialized = 1;
@@ -260,16 +260,16 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
                 "wasi/waitable-set-drop"(ws);
                 result = status_41;
             }
-            written_16 = struct.new "core:prelude/types.wado//StreamWrite" { count: result >> 4, result: __inline_cm_copy_result_14: block -> "core:prelude/types.wado//enum:CopyResult" {
+            written_16 = struct.new "core:prelude/types.wado//StreamWrite" { count: result >> 4, result: $inline_cm_copy_result_14: block -> "core:prelude/types.wado//enum:CopyResult" {
                 let __match_scrut_0: i32;
                 __match_scrut_0 = result & 15;
                 if __match_scrut_0 == 0 {
-                    break __inline_cm_copy_result_14: 0;
+                    break $inline_cm_copy_result_14: 0;
                 } else if __match_scrut_0 == 1 {
-                    break __inline_cm_copy_result_14: 1;
+                    break $inline_cm_copy_result_14: 1;
                 } else {
                 }
-                break __inline_cm_copy_result_14: 2;
+                break $inline_cm_copy_result_14: 2;
             } };
             drop("mem/realloc"(ptr_14, raw_len, 1, 0));
             offset = offset + written_16.count;

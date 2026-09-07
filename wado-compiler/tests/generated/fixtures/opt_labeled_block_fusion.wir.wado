@@ -16,47 +16,45 @@ struct core:prelude/string.wado//String {  // TypeId(3)
     mut used: i32,
 }
 
-array Array<i32> (mut i32);  // TypeId(4)
-
-struct core:prelude/slice.wado//Slice<u8> {  // TypeId(5)
+struct core:prelude/slice.wado//Slice<u8> {  // TypeId(4)
     mut repr: ref Array<u8>,
     mut start: i32,
     mut end: i32,
 }
 
-type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(6)
+type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(5)
 
-type "functype//wasi/stream-write" = fn(i32, i32, i32) -> i32;  // TypeId(7)
+type "functype//wasi/stream-write" = fn(i32, i32, i32) -> i32;  // TypeId(6)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(8)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(7)
 
-type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(9)
+type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(8)
 
-type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(10)
+type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(9)
 
-type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(11)
+type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(10)
 
-type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(12)
+type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(11)
 
-type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(13)
+type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(12)
 
-type "functype//opt_labeled_block_fusion.wado/run" = fn();  // TypeId(14)
+type "functype//opt_labeled_block_fusion.wado/run" = fn();  // TypeId(13)
 
-type "functype//opt_labeled_block_fusion.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(15)
+type "functype//opt_labeled_block_fusion.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(14)
 
-type "functype//opt_labeled_block_fusion.wado/__cm_export__run" = fn();  // TypeId(16)
+type "functype//opt_labeled_block_fusion.wado/__cm_export__run" = fn();  // TypeId(15)
 
-type "functype//core:rt/write_string_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(17)
+type "functype//core:rt/write_string_to_stream" = fn(i32, ref "core:prelude/string.wado//String", bool);  // TypeId(16)
 
-type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(18)
+type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(17)
 
-type "functype//core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_raw_all" = fn(i32, ref "core:prelude/slice.wado//Slice<u8>") -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(19)
+type "functype//core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_raw_all" = fn(i32, ref "core:prelude/slice.wado//Slice<u8>") -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(18)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(20)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(19)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(21)
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(20)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(22)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(21)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -73,53 +71,17 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
 global mut global:opt_labeled_block_fusion.wado::__modules_initialized: bool = 0;
 global global:opt_labeled_block_fusion.wado::__const_obj_2: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(111, 107), used: 2 };
-global global:opt_labeled_block_fusion.wado::__const_obj_3: ref null Array<i32> = array.new_fixed<i32>();
-global global:opt_labeled_block_fusion.wado::__const_obj_4: ref null Array<i32> = array.new_fixed<i32>(-1, -2, 3, 4);
 
 fn "opt_labeled_block_fusion.wado/run"() with Stdout {
     let handle: i32;
     let packed: i64;
     let rx_34: i32;
     let tx_35: i32;
-    let item_54: i32;
-    let __sroa___iter_1_repr_58: ref Array<i32>;
-    let __sroa___iter_1_index_59: i32;
-    let item_70: i32;
-    let __sroa___iter_1_repr_74: ref Array<i32>;
-    let __sroa___iter_1_index_75: i32;
-    __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:opt_labeled_block_fusion.wado::__modules_initialized);
+    $inline___initialize_modules_0: block {
+        break_if $inline___initialize_modules_0 @likely(global:opt_labeled_block_fusion.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:opt_labeled_block_fusion.wado::__modules_initialized = 1;
-    };
-    __inline_first_positive_0: block {
-        __sroa___iter_1_repr_58 = global:opt_labeled_block_fusion.wado::__const_obj_4;
-        __sroa___iter_1_index_59 = 0;
-        b0: block {
-            l1: loop {
-                break_if b0 __sroa___iter_1_index_59 >= 4;
-                item_54 = builtin::array_get_value<i32>(__sroa___iter_1_repr_58, __sroa___iter_1_index_59);
-                __sroa___iter_1_index_59 = __sroa___iter_1_index_59 + 1;
-                break_if __inline_first_positive_0 item_54 > 0;
-                continue l1;
-            };
-        };
-        break __inline_first_positive_0;
-    };
-    __inline_first_positive_1: block {
-        __sroa___iter_1_repr_74 = global:opt_labeled_block_fusion.wado::__const_obj_3;
-        __sroa___iter_1_index_75 = 0;
-        b2: block {
-            l3: loop {
-                break_if b2 __sroa___iter_1_index_75 >= 0;
-                item_70 = builtin::array_get_value<i32>(__sroa___iter_1_repr_74, __sroa___iter_1_index_75);
-                __sroa___iter_1_index_75 = __sroa___iter_1_index_75 + 1;
-                break_if __inline_first_positive_1 item_70 > 0;
-                continue l3;
-            };
-        };
-        break __inline_first_positive_1;
     };
     rx_34 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_35 = builtin::i32_wrap_i64(packed >> 32_i64);
@@ -133,8 +95,8 @@ fn "opt_labeled_block_fusion.wado/__cm_binding__Stdout_write_via_stream"(data) w
 }
 
 fn "opt_labeled_block_fusion.wado/__cm_export__run"() {
-    __inline___initialize_modules_0: block {
-        break_if __inline___initialize_modules_0 @likely(global:opt_labeled_block_fusion.wado::__modules_initialized);
+    $inline___initialize_modules_0: block {
+        break_if $inline___initialize_modules_0 @likely(global:opt_labeled_block_fusion.wado::__modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:opt_labeled_block_fusion.wado::__modules_initialized = 1;
@@ -189,14 +151,14 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
     end_3 = _av_50 + (_av_51 - _av_50);
     offset = data.start;
     block {
-        l7: loop {
+        l3: loop {
             __sroa_data_start = offset;
-            ptr_14 = builtin::i32_wrap_i64(local.tee packed_13(len_23 = end_3 - __sroa_data_start; ptr_24 = "mem/realloc"(0, 0, 1, len_23); i = 0; b8: block {
-                l9: loop {
-                    break_if b8 i >= len_23;
+            ptr_14 = builtin::i32_wrap_i64(local.tee packed_13(len_23 = end_3 - __sroa_data_start; ptr_24 = "mem/realloc"(0, 0, 1, len_23); i = 0; b4: block {
+                l5: loop {
+                    break_if b4 i >= len_23;
                     builtin::store_u8(ptr_24 + i, builtin::array_get_value_u8(repr_2, __sroa_data_start + i));
                     i = i + 1;
-                    continue l9;
+                    continue l5;
                 };
             }; builtin::i64_extend_i32_s(ptr_24) | (builtin::i64_extend_i32_s(len_23) << 32_i64)));
             raw_len = builtin::i32_wrap_i64(packed_13 >> 32_i64);
@@ -212,23 +174,23 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
                 "wasi/waitable-set-drop"(ws);
                 result = status_41;
             }
-            written_16 = struct.new "core:prelude/types.wado//StreamWrite" { count: result >> 4, result: __inline_cm_copy_result_14: block -> "core:prelude/types.wado//enum:CopyResult" {
+            written_16 = struct.new "core:prelude/types.wado//StreamWrite" { count: result >> 4, result: $inline_cm_copy_result_14: block -> "core:prelude/types.wado//enum:CopyResult" {
                 let __match_scrut_0: i32;
                 __match_scrut_0 = result & 15;
                 if __match_scrut_0 == 0 {
-                    break __inline_cm_copy_result_14: 0;
+                    break $inline_cm_copy_result_14: 0;
                 } else if __match_scrut_0 == 1 {
-                    break __inline_cm_copy_result_14: 1;
+                    break $inline_cm_copy_result_14: 1;
                 } else {
                 }
-                break __inline_cm_copy_result_14: 2;
+                break $inline_cm_copy_result_14: 2;
             } };
             drop("mem/realloc"(ptr_14, raw_len, 1, 0));
             offset = offset + written_16.count;
             if select i32(select i32(written_16.result != 0, 1, written_16.count <= 0), 1, offset >= end_3) {
                 return written_16.result;
             }
-            continue l7;
+            continue l3;
         };
     };
 }

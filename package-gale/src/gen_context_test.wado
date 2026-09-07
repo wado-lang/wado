@@ -496,15 +496,16 @@ test "deep_position_first_sets_from: recurses into single-alt RuleRef" {
     assert consumed == 1, `expected one surface element (c) consumed, got ${consumed}`;
 }
 
-test "deep_position_first_sets_from: halts on multi-alt RuleRef" {
+test "deep_position_first_sets_from: a multi-alt RuleRef contributes its head and halts" {
     // Multi-alt rules can have alt-specific prefixes that diverge past
-    // depth 0. Per-depth UNION across alts would over-yield (the mask
-    // would match alt-mixing inputs that no real alt admits). Safe
-    // fallback: halt at the multi-alt RuleRef, keeping only the prefix
-    // accumulated so far.
+    // depth 0, where a per-depth UNION across alts would over-yield: the
+    // mask would match alt-mixing inputs that no real alt admits. So the
+    // walk stops there. At the head the union is exact. Whichever alt a
+    // suffix takes it starts in the rule's first set, so that one position
+    // is contributed before halting and the cursor stays put.
     //
     // Here `c` is multi-alt; `r : a c ; c : X | Y ;` deep-walked from
-    // start=1 (at `c`) should emit nothing (no accumulator before c).
+    // start=1 (at `c`) emits first(c) and stops.
     let c_rule = mk_rule("c", [
         alt([tk("X")]),
         alt([tk("Y")]),
@@ -522,8 +523,38 @@ test "deep_position_first_sets_from: halts on multi-alt RuleRef" {
     ];
     let mut visiting: List<String> = [];
     let [r, consumed] = ctx.deep_position_first_sets_from(&elements, 1, 3, &mut visiting);
-    assert r.is_empty(), `expected empty (multi-alt halts), got ${r.len()}`;
+    let expected_c: List<String> = ["TK_X", "TK_Y"];
+    assert r.len() == 1, `expected the head position alone, got ${r.len()}`;
+    assert r[0] == expected_c, `expected first(c), got ${r[0]:?}`;
     assert consumed == 0, `multi-alt halt must not advance the cursor, got ${consumed}`;
+}
+
+test "deep_position_first_sets_from: a nullable multi-alt RuleRef contributes nothing" {
+    // `c : X | ;` may match nothing, so the position the walk is at can be
+    // the next element's rather than `c`'s. Contributing first(c) there
+    // would reject a suffix that skips `c`. The head is exact only for a
+    // rule the suffix must spend a token on.
+    let c_rule = mk_rule("c", [
+        alt([tk("X")]),
+        alt([]),
+    ]);
+    let r_rule = mk_rule("r", [
+        alt([
+            rr("a"),
+            rr("c"),
+            tk("Z"),
+        ]),
+    ]);
+    let mut ctx = mk_ctx_with([r_rule, c_rule]);
+    let elements: List<Element> = [
+        rr("a"),
+        rr("c"),
+        tk("Z"),
+    ];
+    let mut visiting: List<String> = [];
+    let [r, consumed] = ctx.deep_position_first_sets_from(&elements, 1, 3, &mut visiting);
+    assert r.is_empty(), `expected empty (nullable multi-alt), got ${r.len()}`;
+    assert consumed == 0, `nullable multi-alt halt must not advance the cursor, got ${consumed}`;
 }
 
 test "deep_position_first_sets_from: cycles bail to keep the analysis terminating" {

@@ -1,4 +1,5 @@
 use { Alternative, Element, Visibility } from "./ir.wado";
+use { FOLLOW_PARAM } from "./ident.wado";
 use { CodeWriter } from "./wadopoet.wado";
 use { unwrap_label } from "./lr_util.wado";
 pub use { escape_ident, to_pascal_case, to_snake_case, to_lower } from "./ident.wado";
@@ -635,13 +636,52 @@ pub fn element_field_info(elem: &Element) -> [String, String] {
     };
 }
 
-/// `", follow"` when the grammar emits FOLLOW machinery, else `""`.
-/// Appended after a call's fixed arguments so the forwarded `follow`
-/// is passed only when the callee actually declares the parameter
-/// (`ctx.emit_follow()`). See `GenContext::emit_follow`.
+/// A continuation is one `i64`: `FOLLOW_CONT_SLOTS` positions of
+/// `FOLLOW_SLOT_BITS`, each holding a 1-based `FOLLOW_SETS` index and a bit
+/// saying it opens a fresh reading. Composition is a shift, so a call site
+/// spells it in constants and a rule carries one parameter.
+pub global FOLLOW_SLOT_BITS: i32 = 8;
+
+pub global FOLLOW_CONT_SLOTS: i32 = 7;
+
+pub global FOLLOW_MAX_POSITION_ID: i32 = 127;
+
+/// The whole continuation forwarded unmoved.
+pub fn follow_forward_args() -> String {
+    return FOLLOW_PARAM;
+}
+
+/// `prefix` ahead of the caller's continuation, which therefore starts at the
+/// `positions` the prefix already constrains. `opens` marks that start as a
+/// fresh reading rather than more of the same one.
+///
+/// The forwarded half is masked down to its positions first. A reading it opens
+/// begins where the alternation was written, and `prefix` moves that point
+/// without moving the mark, so the gate would revive the reading `prefix`
+/// positions early — `{ x, y }` inside `[ … ]` handing its own comma to the
+/// list, whose next iteration also starts with one. Only the reading this
+/// composition opens is at a position the gate can still place.
+pub fn follow_composed(prefix: &String, positions: i32, opens: bool) -> String {
+    let sequenced = `${FOLLOW_PARAM} & FOLLOW_SEQUENCED`;
+    let shifted = if opens { `(${sequenced} | FOLLOW_OPENS_BIT)` } else { `(${sequenced})` };
+    return `(${*prefix} | ${shifted} << ${positions * FOLLOW_SLOT_BITS}) & FOLLOW_CONT_MASK`;
+}
+
+/// A `follow_yields` call on the forwarded continuation.
+pub fn follow_yields_call(tokens: &String, pos: &String) -> String {
+    return follow_yields_call_of(tokens, pos, &FOLLOW_PARAM);
+}
+
+/// A `follow_yields` call on a continuation held in one local.
+pub fn follow_yields_call_of(tokens: &String, pos: &String, head: &String) -> String {
+    return `follow_yields(${*tokens}, ${*pos}, ${*head}, &FOLLOW_SETS, TK_EOF)`;
+}
+
+/// `", <forwarded continuation>"` when the callee declares the parameter, else
+/// `""`. Appended after a call's fixed arguments.
 pub fn follow_sep(emit_follow: bool) -> String {
     if emit_follow {
-        return ", follow";
+        return `, ${follow_forward_args()}`;
     }
     return "";
 }

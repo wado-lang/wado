@@ -1350,8 +1350,8 @@ fn reduce_local_rewrites_const_true_if_to_block() {
     );
     let (changed, body, e) = reduce_local_into(&mut interp, &expr);
     assert!(changed);
-    let ExprKind::Block(blk) = body.exprs[e].kind else {
-        panic!("expected Block, got {:?}", body.exprs[e].kind);
+    let ExprKind::LabeledBlock { block: blk, .. } = body.exprs[e].kind else {
+        panic!("expected a block, got {:?}", body.exprs[e].kind);
     };
     assert_eq!(body.blocks[blk].stmts.len(), 1);
     let s0 = body.blocks[blk].stmts[0];
@@ -1375,8 +1375,8 @@ fn reduce_local_rewrites_const_false_if_no_else_to_unit() {
     assert!(changed);
     // `if false {}` with no else evaluates to unit; the unit value has no node
     // form, so the skeleton result is an empty block.
-    let ExprKind::Block(blk) = body.exprs[e].kind else {
-        panic!("expected an empty Block, got {:?}", body.exprs[e].kind);
+    let ExprKind::LabeledBlock { block: blk, .. } = body.exprs[e].kind else {
+        panic!("expected an empty block, got {:?}", body.exprs[e].kind);
     };
     assert!(body.blocks[blk].stmts.is_empty());
 }
@@ -2664,8 +2664,8 @@ fn reduce_local_rewrites_const_match_to_arm_body_block() {
     );
     let (changed, body, e) = reduce_local_into(&mut interp, &expr);
     assert!(changed);
-    let ExprKind::Block(blk) = body.exprs[e].kind else {
-        panic!("expected Block, got {:?}", body.exprs[e].kind);
+    let ExprKind::LabeledBlock { block: blk, .. } = body.exprs[e].kind else {
+        panic!("expected a block, got {:?}", body.exprs[e].kind);
     };
     assert_eq!(body.blocks[blk].stmts.len(), 1);
     let s0 = body.blocks[blk].stmts[0];
@@ -2883,8 +2883,8 @@ fn reduce_local_recurses_into_match_arm_body() {
     // After reduce: the match collapsed to Block([Expr(1 + 2)]). The arm body's
     // `1 + 2` is folded by the bottom-up walk but, under the scratch `BodySink`,
     // left in its operand slot — the fold is observable as the tail's lattice.
-    let ExprKind::Block(blk) = body.exprs[e].kind else {
-        panic!("expected Block, got {:?}", body.exprs[e].kind);
+    let ExprKind::LabeledBlock { block: blk, .. } = body.exprs[e].kind else {
+        panic!("expected a block, got {:?}", body.exprs[e].kind);
     };
     let s0 = body.blocks[blk].stmts[0];
     let StmtKind::Expr(tail) = body.stmts[s0].kind else {
@@ -3048,8 +3048,8 @@ fn match_or_pattern_no_match_no_unknowns_is_definite_no() {
     );
     let (changed, body, e) = reduce_local_into(&mut interp, &expr);
     assert!(changed);
-    let ExprKind::Block(blk) = body.exprs[e].kind else {
-        panic!("expected Block");
+    let ExprKind::LabeledBlock { block: blk, .. } = body.exprs[e].kind else {
+        panic!("expected a block");
     };
     let s0 = body.blocks[blk].stmts[0];
     let StmtKind::Expr(tail) = body.stmts[s0].kind else {
@@ -3672,10 +3672,12 @@ fn container_lit(type_id: TypeId, backing: Build, used: u64) -> Build {
 }
 
 /// The shape the lower phase emits for a source string: a container struct
-/// over a packed byte array plus its length.
-fn seq_lit(type_id: TypeId, bytes: Vec<u8>) -> Build {
+/// over a packed byte array plus its length. The backing carries the array
+/// type, which is what the exit reads the element type off.
+fn seq_lit(table: &mut TypeTable, type_id: TypeId, bytes: Vec<u8>) -> Build {
     let used = bytes.len() as u64;
-    container_lit(type_id, packed_array(bytes, type_id), used)
+    let array_ty = table.make_builtin_array(TypeTable::U8);
+    container_lit(type_id, packed_array(bytes, array_ty), used)
 }
 
 /// Register the container items `materialize_seq_via` identifies by, and the
@@ -3721,7 +3723,7 @@ fn a_constant_string_call_result_becomes_a_literal() {
         "greeting",
         vec![],
         string_ty,
-        return_stmt(seq_lit(string_ty, b"hi".to_vec())),
+        return_stmt(seq_lit(&mut table, string_ty, b"hi".to_vec())),
     );
     let callees = build_callee_map_test(std::slice::from_ref(&greeting));
 
@@ -3824,7 +3826,7 @@ fn a_write_does_not_reach_a_value_copied_out_before_it() {
         TypeTable::U8,
         &[("c", list_ty, true), ("d", list_ty, false)],
         vec![
-            let_mut_stmt_b("c", 0, list_ty, seq_lit(list_ty, vec![1, 2])),
+            let_mut_stmt_b("c", 0, list_ty, seq_lit(&mut table, list_ty, vec![1, 2])),
             let_stmt_b("d", 1, list_ty, local_expr(0, list_ty)),
             expr_stmt_b(seq_write_call(
                 set_id,
@@ -3886,7 +3888,7 @@ fn a_write_through_a_frame_owned_place_is_read_back() {
         vec![],
         TypeTable::U8,
         vec![
-            let_mut_stmt_b("c", 0, list_ty, seq_lit(list_ty, vec![0, 0])),
+            let_mut_stmt_b("c", 0, list_ty, seq_lit(&mut table, list_ty, vec![0, 0])),
             expr_stmt_b(seq_write_call(
                 set_id,
                 vec![
@@ -3989,7 +3991,7 @@ fn a_field_store_through_a_frame_owned_place_is_read_back() {
         vec![],
         TypeTable::I32,
         vec![
-            let_mut_stmt_b("c", 0, list_ty, seq_lit(list_ty, vec![5, 6])),
+            let_mut_stmt_b("c", 0, list_ty, seq_lit(&mut table, list_ty, vec![5, 6])),
             assign_stmt_b(used(), int_lit(1, TypeTable::I32, "1")),
             return_stmt(used()),
         ],
@@ -4020,7 +4022,7 @@ fn a_store_through_a_projection_that_is_not_a_place_is_refused() {
         vec![],
         TypeTable::I32,
         vec![
-            let_mut_stmt_b("c", 0, list_ty, seq_lit(list_ty, vec![5, 6])),
+            let_mut_stmt_b("c", 0, list_ty, seq_lit(&mut table, list_ty, vec![5, 6])),
             assign_stmt_b(
                 field_access(
                     index_expr(
@@ -4211,7 +4213,12 @@ fn a_copy_into_a_frame_owned_place_splices_the_source() {
         vec![],
         TypeTable::U8,
         vec![
-            let_mut_stmt_b("c", 0, list_ty, seq_lit(list_ty, vec![0, 0, 0, 0])),
+            let_mut_stmt_b(
+                "c",
+                0,
+                list_ty,
+                seq_lit(&mut table, list_ty, vec![0, 0, 0, 0]),
+            ),
             expr_stmt_b(seq_write_call(
                 copy_id,
                 vec![
@@ -4263,7 +4270,7 @@ fn a_copy_past_the_end_of_the_destination_is_refused() {
         vec![],
         TypeTable::U8,
         vec![
-            let_mut_stmt_b("c", 0, list_ty, seq_lit(list_ty, vec![0, 0])),
+            let_mut_stmt_b("c", 0, list_ty, seq_lit(&mut table, list_ty, vec![0, 0])),
             expr_stmt_b(seq_write_call(
                 copy_id,
                 vec![
@@ -4339,7 +4346,7 @@ fn a_call_writing_through_a_mut_ref_updates_the_caller_place() {
         vec![],
         TypeTable::I32,
         vec![
-            let_mut_stmt_b("c", 0, list_ty, seq_lit(list_ty, vec![5, 6])),
+            let_mut_stmt_b("c", 0, list_ty, seq_lit(&mut table, list_ty, vec![5, 6])),
             expr_stmt_b(call_expr_args(
                 &bump,
                 vec![(mut_ref(local_expr(0, list_ty), list_ty), true)],
@@ -4365,6 +4372,7 @@ fn a_call_writing_through_a_mut_ref_updates_the_caller_place() {
 /// paired with a caller passing `&mut c` and a second argument built over the
 /// same local, returning `c.used`.
 fn add_through_mut_ref_and_second_arg(
+    table: &mut TypeTable,
     list_ty: TypeId,
     second_param_ty: TypeId,
     second_arg: Build,
@@ -4392,7 +4400,7 @@ fn add_through_mut_ref_and_second_arg(
         vec![],
         TypeTable::I32,
         vec![
-            let_mut_stmt_b("c", 0, list_ty, seq_lit(list_ty, vec![5, 6])),
+            let_mut_stmt_b("c", 0, list_ty, seq_lit(table, list_ty, vec![5, 6])),
             expr_stmt_b(call_expr_args(
                 &add,
                 vec![
@@ -4417,6 +4425,7 @@ fn a_second_argument_naming_a_mut_ref_target_declines_the_call() {
     let list_ref_ty = table.make_ref(list_ty);
 
     let (add, caller) = add_through_mut_ref_and_second_arg(
+        &mut table,
         list_ty,
         list_ref_ty,
         shared_ref(local_expr(0, list_ty), list_ref_ty),
@@ -4456,7 +4465,7 @@ fn a_method_call_writes_back_through_its_receiver() {
         vec![],
         TypeTable::I32,
         vec![
-            let_mut_stmt_b("c", 0, list_ty, seq_lit(list_ty, vec![5, 6])),
+            let_mut_stmt_b("c", 0, list_ty, seq_lit(&mut table, list_ty, vec![5, 6])),
             expr_stmt_b(method_call_expr(&bump, local_expr(0, list_ty), Vec::new())),
             return_stmt(used_of_local(list_ty)),
         ],
@@ -4497,7 +4506,7 @@ fn a_mutating_call_outside_statement_position_is_not_run() {
         vec![],
         TypeTable::I32,
         vec![
-            let_mut_stmt_b("c", 0, list_ty, seq_lit(list_ty, vec![5, 6])),
+            let_mut_stmt_b("c", 0, list_ty, seq_lit(&mut table, list_ty, vec![5, 6])),
             return_stmt(binary(
                 NirBinaryOp::Add,
                 call_expr_args(
@@ -4538,7 +4547,7 @@ fn a_mutating_call_bound_by_a_let_writes_back() {
         vec![],
         TypeTable::I32,
         vec![
-            let_mut_stmt_b("c", 0, list_ty, seq_lit(list_ty, vec![5, 6])),
+            let_mut_stmt_b("c", 0, list_ty, seq_lit(&mut table, list_ty, vec![5, 6])),
             let_stmt_b(
                 "a",
                 1,
@@ -4612,7 +4621,7 @@ fn a_run_that_bails_part_way_writes_nothing() {
         vec![],
         TypeTable::I32,
         vec![
-            let_mut_stmt_b("c", 0, list_ty, seq_lit(list_ty, vec![5, 6])),
+            let_mut_stmt_b("c", 0, list_ty, seq_lit(&mut table, list_ty, vec![5, 6])),
             expr_stmt_b(call_expr_args(
                 &half,
                 vec![(mut_ref(local_expr(0, list_ty), list_ty), true)],
@@ -4739,7 +4748,7 @@ fn a_shared_receiver_leaves_the_container_trackable() {
         vec![],
         TypeTable::I32,
         vec![
-            let_mut_stmt_b("c", 0, list_ty, seq_lit(list_ty, vec![5, 6])),
+            let_mut_stmt_b("c", 0, list_ty, seq_lit(&mut table, list_ty, vec![5, 6])),
             expr_stmt_b(method_call_expr(&bump, local_expr(0, list_ty), Vec::new())),
             return_stmt(method_call_expr(&len, local_expr(0, list_ty), Vec::new())),
         ],
@@ -5112,7 +5121,11 @@ fn block_expr_assigning_local(local_index: u32, type_id: TypeId, value: Build) -
             stmts: vec![stmt],
             span: Span::default(),
         });
-        Operand::Expr(pe(b, ExprKind::Block(block), TypeTable::UNIT))
+        Operand::Expr(pe(
+            b,
+            ExprKind::plain_block(block, TypeTable::UNIT, "test"),
+            TypeTable::UNIT,
+        ))
     })
 }
 
@@ -7354,7 +7367,11 @@ fn if_with_identical_zero_arms_collapses() {
 fn block_expr_of(stmts: Vec<StmtBuild>, type_id: TypeId) -> Build {
     Rc::new(move |b| {
         let block = block_of(b, &stmts);
-        Operand::Expr(pe(b, ExprKind::Block(block), type_id))
+        Operand::Expr(pe(
+            b,
+            ExprKind::plain_block(block, type_id, "test"),
+            type_id,
+        ))
     })
 }
 
@@ -7430,7 +7447,7 @@ fn a_region_write_through_an_alias_lands_in_the_borrowed_local() {
     };
     let region = block_expr_of(
         vec![
-            let_mut_stmt_b("c", 0, list_ty, seq_lit(list_ty, vec![0, 0])),
+            let_mut_stmt_b("c", 0, list_ty, seq_lit(&mut table, list_ty, vec![0, 0])),
             let_stmt_b("p", 1, list_ty, mut_ref(local_expr(0, list_ty), list_ty)),
             expr_stmt_b(seq_write_call(
                 set_id,
@@ -7482,7 +7499,7 @@ fn a_region_writing_an_outer_local_is_refused() {
     let (mut body, e) = into_body_expr(&region);
     let lat = Interpreter::new(&table).reduce_to_lattice_full(&mut body, e);
     assert_eq!(lat, Lattice::Unevaluated);
-    assert_matches!(body.exprs[e].kind, ExprKind::Block(_));
+    assert_matches!(body.exprs[e].kind, ExprKind::LabeledBlock { .. });
 }
 
 #[test]
@@ -7570,7 +7587,7 @@ fn a_region_write_behind_a_cast_still_lands() {
     };
     let region = block_expr_of(
         vec![
-            let_mut_stmt_b("c", 0, list_ty, seq_lit(list_ty, vec![0, 0])),
+            let_mut_stmt_b("c", 0, list_ty, seq_lit(&mut table, list_ty, vec![0, 0])),
             expr_stmt_b(seq_write_call(
                 set_id,
                 vec![
@@ -7619,7 +7636,7 @@ fn an_alias_read_as_a_value_does_not_become_a_copy() {
 
     let region = block_expr_of(
         vec![
-            let_mut_stmt_b("c", 0, list_ty, seq_lit(list_ty, vec![0, 0])),
+            let_mut_stmt_b("c", 0, list_ty, seq_lit(&mut table, list_ty, vec![0, 0])),
             let_stmt_b("p", 1, list_ty, mut_ref(local_expr(0, list_ty), list_ty)),
             let_stmt_b("s", 2, list_ty, local_expr(1, list_ty)),
             expr_stmt_b(seq_write_call(
@@ -7689,7 +7706,7 @@ fn an_alias_captured_in_an_aggregate_is_not_a_constant() {
 
     let region = block_expr_of(
         vec![
-            let_mut_stmt_b("c", 0, list_ty, seq_lit(list_ty, vec![0, 0])),
+            let_mut_stmt_b("c", 0, list_ty, seq_lit(&mut table, list_ty, vec![0, 0])),
             let_stmt_b("p", 1, list_ty, mut_ref(local_expr(0, list_ty), list_ty)),
             let_stmt_b(
                 "h",
@@ -7758,7 +7775,7 @@ fn a_deref_read_binds_a_copy_not_the_place() {
 
     let region = block_expr_of(
         vec![
-            let_mut_stmt_b("c", 0, list_ty, seq_lit(list_ty, vec![0, 0])),
+            let_mut_stmt_b("c", 0, list_ty, seq_lit(&mut table, list_ty, vec![0, 0])),
             let_stmt_b("p", 1, list_ty, mut_ref(local_expr(0, list_ty), list_ty)),
             let_stmt_b(
                 "v",
@@ -7839,7 +7856,7 @@ fn a_unit_typed_region_does_not_fold_to_its_last_value() {
         !interp.reduce_local_in_body(&mut body, e),
         "a block yielding nothing has no value to stand in for it",
     );
-    assert_matches!(body.exprs[e].kind, ExprKind::Block(_));
+    assert_matches!(body.exprs[e].kind, ExprKind::LabeledBlock { .. });
 
     // The same region typed as what it computes still folds, so the refusal
     // above is about the unit position and not about the shape.

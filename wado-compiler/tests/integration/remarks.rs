@@ -60,12 +60,15 @@ fn surviving_list_copy_is_remarked() {
     // `b` is a deep value-copy of `a` that is then mutated, so the copy of the
     // backing array cannot be elided and survives to the final IR. The list
     // spine scalarizes away, leaving the array itself as what is copied.
+    //
+    // One opaque element, so the list is not a constant the engine writes back
+    // as a literal at each binding — which would leave no copy to remark on.
     let remarks = remarks_for(
         r#"
 use { println, Stdout } from "core:cli";
 
 export fn run() with Stdout {
-    let a: List<i32> = [1, 2, 3];
+    let a: List<i32> = [1, 2, builtin::black_box(3)];
     let mut b = a;
     b.push(4);
     println(`${a.len()} ${b.len()}`);
@@ -120,6 +123,9 @@ fn struct_field_copy_remark_points_at_copy_statement() {
     // inside a synthesized block whose inner statements carry placeholder
     // spans. The remark must anchor to the enclosing real statement
     // `let mut b = a;` (line 8), not to the inner statement's placeholder span.
+    //
+    // One opaque element, so the bag is not a constant the engine writes back
+    // as a literal at each binding — which would leave no copy to remark on.
     let remarks = remarks_for(
         r#"
 use { println, Stdout } from "core:cli";
@@ -127,7 +133,7 @@ use { println, Stdout } from "core:cli";
 struct Bag { items: List<i32> }
 
 export fn run() with Stdout {
-    let a = Bag { items: [1, 2, 3] };
+    let a = Bag { items: [1, 2, builtin::black_box(3)] };
     let mut b = a;
     b.items.push(4);
     println(`${a.items.len()} ${b.items.len()}`);
@@ -607,13 +613,12 @@ export fn run() with Stdout {
 }
 
 #[test]
-fn a_list_region_blames_no_call() {
-    // Inspecting the list needs the `List<T>` itself, which the engine cannot
-    // write back, so the fold stops on a value rather than on a body. No call on
-    // the inner region's path is to blame: `push` inlines away and what it
-    // leaves is `grow` on a cold path the frame never reaches. Naming that would
-    // send the reader after the wrong thing, so the remark says there is nothing
-    // to name.
+fn a_list_region_blames_the_inspect_formatter() {
+    // Inspecting the list needs the `List<T>` itself, which the engine now
+    // writes back, so what is left to blame is a body: the `Inspect` formatter
+    // the template still calls. `push` inlines away and what it leaves is
+    // `grow` on a cold path the frame never reaches, so naming that would send
+    // the reader after the wrong thing.
     //
     // `${table().len()}` would not do: the length is a scalar the engine
     // projects out of the list, so that whole template folds.
@@ -638,8 +643,8 @@ export fn run() with Stdout {
     );
 
     assert!(
-        remarks.iter().any(|r| r.contains("no call on its path")),
-        "expected the no-call cause, got {remarks:?}"
+        remarks.iter().any(|r| r.contains("write_seq_inspect")),
+        "expected the inspect formatter to be named, got {remarks:?}"
     );
     assert!(
         remarks.iter().all(|r| !r.contains("grow")),

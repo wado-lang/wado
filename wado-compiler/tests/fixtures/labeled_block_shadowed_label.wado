@@ -1,0 +1,28 @@
+// Test: a `break` names the nearest enclosing block wearing the label.
+//
+// Both blocks are called `outer`, so the inner one takes the `break` and only
+// its own tail is skipped. Every pass that asks "does some `break` in here name
+// my label" has to stop at a block that re-uses it, or it reads the inner
+// block's exit as its own and rewrites around a jump that never arrives.
+
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let mut acc = 0;
+    outer: {
+        acc = acc + 1;
+        outer: {
+            if builtin::black_box(true) {
+                break outer;
+            }
+            acc = acc + 100;
+        }
+        acc = acc + 10;
+    }
+    println(`${acc}`);
+}
+
+__DATA__
+{
+    "stdout": "11\n"
+}
