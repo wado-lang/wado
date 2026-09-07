@@ -3188,8 +3188,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         match table.get(ty) {
             ResolvedType::TypeParam { index, name }
             | ResolvedType::TypePack { index, name, .. } => {
-                u32::from(*index) < sig.declaring_slot_count
-                    && argument_only.contains(&name.as_str())
+                *index < sig.declaring_slot_count && argument_only.contains(&name.as_str())
             }
             // A slot the receiver never mentions is left unresolved by the decl
             // pass, so a blanket's parameter arrives as no type at all rather
