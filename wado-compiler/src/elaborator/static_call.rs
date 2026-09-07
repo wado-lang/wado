@@ -116,6 +116,10 @@ enum CandidateOrigin {
     Written,
     /// The block leaves the trait's default to answer.
     Inherited,
+    /// A value blanket (`impl<T: Bound> Trait for T`) covers the receiver
+    /// through its bound rather than naming it. Last, so anything written for
+    /// the receiver itself outranks it.
+    Blanket,
 }
 
 /// A diagnostic was emitted and the caller has nothing left to build.
@@ -274,6 +278,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             receiver_key,
             receiver_type,
         ));
+        candidates.extend(self.blanket_candidates(method_name, receiver_type));
         if let Some(required) = required_trait {
             candidates.retain(|c| c.supply.as_ref().is_some_and(|s| s.trait_decl == required));
         }
@@ -406,6 +411,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             Some(candidate.method_id),
         );
         match (candidate.origin, &candidate.supply) {
+            // A blanket's template is written against its receiver parameter,
+            // which no name at a call site reaches. The rules have done their
+            // part in picking it; instantiating it at the receiver, and
+            // mangling it as a blanket, is the blanket resolver's.
+            (CandidateOrigin::Blanket, _) => None,
             // An inherited method is declared nowhere but the trait, so that is
             // where its signature is read from — in the trait's frame, which
             // the block's arguments fill.
@@ -553,6 +563,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // A receiver-less declaration answers before a receiver-taking one, so
         // `Type::method(x)` is a static's call before it is a UFCS receiver.
         prefer(&mut candidates, |c| c.kind == CandidateKind::Static);
+        // A block naming the receiver answers before a blanket covering it
+        // through a bound, so a blanket is no alternative to report against.
+        // Before the ambiguity rule, or the trait a blanket names would be
+        // named as one.
+        prefer(&mut candidates, |c| c.origin != CandidateOrigin::Blanket);
         if let Some(alternatives) = self.ambiguous_alternatives(&candidates) {
             return Selection::Ambiguous(alternatives);
         }
@@ -675,6 +690,44 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         build,
                     ),
                 }
+            })
+            .collect()
+    }
+
+    /// Every value blanket (`impl<T: Bound> Trait for T`) whose bound the
+    /// receiver satisfies. Its bucket is keyed by the receiver *parameter*, so
+    /// the receiver's own never holds it and the rungs above miss it entirely.
+    ///
+    /// Its selector is `Blanket`: the template is written against a parameter,
+    /// and instantiating it at the receiver is the blanket resolver's, not a
+    /// candidate's. What the candidate is here for is the rules — which trait
+    /// supplies the name, and that anything written for the receiver itself
+    /// outranks a blanket covering it.
+    fn blanket_candidates(
+        &mut self,
+        method_name: &str,
+        receiver_type: Option<TypeId>,
+    ) -> Vec<Candidate> {
+        let Some(receiver_type) = receiver_type else {
+            return Vec::new();
+        };
+        self.applicable_blanket_statics(receiver_type, method_name)
+            .into_iter()
+            .filter_map(|blanket| {
+                let header = self.tysys.trait_env.impl_headers.get(&blanket.def)?;
+                let method_id = header.methods.iter().find(|m| m.name == method_name)?.def;
+                let trait_decl = self.tysys.signatures.impl_sig(blanket.def)?.trait_decl?;
+                Some(Candidate {
+                    supply: Some(TraitSupply {
+                        impl_def: blanket.def,
+                        trait_decl,
+                        trait_name: blanket.trait_name,
+                    }),
+                    method_id,
+                    kind: CandidateKind::Static,
+                    origin: CandidateOrigin::Blanket,
+                    selector: Selector::Blanket,
+                })
             })
             .collect()
     }

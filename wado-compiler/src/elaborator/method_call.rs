@@ -2600,12 +2600,26 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// The value blanket impl carrying a static `method_name` whose receiver
-    /// bounds `receiver_type_id` satisfies.
+    /// bounds `receiver_type_id` satisfies. Where several do, the resolution
+    /// has already ranked them and reported what no rule separates.
     pub(super) fn find_blanket_static_method(
         &mut self,
         receiver_type_id: TypeId,
         method_name: &str,
     ) -> Option<BlanketStatic> {
+        self.applicable_blanket_statics(receiver_type_id, method_name)
+            .into_iter()
+            .next()
+    }
+
+    /// Every value blanket supplying a static `method_name` that the receiver's
+    /// bounds admit, in the order the blocks were written. Facts only: which of
+    /// several answers is [`Elaborator::resolve_static_callee`]'s to decide.
+    pub(super) fn applicable_blanket_statics(
+        &mut self,
+        receiver_type_id: TypeId,
+        method_name: &str,
+    ) -> Vec<BlanketStatic> {
         let candidates: Vec<(BlanketStatic, Vec<super::trait_env::BlanketBound>)> = self
             .tysys
             .trait_env
@@ -2653,7 +2667,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         candidates
             .into_iter()
-            .find(|(_, bounds)| {
+            .filter(|(_, bounds)| {
                 bounds.iter().all(|bound| {
                     bound.decl_ref.is_some_and(|bound_def| {
                         self.tysys.type_implements_trait(
@@ -2666,6 +2680,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 })
             })
             .map(|(blanket, _)| blanket)
+            .collect()
     }
 
     /// Whether an impl block on `struct_name` itself declares `method_name`, of

@@ -238,6 +238,29 @@ solve. Filling the declaring slots a second time from the spelled turbofish is
 two answers for one call, and it is why no rung could be given the receiver's
 type until this was one answer.
 
+### A blanket is a candidate, ranked last
+
+A value blanket (`impl<T: Bound> Trait for T`) covers a receiver through its
+bound rather than naming it, and its statics are indexed under the receiver
+_parameter_, which no name at a call site reaches. It is a candidate all the
+same: what a rung produces is facts, and which of several answers is the rules'
+to decide.
+
+It ranks after everything written for the receiver itself, so a concrete impl
+wins by the rule rather than by which path ran first. Ranking happens before the
+ambiguity report, or a blanket the receiver's own declaration outranks would be
+named as an alternative to it.
+
+Two traits blanketing one receiver supply the name and separate nothing, so that
+is the same ambiguity two concrete impls raise. Running the blanket path as a
+fallback — only where the resolution answered nothing — is what let it take the
+first applicable blanket instead.
+
+Selecting a blanket is the rules'; instantiating one is not. The template is
+written against the receiver parameter, so the blanket resolver reads it and
+mangles it, and the candidate declines to build a callee. That is what
+`Selector::Blanket` already says for a blanket parameter.
+
 ### An inherited body is read in the trait's own frame
 
 The trait's frame numbers `Self` as slot 0 and the trait's own parameters after
@@ -321,19 +344,14 @@ receiver up front made a lookup mutate state on paths that never used it, and
 - [x] The selection: the three sites that located an impl and then looked its
       return type up separately now make one call, so the two cannot name
       different declarations.
-- [ ] The blanket path. `find_blanket_static_method` and the blanket arm of
-      `lookup_static_method_param_types_keyed` key on the blanket's receiver
-      _parameter_, which no name written at a call site reaches, and run as a
-      fallback after the resolution answers nothing rather than as a rung it
-      ranks. Finishing this means a value blanket is a candidate like any other,
-      outranked by a concrete impl by the origin rule rather than by call order.
-      The rung needs the receiver's `TypeId`, which the query now carries.
+- [x] The blanket path's selection: a value blanket is a candidate the rules
+      rank, and every spelling that reaches one asks the resolution first.
 
 Five of the sixteen names are gone outright. The rest no longer walk a ladder of
 their own: each reads the resolution's answer, or asks one rung through the
-shared `impl_method_entries` walk. The exception is the blanket path —
-`find_blanket_static_method` and `lookup_static_method_param_types_keyed` still
-walk rungs of their own, and that is the open roadmap item above.
+shared `impl_method_entries` walk. `find_blanket_static_method` and
+`lookup_static_method_param_types_keyed` still walk the blanket's own rungs, but
+they instantiate what the rules picked rather than picking it.
 
 ## Known gaps
 

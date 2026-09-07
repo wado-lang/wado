@@ -3021,6 +3021,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // `type_name` is the receiver spelling after `Self::` / `T::`
         // rewriting, which no source segment names.
         let receiver_ty = self.resolve_unsited_type_name(type_name, span);
+        // The rules first, since a blanket is a candidate among the rest: two
+        // traits blanketing one receiver supply the name and separate nothing,
+        // which is the ambiguity every other spelling of that shape reports.
+        let ranked = self.resolve_static_callee(StaticQuery {
+            arg_types: args,
+            receiver_type: Some(receiver_ty),
+            ..StaticQuery::of(type_name, method)
+        });
+        if self.report_ambiguous_static(&ranked, method, span) {
+            return Some(TypeTable::ERROR);
+        }
         // The blanket would key on the argument-less head, which carries no
         // layout (a generic variant never becomes its own declaration, WEP
         // 2026-02-09) and reaches WIR build unregistered.
