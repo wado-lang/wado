@@ -2575,7 +2575,6 @@ fn rebind_scan_repeat_caller_follow(
                     decline_cont_first = suffix_first;
                     decline_scan = scan;
                     decline_viable = ctx.rule_follow_for_probe(rule_name);
-                    ctx.mark_rule_reads_follow();
                 }
             }
         }
@@ -4464,7 +4463,11 @@ fn patch_repeat_op_caller_follow(
         decline_cont_first = ctx.first_of_elements_from(alt_elements, index + 1);
         decline_scan = scan;
         decline_viable = ctx.rule_follow_for_probe(rule_name);
-        ctx.mark_rule_reads_follow();
+        // No `mark_rule_reads_follow`: this guard asks the rule's classical
+        // FOLLOW, which is a superset of anything a caller's mask admits, so the
+        // runtime mask would decide nothing here. Marking it would thread a
+        // `follow` parameter through every caller of every rule that carries a
+        // loop like this — 6000 lines of SQLite's parser, for no answer.
     }
     return RepeatOp {
         ..*rep_op,

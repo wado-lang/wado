@@ -1652,7 +1652,7 @@ fn scan_fields(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
         let dk_2 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-        if !(dk_2 == TK_COMMA || dk_2 == TK_COMMA || follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
+        if !(dk_2 == TK_COMMA || dk_2 == TK_COMMA) {
             let dc_2 = pos;
             let mut dc_2_exit = false;
             pos = sp;
@@ -1811,7 +1811,7 @@ fn _parse_fields__inner(p: &mut Parser, follow: i64 = 0) -> () {
         }
         if rep_scan_pos >= 0 {
             let decline_kind = if rep_scan_pos < p.kinds.len() { p.kinds[rep_scan_pos] } else { TK_EOF };
-            if !(decline_kind == TK_COMMA || decline_kind == TK_COMMA || follow_yields(&p.kinds, rep_scan_pos, follow, &FOLLOW_SETS, TK_EOF)) {
+            if !(decline_kind == TK_COMMA || decline_kind == TK_COMMA) {
                 let mut decline_dead: bool = false;
                 decline_scan: {
                     let tokens = &p.kinds;

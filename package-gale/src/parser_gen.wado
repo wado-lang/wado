@@ -2085,11 +2085,7 @@ fn gen_scan_decline_stranded(w: &mut CodeWriter, re: &ScanRepeatElement, ctx: &m
     let can_continue = join_or(&[
         kind_check_or_none(&admits_kinds(&re.inner_admits), &`dk_${gc}`, ctx),
         kind_check_or_none(&re.decline_cont_first, &`dk_${gc}`, ctx),
-        kind_check_or_none(&re.decline_viable, &`dk_${gc}`, ctx), if ctx.current_rule_reads_follow() {
-            follow_yields_call(&"tokens", &"pos");
-        } else {
-            String::new();
-        },
+        kind_check_or_none(&re.decline_viable, &`dk_${gc}`, ctx),
     ]);
     w.begin(&`if !(${can_continue})`);
     w.line(&`let dc_${gc} = pos;`);
@@ -6149,11 +6145,7 @@ fn gen_rep_decline_stranded(
     let can_continue = join_or(&[
         kind_check_or_none(&admits_kinds(&rep_op.body_admits), &cont_kind, ctx),
         kind_check_or_none(&rep_op.decline_cont_first, &cont_kind, ctx),
-        kind_check_or_none(&rep_op.decline_viable, &cont_kind, ctx), if ctx.current_rule_reads_follow() {
-            follow_yields_call(&"&p.kinds", scan_pos);
-        } else {
-            String::new();
-        },
+        kind_check_or_none(&rep_op.decline_viable, &cont_kind, ctx),
     ]);
     w.begin(&`if !(${can_continue})`);
     w.line(&`let mut ${dead_end}: bool = false;`);

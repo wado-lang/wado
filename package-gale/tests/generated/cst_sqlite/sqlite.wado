@@ -3069,7 +3069,7 @@ fn scan_sql_stmt_list(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
         let dk_2 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-        if !(dk_2 == TK_SCOL || dk_2 == TK_SCOL || _kind_set_38(dk_2) || follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
+        if !(dk_2 == TK_SCOL || dk_2 == TK_SCOL || _kind_set_38(dk_2)) {
             let dc_2 = pos;
             let mut dc_2_exit = false;
             pos = sp;
@@ -9209,7 +9209,7 @@ fn _parse_sql_stmt_list__inner(p: &mut Parser, follow: i64 = 0) -> () {
         }
         if rep_scan_pos_2 >= 0 {
             let decline_kind = if rep_scan_pos_2 < p.kinds.len() { p.kinds[rep_scan_pos_2] } else { TK_EOF };
-            if !(decline_kind == TK_SCOL || decline_kind == TK_SCOL || _kind_set_38(decline_kind) || follow_yields(&p.kinds, rep_scan_pos_2, follow, &FOLLOW_SETS, TK_EOF)) {
+            if !(decline_kind == TK_SCOL || decline_kind == TK_SCOL || _kind_set_38(decline_kind)) {
                 let mut decline_dead: bool = false;
                 decline_scan: {
                     let tokens = &p.kinds;
