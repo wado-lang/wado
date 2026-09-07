@@ -1518,14 +1518,20 @@ impl Body {
         }
     }
 
+    /// Whether `s` takes control elsewhere, so nothing after it runs.
+    pub fn terminates(&self, s: StmtId) -> bool {
+        matches!(
+            self.stmts[s].kind,
+            StmtKind::Break { .. } | StmtKind::Return { .. } | StmtKind::Continue
+        )
+    }
+
     /// Whether `block` can reach its end and produce a value there.
     pub fn falls_through(&self, block: BlockId) -> bool {
-        !self.blocks[block].stmts.last().is_some_and(|s| {
-            matches!(
-                self.stmts[*s].kind,
-                StmtKind::Break { .. } | StmtKind::Return { .. } | StmtKind::Continue
-            )
-        })
+        !self.blocks[block]
+            .stmts
+            .last()
+            .is_some_and(|s| self.terminates(*s))
     }
 
     /// Every point that produces the value of the labeled block at `e`: what

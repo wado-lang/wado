@@ -343,9 +343,10 @@ fn const_seq_len(body: &Body, e: ExprId) -> Option<i32> {
             // binding. If that binding is non-const, the length is unknown —
             // scanning past it to an earlier const `let` would return a stale
             // length for a value the nearest binding already replaced.
-            let nearest = rest.iter().rev().find(|&&s| {
-                matches!(&body.stmts[s].kind, StmtKind::Let { local_index, .. } if *local_index == index)
-            })?;
+            let nearest = rest
+                .iter()
+                .rev()
+                .find(|&&s| body.binds_local(NodeRef::Stmt(s), index))?;
             let StmtKind::Let { value, .. } = &body.stmts[*nearest].kind else {
                 unreachable!("`nearest` matched a `let` of `index` above")
             };

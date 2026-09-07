@@ -248,11 +248,13 @@ impl Interpreter<'_> {
             return None;
         }
         match value {
-            Value::Aggregate { type_id, .. } if self.type_table.is_seq_container(*type_id) => {
-                self.write_container(sink, existing, value, *type_id, ty, span)
-            }
             Value::Aggregate { type_id, fields } => {
-                self.write_aggregate(sink, existing, fields, *type_id, ty, span)
+                match container_backing(value, *type_id, self.type_table) {
+                    Some(backing) => {
+                        self.write_container(sink, existing, backing, *type_id, ty, span)
+                    }
+                    None => self.write_aggregate(sink, existing, fields, *type_id, ty, span),
+                }
             }
             Value::Seq { type_id, elements } => {
                 self.write_seq(sink, existing, elements, *type_id, ty, span)
@@ -292,7 +294,7 @@ impl Interpreter<'_> {
         &self,
         sink: &mut S,
         existing: Option<Operand>,
-        value: &Value,
+        backing: (&Value, TypeId, &[Value]),
         type_id: TypeId,
         ty: TypeId,
         span: crate::token::Span,
@@ -300,8 +302,7 @@ impl Interpreter<'_> {
         if ty != type_id {
             return None;
         }
-        let (backing_type, live) = container_backing(value, type_id, self.type_table)?;
-        let length = value.field(SeqField::Len.index())?;
+        let (length, backing_type, live) = backing;
         // An empty container carries nothing, so a literal over one can only
         // trade a buffer for a smaller buffer — and an opened buffer is exactly
         // what the region about to fill it is holding.
@@ -1203,7 +1204,7 @@ fn charge_leaves(value: &Value, type_table: &TypeTable, budget: &mut usize) -> O
             // and its backing array beside the struct above, and the backing cut
             // to that length. Capacity is never written, so a barely-filled
             // buffer must not be priced by how big it was opened.
-            if let Some((backing_type, live)) = container_backing(value, *type_id, type_table) {
+            if let Some((_, backing_type, live)) = container_backing(value, *type_id, type_table) {
                 *budget = budget.checked_sub(2)?;
                 return charge_elements(backing_type, live, type_table, budget);
             }
@@ -1241,8 +1242,8 @@ fn charge_elements(
     Some(())
 }
 
-/// A sequence container's backing type and the elements its length keeps.
-/// Capacity past the length is not observable, so nothing writes or prices it.
+/// A sequence container's length, its backing type, and the elements the length
+/// keeps. Capacity past it is not observable, so nothing writes or prices it.
 /// `None` for anything else, which is a plain aggregate.
 ///
 /// `Value::Int` holds the sign-extended bit pattern, so a negative length reads
@@ -1251,11 +1252,12 @@ fn container_backing<'v>(
     value: &'v Value,
     type_id: TypeId,
     type_table: &TypeTable,
-) -> Option<(TypeId, &'v [Value])> {
+) -> Option<(&'v Value, TypeId, &'v [Value])> {
     if !type_table.is_seq_container(type_id) {
         return None;
     }
-    let (used, PrimitiveType::I32) = value.field(SeqField::Len.index())?.as_int()? else {
+    let length = value.field(SeqField::Len.index())?;
+    let (used, PrimitiveType::I32) = length.as_int()? else {
         return None;
     };
     let Value::Seq {
@@ -1266,6 +1268,7 @@ fn container_backing<'v>(
         return None;
     };
     Some((
+        length,
         *backing,
         elements.get(..usize::try_from(used as i32).ok()?)?,
     ))

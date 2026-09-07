@@ -1401,13 +1401,7 @@ fn transform_lb_stmt(engine: &mut Engine, s: StmtId, f: &Fusion, out: &mut Vec<S
 
         // Emit `break fused_label;` unless the last emitted statement already
         // terminates control flow.
-        let last_terminates = out.last().is_some_and(|s| {
-            matches!(
-                engine.body.stmts[*s].kind,
-                StmtKind::Break { .. } | StmtKind::Return { .. } | StmtKind::Continue
-            )
-        });
-        if !last_terminates {
+        if !out.last().is_some_and(|s| engine.body.terminates(*s)) {
             let brk = engine.alloc_stmt(
                 StmtKind::Break {
                     label: Some(f.fused_label.to_owned()),
@@ -2024,10 +2018,7 @@ fn arm_body_decomposable(body: &Body, e: ExprId) -> bool {
     let Some(last) = body.blocks[b].stmts.last() else {
         return false;
     };
-    matches!(
-        body.stmts[*last].kind,
-        StmtKind::Expr(_) | StmtKind::Break { .. } | StmtKind::Return { .. } | StmtKind::Continue
-    )
+    matches!(body.stmts[*last].kind, StmtKind::Expr(_)) || body.terminates(*last)
 }
 
 /// [`ExitSink`] for threading: resolves each `break L:` exit to the arm it
