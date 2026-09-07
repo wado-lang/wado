@@ -7,7 +7,9 @@ use crate::ast;
 use crate::compiler_host::CompilerHost;
 use crate::defs::DefId;
 use crate::module_source::ModuleSource;
+use crate::name::FqTraitName;
 use crate::tir::{TypeId, TypeTable};
+use crate::token::Span;
 
 use super::Elaborator;
 use super::callee::StaticMethodRef;
@@ -275,8 +277,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // scope to resolve, and this is the one rung whose frame needs it.
             let receiver_type = receiver_type.or_else(|| {
                 let mut scope = self.enter_inherited_type_param_scope();
-                let resolved =
-                    scope.resolve_unsited_type_name(receiver_name, crate::token::Span::default());
+                let resolved = scope.resolve_unsited_type_name(receiver_name, Span::default());
                 drop(scope);
                 Some(resolved)
             });
@@ -315,7 +316,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 Some(def) if self.tysys.signatures.method_sig(def).is_none() => method_ref
                     .trait_name
                     .as_ref()
-                    .and_then(crate::name::FqTraitName::canonical)
+                    .and_then(FqTraitName::canonical)
                     .and_then(|decl| {
                         let module = method_ref.module.clone();
                         // The selection's own trait reference, not one re-minted
@@ -365,7 +366,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         trait_decl: DefId,
         module: ModuleSource,
         receiver_type: Option<TypeId>,
-        trait_name: Option<crate::name::FqTraitName>,
+        trait_name: Option<FqTraitName>,
     ) -> Option<StaticCallee> {
         let declaring = self.tysys.signatures.trait_sig(trait_decl)?;
         let sig = declaring.method(method_name)?.sig.clone();

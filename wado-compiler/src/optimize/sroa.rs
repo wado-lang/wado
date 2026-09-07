@@ -11,7 +11,7 @@ use cranelift_entity::EntityRef;
 use super::arena_query::strip_one_value_copy;
 use super::gate::{FunctionGate, GatedPass};
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::nir::NirFunction;
+use crate::nir::{FuncId, NirFunction};
 use crate::nir_arena::{
     ArenaStructField, BlockId, Body, ExprId, ExprKind, NodeRef, Operand, StmtId, StmtKind,
 };
@@ -21,7 +21,7 @@ use crate::tir::TypeId;
 use crate::token::Span;
 
 /// Maps a callee → the set of its parameter indices that have `stores` declared.
-type StoresLookup = IndexMap<crate::nir::FuncId, IndexSet<usize>>;
+type StoresLookup = IndexMap<FuncId, IndexSet<usize>>;
 
 /// Information about a struct/tuple local that may be decomposable.
 struct SroaCandidate {
@@ -104,7 +104,7 @@ pub(super) struct SroaRule<'a> {
     /// (`g($value_copy$S(s))`, `return $value_copy$S(s)`) is reconstructible: the
     /// soft-escape walk peels the wrapper and treats the inner bare local as a
     /// soft position.
-    value_copy_ids: &'a IndexSet<crate::nir::FuncId>,
+    value_copy_ids: &'a IndexSet<FuncId>,
     /// Snapshot of `func.stores_aliased_locals` at session start. Used as a
     /// blacklist when picking candidates so a local that the existing alias
     /// analysis already flagged is never decomposed.
@@ -534,7 +534,7 @@ fn find_soft_escaped_locals(
     candidates: &[SroaCandidate],
     uses: &CandidateUses,
     stores_lookup: &StoresLookup,
-    value_copy_ids: &IndexSet<crate::nir::FuncId>,
+    value_copy_ids: &IndexSet<FuncId>,
 ) -> IndexSet<u32> {
     let escaped_candidates: IndexSet<u32> = candidates
         .iter()
@@ -564,7 +564,7 @@ fn find_soft_escaped_locals(
 struct SoftCtx<'a> {
     candidates: &'a IndexSet<u32>,
     stores_lookup: &'a StoresLookup,
-    value_copy_ids: &'a IndexSet<crate::nir::FuncId>,
+    value_copy_ids: &'a IndexSet<FuncId>,
 }
 
 impl SoftCtx<'_> {
@@ -656,7 +656,7 @@ impl SoftCtx<'_> {
 }
 
 fn callee_stores_param_at(
-    func_id: crate::nir::FuncId,
+    func_id: FuncId,
     param_index: usize,
     stores_lookup: &StoresLookup,
 ) -> bool {

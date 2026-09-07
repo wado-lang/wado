@@ -15,6 +15,7 @@ use crate::nir_arena::{
     ArmData, BlockId, BlockNode, Body, ExprId, ExprKind, ExprNode, NodeRef, Operand, PatId,
     PatKind, PatNode, StmtId, StmtKind, StmtNode,
 };
+use crate::nir_value_graph::ValueId;
 use crate::tir::TypeId;
 use crate::token::Span;
 
@@ -24,8 +25,8 @@ use crate::token::Span;
 /// numbering, the only one they compare in.
 #[derive(Default)]
 pub struct FieldValues {
-    pub reads: Vec<(ExprId, crate::nir_value_graph::ValueId)>,
-    walk_version: IndexMap<crate::nir_value_graph::ValueId, crate::nir_value_graph::HeapVersion>,
+    pub reads: Vec<(ExprId, ValueId)>,
+    walk_version: IndexMap<ValueId, crate::nir_value_graph::HeapVersion>,
     stmt_entry_version: IndexMap<StmtId, crate::nir_value_graph::HeapVersion>,
 }
 
@@ -33,7 +34,7 @@ impl FieldValues {
     /// Whether pinning `rep`'s load before `stmt` still reads what its uses
     /// read — false when a mutation earlier in that statement wrote the slot.
     /// Unknown is refused.
-    pub fn pinnable_before(&self, rep: crate::nir_value_graph::ValueId, stmt: StmtId) -> bool {
+    pub fn pinnable_before(&self, rep: ValueId, stmt: StmtId) -> bool {
         match (
             self.walk_version.get(&rep),
             self.stmt_entry_version.get(&stmt),
@@ -406,7 +407,7 @@ impl<'a> Engine<'a> {
     /// (`Engine::maintain_pure_node`), a direct arena edit coarsens the region
     /// it touched, and a caller needing the reaching values regrows them into a
     /// scratch pool ([`Engine::scoped_const_reads`]).
-    pub fn value(&mut self, expr: ExprId) -> Option<crate::nir_value_graph::ValueId> {
+    pub fn value(&mut self, expr: ExprId) -> Option<ValueId> {
         self.ensure_value_graph();
         // There is no skeleton-expr → value side-table. An expr's value comes
         // only from promoted operands (born-as-operands) and pure re-derivation
@@ -421,7 +422,7 @@ impl<'a> Engine<'a> {
     /// a stable parameter; every other kind, and any unresolved operand, gives
     /// `None`. The parameter base case is load-bearing: without it only
     /// all-constant trees resolve and no promoted value can name a local.
-    fn maintain_pure_node(&mut self, expr: ExprId) -> Option<crate::nir_value_graph::ValueId> {
+    fn maintain_pure_node(&mut self, expr: ExprId) -> Option<ValueId> {
         self.body.value_graph.as_ref()?;
         let kind = self.body.exprs[expr].kind.clone();
         let result_ty = self.body.exprs[expr].type_id;
@@ -461,9 +462,9 @@ impl<'a> Engine<'a> {
         Some(v)
     }
 
-    /// The [`ValueId`](crate::nir_value_graph::ValueId) of an operand: the
+    /// The [`ValueId`](ValueId) of an operand: the
     /// promoted value directly, or the skeleton expr's value from the graph.
-    pub fn operand_value(&mut self, op: Operand) -> Option<crate::nir_value_graph::ValueId> {
+    pub fn operand_value(&mut self, op: Operand) -> Option<ValueId> {
         match op {
             Operand::Value(v) => Some(v),
             Operand::Expr(e) => self.value(e),
@@ -473,10 +474,7 @@ impl<'a> Engine<'a> {
     /// Read-only view of a value's kind. The returned reference borrows the
     /// engine's value-graph cache; callers that need to hold the kind across
     /// further `engine` calls should clone it.
-    pub fn value_kind(
-        &mut self,
-        id: crate::nir_value_graph::ValueId,
-    ) -> &crate::nir_value_graph::ValueKind {
+    pub fn value_kind(&mut self, id: ValueId) -> &crate::nir_value_graph::ValueKind {
         self.ensure_value_graph();
         self.body.values.kind(id)
     }
@@ -488,11 +486,7 @@ impl<'a> Engine<'a> {
     /// may move a pure expression to the pre-header exactly when each of
     /// its `Local` leaves' use-site value equals this pre-header value —
     /// see `ValueGraphBuild::loop_entry_values`.
-    pub fn loop_entry_value(
-        &mut self,
-        loop_body: BlockId,
-        local: u32,
-    ) -> Option<crate::nir_value_graph::ValueId> {
+    pub fn loop_entry_value(&mut self, loop_body: BlockId, local: u32) -> Option<ValueId> {
         self.ensure_value_graph();
         self.body
             .value_graph
@@ -512,7 +506,7 @@ impl<'a> Engine<'a> {
         &mut self,
         forwardable: &IndexSet<u32>,
         include_fields: bool,
-    ) -> Vec<(ExprId, crate::nir_value_graph::ValueId)> {
+    ) -> Vec<(ExprId, ValueId)> {
         use crate::nir_value_graph::builder;
         // Only grow an already-built graph: building it here would use this
         // session's alias config, which is sound only when the caller has set the
@@ -620,7 +614,7 @@ impl<'a> Engine<'a> {
         );
         // Collected before any live-pool mutation: `local_has_one_version`
         // borrows the engine.
-        let mut classes: Vec<(ExprId, crate::nir_value_graph::ValueId, u32, u32)> = Vec::new();
+        let mut classes: Vec<(ExprId, ValueId, u32, u32)> = Vec::new();
         for (e, sv) in scoped.values {
             if !matches!(self.body.exprs[e].kind, ExprKind::FieldAccess { .. }) {
                 continue;
@@ -652,8 +646,7 @@ impl<'a> Engine<'a> {
             stmt_entry_version: scoped.stmt_entry_version,
             ..FieldValues::default()
         };
-        let mut minted: IndexMap<crate::nir_value_graph::ValueId, crate::nir_value_graph::ValueId> =
-            IndexMap::default();
+        let mut minted: IndexMap<ValueId, ValueId> = IndexMap::default();
         let mut next_ver = self.body.values.max_heap_version().bump();
         for (e, sv, local, field_index) in classes {
             if !self.local_has_one_version(local) {
@@ -1142,12 +1135,7 @@ impl<'a> Engine<'a> {
     ///
     /// One slot per call (see [`Body::replace_value_operand_once`]); loop until
     /// it returns `false` to cover a node that holds `from` twice.
-    pub fn redirect_value_operand(
-        &mut self,
-        node: NodeRef,
-        from: crate::nir_value_graph::ValueId,
-        new: Operand,
-    ) -> bool {
+    pub fn redirect_value_operand(&mut self, node: NodeRef, from: ValueId, new: Operand) -> bool {
         if !self.body.replace_value_operand_once(node, from, new) {
             return false;
         }
