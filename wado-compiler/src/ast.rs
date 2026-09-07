@@ -1301,8 +1301,11 @@ impl AttrArg {
     pub fn call_args(&self) -> &[String] {
         match self {
             Self::Call(_, args) => args,
-            Self::Str(_) | Self::Ident(_) | Self::Number(_) => &[],
-            Self::KeyValue(..) | Self::KeyArray(..) => &[],
+            Self::Str(_)
+            | Self::Ident(_)
+            | Self::Number(_)
+            | Self::KeyValue(..)
+            | Self::KeyArray(..) => &[],
         }
     }
 }

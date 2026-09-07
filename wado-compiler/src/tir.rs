@@ -5753,8 +5753,8 @@ pub struct TirFunction {
     /// Allocator tag from `#[allocator("...")]` attribute (e.g., `"bump"`, `"debug"`).
     pub allocator_tag: Option<String>,
 
-    /// Return convention declared by `#[returns(...)]`. Only a declaration with
-    /// no body carries one: a body is inferred from instead.
+    /// What `#[returns(...)]` declared. Read only where there is no body to
+    /// infer from, so one written on a body is recorded and ignored.
     pub declared_return_convention: Option<ReturnConvention>,
 
     /// Categorizes the function for kind-specific optimizations. Most functions

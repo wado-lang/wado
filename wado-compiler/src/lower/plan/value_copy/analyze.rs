@@ -21,10 +21,7 @@ use crate::tir_visitor::TirRefVisitor;
 /// routes through the same helper.
 ///
 /// Runs before the return-convention fixpoint, so no body function is known
-/// owned yet. That over-collects seed types — a helper the precise fold never
-/// calls is dead-code-eliminated — but never misses one. The builtin
-/// conventions are the real ones: they are declared, not inferred, and reading
-/// an empty set instead would take every builtin for fresh, which under-collects.
+/// owned yet. A seed the precise fold never calls is dead-code-eliminated.
 pub fn collect_seed_types(
     project: &FlatPackage,
     builtins: &BuiltinConventions,
@@ -32,6 +29,9 @@ pub fn collect_seed_types(
     let type_table = project.type_table.borrow();
     let no_owned = FuncKeySet::default();
     let no_self_proj = FuncKeySet::default();
+    // The builtin conventions must be the real ones even here: they are
+    // declared rather than inferred, and an empty set reads every builtin as
+    // fresh, which misses the seed a borrowed one needs.
     let oracle = OwnedCalls::new(&no_owned, &no_self_proj, builtins);
     let mut walker = SeedWalker {
         type_table: &type_table,

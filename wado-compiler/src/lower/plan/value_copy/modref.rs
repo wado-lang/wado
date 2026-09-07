@@ -206,6 +206,7 @@ fn scan(
     let mut walker = Walker {
         type_table,
         defined,
+        builtins,
         resolver: &resolver,
         writes: Writes::default(),
         callees: Vec::new(),
@@ -218,6 +219,7 @@ fn scan(
 struct Walker<'a> {
     type_table: &'a TypeTable,
     defined: &'a FuncKeySet,
+    builtins: &'a BuiltinConventions,
     resolver: &'a Resolver<'a>,
     writes: Writes,
     callees: Vec<(ModuleSource, String)>,
@@ -364,8 +366,8 @@ impl TirRefVisitor for Walker<'_> {
                     self.callees
                         .push((func.module_source.clone(), func.name.clone()));
                 }
-                let aliases_only = func.module_source.is_core_builtin()
-                    && self.resolver.builtin_part_of(func).is_some();
+                let aliases_only =
+                    func.module_source.is_core_builtin() && self.builtins.part_of(func).is_some();
                 if !aliases_only {
                     for arg in args
                         .iter()

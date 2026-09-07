@@ -7,8 +7,8 @@ use super::needs_value_copy;
 use super::ownership::BuiltinConventions;
 use crate::hashmap::IndexMap;
 use crate::tir::{
-    FunctionRef, ResolvedType, TirExpr, TirExprKind, TirFunction, TirPattern, TirStmt, TirStmtKind,
-    TirUnaryOp, TypeId, TypeTable,
+    ResolvedType, TirExpr, TirExprKind, TirFunction, TirPattern, TirStmt, TirStmtKind, TirUnaryOp,
+    TypeId, TypeTable,
 };
 use crate::tir_visitor::TirRefVisitor;
 
@@ -261,13 +261,6 @@ impl<'a> Resolver<'a> {
     #[must_use]
     pub fn lent(&self, local: u32) -> Option<TypeId> {
         self.lent.get(&local).copied()
-    }
-
-    /// The parameter a `core:builtin` call hands its result out of, from that
-    /// builtin's `#[returns(part_of(p))]`.
-    #[must_use]
-    pub fn builtin_part_of(&self, func: &FunctionRef) -> Option<usize> {
-        self.builtins.part_of(func)
     }
 
     /// What `expr` names. Total over the expression kinds: a shape with no arm

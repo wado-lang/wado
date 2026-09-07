@@ -260,9 +260,9 @@ fn is_receiver_projection(
 }
 
 /// The two return conventions, component by component. Seeds the callees that
-/// have no body to settle — a value-copy helper clones, a builtin allocates
-/// unless it is a container-alias read, and a bodyless declaration may declare
-/// `#[returns(owned)]` — then settles each strongly connected component of the
+/// have no body to settle — a value-copy helper clones, a declaration says
+/// `#[returns(owned)]`, and a builtin that cannot hand storage out allocates —
+/// then settles each strongly connected component of the
 /// call graph with its callees already decided: a body function is owned when
 /// every value it returns is owned, and self-projecting when every value it
 /// returns is owned *or* a projection of its first parameter (`return *self`).

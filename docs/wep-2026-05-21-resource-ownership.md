@@ -241,16 +241,16 @@ where it cannot prove move / share / fresh; no elision pass):
 - Freshness — `ownership.rs` return conventions (a call is fresh iff the callee
   returns owned), plus the literals that materialize their own storage: a string
   _and_ a bytes literal, both of which lower to a fresh aggregate over a packed
-  array. Where a result comes from is one fact with two spellings: a body is
-  read for it, and a `core:builtin` declares it. `#[returns(owned)]` says the
-  result is a fresh place, `#[returns(part_of(p))]` that it names a component of
-  parameter `p`. The declaration is mandatory — link asserts that a bodyless
-  `core:builtin` reading through a reference and returning storage carries one —
-  so silence means "allocates" rather than "guess". Only a reference argument
-  can carry storage out, since a by-value one is copied at the call, which is
-  what makes the obligation checkable from the signature alone. Link snapshots
-  the declarations because monomorphization drops the generic and materializes
-  an instance only for the few a later phase rewrites.
+  array. Where a result comes from is one fact: a body is read for it, a
+  `core:builtin` declares it. `#[returns(owned)]` says the result is a fresh
+  place; `#[returns(part_of(p))]` says it names a component of parameter `p`.
+  The declaration is mandatory. Link asserts that a bodyless `core:builtin`
+  reading through a reference and returning storage carries one, so silence
+  means "allocates" rather than "guess". The obligation is checkable from the
+  signature because only a reference argument can carry storage out: a by-value
+  one is copied at the call. Link also snapshots what it read, since
+  monomorphization drops the generic declarations and materializes an instance
+  only for the few a later phase rewrites.
   An _indirect_ call is fresh when every closure `__call` of its
   return type returns owned: closure lowering rewrites every callable value —
   a closure literal and a bare `FuncRef` alike — into a functor whose `__call`
@@ -595,11 +595,11 @@ Verified against the tree.
       parameter's own storage; a path leaving through a `&` field lands where the
       caller cannot follow.
 
-      The path records _which_ parameter, not just the selectors, because an
-      accessor need not hand out its receiver: `StructField::get(&self, v: &T)`
-      returns a field of `v`. Reading every path as the receiver's drops those,
-      and a dropped path is an unnameable place — so `core:serde` deep-copied
-      every field of every value it serialized.
+      The path records _which_ parameter, not just the selectors. An accessor
+      need not hand out its receiver: `StructField::get(&self, v: &T)` returns a
+      field of `v`. Reading every path as the receiver's drops those, and a
+      dropped path leaves a place nothing can name. That is what made
+      `core:serde` deep-copy every field of every value it serialized.
 
       Whether a place is reached through a borrow is decided by the walk that
       resolves it, never re-derived from an expression's syntax. The walk
@@ -622,14 +622,14 @@ Verified against the tree.
       value pays it.
 
 - [ ] Say which by-value argument a builtin stores into a `&mut` one.
-      `confine::raise_builtin_sides` infers it — every by-value aggregate leaks
-      once any `&mut` operand is present — which is exact over `array_set`,
-      `array_fill` and `array_copy`, the whole population, and silently wrong for
-      a builtin added later. Closing it means a declaration, as the result's
-      origin has. The obligation cannot be checked the same way: a builtin that
-      stores and one that does not have the same signature, so no predicate says
-      where silence is wrong, and silence here is unsound rather than merely
-      pessimistic.
+      `confine::raise_builtin_sides` infers it instead: every by-value aggregate
+      leaks once any `&mut` operand is present. That is exact over `array_set`,
+      `array_fill` and `array_copy`, which is the whole population, and silently
+      wrong for a builtin added later. Closing it means a declaration, as the
+      result's origin has. The obligation cannot be checked the same way. A
+      builtin that stores and one that does not have the same signature, so no
+      predicate says where silence is wrong, and silence here is unsound rather
+      than merely pessimistic.
 
 ## Deferred: the `move` and `unique` keywords
 
