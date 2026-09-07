@@ -2,6 +2,7 @@
 //! carrying them. A callee this analysis cannot read through writes everything.
 
 use super::funcset::{FuncKeyMap, FuncKeySet};
+use super::ownership::BuiltinConventions;
 use super::place::{Names, Resolver, ReturnPaths, Selector, could_write_through, field_owner};
 use crate::flat_package::FlatPackage;
 use crate::hashmap::IndexSet;
@@ -102,6 +103,7 @@ pub fn compute_mod_ref(
     flat: &FlatPackage,
     return_paths: &ReturnPaths,
     returns_owned: &FuncKeySet,
+    builtins: &BuiltinConventions,
 ) -> ModRef {
     let type_table = flat.type_table.borrow();
     // A body this scan reads. One without reaches the caller only through what
@@ -123,8 +125,14 @@ pub fn compute_mod_ref(
     )> = Vec::new();
     for func_rc in &flat.functions {
         let func = func_rc.borrow();
-        let (writes, callees, pending) =
-            scan(&func, &type_table, &defined, return_paths, returns_owned);
+        let (writes, callees, pending) = scan(
+            &func,
+            &type_table,
+            &defined,
+            return_paths,
+            returns_owned,
+            builtins,
+        );
         direct.push((
             func.module_source.clone(),
             func.name.clone(),
@@ -182,6 +190,7 @@ fn scan(
     defined: &FuncKeySet,
     return_paths: &ReturnPaths,
     returns_owned: &FuncKeySet,
+    builtins: &BuiltinConventions,
 ) -> (Writes, Vec<(ModuleSource, String)>, Vec<PendingProjection>) {
     let Some(body) = &func.body else {
         return (
@@ -193,10 +202,11 @@ fn scan(
             Vec::new(),
         );
     };
-    let resolver = Resolver::new(func, type_table, return_paths, returns_owned);
+    let resolver = Resolver::new(func, type_table, return_paths, returns_owned, builtins);
     let mut walker = Walker {
         type_table,
         defined,
+        builtins,
         resolver: &resolver,
         writes: Writes::default(),
         callees: Vec::new(),
@@ -209,6 +219,7 @@ fn scan(
 struct Walker<'a> {
     type_table: &'a TypeTable,
     defined: &'a FuncKeySet,
+    builtins: &'a BuiltinConventions,
     resolver: &'a Resolver<'a>,
     writes: Writes,
     callees: Vec<(ModuleSource, String)>,
@@ -355,11 +366,8 @@ impl TirRefVisitor for Walker<'_> {
                     self.callees
                         .push((func.module_source.clone(), func.name.clone()));
                 }
-                let aliases_only = func.module_source.is_core_builtin()
-                    && super::ownership::is_container_alias_read(
-                        &func.name,
-                        func.monomorph_info.as_ref(),
-                    );
+                let aliases_only =
+                    func.module_source.is_core_builtin() && self.builtins.part_of(func).is_some();
                 if !aliases_only {
                     for arg in args
                         .iter()

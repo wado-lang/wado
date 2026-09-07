@@ -206,6 +206,7 @@ fn generate_copy_function(
         compiler_item: None,
         export_name: None,
         allocator_tag: None,
+        declared_return_convention: None,
         kind: FunctionKind::ValueCopy { type_id },
 
         return_abi: crate::tir::ReturnAbi::default(),

@@ -10,11 +10,12 @@ use std::collections::VecDeque;
 use cranelift_entity::EntityRef;
 
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::nir::NirLocal;
+use crate::nir::{FuncId, NirLocal};
 use crate::nir_arena::{
     ArmData, BlockId, BlockNode, Body, ExprId, ExprKind, ExprNode, NodeRef, Operand, PatId,
     PatKind, PatNode, StmtId, StmtKind, StmtNode,
 };
+use crate::nir_value_graph::{ValueId, ValueKind};
 use crate::tir::TypeId;
 use crate::token::Span;
 
@@ -24,8 +25,8 @@ use crate::token::Span;
 /// numbering, the only one they compare in.
 #[derive(Default)]
 pub struct FieldValues {
-    pub reads: Vec<(ExprId, crate::nir_value_graph::ValueId)>,
-    walk_version: IndexMap<crate::nir_value_graph::ValueId, crate::nir_value_graph::HeapVersion>,
+    pub reads: Vec<(ExprId, ValueId)>,
+    walk_version: IndexMap<ValueId, crate::nir_value_graph::HeapVersion>,
     stmt_entry_version: IndexMap<StmtId, crate::nir_value_graph::HeapVersion>,
 }
 
@@ -33,7 +34,7 @@ impl FieldValues {
     /// Whether pinning `rep`'s load before `stmt` still reads what its uses
     /// read — false when a mutation earlier in that statement wrote the slot.
     /// Unknown is refused.
-    pub fn pinnable_before(&self, rep: crate::nir_value_graph::ValueId, stmt: StmtId) -> bool {
+    pub fn pinnable_before(&self, rep: ValueId, stmt: StmtId) -> bool {
         match (
             self.walk_version.get(&rep),
             self.stmt_entry_version.get(&stmt),
@@ -282,7 +283,7 @@ impl EngineBuffers {
 
 /// What a value-graph walk reads where the session was told nothing. Empty is
 /// conservative — it leaves a call opaque — and shared, so asking costs no map.
-static NO_PURE_BUILTINS: std::sync::LazyLock<IndexSet<crate::nir::FuncId>> =
+static NO_PURE_BUILTINS: std::sync::LazyLock<IndexSet<FuncId>> =
     std::sync::LazyLock::new(IndexSet::default);
 static NO_CTFE_BUILTINS: std::sync::LazyLock<crate::niri::CtfeBuiltinMap> =
     std::sync::LazyLock::new(crate::niri::CtfeBuiltinMap::default);
@@ -342,13 +343,13 @@ pub struct Engine<'a> {
     /// panic block by callee id (not the call node's `FunctionRef`). `None` (the
     /// default) means "no callee is a panic". Set via
     /// [`Engine::set_panic_callee_ids`].
-    panic_callee_ids: Option<&'a IndexSet<crate::nir::FuncId>>,
+    panic_callee_ids: Option<&'a IndexSet<FuncId>>,
     /// [`FuncId`]s of pure builtin intrinsics (`array_get_value`, `array_len`, …),
     /// supplied by a value-graph pass so the builder knows such a call writes no
     /// heap — the call node no longer carries a `FunctionRef` to classify by.
     /// `None` (the default) is conservative: every call is a heap write. Set via
     /// [`Engine::set_pure_builtin_callees`] before the first value query.
-    pure_builtin_callees: Option<&'a IndexSet<crate::nir::FuncId>>,
+    pure_builtin_callees: Option<&'a IndexSet<FuncId>>,
     /// Memoized promoted-read census ([`Body::promoted_read_counts`]) for the
     /// session. See [`Engine::promoted_read_count`].
     ///
@@ -406,7 +407,7 @@ impl<'a> Engine<'a> {
     /// (`Engine::maintain_pure_node`), a direct arena edit coarsens the region
     /// it touched, and a caller needing the reaching values regrows them into a
     /// scratch pool ([`Engine::scoped_const_reads`]).
-    pub fn value(&mut self, expr: ExprId) -> Option<crate::nir_value_graph::ValueId> {
+    pub fn value(&mut self, expr: ExprId) -> Option<ValueId> {
         self.ensure_value_graph();
         // There is no skeleton-expr → value side-table. An expr's value comes
         // only from promoted operands (born-as-operands) and pure re-derivation
@@ -421,7 +422,7 @@ impl<'a> Engine<'a> {
     /// a stable parameter; every other kind, and any unresolved operand, gives
     /// `None`. The parameter base case is load-bearing: without it only
     /// all-constant trees resolve and no promoted value can name a local.
-    fn maintain_pure_node(&mut self, expr: ExprId) -> Option<crate::nir_value_graph::ValueId> {
+    fn maintain_pure_node(&mut self, expr: ExprId) -> Option<ValueId> {
         self.body.value_graph.as_ref()?;
         let kind = self.body.exprs[expr].kind.clone();
         let result_ty = self.body.exprs[expr].type_id;
@@ -461,9 +462,9 @@ impl<'a> Engine<'a> {
         Some(v)
     }
 
-    /// The [`ValueId`](crate::nir_value_graph::ValueId) of an operand: the
+    /// The [`ValueId`](ValueId) of an operand: the
     /// promoted value directly, or the skeleton expr's value from the graph.
-    pub fn operand_value(&mut self, op: Operand) -> Option<crate::nir_value_graph::ValueId> {
+    pub fn operand_value(&mut self, op: Operand) -> Option<ValueId> {
         match op {
             Operand::Value(v) => Some(v),
             Operand::Expr(e) => self.value(e),
@@ -473,10 +474,7 @@ impl<'a> Engine<'a> {
     /// Read-only view of a value's kind. The returned reference borrows the
     /// engine's value-graph cache; callers that need to hold the kind across
     /// further `engine` calls should clone it.
-    pub fn value_kind(
-        &mut self,
-        id: crate::nir_value_graph::ValueId,
-    ) -> &crate::nir_value_graph::ValueKind {
+    pub fn value_kind(&mut self, id: ValueId) -> &ValueKind {
         self.ensure_value_graph();
         self.body.values.kind(id)
     }
@@ -488,11 +486,7 @@ impl<'a> Engine<'a> {
     /// may move a pure expression to the pre-header exactly when each of
     /// its `Local` leaves' use-site value equals this pre-header value —
     /// see `ValueGraphBuild::loop_entry_values`.
-    pub fn loop_entry_value(
-        &mut self,
-        loop_body: BlockId,
-        local: u32,
-    ) -> Option<crate::nir_value_graph::ValueId> {
+    pub fn loop_entry_value(&mut self, loop_body: BlockId, local: u32) -> Option<ValueId> {
         self.ensure_value_graph();
         self.body
             .value_graph
@@ -512,7 +506,7 @@ impl<'a> Engine<'a> {
         &mut self,
         forwardable: &IndexSet<u32>,
         include_fields: bool,
-    ) -> Vec<(ExprId, crate::nir_value_graph::ValueId)> {
+    ) -> Vec<(ExprId, ValueId)> {
         use crate::nir_value_graph::builder;
         // Only grow an already-built graph: building it here would use this
         // session's alias config, which is sound only when the caller has set the
@@ -620,7 +614,7 @@ impl<'a> Engine<'a> {
         );
         // Collected before any live-pool mutation: `local_has_one_version`
         // borrows the engine.
-        let mut classes: Vec<(ExprId, crate::nir_value_graph::ValueId, u32, u32)> = Vec::new();
+        let mut classes: Vec<(ExprId, ValueId, u32, u32)> = Vec::new();
         for (e, sv) in scoped.values {
             if !matches!(self.body.exprs[e].kind, ExprKind::FieldAccess { .. }) {
                 continue;
@@ -652,8 +646,7 @@ impl<'a> Engine<'a> {
             stmt_entry_version: scoped.stmt_entry_version,
             ..FieldValues::default()
         };
-        let mut minted: IndexMap<crate::nir_value_graph::ValueId, crate::nir_value_graph::ValueId> =
-            IndexMap::default();
+        let mut minted: IndexMap<ValueId, ValueId> = IndexMap::default();
         let mut next_ver = self.body.values.max_heap_version().bump();
         for (e, sv, local, field_index) in classes {
             if !self.local_has_one_version(local) {
@@ -750,7 +743,7 @@ impl<'a> Engine<'a> {
 
     /// Supply the panic / `unreachable` callee ids for `condition_implication`'s
     /// panic-block recognizer. See [`Engine::is_panic_callee`].
-    pub fn set_panic_callee_ids(&mut self, ids: &'a IndexSet<crate::nir::FuncId>) {
+    pub fn set_panic_callee_ids(&mut self, ids: &'a IndexSet<FuncId>) {
         self.panic_callee_ids = Some(ids);
     }
 
@@ -758,7 +751,7 @@ impl<'a> Engine<'a> {
     /// call's heap effect by `func_id`. See `Engine::pure_builtin_callees`.
     /// Must be set before the first value query to take effect (the graph is
     /// built once and reused).
-    pub fn set_pure_builtin_callees(&mut self, ids: &'a IndexSet<crate::nir::FuncId>) {
+    pub fn set_pure_builtin_callees(&mut self, ids: &'a IndexSet<FuncId>) {
         self.pure_builtin_callees = Some(ids);
     }
 
@@ -771,7 +764,7 @@ impl<'a> Engine<'a> {
 
     /// Whether `func_id` is one of the supplied panic / `unreachable` callees.
     /// `false` when no set was supplied.
-    pub fn is_panic_callee(&self, func_id: crate::nir::FuncId) -> bool {
+    pub fn is_panic_callee(&self, func_id: FuncId) -> bool {
         self.panic_callee_ids.is_some_and(|s| s.contains(&func_id))
     }
 
@@ -1142,12 +1135,7 @@ impl<'a> Engine<'a> {
     ///
     /// One slot per call (see [`Body::replace_value_operand_once`]); loop until
     /// it returns `false` to cover a node that holds `from` twice.
-    pub fn redirect_value_operand(
-        &mut self,
-        node: NodeRef,
-        from: crate::nir_value_graph::ValueId,
-        new: Operand,
-    ) -> bool {
+    pub fn redirect_value_operand(&mut self, node: NodeRef, from: ValueId, new: Operand) -> bool {
         if !self.body.replace_value_operand_once(node, from, new) {
             return false;
         }
@@ -1205,7 +1193,7 @@ impl<'a> Engine<'a> {
     /// the skeleton form.
     pub fn replace_expr_with_value(&mut self, id: ExprId, value: crate::const_eval::Value) -> bool {
         use crate::const_eval::Value;
-        use crate::nir_value_graph::ValueKind;
+        use ValueKind;
         let type_id = self.body.exprs[id].type_id;
         let kind = match value {
             Value::Int { value, .. } => ValueKind::Int(value, type_id),
@@ -1329,11 +1317,7 @@ impl<'a> Engine<'a> {
     /// return it as an `Operand::Value`. For passes
     /// that synthesize a constant in an operand position (a method arg, an
     /// assigned value) without a source node.
-    pub fn const_operand(
-        &mut self,
-        kind: crate::nir_value_graph::ValueKind,
-        type_id: crate::tir::TypeId,
-    ) -> Operand {
+    pub fn const_operand(&mut self, kind: ValueKind, type_id: TypeId) -> Operand {
         Operand::Value(self.body.values.alloc_unshared(kind, type_id))
     }
 
@@ -1790,7 +1774,7 @@ mod tests {
     use crate::nir::NirBinaryOp;
     use crate::nir_arena::{BlockNode, ExprNode, StmtNode};
     use crate::tir::TypeTable;
-    use crate::token::Span;
+    use Span;
     use std::assert_matches;
 
     /// Build a `Body` whose root block holds the statements `build` produces.
@@ -1812,10 +1796,10 @@ mod tests {
         })
     }
     fn lit(body: &mut Body, n: u64) -> Operand {
-        Operand::Value(body.values.alloc_unshared(
-            crate::nir_value_graph::ValueKind::Int(n, TypeTable::I32),
-            TypeTable::I32,
-        ))
+        Operand::Value(
+            body.values
+                .alloc_unshared(ValueKind::Int(n, TypeTable::I32), TypeTable::I32),
+        )
     }
     fn bin(
         body: &mut Body,
@@ -1998,10 +1982,7 @@ mod tests {
         let Operand::Value(v) = value else {
             panic!("expected folded constant operand, got {value:?}");
         };
-        assert_matches!(
-            body.values.kind(*v),
-            crate::nir_value_graph::ValueKind::Int(12, _)
-        );
+        assert_matches!(body.values.kind(*v), ValueKind::Int(12, _));
     }
 
     #[test]
@@ -2048,7 +2029,7 @@ mod tests {
                 .copied()
                 .filter(|s| {
                     !matches!(&e.body.stmts[*s].kind,
-                        StmtKind::Expr(op) if op.as_value().is_some_and(|v| matches!(e.body.values.kind(v), crate::nir_value_graph::ValueKind::Unit)))
+                        StmtKind::Expr(op) if op.as_value().is_some_and(|v| matches!(e.body.values.kind(v), ValueKind::Unit)))
                 })
                 .collect();
             if kept.len() == stmts.len() {
@@ -2067,10 +2048,10 @@ mod tests {
             let two = lit(b, 2);
             let add = bin(b, one, NirBinaryOp::Add, two);
             let let_stmt = let_x(b, add, false);
-            let unit = Operand::Value(b.values.alloc_unshared(
-                crate::nir_value_graph::ValueKind::Unit,
-                crate::tir::TypeTable::UNIT,
-            ));
+            let unit = Operand::Value(
+                b.values
+                    .alloc_unshared(ValueKind::Unit, crate::tir::TypeTable::UNIT),
+            );
             let unit_stmt = s(b, StmtKind::Expr(unit));
             let ret = ret_x(b);
             vec![let_stmt, unit_stmt, ret]

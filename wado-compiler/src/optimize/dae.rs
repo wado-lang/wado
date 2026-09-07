@@ -142,7 +142,7 @@ pub(super) fn is_dae_sroa_eligible(func: &NirFunction, relax_closure_call: bool)
     if !matches!(func.kind, FunctionKind::Regular) {
         return false;
     }
-    if func.module_source.is_core_builtin() || func.module_source.is_wasm_asset() {
+    if func.module_source.is_builtin() {
         return false;
     }
     if func.allocator_tag.is_some() {

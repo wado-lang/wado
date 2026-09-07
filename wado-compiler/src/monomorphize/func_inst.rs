@@ -2083,6 +2083,7 @@ impl Monomorphizer {
             compiler_item: generic.compiler_item,
             export_name: generic.export_name.clone(),
             allocator_tag: generic.allocator_tag.clone(),
+            declared_return_convention: generic.declared_return_convention,
             kind: FunctionKind::Regular,
 
             return_abi: crate::tir::ReturnAbi::default(),

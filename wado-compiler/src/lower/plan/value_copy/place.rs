@@ -3,10 +3,12 @@
 //! follow": an analysis may ignore the first and must not ignore the second.
 
 use super::funcset::{FuncKeyMap, FuncKeySet};
+use super::needs_value_copy;
+use super::ownership::BuiltinConventions;
 use crate::hashmap::IndexMap;
 use crate::tir::{
-    ResolvedType, TirExpr, TirExprKind, TirFunction, TirPattern, TirStmt, TirStmtKind, TirUnaryOp,
-    TypeId, TypeTable,
+    ResolvedType, TirExpr, TirExprKind, TirFunction, TirParam, TirPattern, TirStmt, TirStmtKind,
+    TirUnaryOp, TypeId, TypeTable,
 };
 use crate::tir_visitor::TirRefVisitor;
 
@@ -100,20 +102,24 @@ impl Bindings {
     }
 }
 
-/// The projection an accessor returns out of its receiver.
+/// The projection an accessor returns out of one of its parameters.
 #[derive(Clone, Debug)]
 pub struct ReturnPath {
+    /// Which parameter the path is rooted at, by position. An accessor need not
+    /// hand out its receiver: `StructField::get(&self, v: &T) -> F` reads a
+    /// field of `v`, and reading that as `self` names the wrong storage.
+    pub param: usize,
     pub selectors: Vec<Selector>,
     /// [`Place::through_borrow`] for the place this path lands on, so even a
-    /// fresh receiver does not own it.
+    /// fresh argument does not own it.
     pub through_borrow: bool,
 }
 
-/// Which projection of its receiver each accessor returns. A call with no
+/// Which projection of which parameter each accessor returns. A call with no
 /// entry returns storage this walk cannot place.
 pub type ReturnPaths = FuncKeyMap<ReturnPath>;
 
-/// The projection each function returns out of its first parameter, for the
+/// The projection each function returns out of one of its parameters, for the
 /// calls that name storage rather than build it.
 ///
 /// A least fixpoint, because an accessor is routinely written over another one
@@ -126,6 +132,7 @@ pub fn compute_return_paths(
     call_graph: &super::callgraph::CallGraph,
     type_table: &TypeTable,
     returns_owned: &FuncKeySet,
+    builtins: &BuiltinConventions,
 ) -> ReturnPaths {
     let mut paths = ReturnPaths::default();
     call_graph.solve(flat, |id| {
@@ -133,18 +140,15 @@ pub fn compute_return_paths(
         if paths.get(&func.module_source, &func.name).is_some() {
             return false;
         }
-        let (Some(body), Some(receiver)) = (&func.body, func.params.first()) else {
+        let Some(body) = &func.body else {
             return false;
         };
-        // A result that could name storage: a reference, or a value the copy
-        // rules defend — the latter because a returned construction hands its
-        // payload out uncopied.
-        if !is_reference(func.return_type, type_table)
-            && !super::needs_value_copy(func.return_type, type_table)
-        {
+        // A returned construction hands its payload out uncopied, so a value
+        // the copy rules defend counts alongside a reference.
+        if !carries_storage(func.return_type, type_table) {
             return false;
         }
-        let resolver = Resolver::new(&func, type_table, &paths, returns_owned);
+        let resolver = Resolver::new(&func, type_table, &paths, returns_owned, builtins);
         let mut returned = ReturnedPlace {
             resolver: &resolver,
             names: None,
@@ -153,13 +157,18 @@ pub fn compute_return_paths(
         let Some(Names::Place(place)) = returned.names else {
             return false;
         };
-        if place.root != receiver.local_index {
+        let Some(param) = func
+            .params
+            .iter()
+            .position(|p| p.local_index == place.root && lends_storage(p, type_table))
+        else {
             return false;
-        }
+        };
         paths.insert(
             func.module_source.clone(),
             func.name.clone(),
             ReturnPath {
+                param,
                 selectors: place.selectors,
                 through_borrow: place.through_borrow,
             },
@@ -203,6 +212,8 @@ pub struct Resolver<'a> {
     /// Callees whose result is storage of its own. Every other hands back
     /// something this walk will not guess at.
     returns_owned: &'a FuncKeySet,
+    /// Where each builtin declared its result comes from.
+    builtins: &'a BuiltinConventions,
     /// Parameters naming storage the caller lent, by the type lent. The only
     /// roots a write in this body reaches out through.
     lent: IndexMap<u32, TypeId>,
@@ -218,20 +229,20 @@ impl<'a> Resolver<'a> {
         type_table: &'a TypeTable,
         return_paths: &'a ReturnPaths,
         returns_owned: &'a FuncKeySet,
+        builtins: &'a BuiltinConventions,
     ) -> Self {
         let mut resolver = Self {
             type_table,
             return_paths,
             returns_owned,
+            builtins,
             lent: IndexMap::default(),
             bindings: Bindings::default(),
         };
-        for param in &func.params {
-            if param.is_mut_ref || is_reference(param.type_id, type_table) {
-                resolver
-                    .lent
-                    .insert(param.local_index, field_owner(param.type_id, type_table));
-            }
+        for param in func.params.iter().filter(|p| lends_storage(p, type_table)) {
+            resolver
+                .lent
+                .insert(param.local_index, field_owner(param.type_id, type_table));
         }
         if let Some(body) = &func.body {
             let mut collector = BindingCollector {
@@ -311,23 +322,19 @@ impl<'a> Resolver<'a> {
                 Names::Place(p) => Names::Place(p),
                 Names::Value | Names::Unknown => Names::Unknown,
             },
-            // An element read borrows the slot in place, so it names its
-            // container's storage one `Index` further in.
-            TirExprKind::Call { func, args, .. }
-                if func.module_source.is_core_builtin()
-                    && super::ownership::is_container_alias_read(
-                        &func.name,
-                        func.monomorph_info.as_ref(),
-                    ) =>
-            {
-                match args.first() {
+            // A member read borrows the slot in place, so it names the storage
+            // of the parameter its `#[returns(part_of(p))]` names, one `Index`
+            // further in. `Index` is the honest selector: the index is a runtime
+            // value, so which component it lands on is not known here.
+            TirExprKind::Call { func, args, .. } if func.module_source.is_core_builtin() => {
+                match self.builtins.part_of(func).and_then(|p| args.get(p)) {
                     Some(arg) => self.project(&arg.expr, Selector::Index),
-                    None => Names::Unknown,
+                    None => Names::Value,
                 }
             }
             TirExprKind::Call { func, args, .. } => {
                 match self.return_paths.get(&func.module_source, &func.name) {
-                    Some(path) => match args.first().map(|r| self.names(&r.expr)) {
+                    Some(path) => match args.get(path.param).map(|r| self.names(&r.expr)) {
                         Some(Names::Place(mut place)) => {
                             place.selectors.extend(path.selectors.iter().copied());
                             place.through_borrow |= path.through_borrow;
@@ -456,6 +463,20 @@ pub fn is_reference(type_id: TypeId, type_table: &TypeTable) -> bool {
         type_table.get(type_id),
         ResolvedType::Ref(_) | ResolvedType::MutRef(_)
     ) || type_table.is_reference_shaped(type_id)
+}
+
+/// Whether this parameter names storage the caller still reaches. A by-value
+/// one was deep-copied at the call, so the body owns what it holds.
+fn lends_storage(param: &TirParam, type_table: &TypeTable) -> bool {
+    param.is_mut_ref || is_reference(param.type_id, type_table)
+}
+
+/// Whether a value of this type could name storage someone else still reaches:
+/// a reference, or a value the copy rules defend. A `Copy`-shaped one carries
+/// none of its own, so a reader of it gets an independent value.
+#[must_use]
+pub fn carries_storage(type_id: TypeId, type_table: &TypeTable) -> bool {
+    is_reference(type_id, type_table) || needs_value_copy(type_id, type_table)
 }
 
 /// A handle a callee can write through. A shared `&` cannot be; a box carries

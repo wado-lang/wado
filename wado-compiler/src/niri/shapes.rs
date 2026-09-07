@@ -5,6 +5,7 @@
 //! [`Value`]: crate::const_eval::Value
 
 use crate::hashmap::IndexMap;
+use crate::nir::NirField;
 use crate::nir_package::NirPackage;
 use crate::tir::{TypeId, TypeTable};
 
@@ -41,7 +42,7 @@ impl AggregateShapes {
             else {
                 continue;
             };
-            let mut fields: Vec<&crate::nir::NirField> = decl.fields.iter().collect();
+            let mut fields: Vec<&NirField> = decl.fields.iter().collect();
             fields.sort_by_key(|f| f.index);
             if fields.iter().enumerate().any(|(k, f)| f.index != k as u32) {
                 continue;

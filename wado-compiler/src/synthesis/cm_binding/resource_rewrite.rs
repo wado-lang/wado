@@ -739,6 +739,7 @@ fn synthesize_stream_write_func(elem_type_id: TypeId, ctx: &SynthCtx) -> TirFunc
         compiler_item: None,
         export_name: None,
         allocator_tag: None,
+        declared_return_convention: None,
         kind: FunctionKind::Regular,
         return_abi: crate::tir::ReturnAbi::default(),
     }
@@ -978,6 +979,7 @@ fn synthesize_future_write_func(payload_type_id: TypeId, ctx: &SynthCtx) -> TirF
         compiler_item: None,
         export_name: None,
         allocator_tag: None,
+        declared_return_convention: None,
         kind: FunctionKind::Regular,
         return_abi: crate::tir::ReturnAbi::default(),
     }
@@ -1208,6 +1210,7 @@ fn synthesize_future_read_func(
         compiler_item: None,
         export_name: None,
         allocator_tag: None,
+        declared_return_convention: None,
         kind: FunctionKind::Regular,
         return_abi: crate::tir::ReturnAbi::default(),
     }
@@ -1604,6 +1607,7 @@ fn synthesize_stream_read_func(
         compiler_item: None,
         export_name: None,
         allocator_tag: None,
+        declared_return_convention: None,
         kind: FunctionKind::Regular,
 
         return_abi: crate::tir::ReturnAbi::default(),
