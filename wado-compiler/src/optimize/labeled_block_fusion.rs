@@ -128,21 +128,6 @@ struct SlotRead {
     type_id: TypeId,
 }
 
-/// Whether `block` can reach its end and produce a value there.
-///
-/// Every fusion here rebuilds a labeled block one `break L:` exit at a time, so
-/// a block that falls through carries its value out by a route no exit rewrite
-/// reaches: fusing it drops the consumer. This is the dual of
-/// [`Body::unbroken_block`], which names the blocks whose value *is* the tail.
-fn falls_through(body: &Body, block: BlockId) -> bool {
-    !body.blocks[block].stmts.last().is_some_and(|s| {
-        matches!(
-            body.stmts[*s].kind,
-            StmtKind::Break { .. } | StmtKind::Return { .. } | StmtKind::Continue
-        )
-    })
-}
-
 fn check_fusion_preconditions(
     body: &Body,
     let_s: StmtId,
@@ -180,7 +165,7 @@ fn check_fusion_preconditions_if_variant_test(
     };
     let label = label.clone();
     let lb_block = *lb_block;
-    if falls_through(body, lb_block) {
+    if body.falls_through(lb_block) {
         return None;
     }
 
@@ -283,7 +268,7 @@ fn check_fusion_preconditions_match(
     };
     let label = label.clone();
     let lb_block = *lb_block;
-    if falls_through(body, lb_block) {
+    if body.falls_through(lb_block) {
         return None;
     }
 
@@ -411,7 +396,7 @@ fn check_fusion_preconditions_slot_match(
         return None;
     };
     let (label, lb_block) = (label.clone(), *lb_block);
-    if falls_through(body, lb_block) {
+    if body.falls_through(lb_block) {
         return None;
     }
 
@@ -1950,7 +1935,7 @@ fn plan_threading(body: &Body, id: ExprId, locals: &[NirLocal]) -> Option<Thread
         .map(|arm| arm_info(body, arm))
         .collect::<Option<_>>()?;
 
-    if falls_through(body, lb_block) {
+    if body.falls_through(lb_block) {
         return None;
     }
 
@@ -2525,7 +2510,7 @@ fn plan_slot_temp_sroa(
     let (label, lb_block, role) = (label.clone(), *lb_block, *role);
 
     // Ordered ahead of the read census below, which walks the whole body.
-    if falls_through(body, lb_block) {
+    if body.falls_through(lb_block) {
         return None;
     }
 

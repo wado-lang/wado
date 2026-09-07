@@ -36,6 +36,16 @@ use crate::tir::{PrimitiveType, ResolvedType, TypeId, TypeTable};
 /// on every fixed-point iteration is pure overhead. [`ConstFoldCache`] reuses
 /// them across iterations; what is read out of bodies is [`GlobalView`], built
 /// per pass.
+/// What a labeled block's exits agree its value borrows into. The join of
+/// [`BorrowRoot`] over the exits, with no `NotABorrow`/`Unrooted` distinction to
+/// keep: a disagreement is a destination that depends on the path either way.
+#[derive(Clone, Copy)]
+enum ExitRoot {
+    None,
+    Local(u32),
+    Unknown,
+}
+
 struct FoldMaps {
     callees: CalleeMap,
     ctfe_builtins: CtfeBuiltinMap,
@@ -1018,13 +1028,14 @@ impl ConstFoldVisitor<'_> {
                     };
                 }
                 ExprKind::Cast { expr: inner, .. } => inner.as_expr(),
-                ExprKind::LabeledBlock { block, .. } => {
-                    body.blocks[*block].stmts.last().and_then(|last| {
-                        match &body.stmts[*last].kind {
-                            StmtKind::Expr(value) => value.as_expr(),
-                            _ => None,
-                        }
-                    })
+                // A block's value comes from whichever exit ran, so the binding
+                // borrows what they agree on and nothing narrower.
+                ExprKind::LabeledBlock { .. } => {
+                    return match Self::joined_exit_root(body, e) {
+                        ExitRoot::None => BorrowRoot::NotABorrow,
+                        ExitRoot::Local(root) => BorrowRoot::Local(root),
+                        ExitRoot::Unknown => BorrowRoot::Unrooted,
+                    };
                 }
                 _ => None,
             };
@@ -1033,6 +1044,36 @@ impl ConstFoldVisitor<'_> {
                 None => return BorrowRoot::NotABorrow,
             }
         }
+    }
+
+    /// What every exit of the labeled block at `e` agrees the value borrows
+    /// into: one local where they all name it, [`ExitRoot::None`] where none is
+    /// a borrow at all, and [`ExitRoot::Unknown`] where the answer depends on
+    /// which exit ran.
+    fn joined_exit_root(body: &Body, e: ExprId) -> ExitRoot {
+        let Some(exits) = body.block_exits(e) else {
+            return ExitRoot::None;
+        };
+        let mut joined: Option<ExitRoot> = None;
+        for exit in exits {
+            // A value-less exit carries no borrow, and neither does a value that
+            // is not one.
+            let one = match exit.map(|op| Self::borrowed_root(body, op)) {
+                None | Some(BorrowRoot::NotABorrow) => ExitRoot::None,
+                Some(BorrowRoot::Local(root)) => ExitRoot::Local(root),
+                Some(BorrowRoot::Unrooted) => ExitRoot::Unknown,
+            };
+            joined = Some(match joined {
+                None => one,
+                Some(ExitRoot::None) if matches!(one, ExitRoot::None) => ExitRoot::None,
+                Some(ExitRoot::Local(had)) if matches!(one, ExitRoot::Local(r) if r == had) => {
+                    ExitRoot::Local(had)
+                }
+                Some(_) => ExitRoot::Unknown,
+            });
+        }
+        // A block that produces no value at all borrows nothing.
+        joined.unwrap_or(ExitRoot::None)
     }
 
     /// The local a borrow bottoms out at, following the accessor calls that
@@ -1049,13 +1090,13 @@ impl ConstFoldVisitor<'_> {
             | ExprKind::VariantPayload { expr: inner, .. }
             | ExprKind::Index { expr: inner, .. } => Self::borrowed_root_impl(body, *inner),
             ExprKind::Local { index, .. } => Some(*index),
-            ExprKind::LabeledBlock { block, .. } => {
-                let last = *body.blocks[*block].stmts.last()?;
-                let StmtKind::Expr(value) = &body.stmts[last].kind else {
-                    return None;
-                };
-                Self::borrowed_root_impl(body, *value)
-            }
+            // As in [`Self::borrowed_root`]: one root only where every exit
+            // names it, since the write lands wherever the block's value came
+            // from.
+            ExprKind::LabeledBlock { .. } => match Self::joined_exit_root(body, e) {
+                ExitRoot::Local(root) => Some(root),
+                ExitRoot::None | ExitRoot::Unknown => None,
+            },
             ExprKind::Call { args, .. } => {
                 let mut found = None;
                 for arg in args {

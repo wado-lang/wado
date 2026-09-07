@@ -1449,46 +1449,12 @@ impl<'a> Builder<'a> {
                     self.copy_local_field_slots(src, root, recv);
                     return;
                 }
-                ExprKind::LabeledBlock { block, label, .. } => {
-                    let (block, label) = (*block, label.clone());
-                    let stmts = &self.body.blocks[block].stmts;
-                    let Some(&last) = stmts.last() else {
+                ExprKind::LabeledBlock { .. } => {
+                    // Several producers leave no one literal to peel towards.
+                    let Some(value) = self.body.block_yield(producer) else {
+                        crate::compiler_trace!("vg_field", "peel {root}: no single block value");
                         return;
                     };
-                    // A block yields through its own `break label: v`, or —
-                    // where nothing breaks to it — through the trailing
-                    // statement.
-                    let value = match &self.body.stmts[last].kind {
-                        StmtKind::Break {
-                            label: Some(brk),
-                            value: Some(value),
-                        } if *brk == label => *value,
-                        StmtKind::Expr(tail)
-                            if !self.body.breaks_to(NodeRef::Block(block), &label) =>
-                        {
-                            let Some(tail) = tail.as_expr() else { return };
-                            producer = tail;
-                            continue;
-                        }
-                        _ => return,
-                    };
-                    // The trailing break must be the sole producer: no other
-                    // break to this label anywhere else in the block or in
-                    // the carried value.
-                    let earlier_break = stmts[..stmts.len() - 1]
-                        .iter()
-                        .any(|s| self.body.breaks_to(NodeRef::Stmt(*s), &label));
-                    if earlier_break
-                        || value
-                            .as_expr()
-                            .is_some_and(|ve| self.body.breaks_to(NodeRef::Expr(ve), &label))
-                    {
-                        crate::compiler_trace!(
-                            "vg_field",
-                            "peel {root}: label has more than one break"
-                        );
-                        return;
-                    }
                     let Some(pe) = value.as_expr() else {
                         return;
                     };
@@ -1915,12 +1881,11 @@ impl<'a> Builder<'a> {
         out
     }
 
-    /// Whether control can reach the bottom of `block`. Mirrors
-    /// `const_folding`'s `block_falls_through` minus never-type detection
-    /// (the builder has no `TypeTable`): a `panic()`-terminated arm is
-    /// conservatively treated as falling through, which only costs
-    /// precision — it modifies no field, so including it in a heap join
-    /// keeps the pre-branch versions anyway.
+    /// Whether control can reach the bottom of `block` — a reachability walk,
+    /// where [`Body::falls_through`] asks only whether the trailing statement
+    /// is a terminator. Never-type detection is missing for want of a
+    /// `TypeTable`, so a `panic()`-terminated arm counts as falling through;
+    /// it modifies no field, so the extra arm in a heap join changes nothing.
     fn block_falls_through(&self, block: crate::nir_arena::BlockId) -> bool {
         match self.body.blocks[block].stmts.last() {
             None => true,

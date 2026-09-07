@@ -1336,12 +1336,9 @@ fn array_new_has_capacity(body: &Body, e: ExprId, idents: &TmplIdents) -> bool {
 /// capacity = N` binding plus the struct tail); the tail is the real
 /// constructor. Returns `e` unchanged when it is not a tail-yielding block.
 fn unwrap_block_tail(body: &Body, e: ExprId) -> ExprId {
-    let ExprKind::LabeledBlock { block: b, .. } = &body.exprs[e].kind else {
-        return e;
-    };
-    match body.blocks[*b].stmts.last().map(|s| &body.stmts[*s].kind) {
-        Some(StmtKind::Expr(op)) => op.as_expr().map_or(e, |t| unwrap_block_tail(body, t)),
-        _ => e,
+    match body.block_yield(e).and_then(Operand::as_expr) {
+        Some(tail) => unwrap_block_tail(body, tail),
+        None => e,
     }
 }
 

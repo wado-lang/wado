@@ -1496,28 +1496,69 @@ impl Body {
         }
     }
 
-    /// The one operand `e` yields, or `None` where more than one point produces
-    /// its value and no single operand names it. A block nothing breaks to
-    /// yields its trailing statement; one whose trailing `break LABEL:` is the
-    /// only break to that label yields what the break carries.
-    pub fn block_yield(&self, e: ExprId) -> Option<Operand> {
+    /// Whether `block` can reach its end and produce a value there.
+    pub fn falls_through(&self, block: BlockId) -> bool {
+        !self.blocks[block].stmts.last().is_some_and(|s| {
+            matches!(
+                self.stmts[*s].kind,
+                StmtKind::Break { .. } | StmtKind::Return { .. } | StmtKind::Continue
+            )
+        })
+    }
+
+    /// Every point that produces the value of the labeled block at `e`: what
+    /// each `break LABEL:` carries — `None` for a value-less one — and the
+    /// trailing statement where control can reach it. `None` for anything but a
+    /// labeled block.
+    ///
+    /// A nested block re-using the label takes its own breaks, so the walk stops
+    /// there, as [`Body::breaks_to`] does.
+    pub fn block_exits(&self, e: ExprId) -> Option<Vec<Option<Operand>>> {
         let ExprKind::LabeledBlock { label, block, .. } = &self.exprs[e].kind else {
             return None;
         };
-        let (&last, rest) = self.blocks[*block].stmts.split_last()?;
-        match &self.stmts[last].kind {
-            StmtKind::Expr(v) => self.unbroken_block(e).map(|_| *v),
-            StmtKind::Break {
-                label: Some(bl),
-                value: Some(v),
-            } if bl == label => {
-                let second = rest
-                    .iter()
-                    .any(|s| self.breaks_to(NodeRef::Stmt(*s), label))
-                    || v.as_expr()
-                        .is_some_and(|ve| self.breaks_to(NodeRef::Expr(ve), label));
-                (!second).then_some(*v)
+        let mut out = Vec::new();
+        self.collect_exits(NodeRef::Block(*block), label, &mut out);
+        // An `Expr` tail is never a terminator, so reaching it is the same
+        // question as it being there.
+        if let Some(&last) = self.blocks[*block].stmts.last()
+            && let StmtKind::Expr(v) = self.stmts[last].kind
+        {
+            out.push(Some(v));
+        }
+        Some(out)
+    }
+
+    fn collect_exits(&self, node: NodeRef, label: &str, out: &mut Vec<Option<Operand>>) {
+        match node {
+            NodeRef::Stmt(s) => match &self.stmts[s].kind {
+                StmtKind::Break {
+                    label: Some(l),
+                    value,
+                } if l == label => {
+                    out.push(*value);
+                    // The carried value can break out past this one.
+                }
+                StmtKind::LabeledBlock { label: l, .. } if l == label => return,
+                _ => {}
+            },
+            NodeRef::Expr(e) => {
+                if let ExprKind::LabeledBlock { label: l, .. } = &self.exprs[e].kind
+                    && l == label
+                {
+                    return;
+                }
             }
+            _ => {}
+        }
+        self.for_each_child(node, |c| self.collect_exits(c, label, out));
+    }
+
+    /// The one operand `e` yields, or `None` where more than one point produces
+    /// its value and no single operand names it.
+    pub fn block_yield(&self, e: ExprId) -> Option<Operand> {
+        match self.block_exits(e)?.as_slice() {
+            [Some(one)] => Some(*one),
             _ => None,
         }
     }
