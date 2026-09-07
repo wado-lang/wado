@@ -189,10 +189,10 @@ pub fn install_action_context(grammar: &mut Grammar, ctx: &mut GenContext) -> [M
 ///
 /// Scannability is a fixpoint over the whole rule set: answered per query it
 /// re-walks every cycle the query reaches, which on a grammar the size of
-/// `RustParser.g4` is the whole cost of lowering. FOLLOW is installed first
-/// because a tail-position viability probe stamps the enclosing rule's FOLLOW
-/// onto its op, so the fixed point has to be in place by then; it reads only
-/// the surface rules.
+/// `RustParser.g4` is the whole cost of lowering. FOLLOW goes in before
+/// lowering rather than during it: a tail-position viability probe stamps the
+/// enclosing rule's FOLLOW onto its op, so the fixed point has to be complete
+/// by then. It reads only the surface rules.
 pub fn lower_for_analysis(grammar: &Grammar, lit_tokens: &List<LitToken>, ctx: &mut GenContext) -> LoweredGrammar {
     ctx.precompute_scannability();
     install_rule_follow(grammar, ctx);

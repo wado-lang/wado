@@ -1,11 +1,10 @@
-/// Driver test for the Rust grammar parser.
+/// Driver test for the Rust grammar parser: items and expressions, plus
+/// negative tripwires. The repository-wide measure is
+/// `tools/rust_corpus_check.wado`; what belongs here is the shape a corpus
+/// failure narrowed to.
 ///
-/// A top-level `fn` item is not parsed yet (`expected Eof, got "fn"`) — a
-/// dispatch gap in `item`, not a semantic-predicate gap: `function_` uses no
-/// predicate, and `match` / nested generics parse fine. The lexer's superClass
-/// predicates (`SOF`, float disambiguation) do run here via the installed base
-/// handler. These tests cover items and expressions that parse correctly, plus
-/// a couple of negative tripwires.
+/// The lexer's superClass predicates (`SOF`, float disambiguation) run through
+/// the base handler installed below.
 use rust from "./grammars/RustLexer.g4"
     with {
         generator: {

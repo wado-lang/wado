@@ -215,28 +215,27 @@ pub fn scan_gate_fields(grammar: &Grammar) -> List<String> {
 /// Every field an action inside a nested group writes, added to the refused set.
 fn reject_nested_writes(elements: &List<Element>, rejected: &mut List<String>) {
     for let e of elements {
-        match e {
-            Group(g) => {
-                for let alt of &g.alternatives {
-                    for let a of &alt.actions {
-                        if !a.kind matches { Predicate } {
-                            push_new(rejected, assigned_names(&a.source.text));
-                        }
+        reject_element_writes(e, rejected);
+    }
+}
+
+fn reject_element_writes(e: &Element, rejected: &mut List<String>) {
+    match e {
+        Group(g) => {
+            for let alt of &g.alternatives {
+                for let a of &alt.actions {
+                    if !a.kind matches { Predicate } {
+                        push_new(rejected, assigned_names(&a.source.text));
                     }
-                    reject_nested_writes(&alt.elements, rejected);
                 }
-            },
-            Repeat(r) => {
-                let inner = [r.element] as List<Element>;
-                reject_nested_writes(&inner, rejected);
-            },
-            Label(l) => {
-                let inner = [l.element] as List<Element>;
-                reject_nested_writes(&inner, rejected);
-            },
-            _ => {
-            },
-        }
+                reject_nested_writes(&alt.elements, rejected);
+            }
+        },
+        Repeat(r) => reject_element_writes(&r.element, rejected),
+        Label(l) => reject_element_writes(&l.element, rejected),
+        Not(n) => reject_element_writes(&n.element, rejected),
+        _ => {
+        },
     }
 }
 

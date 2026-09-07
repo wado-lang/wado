@@ -1731,10 +1731,10 @@ fn lower_lr_alt_suffix(
             elem_follow_exact,
             &elements_from(&alt.elements, i + 1),
         );
-        if let Repeat(rep_op) = &op {
+        if let Some(rep_op) = op_repeat_inner(&op) {
             let basic_follow = ctx.first_of_elements_from(&alt.elements, i + 1);
             let basic_second = compute_caller_follow_second(&alt.elements, i + 1, ctx);
-            op = Op::Repeat(patch_repeat_op_caller_follow(
+            let patched = Op::Repeat(patch_repeat_op_caller_follow(
                 rep_op,
                 basic_follow,
                 basic_second,
@@ -1744,6 +1744,7 @@ fn lower_lr_alt_suffix(
                 false,
                 &rule.name,
             ));
+            op = rewrap_op_repeat(op, patched);
         }
         ops.push(op);
     }
@@ -3058,10 +3059,10 @@ fn lower_alt_body(
         // returns the deep follow (which considers deep-nullable
         // suffixes); emit's per-position `gen_repeat*` decisions use the
         // simpler `first_of_elements_from`.
-        if let Repeat(rep_op) = &op {
+        if let Some(rep_op) = op_repeat_inner(&op) {
             let basic_follow = ctx.first_of_elements_from(&alt.elements, i + 1);
             let basic_second = compute_caller_follow_second(&alt.elements, i + 1, ctx);
-            op = Op::Repeat(patch_repeat_op_caller_follow(
+            let patched = Op::Repeat(patch_repeat_op_caller_follow(
                 rep_op,
                 basic_follow,
                 basic_second,
@@ -3071,6 +3072,7 @@ fn lower_alt_body(
                 reaches_rule_tail,
                 &rule.name,
             ));
+            op = rewrap_op_repeat(op, patched);
         }
         ops.push(op);
     }
@@ -3411,10 +3413,9 @@ fn lower_group_alt(
 ///
 /// A scalar `Label(Repeat(_))` collapses to `Op::Repeat`, but a list one lands
 /// as `Op::ListLabel(Repeat(_))` while the scan still surfaces a top-level
-/// `ScanElement::Repeat`. Asking for the bare variant on the parse side is what
-/// let `x+=y*` take the caller-FOLLOW rebind — and with it the reserve and
-/// decline guards — on the scan alone, which is the divergence the mirrors
-/// exist to prevent.
+/// `ScanElement::Repeat`. Every site that rebinds a repeat's caller FOLLOW asks
+/// through here, so `x+=(y*)` cannot take that rebind — and with it the reserve
+/// and decline guards — on the scan alone.
 fn op_repeat_inner(op: &Op) -> Option<&RepeatOp> with stores[op] {
     return match op {
         Repeat(r) => Option::Some(r),

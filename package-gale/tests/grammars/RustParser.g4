@@ -22,13 +22,11 @@ OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 // $antlr-format alignTrailingComments true, columnLimit 150, minEmptyLines 1, maxEmptyLinesToKeep 1, reflowComments false, useTab false
 // $antlr-format allowShortRulesOnASingleLine false, allowShortBlocksOnASingleLine true, alignSemicolons hanging, alignColons hanging
 
-// Local changes to the vendored grammar, each marked `// LOCAL:` at its rule.
-// Upstream tracks the Rust of its day; these are constructs the language has
-// stabilised since, which this repository's own sources use. ANTLR4 accepts
-// every form below, so the grammar stays oracle-comparable.
-//
-//   - `letStatement`  — let-else (Rust 1.65).
-//   - `ifExpression` / `whileExpression` — let chains (Rust 2024).
+// Local changes to the vendored grammar are marked `// LOCAL:` at the rule
+// they change. Upstream tracks the Rust of its day; most of these are
+// constructs the language has stabilised since, which this repository's own
+// sources use. ANTLR4 accepts every form below, so the grammar stays
+// oracle-comparable.
 
 parser grammar RustParser;
 
@@ -36,20 +34,22 @@ parser grammar RustParser;
 // as the `/*except structExpression*/` comment on `predicateLoopExpression`.
 //
 // `if any_error { None }` is `any_error` and a block, not the struct literal
-// `any_error { None }` — only position separates them, because `{ None }` is a
+// `any_error { None }`. Only position separates them, because `{ None }` is a
 // valid shorthand field list as well as a valid block. Rust spells it with a
-// Scrutinee that excludes struct expressions; expressed here as the depth
-// counter, which is what an ANTLR4 grammar has to use.
+// Scrutinee that excludes struct expressions; a members flag is what an ANTLR4
+// grammar has instead.
 //
 // Set across the head of `if` / `while` / `for` / `match` and a let chain's
-// scrutinee, and cleared by any bracketing — `(…)`, `[…]`, a call's arguments,
-// a block — where Rust allows a struct literal again.
+// scrutinee. Cleared by any bracketing — `(…)`, `[…]`, a call's arguments, a
+// block — where Rust allows a struct literal again. A rule that can hold a
+// whole expression (`callParams`, `arrayElements`, `tupleElements`) restores
+// the flag on the way out, through `locals` + `@init` / `@after`.
 //
-// A flag, not a depth: clearing on the way into a bracket never restores, so
-// the ban does not resume after one inside the same head (`if f(x) + P { y: 1 }`
-// is accepted where Rust rejects it). That direction only ever accepts more,
-// which is the safe one for a parser; a depth would need a stack per frame,
-// which an ANTLR4 members block has no room for.
+// One flag, not a stack, so the ban does not resume after a bracket that ends
+// inside the same head: `if f(x) + P { y: 1 }` is accepted where Rust rejects
+// it. That direction only ever accepts more, which is the safe one for a
+// parser. A stack in a members field is a documented dead end — see
+// `AGENTS.md`, "Failed approaches".
 @parser::members {
     int noStruct = 0;
 }
@@ -596,7 +596,8 @@ unsafeBlockExpression
     ;
 
 // 8.2.6
-// LOCAL: `{noStruct = 0;}` — inside the brackets a struct literal is legal.
+// LOCAL: the `noStruct` scope — inside the brackets a struct literal is legal,
+// and the ban comes back after them.
 arrayElements
 locals [int sv]
 @init { $sv = noStruct; noStruct = 0; }
@@ -606,7 +607,8 @@ locals [int sv]
     ;
 
 // 8.2.7
-// LOCAL: `{noStruct = 0;}` — inside the parentheses a struct literal is legal.
+// LOCAL: the `noStruct` scope — inside the parentheses a struct literal is
+// legal, and the ban comes back after them.
 tupleElements
 locals [int sv]
 @init { $sv = noStruct; noStruct = 0; }
@@ -678,7 +680,7 @@ enumExprFieldless
     ;
 
 // 8.2.9
-// LOCAL: `{noStruct = 0;}` — a call's arguments are bracketing, so
+// LOCAL: the `noStruct` scope — a call's arguments are bracketing, so
 // `if f(Point { x: 1 }) { … }` is the struct literal Rust reads there.
 callParams
 locals [int sv]
