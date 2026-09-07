@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1788753227975,
+  "lastUpdate": 1788817575924,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -54045,6 +54045,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/e925ee58bf1e4ea2e94ebd0e616548e1e0d308d0"
         },
         "date": 1788753227054,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 2013,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6560,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18971,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 288297,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "93cf566522f9f3b08e87f34f11c4466729472308",
+          "message": "Merge pull request #1999 from wado-lang/claude/gifted-goodall-jttubd\n\nfix(value-copy): a member read hands out the storage of the argument it names",
+          "timestamp": "2026-09-08T06:30:42+09:00",
+          "tree_id": "f0641b57d821892103a183a84c291eef2b3923e0",
+          "url": "https://github.com/wado-lang/wado/commit/93cf566522f9f3b08e87f34f11c4466729472308"
+        },
+        "date": 1788817574984,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
