@@ -39,6 +39,7 @@ use {
 } from "./gen_util.wado";
 use { PARSER_HANDLE, DISPATCH_KIND_LOCAL, FOLLOW_PARAM } from "./ident.wado";
 use { GateScope, SCAN_GATE_HANDLE, gate_scope } from "./scan_gate.wado";
+use { DiagnosticKind, DiagnosticOwner, DiagnosticSite } from "./gir.wado";
 use {
     join_kinds,
     follow_composed,
@@ -388,7 +389,7 @@ fn gen_scan_functions(w: &mut CodeWriter, grammar: &Grammar, lowered: &LoweredGr
 
 fn gen_scan_function(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule, ctx: &mut GenContext) {
     let name = `scan_${rule.snake_name}`;
-    if let Some(scope) = scan_gate_scope(rule, ctx) {
+    if let Some(scope) = scan_gate_scope(rule, lowered_rule, ctx) {
         // A rule that sets a gate for its own extent and puts it back after
         // (`locals` + `@init` / `@after`) is a *scope*, not a write, and the
         // scan's own call stack is where its saved value belongs. A wrapper is
@@ -403,16 +404,40 @@ fn gen_scan_function(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule,
     gen_scan_function_named(w, rule, lowered_rule, ctx, &name);
 }
 
-/// The gate scope `rule` opens, or `null` where the scan does not simulate its
-/// field — an unsimulated one has no `SCAN_GATE` slot to save.
-fn scan_gate_scope(rule: &ParserRule, ctx: &GenContext) -> Option<GateScope> {
+/// The gate scope `rule` opens, or `null` where the scan cannot run it.
+///
+/// A field the scan does not simulate has no `SCAN_GATE` slot to save. A
+/// left-recursive rule is refused for a different reason: its `scan_X` carries
+/// `min_prec` and, when a mid operand is gated, `lr_cont` — a signature built
+/// where the precedence loop is emitted, not here, so a wrapper written here
+/// would declare a different one and callers passing `min_prec` would not
+/// compile. Refusing says so; the alternative is a second place that has to be
+/// kept in step with the first.
+fn scan_gate_scope(rule: &ParserRule, lowered_rule: &Rule, ctx: &mut GenContext) -> Option<GateScope> {
     if !ctx.emit_scan_gate() {
         return null;
     }
-    return match gate_scope(rule) {
-        Some(s) => if ctx.scan_gate_fields().contains(&s.field) { Option::Some(s) } else { null },
-        None => null,
+    let scope = match gate_scope(rule) {
+        Some(s) => if ctx.scan_gate_fields().contains(&s.field) {
+            s;
+        } else {
+            return null;
+        },
+        None => {
+            return null;
+        },
     };
+    if lowered_rule matches { LeftRecursive(_) } {
+        ctx.warn(
+            &DiagnosticOwner { rule: rule.name, site: DiagnosticSite::RuleDispatch },
+            DiagnosticKind::UnsupportedAction,
+            String::from(
+                "a left-recursive rule's gate scope is not simulated in its scan: its `scan_` carries `min_prec`, which this wrapper cannot declare",
+            ),
+        );
+        return null;
+    }
+    return Option::Some(scope);
 }
 
 fn gen_scan_gate_scope_wrapper(
@@ -1473,6 +1498,7 @@ fn gen_scan_multi_alt(
     let unguarded_idx = &plan.unguarded_idx;
 
     w.line(&"let start = pos;");
+    gen_scan_gate_save(w, ctx, &"start");
     w.line(&"let mut pos = pos;");
     w.line(&"let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };");
 
@@ -1652,11 +1678,13 @@ fn gen_scan_alt_candidate(
 ) -> bool {
     if skip && body.elements.len() == 1 && body.gates.is_empty() && body.gate_cond.is_empty() {
         w.line(&"pos = start + 1;");
+        gen_scan_gate_restore(w, ctx, &"start");
         w.line(commit_stmt);
         return false;
     }
     let label = `try_${i}`;
     w.line(&if skip { "pos = start + 1;" } else { "pos = start;" });
+    gen_scan_gate_restore(w, ctx, &"start");
     w.begin(&`${label}:`);
     let from = if skip { 1 } else { 0 };
     gen_scan_op_elements_in_block(
@@ -2199,6 +2227,7 @@ fn gen_scan_op_group(w: &mut CodeWriter, ge: &ScanGroupElement, ctx: &mut GenCon
         let save_var = `sg_${gc}_save`;
         if lenient {
             w.line(&`let ${save_var} = pos;`);
+            gen_scan_gate_save(w, ctx, &save_var);
         }
         w.begin(&`${done}:`);
         w.begin(&`${body}:`);
@@ -2207,6 +2236,7 @@ fn gen_scan_op_group(w: &mut CodeWriter, ge: &ScanGroupElement, ctx: &mut GenCon
         w.end();
         if lenient {
             w.line(&`pos = ${save_var};`);
+            gen_scan_gate_restore(w, ctx, &save_var);
         } else {
             w.line(fail_stmt);
         }
@@ -2219,6 +2249,7 @@ fn gen_scan_op_group(w: &mut CodeWriter, ge: &ScanGroupElement, ctx: &mut GenCon
     let kind_var = `sgk_${gc}`;
     let branches = scan_decision_branches(ge);
     w.line(&`let ${gp_var} = pos;`);
+    gen_scan_gate_save(w, ctx, &gp_var);
     if decision_reads_lookahead(&branches) {
         w.line(&`let ${kind_var} = if pos < tokens.len() \{ tokens[pos] \} else \{ TK_EOF \};`);
     }
@@ -2228,6 +2259,7 @@ fn gen_scan_op_group(w: &mut CodeWriter, ge: &ScanGroupElement, ctx: &mut GenCon
         for let ai of &branches[i].alts {
             let inner = `sg_${gc}_${*ai}`;
             w.line(&`pos = ${gp_var};`);
+            gen_scan_gate_restore(w, ctx, &gp_var);
             w.begin(&`${inner}:`);
             gen_scan_op_elements_in_block(w, &ge.alts[*ai].elements, 0, ge.alts[*ai].elements.len(), ctx, &inner);
             w.line(&`if pos > ${best_var} \{ ${best_var} = pos; \}`);
@@ -2240,6 +2272,7 @@ fn gen_scan_op_group(w: &mut CodeWriter, ge: &ScanGroupElement, ctx: &mut GenCon
     w.else_begin(&"else");
     if lenient {
         w.line(&`pos = ${gp_var};`);
+        gen_scan_gate_restore(w, ctx, &gp_var);
     } else {
         w.line(fail_stmt);
     }
@@ -6214,6 +6247,31 @@ fn gen_rep_decline_stranded(
     w.end();
 }
 
+/// Save the scan's gate beside a position the scan may rewind to, and put it
+/// back with that position.
+///
+/// A scan arm that rewinds `pos` and not the gate hands the next arm a value
+/// from a walk that did not happen — an `if` head it entered and never left, so
+/// the next arm measures under a ban the parse will not apply. The gate is part
+/// of where the scan is, so it rewinds with the rest of it.
+fn gen_scan_gate_save(w: &mut CodeWriter, ctx: &GenContext, slot: &String) {
+    if !ctx.emit_scan_gate() {
+        return;
+    }
+    for let f of ctx.scan_gate_fields() {
+        w.line(&`let ${*slot}_${*f} = ${SCAN_GATE_HANDLE}.${*f};`);
+    }
+}
+
+fn gen_scan_gate_restore(w: &mut CodeWriter, ctx: &GenContext, slot: &String) {
+    if !ctx.emit_scan_gate() {
+        return;
+    }
+    for let f of ctx.scan_gate_fields() {
+        w.line(&`${SCAN_GATE_HANDLE}.${*f} = ${*slot}_${*f};`);
+    }
+}
+
 /// `kind_check_str` for a set that may be empty — an empty one admits nothing,
 /// so it contributes no disjunct rather than an assertion.
 fn kind_check_or_none(kinds: &List<String>, subject: &String, ctx: &mut GenContext) -> String {
@@ -6937,14 +6995,29 @@ fn gen_group_dispatch(
     if let Some(slot) = nullable_else {
         // Its own arm above still runs it for the tokens it selects; this one
         // is the empty match, which is the only thing left to take here.
-        w.else_begin(&"else");
+        //
+        // Its gate comes with it. The arm above folded the predicate into its
+        // own condition and marked it answered, so the body carries no guard —
+        // and a bare `else` here would run, on the tokens that arm refused,
+        // exactly the alternative the predicate says does not exist. A gate
+        // that fails leaves nothing viable, empty match included.
+        let gate = join_gate_conds(&alt_initial_gate_conditions(&alts[slot], ctx));
+        w.else_begin(&if gate.is_empty() { String::from("else") } else { `else if ${gate}` });
         gen_group_branch_body(w, &[slot], alts, g_op_alts, g_op_scan_alts, kind, ctx, name_counts);
+        if !gate.is_empty() {
+            gen_group_no_viable(w, classes, ctx);
+        }
     } else if report {
-        let expected_ref = sync_set_ref(ctx, &classes_union(classes));
-        w.else_begin(&"else");
-        w.line(&`p.no_viable("no viable alternative", p.peek_span(), ${expected_ref});`);
+        gen_group_no_viable(w, classes, ctx);
     }
     w.end();
+}
+
+/// The dispatch's last arm, where nothing the group admits is left to take.
+fn gen_group_no_viable(w: &mut CodeWriter, classes: &List<AltClass>, ctx: &mut GenContext) {
+    let expected_ref = sync_set_ref(ctx, &classes_union(classes));
+    w.else_begin(&"else");
+    w.line(&`p.no_viable("no viable alternative", p.peek_span(), ${expected_ref});`);
 }
 
 /// The first alternative that matches empty — ANTLR4 prefers the earliest, and
@@ -7385,11 +7458,21 @@ fn emit_scan_tournament(
     fall_through_on_no_match: bool = false,
 ) {
     let fsep = follow_sep(ctx.current_rule_reads_follow());
-    gen_scan_gate_seed(w, ctx);
     w.line(&"let _sd_tokens = &p.kinds;");
     w.line(&"let _sd_pos = p.pos;");
+    // A gated candidate can score -1 for a reason the lookahead did not predict,
+    // so a gated tournament can end with nothing viable — and
+    // `emit_index_pick_dispatch` runs its last alternative untested, which was
+    // sound only while some alternative always matched.
+    let mut any_gated = false;
     for let mut i = 0; i < sorted_indices.len(); i += 1 {
         let idx = sorted_indices[i];
+        // Per candidate, not once for the tournament: every one starts at
+        // `_sd_pos`, so every one starts from the parser's gate too. A single
+        // seed would hand the second candidate whatever the first left behind —
+        // and a candidate that fails mid-scan leaves a head it never walked out
+        // of.
+        gen_scan_gate_seed(w, ctx);
         // Without the caller follow, a trailing token the helper's
         // `follow_yields` gate rejects still counts toward the score.
         let scan = `${*fn_name}_scan_${idx}(_sd_tokens, _sd_pos${fsep})`;
@@ -7399,6 +7482,9 @@ fn emit_scan_tournament(
         // no match — otherwise the tournament picks by length an alternative the
         // parse then refuses outright.
         let gate = alt_initial_gate(idx, ctx);
+        if !gate.is_empty() {
+            any_gated = true;
+        }
         if gate.is_empty() {
             w.line(&`let _sd_p_${idx} = ${scan};`);
         } else {
@@ -7422,11 +7508,12 @@ fn emit_scan_tournament(
         let end_expr = `_sd_p_${idx}`;
         emit_argmax_update(w, &best_p, &best_i, &end_expr, idx);
     }
-    if fall_through_on_no_match {
+    let guard_pick = fall_through_on_no_match || any_gated;
+    if guard_pick {
         w.begin(&"if _sd_best_i >= 0");
     }
     emit_index_pick_dispatch(w, &"_sd_best_i", sorted_indices, fn_name, rule_display, ctx);
-    if fall_through_on_no_match {
+    if guard_pick {
         w.end();
     }
 }

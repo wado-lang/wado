@@ -1886,10 +1886,12 @@ fn _parse_expr__inner_atom(p: &mut Parser, min_prec: i32 = 0) -> () {
             _sd_best_p = _sd_p_2;
             _sd_best_i = 2;
         }
-        if _sd_best_i == 1 {
-            return _parse_expr__inner_alt_1(p);
+        if _sd_best_i >= 0 {
+            if _sd_best_i == 1 {
+                return _parse_expr__inner_alt_1(p);
+            }
+            return _parse_expr__inner_alt_2(p);
         }
-        return _parse_expr__inner_alt_2(p);
     }
     p.no_viable(
         "no alternative of expr matches",

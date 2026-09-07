@@ -1,0 +1,29 @@
+//! A tournament candidate must not leak its gate to the next one.
+//!
+//! Every candidate scans from the same position, so every one starts from the
+//! parser's gate. One seed for the whole tournament hands the second candidate
+//! whatever the first left behind -- and a candidate that fails inside a head
+//! it raised the ban for leaves the ban raised.
+
+use g from "./grammars/scan_gate_seed_per_candidate.g4"
+    with {
+        generator: { module: "../src/generator.wado", output_dir: "./generated/cst_scan_gate_seed_per_candidate" },
+    };
+
+fn assert_tree(input: &String, expected: &String) {
+    let result = g::parse(input);
+    assert result.ok(), `unexpected diagnostics for ${*input}: ${result.diagnostics:?}`;
+    let actual = g::to_string_tree(&result);
+    assert actual == *expected, `\ninput:    ${*input}\nexpected: ${*expected}\nactual:   ${actual}`;
+}
+
+// The hit case: the first candidate raises the ban and fails on its last token,
+// so the second only matches if it started from the parser's gate.
+test "a candidate starts from the parser's gate, not the previous candidate's" {
+    assert_tree(&"x { y } ;", &"(start (pick (expr x { y }) ;))");
+}
+
+// The rejection case: the first candidate, when it does match, still wins.
+test "the first candidate still wins where it matches" {
+    assert_tree(&"x { y } }", &"(start (pick x { y } }))");
+}

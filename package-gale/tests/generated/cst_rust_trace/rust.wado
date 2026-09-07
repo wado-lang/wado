@@ -7132,11 +7132,13 @@ fn scan_macro_invocation(tokens: &Array<i32>, pos: i32) -> i32 {
 
 fn scan_delim_token_tree(tokens: &Array<i32>, pos: i32) -> i32 {
     let start = pos;
+    let start_no_struct = SCAN_GATE.no_struct;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
         if alt_kind == TK_LPAREN {
             pos = start;
+            SCAN_GATE.no_struct = start_no_struct;
             try_0: {
                 if pos >= tokens.len() || tokens[pos] != TK_LPAREN { break try_0; }
                 pos += 1;
@@ -7153,6 +7155,7 @@ fn scan_delim_token_tree(tokens: &Array<i32>, pos: i32) -> i32 {
             return -1;
         } else if alt_kind == TK_LSQUAREBRACKET {
             pos = start;
+            SCAN_GATE.no_struct = start_no_struct;
             try_1: {
                 if pos >= tokens.len() || tokens[pos] != TK_LSQUAREBRACKET { break try_1; }
                 pos += 1;
@@ -7169,6 +7172,7 @@ fn scan_delim_token_tree(tokens: &Array<i32>, pos: i32) -> i32 {
             return -1;
         } else if alt_kind == TK_LCURLYBRACE {
             pos = start;
+            SCAN_GATE.no_struct = start_no_struct;
             try_2: {
                 if pos >= tokens.len() || tokens[pos] != TK_LCURLYBRACE { break try_2; }
                 pos += 1;
@@ -7192,11 +7196,13 @@ fn scan_delim_token_tree(tokens: &Array<i32>, pos: i32) -> i32 {
 
 fn scan_token_tree(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let start = pos;
+    let start_no_struct = SCAN_GATE.no_struct;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
         if _kind_set_2(alt_kind) {
             pos = start;
+            SCAN_GATE.no_struct = start_no_struct;
             try_0: {
                 pos = scan_token_tree_token(tokens, pos);
                 if pos < 0 { break try_0; }
@@ -7211,6 +7217,7 @@ fn scan_token_tree(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
             return -1;
         } else if _kind_set_3(alt_kind) {
             pos = start;
+            SCAN_GATE.no_struct = start_no_struct;
             try_1: {
                 pos = scan_delim_token_tree(tokens, pos);
                 if pos < 0 { break try_1; }
@@ -7240,6 +7247,7 @@ fn scan_token_tree_token_alt_1(tokens: &Array<i32>, pos: i32) -> i32 {
 
 fn scan_token_tree_token(tokens: &Array<i32>, pos: i32) -> i32 {
     let start = pos;
+    let start_no_struct = SCAN_GATE.no_struct;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
@@ -7261,6 +7269,7 @@ fn scan_token_tree_token(tokens: &Array<i32>, pos: i32) -> i32 {
             return -1;
         } else if _kind_set_54(alt_kind) {
             pos = start;
+            SCAN_GATE.no_struct = start_no_struct;
             try_2: {
                 pos = scan_macro_punctuation_token(tokens, pos);
                 if pos < 0 { break try_2; }
@@ -7269,6 +7278,7 @@ fn scan_token_tree_token(tokens: &Array<i32>, pos: i32) -> i32 {
             return -1;
         } else if _kind_set_55(alt_kind) {
             pos = start;
+            SCAN_GATE.no_struct = start_no_struct;
             try_3: {
                 pos = scan_macro_rep_op(tokens, pos);
                 if pos < 0 { break try_3; }
@@ -7277,6 +7287,7 @@ fn scan_token_tree_token(tokens: &Array<i32>, pos: i32) -> i32 {
             return -1;
         } else if alt_kind == TK_DOLLAR {
             pos = start + 1;
+            SCAN_GATE.no_struct = start_no_struct;
             break scan_alts;
         } else {
             return -1;
@@ -7287,12 +7298,14 @@ fn scan_token_tree_token(tokens: &Array<i32>, pos: i32) -> i32 {
 
 fn scan_macro_invocation_semi(tokens: &Array<i32>, pos: i32) -> i32 {
     let start = pos;
+    let start_no_struct = SCAN_GATE.no_struct;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
         if _kind_set_9(alt_kind) {
             let mut best: i32 = -1;
             pos = start;
+            SCAN_GATE.no_struct = start_no_struct;
             try_0: {
                 pos = scan_simple_path(tokens, pos, FOLLOW_MASK_2);
                 if pos < 0 { break try_0; }
@@ -7313,6 +7326,7 @@ fn scan_macro_invocation_semi(tokens: &Array<i32>, pos: i32) -> i32 {
                 if pos > best { best = pos; }
             }
             pos = start;
+            SCAN_GATE.no_struct = start_no_struct;
             try_1: {
                 pos = scan_simple_path(tokens, pos, FOLLOW_MASK_3);
                 if pos < 0 { break try_1; }
@@ -7333,6 +7347,7 @@ fn scan_macro_invocation_semi(tokens: &Array<i32>, pos: i32) -> i32 {
                 if pos > best { best = pos; }
             }
             pos = start;
+            SCAN_GATE.no_struct = start_no_struct;
             try_2: {
                 pos = scan_simple_path(tokens, pos, FOLLOW_MASK_4);
                 if pos < 0 { break try_2; }
@@ -7374,11 +7389,13 @@ fn scan_macro_rules_definition(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -
 
 fn scan_macro_rules_def(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let start = pos;
+    let start_no_struct = SCAN_GATE.no_struct;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
         if alt_kind == TK_LPAREN {
             pos = start + 1;
+            SCAN_GATE.no_struct = start_no_struct;
             try_0: {
                 pos = scan_macro_rules(tokens, pos, (FOLLOW_MASK_6 | (follow & FOLLOW_SEQUENCED) << 16) & FOLLOW_CONT_MASK);
                 if pos < 0 { break try_0; }
@@ -7391,6 +7408,7 @@ fn scan_macro_rules_def(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
             return -1;
         } else if alt_kind == TK_LSQUAREBRACKET {
             pos = start + 1;
+            SCAN_GATE.no_struct = start_no_struct;
             try_1: {
                 pos = scan_macro_rules(tokens, pos, (FOLLOW_MASK_7 | (follow & FOLLOW_SEQUENCED) << 16) & FOLLOW_CONT_MASK);
                 if pos < 0 { break try_1; }
@@ -7403,6 +7421,7 @@ fn scan_macro_rules_def(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
             return -1;
         } else if alt_kind == TK_LCURLYBRACE {
             pos = start + 1;
+            SCAN_GATE.no_struct = start_no_struct;
             try_2: {
                 pos = scan_macro_rules(tokens, pos, (FOLLOW_MASK_8 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
                 if pos < 0 { break try_2; }
@@ -7473,11 +7492,13 @@ fn scan_macro_rule(tokens: &Array<i32>, pos: i32) -> i32 {
 
 fn scan_macro_matcher(tokens: &Array<i32>, pos: i32) -> i32 {
     let start = pos;
+    let start_no_struct = SCAN_GATE.no_struct;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
         if alt_kind == TK_LPAREN {
             pos = start;
+            SCAN_GATE.no_struct = start_no_struct;
             try_0: {
                 if pos >= tokens.len() || tokens[pos] != TK_LPAREN { break try_0; }
                 pos += 1;
@@ -7494,6 +7515,7 @@ fn scan_macro_matcher(tokens: &Array<i32>, pos: i32) -> i32 {
             return -1;
         } else if alt_kind == TK_LSQUAREBRACKET {
             pos = start;
+            SCAN_GATE.no_struct = start_no_struct;
             try_1: {
                 if pos >= tokens.len() || tokens[pos] != TK_LSQUAREBRACKET { break try_1; }
                 pos += 1;
@@ -7510,6 +7532,7 @@ fn scan_macro_matcher(tokens: &Array<i32>, pos: i32) -> i32 {
             return -1;
         } else if alt_kind == TK_LCURLYBRACE {
             pos = start;
+            SCAN_GATE.no_struct = start_no_struct;
             try_2: {
                 if pos >= tokens.len() || tokens[pos] != TK_LCURLYBRACE { break try_2; }
                 pos += 1;
@@ -7533,11 +7556,13 @@ fn scan_macro_matcher(tokens: &Array<i32>, pos: i32) -> i32 {
 
 fn scan_macro_match(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let start = pos;
+    let start_no_struct = SCAN_GATE.no_struct;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
         if _kind_set_5(alt_kind) {
             pos = start;
+            SCAN_GATE.no_struct = start_no_struct;
             try_0: {
                 pos = scan_macro_match_token(tokens, pos);
                 if pos < 0 { break try_0; }
@@ -7552,6 +7577,7 @@ fn scan_macro_match(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
             return -1;
         } else if _kind_set_3(alt_kind) {
             pos = start;
+            SCAN_GATE.no_struct = start_no_struct;
             try_1: {
                 pos = scan_macro_matcher(tokens, pos);
                 if pos < 0 { break try_1; }
@@ -7561,6 +7587,7 @@ fn scan_macro_match(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
         } else if alt_kind == TK_DOLLAR {
             let mut best: i32 = -1;
             pos = start + 1;
+            SCAN_GATE.no_struct = start_no_struct;
             try_3: {
                 if pos >= tokens.len() || tokens[pos] != TK_LPAREN { break try_3; }
                 pos += 1;
@@ -7584,14 +7611,17 @@ fn scan_macro_match(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
                 if pos > best { best = pos; }
             }
             pos = start;
+            SCAN_GATE.no_struct = start_no_struct;
             try_2: {
                 if pos >= tokens.len() || tokens[pos] != TK_DOLLAR { break try_2; }
                 pos += 1;
                 let gp_3 = pos;
+                let gp_3_no_struct = SCAN_GATE.no_struct;
                 let sgk_3 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
                 let mut sg_3_best = -1;
                 if _kind_set_4(sgk_3) {
                     pos = gp_3;
+                    SCAN_GATE.no_struct = gp_3_no_struct;
                     sg_3_0: {
                         pos = scan_identifier(tokens, pos);
                         if pos < 0 { break sg_3_0; }
@@ -7599,6 +7629,7 @@ fn scan_macro_match(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
                     }
                 } else if sgk_3 == TK_KW_SELFVALUE {
                     pos = gp_3;
+                    SCAN_GATE.no_struct = gp_3_no_struct;
                     sg_3_1: {
                         if pos >= tokens.len() || tokens[pos] != TK_KW_SELFVALUE { break sg_3_1; }
                         pos += 1;
@@ -7641,6 +7672,7 @@ fn scan_macro_match_token_alt_1(tokens: &Array<i32>, pos: i32) -> i32 {
 
 fn scan_macro_match_token(tokens: &Array<i32>, pos: i32) -> i32 {
     let start = pos;
+    let start_no_struct = SCAN_GATE.no_struct;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
@@ -7662,6 +7694,7 @@ fn scan_macro_match_token(tokens: &Array<i32>, pos: i32) -> i32 {
             return -1;
         } else if _kind_set_54(alt_kind) {
             pos = start;
+            SCAN_GATE.no_struct = start_no_struct;
             try_2: {
                 pos = scan_macro_punctuation_token(tokens, pos);
                 if pos < 0 { break try_2; }
@@ -7670,6 +7703,7 @@ fn scan_macro_match_token(tokens: &Array<i32>, pos: i32) -> i32 {
             return -1;
         } else if _kind_set_55(alt_kind) {
             pos = start;
+            SCAN_GATE.no_struct = start_no_struct;
             try_3: {
                 pos = scan_macro_rep_op(tokens, pos);
                 if pos < 0 { break try_3; }
@@ -7708,6 +7742,7 @@ fn scan_macro_rep_sep_alt_1(tokens: &Array<i32>, pos: i32) -> i32 {
 
 fn scan_macro_rep_sep(tokens: &Array<i32>, pos: i32) -> i32 {
     let start = pos;
+    let start_no_struct = SCAN_GATE.no_struct;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
@@ -7729,6 +7764,7 @@ fn scan_macro_rep_sep(tokens: &Array<i32>, pos: i32) -> i32 {
             return -1;
         } else if _kind_set_54(alt_kind) {
             pos = start;
+            SCAN_GATE.no_struct = start_no_struct;
             try_2: {
                 pos = scan_macro_punctuation_token(tokens, pos);
                 if pos < 0 { break try_2; }
@@ -7737,6 +7773,7 @@ fn scan_macro_rep_sep(tokens: &Array<i32>, pos: i32) -> i32 {
             return -1;
         } else if alt_kind == TK_DOLLAR {
             pos = start + 1;
+            SCAN_GATE.no_struct = start_no_struct;
             break scan_alts;
         } else {
             return -1;
@@ -7771,16 +7808,19 @@ fn scan_item(tokens: &Array<i32>, pos: i32) -> i32 {
         if pos == sp { break; }
     }
     let gp_4 = pos;
+    let gp_4_no_struct = SCAN_GATE.no_struct;
     let sgk_4 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     let mut sg_4_best = -1;
     if _kind_set_7(sgk_4) {
         pos = gp_4;
+        SCAN_GATE.no_struct = gp_4_no_struct;
         sg_4_0: {
             pos = scan_vis_item(tokens, pos, 0);
             if pos < 0 { break sg_4_0; }
             if pos > sg_4_best { sg_4_best = pos; }
         }
         pos = gp_4;
+        SCAN_GATE.no_struct = gp_4_no_struct;
         sg_4_1: {
             pos = scan_macro_item(tokens, pos, 0);
             if pos < 0 { break sg_4_1; }
@@ -7805,46 +7845,54 @@ fn scan_vis_item(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
         if pos < 0 { pos = sp; }
     }
     let gp_5 = pos;
+    let gp_5_no_struct = SCAN_GATE.no_struct;
     let sgk_5 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     let mut sg_5_best = -1;
     if _kind_set_8(sgk_5) {
         pos = gp_5;
+        SCAN_GATE.no_struct = gp_5_no_struct;
         sg_5_0: {
             pos = scan_module(tokens, pos, 0);
             if pos < 0 { break sg_5_0; }
             if pos > sg_5_best { sg_5_best = pos; }
         }
         pos = gp_5;
+        SCAN_GATE.no_struct = gp_5_no_struct;
         sg_5_1: {
             pos = scan_extern_crate(tokens, pos, 0);
             if pos < 0 { break sg_5_1; }
             if pos > sg_5_best { sg_5_best = pos; }
         }
         pos = gp_5;
+        SCAN_GATE.no_struct = gp_5_no_struct;
         sg_5_3: {
             pos = scan_function_(tokens, pos, 0);
             if pos < 0 { break sg_5_3; }
             if pos > sg_5_best { sg_5_best = pos; }
         }
         pos = gp_5;
+        SCAN_GATE.no_struct = gp_5_no_struct;
         sg_5_8: {
             pos = scan_constant_item(tokens, pos, 0);
             if pos < 0 { break sg_5_8; }
             if pos > sg_5_best { sg_5_best = pos; }
         }
         pos = gp_5;
+        SCAN_GATE.no_struct = gp_5_no_struct;
         sg_5_10: {
             pos = scan_trait_(tokens, pos, 0);
             if pos < 0 { break sg_5_10; }
             if pos > sg_5_best { sg_5_best = pos; }
         }
         pos = gp_5;
+        SCAN_GATE.no_struct = gp_5_no_struct;
         sg_5_11: {
             pos = scan_implementation(tokens, pos, 0);
             if pos < 0 { break sg_5_11; }
             if pos > sg_5_best { sg_5_best = pos; }
         }
         pos = gp_5;
+        SCAN_GATE.no_struct = gp_5_no_struct;
         sg_5_12: {
             pos = scan_extern_block(tokens, pos, 0);
             if pos < 0 { break sg_5_12; }
@@ -7852,6 +7900,7 @@ fn scan_vis_item(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
         }
     } else if sgk_5 == TK_KW_USE {
         pos = gp_5;
+        SCAN_GATE.no_struct = gp_5_no_struct;
         sg_5_2: {
             pos = scan_use_declaration(tokens, pos, 0);
             if pos < 0 { break sg_5_2; }
@@ -7859,6 +7908,7 @@ fn scan_vis_item(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
         }
     } else if sgk_5 == TK_KW_TYPE {
         pos = gp_5;
+        SCAN_GATE.no_struct = gp_5_no_struct;
         sg_5_4: {
             pos = scan_type_alias(tokens, pos, 0);
             if pos < 0 { break sg_5_4; }
@@ -7866,6 +7916,7 @@ fn scan_vis_item(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
         }
     } else if sgk_5 == TK_KW_STRUCT {
         pos = gp_5;
+        SCAN_GATE.no_struct = gp_5_no_struct;
         sg_5_5: {
             pos = scan_struct_(tokens, pos, 0);
             if pos < 0 { break sg_5_5; }
@@ -7873,6 +7924,7 @@ fn scan_vis_item(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
         }
     } else if sgk_5 == TK_KW_ENUM {
         pos = gp_5;
+        SCAN_GATE.no_struct = gp_5_no_struct;
         sg_5_6: {
             pos = scan_enumeration(tokens, pos, 0);
             if pos < 0 { break sg_5_6; }
@@ -7880,6 +7932,7 @@ fn scan_vis_item(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
         }
     } else if sgk_5 == TK_KW_UNION {
         pos = gp_5;
+        SCAN_GATE.no_struct = gp_5_no_struct;
         sg_5_7: {
             pos = scan_union_(tokens, pos, 0);
             if pos < 0 { break sg_5_7; }
@@ -7887,6 +7940,7 @@ fn scan_vis_item(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
         }
     } else if sgk_5 == TK_KW_STATIC {
         pos = gp_5;
+        SCAN_GATE.no_struct = gp_5_no_struct;
         sg_5_9: {
             pos = scan_static_item(tokens, pos, 0);
             if pos < 0 { break sg_5_9; }
@@ -7911,6 +7965,7 @@ fn scan_macro_item_alt_0(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 
 
 fn scan_macro_item(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let start = pos;
+    let start_no_struct = SCAN_GATE.no_struct;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
@@ -7923,6 +7978,7 @@ fn scan_macro_item(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
             let try_0_end = scan_macro_item_alt_0(tokens, start, follow);
             if try_0_end > best { best = try_0_end; }
             pos = start;
+            SCAN_GATE.no_struct = start_no_struct;
             try_1: {
                 pos = scan_macro_rules_definition(tokens, pos, follow);
                 if pos < 0 { break try_1; }
@@ -7947,10 +8003,12 @@ fn scan_module(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     pos = scan_identifier(tokens, pos);
     if pos < 0 { return -1; }
     let gp_6 = pos;
+    let gp_6_no_struct = SCAN_GATE.no_struct;
     let sgk_6 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     let mut sg_6_best = -1;
     if sgk_6 == TK_SEMI {
         pos = gp_6;
+        SCAN_GATE.no_struct = gp_6_no_struct;
         sg_6_0: {
             if pos >= tokens.len() || tokens[pos] != TK_SEMI { break sg_6_0; }
             pos += 1;
@@ -7958,6 +8016,7 @@ fn scan_module(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
         }
     } else if sgk_6 == TK_LCURLYBRACE {
         pos = gp_6;
+        SCAN_GATE.no_struct = gp_6_no_struct;
         sg_6_1: {
             if pos >= tokens.len() || tokens[pos] != TK_LCURLYBRACE { break sg_6_1; }
             pos += 1;
@@ -7997,6 +8056,7 @@ fn scan_module(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
         pos = sg_6_best;
     } else {
         pos = gp_6;
+        SCAN_GATE.no_struct = gp_6_no_struct;
     }
     return pos;
 }
@@ -8021,11 +8081,13 @@ fn scan_extern_crate(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
 
 fn scan_crate_ref(tokens: &Array<i32>, pos: i32) -> i32 {
     let start = pos;
+    let start_no_struct = SCAN_GATE.no_struct;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
         if _kind_set_4(alt_kind) {
             pos = start;
+            SCAN_GATE.no_struct = start_no_struct;
             try_0: {
                 pos = scan_identifier(tokens, pos);
                 if pos < 0 { break try_0; }
@@ -8034,6 +8096,7 @@ fn scan_crate_ref(tokens: &Array<i32>, pos: i32) -> i32 {
             return -1;
         } else if alt_kind == TK_KW_SELFVALUE {
             pos = start + 1;
+            SCAN_GATE.no_struct = start_no_struct;
             break scan_alts;
         } else {
             return -1;
@@ -8047,10 +8110,12 @@ fn scan_as_clause(tokens: &Array<i32>, pos: i32) -> i32 {
     if pos >= tokens.len() || tokens[pos] != TK_KW_AS { return -1; }
     pos += 1;
     let gp_8 = pos;
+    let gp_8_no_struct = SCAN_GATE.no_struct;
     let sgk_8 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     let mut sg_8_best = -1;
     if _kind_set_4(sgk_8) {
         pos = gp_8;
+        SCAN_GATE.no_struct = gp_8_no_struct;
         sg_8_0: {
             pos = scan_identifier(tokens, pos);
             if pos < 0 { break sg_8_0; }
@@ -8058,6 +8123,7 @@ fn scan_as_clause(tokens: &Array<i32>, pos: i32) -> i32 {
         }
     } else if sgk_8 == TK_UNDERSCORE {
         pos = gp_8;
+        SCAN_GATE.no_struct = gp_8_no_struct;
         sg_8_1: {
             if pos >= tokens.len() || tokens[pos] != TK_UNDERSCORE { break sg_8_1; }
             pos += 1;
@@ -8108,10 +8174,12 @@ fn scan_use_tree_alt_0(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
         }
     }
     let gp_12 = pos;
+    let gp_12_no_struct = SCAN_GATE.no_struct;
     let sgk_12 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     let mut sg_12_best = -1;
     if sgk_12 == TK_STAR {
         pos = gp_12;
+        SCAN_GATE.no_struct = gp_12_no_struct;
         sg_12_0: {
             if pos >= tokens.len() || tokens[pos] != TK_STAR { break sg_12_0; }
             pos += 1;
@@ -8119,6 +8187,7 @@ fn scan_use_tree_alt_0(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
         }
     } else if sgk_12 == TK_LCURLYBRACE {
         pos = gp_12;
+        SCAN_GATE.no_struct = gp_12_no_struct;
         sg_12_1: {
             if pos >= tokens.len() || tokens[pos] != TK_LCURLYBRACE { break sg_12_1; }
             pos += 1;
@@ -8161,12 +8230,14 @@ fn scan_use_tree_alt_0(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
         pos = sg_12_best;
     } else {
         pos = gp_12;
+        SCAN_GATE.no_struct = gp_12_no_struct;
     }
     return pos;
 }
 
 fn scan_use_tree(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let start = pos;
+    let start_no_struct = SCAN_GATE.no_struct;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
@@ -8175,6 +8246,7 @@ fn scan_use_tree(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
             let try_0_end = scan_use_tree_alt_0(tokens, start, follow);
             if try_0_end > best { best = try_0_end; }
             pos = start;
+            SCAN_GATE.no_struct = start_no_struct;
             try_1: {
                 pos = scan_simple_path(tokens, pos, follow);
                 if pos < 0 { break try_1; }
@@ -8185,10 +8257,12 @@ fn scan_use_tree(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
                             if pos >= tokens.len() || tokens[pos] != TK_KW_AS { break sg_15; }
                             pos += 1;
                             let gp_16 = pos;
+                            let gp_16_no_struct = SCAN_GATE.no_struct;
                             let sgk_16 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
                             let mut sg_16_best = -1;
                             if _kind_set_4(sgk_16) {
                                 pos = gp_16;
+                                SCAN_GATE.no_struct = gp_16_no_struct;
                                 sg_16_0: {
                                     pos = scan_identifier(tokens, pos);
                                     if pos < 0 { break sg_16_0; }
@@ -8196,6 +8270,7 @@ fn scan_use_tree(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
                                 }
                             } else if sgk_16 == TK_UNDERSCORE {
                                 pos = gp_16;
+                                SCAN_GATE.no_struct = gp_16_no_struct;
                                 sg_16_1: {
                                     if pos >= tokens.len() || tokens[pos] != TK_UNDERSCORE { break sg_16_1; }
                                     pos += 1;
@@ -8261,10 +8336,12 @@ fn scan_function_(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
         if pos < 0 { pos = sp; }
     }
     let gp_17 = pos;
+    let gp_17_no_struct = SCAN_GATE.no_struct;
     let sgk_17 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     let mut sg_17_best = -1;
     if sgk_17 == TK_LCURLYBRACE {
         pos = gp_17;
+        SCAN_GATE.no_struct = gp_17_no_struct;
         sg_17_0: {
             pos = scan_block_expression(tokens, pos, follow);
             if pos < 0 { break sg_17_0; }
@@ -8272,6 +8349,7 @@ fn scan_function_(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
         }
     } else if sgk_17 == TK_SEMI {
         pos = gp_17;
+        SCAN_GATE.no_struct = gp_17_no_struct;
         sg_17_1: {
             if pos >= tokens.len() || tokens[pos] != TK_SEMI { break sg_17_1; }
             pos += 1;
@@ -8385,6 +8463,7 @@ fn scan_function_parameters_alt_1(tokens: &Array<i32>, pos: i32, follow: i64 = 0
 
 fn scan_function_parameters(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let start = pos;
+    let start_no_struct = SCAN_GATE.no_struct;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
@@ -8393,6 +8472,7 @@ fn scan_function_parameters(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i
             let try_1_end = scan_function_parameters_alt_1(tokens, start, follow);
             if try_1_end > best { best = try_1_end; }
             pos = start;
+            SCAN_GATE.no_struct = start_no_struct;
             try_0: {
                 pos = scan_self_param(tokens, pos);
                 if pos < 0 { break try_0; }
@@ -8424,16 +8504,19 @@ fn scan_self_param(tokens: &Array<i32>, pos: i32) -> i32 {
         if pos == sp { break; }
     }
     let gp_24 = pos;
+    let gp_24_no_struct = SCAN_GATE.no_struct;
     let sgk_24 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     let mut sg_24_best = -1;
     if _kind_set_15(sgk_24) {
         pos = gp_24;
+        SCAN_GATE.no_struct = gp_24_no_struct;
         sg_24_0: {
             pos = scan_shorthand_self(tokens, pos, 0);
             if pos < 0 { break sg_24_0; }
             if pos > sg_24_best { sg_24_best = pos; }
         }
         pos = gp_24;
+        SCAN_GATE.no_struct = gp_24_no_struct;
         sg_24_1: {
             pos = scan_typed_self(tokens, pos, 0);
             if pos < 0 { break sg_24_1; }
@@ -8505,16 +8588,19 @@ fn scan_function_param(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
         if pos == sp { break; }
     }
     let gp_28 = pos;
+    let gp_28_no_struct = SCAN_GATE.no_struct;
     let sgk_28 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     let mut sg_28_best = -1;
     if _kind_set_17(sgk_28) {
         pos = gp_28;
+        SCAN_GATE.no_struct = gp_28_no_struct;
         sg_28_0: {
             pos = scan_function_param_pattern(tokens, pos, follow);
             if pos < 0 { break sg_28_0; }
             if pos > sg_28_best { sg_28_best = pos; }
         }
         pos = gp_28;
+        SCAN_GATE.no_struct = gp_28_no_struct;
         sg_28_2: {
             pos = scan_type_(tokens, pos, follow);
             if pos < 0 { break sg_28_2; }
@@ -8522,6 +8608,7 @@ fn scan_function_param(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
         }
     } else if sgk_28 == TK_DOTDOTDOT {
         pos = gp_28;
+        SCAN_GATE.no_struct = gp_28_no_struct;
         sg_28_1: {
             if pos >= tokens.len() || tokens[pos] != TK_DOTDOTDOT { break sg_28_1; }
             pos += 1;
@@ -8544,10 +8631,12 @@ fn scan_function_param_pattern(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -
     if pos >= tokens.len() || tokens[pos] != TK_COLON { return -1; }
     pos += 1;
     let gp_29 = pos;
+    let gp_29_no_struct = SCAN_GATE.no_struct;
     let sgk_29 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     let mut sg_29_best = -1;
     if _kind_set_18(sgk_29) {
         pos = gp_29;
+        SCAN_GATE.no_struct = gp_29_no_struct;
         sg_29_0: {
             pos = scan_type_(tokens, pos, follow);
             if pos < 0 { break sg_29_0; }
@@ -8555,6 +8644,7 @@ fn scan_function_param_pattern(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -
         }
     } else if sgk_29 == TK_DOTDOTDOT {
         pos = gp_29;
+        SCAN_GATE.no_struct = gp_29_no_struct;
         sg_29_1: {
             if pos >= tokens.len() || tokens[pos] != TK_DOTDOTDOT { break sg_29_1; }
             pos += 1;
@@ -8615,18 +8705,21 @@ fn scan_type_alias(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
 
 fn scan_struct_(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let start = pos;
+    let start_no_struct = SCAN_GATE.no_struct;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
         if alt_kind == TK_KW_STRUCT {
             let mut best: i32 = -1;
             pos = start;
+            SCAN_GATE.no_struct = start_no_struct;
             try_0: {
                 pos = scan_struct_struct(tokens, pos, follow);
                 if pos < 0 { break try_0; }
                 if pos > best { best = pos; }
             }
             pos = start;
+            SCAN_GATE.no_struct = start_no_struct;
             try_1: {
                 pos = scan_tuple_struct(tokens, pos, follow);
                 if pos < 0 { break try_1; }
@@ -8658,10 +8751,12 @@ fn scan_struct_struct(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
         if pos < 0 { pos = sp; }
     }
     let gp_31 = pos;
+    let gp_31_no_struct = SCAN_GATE.no_struct;
     let sgk_31 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     let mut sg_31_best = -1;
     if sgk_31 == TK_LCURLYBRACE {
         pos = gp_31;
+        SCAN_GATE.no_struct = gp_31_no_struct;
         sg_31_0: {
             if pos >= tokens.len() || tokens[pos] != TK_LCURLYBRACE { break sg_31_0; }
             pos += 1;
@@ -8676,6 +8771,7 @@ fn scan_struct_struct(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
         }
     } else if sgk_31 == TK_SEMI {
         pos = gp_31;
+        SCAN_GATE.no_struct = gp_31_no_struct;
         sg_31_1: {
             if pos >= tokens.len() || tokens[pos] != TK_SEMI { break sg_31_1; }
             pos += 1;
@@ -8686,6 +8782,7 @@ fn scan_struct_struct(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
         pos = sg_31_best;
     } else {
         pos = gp_31;
+        SCAN_GATE.no_struct = gp_31_no_struct;
     }
     return pos;
 }
@@ -8935,10 +9032,12 @@ fn scan_enum_item(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     if pos < tokens.len() && _kind_set_21(tokens[pos]) && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
         let sp = pos;
         let gp_38 = pos;
+        let gp_38_no_struct = SCAN_GATE.no_struct;
         let sgk_38 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
         let mut sg_38_best = -1;
         if sgk_38 == TK_LPAREN {
             pos = gp_38;
+            SCAN_GATE.no_struct = gp_38_no_struct;
             sg_38_0: {
                 pos = scan_enum_item_tuple(tokens, pos, 0);
                 if pos < 0 { break sg_38_0; }
@@ -8946,6 +9045,7 @@ fn scan_enum_item(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
             }
         } else if sgk_38 == TK_LCURLYBRACE {
             pos = gp_38;
+            SCAN_GATE.no_struct = gp_38_no_struct;
             sg_38_1: {
                 pos = scan_enum_item_struct(tokens, pos, 0);
                 if pos < 0 { break sg_38_1; }
@@ -8953,6 +9053,7 @@ fn scan_enum_item(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
             }
         } else if sgk_38 == TK_EQ {
             pos = gp_38;
+            SCAN_GATE.no_struct = gp_38_no_struct;
             sg_38_2: {
                 pos = scan_enum_item_discriminant(tokens, pos, 0);
                 if pos < 0 { break sg_38_2; }
@@ -9037,10 +9138,12 @@ fn scan_constant_item(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     if pos >= tokens.len() || tokens[pos] != TK_KW_CONST { return -1; }
     pos += 1;
     let gp_39 = pos;
+    let gp_39_no_struct = SCAN_GATE.no_struct;
     let sgk_39 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     let mut sg_39_best = -1;
     if _kind_set_4(sgk_39) {
         pos = gp_39;
+        SCAN_GATE.no_struct = gp_39_no_struct;
         sg_39_0: {
             pos = scan_identifier(tokens, pos);
             if pos < 0 { break sg_39_0; }
@@ -9048,6 +9151,7 @@ fn scan_constant_item(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
         }
     } else if sgk_39 == TK_UNDERSCORE {
         pos = gp_39;
+        SCAN_GATE.no_struct = gp_39_no_struct;
         sg_39_1: {
             if pos >= tokens.len() || tokens[pos] != TK_UNDERSCORE { break sg_39_1; }
             pos += 1;
@@ -9198,12 +9302,14 @@ fn scan_implementation_alt_1(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> 
 
 fn scan_implementation(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let start = pos;
+    let start_no_struct = SCAN_GATE.no_struct;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
         if alt_kind == TK_KW_IMPL {
             let mut best: i32 = -1;
             pos = start;
+            SCAN_GATE.no_struct = start_no_struct;
             try_0: {
                 pos = scan_inherent_impl(tokens, pos, follow);
                 if pos < 0 { break try_0; }
@@ -9438,10 +9544,12 @@ fn scan_external_item(tokens: &Array<i32>, pos: i32) -> i32 {
         if pos == sp { break; }
     }
     let gp_50 = pos;
+    let gp_50_no_struct = SCAN_GATE.no_struct;
     let sgk_50 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     let mut sg_50_best = -1;
     if _kind_set_9(sgk_50) {
         pos = gp_50;
+        SCAN_GATE.no_struct = gp_50_no_struct;
         sg_50_0: {
             pos = scan_macro_invocation_semi(tokens, pos);
             if pos < 0 { break sg_50_0; }
@@ -9449,6 +9557,7 @@ fn scan_external_item(tokens: &Array<i32>, pos: i32) -> i32 {
         }
     } else if _kind_set_25(sgk_50) {
         pos = gp_50;
+        SCAN_GATE.no_struct = gp_50_no_struct;
         sg_50_1: {
             if pos < tokens.len() && tokens[pos] == TK_KW_PUB {
                 let sp = pos;
@@ -9456,10 +9565,12 @@ fn scan_external_item(tokens: &Array<i32>, pos: i32) -> i32 {
                 if pos < 0 { pos = sp; }
             }
             let gp_51 = pos;
+            let gp_51_no_struct = SCAN_GATE.no_struct;
             let sgk_51 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
             let mut sg_51_best = -1;
             if sgk_51 == TK_KW_STATIC {
                 pos = gp_51;
+                SCAN_GATE.no_struct = gp_51_no_struct;
                 sg_51_0: {
                     pos = scan_static_item(tokens, pos, 0);
                     if pos < 0 { break sg_51_0; }
@@ -9467,6 +9578,7 @@ fn scan_external_item(tokens: &Array<i32>, pos: i32) -> i32 {
                 }
             } else if _kind_set_26(sgk_51) {
                 pos = gp_51;
+                SCAN_GATE.no_struct = gp_51_no_struct;
                 sg_51_1: {
                     pos = scan_function_(tokens, pos, 0);
                     if pos < 0 { break sg_51_1; }
@@ -9485,6 +9597,7 @@ fn scan_external_item(tokens: &Array<i32>, pos: i32) -> i32 {
         pos = sg_50_best;
     } else {
         pos = gp_50;
+        SCAN_GATE.no_struct = gp_50_no_struct;
     }
     if pos == scan_start { return -1; }
     return pos;
@@ -9553,16 +9666,19 @@ fn scan_generic_param(tokens: &Array<i32>, pos: i32) -> i32 {
         let mut rs_55_ok = false;
         rsv_55: {
             let gp_56 = pos;
+            let gp_56_no_struct = SCAN_GATE.no_struct;
             let sgk_56 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
             let mut sg_56_best = -1;
             if _kind_set_28(sgk_56) {
                 pos = gp_56;
+                SCAN_GATE.no_struct = gp_56_no_struct;
                 sg_56_0: {
                     pos = scan_lifetime_param(tokens, pos, 0);
                     if pos < 0 { break sg_56_0; }
                     if pos > sg_56_best { sg_56_best = pos; }
                 }
                 pos = gp_56;
+                SCAN_GATE.no_struct = gp_56_no_struct;
                 sg_56_1: {
                     pos = scan_type_param(tokens, pos, 0);
                     if pos < 0 { break sg_56_1; }
@@ -9570,6 +9686,7 @@ fn scan_generic_param(tokens: &Array<i32>, pos: i32) -> i32 {
                 }
             } else if sgk_56 == TK_KW_CONST {
                 pos = gp_56;
+                SCAN_GATE.no_struct = gp_56_no_struct;
                 sg_56_2: {
                     pos = scan_const_param(tokens, pos, 0);
                     if pos < 0 { break sg_56_2; }
@@ -9587,16 +9704,19 @@ fn scan_generic_param(tokens: &Array<i32>, pos: i32) -> i32 {
         if !rs_55_ok { pos = sp; break; }
     }
     let gp_57 = pos;
+    let gp_57_no_struct = SCAN_GATE.no_struct;
     let sgk_57 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     let mut sg_57_best = -1;
     if _kind_set_28(sgk_57) {
         pos = gp_57;
+        SCAN_GATE.no_struct = gp_57_no_struct;
         sg_57_0: {
             pos = scan_lifetime_param(tokens, pos, 0);
             if pos < 0 { break sg_57_0; }
             if pos > sg_57_best { sg_57_best = pos; }
         }
         pos = gp_57;
+        SCAN_GATE.no_struct = gp_57_no_struct;
         sg_57_1: {
             pos = scan_type_param(tokens, pos, 0);
             if pos < 0 { break sg_57_1; }
@@ -9604,6 +9724,7 @@ fn scan_generic_param(tokens: &Array<i32>, pos: i32) -> i32 {
         }
     } else if sgk_57 == TK_KW_CONST {
         pos = gp_57;
+        SCAN_GATE.no_struct = gp_57_no_struct;
         sg_57_2: {
             pos = scan_const_param(tokens, pos, 0);
             if pos < 0 { break sg_57_2; }
@@ -9761,12 +9882,14 @@ fn scan_where_clause_item_alt_1(tokens: &Array<i32>, pos: i32, follow: i64 = 0) 
 
 fn scan_where_clause_item(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let start = pos;
+    let start_no_struct = SCAN_GATE.no_struct;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
         if _kind_set_16(alt_kind) {
             let mut best: i32 = -1;
             pos = start;
+            SCAN_GATE.no_struct = start_no_struct;
             try_0: {
                 pos = scan_lifetime_where_clause_item(tokens, pos, follow);
                 if pos < 0 { break try_0; }
@@ -9855,10 +9978,12 @@ fn scan_associated_item(tokens: &Array<i32>, pos: i32) -> i32 {
         if pos == sp { break; }
     }
     let gp_65 = pos;
+    let gp_65_no_struct = SCAN_GATE.no_struct;
     let sgk_65 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     let mut sg_65_best = -1;
     if _kind_set_9(sgk_65) {
         pos = gp_65;
+        SCAN_GATE.no_struct = gp_65_no_struct;
         sg_65_0: {
             pos = scan_macro_invocation_semi(tokens, pos);
             if pos < 0 { break sg_65_0; }
@@ -9866,6 +9991,7 @@ fn scan_associated_item(tokens: &Array<i32>, pos: i32) -> i32 {
         }
     } else if _kind_set_29(sgk_65) {
         pos = gp_65;
+        SCAN_GATE.no_struct = gp_65_no_struct;
         sg_65_1: {
             if pos < tokens.len() && tokens[pos] == TK_KW_PUB {
                 let sp = pos;
@@ -9873,10 +9999,12 @@ fn scan_associated_item(tokens: &Array<i32>, pos: i32) -> i32 {
                 if pos < 0 { pos = sp; }
             }
             let gp_66 = pos;
+            let gp_66_no_struct = SCAN_GATE.no_struct;
             let sgk_66 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
             let mut sg_66_best = -1;
             if sgk_66 == TK_KW_TYPE {
                 pos = gp_66;
+                SCAN_GATE.no_struct = gp_66_no_struct;
                 sg_66_0: {
                     pos = scan_type_alias(tokens, pos, 0);
                     if pos < 0 { break sg_66_0; }
@@ -9884,12 +10012,14 @@ fn scan_associated_item(tokens: &Array<i32>, pos: i32) -> i32 {
                 }
             } else if _kind_set_26(sgk_66) {
                 pos = gp_66;
+                SCAN_GATE.no_struct = gp_66_no_struct;
                 sg_66_1: {
                     pos = scan_constant_item(tokens, pos, 0);
                     if pos < 0 { break sg_66_1; }
                     if pos > sg_66_best { sg_66_best = pos; }
                 }
                 pos = gp_66;
+                SCAN_GATE.no_struct = gp_66_no_struct;
                 sg_66_2: {
                     pos = scan_function_(tokens, pos, 0);
                     if pos < 0 { break sg_66_2; }
@@ -9908,6 +10038,7 @@ fn scan_associated_item(tokens: &Array<i32>, pos: i32) -> i32 {
         pos = sg_65_best;
     } else {
         pos = gp_65;
+        SCAN_GATE.no_struct = gp_65_no_struct;
     }
     if pos == scan_start { return -1; }
     return pos;
@@ -9957,11 +10088,13 @@ fn scan_attr(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
 
 fn scan_attr_input(tokens: &Array<i32>, pos: i32) -> i32 {
     let start = pos;
+    let start_no_struct = SCAN_GATE.no_struct;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
         if _kind_set_3(alt_kind) {
             pos = start;
+            SCAN_GATE.no_struct = start_no_struct;
             try_0: {
                 pos = scan_delim_token_tree(tokens, pos);
                 if pos < 0 { break try_0; }
@@ -9970,6 +10103,7 @@ fn scan_attr_input(tokens: &Array<i32>, pos: i32) -> i32 {
             return -1;
         } else if alt_kind == TK_EQ {
             pos = start + 1;
+            SCAN_GATE.no_struct = start_no_struct;
             try_1: {
                 pos = scan_literal_expression(tokens, pos);
                 if pos < 0 { break try_1; }
@@ -10006,11 +10140,13 @@ fn scan_statement_alt_3(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
 
 fn scan_statement(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let start = pos;
+    let start_no_struct = SCAN_GATE.no_struct;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
         if alt_kind == TK_SEMI {
             pos = start + 1;
+            SCAN_GATE.no_struct = start_no_struct;
             break scan_alts;
         } else if alt_kind == TK_POUND {
             let mut best: i32 = -1;
@@ -10041,6 +10177,7 @@ fn scan_statement(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
             let try_3_end = scan_statement_alt_3(tokens, start, follow);
             if try_3_end > best { best = try_3_end; }
             pos = start;
+            SCAN_GATE.no_struct = start_no_struct;
             try_4: {
                 pos = scan_macro_invocation_semi(tokens, pos);
                 if pos < 0 { break try_4; }
@@ -10133,6 +10270,7 @@ fn scan_expression_statement_alt_0(tokens: &Array<i32>, pos: i32, follow: i64 = 
 
 fn scan_expression_statement(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let start = pos;
+    let start_no_struct = SCAN_GATE.no_struct;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
@@ -10141,6 +10279,7 @@ fn scan_expression_statement(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> 
             let try_0_end = scan_expression_statement_alt_0(tokens, start, follow);
             if try_0_end > best { best = try_0_end; }
             pos = start;
+            SCAN_GATE.no_struct = start_no_struct;
             try_1: {
                 pos = scan_expression_with_block(tokens, pos, follow);
                 if pos < 0 { break try_1; }
@@ -10201,6 +10340,7 @@ fn scan_expression_atom_alt_18(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -
 
 fn scan_expression_atom(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let start = pos;
+    let start_no_struct = SCAN_GATE.no_struct;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
@@ -10209,6 +10349,7 @@ fn scan_expression_atom(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
             let try_18_end = scan_expression_atom_alt_18(tokens, start, follow);
             if try_18_end > best { best = try_18_end; }
             pos = start;
+            SCAN_GATE.no_struct = start_no_struct;
             try_0: {
                 pos = scan_outer_attribute(tokens, pos, 0);
                 if pos < 0 { break try_0; }
@@ -10235,6 +10376,7 @@ fn scan_expression_atom(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
             return -1;
         } else if _kind_set_69(alt_kind) {
             pos = start;
+            SCAN_GATE.no_struct = start_no_struct;
             try_1: {
                 pos = scan_literal_expression(tokens, pos);
                 if pos < 0 { break try_1; }
@@ -10250,6 +10392,7 @@ fn scan_expression_atom(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
             let try_16_end = scan_expression_atom_alt_16(tokens, start, follow);
             if try_16_end > best { best = try_16_end; }
             pos = start;
+            SCAN_GATE.no_struct = start_no_struct;
             try_19: {
                 pos = scan_macro_invocation(tokens, pos);
                 if pos < 0 { break try_19; }
@@ -10274,12 +10417,15 @@ fn scan_expression_atom(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
         } else if _kind_set_70(alt_kind) {
             let mut best: i32 = -1;
             pos = start;
+            SCAN_GATE.no_struct = start_no_struct;
             try_3: {
                 let gp_72 = pos;
+                let gp_72_no_struct = SCAN_GATE.no_struct;
                 let sgk_72 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
                 let mut sg_72_best = -1;
                 if sgk_72 == TK_AND {
                     pos = gp_72;
+                    SCAN_GATE.no_struct = gp_72_no_struct;
                     sg_72_0: {
                         if pos >= tokens.len() || tokens[pos] != TK_AND { break sg_72_0; }
                         pos += 1;
@@ -10287,6 +10433,7 @@ fn scan_expression_atom(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
                     }
                 } else if sgk_72 == TK_ANDAND {
                     pos = gp_72;
+                    SCAN_GATE.no_struct = gp_72_no_struct;
                     sg_72_1: {
                         if pos >= tokens.len() || tokens[pos] != TK_ANDAND { break sg_72_1; }
                         pos += 1;
@@ -10301,10 +10448,12 @@ fn scan_expression_atom(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
                 if pos >= tokens.len() || tokens[pos] != TK_KW_RAW { break try_3; }
                 pos += 1;
                 let gp_73 = pos;
+                let gp_73_no_struct = SCAN_GATE.no_struct;
                 let sgk_73 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
                 let mut sg_73_best = -1;
                 if sgk_73 == TK_KW_CONST {
                     pos = gp_73;
+                    SCAN_GATE.no_struct = gp_73_no_struct;
                     sg_73_0: {
                         if pos >= tokens.len() || tokens[pos] != TK_KW_CONST { break sg_73_0; }
                         pos += 1;
@@ -10312,6 +10461,7 @@ fn scan_expression_atom(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
                     }
                 } else if sgk_73 == TK_KW_MUT {
                     pos = gp_73;
+                    SCAN_GATE.no_struct = gp_73_no_struct;
                     sg_73_1: {
                         if pos >= tokens.len() || tokens[pos] != TK_KW_MUT { break sg_73_1; }
                         pos += 1;
@@ -10328,12 +10478,15 @@ fn scan_expression_atom(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
                 if pos > best { best = pos; }
             }
             pos = start;
+            SCAN_GATE.no_struct = start_no_struct;
             try_4: {
                 let gp_74 = pos;
+                let gp_74_no_struct = SCAN_GATE.no_struct;
                 let sgk_74 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
                 let mut sg_74_best = -1;
                 if sgk_74 == TK_AND {
                     pos = gp_74;
+                    SCAN_GATE.no_struct = gp_74_no_struct;
                     sg_74_0: {
                         if pos >= tokens.len() || tokens[pos] != TK_AND { break sg_74_0; }
                         pos += 1;
@@ -10341,6 +10494,7 @@ fn scan_expression_atom(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
                     }
                 } else if sgk_74 == TK_ANDAND {
                     pos = gp_74;
+                    SCAN_GATE.no_struct = gp_74_no_struct;
                     sg_74_1: {
                         if pos >= tokens.len() || tokens[pos] != TK_ANDAND { break sg_74_1; }
                         pos += 1;
@@ -10363,6 +10517,7 @@ fn scan_expression_atom(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
             return -1;
         } else if alt_kind == TK_STAR {
             pos = start + 1;
+            SCAN_GATE.no_struct = start_no_struct;
             try_5: {
                 pos = scan_expression(tokens, pos, follow, 0);
                 if pos < 0 { break try_5; }
@@ -10371,12 +10526,15 @@ fn scan_expression_atom(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
             return -1;
         } else if _kind_set_71(alt_kind) {
             pos = start;
+            SCAN_GATE.no_struct = start_no_struct;
             try_6: {
                 let gp_75 = pos;
+                let gp_75_no_struct = SCAN_GATE.no_struct;
                 let sgk_75 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
                 let mut sg_75_best = -1;
                 if sgk_75 == TK_MINUS {
                     pos = gp_75;
+                    SCAN_GATE.no_struct = gp_75_no_struct;
                     sg_75_0: {
                         if pos >= tokens.len() || tokens[pos] != TK_MINUS { break sg_75_0; }
                         pos += 1;
@@ -10384,6 +10542,7 @@ fn scan_expression_atom(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
                     }
                 } else if sgk_75 == TK_NOT {
                     pos = gp_75;
+                    SCAN_GATE.no_struct = gp_75_no_struct;
                     sg_75_1: {
                         if pos >= tokens.len() || tokens[pos] != TK_NOT { break sg_75_1; }
                         pos += 1;
@@ -10402,6 +10561,7 @@ fn scan_expression_atom(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
             return -1;
         } else if alt_kind == TK_DOTDOT {
             pos = start;
+            SCAN_GATE.no_struct = start_no_struct;
             try_7: {
                 if pos >= tokens.len() || tokens[pos] != TK_DOTDOT { break try_7; }
                 pos += 1;
@@ -10415,6 +10575,7 @@ fn scan_expression_atom(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
             return -1;
         } else if alt_kind == TK_DOTDOTEQ {
             pos = start + 1;
+            SCAN_GATE.no_struct = start_no_struct;
             try_8: {
                 pos = scan_expression(tokens, pos, follow, 0);
                 if pos < 0 { break try_8; }
@@ -10423,6 +10584,7 @@ fn scan_expression_atom(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
             return -1;
         } else if alt_kind == TK_KW_CONTINUE {
             pos = start;
+            SCAN_GATE.no_struct = start_no_struct;
             try_9: {
                 if pos >= tokens.len() || tokens[pos] != TK_KW_CONTINUE { break try_9; }
                 pos += 1;
@@ -10439,6 +10601,7 @@ fn scan_expression_atom(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
             return -1;
         } else if alt_kind == TK_KW_BREAK {
             pos = start;
+            SCAN_GATE.no_struct = start_no_struct;
             try_10: {
                 if pos >= tokens.len() || tokens[pos] != TK_KW_BREAK { break try_10; }
                 pos += 1;
@@ -10455,6 +10618,7 @@ fn scan_expression_atom(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
             return -1;
         } else if alt_kind == TK_KW_RETURN {
             pos = start;
+            SCAN_GATE.no_struct = start_no_struct;
             try_11: {
                 if pos >= tokens.len() || tokens[pos] != TK_KW_RETURN { break try_11; }
                 pos += 1;
@@ -10469,6 +10633,7 @@ fn scan_expression_atom(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
         } else if alt_kind == TK_LPAREN {
             let mut best: i32 = -1;
             pos = start;
+            SCAN_GATE.no_struct = start_no_struct;
             try_12: {
                 if pos >= tokens.len() || tokens[pos] != TK_LPAREN { break try_12; }
                 pos += 1;
@@ -10497,6 +10662,7 @@ fn scan_expression_atom(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
                 if pos > best { best = pos; }
             }
             pos = start;
+            SCAN_GATE.no_struct = start_no_struct;
             try_14: {
                 if pos >= tokens.len() || tokens[pos] != TK_LPAREN { break try_14; }
                 pos += 1;
@@ -10533,6 +10699,7 @@ fn scan_expression_atom(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
             return -1;
         } else if alt_kind == TK_LSQUAREBRACKET {
             pos = start;
+            SCAN_GATE.no_struct = start_no_struct;
             try_13: {
                 if pos >= tokens.len() || tokens[pos] != TK_LSQUAREBRACKET { break try_13; }
                 pos += 1;
@@ -10679,10 +10846,12 @@ fn scan_expression_lr_14(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 
 fn scan_expression_lr_15(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     let gp_79 = pos;
+    let gp_79_no_struct = SCAN_GATE.no_struct;
     let sgk_79 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     let mut sg_79_best = -1;
     if sgk_79 == TK_STAR {
         pos = gp_79;
+        SCAN_GATE.no_struct = gp_79_no_struct;
         sg_79_0: {
             if pos >= tokens.len() || tokens[pos] != TK_STAR { break sg_79_0; }
             pos += 1;
@@ -10690,6 +10859,7 @@ fn scan_expression_lr_15(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 
         }
     } else if sgk_79 == TK_SLASH {
         pos = gp_79;
+        SCAN_GATE.no_struct = gp_79_no_struct;
         sg_79_1: {
             if pos >= tokens.len() || tokens[pos] != TK_SLASH { break sg_79_1; }
             pos += 1;
@@ -10697,6 +10867,7 @@ fn scan_expression_lr_15(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 
         }
     } else if sgk_79 == TK_PERCENT {
         pos = gp_79;
+        SCAN_GATE.no_struct = gp_79_no_struct;
         sg_79_2: {
             if pos >= tokens.len() || tokens[pos] != TK_PERCENT { break sg_79_2; }
             pos += 1;
@@ -10716,10 +10887,12 @@ fn scan_expression_lr_15(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 
 fn scan_expression_lr_16(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     let gp_80 = pos;
+    let gp_80_no_struct = SCAN_GATE.no_struct;
     let sgk_80 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     let mut sg_80_best = -1;
     if sgk_80 == TK_PLUS {
         pos = gp_80;
+        SCAN_GATE.no_struct = gp_80_no_struct;
         sg_80_0: {
             if pos >= tokens.len() || tokens[pos] != TK_PLUS { break sg_80_0; }
             pos += 1;
@@ -10727,6 +10900,7 @@ fn scan_expression_lr_16(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 
         }
     } else if sgk_80 == TK_MINUS {
         pos = gp_80;
+        SCAN_GATE.no_struct = gp_80_no_struct;
         sg_80_1: {
             if pos >= tokens.len() || tokens[pos] != TK_MINUS { break sg_80_1; }
             pos += 1;
@@ -10746,10 +10920,12 @@ fn scan_expression_lr_16(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 
 fn scan_expression_lr_17(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     let gp_81 = pos;
+    let gp_81_no_struct = SCAN_GATE.no_struct;
     let sgk_81 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     let mut sg_81_best = -1;
     if sgk_81 == TK_LT {
         pos = gp_81;
+        SCAN_GATE.no_struct = gp_81_no_struct;
         sg_81_0: {
             pos = scan_shl(tokens, pos);
             if pos < 0 { break sg_81_0; }
@@ -10757,6 +10933,7 @@ fn scan_expression_lr_17(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 
         }
     } else if sgk_81 == TK_GT {
         pos = gp_81;
+        SCAN_GATE.no_struct = gp_81_no_struct;
         sg_81_1: {
             pos = scan_shr(tokens, pos);
             if pos < 0 { break sg_81_1; }
@@ -11129,11 +11306,13 @@ fn scan_compound_assign_operator(tokens: &Array<i32>, pos: i32) -> i32 {
 
 fn scan_expression_with_block(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let start = pos;
+    let start_no_struct = SCAN_GATE.no_struct;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
         if alt_kind == TK_POUND {
             pos = start;
+            SCAN_GATE.no_struct = start_no_struct;
             try_0: {
                 pos = scan_outer_attribute(tokens, pos, 0);
                 if pos < 0 { break try_0; }
@@ -11159,6 +11338,7 @@ fn scan_expression_with_block(tokens: &Array<i32>, pos: i32, follow: i64 = 0) ->
             return -1;
         } else if alt_kind == TK_LCURLYBRACE {
             pos = start;
+            SCAN_GATE.no_struct = start_no_struct;
             try_1: {
                 pos = scan_block_expression(tokens, pos, follow);
                 if pos < 0 { break try_1; }
@@ -11167,6 +11347,7 @@ fn scan_expression_with_block(tokens: &Array<i32>, pos: i32, follow: i64 = 0) ->
             return -1;
         } else if alt_kind == TK_KW_ASYNC {
             pos = start;
+            SCAN_GATE.no_struct = start_no_struct;
             try_2: {
                 pos = scan_async_block_expression(tokens, pos, follow);
                 if pos < 0 { break try_2; }
@@ -11175,6 +11356,7 @@ fn scan_expression_with_block(tokens: &Array<i32>, pos: i32, follow: i64 = 0) ->
             return -1;
         } else if alt_kind == TK_KW_UNSAFE {
             pos = start;
+            SCAN_GATE.no_struct = start_no_struct;
             try_3: {
                 pos = scan_unsafe_block_expression(tokens, pos, follow);
                 if pos < 0 { break try_3; }
@@ -11183,6 +11365,7 @@ fn scan_expression_with_block(tokens: &Array<i32>, pos: i32, follow: i64 = 0) ->
             return -1;
         } else if _kind_set_78(alt_kind) {
             pos = start;
+            SCAN_GATE.no_struct = start_no_struct;
             try_4: {
                 pos = scan_loop_expression(tokens, pos, follow);
                 if pos < 0 { break try_4; }
@@ -11192,12 +11375,14 @@ fn scan_expression_with_block(tokens: &Array<i32>, pos: i32, follow: i64 = 0) ->
         } else if alt_kind == TK_KW_IF {
             let mut best: i32 = -1;
             pos = start;
+            SCAN_GATE.no_struct = start_no_struct;
             try_5: {
                 pos = scan_if_expression(tokens, pos, follow);
                 if pos < 0 { break try_5; }
                 if pos > best { best = pos; }
             }
             pos = start;
+            SCAN_GATE.no_struct = start_no_struct;
             try_6: {
                 pos = scan_if_let_expression(tokens, pos, follow);
                 if pos < 0 { break try_6; }
@@ -11207,6 +11392,7 @@ fn scan_expression_with_block(tokens: &Array<i32>, pos: i32, follow: i64 = 0) ->
             return -1;
         } else if alt_kind == TK_KW_MATCH {
             pos = start;
+            SCAN_GATE.no_struct = start_no_struct;
             try_7: {
                 pos = scan_match_expression(tokens, pos, follow);
                 if pos < 0 { break try_7; }
@@ -11229,11 +11415,13 @@ fn scan_literal_expression(tokens: &Array<i32>, pos: i32) -> i32 {
 
 fn scan_path_expression(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let start = pos;
+    let start_no_struct = SCAN_GATE.no_struct;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
         if _kind_set_32(alt_kind) {
             pos = start;
+            SCAN_GATE.no_struct = start_no_struct;
             try_0: {
                 pos = scan_path_in_expression(tokens, pos, follow);
                 if pos < 0 { break try_0; }
@@ -11242,6 +11430,7 @@ fn scan_path_expression(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
             return -1;
         } else if alt_kind == TK_LT {
             pos = start;
+            SCAN_GATE.no_struct = start_no_struct;
             try_1: {
                 pos = scan_qualified_path_in_expression(tokens, pos, follow);
                 if pos < 0 { break try_1; }
@@ -11327,6 +11516,7 @@ fn scan_statements_alt_0(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 
 
 fn scan_statements(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let start = pos;
+    let start_no_struct = SCAN_GATE.no_struct;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
@@ -11337,6 +11527,7 @@ fn scan_statements(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
         } else if _kind_set_31(alt_kind) {
             let mut best: i32 = -1;
             pos = start;
+            SCAN_GATE.no_struct = start_no_struct;
             try_1: {
                 pos = scan_expression(tokens, pos, follow, 0);
                 if pos < 0 { break try_1; }
@@ -11384,12 +11575,14 @@ fn scan_array_elements(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
 
 fn scan_array_elements__scoped(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let start = pos;
+    let start_no_struct = SCAN_GATE.no_struct;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
         if _kind_set_31(alt_kind) {
             let mut best: i32 = -1;
             pos = start;
+            SCAN_GATE.no_struct = start_no_struct;
             try_0: {
                 pos = scan_expression(tokens, pos, (FOLLOW_MASK_35 | (follow & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << 16) & FOLLOW_CONT_MASK, 0);
                 if pos < 0 { break try_0; }
@@ -11429,6 +11622,7 @@ fn scan_array_elements__scoped(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -
                 if pos > best { best = pos; }
             }
             pos = start;
+            SCAN_GATE.no_struct = start_no_struct;
             try_1: {
                 pos = scan_expression(tokens, pos, FOLLOW_MASK_36, 0);
                 if pos < 0 { break try_1; }
@@ -11516,24 +11710,28 @@ fn scan_tuple_index(tokens: &Array<i32>, pos: i32) -> i32 {
 
 fn scan_struct_expression(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let start = pos;
+    let start_no_struct = SCAN_GATE.no_struct;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
         if _kind_set_32(alt_kind) {
             let mut best: i32 = -1;
             pos = start;
+            SCAN_GATE.no_struct = start_no_struct;
             try_0: {
                 pos = scan_struct_expr_struct(tokens, pos, follow);
                 if pos < 0 { break try_0; }
                 if pos > best { best = pos; }
             }
             pos = start;
+            SCAN_GATE.no_struct = start_no_struct;
             try_1: {
                 pos = scan_struct_expr_tuple(tokens, pos, follow);
                 if pos < 0 { break try_1; }
                 if pos > best { best = pos; }
             }
             pos = start;
+            SCAN_GATE.no_struct = start_no_struct;
             try_2: {
                 pos = scan_struct_expr_unit(tokens, pos, follow);
                 if pos < 0 { break try_2; }
@@ -11565,10 +11763,12 @@ fn scan_struct_expr_struct(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i3
             if pos < tokens.len() && _kind_set_35(tokens[pos]) {
                 let sp = pos;
                 let gp_91 = pos;
+                let gp_91_no_struct = SCAN_GATE.no_struct;
                 let sgk_91 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
                 let mut sg_91_best = -1;
                 if _kind_set_34(sgk_91) {
                     pos = gp_91;
+                    SCAN_GATE.no_struct = gp_91_no_struct;
                     sg_91_0: {
                         pos = scan_struct_expr_fields(tokens, pos, 0);
                         if pos < 0 { break sg_91_0; }
@@ -11576,6 +11776,7 @@ fn scan_struct_expr_struct(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i3
                     }
                 } else if sgk_91 == TK_DOTDOT {
                     pos = gp_91;
+                    SCAN_GATE.no_struct = gp_91_no_struct;
                     sg_91_1: {
                         pos = scan_struct_base(tokens, pos, 0);
                         if pos < 0 { break sg_91_1; }
@@ -11599,10 +11800,12 @@ fn scan_struct_expr_struct(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i3
     if pos < tokens.len() && _kind_set_35(tokens[pos]) {
         let sp = pos;
         let gp_92 = pos;
+        let gp_92_no_struct = SCAN_GATE.no_struct;
         let sgk_92 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
         let mut sg_92_best = -1;
         if _kind_set_34(sgk_92) {
             pos = gp_92;
+            SCAN_GATE.no_struct = gp_92_no_struct;
             sg_92_0: {
                 pos = scan_struct_expr_fields(tokens, pos, 0);
                 if pos < 0 { break sg_92_0; }
@@ -11610,6 +11813,7 @@ fn scan_struct_expr_struct(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i3
             }
         } else if sgk_92 == TK_DOTDOT {
             pos = gp_92;
+            SCAN_GATE.no_struct = gp_92_no_struct;
             sg_92_1: {
                 pos = scan_struct_base(tokens, pos, 0);
                 if pos < 0 { break sg_92_1; }
@@ -11654,10 +11858,12 @@ fn scan_struct_expr_fields(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i3
             pos = sp;
             dcl_94: {
                 let gp_95 = pos;
+                let gp_95_no_struct = SCAN_GATE.no_struct;
                 let sgk_95 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
                 let mut sg_95_best = -1;
                 if sgk_95 == TK_COMMA {
                     pos = gp_95;
+                    SCAN_GATE.no_struct = gp_95_no_struct;
                     sg_95_0: {
                         if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sg_95_0; }
                         pos += 1;
@@ -11666,6 +11872,7 @@ fn scan_struct_expr_fields(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i3
                         if pos > sg_95_best { sg_95_best = pos; }
                     }
                     pos = gp_95;
+                    SCAN_GATE.no_struct = gp_95_no_struct;
                     sg_95_1: {
                         if pos < tokens.len() && tokens[pos] == TK_COMMA {
                             pos += 1;
@@ -11677,6 +11884,7 @@ fn scan_struct_expr_fields(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i3
                     pos = sg_95_best;
                 } else {
                     pos = gp_95;
+                    SCAN_GATE.no_struct = gp_95_no_struct;
                 }
                 let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
                 if (follow == 0 || follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) && (probe_kind == TK_RCURLYBRACE) { dc_94_exit = true; }
@@ -11686,10 +11894,12 @@ fn scan_struct_expr_fields(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i3
         }
     }
     let gp_96 = pos;
+    let gp_96_no_struct = SCAN_GATE.no_struct;
     let sgk_96 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     let mut sg_96_best = -1;
     if sgk_96 == TK_COMMA {
         pos = gp_96;
+        SCAN_GATE.no_struct = gp_96_no_struct;
         sg_96_0: {
             if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sg_96_0; }
             pos += 1;
@@ -11698,6 +11908,7 @@ fn scan_struct_expr_fields(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i3
             if pos > sg_96_best { sg_96_best = pos; }
         }
         pos = gp_96;
+        SCAN_GATE.no_struct = gp_96_no_struct;
         sg_96_1: {
             if pos < tokens.len() && tokens[pos] == TK_COMMA && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
                 pos += 1;
@@ -11709,6 +11920,7 @@ fn scan_struct_expr_fields(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i3
         pos = sg_96_best;
     } else {
         pos = gp_96;
+        SCAN_GATE.no_struct = gp_96_no_struct;
     }
     if pos == scan_start { return -1; }
     return pos;
@@ -11724,22 +11936,27 @@ fn scan_struct_expr_field(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32
         if pos == sp { break; }
     }
     let gp_97 = pos;
+    let gp_97_no_struct = SCAN_GATE.no_struct;
     let sgk_97 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     let mut sg_97_best = -1;
     if _kind_set_36(sgk_97) {
         pos = gp_97;
+        SCAN_GATE.no_struct = gp_97_no_struct;
         sg_97_0: {
             pos = scan_identifier(tokens, pos);
             if pos < 0 { break sg_97_0; }
             if pos > sg_97_best { sg_97_best = pos; }
         }
         pos = gp_97;
+        SCAN_GATE.no_struct = gp_97_no_struct;
         sg_97_1: {
             let gp_98 = pos;
+            let gp_98_no_struct = SCAN_GATE.no_struct;
             let sgk_98 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
             let mut sg_98_best = -1;
             if _kind_set_4(sgk_98) {
                 pos = gp_98;
+                SCAN_GATE.no_struct = gp_98_no_struct;
                 sg_98_0: {
                     pos = scan_identifier(tokens, pos);
                     if pos < 0 { break sg_98_0; }
@@ -11747,6 +11964,7 @@ fn scan_struct_expr_field(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32
                 }
             } else if sgk_98 == TK_INTEGER_LITERAL {
                 pos = gp_98;
+                SCAN_GATE.no_struct = gp_98_no_struct;
                 sg_98_1: {
                     pos = scan_tuple_index(tokens, pos);
                     if pos < 0 { break sg_98_1; }
@@ -11769,6 +11987,7 @@ fn scan_struct_expr_field(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32
         pos = sg_97_best;
     } else {
         pos = gp_97;
+        SCAN_GATE.no_struct = gp_97_no_struct;
     }
     if pos == scan_start { return -1; }
     return pos;
@@ -11880,24 +12099,28 @@ fn scan_struct_expr_unit(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 
 
 fn scan_enumeration_variant_expression(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let start = pos;
+    let start_no_struct = SCAN_GATE.no_struct;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
         if _kind_set_32(alt_kind) {
             let mut best: i32 = -1;
             pos = start;
+            SCAN_GATE.no_struct = start_no_struct;
             try_0: {
                 pos = scan_enum_expr_struct(tokens, pos, follow);
                 if pos < 0 { break try_0; }
                 if pos > best { best = pos; }
             }
             pos = start;
+            SCAN_GATE.no_struct = start_no_struct;
             try_1: {
                 pos = scan_enum_expr_tuple(tokens, pos, follow);
                 if pos < 0 { break try_1; }
                 if pos > best { best = pos; }
             }
             pos = start;
+            SCAN_GATE.no_struct = start_no_struct;
             try_2: {
                 pos = scan_enum_expr_fieldless(tokens, pos, follow);
                 if pos < 0 { break try_2; }
@@ -11973,10 +12196,12 @@ fn scan_enum_expr_fields(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 
 fn scan_enum_expr_field_alt_1(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     let gp_106 = pos;
+    let gp_106_no_struct = SCAN_GATE.no_struct;
     let sgk_106 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     let mut sg_106_best = -1;
     if _kind_set_4(sgk_106) {
         pos = gp_106;
+        SCAN_GATE.no_struct = gp_106_no_struct;
         sg_106_0: {
             pos = scan_identifier(tokens, pos);
             if pos < 0 { break sg_106_0; }
@@ -11984,6 +12209,7 @@ fn scan_enum_expr_field_alt_1(tokens: &Array<i32>, pos: i32, follow: i64 = 0) ->
         }
     } else if sgk_106 == TK_INTEGER_LITERAL {
         pos = gp_106;
+        SCAN_GATE.no_struct = gp_106_no_struct;
         sg_106_1: {
             pos = scan_tuple_index(tokens, pos);
             if pos < 0 { break sg_106_1; }
@@ -12004,12 +12230,14 @@ fn scan_enum_expr_field_alt_1(tokens: &Array<i32>, pos: i32, follow: i64 = 0) ->
 
 fn scan_enum_expr_field(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let start = pos;
+    let start_no_struct = SCAN_GATE.no_struct;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
         if _kind_set_4(alt_kind) {
             let mut best: i32 = -1;
             pos = start;
+            SCAN_GATE.no_struct = start_no_struct;
             try_0: {
                 pos = scan_identifier(tokens, pos);
                 if pos < 0 { break try_0; }
@@ -12139,10 +12367,12 @@ fn scan_closure_expression(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i3
         pos += 1;
     }
     let gp_111 = pos;
+    let gp_111_no_struct = SCAN_GATE.no_struct;
     let sgk_111 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     let mut sg_111_best = -1;
     if sgk_111 == TK_OROR {
         pos = gp_111;
+        SCAN_GATE.no_struct = gp_111_no_struct;
         sg_111_0: {
             if pos >= tokens.len() || tokens[pos] != TK_OROR { break sg_111_0; }
             pos += 1;
@@ -12150,6 +12380,7 @@ fn scan_closure_expression(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i3
         }
     } else if sgk_111 == TK_OR {
         pos = gp_111;
+        SCAN_GATE.no_struct = gp_111_no_struct;
         sg_111_1: {
             if pos >= tokens.len() || tokens[pos] != TK_OR { break sg_111_1; }
             pos += 1;
@@ -12169,10 +12400,12 @@ fn scan_closure_expression(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i3
         return -1;
     }
     let gp_112 = pos;
+    let gp_112_no_struct = SCAN_GATE.no_struct;
     let sgk_112 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     let mut sg_112_best = -1;
     if _kind_set_31(sgk_112) {
         pos = gp_112;
+        SCAN_GATE.no_struct = gp_112_no_struct;
         sg_112_0: {
             pos = scan_expression(tokens, pos, follow, 0);
             if pos < 0 { break sg_112_0; }
@@ -12180,6 +12413,7 @@ fn scan_closure_expression(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i3
         }
     } else if sgk_112 == TK_RARROW {
         pos = gp_112;
+        SCAN_GATE.no_struct = gp_112_no_struct;
         sg_112_1: {
             if pos >= tokens.len() || tokens[pos] != TK_RARROW { break sg_112_1; }
             pos += 1;
@@ -12278,10 +12512,12 @@ fn scan_loop_expression(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
         if pos < 0 { pos = sp; }
     }
     let gp_116 = pos;
+    let gp_116_no_struct = SCAN_GATE.no_struct;
     let sgk_116 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     let mut sg_116_best = -1;
     if sgk_116 == TK_KW_LOOP {
         pos = gp_116;
+        SCAN_GATE.no_struct = gp_116_no_struct;
         sg_116_0: {
             pos = scan_infinite_loop_expression(tokens, pos, 0);
             if pos < 0 { break sg_116_0; }
@@ -12289,12 +12525,14 @@ fn scan_loop_expression(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
         }
     } else if sgk_116 == TK_KW_WHILE {
         pos = gp_116;
+        SCAN_GATE.no_struct = gp_116_no_struct;
         sg_116_1: {
             pos = scan_predicate_loop_expression(tokens, pos, 0);
             if pos < 0 { break sg_116_1; }
             if pos > sg_116_best { sg_116_best = pos; }
         }
         pos = gp_116;
+        SCAN_GATE.no_struct = gp_116_no_struct;
         sg_116_2: {
             pos = scan_predicate_pattern_loop_expression(tokens, pos, 0);
             if pos < 0 { break sg_116_2; }
@@ -12302,6 +12540,7 @@ fn scan_loop_expression(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
         }
     } else if sgk_116 == TK_KW_FOR {
         pos = gp_116;
+        SCAN_GATE.no_struct = gp_116_no_struct;
         sg_116_3: {
             pos = scan_iterator_loop_expression(tokens, pos, 0);
             if pos < 0 { break sg_116_3; }
@@ -12437,10 +12676,12 @@ fn scan_if_expression(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
                 if pos >= tokens.len() || tokens[pos] != TK_KW_ELSE { break sg_120; }
                 pos += 1;
                 let gp_121 = pos;
+                let gp_121_no_struct = SCAN_GATE.no_struct;
                 let sgk_121 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
                 let mut sg_121_best = -1;
                 if sgk_121 == TK_LCURLYBRACE {
                     pos = gp_121;
+                    SCAN_GATE.no_struct = gp_121_no_struct;
                     sg_121_0: {
                         pos = scan_block_expression(tokens, pos, 0);
                         if pos < 0 { break sg_121_0; }
@@ -12448,12 +12689,14 @@ fn scan_if_expression(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
                     }
                 } else if sgk_121 == TK_KW_IF {
                     pos = gp_121;
+                    SCAN_GATE.no_struct = gp_121_no_struct;
                     sg_121_1: {
                         pos = scan_if_expression(tokens, pos, 0);
                         if pos < 0 { break sg_121_1; }
                         if pos > sg_121_best { sg_121_best = pos; }
                     }
                     pos = gp_121;
+                    SCAN_GATE.no_struct = gp_121_no_struct;
                     sg_121_2: {
                         pos = scan_if_let_expression(tokens, pos, 0);
                         if pos < 0 { break sg_121_2; }
@@ -12509,10 +12752,12 @@ fn scan_if_let_expression(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32
                 if pos >= tokens.len() || tokens[pos] != TK_KW_ELSE { break sg_123; }
                 pos += 1;
                 let gp_124 = pos;
+                let gp_124_no_struct = SCAN_GATE.no_struct;
                 let sgk_124 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
                 let mut sg_124_best = -1;
                 if sgk_124 == TK_LCURLYBRACE {
                     pos = gp_124;
+                    SCAN_GATE.no_struct = gp_124_no_struct;
                     sg_124_0: {
                         pos = scan_block_expression(tokens, pos, 0);
                         if pos < 0 { break sg_124_0; }
@@ -12520,12 +12765,14 @@ fn scan_if_let_expression(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32
                     }
                 } else if sgk_124 == TK_KW_IF {
                     pos = gp_124;
+                    SCAN_GATE.no_struct = gp_124_no_struct;
                     sg_124_1: {
                         pos = scan_if_expression(tokens, pos, 0);
                         if pos < 0 { break sg_124_1; }
                         if pos > sg_124_best { sg_124_best = pos; }
                     }
                     pos = gp_124;
+                    SCAN_GATE.no_struct = gp_124_no_struct;
                     sg_124_2: {
                         pos = scan_if_let_expression(tokens, pos, 0);
                         if pos < 0 { break sg_124_2; }
@@ -12661,6 +12908,7 @@ fn scan_match_arm_expression_alt_0(tokens: &Array<i32>, pos: i32, follow: i64 = 
 
 fn scan_match_arm_expression(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let start = pos;
+    let start_no_struct = SCAN_GATE.no_struct;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
@@ -12669,6 +12917,7 @@ fn scan_match_arm_expression(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> 
             let try_0_end = scan_match_arm_expression_alt_0(tokens, start, follow);
             if try_0_end > best { best = try_0_end; }
             pos = start;
+            SCAN_GATE.no_struct = start_no_struct;
             try_1: {
                 pos = scan_expression_with_block(tokens, pos, follow);
                 if pos < 0 { break try_1; }
@@ -12712,12 +12961,14 @@ fn scan_match_arm(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
 
 fn scan_match_arm_guard(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let start = pos;
+    let start_no_struct = SCAN_GATE.no_struct;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
         if alt_kind == TK_KW_IF {
             let mut best: i32 = -1;
             pos = start + 1;
+            SCAN_GATE.no_struct = start_no_struct;
             try_0: {
                 if pos >= tokens.len() || tokens[pos] != TK_KW_LET { break try_0; }
                 pos += 1;
@@ -12736,6 +12987,7 @@ fn scan_match_arm_guard(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
                 if pos > best { best = pos; }
             }
             pos = start + 1;
+            SCAN_GATE.no_struct = start_no_struct;
             try_1: {
                 pos = scan_expression(tokens, pos, (FOLLOW_MASK_41 | (follow & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << 16) & FOLLOW_CONT_MASK, 0);
                 if pos < 0 { break try_1; }
@@ -12792,6 +13044,7 @@ fn scan_pattern_no_top_alt_alt_0(tokens: &Array<i32>, pos: i32, follow: i64 = 0)
 
 fn scan_pattern_no_top_alt(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let start = pos;
+    let start_no_struct = SCAN_GATE.no_struct;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
@@ -12804,6 +13057,7 @@ fn scan_pattern_no_top_alt(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i3
             let try_0_end = scan_pattern_no_top_alt_alt_0(tokens, start, follow);
             if try_0_end > best { best = try_0_end; }
             pos = start;
+            SCAN_GATE.no_struct = start_no_struct;
             try_1: {
                 pos = scan_range_pattern(tokens, pos, follow);
                 if pos < 0 { break try_1; }
@@ -12855,11 +13109,13 @@ fn scan_pattern_without_range_alt_11(tokens: &Array<i32>, pos: i32, follow: i64 
 
 fn scan_pattern_without_range(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let start = pos;
+    let start_no_struct = SCAN_GATE.no_struct;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
         if _kind_set_49(alt_kind) {
             pos = start;
+            SCAN_GATE.no_struct = start_no_struct;
             try_0: {
                 pos = scan_literal_pattern(tokens, pos, follow);
                 if pos < 0 { break try_0; }
@@ -12886,6 +13142,7 @@ fn scan_pattern_without_range(tokens: &Array<i32>, pos: i32, follow: i64 = 0) ->
             return -1;
         } else if alt_kind == TK_UNDERSCORE {
             pos = start;
+            SCAN_GATE.no_struct = start_no_struct;
             try_2: {
                 pos = scan_wildcard_pattern(tokens, pos);
                 if pos < 0 { break try_2; }
@@ -12894,6 +13151,7 @@ fn scan_pattern_without_range(tokens: &Array<i32>, pos: i32, follow: i64 = 0) ->
             return -1;
         } else if alt_kind == TK_DOTDOT {
             pos = start;
+            SCAN_GATE.no_struct = start_no_struct;
             try_3: {
                 pos = scan_rest_pattern(tokens, pos);
                 if pos < 0 { break try_3; }
@@ -12902,6 +13160,7 @@ fn scan_pattern_without_range(tokens: &Array<i32>, pos: i32, follow: i64 = 0) ->
             return -1;
         } else if _kind_set_70(alt_kind) {
             pos = start;
+            SCAN_GATE.no_struct = start_no_struct;
             try_4: {
                 pos = scan_reference_pattern(tokens, pos, follow);
                 if pos < 0 { break try_4; }
@@ -12933,12 +13192,14 @@ fn scan_pattern_without_range(tokens: &Array<i32>, pos: i32, follow: i64 = 0) ->
         } else if alt_kind == TK_LPAREN {
             let mut best: i32 = -1;
             pos = start;
+            SCAN_GATE.no_struct = start_no_struct;
             try_7: {
                 pos = scan_tuple_pattern(tokens, pos, follow);
                 if pos < 0 { break try_7; }
                 if pos > best { best = pos; }
             }
             pos = start;
+            SCAN_GATE.no_struct = start_no_struct;
             try_8: {
                 pos = scan_grouped_pattern(tokens, pos, follow);
                 if pos < 0 { break try_8; }
@@ -12948,6 +13209,7 @@ fn scan_pattern_without_range(tokens: &Array<i32>, pos: i32, follow: i64 = 0) ->
             return -1;
         } else if alt_kind == TK_LSQUAREBRACKET {
             pos = start;
+            SCAN_GATE.no_struct = start_no_struct;
             try_9: {
                 pos = scan_slice_pattern(tokens, pos, follow);
                 if pos < 0 { break try_9; }
@@ -12987,32 +13249,41 @@ fn scan_literal_pattern_alt_9(tokens: &Array<i32>, pos: i32, follow: i64 = 0) ->
 
 fn scan_literal_pattern(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let start = pos;
+    let start_no_struct = SCAN_GATE.no_struct;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
         if alt_kind == TK_KW_TRUE {
             pos = start + 1;
+            SCAN_GATE.no_struct = start_no_struct;
             break scan_alts;
         } else if alt_kind == TK_KW_FALSE {
             pos = start + 1;
+            SCAN_GATE.no_struct = start_no_struct;
             break scan_alts;
         } else if alt_kind == TK_CHAR_LITERAL {
             pos = start + 1;
+            SCAN_GATE.no_struct = start_no_struct;
             break scan_alts;
         } else if alt_kind == TK_BYTE_LITERAL {
             pos = start + 1;
+            SCAN_GATE.no_struct = start_no_struct;
             break scan_alts;
         } else if alt_kind == TK_STRING_LITERAL {
             pos = start + 1;
+            SCAN_GATE.no_struct = start_no_struct;
             break scan_alts;
         } else if alt_kind == TK_RAW_STRING_LITERAL {
             pos = start + 1;
+            SCAN_GATE.no_struct = start_no_struct;
             break scan_alts;
         } else if alt_kind == TK_BYTE_STRING_LITERAL {
             pos = start + 1;
+            SCAN_GATE.no_struct = start_no_struct;
             break scan_alts;
         } else if alt_kind == TK_RAW_BYTE_STRING_LITERAL {
             pos = start + 1;
+            SCAN_GATE.no_struct = start_no_struct;
             break scan_alts;
         } else if alt_kind == TK_MINUS {
             let mut best: i32 = -1;
@@ -13082,12 +13353,14 @@ fn scan_rest_pattern(tokens: &Array<i32>, pos: i32) -> i32 {
 
 fn scan_range_pattern(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let start = pos;
+    let start_no_struct = SCAN_GATE.no_struct;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
         if _kind_set_81(alt_kind) {
             let mut best: i32 = -1;
             pos = start;
+            SCAN_GATE.no_struct = start_no_struct;
             try_0: {
                 pos = scan_range_pattern_bound(tokens, pos, FOLLOW_MASK_46);
                 if pos < 0 { break try_0; }
@@ -13098,6 +13371,7 @@ fn scan_range_pattern(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
                 if pos > best { best = pos; }
             }
             pos = start;
+            SCAN_GATE.no_struct = start_no_struct;
             try_2: {
                 pos = scan_range_pattern_bound(tokens, pos, FOLLOW_MASK_48);
                 if pos < 0 { break try_2; }
@@ -13108,6 +13382,7 @@ fn scan_range_pattern(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
                 if pos > best { best = pos; }
             }
             pos = start;
+            SCAN_GATE.no_struct = start_no_struct;
             try_1: {
                 pos = scan_range_pattern_bound(tokens, pos, (FOLLOW_MASK_47 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
                 if pos < 0 { break try_1; }
@@ -13146,14 +13421,17 @@ fn scan_range_pattern_bound_alt_3(tokens: &Array<i32>, pos: i32, follow: i64 = 0
 
 fn scan_range_pattern_bound(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let start = pos;
+    let start_no_struct = SCAN_GATE.no_struct;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
         if alt_kind == TK_CHAR_LITERAL {
             pos = start + 1;
+            SCAN_GATE.no_struct = start_no_struct;
             break scan_alts;
         } else if alt_kind == TK_BYTE_LITERAL {
             pos = start + 1;
+            SCAN_GATE.no_struct = start_no_struct;
             break scan_alts;
         } else if alt_kind == TK_MINUS {
             let mut best: i32 = -1;
@@ -13173,6 +13451,7 @@ fn scan_range_pattern_bound(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i
             return -1;
         } else if _kind_set_84(alt_kind) {
             pos = start;
+            SCAN_GATE.no_struct = start_no_struct;
             try_4: {
                 pos = scan_path_pattern(tokens, pos, follow);
                 if pos < 0 { break try_4; }
@@ -13189,10 +13468,12 @@ fn scan_range_pattern_bound(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i
 fn scan_reference_pattern(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     let gp_130 = pos;
+    let gp_130_no_struct = SCAN_GATE.no_struct;
     let sgk_130 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     let mut sg_130_best = -1;
     if sgk_130 == TK_AND {
         pos = gp_130;
+        SCAN_GATE.no_struct = gp_130_no_struct;
         sg_130_0: {
             if pos >= tokens.len() || tokens[pos] != TK_AND { break sg_130_0; }
             pos += 1;
@@ -13200,6 +13481,7 @@ fn scan_reference_pattern(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32
         }
     } else if sgk_130 == TK_ANDAND {
         pos = gp_130;
+        SCAN_GATE.no_struct = gp_130_no_struct;
         sg_130_1: {
             if pos >= tokens.len() || tokens[pos] != TK_ANDAND { break sg_130_1; }
             pos += 1;
@@ -13273,6 +13555,7 @@ fn scan_struct_pattern_elements_alt_1(tokens: &Array<i32>, pos: i32, follow: i64
 
 fn scan_struct_pattern_elements(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let start = pos;
+    let start_no_struct = SCAN_GATE.no_struct;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
@@ -13333,10 +13616,12 @@ fn scan_struct_pattern_field(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> 
         if pos == sp { break; }
     }
     let gp_135 = pos;
+    let gp_135_no_struct = SCAN_GATE.no_struct;
     let sgk_135 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     let mut sg_135_best = -1;
     if sgk_135 == TK_INTEGER_LITERAL {
         pos = gp_135;
+        SCAN_GATE.no_struct = gp_135_no_struct;
         sg_135_0: {
             pos = scan_tuple_index(tokens, pos);
             if pos < 0 { break sg_135_0; }
@@ -13348,6 +13633,7 @@ fn scan_struct_pattern_field(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> 
         }
     } else if _kind_set_42(sgk_135) {
         pos = gp_135;
+        SCAN_GATE.no_struct = gp_135_no_struct;
         sg_135_1: {
             pos = scan_identifier(tokens, pos);
             if pos < 0 { break sg_135_1; }
@@ -13358,6 +13644,7 @@ fn scan_struct_pattern_field(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> 
             if pos > sg_135_best { sg_135_best = pos; }
         }
         pos = gp_135;
+        SCAN_GATE.no_struct = gp_135_no_struct;
         sg_135_2: {
             if pos < tokens.len() && tokens[pos] == TK_KW_REF {
                 pos += 1;
@@ -13374,6 +13661,7 @@ fn scan_struct_pattern_field(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> 
         pos = sg_135_best;
     } else {
         pos = gp_135;
+        SCAN_GATE.no_struct = gp_135_no_struct;
     }
     if pos == scan_start { return -1; }
     return pos;
@@ -13525,6 +13813,7 @@ fn scan_tuple_pattern_items_alt_2(tokens: &Array<i32>, pos: i32, follow: i64 = 0
 
 fn scan_tuple_pattern_items(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let start = pos;
+    let start_no_struct = SCAN_GATE.no_struct;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
@@ -13539,6 +13828,7 @@ fn scan_tuple_pattern_items(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i
         } else if alt_kind == TK_DOTDOT {
             let mut best: i32 = -1;
             pos = start;
+            SCAN_GATE.no_struct = start_no_struct;
             try_1: {
                 pos = scan_rest_pattern(tokens, pos);
                 if pos < 0 { break try_1; }
@@ -13626,11 +13916,13 @@ fn scan_slice_pattern_items(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i
 
 fn scan_path_pattern(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let start = pos;
+    let start_no_struct = SCAN_GATE.no_struct;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
         if _kind_set_32(alt_kind) {
             pos = start;
+            SCAN_GATE.no_struct = start_no_struct;
             try_0: {
                 pos = scan_path_in_expression(tokens, pos, follow);
                 if pos < 0 { break try_0; }
@@ -13639,6 +13931,7 @@ fn scan_path_pattern(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
             return -1;
         } else if alt_kind == TK_LT {
             pos = start;
+            SCAN_GATE.no_struct = start_no_struct;
             try_1: {
                 pos = scan_qualified_path_in_expression(tokens, pos, follow);
                 if pos < 0 { break try_1; }
@@ -13668,6 +13961,7 @@ fn scan_type__alt_2(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
 
 fn scan_type_(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let start = pos;
+    let start_no_struct = SCAN_GATE.no_struct;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
@@ -13684,6 +13978,7 @@ fn scan_type_(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
             let try_0_end = scan_type__alt_0(tokens, start, follow);
             if try_0_end > best { best = try_0_end; }
             pos = start;
+            SCAN_GATE.no_struct = start_no_struct;
             try_1: {
                 pos = scan_impl_trait_type(tokens, pos, follow);
                 if pos < 0 { break try_1; }
@@ -13729,12 +14024,14 @@ fn scan_type_no_bounds_alt_12(tokens: &Array<i32>, pos: i32, follow: i64 = 0) ->
 
 fn scan_type_no_bounds(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let start = pos;
+    let start_no_struct = SCAN_GATE.no_struct;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
         if alt_kind == TK_LPAREN {
             let mut best: i32 = -1;
             pos = start;
+            SCAN_GATE.no_struct = start_no_struct;
             try_0: {
                 pos = scan_parenthesized_type(tokens, pos, follow);
                 if pos < 0 { break try_0; }
@@ -13743,6 +14040,7 @@ fn scan_type_no_bounds(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
             let try_2_end = scan_type_no_bounds_alt_2(tokens, start, follow);
             if try_2_end > best { best = try_2_end; }
             pos = start;
+            SCAN_GATE.no_struct = start_no_struct;
             try_4: {
                 pos = scan_tuple_type(tokens, pos, follow);
                 if pos < 0 { break try_4; }
@@ -13752,6 +14050,7 @@ fn scan_type_no_bounds(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
             return -1;
         } else if alt_kind == TK_KW_IMPL {
             pos = start;
+            SCAN_GATE.no_struct = start_no_struct;
             try_1: {
                 pos = scan_impl_trait_type_one_bound(tokens, pos, follow);
                 if pos < 0 { break try_1; }
@@ -13777,6 +14076,7 @@ fn scan_type_no_bounds(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
             let try_3_end = scan_type_no_bounds_alt_3(tokens, start, follow);
             if try_3_end > best { best = try_3_end; }
             pos = start;
+            SCAN_GATE.no_struct = start_no_struct;
             try_13: {
                 pos = scan_macro_invocation(tokens, pos);
                 if pos < 0 { break try_13; }
@@ -13794,6 +14094,7 @@ fn scan_type_no_bounds(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
             return -1;
         } else if alt_kind == TK_NOT {
             pos = start;
+            SCAN_GATE.no_struct = start_no_struct;
             try_5: {
                 pos = scan_never_type(tokens, pos);
                 if pos < 0 { break try_5; }
@@ -13802,6 +14103,7 @@ fn scan_type_no_bounds(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
             return -1;
         } else if alt_kind == TK_STAR {
             pos = start;
+            SCAN_GATE.no_struct = start_no_struct;
             try_6: {
                 pos = scan_raw_pointer_type(tokens, pos, follow);
                 if pos < 0 { break try_6; }
@@ -13810,6 +14112,7 @@ fn scan_type_no_bounds(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
             return -1;
         } else if _kind_set_70(alt_kind) {
             pos = start;
+            SCAN_GATE.no_struct = start_no_struct;
             try_7: {
                 pos = scan_reference_type(tokens, pos, follow);
                 if pos < 0 { break try_7; }
@@ -13819,12 +14122,14 @@ fn scan_type_no_bounds(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
         } else if alt_kind == TK_LSQUAREBRACKET {
             let mut best: i32 = -1;
             pos = start;
+            SCAN_GATE.no_struct = start_no_struct;
             try_8: {
                 pos = scan_array_type(tokens, pos, follow);
                 if pos < 0 { break try_8; }
                 if pos > best { best = pos; }
             }
             pos = start;
+            SCAN_GATE.no_struct = start_no_struct;
             try_9: {
                 pos = scan_slice_type(tokens, pos, follow);
                 if pos < 0 { break try_9; }
@@ -13834,6 +14139,7 @@ fn scan_type_no_bounds(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
             return -1;
         } else if alt_kind == TK_UNDERSCORE {
             pos = start;
+            SCAN_GATE.no_struct = start_no_struct;
             try_10: {
                 pos = scan_inferred_type(tokens, pos);
                 if pos < 0 { break try_10; }
@@ -13842,6 +14148,7 @@ fn scan_type_no_bounds(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
             return -1;
         } else if alt_kind == TK_LT {
             pos = start;
+            SCAN_GATE.no_struct = start_no_struct;
             try_11: {
                 pos = scan_qualified_path_in_type(tokens, pos, follow);
                 if pos < 0 { break try_11; }
@@ -13955,10 +14262,12 @@ fn scan_slice_type(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
 fn scan_reference_type(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     let gp_146 = pos;
+    let gp_146_no_struct = SCAN_GATE.no_struct;
     let sgk_146 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     let mut sg_146_best = -1;
     if sgk_146 == TK_AND {
         pos = gp_146;
+        SCAN_GATE.no_struct = gp_146_no_struct;
         sg_146_0: {
             if pos >= tokens.len() || tokens[pos] != TK_AND { break sg_146_0; }
             pos += 1;
@@ -13966,6 +14275,7 @@ fn scan_reference_type(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
         }
     } else if sgk_146 == TK_ANDAND {
         pos = gp_146;
+        SCAN_GATE.no_struct = gp_146_no_struct;
         sg_146_1: {
             if pos >= tokens.len() || tokens[pos] != TK_ANDAND { break sg_146_1; }
             pos += 1;
@@ -13995,10 +14305,12 @@ fn scan_raw_pointer_type(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 
     if pos >= tokens.len() || tokens[pos] != TK_STAR { return -1; }
     pos += 1;
     let gp_147 = pos;
+    let gp_147_no_struct = SCAN_GATE.no_struct;
     let sgk_147 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     let mut sg_147_best = -1;
     if sgk_147 == TK_KW_MUT {
         pos = gp_147;
+        SCAN_GATE.no_struct = gp_147_no_struct;
         sg_147_0: {
             if pos >= tokens.len() || tokens[pos] != TK_KW_MUT { break sg_147_0; }
             pos += 1;
@@ -14006,6 +14318,7 @@ fn scan_raw_pointer_type(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 
         }
     } else if sgk_147 == TK_KW_CONST {
         pos = gp_147;
+        SCAN_GATE.no_struct = gp_147_no_struct;
         sg_147_1: {
             if pos >= tokens.len() || tokens[pos] != TK_KW_CONST { break sg_147_1; }
             pos += 1;
@@ -14091,18 +14404,21 @@ fn scan_bare_function_return_type(tokens: &Array<i32>, pos: i32, follow: i64 = 0
 
 fn scan_function_parameters_maybe_named_variadic(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let start = pos;
+    let start_no_struct = SCAN_GATE.no_struct;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
         if _kind_set_44(alt_kind) {
             let mut best: i32 = -1;
             pos = start;
+            SCAN_GATE.no_struct = start_no_struct;
             try_0: {
                 pos = scan_maybe_named_function_parameters(tokens, pos, follow);
                 if pos < 0 { break try_0; }
                 if pos > best { best = pos; }
             }
             pos = start;
+            SCAN_GATE.no_struct = start_no_struct;
             try_1: {
                 pos = scan_maybe_named_function_parameters_variadic(tokens, pos, follow);
                 if pos < 0 { break try_1; }
@@ -14173,10 +14489,12 @@ fn scan_maybe_named_param(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32
         sg_153_done: {
             sg_153: {
                 let gp_154 = pos;
+                let gp_154_no_struct = SCAN_GATE.no_struct;
                 let sgk_154 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
                 let mut sg_154_best = -1;
                 if _kind_set_4(sgk_154) {
                     pos = gp_154;
+                    SCAN_GATE.no_struct = gp_154_no_struct;
                     sg_154_0: {
                         pos = scan_identifier(tokens, pos);
                         if pos < 0 { break sg_154_0; }
@@ -14184,6 +14502,7 @@ fn scan_maybe_named_param(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32
                     }
                 } else if sgk_154 == TK_UNDERSCORE {
                     pos = gp_154;
+                    SCAN_GATE.no_struct = gp_154_no_struct;
                     sg_154_1: {
                         if pos >= tokens.len() || tokens[pos] != TK_UNDERSCORE { break sg_154_1; }
                         pos += 1;
@@ -14353,11 +14672,13 @@ fn scan_type_param_bounds(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32
 
 fn scan_type_param_bound(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let start = pos;
+    let start_no_struct = SCAN_GATE.no_struct;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
         if _kind_set_16(alt_kind) {
             pos = start;
+            SCAN_GATE.no_struct = start_no_struct;
             try_0: {
                 pos = scan_lifetime(tokens, pos);
                 if pos < 0 { break try_0; }
@@ -14366,6 +14687,7 @@ fn scan_type_param_bound(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 
             return -1;
         } else if _kind_set_46(alt_kind) {
             pos = start;
+            SCAN_GATE.no_struct = start_no_struct;
             try_1: {
                 pos = scan_trait_bound(tokens, pos, follow);
                 if pos < 0 { break try_1; }
@@ -14381,11 +14703,13 @@ fn scan_type_param_bound(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 
 
 fn scan_trait_bound(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let start = pos;
+    let start_no_struct = SCAN_GATE.no_struct;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
         if _kind_set_47(alt_kind) {
             pos = start;
+            SCAN_GATE.no_struct = start_no_struct;
             try_0: {
                 if pos < tokens.len() && tokens[pos] == TK_QUESTION {
                     pos += 1;
@@ -14402,6 +14726,7 @@ fn scan_trait_bound(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
             return -1;
         } else if alt_kind == TK_LPAREN {
             pos = start;
+            SCAN_GATE.no_struct = start_no_struct;
             try_1: {
                 if pos >= tokens.len() || tokens[pos] != TK_LPAREN { break try_1; }
                 pos += 1;
@@ -14505,11 +14830,13 @@ fn scan_simple_path(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
 
 fn scan_simple_path_segment(tokens: &Array<i32>, pos: i32) -> i32 {
     let start = pos;
+    let start_no_struct = SCAN_GATE.no_struct;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
         if _kind_set_4(alt_kind) {
             pos = start;
+            SCAN_GATE.no_struct = start_no_struct;
             try_0: {
                 pos = scan_identifier(tokens, pos);
                 if pos < 0 { break try_0; }
@@ -14518,15 +14845,19 @@ fn scan_simple_path_segment(tokens: &Array<i32>, pos: i32) -> i32 {
             return -1;
         } else if alt_kind == TK_KW_SUPER {
             pos = start + 1;
+            SCAN_GATE.no_struct = start_no_struct;
             break scan_alts;
         } else if alt_kind == TK_KW_SELFVALUE {
             pos = start + 1;
+            SCAN_GATE.no_struct = start_no_struct;
             break scan_alts;
         } else if alt_kind == TK_KW_CRATE {
             pos = start + 1;
+            SCAN_GATE.no_struct = start_no_struct;
             break scan_alts;
         } else if alt_kind == TK_KW_DOLLARCRATE {
             pos = start + 1;
+            SCAN_GATE.no_struct = start_no_struct;
             break scan_alts;
         } else {
             return -1;
@@ -14587,11 +14918,13 @@ fn scan_path_expr_segment(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32
 
 fn scan_path_ident_segment(tokens: &Array<i32>, pos: i32) -> i32 {
     let start = pos;
+    let start_no_struct = SCAN_GATE.no_struct;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
         if _kind_set_4(alt_kind) {
             pos = start;
+            SCAN_GATE.no_struct = start_no_struct;
             try_0: {
                 pos = scan_identifier(tokens, pos);
                 if pos < 0 { break try_0; }
@@ -14600,18 +14933,23 @@ fn scan_path_ident_segment(tokens: &Array<i32>, pos: i32) -> i32 {
             return -1;
         } else if alt_kind == TK_KW_SUPER {
             pos = start + 1;
+            SCAN_GATE.no_struct = start_no_struct;
             break scan_alts;
         } else if alt_kind == TK_KW_SELFVALUE {
             pos = start + 1;
+            SCAN_GATE.no_struct = start_no_struct;
             break scan_alts;
         } else if alt_kind == TK_KW_SELFTYPE {
             pos = start + 1;
+            SCAN_GATE.no_struct = start_no_struct;
             break scan_alts;
         } else if alt_kind == TK_KW_CRATE {
             pos = start + 1;
+            SCAN_GATE.no_struct = start_no_struct;
             break scan_alts;
         } else if alt_kind == TK_KW_DOLLARCRATE {
             pos = start + 1;
+            SCAN_GATE.no_struct = start_no_struct;
             break scan_alts;
         } else {
             return -1;
@@ -14622,12 +14960,14 @@ fn scan_path_ident_segment(tokens: &Array<i32>, pos: i32) -> i32 {
 
 fn scan_generic_args(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let start = pos;
+    let start_no_struct = SCAN_GATE.no_struct;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
         if alt_kind == TK_LT {
             let mut best: i32 = -1;
             pos = start + 1;
+            SCAN_GATE.no_struct = start_no_struct;
             try_1: {
                 pos = scan_generic_args_lifetimes(tokens, pos, 0);
                 if pos < 0 { break try_1; }
@@ -14667,6 +15007,7 @@ fn scan_generic_args(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
                 if pos > best { best = pos; }
             }
             pos = start + 1;
+            SCAN_GATE.no_struct = start_no_struct;
             try_2: {
                 pos = scan_generic_args_types(tokens, pos, 0);
                 if pos < 0 { break try_2; }
@@ -14692,6 +15033,7 @@ fn scan_generic_args(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
                 if pos > best { best = pos; }
             }
             pos = start;
+            SCAN_GATE.no_struct = start_no_struct;
             try_3: {
                 if pos >= tokens.len() || tokens[pos] != TK_LT { break try_3; }
                 pos += 1;
@@ -14734,6 +15076,7 @@ fn scan_generic_args(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
                 if pos > best { best = pos; }
             }
             pos = start + 1;
+            SCAN_GATE.no_struct = start_no_struct;
             try_0: {
                 if pos >= tokens.len() || tokens[pos] != TK_GT { break try_0; }
                 pos += 1;
@@ -14764,12 +15107,14 @@ fn scan_generic_arg_alt_2(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32
 
 fn scan_generic_arg(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let start = pos;
+    let start_no_struct = SCAN_GATE.no_struct;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
         if _kind_set_16(alt_kind) {
             let mut best: i32 = -1;
             pos = start;
+            SCAN_GATE.no_struct = start_no_struct;
             try_0: {
                 pos = scan_lifetime(tokens, pos);
                 if pos < 0 { break try_0; }
@@ -14790,6 +15135,7 @@ fn scan_generic_arg(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
             let try_2_end = scan_generic_arg_alt_2(tokens, start, follow);
             if try_2_end > best { best = try_2_end; }
             pos = start;
+            SCAN_GATE.no_struct = start_no_struct;
             try_3: {
                 pos = scan_generic_args_binding(tokens, pos, follow);
                 if pos < 0 { break try_3; }
@@ -14818,11 +15164,13 @@ fn scan_generic_arg(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
 
 fn scan_generic_args_const(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let start = pos;
+    let start_no_struct = SCAN_GATE.no_struct;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
         if alt_kind == TK_LCURLYBRACE {
             pos = start;
+            SCAN_GATE.no_struct = start_no_struct;
             try_0: {
                 pos = scan_block_expression(tokens, pos, follow);
                 if pos < 0 { break try_0; }
@@ -14831,6 +15179,7 @@ fn scan_generic_args_const(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i3
             return -1;
         } else if _kind_set_49(alt_kind) {
             pos = start;
+            SCAN_GATE.no_struct = start_no_struct;
             try_1: {
                 if pos < tokens.len() && tokens[pos] == TK_MINUS {
                     pos += 1;
@@ -14842,6 +15191,7 @@ fn scan_generic_args_const(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i3
             return -1;
         } else if _kind_set_10(alt_kind) {
             pos = start;
+            SCAN_GATE.no_struct = start_no_struct;
             try_2: {
                 pos = scan_simple_path_segment(tokens, pos);
                 if pos < 0 { break try_2; }
@@ -15065,10 +15415,12 @@ fn scan_type_path_segment(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32
     if pos < tokens.len() && _kind_set_50(tokens[pos]) && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
         let sp = pos;
         let gp_178 = pos;
+        let gp_178_no_struct = SCAN_GATE.no_struct;
         let sgk_178 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
         let mut sg_178_best = -1;
         if sgk_178 == TK_LT {
             pos = gp_178;
+            SCAN_GATE.no_struct = gp_178_no_struct;
             sg_178_0: {
                 pos = scan_generic_args(tokens, pos, 0);
                 if pos < 0 { break sg_178_0; }
@@ -15076,6 +15428,7 @@ fn scan_type_path_segment(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32
             }
         } else if sgk_178 == TK_LPAREN {
             pos = gp_178;
+            SCAN_GATE.no_struct = gp_178_no_struct;
             sg_178_1: {
                 pos = scan_type_path_fn(tokens, pos, 0);
                 if pos < 0 { break sg_178_1; }
@@ -15174,10 +15527,12 @@ fn scan_visibility(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
                 if pos >= tokens.len() || tokens[pos] != TK_LPAREN { break sg_182; }
                 pos += 1;
                 let gp_183 = pos;
+                let gp_183_no_struct = SCAN_GATE.no_struct;
                 let sgk_183 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
                 let mut sg_183_best = -1;
                 if sgk_183 == TK_KW_CRATE {
                     pos = gp_183;
+                    SCAN_GATE.no_struct = gp_183_no_struct;
                     sg_183_0: {
                         if pos >= tokens.len() || tokens[pos] != TK_KW_CRATE { break sg_183_0; }
                         pos += 1;
@@ -15185,6 +15540,7 @@ fn scan_visibility(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
                     }
                 } else if sgk_183 == TK_KW_SELFVALUE {
                     pos = gp_183;
+                    SCAN_GATE.no_struct = gp_183_no_struct;
                     sg_183_1: {
                         if pos >= tokens.len() || tokens[pos] != TK_KW_SELFVALUE { break sg_183_1; }
                         pos += 1;
@@ -15192,6 +15548,7 @@ fn scan_visibility(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
                     }
                 } else if sgk_183 == TK_KW_SUPER {
                     pos = gp_183;
+                    SCAN_GATE.no_struct = gp_183_no_struct;
                     sg_183_2: {
                         if pos >= tokens.len() || tokens[pos] != TK_KW_SUPER { break sg_183_2; }
                         pos += 1;
@@ -15199,6 +15556,7 @@ fn scan_visibility(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
                     }
                 } else if sgk_183 == TK_KW_IN {
                     pos = gp_183;
+                    SCAN_GATE.no_struct = gp_183_no_struct;
                     sg_183_3: {
                         if pos >= tokens.len() || tokens[pos] != TK_KW_IN { break sg_183_3; }
                         pos += 1;
@@ -15253,6 +15611,7 @@ fn scan_macro_identifier_like_token_alt_1(tokens: &Array<i32>, pos: i32) -> i32 
 
 fn scan_macro_identifier_like_token(tokens: &Array<i32>, pos: i32) -> i32 {
     let start = pos;
+    let start_no_struct = SCAN_GATE.no_struct;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
@@ -15277,17 +15636,21 @@ fn scan_macro_identifier_like_token(tokens: &Array<i32>, pos: i32) -> i32 {
             let try_1_end = scan_macro_identifier_like_token_alt_1(tokens, start);
             if try_1_end > best { best = try_1_end; }
             pos = start + 1;
+            SCAN_GATE.no_struct = start_no_struct;
             if pos > best { best = pos; }
             if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else if alt_kind == TK_KW_UNDERLINELIFETIME {
             pos = start + 1;
+            SCAN_GATE.no_struct = start_no_struct;
             break scan_alts;
         } else if alt_kind == TK_KW_DOLLARCRATE {
             pos = start + 1;
+            SCAN_GATE.no_struct = start_no_struct;
             break scan_alts;
         } else if alt_kind == TK_LIFETIME_OR_LABEL {
             pos = start + 1;
+            SCAN_GATE.no_struct = start_no_struct;
             break scan_alts;
         } else {
             return -1;
@@ -15676,10 +16039,11 @@ fn _parse_token_tree_token__inner(p: &mut Parser) -> () with RustParserBase {
         if _kind_set_53(kind) {
             return _parse_token_tree_token__inner_alt_1(p);
         } else if _kind_set_52(kind) {
-            SCAN_GATE.no_struct = p.no_struct;
             let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
+            SCAN_GATE.no_struct = p.no_struct;
             let _sd_p_0 = _parse_token_tree_token__inner_scan_0(_sd_tokens, _sd_pos);
+            SCAN_GATE.no_struct = p.no_struct;
             let _sd_p_1 = _parse_token_tree_token__inner_scan_1(_sd_tokens, _sd_pos);
             trace_scan_alt(p, &"tokenTreeToken", 0, _sd_p_0);
             trace_scan_alt(p, &"tokenTreeToken", 1, _sd_p_1);
@@ -15920,11 +16284,13 @@ fn _parse_macro_invocation_semi__inner(p: &mut Parser) -> () with RustParserBase
     let kind = p.peek_kind();
     if _kind_set_9(kind) {
         if _kind_set_9(kind) {
-            SCAN_GATE.no_struct = p.no_struct;
             let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
+            SCAN_GATE.no_struct = p.no_struct;
             let _sd_p_0 = _parse_macro_invocation_semi__inner_scan_0(_sd_tokens, _sd_pos);
+            SCAN_GATE.no_struct = p.no_struct;
             let _sd_p_1 = _parse_macro_invocation_semi__inner_scan_1(_sd_tokens, _sd_pos);
+            SCAN_GATE.no_struct = p.no_struct;
             let _sd_p_2 = _parse_macro_invocation_semi__inner_scan_2(_sd_tokens, _sd_pos);
             trace_scan_alt(p, &"macroInvocationSemi", 0, _sd_p_0);
             trace_scan_alt(p, &"macroInvocationSemi", 1, _sd_p_1);
@@ -16445,10 +16811,11 @@ fn _parse_macro_match_token__inner(p: &mut Parser) -> () with RustParserBase {
         if _kind_set_53(kind) {
             return _parse_macro_match_token__inner_alt_1(p);
         } else if _kind_set_52(kind) {
-            SCAN_GATE.no_struct = p.no_struct;
             let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
+            SCAN_GATE.no_struct = p.no_struct;
             let _sd_p_0 = _parse_macro_match_token__inner_scan_0(_sd_tokens, _sd_pos);
+            SCAN_GATE.no_struct = p.no_struct;
             let _sd_p_1 = _parse_macro_match_token__inner_scan_1(_sd_tokens, _sd_pos);
             trace_scan_alt(p, &"macroMatchToken", 0, _sd_p_0);
             trace_scan_alt(p, &"macroMatchToken", 1, _sd_p_1);
@@ -16558,10 +16925,11 @@ fn _parse_macro_rep_sep__inner(p: &mut Parser) -> () with RustParserBase {
         if _kind_set_53(kind) {
             return _parse_macro_rep_sep__inner_alt_1(p);
         } else if _kind_set_52(kind) {
-            SCAN_GATE.no_struct = p.no_struct;
             let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
+            SCAN_GATE.no_struct = p.no_struct;
             let _sd_p_0 = _parse_macro_rep_sep__inner_scan_0(_sd_tokens, _sd_pos);
+            SCAN_GATE.no_struct = p.no_struct;
             let _sd_p_1 = _parse_macro_rep_sep__inner_scan_1(_sd_tokens, _sd_pos);
             trace_scan_alt(p, &"macroRepSep", 0, _sd_p_0);
             trace_scan_alt(p, &"macroRepSep", 1, _sd_p_1);
@@ -16962,10 +17330,11 @@ fn _parse_macro_item__inner(p: &mut Parser, follow: i64 = 0) -> () with RustPars
     let kind = p.peek_kind();
     if _kind_set_9(kind) {
         if kind == TK_KW_MACRORULES {
-            SCAN_GATE.no_struct = p.no_struct;
             let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
+            SCAN_GATE.no_struct = p.no_struct;
             let _sd_p_0 = _parse_macro_item__inner_scan_0(_sd_tokens, _sd_pos, follow);
+            SCAN_GATE.no_struct = p.no_struct;
             let _sd_p_1 = _parse_macro_item__inner_scan_1(_sd_tokens, _sd_pos, follow);
             trace_scan_alt(p, &"macroItem", 0, _sd_p_0);
             trace_scan_alt(p, &"macroItem", 1, _sd_p_1);
@@ -17262,10 +17631,12 @@ fn _parse_use_tree__inner_scan_1(tokens: &Array<i32>, pos: i32, follow: i64 = 0)
                 if pos >= tokens.len() || tokens[pos] != TK_KW_AS { break sg_185; }
                 pos += 1;
                 let gp_186 = pos;
+                let gp_186_no_struct = SCAN_GATE.no_struct;
                 let sgk_186 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
                 let mut sg_186_best = -1;
                 if _kind_set_4(sgk_186) {
                     pos = gp_186;
+                    SCAN_GATE.no_struct = gp_186_no_struct;
                     sg_186_0: {
                         pos = scan_identifier(tokens, pos);
                         if pos < 0 { break sg_186_0; }
@@ -17273,6 +17644,7 @@ fn _parse_use_tree__inner_scan_1(tokens: &Array<i32>, pos: i32, follow: i64 = 0)
                     }
                 } else if sgk_186 == TK_UNDERSCORE {
                     pos = gp_186;
+                    SCAN_GATE.no_struct = gp_186_no_struct;
                     sg_186_1: {
                         if pos >= tokens.len() || tokens[pos] != TK_UNDERSCORE { break sg_186_1; }
                         pos += 1;
@@ -17416,10 +17788,12 @@ fn _parse_use_tree__inner_scan_0(tokens: &Array<i32>, pos: i32, follow: i64 = 0)
         }
     }
     let gp_192 = pos;
+    let gp_192_no_struct = SCAN_GATE.no_struct;
     let sgk_192 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     let mut sg_192_best = -1;
     if sgk_192 == TK_STAR {
         pos = gp_192;
+        SCAN_GATE.no_struct = gp_192_no_struct;
         sg_192_0: {
             if pos >= tokens.len() || tokens[pos] != TK_STAR { break sg_192_0; }
             pos += 1;
@@ -17427,6 +17801,7 @@ fn _parse_use_tree__inner_scan_0(tokens: &Array<i32>, pos: i32, follow: i64 = 0)
         }
     } else if sgk_192 == TK_LCURLYBRACE {
         pos = gp_192;
+        SCAN_GATE.no_struct = gp_192_no_struct;
         sg_192_1: {
             if pos >= tokens.len() || tokens[pos] != TK_LCURLYBRACE { break sg_192_1; }
             pos += 1;
@@ -17469,6 +17844,7 @@ fn _parse_use_tree__inner_scan_0(tokens: &Array<i32>, pos: i32, follow: i64 = 0)
         pos = sg_192_best;
     } else {
         pos = gp_192;
+        SCAN_GATE.no_struct = gp_192_no_struct;
     }
     return pos;
 }
@@ -17477,10 +17853,11 @@ fn _parse_use_tree__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParser
     let kind = p.peek_kind();
     if _kind_set_11(kind) {
         if kind == TK_PATHSEP {
-            SCAN_GATE.no_struct = p.no_struct;
             let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
+            SCAN_GATE.no_struct = p.no_struct;
             let _sd_p_0 = _parse_use_tree__inner_scan_0(_sd_tokens, _sd_pos, follow);
+            SCAN_GATE.no_struct = p.no_struct;
             let _sd_p_1 = _parse_use_tree__inner_scan_1(_sd_tokens, _sd_pos, follow);
             trace_scan_alt(p, &"useTree", 0, _sd_p_0);
             trace_scan_alt(p, &"useTree", 1, _sd_p_1);
@@ -17500,10 +17877,11 @@ fn _parse_use_tree__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParser
             }
             return _parse_use_tree__inner_alt_1(p, follow);
         } else if _kind_set_10(kind) {
-            SCAN_GATE.no_struct = p.no_struct;
             let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
+            SCAN_GATE.no_struct = p.no_struct;
             let _sd_p_0 = _parse_use_tree__inner_scan_0(_sd_tokens, _sd_pos, follow);
+            SCAN_GATE.no_struct = p.no_struct;
             let _sd_p_1 = _parse_use_tree__inner_scan_1(_sd_tokens, _sd_pos, follow);
             trace_scan_alt(p, &"useTree", 0, _sd_p_0);
             trace_scan_alt(p, &"useTree", 1, _sd_p_1);
@@ -17805,10 +18183,11 @@ fn _parse_function_parameters__inner(p: &mut Parser, follow: i64 = 0) -> () with
     let kind = p.peek_kind();
     if _kind_set_12(kind) {
         if _kind_set_14(kind) {
-            SCAN_GATE.no_struct = p.no_struct;
             let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
+            SCAN_GATE.no_struct = p.no_struct;
             let _sd_p_1 = _parse_function_parameters__inner_scan_1(_sd_tokens, _sd_pos, follow);
+            SCAN_GATE.no_struct = p.no_struct;
             let _sd_p_0 = _parse_function_parameters__inner_scan_0(_sd_tokens, _sd_pos, follow);
             trace_scan_alt(p, &"functionParameters", 1, _sd_p_1);
             trace_scan_alt(p, &"functionParameters", 0, _sd_p_0);
@@ -18218,10 +18597,11 @@ fn _parse_struct___inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserB
     let kind = p.peek_kind();
     if kind == TK_KW_STRUCT {
         if kind == TK_KW_STRUCT {
-            SCAN_GATE.no_struct = p.no_struct;
             let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
+            SCAN_GATE.no_struct = p.no_struct;
             let _sd_p_0 = _parse_struct___inner_scan_0(_sd_tokens, _sd_pos, follow);
+            SCAN_GATE.no_struct = p.no_struct;
             let _sd_p_1 = _parse_struct___inner_scan_1(_sd_tokens, _sd_pos, follow);
             trace_scan_alt(p, &"struct_", 0, _sd_p_0);
             trace_scan_alt(p, &"struct_", 1, _sd_p_1);
@@ -19100,10 +19480,11 @@ fn _parse_implementation__inner(p: &mut Parser, follow: i64 = 0) -> () with Rust
     let kind = p.peek_kind();
     if _kind_set_101(kind) {
         if kind == TK_KW_IMPL {
-            SCAN_GATE.no_struct = p.no_struct;
             let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
+            SCAN_GATE.no_struct = p.no_struct;
             let _sd_p_0 = _parse_implementation__inner_scan_0(_sd_tokens, _sd_pos, follow);
+            SCAN_GATE.no_struct = p.no_struct;
             let _sd_p_1 = _parse_implementation__inner_scan_1(_sd_tokens, _sd_pos, follow);
             trace_scan_alt(p, &"implementation", 0, _sd_p_0);
             trace_scan_alt(p, &"implementation", 1, _sd_p_1);
@@ -19685,16 +20066,19 @@ fn _parse_generic_param__inner(p: &mut Parser) -> () with RustParserBase {
             if pos <= p.pos { break rep_scan; }
             let rep_body_end = pos;
             let gp_206 = pos;
+            let gp_206_no_struct = SCAN_GATE.no_struct;
             let sgk_206 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
             let mut sg_206_best = -1;
             if _kind_set_28(sgk_206) {
                 pos = gp_206;
+                SCAN_GATE.no_struct = gp_206_no_struct;
                 sg_206_0: {
                     pos = scan_lifetime_param(tokens, pos, 0);
                     if pos < 0 { break sg_206_0; }
                     if pos > sg_206_best { sg_206_best = pos; }
                 }
                 pos = gp_206;
+                SCAN_GATE.no_struct = gp_206_no_struct;
                 sg_206_1: {
                     pos = scan_type_param(tokens, pos, 0);
                     if pos < 0 { break sg_206_1; }
@@ -19702,6 +20086,7 @@ fn _parse_generic_param__inner(p: &mut Parser) -> () with RustParserBase {
                 }
             } else if sgk_206 == TK_KW_CONST {
                 pos = gp_206;
+                SCAN_GATE.no_struct = gp_206_no_struct;
                 sg_206_2: {
                     pos = scan_const_param(tokens, pos, 0);
                     if pos < 0 { break sg_206_2; }
@@ -19984,10 +20369,11 @@ fn _parse_where_clause_item__inner(p: &mut Parser, follow: i64 = 0) -> () with R
     let kind = p.peek_kind();
     if _kind_set_18(kind) {
         if _kind_set_16(kind) {
-            SCAN_GATE.no_struct = p.no_struct;
             let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
+            SCAN_GATE.no_struct = p.no_struct;
             let _sd_p_0 = _parse_where_clause_item__inner_scan_0(_sd_tokens, _sd_pos, follow);
+            SCAN_GATE.no_struct = p.no_struct;
             let _sd_p_1 = _parse_where_clause_item__inner_scan_1(_sd_tokens, _sd_pos, follow);
             trace_scan_alt(p, &"whereClauseItem", 0, _sd_p_0);
             trace_scan_alt(p, &"whereClauseItem", 1, _sd_p_1);
@@ -20408,11 +20794,13 @@ fn _parse_statement__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParse
     }
     if _kind_set_102(kind) {
         if kind == TK_POUND {
-            SCAN_GATE.no_struct = p.no_struct;
             let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
+            SCAN_GATE.no_struct = p.no_struct;
             let _sd_p_1 = _parse_statement__inner_scan_1(_sd_tokens, _sd_pos, follow);
+            SCAN_GATE.no_struct = p.no_struct;
             let _sd_p_2 = _parse_statement__inner_scan_2(_sd_tokens, _sd_pos, follow);
+            SCAN_GATE.no_struct = p.no_struct;
             let _sd_p_3 = _parse_statement__inner_scan_3(_sd_tokens, _sd_pos, follow);
             trace_scan_alt(p, &"statement", 1, _sd_p_1);
             trace_scan_alt(p, &"statement", 2, _sd_p_2);
@@ -20442,11 +20830,13 @@ fn _parse_statement__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParse
         } else if kind == TK_KW_LET {
             return _parse_statement__inner_alt_2(p, follow);
         } else if _kind_set_9(kind) {
-            SCAN_GATE.no_struct = p.no_struct;
             let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
+            SCAN_GATE.no_struct = p.no_struct;
             let _sd_p_1 = _parse_statement__inner_scan_1(_sd_tokens, _sd_pos, follow);
+            SCAN_GATE.no_struct = p.no_struct;
             let _sd_p_3 = _parse_statement__inner_scan_3(_sd_tokens, _sd_pos, follow);
+            SCAN_GATE.no_struct = p.no_struct;
             let _sd_p_4 = _parse_statement__inner_scan_4(_sd_tokens, _sd_pos, follow);
             trace_scan_alt(p, &"statement", 1, _sd_p_1);
             trace_scan_alt(p, &"statement", 3, _sd_p_3);
@@ -20476,10 +20866,11 @@ fn _parse_statement__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParse
         } else if _kind_set_64(kind) {
             return _parse_statement__inner_alt_1(p, follow);
         } else if _kind_set_65(kind) {
-            SCAN_GATE.no_struct = p.no_struct;
             let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
+            SCAN_GATE.no_struct = p.no_struct;
             let _sd_p_1 = _parse_statement__inner_scan_1(_sd_tokens, _sd_pos, follow);
+            SCAN_GATE.no_struct = p.no_struct;
             let _sd_p_3 = _parse_statement__inner_scan_3(_sd_tokens, _sd_pos, follow);
             trace_scan_alt(p, &"statement", 1, _sd_p_1);
             trace_scan_alt(p, &"statement", 3, _sd_p_3);
@@ -20629,10 +21020,11 @@ fn _parse_expression_statement__inner(p: &mut Parser, follow: i64 = 0) -> () wit
     let kind = p.peek_kind();
     if _kind_set_31(kind) {
         if _kind_set_67(kind) {
-            SCAN_GATE.no_struct = p.no_struct;
             let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
+            SCAN_GATE.no_struct = p.no_struct;
             let _sd_p_0 = _parse_expression_statement__inner_scan_0(_sd_tokens, _sd_pos, follow);
+            SCAN_GATE.no_struct = p.no_struct;
             let _sd_p_1 = _parse_expression_statement__inner_scan_1(_sd_tokens, _sd_pos, follow);
             trace_scan_alt(p, &"expressionStatement", 0, _sd_p_0);
             trace_scan_alt(p, &"expressionStatement", 1, _sd_p_1);
@@ -20839,10 +21231,12 @@ fn _parse_expression__inner_alt_10(p: &mut Parser, follow: i64 = 0) -> () with R
 fn _parse_expression__inner_scan_10(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     let gp_209 = pos;
+    let gp_209_no_struct = SCAN_GATE.no_struct;
     let sgk_209 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     let mut sg_209_best = -1;
     if sgk_209 == TK_AND {
         pos = gp_209;
+        SCAN_GATE.no_struct = gp_209_no_struct;
         sg_209_0: {
             if pos >= tokens.len() || tokens[pos] != TK_AND { break sg_209_0; }
             pos += 1;
@@ -20850,6 +21244,7 @@ fn _parse_expression__inner_scan_10(tokens: &Array<i32>, pos: i32, follow: i64 =
         }
     } else if sgk_209 == TK_ANDAND {
         pos = gp_209;
+        SCAN_GATE.no_struct = gp_209_no_struct;
         sg_209_1: {
             if pos >= tokens.len() || tokens[pos] != TK_ANDAND { break sg_209_1; }
             pos += 1;
@@ -20864,10 +21259,12 @@ fn _parse_expression__inner_scan_10(tokens: &Array<i32>, pos: i32, follow: i64 =
     if pos >= tokens.len() || tokens[pos] != TK_KW_RAW { return -1; }
     pos += 1;
     let gp_210 = pos;
+    let gp_210_no_struct = SCAN_GATE.no_struct;
     let sgk_210 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     let mut sg_210_best = -1;
     if sgk_210 == TK_KW_CONST {
         pos = gp_210;
+        SCAN_GATE.no_struct = gp_210_no_struct;
         sg_210_0: {
             if pos >= tokens.len() || tokens[pos] != TK_KW_CONST { break sg_210_0; }
             pos += 1;
@@ -20875,6 +21272,7 @@ fn _parse_expression__inner_scan_10(tokens: &Array<i32>, pos: i32, follow: i64 =
         }
     } else if sgk_210 == TK_KW_MUT {
         pos = gp_210;
+        SCAN_GATE.no_struct = gp_210_no_struct;
         sg_210_1: {
             if pos >= tokens.len() || tokens[pos] != TK_KW_MUT { break sg_210_1; }
             pos += 1;
@@ -20904,10 +21302,12 @@ fn _parse_expression__inner_alt_11(p: &mut Parser, follow: i64 = 0) -> () with R
 fn _parse_expression__inner_scan_11(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     let gp_211 = pos;
+    let gp_211_no_struct = SCAN_GATE.no_struct;
     let sgk_211 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     let mut sg_211_best = -1;
     if sgk_211 == TK_AND {
         pos = gp_211;
+        SCAN_GATE.no_struct = gp_211_no_struct;
         sg_211_0: {
             if pos >= tokens.len() || tokens[pos] != TK_AND { break sg_211_0; }
             pos += 1;
@@ -20915,6 +21315,7 @@ fn _parse_expression__inner_scan_11(tokens: &Array<i32>, pos: i32, follow: i64 =
         }
     } else if sgk_211 == TK_ANDAND {
         pos = gp_211;
+        SCAN_GATE.no_struct = gp_211_no_struct;
         sg_211_1: {
             if pos >= tokens.len() || tokens[pos] != TK_ANDAND { break sg_211_1; }
             pos += 1;
@@ -21095,10 +21496,11 @@ fn _parse_expression__inner_atom(p: &mut Parser, follow: i64 = 0, min_prec: i32 
     let kind = p.peek_kind();
     if _kind_set_103(kind) {
         if kind == TK_POUND {
-            SCAN_GATE.no_struct = p.no_struct;
             let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
+            SCAN_GATE.no_struct = p.no_struct;
             let _sd_p_39 = _parse_expression__inner_scan_39(_sd_tokens, _sd_pos, follow);
+            SCAN_GATE.no_struct = p.no_struct;
             let _sd_p_0 = _parse_expression__inner_scan_0(_sd_tokens, _sd_pos, follow);
             trace_scan_alt(p, &"expression", 39, _sd_p_39);
             trace_scan_alt(p, &"expression", 0, _sd_p_0);
@@ -21118,10 +21520,11 @@ fn _parse_expression__inner_atom(p: &mut Parser, follow: i64 = 0, min_prec: i32 
             }
             return _parse_expression__inner_alt_0(p, follow);
         } else if kind == TK_KW_ASYNC {
-            SCAN_GATE.no_struct = p.no_struct;
             let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
+            SCAN_GATE.no_struct = p.no_struct;
             let _sd_p_38 = _parse_expression__inner_scan_38(_sd_tokens, _sd_pos, follow);
+            SCAN_GATE.no_struct = p.no_struct;
             let _sd_p_39 = _parse_expression__inner_scan_39(_sd_tokens, _sd_pos, follow);
             trace_scan_alt(p, &"expression", 38, _sd_p_38);
             trace_scan_alt(p, &"expression", 39, _sd_p_39);
@@ -21154,12 +21557,15 @@ fn _parse_expression__inner_atom(p: &mut Parser, follow: i64 = 0, min_prec: i32 
     }
     if _kind_set_84(kind) {
         if _kind_set_9(kind) {
-            SCAN_GATE.no_struct = p.no_struct;
             let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
+            SCAN_GATE.no_struct = p.no_struct;
             let _sd_p_2 = _parse_expression__inner_scan_2(_sd_tokens, _sd_pos, follow);
+            SCAN_GATE.no_struct = p.no_struct;
             let _sd_p_36 = if (p.no_struct == 0) { _parse_expression__inner_scan_36(_sd_tokens, _sd_pos, follow) } else { -1 };
+            SCAN_GATE.no_struct = p.no_struct;
             let _sd_p_37 = if (p.no_struct == 0) { _parse_expression__inner_scan_37(_sd_tokens, _sd_pos, follow) } else { -1 };
+            SCAN_GATE.no_struct = p.no_struct;
             let _sd_p_40 = _parse_expression__inner_scan_40(_sd_tokens, _sd_pos, follow);
             trace_scan_alt(p, &"expression", 2, _sd_p_2);
             trace_scan_alt(p, &"expression", 36, _sd_p_36);
@@ -21183,23 +21589,27 @@ fn _parse_expression__inner_atom(p: &mut Parser, follow: i64 = 0, min_prec: i32 
                 _sd_best_p = _sd_p_40;
                 _sd_best_i = 40;
             }
-            trace_pick(p, &"expression", _sd_best_i);
-            if _sd_best_i == 2 {
-                return _parse_expression__inner_alt_2(p, follow);
+            if _sd_best_i >= 0 {
+                trace_pick(p, &"expression", _sd_best_i);
+                if _sd_best_i == 2 {
+                    return _parse_expression__inner_alt_2(p, follow);
+                }
+                if _sd_best_i == 36 {
+                    return _parse_expression__inner_alt_36(p, follow);
+                }
+                if _sd_best_i == 37 {
+                    return _parse_expression__inner_alt_37(p, follow);
+                }
+                return _parse_expression__inner_alt_40(p, follow);
             }
-            if _sd_best_i == 36 {
-                return _parse_expression__inner_alt_36(p, follow);
-            }
-            if _sd_best_i == 37 {
-                return _parse_expression__inner_alt_37(p, follow);
-            }
-            return _parse_expression__inner_alt_40(p, follow);
         } else if kind == TK_KW_SELFTYPE {
-            SCAN_GATE.no_struct = p.no_struct;
             let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
+            SCAN_GATE.no_struct = p.no_struct;
             let _sd_p_2 = _parse_expression__inner_scan_2(_sd_tokens, _sd_pos, follow);
+            SCAN_GATE.no_struct = p.no_struct;
             let _sd_p_36 = if (p.no_struct == 0) { _parse_expression__inner_scan_36(_sd_tokens, _sd_pos, follow) } else { -1 };
+            SCAN_GATE.no_struct = p.no_struct;
             let _sd_p_37 = if (p.no_struct == 0) { _parse_expression__inner_scan_37(_sd_tokens, _sd_pos, follow) } else { -1 };
             trace_scan_alt(p, &"expression", 2, _sd_p_2);
             trace_scan_alt(p, &"expression", 36, _sd_p_36);
@@ -21218,14 +21628,16 @@ fn _parse_expression__inner_atom(p: &mut Parser, follow: i64 = 0, min_prec: i32 
                 _sd_best_p = _sd_p_37;
                 _sd_best_i = 37;
             }
-            trace_pick(p, &"expression", _sd_best_i);
-            if _sd_best_i == 2 {
-                return _parse_expression__inner_alt_2(p, follow);
+            if _sd_best_i >= 0 {
+                trace_pick(p, &"expression", _sd_best_i);
+                if _sd_best_i == 2 {
+                    return _parse_expression__inner_alt_2(p, follow);
+                }
+                if _sd_best_i == 36 {
+                    return _parse_expression__inner_alt_36(p, follow);
+                }
+                return _parse_expression__inner_alt_37(p, follow);
             }
-            if _sd_best_i == 36 {
-                return _parse_expression__inner_alt_36(p, follow);
-            }
-            return _parse_expression__inner_alt_37(p, follow);
         } else if kind == TK_LT {
             return _parse_expression__inner_alt_2(p, follow);
         }
@@ -21233,10 +21645,11 @@ fn _parse_expression__inner_atom(p: &mut Parser, follow: i64 = 0, min_prec: i32 
     if _kind_set_70(kind) {
         if _kind_set_70(kind) {
             if p.peek_at(1) == TK_KW_RAW {
-                SCAN_GATE.no_struct = p.no_struct;
                 let _sd_tokens = &p.kinds;
                 let _sd_pos = p.pos;
+                SCAN_GATE.no_struct = p.no_struct;
                 let _sd_p_10 = _parse_expression__inner_scan_10(_sd_tokens, _sd_pos, follow);
+                SCAN_GATE.no_struct = p.no_struct;
                 let _sd_p_11 = _parse_expression__inner_scan_11(_sd_tokens, _sd_pos, follow);
                 trace_scan_alt(p, &"expression", 10, _sd_p_10);
                 trace_scan_alt(p, &"expression", 11, _sd_p_11);
@@ -21258,10 +21671,11 @@ fn _parse_expression__inner_atom(p: &mut Parser, follow: i64 = 0, min_prec: i32 
             } else if _kind_set_104(p.peek_at(1)) {
                 return _parse_expression__inner_alt_11(p, follow);
             } else {
-                SCAN_GATE.no_struct = p.no_struct;
                 let _sd_tokens = &p.kinds;
                 let _sd_pos = p.pos;
+                SCAN_GATE.no_struct = p.no_struct;
                 let _sd_p_10 = _parse_expression__inner_scan_10(_sd_tokens, _sd_pos, follow);
+                SCAN_GATE.no_struct = p.no_struct;
                 let _sd_p_11 = _parse_expression__inner_scan_11(_sd_tokens, _sd_pos, follow);
                 trace_scan_alt(p, &"expression", 10, _sd_p_10);
                 trace_scan_alt(p, &"expression", 11, _sd_p_11);
@@ -21349,10 +21763,11 @@ fn _parse_expression__inner_atom(p: &mut Parser, follow: i64 = 0, min_prec: i32 
         return;
     }
     if kind == TK_LPAREN {
-        SCAN_GATE.no_struct = p.no_struct;
         let _sd_tokens = &p.kinds;
         let _sd_pos = p.pos;
+        SCAN_GATE.no_struct = p.no_struct;
         let _sd_p_33 = _parse_expression__inner_scan_33(_sd_tokens, _sd_pos, follow);
+        SCAN_GATE.no_struct = p.no_struct;
         let _sd_p_35 = _parse_expression__inner_scan_35(_sd_tokens, _sd_pos, follow);
         trace_scan_alt(p, &"expression", 33, _sd_p_33);
         trace_scan_alt(p, &"expression", 35, _sd_p_35);
@@ -22033,10 +22448,11 @@ fn _parse_expression_with_block__inner(p: &mut Parser, follow: i64 = 0) -> () wi
             } else if p.peek_at(1) == TK_KW_LET {
                 return _parse_expression_with_block__inner_alt_6(p, follow);
             } else {
-                SCAN_GATE.no_struct = p.no_struct;
                 let _sd_tokens = &p.kinds;
                 let _sd_pos = p.pos;
+                SCAN_GATE.no_struct = p.no_struct;
                 let _sd_p_5 = _parse_expression_with_block__inner_scan_5(_sd_tokens, _sd_pos, follow);
+                SCAN_GATE.no_struct = p.no_struct;
                 let _sd_p_6 = _parse_expression_with_block__inner_scan_6(_sd_tokens, _sd_pos, follow);
                 trace_scan_alt(p, &"expressionWithBlock", 5, _sd_p_5);
                 trace_scan_alt(p, &"expressionWithBlock", 6, _sd_p_6);
@@ -22336,10 +22752,11 @@ fn _parse_statements__inner(p: &mut Parser, follow: i64 = 0) -> () with RustPars
     let kind = p.peek_kind();
     if _kind_set_33(kind) {
         if _kind_set_31(kind) {
-            SCAN_GATE.no_struct = p.no_struct;
             let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
+            SCAN_GATE.no_struct = p.no_struct;
             let _sd_p_1 = _parse_statements__inner_scan_1(_sd_tokens, _sd_pos, follow);
+            SCAN_GATE.no_struct = p.no_struct;
             let _sd_p_0 = _parse_statements__inner_scan_0(_sd_tokens, _sd_pos, follow);
             trace_scan_alt(p, &"statements", 1, _sd_p_1);
             trace_scan_alt(p, &"statements", 0, _sd_p_0);
@@ -22560,10 +22977,11 @@ fn _parse_array_elements__inner(p: &mut Parser, follow: i64 = 0) -> ArrayElement
     let kind = p.peek_kind();
     if _kind_set_31(kind) {
         if _kind_set_31(kind) {
-            SCAN_GATE.no_struct = p.no_struct;
             let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
+            SCAN_GATE.no_struct = p.no_struct;
             let _sd_p_0 = _parse_array_elements__inner_scan_0(_sd_tokens, _sd_pos, follow);
+            SCAN_GATE.no_struct = p.no_struct;
             let _sd_p_1 = _parse_array_elements__inner_scan_1(_sd_tokens, _sd_pos, follow);
             trace_scan_alt(p, &"arrayElements", 0, _sd_p_0);
             trace_scan_alt(p, &"arrayElements", 1, _sd_p_1);
@@ -22752,11 +23170,13 @@ fn _parse_struct_expression__inner(p: &mut Parser, follow: i64 = 0) -> () with R
     let kind = p.peek_kind();
     if _kind_set_32(kind) {
         if _kind_set_32(kind) {
-            SCAN_GATE.no_struct = p.no_struct;
             let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
+            SCAN_GATE.no_struct = p.no_struct;
             let _sd_p_0 = _parse_struct_expression__inner_scan_0(_sd_tokens, _sd_pos, follow);
+            SCAN_GATE.no_struct = p.no_struct;
             let _sd_p_1 = _parse_struct_expression__inner_scan_1(_sd_tokens, _sd_pos, follow);
+            SCAN_GATE.no_struct = p.no_struct;
             let _sd_p_2 = _parse_struct_expression__inner_scan_2(_sd_tokens, _sd_pos, follow);
             trace_scan_alt(p, &"structExpression", 0, _sd_p_0);
             trace_scan_alt(p, &"structExpression", 1, _sd_p_1);
@@ -22827,10 +23247,12 @@ fn _parse_struct_expr_struct__inner(p: &mut Parser, follow: i64 = 0) -> () with 
             if pos < tokens.len() && _kind_set_35(tokens[pos]) {
                 let sp = pos;
                 let gp_219 = pos;
+                let gp_219_no_struct = SCAN_GATE.no_struct;
                 let sgk_219 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
                 let mut sg_219_best = -1;
                 if _kind_set_34(sgk_219) {
                     pos = gp_219;
+                    SCAN_GATE.no_struct = gp_219_no_struct;
                     sg_219_0: {
                         pos = scan_struct_expr_fields(tokens, pos, 0);
                         if pos < 0 { break sg_219_0; }
@@ -22838,6 +23260,7 @@ fn _parse_struct_expr_struct__inner(p: &mut Parser, follow: i64 = 0) -> () with 
                     }
                 } else if sgk_219 == TK_DOTDOT {
                     pos = gp_219;
+                    SCAN_GATE.no_struct = gp_219_no_struct;
                     sg_219_1: {
                         pos = scan_struct_base(tokens, pos, 0);
                         if pos < 0 { break sg_219_1; }
@@ -22957,10 +23380,12 @@ fn _parse_struct_expr_fields__inner(p: &mut Parser, follow: i64 = 0) -> () with 
                     let tokens = &p.kinds;
                     let mut pos: i32 = p.pos;
                     let gp_221 = pos;
+                    let gp_221_no_struct = SCAN_GATE.no_struct;
                     let sgk_221 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
                     let mut sg_221_best = -1;
                     if sgk_221 == TK_COMMA {
                         pos = gp_221;
+                        SCAN_GATE.no_struct = gp_221_no_struct;
                         sg_221_0: {
                             if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sg_221_0; }
                             pos += 1;
@@ -22969,6 +23394,7 @@ fn _parse_struct_expr_fields__inner(p: &mut Parser, follow: i64 = 0) -> () with 
                             if pos > sg_221_best { sg_221_best = pos; }
                         }
                         pos = gp_221;
+                        SCAN_GATE.no_struct = gp_221_no_struct;
                         sg_221_1: {
                             if pos < tokens.len() && tokens[pos] == TK_COMMA {
                                 pos += 1;
@@ -22980,6 +23406,7 @@ fn _parse_struct_expr_fields__inner(p: &mut Parser, follow: i64 = 0) -> () with 
                         pos = sg_221_best;
                     } else {
                         pos = gp_221;
+                        SCAN_GATE.no_struct = gp_221_no_struct;
                     }
                     let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
                     if (follow == 0 || follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) && (probe_kind == TK_RCURLYBRACE) { decline_dead = true; }
@@ -23119,10 +23546,12 @@ fn _parse_struct_expr_field__inner(p: &mut Parser, follow: i64 = 0) -> () with R
                 let tokens = &p.kinds;
                 let mut pos: i32 = p.pos;
                 let gp_222 = pos;
+                let gp_222_no_struct = SCAN_GATE.no_struct;
                 let sgk_222 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
                 let mut sg_222_best = -1;
                 if _kind_set_4(sgk_222) {
                     pos = gp_222;
+                    SCAN_GATE.no_struct = gp_222_no_struct;
                     sg_222_0: {
                         pos = scan_identifier(tokens, pos);
                         if pos < 0 { break sg_222_0; }
@@ -23130,6 +23559,7 @@ fn _parse_struct_expr_field__inner(p: &mut Parser, follow: i64 = 0) -> () with R
                     }
                 } else if sgk_222 == TK_INTEGER_LITERAL {
                     pos = gp_222;
+                    SCAN_GATE.no_struct = gp_222_no_struct;
                     sg_222_1: {
                         pos = scan_tuple_index(tokens, pos);
                         if pos < 0 { break sg_222_1; }
@@ -23418,11 +23848,13 @@ fn _parse_enumeration_variant_expression__inner(p: &mut Parser, follow: i64 = 0)
     let kind = p.peek_kind();
     if _kind_set_32(kind) {
         if _kind_set_32(kind) {
-            SCAN_GATE.no_struct = p.no_struct;
             let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
+            SCAN_GATE.no_struct = p.no_struct;
             let _sd_p_0 = _parse_enumeration_variant_expression__inner_scan_0(_sd_tokens, _sd_pos, follow);
+            SCAN_GATE.no_struct = p.no_struct;
             let _sd_p_1 = _parse_enumeration_variant_expression__inner_scan_1(_sd_tokens, _sd_pos, follow);
+            SCAN_GATE.no_struct = p.no_struct;
             let _sd_p_2 = _parse_enumeration_variant_expression__inner_scan_2(_sd_tokens, _sd_pos, follow);
             trace_scan_alt(p, &"enumerationVariantExpression", 0, _sd_p_0);
             trace_scan_alt(p, &"enumerationVariantExpression", 1, _sd_p_1);
@@ -23599,10 +24031,12 @@ fn _parse_enum_expr_field__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> () wi
 fn _parse_enum_expr_field__inner_scan_1(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     let gp_228 = pos;
+    let gp_228_no_struct = SCAN_GATE.no_struct;
     let sgk_228 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     let mut sg_228_best = -1;
     if _kind_set_4(sgk_228) {
         pos = gp_228;
+        SCAN_GATE.no_struct = gp_228_no_struct;
         sg_228_0: {
             pos = scan_identifier(tokens, pos);
             if pos < 0 { break sg_228_0; }
@@ -23610,6 +24044,7 @@ fn _parse_enum_expr_field__inner_scan_1(tokens: &Array<i32>, pos: i32, follow: i
         }
     } else if sgk_228 == TK_INTEGER_LITERAL {
         pos = gp_228;
+        SCAN_GATE.no_struct = gp_228_no_struct;
         sg_228_1: {
             pos = scan_tuple_index(tokens, pos);
             if pos < 0 { break sg_228_1; }
@@ -23632,10 +24067,11 @@ fn _parse_enum_expr_field__inner(p: &mut Parser, follow: i64 = 0) -> () with Rus
     let kind = p.peek_kind();
     if _kind_set_36(kind) {
         if _kind_set_4(kind) {
-            SCAN_GATE.no_struct = p.no_struct;
             let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
+            SCAN_GATE.no_struct = p.no_struct;
             let _sd_p_0 = _parse_enum_expr_field__inner_scan_0(_sd_tokens, _sd_pos, follow);
+            SCAN_GATE.no_struct = p.no_struct;
             let _sd_p_1 = _parse_enum_expr_field__inner_scan_1(_sd_tokens, _sd_pos, follow);
             trace_scan_alt(p, &"enumExprField", 0, _sd_p_0);
             trace_scan_alt(p, &"enumExprField", 1, _sd_p_1);
@@ -24725,10 +25161,11 @@ fn _parse_match_arm_expression__inner(p: &mut Parser, follow: i64 = 0) -> () wit
     let kind = p.peek_kind();
     if _kind_set_31(kind) {
         if _kind_set_67(kind) {
-            SCAN_GATE.no_struct = p.no_struct;
             let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
+            SCAN_GATE.no_struct = p.no_struct;
             let _sd_p_0 = _parse_match_arm_expression__inner_scan_0(_sd_tokens, _sd_pos, follow);
+            SCAN_GATE.no_struct = p.no_struct;
             let _sd_p_1 = _parse_match_arm_expression__inner_scan_1(_sd_tokens, _sd_pos, follow);
             trace_scan_alt(p, &"matchArmExpression", 0, _sd_p_0);
             trace_scan_alt(p, &"matchArmExpression", 1, _sd_p_1);
@@ -25020,10 +25457,11 @@ fn _parse_pattern_no_top_alt__inner(p: &mut Parser, follow: i64 = 0) -> () with 
     let kind = p.peek_kind();
     if _kind_set_106(kind) {
         if _kind_set_81(kind) {
-            SCAN_GATE.no_struct = p.no_struct;
             let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
+            SCAN_GATE.no_struct = p.no_struct;
             let _sd_p_0 = _parse_pattern_no_top_alt__inner_scan_0(_sd_tokens, _sd_pos, follow);
+            SCAN_GATE.no_struct = p.no_struct;
             let _sd_p_1 = _parse_pattern_no_top_alt__inner_scan_1(_sd_tokens, _sd_pos, follow);
             trace_scan_alt(p, &"patternNoTopAlt", 0, _sd_p_0);
             trace_scan_alt(p, &"patternNoTopAlt", 1, _sd_p_1);
@@ -25166,13 +25604,17 @@ fn _parse_pattern_without_range__inner(p: &mut Parser, follow: i64 = 0) -> () wi
         if _kind_set_82(kind) {
             return _parse_pattern_without_range__inner_alt_1(p, follow);
         } else if _kind_set_4(kind) {
-            SCAN_GATE.no_struct = p.no_struct;
             let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
+            SCAN_GATE.no_struct = p.no_struct;
             let _sd_p_1 = _parse_pattern_without_range__inner_scan_1(_sd_tokens, _sd_pos, follow);
+            SCAN_GATE.no_struct = p.no_struct;
             let _sd_p_5 = _parse_pattern_without_range__inner_scan_5(_sd_tokens, _sd_pos, follow);
+            SCAN_GATE.no_struct = p.no_struct;
             let _sd_p_6 = _parse_pattern_without_range__inner_scan_6(_sd_tokens, _sd_pos, follow);
+            SCAN_GATE.no_struct = p.no_struct;
             let _sd_p_10 = _parse_pattern_without_range__inner_scan_10(_sd_tokens, _sd_pos, follow);
+            SCAN_GATE.no_struct = p.no_struct;
             let _sd_p_11 = _parse_pattern_without_range__inner_scan_11(_sd_tokens, _sd_pos, follow);
             trace_scan_alt(p, &"patternWithoutRange", 1, _sd_p_1);
             trace_scan_alt(p, &"patternWithoutRange", 5, _sd_p_5);
@@ -25216,12 +25658,15 @@ fn _parse_pattern_without_range__inner(p: &mut Parser, follow: i64 = 0) -> () wi
             }
             return _parse_pattern_without_range__inner_alt_11(p, follow);
         } else if _kind_set_83(kind) {
-            SCAN_GATE.no_struct = p.no_struct;
             let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
+            SCAN_GATE.no_struct = p.no_struct;
             let _sd_p_5 = _parse_pattern_without_range__inner_scan_5(_sd_tokens, _sd_pos, follow);
+            SCAN_GATE.no_struct = p.no_struct;
             let _sd_p_6 = _parse_pattern_without_range__inner_scan_6(_sd_tokens, _sd_pos, follow);
+            SCAN_GATE.no_struct = p.no_struct;
             let _sd_p_10 = _parse_pattern_without_range__inner_scan_10(_sd_tokens, _sd_pos, follow);
+            SCAN_GATE.no_struct = p.no_struct;
             let _sd_p_11 = _parse_pattern_without_range__inner_scan_11(_sd_tokens, _sd_pos, follow);
             trace_scan_alt(p, &"patternWithoutRange", 5, _sd_p_5);
             trace_scan_alt(p, &"patternWithoutRange", 6, _sd_p_6);
@@ -25257,11 +25702,13 @@ fn _parse_pattern_without_range__inner(p: &mut Parser, follow: i64 = 0) -> () wi
             }
             return _parse_pattern_without_range__inner_alt_11(p, follow);
         } else if kind == TK_KW_SELFTYPE {
-            SCAN_GATE.no_struct = p.no_struct;
             let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
+            SCAN_GATE.no_struct = p.no_struct;
             let _sd_p_5 = _parse_pattern_without_range__inner_scan_5(_sd_tokens, _sd_pos, follow);
+            SCAN_GATE.no_struct = p.no_struct;
             let _sd_p_6 = _parse_pattern_without_range__inner_scan_6(_sd_tokens, _sd_pos, follow);
+            SCAN_GATE.no_struct = p.no_struct;
             let _sd_p_10 = _parse_pattern_without_range__inner_scan_10(_sd_tokens, _sd_pos, follow);
             trace_scan_alt(p, &"patternWithoutRange", 5, _sd_p_5);
             trace_scan_alt(p, &"patternWithoutRange", 6, _sd_p_6);
@@ -25309,10 +25756,11 @@ fn _parse_pattern_without_range__inner(p: &mut Parser, follow: i64 = 0) -> () wi
     }
     if kind == TK_LPAREN {
         if kind == TK_LPAREN {
-            SCAN_GATE.no_struct = p.no_struct;
             let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
+            SCAN_GATE.no_struct = p.no_struct;
             let _sd_p_7 = _parse_pattern_without_range__inner_scan_7(_sd_tokens, _sd_pos, follow);
+            SCAN_GATE.no_struct = p.no_struct;
             let _sd_p_8 = _parse_pattern_without_range__inner_scan_8(_sd_tokens, _sd_pos, follow);
             trace_scan_alt(p, &"patternWithoutRange", 7, _sd_p_7);
             trace_scan_alt(p, &"patternWithoutRange", 8, _sd_p_8);
@@ -25448,10 +25896,11 @@ fn _parse_literal_pattern__inner(p: &mut Parser, follow: i64 = 0) -> () with Rus
             } else if p.peek_at(1) == TK_FLOAT_LITERAL {
                 return _parse_literal_pattern__inner_alt_9(p, follow);
             } else {
-                SCAN_GATE.no_struct = p.no_struct;
                 let _sd_tokens = &p.kinds;
                 let _sd_pos = p.pos;
+                SCAN_GATE.no_struct = p.no_struct;
                 let _sd_p_8 = _parse_literal_pattern__inner_scan_8(_sd_tokens, _sd_pos, follow);
+                SCAN_GATE.no_struct = p.no_struct;
                 let _sd_p_9 = _parse_literal_pattern__inner_scan_9(_sd_tokens, _sd_pos, follow);
                 trace_scan_alt(p, &"literalPattern", 8, _sd_p_8);
                 trace_scan_alt(p, &"literalPattern", 9, _sd_p_9);
@@ -25638,11 +26087,13 @@ fn _parse_range_pattern__inner(p: &mut Parser, follow: i64 = 0) -> () with RustP
     let kind = p.peek_kind();
     if _kind_set_81(kind) {
         if _kind_set_81(kind) {
-            SCAN_GATE.no_struct = p.no_struct;
             let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
+            SCAN_GATE.no_struct = p.no_struct;
             let _sd_p_0 = _parse_range_pattern__inner_scan_0(_sd_tokens, _sd_pos, follow);
+            SCAN_GATE.no_struct = p.no_struct;
             let _sd_p_2 = _parse_range_pattern__inner_scan_2(_sd_tokens, _sd_pos, follow);
+            SCAN_GATE.no_struct = p.no_struct;
             let _sd_p_1 = _parse_range_pattern__inner_scan_1(_sd_tokens, _sd_pos, follow);
             trace_scan_alt(p, &"rangePattern", 0, _sd_p_0);
             trace_scan_alt(p, &"rangePattern", 2, _sd_p_2);
@@ -25751,10 +26202,11 @@ fn _parse_range_pattern_bound__inner(p: &mut Parser, follow: i64 = 0) -> () with
             } else if p.peek_at(1) == TK_FLOAT_LITERAL {
                 return _parse_range_pattern_bound__inner_alt_3(p, follow);
             } else {
-                SCAN_GATE.no_struct = p.no_struct;
                 let _sd_tokens = &p.kinds;
                 let _sd_pos = p.pos;
+                SCAN_GATE.no_struct = p.no_struct;
                 let _sd_p_2 = _parse_range_pattern_bound__inner_scan_2(_sd_tokens, _sd_pos, follow);
+                SCAN_GATE.no_struct = p.no_struct;
                 let _sd_p_3 = _parse_range_pattern_bound__inner_scan_3(_sd_tokens, _sd_pos, follow);
                 trace_scan_alt(p, &"rangePatternBound", 2, _sd_p_2);
                 trace_scan_alt(p, &"rangePatternBound", 3, _sd_p_3);
@@ -25921,10 +26373,11 @@ fn _parse_struct_pattern_elements__inner(p: &mut Parser, follow: i64 = 0) -> () 
     let kind = p.peek_kind();
     if _kind_set_40(kind) {
         if kind == TK_POUND {
-            SCAN_GATE.no_struct = p.no_struct;
             let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
+            SCAN_GATE.no_struct = p.no_struct;
             let _sd_p_1 = _parse_struct_pattern_elements__inner_scan_1(_sd_tokens, _sd_pos, follow);
+            SCAN_GATE.no_struct = p.no_struct;
             let _sd_p_0 = _parse_struct_pattern_elements__inner_scan_0(_sd_tokens, _sd_pos, follow);
             trace_scan_alt(p, &"structPatternElements", 1, _sd_p_1);
             trace_scan_alt(p, &"structPatternElements", 0, _sd_p_0);
@@ -26442,11 +26895,13 @@ fn _parse_tuple_pattern_items__inner(p: &mut Parser, follow: i64 = 0) -> () with
     let kind = p.peek_kind();
     if _kind_set_43(kind) {
         if kind == TK_DOTDOT {
-            SCAN_GATE.no_struct = p.no_struct;
             let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
+            SCAN_GATE.no_struct = p.no_struct;
             let _sd_p_1 = _parse_tuple_pattern_items__inner_scan_1(_sd_tokens, _sd_pos, follow);
+            SCAN_GATE.no_struct = p.no_struct;
             let _sd_p_2 = _parse_tuple_pattern_items__inner_scan_2(_sd_tokens, _sd_pos, follow);
+            SCAN_GATE.no_struct = p.no_struct;
             let _sd_p_0 = _parse_tuple_pattern_items__inner_scan_0(_sd_tokens, _sd_pos, follow);
             trace_scan_alt(p, &"tuplePatternItems", 1, _sd_p_1);
             trace_scan_alt(p, &"tuplePatternItems", 2, _sd_p_2);
@@ -26474,10 +26929,11 @@ fn _parse_tuple_pattern_items__inner(p: &mut Parser, follow: i64 = 0) -> () with
             }
             return _parse_tuple_pattern_items__inner_alt_0(p, follow);
         } else if _kind_set_86(kind) {
-            SCAN_GATE.no_struct = p.no_struct;
             let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
+            SCAN_GATE.no_struct = p.no_struct;
             let _sd_p_2 = _parse_tuple_pattern_items__inner_scan_2(_sd_tokens, _sd_pos, follow);
+            SCAN_GATE.no_struct = p.no_struct;
             let _sd_p_0 = _parse_tuple_pattern_items__inner_scan_0(_sd_tokens, _sd_pos, follow);
             trace_scan_alt(p, &"tuplePatternItems", 2, _sd_p_2);
             trace_scan_alt(p, &"tuplePatternItems", 0, _sd_p_0);
@@ -26717,10 +27173,11 @@ fn _parse_type___inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBas
     let kind = p.peek_kind();
     if _kind_set_18(kind) {
         if kind == TK_KW_IMPL {
-            SCAN_GATE.no_struct = p.no_struct;
             let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
+            SCAN_GATE.no_struct = p.no_struct;
             let _sd_p_0 = _parse_type___inner_scan_0(_sd_tokens, _sd_pos, follow);
+            SCAN_GATE.no_struct = p.no_struct;
             let _sd_p_1 = _parse_type___inner_scan_1(_sd_tokens, _sd_pos, follow);
             trace_scan_alt(p, &"type_", 0, _sd_p_0);
             trace_scan_alt(p, &"type_", 1, _sd_p_1);
@@ -26740,10 +27197,11 @@ fn _parse_type___inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBas
             }
             return _parse_type___inner_alt_1(p, follow);
         } else if _kind_set_87(kind) {
-            SCAN_GATE.no_struct = p.no_struct;
             let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
+            SCAN_GATE.no_struct = p.no_struct;
             let _sd_p_0 = _parse_type___inner_scan_0(_sd_tokens, _sd_pos, follow);
+            SCAN_GATE.no_struct = p.no_struct;
             let _sd_p_2 = _parse_type___inner_scan_2(_sd_tokens, _sd_pos, follow);
             trace_scan_alt(p, &"type_", 0, _sd_p_0);
             trace_scan_alt(p, &"type_", 2, _sd_p_2);
@@ -26893,11 +27351,13 @@ fn _parse_type_no_bounds__inner(p: &mut Parser, follow: i64 = 0) -> () with Rust
     let kind = p.peek_kind();
     if _kind_set_109(kind) {
         if kind == TK_LPAREN {
-            SCAN_GATE.no_struct = p.no_struct;
             let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
+            SCAN_GATE.no_struct = p.no_struct;
             let _sd_p_0 = _parse_type_no_bounds__inner_scan_0(_sd_tokens, _sd_pos, follow);
+            SCAN_GATE.no_struct = p.no_struct;
             let _sd_p_2 = _parse_type_no_bounds__inner_scan_2(_sd_tokens, _sd_pos, follow);
+            SCAN_GATE.no_struct = p.no_struct;
             let _sd_p_4 = _parse_type_no_bounds__inner_scan_4(_sd_tokens, _sd_pos, follow);
             trace_scan_alt(p, &"typeNoBounds", 0, _sd_p_0);
             trace_scan_alt(p, &"typeNoBounds", 2, _sd_p_2);
@@ -26925,10 +27385,11 @@ fn _parse_type_no_bounds__inner(p: &mut Parser, follow: i64 = 0) -> () with Rust
             }
             return _parse_type_no_bounds__inner_alt_4(p, follow);
         } else if kind == TK_KW_FOR {
-            SCAN_GATE.no_struct = p.no_struct;
             let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
+            SCAN_GATE.no_struct = p.no_struct;
             let _sd_p_2 = _parse_type_no_bounds__inner_scan_2(_sd_tokens, _sd_pos, follow);
+            SCAN_GATE.no_struct = p.no_struct;
             let _sd_p_12 = _parse_type_no_bounds__inner_scan_12(_sd_tokens, _sd_pos, follow);
             trace_scan_alt(p, &"typeNoBounds", 2, _sd_p_2);
             trace_scan_alt(p, &"typeNoBounds", 12, _sd_p_12);
@@ -26950,11 +27411,13 @@ fn _parse_type_no_bounds__inner(p: &mut Parser, follow: i64 = 0) -> () with Rust
         } else if _kind_set_90(kind) {
             return _parse_type_no_bounds__inner_alt_12(p, follow);
         } else if _kind_set_9(kind) {
-            SCAN_GATE.no_struct = p.no_struct;
             let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
+            SCAN_GATE.no_struct = p.no_struct;
             let _sd_p_2 = _parse_type_no_bounds__inner_scan_2(_sd_tokens, _sd_pos, follow);
+            SCAN_GATE.no_struct = p.no_struct;
             let _sd_p_3 = _parse_type_no_bounds__inner_scan_3(_sd_tokens, _sd_pos, follow);
+            SCAN_GATE.no_struct = p.no_struct;
             let _sd_p_13 = _parse_type_no_bounds__inner_scan_13(_sd_tokens, _sd_pos, follow);
             trace_scan_alt(p, &"typeNoBounds", 2, _sd_p_2);
             trace_scan_alt(p, &"typeNoBounds", 3, _sd_p_3);
@@ -26982,10 +27445,11 @@ fn _parse_type_no_bounds__inner(p: &mut Parser, follow: i64 = 0) -> () with Rust
             }
             return _parse_type_no_bounds__inner_alt_13(p, follow);
         } else if kind == TK_KW_SELFTYPE {
-            SCAN_GATE.no_struct = p.no_struct;
             let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
+            SCAN_GATE.no_struct = p.no_struct;
             let _sd_p_2 = _parse_type_no_bounds__inner_scan_2(_sd_tokens, _sd_pos, follow);
+            SCAN_GATE.no_struct = p.no_struct;
             let _sd_p_3 = _parse_type_no_bounds__inner_scan_3(_sd_tokens, _sd_pos, follow);
             trace_scan_alt(p, &"typeNoBounds", 2, _sd_p_2);
             trace_scan_alt(p, &"typeNoBounds", 3, _sd_p_3);
@@ -27030,10 +27494,11 @@ fn _parse_type_no_bounds__inner(p: &mut Parser, follow: i64 = 0) -> () with Rust
     }
     if kind == TK_LSQUAREBRACKET {
         if kind == TK_LSQUAREBRACKET {
-            SCAN_GATE.no_struct = p.no_struct;
             let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
+            SCAN_GATE.no_struct = p.no_struct;
             let _sd_p_8 = _parse_type_no_bounds__inner_scan_8(_sd_tokens, _sd_pos, follow);
+            SCAN_GATE.no_struct = p.no_struct;
             let _sd_p_9 = _parse_type_no_bounds__inner_scan_9(_sd_tokens, _sd_pos, follow);
             trace_scan_alt(p, &"typeNoBounds", 8, _sd_p_8);
             trace_scan_alt(p, &"typeNoBounds", 9, _sd_p_9);
@@ -27446,10 +27911,11 @@ fn _parse_function_parameters_maybe_named_variadic__inner(p: &mut Parser, follow
     let kind = p.peek_kind();
     if _kind_set_44(kind) {
         if _kind_set_44(kind) {
-            SCAN_GATE.no_struct = p.no_struct;
             let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
+            SCAN_GATE.no_struct = p.no_struct;
             let _sd_p_0 = _parse_function_parameters_maybe_named_variadic__inner_scan_0(_sd_tokens, _sd_pos, follow);
+            SCAN_GATE.no_struct = p.no_struct;
             let _sd_p_1 = _parse_function_parameters_maybe_named_variadic__inner_scan_1(_sd_tokens, _sd_pos, follow);
             trace_scan_alt(p, &"functionParametersMaybeNamedVariadic", 0, _sd_p_0);
             trace_scan_alt(p, &"functionParametersMaybeNamedVariadic", 1, _sd_p_1);
@@ -27598,10 +28064,12 @@ fn _parse_maybe_named_param__inner(p: &mut Parser, follow: i64 = 0) -> () with R
         let tokens = &p.kinds;
         let mut pos: i32 = p.pos;
         let gp_249 = pos;
+        let gp_249_no_struct = SCAN_GATE.no_struct;
         let sgk_249 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
         let mut sg_249_best = -1;
         if _kind_set_4(sgk_249) {
             pos = gp_249;
+            SCAN_GATE.no_struct = gp_249_no_struct;
             sg_249_0: {
                 pos = scan_identifier(tokens, pos);
                 if pos < 0 { break sg_249_0; }
@@ -27609,6 +28077,7 @@ fn _parse_maybe_named_param__inner(p: &mut Parser, follow: i64 = 0) -> () with R
             }
         } else if sgk_249 == TK_UNDERSCORE {
             pos = gp_249;
+            SCAN_GATE.no_struct = gp_249_no_struct;
             sg_249_1: {
                 if pos >= tokens.len() || tokens[pos] != TK_UNDERSCORE { break sg_249_1; }
                 pos += 1;
@@ -28560,12 +29029,15 @@ fn _parse_generic_args__inner_scan_0(tokens: &Array<i32>, pos: i32, follow: i64 
 fn _parse_generic_args__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
     let kind = p.peek_kind();
     if kind == TK_LT {
-        SCAN_GATE.no_struct = p.no_struct;
         let _sd_tokens = &p.kinds;
         let _sd_pos = p.pos;
+        SCAN_GATE.no_struct = p.no_struct;
         let _sd_p_1 = _parse_generic_args__inner_scan_1(_sd_tokens, _sd_pos, follow);
+        SCAN_GATE.no_struct = p.no_struct;
         let _sd_p_2 = _parse_generic_args__inner_scan_2(_sd_tokens, _sd_pos, follow);
+        SCAN_GATE.no_struct = p.no_struct;
         let _sd_p_3 = _parse_generic_args__inner_scan_3(_sd_tokens, _sd_pos, follow);
+        SCAN_GATE.no_struct = p.no_struct;
         let _sd_p_0 = _parse_generic_args__inner_scan_0(_sd_tokens, _sd_pos, follow);
         trace_scan_alt(p, &"genericArgs", 1, _sd_p_1);
         trace_scan_alt(p, &"genericArgs", 2, _sd_p_2);
@@ -28678,10 +29150,11 @@ fn _parse_generic_arg__inner(p: &mut Parser, follow: i64 = 0) -> () with RustPar
     let kind = p.peek_kind();
     if _kind_set_48(kind) {
         if _kind_set_16(kind) {
-            SCAN_GATE.no_struct = p.no_struct;
             let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
+            SCAN_GATE.no_struct = p.no_struct;
             let _sd_p_0 = _parse_generic_arg__inner_scan_0(_sd_tokens, _sd_pos, follow);
+            SCAN_GATE.no_struct = p.no_struct;
             let _sd_p_1 = _parse_generic_arg__inner_scan_1(_sd_tokens, _sd_pos, follow);
             trace_scan_alt(p, &"genericArg", 0, _sd_p_0);
             trace_scan_alt(p, &"genericArg", 1, _sd_p_1);
@@ -28701,11 +29174,13 @@ fn _parse_generic_arg__inner(p: &mut Parser, follow: i64 = 0) -> () with RustPar
             }
             return _parse_generic_arg__inner_alt_1(p, follow);
         } else if _kind_set_4(kind) {
-            SCAN_GATE.no_struct = p.no_struct;
             let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
+            SCAN_GATE.no_struct = p.no_struct;
             let _sd_p_1 = _parse_generic_arg__inner_scan_1(_sd_tokens, _sd_pos, follow);
+            SCAN_GATE.no_struct = p.no_struct;
             let _sd_p_2 = _parse_generic_arg__inner_scan_2(_sd_tokens, _sd_pos, follow);
+            SCAN_GATE.no_struct = p.no_struct;
             let _sd_p_3 = _parse_generic_arg__inner_scan_3(_sd_tokens, _sd_pos, follow);
             trace_scan_alt(p, &"genericArg", 1, _sd_p_1);
             trace_scan_alt(p, &"genericArg", 2, _sd_p_2);
@@ -28735,10 +29210,11 @@ fn _parse_generic_arg__inner(p: &mut Parser, follow: i64 = 0) -> () with RustPar
         } else if _kind_set_95(kind) {
             return _parse_generic_arg__inner_alt_2(p, follow);
         } else if _kind_set_94(kind) {
-            SCAN_GATE.no_struct = p.no_struct;
             let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
+            SCAN_GATE.no_struct = p.no_struct;
             let _sd_p_1 = _parse_generic_arg__inner_scan_1(_sd_tokens, _sd_pos, follow);
+            SCAN_GATE.no_struct = p.no_struct;
             let _sd_p_2 = _parse_generic_arg__inner_scan_2(_sd_tokens, _sd_pos, follow);
             trace_scan_alt(p, &"genericArg", 1, _sd_p_1);
             trace_scan_alt(p, &"genericArg", 2, _sd_p_2);
@@ -29472,10 +29948,11 @@ fn _parse_macro_identifier_like_token__inner(p: &mut Parser) -> () with RustPars
     let kind = p.peek_kind();
     if _kind_set_111(kind) {
         if kind == TK_KW_MACRORULES {
-            SCAN_GATE.no_struct = p.no_struct;
             let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
+            SCAN_GATE.no_struct = p.no_struct;
             let _sd_p_1 = _parse_macro_identifier_like_token__inner_scan_1(_sd_tokens, _sd_pos);
+            SCAN_GATE.no_struct = p.no_struct;
             let _sd_p_2 = _parse_macro_identifier_like_token__inner_scan_2(_sd_tokens, _sd_pos);
             trace_scan_alt(p, &"macroIdentifierLikeToken", 1, _sd_p_1);
             trace_scan_alt(p, &"macroIdentifierLikeToken", 2, _sd_p_2);
@@ -29497,10 +29974,11 @@ fn _parse_macro_identifier_like_token__inner(p: &mut Parser) -> () with RustPars
         } else if _kind_set_98(kind) {
             return _parse_macro_identifier_like_token__inner_alt_1(p);
         } else if kind == TK_KW_UNION {
-            SCAN_GATE.no_struct = p.no_struct;
             let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
+            SCAN_GATE.no_struct = p.no_struct;
             let _sd_p_0 = _parse_macro_identifier_like_token__inner_scan_0(_sd_tokens, _sd_pos);
+            SCAN_GATE.no_struct = p.no_struct;
             let _sd_p_1 = _parse_macro_identifier_like_token__inner_scan_1(_sd_tokens, _sd_pos);
             trace_scan_alt(p, &"macroIdentifierLikeToken", 0, _sd_p_0);
             trace_scan_alt(p, &"macroIdentifierLikeToken", 1, _sd_p_1);

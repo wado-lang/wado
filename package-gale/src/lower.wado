@@ -3390,13 +3390,13 @@ fn lower_group_alt(
         // `Op::ListLabel(Repeat(_))` on parse, but the scan side still
         // surfaces a top-level `ScanElement::Repeat` — so the scan
         // rebind needs an independent check, not an `&&` of the two.
-        let op_is_repeat = op matches { Repeat(_) };
+        let op_is_repeat = op_repeat_inner(&op) matches { Some(_) };
         let se_is_repeat = se matches { Repeat(_) };
         if op_is_repeat || se_is_repeat {
             let basic_follow = ctx.first_of_elements_from(&alt.elements, i + 1);
-            if let Repeat(rep_op) = &op {
+            if let Some(rep_op) = op_repeat_inner(&op) {
                 let basic_second = compute_caller_follow_second(&alt.elements, i + 1, ctx);
-                op = Op::Repeat(patch_repeat_op_caller_follow(
+                let patched = Op::Repeat(patch_repeat_op_caller_follow(
                     rep_op,
                     basic_follow,
                     basic_second,
@@ -3406,6 +3406,7 @@ fn lower_group_alt(
                     false,
                     rule_name,
                 ));
+                op = rewrap_op_repeat(op, patched);
             }
             if se_is_repeat {
                 se = rebind_scan_repeat_caller_follow(se, basic_follow, &alt.elements, i, ctx, false);
@@ -3415,6 +3416,35 @@ fn lower_group_alt(
         scan_elements.push(se);
     }
     return [ops, scan_elements];
+}
+
+/// The `RepeatOp` an op is, through a list label — the parse side's answer to
+/// the question the scan side asks as `se matches { Repeat(_) }`.
+///
+/// A scalar `Label(Repeat(_))` collapses to `Op::Repeat`, but a list one lands
+/// as `Op::ListLabel(Repeat(_))` while the scan still surfaces a top-level
+/// `ScanElement::Repeat`. Asking for the bare variant on the parse side is what
+/// let `x+=y*` take the caller-FOLLOW rebind — and with it the reserve and
+/// decline guards — on the scan alone, which is the divergence the mirrors
+/// exist to prevent.
+fn op_repeat_inner(op: &Op) -> Option<&RepeatOp> with stores[op] {
+    return match op {
+        Repeat(r) => Option::Some(r),
+        ListLabel(l) => if let Repeat(r) = &l.inner {
+            Option::Some(r);
+        } else {
+            null;
+        },
+        _ => null,
+    };
+}
+
+/// Put a patched `RepeatOp` back under whatever wrapper `op` had.
+fn rewrap_op_repeat(op: Op, patched: Op) -> Op {
+    return match op {
+        ListLabel(l) => Op::ListLabel(ListLabelOp { ..l, inner: patched }),
+        _ => patched,
+    };
 }
 
 /// Single-alt with ≥ 2 elements: `(name=ID '=' expr)` lowers to a

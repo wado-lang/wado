@@ -1,5 +1,5 @@
-use { gate_assignment, gate_scope } from "./scan_gate.wado";
-use { ParserRule, ActionSource, Visibility } from "./ir.wado";
+use { gate_assignment, gate_scope, scan_gate_fields } from "./scan_gate.wado";
+use { ActionKind, ActionSource, AltAction, Alternative, Grammar, GrammarKind, ParserRule, Visibility } from "./ir.wado";
 
 test "gate_assignment: a bare constant assignment" {
     let hit = gate_assignment(&"noStruct = 1;");
@@ -103,4 +103,62 @@ test "gate_scope: no @after is no scope" {
         init_action: Option::Some(ActionSource { text: "$sv = noStruct; noStruct = 0;" }),
     };
     assert gate_scope(&r) matches { None };
+}
+
+// A gate field is simulated only when the scan can run *every* write to it, and
+// a rule's `@init` / `@after` write to one as much as an alternative's action.
+fn grammar_with(init: &String, after: Option<ActionSource>) -> Grammar {
+    return Grammar {
+        name: "G",
+        kind: GrammarKind::Combined,
+        lexer_rules: [],
+        mode_names: [],
+        channels: [],
+        options: [],
+        named_actions: [],
+        pending_refs: [],
+        source_files: [],
+        parser_rules: [
+            ParserRule {
+                name: "scope",
+                visibility: Visibility::Public,
+                options: [],
+                alternatives: [],
+                init_action: Option::Some(ActionSource { text: *init }),
+                after_action: after,
+            },
+            ParserRule {
+                name: "head",
+                visibility: Visibility::Public,
+                options: [],
+                alternatives: [
+                    Alternative {
+                        label: null,
+                        options: [],
+                        elements: [],
+                        actions: [
+                            AltAction {
+                                kind: ActionKind::Action,
+                                source: ActionSource { text: "noStruct = 1;" },
+                                before_index: 0,
+                            },
+                        ],
+                    },
+                ],
+            },
+        ],
+    };
+}
+
+test "scan_gate_fields: the recognised scope pair leaves its field simulable" {
+    let g = grammar_with(
+        &"$sv = noStruct; noStruct = 0;",
+        Option::Some(ActionSource { text: "noStruct = $sv;" }),
+    );
+    assert scan_gate_fields(&g) == ["no_struct"], `${scan_gate_fields(&g):?}`;
+}
+
+test "scan_gate_fields: an unrunnable rule-level write disqualifies the field" {
+    let g = grammar_with(&"noStruct = depth();", null);
+    assert scan_gate_fields(&g).is_empty(), `${scan_gate_fields(&g):?}`;
 }

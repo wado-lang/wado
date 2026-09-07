@@ -190,10 +190,23 @@ fn split_statements(text: &String) -> List<String> {
 /// snake_cased, first-assignment order. A field assigned anywhere by anything
 /// else is not here: a scan that simulated only some of a field's writes would
 /// answer with a value the parse never holds.
+///
+/// "Anywhere" is the whole of it — a rule's `@init` / `@after` write to a gate
+/// field as much as an alternative's action does, and the pair `gate_scope`
+/// recognises is the only one of those a scan can run.
 pub fn scan_gate_fields(grammar: &Grammar) -> List<String> {
     let mut simulable: List<String> = [];
     let mut rejected: List<String> = [];
     for let rule of &grammar.parser_rules {
+        if gate_scope(rule) matches { None } {
+            for let text of rule_prequel_bodies(rule) {
+                for let name of assigned_names(&text) {
+                    if !rejected.contains(&name) {
+                        rejected.push(name);
+                    }
+                }
+            }
+        }
         for let alt of &rule.alternatives {
             for let a of &alt.actions {
                 if a.kind matches { Predicate } {
@@ -217,6 +230,18 @@ pub fn scan_gate_fields(grammar: &Grammar) -> List<String> {
         }
     }
     return simulable.iter_ref().filter(|f| !rejected.contains(f)).map(|f| *f).collect();
+}
+
+/// A rule's `@init` and `@after` bodies, whichever it has.
+fn rule_prequel_bodies(rule: &ParserRule) -> List<String> {
+    let mut out: List<String> = [];
+    if let Some(a) = &rule.init_action {
+        out.push(a.text);
+    }
+    if let Some(a) = &rule.after_action {
+        out.push(a.text);
+    }
+    return out;
 }
 
 /// The snake_cased names an action body assigns to, however it does it — the
