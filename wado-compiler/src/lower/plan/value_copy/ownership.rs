@@ -20,14 +20,22 @@ use crate::tir::{
 };
 use crate::tir_visitor::TirRefVisitor;
 
-/// The array element reads that name a slot of their first argument in place,
-/// so a place walk projects one `Index` further in. Where the element *lives*
-/// is all this answers; whether a call is fresh is [`hands_out_storage`]'s
+/// The member reads that name a component of their first argument in place, so
+/// a place walk projects one `Index` further in. Where the member *lives* is
+/// all this answers; whether a call is fresh is [`hands_out_storage`]'s
 /// question, derived rather than listed.
-pub(super) fn is_container_alias_read(name: &str, monomorph_info: Option<&MonomorphInfo>) -> bool {
+///
+/// This half cannot be derived: `struct_field_get(v: &T, i) -> F` and a
+/// `concat(a: &String, b: &String) -> String` have the same signature shape and
+/// different answers. An omission costs a share, not soundness — an unlisted
+/// read names [`super::place::Names::Unknown`] and is copied.
+pub(super) fn is_member_alias_read(name: &str, monomorph_info: Option<&MonomorphInfo>) -> bool {
     matches_builtin(name, monomorph_info, "array_get_value")
         || matches_builtin(name, monomorph_info, "array_get_ref")
         || matches_builtin(name, monomorph_info, "array_get_ref_mut")
+        || matches_builtin(name, monomorph_info, "struct_field_get")
+        || matches_builtin(name, monomorph_info, "hole_get")
+        || matches_builtin(name, monomorph_info, "variant_case_extract")
 }
 
 /// Whether a builtin's result may be storage its caller still owns. Only a
@@ -248,8 +256,8 @@ fn function_returns_receiver_alias(
 }
 
 /// Whether `expr` aliases the storage of parameter `param`: a projection chain,
-/// an `array_get_value` / `array_get_ref` element read of one, or a call to a
-/// receiver-aliasing callee whose receiver / first argument is one.
+/// a member read of one, or a call to a receiver-aliasing callee whose
+/// receiver / first argument is one.
 ///
 /// A deref may peel only the parameter's own reference, the rule
 /// [`is_projection_of_param`] follows. Deeper in the chain it reads a reference
@@ -274,7 +282,7 @@ fn is_receiver_projection(expr: &TirExpr, param: u32, set: &FuncKeySet) -> bool 
         | TirExprKind::Index { expr: inner, .. } => is_receiver_projection(inner, param, set),
         TirExprKind::Call { func, args, .. }
             if func.module_source.is_core_builtin()
-                && is_container_alias_read(&func.name, func.monomorph_info.as_ref()) =>
+                && is_member_alias_read(&func.name, func.monomorph_info.as_ref()) =>
         {
             args.first()
                 .is_some_and(|a| is_receiver_projection(&a.expr, param, set))

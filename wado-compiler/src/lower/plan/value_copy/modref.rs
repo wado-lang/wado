@@ -2,6 +2,7 @@
 //! carrying them. A callee this analysis cannot read through writes everything.
 
 use super::funcset::{FuncKeyMap, FuncKeySet};
+use super::ownership::is_member_alias_read;
 use super::place::{Names, Resolver, ReturnPaths, Selector, could_write_through, field_owner};
 use crate::flat_package::FlatPackage;
 use crate::hashmap::IndexSet;
@@ -356,10 +357,7 @@ impl TirRefVisitor for Walker<'_> {
                         .push((func.module_source.clone(), func.name.clone()));
                 }
                 let aliases_only = func.module_source.is_core_builtin()
-                    && super::ownership::is_container_alias_read(
-                        &func.name,
-                        func.monomorph_info.as_ref(),
-                    );
+                    && is_member_alias_read(&func.name, func.monomorph_info.as_ref());
                 if !aliases_only {
                     for arg in args
                         .iter()

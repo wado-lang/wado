@@ -4,6 +4,7 @@
 
 use super::funcset::{FuncKeyMap, FuncKeySet};
 use super::needs_value_copy;
+use super::ownership::is_member_alias_read;
 use crate::hashmap::IndexMap;
 use crate::tir::{
     ResolvedType, TirExpr, TirExprKind, TirFunction, TirPattern, TirStmt, TirStmtKind, TirUnaryOp,
@@ -309,14 +310,13 @@ impl<'a> Resolver<'a> {
                 Names::Place(p) => Names::Place(p),
                 Names::Value | Names::Unknown => Names::Unknown,
             },
-            // An element read borrows the slot in place, so it names its
-            // container's storage one `Index` further in.
+            // A member read borrows the slot in place, so it names its
+            // container's storage one `Index` further in. `Index` is the honest
+            // selector for a reflect read too: its index is a runtime value, so
+            // which component it lands on is not known here.
             TirExprKind::Call { func, args, .. }
                 if func.module_source.is_core_builtin()
-                    && super::ownership::is_container_alias_read(
-                        &func.name,
-                        func.monomorph_info.as_ref(),
-                    ) =>
+                    && is_member_alias_read(&func.name, func.monomorph_info.as_ref()) =>
             {
                 match args.first() {
                     Some(arg) => self.project(&arg.expr, Selector::Index),
