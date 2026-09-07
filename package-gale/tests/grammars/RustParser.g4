@@ -594,14 +594,20 @@ unsafeBlockExpression
 // 8.2.6
 // LOCAL: `{noStruct = 0;}` — inside the brackets a struct literal is legal.
 arrayElements
-    : {noStruct = 0;} expression (COMMA expression)* COMMA?
-    | {noStruct = 0;} expression SEMI expression
+locals [int sv]
+@init { $sv = noStruct; noStruct = 0; }
+@after { noStruct = $sv; }
+    : expression (COMMA expression)* COMMA?
+    | expression SEMI expression
     ;
 
 // 8.2.7
 // LOCAL: `{noStruct = 0;}` — inside the parentheses a struct literal is legal.
 tupleElements
-    : {noStruct = 0;} (expression COMMA)+ expression?
+locals [int sv]
+@init { $sv = noStruct; noStruct = 0; }
+@after { noStruct = $sv; }
+    : (expression COMMA)+ expression?
     ;
 
 tupleIndex
@@ -671,7 +677,10 @@ enumExprFieldless
 // LOCAL: `{noStruct = 0;}` — a call's arguments are bracketing, so
 // `if f(Point { x: 1 }) { … }` is the struct literal Rust reads there.
 callParams
-    : {noStruct = 0;} expression (COMMA expression)* COMMA?
+locals [int sv]
+@init { $sv = noStruct; noStruct = 0; }
+@after { noStruct = $sv; }
+    : expression (COMMA expression)* COMMA?
     ;
 
 // 8.2.12

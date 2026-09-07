@@ -22,7 +22,7 @@
 //! pointing the handle at the global produces the scan's condition from the
 //! parser's own predicate text, with no second translator.
 
-use { Grammar } from "./ir.wado";
+use { Grammar, ParserRule } from "./ir.wado";
 use { to_snake_case } from "./ident.wado";
 
 /// The generated global the scan mutates, and its struct type.
@@ -77,6 +77,113 @@ pub fn gate_assignment(text: &String) -> Option<[String, i32]> {
         return null;
     }
     return Option::Some([to_snake_case(&name), if negative { -value } else { value }]);
+}
+
+/// A rule that sets a gate field for its own extent and puts it back after —
+/// ANTLR4's `locals` + `@init` / `@after`, which is the save/restore a members
+/// field alone cannot express, because each invocation keeps its own copy.
+///
+/// The pair has to be exactly `@init { $L = <field>; <field> = <int>; }` and
+/// `@after { <field> = $L; }`: a scan runs it by saving into a local of its own
+/// and putting it back, which is the same thing the parse does with `vals`.
+pub struct GateScope {
+    pub field: String,
+    pub value: i32,
+}
+
+/// The gate scope `rule` opens, or `null`.
+pub fn gate_scope(rule: &ParserRule) -> Option<GateScope> {
+    let init = match &rule.init_action {
+        Some(a) => a.text,
+        None => {
+            return null;
+        },
+    };
+    let after = match &rule.after_action {
+        Some(a) => a.text,
+        None => {
+            return null;
+        },
+    };
+    // `<field> = $L` — the restore names the local the save filled, and is the
+    // whole of `@after`: a body that does anything else does more than a scan
+    // can put back.
+    let after_stmts = split_statements(&after);
+    if after_stmts.len() != 1 {
+        return null;
+    }
+    let restore = match split_assignment(&after_stmts[0]) {
+        Some(pair) => pair,
+        None => {
+            return null;
+        },
+    };
+    if !starts_with_dollar(&restore.1) {
+        return null;
+    }
+    let stmts = split_statements(&init);
+    if stmts.len() != 2 {
+        return null;
+    }
+    let save = match split_assignment(&stmts[0]) {
+        Some(pair) => pair,
+        None => {
+            return null;
+        },
+    };
+    if save.0 != restore.1 || save.1 != restore.0 {
+        return null;
+    }
+    return match gate_assignment(&stmts[1]) {
+        Some(w) => if w.0 == to_snake_case(&restore.0) {
+            Option::Some(GateScope { field: w.0, value: w.1 });
+        } else {
+            null;
+        },
+        None => null,
+    };
+}
+
+fn starts_with_dollar(text: &String) -> bool {
+    let chars: List<char> = text.chars().collect();
+    return !chars.is_empty() && chars[0] == '$';
+}
+
+/// `lhs = rhs` split on the first `=` that is not `==`, both sides trimmed.
+fn split_assignment(text: &String) -> Option<[String, String]> {
+    let chars: List<char> = text.chars().collect();
+    let n = chars.len();
+    for let mut i = 0; i < n; i += 1 {
+        if chars[i] != '=' {
+            continue;
+        }
+        if i + 1 < n && chars[i + 1] == '=' {
+            return null;
+        }
+        return Option::Some([
+            collect(&chars, 0, i).trim(),
+            collect(&chars, i + 1, n).trim(),
+        ]);
+    }
+    return null;
+}
+
+/// The `;`-separated statements of a body, empties dropped.
+fn split_statements(text: &String) -> List<String> {
+    let chars: List<char> = text.chars().collect();
+    let n = chars.len();
+    let mut out: List<String> = [];
+    let mut start = 0;
+    for let mut i = 0; i <= n; i += 1 {
+        if i == n || chars[i] == ';' {
+            let part = collect(&chars, start, i).trim();
+            if !part.is_empty() {
+                out.push(part);
+            }
+            start = i + 1;
+        }
+    }
+    return out;
 }
 
 /// Every field the grammar's parser actions assign an integer literal to,

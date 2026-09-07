@@ -7034,6 +7034,18 @@ impl Parser {
     }
 }
 
+struct ArrayElementsVals {
+    sv: i32 = 0,
+}
+
+struct TupleElementsVals {
+    sv: i32 = 0,
+}
+
+struct CallParamsVals {
+    sv: i32 = 0,
+}
+
 fn trace_pad(depth: i32) -> String {
     let mut s = String::with_capacity(depth * 2);
     for let mut i = 0; i < depth; i += 1 { s.push_str(&"  "); }
@@ -11363,6 +11375,14 @@ fn scan_unsafe_block_expression(tokens: &Array<i32>, pos: i32, follow: i64 = 0) 
 }
 
 fn scan_array_elements(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
+    let _gate_saved = SCAN_GATE.no_struct;
+    SCAN_GATE.no_struct = 0;
+    let _gate_end = scan_array_elements__scoped(tokens, pos, follow);
+    SCAN_GATE.no_struct = _gate_saved;
+    return _gate_end;
+}
+
+fn scan_array_elements__scoped(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
@@ -11371,7 +11391,6 @@ fn scan_array_elements(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
             let mut best: i32 = -1;
             pos = start;
             try_0: {
-                SCAN_GATE.no_struct = 0;
                 pos = scan_expression(tokens, pos, (FOLLOW_MASK_35 | (follow & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << 16) & FOLLOW_CONT_MASK, 0);
                 if pos < 0 { break try_0; }
                 while pos < tokens.len() && tokens[pos] == TK_COMMA && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
@@ -11411,7 +11430,6 @@ fn scan_array_elements(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
             }
             pos = start;
             try_1: {
-                SCAN_GATE.no_struct = 0;
                 pos = scan_expression(tokens, pos, FOLLOW_MASK_36, 0);
                 if pos < 0 { break try_1; }
                 if pos >= tokens.len() || tokens[pos] != TK_SEMI { break try_1; }
@@ -11430,8 +11448,15 @@ fn scan_array_elements(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
 }
 
 fn scan_tuple_elements(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
-    let mut pos = pos;
+    let _gate_saved = SCAN_GATE.no_struct;
     SCAN_GATE.no_struct = 0;
+    let _gate_end = scan_tuple_elements__scoped(tokens, pos, follow);
+    SCAN_GATE.no_struct = _gate_saved;
+    return _gate_end;
+}
+
+fn scan_tuple_elements__scoped(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
+    let mut pos = pos;
     sg_87_done: {
         sg_87: {
             pos = scan_expression(tokens, pos, (FOLLOW_MASK_22 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK, 0);
@@ -12056,9 +12081,16 @@ fn scan_enum_expr_fieldless(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i
 }
 
 fn scan_call_params(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
+    let _gate_saved = SCAN_GATE.no_struct;
+    SCAN_GATE.no_struct = 0;
+    let _gate_end = scan_call_params__scoped(tokens, pos, follow);
+    SCAN_GATE.no_struct = _gate_saved;
+    return _gate_end;
+}
+
+fn scan_call_params__scoped(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let scan_start = pos;
     let mut pos = pos;
-    SCAN_GATE.no_struct = 0;
     pos = scan_expression(tokens, pos, (FOLLOW_MASK_35 | (follow & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << 16) & FOLLOW_CONT_MASK, 0);
     if pos < 0 { return -1; }
     while pos < tokens.len() && tokens[pos] == TK_COMMA && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
@@ -22404,10 +22436,8 @@ fn _parse_unsafe_block_expression(p: &mut Parser, follow: i64 = 0) -> () with Ru
     }
 }
 
-fn _parse_array_elements__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    if !p.speculating {
-        p.no_struct = 0;
-    }
+fn _parse_array_elements__inner_alt_0(p: &mut Parser, follow: i64 = 0, vals: ArrayElementsVals = ArrayElementsVals {}) -> ArrayElementsVals with RustParserBase {
+    let mut vals = vals;
     let expression = _parse_expression(p, (FOLLOW_MASK_35 | (follow & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << 16) & FOLLOW_CONT_MASK);
     loop {
         if p.recovering { break; }
@@ -22454,12 +22484,14 @@ fn _parse_array_elements__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () wit
     if !(follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF)) && (p.peek_kind() == TK_COMMA) {
         let comma = p.expect(TK_COMMA, &EMPTY_SYNC);
     }
-    return;
+    if !p.speculating {
+        p.no_struct = vals.sv;
+    }
+    return vals;
 }
 
 fn _parse_array_elements__inner_scan_0(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let mut pos = pos;
-    SCAN_GATE.no_struct = 0;
     pos = scan_expression(tokens, pos, (FOLLOW_MASK_35 | (follow & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << 16) & FOLLOW_CONT_MASK, 0);
     if pos < 0 { return -1; }
     while pos < tokens.len() && tokens[pos] == TK_COMMA && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
@@ -22498,19 +22530,19 @@ fn _parse_array_elements__inner_scan_0(tokens: &Array<i32>, pos: i32, follow: i6
     return pos;
 }
 
-fn _parse_array_elements__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    if !p.speculating {
-        p.no_struct = 0;
-    }
+fn _parse_array_elements__inner_alt_1(p: &mut Parser, follow: i64 = 0, vals: ArrayElementsVals = ArrayElementsVals {}) -> ArrayElementsVals with RustParserBase {
+    let mut vals = vals;
     let expression = _parse_expression(p, FOLLOW_MASK_36);
     let semi = p.expect(TK_SEMI, &SYNC_42);
     let expression_2 = _parse_expression(p, follow);
-    return;
+    if !p.speculating {
+        p.no_struct = vals.sv;
+    }
+    return vals;
 }
 
 fn _parse_array_elements__inner_scan_1(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let mut pos = pos;
-    SCAN_GATE.no_struct = 0;
     pos = scan_expression(tokens, pos, FOLLOW_MASK_36, 0);
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_SEMI { return -1; }
@@ -22520,7 +22552,11 @@ fn _parse_array_elements__inner_scan_1(tokens: &Array<i32>, pos: i32, follow: i6
     return pos;
 }
 
-fn _parse_array_elements__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
+fn _parse_array_elements__inner(p: &mut Parser, follow: i64 = 0) -> ArrayElementsVals with RustParserBase {
+    let mut vals = ArrayElementsVals {};
+    if !p.speculating {
+        vals.sv = p.no_struct; p.no_struct = 0;
+    }
     let kind = p.peek_kind();
     if _kind_set_31(kind) {
         if _kind_set_31(kind) {
@@ -22543,9 +22579,9 @@ fn _parse_array_elements__inner(p: &mut Parser, follow: i64 = 0) -> () with Rust
             }
             trace_pick(p, &"arrayElements", _sd_best_i);
             if _sd_best_i == 0 {
-                return _parse_array_elements__inner_alt_0(p, follow);
+                return _parse_array_elements__inner_alt_0(p, follow, vals);
             }
-            return _parse_array_elements__inner_alt_1(p, follow);
+            return _parse_array_elements__inner_alt_1(p, follow, vals);
         }
     }
     p.no_viable(
@@ -22553,16 +22589,16 @@ fn _parse_array_elements__inner(p: &mut Parser, follow: i64 = 0) -> () with Rust
         p.peek_span(),
         &SYNC_42,
     );
-    return;
+    return vals;
 }
 
-fn _parse_array_elements(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    if p.recovering { return; }
+fn _parse_array_elements(p: &mut Parser, follow: i64 = 0) -> ArrayElementsVals with RustParserBase {
+    if p.recovering { return ArrayElementsVals {}; }
     trace_enter(p, &"arrayElements");
     p.trace_depth += 1;
     let _start = p.peek_start();
     p.b.start_node(RK_ARRAYELEMENTS, _start);
-    _parse_array_elements__inner(p, follow);
+    let __vals = _parse_array_elements__inner(p, follow);
     p.b.finish_node(p.last_end());
     p.trace_depth -= 1;
     if p.recovering {
@@ -22571,11 +22607,13 @@ fn _parse_array_elements(p: &mut Parser, follow: i64 = 0) -> () with RustParserB
     } else {
         trace_ok(p, &"arrayElements");
     }
+    return __vals;
 }
 
-fn _parse_tuple_elements__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
+fn _parse_tuple_elements__inner(p: &mut Parser, follow: i64 = 0) -> TupleElementsVals with RustParserBase {
+    let mut vals = TupleElementsVals {};
     if !p.speculating {
-        p.no_struct = 0;
+        vals.sv = p.no_struct; p.no_struct = 0;
     }
     let mut _plus_first = true;
     loop {
@@ -22628,16 +22666,19 @@ fn _parse_tuple_elements__inner(p: &mut Parser, follow: i64 = 0) -> () with Rust
     if !(follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF)) && (_kind_set_31(p.peek_kind())) {
         let expression = _parse_expression(p, follow);
     }
-    return;
+    if !p.speculating {
+        p.no_struct = vals.sv;
+    }
+    return vals;
 }
 
-fn _parse_tuple_elements(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    if p.recovering { return; }
+fn _parse_tuple_elements(p: &mut Parser, follow: i64 = 0) -> TupleElementsVals with RustParserBase {
+    if p.recovering { return TupleElementsVals {}; }
     trace_enter(p, &"tupleElements");
     p.trace_depth += 1;
     let _start = p.peek_start();
     p.b.start_node(RK_TUPLEELEMENTS, _start);
-    _parse_tuple_elements__inner(p, follow);
+    let __vals = _parse_tuple_elements__inner(p, follow);
     p.b.finish_node(p.last_end());
     p.trace_depth -= 1;
     if p.recovering {
@@ -22646,6 +22687,7 @@ fn _parse_tuple_elements(p: &mut Parser, follow: i64 = 0) -> () with RustParserB
     } else {
         trace_ok(p, &"tupleElements");
     }
+    return __vals;
 }
 
 fn _parse_tuple_index__inner(p: &mut Parser) -> () with RustParserBase {
@@ -23744,9 +23786,10 @@ fn _parse_enum_expr_fieldless(p: &mut Parser, follow: i64 = 0) -> () with RustPa
     }
 }
 
-fn _parse_call_params__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
+fn _parse_call_params__inner(p: &mut Parser, follow: i64 = 0) -> CallParamsVals with RustParserBase {
+    let mut vals = CallParamsVals {};
     if !p.speculating {
-        p.no_struct = 0;
+        vals.sv = p.no_struct; p.no_struct = 0;
     }
     let expression = _parse_expression(p, (FOLLOW_MASK_35 | (follow & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << 16) & FOLLOW_CONT_MASK);
     loop {
@@ -23794,16 +23837,19 @@ fn _parse_call_params__inner(p: &mut Parser, follow: i64 = 0) -> () with RustPar
     if !(follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF)) && (p.peek_kind() == TK_COMMA) {
         let comma = p.expect(TK_COMMA, &EMPTY_SYNC);
     }
-    return;
+    if !p.speculating {
+        p.no_struct = vals.sv;
+    }
+    return vals;
 }
 
-fn _parse_call_params(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
-    if p.recovering { return; }
+fn _parse_call_params(p: &mut Parser, follow: i64 = 0) -> CallParamsVals with RustParserBase {
+    if p.recovering { return CallParamsVals {}; }
     trace_enter(p, &"callParams");
     p.trace_depth += 1;
     let _start = p.peek_start();
     p.b.start_node(RK_CALLPARAMS, _start);
-    _parse_call_params__inner(p, follow);
+    let __vals = _parse_call_params__inner(p, follow);
     p.b.finish_node(p.last_end());
     p.trace_depth -= 1;
     if p.recovering {
@@ -23812,6 +23858,7 @@ fn _parse_call_params(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase
     } else {
         trace_ok(p, &"callParams");
     }
+    return __vals;
 }
 
 fn _parse_closure_expression__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
@@ -29998,11 +30045,11 @@ pub fn parse_unsafe_block_expression(input: &String, max_errors: i32 = i32::MAX)
 }
 
 pub fn parse_array_elements(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with (RustLexerBase, RustParserBase) {
-    return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_array_elements(p));
+    return _run_parse_entry(input, max_errors, |p: &mut Parser| { let _ = _parse_array_elements(p); });
 }
 
 pub fn parse_tuple_elements(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with (RustLexerBase, RustParserBase) {
-    return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_tuple_elements(p));
+    return _run_parse_entry(input, max_errors, |p: &mut Parser| { let _ = _parse_tuple_elements(p); });
 }
 
 pub fn parse_tuple_index(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with (RustLexerBase, RustParserBase) {
@@ -30062,7 +30109,7 @@ pub fn parse_enum_expr_fieldless(input: &String, max_errors: i32 = i32::MAX) -> 
 }
 
 pub fn parse_call_params(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with (RustLexerBase, RustParserBase) {
-    return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_call_params(p));
+    return _run_parse_entry(input, max_errors, |p: &mut Parser| { let _ = _parse_call_params(p); });
 }
 
 pub fn parse_closure_expression(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with (RustLexerBase, RustParserBase) {

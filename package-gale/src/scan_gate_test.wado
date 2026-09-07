@@ -1,4 +1,5 @@
-use { gate_assignment } from "./scan_gate.wado";
+use { gate_assignment, gate_scope } from "./scan_gate.wado";
+use { ParserRule, ActionSource, Visibility } from "./ir.wado";
 
 test "gate_assignment: a bare constant assignment" {
     let hit = gate_assignment(&"noStruct = 1;");
@@ -46,4 +47,60 @@ test "gate_assignment: a call" {
 
 test "gate_assignment: a field write through a receiver" {
     assert gate_assignment(&"this.noStruct = 1;") matches { None };
+}
+
+// A gate scope: the save/restore a members field alone cannot express, because
+// each invocation of the rule keeps its own copy of the saved value.
+test "gate_scope: the @init / @after pair" {
+    let r = ParserRule {
+        name: "callParams",
+        visibility: Visibility::Public,
+        options: [],
+        alternatives: [],
+        init_action: Option::Some(ActionSource { text: "$sv = noStruct; noStruct = 0;" }),
+        after_action: Option::Some(ActionSource { text: "noStruct = $sv;" }),
+    };
+    let s = gate_scope(&r);
+    assert s matches { Some(_) }, `${s:?}`;
+    if let Some(g) = s {
+        assert g.field == "no_struct", &g.field;
+        assert g.value == 0, `${g.value}`;
+    }
+}
+
+// The rejection cases. Each is a pair a scan cannot run as a save/restore, so
+// running it anyway would leave the gate holding a value the parse never does.
+test "gate_scope: a restore of a different field" {
+    let r = ParserRule {
+        name: "r",
+        visibility: Visibility::Public,
+        options: [],
+        alternatives: [],
+        init_action: Option::Some(ActionSource { text: "$sv = noStruct; noStruct = 0;" }),
+        after_action: Option::Some(ActionSource { text: "depth = $sv;" }),
+    };
+    assert gate_scope(&r) matches { None };
+}
+
+test "gate_scope: a save the restore does not read" {
+    let r = ParserRule {
+        name: "r",
+        visibility: Visibility::Public,
+        options: [],
+        alternatives: [],
+        init_action: Option::Some(ActionSource { text: "$sv = noStruct; noStruct = 0;" }),
+        after_action: Option::Some(ActionSource { text: "noStruct = $other;" }),
+    };
+    assert gate_scope(&r) matches { None };
+}
+
+test "gate_scope: no @after is no scope" {
+    let r = ParserRule {
+        name: "r",
+        visibility: Visibility::Public,
+        options: [],
+        alternatives: [],
+        init_action: Option::Some(ActionSource { text: "$sv = noStruct; noStruct = 0;" }),
+    };
+    assert gate_scope(&r) matches { None };
 }

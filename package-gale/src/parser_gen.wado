@@ -38,7 +38,7 @@ use {
     elements_match,
 } from "./gen_util.wado";
 use { PARSER_HANDLE, DISPATCH_KIND_LOCAL, FOLLOW_PARAM } from "./ident.wado";
-use { SCAN_GATE_HANDLE } from "./scan_gate.wado";
+use { GateScope, SCAN_GATE_HANDLE, gate_scope } from "./scan_gate.wado";
 use {
     join_kinds,
     follow_composed,
@@ -387,7 +387,59 @@ fn gen_scan_functions(w: &mut CodeWriter, grammar: &Grammar, lowered: &LoweredGr
 }
 
 fn gen_scan_function(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule, ctx: &mut GenContext) {
-    gen_scan_function_named(w, rule, lowered_rule, ctx, &`scan_${rule.snake_name}`);
+    let name = `scan_${rule.snake_name}`;
+    if let Some(scope) = scan_gate_scope(rule, ctx) {
+        // A rule that sets a gate for its own extent and puts it back after
+        // (`locals` + `@init` / `@after`) is a *scope*, not a write, and the
+        // scan's own call stack is where its saved value belongs. A wrapper is
+        // what makes the restore unconditional: the body returns from a dozen
+        // places, and one that skipped the restore would leave the gate holding
+        // a value the parse never does.
+        let inner = `${name}__scoped`;
+        gen_scan_gate_scope_wrapper(w, rule, ctx, &name, &inner, &scope);
+        gen_scan_function_named(w, rule, lowered_rule, ctx, &inner);
+        return;
+    }
+    gen_scan_function_named(w, rule, lowered_rule, ctx, &name);
+}
+
+/// The gate scope `rule` opens, or `null` where the scan does not simulate its
+/// field — an unsimulated one has no `SCAN_GATE` slot to save.
+fn scan_gate_scope(rule: &ParserRule, ctx: &GenContext) -> Option<GateScope> {
+    if !ctx.emit_scan_gate() {
+        return null;
+    }
+    return match gate_scope(rule) {
+        Some(s) => if ctx.scan_gate_fields().contains(&s.field) { Option::Some(s) } else { null },
+        None => null,
+    };
+}
+
+fn gen_scan_gate_scope_wrapper(
+    w: &mut CodeWriter,
+    rule: &ParserRule,
+    ctx: &mut GenContext,
+    name: &String,
+    inner: &String,
+    scope: &GateScope,
+) {
+    let mut f = FnSpec::new(name);
+    f.add_param(&"tokens", &"&Array<i32>");
+    f.add_param(&"pos", &"i32");
+    let reads_follow = ctx.current_rule_reads_follow();
+    if reads_follow {
+        add_follow_param(&mut f);
+    }
+    f.set_return_type(&"i32");
+    f.emit_begin(w);
+    let slot = `${SCAN_GATE_HANDLE}.${scope.field}`;
+    w.line(&`let _gate_saved = ${slot};`);
+    w.line(&`${slot} = ${scope.value};`);
+    w.line(&`let _gate_end = ${*inner}(tokens, pos${follow_sep(reads_follow)});`);
+    w.line(&`${slot} = _gate_saved;`);
+    w.line(&"return _gate_end;");
+    w.end();
+    w.blank();
 }
 
 /// Body emitter for a rule's scan function. Left-recursive rules
