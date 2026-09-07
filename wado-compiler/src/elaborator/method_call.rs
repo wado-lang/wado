@@ -3259,7 +3259,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.import_original_name(&head, impl_module)
     }
 
-    /// Whether `name` appears anywhere in `ty` as written.
     /// Whether only the argument can fill this parameter — a blanket, whose
     /// unsubstituted spelling must not be mangled. Three things fill a slot and
     /// the receiver and the method take the other two.
