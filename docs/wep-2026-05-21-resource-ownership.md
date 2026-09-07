@@ -634,6 +634,21 @@ Verified against the tree.
       omission is wrong. Such a declaration puts the fact where its author will
       look. It does not buy the guarantee the result's origin gets.
 
+- [ ] Root the self-projection verdict at a parameter, as `ReturnPath` is.
+      `returns_self_projection` says a call is fresh when its receiver is, and
+      `analyze::is_owned_value` reads `args.first()` for that receiver. A wrapper
+      whose storage comes from a later parameter breaks the pairing:
+      `VariantCase::extract(&self, w)` returns a component of `w`, so answering
+      yes for it makes the caller test `c` — a freshly built member descriptor —
+      and call the result fresh. The copy `w` needs then disappears.
+      That is why a `core:builtin` answers no here whatever it declared, even
+      though `#[returns(part_of(p))]` names the parameter exactly. Reading the
+      declaration costs `reflect_member_read_copies` its `case` line and buys 4
+      changed goldens out of 1767, with the json and cbor benchmarks unmoved.
+      Closing it means the verdict carrying its parameter and
+      `is_owned_value` testing that argument, which is the same shape
+      `ReturnPath::param` already has.
+
 ## Deferred: the `move` and `unique` keywords
 
 Intentionally not implemented. Move-only semantics need no syntax: transfer is
