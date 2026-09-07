@@ -238,6 +238,27 @@ solve. Filling the declaring slots a second time from the spelled turbofish is
 two answers for one call, and it is why no rung could be given the receiver's
 type until this was one answer.
 
+### Every parameter a block declares is a slot of that block
+
+`bind_declared_target_params` numbers a block's slots by the position each takes
+in the receiver's arguments. A parameter the receiver never mentions —
+`impl<T: Display> From<T> for ByAny` — has no such position, and was left
+unbound, so `fn from(v: T)` resolved to no type at all. It is numbered after the
+ones the receiver does mention. Only an argument can fill it, which is what
+makes the block a blanket, but a slot is what it is either way.
+
+Two spellings decide where the binding goes and what it skips. It runs before
+the trait's parameters are bound, since `From<T>`'s is also spelled `T`: binding
+the trait's first claims that name for an argument nothing has resolved yet, and
+the block's own slot never gets made. And a parameter position may hold a
+concrete type — `impl<i32> IndexValue<i32> for Box` — which is not a parameter
+and must not be bound, or the slot shadows the type it is named for and the
+diagnostic reads `expected 'i32', found 'i32'`.
+
+With the slot real, "only an argument can fill this parameter" is read off the
+slot's index. Reading it off an _absent_ type meant every unresolved parameter
+in a block with such a slot answered the same way.
+
 ### A blanket is a candidate, ranked last
 
 A value blanket (`impl<T: Bound> Trait for T`) covers a receiver through its
@@ -362,26 +383,6 @@ they instantiate what the rules picked rather than picking it.
   is a spelling decision — which slot of the turbofish is `Self` — not a missing
   mechanism, and a bound (`fn f<T: Take<A>>() { T::take() }`) is the way to
   write it meanwhile.
-- A blanket impl's method parameter does not resolve to the block's slot. The
-  decl pass resolves a parameter naming a slot the receiver mentions and leaves
-  one it does not as no type at all, which is why the blanket test reads an
-  unresolved parameter as its answer rather than reading the slot.
-
-  Closing it is not local to the decl pass. `bind_declared_target_params`
-  numbers a block's slots by the position each takes in the receiver's
-  arguments, and a slot the receiver never mentions has no such position — so
-  binding it means choosing a numbering for slots the receiver cannot fill, and
-  `method_param_offset`, `declaring_slot_count` and `spelled_slots` all read
-  that numbering. It is a decision about what a slot's index means, not a
-  missing call.
-
-  Numbering the unmentioned slots after the mentioned ones was tried and does
-  not hold: `associated_type`, `index_trait` and four more fixtures then read a
-  method parameter at a slot the receiver's arguments fill differently, and the
-  diagnostic that comes back is `expected 'i32', found 'i32'` — two type
-  parameters printing one name. The numbering has to distinguish what a
-  receiver fills from what only an argument can, which the index alone does
-  not say.
 - `resolve_static_method_call_from_qualified` resolves without the receiver's
   type, so a declaration whose slots the receiver fills comes back as the
   declaration wrote them. Nothing reads that return type today — the spelling

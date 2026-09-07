@@ -800,6 +800,47 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
         let saved_bounds = saved.type_param_bounds.clone();
         self.annotate_ctx.trait_ctx.type_param_bounds = saved_bounds;
 
+        // A slot the target never mentions is the block's too, numbered after
+        // the ones it does. `impl<T: Display> From<T> for ByAny` binds `T`, so
+        // `fn from(v: T)` reads a slot rather than no type at all. Only an
+        // argument can fill it — that is what makes the block a blanket — but a
+        // slot is what it is either way.
+        //
+        // Before the trait's parameters, since `From<T>`'s is spelled `T` too:
+        // binding the trait's first claims the name for an argument that does
+        // not resolve yet, and the block's own slot never gets made.
+        let mut impl_type_params = impl_type_params;
+        let mut next_slot = method_param_offset(&impl_type_params);
+        for param in impl_declared_params
+            .iter()
+            .filter(|p| p.is_real_type_param())
+        {
+            // `impl<i32> IndexValue<i32> for Box` writes a concrete type where a
+            // parameter goes, and binding one shadows the type it names with a
+            // slot of the same spelling — `expected 'i32', found 'i32'`.
+            if self
+                .tysys
+                .is_known_type_name_in(&self.current_module_source, &param.name)
+                || self
+                    .annotate_ctx
+                    .trait_ctx
+                    .type_params
+                    .contains_key(&param.name)
+            {
+                continue;
+            }
+            let bounds = self.saved_param_bounds(&param.name);
+            impl_type_params.push(self.bind_target_param(
+                &param.name,
+                next_slot,
+                param.is_pack,
+                bounds,
+                None,
+                Some(param.id),
+            ));
+            next_slot += 1;
+        }
+
         // Bind the trait's own type parameters to the impl's concrete trait
         // args so that references like `T` inside a default method body resolve
         // to the impl's instantiation (e.g., `impl Maker<i32> for IntMaker`

@@ -3233,14 +3233,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             | ResolvedType::TypePack { index, name, .. } => {
                 *index < sig.declaring_slot_count && !Self::type_mentions(&header.ty, name)
             }
-            // The decl pass leaves a parameter naming a slot the receiver never
-            // mentions as no type at all, so a blanket's arrives unresolved
-            // rather than as the slot — see the WEP's gap on the decl pass. The
-            // block having such a slot is the same answer.
-            ResolvedType::Unknown | ResolvedType::Error => header
-                .type_params
-                .iter()
-                .any(|slot| !Self::type_mentions(&header.ty, &slot.name)),
             _ => false,
         }
     }
