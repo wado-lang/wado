@@ -50,7 +50,7 @@ use { MemberDecls } from "./java2wado/jmembers.wado";
 use { find_attr_refs } from "./attr_scan.wado";
 use { body_is_base_calls_only, body_names_this, opaque_span_end } from "./superclass.wado";
 use { escape_ident, PARSER_HANDLE } from "./ident.wado";
-use { SCAN_GATE_HANDLE } from "./scan_gate.wado";
+use { SCAN_GATE_HANDLE, reads_only_scan_gate_fields } from "./scan_gate.wado";
 
 /// The callee-local parameter name a rule argument binds to. `escape_ident`
 /// keeps a keyword-named arg (`type`) a legal identifier; the value is stored
@@ -711,20 +711,6 @@ pub fn alt_scan_gate_conditions(alt: &Alternative, ctx: &GenContext) -> String {
         return String::new();
     }
     return join_gate_conds(&conds);
-}
-
-/// Whether a rendered condition reads nothing but simulated gate fields.
-///
-/// Take the simulated reads out and see what is left: a `SCAN_GATE` that
-/// survives names a field the global does not have, and a parser handle that
-/// survives is state the scan does not hold. Either leaves the gate
-/// unsimulated, which is the behaviour before this existed.
-fn reads_only_scan_gate_fields(code: &String, fields: &List<String>) -> bool {
-    let mut rest = *code;
-    for let f of fields {
-        rest = rest.replace(`${SCAN_GATE_HANDLE}.${*f}`, "");
-    }
-    return !rest.contains(SCAN_GATE_HANDLE) && !rest.contains(PARSER_HANDLE);
 }
 
 /// The name of a predicate's standalone fn (`pred_<action_id>`).

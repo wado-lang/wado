@@ -19,7 +19,7 @@
 //! condition from the parser's own predicate text with the handle pointed at
 //! the global. One predicate, one translator, two sides.
 
-use { Grammar, ParserRule } from "./ir.wado";
+use { Element, Grammar, ParserRule } from "./ir.wado";
 use { to_snake_case } from "./ident.wado";
 
 /// The generated global the scan mutates, and its struct type.
@@ -65,6 +65,26 @@ fn one_assignment(text: &String) -> Option<[String, String]> {
         return null;
     }
     return Option::Some([name, value]);
+}
+
+/// Whether a rendered predicate reads nothing but simulated gate fields.
+///
+/// Take the simulated reads out and see what is left. What a condition may keep
+/// is operators, digits and space; any name still standing is a read the scan
+/// cannot answer — an unsimulated field, or the parser — and leaves the gate
+/// unsimulated, which is the behaviour before this existed.
+///
+/// Longest field first, because one field name can be a prefix of another:
+/// taking `SCAN_GATE.no_struct` out of `SCAN_GATE.no_struct_tail` leaves
+/// `_tail`. Asking for a name rather than for the handles is what sees that
+/// leftover — and the parser handle is one letter, so asking whether it appears
+/// anywhere answers yes inside `depth`.
+pub fn reads_only_scan_gate_fields(code: &String, fields: &List<String>) -> bool {
+    let mut rest = *code;
+    for let f of fields.sorted_by(|a: &String, b: &String| b.len().cmp(&a.len())) {
+        rest = rest.replace(`${SCAN_GATE_HANDLE}.${f}`, "");
+    }
+    return rest.find_char(|c| c == '_' || c.is_ascii_alphabetic()) matches { None };
 }
 
 /// Whether the assigned name is a bare identifier. A receiver (`this.f`) or a
@@ -189,17 +209,54 @@ pub fn scan_gate_fields(grammar: &Grammar) -> List<String> {
                         }
                     },
                     None => {
-                        for let name of assigned_names(&a.source.text) {
-                            if !rejected.contains(&name) {
-                                rejected.push(name);
-                            }
-                        }
+                        push_new(&mut rejected, assigned_names(&a.source.text));
                     },
                 }
             }
+            // An inline group's own alternatives carry actions too, and the
+            // parse runs them. Lowering puts no gates on a group alternative's
+            // scan body, so the scan cannot — a field written in there is one
+            // the two sides would disagree about however it is written.
+            reject_nested_writes(&alt.elements, &mut rejected);
         }
     }
     return simulable.iter_ref().filter(|f| !rejected.contains(f)).map(|f| *f).collect();
+}
+
+/// Every field an action inside a nested group writes, added to the refused set.
+fn reject_nested_writes(elements: &List<Element>, rejected: &mut List<String>) {
+    for let e of elements {
+        match e {
+            Group(g) => {
+                for let alt of &g.alternatives {
+                    for let a of &alt.actions {
+                        if !a.kind matches { Predicate } {
+                            push_new(rejected, assigned_names(&a.source.text));
+                        }
+                    }
+                    reject_nested_writes(&alt.elements, rejected);
+                }
+            },
+            Repeat(r) => {
+                let inner = [r.element] as List<Element>;
+                reject_nested_writes(&inner, rejected);
+            },
+            Label(l) => {
+                let inner = [l.element] as List<Element>;
+                reject_nested_writes(&inner, rejected);
+            },
+            _ => {
+            },
+        }
+    }
+}
+
+fn push_new(out: &mut List<String>, names: List<String>) {
+    for let name of names {
+        if !out.contains(&name) {
+            out.push(name);
+        }
+    }
 }
 
 /// A rule's `@init` and `@after` bodies, whichever it has.
@@ -241,7 +298,7 @@ fn assignment_target(stmt: &String) -> Option<String> {
     if rhs.starts_with("=") {
         return null;
     }
-    let target = strip_compound_op(&lhs.trim());
+    let target = strip_trailing_operator(&lhs.trim());
     let name = match target.rsplit_once(".") {
         Some(parts) => parts.1,
         None => target,
@@ -249,13 +306,19 @@ fn assignment_target(stmt: &String) -> Option<String> {
     return if is_plain_ident(&name) { Option::Some(name) } else { null };
 }
 
-/// `name +` from `name += v`. `==`, `!=`, `<=` and `>=` never reach here: a
-/// comparison is refused by its right-hand side.
-fn strip_compound_op(lhs: &String) -> String {
-    for let op of ["+", "-", "*", "/"] as List<String> {
-        if let Some(name) = lhs.strip_suffix(op) {
-            return name.trim();
+/// `name` from the `name +=` / `name |=` / `name <<=` a compound assignment
+/// leaves on the left.
+///
+/// Cuts back to the last character a name may hold rather than listing the
+/// operators, so one nobody thought of still disqualifies its field — which is
+/// the whole point of the set this feeds. `==`, `!=`, `<=` and `>=` never reach
+/// here: a comparison is refused by its right-hand side.
+fn strip_trailing_operator(lhs: &String) -> String {
+    let mut end = 0;
+    for let [index, c] of lhs.char_indices() {
+        if c == '_' || c.is_ascii_alphanumeric() {
+            end = index + c.len_utf8();
         }
     }
-    return *lhs;
+    return lhs.substr_bytes(0, end);
 }

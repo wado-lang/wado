@@ -1,5 +1,16 @@
-use { gate_assignment, gate_scope, scan_gate_fields } from "./scan_gate.wado";
-use { ActionKind, ActionSource, AltAction, Alternative, Grammar, GrammarKind, ParserRule, Visibility } from "./ir.wado";
+use { gate_assignment, gate_scope, reads_only_scan_gate_fields, scan_gate_fields } from "./scan_gate.wado";
+use {
+    ActionKind,
+    ActionSource,
+    AltAction,
+    Alternative,
+    Element,
+    Grammar,
+    GrammarKind,
+    GroupElement,
+    ParserRule,
+    Visibility,
+} from "./ir.wado";
 
 test "gate_assignment: a bare constant assignment" {
     let hit = gate_assignment(&"noStruct = 1;");
@@ -161,4 +172,78 @@ test "scan_gate_fields: the recognised scope pair leaves its field simulable" {
 test "scan_gate_fields: an unrunnable rule-level write disqualifies the field" {
     let g = grammar_with(&"noStruct = depth();", null);
     assert scan_gate_fields(&g).is_empty(), `${scan_gate_fields(&g):?}`;
+}
+
+// The disqualifying set is generous on purpose, so an operator nobody listed
+// still has to reach it: a field the scan simulates for one write and misses
+// for another holds a value the parse never does.
+test "scan_gate_fields: a compound assignment disqualifies the field" {
+    for let op of ["+=", "|=", "&=", "^=", "%=", "<<=", ">>="] as List<String> {
+        let g = grammar_with(&`noStruct ${op} 1;`, null);
+        assert scan_gate_fields(&g).is_empty(), `${op} left the field simulable`;
+    }
+}
+
+test "scan_gate_fields: a write through a receiver disqualifies the field" {
+    let g = grammar_with(&"this.noStruct = depth();", null);
+    assert scan_gate_fields(&g).is_empty(), `${scan_gate_fields(&g):?}`;
+}
+
+// An inline group's alternatives carry actions the parse runs, and lowering
+// puts no gates on a group alternative's scan body — so the scan cannot run
+// them however simply they are written.
+test "scan_gate_fields: a write inside a group disqualifies the field" {
+    let mut g = grammar_with(&"other = 1;", null);
+    let inner = Alternative {
+        label: null,
+        options: [],
+        elements: [],
+        actions: [
+            AltAction {
+                kind: ActionKind::Action,
+                source: ActionSource { text: "noStruct = 0;" },
+                before_index: 0,
+            },
+        ],
+    };
+    g.parser_rules[1].alternatives[0].elements = [
+        Element::Group(GroupElement {
+            alternatives: [inner],
+            options: [],
+        }),
+    ];
+    assert scan_gate_fields(&g).is_empty(), `${scan_gate_fields(&g):?}`;
+}
+
+// A condition the scan may evaluate reads simulated fields and nothing else.
+test "reads_only_scan_gate_fields: a simulated field" {
+    assert reads_only_scan_gate_fields(&"(SCAN_GATE.no_struct == 0)", &["no_struct"]);
+}
+
+test "reads_only_scan_gate_fields: two of them" {
+    let fields = ["no_struct", "depth"] as List<String>;
+    assert reads_only_scan_gate_fields(&"(SCAN_GATE.no_struct == 0 && SCAN_GATE.depth > 1)", &fields);
+}
+
+// One field name can be a prefix of another. Taking the short one out of the
+// long one leaves `_tail`, which is a read of a field the global does not have.
+test "reads_only_scan_gate_fields: a field whose name extends a simulated one" {
+    assert !reads_only_scan_gate_fields(&"(SCAN_GATE.no_struct_tail == 0)", &["no_struct"]);
+}
+
+test "reads_only_scan_gate_fields: the longer name, simulated, is read" {
+    let fields = ["no_struct", "no_struct_tail"] as List<String>;
+    assert reads_only_scan_gate_fields(&"(SCAN_GATE.no_struct_tail == 0)", &fields);
+}
+
+test "reads_only_scan_gate_fields: an unsimulated field" {
+    assert !reads_only_scan_gate_fields(&"(SCAN_GATE.depth == 0)", &["no_struct"]);
+}
+
+test "reads_only_scan_gate_fields: a parser read" {
+    assert !reads_only_scan_gate_fields(&"(p.no_struct == 0)", &["no_struct"]);
+}
+
+test "reads_only_scan_gate_fields: a call on the recognizer" {
+    assert !reads_only_scan_gate_fields(&"pred_3(p)", &["no_struct"]);
 }

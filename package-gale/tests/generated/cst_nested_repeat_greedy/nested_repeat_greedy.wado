@@ -1518,7 +1518,22 @@ fn scan_s(tokens: &Array<i32>, pos: i32) -> i32 {
                 if pos >= tokens.len() || tokens[pos] != TK_LIT_X { break try_0; }
                 pos += 1;
                 while pos < tokens.len() && tokens[pos] == TK_LIT_X {
-                    pos += 1;
+                    let sp = pos;
+                    if pos >= tokens.len() || tokens[pos] != TK_LIT_X { pos = -1; } else { pos += 1; }
+                    if pos < 0 { pos = sp; break; }
+                    if pos == sp { break; }
+                    let rs_0 = pos;
+                    let mut rs_0_ok = false;
+                    rsv_0: {
+                        if pos >= tokens.len() || tokens[pos] != TK_LIT_X { break rsv_0; }
+                        pos += 1;
+                        if pos >= tokens.len() || tokens[pos] != TK_EOF { break rsv_0; }
+                        pos += 1;
+                        rs_0_ok = true;
+                    }
+                    pos = rs_0;
+                    let rk_0 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+                    if !rs_0_ok && !(rk_0 == TK_LIT_X) { pos = sp; break; }
                 }
                 if pos >= tokens.len() || tokens[pos] != TK_LIT_X { break try_0; }
                 pos += 1;
@@ -1535,7 +1550,22 @@ fn scan_s(tokens: &Array<i32>, pos: i32) -> i32 {
                 if pos >= tokens.len() || tokens[pos] != TK_LIT_X { break try_1; }
                 pos += 1;
                 while pos < tokens.len() && tokens[pos] == TK_LIT_X {
-                    pos += 1;
+                    let sp = pos;
+                    if pos >= tokens.len() || tokens[pos] != TK_LIT_X { pos = -1; } else { pos += 1; }
+                    if pos < 0 { pos = sp; break; }
+                    if pos == sp { break; }
+                    let rs_1 = pos;
+                    let mut rs_1_ok = false;
+                    rsv_1: {
+                        if pos >= tokens.len() || tokens[pos] != TK_LIT_X { break rsv_1; }
+                        pos += 1;
+                        if pos >= tokens.len() || tokens[pos] != TK_EOF { break rsv_1; }
+                        pos += 1;
+                        rs_1_ok = true;
+                    }
+                    pos = rs_1;
+                    let rk_1 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+                    if !rs_1_ok && !(rk_1 == TK_LIT_X) { pos = sp; break; }
                 }
                 if pos >= tokens.len() || tokens[pos] != TK_LIT_X { break try_1; }
                 pos += 1;
@@ -1552,7 +1582,22 @@ fn scan_s(tokens: &Array<i32>, pos: i32) -> i32 {
                 if pos >= tokens.len() || tokens[pos] != TK_LIT_X { break try_2; }
                 pos += 1;
                 while pos < tokens.len() && tokens[pos] == TK_LIT_X {
-                    pos += 1;
+                    let sp = pos;
+                    if pos >= tokens.len() || tokens[pos] != TK_LIT_X { pos = -1; } else { pos += 1; }
+                    if pos < 0 { pos = sp; break; }
+                    if pos == sp { break; }
+                    let rs_2 = pos;
+                    let mut rs_2_ok = false;
+                    rsv_2: {
+                        if pos >= tokens.len() || tokens[pos] != TK_LIT_X { break rsv_2; }
+                        pos += 1;
+                        if pos >= tokens.len() || tokens[pos] != TK_EOF { break rsv_2; }
+                        pos += 1;
+                        rs_2_ok = true;
+                    }
+                    pos = rs_2;
+                    let rk_2 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+                    if !rs_2_ok && !(rk_2 == TK_LIT_X) { pos = sp; break; }
                 }
                 if pos >= tokens.len() || tokens[pos] != TK_LIT_X { break try_2; }
                 pos += 1;
@@ -1613,7 +1658,22 @@ fn scan_s(tokens: &Array<i32>, pos: i32) -> i32 {
                 if pos >= tokens.len() || tokens[pos] != TK_LIT_G { break try_5; }
                 pos += 1;
                 while pos < tokens.len() && tokens[pos] == TK_LIT_X {
-                    pos += 1;
+                    let sp = pos;
+                    if pos >= tokens.len() || tokens[pos] != TK_LIT_X { pos = -1; } else { pos += 1; }
+                    if pos < 0 { pos = sp; break; }
+                    if pos == sp { break; }
+                    let rs_3 = pos;
+                    let mut rs_3_ok = false;
+                    rsv_3: {
+                        if pos >= tokens.len() || tokens[pos] != TK_LIT_X { break rsv_3; }
+                        pos += 1;
+                        if pos >= tokens.len() || tokens[pos] != TK_EOF { break rsv_3; }
+                        pos += 1;
+                        rs_3_ok = true;
+                    }
+                    pos = rs_3;
+                    let rk_3 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+                    if !rs_3_ok && !(rk_3 == TK_LIT_X) { pos = sp; break; }
                 }
                 if pos >= tokens.len() || tokens[pos] != TK_LIT_X { break try_5; }
                 pos += 1;
@@ -1645,11 +1705,17 @@ fn _parse_s__inner(p: &mut Parser) -> () {
                     pos += 1;
                     if pos <= p.pos { break rep_scan; }
                     let rep_body_end = pos;
-                    if pos >= tokens.len() || tokens[pos] != TK_LIT_X { break rep_scan; }
-                    pos += 1;
-                    if pos >= tokens.len() || tokens[pos] != TK_EOF { break rep_scan; }
-                    pos += 1;
+                    let mut rep_body_end_ok = false;
+                    rep_body_end_scan: {
+                        if pos >= tokens.len() || tokens[pos] != TK_LIT_X { break rep_body_end_scan; }
+                        pos += 1;
+                        if pos >= tokens.len() || tokens[pos] != TK_EOF { break rep_body_end_scan; }
+                        pos += 1;
+                        rep_body_end_ok = true;
+                    }
                     pos = rep_body_end;
+                    let _k_rep_body_end_ok = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+                    if !rep_body_end_ok && !(_k_rep_body_end_ok == TK_LIT_X) { break rep_scan; }
                     rep_scan_pos = pos;
                 }
                 if rep_scan_pos < 0 { break; }
@@ -1675,11 +1741,17 @@ fn _parse_s__inner(p: &mut Parser) -> () {
                     pos += 1;
                     if pos <= p.pos { break rep_scan; }
                     let rep_body_end = pos;
-                    if pos >= tokens.len() || tokens[pos] != TK_LIT_X { break rep_scan; }
-                    pos += 1;
-                    if pos >= tokens.len() || tokens[pos] != TK_EOF { break rep_scan; }
-                    pos += 1;
+                    let mut rep_body_end_ok = false;
+                    rep_body_end_scan: {
+                        if pos >= tokens.len() || tokens[pos] != TK_LIT_X { break rep_body_end_scan; }
+                        pos += 1;
+                        if pos >= tokens.len() || tokens[pos] != TK_EOF { break rep_body_end_scan; }
+                        pos += 1;
+                        rep_body_end_ok = true;
+                    }
                     pos = rep_body_end;
+                    let _k_rep_body_end_ok = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+                    if !rep_body_end_ok && !(_k_rep_body_end_ok == TK_LIT_X) { break rep_scan; }
                     rep_scan_pos = pos;
                 }
                 if rep_scan_pos < 0 { break; }
@@ -1705,11 +1777,17 @@ fn _parse_s__inner(p: &mut Parser) -> () {
                     pos += 1;
                     if pos <= p.pos { break rep_scan; }
                     let rep_body_end = pos;
-                    if pos >= tokens.len() || tokens[pos] != TK_LIT_X { break rep_scan; }
-                    pos += 1;
-                    if pos >= tokens.len() || tokens[pos] != TK_EOF { break rep_scan; }
-                    pos += 1;
+                    let mut rep_body_end_ok = false;
+                    rep_body_end_scan: {
+                        if pos >= tokens.len() || tokens[pos] != TK_LIT_X { break rep_body_end_scan; }
+                        pos += 1;
+                        if pos >= tokens.len() || tokens[pos] != TK_EOF { break rep_body_end_scan; }
+                        pos += 1;
+                        rep_body_end_ok = true;
+                    }
                     pos = rep_body_end;
+                    let _k_rep_body_end_ok = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+                    if !rep_body_end_ok && !(_k_rep_body_end_ok == TK_LIT_X) { break rep_scan; }
                     rep_scan_pos = pos;
                 }
                 if rep_scan_pos < 0 { break; }
@@ -1765,11 +1843,17 @@ fn _parse_s__inner(p: &mut Parser) -> () {
                 pos += 1;
                 if pos <= p.pos { break rep_scan; }
                 let rep_body_end = pos;
-                if pos >= tokens.len() || tokens[pos] != TK_LIT_X { break rep_scan; }
-                pos += 1;
-                if pos >= tokens.len() || tokens[pos] != TK_EOF { break rep_scan; }
-                pos += 1;
+                let mut rep_body_end_ok = false;
+                rep_body_end_scan: {
+                    if pos >= tokens.len() || tokens[pos] != TK_LIT_X { break rep_body_end_scan; }
+                    pos += 1;
+                    if pos >= tokens.len() || tokens[pos] != TK_EOF { break rep_body_end_scan; }
+                    pos += 1;
+                    rep_body_end_ok = true;
+                }
                 pos = rep_body_end;
+                let _k_rep_body_end_ok = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+                if !rep_body_end_ok && !(_k_rep_body_end_ok == TK_LIT_X) { break rep_scan; }
                 rep_scan_pos = pos;
             }
             if rep_scan_pos < 0 { break; }

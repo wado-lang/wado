@@ -1744,14 +1744,15 @@ pub fn gen_alt_scan_op_elements(
 ) {
     let covers_whole_alt = end == scan_elems.len();
     gen_scan_gate_check(w, gate_cond, &"return -1;");
-    for let mut i = 0; i < end; i += 1 {
-        let se = &scan_elems[i];
-        gen_scan_gates_in(w, gates, if i == 0 { i32::MIN } else { i }, i + 1);
-        let is_last_self_ref = covers_whole_alt && i == end - 1 && is_self_ref_scan_call(se, rule_name);
-        let min_prec_override = if is_last_self_ref { i32::MAX } else { 0 };
-        gen_scan_op_element(w, se, ctx, &"return -1;", min_prec_override);
+    for let mut i = 0; i <= end; i += 1 {
+        gen_scan_gates_before(w, gates, i, 0, end);
+        if i < end {
+            let se = &scan_elems[i];
+            let is_last_self_ref = covers_whole_alt && i == end - 1 && is_self_ref_scan_call(se, rule_name);
+            let min_prec_override = if is_last_self_ref { i32::MAX } else { 0 };
+            gen_scan_op_element(w, se, ctx, &"return -1;", min_prec_override);
+        }
     }
-    gen_scan_gates_in(w, gates, end, i32::MAX);
 }
 
 /// True iff `se` is a top-level `ScanRuleCall` targeting `rule_name`.
@@ -2176,7 +2177,7 @@ fn gen_scan_op_repeat(w: &mut CodeWriter, re: &ScanRepeatElement, ctx: &mut GenC
 /// One scanned iteration: take the token the guard already proved, or scan the
 /// body and rewind where it fails. A loop also leaves where it cannot advance.
 fn gen_scan_iteration(w: &mut CodeWriter, re: &ScanRepeatElement, admits: &Admits, ctx: &mut GenContext, looping: bool) {
-    if repeat_body_implied_by_guard(&re.body, admits) {
+    if repeat_body_implied_by_guard(&re.body, admits) && scan_iteration_owes_nothing_else(re) {
         w.line(&"pos += 1;");
         return;
     }
@@ -2191,6 +2192,14 @@ fn gen_scan_iteration(w: &mut CodeWriter, re: &ScanRepeatElement, admits: &Admit
     w.line(&"if pos == sp { break; }");
     gen_scan_reserve(w, re, ctx);
     gen_scan_decline_stranded(w, re, ctx);
+}
+
+/// Whether an iteration owes nothing past advancing, so the shortcut above may
+/// take it. A reserve and a decline are per-iteration obligations the parse side
+/// applies whatever the body's shape, and skipping them here is what let
+/// `A* A`'s scan eat both tokens and score -1 for input the parse accepts.
+fn scan_iteration_owes_nothing_else(re: &ScanRepeatElement) -> bool {
+    return re.reserve_scan.is_empty() && !re.decline_stranded;
 }
 
 /// Scan-side twin of `gen_rep_decline_stranded`: an iteration that would strand
@@ -2259,14 +2268,24 @@ fn gen_scan_reserve(w: &mut CodeWriter, re: &ScanRepeatElement, ctx: &mut GenCon
     // The reserve only measures, so its walk is undone whichever way it went.
     w.line(&`pos = rs_${gc};`);
     gen_scan_gate_restore(w, ctx, &`rs_${gc}`);
+    // The suffix failing here is only a starve when nothing can follow: while
+    // the loop can iterate again the suffix gets its turn later. Mirrors
+    // `gen_reserve_check`.
+    let another = kind_check_or_none(&admits_kinds(&re.inner_admits), &`rk_${gc}`, ctx);
+    let starved = if another.is_empty() {
+        `!rs_${gc}_ok`;
+    } else {
+        w.line(&`let rk_${gc} = if pos < tokens.len() \{ tokens[pos] \} else \{ TK_EOF \};`);
+        `!rs_${gc}_ok && !(${another})`;
+    };
     if ctx.emit_scan_gate() {
-        w.begin(&`if !rs_${gc}_ok`);
+        w.begin(&`if ${starved}`);
         w.line(&"pos = sp;");
         gen_scan_gate_restore(w, ctx, &"sp");
         w.line(&"break;");
         w.end();
     } else {
-        w.line(&`if !rs_${gc}_ok \{ pos = sp; break; \}`);
+        w.line(&`if ${starved} \{ pos = sp; break; \}`);
     }
 }
 
@@ -2399,11 +2418,12 @@ fn gen_scan_op_elements(
     gate_cond: &String = &NO_SCAN_GATE_COND,
 ) {
     gen_scan_gate_check(w, gate_cond, fail_stmt);
-    for let mut i = start; i < end; i += 1 {
-        gen_scan_gates_in(w, gates, if i == start { i32::MIN } else { i }, i + 1);
-        gen_scan_op_element(w, &scan_elems[i], ctx, fail_stmt);
+    for let mut i = start; i <= end; i += 1 {
+        gen_scan_gates_before(w, gates, i, start, end);
+        if i < end {
+            gen_scan_op_element(w, &scan_elems[i], ctx, fail_stmt);
+        }
     }
-    gen_scan_gates_in(w, gates, end, i32::MAX);
 }
 
 /// No gates — the default for every emit site whose body carries none, which is
@@ -2439,16 +2459,20 @@ fn gen_scan_gate_seed(w: &mut CodeWriter, ctx: &GenContext) {
     }
 }
 
-/// Run the gate actions positioned in `[lo, hi)`. A gate consumes no tokens, so
-/// this is the whole of the scan's simulation: assign, and walk on.
+/// Run the gate actions due before element `at`, where the body emitted is
+/// `[start, end)` of the alternative. A gate consumes no tokens, so this is the
+/// whole of the scan's simulation: assign, and walk on.
 ///
-/// The bounds are half-open on both ends of the body rather than a single index
-/// because the body emitted is not always the whole alternative: a token-led
-/// candidate skips its leading token, and a gate ahead of that token still has
-/// to run — the parse ran it, so the scan's copy must hold the same value. The
-/// trailing call takes everything left for the same reason: a tail gate is what
-/// restores the flag the head closed.
-fn gen_scan_gates_in(w: &mut CodeWriter, gates: &List<ScanGate>, lo: i32, hi: i32) {
+/// The two ends absorb what falls outside the body. A token-led candidate emits
+/// from `start = 1`, and a gate ahead of the token it skipped still has to run —
+/// the parse ran it, so the scan's copy must hold the same value. The far end
+/// takes everything left for the same reason: a tail gate is what restores the
+/// flag the head closed. Walking `start..=end` rather than `start..end` is what
+/// keeps both ends reachable when the body is empty, which is a single-element
+/// alternative whose one element the candidate skipped.
+fn gen_scan_gates_before(w: &mut CodeWriter, gates: &List<ScanGate>, at: i32, start: i32, end: i32) {
+    let lo = if at == start { i32::MIN } else { at };
+    let hi = if at == end { i32::MAX } else { at + 1 };
     for let g of gates {
         if g.before_index >= lo && g.before_index < hi {
             w.line(&`${SCAN_GATE_HANDLE}.${g.field} = ${g.value};`);
@@ -2471,11 +2495,12 @@ fn gen_scan_op_elements_in_block(
 ) {
     let fail = `break ${*label};`;
     gen_scan_gate_check(w, gate_cond, &fail);
-    for let mut i = start; i < end; i += 1 {
-        gen_scan_gates_in(w, gates, if i == start { i32::MIN } else { i }, i + 1);
-        gen_scan_op_element(w, &scan_elems[i], ctx, &fail);
+    for let mut i = start; i <= end; i += 1 {
+        gen_scan_gates_before(w, gates, i, start, end);
+        if i < end {
+            gen_scan_op_element(w, &scan_elems[i], ctx, &fail);
+        }
     }
-    gen_scan_gates_in(w, gates, end, i32::MAX);
 }
 
 /// A rule's non-LR alt indices, their FIRST sets, and the overlap groups over
@@ -4181,7 +4206,7 @@ fn gen_repeat_body(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut GenContext, nc: &
                     return;
                 }
             }
-            let scan_pos = gen_rep_scan_guard(w, &r.scan_body, &r.reserve_scan, ctx, nc);
+            let scan_pos = gen_rep_scan_guard(w, &r.scan_body, &r.reserve_scan, &admits_kinds(&r.body_admits), ctx, nc);
             w.line(&`if ${scan_pos} < 0 \{ break; \}`);
             gen_op(w, &r.body, ctx, nc);
             w.end();
@@ -6252,7 +6277,14 @@ fn gen_rep_iteration_entry(
         w.begin(&`if !${*plus_flag}`);
     }
     gen_caller_follow_gate(w, rep_op);
-    let scan_pos = gen_rep_scan_guard(w, &rep_op.scan_body, &rep_op.reserve_scan, ctx, name_counts);
+    let scan_pos = gen_rep_scan_guard(
+        w,
+        &rep_op.scan_body,
+        &rep_op.reserve_scan,
+        &admits_kinds(&rep_op.body_admits),
+        ctx,
+        name_counts,
+    );
     gen_rep_decline_stranded(w, rep_op, &scan_pos, ctx, name_counts);
     gen_rep_break_with_recovery(w, &scan_pos, rep_op, ctx);
     if guarded_only {
@@ -6298,6 +6330,57 @@ fn gen_rep_decline_stranded(
     gen_viability_probe(w, &rep_op.decline_scan, &dead_end, &"decline_scan", ctx, nc, null, &rep_op.decline_viable);
     w.line(&`if ${dead_end} \{ break; \}`);
     w.end();
+    w.end();
+}
+
+/// The reserve a decided iteration owes, checked from where that iteration
+/// would end.
+///
+/// A group body the lookahead decides outright takes its own entry, and that
+/// entry has no scan guard to hang the reserve on — `gen_scan_guard_with_prefix`
+/// builds it into the guard the other path emits. Without this the parse runs
+/// the loop greedily while the scan reserves, which is the same asymmetry a
+/// token body has in the other direction.
+fn gen_rep_decided_reserve(
+    w: &mut CodeWriter,
+    rep_op: &RepeatOp,
+    best: &String,
+    plus_flag: &String,
+    ctx: &mut GenContext,
+    nc: &mut List<[String, i32]>,
+) {
+    if rep_op.reserve_scan.is_empty() {
+        return;
+    }
+    let label = dedup_name(&"rep_reserve", nc);
+    let ok = dedup_name(&"rep_reserve_ok", nc);
+    // Prediction picked nothing: `best` is no position, and the caller reports
+    // that a line below.
+    w.begin(&`if ${*best} >= 0`);
+    w.line(&`let mut ${ok} = false;`);
+    w.begin(&`${label}:`);
+    gen_scan_gate_seed(w, ctx);
+    w.line(&"let tokens = &p.kinds;");
+    w.line(&`let mut pos: i32 = ${*best};`);
+    for let se of &rep_op.reserve_scan {
+        gen_scan_op_element(w, se, ctx, &`break ${label};`);
+    }
+    w.line(&`${ok} = true;`);
+    w.end();
+    // The same condition `gen_reserve_check` uses: the suffix failing here is
+    // only a starve when nothing can follow.
+    let kind = dedup_name(&"rep_reserve_kind", nc);
+    let another = kind_check_or_none(&admits_kinds(&rep_op.body_admits), &kind, ctx);
+    let starved = if another.is_empty() {
+        `!${ok}`;
+    } else {
+        w.line(&`let ${kind} = if ${*best} < p.kinds.len() \{ p.kinds[${*best}] \} else \{ TK_EOF \};`);
+        `!${ok} && !(${another})`;
+    };
+    // A `+`'s mandatory first iteration takes what prediction picked, exactly as
+    // the guarded path leaves its whole guard behind `!plus_flag`.
+    let guard = if plus_flag.is_empty() { starved } else { `!${*plus_flag} && (${starved})` };
+    w.line(&`if ${guard} \{ break; \}`);
     w.end();
 }
 
@@ -6400,9 +6483,13 @@ fn gen_rep_decided_entry(
         // Every iteration may decline, and one that consumed nothing would
         // come round at the same position forever.
         w.line(&`if ${best} <= p.pos \{ break; \}`);
+        gen_rep_decline_stranded(w, rep_op, &best, ctx, name_counts);
+        gen_rep_decided_reserve(w, rep_op, &best, plus_flag, ctx, name_counts);
         return winner;
     }
     w.line(&`if !${*plus_flag} && ${best} <= p.pos \{ break; \}`);
+    gen_rep_decline_stranded(w, rep_op, &best, ctx, name_counts);
+    gen_rep_decided_reserve(w, rep_op, &best, plus_flag, ctx, name_counts);
     // The mandatory first iteration cannot decline: it takes what prediction
     // picked and lets the body report what it cannot match. Only where
     // prediction picked nothing is there an answer to give here.
@@ -6497,10 +6584,60 @@ fn gen_rep_scan_guard(
     w: &mut CodeWriter,
     scan_inner: &ScanElement,
     reserve: &List<ScanElement>,
+    body_admits: &List<String>,
     ctx: &mut GenContext,
     name_counts: &mut List<[String, i32]>,
 ) -> String {
-    return gen_scan_guard_with_prefix(w, scan_inner, ctx, name_counts, &"rep_scan_pos", &"rep_scan", true, reserve);
+    return gen_scan_guard_with_prefix(
+        w,
+        scan_inner,
+        ctx,
+        name_counts,
+        &"rep_scan_pos",
+        &"rep_scan",
+        true,
+        reserve,
+        body_admits,
+    );
+}
+
+global NO_RESERVE_ADMITS: List<String> = [];
+
+/// Refuse the iteration whose end starves the alternative's mandatory suffix.
+///
+/// The suffix failing *here* is not yet a starve: while the loop can iterate
+/// again the suffix gets its turn later, and `(A | B)* A` on `b b a` is the case
+/// — after the first `b` the tail cannot start, and breaking there loses the
+/// input. Only when nothing can follow is the suffix out of turns.
+fn gen_reserve_check(
+    w: &mut CodeWriter,
+    reserve: &List<ScanElement>,
+    body_admits: &List<String>,
+    body_end: &String,
+    fail: &String,
+    ctx: &mut GenContext,
+    name_counts: &mut List<[String, i32]>,
+) {
+    let ok = dedup_name(&`${*body_end}_ok`, name_counts);
+    let label = dedup_name(&`${*body_end}_scan`, name_counts);
+    w.line(&`let ${*body_end} = pos;`);
+    gen_scan_gate_save(w, ctx, body_end);
+    w.line(&`let mut ${ok} = false;`);
+    w.begin(&`${label}:`);
+    for let se of reserve {
+        gen_scan_op_element(w, se, ctx, &`break ${label};`);
+    }
+    w.line(&`${ok} = true;`);
+    w.end();
+    w.line(&`pos = ${*body_end};`);
+    gen_scan_gate_restore(w, ctx, body_end);
+    let another = kind_check_or_none(body_admits, &`_k_${ok}`, ctx);
+    if another.is_empty() {
+        w.line(&`if !${ok} \{ ${*fail} \}`);
+        return;
+    }
+    w.line(&`let _k_${ok} = if pos < tokens.len() \{ tokens[pos] \} else \{ TK_EOF \};`);
+    w.line(&`if !${ok} && !(${another}) \{ ${*fail} \}`);
 }
 
 fn gen_scan_guard_with_prefix(
@@ -6512,6 +6649,7 @@ fn gen_scan_guard_with_prefix(
     label_prefix: &String,
     require_advance: bool,
     reserve: &List<ScanElement> = &NO_RESERVE_SCAN,
+    body_admits: &List<String> = &NO_RESERVE_ADMITS,
 ) -> String {
     let scan_pos_var = dedup_name(pos_prefix, name_counts);
     let scan_label = dedup_name(label_prefix, name_counts);
@@ -6531,13 +6669,7 @@ fn gen_scan_guard_with_prefix(
     // reports the body's end either way — the reserve only decides.
     if !reserve.is_empty() {
         let body_end = dedup_name(&"rep_body_end", name_counts);
-        w.line(&`let ${body_end} = pos;`);
-        gen_scan_gate_save(w, ctx, &body_end);
-        for let se of reserve {
-            gen_scan_op_element(w, se, ctx, &fail);
-        }
-        w.line(&`pos = ${body_end};`);
-        gen_scan_gate_restore(w, ctx, &body_end);
+        gen_reserve_check(w, reserve, body_admits, &body_end, &fail, ctx, name_counts);
     }
     w.line(&`${scan_pos_var} = pos;`);
     w.end();

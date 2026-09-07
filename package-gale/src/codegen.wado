@@ -41,7 +41,7 @@ use {
     stage_lexer_bodies,
     translate_attr_types,
 } from "./java2wado.wado";
-use { member_names, members_present } from "./java2wado/jmembers.wado";
+use { MemberDecls, member_names, members_present } from "./java2wado/jmembers.wado";
 use {
     lexer_superclass_name,
     parser_superclass_name,
@@ -162,6 +162,29 @@ pub fn analysis_context(grammar: &Grammar, lit_tokens: &List<LitToken>, token_ki
     return ctx;
 }
 
+/// Wire the action context lowering reads, and answer the lexer and parser
+/// members as `[lexer, parser]`. They come back rather than being consumed here
+/// because staging and emit both need them, and `dump` needs neither.
+///
+/// `dump` runs this too, and has to. `alt_earns_group_follow` asks
+/// `emit_actions`, so a context without it lowers a different `AltClass` — and
+/// the dump would then report a prediction shape no parser is built from, which
+/// is the drift the prologue above exists to remove.
+pub fn install_action_context(grammar: &mut Grammar, ctx: &mut GenContext) -> [MemberDecls, MemberDecls] {
+    wire_superclasses(grammar, ctx);
+    // A wired parser base's bodies are Wado once the rewrite has run, so they
+    // execute even under a host language java2wado carves out.
+    ctx.set_emit_actions(should_emit_actions(grammar) || ctx.has_parser_superclass());
+    // Ahead of staging: a body resolves its bare names and `this.` calls against
+    // these, so what it can resolve is exactly what reaches the struct — a block
+    // the translation refuses declares nothing, and the refusal is the
+    // diagnostic rather than an unknown field in the output.
+    let lexer_members = collect_members(grammar, ctx, /*lexer=*/ true);
+    let parser_members = collect_members(grammar, ctx, /*lexer=*/ false);
+    ctx.set_action_members(member_names(&parser_members));
+    return [lexer_members, parser_members];
+}
+
 /// Lower for analysis, priming what lowering itself asks `ctx` for.
 ///
 /// Scannability is a fixpoint over the whole rule set: answered per query it
@@ -194,17 +217,7 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
     let mut ctx = analysis_context(grammar, &lit_tokens, token_kinds);
     ctx.set_trace(options.trace);
     ctx.set_fragment_entries(options.fragment_entries);
-    wire_superclasses(grammar, &mut ctx);
-    // A wired parser base's bodies are Wado once the rewrite has run, so they
-    // execute even under a host language java2wado carves out.
-    ctx.set_emit_actions(should_emit_actions(grammar) || ctx.has_parser_superclass());
-    // Ahead of staging: a body resolves its bare names and `this.` calls against
-    // these, so what it can resolve is exactly what reaches the struct — a block
-    // the translation refuses declares nothing, and the refusal is the
-    // diagnostic rather than an unknown field in the output.
-    let lexer_members = collect_members(grammar, &mut ctx, /*lexer=*/ true);
-    let parser_members = collect_members(grammar, &mut ctx, /*lexer=*/ false);
-    ctx.set_action_members(member_names(&parser_members));
+    let [lexer_members, parser_members] = install_action_context(grammar, &mut ctx);
     // Read off the `.g4` bodies, which staging is about to translate away.
     let mode_use = lexer_mode_attr_use(grammar);
     // Stage the lexer bodies into Wado on exactly the grammars whose lexer
@@ -333,7 +346,7 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
         gen_latn_data_global(&mut w, &latn.atn);
     }
     if ctx.emit_scan_gate() {
-        gen_scan_gate_global(&mut w, ctx.scan_gate_fields());
+        gen_scan_gate_global(&mut w, ctx.scan_gate_fields(), &parser_members);
     }
     // Read the full diagnostic set from `ctx`, not `lowered.diagnostics`:
     // the latter is a lowering-time snapshot, and the emit walk's
@@ -575,14 +588,30 @@ fn gen_atn_data_global(w: &mut CodeWriter, atn: &Atn, emit_scan_globals: bool) {
 ///
 /// The parse seeds it from `p` before each scan, so nothing here has to
 /// survive a scan the tournament abandons.
-fn gen_scan_gate_global(w: &mut CodeWriter, fields: &List<String>) {
+fn gen_scan_gate_global(w: &mut CodeWriter, fields: &List<String>, members: &MemberDecls) {
     w.begin(&`struct ${SCAN_GATE_TYPE}`);
     for let f of fields {
-        w.line(&`${*f}: i32 = 0,`);
+        // The member's own declared type and initialiser, not `i32 = 0`. The
+        // seed is `SCAN_GATE.f = p.f;`, so a `long` member declared here as an
+        // `i32` is a type error in the generated parser rather than anything
+        // this side would notice.
+        let mf = member_field(members, f);
+        w.line(&`${*f}: ${mf.0} = ${mf.1},`);
     }
     w.end();
     w.line(&`global mut ${SCAN_GATE_HANDLE}: ${SCAN_GATE_TYPE} = ${SCAN_GATE_TYPE} \{\};`);
     w.blank();
+}
+
+/// A gate member's `[type, initialiser]`. Every simulated field is one the
+/// members block declares, which is the assert.
+fn member_field(members: &MemberDecls, name: &String) -> [String, String] {
+    for let mf of &members.fields {
+        if mf.name == *name {
+            return [mf.ty, mf.init];
+        }
+    }
+    panic(`gen_scan_gate_global: '${*name}' is simulated but no member declares it`);
 }
 
 /// Emit the decoded `LATN_SIM` global for the runtime lexer simulator. Same

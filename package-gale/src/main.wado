@@ -9,6 +9,7 @@ use {
     GenerateOptions,
     canonicalize_for_analysis,
     analysis_context,
+    install_action_context,
     lower_for_analysis,
 } from "./codegen.wado";
 use { parse_highlight_query, HighlightRule } from "./highlight_query.wado";
@@ -183,6 +184,9 @@ fn cmd_dump(paths: List<String>, atn: bool, lexer: bool) with (Stdout, Stderr, P
     // follow-mask registry is populated and the dump reflects the
     // literal ctx that lowered the grammar.
     let mut ctx = analysis_context(&merged, &lit_tokens, token_kinds);
+    // Lowering asks whether actions execute, so the report is of the grammar a
+    // parser is built from rather than of one with its predicates ignored.
+    let _ = install_action_context(&mut merged, &mut ctx);
     let lowered = lower_for_analysis(&merged, &lit_tokens, &mut ctx);
 
     // `--atn` reports the ATN off that same lowering rather than the GIR.

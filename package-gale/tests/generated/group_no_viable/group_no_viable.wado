@@ -1672,7 +1672,8 @@ fn scan_plus_gated(tokens: &Array<i32>, pos: i32) -> i32 {
             rs_4_ok = true;
         }
         pos = rs_4;
-        if !rs_4_ok { pos = sp; break; }
+        let rk_4 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+        if !rs_4_ok && !(_kind_set_0(rk_4)) { pos = sp; break; }
     }
     if pos >= tokens.len() || tokens[pos] != TK_A { return -1; }
     pos += 1;
@@ -1717,7 +1718,8 @@ fn scan_plus_solo(tokens: &Array<i32>, pos: i32) -> i32 {
             rs_7_ok = true;
         }
         pos = rs_7;
-        if !rs_7_ok { pos = sp; break; }
+        let rk_7 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+        if !rs_7_ok && !(rk_7 == TK_A) { pos = sp; break; }
     }
     if pos >= tokens.len() || tokens[pos] != TK_A { return -1; }
     pos += 1;
@@ -1921,6 +1923,20 @@ fn _parse_plus_gated__inner(p: &mut Parser) -> () {
             }
         }
         if !_plus_first && gd_best <= p.pos { break; }
+        if gd_best >= 0 {
+            let mut rep_reserve_ok = false;
+            rep_reserve: {
+                let tokens = &p.kinds;
+                let mut pos: i32 = gd_best;
+                if pos >= tokens.len() || tokens[pos] != TK_A { break rep_reserve; }
+                pos += 1;
+                if pos >= tokens.len() || tokens[pos] != TK_EOF { break rep_reserve; }
+                pos += 1;
+                rep_reserve_ok = true;
+            }
+            let rep_reserve_kind = if gd_best < p.kinds.len() { p.kinds[gd_best] } else { TK_EOF };
+            if !_plus_first && (!rep_reserve_ok && !(_kind_set_0(rep_reserve_kind))) { break; }
+        }
         if gd_winner < 0 {
             if _plus_first { p.no_viable("no viable alternative", p.peek_span(), &SYNC_0); }
             break;
@@ -1972,11 +1988,17 @@ fn _parse_plus_solo__inner(p: &mut Parser) -> () {
                 }
                 if pos <= p.pos { break rep_scan; }
                 let rep_body_end = pos;
-                if pos >= tokens.len() || tokens[pos] != TK_A { break rep_scan; }
-                pos += 1;
-                if pos >= tokens.len() || tokens[pos] != TK_EOF { break rep_scan; }
-                pos += 1;
+                let mut rep_body_end_ok = false;
+                rep_body_end_scan: {
+                    if pos >= tokens.len() || tokens[pos] != TK_A { break rep_body_end_scan; }
+                    pos += 1;
+                    if pos >= tokens.len() || tokens[pos] != TK_EOF { break rep_body_end_scan; }
+                    pos += 1;
+                    rep_body_end_ok = true;
+                }
                 pos = rep_body_end;
+                let _k_rep_body_end_ok = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+                if !rep_body_end_ok && !(_k_rep_body_end_ok == TK_A) { break rep_scan; }
                 rep_scan_pos = pos;
             }
             if rep_scan_pos < 0 { break; }
