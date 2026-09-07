@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1788749791016,
+  "lastUpdate": 1788753227975,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -54021,6 +54021,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 276991,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "e925ee58bf1e4ea2e94ebd0e616548e1e0d308d0",
+          "message": "Merge pull request #1984 from wado-lang/claude/restrict-crate-super-refs-iatg4d\n\nfeat: gate inline `crate::` / `super::` paths, and widen Gale's static prediction",
+          "timestamp": "2026-09-07T12:38:24+09:00",
+          "tree_id": "a98fecc62a730520e3061141813ddf31513451ba",
+          "url": "https://github.com/wado-lang/wado/commit/e925ee58bf1e4ea2e94ebd0e616548e1e0d308d0"
+        },
+        "date": 1788753227054,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 2013,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6560,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18971,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 288297,
             "unit": "bytes"
           }
         ]
