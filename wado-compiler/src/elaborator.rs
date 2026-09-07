@@ -617,9 +617,26 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// `pub type ByteList = List<u8>;` — since the alias declares no method of
     /// its own. `None` when `name` names no such declaration.
     pub(super) fn newtype_base(&self, name: &str) -> Option<(tir::TypeId, String)> {
-        // `type Buf = ByteList;` chains, so this peels to the type that
-        // declares methods rather than stopping at the first link.
-        let mut current = self.lookup_newtype(name)?;
+        Some(self.peeled_base(self.lookup_newtype(name)?))
+    }
+
+    /// [`Self::newtype_base`] keyed on the alias's own declaration. A caller
+    /// reaching the type only through a namespace (`lib::Q`) has no bare name
+    /// its frame answers for, and the declaration is what it does have.
+    pub(super) fn newtype_base_of(
+        &self,
+        key: &trait_env::ImplTargetKey,
+    ) -> Option<(tir::TypeId, String)> {
+        let trait_env::ImplTargetKey::Decl(def) = key else {
+            return None;
+        };
+        Some(self.peeled_base(self.lookup_newtype_of_decl(*def)?))
+    }
+
+    /// `type Buf = ByteList;` chains, so this peels to the type that declares
+    /// methods rather than stopping at the first link.
+    fn peeled_base(&self, alias: tir::TypeId) -> (tir::TypeId, String) {
+        let mut current = alias;
         loop {
             let peeled = match self.tysys.type_table.borrow().get(current).clone() {
                 tir::ResolvedType::Newtype { base_type, .. } => base_type,
@@ -631,7 +648,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             }
             current = peeled;
         }
-        Some((current, self.tysys.get_ultimate_base_struct_name(current)))
+        (current, self.tysys.get_ultimate_base_struct_name(current))
     }
 
     /// The declaration a `Type::method` call resolves to, seeing through a

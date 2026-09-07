@@ -1,0 +1,26 @@
+//! `Tagged::<V>::tag(5)` names the trait, so a case `V` declares of that name
+//! does not shadow it. The turbofish supplies `Self` and the spelling then
+//! reads as `V::tag(5)`, where the case answered first and the trait's static
+//! was unreachable.
+
+trait Tagged {
+    fn tag(v: i32) -> i32 {
+        return v * 2;
+    }
+}
+
+variant V {
+    tag(i32),
+    none,
+}
+
+impl Tagged for V {}
+
+test "the trait's static answers past a case of the same name" {
+    assert Tagged::<V>::tag(5) == 10;
+}
+
+test "and the plain spelling still builds the case" {
+    let built = V::tag(3);
+    assert built matches { V::tag(3) };
+}

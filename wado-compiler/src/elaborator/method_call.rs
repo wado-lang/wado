@@ -3,6 +3,7 @@
 use super::trait_env::ImplTargetKey;
 use crate::ast::{self, AstId};
 use crate::compiler_host::CompilerHost;
+use crate::defs::DefId;
 use crate::module_source::ModuleSource;
 use crate::name::{FqTypeName, LocalMethodName, MethodName, Receiver, RefKind};
 use crate::tir::{
@@ -17,7 +18,8 @@ use super::method_lookup::MethodInferenceInput;
 use super::reflect::ReflectDispatch;
 use super::sem::types::{CalleeParams, StaticMethodDispatch};
 use super::sig::{MethodSig, Param};
-use super::static_call::{Selector, StaticLookup};
+use super::static_call::{Selector, StaticLookup, StaticQuery};
+use super::synth::ArgClass;
 use super::types::{FunctionContext, MethodInfo, MethodOwner, TypeError};
 
 /// A static call named the way [symbol notation] writes it — the receiver's
@@ -1350,6 +1352,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         static_call: &ast::StaticMethodCallExpr,
         ctx: &mut FunctionContext,
     ) -> TypeId {
+        self.resolve_static_method_call_of_trait(static_call, None, ctx)
+    }
+
+    /// [`Self::resolve_static_method_call`] restricted to one trait's impls,
+    /// which is what a `Trait::<T>::method(…)` spelling names.
+    fn resolve_static_method_call_of_trait(
+        &mut self,
+        static_call: &ast::StaticMethodCallExpr,
+        required_trait: Option<DefId>,
+        ctx: &mut FunctionContext,
+    ) -> TypeId {
         // A reflection trait is a trait, not a type, so `target_type` would not
         // resolve: intercept and route to `T`'s synthesized `T^Trait::method`.
         // It is the only spelling — a bare `T::members()` never resolves, so
@@ -1457,7 +1470,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             {
                 let mut on_self = static_call.clone();
                 on_self.target_type = self_ty_ast.clone();
-                return self.resolve_static_method_call(&on_self, ctx);
+                // Restricted to the named trait: the rewritten spelling reads
+                // as `V::tag(…)`, and without it a case or an inherent static
+                // `V` declares of that name answers in the trait's place.
+                let required = self.tysys.resolutions.declared(g.id);
+                return self.resolve_static_method_call_of_trait(&on_self, required, ctx);
             }
             let _ = self.emit(TypeError::UnknownFunction {
                 name: static_call_symbol_name(static_call),
@@ -1488,34 +1505,34 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             );
         }
 
-        // Literal preselect for a one-argument static call (WEP 2026-07-31
-        // phase 4): choose the impl before the argument is elaborated, so the
-        // expected type comes from the selected impl instead of whichever the
-        // name-keyed index returns first — the circular ordering this WEP
-        // diagnoses. It runs *before* the resolution below and keys it, so the
-        // parameter list and the mangled name come from one answer.
-        let preselected = match (static_call.args.first(), &struct_name_for_lookup) {
-            (Some(arg), Some(recv_name)) => {
+        // Literal preselect for a static call (WEP 2026-07-31 phase 4): choose
+        // the impl before the arguments are elaborated, so their expected types
+        // come from the selected impl instead of whichever the name-keyed index
+        // returns first — the circular ordering this WEP diagnoses. It runs
+        // *before* the resolution below and keys it, so the parameter list and
+        // the mangled name come from one answer.
+        let preselected = match &struct_name_for_lookup {
+            Some(recv_name) => {
                 let recv_name = recv_name.clone();
-                self.preselect_static_arg(
+                self.preselect_static_args(
                     &recv_name,
                     &static_call.method,
-                    arg,
+                    &static_call.args,
                     static_call.span,
                     ctx,
                     struct_key_for_lookup.as_ref(),
                 )
             }
-            _ => PreselectedArg::Undecided,
+            None => PreselectedArg::Undecided,
         };
         if matches!(preselected, PreselectedArg::Reported) {
             return TypeTable::ERROR;
         }
         let preselected = preselected.picked();
-        // The preselect shapes argument zero alone, so this names that one and
-        // no more: a receiver-taking candidate reads argument one and finds
-        // nothing here, which admits it.
-        let arg_types: Vec<TypeId> = preselected.into_iter().collect();
+        // The selected impl's parameters stand in for the arguments the
+        // resolution has not elaborated yet. Empty where nothing was picked,
+        // which admits every candidate.
+        let arg_types: Vec<TypeId> = preselected.clone().unwrap_or_default();
 
         let callee_sig = static_receiver
             .as_ref()
@@ -1529,6 +1546,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     &static_call.method,
                     &name,
                     &arg_types,
+                    required_trait,
                 )
             }
             _ => StaticLookup::NotStatic,
@@ -1545,8 +1563,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             defaults_module,
         } = callee_params;
 
-        if let Some(source) = preselected {
-            PreselectedArg::shape_first(&mut param_types, source);
+        if let Some(picked) = &preselected {
+            PreselectedArg::shape(&mut param_types, picked);
         }
 
         // The module those defaults were written in, so their bodies answer to
@@ -1769,8 +1787,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Option::Some and Option::None are handled by the generic variant
         // construction path below (line ~686). No special case needed.
 
+        // A case, a flags member and a variant constructor are the receiver's
+        // own declarations. A spelling that names a trait asks for none of
+        // them — the same rule the resolution applies to its candidates.
+        let builds_own_case = required_trait.is_none();
+
         // Handle flags type static methods: none() and all()
-        {
+        if builds_own_case {
             // The receiver's own declaration, not its head resolved again.
             // Only a `flags` declaration has members, so this guards the kind.
             if let Some(flags_info) = self
@@ -1810,8 +1833,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         // Handle custom variant construction: Shape::Circle(5.0) or MyVariant::Unit
-        if let ResolvedType::Variant { .. } =
-            self.tysys.type_table.borrow().get(target_type_id).clone()
+        if builds_own_case
+            && let ResolvedType::Variant { .. } =
+                self.tysys.type_table.borrow().get(target_type_id).clone()
         {
             // Look up the variant case info
             if let Some(variant_info) = self.variant_of_type(target_type_id) {
@@ -1850,7 +1874,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self.tysys.type_table.borrow().get(target_type_id),
             ResolvedType::GenericInstance { .. }
         );
-        if is_generic_instance {
+        if builds_own_case && is_generic_instance {
             // Check if the base type is a variant
             if let Some(variant_info) = self.variant_of_type(target_type_id).cloned() {
                 let name = variant_info.name.clone();
@@ -2215,6 +2239,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             &static_call.method,
             Some(&receiver_key),
             &args,
+            required_trait,
             static_call.span,
         ) else {
             return TypeTable::ERROR;
@@ -2716,14 +2741,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let static_key = receiver.head().def().map(|def| {
             super::trait_env::ImplTargetKey::of_decl(self.tysys.resolutions.defs(), def)
         });
-        let resolved = self.resolve_static_callee(
-            None,
-            struct_name,
-            static_key.as_ref(),
-            method_name,
-            &[],
-            None,
-        );
+        let resolved = self.resolve_static_callee(StaticQuery {
+            receiver_key: static_key.as_ref(),
+            ..StaticQuery::of(struct_name, method_name)
+        });
         if let Some(callee) = resolved.found() {
             return callee.return_type;
         }
@@ -2945,26 +2966,27 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         })
     }
 
-    /// Report why a static call's argument matched no impl, when the
+    /// Report why a static call's arguments matched no impl, when the
     /// receiver's impls explain it: a blanket impl this path cannot
-    /// instantiate, or concrete impls none of which accept the argument's
-    /// type. Returns whether an error was emitted — the caller then stops
+    /// instantiate, or concrete impls none of which accept the arguments'
+    /// types. Returns whether an error was emitted — the caller then stops
     /// instead of building an unresolvable mangled name (an ICE at WIR build).
     pub(super) fn report_unmatched_static_arg(
         &mut self,
         struct_name: &str,
         method_name: &str,
-        arg_type: &str,
+        arg_types: &[TypeId],
         span: Span,
         target_hint: Option<&ImplTargetKey>,
     ) -> bool {
         let survey = self.static_arg_survey(struct_name, method_name, target_hint);
+        let spelled = render_type_list(&self.tysys.type_table.borrow(), arg_types);
         if let Some(trait_name) = survey.blanket_trait {
             let _ = self.emit(TypeError::UnsupportedBlanketInstantiation {
                 trait_name,
                 receiver: struct_name.to_string(),
                 method: method_name.to_string(),
-                arg_type: arg_type.to_string(),
+                arg_type: spelled,
                 span,
             });
             return true;
@@ -2978,7 +3000,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // call did not fail on that argument: it failed on the list. Reporting
         // the unmatched case here named the argument as both unaccepted and
         // available.
-        if survey.candidates.iter().any(|c| c.spelling == arg_type) {
+        if survey
+            .candidates
+            .iter()
+            .any(|c| c.params.first() == arg_types.first())
+        {
             let _ = self.emit(TypeError::NoMatchingArgumentList {
                 trait_name,
                 receiver: struct_name.to_string(),
@@ -2991,33 +3017,36 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             trait_name,
             receiver: struct_name.to_string(),
             method: method_name.to_string(),
-            arg_type: arg_type.to_string(),
+            arg_type: spelled,
             candidates: survey.candidates.into_iter().map(|c| c.spelling).collect(),
             span,
         });
         true
     }
 
-    /// The shared preselect entry for a one-argument static call
-    /// (`Wrapper::from(42)`, in either its static-call or plain-call
-    /// spelling). It runs before the callee is resolved, and its answer is
-    /// what the resolution keys on: resolving without the argument and
-    /// mangling with it is two answers for one call.
-    pub(super) fn preselect_static_arg(
+    /// The shared preselect entry for a static call (`Wrapper::from(42)`, in
+    /// either its static-call or plain-call spelling). It runs before the
+    /// callee is resolved, and its answer is what the resolution keys on:
+    /// resolving without the arguments and mangling with them is two answers
+    /// for one call.
+    pub(super) fn preselect_static_args(
         &mut self,
         recv_name: &str,
         method_name: &str,
-        arg: &ast::Expr,
+        args: &[ast::Expr],
         span: Span,
         ctx: &mut FunctionContext,
         target_hint: Option<&ImplTargetKey>,
     ) -> PreselectedArg {
-        if self.has_inherent_static_method(recv_name, method_name, target_hint) {
+        if args.is_empty() || self.has_inherent_static_method(recv_name, method_name, target_hint) {
             return PreselectedArg::Undecided;
         }
-        let class = self.synthesize_arg_class(arg, ctx);
-        match self.static_arg_preselect(recv_name, method_name, &class, target_hint) {
-            ArgPreselect::Selected(source) => PreselectedArg::Type(source),
+        let classes: Vec<ArgClass> = args
+            .iter()
+            .map(|arg| self.synthesize_arg_class(arg, ctx))
+            .collect();
+        match self.static_arg_preselect(recv_name, method_name, &classes, target_hint) {
+            ArgPreselect::Selected(params) => PreselectedArg::Types(params),
             ArgPreselect::Ambiguous(candidates) => {
                 let _ = self.emit(TypeError::AmbiguousStaticArgument {
                     receiver: recv_name.to_string(),
@@ -3054,33 +3083,43 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         struct_name: &str,
         method_name: &str,
-        class: &super::synth::ArgClass,
+        classes: &[ArgClass],
         target_hint: Option<&ImplTargetKey>,
     ) -> ArgPreselect {
-        use super::synth::ArgClass;
-        if matches!(class, ArgClass::Opaque(_)) {
+        // Every argument opaque leaves nothing to select on. One opaque among
+        // others admits every parameter, so the rest still decide.
+        if classes.iter().all(|c| matches!(c, ArgClass::Opaque(_))) {
             return ArgPreselect::Pass;
         }
         let admitted: Vec<ArgCandidate> = self
             .static_arg_survey(struct_name, method_name, target_hint)
             .candidates
             .into_iter()
-            .filter(|c| {
-                c.source != TypeTable::UNKNOWN
-                    && c.source != TypeTable::ERROR
-                    && self.class_admits(c.source, class)
-            })
+            .filter(|c| self.params_admit(&c.params, classes))
             .collect();
         match admitted.as_slice() {
             [] => ArgPreselect::Pass,
-            [only] => ArgPreselect::Selected(only.source),
+            [only] => ArgPreselect::Selected(only.params.clone()),
             // A `Head` names a family, not a type — `Pair { a: 5 }` is a
             // `Pair` of something — so several same-head impls are the expected
-            // answer, not a tie. Only a class denoting one type may call two
-            // candidates ambiguous; elaborating the argument decides the rest.
-            _ if matches!(class, ArgClass::Head(_)) => ArgPreselect::Pass,
+            // answer, not a tie. Only classes each denoting one type may call
+            // two candidates ambiguous; elaborating the arguments decides the
+            // rest.
+            _ if classes.iter().any(|c| matches!(c, ArgClass::Head(_))) => ArgPreselect::Pass,
             _ => ArgPreselect::Ambiguous(admitted.into_iter().map(|c| c.spelling).collect()),
         }
+    }
+
+    /// Whether an impl's parameters admit the call's argument classes, each
+    /// against the one written for it. A call supplying fewer than the
+    /// declaration takes is checked as far as it goes: the rest are defaults.
+    fn params_admit(&self, params: &[TypeId], classes: &[ArgClass]) -> bool {
+        classes.len() <= params.len()
+            && params.iter().zip(classes).all(|(&param, class)| {
+                param != TypeTable::UNKNOWN
+                    && param != TypeTable::ERROR
+                    && self.class_admits(param, class)
+            })
     }
 
     /// The first-parameter types the receiver's trait impls declare for
@@ -3123,24 +3162,24 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // blanket resolver answers such a call and it is never an unmatched
             // alternative worth listing. Asking it a second way here is what
             // let the two disagree.
-            let source = match self.written_selector(header, sig) {
+            let params = match self.written_selector(header, sig) {
                 Selector::Absent => continue,
                 Selector::Blanket => {
                     survey.blanket_trait.get_or_insert_with(trait_name);
                     continue;
                 }
-                Selector::Params(params) => params[0],
+                Selector::Params(params) => params,
             };
             let table = self.tysys.type_table.borrow();
-            // The parameter as the impl's own frame resolved it, so a private
-            // or aliased name means what the impl wrote.
-            let spelling = table.type_name(source);
+            // The parameters as the impl's own frame resolved them, so a
+            // private or aliased name means what the impl wrote.
+            let spelling = render_type_list(&table, &params);
             if survey.candidates.iter().any(|c| c.spelling == spelling) {
                 continue;
             }
             survey.candidates.push(ArgCandidate {
                 spelling,
-                source,
+                params,
                 trait_name: trait_name(),
             });
         }
@@ -3280,8 +3319,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         struct_name: &str,
         method_name: &str,
     ) -> bool {
-        self.resolve_static_callee(site, struct_name, None, method_name, &[], None)
-            .resolves()
+        self.resolve_static_callee(StaticQuery {
+            site,
+            ..StaticQuery::of(struct_name, method_name)
+        })
+        .resolves()
     }
 
     /// Resolve a static method call from a qualified name like `Point::origin()`
@@ -3393,6 +3435,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             method_name,
             receiver_key.as_ref(),
             args,
+            None,
             span,
         ) else {
             return TypeTable::ERROR;
@@ -3474,6 +3517,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 method_name,
                 &actual_struct_name,
                 args,
+                None,
             )
             .params();
 
@@ -3509,13 +3553,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 }
 
-/// What [`Elaborator::preselect_static_arg`] settled about a one-argument
-/// static call, before the callee is resolved.
+/// What [`Elaborator::preselect_static_args`] settled about a static call,
+/// before the callee is resolved.
 pub(super) enum PreselectedArg {
-    /// The parameter type of the impl the argument's class picked. It shapes
-    /// the argument *and* keys the resolution, so both name one declaration.
-    Type(TypeId),
-    /// Nothing to pick between, or a class that picks none: the resolution
+    /// The parameter types of the impl the arguments' classes picked. They
+    /// shape the arguments *and* key the resolution, so both name one
+    /// declaration.
+    Types(Vec<TypeId>),
+    /// Nothing to pick between, or classes that pick none: the resolution
     /// decides on its own.
     Undecided,
     /// Reported as ambiguous. The caller stops.
@@ -3523,48 +3568,57 @@ pub(super) enum PreselectedArg {
 }
 
 impl PreselectedArg {
-    pub(super) fn picked(self) -> Option<TypeId> {
+    pub(super) fn picked(self) -> Option<Vec<TypeId>> {
         match self {
-            Self::Type(source) => Some(source),
+            Self::Types(params) => Some(params),
             Self::Undecided | Self::Reported => None,
         }
     }
 
-    /// Install a picked parameter as the first argument's expected type. Only
-    /// the first: a callee may declare further parameters the defaults fill,
-    /// and replacing the list left their arity unchecked and defaults unpadded.
-    pub(super) fn shape_first(param_types: &mut Vec<TypeId>, source: TypeId) {
-        match param_types.first_mut() {
-            Some(first) => *first = source,
-            None => param_types.push(source),
-        }
+    /// Install the picked parameters as the arguments' expected types. Only as
+    /// far as the picked list goes: a callee may declare further parameters the
+    /// defaults fill, and truncating the list left their arity unchecked and
+    /// defaults unpadded.
+    pub(super) fn shape(param_types: &mut Vec<TypeId>, picked: &[TypeId]) {
+        param_types.resize(param_types.len().max(picked.len()), TypeTable::UNKNOWN);
+        param_types[..picked.len()].copy_from_slice(picked);
     }
 }
 
 /// See [`Elaborator::static_arg_preselect`].
 pub(super) enum ArgPreselect {
-    /// Exactly one impl admits the literal: elaborate the argument against
-    /// this parameter type, and the name hint then finds the same impl.
-    Selected(TypeId),
-    /// Several impls admit the literal — a literal never selects, so the call
-    /// is reported with the admitted alternatives.
+    /// Exactly one impl admits the arguments: elaborate them against these
+    /// parameter types, and the name hint then finds the same impl.
+    Selected(Vec<TypeId>),
+    /// Several impls admit them — a literal never selects, so the call is
+    /// reported with the admitted alternatives.
     Ambiguous(Vec<String>),
-    /// The preselect does not apply (non-literal argument, no admitted
-    /// candidate, or an unresolvable source type): the existing path decides.
+    /// The preselect does not apply (opaque arguments, no admitted candidate,
+    /// or an unresolvable parameter type): the existing path decides.
     Pass,
 }
 
-/// One non-blanket impl's declared first parameter: the spelling for
-/// diagnostics, the resolved type for admissibility, and the trait the impl
+/// One non-blanket impl's declared parameter list: the spelling for
+/// diagnostics, the resolved types for admissibility, and the trait the impl
 /// names so a report says which one it failed to match. See
 /// [`Elaborator::static_arg_survey`].
 pub(super) struct ArgCandidate {
     pub(super) spelling: String,
-    pub(super) source: TypeId,
+    pub(super) params: Vec<TypeId>,
     pub(super) trait_name: String,
 }
 
-/// What a receiver's trait impls accept as a static's first argument.
+/// A parameter or argument list as one spelling: the type alone where there is
+/// one, a parenthesised list where there are several.
+pub(super) fn render_type_list(table: &TypeTable, types: &[TypeId]) -> String {
+    let names: Vec<String> = types.iter().map(|&t| table.type_name(t)).collect();
+    match names.as_slice() {
+        [one] => one.clone(),
+        _ => format!("({})", names.join(", ")),
+    }
+}
+
+/// What a receiver's trait impls accept as a static's arguments.
 #[derive(Default)]
 pub(super) struct StaticArgSurvey {
     pub(super) candidates: Vec<ArgCandidate>,

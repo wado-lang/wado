@@ -1,0 +1,27 @@
+//! A literal after the first argument selects among two impls of one trait.
+//! The preselect shaped argument zero alone, so `5` was elaborated as its own
+//! default `i32` and matched neither impl. It reads the whole list now, and
+//! the selected impl's parameters shape every literal in it.
+
+trait Conv<T> {
+    fn make(tag: i32, v: T) -> i32;
+}
+
+struct M {}
+
+impl Conv<i64> for M {
+    fn make(tag: i32, v: i64) -> i32 {
+        return 1;
+    }
+}
+
+impl Conv<String> for M {
+    fn make(tag: i32, v: String) -> i32 {
+        return 2;
+    }
+}
+
+test "a literal after the first selects the impl" {
+    assert M::make(0, 5) == 1;
+    assert M::make(0, "x") == 2;
+}

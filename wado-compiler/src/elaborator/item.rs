@@ -18,7 +18,7 @@ use crate::tir::{
 use crate::token::Span;
 
 use super::Elaborator;
-use super::scope::{BinderInScope, TypeParamScope};
+use super::scope::{BinderInScope, TypeParamScope, param_decl};
 use super::sig::{DeclSig, MethodSig};
 use super::types::{FunctionContext, TypeError};
 
@@ -634,7 +634,7 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
                 false,
                 vec![],
                 None,
-                super::scope::param_decl(impl_declared_params, name),
+                param_decl(impl_declared_params, name),
             ));
         }
         params

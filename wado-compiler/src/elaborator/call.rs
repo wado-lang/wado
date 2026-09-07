@@ -17,6 +17,7 @@ use super::method_call::PreselectedArg;
 use super::scope::{BinderInScope, Scope};
 use super::sem::types::{CalleeParams, StaticMethodDispatch};
 use super::sig::{MethodSig, Param};
+use super::static_call::StaticQuery;
 use super::trait_env;
 use super::trait_env::ImplTargetKey;
 use super::types::{FunctionContext, TypeError};
@@ -624,20 +625,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             param_types = self.instantiate_types(&param_types, inst);
         }
 
-        // Literal preselect on a static call's first argument (WEP 2026-07-31
+        // Literal preselect on a static call's arguments (WEP 2026-07-31
         // phase 4): see `resolve_static_method_call` — same rule, for the
         // `Wrapper::from(42)` spelling that arrives as a plain call.
-        if let Some(pos) = effective_name.find("::")
-            && let Some(first_arg) = call.args.first()
-        {
+        if let Some(pos) = effective_name.find("::") {
             let (recv_name, method_name) = (
                 effective_name[..pos].to_string(),
                 effective_name[pos + 2..].to_string(),
             );
-            let preselected = self.preselect_static_arg(
+            let preselected = self.preselect_static_args(
                 &recv_name,
                 &method_name,
-                first_arg,
+                &call.args,
                 call.span,
                 ctx,
                 None,
@@ -645,8 +644,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if matches!(preselected, PreselectedArg::Reported) {
                 return TypeTable::ERROR;
             }
-            if let Some(source) = preselected.picked() {
-                PreselectedArg::shape_first(&mut param_types, source);
+            if let Some(picked) = preselected.picked() {
+                PreselectedArg::shape(&mut param_types, &picked);
             }
         }
 
@@ -808,7 +807,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // one: two resolutions of one call disagree, which is what
                     // the edge then records.
                     let selected = self
-                        .resolve_static_callee(receiver_site, prefix, None, suffix, &args, None)
+                        .resolve_static_callee(StaticQuery {
+                            site: receiver_site,
+                            arg_types: &args,
+                            ..StaticQuery::of(prefix, suffix)
+                        })
                         .found()
                         .and_then(|callee| callee.method_ref.method_id);
                     let method_def = selected
@@ -970,8 +973,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // The same argument the selection above read: without it this
                 // re-check resolves a different declaration than the call was
                 // mangled to.
-                let resolved =
-                    self.static_callee_params(&receiver_key, receiver_type, suffix, prefix, &args);
+                let resolved = self.static_callee_params(
+                    &receiver_key,
+                    receiver_type,
+                    suffix,
+                    prefix,
+                    &args,
+                    None,
+                );
                 if self.report_ambiguous_static(&resolved, suffix, call.span) {
                     return TypeTable::ERROR;
                 }
@@ -1345,14 +1354,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             let ast_id = self.tysys.resolutions.defs().ast_id(def);
                             self.tysys.type_table.borrow().type_of_symbol(&ast_id)
                         });
-                    let resolved = self.resolve_static_callee(
-                        ident.segments.get(1).map(|segment| segment.id),
-                        type_name,
-                        ns_key.as_ref(),
-                        method_name,
-                        &args,
-                        ns_receiver_type,
-                    );
+                    let resolved = self.resolve_static_callee(StaticQuery {
+                        site: ident.segments.get(1).map(|segment| segment.id),
+                        receiver_key: ns_key.as_ref(),
+                        arg_types: &args,
+                        receiver_type: ns_receiver_type,
+                        ..StaticQuery::of(type_name, method_name)
+                    });
                     if self.report_ambiguous_static(&resolved, method_name, call.span) {
                         return TypeTable::ERROR;
                     }
@@ -1395,11 +1403,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
                     // Qualify by the module the impl was located in:
                     // `helper::Pair` and a local `Pair` are different
-                    // declarations.
-                    let receiver = self.namespace_member(prefix, type_name).map_or_else(
-                        || crate::name::FqTypeName::shape(&struct_module, type_name),
-                        |def| crate::name::FqTypeName::of_head(self.tysys.resolutions.defs(), def),
-                    );
+                    // declarations. Where the resolution answered under another
+                    // name it peeled a newtype to its base, and the base owns
+                    // the impl the call is mangled under.
+                    let receiver = if method_ref.type_name == type_name {
+                        self.namespace_member(prefix, type_name).map_or_else(
+                            || FqTypeName::shape(&struct_module, type_name),
+                            |def| FqTypeName::of_head(self.tysys.resolutions.defs(), def),
+                        )
+                    } else {
+                        FqTypeName::shape(&struct_module, &method_ref.type_name)
+                    };
                     let final_mangled = MethodName::format_local(
                         &receiver,
                         method_ref.trait_name.as_ref(),

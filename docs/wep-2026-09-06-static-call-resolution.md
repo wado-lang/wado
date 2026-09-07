@@ -51,6 +51,20 @@ the name's. A key merely derived from a name never narrows the trait search: the
 importing module does not name `Type`, and a primitive's `impl FromStr for f32`
 is out of reach from a bare-name key.
 
+The same holds one rung down. A newtype reaches its base's impls, and looking the
+base up by its bare name asks the caller's frame for a name a namespaced
+`lib::Q::twice()` never imported. The rung reads the alias's declaration instead,
+and the call is mangled under the base the resolution answered with — mangling
+under the spelled `Q` names an impl WIR cannot find.
+
+### A qualified spelling names a trait
+
+`Tagged::<V>::tag(5)` asks for `Tagged`'s declaration, so only its impls are
+candidates. The receiver's own declaration of the name is a different method, and
+a case or flags member `V` declares builds a value rather than answering the
+trait — the shadowing rule below applies to a bare `V::tag`, which is what the
+turbofish rewrites to once it has supplied `Self`.
+
 ### Four outcomes, each meaning one thing
 
 |              |                                                        |
@@ -225,6 +239,13 @@ answers for one call, which is the disagreement this WEP exists to remove.
 Folding sixteen lookups into one resolver does not prevent it, because two
 _calls_ to that resolver disagree just as well.
 
+The preselect reads the whole argument list, each argument against the parameter
+written for it, as the selection does. Reading argument zero alone shaped the
+first literal from the impl it picked and left the rest to their own defaults, so
+`M::make(0, 5)` typed `5` as `i32` and matched no `Conv<i64>` impl. An argument
+whose type synthesis cannot produce admits every parameter, so one such argument
+among others does not stop the rest from deciding.
+
 A spelling several traits answer is reported for the same reason, and reported
 before the overload an argument settles. Whether each trait declares a body or
 leaves its default to answer makes no difference, because neither separates the
@@ -284,8 +305,12 @@ receiver up front made a lookup mutate state on paths that never used it, and
       different declarations.
 - [ ] The blanket path. `find_blanket_static_method` and the blanket arm of
       `lookup_static_method_param_types_keyed` key on the blanket's receiver
-      _parameter_, which no name written at a call site reaches. Folding them in
-      means the resolution answers for a receiver it cannot key on directly.
+      _parameter_, which no name written at a call site reaches, and run as a
+      fallback after the resolution answers nothing rather than as a rung it
+      ranks. Finishing this means a value blanket is a candidate like any other,
+      outranked by a concrete impl by the origin rule rather than by call order.
+      It needs the receiver's `TypeId` on the rung, so the double-instantiation
+      gap below has to close first.
 
 Five of the sixteen names are gone outright. The rest no longer walk a ladder of
 their own: each reads the resolution's answer, or asks one rung through the
@@ -295,20 +320,13 @@ walk rungs of their own, and that is the open roadmap item above.
 
 ## Known gaps
 
-- The trait-qualified spelling does not reach past a shadowing case.
-  `Tagged::<V>::tag(5)` resolves now — the turbofish supplies the `Self` an
-  instance method's receiver argument would pin — but it reads as `V::tag(5)`
-  and a case `V` declares of that name still answers first. Reaching the
-  trait's needs the restriction carried into the call, where the variant arm
-  builds the case, and a bound (`fn f<T: Tagged>() { T::tag(5) }`) is until
-  then the only way. The spelling is also confined to a trait declaring no
-  parameters of its own: `Take::<A>::take(recv)` claims the turbofish for
-  those, leaving nowhere to write `Self`.
-- The preselect that shapes a literal reads argument zero alone. A literal
-  after the first is shaped by whatever the resolution then picks, so two impls
-  a _literal_ in second position would separate are still an overload to it.
-  The selection itself reads the whole list, so this is the preselect's own
-  limit, not the rule pass's.
+- The trait-qualified spelling reaches only a trait declaring no parameters of
+  its own. `Take::<A>::take(recv)` claims the turbofish for the trait's
+  arguments, and a receiver-less declaration has no receiver argument to pin
+  `Self` with, so on such a trait there is nowhere left to write it. Closing it
+  is a spelling decision — which slot of the turbofish is `Self` — not a missing
+  mechanism, and a bound (`fn f<T: Take<A>>() { T::take() }`) is the way to
+  write it meanwhile.
 - A blanket impl's method parameter does not resolve to the block's slot. The
   decl pass resolves a parameter naming a slot the receiver mentions and leaves
   one it does not as no type at all, which is why the blanket test reads an
@@ -321,16 +339,18 @@ walk rungs of their own, and that is the open roadmap item above.
   `method_param_offset`, `declaring_slot_count` and `spelled_slots` all read
   that numbering. It is a decision about what a slot's index means, not a
   missing call.
-- A newtype over a namespace-imported type reaches none of its base's statics.
-  `lib::Q::twice()` where `type Q = P` answers that `Q` does not implement the
-  trait: the newtype rung resolves the base by bare name, which the caller's
-  frame cannot supply, and the call is then built against `Q` rather than `P`.
-  The same spelling without the newtype (`lib::P::twice()`) works, and so does
-  the newtype without the namespace, so it is the two together. Closing it is
-  in the newtype dispatch and the solver, not in this resolution — the rung
-  itself finds the base once keyed on its declaration.
 
-  Threading the receiver's `TypeId` in wholesale is not the fix, though it
-  reads like one: the two largest call sites already instantiate from the
-  spelled turbofish, so the resolution doing it too applies the receiver twice
-  and `Stream::<u8>::new()` returns a `StreamWritable<Stream<u8>>`.
+  Numbering the unmentioned slots after the mentioned ones was tried and does
+  not hold: `associated_type`, `index_trait` and four more fixtures then read a
+  method parameter at a slot the receiver's arguments fill differently, and the
+  diagnostic that comes back is `expected 'i32', found 'i32'` — two type
+  parameters printing one name. The numbering has to distinguish what a
+  receiver fills from what only an argument can, which the index alone does
+  not say.
+- A signature is instantiated twice on the two largest call sites. Each
+  instantiates from the spelled turbofish after the resolution has already read
+  the signature at the receiver, so giving those sites' queries a receiver
+  `TypeId` applies it twice and `Stream::<u8>::new()` returns a
+  `StreamWritable<Stream<u8>>`. Closing it means the resolution instantiates
+  once and both sites read its answer. Until then no rung may ask for the
+  receiver's type, which is what the blanket roadmap item above waits on.

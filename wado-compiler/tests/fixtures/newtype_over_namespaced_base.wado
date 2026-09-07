@@ -1,0 +1,11 @@
+//! `lib::Q::twice()` where `type Q = P` reaches `P`'s statics. The newtype
+//! rung looked its base up by bare name, which a caller reaching the type only
+//! through a namespace never has, and the call was then mangled under `Q` —
+//! a receiver WIR found no impl for. Both halves read the declaration now.
+
+use lib from "./sub/newtype_over_namespaced_base.wado";
+
+test "a newtype over a namespaced type reaches its base's statics" {
+    assert lib::P::twice() == 42;
+    assert lib::Q::twice() == 42;
+}

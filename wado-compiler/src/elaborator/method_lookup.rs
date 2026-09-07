@@ -20,6 +20,7 @@ use super::Elaborator;
 use super::infer::InferCtx;
 use super::instantiate::Instantiation;
 use super::sig::{InstantiatedImplSig, Param};
+use super::static_call::{StaticLookup, StaticQuery};
 use super::synth::{ArgClass, ArgProbe};
 use super::trait_env::{ImplHeader, TraitEnv};
 use super::types::{
@@ -1461,15 +1462,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         method_name: &str,
         receiver_name: &str,
         arg_types: &[TypeId],
-    ) -> super::static_call::StaticLookup {
-        self.resolve_static_callee(
-            None,
-            receiver_name,
-            Some(receiver),
-            method_name,
+        required_trait: Option<DefId>,
+    ) -> StaticLookup {
+        self.resolve_static_callee(StaticQuery {
+            receiver_key: Some(receiver),
             arg_types,
-            Some(receiver_type),
-        )
+            receiver_type: Some(receiver_type),
+            required_trait,
+            ..StaticQuery::of(receiver_name, method_name)
+        })
     }
 
     /// Find a trait method for a given type and method name, for when an
@@ -2674,7 +2675,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         struct_name: &str,
         method_name: &str,
     ) -> Vec<ast::GenericParam> {
-        self.resolve_static_callee(None, struct_name, None, method_name, &[], None)
+        self.resolve_static_callee(StaticQuery::of(struct_name, method_name))
             .found()
             .map(|callee| callee.own_params.clone())
             .unwrap_or_default()

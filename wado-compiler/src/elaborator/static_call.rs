@@ -6,7 +6,7 @@ use crate::ast;
 use crate::compiler_host::CompilerHost;
 use crate::defs::DefId;
 use crate::hashmap::IndexSet;
-use crate::name::FqTraitName;
+use crate::name::{DeclName, FqTraitName};
 use crate::tir::{TypeId, TypeTable};
 use crate::token::Span;
 
@@ -17,6 +17,42 @@ use super::sig::MethodSig;
 use super::synth::ArgClass;
 use super::trait_env::{ImplHeader, ImplTargetKey};
 use super::types::TypeError;
+
+/// One `Type::method(...)` spelling as the resolution reads it: what it names,
+/// and what the call site already knows about it. Carried as one value, so a
+/// fact a rung needs reaches it whatever site asked.
+pub(super) struct StaticQuery<'a> {
+    /// The reference site of the receiver's name, where the caller has one.
+    pub(super) site: Option<ast::AstId>,
+    pub(super) receiver_name: &'a str,
+    /// The key the caller's own reference site resolved to. This and
+    /// [`Self::arg_types`] are the call's one vantage — resolving without them
+    /// and mangling with them gives two answers for one call.
+    pub(super) receiver_key: Option<&'a ImplTargetKey>,
+    pub(super) method_name: &'a str,
+    /// The call's arguments, which is what separates several impls of one trait.
+    pub(super) arg_types: &'a [TypeId],
+    pub(super) receiver_type: Option<TypeId>,
+    /// The trait a qualified spelling names (`Tagged::<V>::tag(5)`). Only its
+    /// impls answer: the receiver's own declaration of the name is a different
+    /// method, and a case it declares shadows nothing the trait supplies.
+    pub(super) required_trait: Option<DefId>,
+}
+
+impl<'a> StaticQuery<'a> {
+    /// The spelling alone. Every other fact is what a call site adds.
+    pub(super) fn of(receiver_name: &'a str, method_name: &'a str) -> Self {
+        Self {
+            site: None,
+            receiver_name,
+            receiver_key: None,
+            method_name,
+            arg_types: &[],
+            receiver_type: None,
+            required_trait: None,
+        }
+    }
+}
 
 /// What one `Type::method(...)` spelling names.
 pub(super) struct StaticCallee {
@@ -187,22 +223,18 @@ impl StaticLookup {
 }
 
 impl<H: CompilerHost> Elaborator<'_, H> {
-    /// Resolve what `receiver_name::method_name` names, once, for every site
-    /// that used to ask its own question.
-    ///
-    /// `receiver_key` is the key the caller's own reference site resolved to;
-    /// `arg_types` are its arguments, which is what separates several
-    /// impls of one trait. Both are the call's one vantage — resolving without
-    /// them and mangling with them gives two answers for one call.
-    pub(super) fn resolve_static_callee(
-        &mut self,
-        site: Option<ast::AstId>,
-        receiver_name: &str,
-        receiver_key: Option<&ImplTargetKey>,
-        method_name: &str,
-        arg_types: &[TypeId],
-        receiver_type: Option<TypeId>,
-    ) -> StaticLookup {
+    /// Resolve what `query`'s spelling names, once, for every site that used to
+    /// ask its own question.
+    pub(super) fn resolve_static_callee(&mut self, query: StaticQuery<'_>) -> StaticLookup {
+        let StaticQuery {
+            site,
+            receiver_name,
+            receiver_key,
+            method_name,
+            arg_types,
+            receiver_type,
+            required_trait,
+        } = query;
         // One vantage: the key the caller resolved, else the one its reference
         // site answered for, else the name's own. Deriving a second key when
         // the first misses makes the order a silent tiebreak.
@@ -216,14 +248,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // from the name narrows the search to a declaration the impls may not
         // be indexed under, putting a primitive's `impl FromStr for f32` out of
         // reach.
-        let mut candidates = self.own_candidates(&key, method_name);
+        //
+        // A qualified spelling names a trait, so the receiver's own declaration
+        // is not what it asks for and no case of the name shadows the answer.
+        let mut candidates = match required_trait {
+            Some(_) => Vec::new(),
+            None => self.own_candidates(&key, method_name),
+        };
 
         // A case or member the receiver declares is written on the type, and
         // shadows a static it only *inherits*: its own arm builds the
         // constructor, so the spelling is not a call at all. It does not shadow
         // the receiver's own declaration — that is a type declaring one name
         // twice, and answering with the case would hide it.
-        if candidates.is_empty() && self.declares_case_named(&key, method_name) {
+        if required_trait.is_none()
+            && candidates.is_empty()
+            && self.declares_case_named(&key, method_name)
+        {
             return StaticLookup::NotStatic;
         }
 
@@ -233,6 +274,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             receiver_key,
             receiver_type,
         ));
+        if let Some(required) = required_trait {
+            candidates.retain(|c| c.supply.as_ref().is_some_and(|s| s.trait_decl == required));
+        }
         let resolved = match self.select_candidate(candidates, arg_types) {
             Selection::One(candidate) => {
                 self.callee_of_candidate(receiver_name, method_name, &candidate, receiver_type)
@@ -267,16 +311,24 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         // A newtype and a `flags` reach what they wrap: their impls are looked
-        // up on the base, so the spelling resolves there too.
-        match self.newtype_base(receiver_name) {
-            Some((_, base_name)) => self.resolve_static_callee(
-                None,
-                &base_name,
-                None,
-                method_name,
-                arg_types,
-                receiver_type,
-            ),
+        // up on the base, so the spelling resolves there too. Read from the
+        // alias's declaration, since a namespaced `lib::Q::twice()` leaves the
+        // caller's frame no `Q` to look one up by; the name answers only where
+        // the key reaches no declaration to read.
+        match self
+            .newtype_base_of(&key)
+            .or_else(|| self.newtype_base(receiver_name))
+        {
+            Some((base, base_name)) => {
+                let base_key = self.impl_target_of(base, &DeclName::new(&base_name));
+                self.resolve_static_callee(StaticQuery {
+                    receiver_key: Some(&base_key),
+                    arg_types,
+                    receiver_type,
+                    required_trait,
+                    ..StaticQuery::of(&base_name, method_name)
+                })
+            }
             None => StaticLookup::NotStatic,
         }
     }
@@ -431,33 +483,27 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         method_name: &str,
         receiver_key: Option<&ImplTargetKey>,
         arg_types: &[TypeId],
+        required_trait: Option<DefId>,
         span: Span,
     ) -> Result<StaticTraitRef, Reported> {
-        let lookup = self.resolve_static_callee(
-            None,
-            receiver_name,
+        let lookup = self.resolve_static_callee(StaticQuery {
             receiver_key,
-            method_name,
             arg_types,
-            None,
-        );
+            required_trait,
+            ..StaticQuery::of(receiver_name, method_name)
+        });
         let return_type = lookup.return_type();
         let selected = lookup
             .found()
             .map(|callee| callee.method_ref.clone())
             .filter(|method_ref| method_ref.trait_name.is_some());
-        // The report names the argument the survey reads, which is a static's
-        // first — the same one it compares its candidates on.
-        let first_arg = arg_types
-            .first()
-            .map(|&arg| self.tysys.type_table.borrow().type_name(arg));
         if selected.is_none()
-            && let Some(arg_type) = first_arg.as_deref()
+            && !arg_types.is_empty()
             && !self.has_inherent_static_method(receiver_name, method_name, receiver_key)
             && self.report_unmatched_static_arg(
                 receiver_name,
                 method_name,
-                arg_type,
+                arg_types,
                 span,
                 receiver_key,
             )
