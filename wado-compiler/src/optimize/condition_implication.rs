@@ -1428,11 +1428,19 @@ fn rbce_walk(engine: &mut Engine, node: NodeRef, facts: &mut Vec<ProvenLt>, bind
     // any other statement sequence — which is what the grouping blocks every
     // index expression expands into depend on.
     let fresh_region = match node {
-        NodeRef::Stmt(s) => matches!(engine.body.stmts[s].kind, StmtKind::Loop { .. }),
-        NodeRef::Expr(e) => {
-            matches!(engine.body.exprs[e].kind, ExprKind::LabeledBlock { .. })
-                && engine.body.unbroken_block(e).is_none()
-        }
+        NodeRef::Stmt(s) => match &engine.body.stmts[s].kind {
+            StmtKind::Loop { .. } => true,
+            StmtKind::LabeledBlock { block, label, .. } => {
+                engine.body.breaks_to(NodeRef::Block(*block), label)
+            }
+            _ => false,
+        },
+        NodeRef::Expr(e) => match &engine.body.exprs[e].kind {
+            ExprKind::LabeledBlock { block, label, .. } => {
+                engine.body.breaks_to(NodeRef::Block(*block), label)
+            }
+            _ => false,
+        },
         _ => false,
     };
     if fresh_region {
