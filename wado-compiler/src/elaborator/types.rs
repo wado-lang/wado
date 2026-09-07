@@ -531,6 +531,18 @@ pub enum TypeError {
         span: Span,
     },
 
+    /// A static declaring type parameters of its own, on an `impl` block that
+    /// declares some too. The block's are spelled at the receiver and the
+    /// method's are not inferred from the arguments, so an unspelled one
+    /// reaches codegen unsubstituted.
+    UninferredStaticTypeArg {
+        receiver: String,
+        method: String,
+        /// The first of the method's own parameters, which the call must spell.
+        param: String,
+        span: Span,
+    },
+
     /// A static call whose literal argument admits several impls
     /// (`Wrapper::from(42)` against `From<i32>` beside `From<i64>`). A literal
     /// never selects between the widths it could coerce to (WEP 2026-07-31),
@@ -1398,6 +1410,18 @@ impl TypeError {
                 Code::TypeMismatch,
                 format!(
                     "'{trait_name}::{method}' takes '{expected}'; the receiver spells its own mode: '{trait_name}::{method}({spelled}, …)'"
+                ),
+                *span,
+            ),
+            TypeError::UninferredStaticTypeArg {
+                receiver,
+                method,
+                param,
+                span,
+            } => (
+                Code::TypeMismatch,
+                format!(
+                    "'{receiver}::{method}' declares the type parameter '{param}', which is not inferred from the arguments here; spell it: '{receiver}::{method}::<{param}>(…)'"
                 ),
                 *span,
             ),

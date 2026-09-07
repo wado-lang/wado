@@ -129,14 +129,36 @@ declaration drops the arguments, because a declaration has none to give.
 
 A parameter the block fills is a blanket, not a mismatch. Its unsubstituted
 spelling must not be baked into a mangled name, so declining it sends the call
-to the blanket resolver, which instantiates it. Only the block's own slots make
-a parameter its to fill. A concrete impl whose method carries slots
-(`fn build<T: Display>(v: T)`) is filled at the call instead, and once neither
-resolves the two look alike, so the question goes to the block's written slots
-rather than to the shape of the parameter's type. Two shapes settle the rest: a
-slot reached only inside a constructor (`impl From<Array<T>> for List<T>`)
-leaves a concrete head to mangle and is kept, and a reference to a slot
-(`From<&T>`) is the slot, peeled before the question is asked.
+to the blanket resolver, which instantiates it.
+
+Three things fill a slot, and only one of them is the argument. The receiver
+fills a slot it mentions, so `impl<T> Make<T> for Wrap<T>` is no blanket to
+`Wrap::<i32>::make`. The call fills a slot the *method* declares, so a block's
+own `fn build<T>(v: T)` is not one either — `declaring_slot_count` is where the
+block's slots end and the method's begin. What is left is a block slot the
+receiver never names, as in `impl<T: Display> From<T> for ByAny`, and only that
+is a blanket. Two shapes settle the rest: a slot reached only inside a
+constructor (`impl From<Array<T>> for List<T>`) leaves a concrete head to mangle
+and is kept, and a reference to a slot (`From<&T>`) is the slot, peeled before
+the question is asked.
+
+### A written body outranks an inherited one
+
+The trait's default body consults no argument. Answering it while walking the
+impls therefore lets the first block seen win over the one the argument names,
+so both questions are asked over every impl in turn: the written declarations
+first, the inherited defaults only where none was written. The rule used to be
+the shape of a walk that returned nothing at all once any block declared the
+method; generalising that walk to answer the ambiguity question dissolved the
+shape, and the rule with it.
+
+### The spelling names both kinds
+
+`Type::method(recv, …)` reaches a trait's instance method as well as its static,
+passing the receiver first. The resolution answers statics first and this last,
+so a receiver-less declaration of the name still wins. The ladder was assembled
+from the questions the sixteen lookups answered, and one of them covered this
+spelling in a comment rather than in a signature, so folding them in dropped it.
 
 ### One call, one resolution
 
@@ -216,6 +238,18 @@ other. Unifying them further is symmetry, not this WEP's decision.
   preselect that shapes a literal reads the first argument for the same reason.
   No fixture drives it: closing it is the same `TypeId` migration above, over
   the argument list rather than one name.
+- A static's own type parameters are never inferred from its arguments. Where
+  the block declares no slots the method's are numbered from zero and the
+  substitution reaches them anyway; where it declares some, an unspelled one
+  reaches codegen unsubstituted, so the call is reported and the spelling
+  (`Box3::<i32>::build::<i32>(42)`) named. Closing it means inferring the
+  method's slots at the call as instance dispatch already does.
+- A blanket impl's method parameter does not resolve to the block's slot. The
+  decl pass resolves a parameter naming a slot the receiver mentions and leaves
+  one it does not as no type at all, which is why the blanket test reads an
+  unresolved parameter as its answer rather than reading the slot. Closing it
+  means resolving an impl block's slots for its methods whether or not the
+  receiver names them.
 - A trait-frame signature is read at the receiver, and where no caller supplies
   one the rung resolves the receiver by bare name in the caller's frame — which
   cannot name a namespace-imported type. A `Self`-returning static reached as

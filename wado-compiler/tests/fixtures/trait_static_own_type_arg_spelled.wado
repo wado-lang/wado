@@ -1,0 +1,33 @@
+//! The remedy the uninferred-type-argument diagnostic names, and the shape that
+//! works without it: a concrete block leaves the method's slots numbered from
+//! zero, so those are substituted with nothing spelled.
+
+trait Codec {
+    fn build<T: Display>(v: T) -> String;
+}
+
+struct Box3<A> {
+    a: A,
+}
+
+struct Plain {}
+
+impl<A> Codec for Box3<A> {
+    fn build<T: Display>(v: T) -> String {
+        return `${v}`;
+    }
+}
+
+impl Codec for Plain {
+    fn build<T: Display>(v: T) -> String {
+        return `${v}!`;
+    }
+}
+
+test "a generic block's static takes its own type argument spelled" {
+    assert Box3::<i32>::build::<i32>(42) == "42";
+}
+
+test "and a concrete block's needs no spelling" {
+    assert Plain::build(42) == "42!";
+}

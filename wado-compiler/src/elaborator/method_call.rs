@@ -1614,6 +1614,26 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
 
+        // A static's own slots are filled from the spelling, never inferred from
+        // the arguments. With no slots of its own the block leaves the method's
+        // numbered from zero and the substitution reaches them anyway; with
+        // slots of its own it does not, and an unspelled one reaches codegen
+        // unsubstituted. Reported here, where the remedy can be named.
+        if let Some(sig) = callee_sig.as_ref()
+            && static_call.type_args.is_empty()
+            && sig.declaring_slot_count > 0
+            && let Some(own) = sig.own_params.first()
+            && let Some(receiver) = struct_name_for_lookup.as_ref()
+        {
+            let _ = self.emit(TypeError::UninferredStaticTypeArg {
+                receiver: receiver.clone(),
+                method: static_call.method.clone(),
+                param: own.name.clone(),
+                span: static_call.span,
+            });
+            return TypeTable::ERROR;
+        }
+
         // Resolve arguments with expected types for coercion. `arg_spans` runs
         // parallel to `args` so a diagnostic still lands on the argument that
         // caused it rather than on the whole call.
@@ -3060,7 +3080,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // call, and it is never an unmatched alternative worth listing.
             // The selection's question, asked the same way — the two answering
             // differently selects a blanket the diagnostic calls unsupported.
-            if self.param_filled_by_block(header.type_params.len(), source) {
+            if self.param_filled_by_block(header, sig, source) {
                 survey.blanket_trait.get_or_insert_with(trait_name);
                 continue;
             }
@@ -3120,12 +3140,44 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .map(|&arg| self.tysys.type_table.borrow().type_name(arg))
     }
 
-    /// Whether the block, not the call, fills this parameter — the mark of a
-    /// blanket. `block_slots` is how many slots the block wrote: a concrete
-    /// impl's own `fn build<T>(v: T)` is filled at the call, and the parameter's
-    /// type cannot show which it is once neither resolves.
-    fn param_filled_by_block(&self, block_slots: usize, param: TypeId) -> bool {
-        if block_slots == 0 {
+    /// Whether `name` appears anywhere in `ty` as written.
+    fn type_mentions(ty: &ast::Type, name: &str) -> bool {
+        match ty {
+            ast::Type::Named(n) => n.name == name,
+            ast::Type::Generic(g) => {
+                g.name == name || g.args.iter().any(|a| Self::type_mentions(a, name))
+            }
+            ast::Type::Tuple(elems) => elems.iter().any(|e| Self::type_mentions(e, name)),
+            ast::Type::Reference(inner) | ast::Type::MutReference(inner) => {
+                Self::type_mentions(inner, name)
+            }
+            _ => false,
+        }
+    }
+
+    /// Whether only the argument can fill this parameter — the mark of a
+    /// blanket, whose unsubstituted spelling must not be mangled.
+    ///
+    /// Three ways a slot is filled, and only one of them is the argument's. A
+    /// slot the receiver mentions is fixed by the receiver, so
+    /// `impl<T> Make<T> for Wrap<T>` is not a blanket to `Wrap::<i32>::make`.
+    /// A slot the *method* declares is filled at the call, so a concrete
+    /// impl's own `fn build<T>(v: T)` is not one either — `declaring_slot_count`
+    /// is where the block's slots end. What is left is a block slot the
+    /// receiver never names, as in `impl<T: Display> From<T> for ByAny`.
+    fn param_filled_by_block(
+        &self,
+        header: &super::trait_env::ImplHeader,
+        sig: &MethodSig,
+        param: TypeId,
+    ) -> bool {
+        let argument_only: Vec<&str> = header
+            .type_params
+            .iter()
+            .map(|p| p.name.as_str())
+            .filter(|slot| !Self::type_mentions(&header.ty, slot))
+            .collect();
+        if argument_only.is_empty() {
             return false;
         }
         let table = self.tysys.type_table.borrow();
@@ -3133,13 +3185,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         while let ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) = table.get(ty) {
             ty = *inner;
         }
-        matches!(
-            table.get(ty),
-            ResolvedType::TypeParam { .. }
-                | ResolvedType::TypePack { .. }
-                | ResolvedType::Unknown
-                | ResolvedType::Error
-        )
+        match table.get(ty) {
+            ResolvedType::TypeParam { index, name }
+            | ResolvedType::TypePack { index, name, .. } => {
+                u32::from(*index) < sig.declaring_slot_count
+                    && argument_only.contains(&name.as_str())
+            }
+            // A slot the receiver never mentions is left unresolved by the decl
+            // pass, so a blanket's parameter arrives as no type at all rather
+            // than as the slot. Reaching here means the block has such a slot,
+            // which is the same answer — see the WEP's gap on the decl pass.
+            ResolvedType::Unknown | ResolvedType::Error => true,
+            _ => false,
+        }
     }
 
     pub(super) fn locate_static_method_impl(
@@ -3177,27 +3235,26 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         //
         // Comparing names is this mechanism's ceiling; `TypeId` matching is
         // the replacement (WEP 2026-07-31 phase 4).
-        let param_admits_arg = |sig: &MethodSig, block_slots: usize| -> bool {
+        let param_admits_arg = |sig: &MethodSig, header: &super::trait_env::ImplHeader| -> bool {
             let Some(expected) = arg_type_name else {
                 return true;
             };
             let Some(&param) = sig.decl.param_types.first() else {
                 return true;
             };
-            if self.param_filled_by_block(block_slots, param) {
+            if self.param_filled_by_block(header, sig, param) {
                 return false;
             }
             let table = self.tysys.type_table.borrow();
             table.contains_type_param(param) || table.type_name(param) == expected
         };
 
-        // Returns the trait the impl names and the method it declares there —
-        // the identity of what this selection picked, so a caller recording a
-        // use→def edge names the impl the argument chose rather than the
-        // receiver's first same-named method.
-        let check_impl = |header: &super::trait_env::ImplHeader|
+        // The trait the impl names and the method it writes there — the identity
+        // of what this selection picked, so a caller recording a use→def edge
+        // names the impl the argument chose rather than the receiver's first
+        // same-named method.
+        let written_method = |header: &super::trait_env::ImplHeader|
          -> Option<(crate::name::FqTraitName, crate::defs::DefId)> {
-            let trait_type = header.trait_type.as_ref()?;
             for method in header.methods.iter().filter(|m| m.name == method_name) {
                 let sig = self
                     .tysys
@@ -3207,41 +3264,76 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 if sig.self_kind != ast::SelfKind::None {
                     continue;
                 }
-                if !param_admits_arg(sig, header.type_params.len()) {
+                if !param_admits_arg(sig, header) {
                     return None;
                 }
                 return Some((resolve_trait_name(header)?, method.def));
             }
-            // Fall back to the trait declaration's default methods: when
-            // `impl Trait for Type` does not override a defaulted static
-            // method, the trait still provides the body, so `Type::method`
-            // (called concretely, not via a generic bound) must resolve to
-            // the trait's default. This mirrors how generic dispatch
-            // (`T::method()`) already finds default methods.
-            let trait_name_base = super::trait_env::get_type_name_static(trait_type);
-            if let Some(method) = self
-                .trait_sig_by_name(&trait_name_base)
-                .and_then(|sig| sig.method(method_name))
-                && method.default_body.is_some()
-                && method.sig.self_kind == ast::SelfKind::None
-            {
-                return Some((resolve_trait_name(header)?, method.sig.def));
-            }
             None
         };
 
-        for impl_def in impl_defs {
-            let header = &self.tysys.trait_env.impl_headers[&impl_def];
-            let module_source = self.tysys.resolutions.defs().module(impl_def).clone();
-            if let Some((trait_name, method_id)) = check_impl(header) {
-                return Some(StaticMethodRef::new(
-                    module_source,
+        // The trait's own default body, where the block overrides nothing: the
+        // trait still provides it, so `Type::method` called concretely reaches
+        // it as generic dispatch (`T::method()`) already does.
+        let inherited_default = |header: &super::trait_env::ImplHeader|
+         -> Option<(crate::name::FqTraitName, crate::defs::DefId)> {
+            let trait_type = header.trait_type.as_ref()?;
+            let trait_name_base = super::trait_env::get_type_name_static(trait_type);
+            let method = self
+                .trait_sig_by_name(&trait_name_base)
+                .and_then(|sig| sig.method(method_name))?;
+            (method.default_body.is_some() && method.sig.self_kind == ast::SelfKind::None)
+                .then(|| Some((resolve_trait_name(header)?, method.sig.def)))
+                .flatten()
+        };
+
+        // The spelling names a receiver-taking method too, passing the receiver
+        // as the first argument — `S::go(&s)` beside `Greet::go(&s)`. Tried
+        // after every static, so a receiver-less declaration of the name still
+        // answers first, and the parameter list leads with the receiver exactly
+        // where the call writes it.
+        let written_instance_method = |header: &super::trait_env::ImplHeader| -> Option<(
+            crate::name::FqTraitName,
+            crate::defs::DefId,
+        )> {
+            let method = header
+                .methods
+                .iter()
+                .find(|m| m.name == method_name)
+                .filter(|m| {
+                    self.tysys
+                        .signatures
+                        .method_sig(m.def)
+                        .is_some_and(|sig| sig.self_kind != ast::SelfKind::None)
+                })?;
+            Some((resolve_trait_name(header)?, method.def))
+        };
+
+        // Each pass runs over every impl before the next answers: a body the
+        // block writes outranks one it inherits, and the default consults no
+        // argument, so letting it answer per impl let the first block seen win
+        // over the one the argument names.
+        let select = |pick: &dyn Fn(
+            &super::trait_env::ImplHeader,
+        )
+            -> Option<(crate::name::FqTraitName, crate::defs::DefId)>| {
+            impl_defs.iter().find_map(|&impl_def| {
+                let header = &self.tysys.trait_env.impl_headers[&impl_def];
+                let (trait_name, method_id) = pick(header)?;
+                Some(StaticMethodRef::new(
+                    self.tysys.resolutions.defs().module(impl_def).clone(),
                     struct_name,
                     method_name,
                     Some(trait_name),
                     Some(method_id),
-                ));
-            }
+                ))
+            })
+        };
+        if let Some(found) = select(&written_method)
+            .or_else(|| select(&inherited_default))
+            .or_else(|| select(&written_instance_method))
+        {
+            return Some(found);
         }
 
         if method_name == "default"

@@ -253,12 +253,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         receiver_type: Option<TypeId>,
         supplies: &[TraitSupply],
     ) -> StaticLookup {
+        // A block that writes the body outranks one that inherits the trait's:
+        // the argument picks among what the blocks wrote, and the trait's
+        // default answers only where no block wrote one. Stated here as a
+        // condition because it used to be the shape of the walk — the lookup
+        // this reads from returned nothing at all once any block declared the
+        // method, and generalising it to answer the ambiguity question too
+        // dissolved the rule along with the shape.
+        //
         // An inherited method is declared nowhere but the trait, so that is
         // where its signature is read from. Only one trait reaches here: the
         // caller reported the ambiguity.
         if let Some((decl, impl_def)) = supplies
             .iter()
-            .find(|supply| supply.inherited)
+            .all(|supply| supply.inherited)
+            .then(|| supplies.first())
+            .flatten()
             .map(|supply| (supply.trait_decl, supply.impl_def))
         {
             // Resolved here rather than asked of every caller: the name costs a

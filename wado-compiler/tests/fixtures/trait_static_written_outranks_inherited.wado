@@ -1,0 +1,28 @@
+//! One trait implemented twice, one block writing the body and one leaving the
+//! trait's default. The default consults no argument, so answering it per impl
+//! let the first block seen win over the one the argument names: `M::make("x")`
+//! ran the `Conv<i32>` default and returned 9.
+
+trait Conv<T> {
+    fn make(v: T) -> i32 {
+        return 9;
+    }
+}
+
+struct M {}
+
+impl Conv<i32> for M {}
+
+impl Conv<String> for M {
+    fn make(v: String) -> i32 {
+        return 2;
+    }
+}
+
+test "the written body outranks the inherited default" {
+    assert M::make("x") == 2;
+}
+
+test "and the inherited default still answers its own argument" {
+    assert M::make(5) == 9;
+}

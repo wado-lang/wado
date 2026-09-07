@@ -24,7 +24,11 @@ if ! flock -n 9; then
     # search for `$name` finds.
     holders=""
     if command -v fuser >/dev/null; then
-        holders=$(fuser "$lock" 2>/dev/null | tr -s '[:space:]' ' ' || true)
+        # `9>&-` closes this script's own handle in the child: it opened fd 9
+        # before testing the lock, so `fuser` would otherwise count the asker
+        # and its command-substitution subshell among the holders, and name
+        # dead pids that a `kill` could reuse.
+        holders=$(fuser "$lock" 2>/dev/null 9>&- | tr -s '[:space:]' ' ' || true)
         holders=${holders# }
         holders=${holders% }
     fi
