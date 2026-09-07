@@ -10,8 +10,7 @@
 
 use super::callgraph::CallGraph;
 use super::funcset::FuncKeySet;
-use super::needs_value_copy;
-use super::place::is_reference;
+use super::place::{carries_storage, is_reference};
 use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::tir::{
@@ -21,33 +20,47 @@ use crate::tir::{
 };
 use crate::tir_visitor::TirRefVisitor;
 
-/// The array element reads that name a slot of their first argument in place.
-/// A place walk projects one `Index` further in, and the seed leaves them out
-/// of `returns_owned` for the place and modref walks that read it by name.
-/// Whether a *call* is fresh is [`OwnedCalls::is_owned`]'s question, not this
-/// list's.
+/// The array element reads that name a slot of their first argument in place,
+/// so a place walk projects one `Index` further in. Where the element *lives*
+/// is all this answers; whether a call is fresh is [`hands_out_storage`]'s
+/// question, derived rather than listed.
 pub(super) fn is_container_alias_read(name: &str, monomorph_info: Option<&MonomorphInfo>) -> bool {
     matches_builtin(name, monomorph_info, "array_get_value")
         || matches_builtin(name, monomorph_info, "array_get_ref")
         || matches_builtin(name, monomorph_info, "array_get_ref_mut")
 }
 
-/// Whether a builtin call's result may be storage its caller still owns. Only
-/// a reference argument can carry storage out, since a by-value one is already
+/// Whether a builtin's result may be storage its caller still owns. Only a
+/// reference input can carry storage out, since a by-value one is already
 /// deep-copied at the call: `struct_field_get(v: &T, i) -> F` reads a field of
 /// what `v` points at, while `array_new(len) -> Array<T>` allocates.
 ///
-/// The call answers rather than the declaration, which does not survive to
-/// here: monomorphization drops the generic and materializes an instance only
-/// for the few a later phase rewrites. A builtin added later is then
-/// conservative by default. A list of names would have left it wrong.
-fn hands_out_arg_storage(result_type: TypeId, args: &[CallArg], type_table: &TypeTable) -> bool {
-    let carries_storage =
-        is_reference(result_type, type_table) || needs_value_copy(result_type, type_table);
-    carries_storage
-        && args
-            .iter()
-            .any(|a| is_reference(a.expr.type_id, type_table))
+/// Derived rather than listed, so a builtin added later is conservative by
+/// default. Both the call and the declaration ask it, through the two adapters
+/// below, so the seeded set and [`OwnedCalls::is_owned`] cannot drift.
+fn hands_out_storage(result_type: TypeId, has_ref_input: bool, type_table: &TypeTable) -> bool {
+    has_ref_input && carries_storage(result_type, type_table)
+}
+
+/// [`hands_out_storage`] at a call. This is the reading that always answers: a
+/// builtin declaration does not survive to here, since monomorphization drops
+/// the generic and materializes an instance only for the few a later phase
+/// rewrites.
+fn call_hands_out_storage(result_type: TypeId, args: &[CallArg], type_table: &TypeTable) -> bool {
+    let has_ref_input = args
+        .iter()
+        .any(|a| is_reference(a.expr.type_id, type_table));
+    hands_out_storage(result_type, has_ref_input, type_table)
+}
+
+/// [`hands_out_storage`] at a declaration, for the builtins the package does
+/// still hold when the conventions are seeded.
+fn decl_hands_out_storage(func: &TirFunction, type_table: &TypeTable) -> bool {
+    let has_ref_input = func
+        .params
+        .iter()
+        .any(|p| is_reference(p.type_id, type_table));
+    hands_out_storage(func.return_type, has_ref_input, type_table)
 }
 
 /// Whether `func` declares `#[returns(owned)]`. Only a declaration with no body
@@ -58,7 +71,7 @@ fn declares_owned(func: &TirFunction) -> bool {
 }
 
 /// The builtins that declared `#[returns(owned)]`, by base name: they allocate
-/// while reading through a reference, which [`hands_out_arg_storage`] cannot
+/// while reading through a reference, which [`hands_out_storage`] cannot
 /// tell from a read of one. Collected from whatever declarations the package
 /// still holds. Missing one is safe — that call keeps a copy it need not make.
 #[derive(Default)]
@@ -127,7 +140,7 @@ impl<'a> OwnedCalls<'a> {
     }
 
     /// Whether a call to `func` yields an owned (fresh) value. A builtin
-    /// answers from the call itself ([`hands_out_arg_storage`]), plus the
+    /// answers from the call itself ([`call_hands_out_storage`]), plus the
     /// declared [`OwnedBuiltins`] exceptions; a body function is owned iff the
     /// fixpoint proved it so, and an extern / opaque callee defaults to
     /// borrowed.
@@ -139,7 +152,7 @@ impl<'a> OwnedCalls<'a> {
         type_table: &TypeTable,
     ) -> bool {
         if func.module_source.is_builtin() {
-            return !hands_out_arg_storage(result_type, args, type_table)
+            return !call_hands_out_storage(result_type, args, type_table)
                 || self.owned_builtins.contains(func);
         }
         self.returns_owned.contains(&func.module_source, &func.name)
@@ -185,12 +198,8 @@ pub fn compute_receiver_alias(
         if set.contains(&func.module_source, &func.name) {
             return false;
         }
-        // A `Copy`-shaped return (an `i32` count, say) carries no storage of
-        // its own to alias: a caller that reads it gets an independent value,
-        // not a projection whose conflicts need tracking.
-        if !super::place::is_reference(func.return_type, type_table)
-            && !super::needs_value_copy(func.return_type, type_table)
-        {
+        // Nothing to alias means no conflicts to track.
+        if !carries_storage(func.return_type, type_table) {
             return false;
         }
         let Some(body) = &func.body else { return false };
@@ -241,10 +250,24 @@ fn function_returns_receiver_alias(
 /// Whether `expr` aliases the storage of parameter `param`: a projection chain,
 /// an `array_get_value` / `array_get_ref` element read of one, or a call to a
 /// receiver-aliasing callee whose receiver / first argument is one.
+///
+/// A deref may peel only the parameter's own reference, the rule
+/// [`is_projection_of_param`] follows. Deeper in the chain it reads a reference
+/// *stored in* that storage and lands on whoever lent it, a different place.
+/// Answering the wrong place is not the safe side. `last_use::source_path`
+/// makes a binding a share candidate gated on the place this names, so a place
+/// nothing writes reads as no conflict and the copy is dropped.
 fn is_receiver_projection(expr: &TirExpr, param: u32, set: &FuncKeySet) -> bool {
     match &expr.kind {
         TirExprKind::Local { index, .. } => *index == param,
-        TirExprKind::Unary { expr: inner, .. }
+        TirExprKind::Unary {
+            op: TirUnaryOp::Deref,
+            expr: inner,
+        } => matches!(inner.kind, TirExprKind::Local { index, .. } if index == param),
+        TirExprKind::Unary {
+            op: TirUnaryOp::Ref | TirUnaryOp::MutRef,
+            expr: inner,
+        }
         | TirExprKind::FieldAccess { expr: inner, .. }
         | TirExprKind::VariantPayload { expr: inner, .. }
         | TirExprKind::Cast { expr: inner, .. }
@@ -291,7 +314,7 @@ pub fn compute_return_conventions(
         let is_builtin = func.module_source.is_builtin();
         if is_helper
             || declares_owned(&func)
-            || (is_builtin && !is_container_alias_read(&func.name, func.monomorph_info.as_ref()))
+            || (is_builtin && !decl_hands_out_storage(&func, &type_table))
         {
             owned.insert(func.module_source.clone(), func.name.clone());
         }

@@ -3,6 +3,7 @@
 //! follow": an analysis may ignore the first and must not ignore the second.
 
 use super::funcset::{FuncKeyMap, FuncKeySet};
+use super::needs_value_copy;
 use crate::hashmap::IndexMap;
 use crate::tir::{
     ResolvedType, TirExpr, TirExprKind, TirFunction, TirPattern, TirStmt, TirStmtKind, TirUnaryOp,
@@ -136,12 +137,9 @@ pub fn compute_return_paths(
         let (Some(body), Some(receiver)) = (&func.body, func.params.first()) else {
             return false;
         };
-        // A result that could name storage: a reference, or a value the copy
-        // rules defend — the latter because a returned construction hands its
-        // payload out uncopied.
-        if !is_reference(func.return_type, type_table)
-            && !super::needs_value_copy(func.return_type, type_table)
-        {
+        // A returned construction hands its payload out uncopied, so a value
+        // the copy rules defend counts alongside a reference.
+        if !carries_storage(func.return_type, type_table) {
             return false;
         }
         let resolver = Resolver::new(&func, type_table, &paths, returns_owned);
@@ -456,6 +454,14 @@ pub fn is_reference(type_id: TypeId, type_table: &TypeTable) -> bool {
         type_table.get(type_id),
         ResolvedType::Ref(_) | ResolvedType::MutRef(_)
     ) || type_table.is_reference_shaped(type_id)
+}
+
+/// Whether a value of this type could name storage someone else still reaches:
+/// a reference, or a value the copy rules defend. A `Copy`-shaped one carries
+/// none of its own, so a reader of it gets an independent value.
+#[must_use]
+pub fn carries_storage(type_id: TypeId, type_table: &TypeTable) -> bool {
+    is_reference(type_id, type_table) || needs_value_copy(type_id, type_table)
 }
 
 /// A handle a callee can write through. A shared `&` cannot be; a box carries
