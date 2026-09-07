@@ -1460,14 +1460,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         receiver_type: TypeId,
         method_name: &str,
         receiver_name: &str,
-        arg_hint: Option<&str>,
+        arg_hints: &[String],
     ) -> super::static_call::StaticLookup {
         self.resolve_static_callee(
             None,
             receiver_name,
             Some(receiver),
             method_name,
-            arg_hint,
+            arg_hints,
             Some(receiver_type),
         )
     }
@@ -2674,7 +2674,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         struct_name: &str,
         method_name: &str,
     ) -> Vec<ast::GenericParam> {
-        self.resolve_static_callee(None, struct_name, None, method_name, None, None)
+        self.resolve_static_callee(None, struct_name, None, method_name, &[], None)
             .found()
             .map(|callee| callee.own_params.clone())
             .unwrap_or_default()

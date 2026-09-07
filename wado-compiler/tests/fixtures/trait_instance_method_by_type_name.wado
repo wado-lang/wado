@@ -1,11 +1,19 @@
-//! `Type::method(&recv)` names a trait's instance method too, passing the
+//! `Type::method(&recv, …)` names a trait's instance method too, passing the
 //! receiver first. The lookup this replaced said so outright — "both kinds:
 //! the spelling names a receiver-taking method too" — and the unified ladder
 //! was built from the questions that lookup answered rather than from the
 //! spellings the language admits, so the receiver-taking one lost its rung.
+//!
+//! The arguments after the receiver are the dimension that rung was first
+//! written without: with none of them the call never reached the parameter
+//! list, and every argument this fixture passes went unresolved.
 
 trait Greet {
     fn go(&self) -> i32;
+}
+
+trait Add {
+    fn add(&self, v: i32) -> i32;
 }
 
 struct S {}
@@ -16,8 +24,20 @@ impl Greet for S {
     }
 }
 
+impl Add for S {
+    fn add(&self, v: i32) -> i32 {
+        return v + 1;
+    }
+}
+
 test "a trait's instance method answers its receiver type's spelling" {
     let s = S {};
     assert S::go(&s) == 1;
     assert Greet::go(&s) == 1;
+}
+
+test "and the arguments after the receiver reach its parameters" {
+    let s = S {};
+    assert S::add(&s, 5) == 6;
+    assert Add::add(&s, 5) == 6;
 }

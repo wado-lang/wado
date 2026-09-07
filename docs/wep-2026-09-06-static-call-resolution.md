@@ -82,6 +82,39 @@ did not fully find something, so each of these had to be named:
   for a whole one. A site that reads only `Found` and defaults the rest turns
   every other outcome into a name nothing declares.
 
+### One list of candidates, one pass of rules
+
+The rungs produce candidates; a single pass over them decides. A candidate is
+one declaration a block on the receiver supplies for the name, carrying what the
+rules read — the trait it comes through, the block, the declaration, whether it
+takes a receiver, whether the block wrote the body or inherited it, and the
+parameter the call's argument is checked against. It carries no decision.
+
+Rungs written one at a time acquire the rules that were salient the day each was
+written, and nothing makes a later one acquire the rest. Every defect this
+section exists to prevent was that: the receiver-taking rung reported no
+ambiguity where both other paths did, compared the receiver against the
+parameter the impls differ on, and had no answer at all for a body its block
+inherited. Each was a rule the other rungs already had. Adding a rung is adding
+a candidate producer, which cannot miss a rule because it applies none.
+
+The rules run in this order, and the order is the design:
+
+1. An inherent declaration shadows the inherited candidates of its own kind.
+2. A receiver-less declaration answers before a receiver-taking one, so
+   `Type::method(x)` is a static's call before it is a UFCS receiver.
+3. Several traits leave the spelling naming none, and that is reported.
+4. The argument picks among what is left.
+5. A written body outranks an inherited one among what the argument admits.
+
+What remains is one declaration, or several of one trait that no argument
+separated — the overload.
+
+Steps 4 and 5 are in that order because a written body the argument rejects is
+not an answer: `impl Conv<i32> for M {}` beside `impl Conv<String> for M { fn
+make(…) }` answers `M::make(5)` from the inherited default, though a block wrote
+a body for the other argument.
+
 ### A rule kept in structure has to be restated as data
 
 Choosing which lookup to call _was_ the rule. `has_inherent_static_method`
@@ -107,7 +140,8 @@ the merge on its own, so the resolution states each:
 ### The argument picks a declaration, not a trait
 
 A static call is selected by the parameter the impl declares, compared against
-the call's first argument. Arguments after the first do not narrow it further.
+the first argument that reaches it. Arguments after that one do not narrow it
+further.
 
 `From<T>` made that rule look like two narrower ones. Its source type is also
 its trait argument, so the trait reference could stand in for the parameter, and
@@ -142,14 +176,6 @@ constructor (`impl From<Array<T>> for List<T>`) leaves a concrete head to mangle
 and is kept, and a reference to a slot (`From<&T>`) is the slot, peeled before
 the question is asked.
 
-### A written body outranks an inherited one
-
-A body the block writes answers before one it inherits. Each question is asked
-over every impl in turn — the written declarations first, the trait's defaults
-only where no block wrote one — because the default consults no argument.
-Answering it while walking the impls would let the first block seen win over the
-one the argument names.
-
 ### The spelling names both kinds
 
 `Type::method(recv, …)` reaches a trait's instance method as well as its static,
@@ -161,6 +187,23 @@ syntax: `Q::tag(&q)` names `impl Q`'s and the trait's is spelled `Tag::tag(&q)`.
 Shadowing holds within a kind, so an inherent method leaves a trait's associated
 function of the same name alone — the rule the receiver's own declarations
 already follow above.
+
+Which argument the selection reads follows from the kind rather than from the
+call: a receiver-taking declaration has the receiver at argument zero, so its
+own first parameter is checked against argument one. Reading argument zero for
+both kinds compares a receiver against the parameter two impls differ on, which
+separates nothing and admits nothing.
+
+### An inherited body is read in the trait's frame, filled
+
+The trait's frame numbers `Self` as slot 0 and the trait's own parameters after
+it, so a block reads a default body back by supplying its target and then its
+trait arguments. Supplying the target alone leaves the rest open: every argument
+reaches every block, `M::tag("x")` and `M::tag(5)` select whichever block came
+first, and the mangled name then points at the other one's body.
+
+This is why an inherited candidate's parameter is what the block's trait
+arguments make of it, not what the trait declared.
 
 ### One call, one resolution
 
@@ -225,6 +268,14 @@ other. Unifying them further is symmetry, not this WEP's decision.
 
 ## Known gaps
 
+- Only the trait rungs are candidates. The receiver's own declarations — its
+  inherent impl, its resource statics, that resource's chain — still answer from
+  an ordered sequence of early returns ahead of the rule pass, so the precedence
+  among those three is their order in the source and nowhere else. Nothing among
+  them competes for one call today, which is why the order is invisible; a
+  fourth such rung would be the same class of defect the rule pass exists to
+  prevent. Closing it means producing candidates for them too, with an origin
+  that outranks every trait's.
 - A trait's static has no trait-qualified spelling. `Tagged::<V>::tag(5)` — the
   counterpart of Rust's `<V as Tagged>::A(5)` — answers `unknown function`, and
   an instance method's `Tagged::describe(&v)` works only because the receiver
@@ -236,11 +287,12 @@ other. Unifying them further is symmetry, not this WEP's decision.
   [Overload Resolution](./wep-2026-07-31-overload-resolution.md) phase 4
   replaces that with `TypeId` matching; threading the argument's `TypeId` from
   the four sites that already hold it is what closing it takes.
-- Only the first argument selects. Two impls a call separates only by its
-  _second_ argument have no selection, and the first candidate wins. The
-  preselect that shapes a literal reads the first argument for the same reason.
-  No fixture drives it: closing it is the same `TypeId` migration above, over
-  the argument list rather than one name.
+- Only one argument selects — the first that reaches the declaration, which the
+  candidate's kind decides. Two impls a call separates only by a _later_
+  argument have no selection, and the first candidate wins. The preselect that
+  shapes a literal reads argument zero for the same reason. No fixture drives
+  it: closing it is the same `TypeId` migration above, over the argument list
+  rather than one name.
 - A static's own type parameters are never inferred from its arguments. Where
   the block declares no slots the method's are numbered from zero and the
   substitution reaches them anyway; where it declares some, an unspelled one

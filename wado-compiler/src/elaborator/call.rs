@@ -805,10 +805,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // them. It covers trait impls only; an inherent static has no
                 // selection and reaches the index instead.
                 if let Some(suffix_seg) = ident.segments.get(1) {
-                    let arg_hint = self.first_arg_hint(&args);
-                    let method_def = self
-                        .locate_static_method_impl(prefix, suffix, arg_hint.as_deref(), None)
-                        .and_then(|r| r.method_id)
+                    let arg_hints = self.arg_hints(&args);
+                    // The same resolution the call itself uses, not a second
+                    // one: two resolutions of one call disagree, which is what
+                    // the edge then records.
+                    let selected = self
+                        .resolve_static_callee(
+                            receiver_site,
+                            prefix,
+                            None,
+                            suffix,
+                            &arg_hints,
+                            None,
+                        )
+                        .found()
+                        .and_then(|callee| callee.method_ref.method_id);
+                    let method_def = selected
                         .or_else(|| self.qualified_method_decl_at(receiver_site, prefix, suffix));
                     if let Some(method_def) = method_def {
                         self.record_reference_to_decl(suffix_seg.id, method_def);
@@ -967,13 +979,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // The same argument the selection above read: without it this
                 // re-check resolves a different declaration than the call was
                 // mangled to.
-                let arg_hint = self.first_arg_hint(&args);
+                let arg_hints = self.arg_hints(&args);
                 let resolved = self.static_callee_params(
                     &receiver_key,
                     receiver_type,
                     suffix,
                     prefix,
-                    arg_hint.as_deref(),
+                    &arg_hints,
                 );
                 if let StaticLookup::Ambiguous(traits) = resolved {
                     let _ = self.emit(TypeError::AmbiguousTraitMethod {
@@ -1338,7 +1350,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         );
                     }
 
-                    let arg_type_hint = self.first_arg_hint(&args);
+                    let arg_type_hints = self.arg_hints(&args);
                     // The importing module never names `Type` on its own, so a
                     // bare-name search reaches no impl on it: the callee then
                     // loses its trait segment and names a body nothing
@@ -1359,7 +1371,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         type_name,
                         ns_key.as_ref(),
                         method_name,
-                        arg_type_hint.as_deref(),
+                        &arg_type_hints,
                         ns_receiver_type,
                     );
                     // A spelling several traits answer names none of them, so it

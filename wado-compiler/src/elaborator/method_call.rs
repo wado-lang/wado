@@ -1477,7 +1477,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return TypeTable::ERROR;
         }
         let preselected = preselected.picked();
-        let arg_hint = preselected.map(|source| self.tysys.type_table.borrow().type_name(source));
+        // The preselect shapes argument zero alone, so this names that one and
+        // no more: a receiver-taking candidate reads argument one and finds
+        // nothing here, which admits it.
+        let arg_hints: Vec<String> = preselected
+            .map(|source| self.tysys.type_table.borrow().type_name(source))
+            .into_iter()
+            .collect();
 
         let callee_sig = static_receiver
             .as_ref()
@@ -1490,7 +1496,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     target_type_id,
                     &static_call.method,
                     &name,
-                    arg_hint.as_deref(),
+                    &arg_hints,
                 )
             }
             _ => StaticLookup::NotStatic,
@@ -2139,7 +2145,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             };
 
         // A trait impl's static is mangled with its trait, so WIR resolves it.
-        let arg_type_hint = self.first_arg_hint(&args);
+        let arg_type_hints = self.arg_hints(&args);
         // Keep the whole selection: its trait names the mangled function, and
         // its `method_id` is what the use→def edge below is recorded against.
         // A name lookup cannot stand in — two conversion impls on one type
@@ -2154,7 +2160,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             &struct_name,
             Some(&receiver_key),
             &static_call.method,
-            arg_type_hint.as_deref(),
+            &arg_type_hints,
             None,
         );
         let selected = lookup
@@ -2170,7 +2176,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // mangled name loses its trait and reaches WIR build unresolved, so the
         // disagreement is reported here instead of ICE-ing there.
         if trait_name_opt.is_none()
-            && let Some(arg_type) = arg_type_hint.as_deref()
+            && let Some(arg_type) = arg_type_hints.first().map(String::as_str)
             && !self.has_inherent_static_method(
                 &struct_name,
                 &static_call.method,
@@ -2686,7 +2692,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             struct_name,
             static_key.as_ref(),
             method_name,
-            None,
+            &[],
             None,
         );
         if let Some(callee) = resolved.found() {
@@ -2818,7 +2824,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// the name as its own type parameter (`impl<V: Bound> Trait for V`), which
     /// keys under that binder. Both are searched in the current module, only
     /// the declaration namespace outside it.
-    fn trait_impls_for_receiver(
+    pub(super) fn trait_impls_for_receiver(
         &self,
         struct_name: &str,
         target_hint: Option<&ImplTargetKey>,
@@ -2998,19 +3004,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .any(super::trait_env::ImplMethodEntry::is_inherent)
     }
 
-    /// [`Self::has_inherent_static_method`] for the receiver-taking kind, which
-    /// `Type::method(&recv)` names before a trait impl's of the same name.
-    fn has_inherent_instance_method(
-        &self,
-        struct_name: &str,
-        method_name: &str,
-        target_hint: Option<&ImplTargetKey>,
-    ) -> bool {
-        let target = self.static_receiver_key(struct_name, target_hint);
-        self.impl_method_entries(&target, method_name)
-            .any(|entry| entry.has_self && entry.is_inherent())
-    }
-
     /// The argument preselect over a receiver's impls: `Selected` and
     /// `Ambiguous` short-circuit resolution, so it decides calls. It must run
     /// *before* the argument is elaborated — the expected type shaping a literal
@@ -3146,11 +3139,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.import_original_name(&head, impl_module)
     }
 
-    /// The first argument's type name, which is what separates several impls of
-    /// one trait — however many arguments follow it.
-    pub(super) fn first_arg_hint(&self, args: &[TypeId]) -> Option<String> {
-        args.first()
-            .map(|&arg| self.tysys.type_table.borrow().type_name(arg))
+    /// The arguments by type name, which is what separates several impls of one
+    /// trait. *Which* of them a declaration is checked against is the
+    /// declaration's to say and not this function's: one reached as
+    /// `Type::method(&recv, …)` has the receiver at argument zero.
+    pub(super) fn arg_hints(&self, args: &[TypeId]) -> Vec<String> {
+        let table = self.tysys.type_table.borrow();
+        args.iter().map(|&arg| table.type_name(arg)).collect()
     }
 
     /// Whether `name` appears anywhere in `ty` as written.
@@ -3171,7 +3166,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Whether only the argument can fill this parameter — a blanket, whose
     /// unsubstituted spelling must not be mangled. Three things fill a slot and
     /// the receiver and the method take the other two.
-    fn param_filled_by_block(
+    pub(super) fn param_filled_by_block(
         &self,
         header: &super::trait_env::ImplHeader,
         sig: &MethodSig,
@@ -3201,150 +3196,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    pub(super) fn locate_static_method_impl(
+    /// The `Default::default` no declaration backs, which bound-driven
+    /// synthesis emits on demand. It is not a candidate: nothing declares it,
+    /// so no rule has anything to read, and it answers only where the rules
+    /// found nothing.
+    pub(super) fn auto_derived_default_ref(
         &self,
         struct_name: &str,
         method_name: &str,
-        arg_type_name: Option<&str>,
-        target_hint: Option<&ImplTargetKey>,
     ) -> Option<StaticMethodRef> {
-        // A shadowing inherent associated function declines the whole search,
-        // which reaches trait impls alone: selecting one would mangle the call
-        // to a body the spelling does not name, while every other lookup
-        // answered from the inherent declaration.
-        if self.has_inherent_static_method(struct_name, method_name, target_hint) {
-            return None;
-        }
-        let impl_defs = self.trait_impls_for_receiver(struct_name, target_hint);
-        // The trait reference as the block wrote it, arguments included — the
-        // form `resolve_method` emitted the method under, so that `impl Conv<A>`
-        // and `impl Conv<B>` on one receiver stay apart. Dropping them here
-        // names a body nothing declares, and the two impls collide on it.
-        let resolve_trait_name =
-            |header: &super::trait_env::ImplHeader| -> Option<crate::name::FqTraitName> {
-                self.tysys
-                    .trait_env
-                    .fq_trait_of_impl(header, &self.tysys.resolutions)
-            };
-
-        // Which declaration the argument picks: the parameter answers, not the
-        // trait. Both sides are resolved types, the parameter in the impl's own
-        // frame, so an alias on either is already gone. A parameter the block
-        // fills declines, and one still carrying an open slot is kept — it
-        // equals no instantiation verbatim, and the mangled name carries the
-        // impl's spelling either way.
-        //
-        // Comparing names is this mechanism's ceiling; `TypeId` matching is
-        // the replacement (WEP 2026-07-31 phase 4).
-        let param_admits_arg = |sig: &MethodSig, header: &super::trait_env::ImplHeader| -> bool {
-            let Some(expected) = arg_type_name else {
-                return true;
-            };
-            let Some(&param) = sig.decl.param_types.first() else {
-                return true;
-            };
-            if self.param_filled_by_block(header, sig, param) {
-                return false;
-            }
-            let table = self.tysys.type_table.borrow();
-            table.contains_type_param(param) || table.type_name(param) == expected
-        };
-
-        // The trait the impl names and the method it writes there — the identity
-        // of what this selection picked, so a caller recording a use→def edge
-        // names the impl the argument chose rather than the receiver's first
-        // same-named method.
-        let written_method = |header: &super::trait_env::ImplHeader|
-         -> Option<(crate::name::FqTraitName, crate::defs::DefId)> {
-            for method in header.methods.iter().filter(|m| m.name == method_name) {
-                let sig = self
-                    .tysys
-                    .signatures
-                    .method_sig(method.def)
-                    .expect("the decl pass records every impl-declared method's signature");
-                if sig.self_kind != ast::SelfKind::None {
-                    continue;
-                }
-                if !param_admits_arg(sig, header) {
-                    return None;
-                }
-                return Some((resolve_trait_name(header)?, method.def));
-            }
-            None
-        };
-
-        // The trait's own default body, where the block overrides nothing: the
-        // trait still provides it, so `Type::method` called concretely reaches
-        // it as generic dispatch (`T::method()`) already does.
-        let inherited_default = |header: &super::trait_env::ImplHeader|
-         -> Option<(crate::name::FqTraitName, crate::defs::DefId)> {
-            let trait_type = header.trait_type.as_ref()?;
-            let trait_name_base = super::trait_env::get_type_name_static(trait_type);
-            let method = self
-                .trait_sig_by_name(&trait_name_base)
-                .and_then(|sig| sig.method(method_name))?;
-            (method.default_body.is_some() && method.sig.self_kind == ast::SelfKind::None)
-                .then(|| Some((resolve_trait_name(header)?, method.sig.def)))
-                .flatten()
-        };
-
-        // The spelling names a receiver-taking method too, passing the receiver
-        // as the first argument — `S::go(&s)` beside `Greet::go(&s)`. Tried
-        // after every static, so a receiver-less declaration of the name still
-        // answers first, and the parameter list leads with the receiver exactly
-        // where the call writes it.
-        let written_instance_method = |header: &super::trait_env::ImplHeader| -> Option<(
-            crate::name::FqTraitName,
-            crate::defs::DefId,
-        )> {
-            let method = header
-                .methods
-                .iter()
-                .find(|m| m.name == method_name)
-                .filter(|m| {
-                    self.tysys
-                        .signatures
-                        .method_sig(m.def)
-                        .is_some_and(|sig| sig.self_kind != ast::SelfKind::None)
-                })?;
-            Some((resolve_trait_name(header)?, method.def))
-        };
-
-        // Each pass runs over every impl before the next answers: a body the
-        // block writes outranks one it inherits, and the default consults no
-        // argument, so letting it answer per impl let the first block seen win
-        // over the one the argument names.
-        let select = |pick: &dyn Fn(
-            &super::trait_env::ImplHeader,
-        )
-            -> Option<(crate::name::FqTraitName, crate::defs::DefId)>| {
-            impl_defs.iter().find_map(|&impl_def| {
-                let header = &self.tysys.trait_env.impl_headers[&impl_def];
-                let (trait_name, method_id) = pick(header)?;
-                Some(StaticMethodRef::new(
-                    self.tysys.resolutions.defs().module(impl_def).clone(),
-                    struct_name,
-                    method_name,
-                    Some(trait_name),
-                    Some(method_id),
-                ))
-            })
-        };
-        // An inherent method of the same kind shadows the instance pass, as the
-        // guard at the top of this search does for statics: `Q::tag(&q)` names
-        // `impl Q`'s over `impl Tag for Q`'s, and the trait's is spelled
-        // `Tag::tag(&q)`. Asked only where the static passes found nothing.
-        if let Some(found) = select(&written_method)
-            .or_else(|| select(&inherited_default))
-            .or_else(|| {
-                (!self.has_inherent_instance_method(struct_name, method_name, target_hint))
-                    .then(|| select(&written_instance_method))
-                    .flatten()
-            })
-        {
-            return Some(found);
-        }
-
         if method_name == "default"
             && let Some(struct_type) = self
                 .tysys
@@ -3388,7 +3248,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         struct_name: &str,
         method_name: &str,
     ) -> bool {
-        self.resolve_static_callee(site, struct_name, None, method_name, None, None)
+        self.resolve_static_callee(site, struct_name, None, method_name, &[], None)
             .resolves()
     }
 
@@ -3488,7 +3348,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // The trait the impl names and the module its block lives in. The
         // argument separates a user-defined `impl From<MyType> for i32` from
         // the primitive's, and `impl Conv<A>` from `impl Conv<B>`.
-        let arg_type_hint = self.first_arg_hint(args);
+        let arg_type_hints = self.arg_hints(args);
         // A newtype's static call dispatches to its base, whose name is not
         // the caller's to resolve — that frame can hold a same-named
         // declaration of its own.
@@ -3503,7 +3363,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             &actual_struct_name,
             receiver_key.as_ref(),
             method_name,
-            arg_type_hint.as_deref(),
+            &arg_type_hints,
             None,
         );
         let resolved = lookup
@@ -3517,7 +3377,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // mangled name loses its trait and reaches WIR build unresolved, so the
         // disagreement is reported here instead of ICE-ing there.
         if resolved.is_none()
-            && let Some(arg_type) = arg_type_hint.as_deref()
+            && let Some(arg_type) = arg_type_hints.first().map(String::as_str)
             && !self.has_inherent_static_method(
                 &actual_struct_name,
                 method_name,
@@ -3609,7 +3469,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 receiver_type,
                 method_name,
                 &actual_struct_name,
-                arg_type_hint.as_deref(),
+                &arg_type_hints,
             )
             .params();
 

@@ -1,0 +1,20 @@
+//! An instance method the block inherits with the trait's default body,
+//! reached as `Type::method(&recv, …)`. The rung that answered for an
+//! inherited default asked only for receiver-less declarations, so this had no
+//! answer at all; the trait's frame also has to be filled past `Self` for the
+//! parameter to resolve.
+
+trait Greet {
+    fn go(&self, v: i32) -> i32 {
+        return v + 10;
+    }
+}
+
+struct S {}
+
+impl Greet for S {}
+
+test "an inherited default-bodied instance method through the type spelling" {
+    let s = S {};
+    assert S::go(&s, 5) == 15;
+}

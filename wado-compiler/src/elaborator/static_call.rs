@@ -7,7 +7,6 @@ use crate::ast;
 use crate::compiler_host::CompilerHost;
 use crate::defs::DefId;
 use crate::hashmap::IndexSet;
-use crate::module_source::ModuleSource;
 use crate::name::FqTraitName;
 use crate::tir::{TypeId, TypeTable};
 use crate::token::Span;
@@ -15,7 +14,7 @@ use crate::token::Span;
 use super::Elaborator;
 use super::callee::StaticMethodRef;
 use super::sem::types::CalleeParams;
-use super::trait_env::ImplTargetKey;
+use super::trait_env::{ImplHeader, ImplTargetKey};
 
 /// What one `Type::method(...)` spelling names.
 pub(super) struct StaticCallee {
@@ -48,13 +47,71 @@ pub(super) enum StaticLookup {
     NotStatic,
 }
 
-/// One block on the receiver whose trait supplies a static of the name asked
-/// for. Read off the block, before anything is resolved.
-pub(super) struct TraitSupply {
-    trait_decl: DefId,
+/// Which kind of declaration a candidate is. What shadows it and which
+/// argument selects it both follow from this.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum CandidateKind {
+    /// Receiver-less, so argument zero is its first parameter.
+    Static,
+    /// Receiver-taking, reached as `Type::method(&recv, …)`, so argument zero
+    /// is the receiver and argument one is its first parameter.
+    Instance,
+}
+
+impl CandidateKind {
+    fn of(self_kind: ast::SelfKind) -> Self {
+        match self_kind {
+            ast::SelfKind::None => Self::Static,
+            ast::SelfKind::Value | ast::SelfKind::Ref | ast::SelfKind::MutRef => Self::Instance,
+        }
+    }
+}
+
+/// Where the body a candidate names is written.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum CandidateOrigin {
+    /// The block writes the body.
+    Written,
+    /// The block leaves the trait's default to answer.
+    Inherited,
+}
+
+/// What the rules made of the candidates.
+enum Selection {
+    One(Box<Candidate>),
+    /// Several traits supply the name, which no argument separates: impls of
+    /// different traits share no contract.
+    Ambiguous(Vec<String>),
+    /// One trait, several impls, and no argument to tell them apart.
+    Overloaded,
+    None,
+}
+
+/// What the call's first argument is checked against.
+enum Selector {
+    /// The declaration has no parameter there, so every argument reaches it.
+    Absent,
+    /// Only the argument can fill this parameter — a blanket. Its
+    /// unsubstituted spelling must not be mangled, so the candidate declines
+    /// and the blanket resolver instantiates it instead.
+    Blanket,
+    /// The parameter as the block resolved it, its trait arguments substituted.
+    Type(TypeId),
+}
+
+/// One declaration a block on the receiver supplies for the name: the facts the
+/// rules read, and no decision of its own. Every rung produces these and none
+/// applies a rule, so a rung added later cannot miss one.
+struct Candidate {
     impl_def: DefId,
-    /// The block declares no body of its own, so the trait's default answers.
-    inherited: bool,
+    trait_decl: DefId,
+    /// The block's own trait reference, arguments included — the form the body
+    /// is emitted under, keeping `Conv<A>` and `Conv<B>` on one receiver apart.
+    trait_name: FqTraitName,
+    method_id: DefId,
+    kind: CandidateKind,
+    origin: CandidateOrigin,
+    selector: Selector,
 }
 
 impl StaticLookup {
@@ -99,16 +156,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// that used to ask its own question.
     ///
     /// `receiver_key` is the key the caller's own reference site resolved to;
-    /// `arg_hint` names its first argument's type, which is what separates
-    /// several impls of one trait. Both are the call's one vantage — resolving
-    /// without them and mangling with them gives two answers for one call.
+    /// `arg_hints` names its argument types, which is what separates several
+    /// impls of one trait. Both are the call's one vantage — resolving without
+    /// them and mangling with them gives two answers for one call.
     pub(super) fn resolve_static_callee(
         &mut self,
         site: Option<ast::AstId>,
         receiver_name: &str,
         receiver_key: Option<&ImplTargetKey>,
         method_name: &str,
-        arg_hint: Option<&str>,
+        arg_hints: &[String],
         receiver_type: Option<TypeId>,
     ) -> StaticLookup {
         // One vantage: the key the caller resolved, else the one its reference
@@ -125,7 +182,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // argument lists reach them. A trait impl's declaration falls to the
         // selection below, which names the trait its call is mangled with, and
         // several of one kind are an overload only an argument separates.
-        let (inherent, overloaded) = {
+        let inherent = {
             let entries: Vec<(DefId, bool, bool)> = self
                 .impl_method_entries(&key, method_name)
                 .map(|entry| (entry.method_id, entry.has_self, entry.is_inherent()))
@@ -137,10 +194,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .filter(|(_, kind, _)| *kind == has_self)
                     .count()
             });
-            let inherent = first
+            first
                 .filter(|&(_, _, inherent)| inherent && same_kind == 1)
-                .map(|(def, _, _)| def);
-            (inherent, same_kind > 1)
+                .map(|(def, _, _)| def)
         };
         if let Some(def) = inherent
             && let Some(resolved) =
@@ -187,46 +243,54 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return StaticLookup::NotStatic;
         }
 
-        // Two *traits* supplying the name leaves the spelling naming neither,
-        // and no argument can separate traits — impls of different traits share
-        // no contract. Asked before the overload below, which is the case an
-        // argument *does* separate: one trait implemented several times. Asked
-        // over blocks that declare a body and blocks that inherit the trait's
-        // alike, since which of the two it is decides nothing here.
-        let supplies = self.traits_supplying_static(&key, method_name);
-        if let Some(alternatives) = self.ambiguous_alternatives(&supplies) {
-            return StaticLookup::Ambiguous(alternatives);
-        }
-
-        // With no argument to read, the selection below cannot pick among
-        // several declarations of one name: it would take the first, and a call
-        // site checking against that list rejects every argument the others
-        // accept. `i32::from(b)` names one `From` impl per source type, and the
-        // conversion preselect is what reads the argument.
-        if overloaded && arg_hint.is_none() {
-            return self.overloaded_callee(&key, method_name);
-        }
-
         // `receiver_key` as the caller gave it, not the key derived above: a
         // derived one narrows the search to a declaration the impls may not be
         // indexed under, putting a primitive's `impl FromStr for f32` out of
         // reach.
-        let through_traits = self.resolve_static_callee_through_traits(
-            receiver_name,
-            receiver_key,
-            method_name,
-            arg_hint,
-            receiver_type,
-            &supplies,
-        );
-        if through_traits.found().is_some() || matches!(through_traits, StaticLookup::Ambiguous(_))
-        {
-            return through_traits;
+        let candidates =
+            self.trait_candidates(receiver_name, method_name, receiver_key, receiver_type);
+        // What shadows a candidate is looked up where the candidate was found.
+        // Keyed any other way the check answers for a different receiver, and
+        // hides a declaration it never saw or admits one it should have hidden.
+        let shadow_key = self.static_receiver_key(receiver_name, receiver_key);
+        let shadowed = |want_self: bool| {
+            self.impl_method_entries(&shadow_key, method_name)
+                .any(|entry| entry.is_inherent() && entry.has_self == want_self)
+        };
+        let through_traits = match self.select_candidate(candidates, arg_hints, |kind| match kind {
+            CandidateKind::Static => shadowed(false),
+            CandidateKind::Instance => shadowed(true),
+        }) {
+            Selection::One(candidate) => {
+                self.callee_of_candidate(receiver_name, method_name, &candidate, receiver_type)
+            }
+            Selection::Ambiguous(alternatives) => {
+                return StaticLookup::Ambiguous(alternatives);
+            }
+            // Nothing picked a declaration, so there is none to mangle and no
+            // list to check. `i32::from(b)` names one `From` impl per source
+            // type, and the call site's own preselect is what reads the
+            // argument.
+            Selection::Overloaded => return self.overloaded_callee(&key, method_name),
+            Selection::None => None,
+        };
+        if let Some(resolved) = through_traits {
+            return resolved;
         }
-        // The selection above reads the argument; where it could not pick, the
-        // name is an overload the call site's own resolution settles.
-        if overloaded {
-            return self.overloaded_callee(&key, method_name);
+
+        // The auto-derived `Default`: synthesis emits the body, so no
+        // declaration backs it. It takes no arguments and answers with the
+        // receiver's own type.
+        if let Some(method_ref) = self.auto_derived_default_ref(receiver_name, method_name) {
+            return StaticLookup::Found(Box::new(StaticCallee {
+                params: CalleeParams::default(),
+                own_params: Vec::new(),
+                return_type: self
+                    .tysys
+                    .auto_derive_default_struct_type(&self.type_lookup(), receiver_name)
+                    .unwrap_or(TypeTable::UNKNOWN),
+                method_ref,
+            }));
         }
 
         // A newtype and a `flags` reach what they wrap: their impls are looked
@@ -237,137 +301,83 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 &base_name,
                 None,
                 method_name,
-                arg_hint,
+                arg_hints,
                 receiver_type,
             ),
-            None => through_traits,
+            None => StaticLookup::NotStatic,
         }
     }
 
     /// The trait half of [`Self::resolve_static_callee`]: a block on the
     /// receiver that declares the method, one that inherits the trait's default
     /// body, or the auto-derived `Default`.
-    fn resolve_static_callee_through_traits(
+    /// The resolution for the declaration the rules picked. The block's module
+    /// either way: the body is emitted for the block, so that is what the call
+    /// names, whether the block wrote it or inherited it.
+    fn callee_of_candidate(
         &mut self,
         receiver_name: &str,
-        written_key: Option<&ImplTargetKey>,
         method_name: &str,
-        arg_hint: Option<&str>,
+        candidate: &Candidate,
         receiver_type: Option<TypeId>,
-        supplies: &[TraitSupply],
-    ) -> StaticLookup {
-        // A block that writes the body outranks one that inherits the trait's:
-        // the argument picks among what the blocks wrote, and the trait's
-        // default answers only where no block wrote one. Stated here as a
-        // condition because it used to be the shape of the walk — the lookup
-        // this reads from returned nothing at all once any block declared the
-        // method, and generalising it to answer the ambiguity question too
-        // dissolved the rule along with the shape.
-        //
-        // An inherited method is declared nowhere but the trait, so that is
-        // where its signature is read from. Only one trait reaches here: the
-        // caller reported the ambiguity.
-        if let Some((decl, impl_def)) = supplies
-            .iter()
-            .all(|supply| supply.inherited)
-            .then(|| supplies.first())
-            .flatten()
-            .map(|supply| (supply.trait_decl, supply.impl_def))
-        {
-            // Resolved here rather than asked of every caller: the name costs a
-            // scope to resolve, and this is the one rung whose frame needs it.
-            let receiver_type = receiver_type.or_else(|| {
-                let mut scope = self.enter_inherited_type_param_scope();
-                let resolved = scope.resolve_unsited_type_name(receiver_name, Span::default());
-                drop(scope);
-                Some(resolved)
-            });
-            let module = self.tysys.resolutions.defs().module(impl_def).clone();
-            // The block's own trait reference, arguments included — the form
-            // the body is emitted under. Minting one from the trait declaration
-            // instead drops them, and `impl Enc<A> for M` inheriting a default
-            // body then names `Enc::make` where `Enc<A>::make` was emitted.
-            let trait_name = {
-                let header = &self.tysys.trait_env.impl_headers[&impl_def];
-                self.tysys
-                    .trait_env
-                    .fq_trait_of_impl(header, &self.tysys.resolutions)
-            };
-            if let Some(callee) = self.callee_of_trait_declaration(
-                receiver_name,
-                method_name,
-                decl,
-                module,
-                receiver_type,
-                trait_name,
-            ) {
-                return StaticLookup::Found(Box::new(callee));
+    ) -> Option<StaticLookup> {
+        let module = self
+            .tysys
+            .resolutions
+            .defs()
+            .module(candidate.impl_def)
+            .clone();
+        let method_ref = StaticMethodRef::new(
+            module,
+            receiver_name,
+            method_name,
+            Some(candidate.trait_name.clone()),
+            Some(candidate.method_id),
+        );
+        match candidate.origin {
+            CandidateOrigin::Written => {
+                self.callee_of_declaration(candidate.method_id, method_ref, receiver_type)
             }
-        }
-
-        if let Some(method_ref) =
-            self.locate_static_method_impl(receiver_name, method_name, arg_hint, written_key)
-        {
-            let found = match method_ref.method_id {
-                // The selection reaches a trait's own declaration too, where a
-                // block on the receiver declares the name under another trait
-                // and this one only inherits it. Two tables hold a method's
-                // signature and a `DefId` does not say which: the impl-declared
-                // ones are `method_sig`'s, a trait's own its `TraitSig`'s.
-                Some(def) if self.tysys.signatures.method_sig(def).is_none() => method_ref
-                    .trait_name
-                    .as_ref()
-                    .and_then(FqTraitName::canonical)
-                    .and_then(|decl| {
-                        let module = method_ref.module.clone();
-                        // The selection's own trait reference, not one re-minted
-                        // from `decl`: it is the form the body was emitted under.
-                        let trait_name = method_ref.trait_name.clone();
-                        self.callee_of_trait_declaration(
-                            receiver_name,
-                            method_name,
-                            decl,
-                            module,
-                            receiver_type,
-                            trait_name,
-                        )
-                    })
-                    .map(|callee| StaticLookup::Found(Box::new(callee))),
-                Some(def) => self.callee_of_declaration(def, method_ref, receiver_type),
-                // The auto-derived `Default`: synthesis emits the body, so no
-                // declaration backs it. It takes no arguments and answers with
-                // the receiver's own type.
-                None => Some(StaticLookup::Found(Box::new(StaticCallee {
-                    params: CalleeParams::default(),
-                    own_params: Vec::new(),
-                    return_type: self
-                        .tysys
-                        .auto_derive_default_struct_type(&self.type_lookup(), receiver_name)
-                        .unwrap_or(TypeTable::UNKNOWN),
+            // An inherited method is declared nowhere but the trait, so that is
+            // where its signature is read from — in the trait's frame, which
+            // the block's arguments fill.
+            CandidateOrigin::Inherited => {
+                // Resolved here rather than asked of every caller: the name
+                // costs a scope to resolve, and this is the one rung that needs
+                // it.
+                let receiver_type = receiver_type.or_else(|| {
+                    let mut scope = self.enter_inherited_type_param_scope();
+                    let resolved = scope.resolve_unsited_type_name(receiver_name, Span::default());
+                    drop(scope);
+                    Some(resolved)
+                });
+                self.callee_of_trait_declaration(
+                    candidate.trait_decl,
+                    candidate.impl_def,
+                    method_name,
                     method_ref,
-                }))),
-            };
-            if let Some(resolved) = found {
-                return resolved;
+                    receiver_type,
+                )
+                .map(|callee| StaticLookup::Found(Box::new(callee)))
             }
         }
-        StaticLookup::NotStatic
     }
 
     /// The resolution for a method a block inherits with the trait's default
-    /// body. Its signature is written in the trait's frame, where `Self` leads
-    /// the slots, so it is read at the receiver.
-    /// `module` is the block's, not the trait's: the body is emitted for the
-    /// block that inherits it, so that is what the call names, while the
-    /// defaults are the trait's and resolve where it wrote them.
+    /// body. Its signature is written in the trait's frame, which numbers
+    /// `Self` as slot 0 and the trait's own parameters after it, so the block's
+    /// trait arguments follow the receiver. Reading it at the receiver alone
+    /// leaves them open, and every argument then reaches every block.
+    ///
+    /// The defaults are the trait's and resolve where it wrote them, while the
+    /// body is emitted for the block, which `method_ref` already names.
     fn callee_of_trait_declaration(
         &mut self,
-        receiver_name: &str,
-        method_name: &str,
         trait_decl: DefId,
-        module: ModuleSource,
+        impl_def: DefId,
+        method_name: &str,
+        method_ref: StaticMethodRef,
         receiver_type: Option<TypeId>,
-        trait_name: Option<FqTraitName>,
     ) -> Option<StaticCallee> {
         let declaring = self.tysys.signatures.trait_sig(trait_decl)?;
         let sig = declaring.method(method_name)?.sig.clone();
@@ -375,7 +385,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         params.defaults_module = Some(declaring.module.clone());
         let mut return_type = sig.decl.return_type.unwrap_or(TypeTable::UNIT);
         if let Some(receiver_type) = receiver_type {
-            let instantiated = sig.instantiate_call(&self.tysys.type_table, &[receiver_type], &[]);
+            let frame: Vec<TypeId> = std::iter::once(receiver_type)
+                .chain(self.trait_args_of_impl(impl_def))
+                .collect();
+            let instantiated = sig.instantiate_call(&self.tysys.type_table, &frame, &[]);
             params.param_types = instantiated.param_types;
             return_type = instantiated.return_type;
         }
@@ -383,22 +396,88 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             params,
             own_params: sig.own_params,
             return_type,
-            method_ref: StaticMethodRef::new(
-                module,
-                receiver_name,
-                method_name,
-                trait_name,
-                Some(sig.def),
-            ),
+            method_ref,
         })
     }
 
-    /// The traits to name when several supply one static, in the order the
-    /// blocks were written. `None` where one trait answers, however many times
-    /// it is implemented: naming it as both alternatives is a remedy nobody can
-    /// write.
-    fn ambiguous_alternatives(&self, supplies: &[TraitSupply]) -> Option<Vec<String>> {
-        let distinct: IndexSet<DefId> = supplies.iter().map(|s| s.trait_decl).collect();
+    /// The rules, applied once to every candidate whatever rung produced it.
+    ///
+    /// Order is the design: shadowing and kind narrow to the declarations the
+    /// spelling reaches at all, the ambiguity is reported over those because no
+    /// argument separates traits, and only then does the argument pick — before
+    /// a written body outranks an inherited one, since a written body the
+    /// argument rejects is not an answer.
+    fn select_candidate(
+        &self,
+        mut candidates: Vec<Candidate>,
+        arg_hints: &[String],
+        shadowed: impl Fn(CandidateKind) -> bool,
+    ) -> Selection {
+        // An inherent declaration shadows an inherited one of the same kind: a
+        // receiver-less declaration beside an instance one is no alternative,
+        // since different argument lists reach them.
+        candidates.retain(|c| !shadowed(c.kind));
+        // Where the call writes the argument this declaration checks first: a
+        // receiver-taking one reached as `Type::method(&recv, …)` has the
+        // receiver at argument zero, so its own parameter is argument one.
+        let hint_for = |kind| match kind {
+            CandidateKind::Static => arg_hints.first(),
+            CandidateKind::Instance => arg_hints.get(1),
+        };
+        // A receiver-less declaration answers before a receiver-taking one, so
+        // `Type::method(x)` is a static's call before it is a UFCS receiver.
+        if candidates.iter().any(|c| c.kind == CandidateKind::Static) {
+            candidates.retain(|c| c.kind == CandidateKind::Static);
+        }
+        if let Some(alternatives) = self.ambiguous_alternatives(&candidates) {
+            return Selection::Ambiguous(alternatives);
+        }
+        // The argument picks among the declarations, reading the parameter the
+        // impl declares rather than the trait it names.
+        candidates
+            .retain(|c| self.selector_admits(&c.selector, hint_for(c.kind).map(String::as_str)));
+        // What the argument admits, a written body outranks an inherited one of.
+        if candidates
+            .iter()
+            .any(|c| c.origin == CandidateOrigin::Written)
+        {
+            candidates.retain(|c| c.origin == CandidateOrigin::Written);
+        }
+        match candidates.len() {
+            0 => Selection::None,
+            1 => Selection::One(Box::new(candidates.remove(0))),
+            // One trait, several impls, and no argument that separated them.
+            _ => Selection::Overloaded,
+        }
+    }
+
+    /// Whether the argument reaches this parameter. A parameter still carrying
+    /// an open slot equals no instantiation verbatim, and the mangled name
+    /// carries the impl's spelling either way.
+    ///
+    /// Comparing names is this mechanism's ceiling; `TypeId` matching is the
+    /// replacement (WEP 2026-07-31 phase 4).
+    fn selector_admits(&self, selector: &Selector, hint: Option<&str>) -> bool {
+        // Nothing to select on, so every declaration of the name stays and
+        // several of them are the overload the call site settles.
+        let Some(hint) = hint else {
+            return true;
+        };
+        match selector {
+            Selector::Absent => true,
+            Selector::Blanket => false,
+            Selector::Type(param) => {
+                let table = self.tysys.type_table.borrow();
+                table.contains_type_param(*param) || table.type_name(*param) == hint
+            }
+        }
+    }
+
+    /// The traits to name when several supply one name, in the order the blocks
+    /// were written. `None` where one trait answers, however many times it is
+    /// implemented: naming it as both alternatives is a remedy nobody can write.
+    fn ambiguous_alternatives(&self, candidates: &[Candidate]) -> Option<Vec<String>> {
+        let distinct: IndexSet<DefId> = candidates.iter().map(|c| c.trait_decl).collect();
         (distinct.len() > 1).then(|| {
             distinct
                 .into_iter()
@@ -424,41 +503,123 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// The traits a block on the receiver implements that supply `method_name`
-    /// as a static, whether the block declares its own body or leaves the
-    /// trait's default to answer. Read off the blocks rather than resolved:
-    /// resolving is what the call has not done yet, and doing it here decides
-    /// an overload.
-    fn traits_supplying_static(&self, key: &ImplTargetKey, method_name: &str) -> Vec<TraitSupply> {
-        let Some(impls) = self.tysys.trait_env.impl_index.get(key) else {
-            return Vec::new();
-        };
-        impls
-            .iter()
-            .filter_map(|&impl_def| {
-                let impl_sig = self.tysys.signatures.impl_sig(impl_def)?;
-                let trait_decl = impl_sig.trait_decl?;
-                let declared = self
+    /// Every declaration the receiver's trait blocks supply for `method_name`,
+    /// in the order the blocks were written — the body a block writes, else the
+    /// trait's default where it left one. Facts only: what to do with several
+    /// is [`Self::select_candidate`]'s.
+    fn trait_candidates(
+        &self,
+        receiver_name: &str,
+        method_name: &str,
+        target_hint: Option<&ImplTargetKey>,
+        receiver_type: Option<TypeId>,
+    ) -> Vec<Candidate> {
+        self.trait_impls_for_receiver(receiver_name, target_hint)
+            .into_iter()
+            .filter_map(|impl_def| {
+                let header = &self.tysys.trait_env.impl_headers[&impl_def];
+                let trait_name = self
                     .tysys
-                    .signatures
-                    .trait_sig(trait_decl)?
-                    .method(method_name)?;
-                if declared.sig.self_kind != ast::SelfKind::None {
-                    return None;
-                }
-                let written_here = self.tysys.trait_env.impl_headers[&impl_def]
-                    .methods
-                    .iter()
-                    .any(|m| m.name == method_name);
-                // A required method the block leaves undeclared is its own
-                // error, reported where the two are compared.
-                (written_here || declared.default_body.is_some()).then_some(TraitSupply {
-                    trait_decl,
+                    .trait_env
+                    .fq_trait_of_impl(header, &self.tysys.resolutions)?;
+                let trait_decl = self.tysys.signatures.impl_sig(impl_def)?.trait_decl?;
+                let build = |method_id, kind, origin, selector| Candidate {
                     impl_def,
-                    inherited: !written_here,
-                })
+                    trait_decl,
+                    trait_name,
+                    method_id,
+                    kind,
+                    origin,
+                    selector,
+                };
+                match header.methods.iter().find(|m| m.name == method_name) {
+                    Some(method) => Some(self.written_candidate(header, method.def, build)),
+                    None => self.inherited_candidate(
+                        trait_decl,
+                        impl_def,
+                        method_name,
+                        receiver_type,
+                        build,
+                    ),
+                }
             })
             .collect()
+    }
+
+    /// The candidate for a body the block writes. Its parameter is already in
+    /// the block's own frame, so a slot the block fills is a blanket and
+    /// anything else is what the argument is compared against.
+    fn written_candidate(
+        &self,
+        header: &ImplHeader,
+        method_id: DefId,
+        build: impl FnOnce(DefId, CandidateKind, CandidateOrigin, Selector) -> Candidate,
+    ) -> Candidate {
+        let sig = self
+            .tysys
+            .signatures
+            .method_sig(method_id)
+            .expect("the decl pass records every impl-declared method's signature");
+        let selector = match sig.decl.param_types.get(sig.first_value_param()) {
+            None => Selector::Absent,
+            Some(&param) if self.param_filled_by_block(header, sig, param) => Selector::Blanket,
+            Some(&param) => Selector::Type(param),
+        };
+        build(
+            method_id,
+            CandidateKind::of(sig.self_kind),
+            CandidateOrigin::Written,
+            selector,
+        )
+    }
+
+    /// The candidate for the trait's default body, where the block wrote none.
+    /// The trait's frame numbers `Self` as slot 0 and the trait's own parameters
+    /// after it, so the block's trait arguments follow the receiver: reading the
+    /// default at the receiver alone leaves them open, and every argument then
+    /// reaches every block.
+    ///
+    /// `None` where the trait left the method required, which is the block's own
+    /// error and reported where the two are compared.
+    fn inherited_candidate(
+        &self,
+        trait_decl: DefId,
+        impl_def: DefId,
+        method_name: &str,
+        receiver_type: Option<TypeId>,
+        build: impl FnOnce(DefId, CandidateKind, CandidateOrigin, Selector) -> Candidate,
+    ) -> Option<Candidate> {
+        let declared = self
+            .tysys
+            .signatures
+            .trait_sig(trait_decl)?
+            .method(method_name)?;
+        declared.default_body.as_ref()?;
+        let frame: Vec<TypeId> = std::iter::once(receiver_type.unwrap_or(TypeTable::UNKNOWN))
+            .chain(self.trait_args_of_impl(impl_def))
+            .collect();
+        let instantiated = declared
+            .sig
+            .instantiate_call(&self.tysys.type_table, &frame, &[]);
+        Some(build(
+            declared.sig.def,
+            CandidateKind::of(declared.sig.self_kind),
+            CandidateOrigin::Inherited,
+            instantiated
+                .param_types
+                .get(declared.sig.first_value_param())
+                .map_or(Selector::Absent, |&p| Selector::Type(p)),
+        ))
+    }
+
+    /// The block's trait-reference arguments, which fill the trait's frame past
+    /// `Self`.
+    fn trait_args_of_impl(&self, impl_def: DefId) -> Vec<TypeId> {
+        self.tysys
+            .signatures
+            .impl_sig(impl_def)
+            .map(|impl_sig| impl_sig.trait_type_args.clone())
+            .unwrap_or_default()
     }
 
     /// Whether the receiver declares a `variant` case, an `enum` case or a

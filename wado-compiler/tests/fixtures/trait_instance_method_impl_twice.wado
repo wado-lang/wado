@@ -1,0 +1,34 @@
+//! One trait implemented twice, on its instance method. Through `M::go(&m, x)`
+//! the receiver occupies the first argument, so a selection reading argument
+//! zero compares the receiver against the parameter the impls differ on and
+//! can never separate them.
+
+trait Conv<T> {
+    fn go(&self, v: T) -> i32;
+}
+
+struct M {}
+
+impl Conv<i32> for M {
+    fn go(&self, v: i32) -> i32 {
+        return 1;
+    }
+}
+
+impl Conv<String> for M {
+    fn go(&self, v: String) -> i32 {
+        return 2;
+    }
+}
+
+test "the argument after the receiver picks the impl" {
+    let m = M {};
+    assert M::go(&m, "x") == 2;
+    assert M::go(&m, 5) == 1;
+}
+
+test "and dot syntax agrees with it" {
+    let m = M {};
+    assert m.go("x") == 2;
+    assert m.go(5) == 1;
+}
