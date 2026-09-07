@@ -1595,19 +1595,19 @@ pub enum LexerAltsScan {
     /// Every arm consumes the same fixed number of chars, so longest and
     /// first-match coincide and the cheaper emit stays byte-identical.
     FixedLenArms,
-    /// An arm carries a semantic predicate anywhere below it; scanning every
-    /// arm would change how often the grammar sees it.
+    /// An arm carries a semantic predicate anywhere below it, which the lexer
+    /// ATN cannot run. Only the routing question reads this; the emit measures
+    /// such an arm like any other (`lexer_alts_lengths`).
     ArmPredicate,
 }
 
-pub fn lexer_alts_scan(alts: &List<LexerAlternative>, all_rules: &List<LexerRule>) -> LexerAltsScan {
+/// How the arms compare on length, which is the whole of what the emit needs:
+/// it runs a predicate while scoring, so an arm carrying one is still an arm to
+/// measure. A predicate says whether its own arm matches, never how the lengths
+/// compare, so it is orthogonal to this question.
+pub fn lexer_alts_lengths(alts: &List<LexerAlternative>, all_rules: &List<LexerRule>) -> LexerAltsScan {
     if alts.len() < 2 {
         return LexerAltsScan::SingleArm;
-    }
-    for let alt of alts {
-        if lexer_alt_has_predicate_below(alt, all_rules) {
-            return LexerAltsScan::ArmPredicate;
-        }
     }
     let mut common = -1;
     for let alt of alts {
@@ -1625,6 +1625,21 @@ pub fn lexer_alts_scan(alts: &List<LexerAlternative>, all_rules: &List<LexerRule
     return LexerAltsScan::FixedLenArms;
 }
 
+/// `lexer_alts_lengths` for the routing question, where a predicate is
+/// disqualifying: `latn_match` refuses one, so a predicate-carrying alternation
+/// is never the undecidable-arms case that routes to the lexer ATN.
+pub fn lexer_alts_scan(alts: &List<LexerAlternative>, all_rules: &List<LexerRule>) -> LexerAltsScan {
+    if alts.len() < 2 {
+        return LexerAltsScan::SingleArm;
+    }
+    for let alt of alts {
+        if lexer_alt_has_predicate_below(alt, all_rules) {
+            return LexerAltsScan::ArmPredicate;
+        }
+    }
+    return lexer_alts_lengths(alts, all_rules);
+}
+
 /// Whether a tail-position alternation needs the maximal-munch emit.
 /// The emit an alternation takes, tail position included: the whole
 /// `gen_lexer_alts` decision as one value.
@@ -1635,18 +1650,17 @@ pub enum LexerAltsEmit {
     FirstMatchNotTail,
     FirstMatchSingleArm,
     FirstMatchFixedLenArms,
-    FirstMatchArmPredicate,
 }
 
 pub fn lexer_alts_emit(alts: &List<LexerAlternative>, all_rules: &List<LexerRule>, tail: bool) -> LexerAltsEmit {
     if !tail {
         return LexerAltsEmit::FirstMatchNotTail;
     }
-    return match lexer_alts_scan(alts, all_rules) {
+    return match lexer_alts_lengths(alts, all_rules) {
         Longest => LexerAltsEmit::MaximalMunch,
         SingleArm => LexerAltsEmit::FirstMatchSingleArm,
         FixedLenArms => LexerAltsEmit::FirstMatchFixedLenArms,
-        ArmPredicate => LexerAltsEmit::FirstMatchArmPredicate,
+        ArmPredicate => panic("lexer_alts_lengths never reports the routing question's predicate carve-out"),
     };
 }
 

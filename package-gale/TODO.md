@@ -91,14 +91,16 @@ Remaining:
 
 ## Rust corpus — this repository's own `.rs`
 
-`tools/rust_corpus_check.wado` over `git ls-files '*.rs'` (`AGENTS.md` has the invocation) is the repository-wide number. Measured 2026-09-07 at `e925ee58bf`: **494 files, 451 with diagnostics**, 449 of them reporting exactly one — every failing file dies once and recovery carries the rest, so a class closed is that many files clean.
+`tools/rust_corpus_check.wado` (`AGENTS.md` has the invocation) is the repository-wide number, and `wado-compiler/**/*.rs` is the tracked subset. Every failing file reports exactly one diagnostic — it dies once and recovery carries the rest — so a class closed is that many files clean, and the stack is where the check _reports_, which recovery can move a long way from the cause.
 
-Two classes cover 413 of the 451. Each entry carries the minimal `.rs` that reproduces it; the stack is where the check reports, which recovery can move away from the cause.
+`wado-compiler`: **327 files, 303 with diagnostics** at `e925ee58bf`, **60** now. Closed so far: the caller's continuation stopping at the enclosing group (`useTree`), a greedy loop eating its alternative's mandatory suffix (`matchArms`), a nullable alternative at a lookahead nothing selects (`structExprFields`), a recursive non-greedy fragment (`RAW_STRING_LITERAL`), a predicate-carrying alternation scored by first match rather than length (`FLOAT_LITERAL`), and the grammar being two Rust versions behind (let-else, let chains).
 
-- [ ] **`use a::b::*;` and `use a::b::{…};` do not parse** — 362 files, `crate > item > visItem > useDeclaration > useTree`, "expected LCURLYBRACE or STAR; no viable alternative". One segment is fine (`use a::*;`, `use a::{x, y};` both parse), as is the alternative with no group at all (`use a::b::c;`). `useTree : (simplePath? PATHSEP)? (STAR | LCURLYBRACE …) | simplePath …`, and `simplePath`'s own `(PATHSEP simplePathSegment)*` sits at the enclosing group's tail, so the trailing `::` is the one the group needs.
-- [ ] **A `match` whose last arm carries a trailing comma does not parse** — 51 files (17 reported at `matchArm > pattern > patternNoTopAlt`, 34 as "expected KW_EXTERN" after recovery lands at an item boundary, so the stack names `externBlock` rather than the match). `fn a() { match x { A => 1, } }` fails at the closing `}`; dropping the comma parses. `matchArms : (matchArm FATARROW matchArmExpression)* matchArm FATARROW expression COMMA?` — the loop's `matchArmExpression` admits the trailing `COMMA`, so it takes the arm the mandatory tail needs.
+What is left, each minimized:
 
-The rest is a long tail: 10 reporting `ifExpression > blockExpression` as `expected LCURLYBRACE; got "0"`, 14 at `letStatement`, 8 as `expected SEMI; got "#"`, and singletons below that.
+- [ ] **A struct literal wins the condition of an `if` / `while`.** `if any_error { None } else { … }` reads `any_error { None }` as a struct expression, because the alternative tournament takes the longest and nothing tells it the caller still needs a block. Rust's grammar spells this out with a condition that excludes struct expressions; the vendored one only marks it `/*except structExpression*/` on `predicateLoopExpression` and ANTLR4 mis-parses it the same way, so this is not a compatibility divergence — it is the context-sensitivity neither grammar encodes. Gale has the material to decide it without the grammar saying so: the scan already takes the caller's `follow`, and an alternative whose scan ends where the caller's continuation cannot start is not viable. That is the alternative-side twin of `RepeatOp.reserve_scan`. ~27 files, and every `else` in the tail of the list below is this.
+- [ ] **`|p: &&str|` does not parse** — 3 files, `letStatement > expression > closureExpression`, "expected OR; got `:`". `&&` lexes as `ANDAND`, and `referenceType : AND …` never splits it, so a doubly-referenced type has no rule. ANTLR4 has the same gap here; `shl` / `shr` show the grammar's own answer for the mirror case on `<` / `>`, through the parser base.
+
+The remaining ~30 are a long tail: 5 `expected RCURLYBRACE; got "("` under `matchExpression`, 3 `expected SEMI; got "("`, 2 `expected SEMI; got "<"`, 2 `no alternative of identifier matches`, and singletons.
 
 ## LL prediction — parked gaps
 

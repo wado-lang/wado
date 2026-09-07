@@ -5319,7 +5319,7 @@ fn try_FLOAT_LITERAL(chars: &List<char>, start: i32) -> i32 with (RustLexerBase,
     let mut pos = start;
     if !(RustLexerBase::float_literal_possible(LexerView { chars, start, pos })) { return -1; }
     let alts_saved_70 = pos;
-    let mut alts_ok_70 = false;
+    let mut alts_best_70 = -1;
     alts_70_0: {
         pos = alts_saved_70;
         pos = try_DEC_LITERAL(chars, pos);
@@ -5327,88 +5327,87 @@ fn try_FLOAT_LITERAL(chars: &List<char>, start: i32) -> i32 with (RustLexerBase,
         if pos >= chars.len() || chars[pos] != '.' { break alts_70_0; }
         pos += 1;
         if !(RustLexerBase::float_dot_possible(LexerView { chars, start, pos })) { break alts_70_0; }
-        alts_ok_70 = true;
+        if pos > alts_best_70 { alts_best_70 = pos; }
     }
-    if !alts_ok_70 {
-        alts_70_1: {
-            pos = alts_saved_70;
+    alts_70_1: {
+        pos = alts_saved_70;
+        pos = try_DEC_LITERAL(chars, pos);
+        if pos < 0 { break alts_70_1; }
+        let opt_saved_71 = pos;
+        let mut opt_ok_71 = false;
+        rep_71: {
+            if pos >= chars.len() || chars[pos] != '.' { break rep_71; }
+            pos += 1;
             pos = try_DEC_LITERAL(chars, pos);
-            if pos < 0 { break alts_70_1; }
-            let opt_saved_71 = pos;
-            let mut opt_ok_71 = false;
-            rep_71: {
-                if pos >= chars.len() || chars[pos] != '.' { break rep_71; }
+            if pos < 0 { break rep_71; }
+            opt_ok_71 = true;
+        }
+        if !opt_ok_71 { pos = opt_saved_71; }
+        let opt_saved_72 = pos;
+        let mut opt_ok_72 = false;
+        rep_72: {
+            if pos >= chars.len() { break rep_72; }
+            if !((chars[pos] matches { 'e' | 'E' })) { break rep_72; }
+            pos += 1;
+            let opt_saved_73 = pos;
+            let mut opt_ok_73 = false;
+            rep_73: {
+                if pos >= chars.len() { break rep_73; }
+                if !((chars[pos] matches { '+' | '-' })) { break rep_73; }
                 pos += 1;
-                pos = try_DEC_LITERAL(chars, pos);
-                if pos < 0 { break rep_71; }
-                opt_ok_71 = true;
+                opt_ok_73 = true;
             }
-            if !opt_ok_71 { pos = opt_saved_71; }
-            let opt_saved_72 = pos;
-            let mut opt_ok_72 = false;
-            rep_72: {
-                if pos >= chars.len() { break rep_72; }
-                if !((chars[pos] matches { 'e' | 'E' })) { break rep_72; }
-                pos += 1;
-                let opt_saved_73 = pos;
-                let mut opt_ok_73 = false;
-                rep_73: {
-                    if pos >= chars.len() { break rep_73; }
-                    if !((chars[pos] matches { '+' | '-' })) { break rep_73; }
+            if !opt_ok_73 { pos = opt_saved_73; }
+            loop {
+                let rep_saved_74 = pos;
+                rep_74: {
+                    if pos >= chars.len() || chars[pos] != '_' { break rep_74; }
                     pos += 1;
-                    opt_ok_73 = true;
+                    continue;
                 }
-                if !opt_ok_73 { pos = opt_saved_73; }
-                loop {
-                    let rep_saved_74 = pos;
-                    rep_74: {
-                        if pos >= chars.len() || chars[pos] != '_' { break rep_74; }
-                        pos += 1;
-                        continue;
-                    }
-                    pos = rep_saved_74;
-                    break;
-                }
-                pos = try_DEC_LITERAL(chars, pos);
-                if pos < 0 { break rep_72; }
-                opt_ok_72 = true;
+                pos = rep_saved_74;
+                break;
             }
-            if !opt_ok_72 { pos = opt_saved_72; }
-            let opt_saved_75 = pos;
-            let mut opt_ok_75 = false;
-            rep_75: {
-                let alts_saved_76 = pos;
-                let mut alts_ok_76 = false;
-                alts_76_0: {
+            pos = try_DEC_LITERAL(chars, pos);
+            if pos < 0 { break rep_72; }
+            opt_ok_72 = true;
+        }
+        if !opt_ok_72 { pos = opt_saved_72; }
+        let opt_saved_75 = pos;
+        let mut opt_ok_75 = false;
+        rep_75: {
+            let alts_saved_76 = pos;
+            let mut alts_ok_76 = false;
+            alts_76_0: {
+                pos = alts_saved_76;
+                if pos >= chars.len() || chars[pos] != 'f' { break alts_76_0; }
+                pos += 1;
+                if pos >= chars.len() || chars[pos] != '3' { break alts_76_0; }
+                pos += 1;
+                if pos >= chars.len() || chars[pos] != '2' { break alts_76_0; }
+                pos += 1;
+                alts_ok_76 = true;
+            }
+            if !alts_ok_76 {
+                alts_76_1: {
                     pos = alts_saved_76;
-                    if pos >= chars.len() || chars[pos] != 'f' { break alts_76_0; }
+                    if pos >= chars.len() || chars[pos] != 'f' { break alts_76_1; }
                     pos += 1;
-                    if pos >= chars.len() || chars[pos] != '3' { break alts_76_0; }
+                    if pos >= chars.len() || chars[pos] != '6' { break alts_76_1; }
                     pos += 1;
-                    if pos >= chars.len() || chars[pos] != '2' { break alts_76_0; }
+                    if pos >= chars.len() || chars[pos] != '4' { break alts_76_1; }
                     pos += 1;
                     alts_ok_76 = true;
                 }
-                if !alts_ok_76 {
-                    alts_76_1: {
-                        pos = alts_saved_76;
-                        if pos >= chars.len() || chars[pos] != 'f' { break alts_76_1; }
-                        pos += 1;
-                        if pos >= chars.len() || chars[pos] != '6' { break alts_76_1; }
-                        pos += 1;
-                        if pos >= chars.len() || chars[pos] != '4' { break alts_76_1; }
-                        pos += 1;
-                        alts_ok_76 = true;
-                    }
-                }
-                if !alts_ok_76 { break rep_75; }
-                opt_ok_75 = true;
             }
-            if !opt_ok_75 { pos = opt_saved_75; }
-            alts_ok_70 = true;
+            if !alts_ok_76 { break rep_75; }
+            opt_ok_75 = true;
         }
+        if !opt_ok_75 { pos = opt_saved_75; }
+        if pos > alts_best_70 { alts_best_70 = pos; }
     }
-    if !alts_ok_70 { return -1; }
+    if alts_best_70 < 0 { return -1; }
+    pos = alts_best_70;
     return pos;
 }
 

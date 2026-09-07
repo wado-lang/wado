@@ -1,0 +1,49 @@
+//! A lexer alternation whose arms reach different lengths and one of which
+//! carries a semantic predicate.
+//!
+//! ANTLR4's lexer takes the longest match. The predicate says whether its own
+//! arm matches, not how the arms compare on length, so an arm carrying one is
+//! still an arm to measure. Stopping at the first arm that matches takes the
+//! short one — `RustLexer.g4`'s `FLOAT_LITERAL` lexed `0.75` as `0.` and `75`,
+//! and every `f64` constant in this repository fell over it.
+
+use g from "./grammars/lexer_alt_pred_longest.g4"
+    with {
+        generator: { module: "../src/generator.wado", output_dir: "./generated/cst_lexer_alt_pred_longest" },
+    };
+
+fn kinds(input: &String) -> List<String> {
+    let tokens = g::tokenize(input);
+    let mut out: List<String> = [];
+    for let mut i = 0; i < tokens.len(); i += 1 {
+        out.push(g::token_kind_name(tokens.kinds[i]));
+    }
+    return out;
+}
+
+fn assert_kinds(input: &String, expected: &List<String>) {
+    let actual = kinds(input);
+    assert actual == *expected, `\ninput:    ${*input}\nexpected: ${*expected}\nactual:   ${actual}`;
+}
+
+// The hit case: the predicate-carrying arm matches `1.` and the other reaches
+// `1.5`, so the longer one wins.
+test "the longer arm wins over the predicate-carrying one" {
+    assert_kinds(&"1.5", &["NUM", "Eof"]);
+}
+
+// The predicate-carrying arm is longer here, and still wins.
+test "the predicate-carrying arm wins when it is the longer" {
+    assert_kinds(&"1.", &["NUM", "Eof"]);
+}
+
+// The rejection case: `{ pos - start != 3 }?` is false for `12.`, so that arm
+// does not match at all and the shorter `12` is the answer. A change that
+// scored the arms without running the predicate would take `12.` here.
+test "a false predicate takes its arm out of the running" {
+    assert_kinds(&"12.", &["NUM", "DOT", "Eof"]);
+}
+
+test "and the tokens after it are unaffected" {
+    assert_kinds(&"1.5 ab", &["NUM", "ID", "Eof"]);
+}
