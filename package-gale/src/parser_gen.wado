@@ -406,13 +406,14 @@ fn gen_scan_function(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule,
 
 /// The gate scope `rule` opens, or `null` where the scan cannot run it.
 ///
-/// A field the scan does not simulate has no `SCAN_GATE` slot to save. A
-/// left-recursive rule is refused for a different reason: its `scan_X` carries
-/// `min_prec` and, when a mid operand is gated, `lr_cont` — a signature built
-/// where the precedence loop is emitted, not here, so a wrapper written here
-/// would declare a different one and callers passing `min_prec` would not
-/// compile. Refusing says so; the alternative is a second place that has to be
-/// kept in step with the first.
+/// A field the scan does not simulate has no `SCAN_GATE` slot to save.
+///
+/// A left-recursive rule is refused for a different reason. Its `scan_X` also
+/// carries `min_prec`, and `lr_cont` when a mid operand is gated. That
+/// signature is built where the precedence loop is emitted, so a wrapper
+/// written here would declare a different one and callers passing `min_prec`
+/// would not compile. Refusing says so; supporting it means a second place to
+/// keep in step with the first.
 fn scan_gate_scope(rule: &ParserRule, lowered_rule: &Rule, ctx: &mut GenContext) -> Option<GateScope> {
     if !ctx.emit_scan_gate() {
         return null;
@@ -1916,9 +1917,11 @@ fn gen_scan_optional_probe(
 ) {
     w.begin(&`if ${scan_repeat_guard(&re.inner_admits, caller_follow_gate, ctx)}`);
     w.line(&"let sp = pos;");
+    gen_scan_gate_save(w, ctx, &"sp");
     gen_scan_op_element_assign(w, &re.body, ctx);
     w.begin(&"if pos < 0");
     w.line(&"pos = sp;");
+    gen_scan_gate_restore(w, ctx, &"sp");
     w.else_begin(&"else");
     w.line(&"let bp = pos;");
     w.line(&"let mut opt_ok: bool = false;");
@@ -1956,8 +1959,9 @@ fn gen_scan_non_greedy_probe_loop(w: &mut CodeWriter, re: &ScanRepeatElement, ct
     w.line(&"if ng_exit { break; }");
     w.line(&`if !(${guard}) \{ break; \}`);
     w.line(&"let sp = pos;");
+    gen_scan_gate_save(w, ctx, &"sp");
     gen_scan_op_element_assign(w, &re.body, ctx);
-    w.line(&"if pos < 0 { pos = sp; break; }");
+    gen_scan_iteration_rewind(w, ctx, /*looping=*/ true);
     w.line(&"if pos == sp { break; }");
     w.end();
 }
@@ -2147,12 +2151,13 @@ fn gen_scan_iteration(w: &mut CodeWriter, re: &ScanRepeatElement, admits: &Admit
         return;
     }
     w.line(&"let sp = pos;");
+    gen_scan_gate_save(w, ctx, &"sp");
     gen_scan_op_element_assign(w, &re.body, ctx);
     if !looping {
-        w.line(&"if pos < 0 { pos = sp; }");
+        gen_scan_iteration_rewind(w, ctx, /*looping=*/ false);
         return;
     }
-    w.line(&"if pos < 0 { pos = sp; break; }");
+    gen_scan_iteration_rewind(w, ctx, /*looping=*/ true);
     w.line(&"if pos == sp { break; }");
     gen_scan_reserve(w, re, ctx);
     gen_scan_decline_stranded(w, re, ctx);
@@ -2355,14 +2360,14 @@ fn gen_scan_gate_check(w: &mut CodeWriter, gate_cond: &String, fail_stmt: &Strin
     w.line(&`if !(${*gate_cond}) \{ ${*fail_stmt} \}`);
 }
 
-/// Seed the scan's copy of the gate members from the parser, at the point the
-/// parse hands the token array to a scan.
+/// Seed the scan's copy of the gate members from the parser, once per scan the
+/// parse launches.
 ///
-/// This is what makes the simulation start from the truth. A scan reached from
-/// inside another scan inherits its caller's value and is not seeded — that is
-/// the simulation. A scan reached from the parse starts from where the parse
-/// actually is, so a head the parse has already entered is not re-derived, and
-/// nothing a previous scan left behind survives to be read.
+/// This is what starts the simulation from the truth. A scan reached from
+/// inside another scan inherits its caller's value instead, which is the
+/// simulation working. A scan the parse launches starts from where the parse
+/// actually is, so nothing a previous scan left behind survives to be read —
+/// which is why a tournament seeds per candidate and not once.
 fn gen_scan_gate_seed(w: &mut CodeWriter, ctx: &GenContext) {
     if !ctx.emit_scan_gate() {
         return;
@@ -6196,30 +6201,17 @@ fn gen_rep_iteration_entry(
 
 /// Decline an iteration that would strand the loop's own alternative.
 ///
-/// The iteration has already been scanned, so `scan_pos` is where it would end.
-/// Two questions decide it, in that order because the first is a token test and
-/// the second a scan:
+/// `scan_pos` is where the iteration would end. Two questions decide it, the
+/// token test first because the second is a scan: is that end a dead end, with
+/// no further iteration, no continuation and no caller able to resume there;
+/// and is exiting viable at all. Both are needed, and
+/// `driver_cst_loop_declines_stranded_iteration_test` pins each with a case the
+/// other would get wrong.
 ///
-///   1. Is that end a dead end? Nothing continues from it when no further
-///      iteration and no continuation can start there and no caller could
-///      resume there. Where something can, the iteration is the reading that
-///      goes furthest and is taken — which is every ordinary loop, so this is
-///      where the guard costs a few token tests and stops.
-///
-///      "No caller could resume" is the rule's own FOLLOW as well as the
-///      threaded mask, and the static set is the load-bearing half: the mask is
-///      inert wherever no caller threaded one, so asking it alone calls the end
-///      of the input a dead end and declines the last iteration of every
-///      top-level list.
-///   2. Is exiting viable? Only then is there another reading to prefer. A loop
-///      whose alternative has no other reading keeps its iteration and lets the
-///      body report what it cannot match, rather than declining into a worse
-///      error.
-///
-/// Both are needed. `stmt+ expr?` over `{ y } { z }` reaches a dead end by (1)
-/// alone — nothing follows the second block — and taking the iteration is still
-/// right, because exiting would leave `{ z }` to an `expr?` that cannot also
-/// take `{ y }`.
+/// "No caller could resume" asks the rule's classical FOLLOW rather than the
+/// threaded mask. The mask is inert wherever no caller supplied one, so asking
+/// it would call the end of the input a dead end and decline the last iteration
+/// of every top-level list.
 fn gen_rep_decline_stranded(
     w: &mut CodeWriter,
     rep_op: &RepeatOp,
@@ -6250,10 +6242,10 @@ fn gen_rep_decline_stranded(
 /// Save the scan's gate beside a position the scan may rewind to, and put it
 /// back with that position.
 ///
-/// A scan arm that rewinds `pos` and not the gate hands the next arm a value
-/// from a walk that did not happen — an `if` head it entered and never left, so
-/// the next arm measures under a ban the parse will not apply. The gate is part
-/// of where the scan is, so it rewinds with the rest of it.
+/// The gate is part of where the scan is, so it rewinds with the position. An
+/// arm that rewinds one and not the other hands the next arm a value from a
+/// walk that did not happen: an `if` head it entered and never left, whose ban
+/// the parse will not apply.
 fn gen_scan_gate_save(w: &mut CodeWriter, ctx: &GenContext, slot: &String) {
     if !ctx.emit_scan_gate() {
         return;
@@ -6261,6 +6253,22 @@ fn gen_scan_gate_save(w: &mut CodeWriter, ctx: &GenContext, slot: &String) {
     for let f of ctx.scan_gate_fields() {
         w.line(&`let ${*slot}_${*f} = ${SCAN_GATE_HANDLE}.${*f};`);
     }
+}
+
+/// Undo an iteration the scan is abandoning: the position it started at, and
+/// the gate it started with. `looping` ends the loop as well.
+fn gen_scan_iteration_rewind(w: &mut CodeWriter, ctx: &GenContext, looping: bool) {
+    if !ctx.emit_scan_gate() {
+        w.line(&if looping { "if pos < 0 { pos = sp; break; }" } else { "if pos < 0 { pos = sp; }" });
+        return;
+    }
+    w.begin(&"if pos < 0");
+    w.line(&"pos = sp;");
+    gen_scan_gate_restore(w, ctx, &"sp");
+    if looping {
+        w.line(&"break;");
+    }
+    w.end();
 }
 
 fn gen_scan_gate_restore(w: &mut CodeWriter, ctx: &GenContext, slot: &String) {
@@ -7460,18 +7468,13 @@ fn emit_scan_tournament(
     let fsep = follow_sep(ctx.current_rule_reads_follow());
     w.line(&"let _sd_tokens = &p.kinds;");
     w.line(&"let _sd_pos = p.pos;");
-    // A gated candidate can score -1 for a reason the lookahead did not predict,
-    // so a gated tournament can end with nothing viable — and
-    // `emit_index_pick_dispatch` runs its last alternative untested, which was
-    // sound only while some alternative always matched.
+    // A gated candidate scores -1 for a reason the lookahead did not predict, so
+    // a gated tournament can end with nothing viable. `emit_index_pick_dispatch`
+    // runs its last alternative untested, which held only while some alternative
+    // always matched.
     let mut any_gated = false;
     for let mut i = 0; i < sorted_indices.len(); i += 1 {
         let idx = sorted_indices[i];
-        // Per candidate, not once for the tournament: every one starts at
-        // `_sd_pos`, so every one starts from the parser's gate too. A single
-        // seed would hand the second candidate whatever the first left behind —
-        // and a candidate that fails mid-scan leaves a head it never walked out
-        // of.
         gen_scan_gate_seed(w, ctx);
         // Without the caller follow, a trailing token the helper's
         // `follow_yields` gate rejects still counts toward the score.

@@ -7042,16 +7042,26 @@ fn scan_crate(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
     while pos < tokens.len() && tokens[pos] == TK_POUND {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         pos = scan_inner_attribute(tokens, pos, 0);
-        if pos < 0 { pos = sp; break; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+            break;
+        }
         if pos == sp { break; }
         let rs_0 = pos;
         let mut rs_0_ok = false;
         rsv_0: {
             while pos < tokens.len() && _kind_set_0(tokens[pos]) {
                 let sp = pos;
+                let sp_no_struct = SCAN_GATE.no_struct;
                 pos = scan_item(tokens, pos);
-                if pos < 0 { pos = sp; break; }
+                if pos < 0 {
+                    pos = sp;
+                    SCAN_GATE.no_struct = sp_no_struct;
+                    break;
+                }
                 if pos == sp { break; }
             }
             if pos >= tokens.len() || tokens[pos] != TK_EOF { break rsv_0; }
@@ -7063,8 +7073,13 @@ fn scan_crate(tokens: &Array<i32>, pos: i32) -> i32 {
     }
     while pos < tokens.len() && _kind_set_0(tokens[pos]) {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         pos = scan_item(tokens, pos);
-        if pos < 0 { pos = sp; break; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+            break;
+        }
         if pos == sp { break; }
     }
     if pos >= tokens.len() || tokens[pos] != TK_EOF { return -1; }
@@ -7097,8 +7112,13 @@ fn scan_delim_token_tree(tokens: &Array<i32>, pos: i32) -> i32 {
                 pos += 1;
                 while pos < tokens.len() && _kind_set_1(tokens[pos]) {
                     let sp = pos;
+                    let sp_no_struct = SCAN_GATE.no_struct;
                     pos = scan_token_tree(tokens, pos, 0);
-                    if pos < 0 { pos = sp; break; }
+                    if pos < 0 {
+                        pos = sp;
+                        SCAN_GATE.no_struct = sp_no_struct;
+                        break;
+                    }
                     if pos == sp { break; }
                 }
                 if pos >= tokens.len() || tokens[pos] != TK_RPAREN { break try_0; }
@@ -7114,8 +7134,13 @@ fn scan_delim_token_tree(tokens: &Array<i32>, pos: i32) -> i32 {
                 pos += 1;
                 while pos < tokens.len() && _kind_set_1(tokens[pos]) {
                     let sp = pos;
+                    let sp_no_struct = SCAN_GATE.no_struct;
                     pos = scan_token_tree(tokens, pos, 0);
-                    if pos < 0 { pos = sp; break; }
+                    if pos < 0 {
+                        pos = sp;
+                        SCAN_GATE.no_struct = sp_no_struct;
+                        break;
+                    }
                     if pos == sp { break; }
                 }
                 if pos >= tokens.len() || tokens[pos] != TK_RSQUAREBRACKET { break try_1; }
@@ -7131,8 +7156,13 @@ fn scan_delim_token_tree(tokens: &Array<i32>, pos: i32) -> i32 {
                 pos += 1;
                 while pos < tokens.len() && _kind_set_1(tokens[pos]) {
                     let sp = pos;
+                    let sp_no_struct = SCAN_GATE.no_struct;
                     pos = scan_token_tree(tokens, pos, 0);
-                    if pos < 0 { pos = sp; break; }
+                    if pos < 0 {
+                        pos = sp;
+                        SCAN_GATE.no_struct = sp_no_struct;
+                        break;
+                    }
                     if pos == sp { break; }
                 }
                 if pos >= tokens.len() || tokens[pos] != TK_RCURLYBRACE { break try_2; }
@@ -7161,8 +7191,13 @@ fn scan_token_tree(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
                 if pos < 0 { break try_0; }
                 while pos < tokens.len() && _kind_set_2(tokens[pos]) && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
                     let sp = pos;
+                    let sp_no_struct = SCAN_GATE.no_struct;
                     pos = scan_token_tree_token(tokens, pos);
-                    if pos < 0 { pos = sp; break; }
+                    if pos < 0 {
+                        pos = sp;
+                        SCAN_GATE.no_struct = sp_no_struct;
+                        break;
+                    }
                     if pos == sp { break; }
                 }
                 break scan_alts;
@@ -7268,8 +7303,13 @@ fn scan_macro_invocation_semi(tokens: &Array<i32>, pos: i32) -> i32 {
                 pos += 1;
                 while pos < tokens.len() && _kind_set_1(tokens[pos]) {
                     let sp = pos;
+                    let sp_no_struct = SCAN_GATE.no_struct;
                     pos = scan_token_tree(tokens, pos, 0);
-                    if pos < 0 { pos = sp; break; }
+                    if pos < 0 {
+                        pos = sp;
+                        SCAN_GATE.no_struct = sp_no_struct;
+                        break;
+                    }
                     if pos == sp { break; }
                 }
                 if pos >= tokens.len() || tokens[pos] != TK_RPAREN { break try_0; }
@@ -7289,8 +7329,13 @@ fn scan_macro_invocation_semi(tokens: &Array<i32>, pos: i32) -> i32 {
                 pos += 1;
                 while pos < tokens.len() && _kind_set_1(tokens[pos]) {
                     let sp = pos;
+                    let sp_no_struct = SCAN_GATE.no_struct;
                     pos = scan_token_tree(tokens, pos, 0);
-                    if pos < 0 { pos = sp; break; }
+                    if pos < 0 {
+                        pos = sp;
+                        SCAN_GATE.no_struct = sp_no_struct;
+                        break;
+                    }
                     if pos == sp { break; }
                 }
                 if pos >= tokens.len() || tokens[pos] != TK_RSQUAREBRACKET { break try_1; }
@@ -7310,8 +7355,13 @@ fn scan_macro_invocation_semi(tokens: &Array<i32>, pos: i32) -> i32 {
                 pos += 1;
                 while pos < tokens.len() && _kind_set_1(tokens[pos]) {
                     let sp = pos;
+                    let sp_no_struct = SCAN_GATE.no_struct;
                     pos = scan_token_tree(tokens, pos, 0);
-                    if pos < 0 { pos = sp; break; }
+                    if pos < 0 {
+                        pos = sp;
+                        SCAN_GATE.no_struct = sp_no_struct;
+                        break;
+                    }
                     if pos == sp { break; }
                 }
                 if pos >= tokens.len() || tokens[pos] != TK_RCURLYBRACE { break try_2; }
@@ -7397,6 +7447,7 @@ fn scan_macro_rules(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     if pos < 0 { return -1; }
     while pos < tokens.len() && tokens[pos] == TK_SEMI && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         sg_1_done: {
             sg_1: {
                 if pos >= tokens.len() || tokens[pos] != TK_SEMI { break sg_1; }
@@ -7407,7 +7458,11 @@ fn scan_macro_rules(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
             }
             pos = -1;
         }
-        if pos < 0 { pos = sp; break; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+            break;
+        }
         if pos == sp { break; }
         let dk_2 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
         if !(dk_2 == TK_SEMI || dk_2 == TK_SEMI || _kind_set_56(dk_2)) {
@@ -7457,8 +7512,13 @@ fn scan_macro_matcher(tokens: &Array<i32>, pos: i32) -> i32 {
                 pos += 1;
                 while pos < tokens.len() && _kind_set_1(tokens[pos]) {
                     let sp = pos;
+                    let sp_no_struct = SCAN_GATE.no_struct;
                     pos = scan_macro_match(tokens, pos, 0);
-                    if pos < 0 { pos = sp; break; }
+                    if pos < 0 {
+                        pos = sp;
+                        SCAN_GATE.no_struct = sp_no_struct;
+                        break;
+                    }
                     if pos == sp { break; }
                 }
                 if pos >= tokens.len() || tokens[pos] != TK_RPAREN { break try_0; }
@@ -7474,8 +7534,13 @@ fn scan_macro_matcher(tokens: &Array<i32>, pos: i32) -> i32 {
                 pos += 1;
                 while pos < tokens.len() && _kind_set_1(tokens[pos]) {
                     let sp = pos;
+                    let sp_no_struct = SCAN_GATE.no_struct;
                     pos = scan_macro_match(tokens, pos, 0);
-                    if pos < 0 { pos = sp; break; }
+                    if pos < 0 {
+                        pos = sp;
+                        SCAN_GATE.no_struct = sp_no_struct;
+                        break;
+                    }
                     if pos == sp { break; }
                 }
                 if pos >= tokens.len() || tokens[pos] != TK_RSQUAREBRACKET { break try_1; }
@@ -7491,8 +7556,13 @@ fn scan_macro_matcher(tokens: &Array<i32>, pos: i32) -> i32 {
                 pos += 1;
                 while pos < tokens.len() && _kind_set_1(tokens[pos]) {
                     let sp = pos;
+                    let sp_no_struct = SCAN_GATE.no_struct;
                     pos = scan_macro_match(tokens, pos, 0);
-                    if pos < 0 { pos = sp; break; }
+                    if pos < 0 {
+                        pos = sp;
+                        SCAN_GATE.no_struct = sp_no_struct;
+                        break;
+                    }
                     if pos == sp { break; }
                 }
                 if pos >= tokens.len() || tokens[pos] != TK_RCURLYBRACE { break try_2; }
@@ -7521,8 +7591,13 @@ fn scan_macro_match(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
                 if pos < 0 { break try_0; }
                 while pos < tokens.len() && _kind_set_5(tokens[pos]) && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
                     let sp = pos;
+                    let sp_no_struct = SCAN_GATE.no_struct;
                     pos = scan_macro_match_token(tokens, pos);
-                    if pos < 0 { pos = sp; break; }
+                    if pos < 0 {
+                        pos = sp;
+                        SCAN_GATE.no_struct = sp_no_struct;
+                        break;
+                    }
                     if pos == sp { break; }
                 }
                 break scan_alts;
@@ -7548,16 +7623,25 @@ fn scan_macro_match(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
                 if pos < 0 { break try_3; }
                 while pos < tokens.len() && _kind_set_1(tokens[pos]) {
                     let sp = pos;
+                    let sp_no_struct = SCAN_GATE.no_struct;
                     pos = scan_macro_match(tokens, pos, 0);
-                    if pos < 0 { pos = sp; break; }
+                    if pos < 0 {
+                        pos = sp;
+                        SCAN_GATE.no_struct = sp_no_struct;
+                        break;
+                    }
                     if pos == sp { break; }
                 }
                 if pos >= tokens.len() || tokens[pos] != TK_RPAREN { break try_3; }
                 pos += 1;
                 if pos < tokens.len() && _kind_set_6(tokens[pos]) {
                     let sp = pos;
+                    let sp_no_struct = SCAN_GATE.no_struct;
                     pos = scan_macro_rep_sep(tokens, pos);
-                    if pos < 0 { pos = sp; }
+                    if pos < 0 {
+                        pos = sp;
+                        SCAN_GATE.no_struct = sp_no_struct;
+                    }
                 }
                 pos = scan_macro_rep_op(tokens, pos);
                 if pos < 0 { break try_3; }
@@ -7756,8 +7840,13 @@ fn scan_item(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
     while pos < tokens.len() && tokens[pos] == TK_POUND {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         pos = scan_outer_attribute(tokens, pos, 0);
-        if pos < 0 { pos = sp; break; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+            break;
+        }
         if pos == sp { break; }
     }
     let gp_4 = pos;
@@ -7794,8 +7883,12 @@ fn scan_vis_item(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos < tokens.len() && tokens[pos] == TK_KW_PUB {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         pos = scan_visibility(tokens, pos, FOLLOW_MASK_14);
-        if pos < 0 { pos = sp; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+        }
     }
     let gp_5 = pos;
     let gp_5_no_struct = SCAN_GATE.no_struct;
@@ -7975,16 +8068,26 @@ fn scan_module(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
             pos += 1;
             while pos < tokens.len() && tokens[pos] == TK_POUND {
                 let sp = pos;
+                let sp_no_struct = SCAN_GATE.no_struct;
                 pos = scan_inner_attribute(tokens, pos, 0);
-                if pos < 0 { pos = sp; break; }
+                if pos < 0 {
+                    pos = sp;
+                    SCAN_GATE.no_struct = sp_no_struct;
+                    break;
+                }
                 if pos == sp { break; }
                 let rs_7 = pos;
                 let mut rs_7_ok = false;
                 rsv_7: {
                     while pos < tokens.len() && _kind_set_0(tokens[pos]) {
                         let sp = pos;
+                        let sp_no_struct = SCAN_GATE.no_struct;
                         pos = scan_item(tokens, pos);
-                        if pos < 0 { pos = sp; break; }
+                        if pos < 0 {
+                            pos = sp;
+                            SCAN_GATE.no_struct = sp_no_struct;
+                            break;
+                        }
                         if pos == sp { break; }
                     }
                     if pos >= tokens.len() || tokens[pos] != TK_RCURLYBRACE { break rsv_7; }
@@ -7996,8 +8099,13 @@ fn scan_module(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
             }
             while pos < tokens.len() && _kind_set_0(tokens[pos]) {
                 let sp = pos;
+                let sp_no_struct = SCAN_GATE.no_struct;
                 pos = scan_item(tokens, pos);
-                if pos < 0 { pos = sp; break; }
+                if pos < 0 {
+                    pos = sp;
+                    SCAN_GATE.no_struct = sp_no_struct;
+                    break;
+                }
                 if pos == sp { break; }
             }
             if pos >= tokens.len() || tokens[pos] != TK_RCURLYBRACE { break sg_6_1; }
@@ -8024,8 +8132,12 @@ fn scan_extern_crate(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     if pos < 0 { return -1; }
     if pos < tokens.len() && tokens[pos] == TK_KW_AS {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         pos = scan_as_clause(tokens, pos);
-        if pos < 0 { pos = sp; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+        }
     }
     if pos >= tokens.len() || tokens[pos] != TK_SEMI { return -1; }
     pos += 1;
@@ -8146,12 +8258,14 @@ fn scan_use_tree_alt_0(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
             pos += 1;
             if pos < tokens.len() && _kind_set_11(tokens[pos]) {
                 let sp = pos;
+                let sp_no_struct = SCAN_GATE.no_struct;
                 sg_13_done: {
                     sg_13: {
                         pos = scan_use_tree(tokens, pos, 0);
                         if pos < 0 { break sg_13; }
                         while pos < tokens.len() && tokens[pos] == TK_COMMA {
                             let sp = pos;
+                            let sp_no_struct = SCAN_GATE.no_struct;
                             sg_14_done: {
                                 sg_14: {
                                     if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sg_14; }
@@ -8162,7 +8276,11 @@ fn scan_use_tree_alt_0(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
                                 }
                                 pos = -1;
                             }
-                            if pos < 0 { pos = sp; break; }
+                            if pos < 0 {
+                                pos = sp;
+                                SCAN_GATE.no_struct = sp_no_struct;
+                                break;
+                            }
                             if pos == sp { break; }
                         }
                         if pos < tokens.len() && tokens[pos] == TK_COMMA {
@@ -8172,7 +8290,10 @@ fn scan_use_tree_alt_0(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
                     }
                     pos = -1;
                 }
-                if pos < 0 { pos = sp; }
+                if pos < 0 {
+                    pos = sp;
+                    SCAN_GATE.no_struct = sp_no_struct;
+                }
             }
             if pos >= tokens.len() || tokens[pos] != TK_RCURLYBRACE { break sg_12_1; }
             pos += 1;
@@ -8205,6 +8326,7 @@ fn scan_use_tree(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
                 if pos < 0 { break try_1; }
                 if pos < tokens.len() && tokens[pos] == TK_KW_AS && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
                     let sp = pos;
+                    let sp_no_struct = SCAN_GATE.no_struct;
                     sg_15_done: {
                         sg_15: {
                             if pos >= tokens.len() || tokens[pos] != TK_KW_AS { break sg_15; }
@@ -8239,7 +8361,10 @@ fn scan_use_tree(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
                         }
                         pos = -1;
                     }
-                    if pos < 0 { pos = sp; }
+                    if pos < 0 {
+                        pos = sp;
+                        SCAN_GATE.no_struct = sp_no_struct;
+                    }
                 }
                 if pos > best { best = pos; }
             }
@@ -8266,27 +8391,43 @@ fn scan_function_(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     if pos < 0 { return -1; }
     if pos < tokens.len() && tokens[pos] == TK_LT {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         pos = scan_generic_params(tokens, pos, FOLLOW_MASK_20);
-        if pos < 0 { pos = sp; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+        }
     }
     if pos >= tokens.len() || tokens[pos] != TK_LPAREN { return -1; }
     pos += 1;
     if pos < tokens.len() && _kind_set_12(tokens[pos]) {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         pos = scan_function_parameters(tokens, pos, FOLLOW_MASK_21);
-        if pos < 0 { pos = sp; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+        }
     }
     if pos >= tokens.len() || tokens[pos] != TK_RPAREN { return -1; }
     pos += 1;
     if pos < tokens.len() && tokens[pos] == TK_RARROW {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         pos = scan_function_return_type(tokens, pos, 0);
-        if pos < 0 { pos = sp; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+        }
     }
     if pos < tokens.len() && tokens[pos] == TK_KW_WHERE {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         pos = scan_where_clause(tokens, pos, FOLLOW_MASK_15);
-        if pos < 0 { pos = sp; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+        }
     }
     let gp_17 = pos;
     let gp_17_no_struct = SCAN_GATE.no_struct;
@@ -8364,6 +8505,7 @@ fn scan_function_parameters_alt_1(tokens: &Array<i32>, pos: i32, follow: i64 = 0
     let mut pos = pos;
     if pos < tokens.len() && _kind_set_14(tokens[pos]) {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         sg_21_done: {
             sg_21: {
                 pos = scan_self_param(tokens, pos);
@@ -8374,12 +8516,16 @@ fn scan_function_parameters_alt_1(tokens: &Array<i32>, pos: i32, follow: i64 = 0
             }
             pos = -1;
         }
-        if pos < 0 { pos = sp; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+        }
     }
     pos = scan_function_param(tokens, pos, follow);
     if pos < 0 { return -1; }
     while pos < tokens.len() && tokens[pos] == TK_COMMA && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         sg_22_done: {
             sg_22: {
                 if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sg_22; }
@@ -8390,7 +8536,11 @@ fn scan_function_parameters_alt_1(tokens: &Array<i32>, pos: i32, follow: i64 = 0
             }
             pos = -1;
         }
-        if pos < 0 { pos = sp; break; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+            break;
+        }
         if pos == sp { break; }
         let dk_23 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
         if !(dk_23 == TK_COMMA || dk_23 == TK_COMMA || dk_23 == TK_RPAREN) {
@@ -8452,8 +8602,13 @@ fn scan_self_param(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
     while pos < tokens.len() && tokens[pos] == TK_POUND {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         pos = scan_outer_attribute(tokens, pos, 0);
-        if pos < 0 { pos = sp; break; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+            break;
+        }
         if pos == sp { break; }
     }
     let gp_24 = pos;
@@ -8536,8 +8691,13 @@ fn scan_function_param(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     while pos < tokens.len() && tokens[pos] == TK_POUND {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         pos = scan_outer_attribute(tokens, pos, 0);
-        if pos < 0 { pos = sp; break; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+            break;
+        }
         if pos == sp { break; }
     }
     let gp_28 = pos;
@@ -8629,16 +8789,25 @@ fn scan_type_alias(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     if pos < 0 { return -1; }
     if pos < tokens.len() && tokens[pos] == TK_LT {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         pos = scan_generic_params(tokens, pos, 0);
-        if pos < 0 { pos = sp; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+        }
     }
     if pos < tokens.len() && tokens[pos] == TK_KW_WHERE {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         pos = scan_where_clause(tokens, pos, 0);
-        if pos < 0 { pos = sp; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+        }
     }
     if pos < tokens.len() && tokens[pos] == TK_EQ {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         sg_30_done: {
             sg_30: {
                 if pos >= tokens.len() || tokens[pos] != TK_EQ { break sg_30; }
@@ -8649,7 +8818,10 @@ fn scan_type_alias(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
             }
             pos = -1;
         }
-        if pos < 0 { pos = sp; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+        }
     }
     if pos >= tokens.len() || tokens[pos] != TK_SEMI { return -1; }
     pos += 1;
@@ -8695,13 +8867,21 @@ fn scan_struct_struct(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     if pos < 0 { return -1; }
     if pos < tokens.len() && tokens[pos] == TK_LT {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         pos = scan_generic_params(tokens, pos, 0);
-        if pos < 0 { pos = sp; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+        }
     }
     if pos < tokens.len() && tokens[pos] == TK_KW_WHERE {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         pos = scan_where_clause(tokens, pos, FOLLOW_MASK_15);
-        if pos < 0 { pos = sp; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+        }
     }
     let gp_31 = pos;
     let gp_31_no_struct = SCAN_GATE.no_struct;
@@ -8715,8 +8895,12 @@ fn scan_struct_struct(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
             pos += 1;
             if pos < tokens.len() && _kind_set_19(tokens[pos]) {
                 let sp = pos;
+                let sp_no_struct = SCAN_GATE.no_struct;
                 pos = scan_struct_fields(tokens, pos, (FOLLOW_MASK_8 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
-                if pos < 0 { pos = sp; }
+                if pos < 0 {
+                    pos = sp;
+                    SCAN_GATE.no_struct = sp_no_struct;
+                }
             }
             if pos >= tokens.len() || tokens[pos] != TK_RCURLYBRACE { break sg_31_0; }
             pos += 1;
@@ -8748,22 +8932,34 @@ fn scan_tuple_struct(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     if pos < 0 { return -1; }
     if pos < tokens.len() && tokens[pos] == TK_LT {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         pos = scan_generic_params(tokens, pos, FOLLOW_MASK_20);
-        if pos < 0 { pos = sp; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+        }
     }
     if pos >= tokens.len() || tokens[pos] != TK_LPAREN { return -1; }
     pos += 1;
     if pos < tokens.len() && _kind_set_20(tokens[pos]) {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         pos = scan_tuple_fields(tokens, pos, FOLLOW_MASK_21);
-        if pos < 0 { pos = sp; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+        }
     }
     if pos >= tokens.len() || tokens[pos] != TK_RPAREN { return -1; }
     pos += 1;
     if pos < tokens.len() && tokens[pos] == TK_KW_WHERE {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         pos = scan_where_clause(tokens, pos, (FOLLOW_MASK_16 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
-        if pos < 0 { pos = sp; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+        }
     }
     if pos >= tokens.len() || tokens[pos] != TK_SEMI { return -1; }
     pos += 1;
@@ -8777,6 +8973,7 @@ fn scan_struct_fields(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     if pos < 0 { return -1; }
     while pos < tokens.len() && tokens[pos] == TK_COMMA && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         sg_32_done: {
             sg_32: {
                 if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sg_32; }
@@ -8787,7 +8984,11 @@ fn scan_struct_fields(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
             }
             pos = -1;
         }
-        if pos < 0 { pos = sp; break; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+            break;
+        }
         if pos == sp { break; }
         let dk_33 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
         if !(dk_33 == TK_COMMA || dk_33 == TK_COMMA || dk_33 == TK_RCURLYBRACE) {
@@ -8816,14 +9017,23 @@ fn scan_struct_field(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     while pos < tokens.len() && tokens[pos] == TK_POUND {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         pos = scan_outer_attribute(tokens, pos, 0);
-        if pos < 0 { pos = sp; break; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+            break;
+        }
         if pos == sp { break; }
     }
     if pos < tokens.len() && tokens[pos] == TK_KW_PUB {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         pos = scan_visibility(tokens, pos, FOLLOW_MASK_24);
-        if pos < 0 { pos = sp; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+        }
     }
     pos = scan_identifier(tokens, pos);
     if pos < 0 { return -1; }
@@ -8841,6 +9051,7 @@ fn scan_tuple_fields(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     if pos < 0 { return -1; }
     while pos < tokens.len() && tokens[pos] == TK_COMMA && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         sg_34_done: {
             sg_34: {
                 if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sg_34; }
@@ -8851,7 +9062,11 @@ fn scan_tuple_fields(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
             }
             pos = -1;
         }
-        if pos < 0 { pos = sp; break; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+            break;
+        }
         if pos == sp { break; }
         let dk_35 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
         if !(dk_35 == TK_COMMA || dk_35 == TK_COMMA || dk_35 == TK_RPAREN) {
@@ -8881,14 +9096,23 @@ fn scan_tuple_field(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     while pos < tokens.len() && tokens[pos] == TK_POUND {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         pos = scan_outer_attribute(tokens, pos, 0);
-        if pos < 0 { pos = sp; break; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+            break;
+        }
         if pos == sp { break; }
     }
     if pos < tokens.len() && tokens[pos] == TK_KW_PUB {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         pos = scan_visibility(tokens, pos, FOLLOW_MASK_26);
-        if pos < 0 { pos = sp; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+        }
     }
     pos = scan_type_(tokens, pos, follow);
     if pos < 0 { return -1; }
@@ -8904,20 +9128,32 @@ fn scan_enumeration(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     if pos < 0 { return -1; }
     if pos < tokens.len() && tokens[pos] == TK_LT {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         pos = scan_generic_params(tokens, pos, 0);
-        if pos < 0 { pos = sp; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+        }
     }
     if pos < tokens.len() && tokens[pos] == TK_KW_WHERE {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         pos = scan_where_clause(tokens, pos, FOLLOW_MASK_27);
-        if pos < 0 { pos = sp; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+        }
     }
     if pos >= tokens.len() || tokens[pos] != TK_LCURLYBRACE { return -1; }
     pos += 1;
     if pos < tokens.len() && _kind_set_19(tokens[pos]) {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         pos = scan_enum_items(tokens, pos, (FOLLOW_MASK_8 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
-        if pos < 0 { pos = sp; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+        }
     }
     if pos >= tokens.len() || tokens[pos] != TK_RCURLYBRACE { return -1; }
     pos += 1;
@@ -8931,6 +9167,7 @@ fn scan_enum_items(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     if pos < 0 { return -1; }
     while pos < tokens.len() && tokens[pos] == TK_COMMA && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         sg_36_done: {
             sg_36: {
                 if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sg_36; }
@@ -8941,7 +9178,11 @@ fn scan_enum_items(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
             }
             pos = -1;
         }
-        if pos < 0 { pos = sp; break; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+            break;
+        }
         if pos == sp { break; }
         let dk_37 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
         if !(dk_37 == TK_COMMA || dk_37 == TK_COMMA || dk_37 == TK_RCURLYBRACE) {
@@ -8971,19 +9212,29 @@ fn scan_enum_item(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     while pos < tokens.len() && tokens[pos] == TK_POUND {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         pos = scan_outer_attribute(tokens, pos, 0);
-        if pos < 0 { pos = sp; break; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+            break;
+        }
         if pos == sp { break; }
     }
     if pos < tokens.len() && tokens[pos] == TK_KW_PUB {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         pos = scan_visibility(tokens, pos, FOLLOW_MASK_24);
-        if pos < 0 { pos = sp; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+        }
     }
     pos = scan_identifier(tokens, pos);
     if pos < 0 { return -1; }
     if pos < tokens.len() && _kind_set_21(tokens[pos]) && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         let gp_38 = pos;
         let gp_38_no_struct = SCAN_GATE.no_struct;
         let sgk_38 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
@@ -9018,7 +9269,10 @@ fn scan_enum_item(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
         } else {
             pos = -1;
         }
-        if pos < 0 { pos = sp; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+        }
     }
     if pos == scan_start { return -1; }
     return pos;
@@ -9030,8 +9284,12 @@ fn scan_enum_item_tuple(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     pos += 1;
     if pos < tokens.len() && _kind_set_20(tokens[pos]) {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         pos = scan_tuple_fields(tokens, pos, (FOLLOW_MASK_21 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
-        if pos < 0 { pos = sp; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+        }
     }
     if pos >= tokens.len() || tokens[pos] != TK_RPAREN { return -1; }
     pos += 1;
@@ -9044,8 +9302,12 @@ fn scan_enum_item_struct(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 
     pos += 1;
     if pos < tokens.len() && _kind_set_19(tokens[pos]) {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         pos = scan_struct_fields(tokens, pos, (FOLLOW_MASK_8 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
-        if pos < 0 { pos = sp; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+        }
     }
     if pos >= tokens.len() || tokens[pos] != TK_RCURLYBRACE { return -1; }
     pos += 1;
@@ -9069,13 +9331,21 @@ fn scan_union_(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     if pos < 0 { return -1; }
     if pos < tokens.len() && tokens[pos] == TK_LT {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         pos = scan_generic_params(tokens, pos, 0);
-        if pos < 0 { pos = sp; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+        }
     }
     if pos < tokens.len() && tokens[pos] == TK_KW_WHERE {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         pos = scan_where_clause(tokens, pos, FOLLOW_MASK_27);
-        if pos < 0 { pos = sp; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+        }
     }
     if pos >= tokens.len() || tokens[pos] != TK_LCURLYBRACE { return -1; }
     pos += 1;
@@ -9122,6 +9392,7 @@ fn scan_constant_item(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     if pos < 0 { return -1; }
     if pos < tokens.len() && tokens[pos] == TK_EQ {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         sg_40_done: {
             sg_40: {
                 if pos >= tokens.len() || tokens[pos] != TK_EQ { break sg_40; }
@@ -9132,7 +9403,10 @@ fn scan_constant_item(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
             }
             pos = -1;
         }
-        if pos < 0 { pos = sp; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+        }
     }
     if pos >= tokens.len() || tokens[pos] != TK_SEMI { return -1; }
     pos += 1;
@@ -9154,6 +9428,7 @@ fn scan_static_item(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     if pos < 0 { return -1; }
     if pos < tokens.len() && tokens[pos] == TK_EQ {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         sg_41_done: {
             sg_41: {
                 if pos >= tokens.len() || tokens[pos] != TK_EQ { break sg_41; }
@@ -9164,7 +9439,10 @@ fn scan_static_item(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
             }
             pos = -1;
         }
-        if pos < 0 { pos = sp; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+        }
     }
     if pos >= tokens.len() || tokens[pos] != TK_SEMI { return -1; }
     pos += 1;
@@ -9182,8 +9460,12 @@ fn scan_trait_(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     if pos < 0 { return -1; }
     if pos < tokens.len() && tokens[pos] == TK_LT {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         pos = scan_generic_params(tokens, pos, 0);
-        if pos < 0 { pos = sp; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+        }
     }
     osl_42_done: {
         if pos < tokens.len() && tokens[pos] == TK_COLON && pos + 1 < tokens.len() && _kind_set_22(tokens[pos + 1]) {
@@ -9209,23 +9491,37 @@ fn scan_trait_(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     }
     if pos < tokens.len() && tokens[pos] == TK_KW_WHERE {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         pos = scan_where_clause(tokens, pos, FOLLOW_MASK_27);
-        if pos < 0 { pos = sp; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+        }
     }
     if pos >= tokens.len() || tokens[pos] != TK_LCURLYBRACE { return -1; }
     pos += 1;
     while pos < tokens.len() && tokens[pos] == TK_POUND {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         pos = scan_inner_attribute(tokens, pos, 0);
-        if pos < 0 { pos = sp; break; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+            break;
+        }
         if pos == sp { break; }
         let rs_45 = pos;
         let mut rs_45_ok = false;
         rsv_45: {
             while pos < tokens.len() && _kind_set_23(tokens[pos]) {
                 let sp = pos;
+                let sp_no_struct = SCAN_GATE.no_struct;
                 pos = scan_associated_item(tokens, pos);
-                if pos < 0 { pos = sp; break; }
+                if pos < 0 {
+                    pos = sp;
+                    SCAN_GATE.no_struct = sp_no_struct;
+                    break;
+                }
                 if pos == sp { break; }
             }
             if pos >= tokens.len() || tokens[pos] != TK_RCURLYBRACE { break rsv_45; }
@@ -9237,8 +9533,13 @@ fn scan_trait_(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     }
     while pos < tokens.len() && _kind_set_23(tokens[pos]) {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         pos = scan_associated_item(tokens, pos);
-        if pos < 0 { pos = sp; break; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+            break;
+        }
         if pos == sp { break; }
     }
     if pos >= tokens.len() || tokens[pos] != TK_RCURLYBRACE { return -1; }
@@ -9289,9 +9590,11 @@ fn scan_inherent_impl(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     pos += 1;
     if pos < tokens.len() && tokens[pos] == TK_LT {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         pos = scan_generic_params(tokens, pos, FOLLOW_MASK_26);
         if pos < 0 {
             pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
         } else {
             let bp = pos;
             let mut opt_ok: bool = false;
@@ -9300,23 +9603,37 @@ fn scan_inherent_impl(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
                 if pos < 0 { break opt_probe; }
                 if pos < tokens.len() && tokens[pos] == TK_KW_WHERE {
                     let sp = pos;
+                    let sp_no_struct = SCAN_GATE.no_struct;
                     pos = scan_where_clause(tokens, pos, FOLLOW_MASK_27);
-                    if pos < 0 { pos = sp; }
+                    if pos < 0 {
+                        pos = sp;
+                        SCAN_GATE.no_struct = sp_no_struct;
+                    }
                 }
                 if pos >= tokens.len() || tokens[pos] != TK_LCURLYBRACE { break opt_probe; }
                 pos += 1;
                 while pos < tokens.len() && tokens[pos] == TK_POUND {
                     let sp = pos;
+                    let sp_no_struct = SCAN_GATE.no_struct;
                     pos = scan_inner_attribute(tokens, pos, 0);
-                    if pos < 0 { pos = sp; break; }
+                    if pos < 0 {
+                        pos = sp;
+                        SCAN_GATE.no_struct = sp_no_struct;
+                        break;
+                    }
                     if pos == sp { break; }
                     let rs_46 = pos;
                     let mut rs_46_ok = false;
                     rsv_46: {
                         while pos < tokens.len() && _kind_set_23(tokens[pos]) {
                             let sp = pos;
+                            let sp_no_struct = SCAN_GATE.no_struct;
                             pos = scan_associated_item(tokens, pos);
-                            if pos < 0 { pos = sp; break; }
+                            if pos < 0 {
+                                pos = sp;
+                                SCAN_GATE.no_struct = sp_no_struct;
+                                break;
+                            }
                             if pos == sp { break; }
                         }
                         if pos >= tokens.len() || tokens[pos] != TK_RCURLYBRACE { break rsv_46; }
@@ -9328,8 +9645,13 @@ fn scan_inherent_impl(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
                 }
                 while pos < tokens.len() && _kind_set_23(tokens[pos]) {
                     let sp = pos;
+                    let sp_no_struct = SCAN_GATE.no_struct;
                     pos = scan_associated_item(tokens, pos);
-                    if pos < 0 { pos = sp; break; }
+                    if pos < 0 {
+                        pos = sp;
+                        SCAN_GATE.no_struct = sp_no_struct;
+                        break;
+                    }
                     if pos == sp { break; }
                 }
                 if pos >= tokens.len() || tokens[pos] != TK_RCURLYBRACE { break opt_probe; }
@@ -9344,23 +9666,37 @@ fn scan_inherent_impl(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     if pos < 0 { return -1; }
     if pos < tokens.len() && tokens[pos] == TK_KW_WHERE {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         pos = scan_where_clause(tokens, pos, FOLLOW_MASK_27);
-        if pos < 0 { pos = sp; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+        }
     }
     if pos >= tokens.len() || tokens[pos] != TK_LCURLYBRACE { return -1; }
     pos += 1;
     while pos < tokens.len() && tokens[pos] == TK_POUND {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         pos = scan_inner_attribute(tokens, pos, 0);
-        if pos < 0 { pos = sp; break; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+            break;
+        }
         if pos == sp { break; }
         let rs_47 = pos;
         let mut rs_47_ok = false;
         rsv_47: {
             while pos < tokens.len() && _kind_set_23(tokens[pos]) {
                 let sp = pos;
+                let sp_no_struct = SCAN_GATE.no_struct;
                 pos = scan_associated_item(tokens, pos);
-                if pos < 0 { pos = sp; break; }
+                if pos < 0 {
+                    pos = sp;
+                    SCAN_GATE.no_struct = sp_no_struct;
+                    break;
+                }
                 if pos == sp { break; }
             }
             if pos >= tokens.len() || tokens[pos] != TK_RCURLYBRACE { break rsv_47; }
@@ -9372,8 +9708,13 @@ fn scan_inherent_impl(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     }
     while pos < tokens.len() && _kind_set_23(tokens[pos]) {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         pos = scan_associated_item(tokens, pos);
-        if pos < 0 { pos = sp; break; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+            break;
+        }
         if pos == sp { break; }
     }
     if pos >= tokens.len() || tokens[pos] != TK_RCURLYBRACE { return -1; }
@@ -9390,8 +9731,12 @@ fn scan_trait_impl(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     pos += 1;
     if pos < tokens.len() && tokens[pos] == TK_LT {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         pos = scan_generic_params(tokens, pos, 0);
-        if pos < 0 { pos = sp; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+        }
     }
     if pos < tokens.len() && tokens[pos] == TK_NOT {
         pos += 1;
@@ -9404,23 +9749,37 @@ fn scan_trait_impl(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     if pos < 0 { return -1; }
     if pos < tokens.len() && tokens[pos] == TK_KW_WHERE {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         pos = scan_where_clause(tokens, pos, FOLLOW_MASK_27);
-        if pos < 0 { pos = sp; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+        }
     }
     if pos >= tokens.len() || tokens[pos] != TK_LCURLYBRACE { return -1; }
     pos += 1;
     while pos < tokens.len() && tokens[pos] == TK_POUND {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         pos = scan_inner_attribute(tokens, pos, 0);
-        if pos < 0 { pos = sp; break; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+            break;
+        }
         if pos == sp { break; }
         let rs_48 = pos;
         let mut rs_48_ok = false;
         rsv_48: {
             while pos < tokens.len() && _kind_set_23(tokens[pos]) {
                 let sp = pos;
+                let sp_no_struct = SCAN_GATE.no_struct;
                 pos = scan_associated_item(tokens, pos);
-                if pos < 0 { pos = sp; break; }
+                if pos < 0 {
+                    pos = sp;
+                    SCAN_GATE.no_struct = sp_no_struct;
+                    break;
+                }
                 if pos == sp { break; }
             }
             if pos >= tokens.len() || tokens[pos] != TK_RCURLYBRACE { break rsv_48; }
@@ -9432,8 +9791,13 @@ fn scan_trait_impl(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     }
     while pos < tokens.len() && _kind_set_23(tokens[pos]) {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         pos = scan_associated_item(tokens, pos);
-        if pos < 0 { pos = sp; break; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+            break;
+        }
         if pos == sp { break; }
     }
     if pos >= tokens.len() || tokens[pos] != TK_RCURLYBRACE { return -1; }
@@ -9450,23 +9814,37 @@ fn scan_extern_block(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     pos += 1;
     if pos < tokens.len() && _kind_set_13(tokens[pos]) {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         pos = scan_abi(tokens, pos);
-        if pos < 0 { pos = sp; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+        }
     }
     if pos >= tokens.len() || tokens[pos] != TK_LCURLYBRACE { return -1; }
     pos += 1;
     while pos < tokens.len() && tokens[pos] == TK_POUND {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         pos = scan_inner_attribute(tokens, pos, 0);
-        if pos < 0 { pos = sp; break; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+            break;
+        }
         if pos == sp { break; }
         let rs_49 = pos;
         let mut rs_49_ok = false;
         rsv_49: {
             while pos < tokens.len() && _kind_set_24(tokens[pos]) {
                 let sp = pos;
+                let sp_no_struct = SCAN_GATE.no_struct;
                 pos = scan_external_item(tokens, pos);
-                if pos < 0 { pos = sp; break; }
+                if pos < 0 {
+                    pos = sp;
+                    SCAN_GATE.no_struct = sp_no_struct;
+                    break;
+                }
                 if pos == sp { break; }
             }
             if pos >= tokens.len() || tokens[pos] != TK_RCURLYBRACE { break rsv_49; }
@@ -9478,8 +9856,13 @@ fn scan_extern_block(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     }
     while pos < tokens.len() && _kind_set_24(tokens[pos]) {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         pos = scan_external_item(tokens, pos);
-        if pos < 0 { pos = sp; break; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+            break;
+        }
         if pos == sp { break; }
     }
     if pos >= tokens.len() || tokens[pos] != TK_RCURLYBRACE { return -1; }
@@ -9492,8 +9875,13 @@ fn scan_external_item(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
     while pos < tokens.len() && tokens[pos] == TK_POUND {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         pos = scan_outer_attribute(tokens, pos, 0);
-        if pos < 0 { pos = sp; break; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+            break;
+        }
         if pos == sp { break; }
     }
     let gp_50 = pos;
@@ -9514,8 +9902,12 @@ fn scan_external_item(tokens: &Array<i32>, pos: i32) -> i32 {
         sg_50_1: {
             if pos < tokens.len() && tokens[pos] == TK_KW_PUB {
                 let sp = pos;
+                let sp_no_struct = SCAN_GATE.no_struct;
                 pos = scan_visibility(tokens, pos, FOLLOW_MASK_29);
-                if pos < 0 { pos = sp; }
+                if pos < 0 {
+                    pos = sp;
+                    SCAN_GATE.no_struct = sp_no_struct;
+                }
             }
             let gp_51 = pos;
             let gp_51_no_struct = SCAN_GATE.no_struct;
@@ -9562,10 +9954,12 @@ fn scan_generic_params(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     pos += 1;
     if pos < tokens.len() && _kind_set_27(tokens[pos]) {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         sg_52_done: {
             sg_52: {
                 while pos < tokens.len() && _kind_set_27(tokens[pos]) {
                     let sp = pos;
+                    let sp_no_struct = SCAN_GATE.no_struct;
                     sg_53_done: {
                         sg_53: {
                             pos = scan_generic_param(tokens, pos);
@@ -9576,7 +9970,11 @@ fn scan_generic_params(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
                         }
                         pos = -1;
                     }
-                    if pos < 0 { pos = sp; break; }
+                    if pos < 0 {
+                        pos = sp;
+                        SCAN_GATE.no_struct = sp_no_struct;
+                        break;
+                    }
                     if pos == sp { break; }
                     let rs_54 = pos;
                     let mut rs_54_ok = false;
@@ -9600,7 +9998,10 @@ fn scan_generic_params(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
             }
             pos = -1;
         }
-        if pos < 0 { pos = sp; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+        }
     }
     if pos >= tokens.len() || tokens[pos] != TK_GT { return -1; }
     pos += 1;
@@ -9612,8 +10013,13 @@ fn scan_generic_param(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
     while pos < tokens.len() && tokens[pos] == TK_POUND {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         pos = scan_outer_attribute(tokens, pos, 0);
-        if pos < 0 { pos = sp; break; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+            break;
+        }
         if pos == sp { break; }
         let rs_55 = pos;
         let mut rs_55_ok = false;
@@ -9697,13 +10103,18 @@ fn scan_lifetime_param(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos < tokens.len() && tokens[pos] == TK_POUND {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         pos = scan_outer_attribute(tokens, pos, FOLLOW_MASK_30);
-        if pos < 0 { pos = sp; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+        }
     }
     if pos >= tokens.len() || tokens[pos] != TK_LIFETIME_OR_LABEL { return -1; }
     pos += 1;
     if pos < tokens.len() && tokens[pos] == TK_COLON && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         sg_58_done: {
             sg_58: {
                 if pos >= tokens.len() || tokens[pos] != TK_COLON { break sg_58; }
@@ -9714,7 +10125,10 @@ fn scan_lifetime_param(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
             }
             pos = -1;
         }
-        if pos < 0 { pos = sp; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+        }
     }
     return pos;
 }
@@ -9724,8 +10138,12 @@ fn scan_type_param(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos < tokens.len() && tokens[pos] == TK_POUND {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         pos = scan_outer_attribute(tokens, pos, FOLLOW_MASK_24);
-        if pos < 0 { pos = sp; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+        }
     }
     pos = scan_identifier(tokens, pos);
     if pos < 0 { return -1; }
@@ -9753,6 +10171,7 @@ fn scan_type_param(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     }
     if pos < tokens.len() && tokens[pos] == TK_EQ && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         sg_62_done: {
             sg_62: {
                 if pos >= tokens.len() || tokens[pos] != TK_EQ { break sg_62; }
@@ -9763,7 +10182,10 @@ fn scan_type_param(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
             }
             pos = -1;
         }
-        if pos < 0 { pos = sp; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+        }
     }
     if pos == scan_start { return -1; }
     return pos;
@@ -9788,6 +10210,7 @@ fn scan_where_clause(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     pos += 1;
     while pos < tokens.len() && _kind_set_18(tokens[pos]) && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         sg_63_done: {
             sg_63: {
                 pos = scan_where_clause_item(tokens, pos, (FOLLOW_MASK_22 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
@@ -9798,7 +10221,11 @@ fn scan_where_clause(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
             }
             pos = -1;
         }
-        if pos < 0 { pos = sp; break; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+            break;
+        }
         if pos == sp { break; }
         let dk_64 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
         if !(_kind_set_18(dk_64) || _kind_set_18(dk_64) || _kind_set_61(dk_64)) {
@@ -9808,8 +10235,12 @@ fn scan_where_clause(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
             dcl_64: {
                 if pos < tokens.len() && _kind_set_18(tokens[pos]) {
                     let sp = pos;
+                    let sp_no_struct = SCAN_GATE.no_struct;
                     pos = scan_where_clause_item(tokens, pos, follow);
-                    if pos < 0 { pos = sp; }
+                    if pos < 0 {
+                        pos = sp;
+                        SCAN_GATE.no_struct = sp_no_struct;
+                    }
                 }
                 let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
                 if (follow == 0 || follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) && (_kind_set_61(probe_kind)) { dc_64_exit = true; }
@@ -9820,8 +10251,12 @@ fn scan_where_clause(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     }
     if pos < tokens.len() && _kind_set_18(tokens[pos]) && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         pos = scan_where_clause_item(tokens, pos, follow);
-        if pos < 0 { pos = sp; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+        }
     }
     return pos;
 }
@@ -9878,9 +10313,11 @@ fn scan_type_bound_where_clause_item(tokens: &Array<i32>, pos: i32, follow: i64 
     let mut pos = pos;
     if pos < tokens.len() && tokens[pos] == TK_KW_FOR {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         pos = scan_for_lifetimes(tokens, pos, FOLLOW_MASK_26);
         if pos < 0 {
             pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
         } else {
             let bp = pos;
             let mut opt_ok: bool = false;
@@ -9891,8 +10328,12 @@ fn scan_type_bound_where_clause_item(tokens: &Array<i32>, pos: i32, follow: i64 
                 pos += 1;
                 if pos < tokens.len() && _kind_set_22(tokens[pos]) {
                     let sp = pos;
+                    let sp_no_struct = SCAN_GATE.no_struct;
                     pos = scan_type_param_bounds(tokens, pos, follow);
-                    if pos < 0 { pos = sp; }
+                    if pos < 0 {
+                        pos = sp;
+                        SCAN_GATE.no_struct = sp_no_struct;
+                    }
                 }
                 let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
                 if (follow == 0 || follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) && (_kind_set_63(probe_kind)) { opt_ok = true; }
@@ -9906,8 +10347,12 @@ fn scan_type_bound_where_clause_item(tokens: &Array<i32>, pos: i32, follow: i64 
     pos += 1;
     if pos < tokens.len() && _kind_set_22(tokens[pos]) && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         pos = scan_type_param_bounds(tokens, pos, follow);
-        if pos < 0 { pos = sp; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+        }
     }
     return pos;
 }
@@ -9926,8 +10371,13 @@ fn scan_associated_item(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
     while pos < tokens.len() && tokens[pos] == TK_POUND {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         pos = scan_outer_attribute(tokens, pos, 0);
-        if pos < 0 { pos = sp; break; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+            break;
+        }
         if pos == sp { break; }
     }
     let gp_65 = pos;
@@ -9948,8 +10398,12 @@ fn scan_associated_item(tokens: &Array<i32>, pos: i32) -> i32 {
         sg_65_1: {
             if pos < tokens.len() && tokens[pos] == TK_KW_PUB {
                 let sp = pos;
+                let sp_no_struct = SCAN_GATE.no_struct;
                 pos = scan_visibility(tokens, pos, FOLLOW_MASK_32);
-                if pos < 0 { pos = sp; }
+                if pos < 0 {
+                    pos = sp;
+                    SCAN_GATE.no_struct = sp_no_struct;
+                }
             }
             let gp_66 = pos;
             let gp_66_no_struct = SCAN_GATE.no_struct;
@@ -10032,8 +10486,12 @@ fn scan_attr(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     if pos < 0 { return -1; }
     if pos < tokens.len() && _kind_set_30(tokens[pos]) && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         pos = scan_attr_input(tokens, pos);
-        if pos < 0 { pos = sp; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+        }
     }
     if pos == scan_start { return -1; }
     return pos;
@@ -10157,8 +10615,13 @@ fn scan_let_statement(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     while pos < tokens.len() && tokens[pos] == TK_POUND {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         pos = scan_outer_attribute(tokens, pos, 0);
-        if pos < 0 { pos = sp; break; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+            break;
+        }
         if pos == sp { break; }
     }
     if pos >= tokens.len() || tokens[pos] != TK_KW_LET { return -1; }
@@ -10167,6 +10630,7 @@ fn scan_let_statement(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     if pos < 0 { return -1; }
     if pos < tokens.len() && tokens[pos] == TK_COLON {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         sg_67_done: {
             sg_67: {
                 if pos >= tokens.len() || tokens[pos] != TK_COLON { break sg_67; }
@@ -10177,7 +10641,10 @@ fn scan_let_statement(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
             }
             pos = -1;
         }
-        if pos < 0 { pos = sp; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+        }
     }
     osl_68_done: {
         if pos < tokens.len() && tokens[pos] == TK_EQ && pos + 1 < tokens.len() && _kind_set_31(tokens[pos + 1]) {
@@ -10308,8 +10775,13 @@ fn scan_expression_atom(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
                 if pos < 0 { break try_0; }
                 while pos < tokens.len() && tokens[pos] == TK_POUND {
                     let sp = pos;
+                    let sp_no_struct = SCAN_GATE.no_struct;
                     pos = scan_outer_attribute(tokens, pos, 0);
-                    if pos < 0 { pos = sp; break; }
+                    if pos < 0 {
+                        pos = sp;
+                        SCAN_GATE.no_struct = sp_no_struct;
+                        break;
+                    }
                     if pos == sp { break; }
                     let rs_71 = pos;
                     let mut rs_71_ok = false;
@@ -10520,8 +10992,12 @@ fn scan_expression_atom(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
                 pos += 1;
                 if pos < tokens.len() && _kind_set_31(tokens[pos]) && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
                     let sp = pos;
+                    let sp_no_struct = SCAN_GATE.no_struct;
                     pos = scan_expression(tokens, pos, follow, 0);
-                    if pos < 0 { pos = sp; }
+                    if pos < 0 {
+                        pos = sp;
+                        SCAN_GATE.no_struct = sp_no_struct;
+                    }
                 }
                 break scan_alts;
             }
@@ -10546,8 +11022,12 @@ fn scan_expression_atom(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
                 }
                 if pos < tokens.len() && _kind_set_31(tokens[pos]) && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
                     let sp = pos;
+                    let sp_no_struct = SCAN_GATE.no_struct;
                     pos = scan_expression(tokens, pos, follow, 0);
-                    if pos < 0 { pos = sp; }
+                    if pos < 0 {
+                        pos = sp;
+                        SCAN_GATE.no_struct = sp_no_struct;
+                    }
                 }
                 break scan_alts;
             }
@@ -10563,8 +11043,12 @@ fn scan_expression_atom(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
                 }
                 if pos < tokens.len() && _kind_set_31(tokens[pos]) && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
                     let sp = pos;
+                    let sp_no_struct = SCAN_GATE.no_struct;
                     pos = scan_expression(tokens, pos, follow, 0);
-                    if pos < 0 { pos = sp; }
+                    if pos < 0 {
+                        pos = sp;
+                        SCAN_GATE.no_struct = sp_no_struct;
+                    }
                 }
                 break scan_alts;
             }
@@ -10577,8 +11061,12 @@ fn scan_expression_atom(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
                 pos += 1;
                 if pos < tokens.len() && _kind_set_31(tokens[pos]) && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
                     let sp = pos;
+                    let sp_no_struct = SCAN_GATE.no_struct;
                     pos = scan_expression(tokens, pos, follow, 0);
-                    if pos < 0 { pos = sp; }
+                    if pos < 0 {
+                        pos = sp;
+                        SCAN_GATE.no_struct = sp_no_struct;
+                    }
                 }
                 break scan_alts;
             }
@@ -10593,8 +11081,13 @@ fn scan_expression_atom(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
                 SCAN_GATE.no_struct = 0;
                 while pos < tokens.len() && tokens[pos] == TK_POUND {
                     let sp = pos;
+                    let sp_no_struct = SCAN_GATE.no_struct;
                     pos = scan_inner_attribute(tokens, pos, 0);
-                    if pos < 0 { pos = sp; break; }
+                    if pos < 0 {
+                        pos = sp;
+                        SCAN_GATE.no_struct = sp_no_struct;
+                        break;
+                    }
                     if pos == sp { break; }
                     let rs_76 = pos;
                     let mut rs_76_ok = false;
@@ -10621,16 +11114,25 @@ fn scan_expression_atom(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
                 pos += 1;
                 while pos < tokens.len() && tokens[pos] == TK_POUND {
                     let sp = pos;
+                    let sp_no_struct = SCAN_GATE.no_struct;
                     pos = scan_inner_attribute(tokens, pos, 0);
-                    if pos < 0 { pos = sp; break; }
+                    if pos < 0 {
+                        pos = sp;
+                        SCAN_GATE.no_struct = sp_no_struct;
+                        break;
+                    }
                     if pos == sp { break; }
                     let rs_77 = pos;
                     let mut rs_77_ok = false;
                     rsv_77: {
                         if pos < tokens.len() && _kind_set_31(tokens[pos]) {
                             let sp = pos;
+                            let sp_no_struct = SCAN_GATE.no_struct;
                             pos = scan_tuple_elements(tokens, pos, (FOLLOW_MASK_21 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
-                            if pos < 0 { pos = sp; }
+                            if pos < 0 {
+                                pos = sp;
+                                SCAN_GATE.no_struct = sp_no_struct;
+                            }
                         }
                         if pos >= tokens.len() || tokens[pos] != TK_RPAREN { break rsv_77; }
                         pos += 1;
@@ -10641,8 +11143,12 @@ fn scan_expression_atom(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
                 }
                 if pos < tokens.len() && _kind_set_31(tokens[pos]) {
                     let sp = pos;
+                    let sp_no_struct = SCAN_GATE.no_struct;
                     pos = scan_tuple_elements(tokens, pos, (FOLLOW_MASK_21 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
-                    if pos < 0 { pos = sp; }
+                    if pos < 0 {
+                        pos = sp;
+                        SCAN_GATE.no_struct = sp_no_struct;
+                    }
                 }
                 if pos >= tokens.len() || tokens[pos] != TK_RPAREN { break try_14; }
                 pos += 1;
@@ -10658,16 +11164,25 @@ fn scan_expression_atom(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
                 pos += 1;
                 while pos < tokens.len() && tokens[pos] == TK_POUND {
                     let sp = pos;
+                    let sp_no_struct = SCAN_GATE.no_struct;
                     pos = scan_inner_attribute(tokens, pos, 0);
-                    if pos < 0 { pos = sp; break; }
+                    if pos < 0 {
+                        pos = sp;
+                        SCAN_GATE.no_struct = sp_no_struct;
+                        break;
+                    }
                     if pos == sp { break; }
                     let rs_78 = pos;
                     let mut rs_78_ok = false;
                     rsv_78: {
                         if pos < tokens.len() && _kind_set_31(tokens[pos]) {
                             let sp = pos;
+                            let sp_no_struct = SCAN_GATE.no_struct;
                             pos = scan_array_elements(tokens, pos, (FOLLOW_MASK_33 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
-                            if pos < 0 { pos = sp; }
+                            if pos < 0 {
+                                pos = sp;
+                                SCAN_GATE.no_struct = sp_no_struct;
+                            }
                         }
                         if pos >= tokens.len() || tokens[pos] != TK_RSQUAREBRACKET { break rsv_78; }
                         pos += 1;
@@ -10678,8 +11193,12 @@ fn scan_expression_atom(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
                 }
                 if pos < tokens.len() && _kind_set_31(tokens[pos]) {
                     let sp = pos;
+                    let sp_no_struct = SCAN_GATE.no_struct;
                     pos = scan_array_elements(tokens, pos, (FOLLOW_MASK_33 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
-                    if pos < 0 { pos = sp; }
+                    if pos < 0 {
+                        pos = sp;
+                        SCAN_GATE.no_struct = sp_no_struct;
+                    }
                 }
                 if pos >= tokens.len() || tokens[pos] != TK_RSQUAREBRACKET { break try_13; }
                 pos += 1;
@@ -10719,8 +11238,12 @@ fn scan_expression_lr_3(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     pos += 1;
     if pos < tokens.len() && _kind_set_31(tokens[pos]) {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         pos = scan_call_params(tokens, pos, (FOLLOW_MASK_21 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
-        if pos < 0 { pos = sp; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+        }
     }
     if pos >= tokens.len() || tokens[pos] != TK_RPAREN { return -1; }
     pos += 1;
@@ -10760,8 +11283,12 @@ fn scan_expression_lr_7(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     pos += 1;
     if pos < tokens.len() && _kind_set_31(tokens[pos]) {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         pos = scan_call_params(tokens, pos, (FOLLOW_MASK_21 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
-        if pos < 0 { pos = sp; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+        }
     }
     if pos >= tokens.len() || tokens[pos] != TK_RPAREN { return -1; }
     pos += 1;
@@ -10963,8 +11490,12 @@ fn scan_expression_lr_24(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 
     pos += 1;
     if pos < tokens.len() && _kind_set_31(tokens[pos]) && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         pos = scan_expression(tokens, pos, follow, 5);
-        if pos < 0 { pos = sp; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+        }
     }
     return pos;
 }
@@ -11271,8 +11802,13 @@ fn scan_expression_with_block(tokens: &Array<i32>, pos: i32, follow: i64 = 0) ->
                 if pos < 0 { break try_0; }
                 while pos < tokens.len() && tokens[pos] == TK_POUND {
                     let sp = pos;
+                    let sp_no_struct = SCAN_GATE.no_struct;
                     pos = scan_outer_attribute(tokens, pos, 0);
-                    if pos < 0 { pos = sp; break; }
+                    if pos < 0 {
+                        pos = sp;
+                        SCAN_GATE.no_struct = sp_no_struct;
+                        break;
+                    }
                     if pos == sp { break; }
                     let rs_82 = pos;
                     let mut rs_82_ok = false;
@@ -11404,16 +11940,25 @@ fn scan_block_expression(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 
     SCAN_GATE.no_struct = 0;
     while pos < tokens.len() && tokens[pos] == TK_POUND {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         pos = scan_inner_attribute(tokens, pos, 0);
-        if pos < 0 { pos = sp; break; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+            break;
+        }
         if pos == sp { break; }
         let rs_83 = pos;
         let mut rs_83_ok = false;
         rsv_83: {
             if pos < tokens.len() && _kind_set_33(tokens[pos]) {
                 let sp = pos;
+                let sp_no_struct = SCAN_GATE.no_struct;
                 pos = scan_statements(tokens, pos, (FOLLOW_MASK_8 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
-                if pos < 0 { pos = sp; }
+                if pos < 0 {
+                    pos = sp;
+                    SCAN_GATE.no_struct = sp_no_struct;
+                }
             }
             if pos >= tokens.len() || tokens[pos] != TK_RCURLYBRACE { break rsv_83; }
             pos += 1;
@@ -11424,8 +11969,12 @@ fn scan_block_expression(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 
     }
     if pos < tokens.len() && _kind_set_33(tokens[pos]) {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         pos = scan_statements(tokens, pos, (FOLLOW_MASK_8 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
-        if pos < 0 { pos = sp; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+        }
     }
     if pos >= tokens.len() || tokens[pos] != TK_RCURLYBRACE { return -1; }
     pos += 1;
@@ -11438,8 +11987,13 @@ fn scan_statements_alt_0(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 
     if pos < 0 { return -1; }
     while pos < tokens.len() && _kind_set_33(tokens[pos]) && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         pos = scan_statement(tokens, pos, 0);
-        if pos < 0 { pos = sp; break; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+            break;
+        }
         if pos == sp { break; }
         let dk_84 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
         if !(_kind_set_33(dk_84) || _kind_set_31(dk_84) || dk_84 == TK_RCURLYBRACE) {
@@ -11449,8 +12003,12 @@ fn scan_statements_alt_0(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 
             dcl_84: {
                 if pos < tokens.len() && _kind_set_31(tokens[pos]) {
                     let sp = pos;
+                    let sp_no_struct = SCAN_GATE.no_struct;
                     pos = scan_expression(tokens, pos, follow, 0);
-                    if pos < 0 { pos = sp; }
+                    if pos < 0 {
+                        pos = sp;
+                        SCAN_GATE.no_struct = sp_no_struct;
+                    }
                 }
                 let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
                 if (follow == 0 || follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) && (probe_kind == TK_RCURLYBRACE) { dc_84_exit = true; }
@@ -11461,8 +12019,12 @@ fn scan_statements_alt_0(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 
     }
     if pos < tokens.len() && _kind_set_31(tokens[pos]) && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         pos = scan_expression(tokens, pos, follow, 0);
-        if pos < 0 { pos = sp; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+        }
     }
     return pos;
 }
@@ -11541,6 +12103,7 @@ fn scan_array_elements__scoped(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -
                 if pos < 0 { break try_0; }
                 while pos < tokens.len() && tokens[pos] == TK_COMMA && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
                     let sp = pos;
+                    let sp_no_struct = SCAN_GATE.no_struct;
                     sg_85_done: {
                         sg_85: {
                             if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sg_85; }
@@ -11551,7 +12114,11 @@ fn scan_array_elements__scoped(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -
                         }
                         pos = -1;
                     }
-                    if pos < 0 { pos = sp; break; }
+                    if pos < 0 {
+                        pos = sp;
+                        SCAN_GATE.no_struct = sp_no_struct;
+                        break;
+                    }
                     if pos == sp { break; }
                     let dk_86 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
                     if !(dk_86 == TK_COMMA || dk_86 == TK_COMMA || dk_86 == TK_RSQUAREBRACKET) {
@@ -11616,6 +12183,7 @@ fn scan_tuple_elements__scoped(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -
     }
     while pos < tokens.len() && _kind_set_31(tokens[pos]) && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         sg_88_done: {
             sg_88: {
                 pos = scan_expression(tokens, pos, (FOLLOW_MASK_22 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK, 0);
@@ -11626,7 +12194,11 @@ fn scan_tuple_elements__scoped(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -
             }
             pos = -1;
         }
-        if pos < 0 { pos = sp; break; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+            break;
+        }
         if pos == sp { break; }
         let dk_89 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
         if !(_kind_set_31(dk_89) || _kind_set_31(dk_89) || dk_89 == TK_RPAREN) {
@@ -11636,8 +12208,12 @@ fn scan_tuple_elements__scoped(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -
             dcl_89: {
                 if pos < tokens.len() && _kind_set_31(tokens[pos]) {
                     let sp = pos;
+                    let sp_no_struct = SCAN_GATE.no_struct;
                     pos = scan_expression(tokens, pos, follow, 0);
-                    if pos < 0 { pos = sp; }
+                    if pos < 0 {
+                        pos = sp;
+                        SCAN_GATE.no_struct = sp_no_struct;
+                    }
                 }
                 let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
                 if (follow == 0 || follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) && (probe_kind == TK_RPAREN) { dc_89_exit = true; }
@@ -11648,8 +12224,12 @@ fn scan_tuple_elements__scoped(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -
     }
     if pos < tokens.len() && _kind_set_31(tokens[pos]) && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         pos = scan_expression(tokens, pos, follow, 0);
-        if pos < 0 { pos = sp; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+        }
     }
     return pos;
 }
@@ -11707,14 +12287,20 @@ fn scan_struct_expr_struct(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i3
     pos += 1;
     while pos < tokens.len() && tokens[pos] == TK_POUND {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         pos = scan_inner_attribute(tokens, pos, 0);
-        if pos < 0 { pos = sp; break; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+            break;
+        }
         if pos == sp { break; }
         let rs_90 = pos;
         let mut rs_90_ok = false;
         rsv_90: {
             if pos < tokens.len() && _kind_set_35(tokens[pos]) {
                 let sp = pos;
+                let sp_no_struct = SCAN_GATE.no_struct;
                 let gp_91 = pos;
                 let gp_91_no_struct = SCAN_GATE.no_struct;
                 let sgk_91 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
@@ -11741,7 +12327,10 @@ fn scan_struct_expr_struct(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i3
                 } else {
                     pos = -1;
                 }
-                if pos < 0 { pos = sp; }
+                if pos < 0 {
+                    pos = sp;
+                    SCAN_GATE.no_struct = sp_no_struct;
+                }
             }
             if pos >= tokens.len() || tokens[pos] != TK_RCURLYBRACE { break rsv_90; }
             pos += 1;
@@ -11752,6 +12341,7 @@ fn scan_struct_expr_struct(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i3
     }
     if pos < tokens.len() && _kind_set_35(tokens[pos]) {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         let gp_92 = pos;
         let gp_92_no_struct = SCAN_GATE.no_struct;
         let sgk_92 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
@@ -11778,7 +12368,10 @@ fn scan_struct_expr_struct(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i3
         } else {
             pos = -1;
         }
-        if pos < 0 { pos = sp; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+        }
     }
     if pos >= tokens.len() || tokens[pos] != TK_RCURLYBRACE { return -1; }
     pos += 1;
@@ -11792,6 +12385,7 @@ fn scan_struct_expr_fields(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i3
     if pos < 0 { return -1; }
     while pos < tokens.len() && tokens[pos] == TK_COMMA && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         sg_93_done: {
             sg_93: {
                 if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sg_93; }
@@ -11802,7 +12396,11 @@ fn scan_struct_expr_fields(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i3
             }
             pos = -1;
         }
-        if pos < 0 { pos = sp; break; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+            break;
+        }
         if pos == sp { break; }
         let dk_94 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
         if !(dk_94 == TK_COMMA || dk_94 == TK_COMMA || dk_94 == TK_RCURLYBRACE) {
@@ -11884,8 +12482,13 @@ fn scan_struct_expr_field(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32
     let mut pos = pos;
     while pos < tokens.len() && tokens[pos] == TK_POUND {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         pos = scan_outer_attribute(tokens, pos, 0);
-        if pos < 0 { pos = sp; break; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+            break;
+        }
         if pos == sp { break; }
     }
     let gp_97 = pos;
@@ -11963,20 +12566,27 @@ fn scan_struct_expr_tuple(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32
     pos += 1;
     while pos < tokens.len() && tokens[pos] == TK_POUND {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         pos = scan_inner_attribute(tokens, pos, 0);
-        if pos < 0 { pos = sp; break; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+            break;
+        }
         if pos == sp { break; }
         let rs_99 = pos;
         let mut rs_99_ok = false;
         rsv_99: {
             if pos < tokens.len() && _kind_set_31(tokens[pos]) {
                 let sp = pos;
+                let sp_no_struct = SCAN_GATE.no_struct;
                 sg_100_done: {
                     sg_100: {
                         pos = scan_expression(tokens, pos, 0, 0);
                         if pos < 0 { break sg_100; }
                         while pos < tokens.len() && tokens[pos] == TK_COMMA {
                             let sp = pos;
+                            let sp_no_struct = SCAN_GATE.no_struct;
                             sg_101_done: {
                                 sg_101: {
                                     if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sg_101; }
@@ -11987,7 +12597,11 @@ fn scan_struct_expr_tuple(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32
                                 }
                                 pos = -1;
                             }
-                            if pos < 0 { pos = sp; break; }
+                            if pos < 0 {
+                                pos = sp;
+                                SCAN_GATE.no_struct = sp_no_struct;
+                                break;
+                            }
                             if pos == sp { break; }
                         }
                         if pos < tokens.len() && tokens[pos] == TK_COMMA {
@@ -11997,7 +12611,10 @@ fn scan_struct_expr_tuple(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32
                     }
                     pos = -1;
                 }
-                if pos < 0 { pos = sp; }
+                if pos < 0 {
+                    pos = sp;
+                    SCAN_GATE.no_struct = sp_no_struct;
+                }
             }
             if pos >= tokens.len() || tokens[pos] != TK_RPAREN { break rsv_99; }
             pos += 1;
@@ -12008,12 +12625,14 @@ fn scan_struct_expr_tuple(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32
     }
     if pos < tokens.len() && _kind_set_31(tokens[pos]) {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         sg_102_done: {
             sg_102: {
                 pos = scan_expression(tokens, pos, 0, 0);
                 if pos < 0 { break sg_102; }
                 while pos < tokens.len() && tokens[pos] == TK_COMMA {
                     let sp = pos;
+                    let sp_no_struct = SCAN_GATE.no_struct;
                     sg_103_done: {
                         sg_103: {
                             if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sg_103; }
@@ -12024,7 +12643,11 @@ fn scan_struct_expr_tuple(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32
                         }
                         pos = -1;
                     }
-                    if pos < 0 { pos = sp; break; }
+                    if pos < 0 {
+                        pos = sp;
+                        SCAN_GATE.no_struct = sp_no_struct;
+                        break;
+                    }
                     if pos == sp { break; }
                 }
                 if pos < tokens.len() && tokens[pos] == TK_COMMA {
@@ -12034,7 +12657,10 @@ fn scan_struct_expr_tuple(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32
             }
             pos = -1;
         }
-        if pos < 0 { pos = sp; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+        }
     }
     if pos >= tokens.len() || tokens[pos] != TK_RPAREN { return -1; }
     pos += 1;
@@ -12096,8 +12722,12 @@ fn scan_enum_expr_struct(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 
     pos += 1;
     if pos < tokens.len() && _kind_set_36(tokens[pos]) {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         pos = scan_enum_expr_fields(tokens, pos, (FOLLOW_MASK_8 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
-        if pos < 0 { pos = sp; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+        }
     }
     if pos >= tokens.len() || tokens[pos] != TK_RCURLYBRACE { return -1; }
     pos += 1;
@@ -12111,6 +12741,7 @@ fn scan_enum_expr_fields(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 
     if pos < 0 { return -1; }
     while pos < tokens.len() && tokens[pos] == TK_COMMA && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         sg_104_done: {
             sg_104: {
                 if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sg_104; }
@@ -12121,7 +12752,11 @@ fn scan_enum_expr_fields(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 
             }
             pos = -1;
         }
-        if pos < 0 { pos = sp; break; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+            break;
+        }
         if pos == sp { break; }
         let dk_105 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
         if !(dk_105 == TK_COMMA || dk_105 == TK_COMMA || dk_105 == TK_RCURLYBRACE) {
@@ -12219,12 +12854,14 @@ fn scan_enum_expr_tuple(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     pos += 1;
     if pos < tokens.len() && _kind_set_31(tokens[pos]) {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         sg_107_done: {
             sg_107: {
                 pos = scan_expression(tokens, pos, 0, 0);
                 if pos < 0 { break sg_107; }
                 while pos < tokens.len() && tokens[pos] == TK_COMMA {
                     let sp = pos;
+                    let sp_no_struct = SCAN_GATE.no_struct;
                     sg_108_done: {
                         sg_108: {
                             if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sg_108; }
@@ -12235,7 +12872,11 @@ fn scan_enum_expr_tuple(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
                         }
                         pos = -1;
                     }
-                    if pos < 0 { pos = sp; break; }
+                    if pos < 0 {
+                        pos = sp;
+                        SCAN_GATE.no_struct = sp_no_struct;
+                        break;
+                    }
                     if pos == sp { break; }
                 }
                 if pos < tokens.len() && tokens[pos] == TK_COMMA {
@@ -12245,7 +12886,10 @@ fn scan_enum_expr_tuple(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
             }
             pos = -1;
         }
-        if pos < 0 { pos = sp; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+        }
     }
     if pos >= tokens.len() || tokens[pos] != TK_RPAREN { return -1; }
     pos += 1;
@@ -12276,6 +12920,7 @@ fn scan_call_params__scoped(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i
     if pos < 0 { return -1; }
     while pos < tokens.len() && tokens[pos] == TK_COMMA && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         sg_109_done: {
             sg_109: {
                 if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sg_109; }
@@ -12286,7 +12931,11 @@ fn scan_call_params__scoped(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i
             }
             pos = -1;
         }
-        if pos < 0 { pos = sp; break; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+            break;
+        }
         if pos == sp { break; }
         let dk_110 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
         if !(dk_110 == TK_COMMA || dk_110 == TK_COMMA || dk_110 == TK_RPAREN) {
@@ -12339,8 +12988,12 @@ fn scan_closure_expression(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i3
             pos += 1;
             if pos < tokens.len() && _kind_set_38(tokens[pos]) {
                 let sp = pos;
+                let sp_no_struct = SCAN_GATE.no_struct;
                 pos = scan_closure_parameters(tokens, pos, FOLLOW_MASK_38);
-                if pos < 0 { pos = sp; }
+                if pos < 0 {
+                    pos = sp;
+                    SCAN_GATE.no_struct = sp_no_struct;
+                }
             }
             if pos >= tokens.len() || tokens[pos] != TK_OR { break sg_111_1; }
             pos += 1;
@@ -12392,6 +13045,7 @@ fn scan_closure_parameters(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i3
     if pos < 0 { return -1; }
     while pos < tokens.len() && tokens[pos] == TK_COMMA && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         sg_113_done: {
             sg_113: {
                 if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sg_113; }
@@ -12402,7 +13056,11 @@ fn scan_closure_parameters(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i3
             }
             pos = -1;
         }
-        if pos < 0 { pos = sp; break; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+            break;
+        }
         if pos == sp { break; }
         let dk_114 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
         if !(dk_114 == TK_COMMA || dk_114 == TK_COMMA || dk_114 == TK_OR) {
@@ -12432,14 +13090,20 @@ fn scan_closure_param(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     while pos < tokens.len() && tokens[pos] == TK_POUND {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         pos = scan_outer_attribute(tokens, pos, 0);
-        if pos < 0 { pos = sp; break; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+            break;
+        }
         if pos == sp { break; }
     }
     pos = scan_pattern(tokens, pos, follow);
     if pos < 0 { return -1; }
     if pos < tokens.len() && tokens[pos] == TK_COLON && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         sg_115_done: {
             sg_115: {
                 if pos >= tokens.len() || tokens[pos] != TK_COLON { break sg_115; }
@@ -12450,7 +13114,10 @@ fn scan_closure_param(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
             }
             pos = -1;
         }
-        if pos < 0 { pos = sp; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+        }
     }
     if pos == scan_start { return -1; }
     return pos;
@@ -12461,8 +13128,12 @@ fn scan_loop_expression(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos < tokens.len() && tokens[pos] == TK_LIFETIME_OR_LABEL {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         pos = scan_loop_label(tokens, pos);
-        if pos < 0 { pos = sp; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+        }
     }
     let gp_116 = pos;
     let gp_116_no_struct = SCAN_GATE.no_struct;
@@ -12530,8 +13201,13 @@ fn scan_predicate_loop_expression(tokens: &Array<i32>, pos: i32, follow: i64 = 0
         sg_117: {
             while pos < tokens.len() && tokens[pos] == TK_ANDAND {
                 let sp = pos;
+                let sp_no_struct = SCAN_GATE.no_struct;
                 pos = scan_let_chain_tail(tokens, pos, 0);
-                if pos < 0 { pos = sp; break; }
+                if pos < 0 {
+                    pos = sp;
+                    SCAN_GATE.no_struct = sp_no_struct;
+                    break;
+                }
                 if pos == sp { break; }
             }
             pos = scan_block_expression(tokens, pos, follow);
@@ -12561,8 +13237,13 @@ fn scan_predicate_pattern_loop_expression(tokens: &Array<i32>, pos: i32, follow:
         sg_118: {
             while pos < tokens.len() && tokens[pos] == TK_ANDAND {
                 let sp = pos;
+                let sp_no_struct = SCAN_GATE.no_struct;
                 pos = scan_let_chain_tail(tokens, pos, 0);
-                if pos < 0 { pos = sp; break; }
+                if pos < 0 {
+                    pos = sp;
+                    SCAN_GATE.no_struct = sp_no_struct;
+                    break;
+                }
                 if pos == sp { break; }
             }
             pos = scan_block_expression(tokens, pos, follow);
@@ -12612,8 +13293,13 @@ fn scan_if_expression(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
         sg_119: {
             while pos < tokens.len() && tokens[pos] == TK_ANDAND {
                 let sp = pos;
+                let sp_no_struct = SCAN_GATE.no_struct;
                 pos = scan_let_chain_tail(tokens, pos, 0);
-                if pos < 0 { pos = sp; break; }
+                if pos < 0 {
+                    pos = sp;
+                    SCAN_GATE.no_struct = sp_no_struct;
+                    break;
+                }
                 if pos == sp { break; }
             }
             pos = scan_block_expression(tokens, pos, follow);
@@ -12624,6 +13310,7 @@ fn scan_if_expression(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     }
     if pos < tokens.len() && tokens[pos] == TK_KW_ELSE && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         sg_120_done: {
             sg_120: {
                 if pos >= tokens.len() || tokens[pos] != TK_KW_ELSE { break sg_120; }
@@ -12665,7 +13352,10 @@ fn scan_if_expression(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
             }
             pos = -1;
         }
-        if pos < 0 { pos = sp; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+        }
     }
     return pos;
 }
@@ -12688,8 +13378,13 @@ fn scan_if_let_expression(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32
         sg_122: {
             while pos < tokens.len() && tokens[pos] == TK_ANDAND {
                 let sp = pos;
+                let sp_no_struct = SCAN_GATE.no_struct;
                 pos = scan_let_chain_tail(tokens, pos, 0);
-                if pos < 0 { pos = sp; break; }
+                if pos < 0 {
+                    pos = sp;
+                    SCAN_GATE.no_struct = sp_no_struct;
+                    break;
+                }
                 if pos == sp { break; }
             }
             pos = scan_block_expression(tokens, pos, follow);
@@ -12700,6 +13395,7 @@ fn scan_if_let_expression(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32
     }
     if pos < tokens.len() && tokens[pos] == TK_KW_ELSE && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         sg_123_done: {
             sg_123: {
                 if pos >= tokens.len() || tokens[pos] != TK_KW_ELSE { break sg_123; }
@@ -12741,7 +13437,10 @@ fn scan_if_let_expression(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32
             }
             pos = -1;
         }
-        if pos < 0 { pos = sp; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+        }
     }
     return pos;
 }
@@ -12775,16 +13474,25 @@ fn scan_match_expression(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 
     pos += 1;
     while pos < tokens.len() && tokens[pos] == TK_POUND {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         pos = scan_inner_attribute(tokens, pos, 0);
-        if pos < 0 { pos = sp; break; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+            break;
+        }
         if pos == sp { break; }
         let rs_125 = pos;
         let mut rs_125_ok = false;
         rsv_125: {
             if pos < tokens.len() && _kind_set_37(tokens[pos]) {
                 let sp = pos;
+                let sp_no_struct = SCAN_GATE.no_struct;
                 pos = scan_match_arms(tokens, pos, (FOLLOW_MASK_8 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
-                if pos < 0 { pos = sp; }
+                if pos < 0 {
+                    pos = sp;
+                    SCAN_GATE.no_struct = sp_no_struct;
+                }
             }
             if pos >= tokens.len() || tokens[pos] != TK_RCURLYBRACE { break rsv_125; }
             pos += 1;
@@ -12795,8 +13503,12 @@ fn scan_match_expression(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 
     }
     if pos < tokens.len() && _kind_set_37(tokens[pos]) {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         pos = scan_match_arms(tokens, pos, (FOLLOW_MASK_8 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
-        if pos < 0 { pos = sp; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+        }
     }
     if pos >= tokens.len() || tokens[pos] != TK_RCURLYBRACE { return -1; }
     pos += 1;
@@ -12807,6 +13519,7 @@ fn scan_match_arms(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     while pos < tokens.len() && _kind_set_37(tokens[pos]) {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         sg_126_done: {
             sg_126: {
                 pos = scan_match_arm(tokens, pos, FOLLOW_MASK_44);
@@ -12819,7 +13532,11 @@ fn scan_match_arms(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
             }
             pos = -1;
         }
-        if pos < 0 { pos = sp; break; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+            break;
+        }
         if pos == sp { break; }
         let rs_127 = pos;
         let mut rs_127_ok = false;
@@ -12897,16 +13614,25 @@ fn scan_match_arm(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     while pos < tokens.len() && tokens[pos] == TK_POUND {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         pos = scan_outer_attribute(tokens, pos, 0);
-        if pos < 0 { pos = sp; break; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+            break;
+        }
         if pos == sp { break; }
     }
     pos = scan_pattern(tokens, pos, follow);
     if pos < 0 { return -1; }
     if pos < tokens.len() && tokens[pos] == TK_KW_IF && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         pos = scan_match_arm_guard(tokens, pos, follow);
-        if pos < 0 { pos = sp; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+        }
     }
     if pos == scan_start { return -1; }
     return pos;
@@ -12933,8 +13659,13 @@ fn scan_match_arm_guard(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
                 if pos < 0 { break try_0; }
                 while pos < tokens.len() && tokens[pos] == TK_ANDAND && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
                     let sp = pos;
+                    let sp_no_struct = SCAN_GATE.no_struct;
                     pos = scan_let_chain_tail(tokens, pos, 0);
-                    if pos < 0 { pos = sp; break; }
+                    if pos < 0 {
+                        pos = sp;
+                        SCAN_GATE.no_struct = sp_no_struct;
+                        break;
+                    }
                     if pos == sp { break; }
                 }
                 if pos > best { best = pos; }
@@ -12946,8 +13677,13 @@ fn scan_match_arm_guard(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
                 if pos < 0 { break try_1; }
                 while pos < tokens.len() && tokens[pos] == TK_ANDAND && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
                     let sp = pos;
+                    let sp_no_struct = SCAN_GATE.no_struct;
                     pos = scan_let_chain_tail(tokens, pos, 0);
-                    if pos < 0 { pos = sp; break; }
+                    if pos < 0 {
+                        pos = sp;
+                        SCAN_GATE.no_struct = sp_no_struct;
+                        break;
+                    }
                     if pos == sp { break; }
                 }
                 if pos > best { best = pos; }
@@ -12971,6 +13707,7 @@ fn scan_pattern(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     if pos < 0 { return -1; }
     while pos < tokens.len() && tokens[pos] == TK_OR && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         sg_128_done: {
             sg_128: {
                 if pos >= tokens.len() || tokens[pos] != TK_OR { break sg_128; }
@@ -12981,7 +13718,11 @@ fn scan_pattern(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
             }
             pos = -1;
         }
-        if pos < 0 { pos = sp; break; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+            break;
+        }
         if pos == sp { break; }
     }
     if pos == scan_start { return -1; }
@@ -13274,6 +14015,7 @@ fn scan_identifier_pattern(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i3
     if pos < 0 { return -1; }
     if pos < tokens.len() && tokens[pos] == TK_AT && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         sg_129_done: {
             sg_129: {
                 if pos >= tokens.len() || tokens[pos] != TK_AT { break sg_129; }
@@ -13284,7 +14026,10 @@ fn scan_identifier_pattern(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i3
             }
             pos = -1;
         }
-        if pos < 0 { pos = sp; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+        }
     }
     if pos == scan_start { return -1; }
     return pos;
@@ -13462,8 +14207,12 @@ fn scan_struct_pattern(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     pos += 1;
     if pos < tokens.len() && _kind_set_40(tokens[pos]) {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         pos = scan_struct_pattern_elements(tokens, pos, (FOLLOW_MASK_8 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
-        if pos < 0 { pos = sp; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+        }
     }
     if pos >= tokens.len() || tokens[pos] != TK_RCURLYBRACE { return -1; }
     pos += 1;
@@ -13542,6 +14291,7 @@ fn scan_struct_pattern_fields(tokens: &Array<i32>, pos: i32, follow: i64 = 0) ->
     if pos < 0 { return -1; }
     while pos < tokens.len() && tokens[pos] == TK_COMMA && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         sg_134_done: {
             sg_134: {
                 if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sg_134; }
@@ -13552,7 +14302,11 @@ fn scan_struct_pattern_fields(tokens: &Array<i32>, pos: i32, follow: i64 = 0) ->
             }
             pos = -1;
         }
-        if pos < 0 { pos = sp; break; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+            break;
+        }
         if pos == sp { break; }
     }
     if pos == scan_start { return -1; }
@@ -13564,8 +14318,13 @@ fn scan_struct_pattern_field(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> 
     let mut pos = pos;
     while pos < tokens.len() && tokens[pos] == TK_POUND {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         pos = scan_outer_attribute(tokens, pos, 0);
-        if pos < 0 { pos = sp; break; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+            break;
+        }
         if pos == sp { break; }
     }
     let gp_135 = pos;
@@ -13624,8 +14383,13 @@ fn scan_struct_pattern_et_cetera(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
     while pos < tokens.len() && tokens[pos] == TK_POUND {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         pos = scan_outer_attribute(tokens, pos, 0);
-        if pos < 0 { pos = sp; break; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+            break;
+        }
         if pos == sp { break; }
     }
     if pos >= tokens.len() || tokens[pos] != TK_DOTDOT { return -1; }
@@ -13641,8 +14405,12 @@ fn scan_tuple_struct_pattern(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> 
     pos += 1;
     if pos < tokens.len() && _kind_set_43(tokens[pos]) {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         pos = scan_tuple_struct_items(tokens, pos, (FOLLOW_MASK_21 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
-        if pos < 0 { pos = sp; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+        }
     }
     if pos >= tokens.len() || tokens[pos] != TK_RPAREN { return -1; }
     pos += 1;
@@ -13656,6 +14424,7 @@ fn scan_tuple_struct_items(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i3
     if pos < 0 { return -1; }
     while pos < tokens.len() && tokens[pos] == TK_COMMA && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         sg_136_done: {
             sg_136: {
                 if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sg_136; }
@@ -13666,7 +14435,11 @@ fn scan_tuple_struct_items(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i3
             }
             pos = -1;
         }
-        if pos < 0 { pos = sp; break; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+            break;
+        }
         if pos == sp { break; }
         let dk_137 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
         if !(dk_137 == TK_COMMA || dk_137 == TK_COMMA || dk_137 == TK_RPAREN) {
@@ -13697,8 +14470,12 @@ fn scan_tuple_pattern(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     pos += 1;
     if pos < tokens.len() && _kind_set_43(tokens[pos]) {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         pos = scan_tuple_pattern_items(tokens, pos, (FOLLOW_MASK_21 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
-        if pos < 0 { pos = sp; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+        }
     }
     if pos >= tokens.len() || tokens[pos] != TK_RPAREN { return -1; }
     pos += 1;
@@ -13730,6 +14507,7 @@ fn scan_tuple_pattern_items_alt_2(tokens: &Array<i32>, pos: i32, follow: i64 = 0
     }
     while pos < tokens.len() && tokens[pos] == TK_COMMA && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         sg_139_done: {
             sg_139: {
                 if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sg_139; }
@@ -13740,7 +14518,11 @@ fn scan_tuple_pattern_items_alt_2(tokens: &Array<i32>, pos: i32, follow: i64 = 0
             }
             pos = -1;
         }
-        if pos < 0 { pos = sp; break; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+            break;
+        }
         if pos == sp { break; }
         let dk_140 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
         if !(dk_140 == TK_COMMA || dk_140 == TK_COMMA || dk_140 == TK_RPAREN) {
@@ -13817,8 +14599,12 @@ fn scan_slice_pattern(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     pos += 1;
     if pos < tokens.len() && _kind_set_43(tokens[pos]) {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         pos = scan_slice_pattern_items(tokens, pos, (FOLLOW_MASK_33 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
-        if pos < 0 { pos = sp; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+        }
     }
     if pos >= tokens.len() || tokens[pos] != TK_RSQUAREBRACKET { return -1; }
     pos += 1;
@@ -13832,6 +14618,7 @@ fn scan_slice_pattern_items(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i
     if pos < 0 { return -1; }
     while pos < tokens.len() && tokens[pos] == TK_COMMA && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         sg_141_done: {
             sg_141: {
                 if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sg_141; }
@@ -13842,7 +14629,11 @@ fn scan_slice_pattern_items(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i
             }
             pos = -1;
         }
-        if pos < 0 { pos = sp; break; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+            break;
+        }
         if pos == sp { break; }
         let dk_142 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
         if !(dk_142 == TK_COMMA || dk_142 == TK_COMMA || dk_142 == TK_RSQUAREBRACKET) {
@@ -14143,6 +14934,7 @@ fn scan_tuple_type(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     pos += 1;
     if pos < tokens.len() && _kind_set_18(tokens[pos]) {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         sg_143_done: {
             sg_143: {
                 sg_144_done: {
@@ -14157,6 +14949,7 @@ fn scan_tuple_type(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
                 }
                 while pos < tokens.len() && _kind_set_18(tokens[pos]) {
                     let sp = pos;
+                    let sp_no_struct = SCAN_GATE.no_struct;
                     sg_145_done: {
                         sg_145: {
                             pos = scan_type_(tokens, pos, (FOLLOW_MASK_22 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
@@ -14167,19 +14960,30 @@ fn scan_tuple_type(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
                         }
                         pos = -1;
                     }
-                    if pos < 0 { pos = sp; break; }
+                    if pos < 0 {
+                        pos = sp;
+                        SCAN_GATE.no_struct = sp_no_struct;
+                        break;
+                    }
                     if pos == sp { break; }
                 }
                 if pos < tokens.len() && _kind_set_18(tokens[pos]) {
                     let sp = pos;
+                    let sp_no_struct = SCAN_GATE.no_struct;
                     pos = scan_type_(tokens, pos, (FOLLOW_MASK_21 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
-                    if pos < 0 { pos = sp; }
+                    if pos < 0 {
+                        pos = sp;
+                        SCAN_GATE.no_struct = sp_no_struct;
+                    }
                 }
                 break sg_143_done;
             }
             pos = -1;
         }
-        if pos < 0 { pos = sp; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+        }
     }
     if pos >= tokens.len() || tokens[pos] != TK_RPAREN { return -1; }
     pos += 1;
@@ -14242,8 +15046,12 @@ fn scan_reference_type(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     }
     if pos < tokens.len() && _kind_set_16(tokens[pos]) {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         pos = scan_lifetime(tokens, pos);
-        if pos < 0 { pos = sp; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+        }
     }
     if pos < tokens.len() && tokens[pos] == TK_KW_MUT {
         pos += 1;
@@ -14292,8 +15100,12 @@ fn scan_bare_function_type(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i3
     let mut pos = pos;
     if pos < tokens.len() && tokens[pos] == TK_KW_FOR {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         pos = scan_for_lifetimes(tokens, pos, 0);
-        if pos < 0 { pos = sp; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+        }
     }
     pos = scan_function_type_qualifiers(tokens, pos, FOLLOW_MASK_49);
     if pos < 0 { return -1; }
@@ -14303,15 +15115,23 @@ fn scan_bare_function_type(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i3
     pos += 1;
     if pos < tokens.len() && _kind_set_44(tokens[pos]) {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         pos = scan_function_parameters_maybe_named_variadic(tokens, pos, FOLLOW_MASK_21);
-        if pos < 0 { pos = sp; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+        }
     }
     if pos >= tokens.len() || tokens[pos] != TK_RPAREN { return -1; }
     pos += 1;
     if pos < tokens.len() && tokens[pos] == TK_RARROW && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         pos = scan_bare_function_return_type(tokens, pos, follow);
-        if pos < 0 { pos = sp; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+        }
     }
     return pos;
 }
@@ -14393,6 +15213,7 @@ fn scan_maybe_named_function_parameters(tokens: &Array<i32>, pos: i32, follow: i
     if pos < 0 { return -1; }
     while pos < tokens.len() && tokens[pos] == TK_COMMA && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         sg_151_done: {
             sg_151: {
                 if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sg_151; }
@@ -14403,7 +15224,11 @@ fn scan_maybe_named_function_parameters(tokens: &Array<i32>, pos: i32, follow: i
             }
             pos = -1;
         }
-        if pos < 0 { pos = sp; break; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+            break;
+        }
         if pos == sp { break; }
         let dk_152 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
         if !(dk_152 == TK_COMMA || dk_152 == TK_COMMA || dk_152 == TK_RPAREN) {
@@ -14433,12 +15258,18 @@ fn scan_maybe_named_param(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32
     let mut pos = pos;
     while pos < tokens.len() && tokens[pos] == TK_POUND {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         pos = scan_outer_attribute(tokens, pos, 0);
-        if pos < 0 { pos = sp; break; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+            break;
+        }
         if pos == sp { break; }
     }
     if pos < tokens.len() && _kind_set_45(tokens[pos]) {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         sg_153_done: {
             sg_153: {
                 let gp_154 = pos;
@@ -14473,7 +15304,10 @@ fn scan_maybe_named_param(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32
             }
             pos = -1;
         }
-        if pos < 0 { pos = sp; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+        }
     }
     pos = scan_type_(tokens, pos, follow);
     if pos < 0 { return -1; }
@@ -14485,6 +15319,7 @@ fn scan_maybe_named_function_parameters_variadic(tokens: &Array<i32>, pos: i32, 
     let mut pos = pos;
     while pos < tokens.len() && _kind_set_44(tokens[pos]) {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         sg_155_done: {
             sg_155: {
                 pos = scan_maybe_named_param(tokens, pos, (FOLLOW_MASK_22 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
@@ -14495,7 +15330,11 @@ fn scan_maybe_named_function_parameters_variadic(tokens: &Array<i32>, pos: i32, 
             }
             pos = -1;
         }
-        if pos < 0 { pos = sp; break; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+            break;
+        }
         if pos == sp { break; }
         let rs_156 = pos;
         let mut rs_156_ok = false;
@@ -14506,8 +15345,13 @@ fn scan_maybe_named_function_parameters_variadic(tokens: &Array<i32>, pos: i32, 
             pos += 1;
             while pos < tokens.len() && tokens[pos] == TK_POUND {
                 let sp = pos;
+                let sp_no_struct = SCAN_GATE.no_struct;
                 pos = scan_outer_attribute(tokens, pos, 0);
-                if pos < 0 { pos = sp; break; }
+                if pos < 0 {
+                    pos = sp;
+                    SCAN_GATE.no_struct = sp_no_struct;
+                    break;
+                }
                 if pos == sp { break; }
             }
             if pos >= tokens.len() || tokens[pos] != TK_DOTDOTDOT { break rsv_156; }
@@ -14523,8 +15367,13 @@ fn scan_maybe_named_function_parameters_variadic(tokens: &Array<i32>, pos: i32, 
     pos += 1;
     while pos < tokens.len() && tokens[pos] == TK_POUND {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         pos = scan_outer_attribute(tokens, pos, 0);
-        if pos < 0 { pos = sp; break; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+            break;
+        }
         if pos == sp { break; }
     }
     if pos >= tokens.len() || tokens[pos] != TK_DOTDOTDOT { return -1; }
@@ -14588,6 +15437,7 @@ fn scan_type_param_bounds(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32
     if pos < 0 { return -1; }
     while pos < tokens.len() && tokens[pos] == TK_PLUS && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         sg_157_done: {
             sg_157: {
                 if pos >= tokens.len() || tokens[pos] != TK_PLUS { break sg_157; }
@@ -14598,7 +15448,11 @@ fn scan_type_param_bounds(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32
             }
             pos = -1;
         }
-        if pos < 0 { pos = sp; break; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+            break;
+        }
         if pos == sp { break; }
         let dk_158 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
         if !(dk_158 == TK_PLUS || dk_158 == TK_PLUS || _kind_set_91(dk_158)) {
@@ -14669,8 +15523,12 @@ fn scan_trait_bound(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
                 }
                 if pos < tokens.len() && tokens[pos] == TK_KW_FOR {
                     let sp = pos;
+                    let sp_no_struct = SCAN_GATE.no_struct;
                     pos = scan_for_lifetimes(tokens, pos, FOLLOW_MASK_51);
-                    if pos < 0 { pos = sp; }
+                    if pos < 0 {
+                        pos = sp;
+                        SCAN_GATE.no_struct = sp_no_struct;
+                    }
                 }
                 pos = scan_type_path(tokens, pos, follow);
                 if pos < 0 { break try_0; }
@@ -14688,8 +15546,12 @@ fn scan_trait_bound(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
                 }
                 if pos < tokens.len() && tokens[pos] == TK_KW_FOR {
                     let sp = pos;
+                    let sp_no_struct = SCAN_GATE.no_struct;
                     pos = scan_for_lifetimes(tokens, pos, FOLLOW_MASK_51);
-                    if pos < 0 { pos = sp; }
+                    if pos < 0 {
+                        pos = sp;
+                        SCAN_GATE.no_struct = sp_no_struct;
+                    }
                 }
                 pos = scan_type_path(tokens, pos, (FOLLOW_MASK_21 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
                 if pos < 0 { break try_1; }
@@ -14709,6 +15571,7 @@ fn scan_lifetime_bounds(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     while pos < tokens.len() && _kind_set_16(tokens[pos]) && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         sg_159_done: {
             sg_159: {
                 pos = scan_lifetime(tokens, pos);
@@ -14719,7 +15582,11 @@ fn scan_lifetime_bounds(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
             }
             pos = -1;
         }
-        if pos < 0 { pos = sp; break; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+            break;
+        }
         if pos == sp { break; }
         let dk_160 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
         if !(_kind_set_16(dk_160) || _kind_set_16(dk_160) || _kind_set_92(dk_160)) {
@@ -14729,8 +15596,12 @@ fn scan_lifetime_bounds(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
             dcl_160: {
                 if pos < tokens.len() && _kind_set_16(tokens[pos]) {
                     let sp = pos;
+                    let sp_no_struct = SCAN_GATE.no_struct;
                     pos = scan_lifetime(tokens, pos);
-                    if pos < 0 { pos = sp; }
+                    if pos < 0 {
+                        pos = sp;
+                        SCAN_GATE.no_struct = sp_no_struct;
+                    }
                 }
                 let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
                 if (follow == 0 || follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) && (_kind_set_92(probe_kind)) { dc_160_exit = true; }
@@ -14741,8 +15612,12 @@ fn scan_lifetime_bounds(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     }
     if pos < tokens.len() && _kind_set_16(tokens[pos]) && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         pos = scan_lifetime(tokens, pos);
-        if pos < 0 { pos = sp; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+        }
     }
     return pos;
 }
@@ -14764,6 +15639,7 @@ fn scan_simple_path(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     if pos < 0 { return -1; }
     while pos < tokens.len() && tokens[pos] == TK_PATHSEP && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         sg_161_done: {
             sg_161: {
                 if pos >= tokens.len() || tokens[pos] != TK_PATHSEP { break sg_161; }
@@ -14774,7 +15650,11 @@ fn scan_simple_path(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
             }
             pos = -1;
         }
-        if pos < 0 { pos = sp; break; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+            break;
+        }
         if pos == sp { break; }
     }
     if pos == scan_start { return -1; }
@@ -14829,6 +15709,7 @@ fn scan_path_in_expression(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i3
     if pos < 0 { return -1; }
     while pos < tokens.len() && tokens[pos] == TK_PATHSEP && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         sg_162_done: {
             sg_162: {
                 if pos >= tokens.len() || tokens[pos] != TK_PATHSEP { break sg_162; }
@@ -14839,7 +15720,11 @@ fn scan_path_in_expression(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i3
             }
             pos = -1;
         }
-        if pos < 0 { pos = sp; break; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+            break;
+        }
         if pos == sp { break; }
     }
     if pos == scan_start { return -1; }
@@ -14853,6 +15738,7 @@ fn scan_path_expr_segment(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32
     if pos < 0 { return -1; }
     if pos < tokens.len() && tokens[pos] == TK_PATHSEP && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         sg_163_done: {
             sg_163: {
                 if pos >= tokens.len() || tokens[pos] != TK_PATHSEP { break sg_163; }
@@ -14863,7 +15749,10 @@ fn scan_path_expr_segment(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32
             }
             pos = -1;
         }
-        if pos < 0 { pos = sp; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+        }
     }
     if pos == scan_start { return -1; }
     return pos;
@@ -14926,6 +15815,7 @@ fn scan_generic_args(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
                 if pos < 0 { break try_1; }
                 if pos < tokens.len() && tokens[pos] == TK_COMMA {
                     let sp = pos;
+                    let sp_no_struct = SCAN_GATE.no_struct;
                     sg_164_done: {
                         sg_164: {
                             if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sg_164; }
@@ -14936,10 +15826,14 @@ fn scan_generic_args(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
                         }
                         pos = -1;
                     }
-                    if pos < 0 { pos = sp; }
+                    if pos < 0 {
+                        pos = sp;
+                        SCAN_GATE.no_struct = sp_no_struct;
+                    }
                 }
                 if pos < tokens.len() && tokens[pos] == TK_COMMA {
                     let sp = pos;
+                    let sp_no_struct = SCAN_GATE.no_struct;
                     sg_165_done: {
                         sg_165: {
                             if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sg_165; }
@@ -14950,7 +15844,10 @@ fn scan_generic_args(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
                         }
                         pos = -1;
                     }
-                    if pos < 0 { pos = sp; }
+                    if pos < 0 {
+                        pos = sp;
+                        SCAN_GATE.no_struct = sp_no_struct;
+                    }
                 }
                 if pos < tokens.len() && tokens[pos] == TK_COMMA {
                     pos += 1;
@@ -14966,6 +15863,7 @@ fn scan_generic_args(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
                 if pos < 0 { break try_2; }
                 if pos < tokens.len() && tokens[pos] == TK_COMMA {
                     let sp = pos;
+                    let sp_no_struct = SCAN_GATE.no_struct;
                     sg_166_done: {
                         sg_166: {
                             if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sg_166; }
@@ -14976,7 +15874,10 @@ fn scan_generic_args(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
                         }
                         pos = -1;
                     }
-                    if pos < 0 { pos = sp; }
+                    if pos < 0 {
+                        pos = sp;
+                        SCAN_GATE.no_struct = sp_no_struct;
+                    }
                 }
                 if pos < tokens.len() && tokens[pos] == TK_COMMA {
                     pos += 1;
@@ -14992,6 +15893,7 @@ fn scan_generic_args(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
                 pos += 1;
                 while pos < tokens.len() && _kind_set_48(tokens[pos]) {
                     let sp = pos;
+                    let sp_no_struct = SCAN_GATE.no_struct;
                     sg_167_done: {
                         sg_167: {
                             pos = scan_generic_arg(tokens, pos, (FOLLOW_MASK_22 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
@@ -15002,7 +15904,11 @@ fn scan_generic_args(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
                         }
                         pos = -1;
                     }
-                    if pos < 0 { pos = sp; break; }
+                    if pos < 0 {
+                        pos = sp;
+                        SCAN_GATE.no_struct = sp_no_struct;
+                        break;
+                    }
                     if pos == sp { break; }
                     let rs_168 = pos;
                     let mut rs_168_ok = false;
@@ -15165,6 +16071,7 @@ fn scan_generic_args_lifetimes(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -
     if pos < 0 { return -1; }
     while pos < tokens.len() && tokens[pos] == TK_COMMA && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         sg_169_done: {
             sg_169: {
                 if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sg_169; }
@@ -15175,7 +16082,11 @@ fn scan_generic_args_lifetimes(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -
             }
             pos = -1;
         }
-        if pos < 0 { pos = sp; break; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+            break;
+        }
         if pos == sp { break; }
     }
     if pos == scan_start { return -1; }
@@ -15189,6 +16100,7 @@ fn scan_generic_args_types(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i3
     if pos < 0 { return -1; }
     while pos < tokens.len() && tokens[pos] == TK_COMMA && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         sg_170_done: {
             sg_170: {
                 if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sg_170; }
@@ -15199,7 +16111,11 @@ fn scan_generic_args_types(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i3
             }
             pos = -1;
         }
-        if pos < 0 { pos = sp; break; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+            break;
+        }
         if pos == sp { break; }
     }
     if pos == scan_start { return -1; }
@@ -15213,6 +16129,7 @@ fn scan_generic_args_bindings(tokens: &Array<i32>, pos: i32, follow: i64 = 0) ->
     if pos < 0 { return -1; }
     while pos < tokens.len() && tokens[pos] == TK_COMMA && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         sg_171_done: {
             sg_171: {
                 if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sg_171; }
@@ -15223,7 +16140,11 @@ fn scan_generic_args_bindings(tokens: &Array<i32>, pos: i32, follow: i64 = 0) ->
             }
             pos = -1;
         }
-        if pos < 0 { pos = sp; break; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+            break;
+        }
         if pos == sp { break; }
     }
     if pos == scan_start { return -1; }
@@ -15257,6 +16178,7 @@ fn scan_qualified_path_in_expression(tokens: &Array<i32>, pos: i32, follow: i64 
     }
     while pos < tokens.len() && tokens[pos] == TK_PATHSEP && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         sg_173_done: {
             sg_173: {
                 if pos >= tokens.len() || tokens[pos] != TK_PATHSEP { break sg_173; }
@@ -15267,7 +16189,11 @@ fn scan_qualified_path_in_expression(tokens: &Array<i32>, pos: i32, follow: i64 
             }
             pos = -1;
         }
-        if pos < 0 { pos = sp; break; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+            break;
+        }
         if pos == sp { break; }
     }
     return pos;
@@ -15281,6 +16207,7 @@ fn scan_qualified_path_type(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i
     if pos < 0 { return -1; }
     if pos < tokens.len() && tokens[pos] == TK_KW_AS {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         sg_174_done: {
             sg_174: {
                 if pos >= tokens.len() || tokens[pos] != TK_KW_AS { break sg_174; }
@@ -15291,7 +16218,10 @@ fn scan_qualified_path_type(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i
             }
             pos = -1;
         }
-        if pos < 0 { pos = sp; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+        }
     }
     if pos >= tokens.len() || tokens[pos] != TK_GT { return -1; }
     pos += 1;
@@ -15314,6 +16244,7 @@ fn scan_qualified_path_in_type(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -
     }
     while pos < tokens.len() && tokens[pos] == TK_PATHSEP && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         sg_176_done: {
             sg_176: {
                 if pos >= tokens.len() || tokens[pos] != TK_PATHSEP { break sg_176; }
@@ -15324,7 +16255,11 @@ fn scan_qualified_path_in_type(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -
             }
             pos = -1;
         }
-        if pos < 0 { pos = sp; break; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+            break;
+        }
         if pos == sp { break; }
     }
     return pos;
@@ -15340,6 +16275,7 @@ fn scan_type_path(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     if pos < 0 { return -1; }
     while pos < tokens.len() && tokens[pos] == TK_PATHSEP && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         sg_177_done: {
             sg_177: {
                 if pos >= tokens.len() || tokens[pos] != TK_PATHSEP { break sg_177; }
@@ -15350,7 +16286,11 @@ fn scan_type_path(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
             }
             pos = -1;
         }
-        if pos < 0 { pos = sp; break; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+            break;
+        }
         if pos == sp { break; }
     }
     if pos == scan_start { return -1; }
@@ -15367,6 +16307,7 @@ fn scan_type_path_segment(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32
     }
     if pos < tokens.len() && _kind_set_50(tokens[pos]) && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         let gp_178 = pos;
         let gp_178_no_struct = SCAN_GATE.no_struct;
         let sgk_178 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
@@ -15393,7 +16334,10 @@ fn scan_type_path_segment(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32
         } else {
             pos = -1;
         }
-        if pos < 0 { pos = sp; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+        }
     }
     if pos == scan_start { return -1; }
     return pos;
@@ -15405,13 +16349,18 @@ fn scan_type_path_fn(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     pos += 1;
     if pos < tokens.len() && _kind_set_18(tokens[pos]) {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         pos = scan_type_path_inputs(tokens, pos, FOLLOW_MASK_21);
-        if pos < 0 { pos = sp; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+        }
     }
     if pos >= tokens.len() || tokens[pos] != TK_RPAREN { return -1; }
     pos += 1;
     if pos < tokens.len() && tokens[pos] == TK_RARROW && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         sg_179_done: {
             sg_179: {
                 if pos >= tokens.len() || tokens[pos] != TK_RARROW { break sg_179; }
@@ -15422,7 +16371,10 @@ fn scan_type_path_fn(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
             }
             pos = -1;
         }
-        if pos < 0 { pos = sp; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+        }
     }
     return pos;
 }
@@ -15434,6 +16386,7 @@ fn scan_type_path_inputs(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 
     if pos < 0 { return -1; }
     while pos < tokens.len() && tokens[pos] == TK_COMMA && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         sg_180_done: {
             sg_180: {
                 if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sg_180; }
@@ -15444,7 +16397,11 @@ fn scan_type_path_inputs(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 
             }
             pos = -1;
         }
-        if pos < 0 { pos = sp; break; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+            break;
+        }
         if pos == sp { break; }
         let dk_181 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
         if !(dk_181 == TK_COMMA || dk_181 == TK_COMMA || dk_181 == TK_RPAREN) {
@@ -15475,6 +16432,7 @@ fn scan_visibility(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     pos += 1;
     if pos < tokens.len() && tokens[pos] == TK_LPAREN && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         sg_182_done: {
             sg_182: {
                 if pos >= tokens.len() || tokens[pos] != TK_LPAREN { break sg_182; }
@@ -15529,7 +16487,10 @@ fn scan_visibility(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
             }
             pos = -1;
         }
-        if pos < 0 { pos = sp; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+        }
     }
     return pos;
 }
@@ -15660,8 +16621,13 @@ fn _parse_crate__inner(p: &mut Parser) -> () with RustParserBase {
             let rep_body_end = pos;
             while pos < tokens.len() && _kind_set_0(tokens[pos]) {
                 let sp = pos;
+                let sp_no_struct = SCAN_GATE.no_struct;
                 pos = scan_item(tokens, pos);
-                if pos < 0 { pos = sp; break; }
+                if pos < 0 {
+                    pos = sp;
+                    SCAN_GATE.no_struct = sp_no_struct;
+                    break;
+                }
                 if pos == sp { break; }
             }
             if pos >= tokens.len() || tokens[pos] != TK_EOF { break rep_scan; }
@@ -16066,8 +17032,13 @@ fn _parse_macro_invocation_semi__inner_scan_0(tokens: &Array<i32>, pos: i32) -> 
     pos += 1;
     while pos < tokens.len() && _kind_set_1(tokens[pos]) {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         pos = scan_token_tree(tokens, pos, 0);
-        if pos < 0 { pos = sp; break; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+            break;
+        }
         if pos == sp { break; }
     }
     if pos >= tokens.len() || tokens[pos] != TK_RPAREN { return -1; }
@@ -16125,8 +17096,13 @@ fn _parse_macro_invocation_semi__inner_scan_1(tokens: &Array<i32>, pos: i32) -> 
     pos += 1;
     while pos < tokens.len() && _kind_set_1(tokens[pos]) {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         pos = scan_token_tree(tokens, pos, 0);
-        if pos < 0 { pos = sp; break; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+            break;
+        }
         if pos == sp { break; }
     }
     if pos >= tokens.len() || tokens[pos] != TK_RSQUAREBRACKET { return -1; }
@@ -16183,8 +17159,13 @@ fn _parse_macro_invocation_semi__inner_scan_2(tokens: &Array<i32>, pos: i32) -> 
     pos += 1;
     while pos < tokens.len() && _kind_set_1(tokens[pos]) {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         pos = scan_token_tree(tokens, pos, 0);
-        if pos < 0 { pos = sp; break; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+            break;
+        }
         if pos == sp { break; }
     }
     if pos >= tokens.len() || tokens[pos] != TK_RCURLYBRACE { return -1; }
@@ -17203,8 +18184,13 @@ fn _parse_module__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBa
                 let rep_body_end = pos;
                 while pos < tokens.len() && _kind_set_0(tokens[pos]) {
                     let sp = pos;
+                    let sp_no_struct = SCAN_GATE.no_struct;
                     pos = scan_item(tokens, pos);
-                    if pos < 0 { pos = sp; break; }
+                    if pos < 0 {
+                        pos = sp;
+                        SCAN_GATE.no_struct = sp_no_struct;
+                        break;
+                    }
                     if pos == sp { break; }
                 }
                 if pos >= tokens.len() || tokens[pos] != TK_RCURLYBRACE { break rep_scan; }
@@ -17391,6 +18377,7 @@ fn _parse_use_tree__inner_scan_1(tokens: &Array<i32>, pos: i32, follow: i64 = 0)
     if pos < 0 { return -1; }
     if pos < tokens.len() && tokens[pos] == TK_KW_AS && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         sg_185_done: {
             sg_185: {
                 if pos >= tokens.len() || tokens[pos] != TK_KW_AS { break sg_185; }
@@ -17425,7 +18412,10 @@ fn _parse_use_tree__inner_scan_1(tokens: &Array<i32>, pos: i32, follow: i64 = 0)
             }
             pos = -1;
         }
-        if pos < 0 { pos = sp; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+        }
     }
     return pos;
 }
@@ -17473,6 +18463,7 @@ fn _parse_use_tree__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () with Rust
             if pos < 0 { break opt_scan; }
             while pos < tokens.len() && tokens[pos] == TK_COMMA {
                 let sp = pos;
+                let sp_no_struct = SCAN_GATE.no_struct;
                 sg_187_done: {
                     sg_187: {
                         if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sg_187; }
@@ -17483,7 +18474,11 @@ fn _parse_use_tree__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () with Rust
                     }
                     pos = -1;
                 }
-                if pos < 0 { pos = sp; break; }
+                if pos < 0 {
+                    pos = sp;
+                    SCAN_GATE.no_struct = sp_no_struct;
+                    break;
+                }
                 if pos == sp { break; }
             }
             if pos < tokens.len() && tokens[pos] == TK_COMMA {
@@ -17572,12 +18567,14 @@ fn _parse_use_tree__inner_scan_0(tokens: &Array<i32>, pos: i32, follow: i64 = 0)
             pos += 1;
             if pos < tokens.len() && _kind_set_11(tokens[pos]) {
                 let sp = pos;
+                let sp_no_struct = SCAN_GATE.no_struct;
                 sg_193_done: {
                     sg_193: {
                         pos = scan_use_tree(tokens, pos, 0);
                         if pos < 0 { break sg_193; }
                         while pos < tokens.len() && tokens[pos] == TK_COMMA {
                             let sp = pos;
+                            let sp_no_struct = SCAN_GATE.no_struct;
                             sg_194_done: {
                                 sg_194: {
                                     if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sg_194; }
@@ -17588,7 +18585,11 @@ fn _parse_use_tree__inner_scan_0(tokens: &Array<i32>, pos: i32, follow: i64 = 0)
                                 }
                                 pos = -1;
                             }
-                            if pos < 0 { pos = sp; break; }
+                            if pos < 0 {
+                                pos = sp;
+                                SCAN_GATE.no_struct = sp_no_struct;
+                                break;
+                            }
                             if pos == sp { break; }
                         }
                         if pos < tokens.len() && tokens[pos] == TK_COMMA {
@@ -17598,7 +18599,10 @@ fn _parse_use_tree__inner_scan_0(tokens: &Array<i32>, pos: i32, follow: i64 = 0)
                     }
                     pos = -1;
                 }
-                if pos < 0 { pos = sp; }
+                if pos < 0 {
+                    pos = sp;
+                    SCAN_GATE.no_struct = sp_no_struct;
+                }
             }
             if pos >= tokens.len() || tokens[pos] != TK_RCURLYBRACE { break sg_192_1; }
             pos += 1;
@@ -17846,6 +18850,7 @@ fn _parse_function_parameters__inner_scan_1(tokens: &Array<i32>, pos: i32, follo
     let mut pos = pos;
     if pos < tokens.len() && _kind_set_14(tokens[pos]) {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         sg_196_done: {
             sg_196: {
                 pos = scan_self_param(tokens, pos);
@@ -17856,12 +18861,16 @@ fn _parse_function_parameters__inner_scan_1(tokens: &Array<i32>, pos: i32, follo
             }
             pos = -1;
         }
-        if pos < 0 { pos = sp; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+        }
     }
     pos = scan_function_param(tokens, pos, follow);
     if pos < 0 { return -1; }
     while pos < tokens.len() && tokens[pos] == TK_COMMA && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         sg_197_done: {
             sg_197: {
                 if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sg_197; }
@@ -17872,7 +18881,11 @@ fn _parse_function_parameters__inner_scan_1(tokens: &Array<i32>, pos: i32, follo
             }
             pos = -1;
         }
-        if pos < 0 { pos = sp; break; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+            break;
+        }
         if pos == sp { break; }
         let dk_198 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
         if !(dk_198 == TK_COMMA || dk_198 == TK_COMMA || dk_198 == TK_RPAREN) {
@@ -18961,8 +19974,13 @@ fn _parse_trait___inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBa
             let rep_body_end = pos;
             while pos < tokens.len() && _kind_set_23(tokens[pos]) {
                 let sp = pos;
+                let sp_no_struct = SCAN_GATE.no_struct;
                 pos = scan_associated_item(tokens, pos);
-                if pos < 0 { pos = sp; break; }
+                if pos < 0 {
+                    pos = sp;
+                    SCAN_GATE.no_struct = sp_no_struct;
+                    break;
+                }
                 if pos == sp { break; }
             }
             if pos >= tokens.len() || tokens[pos] != TK_RCURLYBRACE { break rep_scan; }
@@ -19116,23 +20134,37 @@ fn _parse_inherent_impl__inner(p: &mut Parser, follow: i64 = 0) -> () with RustP
             if pos < 0 { break opt_enter_scan; }
             if pos < tokens.len() && tokens[pos] == TK_KW_WHERE {
                 let sp = pos;
+                let sp_no_struct = SCAN_GATE.no_struct;
                 pos = scan_where_clause(tokens, pos, FOLLOW_MASK_27);
-                if pos < 0 { pos = sp; }
+                if pos < 0 {
+                    pos = sp;
+                    SCAN_GATE.no_struct = sp_no_struct;
+                }
             }
             if pos >= tokens.len() || tokens[pos] != TK_LCURLYBRACE { break opt_enter_scan; }
             pos += 1;
             while pos < tokens.len() && tokens[pos] == TK_POUND {
                 let sp = pos;
+                let sp_no_struct = SCAN_GATE.no_struct;
                 pos = scan_inner_attribute(tokens, pos, 0);
-                if pos < 0 { pos = sp; break; }
+                if pos < 0 {
+                    pos = sp;
+                    SCAN_GATE.no_struct = sp_no_struct;
+                    break;
+                }
                 if pos == sp { break; }
                 let rs_202 = pos;
                 let mut rs_202_ok = false;
                 rsv_202: {
                     while pos < tokens.len() && _kind_set_23(tokens[pos]) {
                         let sp = pos;
+                        let sp_no_struct = SCAN_GATE.no_struct;
                         pos = scan_associated_item(tokens, pos);
-                        if pos < 0 { pos = sp; break; }
+                        if pos < 0 {
+                            pos = sp;
+                            SCAN_GATE.no_struct = sp_no_struct;
+                            break;
+                        }
                         if pos == sp { break; }
                     }
                     if pos >= tokens.len() || tokens[pos] != TK_RCURLYBRACE { break rsv_202; }
@@ -19144,8 +20176,13 @@ fn _parse_inherent_impl__inner(p: &mut Parser, follow: i64 = 0) -> () with RustP
             }
             while pos < tokens.len() && _kind_set_23(tokens[pos]) {
                 let sp = pos;
+                let sp_no_struct = SCAN_GATE.no_struct;
                 pos = scan_associated_item(tokens, pos);
-                if pos < 0 { pos = sp; break; }
+                if pos < 0 {
+                    pos = sp;
+                    SCAN_GATE.no_struct = sp_no_struct;
+                    break;
+                }
                 if pos == sp { break; }
             }
             if pos >= tokens.len() || tokens[pos] != TK_RCURLYBRACE { break opt_enter_scan; }
@@ -19175,8 +20212,13 @@ fn _parse_inherent_impl__inner(p: &mut Parser, follow: i64 = 0) -> () with RustP
             let rep_body_end = pos;
             while pos < tokens.len() && _kind_set_23(tokens[pos]) {
                 let sp = pos;
+                let sp_no_struct = SCAN_GATE.no_struct;
                 pos = scan_associated_item(tokens, pos);
-                if pos < 0 { pos = sp; break; }
+                if pos < 0 {
+                    pos = sp;
+                    SCAN_GATE.no_struct = sp_no_struct;
+                    break;
+                }
                 if pos == sp { break; }
             }
             if pos >= tokens.len() || tokens[pos] != TK_RCURLYBRACE { break rep_scan; }
@@ -19276,8 +20318,13 @@ fn _parse_trait_impl__inner(p: &mut Parser, follow: i64 = 0) -> () with RustPars
             let rep_body_end = pos;
             while pos < tokens.len() && _kind_set_23(tokens[pos]) {
                 let sp = pos;
+                let sp_no_struct = SCAN_GATE.no_struct;
                 pos = scan_associated_item(tokens, pos);
-                if pos < 0 { pos = sp; break; }
+                if pos < 0 {
+                    pos = sp;
+                    SCAN_GATE.no_struct = sp_no_struct;
+                    break;
+                }
                 if pos == sp { break; }
             }
             if pos >= tokens.len() || tokens[pos] != TK_RCURLYBRACE { break rep_scan; }
@@ -19368,8 +20415,13 @@ fn _parse_extern_block__inner(p: &mut Parser, follow: i64 = 0) -> () with RustPa
             let rep_body_end = pos;
             while pos < tokens.len() && _kind_set_24(tokens[pos]) {
                 let sp = pos;
+                let sp_no_struct = SCAN_GATE.no_struct;
                 pos = scan_external_item(tokens, pos);
-                if pos < 0 { pos = sp; break; }
+                if pos < 0 {
+                    pos = sp;
+                    SCAN_GATE.no_struct = sp_no_struct;
+                    break;
+                }
                 if pos == sp { break; }
             }
             if pos >= tokens.len() || tokens[pos] != TK_RCURLYBRACE { break rep_scan; }
@@ -19509,6 +20561,7 @@ fn _parse_generic_params__inner(p: &mut Parser, follow: i64 = 0) -> () with Rust
         let mut pos: i32 = p.pos;
         while pos < tokens.len() && _kind_set_27(tokens[pos]) {
             let sp = pos;
+            let sp_no_struct = SCAN_GATE.no_struct;
             sg_203_done: {
                 sg_203: {
                     pos = scan_generic_param(tokens, pos);
@@ -19519,7 +20572,11 @@ fn _parse_generic_params__inner(p: &mut Parser, follow: i64 = 0) -> () with Rust
                 }
                 pos = -1;
             }
-            if pos < 0 { pos = sp; break; }
+            if pos < 0 {
+                pos = sp;
+                SCAN_GATE.no_struct = sp_no_struct;
+                break;
+            }
             if pos == sp { break; }
             let rs_204 = pos;
             let mut rs_204_ok = false;
@@ -19821,8 +20878,12 @@ fn _parse_where_clause__inner(p: &mut Parser, follow: i64 = 0) -> () with RustPa
                     let mut pos: i32 = p.pos;
                     if pos < tokens.len() && _kind_set_18(tokens[pos]) {
                         let sp = pos;
+                        let sp_no_struct = SCAN_GATE.no_struct;
                         pos = scan_where_clause_item(tokens, pos, follow);
-                        if pos < 0 { pos = sp; }
+                        if pos < 0 {
+                            pos = sp;
+                            SCAN_GATE.no_struct = sp_no_struct;
+                        }
                     }
                     let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
                     if (follow == 0 || follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) && (_kind_set_61(probe_kind)) { decline_dead = true; }
@@ -19955,8 +21016,12 @@ fn _parse_type_bound_where_clause_item__inner(p: &mut Parser, follow: i64 = 0) -
             pos += 1;
             if pos < tokens.len() && _kind_set_22(tokens[pos]) {
                 let sp = pos;
+                let sp_no_struct = SCAN_GATE.no_struct;
                 pos = scan_type_param_bounds(tokens, pos, follow);
-                if pos < 0 { pos = sp; }
+                if pos < 0 {
+                    pos = sp;
+                    SCAN_GATE.no_struct = sp_no_struct;
+                }
             }
             let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
             if (follow == 0 || follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) && (_kind_set_63(probe_kind)) { opt_enter = true; }
@@ -20565,8 +21630,13 @@ fn _parse_expression__inner_scan_0(tokens: &Array<i32>, pos: i32, follow: i64 = 
     if pos < 0 { return -1; }
     while pos < tokens.len() && tokens[pos] == TK_POUND {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         pos = scan_outer_attribute(tokens, pos, 0);
-        if pos < 0 { pos = sp; break; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+            break;
+        }
         if pos == sp { break; }
         let rs_208 = pos;
         let mut rs_208_ok = false;
@@ -20806,8 +21876,13 @@ fn _parse_expression__inner_scan_33(tokens: &Array<i32>, pos: i32, follow: i64 =
     SCAN_GATE.no_struct = 0;
     while pos < tokens.len() && tokens[pos] == TK_POUND {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         pos = scan_inner_attribute(tokens, pos, 0);
-        if pos < 0 { pos = sp; break; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+            break;
+        }
         if pos == sp { break; }
         let rs_212 = pos;
         let mut rs_212_ok = false;
@@ -20844,8 +21919,12 @@ fn _parse_expression__inner_alt_35(p: &mut Parser, follow: i64 = 0) -> () with R
             let rep_body_end = pos;
             if pos < tokens.len() && _kind_set_31(tokens[pos]) {
                 let sp = pos;
+                let sp_no_struct = SCAN_GATE.no_struct;
                 pos = scan_tuple_elements(tokens, pos, (FOLLOW_MASK_21 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
-                if pos < 0 { pos = sp; }
+                if pos < 0 {
+                    pos = sp;
+                    SCAN_GATE.no_struct = sp_no_struct;
+                }
             }
             if pos >= tokens.len() || tokens[pos] != TK_RPAREN { break rep_scan; }
             pos += 1;
@@ -20882,16 +21961,25 @@ fn _parse_expression__inner_scan_35(tokens: &Array<i32>, pos: i32, follow: i64 =
     pos += 1;
     while pos < tokens.len() && tokens[pos] == TK_POUND {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         pos = scan_inner_attribute(tokens, pos, 0);
-        if pos < 0 { pos = sp; break; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+            break;
+        }
         if pos == sp { break; }
         let rs_213 = pos;
         let mut rs_213_ok = false;
         rsv_213: {
             if pos < tokens.len() && _kind_set_31(tokens[pos]) {
                 let sp = pos;
+                let sp_no_struct = SCAN_GATE.no_struct;
                 pos = scan_tuple_elements(tokens, pos, (FOLLOW_MASK_21 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
-                if pos < 0 { pos = sp; }
+                if pos < 0 {
+                    pos = sp;
+                    SCAN_GATE.no_struct = sp_no_struct;
+                }
             }
             if pos >= tokens.len() || tokens[pos] != TK_RPAREN { break rsv_213; }
             pos += 1;
@@ -20902,8 +21990,12 @@ fn _parse_expression__inner_scan_35(tokens: &Array<i32>, pos: i32, follow: i64 =
     }
     if pos < tokens.len() && _kind_set_31(tokens[pos]) {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         pos = scan_tuple_elements(tokens, pos, (FOLLOW_MASK_21 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
-        if pos < 0 { pos = sp; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+        }
     }
     if pos >= tokens.len() || tokens[pos] != TK_RPAREN { return -1; }
     pos += 1;
@@ -21189,8 +22281,12 @@ fn _parse_expression__inner_atom(p: &mut Parser, follow: i64 = 0, min_prec: i32 
                 let rep_body_end = pos;
                 if pos < tokens.len() && _kind_set_31(tokens[pos]) {
                     let sp = pos;
+                    let sp_no_struct = SCAN_GATE.no_struct;
                     pos = scan_array_elements(tokens, pos, (FOLLOW_MASK_33 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
-                    if pos < 0 { pos = sp; }
+                    if pos < 0 {
+                        pos = sp;
+                        SCAN_GATE.no_struct = sp_no_struct;
+                    }
                 }
                 if pos >= tokens.len() || tokens[pos] != TK_RSQUAREBRACKET { break rep_scan; }
                 pos += 1;
@@ -21930,8 +23026,12 @@ fn _parse_block_expression__inner(p: &mut Parser, follow: i64 = 0) -> () with Ru
             let rep_body_end = pos;
             if pos < tokens.len() && _kind_set_33(tokens[pos]) {
                 let sp = pos;
+                let sp_no_struct = SCAN_GATE.no_struct;
                 pos = scan_statements(tokens, pos, (FOLLOW_MASK_8 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
-                if pos < 0 { pos = sp; }
+                if pos < 0 {
+                    pos = sp;
+                    SCAN_GATE.no_struct = sp_no_struct;
+                }
             }
             if pos >= tokens.len() || tokens[pos] != TK_RCURLYBRACE { break rep_scan; }
             pos += 1;
@@ -22011,8 +23111,12 @@ fn _parse_statements__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () with Ru
                         let mut pos: i32 = p.pos;
                         if pos < tokens.len() && _kind_set_31(tokens[pos]) {
                             let sp = pos;
+                            let sp_no_struct = SCAN_GATE.no_struct;
                             pos = scan_expression(tokens, pos, follow, 0);
-                            if pos < 0 { pos = sp; }
+                            if pos < 0 {
+                                pos = sp;
+                                SCAN_GATE.no_struct = sp_no_struct;
+                            }
                         }
                         let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
                         if (follow == 0 || follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) && (probe_kind == TK_RCURLYBRACE) { decline_dead = true; }
@@ -22051,8 +23155,13 @@ fn _parse_statements__inner_scan_0(tokens: &Array<i32>, pos: i32, follow: i64 = 
     if pos < 0 { return -1; }
     while pos < tokens.len() && _kind_set_33(tokens[pos]) && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         pos = scan_statement(tokens, pos, 0);
-        if pos < 0 { pos = sp; break; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+            break;
+        }
         if pos == sp { break; }
         let dk_214 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
         if !(_kind_set_33(dk_214) || _kind_set_31(dk_214) || dk_214 == TK_RCURLYBRACE) {
@@ -22062,8 +23171,12 @@ fn _parse_statements__inner_scan_0(tokens: &Array<i32>, pos: i32, follow: i64 = 
             dcl_214: {
                 if pos < tokens.len() && _kind_set_31(tokens[pos]) {
                     let sp = pos;
+                    let sp_no_struct = SCAN_GATE.no_struct;
                     pos = scan_expression(tokens, pos, follow, 0);
-                    if pos < 0 { pos = sp; }
+                    if pos < 0 {
+                        pos = sp;
+                        SCAN_GATE.no_struct = sp_no_struct;
+                    }
                 }
                 let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
                 if (follow == 0 || follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) && (probe_kind == TK_RCURLYBRACE) { dc_214_exit = true; }
@@ -22074,8 +23187,12 @@ fn _parse_statements__inner_scan_0(tokens: &Array<i32>, pos: i32, follow: i64 = 
     }
     if pos < tokens.len() && _kind_set_31(tokens[pos]) && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         pos = scan_expression(tokens, pos, follow, 0);
-        if pos < 0 { pos = sp; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+        }
     }
     return pos;
 }
@@ -22224,6 +23341,7 @@ fn _parse_array_elements__inner_scan_0(tokens: &Array<i32>, pos: i32, follow: i6
     if pos < 0 { return -1; }
     while pos < tokens.len() && tokens[pos] == TK_COMMA && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         sg_216_done: {
             sg_216: {
                 if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sg_216; }
@@ -22234,7 +23352,11 @@ fn _parse_array_elements__inner_scan_0(tokens: &Array<i32>, pos: i32, follow: i6
             }
             pos = -1;
         }
-        if pos < 0 { pos = sp; break; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+            break;
+        }
         if pos == sp { break; }
         let dk_217 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
         if !(dk_217 == TK_COMMA || dk_217 == TK_COMMA || dk_217 == TK_RSQUAREBRACKET) {
@@ -22368,8 +23490,12 @@ fn _parse_tuple_elements__inner(p: &mut Parser, follow: i64 = 0) -> TupleElement
                         let mut pos: i32 = p.pos;
                         if pos < tokens.len() && _kind_set_31(tokens[pos]) {
                             let sp = pos;
+                            let sp_no_struct = SCAN_GATE.no_struct;
                             pos = scan_expression(tokens, pos, follow, 0);
-                            if pos < 0 { pos = sp; }
+                            if pos < 0 {
+                                pos = sp;
+                                SCAN_GATE.no_struct = sp_no_struct;
+                            }
                         }
                         let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
                         if (follow == 0 || follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) && (probe_kind == TK_RPAREN) { decline_dead = true; }
@@ -22526,6 +23652,7 @@ fn _parse_struct_expr_struct__inner(p: &mut Parser, follow: i64 = 0) -> () with 
             let rep_body_end = pos;
             if pos < tokens.len() && _kind_set_35(tokens[pos]) {
                 let sp = pos;
+                let sp_no_struct = SCAN_GATE.no_struct;
                 let gp_219 = pos;
                 let gp_219_no_struct = SCAN_GATE.no_struct;
                 let sgk_219 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
@@ -22552,7 +23679,10 @@ fn _parse_struct_expr_struct__inner(p: &mut Parser, follow: i64 = 0) -> () with 
                 } else {
                     pos = -1;
                 }
-                if pos < 0 { pos = sp; }
+                if pos < 0 {
+                    pos = sp;
+                    SCAN_GATE.no_struct = sp_no_struct;
+                }
             }
             if pos >= tokens.len() || tokens[pos] != TK_RCURLYBRACE { break rep_scan; }
             pos += 1;
@@ -22914,12 +24044,14 @@ fn _parse_struct_expr_tuple__inner(p: &mut Parser, follow: i64 = 0) -> () with R
             let rep_body_end = pos;
             if pos < tokens.len() && _kind_set_31(tokens[pos]) {
                 let sp = pos;
+                let sp_no_struct = SCAN_GATE.no_struct;
                 sg_223_done: {
                     sg_223: {
                         pos = scan_expression(tokens, pos, 0, 0);
                         if pos < 0 { break sg_223; }
                         while pos < tokens.len() && tokens[pos] == TK_COMMA {
                             let sp = pos;
+                            let sp_no_struct = SCAN_GATE.no_struct;
                             sg_224_done: {
                                 sg_224: {
                                     if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sg_224; }
@@ -22930,7 +24062,11 @@ fn _parse_struct_expr_tuple__inner(p: &mut Parser, follow: i64 = 0) -> () with R
                                 }
                                 pos = -1;
                             }
-                            if pos < 0 { pos = sp; break; }
+                            if pos < 0 {
+                                pos = sp;
+                                SCAN_GATE.no_struct = sp_no_struct;
+                                break;
+                            }
                             if pos == sp { break; }
                         }
                         if pos < tokens.len() && tokens[pos] == TK_COMMA {
@@ -22940,7 +24076,10 @@ fn _parse_struct_expr_tuple__inner(p: &mut Parser, follow: i64 = 0) -> () with R
                     }
                     pos = -1;
                 }
-                if pos < 0 { pos = sp; }
+                if pos < 0 {
+                    pos = sp;
+                    SCAN_GATE.no_struct = sp_no_struct;
+                }
             }
             if pos >= tokens.len() || tokens[pos] != TK_RPAREN { break rep_scan; }
             pos += 1;
@@ -22973,6 +24112,7 @@ fn _parse_struct_expr_tuple__inner(p: &mut Parser, follow: i64 = 0) -> () with R
         if pos < 0 { break opt_scan; }
         while pos < tokens.len() && tokens[pos] == TK_COMMA {
             let sp = pos;
+            let sp_no_struct = SCAN_GATE.no_struct;
             sg_225_done: {
                 sg_225: {
                     if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sg_225; }
@@ -22983,7 +24123,11 @@ fn _parse_struct_expr_tuple__inner(p: &mut Parser, follow: i64 = 0) -> () with R
                 }
                 pos = -1;
             }
-            if pos < 0 { pos = sp; break; }
+            if pos < 0 {
+                pos = sp;
+                SCAN_GATE.no_struct = sp_no_struct;
+                break;
+            }
             if pos == sp { break; }
         }
         if pos < tokens.len() && tokens[pos] == TK_COMMA {
@@ -23344,6 +24488,7 @@ fn _parse_enum_expr_tuple__inner(p: &mut Parser, follow: i64 = 0) -> () with Rus
         if pos < 0 { break opt_scan; }
         while pos < tokens.len() && tokens[pos] == TK_COMMA {
             let sp = pos;
+            let sp_no_struct = SCAN_GATE.no_struct;
             sg_229_done: {
                 sg_229: {
                     if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sg_229; }
@@ -23354,7 +24499,11 @@ fn _parse_enum_expr_tuple__inner(p: &mut Parser, follow: i64 = 0) -> () with Rus
                 }
                 pos = -1;
             }
-            if pos < 0 { pos = sp; break; }
+            if pos < 0 {
+                pos = sp;
+                SCAN_GATE.no_struct = sp_no_struct;
+                break;
+            }
             if pos == sp { break; }
         }
         if pos < tokens.len() && tokens[pos] == TK_COMMA {
@@ -24133,8 +25282,12 @@ fn _parse_match_expression__inner(p: &mut Parser, follow: i64 = 0) -> () with Ru
             let rep_body_end = pos;
             if pos < tokens.len() && _kind_set_37(tokens[pos]) {
                 let sp = pos;
+                let sp_no_struct = SCAN_GATE.no_struct;
                 pos = scan_match_arms(tokens, pos, (FOLLOW_MASK_8 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
-                if pos < 0 { pos = sp; }
+                if pos < 0 {
+                    pos = sp;
+                    SCAN_GATE.no_struct = sp_no_struct;
+                }
             }
             if pos >= tokens.len() || tokens[pos] != TK_RCURLYBRACE { break rep_scan; }
             pos += 1;
@@ -25774,6 +26927,7 @@ fn _parse_tuple_pattern_items__inner_scan_2(tokens: &Array<i32>, pos: i32, follo
     }
     while pos < tokens.len() && tokens[pos] == TK_COMMA && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         sg_242_done: {
             sg_242: {
                 if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sg_242; }
@@ -25784,7 +26938,11 @@ fn _parse_tuple_pattern_items__inner_scan_2(tokens: &Array<i32>, pos: i32, follo
             }
             pos = -1;
         }
-        if pos < 0 { pos = sp; break; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+            break;
+        }
         if pos == sp { break; }
         let dk_243 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
         if !(dk_243 == TK_COMMA || dk_243 == TK_COMMA || dk_243 == TK_RPAREN) {
@@ -26459,6 +27617,7 @@ fn _parse_tuple_type__inner(p: &mut Parser, follow: i64 = 0) -> () with RustPars
         }
         while pos < tokens.len() && _kind_set_18(tokens[pos]) {
             let sp = pos;
+            let sp_no_struct = SCAN_GATE.no_struct;
             sg_246_done: {
                 sg_246: {
                     pos = scan_type_(tokens, pos, (FOLLOW_MASK_22 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
@@ -26469,13 +27628,21 @@ fn _parse_tuple_type__inner(p: &mut Parser, follow: i64 = 0) -> () with RustPars
                 }
                 pos = -1;
             }
-            if pos < 0 { pos = sp; break; }
+            if pos < 0 {
+                pos = sp;
+                SCAN_GATE.no_struct = sp_no_struct;
+                break;
+            }
             if pos == sp { break; }
         }
         if pos < tokens.len() && _kind_set_18(tokens[pos]) {
             let sp = pos;
+            let sp_no_struct = SCAN_GATE.no_struct;
             pos = scan_type_(tokens, pos, (FOLLOW_MASK_21 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
-            if pos < 0 { pos = sp; }
+            if pos < 0 {
+                pos = sp;
+                SCAN_GATE.no_struct = sp_no_struct;
+            }
         }
         opt_scan_pos = pos;
     }
@@ -26922,8 +28089,13 @@ fn _parse_maybe_named_function_parameters_variadic__inner(p: &mut Parser, follow
             pos += 1;
             while pos < tokens.len() && tokens[pos] == TK_POUND {
                 let sp = pos;
+                let sp_no_struct = SCAN_GATE.no_struct;
                 pos = scan_outer_attribute(tokens, pos, 0);
-                if pos < 0 { pos = sp; break; }
+                if pos < 0 {
+                    pos = sp;
+                    SCAN_GATE.no_struct = sp_no_struct;
+                    break;
+                }
                 if pos == sp { break; }
             }
             if pos >= tokens.len() || tokens[pos] != TK_DOTDOTDOT { break rep_scan; }
@@ -27234,8 +28406,12 @@ fn _parse_lifetime_bounds__inner(p: &mut Parser, follow: i64 = 0) -> () with Rus
                     let mut pos: i32 = p.pos;
                     if pos < tokens.len() && _kind_set_16(tokens[pos]) {
                         let sp = pos;
+                        let sp_no_struct = SCAN_GATE.no_struct;
                         pos = scan_lifetime(tokens, pos);
-                        if pos < 0 { pos = sp; }
+                        if pos < 0 {
+                            pos = sp;
+                            SCAN_GATE.no_struct = sp_no_struct;
+                        }
                     }
                     let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
                     if (follow == 0 || follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) && (_kind_set_92(probe_kind)) { decline_dead = true; }
@@ -27509,6 +28685,7 @@ fn _parse_generic_args__inner_scan_1(tokens: &Array<i32>, pos: i32, follow: i64 
     if pos < 0 { return -1; }
     if pos < tokens.len() && tokens[pos] == TK_COMMA {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         sg_255_done: {
             sg_255: {
                 if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sg_255; }
@@ -27519,10 +28696,14 @@ fn _parse_generic_args__inner_scan_1(tokens: &Array<i32>, pos: i32, follow: i64 
             }
             pos = -1;
         }
-        if pos < 0 { pos = sp; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+        }
     }
     if pos < tokens.len() && tokens[pos] == TK_COMMA {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         sg_256_done: {
             sg_256: {
                 if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sg_256; }
@@ -27533,7 +28714,10 @@ fn _parse_generic_args__inner_scan_1(tokens: &Array<i32>, pos: i32, follow: i64 
             }
             pos = -1;
         }
-        if pos < 0 { pos = sp; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+        }
     }
     if pos < tokens.len() && tokens[pos] == TK_COMMA {
         pos += 1;
@@ -27565,6 +28749,7 @@ fn _parse_generic_args__inner_scan_2(tokens: &Array<i32>, pos: i32, follow: i64 
     if pos < 0 { return -1; }
     if pos < tokens.len() && tokens[pos] == TK_COMMA {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         sg_257_done: {
             sg_257: {
                 if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sg_257; }
@@ -27575,7 +28760,10 @@ fn _parse_generic_args__inner_scan_2(tokens: &Array<i32>, pos: i32, follow: i64 
             }
             pos = -1;
         }
-        if pos < 0 { pos = sp; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+        }
     }
     if pos < tokens.len() && tokens[pos] == TK_COMMA {
         pos += 1;
@@ -27634,6 +28822,7 @@ fn _parse_generic_args__inner_scan_3(tokens: &Array<i32>, pos: i32, follow: i64 
     pos += 1;
     while pos < tokens.len() && _kind_set_48(tokens[pos]) {
         let sp = pos;
+        let sp_no_struct = SCAN_GATE.no_struct;
         sg_259_done: {
             sg_259: {
                 pos = scan_generic_arg(tokens, pos, (FOLLOW_MASK_22 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
@@ -27644,7 +28833,11 @@ fn _parse_generic_args__inner_scan_3(tokens: &Array<i32>, pos: i32, follow: i64 
             }
             pos = -1;
         }
-        if pos < 0 { pos = sp; break; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_struct = sp_no_struct;
+            break;
+        }
         if pos == sp { break; }
         let rs_260 = pos;
         let mut rs_260_ok = false;

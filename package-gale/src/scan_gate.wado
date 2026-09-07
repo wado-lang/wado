@@ -9,18 +9,15 @@
 //! Passing the parser in does not fix it. The flag is parse-time state and the
 //! scan is lookahead, so an outer tournament scanning over an `if` head reads
 //! the value from before the head. The scan has to *simulate* the action as it
-//! walks — which is possible exactly when the action needs nothing but the walk.
+//! walks, which it can do for an action needing nothing but the walk. This
+//! module recognises those: `field = <int literal>`, and the `locals` +
+//! `@init` / `@after` pair that scopes one. Anything else leaves the gate
+//! unsimulated, as it was before this existed.
 //!
-//! That is the shape this module recognises: `field = <int literal>`. It needs
-//! no parser, no token, and no evaluation order beyond the element sequence, so
-//! a scan can run it. Anything else leaves the gate unsimulated, which is the
-//! behaviour before this existed.
-//!
-//! The simulated fields live in one generated struct global, whose fields carry
-//! the same names as the parser's. That is what keeps the two conditions in
-//! step: the java2wado front end renders a member as `<handle>.<field>`, so
-//! pointing the handle at the global produces the scan's condition from the
-//! parser's own predicate text, with no second translator.
+//! The simulated fields live in one generated struct global carrying the
+//! parser's own field names, so the java2wado front end renders the scan's
+//! condition from the parser's own predicate text with the handle pointed at
+//! the global. One predicate, one translator, two sides.
 
 use { Grammar, ParserRule } from "./ir.wado";
 use { to_snake_case } from "./ident.wado";
@@ -79,9 +76,11 @@ pub fn gate_assignment(text: &String) -> Option<[String, i32]> {
     return Option::Some([to_snake_case(&name), if negative { -value } else { value }]);
 }
 
-/// A rule that sets a gate field for its own extent and puts it back after —
-/// ANTLR4's `locals` + `@init` / `@after`, which is the save/restore a members
-/// field alone cannot express, because each invocation keeps its own copy.
+/// A rule that sets a gate field for its own extent and puts it back after.
+///
+/// ANTLR4 spells it `locals` + `@init` / `@after`. A members field alone
+/// cannot express the restore, because the value to restore to is per
+/// invocation.
 ///
 /// The pair has to be exactly `@init { $L = <field>; <field> = <int>; }` and
 /// `@after { <field> = $L; }`: a scan runs it by saving into a local of its own

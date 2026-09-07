@@ -1,3 +1,11 @@
+// Source: Gale test fixture (a gated alternative that also matches empty)
+// License: same as the Gale package
+//
+// A group dispatch gives its nullable alternative the last arm, for the
+// lookahead none of the others select. When that alternative is also gated, the
+// arm that selects it on its own tokens folds the predicate into that arm's
+// condition. The body then carries no guard of its own, so a bare last arm runs
+// the alternative on the very tokens the first arm refused.
 grammar GatedNullableAlt;
 
 @parser::members {
@@ -9,9 +17,8 @@ start
     | OFF body
     ;
 
-// The group's first alternative is both gated and nullable: it has a branch of
-// its own for `ID` (which folds the gate into that branch's condition and marks
-// it answered, so the body carries no guard) and it also matches empty.
+// The first alternative is both gated and nullable: it has a branch of its own
+// for `ID`, and it also matches empty.
 body
     : LB ({on == 1}? ID? | LP) RB
     ;

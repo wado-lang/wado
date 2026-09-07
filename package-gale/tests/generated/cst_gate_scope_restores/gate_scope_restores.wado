@@ -1652,8 +1652,13 @@ fn scan_start(tokens: &Array<i32>, pos: i32) -> i32 {
     if pos < 0 { return -1; }
     while pos < tokens.len() && _kind_set_0(tokens[pos]) {
         let sp = pos;
+        let sp_no_brace = SCAN_GATE.no_brace;
         pos = scan_stmt(tokens, pos);
-        if pos < 0 { pos = sp; break; }
+        if pos < 0 {
+            pos = sp;
+            SCAN_GATE.no_brace = sp_no_brace;
+            break;
+        }
         if pos == sp { break; }
     }
     if pos >= tokens.len() || tokens[pos] != TK_EOF { return -1; }
