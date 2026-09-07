@@ -671,8 +671,10 @@ callParams
     ;
 
 // 8.2.12
+// LOCAL: `KW_ASYNC?` — the async closure (Rust 2024), absent upstream.
+// `async move |_| rx.await` had no parse at all.
 closureExpression
-    : KW_MOVE? (OROR | OR closureParameters? OR) (expression | RARROW typeNoBounds blockExpression)
+    : KW_ASYNC? KW_MOVE? (OROR | OR closureParameters? OR) (expression | RARROW typeNoBounds blockExpression)
     ;
 
 closureParameters
