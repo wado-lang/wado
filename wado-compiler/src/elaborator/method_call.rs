@@ -2998,6 +2998,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .any(super::trait_env::ImplMethodEntry::is_inherent)
     }
 
+    /// [`Self::has_inherent_static_method`] for the receiver-taking kind, which
+    /// `Type::method(&recv)` names before a trait impl's of the same name.
+    fn has_inherent_instance_method(
+        &self,
+        struct_name: &str,
+        method_name: &str,
+        target_hint: Option<&ImplTargetKey>,
+    ) -> bool {
+        let target = self.static_receiver_key(struct_name, target_hint);
+        self.impl_method_entries(&target, method_name)
+            .any(|entry| entry.has_self && entry.is_inherent())
+    }
+
     /// The argument preselect over a receiver's impls: `Selected` and
     /// `Ambiguous` short-circuit resolution, so it decides calls. It must run
     /// *before* the argument is elaborated — the expected type shaping a literal
@@ -3155,29 +3168,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// Whether only the argument can fill this parameter — the mark of a
-    /// blanket, whose unsubstituted spelling must not be mangled.
-    ///
-    /// Three ways a slot is filled, and only one of them is the argument's. A
-    /// slot the receiver mentions is fixed by the receiver, so
-    /// `impl<T> Make<T> for Wrap<T>` is not a blanket to `Wrap::<i32>::make`.
-    /// A slot the *method* declares is filled at the call, so a concrete
-    /// impl's own `fn build<T>(v: T)` is not one either — `declaring_slot_count`
-    /// is where the block's slots end. What is left is a block slot the
-    /// receiver never names, as in `impl<T: Display> From<T> for ByAny`.
+    /// Whether only the argument can fill this parameter — a blanket, whose
+    /// unsubstituted spelling must not be mangled. Three things fill a slot and
+    /// the receiver and the method take the other two.
     fn param_filled_by_block(
         &self,
         header: &super::trait_env::ImplHeader,
         sig: &MethodSig,
         param: TypeId,
     ) -> bool {
-        let argument_only: Vec<&str> = header
-            .type_params
-            .iter()
-            .map(|p| p.name.as_str())
-            .filter(|slot| !Self::type_mentions(&header.ty, slot))
-            .collect();
-        if argument_only.is_empty() {
+        if header.type_params.is_empty() {
             return false;
         }
         let table = self.tysys.type_table.borrow();
@@ -3185,16 +3185,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         while let ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) = table.get(ty) {
             ty = *inner;
         }
+        // A slot the receiver mentions is the receiver's to fill, not the
+        // argument's, and one at or past `declaring_slot_count` is the method's.
         match table.get(ty) {
             ResolvedType::TypeParam { index, name }
             | ResolvedType::TypePack { index, name, .. } => {
-                *index < sig.declaring_slot_count && argument_only.contains(&name.as_str())
+                *index < sig.declaring_slot_count && !Self::type_mentions(&header.ty, name)
             }
-            // A slot the receiver never mentions is left unresolved by the decl
-            // pass, so a blanket's parameter arrives as no type at all rather
-            // than as the slot. Reaching here means the block has such a slot,
-            // which is the same answer — see the WEP's gap on the decl pass.
-            ResolvedType::Unknown | ResolvedType::Error => true,
+            // The decl pass leaves a parameter naming a slot the receiver never
+            // mentions as no type at all, so a blanket's arrives unresolved
+            // rather than as the slot — see the WEP's gap on the decl pass. The
+            // block having such a slot is the same answer.
+            ResolvedType::Unknown | ResolvedType::Error => header
+                .type_params
+                .iter()
+                .any(|slot| !Self::type_mentions(&header.ty, &slot.name)),
             _ => false,
         }
     }
@@ -3291,24 +3296,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // after every static, so a receiver-less declaration of the name still
         // answers first, and the parameter list leads with the receiver exactly
         // where the call writes it.
-        //
-        // An inherent method of the same kind shadows it, as the guard at the
-        // top of this search does for statics: `Q::tag(&q)` names `impl Q`'s
-        // over `impl Tag for Q`'s, and the trait's is spelled `Tag::tag(&q)`.
-        // Per kind, so this decides nothing for an associated function.
-        let shadowed_by_inherent = self
-            .impl_method_entries(
-                &self.static_receiver_key(struct_name, target_hint),
-                method_name,
-            )
-            .any(|entry| entry.has_self && entry.is_inherent());
         let written_instance_method = |header: &super::trait_env::ImplHeader| -> Option<(
             crate::name::FqTraitName,
             crate::defs::DefId,
         )> {
-            if shadowed_by_inherent {
-                return None;
-            }
             let method = header
                 .methods
                 .iter()
@@ -3342,9 +3333,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 ))
             })
         };
+        // An inherent method of the same kind shadows the instance pass, as the
+        // guard at the top of this search does for statics: `Q::tag(&q)` names
+        // `impl Q`'s over `impl Tag for Q`'s, and the trait's is spelled
+        // `Tag::tag(&q)`. Asked only where the static passes found nothing.
         if let Some(found) = select(&written_method)
             .or_else(|| select(&inherited_default))
-            .or_else(|| select(&written_instance_method))
+            .or_else(|| {
+                (!self.has_inherent_instance_method(struct_name, method_name, target_hint))
+                    .then(|| select(&written_instance_method))
+                    .flatten()
+            })
         {
             return Some(found);
         }
