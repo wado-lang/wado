@@ -636,52 +636,41 @@ pub fn element_field_info(elem: &Element) -> [String, String] {
     };
 }
 
-/// Slots a continuation is carried in. Every mask constrains at least one
-/// position and the gate reads at most this many, so what a composition
-/// shifts out of the last slot begins past what the gate can consult.
-pub global FOLLOW_SLOTS: i32 = 4;
+/// A continuation is one `i64`: `FOLLOW_CONT_SLOTS` positions of
+/// `FOLLOW_SLOT_BITS`, each holding a 1-based `FOLLOW_SETS` index and a bit
+/// saying it opens a fresh reading. Composition is a shift, so a call site
+/// spells it in constants and a rule carries one parameter.
+pub global FOLLOW_SLOT_BITS: i32 = 8;
 
-/// Which slots open a fresh reading, as a bit per slot.
-pub global FOLLOW_SHAPE_PARAM: String = "fs";
+pub global FOLLOW_CONT_SLOTS: i32 = 7;
 
-pub fn follow_slot_name(i: i32) -> String {
-    return `${FOLLOW_PARAM}${i}`;
-}
+pub global FOLLOW_MAX_POSITION_ID: i32 = 127;
 
 /// The whole continuation forwarded unmoved.
 pub fn follow_forward_args() -> String {
-    let mut out: List<String> = [];
-    for let mut i = 0; i < FOLLOW_SLOTS; i += 1 {
-        out.push(follow_slot_name(i));
-    }
-    out.push(FOLLOW_SHAPE_PARAM);
-    return join_kinds(&out);
+    return FOLLOW_PARAM;
 }
 
-/// One continuation carrying `head` alone: the remaining slots are empty and
-/// no slot opens a reading.
-pub fn follow_single_args(head: &String) -> String {
-    let mut out: List<String> = [*head];
-    for let mut i = 1; i < FOLLOW_SLOTS; i += 1 {
-        out.push("&EMPTY_FOLLOW");
-    }
-    out.push("0");
-    return join_kinds(&out);
+/// `prefix` ahead of the caller's continuation, which therefore starts at the
+/// `positions` the prefix already constrains. `opens` marks that start as a
+/// fresh reading rather than more of the same one.
+pub fn follow_composed(prefix: &String, positions: i32, opens: bool) -> String {
+    let shifted = if opens { `(${FOLLOW_PARAM} | FOLLOW_OPENS_BIT)` } else { FOLLOW_PARAM };
+    return `(${*prefix} | ${shifted} << ${positions * FOLLOW_SLOT_BITS}) & FOLLOW_CONT_MASK`;
 }
 
 /// A `follow_yields` call on the forwarded continuation.
 pub fn follow_yields_call(tokens: &String, pos: &String) -> String {
-    return `follow_yields(${*tokens}, ${*pos}, ${follow_forward_args()}, &FOLLOW_SETS, TK_EOF)`;
+    return follow_yields_call_of(tokens, pos, &FOLLOW_PARAM);
 }
 
 /// A `follow_yields` call on a continuation held in one local.
 pub fn follow_yields_call_of(tokens: &String, pos: &String, head: &String) -> String {
-    return `follow_yields(${*tokens}, ${*pos}, ${follow_single_args(head)}, &FOLLOW_SETS, TK_EOF)`;
+    return `follow_yields(${*tokens}, ${*pos}, ${*head}, &FOLLOW_SETS, TK_EOF)`;
 }
 
-/// `", <forwarded continuation>"` when the grammar emits FOLLOW machinery,
-/// else `""`. Appended after a call's fixed arguments so the slots are passed
-/// only when the callee declares them (`ctx.emit_follow()`).
+/// `", <forwarded continuation>"` when the callee declares the parameter, else
+/// `""`. Appended after a call's fixed arguments.
 pub fn follow_sep(emit_follow: bool) -> String {
     if emit_follow {
         return `, ${follow_forward_args()}`;

@@ -5,7 +5,7 @@
 
 use { LoweredGrammar } from "./gir.wado";
 use { GenContext, sets_overlap } from "./gen_context.wado";
-use { join_kinds } from "./gen_util.wado";
+use { join_kinds, FOLLOW_SLOT_BITS, FOLLOW_CONT_SLOTS, FOLLOW_MAX_POSITION_ID } from "./gen_util.wado";
 use { MAX_LOOKAHEAD_DEPTH } from "./prediction.wado";
 use { CodeWriter, FnSpec } from "./wadopoet.wado";
 
@@ -112,8 +112,9 @@ pub fn gen_kind_set_helpers(w: &mut CodeWriter, lowered: &LoweredGrammar, ctx: &
 
 /// Emit the runtime FOLLOW tables: `FOLLOW_KINDS` holds every distinct
 /// position set once, `FOLLOW_SETS` is the same tables as bitsets for the
-/// gate's membership test, and each `FOLLOW_MASK_<id>` names its positions
-/// by index into them. A continuation is therefore a flat `List<i32>`.
+/// gate's membership test, and each `FOLLOW_MASK_<id>` packs its positions
+/// into one `i64`. A continuation is therefore a scalar a call site composes
+/// with a shift, and a rule takes one parameter rather than a row of slots.
 pub fn gen_follow_mask_globals(w: &mut CodeWriter, ctx: &GenContext) {
     // No caller-FOLLOW gate anywhere ⇒ no call site names either table.
     // A grammar that gates on a forwarded `follow` alone interns no mask
@@ -125,11 +126,16 @@ pub fn gen_follow_mask_globals(w: &mut CodeWriter, ctx: &GenContext) {
     let mut sets: List<List<i32>> = [];
     let mut masks: List<String> = [];
     for let entry of &entries {
-        let mut positions: List<String> = [];
+        let mut packed: i64 = 0;
+        let mut slot = 0;
         for let depth_set of &entry.mask {
-            positions.push(`${intern_position_set(&mut sets, depth_set)}`);
+            let id = intern_position_set(&mut sets, depth_set) + 1;
+            assert id <= FOLLOW_MAX_POSITION_ID, `follow mask ${entry.id}: position set id ${id} exceeds the ${FOLLOW_MAX_POSITION_ID} a packed continuation slot holds`;
+            packed = packed | id as i64 << (slot * FOLLOW_SLOT_BITS) as i64;
+            slot += 1;
         }
-        masks.push(`global FOLLOW_MASK_${entry.id}: List<i32> = [${join_kinds(&positions)}];`);
+        assert slot <= FOLLOW_CONT_SLOTS, `follow mask ${entry.id}: ${slot} positions exceed the ${FOLLOW_CONT_SLOTS} a packed continuation holds`;
+        masks.push(`global FOLLOW_MASK_${entry.id}: i64 = ${packed};`);
     }
     let mut rendered: List<String> = [];
     for let set of &sets {

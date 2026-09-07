@@ -2021,8 +2021,14 @@ impl GenContext {
         return Option::<i32>::Some(id);
     }
 
-    /// The positions `FOLLOW_MASK_<id>` constrains. At `FOLLOW_MAX_DEPTH` the
-    /// mask is the whole gate, since `follow_yields` reads no deeper.
+    /// The positions `FOLLOW_MASK_<id>` constrains — where a continuation
+    /// composed behind it starts.
+    pub fn follow_mask_positions(&self, id: i32) -> i32 {
+        return self.follow_mask_depths[id];
+    }
+
+    /// At `FOLLOW_MAX_DEPTH` the mask is the whole gate, since `follow_yields`
+    /// reads no deeper.
     pub fn follow_mask_is_full(&self, id: i32) -> bool {
         return self.follow_mask_depths[id] >= FOLLOW_MAX_DEPTH;
     }

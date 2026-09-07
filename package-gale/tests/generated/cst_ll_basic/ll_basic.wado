@@ -1069,9 +1069,15 @@ fn line_col_from_starts(line_starts: &List<i32>, pos: i32) -> [i32, i32] {
     }
     return [lo + 1, pos - line_starts[lo]];
 }
-pub global EMPTY_FOLLOW: List<i32> = [];
-
 pub global FOLLOW_MAX_DEPTH: i32 = 4;
+
+pub global FOLLOW_SLOT_BITS: i64 = 8;
+
+pub global FOLLOW_ID_MASK: i64 = 127;
+
+pub global FOLLOW_OPENS_BIT: i64 = 128;
+
+pub global FOLLOW_CONT_MASK: i64 = 0x00FF_FFFF_FFFF_FFFF;
 
 pub fn follow_bitsets(kinds: &List<List<i32>>) -> List<List<i32>> {
     let mut out: List<List<i32>> = [];
@@ -1098,95 +1104,36 @@ fn follow_set_has(set: &List<i32>, kind: i32) -> bool {
     return set[w] >> (kind & 31) & 1 == 1;
 }
 
-fn follow_slot_alive(
-    part: &List<i32>,
-    tokens: &Array<i32>,
-    pos: i32,
-    sets: &List<List<i32>>,
-    eof_kind: i32,
-    depth: &mut i32,
-    alive: &mut bool,
-    constrained: &mut bool,
-) {
-    for let id of part {
-        if *depth >= FOLLOW_MAX_DEPTH {
-            return;
-        }
-        *constrained = true;
-        if *alive {
-            let set = &sets[*id];
-            if !set.is_empty() {
-                let idx = pos + *depth;
-                let kind = if idx < tokens.len() { tokens[idx] } else { eof_kind };
-                if !follow_set_has(set, kind) {
-                    *alive = false;
-                }
-            }
-        }
-        *depth += 1;
-    }
-}
-
-fn follow_slot_step(
-    next: &List<i32>,
-    opens: bool,
-    more_opens: bool,
-    depth: &mut i32,
-    alive: &mut bool,
-    constrained: &mut bool,
-    verdict: &mut bool,
-) -> bool {
-    if next.is_empty() {
-        *verdict = *alive && *constrained;
-        return true;
-    }
-    if opens {
-        if *alive && *constrained {
-            *verdict = true;
-            return true;
-        }
-        *depth = 0;
-        *alive = true;
-        *constrained = false;
-    }
-    if !*alive && !more_opens {
-        *verdict = false;
-        return true;
-    }
-    return false;
-}
-
-pub fn follow_yields(
-    tokens: &Array<i32>,
-    pos: i32,
-    f0: &List<i32>,
-    f1: &List<i32>,
-    f2: &List<i32>,
-    f3: &List<i32>,
-    fs: i32,
-    sets: &List<List<i32>>,
-    eof_kind: i32,
-) -> bool {
-    if f0.is_empty() {
-        return false;
-    }
+pub fn follow_yields(tokens: &Array<i32>, pos: i32, cont: i64, sets: &List<List<i32>>, eof_kind: i32) -> bool {
+    let mut c = cont;
     let mut depth = 0;
     let mut alive = true;
     let mut constrained = false;
-    let mut verdict = false;
-    follow_slot_alive(f0, tokens, pos, sets, eof_kind, &mut depth, &mut alive, &mut constrained);
-    if follow_slot_step(f1, fs >> 1 & 1 == 1, fs >> 2 != 0, &mut depth, &mut alive, &mut constrained, &mut verdict) {
-        return verdict;
+    while c & FOLLOW_ID_MASK != 0 {
+        if c & FOLLOW_OPENS_BIT != 0 {
+            if alive && constrained {
+                return true;
+            }
+            depth = 0;
+            alive = true;
+            constrained = false;
+        }
+        if depth < FOLLOW_MAX_DEPTH {
+            constrained = true;
+            if alive {
+                let set = &sets[((c & FOLLOW_ID_MASK) - 1) as i32];
+                if !set.is_empty() {
+                    let idx = pos + depth;
+                    let kind = if idx < tokens.len() { tokens[idx] } else { eof_kind };
+                    if !follow_set_has(set, kind) {
+                        alive = false;
+                    }
+                }
+            }
+            depth += 1;
+        }
+        c = c >> FOLLOW_SLOT_BITS;
     }
-    follow_slot_alive(f1, tokens, pos, sets, eof_kind, &mut depth, &mut alive, &mut constrained);
-    if follow_slot_step(f2, fs >> 2 & 1 == 1, fs >> 3 != 0, &mut depth, &mut alive, &mut constrained, &mut verdict) {
-        return verdict;
-    }
-    follow_slot_alive(f2, tokens, pos, sets, eof_kind, &mut depth, &mut alive, &mut constrained);
-    if follow_slot_step(f3, fs >> 3 & 1 == 1, false, &mut depth, &mut alive, &mut constrained, &mut verdict) {
-        return verdict;
-    }
-    follow_slot_alive(f3, tokens, pos, sets, eof_kind, &mut depth, &mut alive, &mut constrained);
     return alive && constrained;
 }
 pub enum TokenKind {
@@ -1557,7 +1504,7 @@ impl Parser {
     }
 }
 
-fn scan_r(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> i32 {
+fn scan_r(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     let gp_0 = pos;
     let sgk_0 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
@@ -1565,7 +1512,7 @@ fn scan_r(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPTY_FOLLOW, fo
     if sgk_0 == TK_X {
         pos = gp_0;
         sg_0_0: {
-            pos = scan_a(tokens, pos, &FOLLOW_MASK_0, follow0, follow1, follow2, fs << 1);
+            pos = scan_a(tokens, pos, (FOLLOW_MASK_0 | follow << 16) & FOLLOW_CONT_MASK);
             if pos < 0 { break sg_0_0; }
             pos = scan_b(tokens, pos);
             if pos < 0 { break sg_0_0; }
@@ -1573,7 +1520,7 @@ fn scan_r(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPTY_FOLLOW, fo
         }
         pos = gp_0;
         sg_0_1: {
-            pos = scan_a(tokens, pos, &FOLLOW_MASK_1, follow0, follow1, follow2, fs << 1);
+            pos = scan_a(tokens, pos, (FOLLOW_MASK_1 | follow << 8) & FOLLOW_CONT_MASK);
             if pos < 0 { break sg_0_1; }
             if pos > sg_0_best { sg_0_best = pos; }
         }
@@ -1588,11 +1535,11 @@ fn scan_r(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPTY_FOLLOW, fo
     return pos;
 }
 
-fn scan_a(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> i32 {
+fn scan_a(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_X { return -1; }
     pos += 1;
-    if pos < tokens.len() && tokens[pos] == TK_Y && !(follow_yields(tokens, pos, follow0, follow1, follow2, follow3, fs, &FOLLOW_SETS, TK_EOF)) {
+    if pos < tokens.len() && tokens[pos] == TK_Y && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
         pos += 1;
     }
     return pos;
@@ -1605,7 +1552,7 @@ fn scan_b(tokens: &Array<i32>, pos: i32) -> i32 {
     return pos;
 }
 
-fn _parse_r__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> () {
+fn _parse_r__inner(p: &mut Parser, follow: i64 = 0) -> () {
     let grp_kind = p.peek_kind();
     if grp_kind == TK_X {
         let mut gd_winner: i32 = -1;
@@ -1615,7 +1562,7 @@ fn _parse_r__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1:
             gd_scan: {
                 let tokens = &p.kinds;
                 let mut pos: i32 = p.pos;
-                pos = scan_a(tokens, pos, &FOLLOW_MASK_0, follow0, follow1, follow2, fs << 1);
+                pos = scan_a(tokens, pos, (FOLLOW_MASK_0 | follow << 16) & FOLLOW_CONT_MASK);
                 if pos < 0 { break gd_scan; }
                 pos = scan_b(tokens, pos);
                 if pos < 0 { break gd_scan; }
@@ -1632,7 +1579,7 @@ fn _parse_r__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1:
             gd_scan_2: {
                 let tokens = &p.kinds;
                 let mut pos: i32 = p.pos;
-                pos = scan_a(tokens, pos, &FOLLOW_MASK_1, follow0, follow1, follow2, fs << 1);
+                pos = scan_a(tokens, pos, (FOLLOW_MASK_1 | follow << 8) & FOLLOW_CONT_MASK);
                 if pos < 0 { break gd_scan_2; }
                 gd_end_2 = pos;
             }
@@ -1642,10 +1589,10 @@ fn _parse_r__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1:
             }
         }
         if gd_winner == 0 {
-            _parse_a(p, &FOLLOW_MASK_0, follow0, follow1, follow2, fs << 1);
+            _parse_a(p, (FOLLOW_MASK_0 | follow << 16) & FOLLOW_CONT_MASK);
             _parse_b(p);
         } else {
-            _parse_a(p, &FOLLOW_MASK_1, follow0, follow1, follow2, fs << 1);
+            _parse_a(p, (FOLLOW_MASK_1 | follow << 8) & FOLLOW_CONT_MASK);
         }
     } else {
         p.no_viable("no viable alternative", p.peek_span(), &SYNC_0);
@@ -1654,30 +1601,30 @@ fn _parse_r__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1:
     return;
 }
 
-fn _parse_r(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> () {
+fn _parse_r(p: &mut Parser, follow: i64 = 0) -> () {
     if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_R, _start);
-    _parse_r__inner(p, follow0, follow1, follow2, follow3, fs);
+    _parse_r__inner(p, follow);
     p.b.finish_node(p.last_end());
     if p.recovering {
         p.push_rule_stack("r");
     }
 }
 
-fn _parse_a__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> () {
+fn _parse_a__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.expect(TK_X, &SYNC_1);
-    if !(follow_yields(&p.kinds, p.pos, follow0, follow1, follow2, follow3, fs, &FOLLOW_SETS, TK_EOF)) && (p.peek_kind() == TK_Y) {
+    if !(follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF)) && (p.peek_kind() == TK_Y) {
         p.expect(TK_Y, &EMPTY_SYNC);
     }
     return;
 }
 
-fn _parse_a(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> () {
+fn _parse_a(p: &mut Parser, follow: i64 = 0) -> () {
     if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_A, _start);
-    _parse_a__inner(p, follow0, follow1, follow2, follow3, fs);
+    _parse_a__inner(p, follow);
     p.b.finish_node(p.last_end());
     if p.recovering {
         p.push_rule_stack("a");
@@ -1767,6 +1714,6 @@ global SYNC_1: List<i32> = [TK_Y];
 
 global FOLLOW_KINDS: List<List<i32>> = [[TK_Y], [TK_EOF]];
 global FOLLOW_SETS: List<List<i32>> = follow_bitsets(&FOLLOW_KINDS);
-global FOLLOW_MASK_0: List<i32> = [0, 1];
-global FOLLOW_MASK_1: List<i32> = [1];
+global FOLLOW_MASK_0: i64 = 513;
+global FOLLOW_MASK_1: i64 = 2;
 

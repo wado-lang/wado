@@ -40,9 +40,7 @@ use {
 use { PARSER_HANDLE, DISPATCH_KIND_LOCAL, FOLLOW_PARAM } from "./ident.wado";
 use {
     join_kinds,
-    FOLLOW_SLOTS,
-    FOLLOW_SHAPE_PARAM,
-    follow_slot_name,
+    follow_composed,
     follow_forward_args,
     follow_yields_call,
     follow_yields_call_of,
@@ -188,29 +186,21 @@ use { group_alt_classes, non_greedy_static_undecided, peel_repeat_body_label, re
 /// the grammar has a caller-FOLLOW gate (`ctx.current_rule_reads_follow()`); guarded at
 /// every call site so grammars with no FOLLOW repair pay no per-frame cost.
 ///
-/// The continuation is carried as references to static masks rather than one
-/// composed list: a call prepending its own mask shifts the slots along and
-/// passes `&FOLLOW_MASK_<id>` in front, so nothing is copied per call. `fs`
-/// says which slots open a fresh reading. See `follow_yields`.
+/// The continuation is one packed `i64` (see `follow_composed`): a call
+/// prepending its own mask shifts the caller's along in constants, so nothing
+/// is allocated, copied, or threaded per frame. See `follow_yields`.
 fn add_follow_param(f: &mut FnSpec) {
-    for let mut i = 0; i < FOLLOW_SLOTS; i += 1 {
-        f.add_param_spec(ParamSpec {
-            name: follow_slot_name(i),
-            type_str: "&List<i32>",
-            default_value: Option::Some("&EMPTY_FOLLOW"),
-        });
-    }
     f.add_param_spec(ParamSpec {
-        name: FOLLOW_SHAPE_PARAM,
-        type_str: "i32",
+        name: FOLLOW_PARAM,
+        type_str: "i64",
         default_value: Option::Some("0"),
     });
 }
 
 /// `", <FollowArg args>"` when the grammar emits FOLLOW machinery, else `""`.
-fn follow_arg_sep(emit_follow: bool, arg: &FollowArg) -> String {
+fn follow_arg_sep(ctx: &GenContext, emit_follow: bool, arg: &FollowArg) -> String {
     if emit_follow {
-        return `, ${follow_arg_expr(arg)}`;
+        return `, ${follow_arg_expr(ctx, arg)}`;
     }
     return "";
 }
@@ -288,8 +278,8 @@ pub fn gen_parser(
 fn add_lr_cont_param(f: &mut FnSpec) {
     f.add_param_spec(ParamSpec {
         name: "lr_cont",
-        type_str: "&List<i32>",
-        default_value: Option::Some("&EMPTY_FOLLOW"),
+        type_str: "i64",
+        default_value: Option::Some("0"),
     });
 }
 
@@ -895,7 +885,7 @@ fn gen_scan_lr_call_with_prec(
         // Lockstep with the parse loop: the tournament must measure the same
         // climb the parse will take.
         w.line(
-            &`if !(lr_cont.is_empty() || ${follow_yields_call_of(&"tokens", &"pos", &"lr_cont")}) { pos = lr_saved_pos; break; }`,
+            &`if !(lr_cont == 0 || ${follow_yields_call_of(&"tokens", &"pos", &"lr_cont")}) { pos = lr_saved_pos; break; }`,
         );
     }
     w.else_begin(&"else");
@@ -1642,7 +1632,7 @@ fn gen_scan_op_element(
         RuleCall(rc) => {
             // Single scan callee + runtime FOLLOW arg.
             let fn_name = `scan_${rc.target_snake}`;
-            let follow_arg_str = follow_arg_sep(ctx.rule_reads_follow(&rc.target_snake), &rc.follow_arg);
+            let follow_arg_str = follow_arg_sep(ctx, ctx.rule_reads_follow(&rc.target_snake), &rc.follow_arg);
             // `min_prec_arg`, when set, is the baked precedence for a
             // self-recursive call inside an LR suffix (stamped by
             // `stamp_lr_self_ref_min_prec`). Otherwise fall back to
@@ -1666,7 +1656,7 @@ fn gen_scan_op_element(
             // rule-entry wrapper does. Pop before the fail check so an early return
             // never leaks the frame.
             let push_ret = ctx.scan_atn_push_return(rc.atn_call_site);
-            let cont = if rc.lr_cont_mask >= 0 { `, &FOLLOW_MASK_${rc.lr_cont_mask}` } else { "" };
+            let cont = if rc.lr_cont_mask >= 0 { `, FOLLOW_MASK_${rc.lr_cont_mask}` } else { "" };
             assert cont.is_empty() || !min_prec_arg.is_empty(), `scan call to '${rc.target_snake}' passes an LR continuation mask but the callee takes no min_prec — the mask would land in min_prec's slot`;
             if push_ret >= 0 {
                 w.line(&`SCAN_STACK.push(${push_ret});`);
@@ -1712,7 +1702,7 @@ fn gen_scan_op_element_assign(w: &mut CodeWriter, se: &ScanElement, ctx: &mut Ge
         },
         RuleCall(rc) => {
             let fn_name = `scan_${rc.target_snake}`;
-            let follow_arg_str = follow_arg_sep(ctx.rule_reads_follow(&rc.target_snake), &rc.follow_arg);
+            let follow_arg_str = follow_arg_sep(ctx, ctx.rule_reads_follow(&rc.target_snake), &rc.follow_arg);
             // `_assign` only fires inside Repeat bodies — never reachable
             // from alt-scan's trailing-self-ref site, so `min_prec` here
             // is always the rule's default `0` (or whatever
@@ -1727,7 +1717,7 @@ fn gen_scan_op_element_assign(w: &mut CodeWriter, se: &ScanElement, ctx: &mut Ge
             } else {
                 String::new();
             };
-            let cont = if rc.lr_cont_mask >= 0 { `, &FOLLOW_MASK_${rc.lr_cont_mask}` } else { "" };
+            let cont = if rc.lr_cont_mask >= 0 { `, FOLLOW_MASK_${rc.lr_cont_mask}` } else { "" };
             assert cont.is_empty() || !min_prec_arg.is_empty(), `scan call to '${rc.target_snake}' passes an LR continuation mask but the callee takes no min_prec — the mask would land in min_prec's slot`;
             w.line(&`pos = ${fn_name}(tokens, pos${follow_arg_str}${min_prec_arg}${cont});`);
         },
@@ -3245,7 +3235,7 @@ fn gen_op_leaf(
             // cloned `__follow_<id>`.
             let span_field = open_call_capture(w, op, ctx);
             let fn_name = `_parse_${r.target_snake}`;
-            let follow_arg_str = follow_arg_sep(ctx.rule_reads_follow(&r.target_snake), &r.follow_arg);
+            let follow_arg_str = follow_arg_sep(ctx, ctx.rule_reads_follow(&r.target_snake), &r.follow_arg);
             // `RuleCallOp.min_prec_arg` carries the resolved precedence
             // for every self-recursive call that needs one — `lower_lr_alt_suffix`
             // stamps internal LR-suffix self-refs via
@@ -3254,7 +3244,7 @@ fn gen_op_leaf(
             // reads a single source.
             gen_atn_ret_pending(w, ctx, r.atn_call_site);
             let argsfx = call_arg_suffix(&r, ctx);
-            let cont = if r.lr_cont_mask >= 0 { `, &FOLLOW_MASK_${r.lr_cont_mask}` } else { "" };
+            let cont = if r.lr_cont_mask >= 0 { `, FOLLOW_MASK_${r.lr_cont_mask}` } else { "" };
             if let Some(min_prec) = r.min_prec_arg {
                 w.line(&`${leaf_binding(ctx, &r.field)}${fn_name}(p${follow_arg_str}, ${min_prec}${cont}${argsfx});`);
             } else {
@@ -3630,7 +3620,7 @@ fn emit_lr_branch(
         w.line(&`let _lr_end = ${scan_call};`);
         w.line(&"if _lr_end < 0 { break; }");
         w.line(
-            &`if !(lr_cont.is_empty() || ${follow_yields_call_of(&"&p.kinds", &"_lr_end", &"lr_cont")}) { break; }`,
+            &`if !(lr_cont == 0 || ${follow_yields_call_of(&"&p.kinds", &"_lr_end", &"lr_cont")}) { break; }`,
         );
     } else {
         w.begin(&`if ${scan_call} < 0`);
@@ -3798,7 +3788,7 @@ global EMPTY_PROBE_VIABLE: List<String> = [];
 /// conjoining can only move a verdict from "exit" to "iterate".
 fn emit_probe_verdict(w: &mut CodeWriter, probe_viable: &List<String>, verdict: &String, ctx: &mut GenContext) {
     let mask = if ctx.current_rule_reads_follow() {
-        `follow0.is_empty() || ${follow_yields_call(&"tokens", &"pos")}`;
+        `${FOLLOW_PARAM} == 0 || ${follow_yields_call(&"tokens", &"pos")}`;
     } else {
         "true";
     };
@@ -5599,38 +5589,19 @@ fn gen_iter_caller_follow_gate(w: &mut CodeWriter, rep_op: &RepeatOp, plus_flag:
 /// Render the runtime FOLLOW argument expression for a
 /// `RuleCall` per its `FollowArg`. Passed as the callee's `follow`
 /// parameter (parse and scan share the spelling — both bind `follow`).
-fn follow_arg_expr(arg: &FollowArg) -> String {
+fn follow_arg_expr(ctx: &GenContext, arg: &FollowArg) -> String {
     return match arg {
-        NoFollow => follow_slot_args(&"&EMPTY_FOLLOW", &"&EMPTY_FOLLOW", &"0"),
+        NoFollow => "0",
         Forward => follow_forward_args(),
-        Mask(id) => follow_slot_args(&`&FOLLOW_MASK_${*id}`, &"&EMPTY_FOLLOW", &"0"),
-        // The caller's slots shift along behind the new head. What falls out
-        // of the last slot begins at a depth the gate does not read.
-        Combined(id) => follow_slot_args(&`&FOLLOW_MASK_${*id}`, &"shift", &`${FOLLOW_SHAPE_PARAM} << 1`),
-        // Same, and slot 1 opens a reading: the loop iteration and what the
-        // caller wants are alternatives, not a sequence.
-        AltMask(id) => follow_slot_args(&`&FOLLOW_MASK_${*id}`, &"shift", &`(${FOLLOW_SHAPE_PARAM} << 1) | 2`),
+        Mask(id) => `FOLLOW_MASK_${*id}`,
+        // The caller's continuation shifts along behind the new head, starting
+        // where the head stops constraining. What that pushes past the last
+        // slot begins at a depth the gate does not read.
+        Combined(id) => follow_composed(&`FOLLOW_MASK_${*id}`, ctx.follow_mask_positions(*id), false),
+        // Same, and what the caller wants opens a fresh reading: the loop
+        // iteration and it are alternatives, not a sequence.
+        AltMask(id) => follow_composed(&`FOLLOW_MASK_${*id}`, ctx.follow_mask_positions(*id), true),
     };
-}
-
-/// The slot arguments of one call. `rest` is `"shift"` to carry the caller's
-/// slots along behind `head`, `""` to forward them unmoved, or a literal every
-/// trailing slot takes.
-fn follow_slot_args(head: &String, rest: &String, shape: &String) -> String {
-    let mut out: List<String> = [];
-    for let mut i = 0; i < FOLLOW_SLOTS; i += 1 {
-        if head.is_empty() {
-            out.push(follow_slot_name(i));
-        } else if i == 0 {
-            out.push(*head);
-        } else if *rest == "shift" {
-            out.push(follow_slot_name(i - 1));
-        } else {
-            out.push(*rest);
-        }
-    }
-    out.push(*shape);
-    return join_kinds(&out);
 }
 
 /// Greedy `*` / `+` Repeat dispatcher. Splits on `body_shape`:
@@ -5747,7 +5718,7 @@ fn rep_recovery_expr(rep_op: &RepeatOp, ctx: &GenContext) -> Option<String> {
     if let LeafRuleCall = rep_op.body_shape {
         if let RuleCall(r) = &rep_op.body {
             let fn_name = `_parse_${r.target_snake}`;
-            let follow_arg_str = follow_arg_sep(ctx.rule_reads_follow(&r.target_snake), &r.follow_arg);
+            let follow_arg_str = follow_arg_sep(ctx, ctx.rule_reads_follow(&r.target_snake), &r.follow_arg);
             let call = if let Some(min_prec) = r.min_prec_arg {
                 `${fn_name}(p${follow_arg_str}, ${min_prec})`;
             } else {
@@ -6479,9 +6450,9 @@ fn gen_simplecst_rulecall_value(w: &mut CodeWriter, op: &Op, ctx: &mut GenContex
     let fn_name = `_parse_${rc.target_snake}`;
     let local_var = rc.target_snake;
     let call_args = if let Some(min_prec) = rc.min_prec_arg {
-        `p${follow_arg_sep(ctx.rule_reads_follow(&rc.target_snake), &rc.follow_arg)}, ${min_prec}`;
+        `p${follow_arg_sep(ctx, ctx.rule_reads_follow(&rc.target_snake), &rc.follow_arg)}, ${min_prec}`;
     } else {
-        `p${follow_arg_sep(ctx.rule_reads_follow(&rc.target_snake), &rc.follow_arg)}`;
+        `p${follow_arg_sep(ctx, ctx.rule_reads_follow(&rc.target_snake), &rc.follow_arg)}`;
     };
     let span_field = open_call_capture(w, op, ctx);
     gen_atn_ret_pending(w, ctx, rc.atn_call_site);
