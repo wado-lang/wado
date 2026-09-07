@@ -236,6 +236,20 @@ The report names each trait once, in the order the blocks were written. It
 dedupes by declaration rather than by rendered name, because a trait's two
 blocks need not be adjacent.
 
+### A static's own slots are solved, not spelled
+
+A method's own type parameters are inferred from the arguments, as instance
+dispatch infers them. Where the block declares no slots of its own the method's
+are numbered from zero and the receiver's substitution reaches them anyway;
+where it declares some it does not, so they are solved at the call and the
+signature re-instantiated with what came back.
+
+The solve runs after the arguments are elaborated, because it reads them, and a
+literal is re-coerced afterwards against the parameter the solve produced. A
+slot the arguments do not pin is still reported, with the spelling
+(`Box3::<i32>::build::<i32>(42)`) named — an unsolved slot reaching codegen is
+what that diagnostic exists to prevent.
+
 ### A checked argument is a source change
 
 An inherited default-bodied static checks its arguments, because it now answers
@@ -295,12 +309,6 @@ walk rungs of their own, and that is the open roadmap item above.
   a _literal_ in second position would separate are still an overload to it.
   The selection itself reads the whole list, so this is the preselect's own
   limit, not the rule pass's.
-- A static's own type parameters are never inferred from its arguments. Where
-  the block declares no slots the method's are numbered from zero and the
-  substitution reaches them anyway; where it declares some, an unspelled one
-  reaches codegen unsubstituted, so the call is reported and the spelling
-  (`Box3::<i32>::build::<i32>(42)`) named. Closing it means inferring the
-  method's slots at the call as instance dispatch already does.
 - A blanket impl's method parameter does not resolve to the block's slot. The
   decl pass resolves a parameter naming a slot the receiver mentions and leaves
   one it does not as no type at all, which is why the blanket test reads an

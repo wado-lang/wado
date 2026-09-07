@@ -12,6 +12,7 @@ use crate::token::Span;
 
 use super::Elaborator;
 use super::callee::StaticMethodRef;
+use super::infer::InferCtx;
 use super::method_lookup::MethodInferenceInput;
 use super::reflect::ReflectDispatch;
 use super::sem::types::{CalleeParams, StaticMethodDispatch};
@@ -1598,7 +1599,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         // Resolve method-level type arguments
-        let method_type_args: Vec<TypeId> = static_call
+        let mut method_type_args: Vec<TypeId> = static_call
             .type_args
             .iter()
             .map(|ty| self.resolve_type(ty))
@@ -1646,26 +1647,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
 
-        // A static's own slots are filled from the spelling, never inferred from
-        // the arguments. With no slots of its own the block leaves the method's
-        // numbered from zero and the substitution reaches them anyway; with
-        // slots of its own it does not, and an unspelled one reaches codegen
-        // unsubstituted. Reported here, where the remedy can be named.
-        if let Some(sig) = callee_sig.as_ref()
-            && static_call.type_args.is_empty()
-            && sig.declaring_slot_count > 0
-            && let Some(own) = sig.own_params.first()
-            && let Some(receiver) = struct_name_for_lookup.as_ref()
-        {
-            let _ = self.emit(TypeError::UninferredStaticTypeArg {
-                receiver: receiver.clone(),
-                method: static_call.method.clone(),
-                param: own.name.clone(),
-                span: static_call.span,
-            });
-            return TypeTable::ERROR;
-        }
-
         // Resolve arguments with expected types for coercion. `arg_spans` runs
         // parallel to `args` so a diagnostic still lands on the argument that
         // caused it rather than on the whole call.
@@ -1683,6 +1664,59 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .iter()
             .map(super::ast::Expr::span)
             .collect();
+
+        // A static's own slots, where the spelling wrote none. With no slots of
+        // its own the block leaves the method's numbered from zero and the
+        // receiver's substitution reaches them anyway; with slots of its own it
+        // does not, so they are solved here from the arguments — as instance
+        // dispatch solves them — and an unsolved one is reported rather than
+        // left to reach codegen unsubstituted.
+        if let Some(sig) = callee_sig
+            && static_call.type_args.is_empty()
+            && sig.declaring_slot_count > 0
+            && let Some(own) = sig.own_params.first()
+            && let Some(receiver) = struct_name_for_lookup.clone()
+        {
+            let own_ids = sig.own_type_param_ids();
+            let mut infer = InferCtx::new(&self.tysys.type_table, own_ids.clone());
+            for (i, (&param_type, &arg)) in param_types.iter().zip(args.iter()).enumerate() {
+                if Self::is_literal_number_arg(static_call.args.get(i)) {
+                    infer.add_deferred(param_type, arg);
+                } else {
+                    infer.add(param_type, arg);
+                }
+            }
+            let (inferred, bindings) = infer.solve_with_bindings();
+            if own_ids.iter().all(|id| bindings.contains_key(id)) {
+                method_type_args = inferred;
+                let declaring_args = self
+                    .tysys
+                    .type_table
+                    .borrow()
+                    .nominal_type_args(self.tysys.get_base_type(target_type_id))
+                    .unwrap_or_default();
+                let declaring = sig
+                    .declaring_impl
+                    .and_then(|id| self.tysys.signatures.impl_sig(id))
+                    .cloned();
+                let instantiated = sig.instantiate_call_with(
+                    &self.tysys.type_table,
+                    declaring.as_ref(),
+                    &declaring_args,
+                    &method_type_args,
+                );
+                param_types = instantiated.param_types;
+                self.recoerce_literal_args(&static_call.args, &mut args, &param_types);
+            } else {
+                let _ = self.emit(TypeError::UninferredStaticTypeArg {
+                    receiver,
+                    method: static_call.method.clone(),
+                    param: own.name.clone(),
+                    span: static_call.span,
+                });
+                return TypeTable::ERROR;
+            }
+        }
 
         // Pad omitted trailing arguments with declared parameter defaults.
         // Variant / flags constructors carry no defaults, so the arg-count
