@@ -14,61 +14,26 @@ use super::place::{carries_storage, is_reference};
 use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::tir::{
-    CallArg, FunctionKind, FunctionRef, MonomorphInfo, ResolvedType, ReturnConvention, TirBlock,
-    TirExpr, TirExprKind, TirFunction, TirStmt, TirStmtKind, TirUnaryOp, TypeId, TypeTable,
-    matches_builtin,
+    FunctionKind, FunctionRef, ResolvedType, ReturnConvention, TirBlock, TirExpr, TirExprKind,
+    TirFunction, TirStmt, TirStmtKind, TirUnaryOp, TypeId, TypeTable, matches_builtin,
 };
 use crate::tir_visitor::TirRefVisitor;
 
-/// The member reads that name a component of their first argument in place, so
-/// a place walk projects one `Index` further in. Where the member *lives* is
-/// all this answers; whether a call is fresh is [`hands_out_storage`]'s
-/// question, derived rather than listed.
+/// Whether a bodyless declaration's result may be storage its caller still
+/// owns. Only a reference input can carry storage out, since a by-value one is
+/// already deep-copied at the call: `struct_field_get(v: &T, i) -> F` reads a
+/// field of what `v` points at, while `array_new(len) -> Array<T>` allocates.
 ///
-/// This half cannot be derived: `struct_field_get(v: &T, i) -> F` and a
-/// `concat(a: &String, b: &String) -> String` have the same signature shape and
-/// different answers. An omission costs a share, not soundness — an unlisted
-/// read names [`super::place::Names::Unknown`] and is copied.
-pub(super) fn is_member_alias_read(name: &str, monomorph_info: Option<&MonomorphInfo>) -> bool {
-    matches_builtin(name, monomorph_info, "array_get_value")
-        || matches_builtin(name, monomorph_info, "array_get_ref")
-        || matches_builtin(name, monomorph_info, "array_get_ref_mut")
-        || matches_builtin(name, monomorph_info, "struct_field_get")
-        || matches_builtin(name, monomorph_info, "hole_get")
-        || matches_builtin(name, monomorph_info, "variant_case_extract")
-}
-
-/// Whether a builtin's result may be storage its caller still owns. Only a
-/// reference input can carry storage out, since a by-value one is already
-/// deep-copied at the call: `struct_field_get(v: &T, i) -> F` reads a field of
-/// what `v` points at, while `array_new(len) -> Array<T>` allocates.
-///
-/// Derived rather than listed, so a builtin added later is conservative by
-/// default. Both the call and the declaration ask it, through the two adapters
-/// below, so the seeded set and [`OwnedCalls::is_owned`] cannot drift.
-fn hands_out_storage(result_type: TypeId, has_ref_input: bool, type_table: &TypeTable) -> bool {
-    has_ref_input && carries_storage(result_type, type_table)
-}
-
-/// [`hands_out_storage`] at a call. This is the reading that always answers: a
-/// builtin declaration does not survive to here, since monomorphization drops
-/// the generic and materializes an instance only for the few a later phase
-/// rewrites.
-fn call_hands_out_storage(result_type: TypeId, args: &[CallArg], type_table: &TypeTable) -> bool {
-    let has_ref_input = args
-        .iter()
-        .any(|a| is_reference(a.expr.type_id, type_table));
-    hands_out_storage(result_type, has_ref_input, type_table)
-}
-
-/// [`hands_out_storage`] at a declaration, for the builtins the package does
-/// still hold when the conventions are seeded.
-fn decl_hands_out_storage(func: &TirFunction, type_table: &TypeTable) -> bool {
+/// For a `core:builtin` this is the *obligation*, checked at the declaration —
+/// one that answers yes must say which parameter with `#[returns(part_of(p))]`,
+/// or `#[returns(owned)]` that it allocates. Here it seeds the bodyless
+/// declarations the obligation does not cover, which never hand storage out.
+pub fn hands_out_storage(func: &TirFunction, type_table: &TypeTable) -> bool {
     let has_ref_input = func
         .params
         .iter()
         .any(|p| is_reference(p.type_id, type_table));
-    hands_out_storage(func.return_type, has_ref_input, type_table)
+    has_ref_input && carries_storage(func.return_type, type_table)
 }
 
 /// Whether `func` declares `#[returns(owned)]`. Only a declaration with no body
@@ -78,34 +43,32 @@ fn declares_owned(func: &TirFunction) -> bool {
     func.body.is_none() && func.declared_return_convention == Some(ReturnConvention::Owned)
 }
 
-/// The builtins that declared `#[returns(owned)]`, by base name: they allocate
-/// while reading through a reference, which [`hands_out_storage`] cannot
-/// tell from a read of one. Collected from whatever declarations the package
-/// still holds. Missing one is safe — that call keeps a copy it need not make.
+/// What each builtin declared with `#[returns(...)]`, resolved from a call.
+/// Reads [`FlatPackage::builtin_return_conventions`], which link snapshots
+/// before monomorphization drops the generic declarations.
 #[derive(Default)]
-pub struct OwnedBuiltins(IndexSet<String>);
+pub struct BuiltinConventions(IndexMap<String, ReturnConvention>);
 
-impl OwnedBuiltins {
+impl BuiltinConventions {
     pub fn collect(project: &FlatPackage) -> Self {
-        let mut names = IndexSet::default();
-        for func in &project.functions {
-            let func = func.borrow();
-            if !declares_owned(&func) {
-                continue;
-            }
-            let base = func
-                .monomorph_info
-                .as_ref()
-                .map_or(func.name.as_str(), |m| m.generic_name.as_str());
-            names.insert(base.to_string());
-        }
-        Self(names)
+        Self(project.builtin_return_conventions.clone())
     }
 
-    fn contains(&self, func: &FunctionRef) -> bool {
+    /// The convention declared for `func`, or `None` where it declared none.
+    pub fn get(&self, func: &FunctionRef) -> Option<ReturnConvention> {
         self.0
             .iter()
-            .any(|base| matches_builtin(&func.name, func.monomorph_info.as_ref(), base))
+            .find(|(base, _)| matches_builtin(&func.name, func.monomorph_info.as_ref(), base))
+            .map(|(_, convention)| *convention)
+    }
+
+    /// The parameter a builtin's result is a component of, for a call that
+    /// declared `#[returns(part_of(p))]`.
+    pub fn part_of(&self, func: &FunctionRef) -> Option<usize> {
+        match self.get(func) {
+            Some(ReturnConvention::PartOf(param)) => Some(param),
+            Some(ReturnConvention::Owned) | None => None,
+        }
     }
 }
 
@@ -113,7 +76,7 @@ impl OwnedBuiltins {
 pub struct OwnedCalls<'a> {
     returns_owned: &'a FuncKeySet,
     returns_self_projection: &'a FuncKeySet,
-    owned_builtins: &'a OwnedBuiltins,
+    builtin_conventions: &'a BuiltinConventions,
     indirect_owned_returns: Option<&'a IndexSet<TypeId>>,
 }
 
@@ -121,12 +84,12 @@ impl<'a> OwnedCalls<'a> {
     pub fn new(
         returns_owned: &'a FuncKeySet,
         returns_self_projection: &'a FuncKeySet,
-        owned_builtins: &'a OwnedBuiltins,
+        builtin_conventions: &'a BuiltinConventions,
     ) -> Self {
         Self {
             returns_owned,
             returns_self_projection,
-            owned_builtins,
+            builtin_conventions,
             indirect_owned_returns: None,
         }
     }
@@ -147,21 +110,14 @@ impl<'a> OwnedCalls<'a> {
             .is_some_and(|set| set.contains(&return_type))
     }
 
-    /// Whether a call to `func` yields an owned (fresh) value. A builtin
-    /// answers from the call itself ([`call_hands_out_storage`]), plus the
-    /// declared [`OwnedBuiltins`] exceptions; a body function is owned iff the
-    /// fixpoint proved it so, and an extern / opaque callee defaults to
-    /// borrowed.
-    pub fn is_owned(
-        &self,
-        func: &FunctionRef,
-        result_type: TypeId,
-        args: &[CallArg],
-        type_table: &TypeTable,
-    ) -> bool {
-        if func.module_source.is_builtin() {
-            return !call_hands_out_storage(result_type, args, type_table)
-                || self.owned_builtins.contains(func);
+    /// Whether a call to `func` yields an owned (fresh) value. A `core:builtin`
+    /// answers from its declaration: one that hands out an argument's storage
+    /// must say `#[returns(part_of(p))]`, so anything that did not is fresh. A
+    /// body function is owned iff the fixpoint proved it so, and an extern /
+    /// opaque callee defaults to borrowed.
+    pub fn is_owned(&self, func: &FunctionRef) -> bool {
+        if func.module_source.is_core_builtin() {
+            return self.builtin_conventions.part_of(func).is_none();
         }
         self.returns_owned.contains(&func.module_source, &func.name)
     }
@@ -199,6 +155,7 @@ pub fn compute_receiver_alias(
     call_graph: &CallGraph,
     return_paths: &super::place::ReturnPaths,
     type_table: &TypeTable,
+    builtins: &BuiltinConventions,
 ) -> FuncKeySet {
     let mut set = FuncKeySet::default();
     call_graph.solve(project, |id| {
@@ -212,7 +169,7 @@ pub fn compute_receiver_alias(
         }
         let Some(body) = &func.body else { return false };
         let hands_out_payload = super::hands_out_payload(&func, return_paths);
-        if function_returns_receiver_alias(body, &set, hands_out_payload) {
+        if function_returns_receiver_alias(body, &set, builtins, hands_out_payload) {
             set.insert(func.module_source.clone(), func.name.clone());
             true
         } else {
@@ -225,10 +182,12 @@ pub fn compute_receiver_alias(
 fn function_returns_receiver_alias(
     body: &TirBlock,
     set: &FuncKeySet,
+    builtins: &BuiltinConventions,
     hands_out_payload: bool,
 ) -> bool {
     struct W<'a> {
         set: &'a FuncKeySet,
+        builtins: &'a BuiltinConventions,
         hands_out_payload: bool,
         all_alias: bool,
         saw_return: bool,
@@ -238,7 +197,7 @@ fn function_returns_receiver_alias(
             if let TirStmtKind::Return { value: Some(v) } = &stmt.kind {
                 self.saw_return = true;
                 let v = super::analyze::returned_value(v, self.hands_out_payload);
-                if !is_receiver_projection(v, 0, self.set) {
+                if !is_receiver_projection(v, 0, self.set, self.builtins) {
                     self.all_alias = false;
                 }
             }
@@ -247,6 +206,7 @@ fn function_returns_receiver_alias(
     }
     let mut w = W {
         set,
+        builtins,
         hands_out_payload,
         all_alias: true,
         saw_return: false,
@@ -265,7 +225,13 @@ fn function_returns_receiver_alias(
 /// Answering the wrong place is not the safe side. `last_use::source_path`
 /// makes a binding a share candidate gated on the place this names, so a place
 /// nothing writes reads as no conflict and the copy is dropped.
-fn is_receiver_projection(expr: &TirExpr, param: u32, set: &FuncKeySet) -> bool {
+fn is_receiver_projection(
+    expr: &TirExpr,
+    param: u32,
+    set: &FuncKeySet,
+    builtins: &BuiltinConventions,
+) -> bool {
+    let recurse = |inner| is_receiver_projection(inner, param, set, builtins);
     match &expr.kind {
         TirExprKind::Local { index, .. } => *index == param,
         TirExprKind::Unary {
@@ -279,17 +245,15 @@ fn is_receiver_projection(expr: &TirExpr, param: u32, set: &FuncKeySet) -> bool 
         | TirExprKind::FieldAccess { expr: inner, .. }
         | TirExprKind::VariantPayload { expr: inner, .. }
         | TirExprKind::Cast { expr: inner, .. }
-        | TirExprKind::Index { expr: inner, .. } => is_receiver_projection(inner, param, set),
-        TirExprKind::Call { func, args, .. }
-            if func.module_source.is_core_builtin()
-                && is_member_alias_read(&func.name, func.monomorph_info.as_ref()) =>
-        {
-            args.first()
-                .is_some_and(|a| is_receiver_projection(&a.expr, param, set))
-        }
+        | TirExprKind::Index { expr: inner, .. } => recurse(inner),
+        // A builtin hands out the parameter its `#[returns(part_of(p))]` names,
+        // which need not be the first: `struct_field_get(v, i)` reads `v`.
+        TirExprKind::Call { func, args, .. } if func.module_source.is_core_builtin() => builtins
+            .part_of(func)
+            .and_then(|p| args.get(p))
+            .is_some_and(|a| recurse(&a.expr)),
         TirExprKind::Call { func, args, .. } if set.contains(&func.module_source, &func.name) => {
-            args.first()
-                .is_some_and(|a| is_receiver_projection(&a.expr, param, set))
+            args.first().is_some_and(|a| recurse(&a.expr))
         }
         _ => false,
     }
@@ -311,7 +275,7 @@ pub fn compute_return_conventions(
     project: &FlatPackage,
     call_graph: &CallGraph,
     return_paths: &super::place::ReturnPaths,
-    owned_builtins: &OwnedBuiltins,
+    builtin_conventions: &BuiltinConventions,
 ) -> ReturnConventions {
     let type_table = project.type_table.borrow();
 
@@ -322,7 +286,7 @@ pub fn compute_return_conventions(
         let is_builtin = func.module_source.is_builtin();
         if is_helper
             || declares_owned(&func)
-            || (is_builtin && !decl_hands_out_storage(&func, &type_table))
+            || (is_builtin && !hands_out_storage(&func, &type_table))
         {
             owned.insert(func.module_source.clone(), func.name.clone());
         }
@@ -336,7 +300,7 @@ pub fn compute_return_conventions(
             call_graph,
             return_paths,
             &type_table,
-            owned_builtins,
+            builtin_conventions,
             &mut owned,
             &mut self_proj,
         );
@@ -358,7 +322,7 @@ fn settle_component(
     call_graph: &CallGraph,
     return_paths: &super::place::ReturnPaths,
     type_table: &TypeTable,
-    owned_builtins: &OwnedBuiltins,
+    builtin_conventions: &BuiltinConventions,
     owned: &mut FuncKeySet,
     self_proj: &mut FuncKeySet,
 ) {
@@ -389,7 +353,7 @@ fn settle_component(
         }
         let body = func.body.as_ref().expect("members have bodies");
         let (ret_owned, ret_self_proj) = {
-            let oracle = OwnedCalls::new(owned, self_proj, owned_builtins);
+            let oracle = OwnedCalls::new(owned, self_proj, builtin_conventions);
             let hands_out_payload = super::hands_out_payload(&func, return_paths);
             function_return_convention(body, &func.params, &oracle, type_table, hands_out_payload)
         };

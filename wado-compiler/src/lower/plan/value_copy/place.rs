@@ -4,7 +4,7 @@
 
 use super::funcset::{FuncKeyMap, FuncKeySet};
 use super::needs_value_copy;
-use super::ownership::is_member_alias_read;
+use super::ownership::BuiltinConventions;
 use crate::hashmap::IndexMap;
 use crate::tir::{
     ResolvedType, TirExpr, TirExprKind, TirFunction, TirPattern, TirStmt, TirStmtKind, TirUnaryOp,
@@ -102,20 +102,24 @@ impl Bindings {
     }
 }
 
-/// The projection an accessor returns out of its receiver.
+/// The projection an accessor returns out of one of its parameters.
 #[derive(Clone, Debug)]
 pub struct ReturnPath {
+    /// Which parameter the path is rooted at, by position. An accessor need not
+    /// hand out its receiver: `StructField::get(&self, v: &T) -> F` reads a
+    /// field of `v`, and reading that as `self` names the wrong storage.
+    pub param: usize,
     pub selectors: Vec<Selector>,
     /// [`Place::through_borrow`] for the place this path lands on, so even a
-    /// fresh receiver does not own it.
+    /// fresh argument does not own it.
     pub through_borrow: bool,
 }
 
-/// Which projection of its receiver each accessor returns. A call with no
+/// Which projection of which parameter each accessor returns. A call with no
 /// entry returns storage this walk cannot place.
 pub type ReturnPaths = FuncKeyMap<ReturnPath>;
 
-/// The projection each function returns out of its first parameter, for the
+/// The projection each function returns out of one of its parameters, for the
 /// calls that name storage rather than build it.
 ///
 /// A least fixpoint, because an accessor is routinely written over another one
@@ -128,6 +132,7 @@ pub fn compute_return_paths(
     call_graph: &super::callgraph::CallGraph,
     type_table: &TypeTable,
     returns_owned: &FuncKeySet,
+    builtins: &BuiltinConventions,
 ) -> ReturnPaths {
     let mut paths = ReturnPaths::default();
     call_graph.solve(flat, |id| {
@@ -135,7 +140,7 @@ pub fn compute_return_paths(
         if paths.get(&func.module_source, &func.name).is_some() {
             return false;
         }
-        let (Some(body), Some(receiver)) = (&func.body, func.params.first()) else {
+        let Some(body) = &func.body else {
             return false;
         };
         // A returned construction hands its payload out uncopied, so a value
@@ -143,7 +148,7 @@ pub fn compute_return_paths(
         if !carries_storage(func.return_type, type_table) {
             return false;
         }
-        let resolver = Resolver::new(&func, type_table, &paths, returns_owned);
+        let resolver = Resolver::new(&func, type_table, &paths, returns_owned, builtins);
         let mut returned = ReturnedPlace {
             resolver: &resolver,
             names: None,
@@ -152,13 +157,18 @@ pub fn compute_return_paths(
         let Some(Names::Place(place)) = returned.names else {
             return false;
         };
-        if place.root != receiver.local_index {
+        let Some(param) = func
+            .params
+            .iter()
+            .position(|p| p.local_index == place.root)
+        else {
             return false;
-        }
+        };
         paths.insert(
             func.module_source.clone(),
             func.name.clone(),
             ReturnPath {
+                param,
                 selectors: place.selectors,
                 through_borrow: place.through_borrow,
             },
@@ -202,6 +212,8 @@ pub struct Resolver<'a> {
     /// Callees whose result is storage of its own. Every other hands back
     /// something this walk will not guess at.
     returns_owned: &'a FuncKeySet,
+    /// Where each builtin declared its result comes from.
+    builtins: &'a BuiltinConventions,
     /// Parameters naming storage the caller lent, by the type lent. The only
     /// roots a write in this body reaches out through.
     lent: IndexMap<u32, TypeId>,
@@ -217,11 +229,13 @@ impl<'a> Resolver<'a> {
         type_table: &'a TypeTable,
         return_paths: &'a ReturnPaths,
         returns_owned: &'a FuncKeySet,
+        builtins: &'a BuiltinConventions,
     ) -> Self {
         let mut resolver = Self {
             type_table,
             return_paths,
             returns_owned,
+            builtins,
             lent: IndexMap::default(),
             bindings: Bindings::default(),
         };
@@ -251,6 +265,13 @@ impl<'a> Resolver<'a> {
     #[must_use]
     pub fn lent(&self, local: u32) -> Option<TypeId> {
         self.lent.get(&local).copied()
+    }
+
+    /// The parameter a `core:builtin` call hands its result out of, from that
+    /// builtin's `#[returns(part_of(p))]`.
+    #[must_use]
+    pub fn builtin_part_of(&self, func: &crate::tir::FunctionRef) -> Option<usize> {
+        self.builtins.part_of(func)
     }
 
     /// What `expr` names. Total over the expression kinds: a shape with no arm
@@ -310,22 +331,19 @@ impl<'a> Resolver<'a> {
                 Names::Place(p) => Names::Place(p),
                 Names::Value | Names::Unknown => Names::Unknown,
             },
-            // A member read borrows the slot in place, so it names its
-            // container's storage one `Index` further in. `Index` is the honest
-            // selector for a reflect read too: its index is a runtime value, so
-            // which component it lands on is not known here.
-            TirExprKind::Call { func, args, .. }
-                if func.module_source.is_core_builtin()
-                    && is_member_alias_read(&func.name, func.monomorph_info.as_ref()) =>
-            {
-                match args.first() {
+            // A member read borrows the slot in place, so it names the storage
+            // of the parameter its `#[returns(part_of(p))]` names, one `Index`
+            // further in. `Index` is the honest selector: the index is a runtime
+            // value, so which component it lands on is not known here.
+            TirExprKind::Call { func, args, .. } if func.module_source.is_core_builtin() => {
+                match self.builtins.part_of(func).and_then(|p| args.get(p)) {
                     Some(arg) => self.project(&arg.expr, Selector::Index),
-                    None => Names::Unknown,
+                    None => Names::Value,
                 }
             }
             TirExprKind::Call { func, args, .. } => {
                 match self.return_paths.get(&func.module_source, &func.name) {
-                    Some(path) => match args.first().map(|r| self.names(&r.expr)) {
+                    Some(path) => match args.get(path.param).map(|r| self.names(&r.expr)) {
                         Some(Names::Place(mut place)) => {
                             place.selectors.extend(path.selectors.iter().copied());
                             place.through_borrow |= path.through_borrow;

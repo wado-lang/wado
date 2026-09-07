@@ -241,17 +241,16 @@ where it cannot prove move / share / fresh; no elision pass):
 - Freshness — `ownership.rs` return conventions (a call is fresh iff the callee
   returns owned), plus the literals that materialize their own storage: a string
   _and_ a bytes literal, both of which lower to a fresh aggregate over a packed
-  array. A builtin's convention is read off the call: it has no body to settle,
-  and no declaration left to read, because monomorphization drops the generic
-  and materializes an instance only for the few a later phase rewrites. Only a
-  reference argument can carry storage out, since a by-value one is copied at
-  the call. A builtin that allocates while reading through a reference declares
-  `#[returns(owned)]`, which the call alone cannot tell from a read;
-  `builtin::array_clone` is the case. Reading the call replaced a hand-kept list
-  of the builtins that are _not_ fresh. `struct_field_get`, `hole_get` and
-  `variant_case_extract` were all missing from it, so a reflect member read
-  handed out the container's storage as a move, and mutating what
-  `StructField::get` bound wrote through to the struct.
+  array. Where a result comes from is one fact with two spellings: a body is
+  read for it, and a `core:builtin` declares it. `#[returns(owned)]` says the
+  result is a fresh place, `#[returns(part_of(p))]` that it names a component of
+  parameter `p`. The declaration is mandatory — link asserts that a bodyless
+  `core:builtin` reading through a reference and returning storage carries one —
+  so silence means "allocates" rather than "guess". Only a reference argument
+  can carry storage out, since a by-value one is copied at the call, which is
+  what makes the obligation checkable from the signature alone. Link snapshots
+  the declarations because monomorphization drops the generic and materializes
+  an instance only for the few a later phase rewrites.
   An _indirect_ call is fresh when every closure `__call` of its
   return type returns owned: closure lowering rewrites every callable value —
   a closure literal and a bare `FuncRef` alike — into a functor whose `__call`
@@ -592,9 +591,15 @@ Verified against the tree.
 
       Only where the caller can name what it got, because one copy in a callee
       is shared by every call site and moving it out puts a copy on each of them
-      instead. Naming it means a `place::ReturnPath` that stays inside the
-      receiver's own storage; a path leaving through a `&` field lands where the
+      instead. Naming it means a `place::ReturnPath` that stays inside one
+      parameter's own storage; a path leaving through a `&` field lands where the
       caller cannot follow.
+
+      The path records _which_ parameter, not just the selectors, because an
+      accessor need not hand out its receiver: `StructField::get(&self, v: &T)`
+      returns a field of `v`. Reading every path as the receiver's drops those,
+      and a dropped path is an unnameable place — so `core:serde` deep-copied
+      every field of every value it serialized.
 
       Whether a place is reached through a borrow is decided by the walk that
       resolves it, never re-derived from an expression's syntax. The walk

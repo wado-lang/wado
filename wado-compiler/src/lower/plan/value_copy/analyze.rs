@@ -7,7 +7,7 @@
 //! predicates to feed [`super::synthesize::synthesize_helpers`].
 
 use super::funcset::FuncKeySet;
-use super::ownership::{OwnedBuiltins, OwnedCalls};
+use super::ownership::{BuiltinConventions, OwnedCalls};
 use crate::flat_package::FlatPackage;
 use crate::hashmap::IndexSet;
 use crate::tir::{
@@ -27,8 +27,8 @@ pub fn collect_seed_types(project: &FlatPackage) -> IndexSet<TypeId> {
     let type_table = project.type_table.borrow();
     let no_owned = FuncKeySet::default();
     let no_self_proj = FuncKeySet::default();
-    let no_owned_builtins = OwnedBuiltins::default();
-    let oracle = OwnedCalls::new(&no_owned, &no_self_proj, &no_owned_builtins);
+    let no_builtin_conventions = BuiltinConventions::default();
+    let oracle = OwnedCalls::new(&no_owned, &no_self_proj, &no_builtin_conventions);
     let mut walker = SeedWalker {
         type_table: &type_table,
         oracle: &oracle,
@@ -295,7 +295,7 @@ pub(crate) fn is_owned_value(
         // when that receiver is itself fresh, so `[1, 2, 3]`'s builder — a fresh
         // block-local finalized by `.build()` — is not defensively copied.
         TirExprKind::Call { func, args, .. } => {
-            oracle.is_owned(func, expr.type_id, args, type_table)
+            oracle.is_owned(func)
                 || (oracle.returns_self_projection(func)
                     && args
                         .first()

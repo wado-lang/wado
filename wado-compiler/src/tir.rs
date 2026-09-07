@@ -5833,15 +5833,17 @@ pub enum InlineHint {
     Never,
 }
 
-/// What a bodyless declaration says about the storage its result carries.
-/// Without one, a builtin call that reads through a reference argument is taken
-/// to hand out that argument's storage. That is the conservative reading, so a
-/// missing declaration costs a copy rather than value semantics.
+/// Where a bodyless declaration's result comes from. A body is read for the
+/// same fact, so this is the declared half of one notion: the result is either
+/// a fresh place or a projection of one parameter.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ReturnConvention {
     /// `#[returns(owned)]` — every returned value is freshly materialized, so a
     /// caller may consume it as a move.
     Owned,
+    /// `#[returns(part_of(p))]` — the result names a component of parameter `p`
+    /// in place, so it lives as long as that argument's storage does.
+    PartOf(usize),
 }
 
 impl TirFunction {
