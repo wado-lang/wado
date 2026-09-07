@@ -296,6 +296,7 @@ fn ensure_kiln_imports(module: &mut Module, span: Span, needed: &[&str]) {
                 alias: None,
             })
             .collect(),
+        items_span: Some(span),
         attributes: None,
         span,
     };

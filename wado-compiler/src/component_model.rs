@@ -1306,10 +1306,7 @@ fn build_local_name_resolver(
                         let bind = alias.clone().unwrap_or_else(|| name.clone());
                         local.insert(bind, source.clone());
                     }
-                    UseItem::InterfaceFunctions {
-                        interface_name,
-                        functions: _,
-                    } => {
+                    UseItem::InterfaceFunctions { interface_name, .. } => {
                         if let Some(source) = other_defs.get(interface_name) {
                             local.insert(interface_name.clone(), source.clone());
                         }
