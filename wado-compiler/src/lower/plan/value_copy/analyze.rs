@@ -6,7 +6,8 @@
 //! [`collect_seed_types`] walks every function with the same
 //! predicates to feed [`super::synthesize::synthesize_helpers`].
 
-use super::funcset::FuncKeySet;
+use super::funcset::{FuncKeyMap, FuncKeySet};
+use super::needs_value_copy;
 use super::ownership::{BuiltinConventions, OwnedCalls};
 use crate::flat_package::FlatPackage;
 use crate::hashmap::IndexSet;
@@ -28,7 +29,7 @@ pub fn collect_seed_types(
 ) -> IndexSet<TypeId> {
     let type_table = project.type_table.borrow();
     let no_owned = FuncKeySet::default();
-    let no_self_proj = FuncKeySet::default();
+    let no_self_proj = FuncKeyMap::default();
     // The builtin conventions must be the real ones even here: they are
     // declared rather than inferred, and an empty set reads every builtin as
     // fresh, which misses the seed a borrowed one needs.
@@ -236,13 +237,21 @@ pub fn is_fresh_value(expr: &TirExpr, oracle: &OwnedCalls, type_table: &TypeTabl
 /// twice: [`translate`](crate::lower::translate) skips the copy at the
 /// construction, and [`ownership`](super::ownership) judges the same payload for
 /// the return convention and for the receiver-alias set.
-pub fn returned_value(expr: &TirExpr, hands_out_payload: bool) -> &TirExpr {
+pub fn returned_value<'a>(
+    expr: &'a TirExpr,
+    hands_out_payload: bool,
+    type_table: &TypeTable,
+) -> &'a TirExpr {
     let mut expr = expr;
+    // Only a payload the copy rules defend is handed out: a scalar one is
+    // stored into the construct by value, which leaves a place of its own
+    // however the scalar was read.
     while hands_out_payload
         && let TirExprKind::VariantConstruct {
             payload: Some(inner),
             ..
         } = &expr.kind
+        && needs_value_copy(inner.type_id, type_table)
     {
         expr = inner;
     }
@@ -300,10 +309,10 @@ pub(crate) fn is_owned_value(
         // block-local finalized by `.build()` — is not defensively copied.
         TirExprKind::Call { func, args, .. } => {
             oracle.is_owned(func)
-                || (oracle.returns_self_projection(func)
-                    && args
-                        .first()
-                        .is_some_and(|a| is_owned_value(&a.expr, fresh_locals, oracle, type_table)))
+                || oracle
+                    .self_projection_param(func)
+                    .and_then(|p| args.get(p))
+                    .is_some_and(|a| is_owned_value(&a.expr, fresh_locals, oracle, type_table))
         }
         TirExprKind::CmRawCall { .. } => true,
         // Every callable value is a closure functor by lowering time, so an

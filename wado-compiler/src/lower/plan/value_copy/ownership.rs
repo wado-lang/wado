@@ -9,13 +9,13 @@
 //! like `arr[i].field.push(x)` aliased, which copy-on-extract cannot do.
 
 use super::callgraph::CallGraph;
-use super::funcset::FuncKeySet;
+use super::funcset::{FuncKeyMap, FuncKeySet};
 use super::place::{carries_storage, is_reference};
 use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::tir::{
-    FunctionKind, FunctionRef, ResolvedType, ReturnConvention, TirBlock, TirExpr, TirExprKind,
-    TirFunction, TirStmt, TirStmtKind, TirUnaryOp, TypeId, TypeTable, matches_builtin,
+    FunctionKind, FunctionRef, ReturnConvention, TirBlock, TirExpr, TirExprKind, TirFunction,
+    TirParam, TirStmt, TirStmtKind, TirUnaryOp, TypeId, TypeTable, matches_builtin,
 };
 use crate::tir_visitor::TirRefVisitor;
 
@@ -75,7 +75,7 @@ impl BuiltinConventions {
 /// Oracle the freshness checker consults for a call's return convention.
 pub struct OwnedCalls<'a> {
     returns_owned: &'a FuncKeySet,
-    returns_self_projection: &'a FuncKeySet,
+    returns_self_projection: &'a FuncKeyMap<usize>,
     builtin_conventions: &'a BuiltinConventions,
     indirect_owned_returns: Option<&'a IndexSet<TypeId>>,
 }
@@ -83,7 +83,7 @@ pub struct OwnedCalls<'a> {
 impl<'a> OwnedCalls<'a> {
     pub fn new(
         returns_owned: &'a FuncKeySet,
-        returns_self_projection: &'a FuncKeySet,
+        returns_self_projection: &'a FuncKeyMap<usize>,
         builtin_conventions: &'a BuiltinConventions,
     ) -> Self {
         Self {
@@ -122,28 +122,31 @@ impl<'a> OwnedCalls<'a> {
         self.returns_owned.contains(&func.module_source, &func.name)
     }
 
-    /// Whether `func` returns a projection of its receiver / first parameter
-    /// (`build(&self) -> List { return *self }`, an accessor `first(&self)`),
-    /// so a call to it is fresh exactly when that receiver is fresh. Only a body
-    /// function the fixpoint proved self-projecting qualifies: a bodyless one
-    /// either allocates (already owned) or reads through a reference whose
-    /// referent is unrelated to the argument's freshness.
-    pub fn returns_self_projection(&self, func: &FunctionRef) -> bool {
-        if func.module_source.is_builtin() {
-            return false;
+    /// The parameter `func` returns a projection of, by position, so a call to
+    /// it is fresh exactly when *that* argument is. A body function answers from
+    /// the fixpoint; a `core:builtin` from `#[returns(part_of(p))]`, which says
+    /// the result is a component of `p` — and a component of a place nothing
+    /// else reaches is one nothing else reaches. A wasm asset declares neither.
+    pub fn self_projection_param(&self, func: &FunctionRef) -> Option<usize> {
+        if func.module_source.is_core_builtin() {
+            return self.builtin_conventions.part_of(func);
+        }
+        if func.module_source.is_wasm_asset() {
+            return None;
         }
         self.returns_self_projection
-            .contains(&func.module_source, &func.name)
+            .get(&func.module_source, &func.name)
+            .copied()
     }
 }
 
 /// Per-function return conventions the fold consults: `returns_owned` (every
-/// returned value is freshly materialized) and its superset
-/// `returns_self_projection` (every returned value is owned *or* a projection of
-/// the receiver / first parameter).
+/// returned value is freshly materialized) and `returns_self_projection` (the
+/// parameter every returned value that is not owned projects, so the call is
+/// fresh exactly when that argument is).
 pub struct ReturnConventions {
     pub returns_owned: FuncKeySet,
-    pub returns_self_projection: FuncKeySet,
+    pub returns_self_projection: FuncKeyMap<usize>,
 }
 
 /// Functions whose every value-return aliases the receiver / first parameter
@@ -169,7 +172,7 @@ pub fn compute_receiver_alias(
         }
         let Some(body) = &func.body else { return false };
         let hands_out_payload = super::hands_out_payload(&func, return_paths);
-        if function_returns_receiver_alias(body, &set, builtins, hands_out_payload) {
+        if function_returns_receiver_alias(body, &set, builtins, type_table, hands_out_payload) {
             set.insert(func.module_source.clone(), func.name.clone());
             true
         } else {
@@ -183,11 +186,13 @@ fn function_returns_receiver_alias(
     body: &TirBlock,
     set: &FuncKeySet,
     builtins: &BuiltinConventions,
+    type_table: &TypeTable,
     hands_out_payload: bool,
 ) -> bool {
     struct W<'a> {
         set: &'a FuncKeySet,
         builtins: &'a BuiltinConventions,
+        type_table: &'a TypeTable,
         hands_out_payload: bool,
         all_alias: bool,
         saw_return: bool,
@@ -196,7 +201,7 @@ fn function_returns_receiver_alias(
         fn visit_stmt(&mut self, stmt: &TirStmt) {
             if let TirStmtKind::Return { value: Some(v) } = &stmt.kind {
                 self.saw_return = true;
-                let v = super::analyze::returned_value(v, self.hands_out_payload);
+                let v = super::analyze::returned_value(v, self.hands_out_payload, self.type_table);
                 if !is_receiver_projection(v, 0, self.set, self.builtins) {
                     self.all_alias = false;
                 }
@@ -207,6 +212,7 @@ fn function_returns_receiver_alias(
     let mut w = W {
         set,
         builtins,
+        type_table,
         hands_out_payload,
         all_alias: true,
         saw_return: false,
@@ -264,11 +270,10 @@ fn is_receiver_projection(
 /// `#[returns(owned)]`, and a builtin that cannot hand storage out allocates —
 /// then settles each strongly connected component of the
 /// call graph with its callees already decided: a body function is owned when
-/// every value it returns is owned, and self-projecting when every value it
-/// returns is owned *or* a projection of its first parameter (`return *self`).
-/// `returns_owned` is a subset of `returns_self_projection`.
+/// every value it returns is owned, and self-projecting on parameter `p` when
+/// every value it returns that is not owned is a projection of `p`.
 ///
-/// Inside a component the answer is assumed and then disproved, not built up: a
+/// Inside a component `owned` is assumed and then disproved, not built up: a
 /// cycle whose members return each other's result has no base to build from,
 /// and the returns that avoid the cycle are what decide it either way.
 pub fn compute_return_conventions(
@@ -291,7 +296,7 @@ pub fn compute_return_conventions(
             owned.insert(func.module_source.clone(), func.name.clone());
         }
     }
-    let mut self_proj = owned.clone();
+    let mut self_proj = FuncKeyMap::default();
 
     for component in call_graph.sccs() {
         settle_component(
@@ -324,7 +329,7 @@ fn settle_component(
     type_table: &TypeTable,
     builtin_conventions: &BuiltinConventions,
     owned: &mut FuncKeySet,
-    self_proj: &mut FuncKeySet,
+    self_proj: &mut FuncKeyMap<usize>,
 ) {
     let members: Vec<u32> = component
         .iter()
@@ -335,10 +340,12 @@ fn settle_component(
         return;
     }
     let in_component: IndexSet<u32> = members.iter().copied().collect();
+    // Only `owned` is assumed. It is the stronger verdict, so a cycle resolves
+    // as optimistically through it, and the parameter a member projects has no
+    // value to assume — the first walk of each is what proposes one.
     for &id in &members {
         let func = project.functions[id as usize].borrow();
         owned.insert(func.module_source.clone(), func.name.clone());
-        self_proj.insert(func.module_source.clone(), func.name.clone());
     }
 
     let mut queue: std::collections::VecDeque<u32> = members.iter().copied().collect();
@@ -347,8 +354,8 @@ fn settle_component(
         queued.swap_remove(&id);
         let func = project.functions[id as usize].borrow();
         let held_owned = owned.contains(&func.module_source, &func.name);
-        let held_self_proj = self_proj.contains(&func.module_source, &func.name);
-        if !held_owned && !held_self_proj {
+        let held_self_proj = self_proj.get(&func.module_source, &func.name).copied();
+        if !held_owned && held_self_proj.is_none() {
             continue;
         }
         let body = func.body.as_ref().expect("members have bodies");
@@ -358,16 +365,22 @@ fn settle_component(
             function_return_convention(body, &func.params, &oracle, type_table, hands_out_payload)
         };
         let mut dropped = false;
-        // `owned` is a subset of `self_proj`: losing the weaker verdict loses
-        // the stronger one with it.
         if held_owned && !ret_owned {
             owned.remove(&func.module_source, &func.name);
             dropped = true;
         }
-        if held_self_proj && !ret_self_proj {
-            self_proj.remove(&func.module_source, &func.name);
-            owned.remove(&func.module_source, &func.name);
-            dropped = true;
+        // A walk that names a different parameter than the one held refutes
+        // both, the same as naming none: the verdict is one argument to test.
+        match (held_self_proj, ret_self_proj) {
+            (Some(held), found) if found != Some(held) => {
+                self_proj.remove(&func.module_source, &func.name);
+                owned.remove(&func.module_source, &func.name);
+                dropped = true;
+            }
+            (None, Some(found)) => {
+                self_proj.insert(func.module_source.clone(), func.name.clone(), found);
+            }
+            (Some(_), _) | (None, None) => {}
         }
         if !dropped {
             continue;
@@ -406,29 +419,35 @@ pub fn compute_indirect_owned_returns(
     owned_returns
 }
 
-/// The function's `(returns_owned, returns_self_projection)` convention: whether
-/// every returned value is owned, and whether every returned value is owned *or*
-/// a projection of the first parameter (`return *self`). Judged against the
-/// callee convention `oracle` and the fresh-local set (Let bindings and
-/// match-arm bindings that destructure an owned source).
+/// Whether every returned value is owned, and which single parameter the ones
+/// that are not all project (`return *self`, `return builtin::hole_get(t, i)`).
+/// Judged against the callee convention `oracle` and the fresh-local set (Let
+/// bindings and match-arm bindings that destructure an owned source).
 fn function_return_convention(
     body: &TirBlock,
-    params: &[crate::tir::TirParam],
+    params: &[TirParam],
     oracle: &OwnedCalls,
     type_table: &TypeTable,
     hands_out_payload: bool,
-) -> (bool, bool) {
+) -> (bool, Option<usize>) {
     let fresh = compute_fresh_locals(body, params, oracle, type_table);
     let mut walker = ReturnWalker {
         fresh: &fresh,
         oracle,
         type_table,
+        params,
         hands_out_payload,
         all_owned: true,
-        all_owned_or_self_proj: true,
+        self_proj: None,
+        self_proj_broken: false,
     };
     walker.visit_block(body);
-    (walker.all_owned, walker.all_owned_or_self_proj)
+    let self_proj = if walker.self_proj_broken {
+        None
+    } else {
+        walker.self_proj
+    };
+    (walker.all_owned, self_proj)
 }
 
 /// Walk every `return value` and classify its operand: owned, or a projection of
@@ -443,19 +462,28 @@ struct ReturnWalker<'a> {
     fresh: &'a IndexSet<u32>,
     oracle: &'a OwnedCalls<'a>,
     type_table: &'a TypeTable,
+    params: &'a [TirParam],
     hands_out_payload: bool,
     all_owned: bool,
-    all_owned_or_self_proj: bool,
+    /// The parameter every not-owned return projects, while they agree on one.
+    self_proj: Option<usize>,
+    /// A not-owned return projected no parameter, or a second one.
+    self_proj_broken: bool,
 }
 
 impl TirRefVisitor for ReturnWalker<'_> {
     fn visit_stmt(&mut self, stmt: &TirStmt) {
         if let TirStmtKind::Return { value: Some(v) } = &stmt.kind {
-            let v = super::analyze::returned_value(v, self.hands_out_payload);
+            let v = super::analyze::returned_value(v, self.hands_out_payload, self.type_table);
             if !super::analyze::is_owned_value(v, self.fresh, self.oracle, self.type_table) {
                 self.all_owned = false;
-                if !is_projection_of_param(v, 0) {
-                    self.all_owned_or_self_proj = false;
+                match projection_param(v, self.params) {
+                    Some(p) if self.self_proj.is_none_or(|held| held == p) => {
+                        self.self_proj = Some(p);
+                    }
+                    // A second parameter is no better than none: the caller
+                    // has one argument to test, so two answers is no answer.
+                    Some(_) | None => self.self_proj_broken = true,
                 }
             }
         }
@@ -463,27 +491,37 @@ impl TirRefVisitor for ReturnWalker<'_> {
     }
 }
 
-/// True when `expr` is a projection — a field / index / payload / cast chain —
-/// rooted at parameter `param`, so it aliases that parameter's storage. A
-/// projection of a fresh receiver is itself fresh, which is what lets a call to
-/// a self-projecting callee be treated as fresh when its receiver is.
+/// Which parameter `expr` is a projection of — a field / index / payload / cast
+/// chain rooted at one — by position, so it aliases that parameter's storage. A
+/// projection of a fresh argument is itself fresh, which is what lets a call to
+/// a self-projecting callee be treated as fresh when that argument is.
 ///
 /// Only the parameter's own reference may be peeled (`*self`): a deref deeper in
 /// the chain reads a reference *stored in* that storage, and its referent is
 /// somebody else's — a template shape holds each hole as a `&V` field, so
 /// `*v.h0` leaves `v` entirely however fresh `v` is.
-pub(super) fn is_projection_of_param(expr: &TirExpr, param: u32) -> bool {
+pub(super) fn projection_param(expr: &TirExpr, params: &[TirParam]) -> Option<usize> {
+    let root = projection_root(expr)?;
+    params.iter().position(|p| p.local_index == root)
+}
+
+/// The local a projection chain bottoms out at, following the rule
+/// [`projection_param`] states.
+fn projection_root(expr: &TirExpr) -> Option<u32> {
     match &expr.kind {
-        TirExprKind::Local { index, .. } => *index == param,
+        TirExprKind::Local { index, .. } => Some(*index),
         TirExprKind::Unary {
             op: TirUnaryOp::Deref,
             expr: inner,
-        } => matches!(inner.kind, TirExprKind::Local { index, .. } if index == param),
+        } => match inner.kind {
+            TirExprKind::Local { index, .. } => Some(index),
+            _ => None,
+        },
         TirExprKind::FieldAccess { expr: inner, .. }
         | TirExprKind::VariantPayload { expr: inner, .. }
         | TirExprKind::Cast { expr: inner, .. }
-        | TirExprKind::Index { expr: inner, .. } => is_projection_of_param(inner, param),
-        _ => false,
+        | TirExprKind::Index { expr: inner, .. } => projection_root(inner),
+        _ => None,
     }
 }
 
@@ -512,11 +550,12 @@ fn compute_fresh_locals(
     }
     // A by-value parameter is owned: returning it is owned because a returned
     // parameter is never confined, so the caller always copies it in.
+    //
+    // `is_reference`, not a `ResolvedType` match: `boxing` has already rewritten
+    // some `&T` onto `Box<T>` in place, and one it reached would read here as a
+    // parameter the caller handed a copy of.
     for p in params {
-        if !matches!(
-            type_table.get(p.type_id),
-            ResolvedType::Ref(_) | ResolvedType::MutRef(_)
-        ) {
+        if !is_reference(p.type_id, type_table) {
             fresh.insert(p.local_index);
         }
     }

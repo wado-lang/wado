@@ -101,7 +101,7 @@ pub struct ValueCopyPlan {
     /// call to one is fresh when its receiver is, so a `[1, 2, 3]` builder
     /// finalized by `.build()` is not defensively copied. Superset of
     /// `returns_owned`.
-    pub returns_self_projection: FuncKeySet,
+    pub returns_self_projection: FuncKeyMap<usize>,
     /// Where each builtin said its result comes from: a fresh place, or a
     /// component of one named parameter.
     pub builtin_conventions: ownership::BuiltinConventions,

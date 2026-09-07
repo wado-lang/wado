@@ -252,6 +252,15 @@ where it cannot prove move / share / fresh; no elision pass):
   one is copied at the call. Link also snapshots what it read, since
   monomorphization drops the generic declarations and materializes an instance
   only for the few a later phase rewrites.
+
+  A function that returns a projection rather than a fresh place is fresh
+  exactly when the argument it projects is, and `returns_self_projection`
+  records which parameter that is. The caller tests that argument, not the
+  receiver: `VariantCase::extract(&self, w)` returns a component of `w`, and
+  testing `self` would ask about a member descriptor the walk built and call the
+  result fresh while `w` is still held. A `core:builtin` answers the same
+  question from `#[returns(part_of(p))]`, which names `p` outright.
+
   An _indirect_ call is fresh when every closure `__call` of its
   return type returns owned: closure lowering rewrites every callable value —
   a closure literal and a bare `FuncRef` alike — into a functor whose `__call`
@@ -415,9 +424,9 @@ unused helper — while a miss leaves the fold no helper to call.
 
 ### Known gap: a borrowed projection behind a variant
 
-`is_projection_of_param` matches a syntactic deref / field / index / payload /
-cast chain rooted at the first parameter, so `build(&self) -> List { return
-*self }` is self-projecting but `SliceValueIter<T>::next` is not:
+`projection_param` matches a syntactic deref / field / index / payload / cast
+chain rooted at a parameter, so `build(&self) -> List { return *self }` is
+self-projecting but `SliceValueIter<T>::next` is not:
 
 ```wado
 let item = builtin::array_get_value(self.repr, self.index);
@@ -633,21 +642,6 @@ Verified against the tree.
       that does not have the same signature, so no predicate says where an
       omission is wrong. Such a declaration puts the fact where its author will
       look. It does not buy the guarantee the result's origin gets.
-
-- [ ] Root the self-projection verdict at a parameter, as `ReturnPath` is.
-      `returns_self_projection` says a call is fresh when its receiver is, and
-      `analyze::is_owned_value` reads `args.first()` for that receiver. A wrapper
-      whose storage comes from a later parameter breaks the pairing:
-      `VariantCase::extract(&self, w)` returns a component of `w`, so answering
-      yes for it makes the caller test `c` — a freshly built member descriptor —
-      and call the result fresh. The copy `w` needs then disappears.
-      That is why a `core:builtin` answers no here whatever it declared, even
-      though `#[returns(part_of(p))]` names the parameter exactly. Reading the
-      declaration costs `reflect_member_read_copies` its `case` line and buys 4
-      changed goldens out of 1767, with the json and cbor benchmarks unmoved.
-      Closing it means the verdict carrying its parameter and
-      `is_owned_value` testing that argument, which is the same shape
-      `ReturnPath::param` already has.
 
 ## Deferred: the `move` and `unique` keywords
 
