@@ -301,11 +301,25 @@ walk rungs of their own, and that is the open roadmap item above.
 - A blanket impl's method parameter does not resolve to the block's slot. The
   decl pass resolves a parameter naming a slot the receiver mentions and leaves
   one it does not as no type at all, which is why the blanket test reads an
-  unresolved parameter as its answer rather than reading the slot. Closing it
-  means resolving an impl block's slots for its methods whether or not the
-  receiver names them.
-- A trait-frame signature is read at the receiver, and where no caller supplies
-  one the rung resolves the receiver by bare name in the caller's frame — which
-  cannot name a namespace-imported type. A `Self`-returning static reached as
-  `lib::P::twice()` then binds `Self` to nothing. Closing it means threading the
-  receiver's `TypeId` from the site that already resolved it.
+  unresolved parameter as its answer rather than reading the slot.
+
+  Closing it is not local to the decl pass. `bind_declared_target_params`
+  numbers a block's slots by the position each takes in the receiver's
+  arguments, and a slot the receiver never mentions has no such position — so
+  binding it means choosing a numbering for slots the receiver cannot fill, and
+  `method_param_offset`, `declaring_slot_count` and `spelled_slots` all read
+  that numbering. It is a decision about what a slot's index means, not a
+  missing call.
+- A newtype over a namespace-imported type reaches none of its base's statics.
+  `lib::Q::twice()` where `type Q = P` answers that `Q` does not implement the
+  trait: the newtype rung resolves the base by bare name, which the caller's
+  frame cannot supply, and the call is then built against `Q` rather than `P`.
+  The same spelling without the newtype (`lib::P::twice()`) works, and so does
+  the newtype without the namespace, so it is the two together. Closing it is
+  in the newtype dispatch and the solver, not in this resolution — the rung
+  itself finds the base once keyed on its declaration.
+
+  Threading the receiver's `TypeId` in wholesale is not the fix, though it
+  reads like one: the two largest call sites already instantiate from the
+  spelled turbofish, so the resolution doing it too applies the receiver twice
+  and `Stream::<u8>::new()` returns a `StreamWritable<Stream<u8>>`.
