@@ -103,6 +103,19 @@ pub struct GenContext {
     kind_set_registry: TreeMap<String, KindSetEntry>,
     /// Only a `LeftRecursive` rule carries a `min_prec` parameter.
     lr_rule_snakes: List<String>,
+    /// Rules whose functions carry the FOLLOW slots, by snake name. Set once
+    /// from `rule_reads_follow` when lowering is done; the same question
+    /// answers both the declaration and every call site.
+    follow_rule_snakes: List<String>,
+    /// Per rule index: the rule runs a caller-FOLLOW gate or a probe, so it
+    /// reads the slots itself. `caller_follow_gate_seen`'s question, asked per
+    /// rule; the seeds of the fixpoint `lower` closes.
+    rule_reads_follow: List<bool>,
+    /// Per rule index: the callees a call in this rule hands its own
+    /// continuation to. Such a call spells `follow0…` only where the callee
+    /// declares the slots, which is what makes this a fixpoint rather than a
+    /// local test.
+    follow_forward_edges: List<List<String>>,
     /// Lower pre-interns every set it sees, but an emit site may pick a
     /// cheaper form, so the registry over-approximates what is called.
     kind_set_used: List<bool>,
@@ -276,6 +289,9 @@ impl GenContext {
             kind_set_registry: TreeMap::new(),
             kind_set_used: [],
             lr_rule_snakes: [],
+            follow_rule_snakes: [],
+            rule_reads_follow: false_flags(rule_count),
+            follow_forward_edges: empty_name_lists(rule_count),
             follow_mask_registry: TreeMap::new(),
             follow_mask_depths: [],
             sync_set_registry: TreeMap::new(),
@@ -504,6 +520,60 @@ impl GenContext {
 
     pub fn rule_takes_min_prec_arg(&self, snake: &String) -> bool {
         for let n of &self.lr_rule_snakes {
+            if *n == *snake {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /// Record that the rule being lowered reads the continuation it was called
+    /// with directly — a caller-FOLLOW gate or a probe.
+    pub fn mark_rule_reads_follow(&mut self) {
+        let idx = self.current_rule_index;
+        if idx >= 0 {
+            self.rule_reads_follow[idx] = true;
+        }
+    }
+
+    /// Record that the rule being lowered hands its own continuation to
+    /// `target`, so it reads the slots exactly when `target` declares them.
+    pub fn mark_rule_forwards_follow(&mut self, target: &String) {
+        let idx = self.current_rule_index;
+        if idx >= 0 && !self.follow_forward_edges[idx].contains(target) {
+            self.follow_forward_edges[idx].push(*target);
+        }
+    }
+
+    pub fn rule_index_reads_follow(&self, idx: i32) -> bool {
+        return self.rule_reads_follow[idx];
+    }
+
+    pub fn rule_forward_targets(&self, idx: i32) -> List<String> {
+        return self.follow_forward_edges[idx];
+    }
+
+    /// The declaration side of `rule_reads_follow`, answered off the same list
+    /// so a rule cannot declare what its callers do not pass.
+    pub fn current_rule_reads_follow(&self) -> bool {
+        let idx = self.current_rule_index;
+        if idx < 0 {
+            return false;
+        }
+        return self.rule_reads_follow(&self.parser_rules[idx].snake_name);
+    }
+
+    pub fn set_follow_rule_snakes(&mut self, names: &List<String>) {
+        self.follow_rule_snakes = *names;
+    }
+
+    /// Whether `snake`'s functions carry the FOLLOW slots. Asked at the
+    /// declaration and at every call site, so the two cannot disagree.
+    pub fn rule_reads_follow(&self, snake: &String) -> bool {
+        if !self.caller_follow_gate_seen {
+            return false;
+        }
+        for let n of &self.follow_rule_snakes {
             if *n == *snake {
                 return true;
             }
@@ -2274,6 +2344,23 @@ fn none_int_list_cache(n: i32) -> List<Option<List<i32>>> {
     let mut v: List<Option<List<i32>>> = [];
     for let mut i = 0; i < n; i += 1 {
         v.push(null);
+    }
+    return v;
+}
+
+/// Dense `false` flags of length `n`, indexed by rule id.
+fn false_flags(n: i32) -> List<bool> {
+    let mut v: List<bool> = [];
+    for let mut i = 0; i < n; i += 1 {
+        v.push(false);
+    }
+    return v;
+}
+
+fn empty_name_lists(n: i32) -> List<List<String>> {
+    let mut v: List<List<String>> = [];
+    for let mut i = 0; i < n; i += 1 {
+        v.push([]);
     }
     return v;
 }

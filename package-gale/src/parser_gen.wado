@@ -185,7 +185,7 @@ use { group_alt_classes, non_greedy_static_undecided, peel_repeat_body_label, re
 /// Append the defaulted runtime FOLLOW-continuation argument to a
 /// parse/scan/LR function signature, BEFORE any `min_prec` so a
 /// non-precedence call site can pass the slots uniformly. Emitted only when
-/// the grammar has a caller-FOLLOW gate (`ctx.emit_follow()`); guarded at
+/// the grammar has a caller-FOLLOW gate (`ctx.current_rule_reads_follow()`); guarded at
 /// every call site so grammars with no FOLLOW repair pay no per-frame cost.
 ///
 /// The continuation is carried as references to static masks rather than one
@@ -262,6 +262,7 @@ pub fn gen_parser(
     for let mut i = 0; i < grammar.parser_rules.len(); i += 1 {
         let rule = &grammar.parser_rules[i];
         let lowered_rule = &lowered.parser_rules[i];
+        ctx.set_current_rule_index(i);
         gen_parse_fn(w, rule, lowered_rule, ctx);
     }
     // The runtime-FOLLOW redesign retired per-(rule, mask) variant
@@ -341,7 +342,7 @@ fn gen_alt_scan_if_possible(
     let mut f = FnSpec::new(&scan_name);
     f.add_param(&"tokens", &"&Array<i32>");
     f.add_param(&"pos", &"i32");
-    if ctx.emit_follow() {
+    if ctx.current_rule_reads_follow() {
         add_follow_param(&mut f);
     }
     f.set_return_type(&"i32");
@@ -379,6 +380,7 @@ fn alt_scan_is_full(elements: &List<Element>, ctx: &mut GenContext) -> bool {
 
 fn gen_scan_functions(w: &mut CodeWriter, grammar: &Grammar, lowered: &LoweredGrammar, ctx: &mut GenContext) {
     for let mut i = 0; i < grammar.parser_rules.len(); i += 1 {
+        ctx.set_current_rule_index(i);
         gen_scan_function(w, &grammar.parser_rules[i], &lowered.parser_rules[i], ctx);
     }
 }
@@ -489,7 +491,7 @@ fn gen_scan_function_named(
     let mut f = FnSpec::new(fn_name);
     f.add_param(&"tokens", &"&Array<i32>");
     f.add_param(&"pos", &"i32");
-    if ctx.emit_follow() {
+    if ctx.current_rule_reads_follow() {
         add_follow_param(&mut f);
     }
     f.set_return_type(&"i32");
@@ -616,7 +618,7 @@ fn gen_scan_lr_functions(
     let mut fa = FnSpec::new(&atom_name);
     fa.add_param(&"tokens", &"&Array<i32>");
     fa.add_param(&"pos", &"i32");
-    if ctx.emit_follow() {
+    if ctx.current_rule_reads_follow() {
         add_follow_param(&mut fa);
     }
     fa.set_return_type(&"i32");
@@ -646,7 +648,7 @@ fn gen_scan_lr_functions(
     let mut f2 = FnSpec::new(fn_name);
     f2.add_param(&"tokens", &"&Array<i32>");
     f2.add_param(&"pos", &"i32");
-    if ctx.emit_follow() {
+    if ctx.current_rule_reads_follow() {
         add_follow_param(&mut f2);
     }
     f2.add_param_spec(ParamSpec {
@@ -659,7 +661,7 @@ fn gen_scan_lr_functions(
     }
     f2.set_return_type(&"i32");
     f2.emit_begin(w);
-    w.line(&`let mut pos = ${atom_name}(tokens, pos${follow_sep(ctx.emit_follow())});`);
+    w.line(&`let mut pos = ${atom_name}(tokens, pos${follow_sep(ctx.current_rule_reads_follow())});`);
     w.line(&"if pos < 0 { return -1; }");
     if atn_loop_dec >= 0 {
         gen_lr_suffix_dispatch_atn(w, fn_name, lr_alts, lr_dispatch, ctx, atn_loop_dec);
@@ -696,7 +698,7 @@ fn gen_scan_lr_suffix_helpers(
         let mut f = FnSpec::new(&suffix_fn);
         f.add_param(&"tokens", &"&Array<i32>");
         f.add_param(&"pos", &"i32");
-        if ctx.emit_follow() {
+        if ctx.current_rule_reads_follow() {
             add_follow_param(&mut f);
         }
         f.set_return_type(&"i32");
@@ -748,7 +750,7 @@ fn gen_lr_suffix_dispatch_atn(
         } else {
             w.else_begin(&`else if _atn_alt == ${i}`);
         }
-        w.line(&`pos = ${suffix_fn}(tokens, pos${follow_sep(ctx.emit_follow())});`);
+        w.line(&`pos = ${suffix_fn}(tokens, pos${follow_sep(ctx.current_rule_reads_follow())});`);
         w.line(&"if pos < 0 { return -1; }");
     }
     if !is_first {
@@ -793,7 +795,7 @@ fn emit_lr_atn_group_repick(
     pos_expr: &String,
     ctx: &GenContext,
 ) {
-    let fsep = follow_sep(ctx.emit_follow());
+    let fsep = follow_sep(ctx.current_rule_reads_follow());
     for let group of &lr_dispatch.groups {
         if group.len() < 2 {
             continue;
@@ -967,7 +969,7 @@ fn emit_lr_overlap_branch(
                 &site.scan_fn,
                 lr.alt_index,
                 lr.own_prec,
-                ctx.emit_follow(),
+                ctx.current_rule_reads_follow(),
                 mid_operand_gated,
                 scan_local,
             );
@@ -1145,7 +1147,9 @@ fn emit_lr_overlap(
             if !c.2.is_empty() {
                 let alt = lr_alts[lr_dispatch.valid_lr_alts[group[c.0]]].alt_index;
                 w.line(
-                    &`let ${c.2} = ${site.scan_fn}_lr_${alt}(${site.scan_args}${follow_sep(ctx.emit_follow())});`,
+                    &`let ${c.2} = ${site.scan_fn}_lr_${alt}(${site.scan_args}${follow_sep(
+                        ctx.current_rule_reads_follow(),
+                    )});`,
                 );
             }
         }
@@ -1356,7 +1360,7 @@ fn gen_scan_alt_helpers(
         let mut f = FnSpec::new(&scan_alt_helper_name(base_name, *i));
         f.add_param(&"tokens", &"&Array<i32>");
         f.add_param(&"pos", &"i32");
-        if ctx.emit_follow() {
+        if ctx.current_rule_reads_follow() {
             add_follow_param(&mut f);
         }
         f.set_return_type(&"i32");
@@ -1463,7 +1467,9 @@ fn gen_scan_partition_body(
         let guarded = guarded_alts.len() == 1;
         let i = if guarded { guarded_alts[0] } else { unguarded_alts[0] };
         if plan.is_hoisted(i) {
-            w.line(&`pos = ${scan_alt_helper_name(base_name, i)}(tokens, start${follow_sep(ctx.emit_follow())});`);
+            w.line(&`pos = ${scan_alt_helper_name(base_name, i)}(tokens, start${follow_sep(
+                ctx.current_rule_reads_follow(),
+            )});`);
             w.line(&"if pos >= 0 { break scan_alts; }");
             w.line(&"return -1;");
             return;
@@ -1491,7 +1497,7 @@ fn gen_scan_partition_body(
         if plan.is_hoisted(i) {
             w.line(
                 &`let try_${i}_end = ${scan_alt_helper_name(base_name, i)}(tokens, start${follow_sep(
-                    ctx.emit_follow(),
+                    ctx.current_rule_reads_follow(),
                 )});`,
             );
             w.line(&`if try_${i}_end > best \{ best = try_${i}_end; \}`);
@@ -1636,7 +1642,7 @@ fn gen_scan_op_element(
         RuleCall(rc) => {
             // Single scan callee + runtime FOLLOW arg.
             let fn_name = `scan_${rc.target_snake}`;
-            let follow_arg_str = follow_arg_sep(ctx.emit_follow(), &rc.follow_arg);
+            let follow_arg_str = follow_arg_sep(ctx.rule_reads_follow(&rc.target_snake), &rc.follow_arg);
             // `min_prec_arg`, when set, is the baked precedence for a
             // self-recursive call inside an LR suffix (stamped by
             // `stamp_lr_self_ref_min_prec`). Otherwise fall back to
@@ -1706,7 +1712,7 @@ fn gen_scan_op_element_assign(w: &mut CodeWriter, se: &ScanElement, ctx: &mut Ge
         },
         RuleCall(rc) => {
             let fn_name = `scan_${rc.target_snake}`;
-            let follow_arg_str = follow_arg_sep(ctx.emit_follow(), &rc.follow_arg);
+            let follow_arg_str = follow_arg_sep(ctx.rule_reads_follow(&rc.target_snake), &rc.follow_arg);
             // `_assign` only fires inside Repeat bodies — never reachable
             // from alt-scan's trailing-self-ref site, so `min_prec` here
             // is always the rule's default `0` (or whatever
@@ -2254,7 +2260,7 @@ fn gen_parse_fn(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule, ctx:
         &inner,
         rule,
         rule_takes_min_prec(lowered_rule),
-        ctx.emit_follow(),
+        ctx.current_rule_reads_follow(),
         ctx.is_trace(),
         ctx.needs_atn(),
         &rule_result_type_for(rule, ctx),
@@ -2419,7 +2425,7 @@ fn gen_parse_fn_simple_named(
     let mut f = FnSpec::new(fn_name);
     add_parser_super_effect(&mut f, ctx);
     f.add_param(&PARSER_HANDLE, &"&mut Parser");
-    if ctx.emit_follow() {
+    if ctx.current_rule_reads_follow() {
         add_follow_param(&mut f);
     }
     add_arg_params(&mut f, rule, ctx);
@@ -2472,7 +2478,7 @@ fn gen_parse_fn_single_token(w: &mut CodeWriter, rule: &ParserRule, ctx: &mut Ge
     let mut f = FnSpec::new(fn_name);
     add_parser_super_effect(&mut f, ctx);
     f.add_param(&PARSER_HANDLE, &"&mut Parser");
-    if ctx.emit_follow() {
+    if ctx.current_rule_reads_follow() {
         add_follow_param(&mut f);
     }
     f.set_return_type(&rule_result_type());
@@ -2613,7 +2619,7 @@ fn gen_parse_fn_named(
                     let mut f = FnSpec::new(&helper_name);
                     add_parser_super_effect(&mut f, ctx);
                     f.add_param(&PARSER_HANDLE, &"&mut Parser");
-                    if ctx.emit_follow() {
+                    if ctx.current_rule_reads_follow() {
                         add_follow_param(&mut f);
                     }
                     // The seeded `vals` (rule args + `@init`) is threaded in from
@@ -2662,7 +2668,7 @@ fn gen_parse_fn_named(
         let mut f = FnSpec::new(&atom_name);
         add_parser_super_effect(&mut f, ctx);
         f.add_param(&PARSER_HANDLE, &"&mut Parser");
-        if ctx.emit_follow() {
+        if ctx.current_rule_reads_follow() {
             add_follow_param(&mut f);
         }
         // The atom is the LR rule's primary alt body, so — like any alt body —
@@ -2734,7 +2740,7 @@ fn gen_parse_fn_named(
         let mut f = FnSpec::new(fn_name);
         add_parser_super_effect(&mut f, ctx);
         f.add_param(&PARSER_HANDLE, &"&mut Parser");
-        if ctx.emit_follow() {
+        if ctx.current_rule_reads_follow() {
             add_follow_param(&mut f);
         }
         add_arg_params(&mut f, rule, ctx);
@@ -3239,7 +3245,7 @@ fn gen_op_leaf(
             // cloned `__follow_<id>`.
             let span_field = open_call_capture(w, op, ctx);
             let fn_name = `_parse_${r.target_snake}`;
-            let follow_arg_str = follow_arg_sep(ctx.emit_follow(), &r.follow_arg);
+            let follow_arg_str = follow_arg_sep(ctx.rule_reads_follow(&r.target_snake), &r.follow_arg);
             // `RuleCallOp.min_prec_arg` carries the resolved precedence
             // for every self-recursive call that needs one — `lower_lr_alt_suffix`
             // stamps internal LR-suffix self-refs via
@@ -3445,7 +3451,7 @@ fn gen_lr_fn(
     let mut f = FnSpec::new(fn_name);
     add_parser_super_effect(&mut f, ctx);
     f.add_param(&PARSER_HANDLE, &"&mut Parser");
-    if ctx.emit_follow() {
+    if ctx.current_rule_reads_follow() {
         add_follow_param(&mut f);
     }
     f.add_param_spec(ParamSpec {
@@ -3459,7 +3465,7 @@ fn gen_lr_fn(
     f.set_return_type(&rule_result_type_for(rule, ctx));
     f.emit_begin(w);
     let emits_vals = rule_emits_vals(ctx, rule);
-    let fsep = follow_sep(ctx.emit_follow());
+    let fsep = follow_sep(ctx.current_rule_reads_follow());
     w.line(&"let _cp = p.b.checkpoint();");
     w.line(&"let _start = p.peek_start();");
     w.line(&`p.b.start_node(${rk}, _start);`);
@@ -3613,7 +3619,7 @@ fn emit_lr_branch(
     w.begin(&`if ${lr.own_prec} >= min_prec`);
     // The guard that selected this branch already ran the scan.
     let scan_call = if scan_local.is_empty() {
-        `${*scan_fn}_lr_${lr.alt_index}(&p.kinds, p.pos${follow_sep(ctx.emit_follow())})`;
+        `${*scan_fn}_lr_${lr.alt_index}(&p.kinds, p.pos${follow_sep(ctx.current_rule_reads_follow())})`;
     } else {
         *scan_local;
     };
@@ -3791,7 +3797,11 @@ global EMPTY_PROBE_VIABLE: List<String> = [];
 /// site left it empty; the FOLLOW conjunct is what still says no there, and
 /// conjoining can only move a verdict from "exit" to "iterate".
 fn emit_probe_verdict(w: &mut CodeWriter, probe_viable: &List<String>, verdict: &String, ctx: &mut GenContext) {
-    let mask = if ctx.emit_follow() { `follow0.is_empty() || ${follow_yields_call(&"tokens", &"pos")}` } else { "true" };
+    let mask = if ctx.current_rule_reads_follow() {
+        `follow0.is_empty() || ${follow_yields_call(&"tokens", &"pos")}`;
+    } else {
+        "true";
+    };
     if probe_viable.is_empty() {
         if mask == "true" {
             w.line(&`${*verdict} = true;`);
@@ -3834,7 +3844,7 @@ fn gen_repeat_body(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut GenContext, nc: &
             }
             w.begin(&"loop");
             w.line(&"if p.recovering { break; }");
-            if ctx.emit_follow() && r.gate_caller_follow {
+            if ctx.current_rule_reads_follow() && r.gate_caller_follow {
                 w.line(
                     &`if ${follow_yields_call(&"&p.kinds", &"p.pos")} { break; }`,
                 );
@@ -3859,7 +3869,7 @@ fn gen_repeat_body(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut GenContext, nc: &
     }
     // A tail-greedy `Repeat` yields to the caller's continuation at runtime via
     // the FOLLOW gate (`follow` is threaded into the rule fn when emit_follow).
-    let follow_gate = ctx.emit_follow() && r.gate_caller_follow;
+    let follow_gate = ctx.current_rule_reads_follow() && r.gate_caller_follow;
     let cond = gate_cond_with_caller_follow(
         &repeat_guard_cond(&r.body_admits, &NO_EXCLUSION, &PEEK_KIND, ctx),
         follow_gate,
@@ -5484,7 +5494,9 @@ fn probe_decides(
     continuation_scannable: bool,
     ctx: &mut GenContext,
 ) -> bool {
-    return continuation_scannable && sets_overlap(body_first, follow) && (!continuation.is_empty() || ctx.emit_follow());
+    return continuation_scannable
+        && sets_overlap(body_first, follow)
+        && (!continuation.is_empty() || ctx.current_rule_reads_follow());
 }
 
 /// Greedy Optional that enters when entering stays viable. The cheap
@@ -5493,7 +5505,7 @@ fn probe_decides(
 /// where the repair already decided to yield the probe does not rule.
 fn gen_optional_probe_entry(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut GenContext, nc: &mut List<[String, i32]>) {
     let verdict = dedup_name(&"opt_enter", nc);
-    let entry_gate = if ctx.emit_follow() && r.gate_caller_follow {
+    let entry_gate = if ctx.current_rule_reads_follow() && r.gate_caller_follow {
         `!(${follow_yields_call(&"&p.kinds", &"p.pos")}) && `;
     } else {
         "";
@@ -5731,11 +5743,11 @@ fn gen_op_repeat_star_plus_non_storable_group(
 /// malformed deeper in. Returns the call expression (`_parse_R(p)` /
 /// `_parse_R(p, mp)`) used to re-parse it for a precise error, or `null` when
 /// the repeated element is not a single RuleRef (no standalone parse fn).
-fn rep_recovery_expr(rep_op: &RepeatOp, emit_follow: bool) -> Option<String> {
+fn rep_recovery_expr(rep_op: &RepeatOp, ctx: &GenContext) -> Option<String> {
     if let LeafRuleCall = rep_op.body_shape {
         if let RuleCall(r) = &rep_op.body {
             let fn_name = `_parse_${r.target_snake}`;
-            let follow_arg_str = follow_arg_sep(emit_follow, &r.follow_arg);
+            let follow_arg_str = follow_arg_sep(ctx.rule_reads_follow(&r.target_snake), &r.follow_arg);
             let call = if let Some(min_prec) = r.min_prec_arg {
                 `${fn_name}(p${follow_arg_str}, ${min_prec})`;
             } else {
@@ -5750,7 +5762,7 @@ fn rep_recovery_expr(rep_op: &RepeatOp, emit_follow: bool) -> Option<String> {
 /// Emit the `if ${scan_pos} < 0 { break; }` loop-exit, augmented on the error
 /// path with a diagnostic-only re-parse of a RuleRef inner.
 fn gen_rep_break_with_recovery(w: &mut CodeWriter, scan_pos: &String, rep_op: &RepeatOp, ctx: &mut GenContext) {
-    let recovery = rep_recovery_expr(rep_op, ctx.emit_follow());
+    let recovery = rep_recovery_expr(rep_op, ctx);
     if let Some(call) = recovery {
         // The probe wants a set to point at, and takes the one the first-set
         // walk enumerated even where the body admits more than it: gating a
@@ -6467,9 +6479,9 @@ fn gen_simplecst_rulecall_value(w: &mut CodeWriter, op: &Op, ctx: &mut GenContex
     let fn_name = `_parse_${rc.target_snake}`;
     let local_var = rc.target_snake;
     let call_args = if let Some(min_prec) = rc.min_prec_arg {
-        `p${follow_arg_sep(ctx.emit_follow(), &rc.follow_arg)}, ${min_prec}`;
+        `p${follow_arg_sep(ctx.rule_reads_follow(&rc.target_snake), &rc.follow_arg)}, ${min_prec}`;
     } else {
-        `p${follow_arg_sep(ctx.emit_follow(), &rc.follow_arg)}`;
+        `p${follow_arg_sep(ctx.rule_reads_follow(&rc.target_snake), &rc.follow_arg)}`;
     };
     let span_field = open_call_capture(w, op, ctx);
     gen_atn_ret_pending(w, ctx, rc.atn_call_site);
@@ -6983,11 +6995,11 @@ fn emit_index_pick_dispatch(
     for let mut i = 0; i < sorted_indices.len() - 1; i += 1 {
         let idx = sorted_indices[i];
         w.begin(&`if ${*var} == ${idx}`);
-        w.line(&`return ${*fn_name}_alt_${idx}(p${follow_sep(ctx.emit_follow())}${alt_vals_arg(ctx)});`);
+        w.line(&`return ${*fn_name}_alt_${idx}(p${follow_sep(ctx.current_rule_reads_follow())}${alt_vals_arg(ctx)});`);
         w.end();
     }
     let last_idx = sorted_indices[sorted_indices.len() - 1];
-    w.line(&`return ${*fn_name}_alt_${last_idx}(p${follow_sep(ctx.emit_follow())}${alt_vals_arg(ctx)});`);
+    w.line(&`return ${*fn_name}_alt_${last_idx}(p${follow_sep(ctx.current_rule_reads_follow())}${alt_vals_arg(ctx)});`);
 }
 
 
@@ -7028,7 +7040,7 @@ fn emit_scan_tournament(
     ctx: &GenContext,
     fall_through_on_no_match: bool = false,
 ) {
-    let fsep = follow_sep(ctx.emit_follow());
+    let fsep = follow_sep(ctx.current_rule_reads_follow());
     w.line(&"let _sd_tokens = &p.kinds;");
     w.line(&"let _sd_pos = p.pos;");
     for let mut i = 0; i < sorted_indices.len(); i += 1 {
@@ -7156,7 +7168,9 @@ fn gen_prediction_code_inner(
             if skip > 0 {
                 w.line(&`p.pos -= ${skip};`);
             }
-            w.line(&`return ${*fn_name}_alt_${idx}(p${follow_sep(ctx.emit_follow())}${alt_vals_arg(ctx)});`);
+            w.line(
+                &`return ${*fn_name}_alt_${idx}(p${follow_sep(ctx.current_rule_reads_follow())}${alt_vals_arg(ctx)});`,
+            );
         },
         Consume(c) => {
             // Shared-prefix terminal: advance past it (the chosen `_alt_<idx>`

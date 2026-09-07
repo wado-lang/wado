@@ -1716,7 +1716,7 @@ fn scan_stmt(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPTY_FOLLOW,
             sg_0: {
                 if pos >= tokens.len() || tokens[pos] != TK_LIT_ELSE { break sg_0; }
                 pos += 1;
-                pos = scan_block(tokens, pos, &FOLLOW_MASK_1, follow0, follow1, follow2, fs << 1);
+                pos = scan_block(tokens, pos);
                 if pos < 0 { break sg_0; }
                 break sg_0_done;
             }
@@ -1791,7 +1791,7 @@ fn scan_if_expr(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPTY_FOLL
     pos += 1;
     if pos >= tokens.len() || tokens[pos] != TK_ID { return -1; }
     pos += 1;
-    pos = scan_block(tokens, pos, follow0, follow1, follow2, follow3, fs);
+    pos = scan_block(tokens, pos);
     if pos < 0 { return -1; }
     if pos < tokens.len() && tokens[pos] == TK_LIT_ELSE && !(follow_yields(tokens, pos, follow0, follow1, follow2, follow3, fs, &FOLLOW_SETS, TK_EOF)) {
         let sp = pos;
@@ -1799,7 +1799,7 @@ fn scan_if_expr(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPTY_FOLL
             sg_1: {
                 if pos >= tokens.len() || tokens[pos] != TK_LIT_ELSE { break sg_1; }
                 pos += 1;
-                pos = scan_block(tokens, pos, follow0, follow1, follow2, follow3, fs);
+                pos = scan_block(tokens, pos);
                 if pos < 0 { break sg_1; }
                 break sg_1_done;
             }
@@ -1810,7 +1810,7 @@ fn scan_if_expr(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPTY_FOLL
     return pos;
 }
 
-fn scan_block(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> i32 {
+fn scan_block(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_LIT_LBRACE { return -1; }
     pos += 1;
@@ -1845,7 +1845,7 @@ fn _parse_stmt__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follo
     _parse_expression(p, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
     if p.peek_kind() == TK_LIT_ELSE && p.peek_at(1) == TK_LIT_LBRACE {
         p.expect(TK_LIT_ELSE, &SYNC_3);
-        _parse_block(p, &FOLLOW_MASK_1, follow0, follow1, follow2, fs << 1);
+        _parse_block(p);
     }
     p.expect(TK_LIT_SEMI, &EMPTY_SYNC);
     return;
@@ -1919,10 +1919,10 @@ fn _parse_expression(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow
 fn _parse_if_expr__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> () {
     p.expect(TK_LIT_IF, &SYNC_0);
     p.expect(TK_ID, &SYNC_3);
-    _parse_block(p, follow0, follow1, follow2, follow3, fs);
+    _parse_block(p);
     if !(follow_yields(&p.kinds, p.pos, follow0, follow1, follow2, follow3, fs, &FOLLOW_SETS, TK_EOF)) && (p.peek_kind() == TK_LIT_ELSE && p.peek_at(1) == TK_LIT_LBRACE) {
         p.expect(TK_LIT_ELSE, &SYNC_3);
-        _parse_block(p, follow0, follow1, follow2, follow3, fs);
+        _parse_block(p);
     }
     return;
 }
@@ -1938,18 +1938,18 @@ fn _parse_if_expr(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: 
     }
 }
 
-fn _parse_block__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> () {
+fn _parse_block__inner(p: &mut Parser) -> () {
     p.expect(TK_LIT_LBRACE, &SYNC_4);
     p.expect(TK_INT, &SYNC_5);
     p.expect(TK_LIT_RBRACE, &EMPTY_SYNC);
     return;
 }
 
-fn _parse_block(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> () {
+fn _parse_block(p: &mut Parser) -> () {
     if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_BLOCK, _start);
-    _parse_block__inner(p, follow0, follow1, follow2, follow3, fs);
+    _parse_block__inner(p);
     p.b.finish_node(p.last_end());
     if p.recovering {
         p.push_rule_stack("block");

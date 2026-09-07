@@ -1778,7 +1778,7 @@ impl Parser {
     }
 }
 
-fn scan_s(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> i32 {
+fn scan_s(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_LIT_LBRACE { return -1; }
     pos += 1;
@@ -1834,7 +1834,7 @@ fn scan_stat(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPTY_FOLLOW,
     return pos;
 }
 
-fn _parse_s__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> () {
+fn _parse_s__inner(p: &mut Parser) -> () {
     let lbrace = p.expect(TK_LIT_LBRACE, &SYNC_0);
     loop {
         if p.recovering { break; }
@@ -1868,11 +1868,11 @@ fn _parse_s__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1:
     return;
 }
 
-fn _parse_s(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> () {
+fn _parse_s(p: &mut Parser) -> () {
     if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_S, _start);
-    _parse_s__inner(p, follow0, follow1, follow2, follow3, fs);
+    _parse_s__inner(p);
     p.b.finish_node(p.last_end());
     if p.recovering {
         p.push_rule_stack("s");

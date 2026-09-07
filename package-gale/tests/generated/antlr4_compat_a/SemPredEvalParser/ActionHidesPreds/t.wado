@@ -1683,11 +1683,11 @@ impl Parser {
 fn scan_s(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> i32 {
     let scan_start = pos;
     let mut pos = pos;
-    pos = scan_a(tokens, pos, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+    pos = scan_a(tokens, pos);
     if pos < 0 { return -1; }
     while pos < tokens.len() && tokens[pos] == TK_ID && !(follow_yields(tokens, pos, follow0, follow1, follow2, follow3, fs, &FOLLOW_SETS, TK_EOF)) {
         let sp = pos;
-        pos = scan_a(tokens, pos, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+        pos = scan_a(tokens, pos);
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
@@ -1695,7 +1695,7 @@ fn scan_s(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPTY_FOLLOW, fo
     return pos;
 }
 
-fn scan_a(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> i32 {
+fn scan_a(tokens: &Array<i32>, pos: i32) -> i32 {
     if pos < tokens.len() && tokens[pos] == TK_ID {
         return pos + 1;
     }
@@ -1712,7 +1712,7 @@ fn _parse_s__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1:
             rep_scan: {
                 let tokens = &p.kinds;
                 let mut pos: i32 = p.pos;
-                pos = scan_a(tokens, pos, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+                pos = scan_a(tokens, pos);
                 if pos < 0 { break rep_scan; }
                 if pos <= p.pos { break rep_scan; }
                 rep_scan_pos = pos;
@@ -1724,7 +1724,7 @@ fn _parse_s__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1:
                     let _rec_sav = p.recovering;
                     let _rec_spec = p.speculating;
                     p.speculating = true;
-                    _parse_a(p, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+                    _parse_a(p);
                     p.speculating = _rec_spec;
                     p.recovering = _rec_sav;
                     p.pos = _rec_pos;
@@ -1734,7 +1734,7 @@ fn _parse_s__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1:
             }
         }
         _plus_first = false;
-        let a = _parse_a(p, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+        let a = _parse_a(p);
     }
     return;
 }
@@ -1750,7 +1750,7 @@ fn _parse_s(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<
     }
 }
 
-fn _parse_a__inner_alt_0(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> () {
+fn _parse_a__inner_alt_0(p: &mut Parser) -> () {
     if !p.speculating {
         p.i = 1;
     }
@@ -1767,14 +1767,14 @@ fn _parse_a__inner_alt_0(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, fo
     return;
 }
 
-fn _parse_a__inner_scan_0(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> i32 {
+fn _parse_a__inner_scan_0(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_ID { return -1; }
     pos += 1;
     return pos;
 }
 
-fn _parse_a__inner_alt_1(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> () {
+fn _parse_a__inner_alt_1(p: &mut Parser) -> () {
     if !p.speculating {
         p.i = 2;
     }
@@ -1791,20 +1791,20 @@ fn _parse_a__inner_alt_1(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, fo
     return;
 }
 
-fn _parse_a__inner_scan_1(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> i32 {
+fn _parse_a__inner_scan_1(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_ID { return -1; }
     pos += 1;
     return pos;
 }
 
-fn _parse_a__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> () {
+fn _parse_a__inner(p: &mut Parser) -> () {
     let kind = p.peek_kind();
     if kind == TK_ID {
         let _sd_tokens = &p.kinds;
         let _sd_pos = p.pos;
-        let _sd_p_0 = _parse_a__inner_scan_0(_sd_tokens, _sd_pos, follow0, follow1, follow2, follow3, fs);
-        let _sd_p_1 = _parse_a__inner_scan_1(_sd_tokens, _sd_pos, follow0, follow1, follow2, follow3, fs);
+        let _sd_p_0 = _parse_a__inner_scan_0(_sd_tokens, _sd_pos);
+        let _sd_p_1 = _parse_a__inner_scan_1(_sd_tokens, _sd_pos);
         let mut _sd_best_i: i32 = -1;
         let mut _sd_best_p: i32 = -1;
         if _sd_p_0 > _sd_best_p {
@@ -1816,9 +1816,9 @@ fn _parse_a__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1:
             _sd_best_i = 1;
         }
         if _sd_best_i == 0 {
-            return _parse_a__inner_alt_0(p, follow0, follow1, follow2, follow3, fs);
+            return _parse_a__inner_alt_0(p);
         }
-        return _parse_a__inner_alt_1(p, follow0, follow1, follow2, follow3, fs);
+        return _parse_a__inner_alt_1(p);
     }
     p.no_viable(
         "no alternative of a matches",
@@ -1828,11 +1828,11 @@ fn _parse_a__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1:
     return;
 }
 
-fn _parse_a(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> () {
+fn _parse_a(p: &mut Parser) -> () {
     if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_A, _start);
-    _parse_a__inner(p, follow0, follow1, follow2, follow3, fs);
+    _parse_a__inner(p);
     p.b.finish_node(p.last_end());
     if p.recovering {
         p.push_rule_stack("a");

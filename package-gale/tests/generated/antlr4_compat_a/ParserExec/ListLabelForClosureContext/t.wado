@@ -1658,11 +1658,11 @@ impl Parser {
     }
 }
 
-fn scan_if_statement(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> i32 {
+fn scan_if_statement(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_LIT_IF { return -1; }
     pos += 1;
-    pos = scan_expression(tokens, pos, &FOLLOW_MASK_0, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+    pos = scan_expression(tokens, pos);
     if pos < 0 { return -1; }
     let gp_0 = pos;
     let sgk_0 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
@@ -1676,7 +1676,7 @@ fn scan_if_statement(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPTY
                     pos += 1;
                     while pos < tokens.len() && tokens[pos] == TK_LIT_A {
                         let sp = pos;
-                        pos = scan_executable_statement(tokens, pos, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+                        pos = scan_executable_statement(tokens, pos);
                         if pos < 0 { pos = sp; break; }
                         if pos == sp { break; }
                     }
@@ -1688,7 +1688,7 @@ fn scan_if_statement(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPTY
                     }
                     if pos < tokens.len() && tokens[pos] == TK_LIT_A {
                         let sp = pos;
-                        pos = scan_else_statement(tokens, pos, &FOLLOW_MASK_2, follow0, follow1, follow2, fs << 1);
+                        pos = scan_else_statement(tokens, pos);
                         if pos < 0 { pos = sp; }
                     }
                     if pos >= tokens.len() || tokens[pos] != TK_LIT_END { break sg_1; }
@@ -1704,7 +1704,7 @@ fn scan_if_statement(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPTY
     } else if sgk_0 == TK_LIT_A {
         pos = gp_0;
         sg_0_1: {
-            pos = scan_executable_statement(tokens, pos, follow0, follow1, follow2, follow3, fs);
+            pos = scan_executable_statement(tokens, pos);
             if pos < 0 { break sg_0_1; }
             if pos > sg_0_best { sg_0_best = pos; }
         }
@@ -1723,43 +1723,43 @@ fn scan_else_if_statement(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &
     pos += 1;
     if pos >= tokens.len() || tokens[pos] != TK_LIT_IF { return -1; }
     pos += 1;
-    pos = scan_expression(tokens, pos, &FOLLOW_MASK_3, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+    pos = scan_expression(tokens, pos);
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_LIT_THEN { return -1; }
     pos += 1;
     while pos < tokens.len() && tokens[pos] == TK_LIT_A && !(follow_yields(tokens, pos, follow0, follow1, follow2, follow3, fs, &FOLLOW_SETS, TK_EOF)) {
         let sp = pos;
-        pos = scan_executable_statement(tokens, pos, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+        pos = scan_executable_statement(tokens, pos);
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
     return pos;
 }
 
-fn scan_expression(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> i32 {
+fn scan_expression(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_LIT_A { return -1; }
     pos += 1;
     return pos;
 }
 
-fn scan_executable_statement(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> i32 {
+fn scan_executable_statement(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_LIT_A { return -1; }
     pos += 1;
     return pos;
 }
 
-fn scan_else_statement(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> i32 {
+fn scan_else_statement(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_LIT_A { return -1; }
     pos += 1;
     return pos;
 }
 
-fn _parse_if_statement__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> () {
+fn _parse_if_statement__inner(p: &mut Parser) -> () {
     let lit_if = p.expect(TK_LIT_IF, &SYNC_0);
-    let expression = _parse_expression(p, &FOLLOW_MASK_0, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+    let expression = _parse_expression(p);
     let grp_kind = p.peek_kind();
     if grp_kind == TK_LIT_THEN {
         let lit_then = p.expect(TK_LIT_THEN, &SYNC_1);
@@ -1769,7 +1769,7 @@ fn _parse_if_statement__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLO
             rep_scan: {
                 let tokens = &p.kinds;
                 let mut pos: i32 = p.pos;
-                pos = scan_executable_statement(tokens, pos, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+                pos = scan_executable_statement(tokens, pos);
                 if pos < 0 { break rep_scan; }
                 if pos <= p.pos { break rep_scan; }
                 rep_scan_pos = pos;
@@ -1781,7 +1781,7 @@ fn _parse_if_statement__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLO
                     let _rec_sav = p.recovering;
                     let _rec_spec = p.speculating;
                     p.speculating = true;
-                    _parse_executable_statement(p, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+                    _parse_executable_statement(p);
                     p.speculating = _rec_spec;
                     p.recovering = _rec_sav;
                     p.pos = _rec_pos;
@@ -1789,7 +1789,7 @@ fn _parse_if_statement__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLO
                 }
                 break;
             }
-            let executable_statement = _parse_executable_statement(p, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+            let executable_statement = _parse_executable_statement(p);
         }
         loop {
             if p.recovering { break; }
@@ -1820,23 +1820,23 @@ fn _parse_if_statement__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLO
             let else_if_statement = _parse_else_if_statement(p, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
         }
         if p.peek_kind() == TK_LIT_A {
-            let else_statement = _parse_else_statement(p, &FOLLOW_MASK_2, follow0, follow1, follow2, fs << 1);
+            let else_statement = _parse_else_statement(p);
         }
         let lit_end = p.expect(TK_LIT_END, &SYNC_2);
         let lit_if = p.expect(TK_LIT_IF, &EMPTY_SYNC);
     } else if grp_kind == TK_LIT_A {
-        let executable_statement = _parse_executable_statement(p, follow0, follow1, follow2, follow3, fs);
+        let executable_statement = _parse_executable_statement(p);
     } else {
         p.no_viable("no viable alternative", p.peek_span(), &SYNC_3);
     }
     return;
 }
 
-fn _parse_if_statement(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> () {
+fn _parse_if_statement(p: &mut Parser) -> () {
     if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_IFSTATEMENT, _start);
-    _parse_if_statement__inner(p, follow0, follow1, follow2, follow3, fs);
+    _parse_if_statement__inner(p);
     p.b.finish_node(p.last_end());
     if p.recovering {
         p.push_rule_stack("ifStatement");
@@ -1846,7 +1846,7 @@ fn _parse_if_statement(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, foll
 fn _parse_else_if_statement__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> () {
     let lit_else = p.expect(TK_LIT_ELSE, &SYNC_2);
     let lit_if = p.expect(TK_LIT_IF, &SYNC_0);
-    let expression = _parse_expression(p, &FOLLOW_MASK_3, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+    let expression = _parse_expression(p);
     let lit_then = p.expect(TK_LIT_THEN, &SYNC_0);
     loop {
         if p.recovering { break; }
@@ -1855,7 +1855,7 @@ fn _parse_else_if_statement__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_
         rep_scan: {
             let tokens = &p.kinds;
             let mut pos: i32 = p.pos;
-            pos = scan_executable_statement(tokens, pos, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+            pos = scan_executable_statement(tokens, pos);
             if pos < 0 { break rep_scan; }
             if pos <= p.pos { break rep_scan; }
             rep_scan_pos = pos;
@@ -1867,7 +1867,7 @@ fn _parse_else_if_statement__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_
                 let _rec_sav = p.recovering;
                 let _rec_spec = p.speculating;
                 p.speculating = true;
-                _parse_executable_statement(p, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+                _parse_executable_statement(p);
                 p.speculating = _rec_spec;
                 p.recovering = _rec_sav;
                 p.pos = _rec_pos;
@@ -1875,7 +1875,7 @@ fn _parse_else_if_statement__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_
             }
             break;
         }
-        let executable_statement = _parse_executable_statement(p, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+        let executable_statement = _parse_executable_statement(p);
     }
     return;
 }
@@ -1891,48 +1891,48 @@ fn _parse_else_if_statement(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW,
     }
 }
 
-fn _parse_expression__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> () {
+fn _parse_expression__inner(p: &mut Parser) -> () {
     let lit_a = p.expect(TK_LIT_A, &EMPTY_SYNC);
     return;
 }
 
-fn _parse_expression(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> () {
+fn _parse_expression(p: &mut Parser) -> () {
     if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_EXPRESSION, _start);
-    _parse_expression__inner(p, follow0, follow1, follow2, follow3, fs);
+    _parse_expression__inner(p);
     p.b.finish_node(p.last_end());
     if p.recovering {
         p.push_rule_stack("expression");
     }
 }
 
-fn _parse_executable_statement__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> () {
+fn _parse_executable_statement__inner(p: &mut Parser) -> () {
     let lit_a = p.expect(TK_LIT_A, &EMPTY_SYNC);
     return;
 }
 
-fn _parse_executable_statement(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> () {
+fn _parse_executable_statement(p: &mut Parser) -> () {
     if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_EXECUTABLESTATEMENT, _start);
-    _parse_executable_statement__inner(p, follow0, follow1, follow2, follow3, fs);
+    _parse_executable_statement__inner(p);
     p.b.finish_node(p.last_end());
     if p.recovering {
         p.push_rule_stack("executableStatement");
     }
 }
 
-fn _parse_else_statement__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> () {
+fn _parse_else_statement__inner(p: &mut Parser) -> () {
     let lit_a = p.expect(TK_LIT_A, &EMPTY_SYNC);
     return;
 }
 
-fn _parse_else_statement(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> () {
+fn _parse_else_statement(p: &mut Parser) -> () {
     if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_ELSESTATEMENT, _start);
-    _parse_else_statement__inner(p, follow0, follow1, follow2, follow3, fs);
+    _parse_else_statement__inner(p);
     p.b.finish_node(p.last_end());
     if p.recovering {
         p.push_rule_stack("elseStatement");

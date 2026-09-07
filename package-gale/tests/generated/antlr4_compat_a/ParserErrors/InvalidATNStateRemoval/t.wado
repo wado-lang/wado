@@ -1657,7 +1657,7 @@ fn scan_start(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPTY_FOLLOW
 
 fn scan_expr_atom(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> i32 {
     let mut pos = pos;
-    pos = scan_primary(tokens, pos, follow0, follow1, follow2, follow3, fs);
+    pos = scan_primary(tokens, pos);
     if pos < 0 { return -1; }
     if pos < tokens.len() && tokens[pos] == TK_ID && !(follow_yields(tokens, pos, follow0, follow1, follow2, follow3, fs, &FOLLOW_SETS, TK_EOF)) {
         let sp = pos;
@@ -1700,7 +1700,7 @@ fn scan_expr(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPTY_FOLLOW,
     return pos;
 }
 
-fn scan_primary(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> i32 {
+fn scan_primary(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_ID { return -1; }
     pos += 1;
@@ -1728,7 +1728,7 @@ fn _parse_start(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &L
 fn _parse_expr__inner_atom(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0, min_prec: i32 = 0) -> () {
     let kind = p.peek_kind();
     if kind == TK_ID {
-        let primary = _parse_primary(p, follow0, follow1, follow2, follow3, fs);
+        let primary = _parse_primary(p);
         if !(follow_yields(&p.kinds, p.pos, follow0, follow1, follow2, follow3, fs, &FOLLOW_SETS, TK_EOF)) && (p.peek_kind() == TK_ID) {
             let expr = _parse_expr(p, follow0, follow1, follow2, follow3, fs);
         }
@@ -1781,16 +1781,16 @@ fn _parse_expr(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &Li
     }
 }
 
-fn _parse_primary__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> () {
+fn _parse_primary__inner(p: &mut Parser) -> () {
     let id = p.expect(TK_ID, &EMPTY_SYNC);
     return;
 }
 
-fn _parse_primary(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> () {
+fn _parse_primary(p: &mut Parser) -> () {
     if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_PRIMARY, _start);
-    _parse_primary__inner(p, follow0, follow1, follow2, follow3, fs);
+    _parse_primary__inner(p);
     p.b.finish_node(p.last_end());
     if p.recovering {
         p.push_rule_stack("primary");

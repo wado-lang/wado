@@ -1639,7 +1639,7 @@ fn scan_n(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPTY_FOLLOW, fo
     return pos;
 }
 
-fn scan_m(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> i32 {
+fn scan_m(tokens: &Array<i32>, pos: i32) -> i32 {
     let start = pos;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
@@ -1761,7 +1761,7 @@ fn _parse_n(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<
     }
 }
 
-fn _parse_m__inner_alt_0(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> () {
+fn _parse_m__inner_alt_0(p: &mut Parser) -> () {
     p.expect(TK_X, &SYNC_3);
     loop {
         if p.recovering { break; }
@@ -1781,7 +1781,7 @@ fn _parse_m__inner_alt_0(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, fo
     return;
 }
 
-fn _parse_m__inner_scan_0(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> i32 {
+fn _parse_m__inner_scan_0(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_X { return -1; }
     pos += 1;
@@ -1793,14 +1793,14 @@ fn _parse_m__inner_scan_0(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &
     return pos;
 }
 
-fn _parse_m__inner_alt_1(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> () {
+fn _parse_m__inner_alt_1(p: &mut Parser) -> () {
     p.expect(TK_X, &SYNC_4);
     p.expect(TK_W, &SYNC_5);
     p.expect(TK_U, &EMPTY_SYNC);
     return;
 }
 
-fn _parse_m__inner_scan_1(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> i32 {
+fn _parse_m__inner_scan_1(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_X { return -1; }
     pos += 1;
@@ -1811,23 +1811,23 @@ fn _parse_m__inner_scan_1(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &
     return pos;
 }
 
-fn _parse_m__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> () {
+fn _parse_m__inner(p: &mut Parser) -> () {
     let kind = p.peek_kind();
     if kind == TK_X {
         p.pos += 1;
         if p.peek_kind() == TK_W {
             if p.peek_at(1) == TK_V {
                 p.pos -= 1;
-                return _parse_m__inner_alt_0(p, follow0, follow1, follow2, follow3, fs);
+                return _parse_m__inner_alt_0(p);
             } else if p.peek_at(1) == TK_U {
                 p.pos -= 1;
-                return _parse_m__inner_alt_1(p, follow0, follow1, follow2, follow3, fs);
+                return _parse_m__inner_alt_1(p);
             } else {
                 p.pos -= 1;
                 let _sd_tokens = &p.kinds;
                 let _sd_pos = p.pos;
-                let _sd_p_0 = _parse_m__inner_scan_0(_sd_tokens, _sd_pos, follow0, follow1, follow2, follow3, fs);
-                let _sd_p_1 = _parse_m__inner_scan_1(_sd_tokens, _sd_pos, follow0, follow1, follow2, follow3, fs);
+                let _sd_p_0 = _parse_m__inner_scan_0(_sd_tokens, _sd_pos);
+                let _sd_p_1 = _parse_m__inner_scan_1(_sd_tokens, _sd_pos);
                 let mut _sd_best_i: i32 = -1;
                 let mut _sd_best_p: i32 = -1;
                 if _sd_p_0 > _sd_best_p {
@@ -1840,15 +1840,15 @@ fn _parse_m__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1:
                 }
                 if _sd_best_i >= 0 {
                     if _sd_best_i == 0 {
-                        return _parse_m__inner_alt_0(p, follow0, follow1, follow2, follow3, fs);
+                        return _parse_m__inner_alt_0(p);
                     }
-                    return _parse_m__inner_alt_1(p, follow0, follow1, follow2, follow3, fs);
+                    return _parse_m__inner_alt_1(p);
                 }
                 p.pos += 1;
             }
         } else if p.peek_kind() == TK_V {
             p.pos -= 1;
-            return _parse_m__inner_alt_0(p, follow0, follow1, follow2, follow3, fs);
+            return _parse_m__inner_alt_0(p);
         }
     }
     p.no_viable(
@@ -1859,11 +1859,11 @@ fn _parse_m__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1:
     return;
 }
 
-fn _parse_m(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> () {
+fn _parse_m(p: &mut Parser) -> () {
     if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_M, _start);
-    _parse_m__inner(p, follow0, follow1, follow2, follow3, fs);
+    _parse_m__inner(p);
     p.b.finish_node(p.last_end());
     if p.recovering {
         p.push_rule_stack("m");

@@ -2575,7 +2575,7 @@ fn scan_expr_or_assign(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMP
 fn scan_expr(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> i32 {
     let scan_start = pos;
     let mut pos = pos;
-    pos = scan_expr_primary(tokens, pos, follow0, follow1, follow2, follow3, fs);
+    pos = scan_expr_primary(tokens, pos);
     if pos < 0 { return -1; }
     if pos < tokens.len() && tokens[pos] == TK_LIT_LTMINUS && !(follow_yields(tokens, pos, follow0, follow1, follow2, follow3, fs, &FOLLOW_SETS, TK_EOF)) {
         let sp = pos;
@@ -2595,7 +2595,7 @@ fn scan_expr(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPTY_FOLLOW,
     return pos;
 }
 
-fn scan_expr_primary(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> i32 {
+fn scan_expr_primary(tokens: &Array<i32>, pos: i32) -> i32 {
     let start = pos;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
@@ -2775,7 +2775,7 @@ fn _parse_expr_or_assign(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, fo
 
 fn _parse_expr__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> () {
     p.atn_ret_pending = 30;
-    let expr_primary = _parse_expr_primary(p, follow0, follow1, follow2, follow3, fs);
+    let expr_primary = _parse_expr_primary(p);
     if !(follow_yields(&p.kinds, p.pos, follow0, follow1, follow2, follow3, fs, &FOLLOW_SETS, TK_EOF)) && (p.peek_kind() == TK_LIT_LTMINUS && p.peek_at(1) == TK_ID) {
         let lit_ltminus = p.expect(TK_LIT_LTMINUS, &SYNC_1);
         let id = p.expect(TK_ID, &EMPTY_SYNC);
@@ -2798,7 +2798,7 @@ fn _parse_expr(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &Li
     }
 }
 
-fn _parse_expr_primary__inner_alt_1(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> () {
+fn _parse_expr_primary__inner_alt_1(p: &mut Parser) -> () {
     let id = p.expect(TK_ID, &SYNC_2);
     let lparen = p.expect(TK_LIT_LPAREN, &SYNC_1);
     let id_2 = p.expect(TK_ID, &SYNC_3);
@@ -2806,7 +2806,7 @@ fn _parse_expr_primary__inner_alt_1(p: &mut Parser, follow0: &List<i32> = &EMPTY
     return;
 }
 
-fn _parse_expr_primary__inner_scan_1(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> i32 {
+fn _parse_expr_primary__inner_scan_1(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_ID { return -1; }
     pos += 1;
@@ -2819,19 +2819,19 @@ fn _parse_expr_primary__inner_scan_1(tokens: &Array<i32>, pos: i32, follow0: &Li
     return pos;
 }
 
-fn _parse_expr_primary__inner_alt_2(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> () {
+fn _parse_expr_primary__inner_alt_2(p: &mut Parser) -> () {
     let id = p.expect(TK_ID, &EMPTY_SYNC);
     return;
 }
 
-fn _parse_expr_primary__inner_scan_2(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> i32 {
+fn _parse_expr_primary__inner_scan_2(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_ID { return -1; }
     pos += 1;
     return pos;
 }
 
-fn _parse_expr_primary__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> () {
+fn _parse_expr_primary__inner(p: &mut Parser) -> () {
     let kind = p.peek_kind();
     if kind == TK_LIT_LPAREN {
         let lparen = p.expect(TK_LIT_LPAREN, &SYNC_1);
@@ -2842,9 +2842,9 @@ fn _parse_expr_primary__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLO
     if kind == TK_ID {
         let _atn_alt = atn_predict_with_stack(&ATN_SIM, 3, &p.atn_stack, &p.kinds, p.pos, TK_EOF, 0);
         if _atn_alt == 1 {
-            return _parse_expr_primary__inner_alt_1(p, follow0, follow1, follow2, follow3, fs);
+            return _parse_expr_primary__inner_alt_1(p);
         }
-        return _parse_expr_primary__inner_alt_2(p, follow0, follow1, follow2, follow3, fs);
+        return _parse_expr_primary__inner_alt_2(p);
     }
     p.no_viable(
         "no alternative of expr_primary matches",
@@ -2854,14 +2854,14 @@ fn _parse_expr_primary__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLO
     return;
 }
 
-fn _parse_expr_primary(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> () {
+fn _parse_expr_primary(p: &mut Parser) -> () {
     if p.recovering { return; }
     let _atn_ret = p.atn_ret_pending;
     p.atn_ret_pending = -1;
     p.atn_stack.push(_atn_ret);
     let _start = p.peek_start();
     p.b.start_node(RK_EXPR_PRIMARY, _start);
-    _parse_expr_primary__inner(p, follow0, follow1, follow2, follow3, fs);
+    _parse_expr_primary__inner(p);
     p.b.finish_node(p.last_end());
     p.atn_stack.pop();
     if p.recovering {

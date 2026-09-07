@@ -3291,7 +3291,7 @@ impl Parser {
     }
 }
 
-fn scan_parse(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> i32 {
+fn scan_parse(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
     while pos < tokens.len() && _kind_set_1(tokens[pos]) {
         let sp = pos;
@@ -3308,7 +3308,7 @@ fn scan_parse(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPTY_FOLLOW
         } else if sgk_0 == TK_UNEXPECTED_CHAR {
             pos = gp_0;
             sg_0_1: {
-                pos = scan_error(tokens, pos, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+                pos = scan_error(tokens, pos);
                 if pos < 0 { break sg_0_1; }
                 if pos > sg_0_best { sg_0_best = pos; }
             }
@@ -3326,7 +3326,7 @@ fn scan_parse(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPTY_FOLLOW
     return pos;
 }
 
-fn scan_error(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> i32 {
+fn scan_error(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_UNEXPECTED_CHAR { return -1; }
     pos += 1;
@@ -3580,14 +3580,14 @@ fn scan_sql_stmt(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPTY_FOL
     } else if sgk_5 == TK_K_SAVEPOINT {
         pos = gp_5;
         sg_5_24: {
-            pos = scan_savepoint_stmt(tokens, pos, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+            pos = scan_savepoint_stmt(tokens, pos);
             if pos < 0 { break sg_5_24; }
             if pos > sg_5_best { sg_5_best = pos; }
         }
     } else if sgk_5 == TK_K_VACUUM {
         pos = gp_5;
         sg_5_29: {
-            pos = scan_vacuum_stmt(tokens, pos, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+            pos = scan_vacuum_stmt(tokens, pos);
             if pos < 0 { break sg_5_29; }
             if pos > sg_5_best { sg_5_best = pos; }
         }
@@ -3611,7 +3611,7 @@ fn scan_alter_table_stmt(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &E
         let sp = pos;
         sg_6_done: {
             sg_6: {
-                pos = scan_database_name(tokens, pos, &FOLLOW_MASK_0, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+                pos = scan_database_name(tokens, pos);
                 if pos < 0 { break sg_6; }
                 if pos >= tokens.len() || tokens[pos] != TK_DOT { break sg_6; }
                 pos += 1;
@@ -3621,7 +3621,7 @@ fn scan_alter_table_stmt(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &E
         }
         if pos < 0 { pos = sp; }
     }
-    pos = scan_table_name(tokens, pos, &FOLLOW_MASK_1, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+    pos = scan_table_name(tokens, pos);
     if pos < 0 { return -1; }
     let gp_7 = pos;
     let sgk_7 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
@@ -3633,7 +3633,7 @@ fn scan_alter_table_stmt(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &E
             pos += 1;
             if pos >= tokens.len() || tokens[pos] != TK_K_TO { break sg_7_0; }
             pos += 1;
-            pos = scan_new_table_name(tokens, pos, follow0, follow1, follow2, follow3, fs);
+            pos = scan_new_table_name(tokens, pos);
             if pos < 0 { break sg_7_0; }
             if pos > sg_7_best { sg_7_best = pos; }
         }
@@ -3670,23 +3670,23 @@ fn scan_analyze_stmt(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPTY
         if _kind_set_4(sgk_8) {
             pos = gp_8;
             sg_8_0: {
-                pos = scan_database_name(tokens, pos, follow0, follow1, follow2, follow3, fs);
+                pos = scan_database_name(tokens, pos);
                 if pos < 0 { break sg_8_0; }
                 if pos > sg_8_best { sg_8_best = pos; }
             }
             pos = gp_8;
             sg_8_1: {
-                pos = scan_table_or_index_name(tokens, pos, follow0, follow1, follow2, follow3, fs);
+                pos = scan_table_or_index_name(tokens, pos);
                 if pos < 0 { break sg_8_1; }
                 if pos > sg_8_best { sg_8_best = pos; }
             }
             pos = gp_8;
             sg_8_2: {
-                pos = scan_database_name(tokens, pos, &FOLLOW_MASK_0, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+                pos = scan_database_name(tokens, pos);
                 if pos < 0 { break sg_8_2; }
                 if pos >= tokens.len() || tokens[pos] != TK_DOT { break sg_8_2; }
                 pos += 1;
-                pos = scan_table_or_index_name(tokens, pos, follow0, follow1, follow2, follow3, fs);
+                pos = scan_table_or_index_name(tokens, pos);
                 if pos < 0 { break sg_8_2; }
                 if pos > sg_8_best { sg_8_best = pos; }
             }
@@ -3712,7 +3712,7 @@ fn scan_attach_stmt(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPTY_
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_K_AS { return -1; }
     pos += 1;
-    pos = scan_database_name(tokens, pos, follow0, follow1, follow2, follow3, fs);
+    pos = scan_database_name(tokens, pos);
     if pos < 0 { return -1; }
     return pos;
 }
@@ -3761,7 +3761,7 @@ fn scan_begin_stmt(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPTY_F
             sol_11: {
                 if pos >= tokens.len() || tokens[pos] != TK_K_TRANSACTION { break sol_11; }
                 pos += 1;
-                pos = scan_transaction_name(tokens, pos, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+                pos = scan_transaction_name(tokens, pos);
                 if pos < 0 { break sol_11; }
                 break osl_10_done;
             }
@@ -3811,7 +3811,7 @@ fn scan_commit_stmt(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPTY_
             sol_15: {
                 if pos >= tokens.len() || tokens[pos] != TK_K_TRANSACTION { break sol_15; }
                 pos += 1;
-                pos = scan_transaction_name(tokens, pos, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+                pos = scan_transaction_name(tokens, pos);
                 if pos < 0 { break sol_15; }
                 break osl_14_done;
             }
@@ -4040,7 +4040,7 @@ fn scan_create_index_stmt(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &
         let sp = pos;
         sg_28_done: {
             sg_28: {
-                pos = scan_database_name(tokens, pos, &FOLLOW_MASK_0, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+                pos = scan_database_name(tokens, pos);
                 if pos < 0 { break sg_28; }
                 if pos >= tokens.len() || tokens[pos] != TK_DOT { break sg_28; }
                 pos += 1;
@@ -4050,11 +4050,11 @@ fn scan_create_index_stmt(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &
         }
         if pos < 0 { pos = sp; }
     }
-    pos = scan_index_name(tokens, pos, &FOLLOW_MASK_6, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+    pos = scan_index_name(tokens, pos);
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_K_ON { return -1; }
     pos += 1;
-    pos = scan_table_name(tokens, pos, &FOLLOW_MASK_7, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+    pos = scan_table_name(tokens, pos);
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_OPEN_PAR { return -1; }
     pos += 1;
@@ -4147,7 +4147,7 @@ fn scan_create_table_stmt(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &
         let sp = pos;
         sg_33_done: {
             sg_33: {
-                pos = scan_database_name(tokens, pos, &FOLLOW_MASK_0, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+                pos = scan_database_name(tokens, pos);
                 if pos < 0 { break sg_33; }
                 if pos >= tokens.len() || tokens[pos] != TK_DOT { break sg_33; }
                 pos += 1;
@@ -4157,7 +4157,7 @@ fn scan_create_table_stmt(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &
         }
         if pos < 0 { pos = sp; }
     }
-    pos = scan_table_name(tokens, pos, &FOLLOW_MASK_9, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+    pos = scan_table_name(tokens, pos);
     if pos < 0 { return -1; }
     let gp_34 = pos;
     let sgk_34 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
@@ -4288,7 +4288,7 @@ fn scan_create_trigger_stmt(tokens: &Array<i32>, pos: i32, follow0: &List<i32> =
         let sp = pos;
         sg_40_done: {
             sg_40: {
-                pos = scan_database_name(tokens, pos, &FOLLOW_MASK_0, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+                pos = scan_database_name(tokens, pos);
                 if pos < 0 { break sg_40; }
                 if pos >= tokens.len() || tokens[pos] != TK_DOT { break sg_40; }
                 pos += 1;
@@ -4298,7 +4298,7 @@ fn scan_create_trigger_stmt(tokens: &Array<i32>, pos: i32, follow0: &List<i32> =
         }
         if pos < 0 { pos = sp; }
     }
-    pos = scan_trigger_name(tokens, pos, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+    pos = scan_trigger_name(tokens, pos);
     if pos < 0 { return -1; }
     if pos < tokens.len() && _kind_set_10(tokens[pos]) {
         let sp = pos;
@@ -4364,7 +4364,7 @@ fn scan_create_trigger_stmt(tokens: &Array<i32>, pos: i32, follow0: &List<i32> =
                     sg_43: {
                         if pos >= tokens.len() || tokens[pos] != TK_K_OF { break sg_43; }
                         pos += 1;
-                        pos = scan_column_name(tokens, pos, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+                        pos = scan_column_name(tokens, pos);
                         if pos < 0 { break sg_43; }
                         while pos < tokens.len() && tokens[pos] == TK_COMMA {
                             let sp = pos;
@@ -4372,7 +4372,7 @@ fn scan_create_trigger_stmt(tokens: &Array<i32>, pos: i32, follow0: &List<i32> =
                                 sg_44: {
                                     if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sg_44; }
                                     pos += 1;
-                                    pos = scan_column_name(tokens, pos, &FOLLOW_MASK_8, follow0, follow1, follow2, (fs << 1) | 2);
+                                    pos = scan_column_name(tokens, pos);
                                     if pos < 0 { break sg_44; }
                                     break sg_44_done;
                                 }
@@ -4401,7 +4401,7 @@ fn scan_create_trigger_stmt(tokens: &Array<i32>, pos: i32, follow0: &List<i32> =
         let sp = pos;
         sg_45_done: {
             sg_45: {
-                pos = scan_database_name(tokens, pos, &FOLLOW_MASK_0, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+                pos = scan_database_name(tokens, pos);
                 if pos < 0 { break sg_45; }
                 if pos >= tokens.len() || tokens[pos] != TK_DOT { break sg_45; }
                 pos += 1;
@@ -4411,7 +4411,7 @@ fn scan_create_trigger_stmt(tokens: &Array<i32>, pos: i32, follow0: &List<i32> =
         }
         if pos < 0 { pos = sp; }
     }
-    pos = scan_table_name(tokens, pos, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+    pos = scan_table_name(tokens, pos);
     if pos < 0 { return -1; }
     if pos < tokens.len() && tokens[pos] == TK_K_FOR {
         let sp = pos;
@@ -4592,7 +4592,7 @@ fn scan_create_view_stmt(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &E
         let sp = pos;
         sg_54_done: {
             sg_54: {
-                pos = scan_database_name(tokens, pos, &FOLLOW_MASK_0, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+                pos = scan_database_name(tokens, pos);
                 if pos < 0 { break sg_54; }
                 if pos >= tokens.len() || tokens[pos] != TK_DOT { break sg_54; }
                 pos += 1;
@@ -4602,7 +4602,7 @@ fn scan_create_view_stmt(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &E
         }
         if pos < 0 { pos = sp; }
     }
-    pos = scan_view_name(tokens, pos, &FOLLOW_MASK_11, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+    pos = scan_view_name(tokens, pos);
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_K_AS { return -1; }
     pos += 1;
@@ -4639,7 +4639,7 @@ fn scan_create_virtual_table_stmt(tokens: &Array<i32>, pos: i32, follow0: &List<
         let sp = pos;
         sg_56_done: {
             sg_56: {
-                pos = scan_database_name(tokens, pos, &FOLLOW_MASK_0, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+                pos = scan_database_name(tokens, pos);
                 if pos < 0 { break sg_56; }
                 if pos >= tokens.len() || tokens[pos] != TK_DOT { break sg_56; }
                 pos += 1;
@@ -4649,11 +4649,11 @@ fn scan_create_virtual_table_stmt(tokens: &Array<i32>, pos: i32, follow0: &List<
         }
         if pos < 0 { pos = sp; }
     }
-    pos = scan_table_name(tokens, pos, &FOLLOW_MASK_12, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+    pos = scan_table_name(tokens, pos);
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_K_USING { return -1; }
     pos += 1;
-    pos = scan_module_name(tokens, pos, follow0, follow1, follow2, follow3, fs);
+    pos = scan_module_name(tokens, pos);
     if pos < 0 { return -1; }
     if pos < tokens.len() && tokens[pos] == TK_OPEN_PAR && !(follow_yields(tokens, pos, follow0, follow1, follow2, follow3, fs, &FOLLOW_SETS, TK_EOF)) {
         let sp = pos;
@@ -4836,7 +4836,7 @@ fn scan_detach_stmt(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPTY_
     if pos < tokens.len() && tokens[pos] == TK_K_DATABASE {
         pos += 1;
     }
-    pos = scan_database_name(tokens, pos, follow0, follow1, follow2, follow3, fs);
+    pos = scan_database_name(tokens, pos);
     if pos < 0 { return -1; }
     return pos;
 }
@@ -4865,7 +4865,7 @@ fn scan_drop_index_stmt(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EM
         let sp = pos;
         sg_67_done: {
             sg_67: {
-                pos = scan_database_name(tokens, pos, &FOLLOW_MASK_0, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+                pos = scan_database_name(tokens, pos);
                 if pos < 0 { break sg_67; }
                 if pos >= tokens.len() || tokens[pos] != TK_DOT { break sg_67; }
                 pos += 1;
@@ -4875,7 +4875,7 @@ fn scan_drop_index_stmt(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EM
         }
         if pos < 0 { pos = sp; }
     }
-    pos = scan_index_name(tokens, pos, follow0, follow1, follow2, follow3, fs);
+    pos = scan_index_name(tokens, pos);
     if pos < 0 { return -1; }
     return pos;
 }
@@ -4904,7 +4904,7 @@ fn scan_drop_table_stmt(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EM
         let sp = pos;
         sg_69_done: {
             sg_69: {
-                pos = scan_database_name(tokens, pos, &FOLLOW_MASK_0, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+                pos = scan_database_name(tokens, pos);
                 if pos < 0 { break sg_69; }
                 if pos >= tokens.len() || tokens[pos] != TK_DOT { break sg_69; }
                 pos += 1;
@@ -4914,7 +4914,7 @@ fn scan_drop_table_stmt(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EM
         }
         if pos < 0 { pos = sp; }
     }
-    pos = scan_table_name(tokens, pos, follow0, follow1, follow2, follow3, fs);
+    pos = scan_table_name(tokens, pos);
     if pos < 0 { return -1; }
     return pos;
 }
@@ -4943,7 +4943,7 @@ fn scan_drop_trigger_stmt(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &
         let sp = pos;
         sg_71_done: {
             sg_71: {
-                pos = scan_database_name(tokens, pos, &FOLLOW_MASK_0, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+                pos = scan_database_name(tokens, pos);
                 if pos < 0 { break sg_71; }
                 if pos >= tokens.len() || tokens[pos] != TK_DOT { break sg_71; }
                 pos += 1;
@@ -4953,7 +4953,7 @@ fn scan_drop_trigger_stmt(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &
         }
         if pos < 0 { pos = sp; }
     }
-    pos = scan_trigger_name(tokens, pos, follow0, follow1, follow2, follow3, fs);
+    pos = scan_trigger_name(tokens, pos);
     if pos < 0 { return -1; }
     return pos;
 }
@@ -4982,7 +4982,7 @@ fn scan_drop_view_stmt(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMP
         let sp = pos;
         sg_73_done: {
             sg_73: {
-                pos = scan_database_name(tokens, pos, &FOLLOW_MASK_0, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+                pos = scan_database_name(tokens, pos);
                 if pos < 0 { break sg_73; }
                 if pos >= tokens.len() || tokens[pos] != TK_DOT { break sg_73; }
                 pos += 1;
@@ -4992,7 +4992,7 @@ fn scan_drop_view_stmt(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMP
         }
         if pos < 0 { pos = sp; }
     }
-    pos = scan_view_name(tokens, pos, follow0, follow1, follow2, follow3, fs);
+    pos = scan_view_name(tokens, pos);
     if pos < 0 { return -1; }
     return pos;
 }
@@ -5011,7 +5011,7 @@ fn scan_factored_select_stmt(tokens: &Array<i32>, pos: i32, follow0: &List<i32> 
         let sp = pos;
         sg_74_done: {
             sg_74: {
-                pos = scan_compound_operator(tokens, pos, &FOLLOW_MASK_3, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+                pos = scan_compound_operator(tokens, pos);
                 if pos < 0 { break sg_74; }
                 pos = scan_select_core(tokens, pos, follow0, follow1, follow2, follow3, fs);
                 if pos < 0 { break sg_74; }
@@ -5192,7 +5192,7 @@ fn scan_insert_stmt(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPTY_
         let sp = pos;
         sg_82_done: {
             sg_82: {
-                pos = scan_database_name(tokens, pos, &FOLLOW_MASK_0, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+                pos = scan_database_name(tokens, pos);
                 if pos < 0 { break sg_82; }
                 if pos >= tokens.len() || tokens[pos] != TK_DOT { break sg_82; }
                 pos += 1;
@@ -5202,7 +5202,7 @@ fn scan_insert_stmt(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPTY_
         }
         if pos < 0 { pos = sp; }
     }
-    pos = scan_table_name(tokens, pos, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+    pos = scan_table_name(tokens, pos);
     if pos < 0 { return -1; }
     if pos < tokens.len() && tokens[pos] == TK_OPEN_PAR {
         let sp = pos;
@@ -5210,7 +5210,7 @@ fn scan_insert_stmt(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPTY_
             sg_83: {
                 if pos >= tokens.len() || tokens[pos] != TK_OPEN_PAR { break sg_83; }
                 pos += 1;
-                pos = scan_column_name(tokens, pos, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+                pos = scan_column_name(tokens, pos);
                 if pos < 0 { break sg_83; }
                 while pos < tokens.len() && tokens[pos] == TK_COMMA {
                     let sp = pos;
@@ -5218,7 +5218,7 @@ fn scan_insert_stmt(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPTY_
                         sg_84: {
                             if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sg_84; }
                             pos += 1;
-                            pos = scan_column_name(tokens, pos, &FOLLOW_MASK_8, follow0, follow1, follow2, (fs << 1) | 2);
+                            pos = scan_column_name(tokens, pos);
                             if pos < 0 { break sg_84; }
                             break sg_84_done;
                         }
@@ -5332,7 +5332,7 @@ fn scan_pragma_stmt(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPTY_
         let sp = pos;
         sg_89_done: {
             sg_89: {
-                pos = scan_database_name(tokens, pos, &FOLLOW_MASK_0, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+                pos = scan_database_name(tokens, pos);
                 if pos < 0 { break sg_89; }
                 if pos >= tokens.len() || tokens[pos] != TK_DOT { break sg_89; }
                 pos += 1;
@@ -5342,7 +5342,7 @@ fn scan_pragma_stmt(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPTY_
         }
         if pos < 0 { pos = sp; }
     }
-    pos = scan_pragma_name(tokens, pos, follow0, follow1, follow2, follow3, fs);
+    pos = scan_pragma_name(tokens, pos);
     if pos < 0 { return -1; }
     if pos < tokens.len() && _kind_set_13(tokens[pos]) && !(follow_yields(tokens, pos, follow0, follow1, follow2, follow3, fs, &FOLLOW_SETS, TK_EOF)) {
         let sp = pos;
@@ -5392,7 +5392,7 @@ fn scan_reindex_stmt(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPTY
         if _kind_set_4(sgk_91) {
             pos = gp_91;
             sg_91_0: {
-                pos = scan_collation_name(tokens, pos, follow0, follow1, follow2, follow3, fs);
+                pos = scan_collation_name(tokens, pos);
                 if pos < 0 { break sg_91_0; }
                 if pos > sg_91_best { sg_91_best = pos; }
             }
@@ -5402,7 +5402,7 @@ fn scan_reindex_stmt(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPTY
                     let sp = pos;
                     sg_92_done: {
                         sg_92: {
-                            pos = scan_database_name(tokens, pos, &FOLLOW_MASK_17, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+                            pos = scan_database_name(tokens, pos);
                             if pos < 0 { break sg_92; }
                             if pos >= tokens.len() || tokens[pos] != TK_DOT { break sg_92; }
                             pos += 1;
@@ -5418,13 +5418,13 @@ fn scan_reindex_stmt(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPTY
                 if _kind_set_4(sgk_93) {
                     pos = gp_93;
                     sg_93_0: {
-                        pos = scan_table_name(tokens, pos, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+                        pos = scan_table_name(tokens, pos);
                         if pos < 0 { break sg_93_0; }
                         if pos > sg_93_best { sg_93_best = pos; }
                     }
                     pos = gp_93;
                     sg_93_1: {
-                        pos = scan_index_name(tokens, pos, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+                        pos = scan_index_name(tokens, pos);
                         if pos < 0 { break sg_93_1; }
                         if pos > sg_93_best { sg_93_best = pos; }
                     }
@@ -5454,7 +5454,7 @@ fn scan_release_stmt(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPTY
     if pos < tokens.len() && tokens[pos] == TK_K_SAVEPOINT {
         pos += 1;
     }
-    pos = scan_savepoint_name(tokens, pos, follow0, follow1, follow2, follow3, fs);
+    pos = scan_savepoint_name(tokens, pos);
     if pos < 0 { return -1; }
     return pos;
 }
@@ -5469,7 +5469,7 @@ fn scan_rollback_stmt(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPT
             sol_95: {
                 if pos >= tokens.len() || tokens[pos] != TK_K_TRANSACTION { break sol_95; }
                 pos += 1;
-                pos = scan_transaction_name(tokens, pos, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+                pos = scan_transaction_name(tokens, pos);
                 if pos < 0 { break sol_95; }
                 break osl_94_done;
             }
@@ -5493,7 +5493,7 @@ fn scan_rollback_stmt(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPT
                 pos += 1;
                 if pos >= tokens.len() || tokens[pos] != TK_K_SAVEPOINT { break sol_98; }
                 pos += 1;
-                pos = scan_savepoint_name(tokens, pos, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+                pos = scan_savepoint_name(tokens, pos);
                 if pos < 0 { break sol_98; }
                 break osl_97_done;
             }
@@ -5504,7 +5504,7 @@ fn scan_rollback_stmt(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPT
             sol_99: {
                 if pos >= tokens.len() || tokens[pos] != TK_K_TO { break sol_99; }
                 pos += 1;
-                pos = scan_savepoint_name(tokens, pos, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+                pos = scan_savepoint_name(tokens, pos);
                 if pos < 0 { break sol_99; }
                 break osl_97_done;
             }
@@ -5514,11 +5514,11 @@ fn scan_rollback_stmt(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPT
     return pos;
 }
 
-fn scan_savepoint_stmt(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> i32 {
+fn scan_savepoint_stmt(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_K_SAVEPOINT { return -1; }
     pos += 1;
-    pos = scan_savepoint_name(tokens, pos, follow0, follow1, follow2, follow3, fs);
+    pos = scan_savepoint_name(tokens, pos);
     if pos < 0 { return -1; }
     return pos;
 }
@@ -5631,7 +5631,7 @@ fn scan_select_stmt(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPTY_
         let sp = pos;
         sg_106_done: {
             sg_106: {
-                pos = scan_compound_operator(tokens, pos, &FOLLOW_MASK_3, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+                pos = scan_compound_operator(tokens, pos);
                 if pos < 0 { break sg_106; }
                 pos = scan_select_or_values(tokens, pos, follow0, follow1, follow2, follow3, fs);
                 if pos < 0 { break sg_106; }
@@ -6026,7 +6026,7 @@ fn scan_update_stmt(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPTY_
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_K_SET { return -1; }
     pos += 1;
-    pos = scan_column_name(tokens, pos, &FOLLOW_MASK_21, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+    pos = scan_column_name(tokens, pos);
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_ASSIGN { return -1; }
     pos += 1;
@@ -6038,7 +6038,7 @@ fn scan_update_stmt(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPTY_
             sg_126: {
                 if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sg_126; }
                 pos += 1;
-                pos = scan_column_name(tokens, pos, &FOLLOW_MASK_21, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+                pos = scan_column_name(tokens, pos);
                 if pos < 0 { break sg_126; }
                 if pos >= tokens.len() || tokens[pos] != TK_ASSIGN { break sg_126; }
                 pos += 1;
@@ -6135,7 +6135,7 @@ fn scan_update_stmt_limited(tokens: &Array<i32>, pos: i32, follow0: &List<i32> =
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_K_SET { return -1; }
     pos += 1;
-    pos = scan_column_name(tokens, pos, &FOLLOW_MASK_21, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+    pos = scan_column_name(tokens, pos);
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_ASSIGN { return -1; }
     pos += 1;
@@ -6147,7 +6147,7 @@ fn scan_update_stmt_limited(tokens: &Array<i32>, pos: i32, follow0: &List<i32> =
             sg_129: {
                 if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sg_129; }
                 pos += 1;
-                pos = scan_column_name(tokens, pos, &FOLLOW_MASK_21, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+                pos = scan_column_name(tokens, pos);
                 if pos < 0 { break sg_129; }
                 if pos >= tokens.len() || tokens[pos] != TK_ASSIGN { break sg_129; }
                 pos += 1;
@@ -6257,7 +6257,7 @@ fn scan_update_stmt_limited(tokens: &Array<i32>, pos: i32, follow0: &List<i32> =
     return pos;
 }
 
-fn scan_vacuum_stmt(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> i32 {
+fn scan_vacuum_stmt(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_K_VACUUM { return -1; }
     pos += 1;
@@ -6267,7 +6267,7 @@ fn scan_vacuum_stmt(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPTY_
 fn scan_column_def(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> i32 {
     let scan_start = pos;
     let mut pos = pos;
-    pos = scan_column_name(tokens, pos, follow0, follow1, follow2, follow3, fs);
+    pos = scan_column_name(tokens, pos);
     if pos < 0 { return -1; }
     if pos < tokens.len() && _kind_set_4(tokens[pos]) && !(follow_yields(tokens, pos, follow0, follow1, follow2, follow3, fs, &FOLLOW_SETS, TK_EOF)) {
         let sp = pos;
@@ -6303,7 +6303,7 @@ fn scan_column_def(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPTY_F
 fn scan_type_name(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> i32 {
     let scan_start = pos;
     let mut pos = pos;
-    pos = scan_name(tokens, pos, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+    pos = scan_name(tokens, pos);
     if pos < 0 { return -1; }
     loop {
         let ep = pos;
@@ -6354,7 +6354,7 @@ fn scan_type_name(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPTY_FO
         if ng_exit { break; }
         if !(pos < tokens.len() && _kind_set_4(tokens[pos])) { break; }
         let sp = pos;
-        pos = scan_name(tokens, pos, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+        pos = scan_name(tokens, pos);
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
@@ -6409,7 +6409,7 @@ fn scan_column_constraint(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &
             sg_138: {
                 if pos >= tokens.len() || tokens[pos] != TK_K_CONSTRAINT { break sg_138; }
                 pos += 1;
-                pos = scan_name(tokens, pos, &FOLLOW_MASK_23, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+                pos = scan_name(tokens, pos);
                 if pos < 0 { break sg_138; }
                 break sg_138_done;
             }
@@ -6512,7 +6512,7 @@ fn scan_column_constraint(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &
                 }
                 pos = gp_141;
                 sg_141_1: {
-                    pos = scan_literal_value(tokens, pos, follow0, follow1, follow2, follow3, fs);
+                    pos = scan_literal_value(tokens, pos);
                     if pos < 0 { break sg_141_1; }
                     if pos > sg_141_best { sg_141_best = pos; }
                 }
@@ -6540,7 +6540,7 @@ fn scan_column_constraint(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &
         sg_139_5: {
             if pos >= tokens.len() || tokens[pos] != TK_K_COLLATE { break sg_139_5; }
             pos += 1;
-            pos = scan_collation_name(tokens, pos, follow0, follow1, follow2, follow3, fs);
+            pos = scan_collation_name(tokens, pos);
             if pos < 0 { break sg_139_5; }
             if pos > sg_139_best { sg_139_best = pos; }
         }
@@ -6626,7 +6626,7 @@ fn scan_conflict_clause(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EM
 
 fn scan_expr_atom_alt_0(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> i32 {
     let mut pos = pos;
-    pos = scan_literal_value(tokens, pos, follow0, follow1, follow2, follow3, fs);
+    pos = scan_literal_value(tokens, pos);
     if pos < 0 { return -1; }
     return pos;
 }
@@ -6637,11 +6637,11 @@ fn scan_expr_atom_alt_2(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EM
         if pos < tokens.len() && _kind_set_4(tokens[pos]) {
             let sol_145_save = pos;
             sol_145: {
-                pos = scan_database_name(tokens, pos, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+                pos = scan_database_name(tokens, pos);
                 if pos < 0 { break sol_145; }
                 if pos >= tokens.len() || tokens[pos] != TK_DOT { break sol_145; }
                 pos += 1;
-                pos = scan_table_name(tokens, pos, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+                pos = scan_table_name(tokens, pos);
                 if pos < 0 { break sol_145; }
                 if pos >= tokens.len() || tokens[pos] != TK_DOT { break sol_145; }
                 pos += 1;
@@ -6652,7 +6652,7 @@ fn scan_expr_atom_alt_2(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EM
         if pos < tokens.len() && _kind_set_4(tokens[pos]) {
             let sol_146_save = pos;
             sol_146: {
-                pos = scan_table_name(tokens, pos, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+                pos = scan_table_name(tokens, pos);
                 if pos < 0 { break sol_146; }
                 if pos >= tokens.len() || tokens[pos] != TK_DOT { break sol_146; }
                 pos += 1;
@@ -6661,14 +6661,14 @@ fn scan_expr_atom_alt_2(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EM
             pos = sol_146_save;
         }
     }
-    pos = scan_column_name(tokens, pos, follow0, follow1, follow2, follow3, fs);
+    pos = scan_column_name(tokens, pos);
     if pos < 0 { return -1; }
     return pos;
 }
 
 fn scan_expr_atom_alt_3(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> i32 {
     let mut pos = pos;
-    pos = scan_unary_operator(tokens, pos, &FOLLOW_MASK_24, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+    pos = scan_unary_operator(tokens, pos);
     if pos < 0 { return -1; }
     pos = scan_expr(tokens, pos, follow0, follow1, follow2, follow3, fs, 0);
     if pos < 0 { return -1; }
@@ -6677,7 +6677,7 @@ fn scan_expr_atom_alt_3(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EM
 
 fn scan_expr_atom_alt_4(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> i32 {
     let mut pos = pos;
-    pos = scan_function_name(tokens, pos, &FOLLOW_MASK_25, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+    pos = scan_function_name(tokens, pos);
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_OPEN_PAR { return -1; }
     pos += 1;
@@ -6912,7 +6912,7 @@ fn scan_expr_atom(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPTY_FO
             let mut best: i32 = -1;
             pos = start;
             try_9: {
-                pos = scan_raise_function(tokens, pos, follow0, follow1, follow2, follow3, fs);
+                pos = scan_raise_function(tokens, pos);
                 if pos < 0 { break try_9; }
                 if pos > best { best = pos; }
             }
@@ -7225,7 +7225,7 @@ fn scan_expr_lr_10(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPTY_F
                 let sp = pos;
                 sg_163_done: {
                     sg_163: {
-                        pos = scan_database_name(tokens, pos, &FOLLOW_MASK_0, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+                        pos = scan_database_name(tokens, pos);
                         if pos < 0 { break sg_163; }
                         if pos >= tokens.len() || tokens[pos] != TK_DOT { break sg_163; }
                         pos += 1;
@@ -7235,7 +7235,7 @@ fn scan_expr_lr_10(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPTY_F
                 }
                 if pos < 0 { pos = sp; }
             }
-            pos = scan_table_name(tokens, pos, follow0, follow1, follow2, follow3, fs);
+            pos = scan_table_name(tokens, pos);
             if pos < 0 { break sg_160_1; }
             if pos > sg_160_best { sg_160_best = pos; }
         }
@@ -7270,7 +7270,7 @@ fn scan_expr_lr_16(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPTY_F
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_K_COLLATE { return -1; }
     pos += 1;
-    pos = scan_collation_name(tokens, pos, follow0, follow1, follow2, follow3, fs);
+    pos = scan_collation_name(tokens, pos);
     if pos < 0 { return -1; }
     return pos;
 }
@@ -7624,7 +7624,7 @@ fn scan_foreign_key_clause(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = 
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_K_REFERENCES { return -1; }
     pos += 1;
-    pos = scan_foreign_table(tokens, pos, follow0, follow1, follow2, follow3, fs);
+    pos = scan_foreign_table(tokens, pos);
     if pos < 0 { return -1; }
     if pos < tokens.len() && tokens[pos] == TK_OPEN_PAR && !(follow_yields(tokens, pos, follow0, follow1, follow2, follow3, fs, &FOLLOW_SETS, TK_EOF)) {
         let sp = pos;
@@ -7632,7 +7632,7 @@ fn scan_foreign_key_clause(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = 
             sg_167: {
                 if pos >= tokens.len() || tokens[pos] != TK_OPEN_PAR { break sg_167; }
                 pos += 1;
-                pos = scan_column_name(tokens, pos, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+                pos = scan_column_name(tokens, pos);
                 if pos < 0 { break sg_167; }
                 while pos < tokens.len() && tokens[pos] == TK_COMMA {
                     let sp = pos;
@@ -7640,7 +7640,7 @@ fn scan_foreign_key_clause(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = 
                         sg_168: {
                             if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sg_168; }
                             pos += 1;
-                            pos = scan_column_name(tokens, pos, &FOLLOW_MASK_8, follow0, follow1, follow2, (fs << 1) | 2);
+                            pos = scan_column_name(tokens, pos);
                             if pos < 0 { break sg_168; }
                             break sg_168_done;
                         }
@@ -7746,7 +7746,7 @@ fn scan_foreign_key_clause(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = 
             sg_169_1: {
                 if pos >= tokens.len() || tokens[pos] != TK_K_MATCH { break sg_169_1; }
                 pos += 1;
-                pos = scan_name(tokens, pos, follow0, follow1, follow2, follow3, fs);
+                pos = scan_name(tokens, pos);
                 if pos < 0 { break sg_169_1; }
                 if pos > sg_169_best { sg_169_best = pos; }
             }
@@ -7856,7 +7856,7 @@ fn scan_foreign_key_clause(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = 
     return pos;
 }
 
-fn scan_raise_function(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> i32 {
+fn scan_raise_function(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_K_RAISE { return -1; }
     pos += 1;
@@ -7907,7 +7907,7 @@ fn scan_raise_function(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMP
             }
             if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sg_179_1; }
             pos += 1;
-            pos = scan_error_message(tokens, pos, &FOLLOW_MASK_16, follow0, follow1, follow2, fs << 1);
+            pos = scan_error_message(tokens, pos);
             if pos < 0 { break sg_179_1; }
             if pos > sg_179_best { sg_179_best = pos; }
         }
@@ -7925,7 +7925,7 @@ fn scan_raise_function(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMP
 fn scan_indexed_column(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> i32 {
     let scan_start = pos;
     let mut pos = pos;
-    pos = scan_column_name(tokens, pos, follow0, follow1, follow2, follow3, fs);
+    pos = scan_column_name(tokens, pos);
     if pos < 0 { return -1; }
     if pos < tokens.len() && tokens[pos] == TK_K_COLLATE && !(follow_yields(tokens, pos, follow0, follow1, follow2, follow3, fs, &FOLLOW_SETS, TK_EOF)) {
         let sp = pos;
@@ -7933,7 +7933,7 @@ fn scan_indexed_column(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMP
             sg_181: {
                 if pos >= tokens.len() || tokens[pos] != TK_K_COLLATE { break sg_181; }
                 pos += 1;
-                pos = scan_collation_name(tokens, pos, follow0, follow1, follow2, follow3, fs);
+                pos = scan_collation_name(tokens, pos);
                 if pos < 0 { break sg_181; }
                 break sg_181_done;
             }
@@ -7981,7 +7981,7 @@ fn scan_table_constraint(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &E
             sg_183: {
                 if pos >= tokens.len() || tokens[pos] != TK_K_CONSTRAINT { break sg_183; }
                 pos += 1;
-                pos = scan_name(tokens, pos, &FOLLOW_MASK_31, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+                pos = scan_name(tokens, pos);
                 if pos < 0 { break sg_183; }
                 break sg_183_done;
             }
@@ -8067,7 +8067,7 @@ fn scan_table_constraint(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &E
             pos += 1;
             if pos >= tokens.len() || tokens[pos] != TK_OPEN_PAR { break sg_184_2; }
             pos += 1;
-            pos = scan_column_name(tokens, pos, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+            pos = scan_column_name(tokens, pos);
             if pos < 0 { break sg_184_2; }
             while pos < tokens.len() && tokens[pos] == TK_COMMA {
                 let sp = pos;
@@ -8075,7 +8075,7 @@ fn scan_table_constraint(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &E
                     sg_187: {
                         if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sg_187; }
                         pos += 1;
-                        pos = scan_column_name(tokens, pos, &FOLLOW_MASK_8, follow0, follow1, follow2, (fs << 1) | 2);
+                        pos = scan_column_name(tokens, pos);
                         if pos < 0 { break sg_187; }
                         break sg_187_done;
                     }
@@ -8134,7 +8134,7 @@ fn scan_qualified_table_name(tokens: &Array<i32>, pos: i32, follow0: &List<i32> 
         let sp = pos;
         sg_189_done: {
             sg_189: {
-                pos = scan_database_name(tokens, pos, &FOLLOW_MASK_0, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+                pos = scan_database_name(tokens, pos);
                 if pos < 0 { break sg_189; }
                 if pos >= tokens.len() || tokens[pos] != TK_DOT { break sg_189; }
                 pos += 1;
@@ -8144,7 +8144,7 @@ fn scan_qualified_table_name(tokens: &Array<i32>, pos: i32, follow0: &List<i32> 
         }
         if pos < 0 { pos = sp; }
     }
-    pos = scan_table_name(tokens, pos, follow0, follow1, follow2, follow3, fs);
+    pos = scan_table_name(tokens, pos);
     if pos < 0 { return -1; }
     if pos < tokens.len() && _kind_set_27(tokens[pos]) && !(follow_yields(tokens, pos, follow0, follow1, follow2, follow3, fs, &FOLLOW_SETS, TK_EOF)) {
         let sp = pos;
@@ -8158,7 +8158,7 @@ fn scan_qualified_table_name(tokens: &Array<i32>, pos: i32, follow0: &List<i32> 
                 pos += 1;
                 if pos >= tokens.len() || tokens[pos] != TK_K_BY { break sg_190_0; }
                 pos += 1;
-                pos = scan_index_name(tokens, pos, follow0, follow1, follow2, follow3, fs);
+                pos = scan_index_name(tokens, pos);
                 if pos < 0 { break sg_190_0; }
                 if pos > sg_190_best { sg_190_best = pos; }
             }
@@ -8194,7 +8194,7 @@ fn scan_ordering_term(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPT
             sg_191: {
                 if pos >= tokens.len() || tokens[pos] != TK_K_COLLATE { break sg_191; }
                 pos += 1;
-                pos = scan_collation_name(tokens, pos, follow0, follow1, follow2, follow3, fs);
+                pos = scan_collation_name(tokens, pos);
                 if pos < 0 { break sg_191; }
                 break sg_191_done;
             }
@@ -8235,7 +8235,7 @@ fn scan_ordering_term(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPT
 
 fn scan_pragma_value_alt_1(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> i32 {
     let mut pos = pos;
-    pos = scan_name(tokens, pos, follow0, follow1, follow2, follow3, fs);
+    pos = scan_name(tokens, pos);
     if pos < 0 { return -1; }
     return pos;
 }
@@ -8274,7 +8274,7 @@ fn scan_pragma_value(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPTY
 
 fn scan_common_table_expression(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> i32 {
     let mut pos = pos;
-    pos = scan_table_name(tokens, pos, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+    pos = scan_table_name(tokens, pos);
     if pos < 0 { return -1; }
     if pos < tokens.len() && tokens[pos] == TK_OPEN_PAR {
         let sp = pos;
@@ -8282,7 +8282,7 @@ fn scan_common_table_expression(tokens: &Array<i32>, pos: i32, follow0: &List<i3
             sg_193: {
                 if pos >= tokens.len() || tokens[pos] != TK_OPEN_PAR { break sg_193; }
                 pos += 1;
-                pos = scan_column_name(tokens, pos, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+                pos = scan_column_name(tokens, pos);
                 if pos < 0 { break sg_193; }
                 while pos < tokens.len() && tokens[pos] == TK_COMMA {
                     let sp = pos;
@@ -8290,7 +8290,7 @@ fn scan_common_table_expression(tokens: &Array<i32>, pos: i32, follow0: &List<i3
                         sg_194: {
                             if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sg_194; }
                             pos += 1;
-                            pos = scan_column_name(tokens, pos, &FOLLOW_MASK_8, follow0, follow1, follow2, (fs << 1) | 2);
+                            pos = scan_column_name(tokens, pos);
                             if pos < 0 { break sg_194; }
                             break sg_194_done;
                         }
@@ -8328,7 +8328,7 @@ fn scan_result_column_alt_2(tokens: &Array<i32>, pos: i32, follow0: &List<i32> =
             sol_196: {
                 if pos >= tokens.len() || tokens[pos] != TK_K_AS { break sol_196; }
                 pos += 1;
-                pos = scan_column_alias(tokens, pos, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+                pos = scan_column_alias(tokens, pos);
                 if pos < 0 { break sol_196; }
                 break osl_195_done;
             }
@@ -8338,7 +8338,7 @@ fn scan_result_column_alt_2(tokens: &Array<i32>, pos: i32, follow0: &List<i32> =
         if pos < tokens.len() && _kind_set_29(tokens[pos]) {
             let sol_197_save = pos;
             sol_197: {
-                pos = scan_column_alias(tokens, pos, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+                pos = scan_column_alias(tokens, pos);
                 if pos < 0 { break sol_197; }
                 break osl_195_done;
             }
@@ -8361,7 +8361,7 @@ fn scan_result_column(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPT
             let mut best: i32 = -1;
             pos = start;
             try_1: {
-                pos = scan_table_name(tokens, pos, &FOLLOW_MASK_32, follow0, follow1, follow2, fs << 1);
+                pos = scan_table_name(tokens, pos);
                 if pos < 0 { break try_1; }
                 if pos >= tokens.len() || tokens[pos] != TK_DOT { break try_1; }
                 pos += 1;
@@ -8390,7 +8390,7 @@ fn scan_table_or_subquery_alt_0(tokens: &Array<i32>, pos: i32, follow0: &List<i3
         let sp = pos;
         sg_198_done: {
             sg_198: {
-                pos = scan_schema_name(tokens, pos, &FOLLOW_MASK_0, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+                pos = scan_schema_name(tokens, pos);
                 if pos < 0 { break sg_198; }
                 if pos >= tokens.len() || tokens[pos] != TK_DOT { break sg_198; }
                 pos += 1;
@@ -8400,7 +8400,7 @@ fn scan_table_or_subquery_alt_0(tokens: &Array<i32>, pos: i32, follow0: &List<i3
         }
         if pos < 0 { pos = sp; }
     }
-    pos = scan_table_name(tokens, pos, follow0, follow1, follow2, follow3, fs);
+    pos = scan_table_name(tokens, pos);
     if pos < 0 { return -1; }
     osl_199_done: {
         if pos < tokens.len() && tokens[pos] == TK_K_AS && pos + 1 < tokens.len() && _kind_set_31(tokens[pos + 1]) {
@@ -8408,7 +8408,7 @@ fn scan_table_or_subquery_alt_0(tokens: &Array<i32>, pos: i32, follow0: &List<i3
             sol_200: {
                 if pos >= tokens.len() || tokens[pos] != TK_K_AS { break sol_200; }
                 pos += 1;
-                pos = scan_table_alias(tokens, pos, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+                pos = scan_table_alias(tokens, pos);
                 if pos < 0 { break sol_200; }
                 break osl_199_done;
             }
@@ -8418,7 +8418,7 @@ fn scan_table_or_subquery_alt_0(tokens: &Array<i32>, pos: i32, follow0: &List<i3
         if pos < tokens.len() && _kind_set_31(tokens[pos]) {
             let sol_201_save = pos;
             sol_201: {
-                pos = scan_table_alias(tokens, pos, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+                pos = scan_table_alias(tokens, pos);
                 if pos < 0 { break sol_201; }
                 break osl_199_done;
             }
@@ -8438,7 +8438,7 @@ fn scan_table_or_subquery_alt_0(tokens: &Array<i32>, pos: i32, follow0: &List<i3
                 pos += 1;
                 if pos >= tokens.len() || tokens[pos] != TK_K_BY { break sg_202_0; }
                 pos += 1;
-                pos = scan_index_name(tokens, pos, follow0, follow1, follow2, follow3, fs);
+                pos = scan_index_name(tokens, pos);
                 if pos < 0 { break sg_202_0; }
                 if pos > sg_202_best { sg_202_best = pos; }
             }
@@ -8468,7 +8468,7 @@ fn scan_table_or_subquery_alt_1(tokens: &Array<i32>, pos: i32, follow0: &List<i3
         let sp = pos;
         sg_203_done: {
             sg_203: {
-                pos = scan_schema_name(tokens, pos, &FOLLOW_MASK_0, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+                pos = scan_schema_name(tokens, pos);
                 if pos < 0 { break sg_203; }
                 if pos >= tokens.len() || tokens[pos] != TK_DOT { break sg_203; }
                 pos += 1;
@@ -8478,7 +8478,7 @@ fn scan_table_or_subquery_alt_1(tokens: &Array<i32>, pos: i32, follow0: &List<i3
         }
         if pos < 0 { pos = sp; }
     }
-    pos = scan_table_function_name(tokens, pos, &FOLLOW_MASK_25, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+    pos = scan_table_function_name(tokens, pos);
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_OPEN_PAR { return -1; }
     pos += 1;
@@ -8517,7 +8517,7 @@ fn scan_table_or_subquery_alt_1(tokens: &Array<i32>, pos: i32, follow0: &List<i3
             sol_207: {
                 if pos >= tokens.len() || tokens[pos] != TK_K_AS { break sol_207; }
                 pos += 1;
-                pos = scan_table_alias(tokens, pos, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+                pos = scan_table_alias(tokens, pos);
                 if pos < 0 { break sol_207; }
                 break osl_206_done;
             }
@@ -8527,7 +8527,7 @@ fn scan_table_or_subquery_alt_1(tokens: &Array<i32>, pos: i32, follow0: &List<i3
         if pos < tokens.len() && _kind_set_31(tokens[pos]) {
             let sol_208_save = pos;
             sol_208: {
-                pos = scan_table_alias(tokens, pos, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+                pos = scan_table_alias(tokens, pos);
                 if pos < 0 { break sol_208; }
                 break osl_206_done;
             }
@@ -8565,7 +8565,7 @@ fn scan_table_or_subquery(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &
                         sol_210: {
                             if pos >= tokens.len() || tokens[pos] != TK_K_AS { break sol_210; }
                             pos += 1;
-                            pos = scan_table_alias(tokens, pos, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+                            pos = scan_table_alias(tokens, pos);
                             if pos < 0 { break sol_210; }
                             break osl_209_done;
                         }
@@ -8575,7 +8575,7 @@ fn scan_table_or_subquery(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &
                     if pos < tokens.len() && _kind_set_31(tokens[pos]) {
                         let sol_211_save = pos;
                         sol_211: {
-                            pos = scan_table_alias(tokens, pos, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+                            pos = scan_table_alias(tokens, pos);
                             if pos < 0 { break sol_211; }
                             break osl_209_done;
                         }
@@ -8755,7 +8755,7 @@ fn scan_join_constraint(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EM
                 pos += 1;
                 if pos >= tokens.len() || tokens[pos] != TK_OPEN_PAR { break sg_216_1; }
                 pos += 1;
-                pos = scan_column_name(tokens, pos, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+                pos = scan_column_name(tokens, pos);
                 if pos < 0 { break sg_216_1; }
                 while pos < tokens.len() && tokens[pos] == TK_COMMA {
                     let sp = pos;
@@ -8763,7 +8763,7 @@ fn scan_join_constraint(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EM
                         sg_217: {
                             if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sg_217; }
                             pos += 1;
-                            pos = scan_column_name(tokens, pos, &FOLLOW_MASK_8, follow0, follow1, follow2, (fs << 1) | 2);
+                            pos = scan_column_name(tokens, pos);
                             if pos < 0 { break sg_217; }
                             break sg_217_done;
                         }
@@ -9020,7 +9020,7 @@ fn scan_select_core(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPTY_
     return pos;
 }
 
-fn scan_compound_operator(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> i32 {
+fn scan_compound_operator(tokens: &Array<i32>, pos: i32) -> i32 {
     let start = pos;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
@@ -9084,21 +9084,21 @@ fn scan_signed_number(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPT
     return pos;
 }
 
-fn scan_literal_value(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> i32 {
+fn scan_literal_value(tokens: &Array<i32>, pos: i32) -> i32 {
     if pos < tokens.len() && _kind_set_54(tokens[pos]) {
         return pos + 1;
     }
     return -1;
 }
 
-fn scan_unary_operator(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> i32 {
+fn scan_unary_operator(tokens: &Array<i32>, pos: i32) -> i32 {
     if pos < tokens.len() && _kind_set_55(tokens[pos]) {
         return pos + 1;
     }
     return -1;
 }
 
-fn scan_error_message(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> i32 {
+fn scan_error_message(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_STRING_LITERAL { return -1; }
     pos += 1;
@@ -9140,174 +9140,174 @@ fn scan_module_argument(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EM
     return pos;
 }
 
-fn scan_column_alias(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> i32 {
+fn scan_column_alias(tokens: &Array<i32>, pos: i32) -> i32 {
     if pos < tokens.len() && _kind_set_29(tokens[pos]) {
         return pos + 1;
     }
     return -1;
 }
 
-fn scan_keyword(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> i32 {
+fn scan_keyword(tokens: &Array<i32>, pos: i32) -> i32 {
     if pos < tokens.len() && _kind_set_37(tokens[pos]) {
         return pos + 1;
     }
     return -1;
 }
 
-fn scan_name(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> i32 {
+fn scan_name(tokens: &Array<i32>, pos: i32) -> i32 {
     let scan_start = pos;
     let mut pos = pos;
-    pos = scan_any_name(tokens, pos, follow0, follow1, follow2, follow3, fs);
+    pos = scan_any_name(tokens, pos);
     if pos < 0 { return -1; }
     if pos == scan_start { return -1; }
     return pos;
 }
 
-fn scan_function_name(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> i32 {
+fn scan_function_name(tokens: &Array<i32>, pos: i32) -> i32 {
     let scan_start = pos;
     let mut pos = pos;
-    pos = scan_any_name(tokens, pos, follow0, follow1, follow2, follow3, fs);
+    pos = scan_any_name(tokens, pos);
     if pos < 0 { return -1; }
     if pos == scan_start { return -1; }
     return pos;
 }
 
-fn scan_database_name(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> i32 {
+fn scan_database_name(tokens: &Array<i32>, pos: i32) -> i32 {
     let scan_start = pos;
     let mut pos = pos;
-    pos = scan_any_name(tokens, pos, follow0, follow1, follow2, follow3, fs);
+    pos = scan_any_name(tokens, pos);
     if pos < 0 { return -1; }
     if pos == scan_start { return -1; }
     return pos;
 }
 
-fn scan_schema_name(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> i32 {
+fn scan_schema_name(tokens: &Array<i32>, pos: i32) -> i32 {
     let scan_start = pos;
     let mut pos = pos;
-    pos = scan_any_name(tokens, pos, follow0, follow1, follow2, follow3, fs);
+    pos = scan_any_name(tokens, pos);
     if pos < 0 { return -1; }
     if pos == scan_start { return -1; }
     return pos;
 }
 
-fn scan_table_function_name(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> i32 {
+fn scan_table_function_name(tokens: &Array<i32>, pos: i32) -> i32 {
     let scan_start = pos;
     let mut pos = pos;
-    pos = scan_any_name(tokens, pos, follow0, follow1, follow2, follow3, fs);
+    pos = scan_any_name(tokens, pos);
     if pos < 0 { return -1; }
     if pos == scan_start { return -1; }
     return pos;
 }
 
-fn scan_table_name(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> i32 {
+fn scan_table_name(tokens: &Array<i32>, pos: i32) -> i32 {
     let scan_start = pos;
     let mut pos = pos;
-    pos = scan_any_name(tokens, pos, follow0, follow1, follow2, follow3, fs);
+    pos = scan_any_name(tokens, pos);
     if pos < 0 { return -1; }
     if pos == scan_start { return -1; }
     return pos;
 }
 
-fn scan_table_or_index_name(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> i32 {
+fn scan_table_or_index_name(tokens: &Array<i32>, pos: i32) -> i32 {
     let scan_start = pos;
     let mut pos = pos;
-    pos = scan_any_name(tokens, pos, follow0, follow1, follow2, follow3, fs);
+    pos = scan_any_name(tokens, pos);
     if pos < 0 { return -1; }
     if pos == scan_start { return -1; }
     return pos;
 }
 
-fn scan_new_table_name(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> i32 {
+fn scan_new_table_name(tokens: &Array<i32>, pos: i32) -> i32 {
     let scan_start = pos;
     let mut pos = pos;
-    pos = scan_any_name(tokens, pos, follow0, follow1, follow2, follow3, fs);
+    pos = scan_any_name(tokens, pos);
     if pos < 0 { return -1; }
     if pos == scan_start { return -1; }
     return pos;
 }
 
-fn scan_column_name(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> i32 {
+fn scan_column_name(tokens: &Array<i32>, pos: i32) -> i32 {
     let scan_start = pos;
     let mut pos = pos;
-    pos = scan_any_name(tokens, pos, follow0, follow1, follow2, follow3, fs);
+    pos = scan_any_name(tokens, pos);
     if pos < 0 { return -1; }
     if pos == scan_start { return -1; }
     return pos;
 }
 
-fn scan_collation_name(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> i32 {
+fn scan_collation_name(tokens: &Array<i32>, pos: i32) -> i32 {
     let scan_start = pos;
     let mut pos = pos;
-    pos = scan_any_name(tokens, pos, follow0, follow1, follow2, follow3, fs);
+    pos = scan_any_name(tokens, pos);
     if pos < 0 { return -1; }
     if pos == scan_start { return -1; }
     return pos;
 }
 
-fn scan_foreign_table(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> i32 {
+fn scan_foreign_table(tokens: &Array<i32>, pos: i32) -> i32 {
     let scan_start = pos;
     let mut pos = pos;
-    pos = scan_any_name(tokens, pos, follow0, follow1, follow2, follow3, fs);
+    pos = scan_any_name(tokens, pos);
     if pos < 0 { return -1; }
     if pos == scan_start { return -1; }
     return pos;
 }
 
-fn scan_index_name(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> i32 {
+fn scan_index_name(tokens: &Array<i32>, pos: i32) -> i32 {
     let scan_start = pos;
     let mut pos = pos;
-    pos = scan_any_name(tokens, pos, follow0, follow1, follow2, follow3, fs);
+    pos = scan_any_name(tokens, pos);
     if pos < 0 { return -1; }
     if pos == scan_start { return -1; }
     return pos;
 }
 
-fn scan_trigger_name(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> i32 {
+fn scan_trigger_name(tokens: &Array<i32>, pos: i32) -> i32 {
     let scan_start = pos;
     let mut pos = pos;
-    pos = scan_any_name(tokens, pos, follow0, follow1, follow2, follow3, fs);
+    pos = scan_any_name(tokens, pos);
     if pos < 0 { return -1; }
     if pos == scan_start { return -1; }
     return pos;
 }
 
-fn scan_view_name(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> i32 {
+fn scan_view_name(tokens: &Array<i32>, pos: i32) -> i32 {
     let scan_start = pos;
     let mut pos = pos;
-    pos = scan_any_name(tokens, pos, follow0, follow1, follow2, follow3, fs);
+    pos = scan_any_name(tokens, pos);
     if pos < 0 { return -1; }
     if pos == scan_start { return -1; }
     return pos;
 }
 
-fn scan_module_name(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> i32 {
+fn scan_module_name(tokens: &Array<i32>, pos: i32) -> i32 {
     let scan_start = pos;
     let mut pos = pos;
-    pos = scan_any_name(tokens, pos, follow0, follow1, follow2, follow3, fs);
+    pos = scan_any_name(tokens, pos);
     if pos < 0 { return -1; }
     if pos == scan_start { return -1; }
     return pos;
 }
 
-fn scan_pragma_name(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> i32 {
+fn scan_pragma_name(tokens: &Array<i32>, pos: i32) -> i32 {
     let scan_start = pos;
     let mut pos = pos;
-    pos = scan_any_name(tokens, pos, follow0, follow1, follow2, follow3, fs);
+    pos = scan_any_name(tokens, pos);
     if pos < 0 { return -1; }
     if pos == scan_start { return -1; }
     return pos;
 }
 
-fn scan_savepoint_name(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> i32 {
+fn scan_savepoint_name(tokens: &Array<i32>, pos: i32) -> i32 {
     let scan_start = pos;
     let mut pos = pos;
-    pos = scan_any_name(tokens, pos, follow0, follow1, follow2, follow3, fs);
+    pos = scan_any_name(tokens, pos);
     if pos < 0 { return -1; }
     if pos == scan_start { return -1; }
     return pos;
 }
 
-fn scan_table_alias(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> i32 {
+fn scan_table_alias(tokens: &Array<i32>, pos: i32) -> i32 {
     let start = pos;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
@@ -9321,7 +9321,7 @@ fn scan_table_alias(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPTY_
         } else if alt_kind == TK_OPEN_PAR {
             pos = start + 1;
             try_2: {
-                pos = scan_table_alias(tokens, pos, &FOLLOW_MASK_16, follow0, follow1, follow2, fs << 1);
+                pos = scan_table_alias(tokens, pos);
                 if pos < 0 { break try_2; }
                 if pos >= tokens.len() || tokens[pos] != TK_CLOSE_PAR { break try_2; }
                 pos += 1;
@@ -9335,16 +9335,16 @@ fn scan_table_alias(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPTY_
     return pos;
 }
 
-fn scan_transaction_name(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> i32 {
+fn scan_transaction_name(tokens: &Array<i32>, pos: i32) -> i32 {
     let scan_start = pos;
     let mut pos = pos;
-    pos = scan_any_name(tokens, pos, follow0, follow1, follow2, follow3, fs);
+    pos = scan_any_name(tokens, pos);
     if pos < 0 { return -1; }
     if pos == scan_start { return -1; }
     return pos;
 }
 
-fn scan_any_name(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> i32 {
+fn scan_any_name(tokens: &Array<i32>, pos: i32) -> i32 {
     let start = pos;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
@@ -9355,7 +9355,7 @@ fn scan_any_name(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPTY_FOL
         } else if _kind_set_37(alt_kind) {
             pos = start;
             try_1: {
-                pos = scan_keyword(tokens, pos, follow0, follow1, follow2, follow3, fs);
+                pos = scan_keyword(tokens, pos);
                 if pos < 0 { break try_1; }
                 break scan_alts;
             }
@@ -9366,7 +9366,7 @@ fn scan_any_name(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPTY_FOL
         } else if alt_kind == TK_OPEN_PAR {
             pos = start + 1;
             try_3: {
-                pos = scan_any_name(tokens, pos, &FOLLOW_MASK_16, follow0, follow1, follow2, fs << 1);
+                pos = scan_any_name(tokens, pos);
                 if pos < 0 { break try_3; }
                 if pos >= tokens.len() || tokens[pos] != TK_CLOSE_PAR { break try_3; }
                 pos += 1;
@@ -9380,7 +9380,7 @@ fn scan_any_name(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPTY_FOL
     return pos;
 }
 
-fn _parse_parse__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> () {
+fn _parse_parse__inner(p: &mut Parser) -> () {
     loop {
         if p.recovering { break; }
         let mut gd_winner: i32 = -1;
@@ -9400,7 +9400,7 @@ fn _parse_parse__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, foll
             gd_scan_2: {
                 let tokens = &p.kinds;
                 let mut pos: i32 = p.pos;
-                pos = scan_error(tokens, pos, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+                pos = scan_error(tokens, pos);
                 if pos < 0 { break gd_scan_2; }
                 gd_best = pos;
             }
@@ -9409,34 +9409,34 @@ fn _parse_parse__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, foll
         if gd_winner == 0 {
             _parse_sql_stmt_list(p, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
         } else {
-            _parse_error(p, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+            _parse_error(p);
         }
     }
     p.expect(TK_EOF, &EMPTY_SYNC);
     return;
 }
 
-fn _parse_parse(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> () {
+fn _parse_parse(p: &mut Parser) -> () {
     if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_PARSE, _start);
-    _parse_parse__inner(p, follow0, follow1, follow2, follow3, fs);
+    _parse_parse__inner(p);
     p.b.finish_node(p.last_end());
     if p.recovering {
         p.push_rule_stack("parse");
     }
 }
 
-fn _parse_error__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> () {
+fn _parse_error__inner(p: &mut Parser) -> () {
     p.expect(TK_UNEXPECTED_CHAR, &EMPTY_SYNC);
     return;
 }
 
-fn _parse_error(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> () {
+fn _parse_error(p: &mut Parser) -> () {
     if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_ERROR, _start);
-    _parse_error__inner(p, follow0, follow1, follow2, follow3, fs);
+    _parse_error__inner(p);
     p.b.finish_node(p.last_end());
     if p.recovering {
         p.push_rule_stack("error");
@@ -9877,9 +9877,9 @@ fn _parse_sql_stmt__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, f
     } else if grp_kind == TK_K_ROLLBACK {
         _parse_rollback_stmt(p, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
     } else if grp_kind == TK_K_SAVEPOINT {
-        _parse_savepoint_stmt(p, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+        _parse_savepoint_stmt(p);
     } else if grp_kind == TK_K_VACUUM {
-        _parse_vacuum_stmt(p, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+        _parse_vacuum_stmt(p);
     } else {
         p.no_viable("no viable alternative", p.peek_span(), &SYNC_2);
     }
@@ -9904,22 +9904,22 @@ fn _parse_alter_table_stmt__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_F
     opt_scan: {
         let tokens = &p.kinds;
         let mut pos: i32 = p.pos;
-        pos = scan_database_name(tokens, pos, &FOLLOW_MASK_0, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+        pos = scan_database_name(tokens, pos);
         if pos < 0 { break opt_scan; }
         if pos >= tokens.len() || tokens[pos] != TK_DOT { break opt_scan; }
         pos += 1;
         opt_scan_pos = pos;
     }
     if opt_scan_pos >= 0 {
-        _parse_database_name(p, &FOLLOW_MASK_0, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+        _parse_database_name(p);
         p.expect(TK_DOT, &EMPTY_SYNC);
     }
-    _parse_table_name(p, &FOLLOW_MASK_1, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+    _parse_table_name(p);
     let grp_kind = p.peek_kind();
     if grp_kind == TK_K_RENAME {
         p.expect(TK_K_RENAME, &SYNC_5);
         p.expect(TK_K_TO, &SYNC_4);
-        _parse_new_table_name(p, follow0, follow1, follow2, follow3, fs);
+        _parse_new_table_name(p);
     } else if grp_kind == TK_K_ADD {
         p.expect(TK_K_ADD, &SYNC_4);
         if p.peek_kind() == TK_K_COLUMN {
@@ -9955,7 +9955,7 @@ fn _parse_analyze_stmt__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLO
                 gd_scan: {
                     let tokens = &p.kinds;
                     let mut pos: i32 = p.pos;
-                    pos = scan_database_name(tokens, pos, follow0, follow1, follow2, follow3, fs);
+                    pos = scan_database_name(tokens, pos);
                     if pos < 0 { break gd_scan; }
                     gd_end = pos;
                 }
@@ -9970,7 +9970,7 @@ fn _parse_analyze_stmt__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLO
                 gd_scan_2: {
                     let tokens = &p.kinds;
                     let mut pos: i32 = p.pos;
-                    pos = scan_table_or_index_name(tokens, pos, follow0, follow1, follow2, follow3, fs);
+                    pos = scan_table_or_index_name(tokens, pos);
                     if pos < 0 { break gd_scan_2; }
                     gd_end_2 = pos;
                 }
@@ -9985,11 +9985,11 @@ fn _parse_analyze_stmt__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLO
                 gd_scan_3: {
                     let tokens = &p.kinds;
                     let mut pos: i32 = p.pos;
-                    pos = scan_database_name(tokens, pos, &FOLLOW_MASK_0, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+                    pos = scan_database_name(tokens, pos);
                     if pos < 0 { break gd_scan_3; }
                     if pos >= tokens.len() || tokens[pos] != TK_DOT { break gd_scan_3; }
                     pos += 1;
-                    pos = scan_table_or_index_name(tokens, pos, follow0, follow1, follow2, follow3, fs);
+                    pos = scan_table_or_index_name(tokens, pos);
                     if pos < 0 { break gd_scan_3; }
                     gd_end_3 = pos;
                 }
@@ -10002,13 +10002,13 @@ fn _parse_analyze_stmt__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLO
     }
     if gd_best >= 0 {
         if gd_winner == 2 {
-            _parse_database_name(p, &FOLLOW_MASK_0, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+            _parse_database_name(p);
             p.expect(TK_DOT, &SYNC_4);
-            _parse_table_or_index_name(p, follow0, follow1, follow2, follow3, fs);
+            _parse_table_or_index_name(p);
         } else if gd_winner == 0 {
-            _parse_database_name(p, follow0, follow1, follow2, follow3, fs);
+            _parse_database_name(p);
         } else {
-            _parse_table_or_index_name(p, follow0, follow1, follow2, follow3, fs);
+            _parse_table_or_index_name(p);
         }
     }
     return;
@@ -10032,7 +10032,7 @@ fn _parse_attach_stmt__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW
     }
     _parse_expr(p, &FOLLOW_MASK_2, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
     p.expect(TK_K_AS, &SYNC_4);
-    _parse_database_name(p, follow0, follow1, follow2, follow3, fs);
+    _parse_database_name(p);
     return;
 }
 
@@ -10055,7 +10055,7 @@ fn _parse_begin_stmt__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW,
     if !(follow_yields(&p.kinds, p.pos, follow0, follow1, follow2, follow3, fs, &FOLLOW_SETS, TK_EOF)) && (p.peek_kind() == TK_K_TRANSACTION) {
         p.expect(TK_K_TRANSACTION, &SYNC_4);
         if !(follow_yields(&p.kinds, p.pos, follow0, follow1, follow2, follow3, fs, &FOLLOW_SETS, TK_EOF)) && (_kind_set_4(p.peek_kind())) {
-            _parse_transaction_name(p, follow0, follow1, follow2, follow3, fs);
+            _parse_transaction_name(p);
         }
     }
     return;
@@ -10077,7 +10077,7 @@ fn _parse_commit_stmt__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW
     if !(follow_yields(&p.kinds, p.pos, follow0, follow1, follow2, follow3, fs, &FOLLOW_SETS, TK_EOF)) && (p.peek_kind() == TK_K_TRANSACTION) {
         p.expect(TK_K_TRANSACTION, &SYNC_4);
         if !(follow_yields(&p.kinds, p.pos, follow0, follow1, follow2, follow3, fs, &FOLLOW_SETS, TK_EOF)) && (_kind_set_4(p.peek_kind())) {
-            _parse_transaction_name(p, follow0, follow1, follow2, follow3, fs);
+            _parse_transaction_name(p);
         }
     }
     return;
@@ -10267,19 +10267,19 @@ fn _parse_create_index_stmt__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_
     opt_scan: {
         let tokens = &p.kinds;
         let mut pos: i32 = p.pos;
-        pos = scan_database_name(tokens, pos, &FOLLOW_MASK_0, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+        pos = scan_database_name(tokens, pos);
         if pos < 0 { break opt_scan; }
         if pos >= tokens.len() || tokens[pos] != TK_DOT { break opt_scan; }
         pos += 1;
         opt_scan_pos = pos;
     }
     if opt_scan_pos >= 0 {
-        _parse_database_name(p, &FOLLOW_MASK_0, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+        _parse_database_name(p);
         p.expect(TK_DOT, &EMPTY_SYNC);
     }
-    _parse_index_name(p, &FOLLOW_MASK_6, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+    _parse_index_name(p);
     p.expect(TK_K_ON, &SYNC_4);
-    _parse_table_name(p, &FOLLOW_MASK_7, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+    _parse_table_name(p);
     p.expect(TK_OPEN_PAR, &SYNC_4);
     _parse_indexed_column(p, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
     loop {
@@ -10339,17 +10339,17 @@ fn _parse_create_table_stmt__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_
     opt_scan: {
         let tokens = &p.kinds;
         let mut pos: i32 = p.pos;
-        pos = scan_database_name(tokens, pos, &FOLLOW_MASK_0, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+        pos = scan_database_name(tokens, pos);
         if pos < 0 { break opt_scan; }
         if pos >= tokens.len() || tokens[pos] != TK_DOT { break opt_scan; }
         pos += 1;
         opt_scan_pos = pos;
     }
     if opt_scan_pos >= 0 {
-        _parse_database_name(p, &FOLLOW_MASK_0, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+        _parse_database_name(p);
         p.expect(TK_DOT, &EMPTY_SYNC);
     }
-    _parse_table_name(p, &FOLLOW_MASK_9, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+    _parse_table_name(p);
     let grp_kind = p.peek_kind();
     if grp_kind == TK_OPEN_PAR {
         p.expect(TK_OPEN_PAR, &SYNC_4);
@@ -10421,17 +10421,17 @@ fn _parse_create_trigger_stmt__inner(p: &mut Parser, follow0: &List<i32> = &EMPT
     opt_scan: {
         let tokens = &p.kinds;
         let mut pos: i32 = p.pos;
-        pos = scan_database_name(tokens, pos, &FOLLOW_MASK_0, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+        pos = scan_database_name(tokens, pos);
         if pos < 0 { break opt_scan; }
         if pos >= tokens.len() || tokens[pos] != TK_DOT { break opt_scan; }
         pos += 1;
         opt_scan_pos = pos;
     }
     if opt_scan_pos >= 0 {
-        _parse_database_name(p, &FOLLOW_MASK_0, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+        _parse_database_name(p);
         p.expect(TK_DOT, &EMPTY_SYNC);
     }
-    _parse_trigger_name(p, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+    _parse_trigger_name(p);
     let mut gd_winner: i32 = -1;
     let mut gd_best: i32 = -1;
     let gd_kind = p.peek_kind();
@@ -10484,7 +10484,7 @@ fn _parse_create_trigger_stmt__inner(p: &mut Parser, follow0: &List<i32> = &EMPT
         p.expect(TK_K_UPDATE, &SYNC_27);
         if p.peek_kind() == TK_K_OF && _kind_set_4(p.peek_at(1)) {
             p.expect(TK_K_OF, &SYNC_4);
-            _parse_column_name(p, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+            _parse_column_name(p);
             loop {
                 if p.recovering { break; }
                 let mut rep_scan_pos: i32 = -1;
@@ -10495,7 +10495,7 @@ fn _parse_create_trigger_stmt__inner(p: &mut Parser, follow0: &List<i32> = &EMPT
                         sg_238: {
                             if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sg_238; }
                             pos += 1;
-                            pos = scan_column_name(tokens, pos, &FOLLOW_MASK_8, follow0, follow1, follow2, (fs << 1) | 2);
+                            pos = scan_column_name(tokens, pos);
                             if pos < 0 { break sg_238; }
                             break sg_238_done;
                         }
@@ -10506,7 +10506,7 @@ fn _parse_create_trigger_stmt__inner(p: &mut Parser, follow0: &List<i32> = &EMPT
                 }
                 if rep_scan_pos < 0 { break; }
                 p.expect(TK_COMMA, &SYNC_4);
-                _parse_column_name(p, &FOLLOW_MASK_8, follow0, follow1, follow2, (fs << 1) | 2);
+                _parse_column_name(p);
             }
         }
     } else {
@@ -10517,17 +10517,17 @@ fn _parse_create_trigger_stmt__inner(p: &mut Parser, follow0: &List<i32> = &EMPT
     opt_scan_2: {
         let tokens = &p.kinds;
         let mut pos: i32 = p.pos;
-        pos = scan_database_name(tokens, pos, &FOLLOW_MASK_0, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+        pos = scan_database_name(tokens, pos);
         if pos < 0 { break opt_scan_2; }
         if pos >= tokens.len() || tokens[pos] != TK_DOT { break opt_scan_2; }
         pos += 1;
         opt_scan_pos_2 = pos;
     }
     if opt_scan_pos_2 >= 0 {
-        _parse_database_name(p, &FOLLOW_MASK_0, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+        _parse_database_name(p);
         p.expect(TK_DOT, &EMPTY_SYNC);
     }
-    _parse_table_name(p, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+    _parse_table_name(p);
     if p.peek_kind() == TK_K_FOR && p.peek_at(1) == TK_K_EACH && p.peek_at(2) == TK_K_ROW {
         p.expect(TK_K_FOR, &SYNC_29);
         p.expect(TK_K_EACH, &SYNC_30);
@@ -10701,17 +10701,17 @@ fn _parse_create_view_stmt__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_F
     opt_scan: {
         let tokens = &p.kinds;
         let mut pos: i32 = p.pos;
-        pos = scan_database_name(tokens, pos, &FOLLOW_MASK_0, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+        pos = scan_database_name(tokens, pos);
         if pos < 0 { break opt_scan; }
         if pos >= tokens.len() || tokens[pos] != TK_DOT { break opt_scan; }
         pos += 1;
         opt_scan_pos = pos;
     }
     if opt_scan_pos >= 0 {
-        _parse_database_name(p, &FOLLOW_MASK_0, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+        _parse_database_name(p);
         p.expect(TK_DOT, &EMPTY_SYNC);
     }
-    _parse_view_name(p, &FOLLOW_MASK_11, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+    _parse_view_name(p);
     p.expect(TK_K_AS, &SYNC_24);
     _parse_select_stmt(p, follow0, follow1, follow2, follow3, fs);
     return;
@@ -10741,19 +10741,19 @@ fn _parse_create_virtual_table_stmt__inner(p: &mut Parser, follow0: &List<i32> =
     opt_scan: {
         let tokens = &p.kinds;
         let mut pos: i32 = p.pos;
-        pos = scan_database_name(tokens, pos, &FOLLOW_MASK_0, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+        pos = scan_database_name(tokens, pos);
         if pos < 0 { break opt_scan; }
         if pos >= tokens.len() || tokens[pos] != TK_DOT { break opt_scan; }
         pos += 1;
         opt_scan_pos = pos;
     }
     if opt_scan_pos >= 0 {
-        _parse_database_name(p, &FOLLOW_MASK_0, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+        _parse_database_name(p);
         p.expect(TK_DOT, &EMPTY_SYNC);
     }
-    _parse_table_name(p, &FOLLOW_MASK_12, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+    _parse_table_name(p);
     p.expect(TK_K_USING, &SYNC_4);
-    _parse_module_name(p, follow0, follow1, follow2, follow3, fs);
+    _parse_module_name(p);
     if !(follow_yields(&p.kinds, p.pos, follow0, follow1, follow2, follow3, fs, &FOLLOW_SETS, TK_EOF)) && (p.peek_kind() == TK_OPEN_PAR && _kind_set_8(p.peek_at(1))) {
         p.expect(TK_OPEN_PAR, &SYNC_7);
         _parse_module_argument(p, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
@@ -10994,7 +10994,7 @@ fn _parse_detach_stmt__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW
     if p.peek_kind() == TK_K_DATABASE {
         p.expect(TK_K_DATABASE, &EMPTY_SYNC);
     }
-    _parse_database_name(p, follow0, follow1, follow2, follow3, fs);
+    _parse_database_name(p);
     return;
 }
 
@@ -11020,17 +11020,17 @@ fn _parse_drop_index_stmt__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FO
     opt_scan: {
         let tokens = &p.kinds;
         let mut pos: i32 = p.pos;
-        pos = scan_database_name(tokens, pos, &FOLLOW_MASK_0, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+        pos = scan_database_name(tokens, pos);
         if pos < 0 { break opt_scan; }
         if pos >= tokens.len() || tokens[pos] != TK_DOT { break opt_scan; }
         pos += 1;
         opt_scan_pos = pos;
     }
     if opt_scan_pos >= 0 {
-        _parse_database_name(p, &FOLLOW_MASK_0, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+        _parse_database_name(p);
         p.expect(TK_DOT, &EMPTY_SYNC);
     }
-    _parse_index_name(p, follow0, follow1, follow2, follow3, fs);
+    _parse_index_name(p);
     return;
 }
 
@@ -11056,17 +11056,17 @@ fn _parse_drop_table_stmt__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FO
     opt_scan: {
         let tokens = &p.kinds;
         let mut pos: i32 = p.pos;
-        pos = scan_database_name(tokens, pos, &FOLLOW_MASK_0, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+        pos = scan_database_name(tokens, pos);
         if pos < 0 { break opt_scan; }
         if pos >= tokens.len() || tokens[pos] != TK_DOT { break opt_scan; }
         pos += 1;
         opt_scan_pos = pos;
     }
     if opt_scan_pos >= 0 {
-        _parse_database_name(p, &FOLLOW_MASK_0, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+        _parse_database_name(p);
         p.expect(TK_DOT, &EMPTY_SYNC);
     }
-    _parse_table_name(p, follow0, follow1, follow2, follow3, fs);
+    _parse_table_name(p);
     return;
 }
 
@@ -11092,17 +11092,17 @@ fn _parse_drop_trigger_stmt__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_
     opt_scan: {
         let tokens = &p.kinds;
         let mut pos: i32 = p.pos;
-        pos = scan_database_name(tokens, pos, &FOLLOW_MASK_0, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+        pos = scan_database_name(tokens, pos);
         if pos < 0 { break opt_scan; }
         if pos >= tokens.len() || tokens[pos] != TK_DOT { break opt_scan; }
         pos += 1;
         opt_scan_pos = pos;
     }
     if opt_scan_pos >= 0 {
-        _parse_database_name(p, &FOLLOW_MASK_0, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+        _parse_database_name(p);
         p.expect(TK_DOT, &EMPTY_SYNC);
     }
-    _parse_trigger_name(p, follow0, follow1, follow2, follow3, fs);
+    _parse_trigger_name(p);
     return;
 }
 
@@ -11128,17 +11128,17 @@ fn _parse_drop_view_stmt__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOL
     opt_scan: {
         let tokens = &p.kinds;
         let mut pos: i32 = p.pos;
-        pos = scan_database_name(tokens, pos, &FOLLOW_MASK_0, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+        pos = scan_database_name(tokens, pos);
         if pos < 0 { break opt_scan; }
         if pos >= tokens.len() || tokens[pos] != TK_DOT { break opt_scan; }
         pos += 1;
         opt_scan_pos = pos;
     }
     if opt_scan_pos >= 0 {
-        _parse_database_name(p, &FOLLOW_MASK_0, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+        _parse_database_name(p);
         p.expect(TK_DOT, &EMPTY_SYNC);
     }
-    _parse_view_name(p, follow0, follow1, follow2, follow3, fs);
+    _parse_view_name(p);
     return;
 }
 
@@ -11167,7 +11167,7 @@ fn _parse_factored_select_stmt__inner(p: &mut Parser, follow0: &List<i32> = &EMP
             let mut pos: i32 = p.pos;
             sg_248_done: {
                 sg_248: {
-                    pos = scan_compound_operator(tokens, pos, &FOLLOW_MASK_3, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+                    pos = scan_compound_operator(tokens, pos);
                     if pos < 0 { break sg_248; }
                     pos = scan_select_core(tokens, pos, follow0, follow1, follow2, follow3, fs);
                     if pos < 0 { break sg_248; }
@@ -11179,7 +11179,7 @@ fn _parse_factored_select_stmt__inner(p: &mut Parser, follow0: &List<i32> = &EMP
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        _parse_compound_operator(p, &FOLLOW_MASK_3, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+        _parse_compound_operator(p);
         _parse_select_core(p, follow0, follow1, follow2, follow3, fs);
     }
     if !(follow_yields(&p.kinds, p.pos, follow0, follow1, follow2, follow3, fs, &FOLLOW_SETS, TK_EOF)) && (p.peek_kind() == TK_K_ORDER && p.peek_at(1) == TK_K_BY && _kind_set_8(p.peek_at(2))) {
@@ -11414,20 +11414,20 @@ fn _parse_insert_stmt__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW
     opt_scan: {
         let tokens = &p.kinds;
         let mut pos: i32 = p.pos;
-        pos = scan_database_name(tokens, pos, &FOLLOW_MASK_0, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+        pos = scan_database_name(tokens, pos);
         if pos < 0 { break opt_scan; }
         if pos >= tokens.len() || tokens[pos] != TK_DOT { break opt_scan; }
         pos += 1;
         opt_scan_pos = pos;
     }
     if opt_scan_pos >= 0 {
-        _parse_database_name(p, &FOLLOW_MASK_0, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+        _parse_database_name(p);
         p.expect(TK_DOT, &EMPTY_SYNC);
     }
-    _parse_table_name(p, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+    _parse_table_name(p);
     if p.peek_kind() == TK_OPEN_PAR && _kind_set_4(p.peek_at(1)) {
         p.expect(TK_OPEN_PAR, &SYNC_4);
-        _parse_column_name(p, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+        _parse_column_name(p);
         loop {
             if p.recovering { break; }
             let mut rep_scan_pos: i32 = -1;
@@ -11438,7 +11438,7 @@ fn _parse_insert_stmt__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW
                     sg_251: {
                         if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sg_251; }
                         pos += 1;
-                        pos = scan_column_name(tokens, pos, &FOLLOW_MASK_8, follow0, follow1, follow2, (fs << 1) | 2);
+                        pos = scan_column_name(tokens, pos);
                         if pos < 0 { break sg_251; }
                         break sg_251_done;
                     }
@@ -11449,7 +11449,7 @@ fn _parse_insert_stmt__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW
             }
             if rep_scan_pos < 0 { break; }
             p.expect(TK_COMMA, &SYNC_4);
-            _parse_column_name(p, &FOLLOW_MASK_8, follow0, follow1, follow2, (fs << 1) | 2);
+            _parse_column_name(p);
         }
         p.expect(TK_CLOSE_PAR, &EMPTY_SYNC);
     }
@@ -11666,17 +11666,17 @@ fn _parse_pragma_stmt__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW
     opt_scan: {
         let tokens = &p.kinds;
         let mut pos: i32 = p.pos;
-        pos = scan_database_name(tokens, pos, &FOLLOW_MASK_0, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+        pos = scan_database_name(tokens, pos);
         if pos < 0 { break opt_scan; }
         if pos >= tokens.len() || tokens[pos] != TK_DOT { break opt_scan; }
         pos += 1;
         opt_scan_pos = pos;
     }
     if opt_scan_pos >= 0 {
-        _parse_database_name(p, &FOLLOW_MASK_0, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+        _parse_database_name(p);
         p.expect(TK_DOT, &EMPTY_SYNC);
     }
-    _parse_pragma_name(p, follow0, follow1, follow2, follow3, fs);
+    _parse_pragma_name(p);
     let mut gd_winner: i32 = -1;
     let mut gd_best: i32 = -1;
     if !(follow_yields(&p.kinds, p.pos, follow0, follow1, follow2, follow3, fs, &FOLLOW_SETS, TK_EOF)) {
@@ -11743,7 +11743,7 @@ fn _parse_reindex_stmt__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLO
                 gd_scan: {
                     let tokens = &p.kinds;
                     let mut pos: i32 = p.pos;
-                    pos = scan_collation_name(tokens, pos, follow0, follow1, follow2, follow3, fs);
+                    pos = scan_collation_name(tokens, pos);
                     if pos < 0 { break gd_scan; }
                     gd_end = pos;
                 }
@@ -11762,7 +11762,7 @@ fn _parse_reindex_stmt__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLO
                         let sp = pos;
                         sg_259_done: {
                             sg_259: {
-                                pos = scan_database_name(tokens, pos, &FOLLOW_MASK_17, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+                                pos = scan_database_name(tokens, pos);
                                 if pos < 0 { break sg_259; }
                                 if pos >= tokens.len() || tokens[pos] != TK_DOT { break sg_259; }
                                 pos += 1;
@@ -11778,13 +11778,13 @@ fn _parse_reindex_stmt__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLO
                     if _kind_set_4(sgk_260) {
                         pos = gp_260;
                         sg_260_0: {
-                            pos = scan_table_name(tokens, pos, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+                            pos = scan_table_name(tokens, pos);
                             if pos < 0 { break sg_260_0; }
                             if pos > sg_260_best { sg_260_best = pos; }
                         }
                         pos = gp_260;
                         sg_260_1: {
-                            pos = scan_index_name(tokens, pos, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+                            pos = scan_index_name(tokens, pos);
                             if pos < 0 { break sg_260_1; }
                             if pos > sg_260_best { sg_260_best = pos; }
                         }
@@ -11805,20 +11805,20 @@ fn _parse_reindex_stmt__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLO
     }
     if gd_best >= 0 {
         if gd_winner == 0 {
-            _parse_collation_name(p, follow0, follow1, follow2, follow3, fs);
+            _parse_collation_name(p);
         } else {
             let mut opt_scan_pos: i32 = -1;
             opt_scan: {
                 let tokens = &p.kinds;
                 let mut pos: i32 = p.pos;
-                pos = scan_database_name(tokens, pos, &FOLLOW_MASK_17, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+                pos = scan_database_name(tokens, pos);
                 if pos < 0 { break opt_scan; }
                 if pos >= tokens.len() || tokens[pos] != TK_DOT { break opt_scan; }
                 pos += 1;
                 opt_scan_pos = pos;
             }
             if opt_scan_pos >= 0 {
-                _parse_database_name(p, &FOLLOW_MASK_17, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+                _parse_database_name(p);
                 p.expect(TK_DOT, &EMPTY_SYNC);
             }
             let grp_kind = p.peek_kind();
@@ -11830,7 +11830,7 @@ fn _parse_reindex_stmt__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLO
                     gd_scan: {
                         let tokens = &p.kinds;
                         let mut pos: i32 = p.pos;
-                        pos = scan_table_name(tokens, pos, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+                        pos = scan_table_name(tokens, pos);
                         if pos < 0 { break gd_scan; }
                         gd_end = pos;
                     }
@@ -11845,7 +11845,7 @@ fn _parse_reindex_stmt__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLO
                     gd_scan_2: {
                         let tokens = &p.kinds;
                         let mut pos: i32 = p.pos;
-                        pos = scan_index_name(tokens, pos, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+                        pos = scan_index_name(tokens, pos);
                         if pos < 0 { break gd_scan_2; }
                         gd_end_2 = pos;
                     }
@@ -11855,9 +11855,9 @@ fn _parse_reindex_stmt__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLO
                     }
                 }
                 if gd_winner == 0 {
-                    _parse_table_name(p, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+                    _parse_table_name(p);
                 } else {
-                    _parse_index_name(p, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+                    _parse_index_name(p);
                 }
             } else {
                 p.no_viable("no viable alternative", p.peek_span(), &SYNC_4);
@@ -11883,7 +11883,7 @@ fn _parse_release_stmt__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLO
     if p.peek_kind() == TK_K_SAVEPOINT {
         p.expect(TK_K_SAVEPOINT, &EMPTY_SYNC);
     }
-    _parse_savepoint_name(p, follow0, follow1, follow2, follow3, fs);
+    _parse_savepoint_name(p);
     return;
 }
 
@@ -11903,7 +11903,7 @@ fn _parse_rollback_stmt__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLL
     if !(follow_yields(&p.kinds, p.pos, follow0, follow1, follow2, follow3, fs, &FOLLOW_SETS, TK_EOF)) && (p.peek_kind() == TK_K_TRANSACTION) {
         p.expect(TK_K_TRANSACTION, &SYNC_4);
         if !(follow_yields(&p.kinds, p.pos, follow0, follow1, follow2, follow3, fs, &FOLLOW_SETS, TK_EOF)) && (_kind_set_4(p.peek_kind())) {
-            _parse_transaction_name(p, follow0, follow1, follow2, follow3, fs);
+            _parse_transaction_name(p);
         }
     }
     if !(follow_yields(&p.kinds, p.pos, follow0, follow1, follow2, follow3, fs, &FOLLOW_SETS, TK_EOF)) && (p.peek_kind() == TK_K_TO) {
@@ -11911,7 +11911,7 @@ fn _parse_rollback_stmt__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLL
         if p.peek_kind() == TK_K_SAVEPOINT {
             p.expect(TK_K_SAVEPOINT, &EMPTY_SYNC);
         }
-        _parse_savepoint_name(p, follow0, follow1, follow2, follow3, fs);
+        _parse_savepoint_name(p);
     }
     return;
 }
@@ -11927,17 +11927,17 @@ fn _parse_rollback_stmt(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, fol
     }
 }
 
-fn _parse_savepoint_stmt__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> () {
+fn _parse_savepoint_stmt__inner(p: &mut Parser) -> () {
     p.expect(TK_K_SAVEPOINT, &SYNC_4);
-    _parse_savepoint_name(p, follow0, follow1, follow2, follow3, fs);
+    _parse_savepoint_name(p);
     return;
 }
 
-fn _parse_savepoint_stmt(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> () {
+fn _parse_savepoint_stmt(p: &mut Parser) -> () {
     if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_SAVEPOINT_STMT, _start);
-    _parse_savepoint_stmt__inner(p, follow0, follow1, follow2, follow3, fs);
+    _parse_savepoint_stmt__inner(p);
     p.b.finish_node(p.last_end());
     if p.recovering {
         p.push_rule_stack("savepoint_stmt");
@@ -12045,7 +12045,7 @@ fn _parse_select_stmt__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW
             let mut pos: i32 = p.pos;
             sg_263_done: {
                 sg_263: {
-                    pos = scan_compound_operator(tokens, pos, &FOLLOW_MASK_3, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+                    pos = scan_compound_operator(tokens, pos);
                     if pos < 0 { break sg_263; }
                     pos = scan_select_or_values(tokens, pos, follow0, follow1, follow2, follow3, fs);
                     if pos < 0 { break sg_263; }
@@ -12057,7 +12057,7 @@ fn _parse_select_stmt__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        _parse_compound_operator(p, &FOLLOW_MASK_3, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+        _parse_compound_operator(p);
         _parse_select_or_values(p, follow0, follow1, follow2, follow3, fs);
     }
     if !(follow_yields(&p.kinds, p.pos, follow0, follow1, follow2, follow3, fs, &FOLLOW_SETS, TK_EOF)) && (p.peek_kind() == TK_K_ORDER && p.peek_at(1) == TK_K_BY && _kind_set_8(p.peek_at(2))) {
@@ -12527,7 +12527,7 @@ fn _parse_update_stmt__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW
     }
     _parse_qualified_table_name(p, &FOLLOW_MASK_20, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
     p.expect(TK_K_SET, &SYNC_4);
-    _parse_column_name(p, &FOLLOW_MASK_21, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+    _parse_column_name(p);
     p.expect(TK_ASSIGN, &SYNC_7);
     _parse_expr(p, &FOLLOW_MASK_8, follow0, follow1, follow2, (fs << 1) | 2);
     loop {
@@ -12541,7 +12541,7 @@ fn _parse_update_stmt__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW
                 sg_274: {
                     if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sg_274; }
                     pos += 1;
-                    pos = scan_column_name(tokens, pos, &FOLLOW_MASK_21, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+                    pos = scan_column_name(tokens, pos);
                     if pos < 0 { break sg_274; }
                     if pos >= tokens.len() || tokens[pos] != TK_ASSIGN { break sg_274; }
                     pos += 1;
@@ -12556,7 +12556,7 @@ fn _parse_update_stmt__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW
         }
         if rep_scan_pos < 0 { break; }
         p.expect(TK_COMMA, &SYNC_4);
-        _parse_column_name(p, &FOLLOW_MASK_21, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+        _parse_column_name(p);
         p.expect(TK_ASSIGN, &SYNC_7);
         _parse_expr(p, &FOLLOW_MASK_8, follow0, follow1, follow2, (fs << 1) | 2);
     }
@@ -12692,7 +12692,7 @@ fn _parse_update_stmt_limited__inner(p: &mut Parser, follow0: &List<i32> = &EMPT
     }
     _parse_qualified_table_name(p, &FOLLOW_MASK_20, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
     p.expect(TK_K_SET, &SYNC_4);
-    _parse_column_name(p, &FOLLOW_MASK_21, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+    _parse_column_name(p);
     p.expect(TK_ASSIGN, &SYNC_7);
     _parse_expr(p, &FOLLOW_MASK_8, follow0, follow1, follow2, (fs << 1) | 2);
     loop {
@@ -12706,7 +12706,7 @@ fn _parse_update_stmt_limited__inner(p: &mut Parser, follow0: &List<i32> = &EMPT
                 sg_275: {
                     if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sg_275; }
                     pos += 1;
-                    pos = scan_column_name(tokens, pos, &FOLLOW_MASK_21, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+                    pos = scan_column_name(tokens, pos);
                     if pos < 0 { break sg_275; }
                     if pos >= tokens.len() || tokens[pos] != TK_ASSIGN { break sg_275; }
                     pos += 1;
@@ -12721,7 +12721,7 @@ fn _parse_update_stmt_limited__inner(p: &mut Parser, follow0: &List<i32> = &EMPT
         }
         if rep_scan_pos < 0 { break; }
         p.expect(TK_COMMA, &SYNC_4);
-        _parse_column_name(p, &FOLLOW_MASK_21, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+        _parse_column_name(p);
         p.expect(TK_ASSIGN, &SYNC_7);
         _parse_expr(p, &FOLLOW_MASK_8, follow0, follow1, follow2, (fs << 1) | 2);
     }
@@ -12886,16 +12886,16 @@ fn _parse_update_stmt_limited(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLO
     }
 }
 
-fn _parse_vacuum_stmt__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> () {
+fn _parse_vacuum_stmt__inner(p: &mut Parser) -> () {
     p.expect(TK_K_VACUUM, &EMPTY_SYNC);
     return;
 }
 
-fn _parse_vacuum_stmt(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> () {
+fn _parse_vacuum_stmt(p: &mut Parser) -> () {
     if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_VACUUM_STMT, _start);
-    _parse_vacuum_stmt__inner(p, follow0, follow1, follow2, follow3, fs);
+    _parse_vacuum_stmt__inner(p);
     p.b.finish_node(p.last_end());
     if p.recovering {
         p.push_rule_stack("vacuum_stmt");
@@ -12903,7 +12903,7 @@ fn _parse_vacuum_stmt(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follo
 }
 
 fn _parse_column_def__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> () {
-    _parse_column_name(p, follow0, follow1, follow2, follow3, fs);
+    _parse_column_name(p);
     let mut opt_enter: bool = false;
     if !(follow_yields(&p.kinds, p.pos, follow0, follow1, follow2, follow3, fs, &FOLLOW_SETS, TK_EOF)) && _kind_set_4(p.peek_kind()) {
         opt_enter_scan: {
@@ -12969,7 +12969,7 @@ fn _parse_column_def(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow
 
 fn _parse_type_name__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> () {
     _first_iter: {
-        _parse_name(p, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+        _parse_name(p);
     }
     loop {
         if p.recovering { break; }
@@ -13020,7 +13020,7 @@ fn _parse_type_name__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, 
         }
         if ng_exit { break; }
         if !(_kind_set_4(p.peek_kind())) { break; }
-        _parse_name(p, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+        _parse_name(p);
     }
     let mut gd_winner: i32 = -1;
     let mut gd_best: i32 = -1;
@@ -13100,7 +13100,7 @@ fn _parse_type_name(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1
 fn _parse_column_constraint__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> () {
     if p.peek_kind() == TK_K_CONSTRAINT && _kind_set_4(p.peek_at(1)) {
         p.expect(TK_K_CONSTRAINT, &SYNC_4);
-        _parse_name(p, &FOLLOW_MASK_23, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+        _parse_name(p);
     }
     let grp_kind = p.peek_kind();
     if grp_kind == TK_K_PRIMARY {
@@ -13153,7 +13153,7 @@ fn _parse_column_constraint__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_
                 gd_scan_2: {
                     let tokens = &p.kinds;
                     let mut pos: i32 = p.pos;
-                    pos = scan_literal_value(tokens, pos, follow0, follow1, follow2, follow3, fs);
+                    pos = scan_literal_value(tokens, pos);
                     if pos < 0 { break gd_scan_2; }
                     gd_end_2 = pos;
                 }
@@ -13165,7 +13165,7 @@ fn _parse_column_constraint__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_
             if gd_winner == 0 {
                 _parse_signed_number(p, follow0, follow1, follow2, follow3, fs);
             } else {
-                _parse_literal_value(p, follow0, follow1, follow2, follow3, fs);
+                _parse_literal_value(p);
             }
         } else if grp_kind == TK_OPEN_PAR {
             p.expect(TK_OPEN_PAR, &SYNC_7);
@@ -13176,7 +13176,7 @@ fn _parse_column_constraint__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_
         }
     } else if grp_kind == TK_K_COLLATE {
         p.expect(TK_K_COLLATE, &SYNC_4);
-        _parse_collation_name(p, follow0, follow1, follow2, follow3, fs);
+        _parse_collation_name(p);
     } else if grp_kind == TK_K_REFERENCES {
         _parse_foreign_key_clause(p, follow0, follow1, follow2, follow3, fs);
     } else {
@@ -13419,31 +13419,31 @@ fn _parse_expr__inner_scan_14(tokens: &Array<i32>, pos: i32, follow0: &List<i32>
 }
 
 fn _parse_expr__inner_alt_23(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> () {
-    _parse_raise_function(p, follow0, follow1, follow2, follow3, fs);
+    _parse_raise_function(p);
     return;
 }
 
 fn _parse_expr__inner_scan_23(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> i32 {
     let mut pos = pos;
-    pos = scan_raise_function(tokens, pos, follow0, follow1, follow2, follow3, fs);
+    pos = scan_raise_function(tokens, pos);
     if pos < 0 { return -1; }
     return pos;
 }
 
 fn _parse_expr__inner_alt_0(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> () {
-    _parse_literal_value(p, follow0, follow1, follow2, follow3, fs);
+    _parse_literal_value(p);
     return;
 }
 
 fn _parse_expr__inner_scan_0(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> i32 {
     let mut pos = pos;
-    pos = scan_literal_value(tokens, pos, follow0, follow1, follow2, follow3, fs);
+    pos = scan_literal_value(tokens, pos);
     if pos < 0 { return -1; }
     return pos;
 }
 
 fn _parse_expr__inner_alt_13(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> () {
-    _parse_function_name(p, &FOLLOW_MASK_25, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+    _parse_function_name(p);
     p.expect(TK_OPEN_PAR, &SYNC_63);
     let mut gd_winner: i32 = -1;
     let mut gd_best: i32 = -1;
@@ -13524,7 +13524,7 @@ fn _parse_expr__inner_alt_13(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW
 
 fn _parse_expr__inner_scan_13(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> i32 {
     let mut pos = pos;
-    pos = scan_function_name(tokens, pos, &FOLLOW_MASK_25, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+    pos = scan_function_name(tokens, pos);
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_OPEN_PAR { return -1; }
     pos += 1;
@@ -13579,14 +13579,14 @@ fn _parse_expr__inner_scan_13(tokens: &Array<i32>, pos: i32, follow0: &List<i32>
 }
 
 fn _parse_expr__inner_alt_3(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> () {
-    _parse_unary_operator(p, &FOLLOW_MASK_24, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+    _parse_unary_operator(p);
     _parse_expr(p, follow0, follow1, follow2, follow3, fs, 15);
     return;
 }
 
 fn _parse_expr__inner_scan_3(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> i32 {
     let mut pos = pos;
-    pos = scan_unary_operator(tokens, pos, &FOLLOW_MASK_24, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+    pos = scan_unary_operator(tokens, pos);
     if pos < 0 { return -1; }
     pos = scan_expr(tokens, pos, follow0, follow1, follow2, follow3, fs, 2147483647);
     if pos < 0 { return -1; }
@@ -13598,11 +13598,11 @@ fn _parse_expr__inner_alt_2(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW,
     shape_scan: {
         let tokens = &p.kinds;
         let mut pos: i32 = p.pos;
-        pos = scan_database_name(tokens, pos, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+        pos = scan_database_name(tokens, pos);
         if pos < 0 { break shape_scan; }
         if pos >= tokens.len() || tokens[pos] != TK_DOT { break shape_scan; }
         pos += 1;
-        pos = scan_table_name(tokens, pos, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+        pos = scan_table_name(tokens, pos);
         if pos < 0 { break shape_scan; }
         if pos >= tokens.len() || tokens[pos] != TK_DOT { break shape_scan; }
         pos += 1;
@@ -13612,7 +13612,7 @@ fn _parse_expr__inner_alt_2(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW,
     shape_scan_2: {
         let tokens = &p.kinds;
         let mut pos: i32 = p.pos;
-        pos = scan_table_name(tokens, pos, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+        pos = scan_table_name(tokens, pos);
         if pos < 0 { break shape_scan_2; }
         if pos >= tokens.len() || tokens[pos] != TK_DOT { break shape_scan_2; }
         pos += 1;
@@ -13623,23 +13623,23 @@ fn _parse_expr__inner_alt_2(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW,
         opt_scan: {
             let tokens = &p.kinds;
             let mut pos: i32 = p.pos;
-            pos = scan_database_name(tokens, pos, &FOLLOW_MASK_0, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+            pos = scan_database_name(tokens, pos);
             if pos < 0 { break opt_scan; }
             if pos >= tokens.len() || tokens[pos] != TK_DOT { break opt_scan; }
             pos += 1;
             opt_scan_pos = pos;
         }
         if opt_scan_pos >= 0 {
-            _parse_database_name(p, &FOLLOW_MASK_0, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+            _parse_database_name(p);
             p.expect(TK_DOT, &EMPTY_SYNC);
         }
-        _parse_table_name(p, &FOLLOW_MASK_0, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+        _parse_table_name(p);
         p.expect(TK_DOT, &EMPTY_SYNC);
     } else if shape_scan_pos_2 >= 0 {
-        _parse_table_name(p, &FOLLOW_MASK_0, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+        _parse_table_name(p);
         p.expect(TK_DOT, &EMPTY_SYNC);
     }
-    _parse_column_name(p, follow0, follow1, follow2, follow3, fs);
+    _parse_column_name(p);
     return;
 }
 
@@ -13649,11 +13649,11 @@ fn _parse_expr__inner_scan_2(tokens: &Array<i32>, pos: i32, follow0: &List<i32> 
         if pos < tokens.len() && _kind_set_4(tokens[pos]) {
             let sol_295_save = pos;
             sol_295: {
-                pos = scan_database_name(tokens, pos, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+                pos = scan_database_name(tokens, pos);
                 if pos < 0 { break sol_295; }
                 if pos >= tokens.len() || tokens[pos] != TK_DOT { break sol_295; }
                 pos += 1;
-                pos = scan_table_name(tokens, pos, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+                pos = scan_table_name(tokens, pos);
                 if pos < 0 { break sol_295; }
                 if pos >= tokens.len() || tokens[pos] != TK_DOT { break sol_295; }
                 pos += 1;
@@ -13664,7 +13664,7 @@ fn _parse_expr__inner_scan_2(tokens: &Array<i32>, pos: i32, follow0: &List<i32> 
         if pos < tokens.len() && _kind_set_4(tokens[pos]) {
             let sol_296_save = pos;
             sol_296: {
-                pos = scan_table_name(tokens, pos, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+                pos = scan_table_name(tokens, pos);
                 if pos < 0 { break sol_296; }
                 if pos >= tokens.len() || tokens[pos] != TK_DOT { break sol_296; }
                 pos += 1;
@@ -13673,7 +13673,7 @@ fn _parse_expr__inner_scan_2(tokens: &Array<i32>, pos: i32, follow0: &List<i32> 
             pos = sol_296_save;
         }
     }
-    pos = scan_column_name(tokens, pos, follow0, follow1, follow2, follow3, fs);
+    pos = scan_column_name(tokens, pos);
     if pos < 0 { return -1; }
     return pos;
 }
@@ -14084,7 +14084,7 @@ fn _parse_expr__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follo
                                 let sp = pos;
                                 sg_299_done: {
                                     sg_299: {
-                                        pos = scan_database_name(tokens, pos, &FOLLOW_MASK_0, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+                                        pos = scan_database_name(tokens, pos);
                                         if pos < 0 { break sg_299; }
                                         if pos >= tokens.len() || tokens[pos] != TK_DOT { break sg_299; }
                                         pos += 1;
@@ -14094,7 +14094,7 @@ fn _parse_expr__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follo
                                 }
                                 if pos < 0 { pos = sp; }
                             }
-                            pos = scan_table_name(tokens, pos, follow0, follow1, follow2, follow3, fs);
+                            pos = scan_table_name(tokens, pos);
                             if pos < 0 { break gd_scan_2; }
                             gd_end_2 = pos;
                         }
@@ -14170,7 +14170,7 @@ fn _parse_expr__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follo
                             let mut pos: i32 = p.pos;
                             sg_301_done: {
                                 sg_301: {
-                                    pos = scan_database_name(tokens, pos, &FOLLOW_MASK_0, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+                                    pos = scan_database_name(tokens, pos);
                                     if pos < 0 { break sg_301; }
                                     if pos >= tokens.len() || tokens[pos] != TK_DOT { break sg_301; }
                                     pos += 1;
@@ -14181,10 +14181,10 @@ fn _parse_expr__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follo
                             opt_scan_pos = pos;
                         }
                         if opt_scan_pos >= 0 {
-                            _parse_database_name(p, &FOLLOW_MASK_0, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+                            _parse_database_name(p);
                             p.expect(TK_DOT, &EMPTY_SYNC);
                         }
-                        _parse_table_name(p, follow0, follow1, follow2, follow3, fs);
+                        _parse_table_name(p);
                     }
                     p.b.finish_node(p.last_end());
                 } else {
@@ -14405,7 +14405,7 @@ fn _parse_expr__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follo
                                     let sp = pos;
                                     sg_304_done: {
                                         sg_304: {
-                                            pos = scan_database_name(tokens, pos, &FOLLOW_MASK_0, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+                                            pos = scan_database_name(tokens, pos);
                                             if pos < 0 { break sg_304; }
                                             if pos >= tokens.len() || tokens[pos] != TK_DOT { break sg_304; }
                                             pos += 1;
@@ -14415,7 +14415,7 @@ fn _parse_expr__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follo
                                     }
                                     if pos < 0 { pos = sp; }
                                 }
-                                pos = scan_table_name(tokens, pos, follow0, follow1, follow2, follow3, fs);
+                                pos = scan_table_name(tokens, pos);
                                 if pos < 0 { break gd_scan_6; }
                                 gd_end_6 = pos;
                             }
@@ -14491,7 +14491,7 @@ fn _parse_expr__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follo
                                 let mut pos: i32 = p.pos;
                                 sg_306_done: {
                                     sg_306: {
-                                        pos = scan_database_name(tokens, pos, &FOLLOW_MASK_0, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+                                        pos = scan_database_name(tokens, pos);
                                         if pos < 0 { break sg_306; }
                                         if pos >= tokens.len() || tokens[pos] != TK_DOT { break sg_306; }
                                         pos += 1;
@@ -14502,10 +14502,10 @@ fn _parse_expr__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follo
                                 opt_scan_pos_2 = pos;
                             }
                             if opt_scan_pos_2 >= 0 {
-                                _parse_database_name(p, &FOLLOW_MASK_0, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+                                _parse_database_name(p);
                                 p.expect(TK_DOT, &EMPTY_SYNC);
                             }
-                            _parse_table_name(p, follow0, follow1, follow2, follow3, fs);
+                            _parse_table_name(p);
                         }
                         p.b.finish_node(p.last_end());
                     } else {
@@ -14601,7 +14601,7 @@ fn _parse_expr__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follo
                 if !(lr_cont.is_empty() || follow_yields(&p.kinds, _lr_end, lr_cont, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0, &FOLLOW_SETS, TK_EOF)) { break; }
                 p.b.start_node_at(_cp, RK_EXPR, _start);
                 p.expect(TK_K_COLLATE, &EMPTY_SYNC);
-                _parse_collation_name(p, follow0, follow1, follow2, follow3, fs);
+                _parse_collation_name(p);
                 p.b.finish_node(p.last_end());
             } else {
                 break;
@@ -14638,10 +14638,10 @@ fn _parse_expr(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &Li
 
 fn _parse_foreign_key_clause__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> () {
     p.expect(TK_K_REFERENCES, &SYNC_4);
-    _parse_foreign_table(p, follow0, follow1, follow2, follow3, fs);
+    _parse_foreign_table(p);
     if !(follow_yields(&p.kinds, p.pos, follow0, follow1, follow2, follow3, fs, &FOLLOW_SETS, TK_EOF)) && (p.peek_kind() == TK_OPEN_PAR && _kind_set_4(p.peek_at(1))) {
         p.expect(TK_OPEN_PAR, &SYNC_4);
-        _parse_column_name(p, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+        _parse_column_name(p);
         loop {
             if p.recovering { break; }
             let mut rep_scan_pos: i32 = -1;
@@ -14652,7 +14652,7 @@ fn _parse_foreign_key_clause__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY
                     sg_307: {
                         if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sg_307; }
                         pos += 1;
-                        pos = scan_column_name(tokens, pos, &FOLLOW_MASK_8, follow0, follow1, follow2, (fs << 1) | 2);
+                        pos = scan_column_name(tokens, pos);
                         if pos < 0 { break sg_307; }
                         break sg_307_done;
                     }
@@ -14663,7 +14663,7 @@ fn _parse_foreign_key_clause__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY
             }
             if rep_scan_pos < 0 { break; }
             p.expect(TK_COMMA, &SYNC_4);
-            _parse_column_name(p, &FOLLOW_MASK_8, follow0, follow1, follow2, (fs << 1) | 2);
+            _parse_column_name(p);
         }
         p.expect(TK_CLOSE_PAR, &EMPTY_SYNC);
     }
@@ -14761,7 +14761,7 @@ fn _parse_foreign_key_clause__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY
                 sg_308_1: {
                     if pos >= tokens.len() || tokens[pos] != TK_K_MATCH { break sg_308_1; }
                     pos += 1;
-                    pos = scan_name(tokens, pos, follow0, follow1, follow2, follow3, fs);
+                    pos = scan_name(tokens, pos);
                     if pos < 0 { break sg_308_1; }
                     if pos > sg_308_best { sg_308_best = pos; }
                 }
@@ -14835,7 +14835,7 @@ fn _parse_foreign_key_clause__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY
             }
         } else if grp_kind == TK_K_MATCH {
             p.expect(TK_K_MATCH, &SYNC_4);
-            _parse_name(p, follow0, follow1, follow2, follow3, fs);
+            _parse_name(p);
         } else {
             p.no_viable("no viable alternative", p.peek_span(), &SYNC_76);
         }
@@ -15055,7 +15055,7 @@ fn _parse_foreign_key_clause(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW
     }
 }
 
-fn _parse_raise_function__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> () {
+fn _parse_raise_function__inner(p: &mut Parser) -> () {
     p.expect(TK_K_RAISE, &SYNC_45);
     p.expect(TK_OPEN_PAR, &SYNC_79);
     let grp_kind = p.peek_kind();
@@ -15064,7 +15064,7 @@ fn _parse_raise_function__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOL
     } else if _kind_set_25(grp_kind) {
         p.expect_set(&SYNC_80);
         p.expect(TK_COMMA, &SYNC_81);
-        _parse_error_message(p, &FOLLOW_MASK_16, follow0, follow1, follow2, fs << 1);
+        _parse_error_message(p);
     } else {
         p.no_viable("no viable alternative", p.peek_span(), &SYNC_79);
     }
@@ -15072,11 +15072,11 @@ fn _parse_raise_function__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOL
     return;
 }
 
-fn _parse_raise_function(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> () {
+fn _parse_raise_function(p: &mut Parser) -> () {
     if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_RAISE_FUNCTION, _start);
-    _parse_raise_function__inner(p, follow0, follow1, follow2, follow3, fs);
+    _parse_raise_function__inner(p);
     p.b.finish_node(p.last_end());
     if p.recovering {
         p.push_rule_stack("raise_function");
@@ -15084,10 +15084,10 @@ fn _parse_raise_function(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, fo
 }
 
 fn _parse_indexed_column__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> () {
-    _parse_column_name(p, follow0, follow1, follow2, follow3, fs);
+    _parse_column_name(p);
     if !(follow_yields(&p.kinds, p.pos, follow0, follow1, follow2, follow3, fs, &FOLLOW_SETS, TK_EOF)) && (p.peek_kind() == TK_K_COLLATE && _kind_set_4(p.peek_at(1))) {
         p.expect(TK_K_COLLATE, &SYNC_4);
-        _parse_collation_name(p, follow0, follow1, follow2, follow3, fs);
+        _parse_collation_name(p);
     }
     if !(follow_yields(&p.kinds, p.pos, follow0, follow1, follow2, follow3, fs, &FOLLOW_SETS, TK_EOF)) && (_kind_set_18(p.peek_kind())) {
         p.expect_set(&SYNC_57);
@@ -15109,7 +15109,7 @@ fn _parse_indexed_column(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, fo
 fn _parse_table_constraint__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> () {
     if p.peek_kind() == TK_K_CONSTRAINT && _kind_set_4(p.peek_at(1)) {
         p.expect(TK_K_CONSTRAINT, &SYNC_4);
-        _parse_name(p, &FOLLOW_MASK_31, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+        _parse_name(p);
     }
     let grp_kind = p.peek_kind();
     if _kind_set_26(grp_kind) {
@@ -15158,7 +15158,7 @@ fn _parse_table_constraint__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_F
         p.expect(TK_K_FOREIGN, &SYNC_55);
         p.expect(TK_K_KEY, &SYNC_45);
         p.expect(TK_OPEN_PAR, &SYNC_4);
-        _parse_column_name(p, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+        _parse_column_name(p);
         loop {
             if p.recovering { break; }
             let mut rep_scan_pos: i32 = -1;
@@ -15169,7 +15169,7 @@ fn _parse_table_constraint__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_F
                     sg_314: {
                         if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sg_314; }
                         pos += 1;
-                        pos = scan_column_name(tokens, pos, &FOLLOW_MASK_8, follow0, follow1, follow2, (fs << 1) | 2);
+                        pos = scan_column_name(tokens, pos);
                         if pos < 0 { break sg_314; }
                         break sg_314_done;
                     }
@@ -15180,7 +15180,7 @@ fn _parse_table_constraint__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_F
             }
             if rep_scan_pos < 0 { break; }
             p.expect(TK_COMMA, &SYNC_4);
-            _parse_column_name(p, &FOLLOW_MASK_8, follow0, follow1, follow2, (fs << 1) | 2);
+            _parse_column_name(p);
         }
         p.expect(TK_CLOSE_PAR, &SYNC_83);
         _parse_foreign_key_clause(p, follow0, follow1, follow2, follow3, fs);
@@ -15250,17 +15250,17 @@ fn _parse_qualified_table_name__inner(p: &mut Parser, follow0: &List<i32> = &EMP
     opt_scan: {
         let tokens = &p.kinds;
         let mut pos: i32 = p.pos;
-        pos = scan_database_name(tokens, pos, &FOLLOW_MASK_0, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+        pos = scan_database_name(tokens, pos);
         if pos < 0 { break opt_scan; }
         if pos >= tokens.len() || tokens[pos] != TK_DOT { break opt_scan; }
         pos += 1;
         opt_scan_pos = pos;
     }
     if opt_scan_pos >= 0 {
-        _parse_database_name(p, &FOLLOW_MASK_0, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+        _parse_database_name(p);
         p.expect(TK_DOT, &EMPTY_SYNC);
     }
-    _parse_table_name(p, follow0, follow1, follow2, follow3, fs);
+    _parse_table_name(p);
     let mut gd_winner: i32 = -1;
     let mut gd_best: i32 = -1;
     if !(follow_yields(&p.kinds, p.pos, follow0, follow1, follow2, follow3, fs, &FOLLOW_SETS, TK_EOF)) {
@@ -15274,7 +15274,7 @@ fn _parse_qualified_table_name__inner(p: &mut Parser, follow0: &List<i32> = &EMP
                 pos += 1;
                 if pos >= tokens.len() || tokens[pos] != TK_K_BY { break gd_scan; }
                 pos += 1;
-                pos = scan_index_name(tokens, pos, follow0, follow1, follow2, follow3, fs);
+                pos = scan_index_name(tokens, pos);
                 if pos < 0 { break gd_scan; }
                 gd_best = pos;
             }
@@ -15295,7 +15295,7 @@ fn _parse_qualified_table_name__inner(p: &mut Parser, follow0: &List<i32> = &EMP
         if gd_winner == 0 {
             p.expect(TK_K_INDEXED, &SYNC_13);
             p.expect(TK_K_BY, &SYNC_4);
-            _parse_index_name(p, follow0, follow1, follow2, follow3, fs);
+            _parse_index_name(p);
         } else {
             p.expect(TK_K_NOT, &SYNC_85);
             p.expect(TK_K_INDEXED, &EMPTY_SYNC);
@@ -15319,7 +15319,7 @@ fn _parse_ordering_term__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLL
     _parse_expr(p, follow0, follow1, follow2, follow3, fs);
     if !(follow_yields(&p.kinds, p.pos, follow0, follow1, follow2, follow3, fs, &FOLLOW_SETS, TK_EOF)) && (p.peek_kind() == TK_K_COLLATE && _kind_set_4(p.peek_at(1))) {
         p.expect(TK_K_COLLATE, &SYNC_4);
-        _parse_collation_name(p, follow0, follow1, follow2, follow3, fs);
+        _parse_collation_name(p);
     }
     if !(follow_yields(&p.kinds, p.pos, follow0, follow1, follow2, follow3, fs, &FOLLOW_SETS, TK_EOF)) && (_kind_set_18(p.peek_kind())) {
         p.expect_set(&SYNC_57);
@@ -15339,13 +15339,13 @@ fn _parse_ordering_term(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, fol
 }
 
 fn _parse_pragma_value__inner_alt_1(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> () {
-    _parse_name(p, follow0, follow1, follow2, follow3, fs);
+    _parse_name(p);
     return;
 }
 
 fn _parse_pragma_value__inner_scan_1(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> i32 {
     let mut pos = pos;
-    pos = scan_name(tokens, pos, follow0, follow1, follow2, follow3, fs);
+    pos = scan_name(tokens, pos);
     if pos < 0 { return -1; }
     return pos;
 }
@@ -15412,10 +15412,10 @@ fn _parse_pragma_value(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, foll
 }
 
 fn _parse_common_table_expression__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> () {
-    _parse_table_name(p, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+    _parse_table_name(p);
     if p.peek_kind() == TK_OPEN_PAR && _kind_set_4(p.peek_at(1)) {
         p.expect(TK_OPEN_PAR, &SYNC_4);
-        _parse_column_name(p, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+        _parse_column_name(p);
         loop {
             if p.recovering { break; }
             let mut rep_scan_pos: i32 = -1;
@@ -15426,7 +15426,7 @@ fn _parse_common_table_expression__inner(p: &mut Parser, follow0: &List<i32> = &
                     sg_316: {
                         if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sg_316; }
                         pos += 1;
-                        pos = scan_column_name(tokens, pos, &FOLLOW_MASK_8, follow0, follow1, follow2, (fs << 1) | 2);
+                        pos = scan_column_name(tokens, pos);
                         if pos < 0 { break sg_316; }
                         break sg_316_done;
                     }
@@ -15437,7 +15437,7 @@ fn _parse_common_table_expression__inner(p: &mut Parser, follow0: &List<i32> = &
             }
             if rep_scan_pos < 0 { break; }
             p.expect(TK_COMMA, &SYNC_4);
-            _parse_column_name(p, &FOLLOW_MASK_8, follow0, follow1, follow2, (fs << 1) | 2);
+            _parse_column_name(p);
         }
         p.expect(TK_CLOSE_PAR, &EMPTY_SYNC);
     }
@@ -15460,7 +15460,7 @@ fn _parse_common_table_expression(p: &mut Parser, follow0: &List<i32> = &EMPTY_F
 }
 
 fn _parse_result_column__inner_alt_1(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> () {
-    _parse_table_name(p, &FOLLOW_MASK_32, follow0, follow1, follow2, fs << 1);
+    _parse_table_name(p);
     p.expect(TK_DOT, &SYNC_86);
     p.expect(TK_STAR, &EMPTY_SYNC);
     return;
@@ -15468,7 +15468,7 @@ fn _parse_result_column__inner_alt_1(p: &mut Parser, follow0: &List<i32> = &EMPT
 
 fn _parse_result_column__inner_scan_1(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> i32 {
     let mut pos = pos;
-    pos = scan_table_name(tokens, pos, &FOLLOW_MASK_32, follow0, follow1, follow2, fs << 1);
+    pos = scan_table_name(tokens, pos);
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_DOT { return -1; }
     pos += 1;
@@ -15483,9 +15483,9 @@ fn _parse_result_column__inner_alt_2(p: &mut Parser, follow0: &List<i32> = &EMPT
         if p.peek_kind() == TK_K_AS {
             p.expect(TK_K_AS, &EMPTY_SYNC);
         }
-        _parse_column_alias(p, follow0, follow1, follow2, follow3, fs);
+        _parse_column_alias(p);
     } else if !(follow_yields(&p.kinds, p.pos, follow0, follow1, follow2, follow3, fs, &FOLLOW_SETS, TK_EOF)) && (_kind_set_29(p.peek_kind())) {
-        _parse_column_alias(p, follow0, follow1, follow2, follow3, fs);
+        _parse_column_alias(p);
     }
     return;
 }
@@ -15500,7 +15500,7 @@ fn _parse_result_column__inner_scan_2(tokens: &Array<i32>, pos: i32, follow0: &L
             sol_318: {
                 if pos >= tokens.len() || tokens[pos] != TK_K_AS { break sol_318; }
                 pos += 1;
-                pos = scan_column_alias(tokens, pos, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+                pos = scan_column_alias(tokens, pos);
                 if pos < 0 { break sol_318; }
                 break osl_317_done;
             }
@@ -15510,7 +15510,7 @@ fn _parse_result_column__inner_scan_2(tokens: &Array<i32>, pos: i32, follow0: &L
         if pos < tokens.len() && _kind_set_29(tokens[pos]) {
             let sol_319_save = pos;
             sol_319: {
-                pos = scan_column_alias(tokens, pos, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+                pos = scan_column_alias(tokens, pos);
                 if pos < 0 { break sol_319; }
                 break osl_317_done;
             }
@@ -15578,9 +15578,9 @@ fn _parse_table_or_subquery__inner_alt_3(p: &mut Parser, follow0: &List<i32> = &
         if p.peek_kind() == TK_K_AS {
             p.expect(TK_K_AS, &EMPTY_SYNC);
         }
-        _parse_table_alias(p, follow0, follow1, follow2, follow3, fs);
+        _parse_table_alias(p);
     } else if !(follow_yields(&p.kinds, p.pos, follow0, follow1, follow2, follow3, fs, &FOLLOW_SETS, TK_EOF)) && (_kind_set_31(p.peek_kind())) {
-        _parse_table_alias(p, follow0, follow1, follow2, follow3, fs);
+        _parse_table_alias(p);
     }
     return;
 }
@@ -15599,7 +15599,7 @@ fn _parse_table_or_subquery__inner_scan_3(tokens: &Array<i32>, pos: i32, follow0
             sol_321: {
                 if pos >= tokens.len() || tokens[pos] != TK_K_AS { break sol_321; }
                 pos += 1;
-                pos = scan_table_alias(tokens, pos, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+                pos = scan_table_alias(tokens, pos);
                 if pos < 0 { break sol_321; }
                 break osl_320_done;
             }
@@ -15609,7 +15609,7 @@ fn _parse_table_or_subquery__inner_scan_3(tokens: &Array<i32>, pos: i32, follow0
         if pos < tokens.len() && _kind_set_31(tokens[pos]) {
             let sol_322_save = pos;
             sol_322: {
-                pos = scan_table_alias(tokens, pos, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+                pos = scan_table_alias(tokens, pos);
                 if pos < 0 { break sol_322; }
                 break osl_320_done;
             }
@@ -15756,17 +15756,17 @@ fn _parse_table_or_subquery__inner_alt_1(p: &mut Parser, follow0: &List<i32> = &
     opt_scan: {
         let tokens = &p.kinds;
         let mut pos: i32 = p.pos;
-        pos = scan_schema_name(tokens, pos, &FOLLOW_MASK_0, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+        pos = scan_schema_name(tokens, pos);
         if pos < 0 { break opt_scan; }
         if pos >= tokens.len() || tokens[pos] != TK_DOT { break opt_scan; }
         pos += 1;
         opt_scan_pos = pos;
     }
     if opt_scan_pos >= 0 {
-        _parse_schema_name(p, &FOLLOW_MASK_0, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+        _parse_schema_name(p);
         p.expect(TK_DOT, &EMPTY_SYNC);
     }
-    _parse_table_function_name(p, &FOLLOW_MASK_25, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+    _parse_table_function_name(p);
     p.expect(TK_OPEN_PAR, &SYNC_88);
     let mut opt_scan_pos_2: i32 = -1;
     opt_scan_2: {
@@ -15822,9 +15822,9 @@ fn _parse_table_or_subquery__inner_alt_1(p: &mut Parser, follow0: &List<i32> = &
         if p.peek_kind() == TK_K_AS {
             p.expect(TK_K_AS, &EMPTY_SYNC);
         }
-        _parse_table_alias(p, follow0, follow1, follow2, follow3, fs);
+        _parse_table_alias(p);
     } else if !(follow_yields(&p.kinds, p.pos, follow0, follow1, follow2, follow3, fs, &FOLLOW_SETS, TK_EOF)) && (_kind_set_31(p.peek_kind())) {
-        _parse_table_alias(p, follow0, follow1, follow2, follow3, fs);
+        _parse_table_alias(p);
     }
     return;
 }
@@ -15835,7 +15835,7 @@ fn _parse_table_or_subquery__inner_scan_1(tokens: &Array<i32>, pos: i32, follow0
         let sp = pos;
         sg_329_done: {
             sg_329: {
-                pos = scan_schema_name(tokens, pos, &FOLLOW_MASK_0, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+                pos = scan_schema_name(tokens, pos);
                 if pos < 0 { break sg_329; }
                 if pos >= tokens.len() || tokens[pos] != TK_DOT { break sg_329; }
                 pos += 1;
@@ -15845,7 +15845,7 @@ fn _parse_table_or_subquery__inner_scan_1(tokens: &Array<i32>, pos: i32, follow0
         }
         if pos < 0 { pos = sp; }
     }
-    pos = scan_table_function_name(tokens, pos, &FOLLOW_MASK_25, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+    pos = scan_table_function_name(tokens, pos);
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_OPEN_PAR { return -1; }
     pos += 1;
@@ -15884,7 +15884,7 @@ fn _parse_table_or_subquery__inner_scan_1(tokens: &Array<i32>, pos: i32, follow0
             sol_333: {
                 if pos >= tokens.len() || tokens[pos] != TK_K_AS { break sol_333; }
                 pos += 1;
-                pos = scan_table_alias(tokens, pos, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+                pos = scan_table_alias(tokens, pos);
                 if pos < 0 { break sol_333; }
                 break osl_332_done;
             }
@@ -15894,7 +15894,7 @@ fn _parse_table_or_subquery__inner_scan_1(tokens: &Array<i32>, pos: i32, follow0
         if pos < tokens.len() && _kind_set_31(tokens[pos]) {
             let sol_334_save = pos;
             sol_334: {
-                pos = scan_table_alias(tokens, pos, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+                pos = scan_table_alias(tokens, pos);
                 if pos < 0 { break sol_334; }
                 break osl_332_done;
             }
@@ -15910,24 +15910,24 @@ fn _parse_table_or_subquery__inner_alt_0(p: &mut Parser, follow0: &List<i32> = &
     opt_scan: {
         let tokens = &p.kinds;
         let mut pos: i32 = p.pos;
-        pos = scan_schema_name(tokens, pos, &FOLLOW_MASK_0, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+        pos = scan_schema_name(tokens, pos);
         if pos < 0 { break opt_scan; }
         if pos >= tokens.len() || tokens[pos] != TK_DOT { break opt_scan; }
         pos += 1;
         opt_scan_pos = pos;
     }
     if opt_scan_pos >= 0 {
-        _parse_schema_name(p, &FOLLOW_MASK_0, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+        _parse_schema_name(p);
         p.expect(TK_DOT, &EMPTY_SYNC);
     }
-    _parse_table_name(p, follow0, follow1, follow2, follow3, fs);
+    _parse_table_name(p);
     if !(follow_yields(&p.kinds, p.pos, follow0, follow1, follow2, follow3, fs, &FOLLOW_SETS, TK_EOF)) && (p.peek_kind() == TK_K_AS && _kind_set_31(p.peek_at(1))) {
         if p.peek_kind() == TK_K_AS {
             p.expect(TK_K_AS, &EMPTY_SYNC);
         }
-        _parse_table_alias(p, follow0, follow1, follow2, follow3, fs);
+        _parse_table_alias(p);
     } else if !(follow_yields(&p.kinds, p.pos, follow0, follow1, follow2, follow3, fs, &FOLLOW_SETS, TK_EOF)) && (_kind_set_31(p.peek_kind())) {
-        _parse_table_alias(p, follow0, follow1, follow2, follow3, fs);
+        _parse_table_alias(p);
     }
     let mut gd_winner: i32 = -1;
     let mut gd_best: i32 = -1;
@@ -15942,7 +15942,7 @@ fn _parse_table_or_subquery__inner_alt_0(p: &mut Parser, follow0: &List<i32> = &
                 pos += 1;
                 if pos >= tokens.len() || tokens[pos] != TK_K_BY { break gd_scan; }
                 pos += 1;
-                pos = scan_index_name(tokens, pos, follow0, follow1, follow2, follow3, fs);
+                pos = scan_index_name(tokens, pos);
                 if pos < 0 { break gd_scan; }
                 gd_best = pos;
             }
@@ -15963,7 +15963,7 @@ fn _parse_table_or_subquery__inner_alt_0(p: &mut Parser, follow0: &List<i32> = &
         if gd_winner == 0 {
             p.expect(TK_K_INDEXED, &SYNC_13);
             p.expect(TK_K_BY, &SYNC_4);
-            _parse_index_name(p, follow0, follow1, follow2, follow3, fs);
+            _parse_index_name(p);
         } else {
             p.expect(TK_K_NOT, &SYNC_85);
             p.expect(TK_K_INDEXED, &EMPTY_SYNC);
@@ -15978,7 +15978,7 @@ fn _parse_table_or_subquery__inner_scan_0(tokens: &Array<i32>, pos: i32, follow0
         let sp = pos;
         sg_335_done: {
             sg_335: {
-                pos = scan_schema_name(tokens, pos, &FOLLOW_MASK_0, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+                pos = scan_schema_name(tokens, pos);
                 if pos < 0 { break sg_335; }
                 if pos >= tokens.len() || tokens[pos] != TK_DOT { break sg_335; }
                 pos += 1;
@@ -15988,7 +15988,7 @@ fn _parse_table_or_subquery__inner_scan_0(tokens: &Array<i32>, pos: i32, follow0
         }
         if pos < 0 { pos = sp; }
     }
-    pos = scan_table_name(tokens, pos, follow0, follow1, follow2, follow3, fs);
+    pos = scan_table_name(tokens, pos);
     if pos < 0 { return -1; }
     osl_336_done: {
         if pos < tokens.len() && tokens[pos] == TK_K_AS && pos + 1 < tokens.len() && _kind_set_31(tokens[pos + 1]) {
@@ -15996,7 +15996,7 @@ fn _parse_table_or_subquery__inner_scan_0(tokens: &Array<i32>, pos: i32, follow0
             sol_337: {
                 if pos >= tokens.len() || tokens[pos] != TK_K_AS { break sol_337; }
                 pos += 1;
-                pos = scan_table_alias(tokens, pos, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+                pos = scan_table_alias(tokens, pos);
                 if pos < 0 { break sol_337; }
                 break osl_336_done;
             }
@@ -16006,7 +16006,7 @@ fn _parse_table_or_subquery__inner_scan_0(tokens: &Array<i32>, pos: i32, follow0
         if pos < tokens.len() && _kind_set_31(tokens[pos]) {
             let sol_338_save = pos;
             sol_338: {
-                pos = scan_table_alias(tokens, pos, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+                pos = scan_table_alias(tokens, pos);
                 if pos < 0 { break sol_338; }
                 break osl_336_done;
             }
@@ -16026,7 +16026,7 @@ fn _parse_table_or_subquery__inner_scan_0(tokens: &Array<i32>, pos: i32, follow0
                 pos += 1;
                 if pos >= tokens.len() || tokens[pos] != TK_K_BY { break sg_339_0; }
                 pos += 1;
-                pos = scan_index_name(tokens, pos, follow0, follow1, follow2, follow3, fs);
+                pos = scan_index_name(tokens, pos);
                 if pos < 0 { break sg_339_0; }
                 if pos > sg_339_best { sg_339_best = pos; }
             }
@@ -16274,7 +16274,7 @@ fn _parse_join_constraint__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FO
                 pos += 1;
                 if pos >= tokens.len() || tokens[pos] != TK_OPEN_PAR { break gd_scan_2; }
                 pos += 1;
-                pos = scan_column_name(tokens, pos, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+                pos = scan_column_name(tokens, pos);
                 if pos < 0 { break gd_scan_2; }
                 while pos < tokens.len() && tokens[pos] == TK_COMMA {
                     let sp = pos;
@@ -16282,7 +16282,7 @@ fn _parse_join_constraint__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FO
                         sg_341: {
                             if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sg_341; }
                             pos += 1;
-                            pos = scan_column_name(tokens, pos, &FOLLOW_MASK_8, follow0, follow1, follow2, (fs << 1) | 2);
+                            pos = scan_column_name(tokens, pos);
                             if pos < 0 { break sg_341; }
                             break sg_341_done;
                         }
@@ -16304,7 +16304,7 @@ fn _parse_join_constraint__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FO
         } else {
             p.expect(TK_K_USING, &SYNC_45);
             p.expect(TK_OPEN_PAR, &SYNC_4);
-            _parse_column_name(p, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+            _parse_column_name(p);
             loop {
                 if p.recovering { break; }
                 let mut rep_scan_pos: i32 = -1;
@@ -16315,7 +16315,7 @@ fn _parse_join_constraint__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FO
                         sg_342: {
                             if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sg_342; }
                             pos += 1;
-                            pos = scan_column_name(tokens, pos, &FOLLOW_MASK_8, follow0, follow1, follow2, (fs << 1) | 2);
+                            pos = scan_column_name(tokens, pos);
                             if pos < 0 { break sg_342; }
                             break sg_342_done;
                         }
@@ -16326,7 +16326,7 @@ fn _parse_join_constraint__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FO
                 }
                 if rep_scan_pos < 0 { break; }
                 p.expect(TK_COMMA, &SYNC_4);
-                _parse_column_name(p, &FOLLOW_MASK_8, follow0, follow1, follow2, (fs << 1) | 2);
+                _parse_column_name(p);
             }
             p.expect(TK_CLOSE_PAR, &EMPTY_SYNC);
         }
@@ -16616,13 +16616,13 @@ fn _parse_select_core(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follo
     }
 }
 
-fn _parse_compound_operator__inner_alt_1(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> () {
+fn _parse_compound_operator__inner_alt_1(p: &mut Parser) -> () {
     p.expect(TK_K_UNION, &SYNC_11);
     p.expect(TK_K_ALL, &EMPTY_SYNC);
     return;
 }
 
-fn _parse_compound_operator__inner_scan_1(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> i32 {
+fn _parse_compound_operator__inner_scan_1(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_K_UNION { return -1; }
     pos += 1;
@@ -16631,25 +16631,25 @@ fn _parse_compound_operator__inner_scan_1(tokens: &Array<i32>, pos: i32, follow0
     return pos;
 }
 
-fn _parse_compound_operator__inner_alt_0(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> () {
+fn _parse_compound_operator__inner_alt_0(p: &mut Parser) -> () {
     p.expect(TK_K_UNION, &EMPTY_SYNC);
     return;
 }
 
-fn _parse_compound_operator__inner_scan_0(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> i32 {
+fn _parse_compound_operator__inner_scan_0(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_K_UNION { return -1; }
     pos += 1;
     return pos;
 }
 
-fn _parse_compound_operator__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> () {
+fn _parse_compound_operator__inner(p: &mut Parser) -> () {
     let kind = p.peek_kind();
     if kind == TK_K_UNION {
         let _sd_tokens = &p.kinds;
         let _sd_pos = p.pos;
-        let _sd_p_1 = _parse_compound_operator__inner_scan_1(_sd_tokens, _sd_pos, follow0, follow1, follow2, follow3, fs);
-        let _sd_p_0 = _parse_compound_operator__inner_scan_0(_sd_tokens, _sd_pos, follow0, follow1, follow2, follow3, fs);
+        let _sd_p_1 = _parse_compound_operator__inner_scan_1(_sd_tokens, _sd_pos);
+        let _sd_p_0 = _parse_compound_operator__inner_scan_0(_sd_tokens, _sd_pos);
         let mut _sd_best_i: i32 = -1;
         let mut _sd_best_p: i32 = -1;
         if _sd_p_0 > _sd_best_p {
@@ -16661,9 +16661,9 @@ fn _parse_compound_operator__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_
             _sd_best_i = 1;
         }
         if _sd_best_i == 1 {
-            return _parse_compound_operator__inner_alt_1(p, follow0, follow1, follow2, follow3, fs);
+            return _parse_compound_operator__inner_alt_1(p);
         }
-        return _parse_compound_operator__inner_alt_0(p, follow0, follow1, follow2, follow3, fs);
+        return _parse_compound_operator__inner_alt_0(p);
     }
     if kind == TK_K_INTERSECT {
         p.expect(TK_K_INTERSECT, &EMPTY_SYNC);
@@ -16681,11 +16681,11 @@ fn _parse_compound_operator__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_
     return;
 }
 
-fn _parse_compound_operator(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> () {
+fn _parse_compound_operator(p: &mut Parser) -> () {
     if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_COMPOUND_OPERATOR, _start);
-    _parse_compound_operator__inner(p, follow0, follow1, follow2, follow3, fs);
+    _parse_compound_operator__inner(p);
     p.b.finish_node(p.last_end());
     if p.recovering {
         p.push_rule_stack("compound_operator");
@@ -16711,7 +16711,7 @@ fn _parse_signed_number(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, fol
     }
 }
 
-fn _parse_literal_value__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> () {
+fn _parse_literal_value__inner(p: &mut Parser) -> () {
     let kind = p.peek_kind();
     if _kind_set_54(kind) {
         let _ = p.expect(kind, &EMPTY_SYNC);
@@ -16725,18 +16725,18 @@ fn _parse_literal_value__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLL
     return;
 }
 
-fn _parse_literal_value(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> () {
+fn _parse_literal_value(p: &mut Parser) -> () {
     if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_LITERAL_VALUE, _start);
-    _parse_literal_value__inner(p, follow0, follow1, follow2, follow3, fs);
+    _parse_literal_value__inner(p);
     p.b.finish_node(p.last_end());
     if p.recovering {
         p.push_rule_stack("literal_value");
     }
 }
 
-fn _parse_unary_operator__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> () {
+fn _parse_unary_operator__inner(p: &mut Parser) -> () {
     let kind = p.peek_kind();
     if _kind_set_55(kind) {
         let _ = p.expect(kind, &EMPTY_SYNC);
@@ -16750,27 +16750,27 @@ fn _parse_unary_operator__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOL
     return;
 }
 
-fn _parse_unary_operator(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> () {
+fn _parse_unary_operator(p: &mut Parser) -> () {
     if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_UNARY_OPERATOR, _start);
-    _parse_unary_operator__inner(p, follow0, follow1, follow2, follow3, fs);
+    _parse_unary_operator__inner(p);
     p.b.finish_node(p.last_end());
     if p.recovering {
         p.push_rule_stack("unary_operator");
     }
 }
 
-fn _parse_error_message__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> () {
+fn _parse_error_message__inner(p: &mut Parser) -> () {
     p.expect(TK_STRING_LITERAL, &EMPTY_SYNC);
     return;
 }
 
-fn _parse_error_message(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> () {
+fn _parse_error_message(p: &mut Parser) -> () {
     if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_ERROR_MESSAGE, _start);
-    _parse_error_message__inner(p, follow0, follow1, follow2, follow3, fs);
+    _parse_error_message__inner(p);
     p.b.finish_node(p.last_end());
     if p.recovering {
         p.push_rule_stack("error_message");
@@ -16846,7 +16846,7 @@ fn _parse_module_argument(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, f
     }
 }
 
-fn _parse_column_alias__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> () {
+fn _parse_column_alias__inner(p: &mut Parser) -> () {
     let kind = p.peek_kind();
     if _kind_set_29(kind) {
         let _ = p.expect(kind, &EMPTY_SYNC);
@@ -16860,18 +16860,18 @@ fn _parse_column_alias__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLO
     return;
 }
 
-fn _parse_column_alias(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> () {
+fn _parse_column_alias(p: &mut Parser) -> () {
     if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_COLUMN_ALIAS, _start);
-    _parse_column_alias__inner(p, follow0, follow1, follow2, follow3, fs);
+    _parse_column_alias__inner(p);
     p.b.finish_node(p.last_end());
     if p.recovering {
         p.push_rule_stack("column_alias");
     }
 }
 
-fn _parse_keyword__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> () {
+fn _parse_keyword__inner(p: &mut Parser) -> () {
     let kind = p.peek_kind();
     if _kind_set_37(kind) {
         let _ = p.expect(kind, &EMPTY_SYNC);
@@ -16885,290 +16885,290 @@ fn _parse_keyword__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, fo
     return;
 }
 
-fn _parse_keyword(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> () {
+fn _parse_keyword(p: &mut Parser) -> () {
     if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_KEYWORD, _start);
-    _parse_keyword__inner(p, follow0, follow1, follow2, follow3, fs);
+    _parse_keyword__inner(p);
     p.b.finish_node(p.last_end());
     if p.recovering {
         p.push_rule_stack("keyword");
     }
 }
 
-fn _parse_name__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> () {
-    _parse_any_name(p, follow0, follow1, follow2, follow3, fs);
+fn _parse_name__inner(p: &mut Parser) -> () {
+    _parse_any_name(p);
     return;
 }
 
-fn _parse_name(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> () {
+fn _parse_name(p: &mut Parser) -> () {
     if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_NAME, _start);
-    _parse_name__inner(p, follow0, follow1, follow2, follow3, fs);
+    _parse_name__inner(p);
     p.b.finish_node(p.last_end());
     if p.recovering {
         p.push_rule_stack("name");
     }
 }
 
-fn _parse_function_name__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> () {
-    _parse_any_name(p, follow0, follow1, follow2, follow3, fs);
+fn _parse_function_name__inner(p: &mut Parser) -> () {
+    _parse_any_name(p);
     return;
 }
 
-fn _parse_function_name(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> () {
+fn _parse_function_name(p: &mut Parser) -> () {
     if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_FUNCTION_NAME, _start);
-    _parse_function_name__inner(p, follow0, follow1, follow2, follow3, fs);
+    _parse_function_name__inner(p);
     p.b.finish_node(p.last_end());
     if p.recovering {
         p.push_rule_stack("function_name");
     }
 }
 
-fn _parse_database_name__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> () {
-    _parse_any_name(p, follow0, follow1, follow2, follow3, fs);
+fn _parse_database_name__inner(p: &mut Parser) -> () {
+    _parse_any_name(p);
     return;
 }
 
-fn _parse_database_name(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> () {
+fn _parse_database_name(p: &mut Parser) -> () {
     if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_DATABASE_NAME, _start);
-    _parse_database_name__inner(p, follow0, follow1, follow2, follow3, fs);
+    _parse_database_name__inner(p);
     p.b.finish_node(p.last_end());
     if p.recovering {
         p.push_rule_stack("database_name");
     }
 }
 
-fn _parse_schema_name__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> () {
-    _parse_any_name(p, follow0, follow1, follow2, follow3, fs);
+fn _parse_schema_name__inner(p: &mut Parser) -> () {
+    _parse_any_name(p);
     return;
 }
 
-fn _parse_schema_name(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> () {
+fn _parse_schema_name(p: &mut Parser) -> () {
     if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_SCHEMA_NAME, _start);
-    _parse_schema_name__inner(p, follow0, follow1, follow2, follow3, fs);
+    _parse_schema_name__inner(p);
     p.b.finish_node(p.last_end());
     if p.recovering {
         p.push_rule_stack("schema_name");
     }
 }
 
-fn _parse_table_function_name__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> () {
-    _parse_any_name(p, follow0, follow1, follow2, follow3, fs);
+fn _parse_table_function_name__inner(p: &mut Parser) -> () {
+    _parse_any_name(p);
     return;
 }
 
-fn _parse_table_function_name(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> () {
+fn _parse_table_function_name(p: &mut Parser) -> () {
     if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_TABLE_FUNCTION_NAME, _start);
-    _parse_table_function_name__inner(p, follow0, follow1, follow2, follow3, fs);
+    _parse_table_function_name__inner(p);
     p.b.finish_node(p.last_end());
     if p.recovering {
         p.push_rule_stack("table_function_name");
     }
 }
 
-fn _parse_table_name__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> () {
-    _parse_any_name(p, follow0, follow1, follow2, follow3, fs);
+fn _parse_table_name__inner(p: &mut Parser) -> () {
+    _parse_any_name(p);
     return;
 }
 
-fn _parse_table_name(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> () {
+fn _parse_table_name(p: &mut Parser) -> () {
     if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_TABLE_NAME, _start);
-    _parse_table_name__inner(p, follow0, follow1, follow2, follow3, fs);
+    _parse_table_name__inner(p);
     p.b.finish_node(p.last_end());
     if p.recovering {
         p.push_rule_stack("table_name");
     }
 }
 
-fn _parse_table_or_index_name__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> () {
-    _parse_any_name(p, follow0, follow1, follow2, follow3, fs);
+fn _parse_table_or_index_name__inner(p: &mut Parser) -> () {
+    _parse_any_name(p);
     return;
 }
 
-fn _parse_table_or_index_name(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> () {
+fn _parse_table_or_index_name(p: &mut Parser) -> () {
     if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_TABLE_OR_INDEX_NAME, _start);
-    _parse_table_or_index_name__inner(p, follow0, follow1, follow2, follow3, fs);
+    _parse_table_or_index_name__inner(p);
     p.b.finish_node(p.last_end());
     if p.recovering {
         p.push_rule_stack("table_or_index_name");
     }
 }
 
-fn _parse_new_table_name__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> () {
-    _parse_any_name(p, follow0, follow1, follow2, follow3, fs);
+fn _parse_new_table_name__inner(p: &mut Parser) -> () {
+    _parse_any_name(p);
     return;
 }
 
-fn _parse_new_table_name(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> () {
+fn _parse_new_table_name(p: &mut Parser) -> () {
     if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_NEW_TABLE_NAME, _start);
-    _parse_new_table_name__inner(p, follow0, follow1, follow2, follow3, fs);
+    _parse_new_table_name__inner(p);
     p.b.finish_node(p.last_end());
     if p.recovering {
         p.push_rule_stack("new_table_name");
     }
 }
 
-fn _parse_column_name__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> () {
-    _parse_any_name(p, follow0, follow1, follow2, follow3, fs);
+fn _parse_column_name__inner(p: &mut Parser) -> () {
+    _parse_any_name(p);
     return;
 }
 
-fn _parse_column_name(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> () {
+fn _parse_column_name(p: &mut Parser) -> () {
     if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_COLUMN_NAME, _start);
-    _parse_column_name__inner(p, follow0, follow1, follow2, follow3, fs);
+    _parse_column_name__inner(p);
     p.b.finish_node(p.last_end());
     if p.recovering {
         p.push_rule_stack("column_name");
     }
 }
 
-fn _parse_collation_name__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> () {
-    _parse_any_name(p, follow0, follow1, follow2, follow3, fs);
+fn _parse_collation_name__inner(p: &mut Parser) -> () {
+    _parse_any_name(p);
     return;
 }
 
-fn _parse_collation_name(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> () {
+fn _parse_collation_name(p: &mut Parser) -> () {
     if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_COLLATION_NAME, _start);
-    _parse_collation_name__inner(p, follow0, follow1, follow2, follow3, fs);
+    _parse_collation_name__inner(p);
     p.b.finish_node(p.last_end());
     if p.recovering {
         p.push_rule_stack("collation_name");
     }
 }
 
-fn _parse_foreign_table__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> () {
-    _parse_any_name(p, follow0, follow1, follow2, follow3, fs);
+fn _parse_foreign_table__inner(p: &mut Parser) -> () {
+    _parse_any_name(p);
     return;
 }
 
-fn _parse_foreign_table(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> () {
+fn _parse_foreign_table(p: &mut Parser) -> () {
     if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_FOREIGN_TABLE, _start);
-    _parse_foreign_table__inner(p, follow0, follow1, follow2, follow3, fs);
+    _parse_foreign_table__inner(p);
     p.b.finish_node(p.last_end());
     if p.recovering {
         p.push_rule_stack("foreign_table");
     }
 }
 
-fn _parse_index_name__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> () {
-    _parse_any_name(p, follow0, follow1, follow2, follow3, fs);
+fn _parse_index_name__inner(p: &mut Parser) -> () {
+    _parse_any_name(p);
     return;
 }
 
-fn _parse_index_name(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> () {
+fn _parse_index_name(p: &mut Parser) -> () {
     if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_INDEX_NAME, _start);
-    _parse_index_name__inner(p, follow0, follow1, follow2, follow3, fs);
+    _parse_index_name__inner(p);
     p.b.finish_node(p.last_end());
     if p.recovering {
         p.push_rule_stack("index_name");
     }
 }
 
-fn _parse_trigger_name__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> () {
-    _parse_any_name(p, follow0, follow1, follow2, follow3, fs);
+fn _parse_trigger_name__inner(p: &mut Parser) -> () {
+    _parse_any_name(p);
     return;
 }
 
-fn _parse_trigger_name(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> () {
+fn _parse_trigger_name(p: &mut Parser) -> () {
     if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_TRIGGER_NAME, _start);
-    _parse_trigger_name__inner(p, follow0, follow1, follow2, follow3, fs);
+    _parse_trigger_name__inner(p);
     p.b.finish_node(p.last_end());
     if p.recovering {
         p.push_rule_stack("trigger_name");
     }
 }
 
-fn _parse_view_name__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> () {
-    _parse_any_name(p, follow0, follow1, follow2, follow3, fs);
+fn _parse_view_name__inner(p: &mut Parser) -> () {
+    _parse_any_name(p);
     return;
 }
 
-fn _parse_view_name(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> () {
+fn _parse_view_name(p: &mut Parser) -> () {
     if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_VIEW_NAME, _start);
-    _parse_view_name__inner(p, follow0, follow1, follow2, follow3, fs);
+    _parse_view_name__inner(p);
     p.b.finish_node(p.last_end());
     if p.recovering {
         p.push_rule_stack("view_name");
     }
 }
 
-fn _parse_module_name__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> () {
-    _parse_any_name(p, follow0, follow1, follow2, follow3, fs);
+fn _parse_module_name__inner(p: &mut Parser) -> () {
+    _parse_any_name(p);
     return;
 }
 
-fn _parse_module_name(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> () {
+fn _parse_module_name(p: &mut Parser) -> () {
     if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_MODULE_NAME, _start);
-    _parse_module_name__inner(p, follow0, follow1, follow2, follow3, fs);
+    _parse_module_name__inner(p);
     p.b.finish_node(p.last_end());
     if p.recovering {
         p.push_rule_stack("module_name");
     }
 }
 
-fn _parse_pragma_name__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> () {
-    _parse_any_name(p, follow0, follow1, follow2, follow3, fs);
+fn _parse_pragma_name__inner(p: &mut Parser) -> () {
+    _parse_any_name(p);
     return;
 }
 
-fn _parse_pragma_name(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> () {
+fn _parse_pragma_name(p: &mut Parser) -> () {
     if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_PRAGMA_NAME, _start);
-    _parse_pragma_name__inner(p, follow0, follow1, follow2, follow3, fs);
+    _parse_pragma_name__inner(p);
     p.b.finish_node(p.last_end());
     if p.recovering {
         p.push_rule_stack("pragma_name");
     }
 }
 
-fn _parse_savepoint_name__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> () {
-    _parse_any_name(p, follow0, follow1, follow2, follow3, fs);
+fn _parse_savepoint_name__inner(p: &mut Parser) -> () {
+    _parse_any_name(p);
     return;
 }
 
-fn _parse_savepoint_name(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> () {
+fn _parse_savepoint_name(p: &mut Parser) -> () {
     if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_SAVEPOINT_NAME, _start);
-    _parse_savepoint_name__inner(p, follow0, follow1, follow2, follow3, fs);
+    _parse_savepoint_name__inner(p);
     p.b.finish_node(p.last_end());
     if p.recovering {
         p.push_rule_stack("savepoint_name");
     }
 }
 
-fn _parse_table_alias__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> () {
+fn _parse_table_alias__inner(p: &mut Parser) -> () {
     let kind = p.peek_kind();
     if kind == TK_IDENTIFIER {
         p.expect(TK_IDENTIFIER, &EMPTY_SYNC);
@@ -17180,7 +17180,7 @@ fn _parse_table_alias__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW
     }
     if kind == TK_OPEN_PAR {
         p.expect(TK_OPEN_PAR, &SYNC_95);
-        _parse_table_alias(p, &FOLLOW_MASK_16, follow0, follow1, follow2, fs << 1);
+        _parse_table_alias(p);
         p.expect(TK_CLOSE_PAR, &EMPTY_SYNC);
         return;
     }
@@ -17192,41 +17192,41 @@ fn _parse_table_alias__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW
     return;
 }
 
-fn _parse_table_alias(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> () {
+fn _parse_table_alias(p: &mut Parser) -> () {
     if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_TABLE_ALIAS, _start);
-    _parse_table_alias__inner(p, follow0, follow1, follow2, follow3, fs);
+    _parse_table_alias__inner(p);
     p.b.finish_node(p.last_end());
     if p.recovering {
         p.push_rule_stack("table_alias");
     }
 }
 
-fn _parse_transaction_name__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> () {
-    _parse_any_name(p, follow0, follow1, follow2, follow3, fs);
+fn _parse_transaction_name__inner(p: &mut Parser) -> () {
+    _parse_any_name(p);
     return;
 }
 
-fn _parse_transaction_name(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> () {
+fn _parse_transaction_name(p: &mut Parser) -> () {
     if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_TRANSACTION_NAME, _start);
-    _parse_transaction_name__inner(p, follow0, follow1, follow2, follow3, fs);
+    _parse_transaction_name__inner(p);
     p.b.finish_node(p.last_end());
     if p.recovering {
         p.push_rule_stack("transaction_name");
     }
 }
 
-fn _parse_any_name__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> () {
+fn _parse_any_name__inner(p: &mut Parser) -> () {
     let kind = p.peek_kind();
     if kind == TK_IDENTIFIER {
         p.expect(TK_IDENTIFIER, &EMPTY_SYNC);
         return;
     }
     if _kind_set_37(kind) {
-        _parse_keyword(p, follow0, follow1, follow2, follow3, fs);
+        _parse_keyword(p);
         return;
     }
     if kind == TK_STRING_LITERAL {
@@ -17235,7 +17235,7 @@ fn _parse_any_name__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, f
     }
     if kind == TK_OPEN_PAR {
         p.expect(TK_OPEN_PAR, &SYNC_4);
-        _parse_any_name(p, &FOLLOW_MASK_16, follow0, follow1, follow2, fs << 1);
+        _parse_any_name(p);
         p.expect(TK_CLOSE_PAR, &EMPTY_SYNC);
         return;
     }
@@ -17247,11 +17247,11 @@ fn _parse_any_name__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, f
     return;
 }
 
-fn _parse_any_name(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> () {
+fn _parse_any_name(p: &mut Parser) -> () {
     if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_ANY_NAME, _start);
-    _parse_any_name__inner(p, follow0, follow1, follow2, follow3, fs);
+    _parse_any_name__inner(p);
     p.b.finish_node(p.last_end());
     if p.recovering {
         p.push_rule_stack("any_name");

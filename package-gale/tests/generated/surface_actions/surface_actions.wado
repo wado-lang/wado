@@ -1775,11 +1775,11 @@ struct ItemVals {
 fn scan_prog(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> i32 {
     let scan_start = pos;
     let mut pos = pos;
-    pos = scan_item(tokens, pos, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+    pos = scan_item(tokens, pos);
     if pos < 0 { return -1; }
     while pos < tokens.len() && _kind_set_0(tokens[pos]) && !(follow_yields(tokens, pos, follow0, follow1, follow2, follow3, fs, &FOLLOW_SETS, TK_EOF)) {
         let sp = pos;
-        pos = scan_item(tokens, pos, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+        pos = scan_item(tokens, pos);
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
@@ -1787,7 +1787,7 @@ fn scan_prog(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPTY_FOLLOW,
     return pos;
 }
 
-fn scan_item(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> i32 {
+fn scan_item(tokens: &Array<i32>, pos: i32) -> i32 {
     if pos < tokens.len() && _kind_set_0(tokens[pos]) {
         return pos + 1;
     }
@@ -1808,7 +1808,7 @@ fn _parse_prog__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follo
             rep_scan: {
                 let tokens = &p.kinds;
                 let mut pos: i32 = p.pos;
-                pos = scan_item(tokens, pos, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+                pos = scan_item(tokens, pos);
                 if pos < 0 { break rep_scan; }
                 if pos <= p.pos { break rep_scan; }
                 rep_scan_pos = pos;
@@ -1820,7 +1820,7 @@ fn _parse_prog__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follo
                     let _rec_sav = p.recovering;
                     let _rec_spec = p.speculating;
                     p.speculating = true;
-                    _parse_item(p, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+                    _parse_item(p);
                     p.speculating = _rec_spec;
                     p.recovering = _rec_sav;
                     p.pos = _rec_pos;
@@ -1830,7 +1830,7 @@ fn _parse_prog__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follo
             }
         }
         _plus_first = false;
-        let item = _parse_item(p, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+        let item = _parse_item(p);
     }
     if !p.speculating {
         p.emit(`${p.label()}\n`);
@@ -1850,7 +1850,7 @@ fn _parse_prog(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &Li
     return __vals;
 }
 
-fn _parse_item__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> ItemVals {
+fn _parse_item__inner(p: &mut Parser) -> ItemVals {
     let mut vals = ItemVals {};
     let kind = p.peek_kind();
     if kind == TK_OPEN {
@@ -1875,11 +1875,11 @@ fn _parse_item__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follo
     return vals;
 }
 
-fn _parse_item(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> ItemVals {
+fn _parse_item(p: &mut Parser) -> ItemVals {
     if p.recovering { return ItemVals {}; }
     let _start = p.peek_start();
     p.b.start_node(RK_ITEM, _start);
-    let __vals = _parse_item__inner(p, follow0, follow1, follow2, follow3, fs);
+    let __vals = _parse_item__inner(p);
     p.b.finish_node(p.last_end());
     if p.recovering {
         p.push_rule_stack("item");

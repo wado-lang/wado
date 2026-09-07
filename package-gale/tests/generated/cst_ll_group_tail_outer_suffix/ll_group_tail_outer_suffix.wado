@@ -1613,7 +1613,7 @@ fn scan_block(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPTY_FOLLOW
         }
         return -1;
     }
-    pos = scan_body(tokens, pos, follow0, follow1, follow2, follow3, fs);
+    pos = scan_body(tokens, pos);
     if pos < 0 { return -1; }
     return pos;
 }
@@ -1664,7 +1664,7 @@ fn scan_name(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPTY_FOLLOW,
     return pos;
 }
 
-fn scan_body(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> i32 {
+fn scan_body(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_ID { return -1; }
     pos += 1;
@@ -1694,7 +1694,7 @@ fn _parse_block__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, foll
         _parse_names(p, &FOLLOW_MASK_1, follow0, follow1, follow2, fs << 1);
     }
     p.expect(TK_OR, &EMPTY_SYNC);
-    _parse_body(p, follow0, follow1, follow2, follow3, fs);
+    _parse_body(p);
     return;
 }
 
@@ -1789,16 +1789,16 @@ fn _parse_name(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &Li
     }
 }
 
-fn _parse_body__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> () {
+fn _parse_body__inner(p: &mut Parser) -> () {
     p.expect(TK_ID, &EMPTY_SYNC);
     return;
 }
 
-fn _parse_body(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> () {
+fn _parse_body(p: &mut Parser) -> () {
     if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_BODY, _start);
-    _parse_body__inner(p, follow0, follow1, follow2, follow3, fs);
+    _parse_body__inner(p);
     p.b.finish_node(p.last_end());
     if p.recovering {
         p.push_rule_stack("body");

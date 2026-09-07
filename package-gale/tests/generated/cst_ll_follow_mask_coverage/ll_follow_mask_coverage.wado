@@ -1616,7 +1616,7 @@ fn scan_stmt(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPTY_FOLLOW,
             try_0: {
                 pos = scan_a(tokens, pos, &FOLLOW_MASK_1, follow0, follow1, follow2, fs << 1);
                 if pos < 0 { break try_0; }
-                pos = scan_t(tokens, pos, &FOLLOW_MASK_2, follow0, follow1, follow2, fs << 1);
+                pos = scan_t(tokens, pos);
                 if pos < 0 { break try_0; }
                 if pos >= tokens.len() || tokens[pos] != TK_LIT_SEMI { break try_0; }
                 pos += 1;
@@ -1664,7 +1664,7 @@ fn scan_a(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPTY_FOLLOW, fo
     return pos;
 }
 
-fn scan_t(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> i32 {
+fn scan_t(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_Y { return -1; }
     pos += 1;
@@ -1693,7 +1693,7 @@ fn _parse_stmt__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follo
     if kind == TK_LIT_KEEP {
         p.expect(TK_LIT_KEEP, &SYNC_0);
         _parse_a(p, &FOLLOW_MASK_1, follow0, follow1, follow2, fs << 1);
-        _parse_t(p, &FOLLOW_MASK_2, follow0, follow1, follow2, fs << 1);
+        _parse_t(p);
         p.expect(TK_LIT_SEMI, &EMPTY_SYNC);
         return;
     }
@@ -1745,16 +1745,16 @@ fn _parse_a(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<
     }
 }
 
-fn _parse_t__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> () {
+fn _parse_t__inner(p: &mut Parser) -> () {
     p.expect(TK_Y, &EMPTY_SYNC);
     return;
 }
 
-fn _parse_t(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> () {
+fn _parse_t(p: &mut Parser) -> () {
     if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_T, _start);
-    _parse_t__inner(p, follow0, follow1, follow2, follow3, fs);
+    _parse_t__inner(p);
     p.b.finish_node(p.last_end());
     if p.recovering {
         p.push_rule_stack("t");

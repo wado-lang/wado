@@ -1679,7 +1679,7 @@ struct AVals {
     _span_hi_inner: i32 = -1,
 }
 
-fn scan_start(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> i32 {
+fn scan_start(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
     while pos < tokens.len() && _kind_set_0(tokens[pos]) {
         let sp = pos;
@@ -1700,9 +1700,9 @@ fn scan_a(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPTY_FOLLOW, fo
         if alt_kind == TK_LIT_X {
             pos = start;
             try_0: {
-                pos = scan_sub(tokens, pos, &FOLLOW_MASK_0, follow0, follow1, follow2, fs << 1);
+                pos = scan_sub(tokens, pos);
                 if pos < 0 { break try_0; }
-                pos = scan_sub(tokens, pos, follow0, follow1, follow2, follow3, fs);
+                pos = scan_sub(tokens, pos);
                 if pos < 0 { break try_0; }
                 break scan_alts;
             }
@@ -1715,11 +1715,11 @@ fn scan_a(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPTY_FOLLOW, fo
             try_2: {
                 if pos >= tokens.len() || tokens[pos] != TK_LIT_G { break try_2; }
                 pos += 1;
-                pos = scan_sub(tokens, pos, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+                pos = scan_sub(tokens, pos);
                 if pos < 0 { break try_2; }
                 while pos < tokens.len() && tokens[pos] == TK_LIT_X && !(follow_yields(tokens, pos, follow0, follow1, follow2, follow3, fs, &FOLLOW_SETS, TK_EOF)) {
                     let sp = pos;
-                    pos = scan_sub(tokens, pos, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+                    pos = scan_sub(tokens, pos);
                     if pos < 0 { pos = sp; break; }
                     if pos == sp { break; }
                 }
@@ -1733,7 +1733,7 @@ fn scan_a(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPTY_FOLLOW, fo
     return pos;
 }
 
-fn scan_sub(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> i32 {
+fn scan_sub(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_LIT_X { return -1; }
     pos += 1;
@@ -1742,7 +1742,7 @@ fn scan_sub(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPTY_FOLLOW, 
     return pos;
 }
 
-fn _parse_start__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> () {
+fn _parse_start__inner(p: &mut Parser) -> () {
     loop {
         if p.recovering { break; }
         let mut rep_scan_pos: i32 = -1;
@@ -1775,11 +1775,11 @@ fn _parse_start__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, foll
     return;
 }
 
-fn _parse_start(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> () {
+fn _parse_start(p: &mut Parser) -> () {
     if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_START, _start);
-    _parse_start__inner(p, follow0, follow1, follow2, follow3, fs);
+    _parse_start__inner(p);
     p.b.finish_node(p.last_end());
     if p.recovering {
         p.push_rule_stack("start");
@@ -1791,13 +1791,13 @@ fn _parse_a__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1:
     let kind = p.peek_kind();
     if kind == TK_LIT_X {
         vals._span_lo_my_label = p.pos;
-        let my_label = _parse_sub(p, &FOLLOW_MASK_0, follow0, follow1, follow2, fs << 1);
+        let my_label = _parse_sub(p);
         vals._span_hi_my_label = p.pos - 1;
         if !p.speculating {
             p.emit(`${p.text_between(vals._span_lo_my_label, vals._span_hi_my_label)}\n`);
         }
         vals._span_lo_tail = p.pos;
-        let tail = _parse_sub(p, follow0, follow1, follow2, follow3, fs);
+        let tail = _parse_sub(p);
         vals._span_hi_tail = p.pos - 1;
         if !p.speculating {
             p.emit(`${p.text_between(vals._span_lo_tail, vals._span_hi_tail)}\n`);
@@ -1822,7 +1822,7 @@ fn _parse_a__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1:
                 rep_scan: {
                     let tokens = &p.kinds;
                     let mut pos: i32 = p.pos;
-                    pos = scan_sub(tokens, pos, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+                    pos = scan_sub(tokens, pos);
                     if pos < 0 { break rep_scan; }
                     if pos <= p.pos { break rep_scan; }
                     rep_scan_pos = pos;
@@ -1831,7 +1831,7 @@ fn _parse_a__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1:
             }
             _plus_first = false;
             vals._span_lo_inner = p.pos;
-            let inner = _parse_sub(p, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+            let inner = _parse_sub(p);
             vals._span_hi_inner = p.pos - 1;
             if !p.speculating {
                 p.emit(`${p.text_between(vals._span_lo_inner, vals._span_hi_inner)}\n`);
@@ -1859,17 +1859,17 @@ fn _parse_a(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<
     return __vals;
 }
 
-fn _parse_sub__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> () {
+fn _parse_sub__inner(p: &mut Parser) -> () {
     let lit_x = p.expect(TK_LIT_X, &SYNC_2);
     let lit_z = p.expect(TK_LIT_Z, &EMPTY_SYNC);
     return;
 }
 
-fn _parse_sub(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> () {
+fn _parse_sub(p: &mut Parser) -> () {
     if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_SUB, _start);
-    _parse_sub__inner(p, follow0, follow1, follow2, follow3, fs);
+    _parse_sub__inner(p);
     p.b.finish_node(p.last_end());
     if p.recovering {
         p.push_rule_stack("sub");

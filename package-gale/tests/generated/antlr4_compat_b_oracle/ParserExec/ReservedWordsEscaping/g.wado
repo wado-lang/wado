@@ -1730,11 +1730,11 @@ fn scan_continue_atom(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPT
         if alt_kind == TK_FOR {
             pos = start;
             try_0: {
-                pos = scan_for(tokens, pos, follow0, follow1, follow2, follow3, fs);
+                pos = scan_for(tokens, pos);
                 if pos < 0 { break try_0; }
                 if pos < tokens.len() && tokens[pos] == TK_FOR && !(follow_yields(tokens, pos, follow0, follow1, follow2, follow3, fs, &FOLLOW_SETS, TK_EOF)) {
                     let sp = pos;
-                    pos = scan_for(tokens, pos, follow0, follow1, follow2, follow3, fs);
+                    pos = scan_for(tokens, pos);
                     if pos < 0 { pos = sp; }
                 }
                 break scan_alts;
@@ -1756,7 +1756,7 @@ fn scan_continue_atom(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPT
                 if sgk_0 == TK_FOR {
                     pos = gp_0;
                     sg_0_0: {
-                        pos = scan_for(tokens, pos, follow0, follow1, follow2, follow3, fs);
+                        pos = scan_for(tokens, pos);
                         if pos < 0 { break sg_0_0; }
                         if pos > sg_0_best { sg_0_best = pos; }
                     }
@@ -1825,16 +1825,16 @@ fn scan_continue(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPTY_FOL
     return pos;
 }
 
-fn scan_args(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> i32 {
+fn scan_args(tokens: &Array<i32>, pos: i32) -> i32 {
     let scan_start = pos;
     let mut pos = pos;
-    pos = scan_for(tokens, pos, follow0, follow1, follow2, follow3, fs);
+    pos = scan_for(tokens, pos);
     if pos < 0 { return -1; }
     if pos == scan_start { return -1; }
     return pos;
 }
 
-fn scan_for(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> i32 {
+fn scan_for(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_FOR { return -1; }
     pos += 1;
@@ -1904,9 +1904,9 @@ fn _parse_continue__inner_atom(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLL
     let kind = p.peek_kind();
     if kind == TK_FOR {
         p.b.set_alt(0);
-        let for_ = _parse_for(p, follow0, follow1, follow2, follow3, fs);
+        let for_ = _parse_for(p);
         if !(follow_yields(&p.kinds, p.pos, follow0, follow1, follow2, follow3, fs, &FOLLOW_SETS, TK_EOF)) && (p.peek_kind() == TK_FOR) {
-            let for_ = _parse_for(p, follow0, follow1, follow2, follow3, fs);
+            let for_ = _parse_for(p);
         }
         if !p.speculating {
             if !(1 == 1) {
@@ -1939,7 +1939,7 @@ fn _parse_continue__inner_atom(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLL
         }
         let grp_kind = p.peek_kind();
         if grp_kind == TK_FOR {
-            let for_ = _parse_for(p, follow0, follow1, follow2, follow3, fs);
+            let for_ = _parse_for(p);
         } else if grp_kind == TK_IF {
             let if_ = p.expect(TK_IF, &EMPTY_SYNC);
         } else {
@@ -2019,18 +2019,18 @@ fn _parse_continue(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1:
     return __vals;
 }
 
-fn _parse_args__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0, else_: i32 = 0) -> ArgsVals {
+fn _parse_args__inner(p: &mut Parser, else_: i32 = 0) -> ArgsVals {
     let mut vals = ArgsVals {};
     vals.else = else_;
-    let for_ = _parse_for(p, follow0, follow1, follow2, follow3, fs);
+    let for_ = _parse_for(p);
     return vals;
 }
 
-fn _parse_args(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0, else_: i32 = 0) -> ArgsVals {
+fn _parse_args(p: &mut Parser, else_: i32 = 0) -> ArgsVals {
     if p.recovering { return ArgsVals {}; }
     let _start = p.peek_start();
     p.b.start_node(RK_ARGS, _start);
-    let __vals = _parse_args__inner(p, follow0, follow1, follow2, follow3, fs, else_);
+    let __vals = _parse_args__inner(p, else_);
     p.b.finish_node(p.last_end());
     if p.recovering {
         p.push_rule_stack("args");
@@ -2038,16 +2038,16 @@ fn _parse_args(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &Li
     return __vals;
 }
 
-fn _parse_for__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> () {
+fn _parse_for__inner(p: &mut Parser) -> () {
     let for_ = p.expect(TK_FOR, &EMPTY_SYNC);
     return;
 }
 
-fn _parse_for(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> () {
+fn _parse_for(p: &mut Parser) -> () {
     if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_FOR, _start);
-    _parse_for__inner(p, follow0, follow1, follow2, follow3, fs);
+    _parse_for__inner(p);
     p.b.finish_node(p.last_end());
     if p.recovering {
         p.push_rule_stack("for");

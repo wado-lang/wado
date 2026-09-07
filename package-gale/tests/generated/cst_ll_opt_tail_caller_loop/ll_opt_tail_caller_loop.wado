@@ -1676,14 +1676,14 @@ fn scan_seg(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPTY_FOLLOW, 
         if sgk_1 == TK_LT {
             pos = gp_1;
             sg_1_0: {
-                pos = scan_args(tokens, pos, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+                pos = scan_args(tokens, pos);
                 if pos < 0 { break sg_1_0; }
                 if pos > sg_1_best { sg_1_best = pos; }
             }
         } else if sgk_1 == TK_LPAREN {
             pos = gp_1;
             sg_1_1: {
-                pos = scan_fn_(tokens, pos, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+                pos = scan_fn_(tokens, pos);
                 if pos < 0 { break sg_1_1; }
                 if pos > sg_1_best { sg_1_best = pos; }
             }
@@ -1698,7 +1698,7 @@ fn scan_seg(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPTY_FOLLOW, 
     return pos;
 }
 
-fn scan_args(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> i32 {
+fn scan_args(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_LT { return -1; }
     pos += 1;
@@ -1709,7 +1709,7 @@ fn scan_args(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPTY_FOLLOW,
     return pos;
 }
 
-fn scan_fn_(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> i32 {
+fn scan_fn_(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_LPAREN { return -1; }
     pos += 1;
@@ -1789,7 +1789,7 @@ fn _parse_seg__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow
             gd_scan: {
                 let tokens = &p.kinds;
                 let mut pos: i32 = p.pos;
-                pos = scan_args(tokens, pos, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+                pos = scan_args(tokens, pos);
                 if pos < 0 { break gd_scan; }
                 gd_best = pos;
             }
@@ -1798,7 +1798,7 @@ fn _parse_seg__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow
             gd_scan_2: {
                 let tokens = &p.kinds;
                 let mut pos: i32 = p.pos;
-                pos = scan_fn_(tokens, pos, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+                pos = scan_fn_(tokens, pos);
                 if pos < 0 { break gd_scan_2; }
                 gd_best = pos;
             }
@@ -1806,9 +1806,9 @@ fn _parse_seg__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow
     }
     if gd_best >= 0 {
         if gd_winner == 0 {
-            _parse_args(p, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+            _parse_args(p);
         } else {
-            _parse_fn_(p, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+            _parse_fn_(p);
         }
     }
     return;
@@ -1825,35 +1825,35 @@ fn _parse_seg(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &Lis
     }
 }
 
-fn _parse_args__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> () {
+fn _parse_args__inner(p: &mut Parser) -> () {
     p.expect(TK_LT, &SYNC_0);
     p.expect(TK_ID, &SYNC_2);
     p.expect(TK_GT, &EMPTY_SYNC);
     return;
 }
 
-fn _parse_args(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> () {
+fn _parse_args(p: &mut Parser) -> () {
     if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_ARGS, _start);
-    _parse_args__inner(p, follow0, follow1, follow2, follow3, fs);
+    _parse_args__inner(p);
     p.b.finish_node(p.last_end());
     if p.recovering {
         p.push_rule_stack("args");
     }
 }
 
-fn _parse_fn___inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> () {
+fn _parse_fn___inner(p: &mut Parser) -> () {
     p.expect(TK_LPAREN, &SYNC_3);
     p.expect(TK_RPAREN, &EMPTY_SYNC);
     return;
 }
 
-fn _parse_fn_(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> () {
+fn _parse_fn_(p: &mut Parser) -> () {
     if p.recovering { return; }
     let _start = p.peek_start();
     p.b.start_node(RK_FN_, _start);
-    _parse_fn___inner(p, follow0, follow1, follow2, follow3, fs);
+    _parse_fn___inner(p);
     p.b.finish_node(p.last_end());
     if p.recovering {
         p.push_rule_stack("fn_");

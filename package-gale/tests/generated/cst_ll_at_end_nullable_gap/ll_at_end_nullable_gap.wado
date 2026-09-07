@@ -2423,7 +2423,7 @@ impl Parser {
 
 fn scan_s(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> i32 {
     let mut pos = pos;
-    pos = scan_x(tokens, pos, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+    pos = scan_x(tokens, pos);
     if pos < 0 { return -1; }
     pos = scan_nb(tokens, pos, &FOLLOW_MASK_0, follow0, follow1, follow2, fs << 1);
     if pos < 0 { return -1; }
@@ -2432,7 +2432,7 @@ fn scan_s(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPTY_FOLLOW, fo
     return pos;
 }
 
-fn scan_x(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> i32 {
+fn scan_x(tokens: &Array<i32>, pos: i32) -> i32 {
     let start = pos;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
@@ -2472,7 +2472,7 @@ fn scan_nb(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPTY_FOLLOW, f
 
 fn _parse_s__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> () {
     p.atn_ret_pending = 10;
-    _parse_x(p, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, &EMPTY_FOLLOW, 0);
+    _parse_x(p);
     p.atn_ret_pending = 12;
     _parse_nb(p, &FOLLOW_MASK_0, follow0, follow1, follow2, fs << 1);
     p.expect(TK_LIT_C, &EMPTY_SYNC);
@@ -2494,14 +2494,14 @@ fn _parse_s(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<
     }
 }
 
-fn _parse_x__inner_alt_1(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> () {
+fn _parse_x__inner_alt_1(p: &mut Parser) -> () {
     p.expect(TK_LIT_A, &SYNC_0);
     p.expect(TK_LIT_B, &SYNC_1);
     p.expect(TK_LIT_C, &EMPTY_SYNC);
     return;
 }
 
-fn _parse_x__inner_scan_1(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> i32 {
+fn _parse_x__inner_scan_1(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_LIT_A { return -1; }
     pos += 1;
@@ -2512,13 +2512,13 @@ fn _parse_x__inner_scan_1(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &
     return pos;
 }
 
-fn _parse_x__inner_alt_0(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> () {
+fn _parse_x__inner_alt_0(p: &mut Parser) -> () {
     p.expect(TK_LIT_A, &SYNC_0);
     p.expect(TK_LIT_B, &EMPTY_SYNC);
     return;
 }
 
-fn _parse_x__inner_scan_0(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> i32 {
+fn _parse_x__inner_scan_0(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_LIT_A { return -1; }
     pos += 1;
@@ -2527,14 +2527,14 @@ fn _parse_x__inner_scan_0(tokens: &Array<i32>, pos: i32, follow0: &List<i32> = &
     return pos;
 }
 
-fn _parse_x__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> () {
+fn _parse_x__inner(p: &mut Parser) -> () {
     let kind = p.peek_kind();
     if kind == TK_LIT_A {
         let _atn_alt = atn_predict_with_stack(&ATN_SIM, 0, &p.atn_stack, &p.kinds, p.pos, TK_EOF, 0);
         if _atn_alt == 1 {
-            return _parse_x__inner_alt_1(p, follow0, follow1, follow2, follow3, fs);
+            return _parse_x__inner_alt_1(p);
         }
-        return _parse_x__inner_alt_0(p, follow0, follow1, follow2, follow3, fs);
+        return _parse_x__inner_alt_0(p);
     }
     p.no_viable(
         "no alternative of x matches",
@@ -2544,14 +2544,14 @@ fn _parse_x__inner(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1:
     return;
 }
 
-fn _parse_x(p: &mut Parser, follow0: &List<i32> = &EMPTY_FOLLOW, follow1: &List<i32> = &EMPTY_FOLLOW, follow2: &List<i32> = &EMPTY_FOLLOW, follow3: &List<i32> = &EMPTY_FOLLOW, fs: i32 = 0) -> () {
+fn _parse_x(p: &mut Parser) -> () {
     if p.recovering { return; }
     let _atn_ret = p.atn_ret_pending;
     p.atn_ret_pending = -1;
     p.atn_stack.push(_atn_ret);
     let _start = p.peek_start();
     p.b.start_node(RK_X, _start);
-    _parse_x__inner(p, follow0, follow1, follow2, follow3, fs);
+    _parse_x__inner(p);
     p.b.finish_node(p.last_end());
     p.atn_stack.pop();
     if p.recovering {

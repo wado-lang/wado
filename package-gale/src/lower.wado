@@ -205,6 +205,30 @@ fn elements_from(elements: &List<Element>, start: i32) -> List<Element> {
 ///   - empty local prefix with a caller loop past it → `AltMask(id)`: another
 ///     iteration or what follows the loop, whichever the input matches.
 fn compute_follow_arg(ctx: &mut GenContext, elements: &List<Element>, i: i32) -> FollowArg {
+    let arg = follow_arg_for(ctx, elements, i);
+    // `Forward`, `Combined` and `AltMask` all spell the caller's own slots into
+    // the call — but only where the callee declares them, so this is an edge in
+    // the fixpoint `lower` closes, not a verdict.
+    if !arg matches { NoFollow | Mask(_) } {
+        if let Some(target) = rule_ref_snake(&elements[i]) {
+            ctx.mark_rule_forwards_follow(&target);
+        }
+    }
+    return arg;
+}
+
+/// The callee a position names, through the `Label` and greedy-`?` wrappers
+/// `element_consumes_follow_arg` looks through.
+fn rule_ref_snake(elem: &Element) -> Option<String> {
+    return match elem {
+        RuleRef(r) => Option::Some(r.snake_name),
+        Label(lab) => rule_ref_snake(&lab.element),
+        Repeat(rep) => rule_ref_snake(&rep.element),
+        TokenRef(_) | Literal(_) | Group(_) | Wildcard(_) | Not(_) => null,
+    };
+}
+
+fn follow_arg_for(ctx: &mut GenContext, elements: &List<Element>, i: i32) -> FollowArg {
     if !element_consumes_follow_arg(&elements[i]) {
         return FollowArg::NoFollow;
     }
@@ -452,6 +476,7 @@ pub fn lower(grammar: &Grammar, lit_tokens: &List<LitToken>, ctx: &mut GenContex
     // helper-function emission; emit consults it in lockstep with
     // the dispatch / op walk it does anyway.
     let kind_sets = intern_kind_sets(&parser_rules, ctx);
+    ctx.set_follow_rule_snakes(&follow_rule_snakes(grammar, ctx));
     return LoweredGrammar {
         name: grammar.name,
         source_files: grammar.source_files,
@@ -465,6 +490,47 @@ pub fn lower(grammar: &Grammar, lit_tokens: &List<LitToken>, ctx: &mut GenContex
         kind_sets,
         diagnostics: ctx.copy_diagnostics(),
     };
+}
+
+/// Which rules carry the FOLLOW slots, by snake name. The rules that gate or
+/// probe on the continuation seed it; a rule that hands its continuation to one
+/// of them joins, and that is what its own callers then see. Settled only once
+/// every rule is lowered, and emit asks it at both ends of a call so the
+/// declaration and the arguments cannot disagree.
+fn follow_rule_snakes(grammar: &Grammar, ctx: &GenContext) -> List<String> {
+    let count = grammar.parser_rules.len();
+    let mut reads: List<bool> = [];
+    for let mut i = 0; i < count; i += 1 {
+        reads.push(ctx.rule_index_reads_follow(i));
+    }
+    let mut changed = true;
+    while changed {
+        changed = false;
+        for let mut i = 0; i < count; i += 1 {
+            if reads[i] {
+                continue;
+            }
+            for let target of &ctx.rule_forward_targets(i) {
+                for let mut j = 0; j < count; j += 1 {
+                    if reads[j] && grammar.parser_rules[j].snake_name == *target {
+                        reads[i] = true;
+                        changed = true;
+                        break;
+                    }
+                }
+                if reads[i] {
+                    break;
+                }
+            }
+        }
+    }
+    let mut snakes: List<String> = [];
+    for let mut i = 0; i < count; i += 1 {
+        if reads[i] {
+            snakes.push(grammar.parser_rules[i].snake_name);
+        }
+    }
+    return snakes;
 }
 
 /// Returns true iff `se` carries a `ScanRuleCall` to `rule_snake`
@@ -853,6 +919,7 @@ fn lower_lr_rule(rule: &ParserRule, ctx: &mut GenContext) -> LeftRecursiveRule {
     let mid_operand_gated = stamp_lr_self_ref_min_prec(&mut lr_alts, &rule.name, &rule.snake_name, ctx, atn_class);
     if mid_operand_gated {
         ctx.mark_caller_follow_gate();
+        ctx.mark_rule_reads_follow();
     }
 
     return LeftRecursiveRule {
@@ -2392,6 +2459,7 @@ fn lower_scan_repeat(
     let effective_gate = gate_caller_follow && !rep.non_greedy;
     if effective_gate {
         ctx.mark_caller_follow_gate();
+        ctx.mark_rule_reads_follow();
     }
     let mut body_visiting: List<String> = [];
     return ScanElement::Repeat(ScanRepeatElement {
@@ -2430,6 +2498,7 @@ fn rebind_scan_repeat_caller_follow(
                 continuation_scan = scan;
                 continuation_scannable = true;
                 probe_viable = ctx.rule_follow_for_probe(rule_name);
+                ctx.mark_rule_reads_follow();
             }
         }
         let static_exit_undecided = non_greedy_static_undecided(
@@ -3842,6 +3911,7 @@ fn lower_repeat_op(
     let effective_gate = gate_caller_follow && !rep.non_greedy;
     if effective_gate {
         ctx.mark_caller_follow_gate();
+        ctx.mark_rule_reads_follow();
     }
     return Op::Repeat(RepeatOp {
         kind: rep.kind,
@@ -4296,6 +4366,7 @@ fn patch_repeat_op_caller_follow(
         continuation_scan = scan;
         continuation_scannable = true;
         probe_viable = ctx.rule_follow_for_probe(rule_name);
+        ctx.mark_rule_reads_follow();
     }
     let static_exit_undecided = non_greedy_static_undecided(
         &admits_kinds(&rep_op.body_admits),
