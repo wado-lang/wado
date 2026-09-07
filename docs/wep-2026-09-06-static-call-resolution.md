@@ -289,9 +289,10 @@ other. Unifying them further is symmetry, not this WEP's decision.
   the four sites that already hold it is what closing it takes.
 - Only one argument selects — the first that reaches the declaration, which the
   candidate's kind decides. Two impls a call separates only by a _later_
-  argument have no selection, and the first candidate wins. The preselect that
-  shapes a literal reads argument zero for the same reason. No fixture drives
-  it: closing it is the same `TypeId` migration above, over the argument list
+  argument are an overload nothing settles, so the call is refused and the
+  report says which argument was read and that the ones after it are not. The
+  preselect that shapes a literal reads argument zero for the same reason.
+  Closing it is the same `TypeId` migration above, over the argument list
   rather than one name.
 - A static's own type parameters are never inferred from its arguments. Where
   the block declares no slots the method's are numbered from zero and the

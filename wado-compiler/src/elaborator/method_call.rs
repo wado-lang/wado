@@ -2942,18 +2942,33 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         // The trait the first candidate names. Where several traits supply the
         // name the call is an overload, reported before it reaches here.
-        if let Some(trait_name) = survey.candidates.first().map(|c| c.trait_name.clone()) {
-            let _ = self.emit(TypeError::NoMatchingTraitArgument {
+        let Some(trait_name) = survey.candidates.first().map(|c| c.trait_name.clone()) else {
+            return false;
+        };
+        // A candidate the argument matches is one the selection kept, so the
+        // call did not fail on this argument: it failed because nothing after
+        // it separates what the argument admitted. Reporting the unmatched case
+        // here said the opposite of what happened, naming the argument as both
+        // unaccepted and available.
+        if survey.candidates.iter().any(|c| c.spelling == arg_type) {
+            let _ = self.emit(TypeError::OverloadUnsettledByLaterArgs {
                 trait_name,
                 receiver: struct_name.to_string(),
                 method: method_name.to_string(),
                 arg_type: arg_type.to_string(),
-                candidates: survey.candidates.into_iter().map(|c| c.spelling).collect(),
                 span,
             });
             return true;
         }
-        false
+        let _ = self.emit(TypeError::NoMatchingTraitArgument {
+            trait_name,
+            receiver: struct_name.to_string(),
+            method: method_name.to_string(),
+            arg_type: arg_type.to_string(),
+            candidates: survey.candidates.into_iter().map(|c| c.spelling).collect(),
+            span,
+        });
+        true
     }
 
     /// The shared preselect entry for a one-argument static call

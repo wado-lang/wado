@@ -1,0 +1,30 @@
+//! Two impls of one trait that agree on the argument the selection reads and
+//! differ only after it. Nothing separates them, and the report said the
+//! opposite of what happened: it ran its own survey over argument zero and
+//! announced that no impl takes an `i32`, while listing `i32` as available.
+//! A site may only report the outcome the selection reached.
+
+trait Conv<T> {
+    fn make(tag: i32, v: T) -> i32;
+}
+
+struct M {}
+
+impl Conv<i32> for M {
+    fn make(tag: i32, v: i32) -> i32 {
+        return 1;
+    }
+}
+
+impl Conv<String> for M {
+    fn make(tag: i32, v: String) -> i32 {
+        return 2;
+    }
+}
+
+export fn run() {
+    assert M::make(0, "x") == 2;
+}
+
+__DATA__
+{"compile_error": "several impls of 'Conv' for 'M' declare 'make' taking 'i32' here; only that argument selects, so the ones after it cannot separate them"}

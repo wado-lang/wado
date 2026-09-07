@@ -570,6 +570,17 @@ pub enum TypeError {
         span: Span,
     },
 
+    /// Several impls of one trait accept the argument the selection reads, and
+    /// only that argument selects — so the arguments after it, which is all
+    /// that tells the impls apart, are never consulted.
+    OverloadUnsettledByLaterArgs {
+        trait_name: String,
+        receiver: String,
+        method: String,
+        arg_type: String,
+        span: Span,
+    },
+
     /// A type argument whose associated type does not match the constraint
     /// written on the bound (`T: Collect<Item = i32>` given `Item = String`).
     AssocTypeBoundNotSatisfied {
@@ -1471,6 +1482,19 @@ impl TypeError {
                         .map(|c| format!("'{c}'"))
                         .collect::<Vec<_>>()
                         .join(" and ")
+                ),
+                *span,
+            ),
+            TypeError::OverloadUnsettledByLaterArgs {
+                trait_name,
+                receiver,
+                method,
+                arg_type,
+                span,
+            } => (
+                Code::TypeMismatch,
+                format!(
+                    "several impls of '{trait_name}' for '{receiver}' declare '{method}' taking '{arg_type}' here; only that argument selects, so the ones after it cannot separate them"
                 ),
                 *span,
             ),
