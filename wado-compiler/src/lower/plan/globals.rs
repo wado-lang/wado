@@ -259,6 +259,7 @@ fn build_module_init_function(
         compiler_item: None,
         export_name: None,
         allocator_tag: None,
+        declared_return_convention: None,
         kind: FunctionKind::Regular,
         return_abi: crate::tir::ReturnAbi::default(),
     }
@@ -915,6 +916,7 @@ pub fn build_initialize_modules(flat: &mut FlatPackage) {
         compiler_item: None,
         export_name: None,
         allocator_tag: None,
+        declared_return_convention: None,
         kind: FunctionKind::Regular,
 
         return_abi: crate::tir::ReturnAbi::default(),

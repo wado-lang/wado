@@ -102,6 +102,10 @@ pub struct ValueCopyPlan {
     /// finalized by `.build()` is not defensively copied. Superset of
     /// `returns_owned`.
     pub returns_self_projection: FuncKeySet,
+    /// The builtins that declared `#[returns(owned)]`: they allocate while
+    /// reading through a reference, which the call-site reading cannot tell
+    /// from a read of one.
+    pub owned_builtins: ownership::OwnedBuiltins,
     /// Per-callee, per-position reference-storage: which parameter positions a
     /// callee may persist a reference to. A local whose `&`/`&mut` is passed at
     /// a *stored* position is borrow-escaped and cannot be moved; passed at a
@@ -150,15 +154,21 @@ pub fn plan(
     // Three passes, because the paths gate the conventions
     // ([`hands_out_payload`]) and the conventions place the paths: a seed pass
     // without the gate breaks the knot.
-    let seed_conventions =
-        ownership::compute_return_conventions(flat, &call_graph, &place::ReturnPaths::default());
+    let owned_builtins = ownership::OwnedBuiltins::collect(flat);
+    let seed_conventions = ownership::compute_return_conventions(
+        flat,
+        &call_graph,
+        &place::ReturnPaths::default(),
+        &owned_builtins,
+    );
     let return_paths = place::compute_return_paths(
         flat,
         &call_graph,
         &flat.type_table.borrow(),
         &seed_conventions.returns_owned,
     );
-    let conventions = ownership::compute_return_conventions(flat, &call_graph, &return_paths);
+    let conventions =
+        ownership::compute_return_conventions(flat, &call_graph, &return_paths, &owned_builtins);
     let stored_params = stores::compute_stored_params(flat, &call_graph);
     let mut mut_receiver_methods = FuncKeySet::default();
     let mut mut_ref_params = FuncKeyMap::default();
@@ -187,6 +197,7 @@ pub fn plan(
         return_paths,
         returns_owned: conventions.returns_owned,
         returns_self_projection: conventions.returns_self_projection,
+        owned_builtins,
         stored_params,
         mut_receiver_methods,
         confined_params,

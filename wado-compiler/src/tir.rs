@@ -5753,6 +5753,10 @@ pub struct TirFunction {
     /// Allocator tag from `#[allocator("...")]` attribute (e.g., `"bump"`, `"debug"`).
     pub allocator_tag: Option<String>,
 
+    /// Return convention declared by `#[returns(...)]`. Only a declaration with
+    /// no body carries one: a body is inferred from instead.
+    pub declared_return_convention: Option<ReturnConvention>,
+
     /// Categorizes the function for kind-specific optimizations. Most functions
     /// are `Regular`; synthesis passes set specialized kinds so the TIR
     /// optimizer can apply targeted transformations (e.g. freshness-based
@@ -5827,6 +5831,17 @@ pub enum InlineHint {
     Always,
     /// `#[inline(never)]` — never inline.
     Never,
+}
+
+/// What a bodyless declaration says about the storage its result carries.
+/// Without one, a builtin that reads through a reference parameter is taken to
+/// hand out that parameter's storage — the conservative reading, so a missing
+/// declaration costs a copy rather than value semantics.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ReturnConvention {
+    /// `#[returns(owned)]` — every returned value is freshly materialized, so a
+    /// caller may consume it as a move.
+    Owned,
 }
 
 impl TirFunction {

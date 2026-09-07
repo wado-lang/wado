@@ -1455,6 +1455,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             ),
             export_name: extract_export_name_attr(&func.attrs),
             allocator_tag: extract_allocator_tag_attr(&func.attrs),
+            declared_return_convention: extract_return_convention_attr(&func.attrs),
             kind: tir::FunctionKind::Regular,
             return_abi: tir::ReturnAbi::Single,
         })
@@ -1888,6 +1889,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             ),
             export_name: extract_export_name_attr(&func.attrs),
             allocator_tag: extract_allocator_tag_attr(&func.attrs),
+            declared_return_convention: extract_return_convention_attr(&func.attrs),
             kind: crate::tir::FunctionKind::Regular,
             return_abi: crate::tir::ReturnAbi::Single,
         })
@@ -1952,6 +1954,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             compiler_item: None,
             export_name: None,
             allocator_tag: None,
+            declared_return_convention: None,
             kind: FunctionKind::Regular,
             return_abi: ReturnAbi::default(),
         };
@@ -10674,6 +10677,16 @@ fn extract_inline_hint_attr(attrs: &[crate::ast::Attribute]) -> crate::tir::Inli
         Some("never") => crate::tir::InlineHint::Never,
         None => crate::tir::InlineHint::Hint,
         _ => crate::tir::InlineHint::Auto,
+    }
+}
+
+/// The `#[returns(...)]` convention. `None` where the declaration states none,
+/// leaving the return-convention analysis to decide.
+fn extract_return_convention_attr(attrs: &[ast::Attribute]) -> Option<tir::ReturnConvention> {
+    let attr = attrs.iter().find(|a| a.name == "returns")?;
+    match attr.args.first().map(ast::AttrArg::as_str) {
+        Some("owned") => Some(tir::ReturnConvention::Owned),
+        Some(_) | None => None,
     }
 }
 

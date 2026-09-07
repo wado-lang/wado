@@ -10,47 +10,115 @@
 
 use super::callgraph::CallGraph;
 use super::funcset::FuncKeySet;
+use super::needs_value_copy;
+use super::place::is_reference;
 use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::module_source::ModuleSource;
 use crate::tir::{
-    FunctionKind, FunctionRef, MonomorphInfo, ResolvedType, TirBlock, TirExpr, TirExprKind,
-    TirStmt, TirStmtKind, TirUnaryOp, TypeId, TypeTable, matches_builtin,
+    CallArg, FunctionKind, FunctionRef, MonomorphInfo, ResolvedType, ReturnConvention, TirBlock,
+    TirExpr, TirExprKind, TirFunction, TirStmt, TirStmtKind, TirUnaryOp, TypeId, TypeTable,
+    matches_builtin,
 };
 use crate::tir_visitor::TirRefVisitor;
 
-/// The element reads that borrow a slot of their first argument in place,
-/// rather than building a value of their own.
+/// The array element reads that name a slot of their first argument in place,
+/// so a place walk projects one `Index` further in — and, in the seed below,
+/// the builtins the `returns_owned` *set* leaves out for the place and modref
+/// walks that read it by name.
+///
+/// Whether a *call* is fresh is not this list's question: [`OwnedCalls::is_owned`]
+/// reads that off the call itself, so no builtin can be missing from it.
 pub(super) fn is_container_alias_read(name: &str, monomorph_info: Option<&MonomorphInfo>) -> bool {
     matches_builtin(name, monomorph_info, "array_get_value")
         || matches_builtin(name, monomorph_info, "array_get_ref")
         || matches_builtin(name, monomorph_info, "array_get_ref_mut")
 }
 
+/// Whether a builtin call's result may be storage its caller still owns. A
+/// by-value argument is deep-copied at the call, so only a reference argument
+/// can carry storage out: `struct_field_get(v: &T, i) -> F` reads a field of
+/// what `v` points at, while `array_new(len) -> Array<T>` allocates and
+/// `black_box(value: T) -> T` hands back the copy it was given.
+///
+/// Read off the call rather than a list of names, so a builtin added later is
+/// conservative by default — a missing answer costs a copy, never value
+/// semantics. A builtin declaration does not survive to here: monomorphization
+/// drops the generic and materializes an instance only for the few a later
+/// phase rewrites, so the call is the only thing that always answers.
+fn hands_out_arg_storage(result_type: TypeId, args: &[CallArg], type_table: &TypeTable) -> bool {
+    let carries_storage =
+        is_reference(result_type, type_table) || needs_value_copy(result_type, type_table);
+    carries_storage
+        && args
+            .iter()
+            .any(|a| is_reference(a.expr.type_id, type_table))
+}
+
+/// Whether `func` declares `#[returns(owned)]`. Only a declaration with no body
+/// is asked: a body is inferred from below, and would be free to contradict
+/// what it declared.
+fn declares_owned(func: &TirFunction) -> bool {
+    func.body.is_none() && func.declared_return_convention == Some(ReturnConvention::Owned)
+}
+
+/// Whether `func` is a compiler intrinsic rather than a compiled declaration.
+fn is_builtin_module(func: &FunctionRef) -> bool {
+    func.module_source.is_core_builtin() || func.module_source.is_wasm_asset()
+}
+
+/// The builtins that declared `#[returns(owned)]`, by base name: they allocate
+/// while reading through a reference, which [`hands_out_arg_storage`] cannot
+/// tell from a read of one.
+///
+/// Best-effort, and safely so — collected from whatever declarations the
+/// package still holds, and a name it misses only costs that call a copy.
+#[derive(Default)]
+pub struct OwnedBuiltins(IndexSet<String>);
+
+impl OwnedBuiltins {
+    pub fn collect(project: &FlatPackage) -> Self {
+        let mut names = IndexSet::default();
+        for func in &project.functions {
+            let func = func.borrow();
+            if !declares_owned(&func) {
+                continue;
+            }
+            let base = func
+                .monomorph_info
+                .as_ref()
+                .map_or(func.name.as_str(), |m| m.generic_name.as_str());
+            names.insert(base.to_string());
+        }
+        Self(names)
+    }
+
+    fn contains(&self, func: &FunctionRef) -> bool {
+        self.0
+            .iter()
+            .any(|base| matches_builtin(&func.name, func.monomorph_info.as_ref(), base))
+    }
+}
+
 /// Oracle the freshness checker consults for a call's return convention.
 pub struct OwnedCalls<'a> {
     returns_owned: &'a FuncKeySet,
     returns_self_projection: &'a FuncKeySet,
+    owned_builtins: &'a OwnedBuiltins,
     indirect_owned_returns: Option<&'a IndexSet<TypeId>>,
-    assumed_owned: Option<(&'a ModuleSource, &'a str)>,
 }
 
 impl<'a> OwnedCalls<'a> {
-    pub fn new(returns_owned: &'a FuncKeySet, returns_self_projection: &'a FuncKeySet) -> Self {
+    pub fn new(
+        returns_owned: &'a FuncKeySet,
+        returns_self_projection: &'a FuncKeySet,
+        owned_builtins: &'a OwnedBuiltins,
+    ) -> Self {
         Self {
             returns_owned,
             returns_self_projection,
+            owned_builtins,
             indirect_owned_returns: None,
-            assumed_owned: None,
         }
-    }
-
-    /// Assume `func` returns owned while proving that it does: the fixpoint only
-    /// adds, so a self-call would read back the verdict being computed. Returns
-    /// that avoid the recursive call are still checked on their own.
-    pub fn assuming_owned(mut self, module_source: &'a ModuleSource, name: &'a str) -> Self {
-        self.assumed_owned = Some((module_source, name));
-        self
     }
 
     /// Attach the indirect-call verdict (see [`compute_indirect_owned_returns`]).
@@ -69,31 +137,33 @@ impl<'a> OwnedCalls<'a> {
             .is_some_and(|set| set.contains(&return_type))
     }
 
-    /// Whether a call to `func` yields an owned (fresh) value. A core builtin
-    /// allocates or computes a fresh result — except the container-alias reads
-    /// `array_get_value` / `array_get_ref`, which borrow an element in place. A body
-    /// function is owned iff the fixpoint proved it so; extern / opaque callees
-    /// default to borrowed.
-    pub fn is_owned(&self, func: &FunctionRef) -> bool {
-        if func.module_source.is_core_builtin() || func.module_source.is_wasm_asset() {
-            return !is_container_alias_read(&func.name, func.monomorph_info.as_ref());
-        }
-        if self
-            .assumed_owned
-            .is_some_and(|(ms, name)| *ms == func.module_source && name == func.name)
-        {
-            return true;
+    /// Whether a call to `func` yields an owned (fresh) value. A builtin
+    /// answers from the call itself ([`hands_out_arg_storage`]), plus the
+    /// declared [`OwnedBuiltins`] exceptions; a body function is owned iff the
+    /// fixpoint proved it so, and an extern / opaque callee defaults to
+    /// borrowed.
+    pub fn is_owned(
+        &self,
+        func: &FunctionRef,
+        result_type: TypeId,
+        args: &[CallArg],
+        type_table: &TypeTable,
+    ) -> bool {
+        if is_builtin_module(func) {
+            return self.owned_builtins.contains(func)
+                || !hands_out_arg_storage(result_type, args, type_table);
         }
         self.returns_owned.contains(&func.module_source, &func.name)
     }
 
     /// Whether `func` returns a projection of its receiver / first parameter
     /// (`build(&self) -> List { return *self }`, an accessor `first(&self)`),
-    /// so a call to it is fresh exactly when that receiver is fresh. Builtins
-    /// are already owned (`is_owned`); only body functions the fixpoint proved
-    /// self-projecting qualify.
+    /// so a call to it is fresh exactly when that receiver is fresh. Only a body
+    /// function the fixpoint proved self-projecting qualifies: a bodyless one
+    /// either allocates (already owned) or reads through a reference whose
+    /// referent is unrelated to the argument's freshness.
     pub fn returns_self_projection(&self, func: &FunctionRef) -> bool {
-        if func.module_source.is_core_builtin() || func.module_source.is_wasm_asset() {
+        if is_builtin_module(func) {
             return false;
         }
         self.returns_self_projection
@@ -205,14 +275,14 @@ fn is_receiver_projection(expr: &TirExpr, param: u32, set: &FuncKeySet) -> bool 
     }
 }
 
-/// The two return conventions, component by component. Seeds the always-owned
-/// callees (value-copy helpers clone; builtins except the container-alias
-/// reads `array_get_value` / `array_get_ref` allocate), then settles each
-/// strongly connected component of the call graph with its callees already
-/// decided: a body function is owned when every value it returns is owned, and
-/// self-projecting when every value it returns is owned *or* a projection of
-/// its first parameter (`return *self`). `returns_owned` is a subset of
-/// `returns_self_projection`.
+/// The two return conventions, component by component. Seeds the callees that
+/// have no body to settle — a value-copy helper clones, a builtin allocates
+/// unless it is a container-alias read, and a bodyless declaration may declare
+/// `#[returns(owned)]` — then settles each strongly connected component of the
+/// call graph with its callees already decided: a body function is owned when
+/// every value it returns is owned, and self-projecting when every value it
+/// returns is owned *or* a projection of its first parameter (`return *self`).
+/// `returns_owned` is a subset of `returns_self_projection`.
 ///
 /// Inside a component the answer is assumed and then disproved, not built up: a
 /// cycle whose members return each other's result has no base to build from,
@@ -221,6 +291,7 @@ pub fn compute_return_conventions(
     project: &FlatPackage,
     call_graph: &CallGraph,
     return_paths: &super::place::ReturnPaths,
+    owned_builtins: &OwnedBuiltins,
 ) -> ReturnConventions {
     let type_table = project.type_table.borrow();
 
@@ -230,6 +301,7 @@ pub fn compute_return_conventions(
         let is_helper = matches!(func.kind, FunctionKind::ValueCopy { .. });
         let is_builtin = func.module_source.is_core_builtin() || func.module_source.is_wasm_asset();
         if is_helper
+            || declares_owned(&func)
             || (is_builtin && !is_container_alias_read(&func.name, func.monomorph_info.as_ref()))
         {
             owned.insert(func.module_source.clone(), func.name.clone());
@@ -244,6 +316,7 @@ pub fn compute_return_conventions(
             call_graph,
             return_paths,
             &type_table,
+            owned_builtins,
             &mut owned,
             &mut self_proj,
         );
@@ -265,6 +338,7 @@ fn settle_component(
     call_graph: &CallGraph,
     return_paths: &super::place::ReturnPaths,
     type_table: &TypeTable,
+    owned_builtins: &OwnedBuiltins,
     owned: &mut FuncKeySet,
     self_proj: &mut FuncKeySet,
 ) {
@@ -295,7 +369,7 @@ fn settle_component(
         }
         let body = func.body.as_ref().expect("members have bodies");
         let (ret_owned, ret_self_proj) = {
-            let oracle = OwnedCalls::new(owned, self_proj);
+            let oracle = OwnedCalls::new(owned, self_proj, owned_builtins);
             let hands_out_payload = super::hands_out_payload(&func, return_paths);
             function_return_convention(body, &func.params, &oracle, type_table, hands_out_payload)
         };
@@ -405,18 +479,23 @@ impl TirRefVisitor for ReturnWalker<'_> {
     }
 }
 
-/// True when `expr` is a projection — a `deref` / field / index / payload / cast
-/// chain — rooted at parameter `param`, so it aliases that parameter's storage.
-/// A projection of a fresh receiver is itself fresh, which is what lets a call to
+/// True when `expr` is a projection — a field / index / payload / cast chain —
+/// rooted at parameter `param`, so it aliases that parameter's storage. A
+/// projection of a fresh receiver is itself fresh, which is what lets a call to
 /// a self-projecting callee be treated as fresh when its receiver is.
+///
+/// Only the parameter's own reference may be peeled (`*self`): a deref deeper in
+/// the chain reads a reference *stored in* that storage, and its referent is
+/// somebody else's — a template shape holds each hole as a `&V` field, so
+/// `*v.h0` leaves `v` entirely however fresh `v` is.
 pub(super) fn is_projection_of_param(expr: &TirExpr, param: u32) -> bool {
     match &expr.kind {
         TirExprKind::Local { index, .. } => *index == param,
         TirExprKind::Unary {
             op: TirUnaryOp::Deref,
             expr: inner,
-        }
-        | TirExprKind::FieldAccess { expr: inner, .. }
+        } => matches!(inner.kind, TirExprKind::Local { index, .. } if index == param),
+        TirExprKind::FieldAccess { expr: inner, .. }
         | TirExprKind::VariantPayload { expr: inner, .. }
         | TirExprKind::Cast { expr: inner, .. }
         | TirExprKind::Index { expr: inner, .. } => is_projection_of_param(inner, param),

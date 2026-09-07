@@ -700,6 +700,7 @@ impl ClosureLowerer {
                 compiler_item: None,
                 export_name: None,
                 allocator_tag: None,
+                declared_return_convention: None,
                 kind: FunctionKind::Regular,
 
                 return_abi: crate::tir::ReturnAbi::default(),
@@ -1045,6 +1046,7 @@ impl ClosureLowerer {
             compiler_item: None,
             export_name: None,
             allocator_tag: None,
+            declared_return_convention: None,
             kind: FunctionKind::Regular,
 
             return_abi: crate::tir::ReturnAbi::default(),
@@ -1218,6 +1220,7 @@ impl ClosureLowerer {
             compiler_item: callee.compiler_item,
             export_name: callee.export_name.clone(),
             allocator_tag: callee.allocator_tag.clone(),
+            declared_return_convention: callee.declared_return_convention,
             kind: FunctionKind::Regular,
 
             return_abi: crate::tir::ReturnAbi::default(),
