@@ -7,11 +7,13 @@
 
 use std::cell::Cell;
 
-use crate::hashmap::IndexSet;
-use crate::nir::NirFunction;
+use crate::hashmap::{IndexMap, IndexSet};
+use crate::nir::{FuncId, NirFunction};
 use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, NodeRef};
 use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
+use crate::nir_value_graph::ValueId;
+use crate::tir::TypeTable;
 
 /// Forwards stores to loads in every function. Used by the post-`field_scalarize`
 /// cleanup so the scalarization shadow inits (`__hfs_x = obj.f`) get their fields
@@ -44,10 +46,10 @@ pub fn forward_stores_to_loads_all(project: &mut NirPackage) -> bool {
 /// changed.
 fn forward_one(
     func: &mut NirFunction,
-    type_table: &crate::tir::TypeTable,
+    type_table: &TypeTable,
     first_param_types: &super::alias::FirstParamTypes,
     call_immutability: &super::alias::CallImmutability,
-    pure_builtin_callees: &crate::hashmap::IndexSet<crate::nir::FuncId>,
+    pure_builtin_callees: &IndexSet<FuncId>,
     ctfe_builtins: &crate::niri::CtfeBuiltinMap,
     buffers: &mut EngineBuffers,
 ) -> bool {
@@ -106,7 +108,7 @@ fn forward_one(
         .collect();
     // Born-as-operands (WEP item 3): promote each re-emittable reaching value
     // straight into its operand slot, never through the persisted `value_of`.
-    let forwarded: crate::hashmap::IndexMap<ExprId, crate::nir_value_graph::ValueId> = engine
+    let forwarded: IndexMap<ExprId, ValueId> = engine
         .scoped_const_reads(&forwardable_locals, /* include_fields */ true)
         .into_iter()
         .collect();
@@ -124,7 +126,7 @@ pub(super) struct StoreLoadForwardRule {
     applied: Cell<bool>,
     unsafe_locals: IndexSet<u32>,
     /// Reaching values from the scratch re-walk, promoted directly.
-    forwarded: crate::hashmap::IndexMap<ExprId, crate::nir_value_graph::ValueId>,
+    forwarded: IndexMap<ExprId, ValueId>,
 }
 
 impl Rule for StoreLoadForwardRule {
@@ -145,7 +147,7 @@ impl Rule for StoreLoadForwardRule {
 fn forward_at_root(
     engine: &mut Engine,
     unsafe_locals: &IndexSet<u32>,
-    forwarded: &crate::hashmap::IndexMap<ExprId, crate::nir_value_graph::ValueId>,
+    forwarded: &IndexMap<ExprId, ValueId>,
 ) -> bool {
     // Snapshot reads before rewriting. A `FieldAccess` carries no local index,
     // so the `unsafe_locals` filter below never applies to one: a field read's

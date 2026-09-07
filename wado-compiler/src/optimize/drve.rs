@@ -75,7 +75,7 @@ fn is_eligible(func: &NirFunction, type_table: &TypeTable) -> bool {
     if !matches!(func.kind, FunctionKind::Regular) {
         return false;
     }
-    if func.module_source.is_core_builtin() || func.module_source.is_wasm_asset() {
+    if func.module_source.is_builtin() {
         return false;
     }
     if func.return_type == TypeTable::UNIT || func.return_type == TypeTable::NEVER {

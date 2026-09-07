@@ -7,14 +7,40 @@ use std::rc::Rc;
 
 use crate::flat_package::FlatPackage;
 use crate::hashmap::IndexMap;
+use crate::lower::plan::value_copy::ownership::hands_out_storage;
 use crate::module_source::ModuleSource;
 use crate::package::Package;
-use crate::tir::TypeTable;
+use crate::tir::{ReturnConvention, TirFunction, TypeTable};
 use crate::wir_build::component_plan;
 
 /// Link a `Package` into a `FlatPackage`.
 ///
 /// Flattens per-module TIR data into flat lists and builds the component plan.
+/// Snapshot what a `core:builtin` declared about its result, before
+/// monomorphization drops the generic declarations the plan phase would read.
+///
+/// A builtin that can hand out an argument's storage must say so: the plan
+/// phase takes silence for "allocates". `core:builtin` is compiler-owned, so a
+/// missing declaration is our bug, not the program's.
+fn record_builtin_convention(
+    func: &TirFunction,
+    type_table: &TypeTable,
+    out: &mut IndexMap<String, ReturnConvention>,
+) {
+    if func.body.is_some() {
+        return;
+    }
+    assert!(
+        func.declared_return_convention.is_some() || !hands_out_storage(func, type_table),
+        "builtin `{}` reads through a reference and returns storage: \
+         declare #[returns(part_of(p))] or #[returns(owned)]",
+        func.name,
+    );
+    if let Some(convention) = func.declared_return_convention {
+        out.insert(func.name.clone(), convention);
+    }
+}
+
 pub fn link(package: Package) -> FlatPackage {
     // Extract the shared type table from the first module.
     let type_table: Rc<RefCell<TypeTable>> = package
@@ -51,6 +77,7 @@ pub fn link(package: Package) -> FlatPackage {
     let mut imports = Vec::new();
     let mut tests = Vec::new();
     let mut wasm_module_sources: IndexMap<ModuleSource, String> = IndexMap::default();
+    let mut builtin_return_conventions: IndexMap<String, ReturnConvention> = IndexMap::default();
 
     for (_ms, tir_mod) in package.tir_modules {
         let ms: ModuleSource = tir_mod.module_source.clone();
@@ -59,6 +86,13 @@ pub fn link(package: Package) -> FlatPackage {
         // Functions: set module_source on each function
         for func_rc in tir_mod.functions {
             func_rc.borrow_mut().module_source = ms.clone();
+            if ms.is_core_builtin() {
+                record_builtin_convention(
+                    &func_rc.borrow(),
+                    &type_table.borrow(),
+                    &mut builtin_return_conventions,
+                );
+            }
             functions.push(func_rc);
         }
 
@@ -104,6 +138,7 @@ pub fn link(package: Package) -> FlatPackage {
         imports,
         tests,
         wasm_module_sources,
+        builtin_return_conventions,
         module_name: package.module_name,
         cm_interface_registry: package.cm_interface_registry,
         world_registry: package.world_registry,

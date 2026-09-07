@@ -7,7 +7,7 @@
 //! predicates to feed [`super::synthesize::synthesize_helpers`].
 
 use super::funcset::FuncKeySet;
-use super::ownership::OwnedCalls;
+use super::ownership::{BuiltinConventions, OwnedCalls};
 use crate::flat_package::FlatPackage;
 use crate::hashmap::IndexSet;
 use crate::tir::{
@@ -20,14 +20,19 @@ use crate::tir_visitor::TirRefVisitor;
 /// element types of `array_clone::<T>(...)` calls that codegen
 /// routes through the same helper.
 ///
-/// Runs before the return-convention fixpoint, so it uses a conservative
-/// oracle (only builtins are owned). That over-collects seed types — a helper
-/// the precise fold never calls is dead-code-eliminated — but never misses one.
-pub fn collect_seed_types(project: &FlatPackage) -> IndexSet<TypeId> {
+/// Runs before the return-convention fixpoint, so no body function is known
+/// owned yet. A seed the precise fold never calls is dead-code-eliminated.
+pub fn collect_seed_types(
+    project: &FlatPackage,
+    builtins: &BuiltinConventions,
+) -> IndexSet<TypeId> {
     let type_table = project.type_table.borrow();
     let no_owned = FuncKeySet::default();
     let no_self_proj = FuncKeySet::default();
-    let oracle = OwnedCalls::new(&no_owned, &no_self_proj);
+    // The builtin conventions must be the real ones even here: they are
+    // declared rather than inferred, and an empty set reads every builtin as
+    // fresh, which misses the seed a borrowed one needs.
+    let oracle = OwnedCalls::new(&no_owned, &no_self_proj, builtins);
     let mut walker = SeedWalker {
         type_table: &type_table,
         oracle: &oracle,

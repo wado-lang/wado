@@ -13,7 +13,6 @@ use super::funcset::FuncKeyMap;
 use super::needs_value_copy;
 use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::module_source::ModuleSource;
 use crate::tir::{
     FunctionKind, FunctionRef, ResolvedType, TirBlock, TirExpr, TirExprKind, TirStmt, TirStmtKind,
     TirUnaryOp, TypeId, TypeTable,
@@ -112,7 +111,7 @@ fn classify_functions(project: &FlatPackage) -> FuncKeyMap<Kind> {
         let func = func.borrow();
         let kind = if matches!(func.kind, FunctionKind::ValueCopy { .. }) {
             Kind::ValueCopy
-        } else if is_builtin(&func.module_source) {
+        } else if func.module_source.is_builtin() {
             Kind::Builtin
         } else if func.body.is_some() {
             Kind::HasBody
@@ -139,7 +138,7 @@ impl Ctx<'_> {
             .get(&func.module_source, &func.name)
             .copied()
             .unwrap_or_else(|| {
-                if is_builtin(&func.module_source) {
+                if func.module_source.is_builtin() {
                     Kind::Builtin
                 } else {
                     Kind::Opaque
@@ -480,10 +479,6 @@ fn carries_identity(type_id: TypeId, type_table: &TypeTable) -> bool {
             type_table.get(type_id),
             ResolvedType::Ref(_) | ResolvedType::MutRef(_)
         )
-}
-
-fn is_builtin(module: &ModuleSource) -> bool {
-    module.is_core_builtin() || module.is_wasm_asset()
 }
 
 fn is_mut_ref(expr: &TirExpr, type_table: &TypeTable) -> bool {

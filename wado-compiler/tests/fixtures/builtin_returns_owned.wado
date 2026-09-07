@@ -1,0 +1,24 @@
+// `array_clone` reads through a reference and returns storage, so it must
+// declare where its result comes from. It allocates, and `#[returns(owned)]`
+// says so. Read as a component of `src` instead, the struct literal below
+// would copy the array a second time.
+use { println, Stdout } from "core:cli";
+
+struct Holder {
+    repr: Array<i32>,
+}
+
+export fn run() with Stdout {
+    let mut src: Array<i32> = builtin::array_new(3);
+    builtin::array_fill(&mut src, 0, 7, 3);
+    let h = Holder { repr: builtin::array_clone(&src) };
+    // An aliasing clone would print the 9.
+    builtin::array_fill(&mut src, 0, 9, 3);
+    println(`${builtin::array_len(&h.repr)} ${builtin::array_get_value(&h.repr, 0)}`);
+}
+
+__DATA__
+{
+    "stdout": "3 7\n",
+    "wir_not_expect:O0": ["$value_copy$Array<i32>"]
+}

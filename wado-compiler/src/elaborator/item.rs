@@ -85,6 +85,7 @@ fn placeholder_function(name: String, span: Span) -> TirFunction {
         compiler_item: None,
         export_name: None,
         allocator_tag: None,
+        declared_return_convention: None,
         kind: FunctionKind::Regular,
         return_abi: crate::tir::ReturnAbi::default(),
     }

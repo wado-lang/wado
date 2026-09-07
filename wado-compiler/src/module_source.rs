@@ -695,6 +695,13 @@ impl ModuleSource {
         matches!(self, Self::Core { name } if name == "builtin")
     }
 
+    /// Whether declarations here are compiler intrinsics rather than compiled
+    /// source: `core:builtin` and the bundled wasm assets.
+    #[must_use]
+    pub fn is_builtin(&self) -> bool {
+        self.is_core_builtin() || self.is_wasm_asset()
+    }
+
     /// Check if this is the core/prelude module.
     #[must_use]
     pub fn is_core_prelude(&self) -> bool {

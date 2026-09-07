@@ -5,11 +5,12 @@
 //! Consumed lazily by [`crate::nir_engine::Engine::value`]; see WEP 2026-06-05.
 
 use crate::const_eval;
-use crate::hashmap::IndexMap;
+use crate::hashmap::{IndexMap, IndexSet};
 use crate::nir::{FuncId, NirBinaryOp, NirUnaryOp};
 use crate::nir_arena::{
     ArmData, BlockId, Body, ExprId, ExprKind, NodeRef, Operand, PatId, PatKind, StmtId, StmtKind,
 };
+use crate::tir::TypeTable;
 
 use super::{HeapVersion, OpaqueSource, ValueId, ValueKind, ValuePool};
 
@@ -205,11 +206,11 @@ pub struct ValueGraphBuild {
 pub fn build(
     body: &mut Body,
     param_locals: &[u32],
-    aliased: &crate::hashmap::IndexSet<u32>,
-    untrackable: &crate::hashmap::IndexSet<u32>,
-    mut_escaped: &crate::hashmap::IndexSet<u32>,
+    aliased: &IndexSet<u32>,
+    untrackable: &IndexSet<u32>,
+    mut_escaped: &IndexSet<u32>,
     calls: CallFacts<'_>,
-    type_table: Option<&crate::tir::TypeTable>,
+    type_table: Option<&TypeTable>,
 ) -> ValueGraphBuild {
     // Build into the body's own pool: take it out as the seed (so a promoted
     // `Operand::Value` resolves through the same ids), grow it during the walk,
@@ -243,10 +244,10 @@ pub(crate) fn build_scoped(
     block: BlockId,
     skip: usize,
     seed: &IndexMap<u32, ValueId>,
-    aliased: &crate::hashmap::IndexSet<u32>,
-    untrackable: &crate::hashmap::IndexSet<u32>,
-    mut_escaped: &crate::hashmap::IndexSet<u32>,
-    type_table: Option<&crate::tir::TypeTable>,
+    aliased: &IndexSet<u32>,
+    untrackable: &IndexSet<u32>,
+    mut_escaped: &IndexSet<u32>,
+    type_table: Option<&TypeTable>,
     calls: CallFacts<'_>,
     scratch: &mut ValuePool,
     heap_seed: Option<&HeapSnapshot>,
@@ -291,10 +292,10 @@ pub(crate) fn walk_scoped(
     block: BlockId,
     skip: usize,
     seed: &IndexMap<u32, ValueId>,
-    aliased: &crate::hashmap::IndexSet<u32>,
-    untrackable: &crate::hashmap::IndexSet<u32>,
-    mut_escaped: &crate::hashmap::IndexSet<u32>,
-    type_table: Option<&crate::tir::TypeTable>,
+    aliased: &IndexSet<u32>,
+    untrackable: &IndexSet<u32>,
+    mut_escaped: &IndexSet<u32>,
+    type_table: Option<&TypeTable>,
     calls: CallFacts<'_>,
     scratch: &mut ValuePool,
     heap_seed: Option<&HeapSnapshot>,
@@ -383,7 +384,7 @@ fn reintern_live_rooted(
     live: &mut ValuePool,
     id: ValueId,
     live_base: u32,
-    type_table: Option<&crate::tir::TypeTable>,
+    type_table: Option<&TypeTable>,
 ) -> Option<ValueId> {
     if id.index() < live_base {
         return Some(id);
@@ -432,8 +433,8 @@ struct Builder<'a> {
     body: &'a Body,
     pool: ValuePool,
     value_of: IndexMap<ExprId, ValueId>,
-    block_writes: IndexMap<BlockId, std::rc::Rc<crate::hashmap::IndexSet<u32>>>,
-    fresh_invalidations: crate::hashmap::IndexSet<u32>,
+    block_writes: IndexMap<BlockId, std::rc::Rc<IndexSet<u32>>>,
+    fresh_invalidations: IndexSet<u32>,
     mut_escaped_sorted: Vec<u32>,
     /// `local_index → current Value` at the current program point. Cloned at
     /// branch entries so each arm walks from the pre-branch snapshot.
@@ -451,12 +452,12 @@ struct Builder<'a> {
     trace_id: u32,
     /// Reference-aliased locals; their field writes / calls invalidate
     /// conservatively. See [`build`].
-    aliased: crate::hashmap::IndexSet<u32>,
+    aliased: IndexSet<u32>,
     /// `stores`-aliased locals whose fields are never seeded. See [`build`].
-    untrackable: crate::hashmap::IndexSet<u32>,
+    untrackable: IndexSet<u32>,
     /// Locals a call may mutate (mutable escape). Only these are bumped by
     /// [`Builder::bump_call_effects`]. See [`build`].
-    mut_escaped: crate::hashmap::IndexSet<u32>,
+    mut_escaped: IndexSet<u32>,
     /// `local → pointee local` for `let r = &v` references, so `r.f` forwards
     /// from `v`'s field slot (reference look-through). Cleared when `r` or the
     /// pointee is reassigned ([`Builder::update_ref_target`]). This is
@@ -478,13 +479,13 @@ struct Builder<'a> {
     field_ref_targets: IndexMap<(ValueId, u32), u32>,
     /// Field indices some `Assign` in the body writes. See
     /// [`Builder::field_ref_targets`].
-    assigned_fields: crate::hashmap::IndexSet<u32>,
+    assigned_fields: IndexSet<u32>,
     /// Which sequence builtin each callee id is, so `array_len` over an array
     /// this walk saw `array_new` allocate folds to the length it was given.
     ctfe_builtins: crate::niri::CtfeBuiltinMap,
     /// Locals a struct literal bound, whose value therefore names an object
     /// rather than a datum. See [`Builder::bump_call_effects`].
-    seeded_aggregates: crate::hashmap::IndexSet<u32>,
+    seeded_aggregates: IndexSet<u32>,
     /// `array value → its length value`, for the arrays this walk allocated.
     /// The array is a fresh opaque per call, so a second allocation is a second
     /// entry and a reassignment reaches neither.
@@ -492,7 +493,7 @@ struct Builder<'a> {
     /// Type table for constant folding of pure arithmetic on literal operands
     /// (`Binary` / `Unary`). `None` disables folding (the value graph still
     /// builds structural nodes). See [`Builder::fold_binary_const`].
-    type_table: Option<&'a crate::tir::TypeTable>,
+    type_table: Option<&'a TypeTable>,
     /// Per-loop pre-header `current_value` snapshots. See
     /// [`ValueGraphBuild::loop_entry_values`].
     loop_entry_values: IndexMap<BlockId, IndexMap<u32, ValueId>>,
@@ -502,23 +503,23 @@ struct Builder<'a> {
     stmt_entry_version: IndexMap<StmtId, HeapVersion>,
     /// `ExprId` indices of calls that mutate no caller local. See
     /// [`BuildConfig::pure_calls`].
-    pure_calls: crate::hashmap::IndexSet<ExprId>,
+    pure_calls: IndexSet<ExprId>,
     /// Callees that write no tracked `(root, field)` slot: an intrinsic below
     /// the field layer, a value-copy helper, or a bodied function that never
     /// returns. Empty is conservative.
-    pure_builtin_callees: crate::hashmap::IndexSet<FuncId>,
+    pure_builtin_callees: IndexSet<FuncId>,
     /// Calls whose callee cannot write through the receiver, so a loop does not
     /// borrow it. Empty is conservative.
-    receiver_immutable_calls: crate::hashmap::IndexSet<ExprId>,
+    receiver_immutable_calls: IndexSet<ExprId>,
 }
 
 impl<'a> Builder<'a> {
     fn new(
         body: &'a Body,
-        aliased: &crate::hashmap::IndexSet<u32>,
-        untrackable: &crate::hashmap::IndexSet<u32>,
-        mut_escaped: &crate::hashmap::IndexSet<u32>,
-        type_table: Option<&'a crate::tir::TypeTable>,
+        aliased: &IndexSet<u32>,
+        untrackable: &IndexSet<u32>,
+        mut_escaped: &IndexSet<u32>,
+        type_table: Option<&'a TypeTable>,
         pool: ValuePool,
     ) -> Self {
         Self {
@@ -526,7 +527,7 @@ impl<'a> Builder<'a> {
             pool,
             value_of: IndexMap::default(),
             block_writes: IndexMap::default(),
-            fresh_invalidations: crate::hashmap::IndexSet::default(),
+            fresh_invalidations: IndexSet::default(),
             current_value: IndexMap::default(),
             heap_state: HeapState::new(),
             field_store: IndexMap::default(),
@@ -547,14 +548,14 @@ impl<'a> Builder<'a> {
             field_ref_targets: IndexMap::default(),
             assigned_fields: assigned_field_indices(body),
             ctfe_builtins: crate::niri::CtfeBuiltinMap::default(),
-            seeded_aggregates: crate::hashmap::IndexSet::default(),
+            seeded_aggregates: IndexSet::default(),
             array_lengths: IndexMap::default(),
             type_table,
             loop_entry_values: IndexMap::default(),
             stmt_entry_version: IndexMap::default(),
-            pure_calls: crate::hashmap::IndexSet::default(),
-            pure_builtin_callees: crate::hashmap::IndexSet::default(),
-            receiver_immutable_calls: crate::hashmap::IndexSet::default(),
+            pure_calls: IndexSet::default(),
+            pure_builtin_callees: IndexSet::default(),
+            receiver_immutable_calls: IndexSet::default(),
         }
     }
 
@@ -664,7 +665,7 @@ impl<'a> Builder<'a> {
         &self,
         vn: ValueId,
         op: Operand,
-        tt: &crate::tir::TypeTable,
+        tt: &TypeTable,
     ) -> Option<const_eval::Value> {
         let prim = const_eval::prim_of(self.operand_type(op), tt);
         super::value_kind_to_const(self.pool.kind(vn), prim)
@@ -1020,7 +1021,7 @@ impl<'a> Builder<'a> {
                     self.fresh_invalidations.clear();
                     let saved_cur = self.current_value.clone();
                     let rhs = self.walk_operand(right);
-                    let changed: crate::hashmap::IndexSet<u32> = self
+                    let changed: IndexSet<u32> = self
                         .current_value
                         .iter()
                         .filter_map(|(&k, &v)| {
@@ -1776,7 +1777,7 @@ impl<'a> Builder<'a> {
     /// and a reference whose pointee is among `writes` may point at a moved
     /// object. The `ref_targets` counterpart to those constructs' `Opaque`
     /// reassignment of `current_value` for the same locals.
-    fn drop_ref_targets_for(&mut self, writes: &crate::hashmap::IndexSet<u32>) {
+    fn drop_ref_targets_for(&mut self, writes: &IndexSet<u32>) {
         self.ref_targets
             .retain(|src, pointee| !writes.contains(src) && !writes.contains(pointee));
     }
@@ -1854,7 +1855,7 @@ impl<'a> Builder<'a> {
     where
         K: Copy + Eq + std::hash::Hash + 's,
     {
-        let mut keys: crate::hashmap::IndexSet<K> = crate::hashmap::IndexSet::default();
+        let mut keys: IndexSet<K> = IndexSet::default();
         for k in pre_map.keys() {
             keys.insert(*k);
         }
@@ -1928,7 +1929,7 @@ impl<'a> Builder<'a> {
         // threading the post-guard state forward, conservatively dirty
         // every outer local any guard could write and bump the heap
         // once before walking arms.
-        let mut guard_writes: crate::hashmap::IndexSet<u32> = crate::hashmap::IndexSet::default();
+        let mut guard_writes: IndexSet<u32> = IndexSet::default();
         let mut any_guard = false;
         for arm in arms {
             if let Some(g) = arm.guard {
@@ -2079,12 +2080,12 @@ impl<'a> Builder<'a> {
 fn writes_of_block(
     body: &Body,
     block: crate::nir_arena::BlockId,
-    cache: &mut IndexMap<BlockId, std::rc::Rc<crate::hashmap::IndexSet<u32>>>,
-) -> std::rc::Rc<crate::hashmap::IndexSet<u32>> {
+    cache: &mut IndexMap<BlockId, std::rc::Rc<IndexSet<u32>>>,
+) -> std::rc::Rc<IndexSet<u32>> {
     if let Some(ws) = cache.get(&block) {
         return std::rc::Rc::clone(ws);
     }
-    let mut out = crate::hashmap::IndexSet::default();
+    let mut out = IndexSet::default();
     let stmts = body.blocks[block].stmts.clone();
     for s in stmts {
         collect_writes_in_stmt(body, s, &mut out, cache);
@@ -2097,8 +2098,8 @@ fn writes_of_block(
 /// Every field index some `Assign` in `body` writes, over the whole arena: a
 /// field nothing replaces is one a recorded pointee outlives. Coarse by index
 /// rather than by type, which errs toward recording nothing.
-fn assigned_field_indices(body: &Body) -> crate::hashmap::IndexSet<u32> {
-    let mut set = crate::hashmap::IndexSet::default();
+fn assigned_field_indices(body: &Body) -> IndexSet<u32> {
+    let mut set = IndexSet::default();
     for (_, node) in &body.exprs {
         if let ExprKind::Assign { target, .. } = &node.kind
             && let ExprKind::FieldAccess { field_index, .. } = &body.exprs[*target].kind
@@ -2113,11 +2114,11 @@ fn assigned_field_indices(body: &Body) -> crate::hashmap::IndexSet<u32> {
 /// questions [`Builder::bump_call_effects`] asks of one call.
 pub struct CallFacts<'a> {
     /// Builtin intrinsics operating below the struct-field layer.
-    pub pure_builtin: &'a crate::hashmap::IndexSet<FuncId>,
+    pub pure_builtin: &'a IndexSet<FuncId>,
     /// Calls that mutate no caller local.
-    pub pure: &'a crate::hashmap::IndexSet<ExprId>,
+    pub pure: &'a IndexSet<ExprId>,
     /// Calls whose callee cannot write through the receiver.
-    pub receiver_immutable: &'a crate::hashmap::IndexSet<ExprId>,
+    pub receiver_immutable: &'a IndexSet<ExprId>,
     /// Which sequence builtin each callee id is, so `array_len` over an array
     /// the walk saw allocated folds to the length it was given.
     pub ctfe_builtins: &'a crate::niri::CtfeBuiltinMap,
@@ -2129,10 +2130,10 @@ pub struct CallFacts<'a> {
 #[derive(Default)]
 struct LoopHeapEffects {
     /// `local.field = …` (bare-`Local` receiver) targets.
-    written_fields: crate::hashmap::IndexSet<(u32, u32)>,
+    written_fields: IndexSet<(u32, u32)>,
     /// `&mut local`, `&mut local.field`, a `&mut` call arg, or a method
     /// receiver — the callee may store through the reference.
-    mut_borrowed: crate::hashmap::IndexSet<u32>,
+    mut_borrowed: IndexSet<u32>,
     /// An impure call, indirect or CM call, or opaque-target store that may
     /// mutate aliased state.
     has_external_writes: bool,
@@ -2146,10 +2147,7 @@ struct LoopHeapEffects {
 /// so never mutates a tracked `(root, field)` slot. Classified by the callee's
 /// `func_id` (the call node carries no `FunctionRef`); an empty set is
 /// conservative (treat every call as an external write).
-fn is_builtin_pure_call(
-    pure_builtin_callees: &crate::hashmap::IndexSet<FuncId>,
-    func_id: FuncId,
-) -> bool {
+fn is_builtin_pure_call(pure_builtin_callees: &IndexSet<FuncId>, func_id: FuncId) -> bool {
     pure_builtin_callees.contains(&func_id)
 }
 
@@ -2293,8 +2291,8 @@ fn record_loop_heap_write(
 fn collect_writes_in_block(
     body: &Body,
     block: crate::nir_arena::BlockId,
-    out: &mut crate::hashmap::IndexSet<u32>,
-    cache: &mut IndexMap<BlockId, std::rc::Rc<crate::hashmap::IndexSet<u32>>>,
+    out: &mut IndexSet<u32>,
+    cache: &mut IndexMap<BlockId, std::rc::Rc<IndexSet<u32>>>,
 ) {
     let ws = writes_of_block(body, block, cache);
     out.extend(ws.iter().copied());
@@ -2303,8 +2301,8 @@ fn collect_writes_in_block(
 fn collect_writes_in_stmt(
     body: &Body,
     stmt: StmtId,
-    out: &mut crate::hashmap::IndexSet<u32>,
-    cache: &mut IndexMap<BlockId, std::rc::Rc<crate::hashmap::IndexSet<u32>>>,
+    out: &mut IndexSet<u32>,
+    cache: &mut IndexMap<BlockId, std::rc::Rc<IndexSet<u32>>>,
 ) {
     match &body.stmts[stmt].kind {
         StmtKind::Let {
@@ -2337,8 +2335,8 @@ fn collect_writes_in_stmt(
 fn collect_writes_in_operand(
     body: &Body,
     op: Operand,
-    out: &mut crate::hashmap::IndexSet<u32>,
-    cache: &mut IndexMap<BlockId, std::rc::Rc<crate::hashmap::IndexSet<u32>>>,
+    out: &mut IndexSet<u32>,
+    cache: &mut IndexMap<BlockId, std::rc::Rc<IndexSet<u32>>>,
 ) {
     if let Some(e) = op.as_expr() {
         collect_writes_in_expr(body, e, out, cache);
@@ -2348,8 +2346,8 @@ fn collect_writes_in_operand(
 fn collect_writes_in_expr(
     body: &Body,
     expr: ExprId,
-    out: &mut crate::hashmap::IndexSet<u32>,
-    cache: &mut IndexMap<BlockId, std::rc::Rc<crate::hashmap::IndexSet<u32>>>,
+    out: &mut IndexSet<u32>,
+    cache: &mut IndexMap<BlockId, std::rc::Rc<IndexSet<u32>>>,
 ) {
     if let ExprKind::Assign { target, .. } = &body.exprs[expr].kind
         && let ExprKind::Local { index, .. } = &body.exprs[*target].kind
@@ -2371,8 +2369,8 @@ fn collect_writes_in_expr(
 fn collect_writes_in_pattern(
     body: &Body,
     pat: PatId,
-    out: &mut crate::hashmap::IndexSet<u32>,
-    cache: &mut IndexMap<BlockId, std::rc::Rc<crate::hashmap::IndexSet<u32>>>,
+    out: &mut IndexSet<u32>,
+    cache: &mut IndexMap<BlockId, std::rc::Rc<IndexSet<u32>>>,
 ) {
     if let PatKind::Binding { local_index, .. } = &body.pats[pat].kind {
         out.insert(*local_index);
@@ -2392,7 +2390,7 @@ fn collect_writes_in_pattern(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::tir::TypeTable;
+    use TypeTable;
 
     // ----- Body builders for tests -----
 
@@ -2500,9 +2498,9 @@ mod tests {
     /// verdict it is about and leave the rest at their conservative empty.
     #[derive(Default)]
     struct TestFacts {
-        builtin: crate::hashmap::IndexSet<FuncId>,
-        pure: crate::hashmap::IndexSet<ExprId>,
-        immutable: crate::hashmap::IndexSet<ExprId>,
+        builtin: IndexSet<FuncId>,
+        pure: IndexSet<ExprId>,
+        immutable: IndexSet<ExprId>,
         ctfe_builtins: crate::niri::CtfeBuiltinMap,
     }
 
@@ -2649,7 +2647,7 @@ mod tests {
 
     #[test]
     fn cse_independent_of_mut_escaped_iteration_order() {
-        use crate::hashmap::IndexSet;
+        use IndexSet;
         let empty = IndexSet::default();
         let no_calls = IndexSet::default();
         let no_callees = IndexSet::default();

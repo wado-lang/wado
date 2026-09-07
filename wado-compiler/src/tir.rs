@@ -4733,7 +4733,7 @@ impl FunctionRef {
         if self.monomorph_info.is_some() {
             return None;
         }
-        if self.module_source.is_core_builtin() || self.module_source.is_wasm_asset() {
+        if self.module_source.is_builtin() {
             Some(format!("builtin::{}", self.name))
         } else {
             None
@@ -5753,6 +5753,10 @@ pub struct TirFunction {
     /// Allocator tag from `#[allocator("...")]` attribute (e.g., `"bump"`, `"debug"`).
     pub allocator_tag: Option<String>,
 
+    /// What `#[returns(...)]` declared. Read only where there is no body to
+    /// infer from, so one written on a body is recorded and ignored.
+    pub declared_return_convention: Option<ReturnConvention>,
+
     /// Categorizes the function for kind-specific optimizations. Most functions
     /// are `Regular`; synthesis passes set specialized kinds so the TIR
     /// optimizer can apply targeted transformations (e.g. freshness-based
@@ -5827,6 +5831,19 @@ pub enum InlineHint {
     Always,
     /// `#[inline(never)]` — never inline.
     Never,
+}
+
+/// Where a bodyless declaration's result comes from. A body is read for the
+/// same fact, so this is the declared half of one notion: the result is either
+/// a fresh place or a projection of one parameter.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ReturnConvention {
+    /// `#[returns(owned)]` — every returned value is freshly materialized, so a
+    /// caller may consume it as a move.
+    Owned,
+    /// `#[returns(part_of(p))]` — the result names a component of parameter `p`
+    /// in place, so it lives as long as that argument's storage does.
+    PartOf(usize),
 }
 
 impl TirFunction {

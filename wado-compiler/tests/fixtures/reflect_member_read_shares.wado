@@ -1,0 +1,42 @@
+// A reflect member read names a component of its argument, so a binding that
+// nothing writes shares that storage instead of copying it. Every `core:serde`
+// struct serializer walks this path once per field: without the share, every
+// field of every serialized value is deep-copied.
+use { println, Stdout } from "core:cli";
+
+struct Holder {
+    xs: List<i32>,
+    ys: List<i32>,
+}
+
+trait Size {
+    fn size(&self) -> i32;
+}
+
+impl Size for List<i32> {
+    fn size(&self) -> i32 {
+        return self.len();
+    }
+}
+
+fn total<T: ReflectStruct<FieldTypes = [..F]>, ..F: Size>(t: &T) -> i32 {
+    let mut n = 0;
+    for let f of ReflectStruct::<T>::members() {
+        let v = f.get(t);
+        n = n + v.size();
+    }
+    return n;
+}
+
+export fn run() with Stdout {
+    let a: List<i32> = [1, 2];
+    let b: List<i32> = [3, 4, 5];
+    let h = Holder { xs: builtin::black_box(a), ys: builtin::black_box(b) };
+    println(`${total(&h)}`);
+}
+
+__DATA__
+{
+    "stdout": "5\n",
+    "wir_not_expect:O0": ["$value_copy$List<i32>"]
+}

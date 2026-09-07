@@ -1,0 +1,68 @@
+// A reflect member read hands out the container's storage. Binding it and
+// mutating the binding must copy, as every other read does. `StructField::get`,
+// `Hole::get` and `VariantCase::extract` each bridge through a bodyless
+// `builtin::` marker, which is what puts the question to the return-convention
+// analysis.
+use { println, Stdout } from "core:cli";
+
+struct Holder {
+    xs: List<i32>,
+}
+
+variant W {
+    A(List<i32>),
+    B(List<i32>),
+}
+
+trait Bump {
+    fn bump(&mut self);
+}
+
+impl Bump for List<i32> {
+    fn bump(&mut self) {
+        self.push(999);
+    }
+}
+
+fn via_field<T: ReflectStruct<FieldTypes = [..F]>, ..F: Bump>(t: &T) {
+    for let f of ReflectStruct::<T>::members() {
+        let mut v = f.get(t);
+        v.bump();
+    }
+}
+
+fn via_hole<T: ReflectTemplate<Holes = [..V]>, ..V: Bump>(t: T) {
+    for let h of ReflectTemplate::<T>::members() {
+        let mut v = h.get(&t);
+        v.bump();
+    }
+}
+
+fn via_case<T: ReflectVariant<CasePayloads = [..P]>, ..P: Bump>(w: &T) {
+    for let c of ReflectVariant::<T>::members() {
+        if c.holds(w) {
+            let mut v = c.extract(w);
+            v.bump();
+        }
+    }
+}
+
+export fn run() with Stdout {
+    let a: List<i32> = [1, 2];
+    let h = Holder { xs: builtin::black_box(a) };
+    via_field(&h);
+    println(`field ${h.xs:?}`);
+
+    let b: List<i32> = [1, 2];
+    let ys = builtin::black_box(b);
+    via_hole`${ys}`;
+    println(`hole ${ys:?}`);
+
+    let c: List<i32> = [1, 2];
+    let w = W::A(builtin::black_box(c));
+    via_case(&w);
+    println(`case ${w:?}`);
+}
+
+__DATA__
+{"stdout": "field [1, 2]\nhole [1, 2]\ncase W::A([1, 2])\n"}
