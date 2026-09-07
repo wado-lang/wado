@@ -377,12 +377,12 @@ they instantiate what the rules picked rather than picking it.
 ## Known gaps
 
 - The trait-qualified spelling reaches only a trait declaring no parameters of
-  its own. `Take::<A>::take(recv)` claims the turbofish for the trait's
-  arguments, and a receiver-less declaration has no receiver argument to pin
-  `Self` with, so on such a trait there is nowhere left to write it. Closing it
-  is a spelling decision — which slot of the turbofish is `Self` — not a missing
-  mechanism, and a bound (`fn f<T: Take<A>>() { T::take() }`) is the way to
-  write it meanwhile.
+  its own. `Take::<A>::take()` claims the turbofish for the trait's arguments,
+  and a receiver-less declaration has no receiver argument to pin `Self` with,
+  so on such a trait there is nowhere left to write it. Closing it is a spelling
+  decision — which slot of the turbofish is `Self` — not a missing mechanism.
+  The call is reported as that, naming the bound that writes it meanwhile
+  (`fn f<T: Take<A>>() { T::take() }`), rather than as an unknown function.
 - `resolve_static_method_call_from_qualified` resolves without the receiver's
   type, so a declaration whose slots the receiver fills comes back as the
   declaration wrote them. Nothing reads that return type today — the site

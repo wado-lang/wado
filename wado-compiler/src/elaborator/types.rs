@@ -543,6 +543,17 @@ pub enum TypeError {
         span: Span,
     },
 
+    /// `Trait::<T>::method()` on a trait declaring parameters of its own. The
+    /// turbofish is the trait's argument list there, so `Self` has nowhere to
+    /// be written. A known gap of WEP 2026-09-06.
+    UnwritableStaticSelf {
+        trait_name: String,
+        method: String,
+        /// The trait's own parameters, as the bound spells them.
+        params: Vec<String>,
+        span: Span,
+    },
+
     /// A static call whose literal argument admits several impls
     /// (`Wrapper::from(42)` against `From<i32>` beside `From<i64>`). A literal
     /// never selects between the widths it could coerce to (WEP 2026-07-31),
@@ -1462,6 +1473,19 @@ impl TypeError {
                 Code::TypeMismatch,
                 format!(
                     "'{receiver}::{method}' resolves to a blanket '{trait_name}' impl, and selecting its instantiation from the argument is not supported yet; write a concrete 'impl {trait_name}<{arg_type}> for {receiver}'"
+                ),
+                *span,
+            ),
+            TypeError::UnwritableStaticSelf {
+                trait_name,
+                method,
+                params,
+                span,
+            } => (
+                Code::TypeMismatch,
+                format!(
+                    "'{trait_name}' declares type parameters of its own, so the turbofish of '{trait_name}::<…>::{method}' is its argument list and 'Self' has nowhere to be written; call it through a bound ('fn f<T: {trait_name}<{}>>() {{ T::{method}(…) }}')",
+                    params.join(", ")
                 ),
                 *span,
             ),

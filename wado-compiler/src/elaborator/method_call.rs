@@ -1476,6 +1476,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let required = self.tysys.resolutions.declared(g.id);
                 return self.resolve_static_method_call_of_trait(&on_self, required, ctx);
             }
+            // The same spelling on a trait that does declare parameters: the
+            // turbofish is already spoken for, so say that rather than let the
+            // call read as an unknown function.
+            if self.is_trait_static_method(&g.name, &static_call.method)
+                && let Some(params) = self
+                    .decl_key_at(g.id, &g.name)
+                    .and_then(|key| self.trait_decl_type_params_of(&key))
+                && !params.is_empty()
+            {
+                let _ = self.emit(TypeError::UnwritableStaticSelf {
+                    trait_name: self.declared_trait_name(&g.name),
+                    method: static_call.method.clone(),
+                    params: params.into_iter().map(|p| p.name).collect(),
+                    span: static_call.span,
+                });
+                return TypeTable::ERROR;
+            }
             let _ = self.emit(TypeError::UnknownFunction {
                 name: static_call_symbol_name(static_call),
                 span: static_call.span,
@@ -3400,13 +3417,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 &crate::name::DeclName::new(&actual_struct_name),
             )
         });
+        // The receiver a newtype dispatches to. Its arguments are the ones
+        // `impl_type_args` already falls back to above, so the resolution
+        // filling the declaring slots from it says what this site would say.
+        let receiver_type = newtype_dispatch.as_ref().map(|(_, base, _)| *base);
         let Ok(resolution) = self.static_trait_ref(
             &actual_struct_name,
             method_name,
             receiver_key.as_ref(),
             args,
             None,
-            None,
+            receiver_type,
             span,
         ) else {
             return TypeTable::ERROR;

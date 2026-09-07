@@ -1,0 +1,23 @@
+// `Trait::<T>::method(…)` supplies `Self` in the turbofish, so a trait that
+// declares parameters of its own has nowhere left to write it: the turbofish
+// is already the trait's argument list. A known gap of WEP 2026-09-06,
+// reported at the call with the bound that writes it instead.
+
+trait Take<A> {
+    fn take() -> A;
+}
+
+struct V {}
+
+impl Take<i32> for V {
+    fn take() -> i32 {
+        return 7;
+    }
+}
+
+export fn run() {
+    let _ = Take::<i32>::take();
+}
+
+__DATA__
+{"compile_error": "'Take' declares type parameters of its own, so the turbofish"}
