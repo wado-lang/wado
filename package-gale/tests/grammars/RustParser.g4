@@ -773,8 +773,11 @@ matchArm
     : outerAttribute* pattern matchArmGuard?
     ;
 
+// LOCAL: `if let` guards (Rust 1.88), and the let chain a guard may continue
+// into — the same `letChainTail` an `if` condition uses.
 matchArmGuard
-    : KW_IF expression
+    : KW_IF KW_LET pattern EQ expression letChainTail*
+    | KW_IF expression letChainTail*
     ;
 
 // 9
