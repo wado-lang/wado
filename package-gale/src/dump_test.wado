@@ -24,27 +24,44 @@ use {
 use { LitToken, collect_literal_tokens } from "./lexer_gen.wado";
 use { lower } from "./lower.wado";
 use { GenContext } from "./gen_context.wado";
+use { canonicalize_for_analysis, analysis_context, lower_for_analysis } from "./codegen.wado";
 use { render_dump } from "./dump.wado";
 use { parse } from "./g4/parser.wado";
 
 /// Run the full front-end (parse → merge → synth → lower) and render,
-/// mirroring `cmd_dump`. Used by tests whose grammar shape (left
-/// recursion) is impractical to hand-build.
-fn dump_source(input: &String) -> String {
+/// through the very functions `cmd_dump` calls. Used by tests whose grammar
+/// shape (left recursion) is impractical to hand-build.
+///
+/// The pipeline is `generate`'s, not a copy of it: the dump's whole claim is
+/// that it reports what the emitter emits, and lowering asks `ctx` for FOLLOW
+/// and for scannability. A hand-rolled prologue that skips either answers them
+/// by re-deriving them per query, which on `RustParser.g4` cost three orders
+/// of magnitude over generating the whole parser.
+fn dump_pipeline(input: &String) -> [String, GenContext] {
     let mut merged = merge_grammars([parse(*input).unwrap()]);
     synthesize_implicit_tokens(&mut merged);
-    alias_parser_literals(&mut merged);
-    normalize_caches(&mut merged);
+    let token_kinds = canonicalize_for_analysis(&mut merged);
     let lit = collect_literal_tokens(&merged.parser_rules);
-    let mut ctx = GenContext::new(&merged.parser_rules, &lit);
-    let lowered = lower(&merged, &lit, &mut ctx);
-    return render_dump(&merged, &lowered, &mut ctx);
+    let mut ctx = analysis_context(&merged, &lit, token_kinds);
+    let lowered = lower_for_analysis(&merged, &lit, &mut ctx);
+    return [render_dump(&merged, &lowered, &mut ctx), ctx];
 }
 
+fn dump_source(input: &String) -> String {
+    return dump_pipeline(input).0;
+}
+
+test "the dump lowers through the emitter's primed context" {
+    let [_, ctx] = dump_pipeline(&"grammar G; a : B c ; c : C ; B : 'b' ; C : 'c' ;");
+    assert ctx.rule_follow_is_exact(), "the dump must install FOLLOW before lowering, as `generate` does";
+}
+
+/// Render a hand-built `Grammar` as is. Not `cmd_dump`'s pipeline —
+/// canonicalization would rewrite the very shape these tests assert on — so
+/// what it pins is the report's structure, not the emitter's agreement with it.
+/// `dump_pipeline` is the one that mirrors the command.
 fn dump_grammar(g: &Grammar) -> String {
     let lit_tokens = no_lit_tokens();
-    // Lower through the render ctx (mirrors cmd_dump) so the
-    // follow-mask registry is populated for the dump.
     let mut ctx = GenContext::new(&g.parser_rules, &lit_tokens);
     let lowered = lower(g, &lit_tokens, &mut ctx);
     return render_dump(g, &lowered, &mut ctx);

@@ -3,18 +3,16 @@ use { Deserialize } from "core:serde";
 use { parse, ArgsError } from "core:args";
 use { Preopens, Descriptor, Filesize, PathFlags, OpenFlags, DescriptorFlags, ErrorCode } from "wasi:filesystem";
 use { assemble_grammar, AssembleError } from "./g4/parser.wado";
+use { Grammar } from "./ir.wado";
 use {
-    Grammar,
-    normalize_caches,
-    alias_parser_literals,
-    canonicalize_empty_alt_groups,
-    unwrap_labeled_transparent_groups,
-} from "./ir.wado";
-use { generate, GenerateOptions } from "./codegen.wado";
+    generate,
+    GenerateOptions,
+    canonicalize_for_analysis,
+    analysis_context,
+    lower_for_analysis,
+} from "./codegen.wado";
 use { parse_highlight_query, HighlightRule } from "./highlight_query.wado";
-use { lower } from "./lower.wado";
 use { collect_literal_tokens } from "./lexer_gen.wado";
-use { GenContext } from "./gen_context.wado";
 use { build_diagnostics } from "./gir.wado";
 use { render_dump } from "./dump.wado";
 use { render_lexer_dump } from "./lexer_dump.wado";
@@ -165,17 +163,15 @@ fn cmd_dump(paths: List<String>, atn: bool, lexer: bool) with (Stdout, Stderr, P
     }
     let mut merged = load_and_merge(&paths);
 
-    // `dump` reports what the emitter sees, so it runs `generate`'s surface
-    // normalizations too — otherwise it can report a shape no parser is
-    // built from.
-    alias_parser_literals(&mut merged);
-    canonicalize_empty_alt_groups(&mut merged);
-    unwrap_labeled_transparent_groups(&mut merged);
+    // `dump` reports what the emitter sees, so it canonicalizes and stamps the
+    // grammar through `generate`'s own prologue — otherwise it reports a shape
+    // no parser is built from, and lowering re-derives per query what the
+    // prologue answers once.
+    let token_kinds = canonicalize_for_analysis(&mut merged);
 
     // `--atn` short-circuits the GIR dump: build the surface-IR ATN (the
     // data the runtime simulator walks) and print it.
     if atn {
-        normalize_caches(&mut merged);
         let built = build_atn(&merged);
         print(dump_atn(&built, &merged));
         return;
@@ -184,20 +180,18 @@ fn cmd_dump(paths: List<String>, atn: bool, lexer: bool) with (Stdout, Stderr, P
     // `--lexer` reports the lexer emit instead: the GIR dump covers the parser
     // only, and lexer strategies are decided at emit time from the surface IR.
     if lexer {
-        normalize_caches(&mut merged);
         print(render_lexer_dump(&merged));
         return;
     }
 
     // Lower to GIR and render the per-rule report derived from the
     // actual prediction decisions (not the raw surface IR).
-    normalize_caches(&mut merged);
     let lit_tokens = collect_literal_tokens(&merged.parser_rules);
     // Lower through the same ctx render_dump renders with, so the
     // follow-mask registry is populated and the dump reflects the
     // literal ctx that lowered the grammar.
-    let mut ctx = GenContext::new(&merged.parser_rules, &lit_tokens);
-    let lowered = lower(&merged, &lit_tokens, &mut ctx);
+    let mut ctx = analysis_context(&merged, &lit_tokens, token_kinds);
+    let lowered = lower_for_analysis(&merged, &lit_tokens, &mut ctx);
     print(render_dump(&merged, &lowered, &mut ctx));
 }
 

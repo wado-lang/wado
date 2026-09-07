@@ -18,6 +18,7 @@ use {
 use { build as build_follow_env } from "./follow_env.wado";
 use { TokenKinds, resolve_kind_ids } from "./token_kinds.wado";
 use {
+    LitToken,
     collect_literal_tokens,
     gen_token_constants,
     gen_lexer,
@@ -106,8 +107,12 @@ pub struct GeneratedOutput {
 global GEN_BASE_CAPACITY: i32 = 4096;
 global GEN_PER_RULE_CAPACITY: i32 = 4096;
 
-pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOutput {
-    // Before `collect_literal_tokens` below, which must not see an aliased text.
+/// The surface normalizations and id stamping every consumer of the analysis
+/// runs before it builds a `GenContext`. `generate`, `gale dump` and the ATN
+/// builder all lower the same grammar, so a pass only one of them runs makes
+/// the others describe a parser nobody emits.
+pub fn canonicalize_for_analysis(grammar: &mut Grammar) -> TokenKinds {
+    // Before `collect_literal_tokens`, which must not see an aliased text.
     alias_parser_literals(grammar);
     // Fill in `snake_name` / `field_name` caches on every name-bearing IR
     // node before any codegen pass touches the grammar. Production IR built
@@ -139,6 +144,37 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
     // the analysis reads `kind_id`; names are recovered from the table at emit.
     let token_kinds = TokenKinds::build(grammar);
     resolve_kind_ids(grammar, &token_kinds);
+    return token_kinds;
+}
+
+/// A `GenContext` over a `canonicalize_for_analysis`-ed grammar, carrying
+/// everything the analysis reads. Emit-only settings (trace, fragment entries,
+/// superclasses, action members) stay with `generate`.
+pub fn analysis_context(grammar: &Grammar, lit_tokens: &List<LitToken>, token_kinds: TokenKinds) -> GenContext {
+    let mut ctx = GenContext::new(&grammar.parser_rules, lit_tokens);
+    ctx.set_token_kinds(token_kinds);
+    ctx.set_vocab_names(vocab_display_names(&grammar.lexer_rules, lit_tokens, ctx.token_kind_names()));
+    ctx.set_action_language(&grammar.action_language);
+    ctx.set_grammar_name(&grammar.name);
+    return ctx;
+}
+
+/// Lower for analysis, priming what lowering itself asks `ctx` for.
+///
+/// Scannability is a fixpoint over the whole rule set: answered per query it
+/// re-walks every cycle the query reaches, which on a grammar the size of
+/// `RustParser.g4` is the whole cost of lowering. FOLLOW is installed first
+/// because a tail-position viability probe stamps the enclosing rule's FOLLOW
+/// onto its op, so the fixed point has to be in place by then; it reads only
+/// the surface rules.
+pub fn lower_for_analysis(grammar: &Grammar, lit_tokens: &List<LitToken>, ctx: &mut GenContext) -> LoweredGrammar {
+    ctx.precompute_scannability();
+    install_rule_follow(grammar, ctx);
+    return lower(grammar, lit_tokens, ctx);
+}
+
+pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOutput {
+    let token_kinds = canonicalize_for_analysis(grammar);
     // Pre-size the output buffer from the grammar's rule count so the
     // bulk of `String::push_str` calls in `CodeWriter::line` don't
     // trigger `String::grow` doubling events. Empirical Rust*.g4 output
@@ -152,13 +188,9 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
     // follow-mask / kind-set registries and the first / nullable
     // / scannable caches for the subsequent parser emit.
     let lit_tokens = collect_literal_tokens(&grammar.parser_rules);
-    let mut ctx = GenContext::new(&grammar.parser_rules, &lit_tokens);
-    ctx.set_token_kinds(token_kinds);
-    ctx.set_vocab_names(vocab_display_names(&grammar.lexer_rules, &lit_tokens, ctx.token_kind_names()));
+    let mut ctx = analysis_context(grammar, &lit_tokens, token_kinds);
     ctx.set_trace(options.trace);
     ctx.set_fragment_entries(options.fragment_entries);
-    ctx.set_action_language(&grammar.action_language);
-    ctx.set_grammar_name(&grammar.name);
     wire_superclasses(grammar, &mut ctx);
     // A wired parser base's bodies are Wado once the rewrite has run, so they
     // execute even under a host language java2wado carves out.
@@ -185,12 +217,7 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
             ctx.warn(&DiagnosticOwner::host(&"lexer action"), DiagnosticKind::UnsupportedAction, *msg);
         }
     }
-    ctx.precompute_scannability();
-    // Before lowering: a tail-position viability probe stamps the enclosing
-    // rule's FOLLOW onto its op, so the fixed point has to be in place by
-    // then. It reads only the surface rules.
-    install_rule_follow(grammar, &mut ctx);
-    let lowered = lower(grammar, &lit_tokens, &mut ctx);
+    let lowered = lower_for_analysis(grammar, &lit_tokens, &mut ctx);
     // Build the ATN up front when the grammar needs the simulator, so parser
     // emit can push each rule call's exact return state (`call_site_returns`)
     // and `gen_atn_data_global` can serialize the very same ATN. Gate-free
