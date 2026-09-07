@@ -1,0 +1,23 @@
+// An argument no candidate admits is a mismatch to report, not a spelling
+// nothing declares. The bare-name path dropped the parameter list when the
+// resolution picked nothing, so `42` met no list at all, the call was mangled
+// anyway, and WIR build panicked on a name it could not resolve. The survey
+// that names what the receiver does declare read only the bodies a block
+// writes, so the inherited default was invisible to it too.
+
+trait Make {
+    fn make(v: String) -> i32 {
+        return v.len() as i32;
+    }
+}
+
+struct Foo {}
+
+impl Make for Foo {}
+
+export fn run() {
+    let _ = Foo::make(42);
+}
+
+__DATA__
+{"compile_error": "no impl of 'Make' for 'Foo' takes an argument of type 'i32'; 'Foo::make' is available for 'String'"}

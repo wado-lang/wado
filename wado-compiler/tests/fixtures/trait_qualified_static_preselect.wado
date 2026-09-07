@@ -1,0 +1,34 @@
+//! `A::<Foo>::make(1)` names `A`, so `B`'s impl is not a candidate to weigh
+//! the literal against. The argument preselect ran before the resolution and
+//! was never told which trait the spelling named, so it surveyed both impls
+//! and reported the literal as ambiguous between `i32` and `i64`.
+
+struct Foo {}
+
+trait A {
+    fn make(v: i32) -> i32;
+}
+
+trait B {
+    fn make(v: i64) -> i32;
+}
+
+impl A for Foo {
+    fn make(v: i32) -> i32 {
+        return 1;
+    }
+}
+
+impl B for Foo {
+    fn make(v: i64) -> i32 {
+        return 2;
+    }
+}
+
+test "the spelling's trait narrows the preselect" {
+    assert A::<Foo>::make(1) == 1;
+    assert B::<Foo>::make(1) == 2;
+}
+
+__DATA__
+{"test": {}}

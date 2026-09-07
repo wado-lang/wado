@@ -640,6 +640,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 call.span,
                 ctx,
                 None,
+                None,
             );
             if matches!(preselected, PreselectedArg::Reported) {
                 return TypeTable::ERROR;
@@ -982,6 +983,24 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     None,
                 );
                 if self.report_ambiguous_static(&resolved, suffix, call.span) {
+                    return TypeTable::ERROR;
+                }
+                // No candidate the arguments admitted. The same report the
+                // static-call spelling makes: unreported, the call carried no
+                // parameter list to reject the argument, was mangled anyway,
+                // and reached WIR build unresolved.
+                if resolved.found().is_none()
+                    && !args.is_empty()
+                    && !self.has_inherent_static_method(prefix, suffix, Some(&receiver_key))
+                    && self.report_unmatched_static_arg(
+                        prefix,
+                        suffix,
+                        &args,
+                        call.span,
+                        Some(&receiver_key),
+                        None,
+                    )
+                {
                     return TypeTable::ERROR;
                 }
                 // The count and the defaults come from the declaration, so the

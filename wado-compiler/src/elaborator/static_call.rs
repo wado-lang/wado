@@ -91,10 +91,19 @@ pub(super) enum StaticLookup {
     NotStatic,
 }
 
+/// What one `impl` block offers for a method name: the declaration that
+/// answers, and the facts the rules and the argument survey each read off it.
+pub(super) struct StaticOffer {
+    pub(super) method_id: DefId,
+    pub(super) kind: CandidateKind,
+    pub(super) origin: CandidateOrigin,
+    pub(super) selector: Selector,
+}
+
 /// Which kind of declaration a candidate is. What shadows it and which
 /// argument selects it both follow from this.
 #[derive(Clone, Copy, PartialEq, Eq)]
-enum CandidateKind {
+pub(super) enum CandidateKind {
     /// Receiver-less, so argument zero is its first parameter.
     Static,
     /// Receiver-taking, reached as `Type::method(&recv, …)`, so argument zero
@@ -113,7 +122,7 @@ impl CandidateKind {
 
 /// Where the body a candidate names is written, in the order that outranks.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-enum CandidateOrigin {
+pub(super) enum CandidateOrigin {
     /// The receiver's own declaration — its inherent impl, a resource static,
     /// or one along that resource's chain. It shadows every trait's of its
     /// kind, as dot syntax resolves it.
@@ -512,6 +521,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> Result<StaticTraitRef, Reported> {
         let (receiver_name, method_name) = (query.receiver_name, query.method_name);
         let (receiver_key, arg_types) = (query.receiver_key, query.arg_types);
+        let required_trait = query.required_trait;
         let lookup = self.resolve_static_callee(query);
         let return_type = lookup.return_type();
         let selected = lookup
@@ -527,6 +537,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 arg_types,
                 span,
                 receiver_key,
+                required_trait,
             )
         {
             return Err(Reported);
@@ -689,16 +700,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     origin,
                     selector,
                 };
-                match header.methods.iter().find(|m| m.name == method_name) {
-                    Some(method) => Some(self.written_candidate(header, method.def, build)),
-                    None => self.inherited_candidate(
-                        trait_decl,
-                        impl_def,
-                        method_name,
-                        receiver_type,
-                        build,
-                    ),
-                }
+                let offer = self.impl_static_offer(
+                    header,
+                    impl_def,
+                    trait_decl,
+                    method_name,
+                    receiver_type,
+                )?;
+                Some(build(
+                    offer.method_id,
+                    offer.kind,
+                    offer.origin,
+                    offer.selector,
+                ))
             })
             .collect()
     }
@@ -744,24 +758,37 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// The candidate for a body the block writes. Its parameter is already in
     /// the block's own frame, so a slot the block fills is a blanket and
     /// anything else is what the argument is compared against.
-    fn written_candidate(
+    /// What an `impl` block offers for `method_name` — the body it wrote, else
+    /// the trait default it leaves to answer. One walk, so the survey that
+    /// lists a receiver's candidates and the rules that pick among them cannot
+    /// see different sets: reading only `header.methods` made every inherited
+    /// static invisible to the survey.
+    ///
+    /// `None` where the block offers nothing: it declares another name, or the
+    /// trait left the method required — the block's own error, reported where
+    /// the two are compared.
+    pub(super) fn impl_static_offer(
         &self,
         header: &ImplHeader,
-        method_id: DefId,
-        build: impl FnOnce(DefId, CandidateKind, CandidateOrigin, Selector) -> Candidate,
-    ) -> Candidate {
-        let sig = self
-            .tysys
-            .signatures
-            .method_sig(method_id)
-            .expect("the decl pass records every impl-declared method's signature");
-        let selector = self.written_selector(header, sig);
-        build(
-            method_id,
-            CandidateKind::of(sig.self_kind),
-            CandidateOrigin::Written,
-            selector,
-        )
+        impl_def: DefId,
+        trait_decl: DefId,
+        method_name: &str,
+        receiver_type: Option<TypeId>,
+    ) -> Option<StaticOffer> {
+        if let Some(method) = header.methods.iter().find(|m| m.name == method_name) {
+            let sig = self
+                .tysys
+                .signatures
+                .method_sig(method.def)
+                .expect("the decl pass records every impl-declared method's signature");
+            return Some(StaticOffer {
+                method_id: method.def,
+                kind: CandidateKind::of(sig.self_kind),
+                origin: CandidateOrigin::Written,
+                selector: self.written_selector(header, sig),
+            });
+        }
+        self.inherited_offer(trait_decl, impl_def, method_name, receiver_type)
     }
 
     /// What the argument is checked against for a body the block wrote: the
@@ -790,14 +817,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ///
     /// `None` where the trait left the method required, which is the block's own
     /// error and reported where the two are compared.
-    fn inherited_candidate(
+    fn inherited_offer(
         &self,
         trait_decl: DefId,
         impl_def: DefId,
         method_name: &str,
         receiver_type: Option<TypeId>,
-        build: impl FnOnce(DefId, CandidateKind, CandidateOrigin, Selector) -> Candidate,
-    ) -> Option<Candidate> {
+    ) -> Option<StaticOffer> {
         let declared = self
             .tysys
             .signatures
@@ -810,11 +836,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let instantiated = declared
             .sig
             .instantiate_call(&self.tysys.type_table, &frame, &[]);
-        Some(build(
-            declared.sig.def,
-            CandidateKind::of(declared.sig.self_kind),
-            CandidateOrigin::Inherited,
-            match instantiated.param_types.get(
+        Some(StaticOffer {
+            method_id: declared.sig.def,
+            kind: CandidateKind::of(declared.sig.self_kind),
+            origin: CandidateOrigin::Inherited,
+            selector: match instantiated.param_types.get(
                 declared
                     .sig
                     .first_value_param()
@@ -823,7 +849,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 Some([]) | None => Selector::Absent,
                 Some(params) => Selector::Params(params.to_vec()),
             },
-        ))
+        })
     }
 
     /// The block's trait-reference arguments, which fill the trait's frame past

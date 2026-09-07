@@ -18,7 +18,7 @@ use super::method_lookup::MethodInferenceInput;
 use super::reflect::ReflectDispatch;
 use super::sem::types::{CalleeParams, StaticMethodDispatch};
 use super::sig::{MethodSig, Param};
-use super::static_call::{Selector, StaticLookup, StaticQuery};
+use super::static_call::{CandidateKind, Selector, StaticLookup, StaticQuery};
 use super::synth::ArgClass;
 use super::types::{FunctionContext, MethodInfo, MethodOwner, TypeError};
 
@@ -1537,6 +1537,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     static_call.span,
                     ctx,
                     struct_key_for_lookup.as_ref(),
+                    required_trait,
                 )
             }
             None => PreselectedArg::Undecided,
@@ -1720,8 +1721,25 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     infer.add(param_type, arg);
                 }
             }
-            let (inferred, bindings) = infer.solve_with_bindings();
-            if own_ids.iter().all(|id| bindings.contains_key(id)) {
+            let (mut inferred, bindings) = infer.solve_with_bindings();
+            // A slot the arguments do not pin takes the default its declaration
+            // wrote (WEP 2026-04-11), as every other spelling does. Without it
+            // a block declaring slots of its own rejected the call the same
+            // declaration accepts on a receiver that declares none.
+            let defaulted = sig.own_params.iter().any(|p| p.default.is_some())
+                && self.fill_defaulted_method_type_args(
+                    &sig.own_params,
+                    target_type_id,
+                    sig.declaring_impl
+                        .and_then(|impl_def| self.tysys.signatures.impl_sig(impl_def)?.trait_decl),
+                    &own_ids,
+                    sig.defaults_module.clone().or_else(|| {
+                        sig.declaring_impl
+                            .map(|impl_def| self.tysys.resolutions.defs().module(impl_def).clone())
+                    }),
+                    &mut inferred,
+                );
+            if defaulted || own_ids.iter().all(|id| bindings.contains_key(id)) {
                 method_type_args = inferred;
                 let declaring_args = self
                     .receiver_declaring_args(Some(target_type_id), &[])
@@ -2737,11 +2755,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             receiver_key: static_key.as_ref(),
             ..StaticQuery::of(struct_name, method_name)
         });
-        if let Some(callee) = resolved.found() {
-            return callee.return_type;
-        }
-
-        TypeTable::UNKNOWN
+        // The outcome's own answer, not the picked declaration's: an overload
+        // returns where its candidates agree, and reading only `found()` threw
+        // that away for an `Unknown` the caller cannot act on.
+        resolved.return_type()
     }
 
     /// A static method's value parameters, in the declaration's own frame — its
@@ -2970,8 +2987,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         arg_types: &[TypeId],
         span: Span,
         target_hint: Option<&ImplTargetKey>,
+        required_trait: Option<DefId>,
     ) -> bool {
-        let survey = self.static_arg_survey(struct_name, method_name, target_hint);
+        let survey = self.static_arg_survey(struct_name, method_name, target_hint, required_trait);
         let spelled = render_type_list(&self.tysys.type_table.borrow(), arg_types);
         if let Some(trait_name) = survey.blanket_trait {
             let _ = self.emit(TypeError::UnsupportedBlanketInstantiation {
@@ -3029,6 +3047,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         span: Span,
         ctx: &mut FunctionContext,
         target_hint: Option<&ImplTargetKey>,
+        required_trait: Option<DefId>,
     ) -> PreselectedArg {
         if args.is_empty() || self.has_inherent_static_method(recv_name, method_name, target_hint) {
             return PreselectedArg::Undecided;
@@ -3037,7 +3056,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .iter()
             .map(|arg| self.synthesize_arg_class(arg, ctx))
             .collect();
-        match self.static_arg_preselect(recv_name, method_name, &classes, target_hint) {
+        match self.static_arg_preselect(
+            recv_name,
+            method_name,
+            &classes,
+            target_hint,
+            required_trait,
+        ) {
             ArgPreselect::Selected(params) => PreselectedArg::Types(params),
             ArgPreselect::Ambiguous(candidates) => {
                 let _ = self.emit(TypeError::AmbiguousStaticArgument {
@@ -3077,6 +3102,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         method_name: &str,
         classes: &[ArgClass],
         target_hint: Option<&ImplTargetKey>,
+        required_trait: Option<DefId>,
     ) -> ArgPreselect {
         // Every argument opaque leaves nothing to select on. One opaque among
         // others admits every parameter, so the rest still decide.
@@ -3084,7 +3110,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return ArgPreselect::Pass;
         }
         let admitted: Vec<ArgCandidate> = self
-            .static_arg_survey(struct_name, method_name, target_hint)
+            .static_arg_survey(struct_name, method_name, target_hint, required_trait)
             .candidates
             .into_iter()
             .filter(|c| self.params_admit(&c.params, classes))
@@ -3128,19 +3154,41 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         struct_name: &str,
         method_name: &str,
         target_hint: Option<&ImplTargetKey>,
+        required_trait: Option<DefId>,
     ) -> StaticArgSurvey {
         let mut survey = StaticArgSurvey::default();
         for impl_def in self.trait_impls_for_receiver(struct_name, target_hint) {
-            let header = &self.tysys.trait_env.impl_headers[&impl_def];
-            let Some(method) = header.methods.iter().find(|m| m.name == method_name) else {
+            // A qualified spelling names a trait, so another trait's impl is
+            // not a candidate to weigh against — the same rule the resolution
+            // applies, asked where the arguments are surveyed.
+            if let Some(required) = required_trait
+                && self
+                    .tysys
+                    .signatures
+                    .impl_sig(impl_def)
+                    .and_then(|sig| sig.trait_decl)
+                    != Some(required)
+            {
                 continue;
-            };
-            let sig = self
+            }
+            let header = &self.tysys.trait_env.impl_headers[&impl_def];
+            let Some(trait_decl) = self
                 .tysys
                 .signatures
-                .method_sig(method.def)
-                .expect("the decl pass records every impl-declared method's signature");
-            if sig.self_kind != ast::SelfKind::None {
+                .impl_sig(impl_def)
+                .and_then(|sig| sig.trait_decl)
+            else {
+                continue;
+            };
+            // The same walk the rules read, so a body the block inherits is a
+            // candidate here too: surveying `header.methods` alone left every
+            // inherited static without a parameter list to check against.
+            let Some(offer) =
+                self.impl_static_offer(header, impl_def, trait_decl, method_name, None)
+            else {
+                continue;
+            };
+            if offer.kind != CandidateKind::Static {
                 continue;
             }
             let trait_name = || {
@@ -3154,7 +3202,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // blanket resolver answers such a call and it is never an unmatched
             // alternative worth listing. Asking it a second way here is what
             // let the two disagree.
-            let params = match self.written_selector(header, sig) {
+            let params = match offer.selector {
                 Selector::Absent => continue,
                 Selector::Blanket => {
                     survey.blanket_trait.get_or_insert_with(trait_name);
@@ -3212,20 +3260,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Whether `name` appears anywhere in `ty` as written.
-    fn type_mentions(ty: &ast::Type, name: &str) -> bool {
-        match ty {
-            ast::Type::Named(n) => n.name == name,
-            ast::Type::Generic(g) => {
-                g.name == name || g.args.iter().any(|a| Self::type_mentions(a, name))
-            }
-            ast::Type::Tuple(elems) => elems.iter().any(|e| Self::type_mentions(e, name)),
-            ast::Type::Reference(inner) | ast::Type::MutReference(inner) => {
-                Self::type_mentions(inner, name)
-            }
-            _ => false,
-        }
-    }
-
     /// Whether only the argument can fill this parameter — a blanket, whose
     /// unsubstituted spelling must not be mangled. Three things fill a slot and
     /// the receiver and the method take the other two.
@@ -3245,7 +3279,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         match table.get(table.peel_refs(param)) {
             ResolvedType::TypeParam { index, name }
             | ResolvedType::TypePack { index, name, .. } => {
-                *index < sig.declaring_slot_count && !Self::type_mentions(&header.ty, name)
+                *index < sig.declaring_slot_count && !header.ty.mentions(name)
             }
             _ => false,
         }
