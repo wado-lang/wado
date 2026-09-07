@@ -2507,6 +2507,21 @@ fn rebind_scan_repeat_caller_follow(
             &scan_repeat_body_second(&alt_elements[index], ctx),
             &compute_caller_follow_second(alt_elements, index + 1, ctx),
         );
+        // Scan mirror of `lower_reserve_scan`; the two gates must admit the same
+        // loops or the tournament measures what the parse will not consume.
+        let mut reserve_scan: List<ScanElement> = [];
+        let can_starve = !re.non_greedy
+            && re.kind matches { Star | Plus }
+            && index + 1 < alt_elements.len()
+            && !ctx.tail_is_nullable_deep(alt_elements, index + 1);
+        if can_starve {
+            let suffix_first = ctx.first_of_elements_from(alt_elements, index + 1);
+            if sets_overlap(&admits_kinds(&re.inner_admits), &suffix_first) {
+                if let Some(scan) = lower_scan_continuation_elements(alt_elements, index, ctx) {
+                    reserve_scan = scan;
+                }
+            }
+        }
         return ScanElement::Repeat(ScanRepeatElement {
             kind: re.kind,
             body: re.body,
@@ -2519,6 +2534,7 @@ fn rebind_scan_repeat_caller_follow(
             static_exit_undecided,
             probe_viable,
             body_scannable: re.body_scannable,
+            reserve_scan,
         });
     }
     return se;
@@ -4374,6 +4390,10 @@ fn patch_repeat_op_caller_follow(
         &rep_op.body_second_position_first,
         &caller_follow_second,
     );
+    let mut reserve_scan: List<ScanElement> = [];
+    if let Some(scan) = lower_reserve_scan(rep_op, alt_elements, index, ctx) {
+        reserve_scan = scan;
+    }
     return RepeatOp {
         ..*rep_op,
         caller_follow_first,
@@ -4382,7 +4402,37 @@ fn patch_repeat_op_caller_follow(
         continuation_scannable,
         static_exit_undecided,
         probe_viable,
+        reserve_scan,
     };
+}
+
+/// The mandatory suffix a loop must leave to its own alternative, as scan
+/// elements. `null` wherever the loop cannot starve it, which is every loop
+/// but the `X* X` shape.
+///
+/// Each condition rules out a reservation that would decide nothing and only
+/// cost a scan: a non-greedy loop already stops at its continuation; a
+/// nullable suffix is nothing to reserve, since the alternative completes
+/// without it; a suffix whose head no iteration admits can never be eaten; and
+/// an unscannable one would be reserved on a prefix, which proves nothing about
+/// the whole.
+fn lower_reserve_scan(
+    rep_op: &RepeatOp,
+    alt_elements: &List<Element>,
+    index: i32,
+    ctx: &mut GenContext,
+) -> Option<List<ScanElement>> {
+    if rep_op.non_greedy || !rep_op.kind matches { Star | Plus } {
+        return null;
+    }
+    if index + 1 >= alt_elements.len() || ctx.tail_is_nullable_deep(alt_elements, index + 1) {
+        return null;
+    }
+    let suffix_first = ctx.first_of_elements_from(alt_elements, index + 1);
+    if !sets_overlap(&admits_kinds(&rep_op.body_admits), &suffix_first) {
+        return null;
+    }
+    return lower_scan_continuation_elements(alt_elements, index, ctx);
 }
 
 /// The continuation for emit's probe, built only for the Repeat kinds whose

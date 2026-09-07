@@ -1645,6 +1645,17 @@ fn scan_gated(tokens: &Array<i32>, pos: i32) -> i32 {
         }
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
+        let rs_4 = pos;
+        let mut rs_4_ok = false;
+        rsv_4: {
+            if pos >= tokens.len() || tokens[pos] != TK_B { break rsv_4; }
+            pos += 1;
+            if pos >= tokens.len() || tokens[pos] != TK_EOF { break rsv_4; }
+            pos += 1;
+            rs_4_ok = true;
+        }
+        pos = rs_4;
+        if !rs_4_ok { pos = sp; break; }
     }
     if pos >= tokens.len() || tokens[pos] != TK_B { return -1; }
     pos += 1;

@@ -1888,6 +1888,10 @@ fn scan_repeat_guard_excluding(
 }
 
 global NO_EXCLUSION: List<String> = [];
+
+/// A loop with nothing to reserve for its alternative — every loop but the
+/// `X* X` shape `RepeatOp.reserve_scan` describes.
+global NO_RESERVE_SCAN: List<ScanElement> = [];
 global PEEK_KIND: String = "p.peek_kind()";
 
 /// What a repeat's entry or iteration tests on the parse side: the body admits
@@ -2011,6 +2015,29 @@ fn gen_scan_iteration(w: &mut CodeWriter, re: &ScanRepeatElement, admits: &Admit
     }
     w.line(&"if pos < 0 { pos = sp; break; }");
     w.line(&"if pos == sp { break; }");
+    gen_scan_reserve(w, re, ctx);
+}
+
+/// Scan-side twin of the reserve check `gen_scan_guard_with_prefix` emits: an
+/// iteration that leaves the alternative's mandatory suffix unmatchable is one
+/// the suffix needed for itself, and rewinds. The two must move together, or
+/// the tournament measures a length the parse refuses to consume.
+fn gen_scan_reserve(w: &mut CodeWriter, re: &ScanRepeatElement, ctx: &mut GenContext) {
+    if re.reserve_scan.is_empty() {
+        return;
+    }
+    assert re.kind matches { Star | Plus }, "only a loop can starve its suffix; lowering reserves for no other kind";
+    let gc = ctx.next_scan_group();
+    w.line(&`let rs_${gc} = pos;`);
+    w.line(&`let mut rs_${gc}_ok = false;`);
+    w.begin(&`rsv_${gc}:`);
+    for let se of &re.reserve_scan {
+        gen_scan_op_element(w, se, ctx, &`break rsv_${gc};`);
+    }
+    w.line(&`rs_${gc}_ok = true;`);
+    w.end();
+    w.line(&`pos = rs_${gc};`);
+    w.line(&`if !rs_${gc}_ok \{ pos = sp; break; \}`);
 }
 
 /// Op-driven scan emitter for `ScanElement::Group`: the same partition the
@@ -3850,7 +3877,7 @@ fn gen_repeat_body(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut GenContext, nc: &
                     return;
                 }
             }
-            let scan_pos = gen_rep_scan_guard(w, &r.scan_body, ctx, nc);
+            let scan_pos = gen_rep_scan_guard(w, &r.scan_body, &r.reserve_scan, ctx, nc);
             w.line(&`if ${scan_pos} < 0 \{ break; \}`);
             gen_op(w, &r.body, ctx, nc);
             w.end();
@@ -5910,7 +5937,7 @@ fn gen_rep_iteration_entry(
         w.begin(&`if !${*plus_flag}`);
     }
     gen_caller_follow_gate(w, rep_op);
-    let scan_pos = gen_rep_scan_guard(w, &rep_op.scan_body, ctx, name_counts);
+    let scan_pos = gen_rep_scan_guard(w, &rep_op.scan_body, &rep_op.reserve_scan, ctx, name_counts);
     gen_rep_break_with_recovery(w, &scan_pos, rep_op, ctx);
     if guarded_only {
         w.end();
@@ -6032,10 +6059,11 @@ fn unwrap_optional(elem: &Element) -> &Element with stores[elem] {
 fn gen_rep_scan_guard(
     w: &mut CodeWriter,
     scan_inner: &ScanElement,
+    reserve: &List<ScanElement>,
     ctx: &mut GenContext,
     name_counts: &mut List<[String, i32]>,
 ) -> String {
-    return gen_scan_guard_with_prefix(w, scan_inner, ctx, name_counts, &"rep_scan_pos", &"rep_scan", true);
+    return gen_scan_guard_with_prefix(w, scan_inner, ctx, name_counts, &"rep_scan_pos", &"rep_scan", true, reserve);
 }
 
 fn gen_scan_guard_with_prefix(
@@ -6046,6 +6074,7 @@ fn gen_scan_guard_with_prefix(
     pos_prefix: &String,
     label_prefix: &String,
     require_advance: bool,
+    reserve: &List<ScanElement> = &NO_RESERVE_SCAN,
 ) -> String {
     let scan_pos_var = dedup_name(pos_prefix, name_counts);
     let scan_label = dedup_name(label_prefix, name_counts);
@@ -6057,6 +6086,18 @@ fn gen_scan_guard_with_prefix(
     gen_scan_op_element(w, scan_inner, ctx, &fail);
     if require_advance {
         w.line(&`if pos <= p.pos \{ break ${scan_label}; \}`);
+    }
+    // What the alternative still owes past this loop, measured from where the
+    // iteration would end. An iteration leaving the suffix unmatchable is one
+    // the suffix needed for itself, so it is not an iteration. The guard
+    // reports the body's end either way — the reserve only decides.
+    if !reserve.is_empty() {
+        let body_end = dedup_name(&"rep_body_end", name_counts);
+        w.line(&`let ${body_end} = pos;`);
+        for let se of reserve {
+            gen_scan_op_element(w, se, ctx, &fail);
+        }
+        w.line(&`pos = ${body_end};`);
     }
     w.line(&`${scan_pos_var} = pos;`);
     w.end();

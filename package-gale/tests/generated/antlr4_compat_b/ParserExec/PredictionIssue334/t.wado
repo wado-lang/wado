@@ -1666,6 +1666,18 @@ fn scan_file_(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
         }
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
+        let rs_1 = pos;
+        let mut rs_1_ok = false;
+        rsv_1: {
+            if pos < tokens.len() && tokens[pos] == TK_SEMICOLON {
+                pos += 1;
+            }
+            if pos >= tokens.len() || tokens[pos] != TK_EOF { break rsv_1; }
+            pos += 1;
+            rs_1_ok = true;
+        }
+        pos = rs_1;
+        if !rs_1_ok { pos = sp; break; }
     }
     if pos < tokens.len() && tokens[pos] == TK_SEMICOLON {
         pos += 1;
@@ -1693,17 +1705,24 @@ fn _parse_file___inner(p: &mut Parser, follow: i64 = 0) -> () {
         rep_scan: {
             let tokens = &p.kinds;
             let mut pos: i32 = p.pos;
-            sg_1_done: {
-                sg_1: {
-                    if pos >= tokens.len() || tokens[pos] != TK_SEMICOLON { break sg_1; }
+            sg_2_done: {
+                sg_2: {
+                    if pos >= tokens.len() || tokens[pos] != TK_SEMICOLON { break sg_2; }
                     pos += 1;
                     pos = scan_item(tokens, pos, (FOLLOW_MASK_0 | (follow & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << 16) & FOLLOW_CONT_MASK);
-                    if pos < 0 { break sg_1; }
-                    break sg_1_done;
+                    if pos < 0 { break sg_2; }
+                    break sg_2_done;
                 }
                 break rep_scan;
             }
             if pos <= p.pos { break rep_scan; }
+            let rep_body_end = pos;
+            if pos < tokens.len() && tokens[pos] == TK_SEMICOLON {
+                pos += 1;
+            }
+            if pos >= tokens.len() || tokens[pos] != TK_EOF { break rep_scan; }
+            pos += 1;
+            pos = rep_body_end;
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }

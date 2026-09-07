@@ -928,6 +928,13 @@ pub struct RepeatOp {
     /// continuation fits and the caller's FOLLOW is the right question at the
     /// position it ended on. False keeps emit on the static condition.
     pub continuation_scannable: bool = false,
+    /// Scan mirror of the mandatory suffix this loop must leave to its own
+    /// alternative. A greedy iteration whose body starts where the suffix does
+    /// takes what the suffix needs: `(matchArm FATARROW matchArmExpression)*
+    /// matchArm FATARROW expression` eats the only arm of `match x { A => 1, }`
+    /// and leaves the tail none. Built only where the two heads really overlap,
+    /// so a loop that cannot starve its suffix emits the guard it always did.
+    pub reserve_scan: List<ScanElement> = [],
     /// `non_greedy_static_undecided` for this Repeat — no lookahead
     /// separates the loop body from the continuation. Stamped rather than
     /// recomputed so the two emit walkers and the scan side cannot answer
@@ -1235,6 +1242,10 @@ pub struct ScanRepeatElement {
     /// Mirrors `RepeatOp.body_scannable`. The probe entry gate reads it on
     /// both sides, so an unscannable body cannot probe on the scan alone.
     pub body_scannable: bool = false,
+    /// Mirrors `RepeatOp.reserve_scan`. A scan counting an iteration the parse
+    /// reserves makes the longest-match tournament pick an alt the parse then
+    /// refuses.
+    pub reserve_scan: List<ScanElement> = [],
 }
 
 pub struct ScanGroupElement {

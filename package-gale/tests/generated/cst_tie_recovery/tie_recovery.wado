@@ -1478,6 +1478,17 @@ fn scan_prog(tokens: &Array<i32>, pos: i32) -> i32 {
         pos = scan_item(tokens, pos);
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
+        let rs_0 = pos;
+        let mut rs_0_ok = false;
+        rsv_0: {
+            pos = scan_trailer(tokens, pos);
+            if pos < 0 { break rsv_0; }
+            if pos >= tokens.len() || tokens[pos] != TK_EOF { break rsv_0; }
+            pos += 1;
+            rs_0_ok = true;
+        }
+        pos = rs_0;
+        if !rs_0_ok { pos = sp; break; }
     }
     pos = scan_trailer(tokens, pos);
     if pos < 0 { return -1; }
@@ -1514,6 +1525,12 @@ fn _parse_prog__inner(p: &mut Parser) -> () {
             pos = scan_item(tokens, pos);
             if pos < 0 { break rep_scan; }
             if pos <= p.pos { break rep_scan; }
+            let rep_body_end = pos;
+            pos = scan_trailer(tokens, pos);
+            if pos < 0 { break rep_scan; }
+            if pos >= tokens.len() || tokens[pos] != TK_EOF { break rep_scan; }
+            pos += 1;
+            pos = rep_body_end;
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 {

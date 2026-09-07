@@ -1662,6 +1662,17 @@ fn scan_plus_gated(tokens: &Array<i32>, pos: i32) -> i32 {
         }
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
+        let rs_4 = pos;
+        let mut rs_4_ok = false;
+        rsv_4: {
+            if pos >= tokens.len() || tokens[pos] != TK_A { break rsv_4; }
+            pos += 1;
+            if pos >= tokens.len() || tokens[pos] != TK_EOF { break rsv_4; }
+            pos += 1;
+            rs_4_ok = true;
+        }
+        pos = rs_4;
+        if !rs_4_ok { pos = sp; break; }
     }
     if pos >= tokens.len() || tokens[pos] != TK_A { return -1; }
     pos += 1;
@@ -1672,30 +1683,41 @@ fn scan_plus_gated(tokens: &Array<i32>, pos: i32) -> i32 {
 
 fn scan_plus_solo(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
-    sg_4_done: {
-        sg_4: {
-            if pos >= tokens.len() || tokens[pos] != TK_A { break sg_4; }
+    sg_5_done: {
+        sg_5: {
+            if pos >= tokens.len() || tokens[pos] != TK_A { break sg_5; }
             pos += 1;
-            if pos >= tokens.len() || tokens[pos] != TK_B { break sg_4; }
+            if pos >= tokens.len() || tokens[pos] != TK_B { break sg_5; }
             pos += 1;
-            break sg_4_done;
+            break sg_5_done;
         }
         return -1;
     }
     while pos < tokens.len() && tokens[pos] == TK_A {
         let sp = pos;
-        sg_5_done: {
-            sg_5: {
-                if pos >= tokens.len() || tokens[pos] != TK_A { break sg_5; }
+        sg_6_done: {
+            sg_6: {
+                if pos >= tokens.len() || tokens[pos] != TK_A { break sg_6; }
                 pos += 1;
-                if pos >= tokens.len() || tokens[pos] != TK_B { break sg_5; }
+                if pos >= tokens.len() || tokens[pos] != TK_B { break sg_6; }
                 pos += 1;
-                break sg_5_done;
+                break sg_6_done;
             }
             pos = -1;
         }
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
+        let rs_7 = pos;
+        let mut rs_7_ok = false;
+        rsv_7: {
+            if pos >= tokens.len() || tokens[pos] != TK_A { break rsv_7; }
+            pos += 1;
+            if pos >= tokens.len() || tokens[pos] != TK_EOF { break rsv_7; }
+            pos += 1;
+            rs_7_ok = true;
+        }
+        pos = rs_7;
+        if !rs_7_ok { pos = sp; break; }
     }
     if pos >= tokens.len() || tokens[pos] != TK_A { return -1; }
     pos += 1;
@@ -1706,57 +1728,57 @@ fn scan_plus_solo(tokens: &Array<i32>, pos: i32) -> i32 {
 
 fn scan_plus_scan(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
-    let gp_6 = pos;
-    let sgk_6 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-    let mut sg_6_best = -1;
-    if sgk_6 == TK_A {
-        pos = gp_6;
-        sg_6_0: {
-            if pos >= tokens.len() || tokens[pos] != TK_A { break sg_6_0; }
+    let gp_8 = pos;
+    let sgk_8 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+    let mut sg_8_best = -1;
+    if sgk_8 == TK_A {
+        pos = gp_8;
+        sg_8_0: {
+            if pos >= tokens.len() || tokens[pos] != TK_A { break sg_8_0; }
             pos += 1;
-            if pos >= tokens.len() || tokens[pos] != TK_B { break sg_6_0; }
+            if pos >= tokens.len() || tokens[pos] != TK_B { break sg_8_0; }
             pos += 1;
-            if pos > sg_6_best { sg_6_best = pos; }
+            if pos > sg_8_best { sg_8_best = pos; }
         }
-        pos = gp_6;
-        sg_6_1: {
-            if pos >= tokens.len() || tokens[pos] != TK_A { break sg_6_1; }
+        pos = gp_8;
+        sg_8_1: {
+            if pos >= tokens.len() || tokens[pos] != TK_A { break sg_8_1; }
             pos += 1;
-            if pos >= tokens.len() || tokens[pos] != TK_C { break sg_6_1; }
+            if pos >= tokens.len() || tokens[pos] != TK_C { break sg_8_1; }
             pos += 1;
-            if pos > sg_6_best { sg_6_best = pos; }
+            if pos > sg_8_best { sg_8_best = pos; }
         }
     }
-    if sg_6_best >= 0 {
-        pos = sg_6_best;
+    if sg_8_best >= 0 {
+        pos = sg_8_best;
     } else {
-        pos = gp_6;
+        pos = gp_8;
     }
     while pos < tokens.len() && tokens[pos] == TK_A {
         let sp = pos;
-        let gp_7 = pos;
-        let sgk_7 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-        let mut sg_7_best = -1;
-        if sgk_7 == TK_A {
-            pos = gp_7;
-            sg_7_0: {
-                if pos >= tokens.len() || tokens[pos] != TK_A { break sg_7_0; }
+        let gp_9 = pos;
+        let sgk_9 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+        let mut sg_9_best = -1;
+        if sgk_9 == TK_A {
+            pos = gp_9;
+            sg_9_0: {
+                if pos >= tokens.len() || tokens[pos] != TK_A { break sg_9_0; }
                 pos += 1;
-                if pos >= tokens.len() || tokens[pos] != TK_B { break sg_7_0; }
+                if pos >= tokens.len() || tokens[pos] != TK_B { break sg_9_0; }
                 pos += 1;
-                if pos > sg_7_best { sg_7_best = pos; }
+                if pos > sg_9_best { sg_9_best = pos; }
             }
-            pos = gp_7;
-            sg_7_1: {
-                if pos >= tokens.len() || tokens[pos] != TK_A { break sg_7_1; }
+            pos = gp_9;
+            sg_9_1: {
+                if pos >= tokens.len() || tokens[pos] != TK_A { break sg_9_1; }
                 pos += 1;
-                if pos >= tokens.len() || tokens[pos] != TK_C { break sg_7_1; }
+                if pos >= tokens.len() || tokens[pos] != TK_C { break sg_9_1; }
                 pos += 1;
-                if pos > sg_7_best { sg_7_best = pos; }
+                if pos > sg_9_best { sg_9_best = pos; }
             }
         }
-        if sg_7_best >= 0 {
-            pos = sg_7_best;
+        if sg_9_best >= 0 {
+            pos = sg_9_best;
         } else {
             pos = -1;
         }
@@ -1772,28 +1794,28 @@ fn scan_plus_scan(tokens: &Array<i32>, pos: i32) -> i32 {
 
 fn scan_refs(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
-    let gp_8 = pos;
-    let sgk_8 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-    let mut sg_8_best = -1;
-    if sgk_8 == TK_A {
-        pos = gp_8;
-        sg_8_0: {
+    let gp_10 = pos;
+    let sgk_10 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+    let mut sg_10_best = -1;
+    if sgk_10 == TK_A {
+        pos = gp_10;
+        sg_10_0: {
             pos = scan_ra(tokens, pos);
-            if pos < 0 { break sg_8_0; }
-            if pos > sg_8_best { sg_8_best = pos; }
+            if pos < 0 { break sg_10_0; }
+            if pos > sg_10_best { sg_10_best = pos; }
         }
-    } else if sgk_8 == TK_B {
-        pos = gp_8;
-        sg_8_1: {
+    } else if sgk_10 == TK_B {
+        pos = gp_10;
+        sg_10_1: {
             pos = scan_rb(tokens, pos);
-            if pos < 0 { break sg_8_1; }
-            if pos > sg_8_best { sg_8_best = pos; }
+            if pos < 0 { break sg_10_1; }
+            if pos > sg_10_best { sg_10_best = pos; }
         }
     }
-    if sg_8_best >= 0 {
-        pos = sg_8_best;
+    if sg_10_best >= 0 {
+        pos = sg_10_best;
     } else {
-        pos = gp_8;
+        pos = gp_10;
     }
     if pos >= tokens.len() || tokens[pos] != TK_C { return -1; }
     pos += 1;
@@ -1938,17 +1960,23 @@ fn _parse_plus_solo__inner(p: &mut Parser) -> () {
             rep_scan: {
                 let tokens = &p.kinds;
                 let mut pos: i32 = p.pos;
-                sg_9_done: {
-                    sg_9: {
-                        if pos >= tokens.len() || tokens[pos] != TK_A { break sg_9; }
+                sg_11_done: {
+                    sg_11: {
+                        if pos >= tokens.len() || tokens[pos] != TK_A { break sg_11; }
                         pos += 1;
-                        if pos >= tokens.len() || tokens[pos] != TK_B { break sg_9; }
+                        if pos >= tokens.len() || tokens[pos] != TK_B { break sg_11; }
                         pos += 1;
-                        break sg_9_done;
+                        break sg_11_done;
                     }
                     break rep_scan;
                 }
                 if pos <= p.pos { break rep_scan; }
+                let rep_body_end = pos;
+                if pos >= tokens.len() || tokens[pos] != TK_A { break rep_scan; }
+                pos += 1;
+                if pos >= tokens.len() || tokens[pos] != TK_EOF { break rep_scan; }
+                pos += 1;
+                pos = rep_body_end;
                 rep_scan_pos = pos;
             }
             if rep_scan_pos < 0 { break; }

@@ -1221,10 +1221,26 @@ impl GenContext {
                     }
                     cursor += 1;
                 },
-                Group(_) | Repeat(_) | Wildcard(_) | Not(_) => {
-                    // Conservative halt: per-depth union across alts /
-                    // optional iterations would over-yield; static
-                    // wildcards can't be enumerated.
+                Group(_) => {
+                    // Same shape as a multi-alt `RuleRef` above: the alts
+                    // diverge past their head, so a per-depth union would
+                    // over-yield, but at the head it is exact. Contribute that
+                    // one position and halt. A nullable group contributes none
+                    // — the position may be the next element's.
+                    let mut null_visiting: List<String> = [];
+                    if !self.element_is_nullable_deep(elem, &mut null_visiting) {
+                        let mut first_visiting: List<String> = [];
+                        let first = self.first_of_element(elem, &mut first_visiting);
+                        if !first.is_empty() {
+                            result.push(first);
+                        }
+                    }
+                    return cursor;
+                },
+                Repeat(_) | Wildcard(_) | Not(_) => {
+                    // Conservative halt: a repeat's head is also the position
+                    // after it when it iterates zero times, and a static
+                    // wildcard can't be enumerated.
                     return cursor;
                 },
             }
