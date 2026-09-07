@@ -2240,6 +2240,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             Some(&receiver_key),
             &args,
             required_trait,
+            Some(target_type_id),
             static_call.span,
         ) else {
             return TypeTable::ERROR;
@@ -2280,16 +2281,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return TypeTable::ERROR;
         }
 
-        // Substitute the declaring block's and the method's own parameters,
-        // taken from the signature rather than counted off the receiver.
+        // Substitute the method's own parameters, taken from the signature
+        // rather than counted off the receiver. The declaring block's are
+        // already filled: the resolution read the signature at the receiver,
+        // and binding them a second time here is what let the two answers
+        // differ.
         {
-            let (decl_params, method_params) =
-                self.qualified_method_slot_params(&struct_name, &static_call.method);
-            let decl_args =
-                self.aligned_declaring_args(&struct_name, &static_call.method, &struct_type_args);
-            let subst_ctx = SubstitutionContext::new()
-                .bind(&decl_params, &decl_args)
-                .bind(&method_params, &method_type_args);
+            let method_params = self.qualified_method_own_slots(&struct_name, &static_call.method);
+            let subst_ctx = SubstitutionContext::new().bind(&method_params, &method_type_args);
             if !subst_ctx.is_empty() {
                 return_type =
                     subst_ctx.substitute(return_type, &mut self.tysys.type_table.borrow_mut());
@@ -2543,49 +2542,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .make_type_param(blanket_param.to_string(), 0)
     }
 
-    /// The declaring block's and the method's own type parameters for a
-    /// qualified method, split where its signature says they split.
-    fn qualified_method_slot_params(
-        &self,
-        struct_name: &str,
-        method_name: &str,
-    ) -> (Vec<TypeId>, Vec<TypeId>) {
-        let Some(sig) = self.qualified_method_sig(struct_name, method_name) else {
-            return (vec![], vec![]);
-        };
-        let ids = |ps: &[(String, TypeId)]| ps.iter().map(|(_, id)| *id).collect();
-        (ids(sig.declaring_type_params()), ids(sig.own_type_params()))
-    }
-
-    /// A receiver's spelled type arguments (`TreeMap::<String, i32>`) reordered
-    /// into the declaring block's slot order. `impl … for TreeMap<String, V>`
-    /// numbers only `V`, so a positional zip binds it to `String`; the block's
-    /// own alignment says position 1 fills it.
-    fn aligned_declaring_args(
-        &self,
-        struct_name: &str,
-        method_name: &str,
-        receiver_args: &[TypeId],
-    ) -> Vec<TypeId> {
-        let Some(slots) = self
-            .qualified_method_sig(struct_name, method_name)
-            .and_then(|sig| sig.declaring_impl)
-            .and_then(|id| self.tysys.signatures.impl_sig(id))
-            .and_then(|impl_sig| impl_sig.spelled_slots(&self.tysys.type_table, receiver_args))
-        else {
-            return receiver_args.to_vec();
-        };
-        let (decl_params, _) = self.qualified_method_slot_params(struct_name, method_name);
-        let table = self.tysys.type_table.borrow();
-        decl_params
-            .iter()
-            .filter_map(|slot| match table.get(*slot) {
-                ResolvedType::TypeParam { index, .. } | ResolvedType::TypePack { index, .. } => {
-                    slots.get(index).copied()
-                }
-                _ => None,
-            })
-            .collect()
+    /// A qualified method's own type parameters — the slots past the declaring
+    /// block's, split where its signature says they split. The block's are the
+    /// resolution's to fill, so only these are left for a call site.
+    fn qualified_method_own_slots(&self, struct_name: &str, method_name: &str) -> Vec<TypeId> {
+        self.qualified_method_sig(struct_name, method_name)
+            .map(|sig| sig.own_type_params().iter().map(|(_, id)| *id).collect())
+            .unwrap_or_default()
     }
 
     /// Whether `args` arguments fill a callee declaring `params` parameters,
@@ -3435,6 +3398,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             method_name,
             receiver_key.as_ref(),
             args,
+            None,
             None,
             span,
         ) else {

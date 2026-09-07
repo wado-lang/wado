@@ -220,6 +220,24 @@ own parameters begin at argument one. Reading from argument zero for both kinds
 compares a receiver against the parameter two impls differ on, which separates
 nothing and admits nothing.
 
+### The receiver fills the declaring slots, once
+
+A declaration's declaring slots — an `impl` block's, a `resource`'s, an
+`interface`'s — are filled by the receiver's type _arguments_. A block aligns
+them, since its head may reorder or fix some (`impl … for TreeMap<String, V>`
+numbers only `V`); a resource numbers its own by position.
+
+Never the receiver type itself. Only a trait's frame leads with `Self`, and that
+frame is read where an inherited body is. Binding slot zero to the receiver
+outside it made `Stream::<u8>::new()` return a `StreamWritable<Stream<u8>>`,
+because `Stream`'s slot zero is its `T`.
+
+The resolution fills them, so the call site does not. It substitutes the
+method's own slots alone — the ones the resolution leaves open for the call to
+solve. Filling the declaring slots a second time from the spelled turbofish is
+two answers for one call, and it is why no rung could be given the receiver's
+type until this was one answer.
+
 ### An inherited body is read in the trait's own frame
 
 The trait's frame numbers `Self` as slot 0 and the trait's own parameters after
@@ -309,8 +327,7 @@ receiver up front made a lookup mutate state on paths that never used it, and
       fallback after the resolution answers nothing rather than as a rung it
       ranks. Finishing this means a value blanket is a candidate like any other,
       outranked by a concrete impl by the origin rule rather than by call order.
-      It needs the receiver's `TypeId` on the rung, so the double-instantiation
-      gap below has to close first.
+      The rung needs the receiver's `TypeId`, which the query now carries.
 
 Five of the sixteen names are gone outright. The rest no longer walk a ladder of
 their own: each reads the resolution's answer, or asks one rung through the
@@ -347,10 +364,8 @@ walk rungs of their own, and that is the open roadmap item above.
   parameters printing one name. The numbering has to distinguish what a
   receiver fills from what only an argument can, which the index alone does
   not say.
-- A signature is instantiated twice on the two largest call sites. Each
-  instantiates from the spelled turbofish after the resolution has already read
-  the signature at the receiver, so giving those sites' queries a receiver
-  `TypeId` applies it twice and `Stream::<u8>::new()` returns a
-  `StreamWritable<Stream<u8>>`. Closing it means the resolution instantiates
-  once and both sites read its answer. Until then no rung may ask for the
-  receiver's type, which is what the blanket roadmap item above waits on.
+- `resolve_static_method_call_from_qualified` resolves without the receiver's
+  type, so a declaration whose slots the receiver fills comes back as the
+  declaration wrote them. Nothing reads that return type today — the spelling
+  it serves brings its own instantiation — but a rung that needs the receiver
+  would find none there.

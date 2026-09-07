@@ -484,11 +484,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         receiver_key: Option<&ImplTargetKey>,
         arg_types: &[TypeId],
         required_trait: Option<DefId>,
+        receiver_type: Option<TypeId>,
         span: Span,
     ) -> Result<StaticTraitRef, Reported> {
         let lookup = self.resolve_static_callee(StaticQuery {
             receiver_key,
             arg_types,
+            receiver_type,
             required_trait,
             ..StaticQuery::of(receiver_name, method_name)
         });
@@ -805,31 +807,30 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let sig = self.tysys.signatures.method_sig(def).cloned()?;
         let mut params = CalleeParams::of_signature(Some(&sig));
         let mut return_type = sig.decl.return_type.unwrap_or(TypeTable::UNIT);
-        // A trait's own declaration is written in the trait's frame, where
-        // `Self` leads the slots, so it is read at the receiver. A caller asking
-        // only whether the spelling resolves brings none, and reads neither.
-        if sig.declaring_impl.is_none()
-            && let Some(receiver_type) = receiver_type
-        {
-            let instantiated = sig.instantiate_call(&self.tysys.type_table, &[receiver_type], &[]);
-            params.param_types = instantiated.param_types;
-            return_type = instantiated.return_type;
-        }
-        // A generic block's slots are the receiver's arguments — `ByteList`
-        // fills `List<T>`'s `T` with `u8`. Where the receiver brings none they
-        // stay as the block wrote them, and the call site checks past them.
-        if let Some(impl_def) = sig.declaring_impl
-            && let Some(declaring) = self.tysys.signatures.impl_sig(impl_def).cloned()
-            && !declaring.target_type_args.is_empty()
+        // The declaring slots are the receiver's *arguments* — `ByteList` fills
+        // `List<T>`'s `T` with `u8`. An `impl` block aligns them, since its head
+        // may reorder or fix some; a `resource` or `interface` numbers its own
+        // by position. Where the receiver brings none they stay as the
+        // declaration wrote them, and the call site checks past them.
+        //
+        // Never the receiver *type* itself: only a trait's frame leads with
+        // `Self`, and that frame is read in `callee_of_trait_declaration`.
+        // Binding slot zero to the receiver here made `Stream::<u8>::new()`
+        // return a `StreamWritable<Stream<u8>>`.
+        if sig.declaring_slot_count > 0
             && let Some(args) = receiver_type.and_then(|ty| {
                 self.tysys
                     .type_table
                     .borrow()
                     .nominal_type_args(self.tysys.get_base_type(ty))
             })
+            && !args.is_empty()
         {
+            let declaring = sig
+                .declaring_impl
+                .and_then(|impl_def| self.tysys.signatures.impl_sig(impl_def).cloned());
             let instantiated =
-                sig.instantiate_call_with(&self.tysys.type_table, Some(&declaring), &args, &[]);
+                sig.instantiate_call_with(&self.tysys.type_table, declaring.as_ref(), &args, &[]);
             params.param_types = instantiated.param_types;
             return_type = instantiated.return_type;
         }
