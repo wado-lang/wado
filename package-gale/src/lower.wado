@@ -2571,43 +2571,31 @@ fn rebind_scan_repeat_caller_follow(
             &scan_repeat_body_second(&alt_elements[index], ctx),
             &compute_caller_follow_second(alt_elements, index + 1, ctx),
         );
-        // Scan mirror of `lower_reserve_scan`; the two gates must admit the same
-        // loops or the tournament measures what the parse will not consume.
+        // The scan asks the same two questions the parse side does, through the
+        // same helpers: an answer only one of them gets is a length the
+        // tournament commits to and the parse refuses.
+        let loop_first = admits_kinds(&re.inner_admits);
         let mut reserve_scan: List<ScanElement> = [];
-        let can_starve = !re.non_greedy
-            && re.kind matches { Star | Plus }
-            && index + 1 < alt_elements.len()
-            && !ctx.tail_is_nullable_deep(alt_elements, index + 1);
-        if can_starve {
-            let suffix_first = ctx.first_of_elements_from(alt_elements, index + 1);
-            if sets_overlap(&admits_kinds(&re.inner_admits), &suffix_first) {
-                if let Some(scan) = lower_scan_continuation_elements(alt_elements, index, ctx) {
-                    reserve_scan = scan;
-                }
-            }
+        if let Some(scan) = lower_reserve_scan(re.non_greedy, re.kind, &loop_first, alt_elements, index, ctx) {
+            reserve_scan = scan;
         }
-        // Scan mirror of `lower_decline_scan`, for the same reason: a scan that
-        // counts an iteration the parse declines measures a length the parse
-        // will not reproduce.
         let mut decline_stranded = false;
         let mut decline_cont_first: List<String> = [];
         let mut decline_scan: List<ScanElement> = [];
         let mut decline_viable: List<String> = [];
-        let can_strand = !re.non_greedy
-            && re.kind matches { Star | Plus }
-            && reaches_rule_tail
-            && index + 1 < alt_elements.len()
-            && ctx.tail_is_nullable_deep(alt_elements, index + 1);
-        if can_strand {
-            let suffix_first = ctx.first_of_elements_from(alt_elements, index + 1);
-            if sets_overlap(&admits_kinds(&re.inner_admits), &suffix_first) {
-                if let Some(scan) = lower_scan_continuation_elements(alt_elements, index, ctx) {
-                    decline_stranded = true;
-                    decline_cont_first = suffix_first;
-                    decline_scan = scan;
-                    decline_viable = ctx.rule_follow_for_probe(rule_name);
-                }
-            }
+        if let Some(hit) = lower_decline_scan(
+            re.non_greedy,
+            re.kind,
+            &loop_first,
+            alt_elements,
+            index,
+            ctx,
+            reaches_rule_tail,
+        ) {
+            decline_stranded = true;
+            decline_scan = hit.0;
+            decline_cont_first = hit.1;
+            decline_viable = ctx.rule_follow_for_probe(rule_name);
         }
         return ScanElement::Repeat(ScanRepeatElement {
             kind: re.kind,
@@ -4511,15 +4499,24 @@ fn patch_repeat_op_caller_follow(
         &rep_op.body_second_position_first,
         &caller_follow_second,
     );
+    let loop_first = admits_kinds(&rep_op.body_admits);
     let mut reserve_scan: List<ScanElement> = [];
-    if let Some(scan) = lower_reserve_scan(rep_op, alt_elements, index, ctx) {
+    if let Some(scan) = lower_reserve_scan(rep_op.non_greedy, rep_op.kind, &loop_first, alt_elements, index, ctx) {
         reserve_scan = scan;
     }
     let mut decline_stranded = false;
     let mut decline_cont_first: List<String> = [];
     let mut decline_scan: List<ScanElement> = [];
     let mut decline_viable: List<String> = [];
-    if let Some(hit) = lower_decline_scan(rep_op, alt_elements, index, ctx, reaches_rule_tail) {
+    if let Some(hit) = lower_decline_scan(
+        rep_op.non_greedy,
+        rep_op.kind,
+        &loop_first,
+        alt_elements,
+        index,
+        ctx,
+        reaches_rule_tail,
+    ) {
         decline_stranded = true;
         decline_scan = hit.0;
         decline_cont_first = hit.1;
@@ -4556,20 +4553,26 @@ fn patch_repeat_op_caller_follow(
 /// without it; a suffix whose head no iteration admits can never be eaten; and
 /// an unscannable one would be reserved on a prefix, which proves nothing about
 /// the whole.
+///
+/// The loop arrives as its three deciding properties rather than as an op, so
+/// the parse's `RepeatOp` and the scan's `ScanRepeatElement` ask through the
+/// same body — the two must admit the same loops or the tournament measures
+/// what the parse will not consume.
 fn lower_reserve_scan(
-    rep_op: &RepeatOp,
+    non_greedy: bool,
+    kind: RepeatKind,
+    loop_first: &List<String>,
     alt_elements: &List<Element>,
     index: i32,
     ctx: &mut GenContext,
 ) -> Option<List<ScanElement>> {
-    if rep_op.non_greedy || !rep_op.kind matches { Star | Plus } {
+    if non_greedy || !kind matches { Star | Plus } {
         return null;
     }
     if index + 1 >= alt_elements.len() || ctx.tail_is_nullable_deep(alt_elements, index + 1) {
         return null;
     }
-    let suffix_first = ctx.first_of_elements_from(alt_elements, index + 1);
-    if !sets_overlap(&admits_kinds(&rep_op.body_admits), &suffix_first) {
+    if !sets_overlap(loop_first, &ctx.first_of_elements_from(alt_elements, index + 1)) {
         return null;
     }
     return lower_scan_continuation_elements(alt_elements, index, ctx);
@@ -4591,25 +4594,28 @@ fn lower_reserve_scan(
 /// the two heads to overlap, or the loop could not have taken the suffix's
 /// input in the first place. Only this one needs the rule's tail, because it
 /// ends by asking the caller's FOLLOW.
+///
 /// Returns the continuation's scan and its FIRST set together: the guard needs
 /// both and the set is what decides whether to build the scan at all, so
 /// computing it once is the difference between one `first_of_elements_from` per
 /// qualifying loop and two.
 fn lower_decline_scan(
-    rep_op: &RepeatOp,
+    non_greedy: bool,
+    kind: RepeatKind,
+    loop_first: &List<String>,
     alt_elements: &List<Element>,
     index: i32,
     ctx: &mut GenContext,
     reaches_rule_tail: bool,
 ) -> Option<[List<ScanElement>, List<String>]> {
-    if rep_op.non_greedy || !rep_op.kind matches { Star | Plus } || !reaches_rule_tail {
+    if non_greedy || !kind matches { Star | Plus } || !reaches_rule_tail {
         return null;
     }
     if index + 1 >= alt_elements.len() || !ctx.tail_is_nullable_deep(alt_elements, index + 1) {
         return null;
     }
     let suffix_first = ctx.first_of_elements_from(alt_elements, index + 1);
-    if !sets_overlap(&admits_kinds(&rep_op.body_admits), &suffix_first) {
+    if !sets_overlap(loop_first, &suffix_first) {
         return null;
     }
     return match lower_scan_continuation_elements(alt_elements, index, ctx) {

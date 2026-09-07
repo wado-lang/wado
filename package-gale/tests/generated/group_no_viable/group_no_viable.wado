@@ -1997,8 +1997,8 @@ fn _parse_plus_solo__inner(p: &mut Parser) -> () {
                     rep_body_end_ok = true;
                 }
                 pos = rep_body_end;
-                let _k_rep_body_end_ok = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                if !rep_body_end_ok && !(_k_rep_body_end_ok == TK_A) { break rep_scan; }
+                let rep_body_end_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+                if !rep_body_end_ok && !(rep_body_end_kind == TK_A) { break rep_scan; }
                 rep_scan_pos = pos;
             }
             if rep_scan_pos < 0 { break; }

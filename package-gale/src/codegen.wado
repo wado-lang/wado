@@ -595,16 +595,16 @@ fn gen_scan_gate_global(w: &mut CodeWriter, fields: &List<String>, members: &Mem
         // seed is `SCAN_GATE.f = p.f;`, so a `long` member declared here as an
         // `i32` is a type error in the generated parser rather than anything
         // this side would notice.
-        let mf = member_field(members, f);
-        w.line(&`${*f}: ${mf.0} = ${mf.1},`);
+        let [ty, init] = member_field(members, f);
+        w.line(&`${*f}: ${ty} = ${init},`);
     }
     w.end();
     w.line(&`global mut ${SCAN_GATE_HANDLE}: ${SCAN_GATE_TYPE} = ${SCAN_GATE_TYPE} \{\};`);
     w.blank();
 }
 
-/// A gate member's `[type, initialiser]`. Every simulated field is one the
-/// members block declares, which is the assert.
+/// A gate member's `[type, initialiser]`. `scan_gate_fields` reads the same
+/// members block, so a field with no declaration is a bug there.
 fn member_field(members: &MemberDecls, name: &String) -> [String, String] {
     for let mf of &members.fields {
         if mf.name == *name {

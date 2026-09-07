@@ -28,7 +28,13 @@ use {
     find_lexer_rule,
 } from "./ir.wado";
 use { Atn, AtnState, AtnTransition } from "./atn.wado";
-use { resolve_ci, fold_range_ci, lexer_alts_scan, lexer_alts_can_collide } from "./lexer_gen.wado";
+use {
+    resolve_ci,
+    fold_range_ci,
+    lexer_alts_have_non_greedy,
+    lexer_alts_scan,
+    lexer_alts_can_collide,
+} from "./lexer_gen.wado";
 use {
     ATN_BASIC,
     ATN_RULE_START,
@@ -135,7 +141,11 @@ fn elem_calls_recursive_ng_rule(elem: &LexerElement, all_rules: &List<LexerRule>
             return false;
         };
         let mut self_visited: List<String> = [];
-        if refs_rule_in_alts(&rn, &target.body, all_rules, &mut self_visited) && alts_have_non_greedy(&target.body) {
+        // Seeded with the target so the recursion the first conjunct just
+        // established is not walked again.
+        let mut ng_visiting: List<String> = [rn];
+        if refs_rule_in_alts(&rn, &target.body, all_rules, &mut self_visited)
+            && lexer_alts_have_non_greedy(&target.body, all_rules, &mut ng_visiting) {
             return true;
         }
         return calls_recursive_ng_rule(&target.body, all_rules, visited);
@@ -144,27 +154,6 @@ fn elem_calls_recursive_ng_rule(elem: &LexerElement, all_rules: &List<LexerRule>
         Group(alts) => calls_recursive_ng_rule(&alts, all_rules, visited),
         Repeat(rep) => elem_calls_recursive_ng_rule(&rep.element, all_rules, visited),
         Not(n) => elem_calls_recursive_ng_rule(&n.element, all_rules, visited),
-        _ => false,
-    };
-}
-
-/// A non-greedy repeat anywhere in `alts`, at any depth of grouping.
-fn alts_have_non_greedy(alts: &List<LexerAlternative>) -> bool {
-    for let alt of alts {
-        for let elem of &alt.elements {
-            if elem_has_non_greedy(elem) {
-                return true;
-            }
-        }
-    }
-    return false;
-}
-
-fn elem_has_non_greedy(elem: &LexerElement) -> bool {
-    return match *elem {
-        Repeat(rep) => rep.non_greedy || elem_has_non_greedy(&rep.element),
-        Group(alts) => alts_have_non_greedy(&alts),
-        Not(n) => elem_has_non_greedy(&n.element),
         _ => false,
     };
 }

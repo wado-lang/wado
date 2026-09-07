@@ -1,23 +1,12 @@
-//! The scan-side twin of a parser gate member.
+//! Which gate actions a scan can simulate as it walks, so a tournament crossing
+//! one measures the length the parse will take rather than one it refuses.
 //!
-//! An alt-initial predicate gates an alternative out of a dispatch, and
-//! `action_gen` already evaluates it where the parser is in scope. A scan is
-//! not: it is a pure `(tokens, pos, follow) -> i32` walk, so a tournament that
-//! measures a stretch crossing a gate action measures it with the gate open and
-//! commits to a length the parse then refuses.
-//!
-//! Passing the parser in does not fix it. The flag is parse-time state and the
-//! scan is lookahead, so an outer tournament scanning over an `if` head reads
-//! the value from before the head. The scan has to *simulate* the action as it
-//! walks, which it can do for an action needing nothing but the walk. This
-//! module recognises those: `field = <int literal>`, and the `locals` +
-//! `@init` / `@after` pair that scopes one. Anything else leaves the gate
-//! unsimulated, as it was before this existed.
-//!
-//! The simulated fields live in one generated struct global carrying the
-//! parser's own field names, so the java2wado front end renders the scan's
-//! condition from the parser's own predicate text with the handle pointed at
-//! the global. One predicate, one translator, two sides.
+//! Passing the parser in does not answer it. The flag is parse-time state and
+//! the scan is lookahead, so an outer tournament scanning over an `if` head
+//! reads the value from before the head. Only an action needing nothing but the
+//! walk can be simulated: `field = <int literal>`, and the `locals` + `@init` /
+//! `@after` pair that scopes one. Anything else leaves the gate unsimulated, as
+//! it was before this existed.
 
 use { Element, Grammar, ParserRule } from "./ir.wado";
 use { to_snake_case } from "./ident.wado";

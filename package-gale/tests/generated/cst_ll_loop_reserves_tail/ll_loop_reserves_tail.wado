@@ -1631,8 +1631,8 @@ fn _parse_arms__inner(p: &mut Parser, follow: i64 = 0) -> () {
                 rep_body_end_ok = true;
             }
             pos = rep_body_end;
-            let _k_rep_body_end_ok = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-            if !rep_body_end_ok && !(_k_rep_body_end_ok == TK_ID) { break rep_scan; }
+            let rep_body_end_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+            if !rep_body_end_ok && !(rep_body_end_kind == TK_ID) { break rep_scan; }
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }

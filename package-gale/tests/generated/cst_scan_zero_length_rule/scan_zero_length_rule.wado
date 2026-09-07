@@ -1604,8 +1604,8 @@ fn _parse_list__inner(p: &mut Parser) -> () {
                 rep_body_end_ok = true;
             }
             pos = rep_body_end;
-            let _k_rep_body_end_ok = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-            if !rep_body_end_ok && !(_k_rep_body_end_ok == TK_LIT_SEMI) { break rep_scan_2; }
+            let rep_body_end_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+            if !rep_body_end_ok && !(rep_body_end_kind == TK_LIT_SEMI) { break rep_scan_2; }
             rep_scan_pos_2 = pos;
         }
         if rep_scan_pos_2 < 0 { break; }

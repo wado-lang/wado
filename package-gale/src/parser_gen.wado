@@ -2212,7 +2212,7 @@ fn gen_scan_decline_stranded(w: &mut CodeWriter, re: &ScanRepeatElement, ctx: &m
     }
     assert re.kind matches { Star | Plus }, "only a loop can strand its continuation; lowering declines for no other kind";
     let gc = ctx.next_scan_group();
-    w.line(&`let dk_${gc} = if pos < tokens.len() \{ tokens[pos] \} else \{ TK_EOF \};`);
+    gen_kind_read(w, &`dk_${gc}`, &"tokens", &"pos");
     let can_continue = join_or(&[
         kind_check_or_none(&admits_kinds(&re.inner_admits), &`dk_${gc}`, ctx),
         kind_check_or_none(&re.decline_cont_first, &`dk_${gc}`, ctx),
@@ -2256,28 +2256,16 @@ fn gen_scan_reserve(w: &mut CodeWriter, re: &ScanRepeatElement, ctx: &mut GenCon
     }
     assert re.kind matches { Star | Plus }, "only a loop can starve its suffix; lowering reserves for no other kind";
     let gc = ctx.next_scan_group();
-    w.line(&`let rs_${gc} = pos;`);
-    gen_scan_gate_save(w, ctx, &`rs_${gc}`);
-    w.line(&`let mut rs_${gc}_ok = false;`);
-    w.begin(&`rsv_${gc}:`);
-    for let se of &re.reserve_scan {
-        gen_scan_op_element(w, se, ctx, &`break rsv_${gc};`);
-    }
-    w.line(&`rs_${gc}_ok = true;`);
-    w.end();
-    // The reserve only measures, so its walk is undone whichever way it went.
-    w.line(&`pos = rs_${gc};`);
-    gen_scan_gate_restore(w, ctx, &`rs_${gc}`);
-    // The suffix failing here is only a starve when nothing can follow: while
-    // the loop can iterate again the suffix gets its turn later. Mirrors
-    // `gen_reserve_check`.
-    let another = kind_check_or_none(&admits_kinds(&re.inner_admits), &`rk_${gc}`, ctx);
-    let starved = if another.is_empty() {
-        `!rs_${gc}_ok`;
-    } else {
-        w.line(&`let rk_${gc} = if pos < tokens.len() \{ tokens[pos] \} else \{ TK_EOF \};`);
-        `!rs_${gc}_ok && !(${another})`;
-    };
+    gen_reserve_probe(w, &re.reserve_scan, &`rs_${gc}`, &`rs_${gc}_ok`, &`rsv_${gc}`, ctx);
+    let starved = reserve_starved_cond(
+        w,
+        &`rs_${gc}_ok`,
+        &`rk_${gc}`,
+        &"tokens",
+        &"pos",
+        &admits_kinds(&re.inner_admits),
+        ctx,
+    );
     if ctx.emit_scan_gate() {
         w.begin(&`if ${starved}`);
         w.line(&"pos = sp;");
@@ -2329,7 +2317,7 @@ fn gen_scan_op_group(w: &mut CodeWriter, ge: &ScanGroupElement, ctx: &mut GenCon
     w.line(&`let ${gp_var} = pos;`);
     gen_scan_gate_save(w, ctx, &gp_var);
     if decision_reads_lookahead(&branches) {
-        w.line(&`let ${kind_var} = if pos < tokens.len() \{ tokens[pos] \} else \{ TK_EOF \};`);
+        gen_kind_read(w, &kind_var, &"tokens", &"pos");
     }
     w.line(&`let mut ${best_var} = -1;`);
     // The gate travels with `best`: the arms run after the winning one and each
@@ -6319,7 +6307,7 @@ fn gen_rep_decline_stranded(
     let cont_kind = dedup_name(&"decline_kind", nc);
     let dead_end = dedup_name(&"decline_dead", nc);
     w.begin(&`if ${*scan_pos} >= 0`);
-    w.line(&`let ${cont_kind} = if ${*scan_pos} < p.kinds.len() \{ p.kinds[${*scan_pos}] \} else \{ TK_EOF \};`);
+    gen_kind_read(w, &cont_kind, &"p.kinds", scan_pos);
     let can_continue = join_or(&[
         kind_check_or_none(&admits_kinds(&rep_op.body_admits), &cont_kind, ctx),
         kind_check_or_none(&rep_op.decline_cont_first, &cont_kind, ctx),
@@ -6367,16 +6355,8 @@ fn gen_rep_decided_reserve(
     }
     w.line(&`${ok} = true;`);
     w.end();
-    // The same condition `gen_reserve_check` uses: the suffix failing here is
-    // only a starve when nothing can follow.
     let kind = dedup_name(&"rep_reserve_kind", nc);
-    let another = kind_check_or_none(&admits_kinds(&rep_op.body_admits), &kind, ctx);
-    let starved = if another.is_empty() {
-        `!${ok}`;
-    } else {
-        w.line(&`let ${kind} = if ${*best} < p.kinds.len() \{ p.kinds[${*best}] \} else \{ TK_EOF \};`);
-        `!${ok} && !(${another})`;
-    };
+    let starved = reserve_starved_cond(w, &ok, &kind, &"p.kinds", best, &admits_kinds(&rep_op.body_admits), ctx);
     // A `+`'s mandatory first iteration takes what prediction picked, exactly as
     // the guarded path leaves its whole guard behind `!plus_flag`.
     let guard = if plus_flag.is_empty() { starved } else { `!${*plus_flag} && (${starved})` };
@@ -6439,6 +6419,12 @@ fn gen_scan_gate_restore(w: &mut CodeWriter, ctx: &GenContext, slot: &String) {
     for let f of ctx.scan_gate_fields() {
         w.line(&`${SCAN_GATE_HANDLE}.${*f} = ${*slot}_${*f};`);
     }
+}
+
+/// The lookahead read every gate and probe opens with: the kind at `at`, EOF
+/// past the end. `stream` is `tokens` inside a scan and `p.kinds` outside one.
+fn gen_kind_read(w: &mut CodeWriter, name: &String, stream: &String, at: &String) {
+    w.line(&`let ${*name} = if ${*at} < ${*stream}.len() \{ ${*stream}[${*at}] \} else \{ TK_EOF \};`);
 }
 
 /// `kind_check_str` for a set that may be empty — an empty one admits nothing,
@@ -6603,12 +6589,57 @@ fn gen_rep_scan_guard(
 
 global NO_RESERVE_ADMITS: List<String> = [];
 
-/// Refuse the iteration whose end starves the alternative's mandatory suffix.
+/// Walk `reserve` from the current position and leave `ok` telling whether it
+/// matched. The reserve only measures, so `slot` holds the position and gate to
+/// put back whichever way the walk went.
+fn gen_reserve_probe(
+    w: &mut CodeWriter,
+    reserve: &List<ScanElement>,
+    slot: &String,
+    ok: &String,
+    label: &String,
+    ctx: &mut GenContext,
+) {
+    w.line(&`let ${*slot} = pos;`);
+    gen_scan_gate_save(w, ctx, slot);
+    w.line(&`let mut ${*ok} = false;`);
+    w.begin(&`${*label}:`);
+    for let se of reserve {
+        gen_scan_op_element(w, se, ctx, &`break ${*label};`);
+    }
+    w.line(&`${*ok} = true;`);
+    w.end();
+    w.line(&`pos = ${*slot};`);
+    gen_scan_gate_restore(w, ctx, slot);
+}
+
+/// Whether a failed reserve starves the alternative's mandatory suffix.
 ///
-/// The suffix failing *here* is not yet a starve: while the loop can iterate
-/// again the suffix gets its turn later, and `(A | B)* A` on `b b a` is the case
-/// — after the first `b` the tail cannot start, and breaking there loses the
-/// input. Only when nothing can follow is the suffix out of turns.
+/// Failing *here* is not yet a starve: while the loop can iterate again the
+/// suffix gets its turn later, and `(A | B)* A` on `b b a` is the case — after
+/// the first `b` the tail cannot start, and breaking there loses the input. Only
+/// when nothing can follow is the suffix out of turns.
+///
+/// Emits the lookahead read the answer needs, so the caller's `pos` must already
+/// be back at the iteration's end.
+fn reserve_starved_cond(
+    w: &mut CodeWriter,
+    ok: &String,
+    kind: &String,
+    stream: &String,
+    at: &String,
+    body_admits: &List<String>,
+    ctx: &mut GenContext,
+) -> String {
+    let another = kind_check_or_none(body_admits, kind, ctx);
+    if another.is_empty() {
+        return `!${*ok}`;
+    }
+    gen_kind_read(w, kind, stream, at);
+    return `!${*ok} && !(${another})`;
+}
+
+/// Refuse the iteration whose end starves the alternative's mandatory suffix.
 fn gen_reserve_check(
     w: &mut CodeWriter,
     reserve: &List<ScanElement>,
@@ -6620,24 +6651,10 @@ fn gen_reserve_check(
 ) {
     let ok = dedup_name(&`${*body_end}_ok`, name_counts);
     let label = dedup_name(&`${*body_end}_scan`, name_counts);
-    w.line(&`let ${*body_end} = pos;`);
-    gen_scan_gate_save(w, ctx, body_end);
-    w.line(&`let mut ${ok} = false;`);
-    w.begin(&`${label}:`);
-    for let se of reserve {
-        gen_scan_op_element(w, se, ctx, &`break ${label};`);
-    }
-    w.line(&`${ok} = true;`);
-    w.end();
-    w.line(&`pos = ${*body_end};`);
-    gen_scan_gate_restore(w, ctx, body_end);
-    let another = kind_check_or_none(body_admits, &`_k_${ok}`, ctx);
-    if another.is_empty() {
-        w.line(&`if !${ok} \{ ${*fail} \}`);
-        return;
-    }
-    w.line(&`let _k_${ok} = if pos < tokens.len() \{ tokens[pos] \} else \{ TK_EOF \};`);
-    w.line(&`if !${ok} && !(${another}) \{ ${*fail} \}`);
+    gen_reserve_probe(w, reserve, body_end, &ok, &label, ctx);
+    let kind = dedup_name(&`${*body_end}_kind`, name_counts);
+    let starved = reserve_starved_cond(w, &ok, &kind, &"tokens", &"pos", body_admits, ctx);
+    w.line(&`if ${starved} \{ ${*fail} \}`);
 }
 
 fn gen_scan_guard_with_prefix(

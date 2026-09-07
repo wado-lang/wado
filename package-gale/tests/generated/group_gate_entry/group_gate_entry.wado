@@ -2015,8 +2015,8 @@ fn _parse_list_label__inner(p: &mut Parser) -> () {
                 rep_body_end_ok = true;
             }
             pos = rep_body_end;
-            let _k_rep_body_end_ok = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-            if !rep_body_end_ok && !(_kind_set_0(_k_rep_body_end_ok)) { break rep_scan; }
+            let rep_body_end_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+            if !rep_body_end_ok && !(_kind_set_0(rep_body_end_kind)) { break rep_scan; }
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
@@ -2101,8 +2101,8 @@ fn _parse_solo_star__inner(p: &mut Parser) -> () {
                 rep_body_end_ok = true;
             }
             pos = rep_body_end;
-            let _k_rep_body_end_ok = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-            if !rep_body_end_ok && !(_k_rep_body_end_ok == TK_A) { break rep_scan; }
+            let rep_body_end_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+            if !rep_body_end_ok && !(rep_body_end_kind == TK_A) { break rep_scan; }
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }

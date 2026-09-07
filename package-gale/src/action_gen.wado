@@ -615,7 +615,7 @@ fn current_rule_is_multi_alt(ctx: &GenContext) -> bool {
 /// scope. A body the translator cannot emit is not gateable — it falls to the
 /// inline guard path. The condition collector and the id-marking pass share
 /// this, so the gated set and the emitted conditions cannot diverge.
-fn gate_condition_for(a: &AltAction, ctx: &GenContext) -> Option<String> {
+fn gate_condition_for(a: &AltAction, ctx: &GenContext, handle: &String = &PARSER_HANDLE) -> Option<String> {
     if a.before_index != 0 {
         return null;
     }
@@ -646,6 +646,8 @@ fn gate_condition_for(a: &AltAction, ctx: &GenContext) -> Option<String> {
         ctx.alt_bindings(),
         ctx.grammar_name(),
         ctx.action_members(),
+        false,
+        handle,
     ) {
         Ok(code) => Option::Some(code),
         Err(_) => null,
@@ -660,11 +662,10 @@ fn is_gateable_alt_initial_predicate(a: &AltAction, ctx: &GenContext) -> bool {
 /// joined — or `""` when the scan cannot answer them.
 ///
 /// A scan has no parser, so it can only evaluate a condition that reads nothing
-/// but simulated fields. `translate_predicate` renders a member as
-/// `<handle>.<field>`, so the scan's condition is the parser's own predicate
-/// text with the handle pointed at `SCAN_GATE`; what that leaves behind is the
-/// check. A condition naming anything else — a method, an unsimulated field, a
-/// token — leaves the scan ungated, which is the behaviour before this existed.
+/// but simulated fields. The condition is the dispatch's own, rendered with the
+/// handle pointed at `SCAN_GATE`; whatever names something else — a method, an
+/// unsimulated field, the parser — leaves the scan ungated, as it was before
+/// this existed.
 pub fn alt_scan_gate_conditions(alt: &Alternative, ctx: &GenContext) -> String {
     if !ctx.emit_scan_gate() {
         return String::new();
@@ -674,38 +675,16 @@ pub fn alt_scan_gate_conditions(alt: &Alternative, ctx: &GenContext) -> String {
         if a.before_index != 0 || a.kind matches { Action } {
             continue;
         }
-        // Only the Java front end resolves a bare member against a receiver; a
-        // Wado body already names `p` and no rebinding reaches inside it.
-        if !ctx.action_language() matches { Java } || body_names_unwired_base(&a.source.text, ctx) {
-            return String::new();
-        }
-        let ridx = ctx.current_rule_index();
-        if ridx < 0 {
-            return String::new();
-        }
-        let rule = &ctx.parser_rules()[ridx];
-        match translate_predicate(
-            &ctx.action_language(),
-            rule,
-            ctx.parser_rules(),
-            &a.source.text,
-            rule_emits_vals(ctx, rule),
-            ctx.alt_bindings(),
-            ctx.grammar_name(),
-            ctx.action_members(),
-            false,
-            &SCAN_GATE_HANDLE,
-        ) {
-            Ok(code) => {
-                if !reads_only_scan_gate_fields(&code, ctx.scan_gate_fields()) {
-                    return String::new();
-                }
-                conds.push(code);
-            },
-            Err(_) => {
+        let code = match gate_condition_for(a, ctx, &SCAN_GATE_HANDLE) {
+            Some(c) => c,
+            None => {
                 return String::new();
             },
+        };
+        if !reads_only_scan_gate_fields(&code, ctx.scan_gate_fields()) {
+            return String::new();
         }
+        conds.push(code);
     }
     if conds.is_empty() {
         return String::new();
