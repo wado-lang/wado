@@ -5598,9 +5598,11 @@ fn "core:serde/serde_variant_no_unit_case.wado/NoUnit^core:serde/Serialize::seri
     let start_126: i32;
     let new_used_139: i32;
     let start_140: i32;
-    let v_149: ref "serde_variant_no_unit_case.wado//NoUnit";
-    let new_used_166: i32;
-    let start_167: i32;
+    let v_148: ref "core:prelude/string.wado//String";
+    let v_150: ref "serde_variant_no_unit_case.wado//NoUnit";
+    let new_used_167: i32;
+    let start_168: i32;
+    let _av_243: i32;
     if self.value.discriminant == 0 {
         new_used_52 = s.used + 1;
         if @unlikely(new_used_52 > builtin::array_len(s.repr)) {
@@ -5653,11 +5655,13 @@ fn "core:serde/serde_variant_no_unit_case.wado/NoUnit^core:serde/Serialize::seri
         start_140 = s.used;
         s.used = new_used_139;
         builtin::array_set_u8(s.repr, start_140, 58);
-        v_149 = self.value;
-        if @unlikely(v_149.discriminant != 1) {
+        v_150 = self.value;
+        if @unlikely(v_150.discriminant != 1) {
             unreachable;
         }
-        payload_20 = ref.cast "serde_variant_no_unit_case.wado//NoUnit::B"(v_149).payload_0;
+        v_148 = ref.cast "serde_variant_no_unit_case.wado//NoUnit::B"(v_150).payload_0;
+        _av_243 = v_148.used;
+        payload_20 = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_1: ref Array<u8>; __array_clone_src_1 = v_148.repr; let __array_clone_dst_2: ref Array<u8>; __array_clone_dst_2 = builtin::array_new<u8>(_av_243); builtin::array_copy<u8>(__array_clone_dst_2, 0, __array_clone_src_1, 0, _av_243); __array_clone_dst_2), used: _av_243 };
         "core:json/write_escaped_string"(s, payload_20);
         if @likely(ref.is_null(ref.null none)) {
         } else {
@@ -5665,10 +5669,10 @@ fn "core:serde/serde_variant_no_unit_case.wado/NoUnit^core:serde/Serialize::seri
             cold_path;
             return __local_22;
         }
-        return new_used_166 = s.used + 1, if @unlikely(new_used_166 > builtin::array_len(s.repr)) {
+        return new_used_167 = s.used + 1, if @unlikely(new_used_167 > builtin::array_len(s.repr)) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(s, new_used_166);
-        }, start_167 = s.used, s.used = new_used_166, builtin::array_set_u8(s.repr, start_167, 125), ref.null none;
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(s, new_used_167);
+        }, start_168 = s.used, s.used = new_used_167, builtin::array_set_u8(s.repr, start_168, 125), ref.null none;
     }
     return struct.new "core:serde//SerializeError" { kind: 0, message: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("unknown case of NoUnit"), used: 22 } };
 }

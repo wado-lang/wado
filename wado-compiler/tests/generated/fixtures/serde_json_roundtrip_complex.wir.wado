@@ -17704,10 +17704,12 @@ fn "core:serde/serde_json_roundtrip_complex.wado/Shape^core:serde/Serialize::ser
     let start_136: i32;
     let new_used_149: i32;
     let start_150: i32;
-    let v_159: ref "serde_json_roundtrip_complex.wado//Shape";
-    let r_164: ref null "core:serde//SerializeError";
-    let new_used_174: i32;
-    let start_175: i32;
+    let v_158: ref "serde_json_roundtrip_complex.wado//Inner";
+    let v_160: ref "serde_json_roundtrip_complex.wado//Shape";
+    let v_163: ref "core:prelude/string.wado//String";
+    let r_166: ref null "core:serde//SerializeError";
+    let new_used_176: i32;
+    let start_177: i32;
     let __sroa_payload_value: f64;
     if self.value.discriminant == 0 {
         if ref.is_null(global:core:serde::__const_obj_602) {
@@ -17777,22 +17779,23 @@ fn "core:serde/serde_json_roundtrip_complex.wado/Shape^core:serde/Serialize::ser
         start_150 = s.used;
         s.used = new_used_149;
         builtin::array_set_u8(s.repr, start_150, 58);
-        v_159 = self.value;
-        if @unlikely(v_159.discriminant != 1) {
+        v_160 = self.value;
+        if @unlikely(v_160.discriminant != 1) {
             unreachable;
         }
-        payload_20 = ref.cast "serde_json_roundtrip_complex.wado//Shape::Rectangle"(v_159).payload_0;
-        r_164 = "core:serde/serde_json_roundtrip_complex.wado/Inner^core:serde/Serialize::serialize<core:json/JsonSerializer>$scalar"(payload_20, s);
-        if @likely(ref.is_null(r_164)) {
+        v_158 = ref.cast "serde_json_roundtrip_complex.wado//Shape::Rectangle"(v_160).payload_0;
+        payload_20 = struct.new "serde_json_roundtrip_complex.wado//Inner" { value: v_158.value, label: ref.as_non_null(v_163 = v_158.label; struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let __array_clone_src_1: ref Array<u8>; __array_clone_src_1 = v_163.repr; let __array_clone_len_3: i32; __array_clone_len_3 = v_163.used; let __array_clone_dst_2: ref Array<u8>; __array_clone_dst_2 = builtin::array_new<u8>(__array_clone_len_3); builtin::array_copy<u8>(__array_clone_dst_2, 0, __array_clone_src_1, 0, __array_clone_len_3); __array_clone_dst_2), used: v_163.used }) };
+        r_166 = "core:serde/serde_json_roundtrip_complex.wado/Inner^core:serde/Serialize::serialize<core:json/JsonSerializer>$scalar"(payload_20, s);
+        if @likely(ref.is_null(r_166)) {
         } else {
-            __local_22 = ref.as_non_null(r_164);
+            __local_22 = ref.as_non_null(r_166);
             cold_path;
             return __local_22;
         }
-        return new_used_174 = s.used + 1, if @unlikely(new_used_174 > builtin::array_len(s.repr)) {
+        return new_used_176 = s.used + 1, if @unlikely(new_used_176 > builtin::array_len(s.repr)) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(s, new_used_174);
-        }, start_175 = s.used, s.used = new_used_174, builtin::array_set_u8(s.repr, start_175, 125), ref.null none;
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(s, new_used_176);
+        }, start_177 = s.used, s.used = new_used_176, builtin::array_set_u8(s.repr, start_177, 125), ref.null none;
     }
     if self.value.discriminant == 2 {
         if ref.is_null(global:core:serde::__const_obj_600) {
