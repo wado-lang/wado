@@ -1143,12 +1143,28 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// (WEP 2026-07-31). A trait's *static* method is not included: it has no
     /// receiver argument to bind `Self` from.
     pub(super) fn is_trait_instance_method(&self, trait_name: &str, method_name: &str) -> bool {
+        self.trait_declares_method(trait_name, method_name, |kind| kind != ast::SelfKind::None)
+    }
+
+    /// [`Self::is_trait_instance_method`] for the receiver-less kind — what
+    /// `Trait::<T>::method(…)` binds `Self` for, since it has no receiver
+    /// argument to pin it.
+    pub(super) fn is_trait_static_method(&self, trait_name: &str, method_name: &str) -> bool {
+        self.trait_declares_method(trait_name, method_name, |kind| kind == ast::SelfKind::None)
+    }
+
+    fn trait_declares_method(
+        &self,
+        trait_name: &str,
+        method_name: &str,
+        of_kind: impl Fn(ast::SelfKind) -> bool,
+    ) -> bool {
         self.decl_key_or_local(trait_name).is_some_and(|key| {
             self.tysys.trait_env.declares_trait(&key)
                 && self
                     .trait_sig_of(&key)
                     .and_then(|sig| sig.method(method_name))
-                    .is_some_and(|m| m.sig.self_kind != ast::SelfKind::None)
+                    .is_some_and(|m| of_kind(m.sig.self_kind))
         })
     }
 
@@ -1423,6 +1439,24 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     None,
                     ctx,
                 );
+            }
+            // `Tagged::<V>::tag(…)` — the static counterpart. A receiver-less
+            // declaration has no receiver argument to pin `Self`, so the
+            // turbofish supplies it and the call reads as `V::tag(…)`. Only
+            // where the trait declares no parameters of its own: the branch
+            // above claims the turbofish for a trait that does, and there is
+            // then nowhere left to write `Self`.
+            if let [self_ty_ast] = g.args.as_slice()
+                && self.is_trait_static_method(&g.name, &static_call.method)
+                && self
+                    .decl_key_at(g.id, &g.name)
+                    .and_then(|key| self.trait_decl_type_params_of(&key))
+                    .is_none_or(|params| params.is_empty())
+                && self.resolve_type(self_ty_ast) != TypeTable::UNKNOWN
+            {
+                let mut on_self = static_call.clone();
+                on_self.target_type = self_ty_ast.clone();
+                return self.resolve_static_method_call(&on_self, ctx);
             }
             let _ = self.emit(TypeError::UnknownFunction {
                 name: static_call_symbol_name(static_call),

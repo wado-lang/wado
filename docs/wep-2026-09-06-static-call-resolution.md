@@ -278,12 +278,15 @@ walk rungs of their own, and that is the open roadmap item above.
   fourth such rung would be the same class of defect the rule pass exists to
   prevent. Closing it means producing candidates for them too, with an origin
   that outranks every trait's.
-- A trait's static has no trait-qualified spelling. `Tagged::<V>::tag(5)` — the
-  counterpart of Rust's `<V as Tagged>::A(5)` — answers `unknown function`, and
-  an instance method's `Tagged::describe(&v)` works only because the receiver
-  argument pins `Self`. So where a case shadows an inherited static, a bound
-  (`fn f<T: Tagged>() { T::tag(5) }`) is the only way left to reach it. The
-  spelling is missing on its own, not just under shadowing.
+- The trait-qualified spelling does not reach past a shadowing case.
+  `Tagged::<V>::tag(5)` resolves now — the turbofish supplies the `Self` an
+  instance method's receiver argument would pin — but it reads as `V::tag(5)`
+  and a case `V` declares of that name still answers first. Reaching the
+  trait's needs the restriction carried into the call, where the variant arm
+  builds the case, and a bound (`fn f<T: Tagged>() { T::tag(5) }`) is until
+  then the only way. The spelling is also confined to a trait declaring no
+  parameters of its own: `Take::<A>::take(recv)` claims the turbofish for
+  those, leaving nowhere to write `Self`.
 - The preselect that shapes a literal reads argument zero alone. A literal
   after the first is shaped by whatever the resolution then picks, so two impls
   a _literal_ in second position would separate are still an overload to it.
