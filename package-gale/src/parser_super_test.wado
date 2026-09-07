@@ -156,18 +156,24 @@ A : 'a' ;
     assert !plain.contains("pub fn la("), "the action-context API stays private";
 }
 
-test "a base call sharing its body with untranslatable host code is refused" {
-    // The rewrite makes a base call Wado on its own, but only a body that is
-    // nothing else: this one needs the java2wado a superClass grammar carves
-    // out, so nothing runs and the base is not wired.
+test "an untranslatable body is dropped on its own, and the base still wires" {
+    // warn-and-emit (`action.md`): the one body java2wado cannot translate is
+    // reported and dropped, and the base the OTHER body calls is still wired,
+    // so `r`'s predicate runs. A parser base is predicate-only and the rewrite
+    // leaves `PBase::m(p)` calls the translator passes through, so one bad body
+    // costs itself rather than every other body's base — which is what ANTLR4
+    // does, compiling the class and leaving that body to the host compiler.
     let src = &"grammar C;
 options { superClass = PBase; }
+@parser::members {
+    int n = 0;
+}
 r : A { this.ok() }? A ;
-s : A { System.out.println(\"x\"); } ;
+s : A { n++; } ;
 A : 'a' ;
 ";
     assert unsupported_count(src) == 1, "the refusal is reported once";
-    assert !gen_source(src).contains("pub interface PBase"), "and nothing reaching the base is emitted";
+    assert gen_source(src).contains("pub interface PBase"), "and the base the other body calls still wires";
 }
 
 test "the metadata comment names each recognizer's base" {
@@ -208,20 +214,22 @@ X : { this.ok() }? [a-z]+ ;
     assert !gen_source(src).contains("this."), gen_source(src);
 }
 
-test "a wired parser base does not un-carve java members" {
-    // `language = Java` under a `superClass` is java2wado's carve-out: the base
-    // rewrite runs the bodies, but `@parser::members` still has no translator.
+test "a parser superClass does not carve out java members" {
+    // The carve-out is the lexer's, whose base owns the action surface too. A
+    // parser base is predicate-only and the rewrite leaves `PBase::m(p)` calls
+    // java2wado passes through, so `@parser::members` translates exactly as it
+    // would with no base — which is what lets a grammar keep parser state
+    // beside a base, as ANTLR4 does.
     let src = gen_source(&"grammar C;
 options { superClass = PBase; }
 @parser::members {
     int calls = 0;
-    void bump() { this.calls += 1; }
 }
 shr : GT { this.NextGT() }? GT ;
 GT : '>' ;
 ");
     assert src.contains("PBase::next_gt(p)"), "the base predicate still runs";
-    assert !src.contains("fn bump"), src;
+    assert src.contains("calls: i32 = 0"), src;
 }
 
 test "fragment recovery reaches the base through expect" {

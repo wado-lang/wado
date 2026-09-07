@@ -39,7 +39,13 @@ use {
     vals_struct_name,
     wado_type_default,
 } from "./action_translate.wado";
-use { action_language_is_emittable, translate_action, translate_members, translate_predicate } from "./java2wado.wado";
+use {
+    action_language_is_emittable,
+    parser_action_language_is_emittable,
+    translate_action,
+    translate_members,
+    translate_predicate,
+} from "./java2wado.wado";
 use { MemberDecls } from "./java2wado/jmembers.wado";
 use { find_attr_refs } from "./attr_scan.wado";
 use { body_is_base_calls_only, body_names_this, opaque_span_end } from "./superclass.wado";
@@ -350,8 +356,16 @@ fn gen_vals_fields(w: &mut CodeWriter, decls: &List<AttrDecl>) {
 pub fn collect_members(grammar: &Grammar, ctx: &mut GenContext, lexer: bool) -> MemberDecls {
     let empty = MemberDecls { fields: [], methods: [] };
     // Members are a translator product, so a wired base — which turns
-    // `emit_actions` on for a carved-out host language — must not un-carve them.
-    if !ctx.emit_actions() || !action_language_is_emittable(grammar) {
+    // `emit_actions` on for a carved-out host language — must not un-carve the
+    // lexer's, whose base owns the action surface too. The parser's base is
+    // predicate-only and the rewrite leaves java2wado a body to translate, so
+    // there the carve-out does not apply.
+    let emittable = if lexer {
+        action_language_is_emittable(grammar);
+    } else {
+        parser_action_language_is_emittable(grammar);
+    };
+    if !ctx.emit_actions() || !emittable {
         return empty;
     }
     let mut body = String::new();

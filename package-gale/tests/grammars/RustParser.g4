@@ -32,6 +32,23 @@ OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 
 parser grammar RustParser;
 
+// LOCAL: Rust's "no struct literal in a condition" rule, which upstream leaves
+// as the `/*except structExpression*/` comment on `predicateLoopExpression`.
+//
+// `if any_error { None }` is `any_error` and a block, not the struct literal
+// `any_error { None }` — only position separates them, because `{ None }` is a
+// valid shorthand field list as well as a valid block. Rust spells it with a
+// Scrutinee that excludes struct expressions; expressed here as the depth
+// counter, which is what an ANTLR4 grammar has to use.
+//
+// Non-zero across the head of `if` / `while` / `for` / `match` and a let
+// chain's scrutinee. Bracketing does not reset it, so a struct literal nested
+// in a condition's own parentheses or call arguments is refused where Rust
+// allows one; no source in this repository writes that.
+@parser::members {
+    int noStruct = 0;
+}
+
 // Insert here @header for C++ parser.
 
 options
@@ -485,8 +502,8 @@ expression
     | LPAREN innerAttribute* expression RPAREN                       # GroupedExpression             // 8.2.5
     | LSQUAREBRACKET innerAttribute* arrayElements? RSQUAREBRACKET   # ArrayExpression               // 8.2.6
     | LPAREN innerAttribute* tupleElements? RPAREN                   # TupleExpression               // 8.2.7
-    | structExpression                                               # StructExpression_             // 8.2.8
-    | enumerationVariantExpression                                   # EnumerationVariantExpression_
+    | {noStruct == 0}? structExpression                              # StructExpression_             // 8.2.8
+    | {noStruct == 0}? enumerationVariantExpression                  # EnumerationVariantExpression_
     | closureExpression                                              # ClosureExpression_            // 8.2.12
     | expressionWithBlock                                            # ExpressionWithBlock_
     | macroInvocation                                                # MacroInvocationAsExpression
@@ -671,15 +688,19 @@ infiniteLoopExpression
 
 // LOCAL: `letChainTail*` — the `while` half of the let chain above.
 predicateLoopExpression
-    : KW_WHILE expression /*except structExpression*/ (letChainTail* blockExpression)
+    : KW_WHILE {noStruct = noStruct + 1;} expression {noStruct = noStruct - 1;} (
+        letChainTail* blockExpression
+    )
     ;
 
 predicatePatternLoopExpression
-    : KW_WHILE KW_LET pattern EQ expression (letChainTail* blockExpression)
+    : KW_WHILE KW_LET pattern EQ {noStruct = noStruct + 1;} expression {noStruct = noStruct - 1;} (
+        letChainTail* blockExpression
+    )
     ;
 
 iteratorLoopExpression
-    : KW_FOR pattern KW_IN expression blockExpression
+    : KW_FOR pattern KW_IN {noStruct = noStruct + 1;} expression {noStruct = noStruct - 1;} blockExpression
     ;
 
 loopLabel
@@ -701,22 +722,25 @@ loopLabel
 // what stops `if return { 1 }` eating its own block. Grouped, the suffix head
 // is mandatory again. The group is transparent, so no tree changes.
 ifExpression
-    : KW_IF expression (letChainTail* blockExpression) (KW_ELSE (blockExpression | ifExpression | ifLetExpression))?
+    : KW_IF {noStruct = noStruct + 1;} expression {noStruct = noStruct - 1;} (
+        letChainTail* blockExpression
+    ) (KW_ELSE (blockExpression | ifExpression | ifLetExpression))?
     ;
 
 ifLetExpression
-    : KW_IF KW_LET pattern EQ expression (letChainTail* blockExpression) (
-        KW_ELSE (blockExpression | ifExpression | ifLetExpression)
-    )?
+    : KW_IF KW_LET pattern EQ {noStruct = noStruct + 1;} expression {noStruct = noStruct - 1;} (
+        letChainTail* blockExpression
+    ) (KW_ELSE (blockExpression | ifExpression | ifLetExpression))?
     ;
 
 letChainTail
-    : ANDAND KW_LET pattern EQ expression
+    : ANDAND KW_LET pattern EQ {noStruct = noStruct + 1;} expression {noStruct = noStruct - 1;}
     ;
 
 // 8.2.16
 matchExpression
-    : KW_MATCH expression LCURLYBRACE innerAttribute* matchArms? RCURLYBRACE
+    : KW_MATCH {noStruct = noStruct + 1;} expression {noStruct = noStruct - 1;} LCURLYBRACE innerAttribute* matchArms?
+        RCURLYBRACE
     ;
 
 matchArms

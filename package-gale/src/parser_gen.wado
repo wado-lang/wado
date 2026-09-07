@@ -7078,7 +7078,7 @@ fn emit_scan_tournament(
     sorted_indices: &List<i32>,
     fn_name: &String,
     rule_display: &String,
-    ctx: &GenContext,
+    ctx: &mut GenContext,
     fall_through_on_no_match: bool = false,
 ) {
     let fsep = follow_sep(ctx.current_rule_reads_follow());
@@ -7088,7 +7088,18 @@ fn emit_scan_tournament(
         let idx = sorted_indices[i];
         // Without the caller follow, a trailing token the helper's
         // `follow_yields` gate rejects still counts toward the score.
-        w.line(&`let _sd_p_${idx} = ${*fn_name}_scan_${idx}(_sd_tokens, _sd_pos${fsep});`);
+        let scan = `${*fn_name}_scan_${idx}(_sd_tokens, _sd_pos${fsep})`;
+        // An alt-initial predicate says whether the alternative exists at all,
+        // and a scan is a pure token function that cannot ask one. Evaluate it
+        // here, where the parser is in scope, and score a refused alternative as
+        // no match — otherwise the tournament picks by length an alternative the
+        // parse then refuses outright.
+        let gate = alt_initial_gate(idx, ctx);
+        if gate.is_empty() {
+            w.line(&`let _sd_p_${idx} = ${scan};`);
+        } else {
+            w.line(&`let _sd_p_${idx} = if ${gate} \{ ${scan} \} else \{ -1 \};`);
+        }
     }
     if ctx.is_trace() {
         let rlit = str_lit(*rule_display);
@@ -7126,6 +7137,26 @@ fn alts_all_scan_full(indices: &List<i32>, alts: &List<Alternative>, ctx: &mut G
         }
     }
     return true;
+}
+
+/// The gate the current rule's alternative `idx` carries, or empty where it
+/// carries none. Registering it emits the `pred_<id>` fn the condition names,
+/// which is why this asks `alt_has_gate` first rather than registering
+/// speculatively.
+fn alt_initial_gate(idx: i32, ctx: &mut GenContext) -> String {
+    let ridx = ctx.current_rule_index();
+    if ridx < 0 {
+        return String::new();
+    }
+    let rule = ctx.parser_rules()[ridx];
+    if idx < 0 || idx >= rule.alternatives.len() {
+        return String::new();
+    }
+    let alt = rule.alternatives[idx];
+    if !alt_has_gate(&alt, ctx) {
+        return String::new();
+    }
+    return join_gate_conds(&alt_initial_gate_conditions(&alt, ctx));
 }
 
 /// The alts a `Dispatch` node's tournament fallback chooses between, in

@@ -36,6 +36,7 @@ use { gen_kind_set_helpers, gen_follow_mask_globals, gen_sync_set_globals } from
 use { gen_node_kinds, gen_alt_enums, gen_string_tree_helper } from "./cst_gen.wado";
 use {
     action_language_is_emittable,
+    parser_action_language_is_emittable,
     should_emit_actions,
     stage_lexer_bodies,
     translate_attr_types,
@@ -395,8 +396,14 @@ fn wire_parser_superclass(grammar: &mut Grammar, ctx: &mut GenContext) {
 
 /// Whether codegen runs the grammar's parser action bodies: java2wado emits the
 /// language, or every body is base calls, which the rewrite makes Wado.
+///
+/// A `superClass` does not take the language away here the way it does for the
+/// lexer — the rewrite leaves `Base::m(p)` calls java2wado passes through, and a
+/// body it cannot translate is reported and dropped on its own
+/// (`UnsupportedAction`, warn-and-emit) rather than costing every other body the
+/// base.
 fn parser_bodies_execute(grammar: &Grammar, base: &String) -> bool {
-    return action_language_is_emittable(grammar) || parser_bodies_are_base_calls(grammar, base);
+    return parser_action_language_is_emittable(grammar) || parser_bodies_are_base_calls(grammar, base);
 }
 
 fn warn_superclass_refused(ctx: &mut GenContext, base: &String, refusal: &String) {

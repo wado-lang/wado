@@ -1614,7 +1614,7 @@ fn _parse_s__inner(p: &mut Parser) -> () {
         let _sd_tokens = &p.kinds;
         let _sd_pos = p.pos;
         let _sd_p_1 = _parse_s__inner_scan_1(_sd_tokens, _sd_pos);
-        let _sd_p_0 = _parse_s__inner_scan_0(_sd_tokens, _sd_pos);
+        let _sd_p_0 = if (pred_0(p)) { _parse_s__inner_scan_0(_sd_tokens, _sd_pos) } else { -1 };
         let mut _sd_best_i: i32 = -1;
         let mut _sd_best_p: i32 = -1;
         if _sd_p_0 > _sd_best_p {
@@ -1647,6 +1647,10 @@ fn _parse_s(p: &mut Parser) -> () {
     if p.recovering {
         p.push_rule_stack("s");
     }
+}
+
+fn pred_0(p: &Parser) -> bool {
+    return true;
 }
 
 fn _run_parse_entry(input: &String, max_errors: i32, entry: fn(&mut Parser)) -> ParseResult {

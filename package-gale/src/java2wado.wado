@@ -221,6 +221,18 @@ pub fn action_language_is_emittable(grammar: &Grammar) -> bool {
         || grammar.action_language matches { Java } && !grammar_has_superclass(grammar);
 }
 
+/// The parser half of the same question, where a `superClass` carves nothing
+/// out. A parser base is a set of predicate operations, and the rewrite turns
+/// each `this.m()` into a `Base::m(p)` call java2wado passes through — so the
+/// translator still has a body around them to translate. The lexer's base owns
+/// its action surface as well, which is why the carve-out above stays.
+///
+/// ANTLR4 compiles `@parser::members` and a `superClass` together, so refusing
+/// them together rejected a grammar it accepts.
+pub fn parser_action_language_is_emittable(grammar: &Grammar) -> bool {
+    return grammar.action_language matches { Wado } || grammar.action_language matches { Java };
+}
+
 /// Whether the grammar carries any action content: a named action, a rule
 /// prequel or value channel (args/returns/locals), or a per-alt action.
 fn grammar_has_actions(grammar: &Grammar) -> bool {

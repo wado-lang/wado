@@ -1,0 +1,38 @@
+//! A semantic predicate gating one alternative of a scan tournament.
+//!
+//! `expr`'s braced alternative is strictly longer than its bare one, so the
+//! longest-match tournament always takes it — except where the caller has said
+//! it does not exist. A scan is a pure `(tokens, pos, follow)` function and
+//! cannot evaluate a parser predicate, so the gate is evaluated in the parse
+//! function and scores the refused alternative as no match.
+//!
+//! `RustParser.g4` has this shape as "no struct literal in a condition":
+//! `if a { b }` is `a` and a block, not the struct literal `a { b }`.
+
+use g from "./grammars/gated_tournament_alt.g4"
+    with {
+        generator: { module: "../src/generator.wado", output_dir: "./generated/cst_gated_tournament_alt" },
+    };
+
+fn assert_tree(input: &String, expected: &String) {
+    let result = g::parse(input);
+    assert result.ok(), `unexpected diagnostics for ${*input}: ${result.diagnostics:?}`;
+    let actual = g::to_string_tree(&result);
+    assert actual == *expected, `\ninput:    ${*input}\nexpected: ${*expected}\nactual:   ${actual}`;
+}
+
+// The rejection case first: with the gate open the longer alternative wins, so
+// a repair that simply stopped preferring it fails here.
+test "outside the gate the longer alternative still wins" {
+    assert_tree(&"a { b } ;", &"(start (stmt (expr a { b }) ;))");
+}
+
+// The hit case: inside the `IF` head the counter is non-zero, so the braced
+// alternative does not exist and the block goes to `stmt`.
+test "inside the gate the shorter alternative leaves the block to its caller" {
+    assert_tree(&"if a { b }", &"(start (stmt if (expr a) (block { b })))");
+}
+
+test "the gate is restored after the head" {
+    assert_tree(&"if a { b } c { d } ;", &"(start (stmt if (expr a) (block { b })) (stmt (expr c { d }) ;))");
+}

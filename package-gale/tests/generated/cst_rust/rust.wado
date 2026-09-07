@@ -4,6 +4,7 @@
 //   option superClass = RustLexerBase (lexer)
 //   option superClass = RustParserBase (parser)
 //   option tokenVocab = RustLexer
+//   @parser::members
 
 pub struct Span {
     pub start: i32,
@@ -6698,6 +6699,7 @@ pub struct Parser {
     b: TreeBuilder,
     diagnostics: List<Diagnostic>,
     output: String,
+    no_struct: i32 = 0,
 }
 
 fn kind_names(kinds: &List<i32>) -> List<String> {
@@ -19701,8 +19703,8 @@ fn _parse_expression__inner_atom(p: &mut Parser, follow: i64 = 0, min_prec: i32 
             let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
             let _sd_p_2 = _parse_expression__inner_scan_2(_sd_tokens, _sd_pos, follow);
-            let _sd_p_35 = _parse_expression__inner_scan_35(_sd_tokens, _sd_pos, follow);
-            let _sd_p_36 = _parse_expression__inner_scan_36(_sd_tokens, _sd_pos, follow);
+            let _sd_p_35 = if (p.no_struct == 0) { _parse_expression__inner_scan_35(_sd_tokens, _sd_pos, follow) } else { -1 };
+            let _sd_p_36 = if (p.no_struct == 0) { _parse_expression__inner_scan_36(_sd_tokens, _sd_pos, follow) } else { -1 };
             let _sd_p_39 = _parse_expression__inner_scan_39(_sd_tokens, _sd_pos, follow);
             let mut _sd_best_i: i32 = -1;
             let mut _sd_best_p: i32 = -1;
@@ -19736,8 +19738,8 @@ fn _parse_expression__inner_atom(p: &mut Parser, follow: i64 = 0, min_prec: i32 
             let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
             let _sd_p_2 = _parse_expression__inner_scan_2(_sd_tokens, _sd_pos, follow);
-            let _sd_p_35 = _parse_expression__inner_scan_35(_sd_tokens, _sd_pos, follow);
-            let _sd_p_36 = _parse_expression__inner_scan_36(_sd_tokens, _sd_pos, follow);
+            let _sd_p_35 = if (p.no_struct == 0) { _parse_expression__inner_scan_35(_sd_tokens, _sd_pos, follow) } else { -1 };
+            let _sd_p_36 = if (p.no_struct == 0) { _parse_expression__inner_scan_36(_sd_tokens, _sd_pos, follow) } else { -1 };
             let mut _sd_best_i: i32 = -1;
             let mut _sd_best_p: i32 = -1;
             if _sd_p_2 > _sd_best_p {
@@ -22138,7 +22140,13 @@ fn _parse_infinite_loop_expression(p: &mut Parser, follow: i64 = 0) -> () with R
 
 fn _parse_predicate_loop_expression__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
     let kw_while = p.expect(TK_KW_WHILE, &SYNC_42);
+    if !p.speculating {
+        p.no_struct = p.no_struct + 1;
+    }
     let expression = _parse_expression(p, FOLLOW_MASK_40);
+    if !p.speculating {
+        p.no_struct = p.no_struct - 1;
+    }
     loop {
         if p.recovering { break; }
         let mut rep_scan_pos: i32 = -1;
@@ -22187,7 +22195,13 @@ fn _parse_predicate_pattern_loop_expression__inner(p: &mut Parser, follow: i64 =
     let kw_let = p.expect(TK_KW_LET, &SYNC_86);
     let pattern = _parse_pattern(p, FOLLOW_MASK_42);
     let eq = p.expect(TK_EQ, &SYNC_42);
+    if !p.speculating {
+        p.no_struct = p.no_struct + 1;
+    }
     let expression = _parse_expression(p, FOLLOW_MASK_40);
+    if !p.speculating {
+        p.no_struct = p.no_struct - 1;
+    }
     loop {
         if p.recovering { break; }
         let mut rep_scan_pos: i32 = -1;
@@ -22235,7 +22249,13 @@ fn _parse_iterator_loop_expression__inner(p: &mut Parser, follow: i64 = 0) -> ()
     let kw_for = p.expect(TK_KW_FOR, &SYNC_86);
     let pattern = _parse_pattern(p, FOLLOW_MASK_43);
     let kw_in = p.expect(TK_KW_IN, &SYNC_42);
+    if !p.speculating {
+        p.no_struct = p.no_struct + 1;
+    }
     let expression = _parse_expression(p, FOLLOW_MASK_27);
+    if !p.speculating {
+        p.no_struct = p.no_struct - 1;
+    }
     let block_expression = _parse_block_expression(p, follow);
     return;
 }
@@ -22270,7 +22290,13 @@ fn _parse_loop_label(p: &mut Parser) -> () with RustParserBase {
 
 fn _parse_if_expression__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
     let kw_if = p.expect(TK_KW_IF, &SYNC_42);
+    if !p.speculating {
+        p.no_struct = p.no_struct + 1;
+    }
     let expression = _parse_expression(p, FOLLOW_MASK_40);
+    if !p.speculating {
+        p.no_struct = p.no_struct - 1;
+    }
     loop {
         if p.recovering { break; }
         let mut rep_scan_pos: i32 = -1;
@@ -22365,7 +22391,13 @@ fn _parse_if_let_expression__inner(p: &mut Parser, follow: i64 = 0) -> () with R
     let kw_let = p.expect(TK_KW_LET, &SYNC_86);
     let pattern = _parse_pattern(p, FOLLOW_MASK_42);
     let eq = p.expect(TK_EQ, &SYNC_42);
+    if !p.speculating {
+        p.no_struct = p.no_struct + 1;
+    }
     let expression = _parse_expression(p, FOLLOW_MASK_40);
+    if !p.speculating {
+        p.no_struct = p.no_struct - 1;
+    }
     loop {
         if p.recovering { break; }
         let mut rep_scan_pos: i32 = -1;
@@ -22460,7 +22492,13 @@ fn _parse_let_chain_tail__inner(p: &mut Parser, follow: i64 = 0) -> () with Rust
     let kw_let = p.expect(TK_KW_LET, &SYNC_86);
     let pattern = _parse_pattern(p, FOLLOW_MASK_42);
     let eq = p.expect(TK_EQ, &SYNC_42);
+    if !p.speculating {
+        p.no_struct = p.no_struct + 1;
+    }
     let expression = _parse_expression(p, follow);
+    if !p.speculating {
+        p.no_struct = p.no_struct - 1;
+    }
     return;
 }
 
@@ -22477,7 +22515,13 @@ fn _parse_let_chain_tail(p: &mut Parser, follow: i64 = 0) -> () with RustParserB
 
 fn _parse_match_expression__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBase {
     let kw_match = p.expect(TK_KW_MATCH, &SYNC_42);
+    if !p.speculating {
+        p.no_struct = p.no_struct + 1;
+    }
     let expression = _parse_expression(p, FOLLOW_MASK_27);
+    if !p.speculating {
+        p.no_struct = p.no_struct - 1;
+    }
     let lcurlybrace = p.expect(TK_LCURLYBRACE, &SYNC_88);
     loop {
         if p.recovering { break; }
