@@ -22,6 +22,14 @@ OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 // $antlr-format alignTrailingComments true, columnLimit 150, minEmptyLines 1, maxEmptyLinesToKeep 1, reflowComments false, useTab false
 // $antlr-format allowShortRulesOnASingleLine false, allowShortBlocksOnASingleLine true, alignSemicolons hanging, alignColons hanging
 
+// Local changes to the vendored grammar, each marked `// LOCAL:` at its rule.
+// Upstream tracks the Rust of its day; these are constructs the language has
+// stabilised since, which this repository's own sources use. ANTLR4 accepts
+// every form below, so the grammar stays oracle-comparable.
+//
+//   - `letStatement`  — let-else (Rust 1.65).
+//   - `ifExpression` / `whileExpression` — let chains (Rust 2024).
+
 parser grammar RustParser;
 
 // Insert here @header for C++ parser.
@@ -430,8 +438,9 @@ statement
     | macroInvocationSemi
     ;
 
+// LOCAL: `else blockExpression` is let-else (Rust 1.65), absent upstream.
 letStatement
-    : outerAttribute* KW_LET patternNoTopAlt (COLON type_)? (EQ expression)? SEMI
+    : outerAttribute* KW_LET patternNoTopAlt (COLON type_)? (EQ expression (KW_ELSE blockExpression)?)? SEMI
     ;
 
 expressionStatement
@@ -660,12 +669,13 @@ infiniteLoopExpression
     : KW_LOOP blockExpression
     ;
 
+// LOCAL: `letChainTail*` — the `while` half of the let chain above.
 predicateLoopExpression
-    : KW_WHILE expression /*except structExpression*/ blockExpression
+    : KW_WHILE expression /*except structExpression*/ (letChainTail* blockExpression)
     ;
 
 predicatePatternLoopExpression
-    : KW_WHILE KW_LET pattern EQ expression blockExpression
+    : KW_WHILE KW_LET pattern EQ expression (letChainTail* blockExpression)
     ;
 
 iteratorLoopExpression
@@ -677,14 +687,31 @@ loopLabel
     ;
 
 // 8.2.15
+// LOCAL: `letChainTail*` on each condition is the let chain (Rust 2024),
+// absent upstream. Both heads start one, and only a link that binds needs the
+// rule — a link that does not is already part of the expression before it.
+//
+// The scrutinee stays the full `expression`, so `if let P = e && cond` reads
+// `e && cond` as one scrutinee where rustc reads a two-link chain. Rust spells
+// the difference with a Scrutinee excluding the lazy-boolean operators, which
+// needs a second expression hierarchy; the trees differ, the parse does not.
+// The chain and the block it guards are one group on purpose: a bare
+// `letChainTail*` is a nullable element between the condition and the block,
+// and a nullable suffix head switches the caller-FOLLOW gate off, which is
+// what stops `if return { 1 }` eating its own block. Grouped, the suffix head
+// is mandatory again. The group is transparent, so no tree changes.
 ifExpression
-    : KW_IF expression blockExpression (KW_ELSE (blockExpression | ifExpression | ifLetExpression))?
+    : KW_IF expression (letChainTail* blockExpression) (KW_ELSE (blockExpression | ifExpression | ifLetExpression))?
     ;
 
 ifLetExpression
-    : KW_IF KW_LET pattern EQ expression blockExpression (
+    : KW_IF KW_LET pattern EQ expression (letChainTail* blockExpression) (
         KW_ELSE (blockExpression | ifExpression | ifLetExpression)
     )?
+    ;
+
+letChainTail
+    : ANDAND KW_LET pattern EQ expression
     ;
 
 // 8.2.16

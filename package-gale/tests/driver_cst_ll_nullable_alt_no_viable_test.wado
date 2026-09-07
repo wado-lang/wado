@@ -1,0 +1,45 @@
+//! A group's nullable alternative at a lookahead nothing selects.
+//!
+//! `fields : field (COMMA field)* (COMMA base | COMMA?)`. At the `}` closing
+//! `p { x, y }` neither arm of the trailing group is selected by the
+//! lookahead, and the alternative that matches empty is the only reading left.
+//! The dispatch used to report "no viable alternative" there.
+//!
+//! `RustParser.g4` has this shape as `structExprFields`, where it cost every
+//! struct literal without a trailing comma — `Self { space, local }`.
+
+use g from "./grammars/ll_nullable_alt_no_viable.g4"
+    with {
+        generator: { module: "../src/generator.wado", output_dir: "./generated/cst_ll_nullable_alt_no_viable" },
+    };
+
+fn assert_tree(input: &String, expected: &String) {
+    let result = g::parse(input);
+    assert result.ok(), `unexpected diagnostics for ${*input}: ${result.diagnostics:?}`;
+    let actual = g::to_string_tree(&result);
+    assert actual == *expected, `\ninput:    ${*input}\nexpected: ${*expected}\nactual:   ${actual}`;
+}
+
+test "the empty match closes the list" {
+    assert_tree(&"p { x, y }", &"(start (expr p { (fields (field x) , (field y)) }))");
+}
+
+test "a trailing separator still takes the alternative that names one" {
+    assert_tree(&"p { x, y, }", &"(start (expr p { (fields (field x) , (field y) ,) }))");
+}
+
+test "and the other arm still wins where it applies" {
+    assert_tree(&"p { x, ..y }", &"(start (expr p { (fields (field x) , (base .. y)) }))");
+}
+
+test "an empty body needs no fields at all" {
+    assert_tree(&"p { }", &"(start (expr p { }))");
+}
+
+// The rejection case: the empty match closes the group, it does not swallow
+// what follows. A token the enclosing rule cannot take must still be reported
+// there rather than absorbed here.
+test "a token the enclosing rule cannot take is still an error" {
+    let result = g::parse(&"p { x y }");
+    assert !result.ok(), "the empty match ends the group; `y` is then the enclosing rule's problem";
+}

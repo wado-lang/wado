@@ -87,6 +87,7 @@ use {
     admits_or_untestable,
     admits_tests_nothing,
     AltClass,
+    alt_class_is_nullable,
     alt_class_tests_nothing,
     LoweredGrammar,
     Rule,
@@ -6601,14 +6602,26 @@ fn gen_group_dispatch(
     // and brings the report back: a false predicate must not land in the arm
     // meant for the alternative it excludes.
     let ends_in_fallback = is_decision_fallback(&branches[branches.len() - 1]);
-    let report = !ends_in_fallback && (any_alt_gated(branches, ctx) || entry matches { Required });
+    // Whether the chain owes an answer for a lookahead no branch admits. It is
+    // also what decides whether the last branch may drop its condition and
+    // become the `else` — so the nullable arm below reads it rather than
+    // clearing it, or the two both claim that `else`.
+    let must_answer = !ends_in_fallback && (any_alt_gated(branches, ctx) || entry matches { Required });
+    // A nullable alternative matches empty, so it takes a lookahead no branch
+    // tests for and there is nothing to report. `apply_empty_alt_admits`
+    // answers this by name where the group's FOLLOW is exact; where it is not,
+    // the alternative still matches, and erroring instead rejects input the
+    // grammar accepts — `(COMMA structBase | COMMA?)` at the `}` closing
+    // `Point { x, y }`.
+    let nullable_else = if must_answer { first_nullable_alt(classes) } else { null };
+    let report = must_answer && nullable_else matches { None };
     let grp_var = dedup_name(&"grp_kind", name_counts);
     w.line(&`let ${grp_var} = p.peek_kind();`);
 
     for let mut g = 0; g < branches.len(); g += 1 {
         // Only a branch that has one before it can drop its condition: the
         // first is what decides whether the group is entered at all.
-        let last_takes_rest = !report && g > 0 && g == branches.len() - 1;
+        let last_takes_rest = !must_answer && g > 0 && g == branches.len() - 1;
         if g == 0 {
             w.begin(&`if ${render_branch_cond(&branches[g], &grp_var, ctx)}`);
         } else if last_takes_rest {
@@ -6618,12 +6631,28 @@ fn gen_group_dispatch(
         }
         gen_group_branch_body(w, &branches[g].alts, alts, g_op_alts, g_op_scan_alts, kind, ctx, name_counts);
     }
-    if report {
+    if let Some(slot) = nullable_else {
+        // Its own arm above still runs it for the tokens it selects; this one
+        // is the empty match, which is the only thing left to take here.
+        w.else_begin(&"else");
+        gen_group_branch_body(w, &[slot], alts, g_op_alts, g_op_scan_alts, kind, ctx, name_counts);
+    } else if report {
         let expected_ref = sync_set_ref(ctx, &classes_union(classes));
         w.else_begin(&"else");
         w.line(&`p.no_viable("no viable alternative", p.peek_span(), ${expected_ref});`);
     }
     w.end();
+}
+
+/// The first alternative that matches empty — ANTLR4 prefers the earliest, and
+/// only one can be taken for a lookahead none of them select.
+fn first_nullable_alt(classes: &List<AltClass>) -> Option<i32> {
+    for let mut i = 0; i < classes.len(); i += 1 {
+        if alt_class_is_nullable(&classes[i]) {
+            return Option::Some(i);
+        }
+    }
+    return null;
 }
 
 /// The union of one branch's first sets, for the branches not over classified
