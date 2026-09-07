@@ -940,6 +940,25 @@ pub struct RepeatOp {
     /// recomputed so the two emit walkers and the scan side cannot answer
     /// it differently.
     pub static_exit_undecided: bool = false,
+    /// A greedy loop whose body and continuation overlap can take an iteration
+    /// that strands its own alternative: `stmt+ expr?` over `{ y }.m()` gives
+    /// the loop the `{ y }` and leaves the `.m()` to nobody. The three fields
+    /// below are what the iteration asks before committing — see
+    /// `gen_rep_decline_stranded`. Off for every other loop, which keeps their
+    /// emit byte-identical.
+    pub decline_stranded: bool = false,
+    /// FIRST of what follows this Repeat in its own alternative. With the
+    /// body's own first set and the caller's FOLLOW it answers "can anything
+    /// continue from where this iteration would end".
+    pub decline_cont_first: List<String> = [],
+    /// Scan mirror of that continuation, run from the iteration's *start* to
+    /// ask the other half: is exiting here viable at all? A loop declines only
+    /// when the answer is yes, so an iteration whose alternative has no other
+    /// reading is still taken.
+    pub decline_scan: List<ScanElement> = [],
+    /// The enclosing rule's FOLLOW, conjoined into the exit-viability verdict
+    /// exactly as `probe_viable` is into the non-greedy probe's.
+    pub decline_viable: List<String> = [],
     /// The enclosing rule's classical FOLLOW, conjoined into the probe's
     /// verdict: its continuation scan ends at the rule's tail, and a token
     /// outside this set cannot continue any caller from there. Empty leaves
@@ -1260,6 +1279,13 @@ pub struct ScanRepeatElement {
     pub continuation_scannable: bool = false,
     pub static_exit_undecided: bool = false,
     pub probe_viable: List<String> = [],
+    /// Mirrors `RepeatOp`'s four `decline_*` stamps. A scan that counted an
+    /// iteration the parse declines measures a length the parse will not
+    /// reproduce, which is what the tournament then commits to.
+    pub decline_stranded: bool = false,
+    pub decline_cont_first: List<String> = [],
+    pub decline_scan: List<ScanElement> = [],
+    pub decline_viable: List<String> = [],
     /// Mirrors `RepeatOp.body_scannable`. The probe entry gate reads it on
     /// both sides, so an unscannable body cannot probe on the scan alone.
     pub body_scannable: bool = false,

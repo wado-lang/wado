@@ -2555,6 +2555,30 @@ fn rebind_scan_repeat_caller_follow(
                 }
             }
         }
+        // Scan mirror of `lower_decline_scan`, for the same reason: a scan that
+        // counts an iteration the parse declines measures a length the parse
+        // will not reproduce.
+        let mut decline_stranded = false;
+        let mut decline_cont_first: List<String> = [];
+        let mut decline_scan: List<ScanElement> = [];
+        let mut decline_viable: List<String> = [];
+        let can_strand = !re.non_greedy
+            && re.kind matches { Star | Plus }
+            && reaches_rule_tail
+            && index + 1 < alt_elements.len()
+            && ctx.tail_is_nullable_deep(alt_elements, index + 1);
+        if can_strand {
+            let suffix_first = ctx.first_of_elements_from(alt_elements, index + 1);
+            if sets_overlap(&admits_kinds(&re.inner_admits), &suffix_first) {
+                if let Some(scan) = lower_scan_continuation_elements(alt_elements, index, ctx) {
+                    decline_stranded = true;
+                    decline_cont_first = suffix_first;
+                    decline_scan = scan;
+                    decline_viable = ctx.rule_follow_for_probe(rule_name);
+                    ctx.mark_rule_reads_follow();
+                }
+            }
+        }
         return ScanElement::Repeat(ScanRepeatElement {
             kind: re.kind,
             body: re.body,
@@ -2568,6 +2592,10 @@ fn rebind_scan_repeat_caller_follow(
             probe_viable,
             body_scannable: re.body_scannable,
             reserve_scan,
+            decline_stranded,
+            decline_cont_first,
+            decline_scan,
+            decline_viable,
         });
     }
     return se;
@@ -4427,6 +4455,17 @@ fn patch_repeat_op_caller_follow(
     if let Some(scan) = lower_reserve_scan(rep_op, alt_elements, index, ctx) {
         reserve_scan = scan;
     }
+    let mut decline_stranded = false;
+    let mut decline_cont_first: List<String> = [];
+    let mut decline_scan: List<ScanElement> = [];
+    let mut decline_viable: List<String> = [];
+    if let Some(scan) = lower_decline_scan(rep_op, alt_elements, index, ctx, reaches_rule_tail) {
+        decline_stranded = true;
+        decline_cont_first = ctx.first_of_elements_from(alt_elements, index + 1);
+        decline_scan = scan;
+        decline_viable = ctx.rule_follow_for_probe(rule_name);
+        ctx.mark_rule_reads_follow();
+    }
     return RepeatOp {
         ..*rep_op,
         caller_follow_first,
@@ -4436,6 +4475,10 @@ fn patch_repeat_op_caller_follow(
         static_exit_undecided,
         probe_viable,
         reserve_scan,
+        decline_stranded,
+        decline_cont_first,
+        decline_scan,
+        decline_viable,
     };
 }
 
@@ -4463,6 +4506,44 @@ fn lower_reserve_scan(
     }
     let suffix_first = ctx.first_of_elements_from(alt_elements, index + 1);
     if !sets_overlap(&admits_kinds(&rep_op.body_admits), &suffix_first) {
+        return null;
+    }
+    return lower_scan_continuation_elements(alt_elements, index, ctx);
+}
+
+/// The continuation a greedy loop asks before committing to an iteration, or
+/// `null` wherever the loop cannot strand its own alternative — which leaves
+/// every other loop's emit unchanged.
+///
+/// `X* Y?` where an `X` and a `Y` can start on the same token: the loop takes
+/// every `X` its body scans, so the input that reads as `Y` loses its head to
+/// the loop and what follows the head has no taker. `stmt+ expr?` over
+/// `{ y }.m()` is the shape — the `{ y }` scans as a statement and strands the
+/// `.m()`.
+///
+/// The conditions mirror `lower_reserve_scan`'s and answer the other half of
+/// the same question. A reservation protects a *mandatory* suffix from the
+/// loop; this protects an *optional* one, which nothing else does. Both need
+/// the two heads to overlap, or the loop could not have taken the suffix's
+/// input in the first place. Only this one needs the rule's tail, because it
+/// ends by asking the caller's FOLLOW.
+fn lower_decline_scan(
+    rep_op: &RepeatOp,
+    alt_elements: &List<Element>,
+    index: i32,
+    ctx: &mut GenContext,
+    reaches_rule_tail: bool,
+) -> Option<List<ScanElement>> {
+    if rep_op.non_greedy || !rep_op.kind matches { Star | Plus } || !reaches_rule_tail {
+        return null;
+    }
+    if index + 1 >= alt_elements.len() || !ctx.tail_is_nullable_deep(alt_elements, index + 1) {
+        return null;
+    }
+    if !sets_overlap(
+        &admits_kinds(&rep_op.body_admits),
+        &ctx.first_of_elements_from(alt_elements, index + 1),
+    ) {
         return null;
     }
     return lower_scan_continuation_elements(alt_elements, index, ctx);

@@ -482,6 +482,10 @@ expression
     | expression LPAREN callParams? RPAREN                           # CallExpression                // 8.2.9
     | expression LSQUAREBRACKET {noStruct = 0;} expression RSQUAREBRACKET # IndexExpression           // 8.2.6
     | expression QUESTION                                            # ErrorPropagationExpression    // 8.2.4
+    // LOCAL: `KW_RAW (KW_CONST | KW_MUT)` — the raw borrow `&raw const p` /
+    // `&raw mut p` (Rust 1.82). `raw` is not a keyword, so the two readings are
+    // separated by what follows it: only a raw borrow has `const` / `mut` there.
+    | (AND | ANDAND) KW_RAW (KW_CONST | KW_MUT) expression           # RawBorrowExpression
     | (AND | ANDAND) KW_MUT? expression                              # BorrowExpression              // 8.2.4
     | STAR expression                                                # DereferenceExpression         // 8.2.4
     | (MINUS | NOT) expression                                         # NegationExpression            // 8.2.4
@@ -1145,6 +1149,8 @@ identifier
     | RAW_IDENTIFIER
     | KW_MACRORULES
     | KW_UNION
+    // LOCAL: `raw` is weak — a keyword only in `&raw const` / `&raw mut`.
+    | KW_RAW
     ;
 
 keyword

@@ -1726,6 +1726,23 @@ fn scan_stmts(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
                     pos = scan_stmt(tokens, pos);
                     if pos < 0 { pos = sp; break; }
                     if pos == sp { break; }
+                    let dk_0 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+                    if !(_kind_set_0(dk_0) || _kind_set_0(dk_0) || dk_0 == TK_RB || follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
+                        let dc_0 = pos;
+                        let mut dc_0_exit = false;
+                        pos = sp;
+                        dcl_0: {
+                            if pos < tokens.len() && _kind_set_0(tokens[pos]) {
+                                let sp = pos;
+                                pos = scan_expr(tokens, pos, 0);
+                                if pos < 0 { pos = sp; }
+                            }
+                            let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+                            if (follow == 0 || follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) && (probe_kind == TK_RB) { dc_0_exit = true; }
+                        }
+                        if dc_0_exit { pos = sp; break; }
+                        pos = dc_0;
+                    }
                 }
                 if pos < tokens.len() && _kind_set_0(tokens[pos]) && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
                     let sp = pos;
@@ -1900,6 +1917,25 @@ fn _parse_stmts__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () {
                 if pos <= p.pos { break rep_scan; }
                 rep_scan_pos = pos;
             }
+            if rep_scan_pos >= 0 {
+                let decline_kind = if rep_scan_pos < p.kinds.len() { p.kinds[rep_scan_pos] } else { TK_EOF };
+                if !(_kind_set_0(decline_kind) || _kind_set_0(decline_kind) || decline_kind == TK_RB || follow_yields(&p.kinds, rep_scan_pos, follow, &FOLLOW_SETS, TK_EOF)) {
+                    let mut decline_dead: bool = false;
+                    decline_scan: {
+                        SCAN_GATE.no_brace = p.no_brace;
+                        let tokens = &p.kinds;
+                        let mut pos: i32 = p.pos;
+                        if pos < tokens.len() && _kind_set_0(tokens[pos]) {
+                            let sp = pos;
+                            pos = scan_expr(tokens, pos, 0);
+                            if pos < 0 { pos = sp; }
+                        }
+                        let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+                        if (follow == 0 || follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) && (probe_kind == TK_RB) { decline_dead = true; }
+                    }
+                    if decline_dead { break; }
+                }
+            }
             if rep_scan_pos < 0 {
                 if _kind_set_0(p.peek_kind()) {
                     let _rec_pos = p.pos;
@@ -1934,6 +1970,23 @@ fn _parse_stmts__inner_scan_0(tokens: &Array<i32>, pos: i32, follow: i64 = 0) ->
         pos = scan_stmt(tokens, pos);
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
+        let dk_1 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+        if !(_kind_set_0(dk_1) || _kind_set_0(dk_1) || dk_1 == TK_RB || follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
+            let dc_1 = pos;
+            let mut dc_1_exit = false;
+            pos = sp;
+            dcl_1: {
+                if pos < tokens.len() && _kind_set_0(tokens[pos]) {
+                    let sp = pos;
+                    pos = scan_expr(tokens, pos, 0);
+                    if pos < 0 { pos = sp; }
+                }
+                let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+                if (follow == 0 || follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) && (probe_kind == TK_RB) { dc_1_exit = true; }
+            }
+            if dc_1_exit { pos = sp; break; }
+            pos = dc_1;
+        }
     }
     if pos < tokens.len() && _kind_set_0(tokens[pos]) && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
         let sp = pos;

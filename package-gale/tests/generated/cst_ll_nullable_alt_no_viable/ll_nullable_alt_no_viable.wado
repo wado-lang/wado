@@ -1651,31 +1651,67 @@ fn scan_fields(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
         }
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
+        let dk_2 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+        if !(dk_2 == TK_COMMA || dk_2 == TK_COMMA || follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
+            let dc_2 = pos;
+            let mut dc_2_exit = false;
+            pos = sp;
+            dcl_2: {
+                let gp_3 = pos;
+                let sgk_3 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+                let mut sg_3_best = -1;
+                if sgk_3 == TK_COMMA {
+                    pos = gp_3;
+                    sg_3_0: {
+                        if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sg_3_0; }
+                        pos += 1;
+                        pos = scan_base(tokens, pos);
+                        if pos < 0 { break sg_3_0; }
+                        if pos > sg_3_best { sg_3_best = pos; }
+                    }
+                    pos = gp_3;
+                    sg_3_1: {
+                        if pos < tokens.len() && tokens[pos] == TK_COMMA {
+                            pos += 1;
+                        }
+                        if pos > sg_3_best { sg_3_best = pos; }
+                    }
+                }
+                if sg_3_best >= 0 {
+                    pos = sg_3_best;
+                } else {
+                    pos = gp_3;
+                }
+                if follow == 0 || follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) { dc_2_exit = true; }
+            }
+            if dc_2_exit { pos = sp; break; }
+            pos = dc_2;
+        }
     }
-    let gp_2 = pos;
-    let sgk_2 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-    let mut sg_2_best = -1;
-    if sgk_2 == TK_COMMA {
-        pos = gp_2;
-        sg_2_0: {
-            if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sg_2_0; }
+    let gp_4 = pos;
+    let sgk_4 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+    let mut sg_4_best = -1;
+    if sgk_4 == TK_COMMA {
+        pos = gp_4;
+        sg_4_0: {
+            if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sg_4_0; }
             pos += 1;
             pos = scan_base(tokens, pos);
-            if pos < 0 { break sg_2_0; }
-            if pos > sg_2_best { sg_2_best = pos; }
+            if pos < 0 { break sg_4_0; }
+            if pos > sg_4_best { sg_4_best = pos; }
         }
-        pos = gp_2;
-        sg_2_1: {
+        pos = gp_4;
+        sg_4_1: {
             if pos < tokens.len() && tokens[pos] == TK_COMMA && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
                 pos += 1;
             }
-            if pos > sg_2_best { sg_2_best = pos; }
+            if pos > sg_4_best { sg_4_best = pos; }
         }
     }
-    if sg_2_best >= 0 {
-        pos = sg_2_best;
+    if sg_4_best >= 0 {
+        pos = sg_4_best;
     } else {
-        pos = gp_2;
+        pos = gp_4;
     }
     if pos == scan_start { return -1; }
     return pos;
@@ -1760,18 +1796,55 @@ fn _parse_fields__inner(p: &mut Parser, follow: i64 = 0) -> () {
         rep_scan: {
             let tokens = &p.kinds;
             let mut pos: i32 = p.pos;
-            sg_3_done: {
-                sg_3: {
-                    if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sg_3; }
+            sg_5_done: {
+                sg_5: {
+                    if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sg_5; }
                     pos += 1;
                     pos = scan_field(tokens, pos);
-                    if pos < 0 { break sg_3; }
-                    break sg_3_done;
+                    if pos < 0 { break sg_5; }
+                    break sg_5_done;
                 }
                 break rep_scan;
             }
             if pos <= p.pos { break rep_scan; }
             rep_scan_pos = pos;
+        }
+        if rep_scan_pos >= 0 {
+            let decline_kind = if rep_scan_pos < p.kinds.len() { p.kinds[rep_scan_pos] } else { TK_EOF };
+            if !(decline_kind == TK_COMMA || decline_kind == TK_COMMA || follow_yields(&p.kinds, rep_scan_pos, follow, &FOLLOW_SETS, TK_EOF)) {
+                let mut decline_dead: bool = false;
+                decline_scan: {
+                    let tokens = &p.kinds;
+                    let mut pos: i32 = p.pos;
+                    let gp_6 = pos;
+                    let sgk_6 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+                    let mut sg_6_best = -1;
+                    if sgk_6 == TK_COMMA {
+                        pos = gp_6;
+                        sg_6_0: {
+                            if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sg_6_0; }
+                            pos += 1;
+                            pos = scan_base(tokens, pos);
+                            if pos < 0 { break sg_6_0; }
+                            if pos > sg_6_best { sg_6_best = pos; }
+                        }
+                        pos = gp_6;
+                        sg_6_1: {
+                            if pos < tokens.len() && tokens[pos] == TK_COMMA {
+                                pos += 1;
+                            }
+                            if pos > sg_6_best { sg_6_best = pos; }
+                        }
+                    }
+                    if sg_6_best >= 0 {
+                        pos = sg_6_best;
+                    } else {
+                        pos = gp_6;
+                    }
+                    if follow == 0 || follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) { decline_dead = true; }
+                }
+                if decline_dead { break; }
+            }
         }
         if rep_scan_pos < 0 { break; }
         p.expect(TK_COMMA, &SYNC_3);

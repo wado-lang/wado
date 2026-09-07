@@ -2068,6 +2068,42 @@ fn gen_scan_iteration(w: &mut CodeWriter, re: &ScanRepeatElement, admits: &Admit
     w.line(&"if pos < 0 { pos = sp; break; }");
     w.line(&"if pos == sp { break; }");
     gen_scan_reserve(w, re, ctx);
+    gen_scan_decline_stranded(w, re, ctx);
+}
+
+/// Scan-side twin of `gen_rep_decline_stranded`: an iteration that would strand
+/// the alternative is not counted, so the tournament measures the length the
+/// parse will actually consume. `sp` is the iteration's start and `pos` its end,
+/// which is the pair the two questions need.
+fn gen_scan_decline_stranded(w: &mut CodeWriter, re: &ScanRepeatElement, ctx: &mut GenContext) {
+    if !re.decline_stranded {
+        return;
+    }
+    assert re.kind matches { Star | Plus }, "only a loop can strand its continuation; lowering declines for no other kind";
+    let gc = ctx.next_scan_group();
+    w.line(&`let dk_${gc} = if pos < tokens.len() \{ tokens[pos] \} else \{ TK_EOF \};`);
+    let can_continue = join_or(&[
+        kind_check_or_none(&admits_kinds(&re.inner_admits), &`dk_${gc}`, ctx),
+        kind_check_or_none(&re.decline_cont_first, &`dk_${gc}`, ctx),
+        kind_check_or_none(&re.decline_viable, &`dk_${gc}`, ctx), if ctx.current_rule_reads_follow() {
+            follow_yields_call(&"tokens", &"pos");
+        } else {
+            String::new();
+        },
+    ]);
+    w.begin(&`if !(${can_continue})`);
+    w.line(&`let dc_${gc} = pos;`);
+    w.line(&`let mut dc_${gc}_exit = false;`);
+    w.line(&`pos = sp;`);
+    w.begin(&`dcl_${gc}:`);
+    for let se of &re.decline_scan {
+        gen_scan_op_element(w, se, ctx, &`break dcl_${gc};`);
+    }
+    emit_probe_verdict(w, &re.decline_viable, &`dc_${gc}_exit`, ctx);
+    w.end();
+    w.line(&`if dc_${gc}_exit \{ pos = sp; break; \}`);
+    w.line(&`pos = dc_${gc};`);
+    w.end();
 }
 
 /// Scan-side twin of the reserve check `gen_scan_guard_with_prefix` emits: an
@@ -6062,11 +6098,93 @@ fn gen_rep_iteration_entry(
     }
     gen_caller_follow_gate(w, rep_op);
     let scan_pos = gen_rep_scan_guard(w, &rep_op.scan_body, &rep_op.reserve_scan, ctx, name_counts);
+    gen_rep_decline_stranded(w, rep_op, &scan_pos, ctx, name_counts);
     gen_rep_break_with_recovery(w, &scan_pos, rep_op, ctx);
     if guarded_only {
         w.end();
     }
     return null;
+}
+
+/// Decline an iteration that would strand the loop's own alternative.
+///
+/// The iteration has already been scanned, so `scan_pos` is where it would end.
+/// Two questions decide it, in that order because the first is a token test and
+/// the second a scan:
+///
+///   1. Is that end a dead end? Nothing continues from it when no further
+///      iteration and no continuation can start there and no caller could
+///      resume there. Where something can, the iteration is the reading that
+///      goes furthest and is taken — which is every ordinary loop, so this is
+///      where the guard costs a few token tests and stops.
+///
+///      "No caller could resume" is the rule's own FOLLOW as well as the
+///      threaded mask, and the static set is the load-bearing half: the mask is
+///      inert wherever no caller threaded one, so asking it alone calls the end
+///      of the input a dead end and declines the last iteration of every
+///      top-level list.
+///   2. Is exiting viable? Only then is there another reading to prefer. A loop
+///      whose alternative has no other reading keeps its iteration and lets the
+///      body report what it cannot match, rather than declining into a worse
+///      error.
+///
+/// Both are needed. `stmt+ expr?` over `{ y } { z }` reaches a dead end by (1)
+/// alone — nothing follows the second block — and taking the iteration is still
+/// right, because exiting would leave `{ z }` to an `expr?` that cannot also
+/// take `{ y }`.
+fn gen_rep_decline_stranded(
+    w: &mut CodeWriter,
+    rep_op: &RepeatOp,
+    scan_pos: &String,
+    ctx: &mut GenContext,
+    nc: &mut List<[String, i32]>,
+) {
+    if !rep_op.decline_stranded {
+        return;
+    }
+    let cont_kind = dedup_name(&"decline_kind", nc);
+    let dead_end = dedup_name(&"decline_dead", nc);
+    w.begin(&`if ${*scan_pos} >= 0`);
+    w.line(&`let ${cont_kind} = if ${*scan_pos} < p.kinds.len() \{ p.kinds[${*scan_pos}] \} else \{ TK_EOF \};`);
+    let can_continue = join_or(&[
+        kind_check_or_none(&admits_kinds(&rep_op.body_admits), &cont_kind, ctx),
+        kind_check_or_none(&rep_op.decline_cont_first, &cont_kind, ctx),
+        kind_check_or_none(&rep_op.decline_viable, &cont_kind, ctx), if ctx.current_rule_reads_follow() {
+            follow_yields_call(&"&p.kinds", scan_pos);
+        } else {
+            String::new();
+        },
+    ]);
+    w.begin(&`if !(${can_continue})`);
+    w.line(&`let mut ${dead_end}: bool = false;`);
+    gen_viability_probe(w, &rep_op.decline_scan, &dead_end, &"decline_scan", ctx, nc, null, &rep_op.decline_viable);
+    w.line(&`if ${dead_end} \{ break; \}`);
+    w.end();
+    w.end();
+}
+
+/// `kind_check_str` for a set that may be empty — an empty one admits nothing,
+/// so it contributes no disjunct rather than an assertion.
+fn kind_check_or_none(kinds: &List<String>, subject: &String, ctx: &mut GenContext) -> String {
+    if kinds.is_empty() {
+        return String::new();
+    }
+    return ctx.kind_check_str(kinds, subject);
+}
+
+/// `a || b || c`, skipping the empties.
+fn join_or(parts: &List<String>) -> String {
+    let mut out = String::new();
+    for let p of parts {
+        if p.is_empty() {
+            continue;
+        }
+        if !out.is_empty() {
+            out.push_str(&" || ");
+        }
+        out.push_str(p);
+    }
+    return if out.is_empty() { String::from("false") } else { out };
 }
 
 fn gen_rep_decided_entry(

@@ -92,6 +92,9 @@ KW_YIELD    : 'yield';
 KW_TRY: 'try';
 
 // weak
+// LOCAL: `raw`, for the raw borrow `&raw const p` (Rust 1.82). Weak like
+// `union`: `identifier` admits it, so `let raw = 1;` still reads as a name.
+KW_RAW            : 'raw';
 KW_UNION          : 'union';
 KW_STATICLIFETIME : '\'static';
 
@@ -114,7 +117,13 @@ fragment UNICODE_OIDC: '\u00b7' | '\u0387' | '\u1369' ..'\u1371' | '\u19da';
 
 RAW_IDENTIFIER: 'r#' NON_KEYWORD_IDENTIFIER;
 // comments https://doc.rust-lang.org/reference/comments.html
-LINE_COMMENT: ('//' (~[/!] | '//') ~[\r\n]* | '//') -> channel (HIDDEN);
+// LOCAL: `~[/!\r\n]`, not `~[/!]`. The character after `//` disambiguates a
+// line comment from a doc comment, and upstream lets it be the line's own
+// newline — after which `~[\r\n]*` runs on and eats the *next* line. An empty
+// `//` before a closing brace therefore swallows the brace. A line comment ends
+// at its newline, so the newline cannot be the character that starts it; the
+// `| '//'` alternative already covers a comment with nothing after it.
+LINE_COMMENT: ('//' (~[/!\r\n] | '//') ~[\r\n]* | '//') -> channel (HIDDEN);
 
 BLOCK_COMMENT:
     (
@@ -128,7 +137,10 @@ INNER_LINE_DOC: '//!' ~[\n\r]* -> channel (HIDDEN); // isolated cr
 
 INNER_BLOCK_DOC: '/*!' ( BLOCK_COMMENT_OR_DOC | ~[*])*? '*/' -> channel (HIDDEN);
 
-OUTER_LINE_DOC: '///' (~[/] ~[\n\r]*)? -> channel (HIDDEN); // isolated cr
+// LOCAL: `~[/\r\n]`, not `~[/]` — the same defect as `LINE_COMMENT`. A bare
+// `///` line ended up consuming the line after it, so `/// x` parsed and a
+// blank `///` silently ate whatever followed.
+OUTER_LINE_DOC: '///' (~[/\r\n] ~[\n\r]*)? -> channel (HIDDEN); // isolated cr
 
 OUTER_BLOCK_DOC:
     '/**' (~[*] | BLOCK_COMMENT_OR_DOC) (BLOCK_COMMENT_OR_DOC | ~[*])*? '*/' -> channel (HIDDEN)
