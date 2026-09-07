@@ -4733,7 +4733,7 @@ impl FunctionRef {
         if self.monomorph_info.is_some() {
             return None;
         }
-        if self.module_source.is_core_builtin() || self.module_source.is_wasm_asset() {
+        if self.module_source.is_builtin() {
             Some(format!("builtin::{}", self.name))
         } else {
             None
@@ -5834,9 +5834,9 @@ pub enum InlineHint {
 }
 
 /// What a bodyless declaration says about the storage its result carries.
-/// Without one, a builtin that reads through a reference parameter is taken to
-/// hand out that parameter's storage — the conservative reading, so a missing
-/// declaration costs a copy rather than value semantics.
+/// Without one, a builtin call that reads through a reference argument is taken
+/// to hand out that argument's storage. That is the conservative reading, so a
+/// missing declaration costs a copy rather than value semantics.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ReturnConvention {
     /// `#[returns(owned)]` — every returned value is freshly materialized, so a

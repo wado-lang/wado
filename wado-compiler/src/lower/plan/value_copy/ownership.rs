@@ -21,30 +21,26 @@ use crate::tir::{
 };
 use crate::tir_visitor::TirRefVisitor;
 
-/// The array element reads that name a slot of their first argument in place,
-/// so a place walk projects one `Index` further in — and, in the seed below,
-/// the builtins the `returns_owned` *set* leaves out for the place and modref
-/// walks that read it by name.
-///
-/// Whether a *call* is fresh is not this list's question: [`OwnedCalls::is_owned`]
-/// reads that off the call itself, so no builtin can be missing from it.
+/// The array element reads that name a slot of their first argument in place.
+/// A place walk projects one `Index` further in, and the seed leaves them out
+/// of `returns_owned` for the place and modref walks that read it by name.
+/// Whether a *call* is fresh is [`OwnedCalls::is_owned`]'s question, not this
+/// list's.
 pub(super) fn is_container_alias_read(name: &str, monomorph_info: Option<&MonomorphInfo>) -> bool {
     matches_builtin(name, monomorph_info, "array_get_value")
         || matches_builtin(name, monomorph_info, "array_get_ref")
         || matches_builtin(name, monomorph_info, "array_get_ref_mut")
 }
 
-/// Whether a builtin call's result may be storage its caller still owns. A
-/// by-value argument is deep-copied at the call, so only a reference argument
-/// can carry storage out: `struct_field_get(v: &T, i) -> F` reads a field of
-/// what `v` points at, while `array_new(len) -> Array<T>` allocates and
-/// `black_box(value: T) -> T` hands back the copy it was given.
+/// Whether a builtin call's result may be storage its caller still owns. Only
+/// a reference argument can carry storage out, since a by-value one is already
+/// deep-copied at the call: `struct_field_get(v: &T, i) -> F` reads a field of
+/// what `v` points at, while `array_new(len) -> Array<T>` allocates.
 ///
-/// Read off the call rather than a list of names, so a builtin added later is
-/// conservative by default — a missing answer costs a copy, never value
-/// semantics. A builtin declaration does not survive to here: monomorphization
-/// drops the generic and materializes an instance only for the few a later
-/// phase rewrites, so the call is the only thing that always answers.
+/// The call answers rather than the declaration, which does not survive to
+/// here: monomorphization drops the generic and materializes an instance only
+/// for the few a later phase rewrites. A builtin added later is then
+/// conservative by default. A list of names would have left it wrong.
 fn hands_out_arg_storage(result_type: TypeId, args: &[CallArg], type_table: &TypeTable) -> bool {
     let carries_storage =
         is_reference(result_type, type_table) || needs_value_copy(result_type, type_table);
@@ -61,17 +57,10 @@ fn declares_owned(func: &TirFunction) -> bool {
     func.body.is_none() && func.declared_return_convention == Some(ReturnConvention::Owned)
 }
 
-/// Whether `func` is a compiler intrinsic rather than a compiled declaration.
-fn is_builtin_module(func: &FunctionRef) -> bool {
-    func.module_source.is_core_builtin() || func.module_source.is_wasm_asset()
-}
-
 /// The builtins that declared `#[returns(owned)]`, by base name: they allocate
 /// while reading through a reference, which [`hands_out_arg_storage`] cannot
-/// tell from a read of one.
-///
-/// Best-effort, and safely so — collected from whatever declarations the
-/// package still holds, and a name it misses only costs that call a copy.
+/// tell from a read of one. Collected from whatever declarations the package
+/// still holds. Missing one is safe — that call keeps a copy it need not make.
 #[derive(Default)]
 pub struct OwnedBuiltins(IndexSet<String>);
 
@@ -149,9 +138,9 @@ impl<'a> OwnedCalls<'a> {
         args: &[CallArg],
         type_table: &TypeTable,
     ) -> bool {
-        if is_builtin_module(func) {
-            return self.owned_builtins.contains(func)
-                || !hands_out_arg_storage(result_type, args, type_table);
+        if func.module_source.is_builtin() {
+            return !hands_out_arg_storage(result_type, args, type_table)
+                || self.owned_builtins.contains(func);
         }
         self.returns_owned.contains(&func.module_source, &func.name)
     }
@@ -163,7 +152,7 @@ impl<'a> OwnedCalls<'a> {
     /// either allocates (already owned) or reads through a reference whose
     /// referent is unrelated to the argument's freshness.
     pub fn returns_self_projection(&self, func: &FunctionRef) -> bool {
-        if is_builtin_module(func) {
+        if func.module_source.is_builtin() {
             return false;
         }
         self.returns_self_projection
@@ -299,7 +288,7 @@ pub fn compute_return_conventions(
     for func in &project.functions {
         let func = func.borrow();
         let is_helper = matches!(func.kind, FunctionKind::ValueCopy { .. });
-        let is_builtin = func.module_source.is_core_builtin() || func.module_source.is_wasm_asset();
+        let is_builtin = func.module_source.is_builtin();
         if is_helper
             || declares_owned(&func)
             || (is_builtin && !is_container_alias_read(&func.name, func.monomorph_info.as_ref()))

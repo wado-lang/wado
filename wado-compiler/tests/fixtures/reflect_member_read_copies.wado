@@ -1,8 +1,8 @@
-// A reflect member read hands out the container's storage, so binding it and
-// mutating the binding must copy — the value semantics every other read
-// follows. `StructField::get`, `Hole::get` and `VariantCase::extract` all
-// bridge through a bodyless `builtin::` marker, which the return-convention
-// seed used to take for a freshly materialized value.
+// A reflect member read hands out the container's storage. Binding it and
+// mutating the binding must copy, as every other read does. `StructField::get`,
+// `Hole::get` and `VariantCase::extract` each bridge through a bodyless
+// `builtin::` marker, which is what puts the question to the return-convention
+// analysis.
 use { println, Stdout } from "core:cli";
 
 struct Holder {

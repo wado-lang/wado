@@ -78,7 +78,7 @@ impl FunctionRef {
         if self.monomorph_info.is_some() {
             return None;
         }
-        if self.module_source.is_core_builtin() || self.module_source.is_wasm_asset() {
+        if self.module_source.is_builtin() {
             Some(format!("builtin::{}", self.name))
         } else {
             None

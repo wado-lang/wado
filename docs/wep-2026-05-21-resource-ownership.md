@@ -241,17 +241,17 @@ where it cannot prove move / share / fresh; no elision pass):
 - Freshness — `ownership.rs` return conventions (a call is fresh iff the callee
   returns owned), plus the literals that materialize their own storage: a string
   _and_ a bytes literal, both of which lower to a fresh aggregate over a packed
-  array. A builtin has no body to settle and no declaration left to read —
-  monomorphization drops the generic and materializes an instance only for the
-  few a later phase rewrites — so its convention is read off the call: only a
-  reference argument can carry storage out, since a by-value one is already
-  copied at the call. A builtin that allocates while reading through a
-  reference says `#[returns(owned)]`, which the reading cannot tell from a read
-  of one; `builtin::array_clone` is the case. Reading the call replaced a
-  hand-kept list of the builtins that are _not_ fresh, which
-  `struct_field_get`, `hole_get` and `variant_case_extract` were all missing
-  from: a reflect member read handed out the container's storage as a move, so
-  mutating what `StructField::get` bound wrote through to the struct. An _indirect_ call is fresh when every closure `__call` of its
+  array. A builtin's convention is read off the call. It has no body to settle,
+  and no declaration left to read either: monomorphization drops the generic and
+  materializes an instance only for the few a later phase rewrites. Only a
+  reference argument can carry storage out of a call, since a by-value one is
+  already copied at the call. A builtin that allocates while reading through a
+  reference says `#[returns(owned)]`, since the call alone cannot tell it from a
+  read; `builtin::array_clone` is the case. Reading the call replaced a
+  hand-kept list of the builtins that are _not_ fresh. `struct_field_get`,
+  `hole_get` and `variant_case_extract` were all missing from that list, so a
+  reflect member read handed out the container's storage as a move: mutating
+  what `StructField::get` bound wrote through to the struct. An _indirect_ call is fresh when every closure `__call` of its
   return type returns owned: closure lowering rewrites every callable value —
   a closure literal and a bare `FuncRef` alike — into a functor whose `__call`
   is an ordinary function, so those are the complete set of targets, and the

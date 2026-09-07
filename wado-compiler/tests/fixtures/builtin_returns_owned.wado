@@ -1,7 +1,7 @@
-// A bodyless declaration that reads through a reference is taken to hand out
-// that reference's storage, so its result is copied where a caller binds it.
-// `builtin::array_clone` allocates instead, and says so with `#[returns(owned)]`
-// — without it the struct literal below would copy the array a second time.
+// A builtin call that reads through a reference is taken to hand out that
+// reference's storage, so a caller binding its result copies. `array_clone`
+// allocates instead, and says so with `#[returns(owned)]`. Without it the
+// struct literal below copies the array a second time.
 use { println, Stdout } from "core:cli";
 
 struct Holder {
