@@ -1724,10 +1724,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if own_ids.iter().all(|id| bindings.contains_key(id)) {
                 method_type_args = inferred;
                 let declaring_args = self
-                    .tysys
-                    .type_table
-                    .borrow()
-                    .nominal_type_args(self.tysys.get_base_type(target_type_id))
+                    .receiver_declaring_args(Some(target_type_id), &[])
                     .unwrap_or_default();
                 let declaring = sig
                     .declaring_impl

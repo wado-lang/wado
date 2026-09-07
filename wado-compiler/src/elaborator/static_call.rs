@@ -859,7 +859,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// the receiver.
     /// The receiver's type arguments: the ones a call carries, else the ones
     /// its type holds. `None` where it brings neither.
-    fn receiver_declaring_args(
+    pub(super) fn receiver_declaring_args(
         &self,
         receiver_type: Option<TypeId>,
         receiver_args: &[TypeId],
