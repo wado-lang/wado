@@ -3292,10 +3292,24 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // after every static, so a receiver-less declaration of the name still
         // answers first, and the parameter list leads with the receiver exactly
         // where the call writes it.
+        //
+        // An inherent method of the same kind shadows it, as the guard at the
+        // top of this search does for statics: `Q::tag(&q)` names `impl Q`'s
+        // over `impl Tag for Q`'s, and the trait's is spelled `Tag::tag(&q)`.
+        // Per kind, so this decides nothing for an associated function.
+        let shadowed_by_inherent = self
+            .impl_method_entries(
+                &self.static_receiver_key(struct_name, target_hint),
+                method_name,
+            )
+            .any(|entry| entry.has_self && entry.is_inherent());
         let written_instance_method = |header: &super::trait_env::ImplHeader| -> Option<(
             crate::name::FqTraitName,
             crate::defs::DefId,
         )> {
+            if shadowed_by_inherent {
+                return None;
+            }
             let method = header
                 .methods
                 .iter()

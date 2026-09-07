@@ -22,13 +22,16 @@ if ! flock -n 9; then
     # spawns inherits fd 9, so an orphaned test binary outlives the pid written
     # here and keeps the lock — and it is named for its own binary, which no
     # search for `$name` finds.
+    # Let go of our own handle before asking who holds the lock. This script
+    # opened fd 9 to test it and every subshell inherits that, so `fuser`
+    # counted the asker and its own pipeline beside the real holder — pids
+    # already gone by the time anyone reads the message, and a `kill` on one
+    # the system has since reused. Nothing below needs the descriptor: the
+    # lock is not ours and this path only reports and exits.
+    exec 9>&-
     holders=""
     if command -v fuser >/dev/null; then
-        # `9>&-` closes this script's own handle in the child: it opened fd 9
-        # before testing the lock, so `fuser` would otherwise count the asker
-        # and its command-substitution subshell among the holders, and name
-        # dead pids that a `kill` could reuse.
-        holders=$(fuser "$lock" 2>/dev/null 9>&- | tr -s '[:space:]' ' ' || true)
+        holders=$(fuser "$lock" 2>/dev/null | tr -s '[:space:]' ' ' || true)
         holders=${holders# }
         holders=${holders% }
     fi
