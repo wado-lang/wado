@@ -30,50 +30,51 @@ pub global SCAN_GATE_TYPE: String = "ScanGate";
 /// whitespace — the whole body, not a prefix of it. Returns the snake_cased
 /// field and the value.
 pub fn gate_assignment(text: &String) -> Option<[String, i32]> {
-    let chars: List<char> = text.chars().collect();
-    let n = chars.len();
-    let mut i = skip_ws(&chars, 0, n);
-    let name_start = i;
-    while i < n && is_ident_char(chars[i]) {
-        i += 1;
-    }
-    if i == name_start {
+    let stmts = statements(text);
+    if stmts.len() != 1 {
         return null;
     }
-    let name = collect(&chars, name_start, i);
-    i = skip_ws(&chars, i, n);
-    if i >= n || chars[i] != '=' {
+    let [name, rhs] = match one_assignment(&stmts[0]) {
+        Some(pair) => pair,
+        None => {
+            return null;
+        },
+    };
+    if !is_plain_ident(&name) {
         return null;
     }
-    i += 1;
-    // `==` is a comparison, not an assignment; `=+`/`=-` are not Java at all.
-    if i < n && chars[i] == '=' {
+    return match i32::from_str_radix(&rhs, 10) {
+        Ok(value) => Option::Some([to_snake_case(&name), value]),
+        Err(_) => null,
+    };
+}
+
+/// `lhs = rhs` with both sides trimmed, or `null` when the text is not one
+/// assignment. `==` leaves the `=` on the right-hand side, which is how a
+/// comparison is told from an assignment.
+fn one_assignment(text: &String) -> Option<[String, String]> {
+    let [lhs, rhs] = match text.split_once("=") {
+        Some(pair) => pair,
+        None => {
+            return null;
+        },
+    };
+    let name = lhs.trim();
+    let value = rhs.trim();
+    if name.is_empty() || value.is_empty() || value.starts_with("=") {
         return null;
     }
-    i = skip_ws(&chars, i, n);
-    let mut negative = false;
-    if i < n && chars[i] == '-' {
-        negative = true;
-        i += 1;
-        i = skip_ws(&chars, i, n);
+    return Option::Some([name, value]);
+}
+
+/// Whether the assigned name is a bare identifier. A receiver (`this.f`) or a
+/// subscript is a write a scan cannot claim to run, and both differ from a
+/// field name only by a character the name may not hold.
+fn is_plain_ident(name: &String) -> bool {
+    if name.is_empty() {
+        return false;
     }
-    let digits_start = i;
-    let mut value = 0;
-    while i < n && chars[i] >= '0' && chars[i] <= '9' {
-        value = value * 10 + (chars[i] as i32 - '0' as i32);
-        i += 1;
-    }
-    if i == digits_start {
-        return null;
-    }
-    i = skip_ws(&chars, i, n);
-    if i < n && chars[i] == ';' {
-        i = skip_ws(&chars, i + 1, n);
-    }
-    if i != n {
-        return null;
-    }
-    return Option::Some([to_snake_case(&name), if negative { -value } else { value }]);
+    return name.find_char(|c| !(c == '_' || c.is_ascii_alphanumeric())) matches { None };
 }
 
 /// A rule that sets a gate field for its own extent and puts it back after.
@@ -104,37 +105,37 @@ pub fn gate_scope(rule: &ParserRule) -> Option<GateScope> {
             return null;
         },
     };
-    // `<field> = $L` — the restore names the local the save filled, and is the
-    // whole of `@after`: a body that does anything else does more than a scan
-    // can put back.
-    let after_stmts = split_statements(&after);
-    if after_stmts.len() != 1 {
+    // `<field> = $L`, and the whole of `@after`: a body that does anything else
+    // does more than a scan can put back.
+    let restores = statements(&after);
+    if restores.len() != 1 {
         return null;
     }
-    let restore = match split_assignment(&after_stmts[0]) {
+    let [restored, local] = match one_assignment(&restores[0]) {
         Some(pair) => pair,
         None => {
             return null;
         },
     };
-    if !starts_with_dollar(&restore.1) {
+    if !local.starts_with("$") {
         return null;
     }
-    let stmts = split_statements(&init);
+    let stmts = statements(&init);
     if stmts.len() != 2 {
         return null;
     }
-    let save = match split_assignment(&stmts[0]) {
+    // `$L = <field>` — the save fills the local the restore reads.
+    let [saved_into, saved_from] = match one_assignment(&stmts[0]) {
         Some(pair) => pair,
         None => {
             return null;
         },
     };
-    if save.0 != restore.1 || save.1 != restore.0 {
+    if saved_into != local || saved_from != restored {
         return null;
     }
     return match gate_assignment(&stmts[1]) {
-        Some(w) => if w.0 == to_snake_case(&restore.0) {
+        Some(w) => if w.0 == to_snake_case(&restored) {
             Option::Some(GateScope { field: w.0, value: w.1 });
         } else {
             null;
@@ -143,43 +144,13 @@ pub fn gate_scope(rule: &ParserRule) -> Option<GateScope> {
     };
 }
 
-fn starts_with_dollar(text: &String) -> bool {
-    let chars: List<char> = text.chars().collect();
-    return !chars.is_empty() && chars[0] == '$';
-}
-
-/// `lhs = rhs` split on the first `=` that is not `==`, both sides trimmed.
-fn split_assignment(text: &String) -> Option<[String, String]> {
-    let chars: List<char> = text.chars().collect();
-    let n = chars.len();
-    for let mut i = 0; i < n; i += 1 {
-        if chars[i] != '=' {
-            continue;
-        }
-        if i + 1 < n && chars[i + 1] == '=' {
-            return null;
-        }
-        return Option::Some([
-            collect(&chars, 0, i).trim(),
-            collect(&chars, i + 1, n).trim(),
-        ]);
-    }
-    return null;
-}
-
 /// The `;`-separated statements of a body, empties dropped.
-fn split_statements(text: &String) -> List<String> {
-    let chars: List<char> = text.chars().collect();
-    let n = chars.len();
+fn statements(text: &String) -> List<String> {
     let mut out: List<String> = [];
-    let mut start = 0;
-    for let mut i = 0; i <= n; i += 1 {
-        if i == n || chars[i] == ';' {
-            let part = collect(&chars, start, i).trim();
-            if !part.is_empty() {
-                out.push(part);
-            }
-            start = i + 1;
+    for let part of text.split(";") {
+        let stmt = part.trim();
+        if !stmt.is_empty() {
+            out.push(stmt);
         }
     }
     return out;
@@ -244,56 +215,47 @@ fn rule_prequel_bodies(rule: &ParserRule) -> List<String> {
 }
 
 /// The snake_cased names an action body assigns to, however it does it — the
-/// disqualifying set. Deliberately generous: it takes every `name` left of a
-/// `=` that is not `==`, so a compound assignment or a write buried in a
-/// multi-statement body still disqualifies the field.
+/// disqualifying set. Deliberately generous: a compound assignment and a write
+/// through a receiver both count, so either still disqualifies the field.
 fn assigned_names(text: &String) -> List<String> {
-    let chars: List<char> = text.chars().collect();
-    let n = chars.len();
     let mut out: List<String> = [];
-    let mut i = 0;
-    while i < n {
-        if !is_ident_start(chars[i]) {
-            i += 1;
-            continue;
-        }
-        let start = i;
-        while i < n && is_ident_char(chars[i]) {
-            i += 1;
-        }
-        let name = collect(&chars, start, i);
-        let mut j = skip_ws(&chars, i, n);
-        // A compound assignment is `name <op>= value`; `==`/`!=`/`<=`/`>=` are not.
-        if j < n && (chars[j] == '+' || chars[j] == '-' || chars[j] == '*' || chars[j] == '/') {
-            j += 1;
-        }
-        if j < n && chars[j] == '=' && !(j + 1 < n && chars[j + 1] == '=') {
-            out.push(to_snake_case(&name));
+    for let stmt of statements(text) {
+        if let Some(target) = assignment_target(&stmt) {
+            out.push(to_snake_case(&target));
         }
     }
     return out;
 }
 
-fn skip_ws(chars: &List<char>, from: i32, n: i32) -> i32 {
-    let mut i = from;
-    while i < n && (chars[i] == ' ' || chars[i] == '\t' || chars[i] == '\n' || chars[i] == '\r') {
-        i += 1;
+/// The name a statement assigns to, or `null`. `a.b = 1` names `b`, because a
+/// receiver hides the field rather than changing which one is written;
+/// `a += 1` names `a`, because the operator sits outside the name.
+fn assignment_target(stmt: &String) -> Option<String> {
+    let [lhs, rhs] = match stmt.split_once("=") {
+        Some(pair) => pair,
+        None => {
+            return null;
+        },
+    };
+    // `==` leaves its second `=` at the head of the right-hand side.
+    if rhs.starts_with("=") {
+        return null;
     }
-    return i;
+    let target = strip_compound_op(&lhs.trim());
+    let name = match target.rsplit_once(".") {
+        Some(parts) => parts.1,
+        None => target,
+    };
+    return if is_plain_ident(&name) { Option::Some(name) } else { null };
 }
 
-fn is_ident_start(c: char) -> bool {
-    return c == '_' || c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z';
-}
-
-fn is_ident_char(c: char) -> bool {
-    return is_ident_start(c) || c >= '0' && c <= '9';
-}
-
-fn collect(chars: &List<char>, from: i32, to: i32) -> String {
-    let mut s = String::new();
-    for let mut i = from; i < to; i += 1 {
-        s.push(chars[i]);
+/// `name +` from `name += v`. `==`, `!=`, `<=` and `>=` never reach here: a
+/// comparison is refused by its right-hand side.
+fn strip_compound_op(lhs: &String) -> String {
+    for let op of ["+", "-", "*", "/"] as List<String> {
+        if let Some(name) = lhs.strip_suffix(op) {
+            return name.trim();
+        }
     }
-    return s;
+    return *lhs;
 }

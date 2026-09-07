@@ -713,59 +713,18 @@ pub fn alt_scan_gate_conditions(alt: &Alternative, ctx: &GenContext) -> String {
     return join_gate_conds(&conds);
 }
 
-/// Whether a rendered condition reads nothing but simulated gate fields: every
-/// `SCAN_GATE.` reaches one, and no parser handle survives. A condition that
-/// fails this would compile against a field the global does not have, or read
-/// a `p` the scan does not hold.
+/// Whether a rendered condition reads nothing but simulated gate fields.
+///
+/// Take the simulated reads out and see what is left: a `SCAN_GATE` that
+/// survives names a field the global does not have, and a parser handle that
+/// survives is state the scan does not hold. Either leaves the gate
+/// unsimulated, which is the behaviour before this existed.
 fn reads_only_scan_gate_fields(code: &String, fields: &List<String>) -> bool {
-    let chars: List<char> = code.chars().collect();
-    let n = chars.len();
-    let mut i = 0;
-    while i < n {
-        if !is_word_start(chars[i]) {
-            i += 1;
-            continue;
-        }
-        let start = i;
-        while i < n && is_word_char(chars[i]) {
-            i += 1;
-        }
-        let word = collect_chars(&chars, start, i);
-        if word == PARSER_HANDLE {
-            return false;
-        }
-        if word != SCAN_GATE_HANDLE {
-            continue;
-        }
-        if i >= n || chars[i] != '.' {
-            return false;
-        }
-        i += 1;
-        let fstart = i;
-        while i < n && is_word_char(chars[i]) {
-            i += 1;
-        }
-        if !fields.contains(&collect_chars(&chars, fstart, i)) {
-            return false;
-        }
+    let mut rest = *code;
+    for let f of fields {
+        rest = rest.replace(`${SCAN_GATE_HANDLE}.${*f}`, "");
     }
-    return true;
-}
-
-fn is_word_start(c: char) -> bool {
-    return c == '_' || c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z';
-}
-
-fn is_word_char(c: char) -> bool {
-    return is_word_start(c) || c >= '0' && c <= '9';
-}
-
-fn collect_chars(chars: &List<char>, from: i32, to: i32) -> String {
-    let mut s = String::new();
-    for let mut i = from; i < to; i += 1 {
-        s.push(chars[i]);
-    }
-    return s;
+    return !rest.contains(SCAN_GATE_HANDLE) && !rest.contains(PARSER_HANDLE);
 }
 
 /// The name of a predicate's standalone fn (`pred_<action_id>`).
