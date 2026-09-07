@@ -4458,10 +4458,10 @@ fn patch_repeat_op_caller_follow(
     let mut decline_cont_first: List<String> = [];
     let mut decline_scan: List<ScanElement> = [];
     let mut decline_viable: List<String> = [];
-    if let Some(scan) = lower_decline_scan(rep_op, alt_elements, index, ctx, reaches_rule_tail) {
+    if let Some(hit) = lower_decline_scan(rep_op, alt_elements, index, ctx, reaches_rule_tail) {
         decline_stranded = true;
-        decline_cont_first = ctx.first_of_elements_from(alt_elements, index + 1);
-        decline_scan = scan;
+        decline_scan = hit.0;
+        decline_cont_first = hit.1;
         decline_viable = ctx.rule_follow_for_probe(rule_name);
         // No `mark_rule_reads_follow`: this guard asks the rule's classical
         // FOLLOW, which is a superset of anything a caller's mask admits, so the
@@ -4530,26 +4530,31 @@ fn lower_reserve_scan(
 /// the two heads to overlap, or the loop could not have taken the suffix's
 /// input in the first place. Only this one needs the rule's tail, because it
 /// ends by asking the caller's FOLLOW.
+/// Returns the continuation's scan and its FIRST set together: the guard needs
+/// both and the set is what decides whether to build the scan at all, so
+/// computing it once is the difference between one `first_of_elements_from` per
+/// qualifying loop and two.
 fn lower_decline_scan(
     rep_op: &RepeatOp,
     alt_elements: &List<Element>,
     index: i32,
     ctx: &mut GenContext,
     reaches_rule_tail: bool,
-) -> Option<List<ScanElement>> {
+) -> Option<[List<ScanElement>, List<String>]> {
     if rep_op.non_greedy || !rep_op.kind matches { Star | Plus } || !reaches_rule_tail {
         return null;
     }
     if index + 1 >= alt_elements.len() || !ctx.tail_is_nullable_deep(alt_elements, index + 1) {
         return null;
     }
-    if !sets_overlap(
-        &admits_kinds(&rep_op.body_admits),
-        &ctx.first_of_elements_from(alt_elements, index + 1),
-    ) {
+    let suffix_first = ctx.first_of_elements_from(alt_elements, index + 1);
+    if !sets_overlap(&admits_kinds(&rep_op.body_admits), &suffix_first) {
         return null;
     }
-    return lower_scan_continuation_elements(alt_elements, index, ctx);
+    return match lower_scan_continuation_elements(alt_elements, index, ctx) {
+        Some(scan) => Option::Some([scan, suffix_first]),
+        None => null,
+    };
 }
 
 /// The continuation for emit's probe, built only for the Repeat kinds whose
