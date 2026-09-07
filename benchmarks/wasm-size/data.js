@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1788735302442,
+  "lastUpdate": 1788749791016,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -53977,6 +53977,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 277505,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "59eed7d318fc5899c17d863e6877317f02370c10",
+          "message": "Merge pull request #1985 from wado-lang/niri-frame-owns-storage\n\nfeat(nir): write a constant aggregate back as a literal, and give every block a label",
+          "timestamp": "2026-09-07T11:41:11+09:00",
+          "tree_id": "7702a9da764c5cce81062d5fd1d4ae64e780b325",
+          "url": "https://github.com/wado-lang/wado/commit/59eed7d318fc5899c17d863e6877317f02370c10"
+        },
+        "date": 1788749790091,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 2013,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6560,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18971,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 276991,
             "unit": "bytes"
           }
         ]
