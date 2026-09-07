@@ -65,6 +65,15 @@ a case or flags member `V` declares builds a value rather than answering the
 trait — the shadowing rule below applies to a bare `V::tag`, which is what the
 turbofish rewrites to once it has supplied `Self`.
 
+Only where the trait declares no parameters of its own. On one that does, the
+turbofish is already that trait's argument list — `Take::<i64>::take(&f, 42)`
+pins the list and the receiver argument supplies `Self`. A static has no such
+argument, and the spec's answer for it is not a second turbofish: the receiver
+type is written out and the call's arguments select the impl, `M::make(A {})`
+against `impl Enc<A> for M` beside `impl Enc<B> for M` (`docs/spec.md`, "A
+trait's associated function"). So `Take::<i64>::take()` names no receiver at
+all, and is reported as that rather than as an unknown function.
+
 ### Four outcomes, each meaning one thing
 
 |              |                                                        |
@@ -382,10 +391,4 @@ they instantiate what the rules picked rather than picking it.
 
 ## Known gaps
 
-- The trait-qualified spelling reaches only a trait declaring no parameters of
-  its own. `Take::<A>::take()` claims the turbofish for the trait's arguments,
-  and a receiver-less declaration has no receiver argument to pin `Self` with,
-  so on such a trait there is nowhere left to write it. Closing it is a spelling
-  decision — which slot of the turbofish is `Self` — not a missing mechanism.
-  The call is reported as that, naming the bound that writes it meanwhile
-  (`fn f<T: Take<A>>() { T::take() }`), rather than as an unknown function.
+None.

@@ -1,7 +1,7 @@
-// `Trait::<T>::method(…)` supplies `Self` in the turbofish, so a trait that
-// declares parameters of its own has nowhere left to write it: the turbofish
-// is already the trait's argument list. A known gap of WEP 2026-09-06,
-// reported at the call with the bound that writes it instead.
+// On a trait declaring parameters of its own the turbofish is that trait's
+// argument list, so `Take::<i32>::take()` names no receiver. A static's
+// receiver is written out instead — `V::take()` below — and where several
+// impls declare the function, the arguments select among them.
 
 trait Take<A> {
     fn take() -> A;
@@ -16,8 +16,9 @@ impl Take<i32> for V {
 }
 
 export fn run() {
+    let _ = V::take();
     let _ = Take::<i32>::take();
 }
 
 __DATA__
-{"compile_error": "'Take' declares type parameters of its own, so the turbofish"}
+{"compile_error": "the turbofish of 'Take::<…>::take' is its argument list and names no receiver; write the receiver out"}

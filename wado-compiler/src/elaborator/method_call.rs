@@ -1480,15 +1480,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // turbofish is already spoken for, so say that rather than let the
             // call read as an unknown function.
             if self.is_trait_static_method(&g.name, &static_call.method)
-                && let Some(params) = self
+                && self
                     .decl_key_at(g.id, &g.name)
                     .and_then(|key| self.trait_decl_type_params_of(&key))
-                && !params.is_empty()
+                    .is_some_and(|params| !params.is_empty())
             {
-                let _ = self.emit(TypeError::UnwritableStaticSelf {
+                let _ = self.emit(TypeError::StaticNeedsWrittenReceiver {
                     trait_name: self.declared_trait_name(&g.name),
                     method: static_call.method.clone(),
-                    params: params.into_iter().map(|p| p.name).collect(),
                     span: static_call.span,
                 });
                 return TypeTable::ERROR;

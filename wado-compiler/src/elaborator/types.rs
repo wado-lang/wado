@@ -544,13 +544,12 @@ pub enum TypeError {
     },
 
     /// `Trait::<T>::method()` on a trait declaring parameters of its own. The
-    /// turbofish is the trait's argument list there, so `Self` has nowhere to
-    /// be written. A known gap of WEP 2026-09-06.
-    UnwritableStaticSelf {
+    /// turbofish is that trait's argument list, so it names no receiver; a
+    /// static's receiver is written out instead (`docs/spec.md`, "A trait's
+    /// associated function").
+    StaticNeedsWrittenReceiver {
         trait_name: String,
         method: String,
-        /// The trait's own parameters, as the bound spells them.
-        params: Vec<String>,
         span: Span,
     },
 
@@ -1476,16 +1475,14 @@ impl TypeError {
                 ),
                 *span,
             ),
-            TypeError::UnwritableStaticSelf {
+            TypeError::StaticNeedsWrittenReceiver {
                 trait_name,
                 method,
-                params,
                 span,
             } => (
                 Code::TypeMismatch,
                 format!(
-                    "'{trait_name}' declares type parameters of its own, so the turbofish of '{trait_name}::<…>::{method}' is its argument list and 'Self' has nowhere to be written; call it through a bound ('fn f<T: {trait_name}<{}>>() {{ T::{method}(…) }}')",
-                    params.join(", ")
+                    "'{trait_name}' declares type parameters of its own, so the turbofish of '{trait_name}::<…>::{method}' is its argument list and names no receiver; write the receiver out ('Receiver::{method}(…)'), where the arguments select the impl"
                 ),
                 *span,
             ),
