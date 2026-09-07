@@ -2379,8 +2379,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self.record_reference_to_decl(static_call.method_id, method_def);
         }
 
+        // A concrete block hosts its own function; a generic one's instance is
+        // materialised in the receiver's module (see `FuncInstState::impl_module`).
+        // Naming the receiver's for both minted an extern stub beside a
+        // definition of that very name, where the two modules differ.
         let func_ref = FunctionRef {
-            module_source: struct_module,
+            module_source: self
+                .concrete_impl_module_of(selected.as_ref())
+                .unwrap_or(struct_module),
             name: mangled_func_name,
             monomorph_info,
             method_info: Some(method_info),
@@ -3257,6 +3263,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return head;
         }
         self.import_original_name(&head, impl_module)
+    }
+
+    /// The module a *concrete* impl block hosts its function in — its own.
+    /// `None` for a generic block, whose instance is materialised in the
+    /// receiver's module instead, and for a spelling no trait impl answered.
+    fn concrete_impl_module_of(&self, selected: Option<&StaticMethodRef>) -> Option<ModuleSource> {
+        let impl_def = self
+            .tysys
+            .signatures
+            .method_sig(selected?.method_id?)?
+            .declaring_impl?;
+        self.tysys
+            .trait_env
+            .impl_headers
+            .get(&impl_def)
+            .filter(|header| header.is_concrete())
+            .map(|_| self.tysys.resolutions.defs().module(impl_def).clone())
     }
 
     /// Whether only the argument can fill this parameter — a blanket, whose
