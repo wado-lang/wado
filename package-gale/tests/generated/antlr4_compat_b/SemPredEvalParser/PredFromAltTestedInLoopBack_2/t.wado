@@ -1611,7 +1611,6 @@ fn scan_para(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
 }
 
 fn scan_para_content(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
-    let scan_start = pos;
     let mut pos = pos;
     let gp_0 = pos;
     let sgk_0 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
@@ -1641,7 +1640,7 @@ fn scan_para_content(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     if sg_0_best >= 0 {
         pos = sg_0_best;
     } else {
-        pos = gp_0;
+        return -1;
     }
     while pos < tokens.len() && _kind_set_0(tokens[pos]) && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
         let sp = pos;
@@ -1678,7 +1677,6 @@ fn scan_para_content(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
-    if pos == scan_start { return -1; }
     return pos;
 }
 

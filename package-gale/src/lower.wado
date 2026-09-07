@@ -2385,8 +2385,39 @@ fn scan_group_lenient(alts: &List<Alternative>, ctx: &mut GenContext) -> bool {
     if scan_group_is_nullable(alts, ctx) {
         return true;
     }
+    // A group the scan decides rather than approximates: finding no alternative
+    // is then the answer the parse will give, and rewinding instead reports the
+    // prefix before the group as a match —
+    // `item : outerAttribute* (visItem | macroItem)` measures `#[a]` as an item
+    // the parse refuses, and the tournament has already committed to it.
+    if scan_group_is_decidable(alts, ctx) {
+        return false;
+    }
     let cyclic = ctx.is_rule_scan_cyclic(ctx.current_rule_index());
     return !cyclic;
+}
+
+/// True iff every alternative is a flat sequence of scannable rule / token
+/// references — no repeat, group or wildcard.
+///
+/// The shape is the point, not just scannability. A scan measures a non-greedy
+/// repeat rather than deciding it, so a group containing one can fail where the
+/// parse succeeds, and making that group strict loses the whole rule: SQLite's
+/// `create_table_stmt` has `( ',' column_def )*?` inside exactly such a group.
+/// A flat sequence has no such decision in it — it matches or it does not.
+fn scan_group_is_decidable(alts: &List<Alternative>, ctx: &mut GenContext) -> bool {
+    for let alt of alts {
+        for let e of &alt.elements {
+            if !(peel_repeat_body_label(e) matches { RuleRef(_) | TokenRef(_) | Literal(_) }) {
+                return false;
+            }
+            let mut visiting: List<String> = [];
+            if !ctx.is_element_scannable(e, &mut visiting) {
+                return false;
+            }
+        }
+    }
+    return true;
 }
 
 /// True iff some alternative of the group is fully nullable (the group can match

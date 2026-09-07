@@ -1569,7 +1569,7 @@ fn scan_tok(tokens: &Array<i32>, pos: i32) -> i32 {
     if sg_0_best >= 0 {
         pos = sg_0_best;
     } else {
-        pos = gp_0;
+        return -1;
     }
     if pos >= tokens.len() || tokens[pos] != TK_C { return -1; }
     pos += 1;
@@ -1601,7 +1601,7 @@ fn scan_gated(tokens: &Array<i32>, pos: i32) -> i32 {
     if sg_1_best >= 0 {
         pos = sg_1_best;
     } else {
-        pos = gp_1;
+        return -1;
     }
     if pos >= tokens.len() || tokens[pos] != TK_A { return -1; }
     pos += 1;
@@ -1633,7 +1633,7 @@ fn scan_plus_gated(tokens: &Array<i32>, pos: i32) -> i32 {
     if sg_2_best >= 0 {
         pos = sg_2_best;
     } else {
-        pos = gp_2;
+        return -1;
     }
     while pos < tokens.len() && _kind_set_0(tokens[pos]) {
         let sp = pos;
@@ -1752,7 +1752,7 @@ fn scan_plus_scan(tokens: &Array<i32>, pos: i32) -> i32 {
     if sg_8_best >= 0 {
         pos = sg_8_best;
     } else {
-        pos = gp_8;
+        return -1;
     }
     while pos < tokens.len() && tokens[pos] == TK_A {
         let sp = pos;
@@ -1815,7 +1815,7 @@ fn scan_refs(tokens: &Array<i32>, pos: i32) -> i32 {
     if sg_10_best >= 0 {
         pos = sg_10_best;
     } else {
-        pos = gp_10;
+        return -1;
     }
     if pos >= tokens.len() || tokens[pos] != TK_C { return -1; }
     pos += 1;

@@ -7026,7 +7026,7 @@ fn scan_binding_pattern(tokens: &Array<i32>, pos: i32) -> i32 {
     if sg_0_best >= 0 {
         pos = sg_0_best;
     } else {
-        pos = gp_0;
+        return -1;
     }
     if pos == scan_start { return -1; }
     return pos;
@@ -8702,7 +8702,7 @@ fn scan_decorator(tokens: &Array<i32>, pos: i32) -> i32 {
     if sg_28_best >= 0 {
         pos = sg_28_best;
     } else {
-        pos = gp_28;
+        return -1;
     }
     return pos;
 }
@@ -9346,7 +9346,7 @@ fn scan_abstract_declaration(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> 
     if sg_29_best >= 0 {
         pos = sg_29_best;
     } else {
-        pos = gp_29;
+        return -1;
     }
     pos = scan_eos(tokens, pos);
     if pos < 0 { return -1; }
@@ -9400,7 +9400,7 @@ fn scan_import_from_block(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32
                             if sg_30_best >= 0 {
                                 pos = sg_30_best;
                             } else {
-                                pos = gp_30;
+                                break opt_probe;
                             }
                             pos = scan_import_from(tokens, pos);
                             if pos < 0 { break opt_probe; }
@@ -9433,7 +9433,7 @@ fn scan_import_from_block(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32
                 if sg_31_best >= 0 {
                     pos = sg_31_best;
                 } else {
-                    pos = gp_31;
+                    break try_0;
                 }
                 pos = scan_import_from(tokens, pos);
                 if pos < 0 { break try_0; }
@@ -9620,7 +9620,7 @@ fn scan_import_namespace(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 
     if sg_41_best >= 0 {
         pos = sg_41_best;
     } else {
-        pos = gp_41;
+        return -1;
     }
     if pos < tokens.len() && tokens[pos] == TK_As && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
         let sp = pos;
@@ -9706,7 +9706,7 @@ fn scan_export_statement(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 
                 if sg_44_best >= 0 {
                     pos = sg_44_best;
                 } else {
-                    pos = gp_44;
+                    break try_0;
                 }
                 pos = scan_eos(tokens, pos);
                 if pos < 0 { break try_0; }
@@ -10065,7 +10065,7 @@ fn scan_variable_declaration(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> 
     if sg_55_best >= 0 {
         pos = sg_55_best;
     } else {
-        pos = gp_55;
+        return -1;
     }
     if pos < tokens.len() && tokens[pos] == TK_Colon && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
         let sp = pos;
@@ -10988,7 +10988,7 @@ fn scan_property_member_declaration_alt_2(tokens: &Array<i32>, pos: i32, follow:
     if sg_77_best >= 0 {
         pos = sg_77_best;
     } else {
-        pos = gp_77;
+        return -1;
     }
     return pos;
 }
@@ -11617,7 +11617,7 @@ fn scan_array_element(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     if sg_92_best >= 0 {
         pos = sg_92_best;
     } else {
-        pos = gp_92;
+        return -1;
     }
     if pos < tokens.len() && tokens[pos] == TK_Comma && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
         pos += 1;
@@ -11987,7 +11987,7 @@ fn scan_argument(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     if sg_100_best >= 0 {
         pos = sg_100_best;
     } else {
-        pos = gp_100;
+        return -1;
     }
     if pos == scan_start { return -1; }
     return pos;
@@ -12569,7 +12569,7 @@ fn scan_single_expression_lr_25(tokens: &Array<i32>, pos: i32, follow: i64 = 0) 
     if sg_104_best >= 0 {
         pos = sg_104_best;
     } else {
-        pos = gp_104;
+        return -1;
     }
     pos = scan_single_expression(tokens, pos, follow, 17);
     if pos < 0 { return -1; }
@@ -17671,7 +17671,7 @@ fn _parse_import_from_block__inner(p: &mut Parser, follow: i64 = 0) -> () with T
                 if sg_126_best >= 0 {
                     pos = sg_126_best;
                 } else {
-                    pos = gp_126;
+                    break opt_enter_scan;
                 }
                 pos = scan_import_from(tokens, pos);
                 if pos < 0 { break opt_enter_scan; }
@@ -18045,7 +18045,7 @@ fn _parse_export_statement__inner_scan_0(tokens: &Array<i32>, pos: i32, follow: 
     if sg_131_best >= 0 {
         pos = sg_131_best;
     } else {
-        pos = gp_131;
+        return -1;
     }
     pos = scan_eos(tokens, pos);
     if pos < 0 { return -1; }
@@ -19970,7 +19970,7 @@ fn _parse_property_member_declaration__inner_scan_2(tokens: &Array<i32>, pos: i3
     if sg_141_best >= 0 {
         pos = sg_141_best;
     } else {
-        pos = gp_141;
+        return -1;
     }
     return pos;
 }

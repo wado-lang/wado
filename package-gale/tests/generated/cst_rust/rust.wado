@@ -7549,7 +7549,7 @@ fn scan_macro_match(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
                 if sg_3_best >= 0 {
                     pos = sg_3_best;
                 } else {
-                    pos = gp_3;
+                    break try_2;
                 }
                 if pos >= tokens.len() || tokens[pos] != TK_COLON { break try_2; }
                 pos += 1;
@@ -7731,7 +7731,7 @@ fn scan_item(tokens: &Array<i32>, pos: i32) -> i32 {
     if sg_4_best >= 0 {
         pos = sg_4_best;
     } else {
-        pos = gp_4;
+        return -1;
     }
     if pos == scan_start { return -1; }
     return pos;
@@ -7837,7 +7837,7 @@ fn scan_vis_item(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     if sg_5_best >= 0 {
         pos = sg_5_best;
     } else {
-        pos = gp_5;
+        return -1;
     }
     if pos == scan_start { return -1; }
     return pos;
@@ -8008,7 +8008,7 @@ fn scan_as_clause(tokens: &Array<i32>, pos: i32) -> i32 {
     if sg_8_best >= 0 {
         pos = sg_8_best;
     } else {
-        pos = gp_8;
+        return -1;
     }
     return pos;
 }
@@ -8146,7 +8146,7 @@ fn scan_use_tree(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
                             if sg_16_best >= 0 {
                                 pos = sg_16_best;
                             } else {
-                                pos = gp_16;
+                                break sg_15;
                             }
                             break sg_15_done;
                         }
@@ -8222,7 +8222,7 @@ fn scan_function_(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     if sg_17_best >= 0 {
         pos = sg_17_best;
     } else {
-        pos = gp_17;
+        return -1;
     }
     return pos;
 }
@@ -8384,7 +8384,7 @@ fn scan_self_param(tokens: &Array<i32>, pos: i32) -> i32 {
     if sg_24_best >= 0 {
         pos = sg_24_best;
     } else {
-        pos = gp_24;
+        return -1;
     }
     if pos == scan_start { return -1; }
     return pos;
@@ -8472,7 +8472,7 @@ fn scan_function_param(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     if sg_28_best >= 0 {
         pos = sg_28_best;
     } else {
-        pos = gp_28;
+        return -1;
     }
     if pos == scan_start { return -1; }
     return pos;
@@ -8505,7 +8505,7 @@ fn scan_function_param_pattern(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -
     if sg_29_best >= 0 {
         pos = sg_29_best;
     } else {
-        pos = gp_29;
+        return -1;
     }
     return pos;
 }
@@ -8998,7 +8998,7 @@ fn scan_constant_item(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     if sg_39_best >= 0 {
         pos = sg_39_best;
     } else {
-        pos = gp_39;
+        return -1;
     }
     if pos >= tokens.len() || tokens[pos] != TK_COLON { return -1; }
     pos += 1;
@@ -9417,7 +9417,7 @@ fn scan_external_item(tokens: &Array<i32>, pos: i32) -> i32 {
             if sg_51_best >= 0 {
                 pos = sg_51_best;
             } else {
-                pos = gp_51;
+                break sg_50_1;
             }
             if pos > sg_50_best { sg_50_best = pos; }
         }
@@ -9520,7 +9520,7 @@ fn scan_generic_param(tokens: &Array<i32>, pos: i32) -> i32 {
             if sg_56_best >= 0 {
                 pos = sg_56_best;
             } else {
-                pos = gp_56;
+                break rsv_55;
             }
             rs_55_ok = true;
         }
@@ -9554,7 +9554,7 @@ fn scan_generic_param(tokens: &Array<i32>, pos: i32) -> i32 {
     if sg_57_best >= 0 {
         pos = sg_57_best;
     } else {
-        pos = gp_57;
+        return -1;
     }
     if pos == scan_start { return -1; }
     return pos;
@@ -9840,7 +9840,7 @@ fn scan_associated_item(tokens: &Array<i32>, pos: i32) -> i32 {
             if sg_66_best >= 0 {
                 pos = sg_66_best;
             } else {
-                pos = gp_66;
+                break sg_65_1;
             }
             if pos > sg_65_best { sg_65_best = pos; }
         }
@@ -11683,7 +11683,7 @@ fn scan_struct_expr_field(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32
             if sg_98_best >= 0 {
                 pos = sg_98_best;
             } else {
-                pos = gp_98;
+                break sg_97_1;
             }
             if pos >= tokens.len() || tokens[pos] != TK_COLON { break sg_97_1; }
             pos += 1;
@@ -11920,7 +11920,7 @@ fn scan_enum_expr_field_alt_1(tokens: &Array<i32>, pos: i32, follow: i64 = 0) ->
     if sg_106_best >= 0 {
         pos = sg_106_best;
     } else {
-        pos = gp_106;
+        return -1;
     }
     if pos >= tokens.len() || tokens[pos] != TK_COLON { return -1; }
     pos += 1;
@@ -12231,7 +12231,7 @@ fn scan_loop_expression(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     if sg_116_best >= 0 {
         pos = sg_116_best;
     } else {
-        pos = gp_116;
+        return -1;
     }
     if pos == scan_start { return -1; }
     return pos;
@@ -12383,7 +12383,7 @@ fn scan_if_expression(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
                 if sg_121_best >= 0 {
                     pos = sg_121_best;
                 } else {
-                    pos = gp_121;
+                    break sg_120;
                 }
                 break sg_120_done;
             }
@@ -12455,7 +12455,7 @@ fn scan_if_let_expression(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32
                 if sg_124_best >= 0 {
                     pos = sg_124_best;
                 } else {
-                    pos = gp_124;
+                    break sg_123;
                 }
                 break sg_123_done;
             }
@@ -14076,7 +14076,7 @@ fn scan_maybe_named_param(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32
                 if sg_154_best >= 0 {
                     pos = sg_154_best;
                 } else {
-                    pos = gp_154;
+                    break sg_153;
                 }
                 if pos >= tokens.len() || tokens[pos] != TK_COLON { break sg_153; }
                 pos += 1;
@@ -15093,7 +15093,7 @@ fn scan_visibility(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
                 if sg_183_best >= 0 {
                     pos = sg_183_best;
                 } else {
-                    pos = gp_183;
+                    break sg_182;
                 }
                 if pos >= tokens.len() || tokens[pos] != TK_RPAREN { break sg_182; }
                 pos += 1;
@@ -16977,7 +16977,7 @@ fn _parse_use_tree__inner_scan_1(tokens: &Array<i32>, pos: i32, follow: i64 = 0)
                 if sg_186_best >= 0 {
                     pos = sg_186_best;
                 } else {
-                    pos = gp_186;
+                    break sg_185;
                 }
                 break sg_185_done;
             }
@@ -19181,7 +19181,7 @@ fn _parse_generic_param__inner(p: &mut Parser) -> () with RustParserBase {
             if sg_206_best >= 0 {
                 pos = sg_206_best;
             } else {
-                pos = gp_206;
+                break rep_scan;
             }
             pos = rep_body_end;
             rep_scan_pos = pos;
@@ -22327,7 +22327,7 @@ fn _parse_struct_expr_field__inner(p: &mut Parser, follow: i64 = 0) -> () with R
                 if sg_222_best >= 0 {
                     pos = sg_222_best;
                 } else {
-                    pos = gp_222;
+                    break gd_scan_2;
                 }
                 if pos >= tokens.len() || tokens[pos] != TK_COLON { break gd_scan_2; }
                 pos += 1;
@@ -22761,7 +22761,7 @@ fn _parse_enum_expr_field__inner_scan_1(tokens: &Array<i32>, pos: i32, follow: i
     if sg_228_best >= 0 {
         pos = sg_228_best;
     } else {
-        pos = gp_228;
+        return -1;
     }
     if pos >= tokens.len() || tokens[pos] != TK_COLON { return -1; }
     pos += 1;
@@ -26221,7 +26221,7 @@ fn _parse_maybe_named_param__inner(p: &mut Parser, follow: i64 = 0) -> () with R
         if sg_249_best >= 0 {
             pos = sg_249_best;
         } else {
-            pos = gp_249;
+            break opt_scan;
         }
         if pos >= tokens.len() || tokens[pos] != TK_COLON { break opt_scan; }
         pos += 1;

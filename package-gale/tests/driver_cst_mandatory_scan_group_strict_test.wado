@@ -1,0 +1,39 @@
+//! A mandatory scan group that must fail rather than match nothing.
+//!
+//! A required group scans lenient by default, which over-approximates the
+//! length and is what the longest-match tournament wants. Where the group is
+//! mandatory and every alternative is scannable, a scan failure means the parse
+//! fails too, so leniency only inflates a length the parse will refuse.
+
+use g from "./grammars/mandatory_scan_group_strict.g4"
+    with {
+        generator: { module: "../src/generator.wado", output_dir: "./generated/cst_mandatory_scan_group_strict" },
+    };
+
+fn assert_tree(input: &String, expected: &String) {
+    let result = g::parse(input);
+    assert result.ok(), `unexpected diagnostics for ${*input}: ${result.diagnostics:?}`;
+    let actual = g::to_string_tree(&result);
+    assert actual == *expected, `\ninput:    ${*input}\nexpected: ${*expected}\nactual:   ${actual}`;
+}
+
+// The hit case: `# a` is not a `stmt`, so the whole input is the one `expr`.
+test "a mandatory group that matches nothing is not a match" {
+    assert_tree(&"{ # a x }", &"(start (block { (body (expr (attr # a) x)) }))");
+}
+
+// The rejection cases: the same group, found. A repair that made every group
+// strict, or that stopped scanning the prefix, fails these.
+test "the group found is still a statement" {
+    assert_tree(
+        &"{ # a let y; }",
+        &"(start (block { (body (stmt (attr # a) (decl let y ;))) }))",
+    );
+}
+
+test "a statement and a trailing expression" {
+    assert_tree(
+        &"{ let y; # a x }",
+        &"(start (block { (body (stmt (decl let y ;)) (expr (attr # a) x)) }))",
+    );
+}

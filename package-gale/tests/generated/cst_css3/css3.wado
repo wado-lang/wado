@@ -27302,7 +27302,7 @@ fn scan_imports(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
                 if sg_8_best >= 0 {
                     pos = sg_8_best;
                 } else {
-                    pos = gp_8;
+                    break try_0;
                 }
                 pos = scan_ws(tokens, pos, 0);
                 if pos < 0 { break try_0; }
@@ -27339,7 +27339,7 @@ fn scan_imports(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
                 if sg_9_best >= 0 {
                     pos = sg_9_best;
                 } else {
-                    pos = gp_9;
+                    break try_1;
                 }
                 pos = scan_ws(tokens, pos, FOLLOW_MASK_1);
                 if pos < 0 { break try_1; }
@@ -27374,7 +27374,7 @@ fn scan_imports(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
                 if sg_10_best >= 0 {
                     pos = sg_10_best;
                 } else {
-                    pos = gp_10;
+                    break try_2;
                 }
                 pos = scan_ws(tokens, pos, follow);
                 if pos < 0 { break try_2; }
@@ -27407,7 +27407,7 @@ fn scan_imports(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
                 if sg_11_best >= 0 {
                     pos = sg_11_best;
                 } else {
-                    pos = gp_11;
+                    break try_3;
                 }
                 pos = scan_ws(tokens, pos, follow);
                 if pos < 0 { break try_3; }
@@ -27468,7 +27468,7 @@ fn scan_namespace_(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
                 if sg_13_best >= 0 {
                     pos = sg_13_best;
                 } else {
-                    pos = gp_13;
+                    break try_0;
                 }
                 pos = scan_ws(tokens, pos, FOLLOW_MASK_1);
                 if pos < 0 { break try_0; }
@@ -27517,7 +27517,7 @@ fn scan_namespace_(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
                 if sg_15_best >= 0 {
                     pos = sg_15_best;
                 } else {
-                    pos = gp_15;
+                    break try_1;
                 }
                 pos = scan_ws(tokens, pos, follow);
                 if pos < 0 { break try_1; }
@@ -27920,7 +27920,7 @@ fn scan_simple_selector_sequence(tokens: &Array<i32>, pos: i32, follow: i64 = 0)
                 if sg_25_best >= 0 {
                     pos = sg_25_best;
                 } else {
-                    pos = gp_25;
+                    break try_0;
                 }
                 while pos < tokens.len() && _kind_set_10(tokens[pos]) && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
                     let sp = pos;
@@ -28019,7 +28019,7 @@ fn scan_simple_selector_sequence(tokens: &Array<i32>, pos: i32, follow: i64 = 0)
                 if sg_27_best >= 0 {
                     pos = sg_27_best;
                 } else {
-                    pos = gp_27;
+                    break try_1;
                 }
                 while pos < tokens.len() && _kind_set_10(tokens[pos]) && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
                     let sp = pos;
@@ -28279,7 +28279,7 @@ fn scan_attrib(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
                             if sg_32_best >= 0 {
                                 pos = sg_32_best;
                             } else {
-                                pos = gp_32;
+                                break sg_30;
                             }
                             pos = scan_ws(tokens, pos, (FOLLOW_MASK_13 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
                             if pos < 0 { break sg_30; }
@@ -28379,7 +28379,7 @@ fn scan_attrib(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
                 if sg_35_best >= 0 {
                     pos = sg_35_best;
                 } else {
-                    pos = gp_35;
+                    break sg_33;
                 }
                 pos = scan_ws(tokens, pos, (FOLLOW_MASK_13 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
                 if pos < 0 { break sg_33; }
@@ -28422,7 +28422,7 @@ fn scan_pseudo(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     if sg_36_best >= 0 {
         pos = sg_36_best;
     } else {
-        pos = gp_36;
+        return -1;
     }
     return pos;
 }
@@ -28501,7 +28501,7 @@ fn scan_expression(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
             if sg_38_best >= 0 {
                 pos = sg_38_best;
             } else {
-                pos = gp_38;
+                break sg_37;
             }
             pos = scan_ws(tokens, pos, follow);
             if pos < 0 { break sg_37; }
@@ -28569,7 +28569,7 @@ fn scan_expression(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
                 if sg_40_best >= 0 {
                     pos = sg_40_best;
                 } else {
-                    pos = gp_40;
+                    break sg_39;
                 }
                 pos = scan_ws(tokens, pos, follow);
                 if pos < 0 { break sg_39; }
@@ -28949,7 +28949,7 @@ fn scan_value(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     if sg_43_best >= 0 {
         pos = sg_43_best;
     } else {
-        pos = gp_43;
+        return -1;
     }
     while pos < tokens.len() && _kind_set_18(tokens[pos]) && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
         let sp = pos;
@@ -29645,7 +29645,7 @@ fn scan_at_rule(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     if sg_53_best >= 0 {
         pos = sg_53_best;
     } else {
-        pos = gp_53;
+        return -1;
     }
     return pos;
 }
@@ -31519,7 +31519,7 @@ fn _parse_imports__inner_scan_0(tokens: &Array<i32>, pos: i32, follow: i64 = 0) 
     if sg_86_best >= 0 {
         pos = sg_86_best;
     } else {
-        pos = gp_86;
+        return -1;
     }
     pos = scan_ws(tokens, pos, 0);
     if pos < 0 { return -1; }
@@ -31577,7 +31577,7 @@ fn _parse_imports__inner_scan_1(tokens: &Array<i32>, pos: i32, follow: i64 = 0) 
     if sg_87_best >= 0 {
         pos = sg_87_best;
     } else {
-        pos = gp_87;
+        return -1;
     }
     pos = scan_ws(tokens, pos, FOLLOW_MASK_1);
     if pos < 0 { return -1; }
@@ -31632,7 +31632,7 @@ fn _parse_imports__inner_scan_2(tokens: &Array<i32>, pos: i32, follow: i64 = 0) 
     if sg_88_best >= 0 {
         pos = sg_88_best;
     } else {
-        pos = gp_88;
+        return -1;
     }
     pos = scan_ws(tokens, pos, follow);
     if pos < 0 { return -1; }
@@ -31684,7 +31684,7 @@ fn _parse_imports__inner_scan_3(tokens: &Array<i32>, pos: i32, follow: i64 = 0) 
     if sg_89_best >= 0 {
         pos = sg_89_best;
     } else {
-        pos = gp_89;
+        return -1;
     }
     pos = scan_ws(tokens, pos, follow);
     if pos < 0 { return -1; }
@@ -31821,7 +31821,7 @@ fn _parse_namespace___inner_scan_0(tokens: &Array<i32>, pos: i32, follow: i64 = 
     if sg_91_best >= 0 {
         pos = sg_91_best;
     } else {
-        pos = gp_91;
+        return -1;
     }
     pos = scan_ws(tokens, pos, FOLLOW_MASK_1);
     if pos < 0 { return -1; }
@@ -31903,7 +31903,7 @@ fn _parse_namespace___inner_scan_1(tokens: &Array<i32>, pos: i32, follow: i64 = 
     if sg_93_best >= 0 {
         pos = sg_93_best;
     } else {
-        pos = gp_93;
+        return -1;
     }
     pos = scan_ws(tokens, pos, follow);
     if pos < 0 { return -1; }
@@ -32848,7 +32848,7 @@ fn _parse_attrib__inner(p: &mut Parser, follow: i64 = 0) -> () {
                         if sg_103_best >= 0 {
                             pos = sg_103_best;
                         } else {
-                            pos = gp_103;
+                            break sg_101;
                         }
                         pos = scan_ws(tokens, pos, (FOLLOW_MASK_13 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
                         if pos < 0 { break sg_101; }
@@ -32947,7 +32947,7 @@ fn _parse_attrib__inner(p: &mut Parser, follow: i64 = 0) -> () {
         if sg_105_best >= 0 {
             pos = sg_105_best;
         } else {
-            pos = gp_105;
+            break opt_scan;
         }
         pos = scan_ws(tokens, pos, (FOLLOW_MASK_13 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
         if pos < 0 { break opt_scan; }
@@ -33095,7 +33095,7 @@ fn _parse_expression__inner(p: &mut Parser, follow: i64 = 0) -> () {
                         if sg_107_best >= 0 {
                             pos = sg_107_best;
                         } else {
-                            pos = gp_107;
+                            break sg_106;
                         }
                         pos = scan_ws(tokens, pos, follow);
                         if pos < 0 { break sg_106; }

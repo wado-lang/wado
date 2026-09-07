@@ -3320,7 +3320,7 @@ fn scan_sql_stmt(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     if sg_6_best >= 0 {
         pos = sg_6_best;
     } else {
-        pos = gp_6;
+        return -1;
     }
     if pos == scan_start { return -1; }
     return pos;
@@ -4204,7 +4204,7 @@ fn scan_create_trigger_stmt(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i
             if sg_50_best >= 0 {
                 pos = sg_50_best;
             } else {
-                pos = gp_50;
+                break sg_49;
             }
             if pos >= tokens.len() || tokens[pos] != TK_SCOL { break sg_49; }
             pos += 1;
@@ -4248,7 +4248,7 @@ fn scan_create_trigger_stmt(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i
                 if sg_52_best >= 0 {
                     pos = sg_52_best;
                 } else {
-                    pos = gp_52;
+                    break sg_51;
                 }
                 if pos >= tokens.len() || tokens[pos] != TK_SCOL { break sg_51; }
                 pos += 1;
@@ -4909,7 +4909,7 @@ fn scan_insert_stmt(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     if sg_82_best >= 0 {
         pos = sg_82_best;
     } else {
-        pos = gp_82;
+        return -1;
     }
     if pos >= tokens.len() || tokens[pos] != TK_K_INTO { return -1; }
     pos += 1;
@@ -5157,7 +5157,7 @@ fn scan_reindex_stmt(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
                 if sg_94_best >= 0 {
                     pos = sg_94_best;
                 } else {
-                    pos = gp_94;
+                    break sg_92_1;
                 }
                 if pos > sg_92_best { sg_92_best = pos; }
             }
@@ -6256,7 +6256,7 @@ fn scan_column_constraint(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32
             if sg_142_best >= 0 {
                 pos = sg_142_best;
             } else {
-                pos = gp_142;
+                break sg_140_4;
             }
             if pos > sg_140_best { sg_140_best = pos; }
         }
@@ -7093,7 +7093,7 @@ fn scan_expr_lr_18(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     if sg_167_best >= 0 {
         pos = sg_167_best;
     } else {
-        pos = gp_167;
+        return -1;
     }
     return pos;
 }
@@ -7462,7 +7462,7 @@ fn scan_foreign_key_clause(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i3
                 if sg_172_best >= 0 {
                     pos = sg_172_best;
                 } else {
-                    pos = gp_172;
+                    break sg_170_0;
                 }
                 if pos > sg_170_best { sg_170_best = pos; }
             }
@@ -7516,7 +7516,7 @@ fn scan_foreign_key_clause(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i3
                 if sg_175_best >= 0 {
                     pos = sg_175_best;
                 } else {
-                    pos = gp_175;
+                    break sol_174;
                 }
                 break osl_173_done;
             }
@@ -7551,7 +7551,7 @@ fn scan_foreign_key_clause(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i3
                 if sg_177_best >= 0 {
                     pos = sg_177_best;
                 } else {
-                    pos = gp_177;
+                    break sol_176;
                 }
                 break osl_173_done;
             }
@@ -7743,7 +7743,7 @@ fn scan_table_constraint(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 
             if sg_186_best >= 0 {
                 pos = sg_186_best;
             } else {
-                pos = gp_186;
+                break sg_185_0;
             }
             if pos >= tokens.len() || tokens[pos] != TK_OPEN_PAR { break sg_185_0; }
             pos += 1;
@@ -10321,7 +10321,7 @@ fn _parse_create_trigger_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
                         if sg_241_best >= 0 {
                             pos = sg_241_best;
                         } else {
-                            pos = gp_241;
+                            break sg_240;
                         }
                         if pos >= tokens.len() || tokens[pos] != TK_SCOL { break sg_240; }
                         pos += 1;
@@ -11533,7 +11533,7 @@ fn _parse_reindex_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
                     if sg_261_best >= 0 {
                         pos = sg_261_best;
                     } else {
-                        pos = gp_261;
+                        break gd_scan_2;
                     }
                     gd_end_2 = pos;
                 }
@@ -14493,7 +14493,7 @@ fn _parse_foreign_key_clause__inner(p: &mut Parser, follow: i64 = 0) -> () {
                     if sg_311_best >= 0 {
                         pos = sg_311_best;
                     } else {
-                        pos = gp_311;
+                        break sg_309_0;
                     }
                     if pos > sg_309_best { sg_309_best = pos; }
                 }
@@ -14613,7 +14613,7 @@ fn _parse_foreign_key_clause__inner(p: &mut Parser, follow: i64 = 0) -> () {
         if sg_312_best >= 0 {
             pos = sg_312_best;
         } else {
-            pos = gp_312;
+            break shape_scan;
         }
         shape_scan_pos = pos;
     }
@@ -14647,7 +14647,7 @@ fn _parse_foreign_key_clause__inner(p: &mut Parser, follow: i64 = 0) -> () {
         if sg_313_best >= 0 {
             pos = sg_313_best;
         } else {
-            pos = gp_313;
+            break shape_scan_2;
         }
         shape_scan_pos_2 = pos;
     }
