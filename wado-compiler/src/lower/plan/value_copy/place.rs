@@ -7,8 +7,8 @@ use super::needs_value_copy;
 use super::ownership::BuiltinConventions;
 use crate::hashmap::IndexMap;
 use crate::tir::{
-    ResolvedType, TirExpr, TirExprKind, TirFunction, TirPattern, TirStmt, TirStmtKind, TirUnaryOp,
-    TypeId, TypeTable,
+    ResolvedType, TirExpr, TirExprKind, TirFunction, TirParam, TirPattern, TirStmt, TirStmtKind,
+    TirUnaryOp, TypeId, TypeTable,
 };
 use crate::tir_visitor::TirRefVisitor;
 
@@ -157,7 +157,11 @@ pub fn compute_return_paths(
         let Some(Names::Place(place)) = returned.names else {
             return false;
         };
-        let Some(param) = func.params.iter().position(|p| p.local_index == place.root) else {
+        let Some(param) = func
+            .params
+            .iter()
+            .position(|p| p.local_index == place.root && lends_storage(p, type_table))
+        else {
             return false;
         };
         paths.insert(
@@ -235,12 +239,10 @@ impl<'a> Resolver<'a> {
             lent: IndexMap::default(),
             bindings: Bindings::default(),
         };
-        for param in &func.params {
-            if param.is_mut_ref || is_reference(param.type_id, type_table) {
-                resolver
-                    .lent
-                    .insert(param.local_index, field_owner(param.type_id, type_table));
-            }
+        for param in func.params.iter().filter(|p| lends_storage(p, type_table)) {
+            resolver
+                .lent
+                .insert(param.local_index, field_owner(param.type_id, type_table));
         }
         if let Some(body) = &func.body {
             let mut collector = BindingCollector {
@@ -461,6 +463,12 @@ pub fn is_reference(type_id: TypeId, type_table: &TypeTable) -> bool {
         type_table.get(type_id),
         ResolvedType::Ref(_) | ResolvedType::MutRef(_)
     ) || type_table.is_reference_shaped(type_id)
+}
+
+/// Whether this parameter names storage the caller still reaches. A by-value
+/// one was deep-copied at the call, so the body owns what it holds.
+fn lends_storage(param: &TirParam, type_table: &TypeTable) -> bool {
+    param.is_mut_ref || is_reference(param.type_id, type_table)
 }
 
 /// Whether a value of this type could name storage someone else still reaches:

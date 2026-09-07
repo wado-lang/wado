@@ -245,8 +245,9 @@ where it cannot prove move / share / fresh; no elision pass):
   `core:builtin` declares it. `#[returns(owned)]` says the result is a fresh
   place; `#[returns(part_of(p))]` says it names a component of parameter `p`.
   The declaration is mandatory. Link asserts that a bodyless `core:builtin`
-  reading through a reference and returning storage carries one, so silence
-  means "allocates" rather than "guess". The obligation is checkable from the
+  reading through a reference and returning storage carries one. What is left
+  undeclared cannot hand storage out at all, so reading it as fresh is a fact
+  rather than a guess. The obligation is checkable from the
   signature because only a reference argument can carry storage out: a by-value
   one is copied at the call. Link also snapshots what it read, since
   monomorphization drops the generic declarations and materializes an instance
@@ -623,13 +624,15 @@ Verified against the tree.
 
 - [ ] Say which by-value argument a builtin stores into a `&mut` one.
       `confine::raise_builtin_sides` infers it instead: every by-value aggregate
-      leaks once any `&mut` operand is present. That is exact over `array_set`,
-      `array_fill` and `array_copy`, which is the whole population, and silently
-      wrong for a builtin added later. Closing it means a declaration, as the
-      result's origin has. The obligation cannot be checked the same way. A
-      builtin that stores and one that does not have the same signature, so no
-      predicate says where silence is wrong, and silence here is unsound rather
-      than merely pessimistic.
+      leaks once any `&mut` operand is present. That over-marks, which costs a
+      copy. It is exact over the whole population: `array_set`, `array_fill` and
+      `array_copy`. A builtin that retains an argument by some other route goes
+      unmarked, and that one is unsound rather than slow.
+      Closing the gap means a declaration, as the result's origin has. The
+      obligation cannot be checked the same way: a builtin that stores and one
+      that does not have the same signature, so no predicate says where an
+      omission is wrong. Such a declaration puts the fact where its author will
+      look. It does not buy the guarantee the result's origin gets.
 
 ## Deferred: the `move` and `unique` keywords
 

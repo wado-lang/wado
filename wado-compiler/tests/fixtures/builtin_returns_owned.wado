@@ -12,6 +12,8 @@ export fn run() with Stdout {
     let mut src: Array<i32> = builtin::array_new(3);
     builtin::array_fill(&mut src, 0, 7, 3);
     let h = Holder { repr: builtin::array_clone(&src) };
+    // An aliasing clone would print the 9.
+    builtin::array_fill(&mut src, 0, 9, 3);
     println(`${builtin::array_len(&h.repr)} ${builtin::array_get_value(&h.repr, 0)}`);
 }
 
