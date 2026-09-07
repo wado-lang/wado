@@ -93,15 +93,29 @@ Remaining:
 
 `tools/rust_corpus_check.wado` (`AGENTS.md` has the invocation) is the repository-wide number, and `wado-compiler/**/*.rs` is the tracked subset. Every failing file reports exactly one diagnostic — it dies once and recovery carries the rest — so a class closed is that many files clean, and the stack is where the check _reports_, which recovery can move a long way from the cause.
 
-`wado-compiler`: **327 files, 303 with diagnostics** at `e925ee58bf`, **3** now. Closed so far: the caller's continuation stopping at the enclosing group (`useTree`), a greedy loop eating its alternative's mandatory suffix (`matchArms`), a nullable alternative at a lookahead nothing selects (`structExprFields`), a recursive non-greedy fragment (`RAW_STRING_LITERAL`), a predicate-carrying alternation scored by first match rather than length (`FLOAT_LITERAL`), a semantic predicate that could not gate a scan tournament's alternative, a scan that could not _run_ one either, a greedy loop stranding its own alternative, a parser `superClass` that carved actions out of its own grammar, a line comment whose body could start with its own newline and eat the line after it, and the grammar being several Rust versions behind (let-else, let chains, async closures, `union`, `&&T`, raw borrows, and a string catch-all admitting the backslash).
+`wado-compiler`: **327 files, 303 with diagnostics** at `e925ee58bf`, **0** now — every `.rs` in the crate parses. Repository-wide: 494 files, 3 left, all outside `wado-compiler`.
 
-The gap that held 34 of the 41 failing methods is closed: a scan now **simulates** the gate actions it walks over (`src/scan_gate.wado`). The flag lives in one generated `SCAN_GATE` global whose fields carry the parser's own names, so java2wado renders the scan's condition from the parser's own predicate text with the handle pointed at the global; the parse seeds it wherever it hands the token array to a scan, so the simulation starts from the truth and a scan reached from inside another scan inherits its caller's value. Only `field = <int literal>` is simulated — an action a walk can run — and a grammar with none is byte-identical.
+Closed along the way: the caller's continuation stopping at the enclosing group (`useTree`), a greedy loop eating its alternative's mandatory suffix (`matchArms`), a greedy loop stranding its own optional one (`statements`), a nullable alternative at a lookahead nothing selects (`structExprFields`), a recursive non-greedy fragment (`RAW_STRING_LITERAL`), a predicate-carrying alternation scored by first match rather than length (`FLOAT_LITERAL`), a mandatory scan group reporting a match after finding no alternative (`item`), a parser `superClass` that carved actions out of its own grammar, a line comment whose body could start with its own newline and eat the line after it, and the grammar being several Rust versions behind (let-else, let chains, `if let` guards, async closures, `union`, `&&T`, raw borrows, and a string catch-all admitting the backslash).
 
-Three files are left, each a singleton rather than a class:
+The largest class was a semantic predicate the scan could not see. Three things closed it, and each is a separate soundness claim:
 
-- [ ] `operators.rs`, `func_inst.rs`, `pattern.rs`. Two known shapes are in them, both minimised and both real: an attribute on a block's trailing expression (`{ #[allow(…)] f() }` — adding `outerAttribute*` to `statements` costs more than it buys, because it gives `statement` and the tail the same head), and a struct literal the condition ban still refuses after a bracket inside the same head (`if self.g(&x) || c { }`). The second is the flag's limit, and both directions of a flag are mutually exclusive — see the two semantic-predicate entries in [`AGENTS.md`](./AGENTS.md)'s failed approaches. Restoring parser members across recovery and speculation is what unblocks the stack-shaped gate that would decide it.
+- A scan **simulates** the gate actions it walks over (`src/scan_gate.wado`). The fields live in one generated `SCAN_GATE` global carrying the parser's own names, so java2wado renders the scan's condition from the parser's own predicate text with the handle pointed at the global. The parse seeds it wherever it hands the token array to a scan, so the simulation starts from the truth and a scan reached from inside another inherits its caller's value. Only `field = <int literal>` is simulated, and a grammar with none is byte-identical.
+- A left-recursive suffix's actions run in its scan too. The precedence loop scans a suffix before committing to it, and that emitter was the last one not going through `gen_scan_op_elements`.
+- A rule can **scope** a gate — `locals` + `@init` / `@after` — and the scan takes its saved copy from its own call stack. That is the restore a members field cannot express, because the value to restore to is per-invocation; without it the ban a bracket lifts never comes back, and `if f(x) || a { b }` loses its block.
 
-  `target/shrink.mjs` + `target/shrink.sh` (throwaway, not committed) is how the remaining ones were reached: greedy line-range removal over delimiter-balanced ranges, with `rustfmt --edition 2024` as the validity oracle. The oracle is the load-bearing part — without it the minimizer "shrinks" to input rustc rejects too, and blames the parser for its own error. Rebuild it rather than bisecting by hand.
+Reaching the last few meant minimising, and the minimiser's oracle is the load-bearing part. `target/shrink.mjs` + `target/shrink.sh` (throwaway, not committed) does greedy line-range removal over delimiter-balanced ranges; delimiter balance is not Rust validity, and neither is `rustfmt`, which recovers from `match x { y }` where rustc rejects it. Without a faithful oracle the minimiser shrinks to input rustc refuses and blames the parser for its own error — twice, here, before the oracle became rustc's own parse errors, which are the ones with no error code (`error:`, not `error[E0425]:` — that is name resolution complaining about types the fragment no longer declares).
+
+What the whole set cost, against `e925ee58bf` with the same grammar on both
+arms and each row normalised by the ANTLR4 control in the same run:
+
+| row                      | ratio | note                                     |
+| ------------------------ | ----- | ---------------------------------------- |
+| `benchmark-sqlite-parse` | 1.03x | the generated parser's own runtime, flat |
+| `benchmark-gale-gen`     | 1.25x | generator throughput, a build-time cost  |
+
+The generator row is spread across the correctness work rather than
+concentrated: disabling the decline lowering alone — the largest single
+addition, 88 sites in the Rust parser — recovers about a quarter of it.
 
 ## LL prediction — parked gaps
 

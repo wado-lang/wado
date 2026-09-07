@@ -2408,7 +2408,7 @@ fn scan_group_lenient(alts: &List<Alternative>, ctx: &mut GenContext) -> bool {
 fn scan_group_is_decidable(alts: &List<Alternative>, ctx: &mut GenContext) -> bool {
     for let alt of alts {
         for let e of &alt.elements {
-            if !(peel_repeat_body_label(e) matches { RuleRef(_) | TokenRef(_) | Literal(_) }) {
+            if !peel_repeat_body_label(e) matches { RuleRef(_) | TokenRef(_) | Literal(_) } {
                 return false;
             }
             let mut visiting: List<String> = [];
