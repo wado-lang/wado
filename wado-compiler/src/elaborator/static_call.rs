@@ -33,6 +33,11 @@ pub(super) struct StaticQuery<'a> {
     /// The call's arguments, which is what separates several impls of one trait.
     pub(super) arg_types: &'a [TypeId],
     pub(super) receiver_type: Option<TypeId>,
+    /// The receiver's type arguments, which fill the declaring block's slots.
+    /// A receiver spelled as a bare name has a list without a type to read it
+    /// off — the qualified spelling infers one at the call — so the fact is
+    /// carried rather than re-derived from [`Self::receiver_type`].
+    pub(super) receiver_args: &'a [TypeId],
     /// The trait a qualified spelling names (`Tagged::<V>::tag(5)`). Only its
     /// impls answer: the receiver's own declaration of the name is a different
     /// method, and a case it declares shadows nothing the trait supplies.
@@ -49,6 +54,7 @@ impl<'a> StaticQuery<'a> {
             method_name,
             arg_types: &[],
             receiver_type: None,
+            receiver_args: &[],
             required_trait: None,
         }
     }
@@ -237,6 +243,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             method_name,
             arg_types,
             receiver_type,
+            receiver_args,
             required_trait,
         } = query;
         // One vantage: the key the caller resolved, else the one its reference
@@ -283,9 +290,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             candidates.retain(|c| c.supply.as_ref().is_some_and(|s| s.trait_decl == required));
         }
         let resolved = match self.select_candidate(candidates, arg_types) {
-            Selection::One(candidate) => {
-                self.callee_of_candidate(receiver_name, method_name, &candidate, receiver_type)
-            }
+            Selection::One(candidate) => self.callee_of_candidate(
+                receiver_name,
+                method_name,
+                &candidate,
+                receiver_type,
+                receiver_args,
+            ),
             Selection::Ambiguous(alternatives) => {
                 return StaticLookup::Ambiguous(alternatives);
             }
@@ -330,6 +341,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     receiver_key: Some(&base_key),
                     arg_types,
                     receiver_type,
+                    receiver_args,
                     required_trait,
                     ..StaticQuery::of(&base_name, method_name)
                 })
@@ -397,6 +409,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         method_name: &str,
         candidate: &Candidate,
         receiver_type: Option<TypeId>,
+        receiver_args: &[TypeId],
     ) -> Option<StaticLookup> {
         let defs = self.tysys.resolutions.defs();
         let module = match &candidate.supply {
@@ -439,7 +452,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 )
                 .map(|callee| StaticLookup::Found(Box::new(callee)))
             }
-            _ => self.callee_of_declaration(candidate.method_id, method_ref, receiver_type),
+            _ => self.callee_of_declaration(
+                candidate.method_id,
+                method_ref,
+                receiver_type,
+                receiver_args,
+            ),
         }
     }
 
@@ -489,21 +507,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// rather than left to ICE there, and the caller stops.
     pub(super) fn static_trait_ref(
         &mut self,
-        receiver_name: &str,
-        method_name: &str,
-        receiver_key: Option<&ImplTargetKey>,
-        arg_types: &[TypeId],
-        required_trait: Option<DefId>,
-        receiver_type: Option<TypeId>,
+        query: StaticQuery<'_>,
         span: Span,
     ) -> Result<StaticTraitRef, Reported> {
-        let lookup = self.resolve_static_callee(StaticQuery {
-            receiver_key,
-            arg_types,
-            receiver_type,
-            required_trait,
-            ..StaticQuery::of(receiver_name, method_name)
-        });
+        let (receiver_name, method_name) = (query.receiver_name, query.method_name);
+        let (receiver_key, arg_types) = (query.receiver_key, query.arg_types);
+        let lookup = self.resolve_static_callee(query);
         let return_type = lookup.return_type();
         let selected = lookup
             .found()
@@ -848,11 +857,31 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// The resolution for a declaration already picked: its signature, read at
     /// the receiver.
+    /// The receiver's type arguments: the ones a call carries, else the ones
+    /// its type holds. `None` where it brings neither.
+    fn receiver_declaring_args(
+        &self,
+        receiver_type: Option<TypeId>,
+        receiver_args: &[TypeId],
+    ) -> Option<Vec<TypeId>> {
+        if !receiver_args.is_empty() {
+            return Some(receiver_args.to_vec());
+        }
+        let args = receiver_type.and_then(|ty| {
+            self.tysys
+                .type_table
+                .borrow()
+                .nominal_type_args(self.tysys.get_base_type(ty))
+        })?;
+        (!args.is_empty()).then_some(args)
+    }
+
     fn callee_of_declaration(
         &mut self,
         def: DefId,
         method_ref: StaticMethodRef,
         receiver_type: Option<TypeId>,
+        receiver_args: &[TypeId],
     ) -> Option<StaticLookup> {
         // `None` falls through to the next rung rather than ending the walk: a
         // declaration the signature table does not answer for is one this rung
@@ -871,13 +900,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Binding slot zero to the receiver here made `Stream::<u8>::new()`
         // return a `StreamWritable<Stream<u8>>`.
         if sig.declaring_slot_count > 0
-            && let Some(args) = receiver_type.and_then(|ty| {
-                self.tysys
-                    .type_table
-                    .borrow()
-                    .nominal_type_args(self.tysys.get_base_type(ty))
-            })
-            && !args.is_empty()
+            && let Some(args) = self.receiver_declaring_args(receiver_type, receiver_args)
         {
             let declaring = sig
                 .declaring_impl

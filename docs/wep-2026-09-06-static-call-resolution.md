@@ -238,6 +238,12 @@ solve. Filling the declaring slots a second time from the spelled turbofish is
 two answers for one call, and it is why no rung could be given the receiver's
 type until this was one answer.
 
+The arguments are the fact, not the type that holds them. A receiver spelled as
+a bare name has a list and no type to read it off: `Counter::make()` infers the
+list at the call, and `Counter<T>` resolved from the name would answer with its
+own parameters. So the query carries the arguments, and derives them from the
+receiver type only where the call brings none.
+
 ### Every parameter a block declares is a slot of that block
 
 `bind_declared_target_params` numbers a block's slots by the position each takes
@@ -383,17 +389,3 @@ they instantiate what the rules picked rather than picking it.
   decision — which slot of the turbofish is `Self` — not a missing mechanism.
   The call is reported as that, naming the bound that writes it meanwhile
   (`fn f<T: Take<A>>() { T::take() }`), rather than as an unknown function.
-- `resolve_static_method_call_from_qualified` resolves without the receiver's
-  type, so a declaration whose slots the receiver fills comes back as the
-  declaration wrote them. Nothing reads that return type today — the site
-  substitutes its own arguments after — but a rung that needs the receiver
-  would find none there.
-
-  It is not a missing argument. This spelling's receiver arguments are
-  _inferred at the call_ by `infer_static_call_type_args`, which reads the
-  parameter types the resolution produces; passing the receiver in would mean
-  running the inference before the resolution it depends on. The bare name's
-  own arguments are not a substitute — that is what the inference exists to
-  improve on, so binding the slots to them first makes the inferred ones a
-  no-op. Closing it means deciding which of the two the slots take, and that is
-  the ordering this WEP's context describes rather than an instance of it.

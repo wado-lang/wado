@@ -2252,12 +2252,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let receiver_key =
             self.impl_target_of(target_type_id, &crate::name::DeclName::new(&struct_name));
         let Ok(resolution) = self.static_trait_ref(
-            &struct_name,
-            &static_call.method,
-            Some(&receiver_key),
-            &args,
-            required_trait,
-            Some(target_type_id),
+            StaticQuery {
+                receiver_key: Some(&receiver_key),
+                arg_types: &args,
+                receiver_type: Some(target_type_id),
+                required_trait,
+                ..StaticQuery::of(&struct_name, &static_call.method)
+            },
             static_call.span,
         ) else {
             return TypeTable::ERROR;
@@ -3417,17 +3418,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 &crate::name::DeclName::new(&actual_struct_name),
             )
         });
-        // The receiver a newtype dispatches to. Its arguments are the ones
-        // `impl_type_args` already falls back to above, so the resolution
-        // filling the declaring slots from it says what this site would say.
+        // The receiver a newtype dispatches to, and the arguments this site
+        // resolves it with — inferred at the call, since the receiver is
+        // spelled as a bare name. `impl_type_args` is what the site substitutes
+        // with afterwards, so the resolution reading them says the same thing.
         let receiver_type = newtype_dispatch.as_ref().map(|(_, base, _)| *base);
         let Ok(resolution) = self.static_trait_ref(
-            &actual_struct_name,
-            method_name,
-            receiver_key.as_ref(),
-            args,
-            None,
-            receiver_type,
+            StaticQuery {
+                receiver_key: receiver_key.as_ref(),
+                arg_types: args,
+                receiver_type,
+                receiver_args: impl_type_args,
+                ..StaticQuery::of(&actual_struct_name, method_name)
+            },
             span,
         ) else {
             return TypeTable::ERROR;
