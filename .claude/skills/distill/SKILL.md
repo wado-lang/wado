@@ -67,6 +67,22 @@ serves that.
 - Cutting narration and redundancy is one way to get there. It is not the point.
   A passage that came out shorter and harder to follow has failed.
 
+## Sweep by shape
+
+A copy does not share a name, so grepping the name finds nothing. `falls_through`
+has sat beside `block_falls_through` and beside a bare `matches!` over the same
+three statement kinds. `block_yield` has sat beside forty lines that spell it
+out.
+
+For every predicate or helper the branch adds or moves, grep the tree for what
+its body looks like rather than what it is called. Two or three tokens carry
+further than a signature: `ExprKind::LabeledBlock` near `stmts.last()` turned up
+five hand-rolled readings of one rule.
+
+Finish the sweep in the same pass. Fixing the sites a reviewer named and calling
+it a class fix leaves the rest standing, and the next review returns them one at
+a time.
+
 ## Cycle
 
 Three passes over that scope; surviving one is no exemption. Stop when a pass
