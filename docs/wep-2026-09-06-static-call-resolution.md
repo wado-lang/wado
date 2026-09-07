@@ -98,15 +98,21 @@ parameter the impls differ on, and had no answer at all for a body its block
 inherited. Each was a rule the other rungs already had. Adding a rung is adding
 a candidate producer, which cannot miss a rule because it applies none.
 
+The receiver's own declarations are candidates too — its inherent impl, the
+statics a `resource` declares, and one it inherits along that chain — carrying
+the origin `Own`. Their precedence was the order three early returns happened to
+sit in; it is a rule the pass applies now.
+
 The rules run in this order, and the order is the design:
 
-1. An inherent declaration shadows the inherited candidates of its own kind.
+1. The receiver's own declaration shadows the inherited candidates of its kind.
 2. A receiver-less declaration answers before a receiver-taking one, so
    `Type::method(x)` is a static's call before it is a UFCS receiver.
 3. Where several traits supply the name, the spelling names none of them, and
    that is reported.
-4. The argument picks among what is left.
-5. A written body outranks an inherited one among what the argument admits.
+4. The arguments pick among what is left.
+5. The earlier origin outranks: the receiver's own, then a written body, then an
+   inherited one — among what the arguments admit.
 
 What remains is one declaration, or several of one trait that no argument
 separated — the overload.
@@ -115,6 +121,11 @@ Steps 4 and 5 are in that order because a written body the argument rejects is
 not an answer: `impl Conv<i32> for M {}` beside `impl Conv<String> for M { fn
 make(…) }` answers `M::make(5)` from the inherited default, though a block wrote
 a body for the other argument.
+
+An own candidate is exempt from step 4. The arguments choose among _impls_, and
+a declaration the receiver makes itself has none to be chosen against — reading
+them there drops it on a mismatch, where the call site has an argument type
+error to report against the one declaration the spelling names.
 
 ### A rule kept in structure has to be restated as data
 
@@ -270,14 +281,6 @@ walk rungs of their own, and that is the open roadmap item above.
 
 ## Known gaps
 
-- Only the trait rungs are candidates. The receiver's own declarations — its
-  inherent impl, its resource statics, that resource's chain — still answer from
-  an ordered sequence of early returns ahead of the rule pass, so the precedence
-  among those three is their order in the source and nowhere else. Nothing among
-  them competes for one call today, which is why the order is invisible; a
-  fourth such rung would be the same class of defect the rule pass exists to
-  prevent. Closing it means producing candidates for them too, with an origin
-  that outranks every trait's.
 - The trait-qualified spelling does not reach past a shadowing case.
   `Tagged::<V>::tag(5)` resolves now — the turbofish supplies the `Self` an
   instance method's receiver argument would pin — but it reads as `V::tag(5)`
