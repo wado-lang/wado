@@ -117,6 +117,16 @@ The generator row is spread across the correctness work rather than
 concentrated: disabling the decline lowering alone — the largest single
 addition, 88 sites in the Rust parser — recovers about a quarter of it.
 
+## Gale accepts `\\[` in a char set where ANTLR4 rejects it
+
+`~[\\[\\r\\n]` compiles under Gale and fails under the jar with
+`invalid escape sequence \\[`. A `[` inside a set needs no escape, so the
+portable spelling is `~[[\\r\\n]` and the two agree on the meaning — but
+Gale accepting the other form is what let a grammar in this repository reach the
+oracle scripts in a shape they cannot run. Being a superset is allowed where the
+meaning is unique, which it is here; being a _silent_ superset is what cost the
+comparison.
+
 ## `x += (a*)` panics instead of emitting
 
 A list label over a _block_ holding a repeat lowers to
