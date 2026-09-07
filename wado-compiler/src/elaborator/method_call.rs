@@ -16,7 +16,7 @@ use super::method_lookup::MethodInferenceInput;
 use super::reflect::ReflectDispatch;
 use super::sem::types::{CalleeParams, StaticMethodDispatch};
 use super::sig::{MethodSig, Param};
-use super::static_call::StaticLookup;
+use super::static_call::{Selector, StaticLookup};
 use super::types::{FunctionContext, MethodInfo, MethodOwner, TypeError};
 
 /// A static call named the way [symbol notation] writes it — the receiver's
@@ -2856,8 +2856,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// The static method declared under this name, `None` when several impls
-    /// declare it and the index has nothing to choose between them. A conversion
-    /// that must choose goes through [`Self::conversion_preselect`].
+    /// declare it and the index has nothing to choose between them. A call that
+    /// must choose goes through [`Self::preselect_static_arg`].
     fn unique_static_method_sig(
         &self,
         static_key: &crate::elaborator::trait_env::ImplTargetKey,
@@ -3015,8 +3015,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         target_hint: Option<&ImplTargetKey>,
     ) -> bool {
         let target = self.static_receiver_key(struct_name, target_hint);
-        self.static_method_entries(&target, method_name)
-            .any(super::trait_env::ImplMethodEntry::is_inherent)
+        self.inherent_shadows(&target, method_name, false)
     }
 
     /// The argument preselect over a receiver's impls: `Selected` and
@@ -3064,9 +3063,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// declaration rather than off the trait reference: a conversion trait's
     /// source type is also its trait argument, but no other trait's is.
     ///
-    /// It walks the impls directly rather than sharing
-    /// [`Self::locate_static_method_impl`]'s early-return traversal, because
-    /// its consumers need the full candidate list.
+    /// It walks the impls directly rather than reading the resolution, because
+    /// its consumers need every candidate and the resolution keeps one.
     pub(super) fn static_arg_survey(
         &self,
         struct_name: &str,
@@ -3087,24 +3085,25 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if sig.self_kind != ast::SelfKind::None {
                 continue;
             }
-            let Some(&source) = sig.decl.param_types.first() else {
-                continue;
-            };
             let trait_name = || {
                 header
                     .trait_name
                     .clone()
                     .expect("trait_impls_for_receiver yields trait impls alone")
             };
-            // A parameter the block fills is a blanket: it accepts a family
-            // rather than a type, the blanket resolver is what answers such a
-            // call, and it is never an unmatched alternative worth listing.
-            // The selection's question, asked the same way — the two answering
-            // differently selects a blanket the diagnostic calls unsupported.
-            if self.param_filled_by_block(header, sig, source) {
-                survey.blanket_trait.get_or_insert_with(trait_name);
-                continue;
-            }
+            // The selection's own question, asked through the selection's own
+            // answer: a blanket accepts a family rather than a type, so the
+            // blanket resolver answers such a call and it is never an unmatched
+            // alternative worth listing. Asking it a second way here is what
+            // let the two disagree.
+            let source = match self.written_selector(header, sig) {
+                Selector::Absent => continue,
+                Selector::Blanket => {
+                    survey.blanket_trait.get_or_insert_with(trait_name);
+                    continue;
+                }
+                Selector::Type(source) => source,
+            };
             let table = self.tysys.type_table.borrow();
             // The parameter as the impl's own frame resolved it, so a private
             // or aliased name means what the impl wrote.

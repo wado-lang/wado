@@ -2350,10 +2350,15 @@ A trait method's type parameter default belongs to the trait, exactly as its val
 ```wado
 pub trait Boxed {
     fn boxed<T: Named = Tag>(&self) -> String;   // `Tag` is private to this module
+    fn made<T: Named = Tag>() -> String;
 }
 
 impl Boxed for M {
     fn boxed<T: Named>(&self) -> String {        // no default here
+        return T::name();
+    }
+
+    fn made<T: Named>() -> String {
         return T::name();
     }
 }
@@ -2361,6 +2366,7 @@ impl Boxed for M {
 m.boxed();            // → m.boxed::<Tag>()
 m.boxed::<Local>();   // spelled, so `Local`
 M::made();            // the static spelling reads the same declaration
+M::boxed(&m);         // and so does the receiver-taking one
 ```
 
 Rust rejects a type parameter default on every function, method and `impl` (rust-lang#36887), allowing them only on type and trait declarations. Wado accepts them wherever a parameter list is written.

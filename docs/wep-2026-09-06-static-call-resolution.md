@@ -103,7 +103,8 @@ The rules run in this order, and the order is the design:
 1. An inherent declaration shadows the inherited candidates of its own kind.
 2. A receiver-less declaration answers before a receiver-taking one, so
    `Type::method(x)` is a static's call before it is a UFCS receiver.
-3. Several traits leave the spelling naming none, and that is reported.
+3. Where several traits supply the name, the spelling names none of them, and
+   that is reported.
 4. The argument picks among what is left.
 5. A written body outranks an inherited one among what the argument admits.
 
@@ -117,16 +118,16 @@ a body for the other argument.
 
 ### A rule kept in structure has to be restated as data
 
-Choosing which lookup to call _was_ the rule. `has_inherent_static_method`
-existing as its own function was the shadowing rule; `impl_method_entries`'
-ordering was the qualifier that shadowing holds only within a kind;
-`locate_static_method_impl` returning the impl's module while `TraitSig` holds
-the trait's was how a call got the right one of the two. None of that survives
-the merge on its own, so the resolution states each:
+Choosing which lookup to call _was_ the rule. Which of the sixteen a site called
+was the shadowing rule; `impl_method_entries`' ordering was the qualifier that
+shadowing holds only within a kind; `locate_static_method_impl` returning the
+impl's module while `TraitSig` holds the trait's was how a call got the right one
+of the two. None of that survives the merge on its own.
 
-- An inherent declaration shadows an inherited one, and only of the same kind: a
-  receiver-less declaration beside an instance one is no alternative, since
-  different argument lists reach them.
+Shadowing is now `inherent_shadows`, which both the dot-syntax walk and the
+resolution ask, so neither can hold a version of its own. The rest the
+resolution states:
+
 - A `variant` case, an `enum` case and a `flags` member shadow an inherited
   static of the same name, by that same rule: they are written on the type,
   and the static is only borrowed. This matches Rust, where `V::A(5)` is the
@@ -194,7 +195,7 @@ own first parameter is checked against argument one. Reading argument zero for
 both kinds compares a receiver against the parameter two impls differ on, which
 separates nothing and admits nothing.
 
-### An inherited body is read in the trait's frame, filled
+### An inherited body is read in the trait's own frame
 
 The trait's frame numbers `Self` as slot 0 and the trait's own parameters after
 it, so a block reads a default body back by supplying its target and then its
@@ -202,8 +203,8 @@ trait arguments. Supplying the target alone leaves the rest open: every argument
 reaches every block, `M::tag("x")` and `M::tag(5)` select whichever block came
 first, and the mangled name then points at the other one's body.
 
-This is why an inherited candidate's parameter is what the block's trait
-arguments make of it, not what the trait declared.
+So an inherited candidate's parameter is the one the block's trait arguments
+produce, not the one the trait declared.
 
 ### One call, one resolution
 

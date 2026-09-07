@@ -1,7 +1,8 @@
 //! One trait implemented twice, one block writing the body and one leaving the
-//! trait's default. The default consults no argument, so answering it per impl
-//! let the first block seen win over the one the argument names: `M::make("x")`
-//! ran the `Conv<i32>` default and returned 9.
+//! trait's default. The argument picks first and the written body breaks the
+//! tie only among what the argument admits, so the block that inherits still
+//! answers for its own: answering the default per impl instead let the first
+//! block seen win, and `M::make("x")` ran the `Conv<i32>` default.
 
 trait Conv<T> {
     fn make(v: T) -> i32 {

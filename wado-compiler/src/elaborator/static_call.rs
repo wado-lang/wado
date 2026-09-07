@@ -1,6 +1,5 @@
-//! The one walk behind a `Type::method(...)` spelling: whether it names a
-//! static, which declaration, and that declaration's parameters, return type
-//! and slots, all from a single resolution.
+//! The one resolution behind every `Type::method(...)` spelling: what it names,
+//! and that declaration's parameters, return type and slots.
 //! See `docs/wep-2026-09-06-static-call-resolution.md`.
 
 use crate::ast;
@@ -14,6 +13,7 @@ use crate::token::Span;
 use super::Elaborator;
 use super::callee::StaticMethodRef;
 use super::sem::types::CalleeParams;
+use super::sig::MethodSig;
 use super::trait_env::{ImplHeader, ImplTargetKey};
 
 /// What one `Type::method(...)` spelling names.
@@ -88,7 +88,7 @@ enum Selection {
 }
 
 /// What the call's first argument is checked against.
-enum Selector {
+pub(super) enum Selector {
     /// The declaration has no parameter there, so every argument reaches it.
     Absent,
     /// Only the argument can fill this parameter — a blanket. Its
@@ -112,6 +112,14 @@ struct Candidate {
     kind: CandidateKind,
     origin: CandidateOrigin,
     selector: Selector,
+}
+
+/// Narrow to the candidates the rule prefers, where any of them qualifies.
+/// A rule that no candidate satisfies decides nothing and leaves the field.
+fn prefer(candidates: &mut Vec<Candidate>, preferred: impl Fn(&Candidate) -> bool) {
+    if candidates.iter().any(&preferred) {
+        candidates.retain(&preferred);
+    }
 }
 
 impl StaticLookup {
@@ -176,64 +184,27 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             None => self.impl_target_at(site, receiver_name),
         };
 
-        // The receiver's own declaration, which shadows every inherited one as
-        // dot syntax does — but only of the same kind: a receiver-less
-        // declaration beside an instance one is no alternative, since different
-        // argument lists reach them. A trait impl's declaration falls to the
-        // selection below, which names the trait its call is mangled with, and
-        // several of one kind are an overload only an argument separates.
-        let inherent = {
-            let entries: Vec<(DefId, bool, bool)> = self
-                .impl_method_entries(&key, method_name)
-                .map(|entry| (entry.method_id, entry.has_self, entry.is_inherent()))
-                .collect();
-            let first = entries.first().copied();
-            let same_kind = first.map_or(0, |(_, has_self, _)| {
-                entries
-                    .iter()
-                    .filter(|(_, kind, _)| *kind == has_self)
-                    .count()
-            });
-            first
-                .filter(|&(_, _, inherent)| inherent && same_kind == 1)
-                .map(|(def, _, _)| def)
-        };
-        if let Some(def) = inherent
-            && let Some(resolved) =
+        // The receiver's own declarations, which shadow every inherited one as
+        // dot syntax does. In the order they shadow, each falling through where
+        // it cannot resolve: its inherent declaration, its resource statics,
+        // then that resource's chain — the index holds only a resource's own
+        // methods, so one it inherits is reached by walking it.
+        let own = [
+            self.unshadowed_inherent(&key, method_name),
+            self.resource_static_declaration(&key, method_name),
+            match &key {
+                ImplTargetKey::Decl(def) => self
+                    .resource_instance_method(*def, method_name)
+                    .map(|(_, sig)| sig.def),
+                _ => None,
+            },
+        ];
+        for def in own.into_iter().flatten() {
+            if let Some(resolved) =
                 self.callee_of_own_declaration(receiver_name, method_name, def, receiver_type)
-        {
-            return resolved;
-        }
-
-        // A resource declares its statics like any other declaration.
-        let resource_static = self
-            .tysys
-            .trait_env
-            .resource_static(&key, method_name)
-            .map(|(name, _, decl, _)| (name.clone(), *decl))
-            .and_then(|(name, decl)| {
-                Some(self.tysys.signatures.resource_method_sig(decl, &name)?.def)
-            });
-        if let Some(def) = resource_static
-            && let Some(resolved) =
-                self.callee_of_own_declaration(receiver_name, method_name, def, receiver_type)
-        {
-            return resolved;
-        }
-
-        // The index holds only the declaring resource's own methods, so one it
-        // inherits is reached by walking the chain.
-        let inherited = match &key {
-            ImplTargetKey::Decl(def) => self
-                .resource_instance_method(*def, method_name)
-                .map(|(_, sig)| sig.def),
-            _ => None,
-        };
-        if let Some(def) = inherited
-            && let Some(resolved) =
-                self.callee_of_own_declaration(receiver_name, method_name, def, receiver_type)
-        {
-            return resolved;
+            {
+                return resolved;
+            }
         }
 
         // A case or member the receiver declares is written on the type, and
@@ -249,17 +220,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // reach.
         let candidates =
             self.trait_candidates(receiver_name, method_name, receiver_key, receiver_type);
-        // What shadows a candidate is looked up where the candidate was found.
-        // Keyed any other way the check answers for a different receiver, and
-        // hides a declaration it never saw or admits one it should have hidden.
+        // Keyed where the candidates were found. Keyed any other way the check
+        // answers for a different receiver, hiding a declaration it never saw
+        // or admitting one it should have hidden.
         let shadow_key = self.static_receiver_key(receiver_name, receiver_key);
-        let shadowed = |want_self: bool| {
-            self.impl_method_entries(&shadow_key, method_name)
-                .any(|entry| entry.is_inherent() && entry.has_self == want_self)
-        };
-        let through_traits = match self.select_candidate(candidates, arg_hints, |kind| match kind {
-            CandidateKind::Static => shadowed(false),
-            CandidateKind::Instance => shadowed(true),
+        let through_traits = match self.select_candidate(candidates, arg_hints, |kind| {
+            self.inherent_shadows(&shadow_key, method_name, kind == CandidateKind::Instance)
         }) {
             Selection::One(candidate) => {
                 self.callee_of_candidate(receiver_name, method_name, &candidate, receiver_type)
@@ -308,9 +274,24 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// The trait half of [`Self::resolve_static_callee`]: a block on the
-    /// receiver that declares the method, one that inherits the trait's default
-    /// body, or the auto-derived `Default`.
+    /// The receiver's own declaration of the name, where it is the only one of
+    /// its kind. Several are an overload no argument has separated yet, and a
+    /// trait impl's falls to the selection, which names the trait its call is
+    /// mangled with.
+    fn unshadowed_inherent(&self, key: &ImplTargetKey, method_name: &str) -> Option<DefId> {
+        let mut entries = self.impl_method_entries(key, method_name);
+        let first = entries.next()?;
+        let only_of_kind = !entries.any(|other| other.has_self == first.has_self);
+        (first.is_inherent() && only_of_kind).then_some(first.method_id)
+    }
+
+    /// The static a `resource` declares, which it makes like any other
+    /// declaration.
+    fn resource_static_declaration(&self, key: &ImplTargetKey, method_name: &str) -> Option<DefId> {
+        let (name, _, decl, _) = self.tysys.trait_env.resource_static(key, method_name)?;
+        Some(self.tysys.signatures.resource_method_sig(*decl, name)?.def)
+    }
+
     /// The resolution for the declaration the rules picked. The block's module
     /// either way: the body is emitted for the block, so that is what the call
     /// names, whether the block wrote it or inherited it.
@@ -401,12 +382,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// The rules, applied once to every candidate whatever rung produced it.
-    ///
-    /// Order is the design: shadowing and kind narrow to the declarations the
-    /// spelling reaches at all, the ambiguity is reported over those because no
-    /// argument separates traits, and only then does the argument pick — before
-    /// a written body outranks an inherited one, since a written body the
-    /// argument rejects is not an answer.
+    /// Their order is the design, not an implementation detail.
     fn select_candidate(
         &self,
         mut candidates: Vec<Candidate>,
@@ -417,32 +393,26 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // receiver-less declaration beside an instance one is no alternative,
         // since different argument lists reach them.
         candidates.retain(|c| !shadowed(c.kind));
-        // Where the call writes the argument this declaration checks first: a
-        // receiver-taking one reached as `Type::method(&recv, …)` has the
-        // receiver at argument zero, so its own parameter is argument one.
-        let hint_for = |kind| match kind {
-            CandidateKind::Static => arg_hints.first(),
-            CandidateKind::Instance => arg_hints.get(1),
-        };
         // A receiver-less declaration answers before a receiver-taking one, so
         // `Type::method(x)` is a static's call before it is a UFCS receiver.
-        if candidates.iter().any(|c| c.kind == CandidateKind::Static) {
-            candidates.retain(|c| c.kind == CandidateKind::Static);
-        }
+        prefer(&mut candidates, |c| c.kind == CandidateKind::Static);
         if let Some(alternatives) = self.ambiguous_alternatives(&candidates) {
             return Selection::Ambiguous(alternatives);
         }
         // The argument picks among the declarations, reading the parameter the
-        // impl declares rather than the trait it names.
-        candidates
-            .retain(|c| self.selector_admits(&c.selector, hint_for(c.kind).map(String::as_str)));
-        // What the argument admits, a written body outranks an inherited one of.
-        if candidates
-            .iter()
-            .any(|c| c.origin == CandidateOrigin::Written)
-        {
-            candidates.retain(|c| c.origin == CandidateOrigin::Written);
-        }
+        // impl declares rather than the trait it names. Which argument follows
+        // from the kind: a receiver-taking declaration has the receiver at
+        // argument zero, so its own parameter is checked against argument one.
+        candidates.retain(|c| {
+            let hint = match c.kind {
+                CandidateKind::Static => arg_hints.first(),
+                CandidateKind::Instance => arg_hints.get(1),
+            };
+            self.selector_admits(&c.selector, hint.map(String::as_str))
+        });
+        // Among what the argument admits, a written body outranks an inherited
+        // one.
+        prefer(&mut candidates, |c| c.origin == CandidateOrigin::Written);
         match candidates.len() {
             0 => Selection::None,
             1 => Selection::One(Box::new(candidates.remove(0))),
@@ -560,17 +530,24 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .signatures
             .method_sig(method_id)
             .expect("the decl pass records every impl-declared method's signature");
-        let selector = match sig.decl.param_types.get(sig.first_value_param()) {
-            None => Selector::Absent,
-            Some(&param) if self.param_filled_by_block(header, sig, param) => Selector::Blanket,
-            Some(&param) => Selector::Type(param),
-        };
+        let selector = self.written_selector(header, sig);
         build(
             method_id,
             CandidateKind::of(sig.self_kind),
             CandidateOrigin::Written,
             selector,
         )
+    }
+
+    /// What the argument is checked against for a body the block wrote: the
+    /// declaration's first parameter past any receiver, unless only the
+    /// argument can fill it.
+    pub(super) fn written_selector(&self, header: &ImplHeader, sig: &MethodSig) -> Selector {
+        match sig.decl.param_types.get(sig.first_value_param()) {
+            None => Selector::Absent,
+            Some(&param) if self.param_filled_by_block(header, sig, param) => Selector::Blanket,
+            Some(&param) => Selector::Type(param),
+        }
     }
 
     /// The candidate for the trait's default body, where the block wrote none.

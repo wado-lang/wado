@@ -36,3 +36,9 @@ test "a spelled turbofish still wins" {
     assert m.boxed::<Local>() == "local";
     assert M::made::<Local>() == "local";
 }
+
+test "the receiver-taking spelling reads the same declaration" {
+    let m = M {};
+    assert M::boxed(&m) == "tag";
+    assert M::boxed::<Local>(&m) == "local";
+}

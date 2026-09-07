@@ -31,7 +31,7 @@ site:
   `IndexValue<i32>`, `IndexValue<RangeExclusive<i32>>` and
   `IndexValue<RangeInclusive<i32>>` at once.
 - `Type::from(x)` / `try_from` filter `From<T>` / `TryFrom<T>` impls by the
-  argument (`conversion_preselect`, `locate_static_method_impl`).
+  argument (`static_arg_preselect`, `select_candidate`).
 
 Both bake the winning trait's spelling into the mangled method name
 (`Type^Trait::method`), which is also how monomorphization discriminates

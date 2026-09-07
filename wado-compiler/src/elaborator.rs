@@ -694,6 +694,26 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             .filter(|e| !e.has_self)
     }
 
+    /// Whether the receiver's own declaration of this name and kind shadows a
+    /// trait impl's. Stated once here because every walk reaching both kinds
+    /// has to apply it, and one that reimplements it applies its own.
+    pub(crate) fn inherent_shadows(
+        &self,
+        receiver: &trait_env::ImplTargetKey,
+        method_name: &str,
+        has_self: bool,
+    ) -> bool {
+        self.tysys
+            .trait_env
+            .impl_method_index
+            .get(receiver)
+            .is_some_and(|bucket| {
+                bucket
+                    .iter()
+                    .any(|e| e.name == method_name && e.has_self == has_self && e.is_inherent())
+            })
+    }
+
     /// Every declaration of `method_name` an impl block on `receiver` makes,
     /// receiver-less first. The one walk behind every qualified lookup.
     ///
@@ -712,12 +732,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             .get(receiver)
             .map_or(&[], Vec::as_slice);
         let named = move |entry: &&trait_env::ImplMethodEntry| entry.name == method_name;
-        let inherent_of_kind = |has_self: bool| {
-            bucket
-                .iter()
-                .any(|e| e.name == method_name && e.has_self == has_self && e.is_inherent())
-        };
-        let shadowed = [inherent_of_kind(false), inherent_of_kind(true)];
+        let shadowed = [
+            self.inherent_shadows(receiver, method_name, false),
+            self.inherent_shadows(receiver, method_name, true),
+        ];
         let survives = move |entry: &&trait_env::ImplMethodEntry| {
             entry.is_inherent() || !shadowed[usize::from(entry.has_self)]
         };

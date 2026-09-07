@@ -4,11 +4,9 @@
 // the impl) were invisible to `Type::method` even though generic dispatch
 // `T::method()` already found them.
 //
-// The fix extends `locate_static_method_impl`, `is_static_method`, and
-// `lookup_static_method_return_type` to fall back to
-// `find_trait_decl_methods` when the impl block does not override the
-// method. This mirrors the path that generic dispatch already uses via
-// the by-name method scan.
+// A block that overrides nothing now supplies the trait's default as a
+// candidate of its own, so `Type::method` reaches it by the same resolution
+// generic dispatch uses.
 
 use { println, Stdout } from "core:cli";
 
