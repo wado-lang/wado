@@ -1,0 +1,54 @@
+//! A non-greedy loop the rule's own recursion has to stop, behind a fragment.
+//!
+//! `STR : 'r' STR_BODY` over
+//! `fragment STR_BODY : '#' STR_BODY '#' | '"' .*? '"'`. The `.*?` must end at
+//! the `"` the enclosing `#` follows, which is a different `"` at each depth,
+//! so no single static stopping rule answers for all of them.
+//!
+//! `RustLexer.g4` has this shape as `RAW_STRING_LITERAL`, where it cost every
+//! `r#"..."#` holding a quote — and Rust's test sources are full of them.
+
+use g from "./grammars/lexer_recursive_ng_fragment.g4"
+    with {
+        generator: { module: "../src/generator.wado", output_dir: "./generated/cst_lexer_recursive_ng_fragment" },
+    };
+use { TK_EOF } from "./grammars/lexer_recursive_ng_fragment.g4";
+
+fn kinds(input: &String) -> List<String> {
+    let tokens = g::tokenize(input);
+    let mut out: List<String> = [];
+    for let mut i = 0; i < tokens.len(); i += 1 {
+        out.push(g::token_kind_name(tokens.kinds[i]));
+    }
+    return out;
+}
+
+fn assert_kinds(input: &String, expected: &List<String>) {
+    let actual = kinds(input);
+    assert actual == *expected, `\ninput:    ${*input}\nexpected: ${*expected}\nactual:   ${actual}`;
+}
+
+test "a raw string with no hashes is one token" {
+    assert_kinds(&"r\"abc\"", &["STR", "Eof"]);
+}
+
+// The hit case: the inner quotes are content, and the loop must run past them
+// to the `"` that the closing `#` follows.
+test "a quoted hash-delimited raw string is one token" {
+    assert_kinds(&"r#\"a \"b\" c\"#", &["STR", "Eof"]);
+}
+
+test "two hashes nest the same way" {
+    assert_kinds(&"r##\"a \"# b\"##", &["STR", "Eof"]);
+}
+
+// The rejection case: the loop stops at the FIRST `"` its own depth closes on,
+// not the last one in the input. A policy that simply ran the `.*?` to the
+// final `"#` would take these two as one token.
+test "two raw strings in a row stay two tokens" {
+    assert_kinds(&"r#\"a\"# r#\"b\"#", &["STR", "STR", "Eof"]);
+}
+
+test "a raw string still ends before ordinary text" {
+    assert_kinds(&"r#\"a\"# rest", &["STR", "ID", "Eof"]);
+}

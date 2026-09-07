@@ -72,10 +72,13 @@ fn rule_needs_latn(grammar: &Grammar, rule: &LexerRule) -> bool {
         && lexer_rule_is_atn_class(rule, &grammar.lexer_rules, resolve_ci(&grammar.options, &rule.options));
 }
 
-/// A lexer rule is ATN-class when a non-greedy repeat *directly in its body*
-/// has an inner element that transitively references the rule itself — the
-/// nested-recursion case static lexing cannot decide. Plain non-greedy
-/// (`.*? '*/'`) and non-recursive rule refs stay on the static path.
+/// A lexer rule is ATN-class when a non-greedy repeat and the recursion that
+/// decides where it stops meet — the case static lexing cannot decide, because
+/// the loop's stopping point is a different position at each depth. Two shapes
+/// reach it: the repeat's own body recurses (`scan_recursive_ng`, nested
+/// comments), or the rule calls a rule where the two are siblings
+/// (`calls_recursive_ng_rule`, a raw string). Plain non-greedy (`.*? '*/'`) and
+/// non-recursive rule refs stay on the static path.
 ///
 /// Deliberately narrow (cf. the documented static-prediction edges in
 /// AGENTS.md, "Failed Approaches" — broadening a trigger past today's
@@ -84,18 +87,86 @@ fn rule_needs_latn(grammar: &Grammar, rule: &LexerRule) -> bool {
 ///   is not routed here; no corpus grammar needs it, and the runtime VM is
 ///   greedy/non-greedy agnostic, so the trigger can be widened with a
 ///   fixture if one appears.
-/// - The repeat must sit in the rule's own body, not behind a `RuleRef`
-///   into another rule (a fragment-decomposed `'/*' FRAG '*/'` where FRAG
-///   holds the `(CMT|.)+?`). The simulator inlines referenced rules, so
-///   handling this means flagging the owning token rule as the entry; left
-///   for when a grammar needs it.
 /// - A greedy repeat whose body arms can both match at a position and reach
 ///   different lengths (`'"' (~["] | '\\' ['"])* '"'`). No static policy
 ///   decides it; see AGENTS.md, "Failed approaches".
 pub fn lexer_rule_is_atn_class(rule: &LexerRule, all_rules: &List<LexerRule>, ci: bool) -> bool {
     let mut visiting: List<String> = [rule.name];
+    let mut reach_visited: List<String> = [rule.name];
     return scan_recursive_ng(&rule.name, &rule.body, all_rules)
+        || calls_recursive_ng_rule(&rule.body, all_rules, &mut reach_visited)
         || scan_undecidable_arms(&rule.body, all_rules, ci, &mut visiting);
+}
+
+/// A rule that CALLS a recursive rule holding a non-greedy repeat. The loop's
+/// min-match ends where the recursion says it does, which is a different
+/// position at each depth: `'#' BODY '#' | '"' .*? '"'` must stop the `.*?` at
+/// the `"` its own `#` follows, and the static path picks the first one.
+///
+/// This is `scan_recursive_ng` one call out. That one asks for the recursion
+/// *inside* the non-greedy repeat (nested comments); here they are siblings,
+/// and the rule that owns the match holds neither — `RAW_STRING_LITERAL` is
+/// `'r' RAW_STRING_CONTENT` and nothing else. A fragment cannot be an entry,
+/// so the caller is what routes.
+fn calls_recursive_ng_rule(
+    alts: &List<LexerAlternative>,
+    all_rules: &List<LexerRule>,
+    visited: &mut List<String>,
+) -> bool {
+    for let alt of alts {
+        for let elem of &alt.elements {
+            if elem_calls_recursive_ng_rule(elem, all_rules, visited) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+fn elem_calls_recursive_ng_rule(elem: &LexerElement, all_rules: &List<LexerRule>, visited: &mut List<String>) -> bool {
+    if let RuleRef(rn) = *elem {
+        for let v of visited {
+            if *v == rn {
+                return false;
+            }
+        }
+        visited.push(rn);
+        let Some(target) = find_lexer_rule(all_rules, &rn) else {
+            return false;
+        };
+        let mut self_visited: List<String> = [];
+        if refs_rule_in_alts(&rn, &target.body, all_rules, &mut self_visited) && alts_have_non_greedy(&target.body) {
+            return true;
+        }
+        return calls_recursive_ng_rule(&target.body, all_rules, visited);
+    }
+    return match *elem {
+        Group(alts) => calls_recursive_ng_rule(&alts, all_rules, visited),
+        Repeat(rep) => elem_calls_recursive_ng_rule(&rep.element, all_rules, visited),
+        Not(n) => elem_calls_recursive_ng_rule(&n.element, all_rules, visited),
+        _ => false,
+    };
+}
+
+/// A non-greedy repeat anywhere in `alts`, at any depth of grouping.
+fn alts_have_non_greedy(alts: &List<LexerAlternative>) -> bool {
+    for let alt of alts {
+        for let elem of &alt.elements {
+            if elem_has_non_greedy(elem) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+fn elem_has_non_greedy(elem: &LexerElement) -> bool {
+    return match *elem {
+        Repeat(rep) => rep.non_greedy || elem_has_non_greedy(&rep.element),
+        Group(alts) => alts_have_non_greedy(&alts),
+        Not(n) => elem_has_non_greedy(&n.element),
+        _ => false,
+    };
 }
 
 /// A greedy repeat directly in `alts` whose body is an alternation the static
