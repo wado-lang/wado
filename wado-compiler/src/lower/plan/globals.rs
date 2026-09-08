@@ -38,8 +38,8 @@ fn is_constant_initializer(expr: &TirExpr, type_table: &TypeTable) -> bool {
         | TirExprKind::FloatLiteral { .. }
         | TirExprKind::BoolLiteral(_)
         | TirExprKind::CharLiteral(_)
-        | TirExprKind::Null
         | TirExprKind::Unit => true,
+        TirExprKind::Null => null_is_ref_null(expr.type_id, type_table),
         TirExprKind::Cast { expr: inner, .. } => is_constant_initializer(inner, type_table),
         TirExprKind::Unary { op, expr: inner } => {
             // Negation of literals is constant
@@ -53,6 +53,17 @@ fn is_constant_initializer(expr: &TirExpr, type_table: &TypeTable) -> bool {
         }
         _ => false,
     }
+}
+
+/// Whether `null` at this type lowers to a null reference, so a global slot can
+/// hold it as a constant.
+///
+/// Not at an `Option`: every `None` is a `struct.new` carrying the discriminant
+/// (`translate_variant_construct`), so it is a value the initialization function
+/// has to build. A slot initialized to a bare null instead traps on the first
+/// read that asks which case it is.
+fn null_is_ref_null(type_id: TypeId, type_table: &TypeTable) -> bool {
+    type_table.as_option(type_id).is_none()
 }
 
 /// An integer whose Wado width matches the Wasm operand it lowers to, so
