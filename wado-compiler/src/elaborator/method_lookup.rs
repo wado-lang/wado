@@ -1772,43 +1772,39 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
 
-        // For blanket impls where impl_ty is a free type parameter
+        // For blanket impls where impl_ty is a free type parameter, at the slot
+        // the impl gave it. That is 0 only when the receiver is the first
+        // parameter written: `impl<A, T: Holder<Item = A>> Trait for T` puts it
+        // at 1, and binding it at 0 leaves the target itself unsubstituted.
+        // Finding the slot is what asks whether there is one — an effect or
+        // `fn`-bound parameter holds none, and binding such a name to slot 0
+        // would claim another parameter's.
         if let Some(ref name) = blanket_name
             && !scope.annotate_ctx.trait_ctx.type_params.contains_key(name)
-            && scope.tysys.is_impl_target_param(&header.type_params, name)
+            && let Some(slot) = header
+                .type_params
+                .iter()
+                .filter(|p| p.is_real_type_param())
+                .position(|p| &p.name == name)
         {
-            if let Some(recv_id) = receiver_type_id {
-                // At the slot the impl gave it, which is 0 only when the
-                // receiver is the first parameter written. `impl<A, T:
-                // Holder<Item = A>> Trait for T` puts it at 1, and binding it
-                // at 0 leaves the target itself unsubstituted.
-                let slot = header
-                    .type_params
-                    .iter()
-                    .filter(|p| p.is_real_type_param())
-                    .position(|p| &p.name == name)
-                    .unwrap_or(0) as u32;
-                Self::bind_type_param(
-                    &mut scope,
-                    super::scope::param_decl(&header.type_params, name),
-                    name,
-                    slot,
-                    recv_id,
-                );
-            } else {
-                let type_id = scope
+            let slot = slot as u32;
+            // With no receiver type to fill the slot, the parameter at it stands
+            // for itself.
+            let bound = match receiver_type_id {
+                Some(recv_id) => recv_id,
+                None => scope
                     .tysys
                     .type_table
                     .borrow_mut()
-                    .make_type_param(name.clone(), 0);
-                Self::bind_type_param(
-                    &mut scope,
-                    super::scope::param_decl(&header.type_params, name),
-                    name,
-                    0,
-                    type_id,
-                );
-            }
+                    .make_type_param(name.clone(), slot),
+            };
+            Self::bind_type_param(
+                &mut scope,
+                super::scope::param_decl(&header.type_params, name),
+                name,
+                slot,
+                bound,
+            );
         }
 
         // The receiver's type arguments, aligned to the impl's slots per its
