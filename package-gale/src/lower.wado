@@ -106,6 +106,7 @@ use {
     ScanRuleCallElement,
     ScanExcludedElement,
     ScanRepeatElement,
+    IterationDuties,
     ScanGroupElement,
     ScanOptionalLookaheadElement,
     Op,
@@ -2572,32 +2573,16 @@ fn rebind_scan_repeat_caller_follow(
             &scan_repeat_body_second(&alt_elements[index], ctx),
             &compute_caller_follow_second(alt_elements, index + 1, ctx),
         );
-        // The scan asks the same two questions the parse side does, through the
-        // same helpers: an answer only one of them gets is a length the
-        // tournament commits to and the parse refuses.
-        let loop_first = admits_kinds(&re.inner_admits);
-        let mut reserve_scan: List<ScanElement> = [];
-        if let Some(scan) = lower_reserve_scan(re.non_greedy, re.kind, &loop_first, alt_elements, index, ctx) {
-            reserve_scan = scan;
-        }
-        let mut decline_stranded = false;
-        let mut decline_cont_first: List<String> = [];
-        let mut decline_scan: List<ScanElement> = [];
-        let mut decline_viable: List<String> = [];
-        if let Some(hit) = lower_decline_scan(
+        let duties = lower_iteration_duties(
             re.non_greedy,
             re.kind,
-            &loop_first,
+            &admits_kinds(&re.inner_admits),
             alt_elements,
             index,
             ctx,
             reaches_rule_tail,
-        ) {
-            decline_stranded = true;
-            decline_scan = hit.0;
-            decline_cont_first = hit.1;
-            decline_viable = ctx.rule_follow_for_probe(rule_name);
-        }
+            rule_name,
+        );
         return ScanElement::Repeat(ScanRepeatElement {
             kind: re.kind,
             body: re.body,
@@ -2610,11 +2595,7 @@ fn rebind_scan_repeat_caller_follow(
             static_exit_undecided,
             probe_viable,
             body_scannable: re.body_scannable,
-            reserve_scan,
-            decline_stranded,
-            decline_cont_first,
-            decline_scan,
-            decline_viable,
+            duties,
         });
     }
     return se;
@@ -4500,34 +4481,16 @@ fn patch_repeat_op_caller_follow(
         &rep_op.body_second_position_first,
         &caller_follow_second,
     );
-    let loop_first = admits_kinds(&rep_op.body_admits);
-    let mut reserve_scan: List<ScanElement> = [];
-    if let Some(scan) = lower_reserve_scan(rep_op.non_greedy, rep_op.kind, &loop_first, alt_elements, index, ctx) {
-        reserve_scan = scan;
-    }
-    let mut decline_stranded = false;
-    let mut decline_cont_first: List<String> = [];
-    let mut decline_scan: List<ScanElement> = [];
-    let mut decline_viable: List<String> = [];
-    if let Some(hit) = lower_decline_scan(
+    let duties = lower_iteration_duties(
         rep_op.non_greedy,
         rep_op.kind,
-        &loop_first,
+        &admits_kinds(&rep_op.body_admits),
         alt_elements,
         index,
         ctx,
         reaches_rule_tail,
-    ) {
-        decline_stranded = true;
-        decline_scan = hit.0;
-        decline_cont_first = hit.1;
-        decline_viable = ctx.rule_follow_for_probe(rule_name);
-        // No `mark_rule_reads_follow`: this guard asks the rule's classical
-        // FOLLOW, which is a superset of anything a caller's mask admits, so the
-        // runtime mask would decide nothing here. Marking it would thread a
-        // `follow` parameter through every caller of every rule that carries a
-        // loop like this — 6000 lines of SQLite's parser, for no answer.
-    }
+        rule_name,
+    );
     return RepeatOp {
         ..*rep_op,
         caller_follow_first,
@@ -4536,12 +4499,42 @@ fn patch_repeat_op_caller_follow(
         continuation_scannable,
         static_exit_undecided,
         probe_viable,
-        reserve_scan,
-        decline_stranded,
-        decline_cont_first,
-        decline_scan,
-        decline_viable,
+        duties,
     };
+}
+
+/// Everything a loop's iteration owes, in one value.
+///
+/// The loop arrives as its three deciding properties rather than as an op, so
+/// the parse's `RepeatOp` and the scan's `ScanRepeatElement` build their duties
+/// from the same body. Two calls with the same arguments cannot disagree, which
+/// is the invariant the mirrored stamps could only assert.
+fn lower_iteration_duties(
+    non_greedy: bool,
+    kind: RepeatKind,
+    loop_first: &List<String>,
+    alt_elements: &List<Element>,
+    index: i32,
+    ctx: &mut GenContext,
+    reaches_rule_tail: bool,
+    rule_name: &String,
+) -> IterationDuties {
+    let mut duties = IterationDuties {};
+    if let Some(scan) = lower_reserve_scan(non_greedy, kind, loop_first, alt_elements, index, ctx) {
+        duties.reserve_scan = scan;
+    }
+    // No `mark_rule_reads_follow` for the decline: it asks the rule's classical
+    // FOLLOW, a superset of anything a caller's mask admits, so the runtime mask
+    // would decide nothing. Marking it would thread a `follow` parameter through
+    // every caller of every rule carrying such a loop — 6000 lines of SQLite's
+    // parser, for no answer.
+    if let Some(hit) = lower_decline_scan(non_greedy, kind, loop_first, alt_elements, index, ctx, reaches_rule_tail) {
+        duties.decline_stranded = true;
+        duties.decline_scan = hit.0;
+        duties.decline_cont_first = hit.1;
+        duties.decline_viable = ctx.rule_follow_for_probe(rule_name);
+    }
+    return duties;
 }
 
 /// The mandatory suffix a loop must leave to its own alternative, as scan
@@ -4554,11 +4547,6 @@ fn patch_repeat_op_caller_follow(
 /// without it; a suffix whose head no iteration admits can never be eaten; and
 /// an unscannable one would be reserved on a prefix, which proves nothing about
 /// the whole.
-///
-/// The loop arrives as its three deciding properties rather than as an op, so
-/// the parse's `RepeatOp` and the scan's `ScanRepeatElement` ask through the
-/// same body — the two must admit the same loops or the tournament measures
-/// what the parse will not consume.
 fn lower_reserve_scan(
     non_greedy: bool,
     kind: RepeatKind,

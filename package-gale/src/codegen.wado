@@ -194,6 +194,7 @@ pub fn install_action_context(grammar: &mut Grammar, ctx: &mut GenContext) -> [M
 /// enclosing rule's FOLLOW onto its op, so the fixed point has to be complete
 /// by then. It reads only the surface rules.
 pub fn lower_for_analysis(grammar: &Grammar, lit_tokens: &List<LitToken>, ctx: &mut GenContext) -> LoweredGrammar {
+    assert ctx.action_context_installed(), "lower_for_analysis: call install_action_context first — lowering asks emit_actions, and a context without it lowers a different AltClass";
     ctx.precompute_scannability();
     install_rule_follow(grammar, ctx);
     return lower(grammar, lit_tokens, ctx);

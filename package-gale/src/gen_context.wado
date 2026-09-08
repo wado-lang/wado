@@ -208,6 +208,11 @@ pub struct GenContext {
     /// currently emit (`language = Wado`). Actionless / other-language
     /// grammars stay byte-identical.
     emit_actions: bool,
+    /// Whether `install_action_context` has run. Lowering asks `emit_actions`,
+    /// which reads `false` both for a grammar without actions and for a context
+    /// nobody installed one on — so the flag alone cannot tell a consumer that
+    /// skipped the step from one that had nothing to do.
+    action_context_installed: bool,
     /// The grammar's action language (`options { language = X }`), so the
     /// action / predicate splice sites route to the right translator front
     /// end (identity for Wado, java2wado for Java). Set once at codegen entry.
@@ -312,6 +317,7 @@ impl GenContext {
             trace: false,
             fragment_entries: [],
             emit_actions: false,
+            action_context_installed: false,
             action_language: ActionLanguage::Wado,
             grammar_name: "",
             action_members: MemberNames {},
@@ -654,6 +660,15 @@ impl GenContext {
     /// `gen_alt_elements` (the interleaved action bodies).
     pub fn set_emit_actions(&mut self, on: bool) {
         self.emit_actions = on;
+        self.action_context_installed = true;
+    }
+
+    /// Whether the action context is in place, which `lower_for_analysis`
+    /// asserts. A consumer that assembles the prologue itself and stops one
+    /// step short lowers a different `AltClass` and reports a parser nobody
+    /// builds.
+    pub fn action_context_installed(&self) -> bool {
+        return self.action_context_installed;
     }
 
     /// Whether retained actions should be executed rather than discarded.

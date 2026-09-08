@@ -234,7 +234,9 @@ fn reject_element_writes(e: &Element, rejected: &mut List<String>) {
         Repeat(r) => reject_element_writes(&r.element, rejected),
         Label(l) => reject_element_writes(&l.element, rejected),
         Not(n) => reject_element_writes(&n.element, rejected),
-        _ => {
+        // Named rather than left to a `_`, so an `Element` variant that can hold
+        // an action does not silently keep its field simulable.
+        RuleRef(_) | TokenRef(_) | Literal(_) | Wildcard(_) => {
         },
     }
 }

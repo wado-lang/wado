@@ -9,6 +9,7 @@ use {
     Alternative,
     Element,
     RepeatElement,
+    RepeatKind,
     GroupElement,
     AltAction,
     ActionSource,
@@ -115,6 +116,7 @@ use {
     ScanRepeatElement,
     ScanGroupElement,
     ScanOptionalLookaheadElement,
+    IterationDuties,
     rule_alt_body,
     rule_alt_scan_body,
 } from "./gir.wado";
@@ -2177,7 +2179,10 @@ fn gen_scan_op_repeat(w: &mut CodeWriter, re: &ScanRepeatElement, ctx: &mut GenC
 /// One scanned iteration: take the token the guard already proved, or scan the
 /// body and rewind where it fails. A loop also leaves where it cannot advance.
 fn gen_scan_iteration(w: &mut CodeWriter, re: &ScanRepeatElement, admits: &Admits, ctx: &mut GenContext, looping: bool) {
-    if repeat_body_implied_by_guard(&re.body, admits) && scan_iteration_owes_nothing_else(re) {
+    // `duties.is_empty()`, never the fields it holds: skipping a duty here is
+    // what let `A* A`'s scan eat both tokens and score -1 for input the parse
+    // accepts, and the next duty added would repeat it.
+    if repeat_body_implied_by_guard(&re.body, admits) && re.duties.is_empty() {
         w.line(&"pos += 1;");
         return;
     }
@@ -2190,33 +2195,42 @@ fn gen_scan_iteration(w: &mut CodeWriter, re: &ScanRepeatElement, admits: &Admit
     }
     gen_scan_iteration_rewind(w, ctx, /*looping=*/ true);
     w.line(&"if pos == sp { break; }");
-    gen_scan_reserve(w, re, ctx);
-    gen_scan_decline_stranded(w, re, ctx);
+    gen_scan_iteration_duties(w, &re.duties, &admits_kinds(&re.inner_admits), re.kind, ctx);
 }
 
-/// Whether an iteration owes nothing past advancing, so the shortcut above may
-/// take it. A reserve and a decline are per-iteration obligations the parse side
-/// applies whatever the body's shape, and skipping them here is what let
-/// `A* A`'s scan eat both tokens and score -1 for input the parse accepts.
-fn scan_iteration_owes_nothing_else(re: &ScanRepeatElement) -> bool {
-    return re.reserve_scan.is_empty() && !re.decline_stranded;
+/// The scan's twin of `gen_iteration_duties`: the one place a scanned iteration
+/// discharges what it owes, so the two sides refuse the same iterations.
+fn gen_scan_iteration_duties(
+    w: &mut CodeWriter,
+    duties: &IterationDuties,
+    loop_first: &List<String>,
+    kind: RepeatKind,
+    ctx: &mut GenContext,
+) {
+    assert duties.is_empty() || kind matches { Star | Plus }, "only a loop can starve a suffix or strand a continuation; lowering stamps duties for no other kind";
+    gen_scan_reserve(w, duties, loop_first, ctx);
+    gen_scan_decline_stranded(w, duties, loop_first, ctx);
 }
 
 /// Scan-side twin of `gen_rep_decline_stranded`: an iteration that would strand
 /// the alternative is not counted, so the tournament measures the length the
 /// parse will actually consume. `sp` is the iteration's start and `pos` its end,
 /// which is the pair the two questions need.
-fn gen_scan_decline_stranded(w: &mut CodeWriter, re: &ScanRepeatElement, ctx: &mut GenContext) {
-    if !re.decline_stranded {
+fn gen_scan_decline_stranded(
+    w: &mut CodeWriter,
+    duties: &IterationDuties,
+    loop_first: &List<String>,
+    ctx: &mut GenContext,
+) {
+    if !duties.decline_stranded {
         return;
     }
-    assert re.kind matches { Star | Plus }, "only a loop can strand its continuation; lowering declines for no other kind";
     let gc = ctx.next_scan_group();
     gen_kind_read(w, &`dk_${gc}`, &"tokens", &"pos");
     let can_continue = join_or(&[
-        kind_check_or_none(&admits_kinds(&re.inner_admits), &`dk_${gc}`, ctx),
-        kind_check_or_none(&re.decline_cont_first, &`dk_${gc}`, ctx),
-        kind_check_or_none(&re.decline_viable, &`dk_${gc}`, ctx),
+        kind_check_or_none(loop_first, &`dk_${gc}`, ctx),
+        kind_check_or_none(&duties.decline_cont_first, &`dk_${gc}`, ctx),
+        kind_check_or_none(&duties.decline_viable, &`dk_${gc}`, ctx),
     ]);
     w.begin(&`if !(${can_continue})`);
     w.line(&`let dc_${gc} = pos;`);
@@ -2224,10 +2238,10 @@ fn gen_scan_decline_stranded(w: &mut CodeWriter, re: &ScanRepeatElement, ctx: &m
     w.line(&`let mut dc_${gc}_exit = false;`);
     w.line(&`pos = sp;`);
     w.begin(&`dcl_${gc}:`);
-    for let se of &re.decline_scan {
+    for let se of &duties.decline_scan {
         gen_scan_op_element(w, se, ctx, &`break dcl_${gc};`);
     }
-    emit_probe_verdict(w, &re.decline_viable, &`dc_${gc}_exit`, ctx);
+    emit_probe_verdict(w, &duties.decline_viable, &`dc_${gc}_exit`, ctx);
     w.end();
     // Both exits leave a walk that did not happen, so both put the gate back:
     // declining rewinds to the iteration's start, and continuing resumes at the
@@ -2250,22 +2264,13 @@ fn gen_scan_decline_stranded(w: &mut CodeWriter, re: &ScanRepeatElement, ctx: &m
 /// iteration that leaves the alternative's mandatory suffix unmatchable is one
 /// the suffix needed for itself, and rewinds. The two must move together, or
 /// the tournament measures a length the parse refuses to consume.
-fn gen_scan_reserve(w: &mut CodeWriter, re: &ScanRepeatElement, ctx: &mut GenContext) {
-    if re.reserve_scan.is_empty() {
+fn gen_scan_reserve(w: &mut CodeWriter, duties: &IterationDuties, loop_first: &List<String>, ctx: &mut GenContext) {
+    if duties.reserve_scan.is_empty() {
         return;
     }
-    assert re.kind matches { Star | Plus }, "only a loop can starve its suffix; lowering reserves for no other kind";
     let gc = ctx.next_scan_group();
-    gen_reserve_probe(w, &re.reserve_scan, &`rs_${gc}`, &`rs_${gc}_ok`, &`rsv_${gc}`, ctx);
-    let starved = reserve_starved_cond(
-        w,
-        &`rs_${gc}_ok`,
-        &`rk_${gc}`,
-        &"tokens",
-        &"pos",
-        &admits_kinds(&re.inner_admits),
-        ctx,
-    );
+    gen_reserve_probe(w, &duties.reserve_scan, &`rs_${gc}`, &`rs_${gc}_ok`, &`rsv_${gc}`, ctx);
+    let starved = reserve_starved_cond(w, &`rs_${gc}_ok`, &`rk_${gc}`, &"tokens", &"pos", loop_first, ctx);
     if ctx.emit_scan_gate() {
         w.begin(&`if ${starved}`);
         w.line(&"pos = sp;");
@@ -4185,16 +4190,40 @@ fn gen_repeat_body(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut GenContext, nc: &
             }
             // Where the body has alternatives its own decision is the guard:
             // finding none ends the loop, and the dispatch commits to a find.
+            let body_admits = admits_kinds(&r.body_admits);
+            // A `+` emitted its mandatory iteration above the loop, so every
+            // iteration reaching here is optional.
+            let refusable = Refusable::Always;
             if let Group(g) = &r.body {
                 if let Some(branches) = op_group_alt_decision(g, ctx) {
                     let [winner, best] = gen_group_decide(w, &branches, &g.scan_group.alts, ctx, nc, false);
                     w.line(&`if ${best} <= p.pos \{ break; \}`);
+                    gen_iteration_duties(
+                        w,
+                        &r.duties,
+                        &body_admits,
+                        &best,
+                        &refusable,
+                        /*reserve_in_guard=*/ false,
+                        ctx,
+                        nc,
+                    );
                     gen_group_body(w, g, ctx, nc, Option::Some(winner));
                     w.end();
                     return;
                 }
             }
-            let scan_pos = gen_rep_scan_guard(w, &r.scan_body, &r.reserve_scan, &admits_kinds(&r.body_admits), ctx, nc);
+            let scan_pos = gen_rep_scan_guard(w, &r.scan_body, &r.duties, &body_admits, ctx, nc);
+            gen_iteration_duties(
+                w,
+                &r.duties,
+                &body_admits,
+                &scan_pos,
+                &refusable,
+                /*reserve_in_guard=*/ true,
+                ctx,
+                nc,
+            );
             w.line(&`if ${scan_pos} < 0 \{ break; \}`);
             gen_op(w, &r.body, ctx, nc);
             w.end();
@@ -6265,15 +6294,20 @@ fn gen_rep_iteration_entry(
         w.begin(&`if !${*plus_flag}`);
     }
     gen_caller_follow_gate(w, rep_op);
-    let scan_pos = gen_rep_scan_guard(
+    let body_admits = admits_kinds(&rep_op.body_admits);
+    let scan_pos = gen_rep_scan_guard(w, &rep_op.scan_body, &rep_op.duties, &body_admits, ctx, name_counts);
+    // `Always`, though a `+` has a flag: the whole guard sits inside
+    // `if !plus_flag`, which already excluded the mandatory iteration.
+    gen_iteration_duties(
         w,
-        &rep_op.scan_body,
-        &rep_op.reserve_scan,
-        &admits_kinds(&rep_op.body_admits),
+        &rep_op.duties,
+        &body_admits,
+        &scan_pos,
+        &Refusable::Always,
+        /*reserve_in_guard=*/ true,
         ctx,
         name_counts,
     );
-    gen_rep_decline_stranded(w, rep_op, &scan_pos, ctx, name_counts);
     gen_rep_break_with_recovery(w, &scan_pos, rep_op, ctx);
     if guarded_only {
         w.end();
@@ -6296,12 +6330,13 @@ fn gen_rep_iteration_entry(
 /// of every top-level list.
 fn gen_rep_decline_stranded(
     w: &mut CodeWriter,
-    rep_op: &RepeatOp,
+    duties: &IterationDuties,
+    body_admits: &List<String>,
     scan_pos: &String,
     ctx: &mut GenContext,
     nc: &mut List<[String, i32]>,
 ) {
-    if !rep_op.decline_stranded {
+    if !duties.decline_stranded {
         return;
     }
     let cont_kind = dedup_name(&"decline_kind", nc);
@@ -6309,57 +6344,94 @@ fn gen_rep_decline_stranded(
     w.begin(&`if ${*scan_pos} >= 0`);
     gen_kind_read(w, &cont_kind, &"p.kinds", scan_pos);
     let can_continue = join_or(&[
-        kind_check_or_none(&admits_kinds(&rep_op.body_admits), &cont_kind, ctx),
-        kind_check_or_none(&rep_op.decline_cont_first, &cont_kind, ctx),
-        kind_check_or_none(&rep_op.decline_viable, &cont_kind, ctx),
+        kind_check_or_none(body_admits, &cont_kind, ctx),
+        kind_check_or_none(&duties.decline_cont_first, &cont_kind, ctx),
+        kind_check_or_none(&duties.decline_viable, &cont_kind, ctx),
     ]);
     w.begin(&`if !(${can_continue})`);
     w.line(&`let mut ${dead_end}: bool = false;`);
-    gen_viability_probe(w, &rep_op.decline_scan, &dead_end, &"decline_scan", ctx, nc, null, &rep_op.decline_viable);
+    gen_viability_probe(w, &duties.decline_scan, &dead_end, &"decline_scan", ctx, nc, null, &duties.decline_viable);
     w.line(&`if ${dead_end} \{ break; \}`);
     w.end();
     w.end();
 }
 
-/// The reserve a decided iteration owes, checked from where that iteration
-/// would end.
+/// Discharge, at a position the entry has committed to, every duty the guard
+/// did not.
 ///
-/// A group body the lookahead decides outright takes its own entry, and that
-/// entry has no scan guard to hang the reserve on — `gen_scan_guard_with_prefix`
-/// builds it into the guard the other path emits. Without this the parse runs
-/// the loop greedily while the scan reserves, which is the same asymmetry a
-/// token body has in the other direction.
-fn gen_rep_decided_reserve(
+/// The one call an entry path makes. A duty added to `IterationDuties` reaches
+/// every path from here, which is what a hand-listed call per path could not
+/// promise — the guarded body loop and the decided group body each ran a
+/// different subset until this existed.
+///
+/// `reserve_in_guard` says the path ran `gen_rep_scan_guard`, which builds the
+/// reserve into the guard's own scan. That is not a placement detail: failing
+/// there fails the guard, which is what lets the repeat-exit probe report where
+/// a starved iteration stopped.
+/// Which iterations an entry may refuse.
+///
+/// A `+`'s first iteration is mandatory and takes what prediction picked. The
+/// two ways an entry knows that differ, and an empty flag name cannot tell them
+/// apart: `gen_repeat_body` emits the mandatory iteration ahead of its loop, so
+/// inside the loop there is no flag at all, while `gen_rep_iteration_entry` has
+/// one and stands inside the `if !flag` that already excludes it.
+variant Refusable {
+    /// Every iteration reaching here may be refused.
+    Always,
+    /// Every iteration but the one the named flag marks.
+    UnlessFirst(String),
+}
+
+fn gen_iteration_duties(
     w: &mut CodeWriter,
-    rep_op: &RepeatOp,
-    best: &String,
-    plus_flag: &String,
+    duties: &IterationDuties,
+    body_admits: &List<String>,
+    at: &String,
+    refusable: &Refusable,
+    reserve_in_guard: bool,
     ctx: &mut GenContext,
     nc: &mut List<[String, i32]>,
 ) {
-    if rep_op.reserve_scan.is_empty() {
+    gen_rep_decline_stranded(w, duties, body_admits, at, ctx, nc);
+    if !reserve_in_guard {
+        gen_rep_reserve_at(w, duties, body_admits, at, refusable, ctx, nc);
+    }
+}
+
+/// The reserve, checked from a position the entry has already committed to.
+fn gen_rep_reserve_at(
+    w: &mut CodeWriter,
+    duties: &IterationDuties,
+    body_admits: &List<String>,
+    at: &String,
+    refusable: &Refusable,
+    ctx: &mut GenContext,
+    nc: &mut List<[String, i32]>,
+) {
+    if duties.reserve_scan.is_empty() {
         return;
     }
     let label = dedup_name(&"rep_reserve", nc);
     let ok = dedup_name(&"rep_reserve_ok", nc);
-    // Prediction picked nothing: `best` is no position, and the caller reports
+    // Prediction picked nothing: `at` is no position, and the caller reports
     // that a line below.
-    w.begin(&`if ${*best} >= 0`);
+    w.begin(&`if ${*at} >= 0`);
     w.line(&`let mut ${ok} = false;`);
     w.begin(&`${label}:`);
     gen_scan_gate_seed(w, ctx);
     w.line(&"let tokens = &p.kinds;");
-    w.line(&`let mut pos: i32 = ${*best};`);
-    for let se of &rep_op.reserve_scan {
+    w.line(&`let mut pos: i32 = ${*at};`);
+    for let se of &duties.reserve_scan {
         gen_scan_op_element(w, se, ctx, &`break ${label};`);
     }
     w.line(&`${ok} = true;`);
     w.end();
     let kind = dedup_name(&"rep_reserve_kind", nc);
-    let starved = reserve_starved_cond(w, &ok, &kind, &"p.kinds", best, &admits_kinds(&rep_op.body_admits), ctx);
-    // A `+`'s mandatory first iteration takes what prediction picked, exactly as
-    // the guarded path leaves its whole guard behind `!plus_flag`.
-    let guard = if plus_flag.is_empty() { starved } else { `!${*plus_flag} && (${starved})` };
+    let starved = reserve_starved_cond(w, &ok, &kind, &"p.kinds", at, body_admits, ctx);
+    let guard = match refusable {
+        Always => starved,
+        UnlessFirst(flag) => `!${*flag} && (${starved})`,
+    };
     w.line(&`if ${guard} \{ break; \}`);
     w.end();
 }
@@ -6465,17 +6537,28 @@ fn gen_rep_decided_entry(
     // would test, so a predicate the decision already answered is not asked
     // a second time.
     let [winner, best] = gen_group_decide(w, &decision.branches, &g_op.scan_group.alts, ctx, name_counts, false);
+    let body_admits = admits_kinds(&rep_op.body_admits);
+    // Every iteration may decline, and one that consumed nothing would come
+    // round at the same position forever.
     if plus_flag.is_empty() {
-        // Every iteration may decline, and one that consumed nothing would
-        // come round at the same position forever.
         w.line(&`if ${best} <= p.pos \{ break; \}`);
-        gen_rep_decline_stranded(w, rep_op, &best, ctx, name_counts);
-        gen_rep_decided_reserve(w, rep_op, &best, plus_flag, ctx, name_counts);
+    } else {
+        w.line(&`if !${*plus_flag} && ${best} <= p.pos \{ break; \}`);
+    }
+    let refusable = if plus_flag.is_empty() { Refusable::Always } else { Refusable::UnlessFirst(*plus_flag) };
+    gen_iteration_duties(
+        w,
+        &rep_op.duties,
+        &body_admits,
+        &best,
+        &refusable,
+        /*reserve_in_guard=*/ false,
+        ctx,
+        name_counts,
+    );
+    if plus_flag.is_empty() {
         return winner;
     }
-    w.line(&`if !${*plus_flag} && ${best} <= p.pos \{ break; \}`);
-    gen_rep_decline_stranded(w, rep_op, &best, ctx, name_counts);
-    gen_rep_decided_reserve(w, rep_op, &best, plus_flag, ctx, name_counts);
     // The mandatory first iteration cannot decline: it takes what prediction
     // picked and lets the body report what it cannot match. Only where
     // prediction picked nothing is there an answer to give here.
@@ -6569,11 +6652,12 @@ fn unwrap_optional(elem: &Element) -> &Element with stores[elem] {
 fn gen_rep_scan_guard(
     w: &mut CodeWriter,
     scan_inner: &ScanElement,
-    reserve: &List<ScanElement>,
+    duties: &IterationDuties,
     body_admits: &List<String>,
     ctx: &mut GenContext,
     name_counts: &mut List<[String, i32]>,
 ) -> String {
+    let reserve = &duties.reserve_scan;
     return gen_scan_guard_with_prefix(
         w,
         scan_inner,

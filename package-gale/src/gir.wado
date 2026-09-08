@@ -840,6 +840,50 @@ pub struct ListLabelOp {
     pub dedup_base: String,
 }
 
+/// What a loop's iteration owes before it commits, as one value both sides
+/// carry and every entry path discharges through `gen_iteration_duties`.
+///
+/// Grouped rather than left as loose stamps because each of these has to reach
+/// three places at once — the parse's guarded entry, the parse's decided entry,
+/// and the scan — and a stamp that reaches two of them is a length the
+/// tournament commits to and the parse refuses. Ask `is_empty`, never the
+/// fields: that is what a shortcut has to get right, and it is right here for
+/// any duty added later.
+pub struct IterationDuties {
+    /// The mandatory suffix the loop must leave to its own alternative. A
+    /// greedy iteration whose body starts where the suffix does takes what the
+    /// suffix needs: `(matchArm FATARROW matchArmExpression)* matchArm FATARROW
+    /// expression` eats the only arm of `match x { A => 1, }`. Empty where the
+    /// two heads cannot overlap, so such a loop emits the guard it always did.
+    pub reserve_scan: List<ScanElement> = [],
+    /// Whether an iteration that would strand the loop's *optional*
+    /// continuation declines instead: `stmt+ expr?` over `{ y }.m()` gives the
+    /// loop the `{ y }` and leaves the `.m()` to nobody. The three fields below
+    /// are what that iteration asks, and are meaningless while this is false.
+    pub decline_stranded: bool = false,
+    /// FIRST of what follows the Repeat in its own alternative. With the body's
+    /// own first set and the caller's FOLLOW it answers "can anything continue
+    /// from where this iteration would end".
+    pub decline_cont_first: List<String> = [],
+    /// Scan mirror of that continuation, run from the iteration's *start* to
+    /// ask the other half: is exiting here viable at all? A loop declines only
+    /// when the answer is yes, so an iteration whose alternative has no other
+    /// reading is still taken.
+    pub decline_scan: List<ScanElement> = [],
+    /// The enclosing rule's FOLLOW, conjoined into the exit-viability verdict
+    /// exactly as `probe_viable` is into the non-greedy probe's.
+    pub decline_viable: List<String> = [],
+}
+
+impl IterationDuties {
+    /// Whether an iteration owes nothing past advancing. The only question a
+    /// shortcut may ask: naming the fields instead is what let the scan's
+    /// take-the-token path skip a reserve the parse applies.
+    pub fn is_empty(&self) -> bool {
+        return self.reserve_scan.is_empty() && !self.decline_stranded;
+    }
+}
+
 pub struct RepeatOp {
     pub kind: RepeatKind,
     /// Surface `RepeatElement.non_greedy`. A `??` lowers to
@@ -928,37 +972,13 @@ pub struct RepeatOp {
     /// continuation fits and the caller's FOLLOW is the right question at the
     /// position it ended on. False keeps emit on the static condition.
     pub continuation_scannable: bool = false,
-    /// Scan mirror of the mandatory suffix this loop must leave to its own
-    /// alternative. A greedy iteration whose body starts where the suffix does
-    /// takes what the suffix needs: `(matchArm FATARROW matchArmExpression)*
-    /// matchArm FATARROW expression` eats the only arm of `match x { A => 1, }`
-    /// and leaves the tail none. Built only where the two heads really overlap,
-    /// so a loop that cannot starve its suffix emits the guard it always did.
-    pub reserve_scan: List<ScanElement> = [],
+    /// What each iteration owes before it commits. See `IterationDuties`.
+    pub duties: IterationDuties = IterationDuties {},
     /// `non_greedy_static_undecided` for this Repeat — no lookahead
     /// separates the loop body from the continuation. Stamped rather than
     /// recomputed so the two emit walkers and the scan side cannot answer
     /// it differently.
     pub static_exit_undecided: bool = false,
-    /// A greedy loop whose body and continuation overlap can take an iteration
-    /// that strands its own alternative: `stmt+ expr?` over `{ y }.m()` gives
-    /// the loop the `{ y }` and leaves the `.m()` to nobody. The three fields
-    /// below are what the iteration asks before committing — see
-    /// `gen_rep_decline_stranded`. Off for every other loop, which keeps their
-    /// emit byte-identical.
-    pub decline_stranded: bool = false,
-    /// FIRST of what follows this Repeat in its own alternative. With the
-    /// body's own first set and the caller's FOLLOW it answers "can anything
-    /// continue from where this iteration would end".
-    pub decline_cont_first: List<String> = [],
-    /// Scan mirror of that continuation, run from the iteration's *start* to
-    /// ask the other half: is exiting here viable at all? A loop declines only
-    /// when the answer is yes, so an iteration whose alternative has no other
-    /// reading is still taken.
-    pub decline_scan: List<ScanElement> = [],
-    /// The enclosing rule's FOLLOW, conjoined into the exit-viability verdict
-    /// exactly as `probe_viable` is into the non-greedy probe's.
-    pub decline_viable: List<String> = [],
     /// The enclosing rule's classical FOLLOW, conjoined into the probe's
     /// verdict: its continuation scan ends at the rule's tail, and a token
     /// outside this set cannot continue any caller from there. Empty leaves
@@ -1279,20 +1299,13 @@ pub struct ScanRepeatElement {
     pub continuation_scannable: bool = false,
     pub static_exit_undecided: bool = false,
     pub probe_viable: List<String> = [],
-    /// Mirrors `RepeatOp`'s four `decline_*` stamps. A scan that counted an
-    /// iteration the parse declines measures a length the parse will not
-    /// reproduce, which is what the tournament then commits to.
-    pub decline_stranded: bool = false,
-    pub decline_cont_first: List<String> = [],
-    pub decline_scan: List<ScanElement> = [],
-    pub decline_viable: List<String> = [],
     /// Mirrors `RepeatOp.body_scannable`. The probe entry gate reads it on
     /// both sides, so an unscannable body cannot probe on the scan alone.
     pub body_scannable: bool = false,
-    /// Mirrors `RepeatOp.reserve_scan`. A scan counting an iteration the parse
-    /// reserves makes the longest-match tournament pick an alt the parse then
-    /// refuses.
-    pub reserve_scan: List<ScanElement> = [],
+    /// The same `IterationDuties` value `RepeatOp` carries, from the same
+    /// `lower_iteration_duties` call shape. A scan that counts an iteration the
+    /// parse refuses measures a length the tournament then commits to.
+    pub duties: IterationDuties = IterationDuties {},
 }
 
 pub struct ScanGroupElement {

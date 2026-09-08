@@ -21,8 +21,9 @@ use {
 } from "./ir.wado";
 use { LitToken, collect_literal_tokens } from "./lexer_gen.wado";
 use { lower } from "./lower.wado";
+use { LoweredGrammar } from "./gir.wado";
 use { GenContext } from "./gen_context.wado";
-use { canonicalize_for_analysis, analysis_context, lower_for_analysis } from "./codegen.wado";
+use { canonicalize_for_analysis, analysis_context, install_action_context, lower_for_analysis } from "./codegen.wado";
 use { render_dump, render_atn_dump } from "./dump.wado";
 use { parse } from "./g4/parser.wado";
 
@@ -38,11 +39,19 @@ use { parse } from "./g4/parser.wado";
 fn dump_pipeline(input: &String) -> [String, GenContext] {
     let mut merged = merge_grammars([parse(*input).unwrap()]);
     synthesize_implicit_tokens(&mut merged);
-    let token_kinds = canonicalize_for_analysis(&mut merged);
-    let lit = collect_literal_tokens(&merged.parser_rules);
-    let mut ctx = analysis_context(&merged, &lit, token_kinds);
-    let lowered = lower_for_analysis(&merged, &lit, &mut ctx);
+    let [lowered, mut ctx] = lower_pipeline(&mut merged);
     return [render_dump(&merged, &lowered, &mut ctx), ctx];
+}
+
+/// `cmd_dump`'s prologue, whole. The step this used to leave out —
+/// `install_action_context` — is the one `lower_for_analysis` now asserts,
+/// which is how the omission stopped being invisible.
+fn lower_pipeline(merged: &mut Grammar) -> [LoweredGrammar, GenContext] {
+    let token_kinds = canonicalize_for_analysis(merged);
+    let lit = collect_literal_tokens(&merged.parser_rules);
+    let mut ctx = analysis_context(merged, &lit, token_kinds);
+    let _ = install_action_context(merged, &mut ctx);
+    return [lower_for_analysis(merged, &lit, &mut ctx), ctx];
 }
 
 fn dump_source(input: &String) -> String {
@@ -60,10 +69,7 @@ test "the dump lowers through the emitter's primed context" {
 test "the ATN dump builds off the lowering the dump already has" {
     let mut merged = merge_grammars([parse("grammar G; a : B c ; c : C ; B : 'b' ; C : 'c' ;").unwrap()]);
     synthesize_implicit_tokens(&mut merged);
-    let token_kinds = canonicalize_for_analysis(&mut merged);
-    let lit = collect_literal_tokens(&merged.parser_rules);
-    let mut ctx = analysis_context(&merged, &lit, token_kinds);
-    let lowered = lower_for_analysis(&merged, &lit, &mut ctx);
+    let [lowered, _] = lower_pipeline(&mut merged);
     let report = render_atn_dump(&merged, &lowered);
     assert str_contains(&report, &"rule 0 'a'"), report;
     assert str_contains(&report, &"rule 1 'c'"), report;
