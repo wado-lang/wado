@@ -1,0 +1,37 @@
+//! `Cell::wrap(7)` selects `impl Wrap<i32> for Cell<i32>` without a turbofish:
+//! the arguments choose the impl, and the receiver's own arguments come from
+//! the head that block wrote. A concrete block hosts its function under that
+//! head, so a call naming the bare declaration reached WIR build unresolved and
+//! was reported there as an unimplemented trait.
+
+struct Cell<T> {
+    v: T,
+}
+
+trait Wrap<T> {
+    fn wrap(v: T) -> i32;
+}
+
+impl Wrap<i32> for Cell<i32> {
+    fn wrap(v: i32) -> i32 {
+        return v + 1;
+    }
+}
+
+impl Wrap<bool> for Cell<bool> {
+    fn wrap(v: bool) -> i32 {
+        return 100;
+    }
+}
+
+test "the argument picks the block, and the block names the receiver" {
+    assert Cell::wrap(7) == 8;
+    assert Cell::wrap(true) == 100;
+}
+
+test "a turbofish still names it" {
+    assert Cell::<i32>::wrap(7) == 8;
+}
+
+__DATA__
+{"test": {}}

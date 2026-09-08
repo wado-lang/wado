@@ -1457,7 +1457,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // declarations. Where the resolution answered under another
                     // name it peeled a newtype to its base, and the base owns
                     // the impl the call is mangled under.
-                    let receiver = if method_ref.type_name == type_name {
+                    // A concrete block hosts its function under the head it
+                    // wrote, arguments included, as the two-segment spelling
+                    // names it.
+                    let receiver = if let Some(head) = self.concrete_impl_head_of(Some(&method_ref))
+                    {
+                        head
+                    } else if method_ref.type_name == type_name {
                         self.namespace_member(prefix, type_name).map_or_else(
                             || FqTypeName::shape(&struct_module, type_name),
                             |def| FqTypeName::of_head(self.tysys.resolutions.defs(), def),

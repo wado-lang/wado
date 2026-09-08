@@ -3265,10 +3265,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.import_original_name(&head, impl_module)
     }
 
-    /// The module a *concrete* impl block hosts its function in — its own.
-    /// `None` for a generic block, whose instance is materialised in the
-    /// receiver's module instead, and for a spelling no trait impl answered.
-    fn concrete_impl_module_of(&self, selected: Option<&StaticMethodRef>) -> Option<ModuleSource> {
+    /// The *concrete* block a selection came from — one written for a single
+    /// instantiation, which hosts its own function under its own head. `None`
+    /// for a generic block, whose instance monomorphization materialises in the
+    /// receiver's module and under the receiver's own name, and for a spelling
+    /// no trait impl answered.
+    fn concrete_impl_of(&self, selected: Option<&StaticMethodRef>) -> Option<DefId> {
         let impl_def = self
             .tysys
             .signatures
@@ -3279,7 +3281,37 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .impl_headers
             .get(&impl_def)
             .filter(|header| header.is_concrete())
-            .map(|_| self.tysys.resolutions.defs().module(impl_def).clone())
+            .map(|_| impl_def)
+    }
+
+    /// The module a concrete block hosts its function in — its own.
+    fn concrete_impl_module_of(&self, selected: Option<&StaticMethodRef>) -> Option<ModuleSource> {
+        let impl_def = self.concrete_impl_of(selected)?;
+        Some(self.tysys.resolutions.defs().module(impl_def).clone())
+    }
+
+    /// The head a concrete block wrote, arguments included: `impl … for
+    /// Cell<i32>` hosts its function under `Cell<i32>`, and a call spelling the
+    /// receiver `Cell` has to name that, not the bare declaration. `None` where
+    /// the block's target is not generic, which leaves the head as written.
+    pub(super) fn concrete_impl_head_of(
+        &self,
+        selected: Option<&StaticMethodRef>,
+    ) -> Option<FqTypeName> {
+        let sig = self
+            .tysys
+            .signatures
+            .impl_sig(self.concrete_impl_of(selected)?)?;
+        if sig.target_type_args.is_empty() {
+            return None;
+        }
+        let table = self.tysys.type_table.borrow();
+        let args: Vec<FqTypeName> = sig
+            .target_type_args
+            .iter()
+            .map(|&arg| table.fq_type_name(arg))
+            .collect();
+        Some(sig.target_fq.clone().with_args(args))
     }
 
     /// Whether only the argument can fill this parameter — a blanket, whose
@@ -3502,9 +3534,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             StaticMethodRef::new(module, &actual_struct_name, method_name, None, None)
         });
 
+        // A concrete block hosts its function under the head it wrote:
+        // `impl … for Cell<i32>` emits `Cell<i32>::wrap`, so a call spelling
+        // the receiver `Cell` names that. A generic block's instance is
+        // monomorphized under the receiver's own name, and keeps it.
+        let receiver_fq = self
+            .concrete_impl_head_of(Some(&method_ref))
+            .unwrap_or(actual_struct_fq);
         // Use trait-qualified mangled name if this is a trait method
         let final_mangled_name = if let Some(ref trait_name) = method_ref.trait_name {
-            MethodName::format_local(&actual_struct_fq, Some(trait_name), method_name)
+            MethodName::format_local(&receiver_fq, Some(trait_name), method_name)
         } else {
             actual_mangled_name
         };
@@ -3579,8 +3618,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             name: final_mangled_name,
             monomorph_info,
             method_info: Some({
+                // The same head the name was built from: mono looks the concrete
+                // block's module up by this very spelling.
                 let mut m =
-                    LocalMethodName::new(actual_struct_fq, trait_name_opt, method_name.to_string());
+                    LocalMethodName::new(receiver_fq, trait_name_opt, method_name.to_string());
                 m.cm_name = cm_name;
                 m
             }),
