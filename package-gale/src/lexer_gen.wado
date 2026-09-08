@@ -1483,7 +1483,7 @@ fn gen_lexer_alts(
         let label = `alts_${id}_${i}`;
         w.begin(&`${label}:`);
         w.line(&`pos = alts_saved_${id};`);
-        gen_lexer_alt_seq(w, &alts[i], &plan.arms[i], 0, all_rules, &`break ${label}`, ci, ea, hm, false);
+        gen_lexer_arm_probe(w, &alts[i], &plan.arms[i], all_rules, &`break ${label}`, ci, ea, hm, replay);
         w.line(&`alts_ok_${id} = true;`);
         w.end();
     }
@@ -1516,7 +1516,7 @@ fn gen_lexer_alts_longest(
         let label = `alts_${id}_${i}`;
         w.begin(&`${label}:`);
         w.line(&`pos = alts_saved_${id};`);
-        gen_lexer_alt_seq(w, &alts[i], &plan.arms[i], 0, all_rules, &`break ${label}`, ci, ea, hm, false);
+        gen_lexer_arm_probe(w, &alts[i], &plan.arms[i], all_rules, &`break ${label}`, ci, ea, hm, /*replay=*/ false);
         w.line(&`if pos > alts_best_${id} \{ alts_best_${id} = pos; \}`);
         w.end();
     }
@@ -1553,10 +1553,7 @@ fn gen_lexer_alts_replay(
         let label = `sel_${id}_${i}`;
         w.begin(&`${label}:`);
         w.line(&`pos = sel_saved_${id};`);
-        // The selection has to pick the arm the match picked, so it always
-        // evaluates the predicates the match evaluated — even where the
-        // enclosing replay body does not.
-        gen_lexer_alt_seq(w, &alts[i], &plan.arms[i], 0, all_rules, &`break ${label}`, ci, true, hm, false);
+        gen_lexer_arm_probe(w, &alts[i], &plan.arms[i], all_rules, &`break ${label}`, ci, ea, hm, /*replay=*/ true);
         if longest {
             w.line(&`if pos > sel_best_${id} \{ sel_best_${id} = pos; sel_alt_${id} = ${i}; \}`);
         } else {
@@ -1834,6 +1831,24 @@ fn lexer_elem_fixed_len(elem: &LexerElement, all_rules: &List<LexerRule>) -> Opt
 /// cannot reject the winner's actions after the decision is settled.
 fn probe_ea(replay: bool, ea: bool) -> bool {
     return replay || ea;
+}
+
+/// Match an arm for a selection pass: no actions, and predicates exactly where
+/// the match evaluated them. Every arm-scoring and first-match selection goes
+/// through here, so none can hand the enclosing body's `ea` to a decision and
+/// score an arm the match had ruled out.
+fn gen_lexer_arm_probe(
+    w: &mut CodeWriter,
+    alt: &LexerAlternative,
+    plan: &LexerSeqPlan,
+    all_rules: &List<LexerRule>,
+    fail_action: &String,
+    ci: bool,
+    ea: bool,
+    hm: bool,
+    replay: bool,
+) {
+    gen_lexer_alt_seq(w, alt, plan, 0, all_rules, fail_action, ci, probe_ea(replay, ea), hm, false);
 }
 
 /// The id a probe's locals carry. Only a replay emits a probe, so only a replay
@@ -2892,10 +2907,21 @@ fn gen_lexer_alts_lookahead_aware(
         let label = `la_alt_${id}_${i}`;
         w.begin(&`${label}:`);
         w.line(&`pos = la_saved_${id};`);
-        gen_lexer_alt_seq(w, &alts[i], &arms[i], 0, all_rules, &`break ${label}`, ci, ea, hm, false);
+        gen_lexer_arm_probe(w, &alts[i], &arms[i], all_rules, &`break ${label}`, ci, ea, hm, replay);
         w.line(&`let la_arm_${id}_${i} = pos;`);
         w.line(&`let mut la_tot_${id}_${i}: i32 = -1;`);
-        gen_lexer_suffix_peek(w, alt, plan, from, all_rules, &`la_tot_${id}_${i}`, ci, ea, hm, /*record_end=*/ true);
+        gen_lexer_suffix_peek(
+            w,
+            alt,
+            plan,
+            from,
+            all_rules,
+            &`la_tot_${id}_${i}`,
+            ci,
+            probe_ea(replay, ea),
+            hm,
+            /*record_end=*/ true,
+        );
         // Strict `>` over arms in source order gives ANTLR4's tie-break.
         w.begin(&`if la_tot_${id}_${i} > la_reach_${id}`);
         w.line(&`la_reach_${id} = la_tot_${id}_${i};`);

@@ -1,0 +1,42 @@
+//! The recursive non-greedy shape as one rule, where the recursion is the entry
+//! rule's own.
+//!
+//! `STR : '#' STR '#' | '"' .*? '"'` is `lexer_recursive_ng_fragment.g4`'s
+//! grammar with the fragment folded in. The recursion and the `.*?` are still
+//! siblings and the loop still has to stop at a `"` that is a different one at
+//! each `#` depth, so the rule is ATN-class for the same reason. Reaching it
+//! through a fragment was the only route tested, and a walk seeded with the
+//! entry rule cannot see the recursion when the entry rule *is* the recursion.
+
+use g from "./grammars/lexer_recursive_ng_self.g4"
+    with {
+        generator: { module: "../src/generator.wado", output_dir: "./generated/cst_lexer_recursive_ng_self" },
+    };
+
+fn kinds(input: &String) -> List<String> {
+    let tokens = g::tokenize(input);
+    let mut out: List<String> = [];
+    for let mut i = 0; i < tokens.len(); i += 1 {
+        out.push(g::token_kind_name(tokens.kinds[i]));
+    }
+    return out;
+}
+
+fn assert_kinds(input: &String, expected: &List<String>) {
+    let actual = kinds(input);
+    assert actual == *expected, `\ninput:    ${*input}\nexpected: ${*expected}\nactual:   ${actual}`;
+}
+
+test "an unhashed string is one token" {
+    assert_kinds(&"\"abc\"", &["STR", "Eof"]);
+}
+
+// The hit case: the inner quotes are content, and the loop has to run past them
+// to the `"` that the closing `#` follows.
+test "a quoted hash-delimited string is one token" {
+    assert_kinds(&"#\"a \"b\" c\"#", &["STR", "Eof"]);
+}
+
+test "two hashes nest the same way" {
+    assert_kinds(&"##\"a \"#\" b\"##", &["STR", "Eof"]);
+}

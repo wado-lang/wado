@@ -153,6 +153,16 @@ The K-prefix follow-mask path closes the multi-token tail-greedy gap at the oute
 
 The K-prefix caller-side mask analysis halts at a multi-alternative rule reference because a per-depth union of the alternatives' prefixes would over-yield by matching cross-alternative sequences no real alternative admits. A per-alternative sequence representation could extend the walk safely — useful when a caller's continuation passes through a multi-alternative rule like `expr : literal | name`.
 
+## Wado-language gates
+
+A scan gate works only for a Java-language grammar. Write the same grammar with `language = Wado` and it mis-parses: `nested_gate_tournament.g4` translated body-for-body fails on `{ y = if v { a } ; }` with `expected RB; got "="`, which the Java original parses.
+
+The gate machinery reads Java-shaped action text throughout. A Wado action qualifies its member (`{p.noBrace = 1}`) where a Java one does not (`{noBrace = 1;}`). So `gate_assignment` rejects the write on `is_plain_ident`, no field is simulable, `emit_scan_gate` is false, and the generated parser carries no `SCAN_GATE` at all. The parse still evaluates its predicate, so the two sides disagree exactly as they did before the gate existed.
+
+Fixing it is a naming decision, not a patch. `gate_assignment` snake_cases because java2wado snake_cases Java members into the struct, while a Wado member keeps the name it was written with. The name an action writes therefore maps to the field the scan simulates differently per language, and four places assume it does not: `gate_assignment`, the `@init` / `@after` pair in `runnable_gate_scope`, the `declared.contains` filter in `set_scan_gate_fields`, and `gate_condition_for`, whose `body_needs_no_translator` path returns `pred_<id>(p)` before it reads its `handle` argument.
+
+Consider resolving the name once, at the boundary. `gate_assignment` returns it as written, and `set_scan_gate_fields` resolves it to a declared field, exact match first and snake_case second. That is the only place that knows what the members block declares. Lowering then asks the same resolver instead of re-deriving. Java output stays byte-identical and no new convention is needed.
+
 ## Performance
 
 Runtime performance — the benchmark state, the live profile, the directions that would move the needle, and measured dead-ends (e.g. data-driven scan) — lives in [`perf.md`](./perf.md).

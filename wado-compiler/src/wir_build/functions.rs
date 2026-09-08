@@ -654,17 +654,15 @@ fn register_globals(ctx: &mut WirContext<'_>) {
         }
 
         // A deferred reference slot starts at `ref.null`, so it has to be
-        // nullable. A slot holding a value is not: whether *that* value is a
-        // null is the type's own answer, and `wir_optimize::nullable_ref` gives
-        // it by substituting the type here along with every other use.
+        // nullable. A slot holding a value is not: whether *that* value is a null
+        // is the type's own answer, and `wir_optimize::nullable_ref` gives it by
+        // substituting the type here along with every other use.
         let deferred = global.init.is_deferred();
-        if deferred && is_wir_reference(&wir_type) {
-            match &mut wir_type {
-                WirType::Ref { nullable, .. } | WirType::AbstractRef { nullable, .. } => {
-                    *nullable = true;
-                }
-                _ => {}
-            }
+        if deferred
+            && let WirType::Ref { nullable, .. } | WirType::AbstractRef { nullable, .. } =
+                &mut wir_type
+        {
+            *nullable = true;
         }
 
         let slot = global.init.slot_expr();
@@ -698,11 +696,6 @@ fn register_globals(ctx: &mut WirContext<'_>) {
             },
         });
     }
-}
-
-/// Whether the slot needs a `ref.null` placeholder, and so a narrowing read.
-fn is_wir_reference(ty: &WirType) -> bool {
-    matches!(ty, WirType::Ref { .. } | WirType::AbstractRef { .. })
 }
 
 /// Whether the declared value is `null` itself.

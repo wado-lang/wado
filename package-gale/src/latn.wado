@@ -98,7 +98,11 @@ fn rule_needs_latn(grammar: &Grammar, rule: &LexerRule) -> bool {
 ///   decides it; see AGENTS.md, "Failed approaches".
 pub fn lexer_rule_is_atn_class(rule: &LexerRule, all_rules: &List<LexerRule>, ci: bool) -> bool {
     let mut visiting: List<String> = [rule.name];
-    let mut reach_visited: List<String> = [rule.name];
+    // Not seeded with `rule.name`. Fold the two rules below into one and the
+    // recursion the walk looks for is the entry's own, which a seed answers
+    // `false` at. `elem_calls_recursive_ng_rule` marks a name before walking
+    // into it, so termination never needed the seed.
+    let mut reach_visited: List<String> = [];
     return scan_recursive_ng(&rule.name, &rule.body, all_rules)
         || calls_recursive_ng_rule(&rule.body, all_rules, &mut reach_visited)
         || scan_undecidable_arms(&rule.body, all_rules, ci, &mut visiting);
@@ -129,6 +133,43 @@ fn calls_recursive_ng_rule(
     return false;
 }
 
+/// Whether `rn` recurses in one alternative and holds a non-greedy repeat in
+/// another. There the loop's stopping point is the recursion's answer, and so a
+/// different position at each depth.
+///
+/// Different alternatives, not merely both present. `CMT : '//' .*? '\n' CMT*`
+/// has them in one sequence, where `'\n'` ends the loop whatever the depth, and
+/// the static path lexes it correctly.
+fn recursion_and_non_greedy_are_siblings(
+    rn: &String,
+    alts: &List<LexerAlternative>,
+    all_rules: &List<LexerRule>,
+) -> bool {
+    let mut recursing: List<i32> = [];
+    let mut non_greedy: List<i32> = [];
+    for let mut i = 0; i < alts.len(); i += 1 {
+        let one: List<LexerAlternative> = [alts[i]];
+        let mut self_visited: List<String> = [];
+        // Seeded with the rule, so the recursion being established here is not
+        // itself walked looking for the loop.
+        let mut ng_visiting: List<String> = [*rn];
+        if refs_rule_in_alts(rn, &one, all_rules, &mut self_visited) {
+            recursing.push(i);
+        }
+        if lexer_alts_have_non_greedy(&one, all_rules, &mut ng_visiting) {
+            non_greedy.push(i);
+        }
+    }
+    for let r of &recursing {
+        for let g of &non_greedy {
+            if *r != *g {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
 fn elem_calls_recursive_ng_rule(elem: &LexerElement, all_rules: &List<LexerRule>, visited: &mut List<String>) -> bool {
     if let RuleRef(rn) = *elem {
         for let v of visited {
@@ -140,12 +181,7 @@ fn elem_calls_recursive_ng_rule(elem: &LexerElement, all_rules: &List<LexerRule>
         let Some(target) = find_lexer_rule(all_rules, &rn) else {
             return false;
         };
-        let mut self_visited: List<String> = [];
-        // Seeded with the target so the recursion the first conjunct just
-        // established is not walked again.
-        let mut ng_visiting: List<String> = [rn];
-        if refs_rule_in_alts(&rn, &target.body, all_rules, &mut self_visited)
-            && lexer_alts_have_non_greedy(&target.body, all_rules, &mut ng_visiting) {
+        if recursion_and_non_greedy_are_siblings(&rn, &target.body, all_rules) {
             return true;
         }
         return calls_recursive_ng_rule(&target.body, all_rules, visited);

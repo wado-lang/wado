@@ -19,6 +19,10 @@ pub global SCAN_GATE_TYPE: String = "ScanGate";
 /// `field = <int literal>`, with an optional trailing `;` and any surrounding
 /// whitespace — the whole body, not a prefix of it. Returns the snake_cased
 /// field and the value.
+///
+/// A Wado body qualifies the member with the parser handle (`p.noBrace = 1`)
+/// where a Java one names it bare, so no `language = Wado` grammar has a
+/// simulable gate today — see "Wado-language gates" in `TODO.md`.
 pub fn gate_assignment(text: &String) -> Option<[String, i32]> {
     let stmts = statements(text);
     if stmts.len() != 1 {

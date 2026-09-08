@@ -1,0 +1,37 @@
+//! Arm scoring inside a rule that carries actions, so the match runs on the
+//! replay path.
+//!
+//! A replay body runs with predicates off: re-evaluating a state-dependent one
+//! could reject the winner's actions after the token has already committed. A
+//! selection pass is the opposite. It makes the decision, so it runs the
+//! predicates the match ran. Give it the body's setting and it scores an arm the
+//! match had disabled. The token is still the match's, so only the actions give
+//! it away: the replay runs the arm the token was never built from.
+
+use g from "./grammars/lexer_arm_score_pred_replay.g4"
+    with {
+        generator: { module: "../src/generator.wado", output_dir: "./generated/cst_lexer_arm_score_pred_replay" },
+    };
+
+fn kinds(input: &String) -> List<String> {
+    let tokens = g::tokenize(input);
+    let mut out: List<String> = [];
+    for let mut i = 0; i < tokens.len(); i += 1 {
+        out.push(g::token_kind_name(tokens.kinds[i]));
+    }
+    return out;
+}
+
+fn assert_kinds(input: &String, expected: &List<String>) {
+    let actual = kinds(input);
+    assert actual == *expected, `\ninput:    ${*input}\nexpected: ${*expected}\nactual:   ${actual}`;
+}
+
+// The token is arm 0's either way — `T` is `ab`, and `c` follows it. `MARK`
+// reads `hits`, which says which arm the replay ran: arm 0 sets 1, arm 1 sets
+// 10. Scoring arm 1 without its predicate makes it reach `abc` against arm 0's
+// `ab`, so the replay hands the actions to the arm the match ruled out and the
+// `!` lexes as `BANG`.
+test "the replay scores the arms the match scored" {
+    assert_kinds(&"abc!", &["T", "C", "MARK", "Eof"]);
+}
