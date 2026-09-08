@@ -9,6 +9,8 @@ use {
     GrammarKind,
     GroupElement,
     ParserRule,
+    RuleRefElement,
+    TokenRefElement,
     Visibility,
 } from "./ir.wado";
 use { parse } from "./g4/parser.wado";
@@ -254,6 +256,28 @@ test "scan_gate_fields: the recognised scope pair leaves its field simulable" {
         Option::Some(ActionSource { text: "noStruct = $sv;" }),
     );
     assert scan_gate_fields(&g) == ["no_struct"], `${scan_gate_fields(&g):?}`;
+}
+
+// A left-recursive rule's scan carries `min_prec`, so the scope wrapper cannot
+// be written for it. The field is then unsimulable *everywhere*, not just in
+// that rule: leaving it in the set would have every other scan restoring a ban
+// this one never lifts.
+test "scan_gate_fields: a left-recursive rule's scope disqualifies its field" {
+    let mut g = grammar_with(
+        &"$sv = noStruct; noStruct = 0;",
+        Option::Some(ActionSource { text: "noStruct = $sv;" }),
+    );
+    g.parser_rules[0].alternatives = [
+        Alternative {
+            label: null,
+            options: [],
+            elements: [
+                Element::RuleRef(RuleRefElement::new("scope")),
+                Element::TokenRef(TokenRefElement::new("A")),
+            ],
+        },
+    ];
+    assert scan_gate_fields(&g).is_empty(), `${scan_gate_fields(&g):?}`;
 }
 
 test "scan_gate_fields: an unrunnable rule-level write disqualifies the field" {

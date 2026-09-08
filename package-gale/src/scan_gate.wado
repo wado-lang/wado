@@ -10,6 +10,7 @@
 
 use { Element, Grammar, ParserRule } from "./ir.wado";
 use { to_snake_case } from "./ident.wado";
+use { rule_is_left_recursive } from "./action_translate.wado";
 
 /// The generated global the scan mutates, and its struct type.
 pub global SCAN_GATE_HANDLE: String = "SCAN_GATE";
@@ -100,6 +101,20 @@ pub struct GateScope {
     pub value: i32,
 }
 
+/// The gate scope `rule` opens that a scan can run, or `null`.
+///
+/// A left-recursive rule's scan carries `min_prec`, which the wrapper's fixed
+/// `(tokens, pos, follow)` signature cannot declare, so its scope is one the
+/// scan cannot run. Answered here rather than at the emit that would have
+/// wrapped it: the field is unsimulable everywhere, not only in this rule, and
+/// only the set knows that in time.
+pub fn runnable_gate_scope(rule: &ParserRule) -> Option<GateScope> {
+    if rule_is_left_recursive(rule) {
+        return null;
+    }
+    return gate_scope(rule);
+}
+
 /// The gate scope `rule` opens, or `null`.
 pub fn gate_scope(rule: &ParserRule) -> Option<GateScope> {
     let init = match &rule.init_action {
@@ -180,7 +195,7 @@ pub fn scan_gate_fields(grammar: &Grammar) -> List<String> {
     let mut simulable: List<String> = [];
     let mut rejected: List<String> = [];
     for let rule of &grammar.parser_rules {
-        if gate_scope(rule) matches { None } {
+        if runnable_gate_scope(rule) matches { None } {
             for let text of rule_prequel_bodies(rule) {
                 push_new(&mut rejected, mentioned_names(&text));
             }

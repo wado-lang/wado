@@ -39,7 +39,7 @@ use {
     elements_match,
 } from "./gen_util.wado";
 use { PARSER_HANDLE, DISPATCH_KIND_LOCAL, FOLLOW_PARAM } from "./ident.wado";
-use { GateScope, SCAN_GATE_HANDLE, gate_scope } from "./scan_gate.wado";
+use { GateScope, SCAN_GATE_HANDLE, runnable_gate_scope } from "./scan_gate.wado";
 use { DiagnosticKind, DiagnosticOwner, DiagnosticSite } from "./gir.wado";
 use {
     join_kinds,
@@ -406,21 +406,19 @@ fn gen_scan_function(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule,
     gen_scan_function_named(w, rule, lowered_rule, ctx, &name);
 }
 
-/// The gate scope `rule` opens, or `null` where the scan cannot run it.
+/// The gate scope `rule` opens, or `null` where the scan cannot run it. A field
+/// the scan does not simulate has no `SCAN_GATE` slot to save.
 ///
-/// A field the scan does not simulate has no `SCAN_GATE` slot to save.
-///
-/// A left-recursive rule is refused for a different reason. Its `scan_X` also
-/// carries `min_prec`, and `lr_cont` when a mid operand is gated. That
-/// signature is built where the precedence loop is emitted, so a wrapper
-/// written here would declare a different one and callers passing `min_prec`
-/// would not compile. Refusing says so; supporting it means a second place to
-/// keep in step with the first.
-fn scan_gate_scope(rule: &ParserRule, lowered_rule: &Rule, ctx: &mut GenContext) -> Option<GateScope> {
+/// The left-recursive case is settled before this, in `runnable_gate_scope`:
+/// such a rule's scope is unrunnable everywhere, not only in the wrapper that
+/// would have carried it, so the field is dropped from the set rather than
+/// dropped here. The assert is that `rule_is_left_recursive` really does mirror
+/// lowering's classification, which is the whole claim its doc makes.
+fn scan_gate_scope(rule: &ParserRule, lowered_rule: &Rule, ctx: &GenContext) -> Option<GateScope> {
     if !ctx.emit_scan_gate() {
         return null;
     }
-    let scope = match gate_scope(rule) {
+    let scope = match runnable_gate_scope(rule) {
         Some(s) => if ctx.scan_gate_fields().contains(&s.field) {
             s;
         } else {
@@ -430,16 +428,7 @@ fn scan_gate_scope(rule: &ParserRule, lowered_rule: &Rule, ctx: &mut GenContext)
             return null;
         },
     };
-    if lowered_rule matches { LeftRecursive(_) } {
-        ctx.warn(
-            &DiagnosticOwner { rule: rule.name, site: DiagnosticSite::RuleDispatch },
-            DiagnosticKind::UnsupportedAction,
-            String::from(
-                "a left-recursive rule's gate scope is not simulated in its scan: its `scan_` carries `min_prec`, which this wrapper cannot declare",
-            ),
-        );
-        return null;
-    }
+    assert !lowered_rule matches { LeftRecursive(_) }, "scan_gate_scope: lowering calls this rule left-recursive and the surface predicate does not";
     return Option::Some(scope);
 }
 
