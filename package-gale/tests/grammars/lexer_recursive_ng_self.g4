@@ -7,9 +7,6 @@
 // different one at each `#` depth, exactly as it is there. A walk that starts by
 // marking the entry rule visited never asks whether it recurses into itself, and
 // routes this to the static path where the min-match takes the first `"`.
-//
-// Gale reads the hashed cases differently from the jar today; the driver test
-// carries them as `#[TODO]` and says what the open question is.
 lexer grammar LexerRecursiveNgSelf;
 
 STR
