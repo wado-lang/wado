@@ -1,0 +1,128 @@
+//! A static's own type parameters, and the slots that are the receiver's
+//! rather than the method's. Where the block declares slots of its own the
+//! method's are not numbered from zero, so the receiver's substitution does not
+//! reach them; they are inferred at the call, as instance dispatch infers them.
+//! A slot the receiver mentions is the receiver's to fill, whatever spelling it
+//! is mentioned in, so a block that fills its own slots is no blanket.
+
+trait Codec {
+    fn build<T: Display>(v: T) -> String;
+}
+
+struct Box3<A> {
+    a: A,
+}
+
+struct Plain {}
+
+impl<A> Codec for Box3<A> {
+    fn build<T: Display>(v: T) -> String {
+        return `${v}`;
+    }
+}
+
+// The selection declines a parameter the *block* fills — a blanket, whose
+// unsubstituted spelling must not be mangled — and a method's own slot looks
+// exactly like one once neither resolves. Only the block's written slots say
+// which it is, so a block with none can never be a blanket.
+impl Codec for Plain {
+    fn build<T: Display>(v: T) -> String {
+        return `${v}!`;
+    }
+}
+
+struct Tag {}
+
+trait Named {
+    fn name() -> String;
+}
+
+impl Named for Tag {
+    fn name() -> String {
+        return "tag";
+    }
+}
+
+// A method-level slot the arguments do not pin takes the default its
+// declaration wrote, whether or not the block declares slots of its own.
+trait Made {
+    fn made<U: Named = Tag>() -> String;
+}
+
+impl<T> Made for Box3<T> {
+    fn made<U: Named>() -> String {
+        return U::name();
+    }
+}
+
+impl Made for Plain {
+    fn made<U: Named>() -> String {
+        return U::name();
+    }
+}
+
+// A block slot the receiver mentions is fixed by the receiver, not by the
+// argument, so `impl<T> Make<T> for Wrap<T>` is no blanket to
+// `Wrap::<i32>::make`. Asking only whether the block declares *any* slot reads
+// every such impl as one, and proposes an `impl Make<i32> for Wrap` nobody can
+// write.
+trait Make<T> {
+    fn make(v: T) -> i32;
+}
+
+struct Wrap<T> {
+    v: T,
+}
+
+impl<T> Make<T> for Wrap<T> {
+    fn make(v: T) -> i32 {
+        return 1;
+    }
+}
+
+// The walk that reads the receiver must not stop at a wildcard: a slot named
+// inside a function type — or a namespaced generic, or a type pack — is the
+// receiver's too.
+struct Holder<F> {
+    f: F,
+}
+
+trait Mk<A> {
+    fn mk(v: A) -> i32;
+}
+
+impl<T> Mk<T> for Holder<fn(T) -> i32> {
+    fn mk(v: T) -> i32 {
+        return 1;
+    }
+}
+
+test "the argument solves the method's own slot" {
+    assert Box3::<i32>::build(42) == "42";
+    assert Box3::<i32>::build("x") == "x";
+}
+
+test "and a spelled turbofish still wins" {
+    assert Box3::<i32>::build::<i32>(42) == "42";
+}
+
+test "a concrete block leaves the method's slots numbered from zero" {
+    assert Plain::build(42) == "42!";
+    assert Plain::build(true) == "true!";
+}
+
+test "a non-generic receiver takes the trait's declared type default" {
+    assert Plain::made() == "tag";
+}
+
+test "and a generic receiver takes it too" {
+    assert Box3::<i32>::made() == "tag";
+}
+
+test "the receiver fixes the block's slot" {
+    assert Wrap::<i32>::make(1) == 1;
+}
+
+test "a slot the receiver mentions inside a function type is the receiver's" {
+    assert Holder::mk(7) == 1;
+}

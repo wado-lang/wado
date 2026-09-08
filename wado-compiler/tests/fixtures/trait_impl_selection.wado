@@ -1,0 +1,207 @@
+//! One trait implemented twice on one receiver, in every shape the selection
+//! has to separate: written against inherited, static against instance, and a
+//! second generic trait beside the first. Only the argument list tells the
+//! blocks apart, so the trait segment of the mangled name has to keep the
+//! trait's arguments and the selection has to read past the receiver.
+
+struct A {}
+
+struct B {}
+
+struct M {}
+
+// Two written impls of one generic trait. `from` was never a privileged name:
+// it was the only generic trait anyone had written twice on one receiver, so
+// it was the only one whose argument the selection read.
+trait Enc<T> {
+    fn make(v: T) -> i32;
+}
+
+impl Enc<A> for M {
+    fn make(v: A) -> i32 {
+        return 1;
+    }
+}
+
+impl Enc<B> for M {
+    fn make(v: B) -> i32 {
+        return 2;
+    }
+}
+
+trait Hold<T> {
+    fn hold(v: T) -> i32;
+}
+
+impl Hold<i64> for M {
+    fn hold(v: i64) -> i32 {
+        return 3;
+    }
+}
+
+impl Hold<String> for M {
+    fn hold(v: String) -> i32 {
+        return 4;
+    }
+}
+
+trait Pad<T> {
+    fn pack(v: T, pad: i32 = 7) -> i32;
+}
+
+impl Pad<A> for M {
+    fn pack(v: A, pad: i32) -> i32 {
+        return pad;
+    }
+}
+
+impl Pad<B> for M {
+    fn pack(v: B, pad: i32) -> i32 {
+        return pad + 1;
+    }
+}
+
+// Through `M::conv(&m, x)` the receiver occupies the first argument, so a
+// selection reading argument zero compares the receiver against the parameter
+// the impls differ on and can never separate them.
+trait Conv<T> {
+    fn conv(&self, v: T) -> i32;
+}
+
+impl Conv<i32> for M {
+    fn conv(&self, v: i32) -> i32 {
+        return 1;
+    }
+}
+
+impl Conv<String> for M {
+    fn conv(&self, v: String) -> i32 {
+        return 2;
+    }
+}
+
+// One block writes the body, one leaves the trait's default. The argument picks
+// first and the written body breaks the tie only among what the argument
+// admits, so the block that inherits still answers for its own: answering the
+// default per impl instead let the first block seen win.
+trait Rank<T> {
+    fn rank(v: T) -> i32 {
+        return 9;
+    }
+}
+
+impl Rank<i32> for M {}
+
+impl Rank<String> for M {
+    fn rank(v: String) -> i32 {
+        return 2;
+    }
+}
+
+trait RankGo<T> {
+    fn rank_go(&self, v: T) -> i32 {
+        return 9;
+    }
+}
+
+impl RankGo<i32> for M {}
+
+impl RankGo<String> for M {
+    fn rank_go(&self, v: String) -> i32 {
+        return 2;
+    }
+}
+
+// Both blocks leave the trait's default body. The trait's frame numbers `Self`
+// as slot 0 and its own parameters after it, so reading the default at the
+// receiver alone leaves `T` unsubstituted: the parameter list admitted any
+// argument and codegen received a call to the wrong block's body.
+trait Both<T> {
+    fn both(v: T) -> i32 {
+        return 5;
+    }
+}
+
+impl Both<i32> for M {}
+
+impl Both<String> for M {}
+
+// A receiver-less declaration answers `Type::method(…)` before a
+// receiver-taking one, so the spelling is a static's call before it is a UFCS
+// receiver. Both kinds carry an argument here, which is what a selection
+// reading argument zero for either kind confuses.
+struct S {}
+
+trait Alpha {
+    fn go(v: i32) -> i32;
+}
+
+trait Beta {
+    fn go(&self, v: i32) -> i32;
+}
+
+impl Alpha for S {
+    fn go(v: i32) -> i32 {
+        return 1;
+    }
+}
+
+impl Beta for S {
+    fn go(&self, v: i32) -> i32 {
+        return 2;
+    }
+}
+
+test "the argument reaches the impl that declares it" {
+    assert M::make(A {}) == 1;
+    assert M::make(B {}) == 2;
+}
+
+test "a literal is shaped by the impl its class admits" {
+    assert M::hold(5) == 3;
+    assert M::hold("x") == 4;
+}
+
+test "the selected impl's own defaults are the ones padded" {
+    assert M::pack(A {}) == 7;
+    assert M::pack(B {}) == 8;
+}
+
+test "and the first argument selects however many follow it" {
+    assert M::pack(A {}, 5) == 5;
+    assert M::pack(B {}, 5) == 6;
+}
+
+test "the argument after the receiver picks the impl" {
+    let m = M {};
+    assert M::conv(&m, "x") == 2;
+    assert M::conv(&m, 5) == 1;
+}
+
+test "and dot syntax agrees with it" {
+    let m = M {};
+    assert m.conv("x") == 2;
+    assert m.conv(5) == 1;
+}
+
+test "the written body outranks the inherited default" {
+    assert M::rank("x") == 2;
+    assert M::rank(5) == 9;
+}
+
+test "the written body outranks it for the receiver-taking kind too" {
+    let m = M {};
+    assert M::rank_go(&m, "x") == 2;
+    assert M::rank_go(&m, 5) == 9;
+}
+
+test "with both inherited the argument still picks the block" {
+    assert M::both("x") == 5;
+    assert M::both(5) == 5;
+}
+
+test "the static answers, and the trait names the instance one" {
+    let s = S {};
+    assert S::go(5) == 1;
+    assert Beta::go(&s, 5) == 2;
+}

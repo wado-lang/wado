@@ -1,0 +1,39 @@
+// The arity of a generic block's static, and the types of the parameters it
+// wrote concretely, are the declaration's whether or not the receiver filled
+// its slots: only the slot itself is unknown. Skipping the whole list left all
+// three of these unchecked, and the calls reached codegen to fail Wasm
+// validation.
+
+struct Box2<T> {
+    value: T,
+}
+
+impl<T> Box2<T> {
+    fn need(v: T, extra: i32) -> Box2<T> {
+        return Box2 { value: v };
+    }
+
+    fn one(v: T) -> Box2<T> {
+        return Box2 { value: v };
+    }
+
+    fn typed(v: T, tag: String) -> Box2<T> {
+        return Box2 { value: v };
+    }
+}
+
+export fn run() {
+    let _ = Box2::need(5);
+    let _ = Box2::one(5, 6);
+    let _ = Box2::typed(5, 6);
+}
+
+__DATA__
+{
+  "compile_error": "expected 2 arguments, found 1",
+  "compile_errors_contains": [
+    "expected 2 arguments, found 1",
+    "expected 1 arguments, found 2",
+    "type mismatch: expected 'String', found 'i32'"
+  ]
+}

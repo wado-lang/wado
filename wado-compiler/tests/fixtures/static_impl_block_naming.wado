@@ -1,0 +1,133 @@
+//! Where a block's function lives, and which of its slots the call has to fill.
+//! A concrete block hosts its own function under the head it wrote; a generic
+//! one's instance is materialised in the receiver's module. "Declares no
+//! parameters" is not "written for one instantiation" — `impl Default for
+//! List<T>` declares none and is still generic in `T`, which the receiver
+//! fills.
+
+use { Cell as LibCell, Bytes as LibBytes } from "./sub/static_impl_block_naming.wado";
+
+type Buf = LibBytes;
+
+struct Box2<T> {
+    value: T,
+}
+
+struct Plain2 {}
+
+// The slots stay as the block wrote them, so only the parameters whose types
+// the call did fill are checked — but how many there are and which carry
+// defaults come from the declaration, and hold either way. Reported as one
+// all-or-nothing list, an unfilled slot dropped the count and the defaults with
+// it.
+impl<T> Box2<T> {
+    fn wrap(v: T, tag: i32 = 9) -> Box2<T> {
+        return Box2 { value: v };
+    }
+}
+
+impl Plain2 {
+    fn wrap(v: i32, tag: i32 = 9) -> i32 {
+        return v + tag;
+    }
+}
+
+trait Wrap<T> {
+    fn wrap(v: T) -> i32;
+}
+
+// Naming the receiver's module for a concrete block too minted an extern stub
+// beside a definition of that very name, and lowering panicked.
+impl Wrap<i32> for LibCell<i32> {
+    fn wrap(v: i32) -> i32 {
+        return v + 1;
+    }
+}
+
+struct Cell<T> {
+    v: T,
+}
+
+// `Cell::wrap(7)` selects `impl Wrap<i32> for Cell<i32>` without a turbofish:
+// the arguments choose the impl, and the receiver's own arguments come from the
+// head that block wrote.
+impl Wrap<i32> for Cell<i32> {
+    fn wrap(v: i32) -> i32 {
+        return v + 1;
+    }
+}
+
+impl Wrap<bool> for Cell<bool> {
+    fn wrap(v: bool) -> i32 {
+        return 100;
+    }
+}
+
+struct Bag<T> {
+    v: T,
+}
+
+trait Make {
+    fn make() -> Self;
+}
+
+impl<T> Make for Bag<T> {
+    fn make() -> Bag<T> {
+        return Bag { v: 0 as T };
+    }
+}
+
+struct Bytes {
+    n: i32,
+}
+
+// The lists a call records come from the resolution that named its callee.
+// Asking again by the base's bare name asks the *caller's* frame, which an
+// alias leaves without that name.
+impl Bytes {
+    fn make(n: i32 = 99) -> Bytes {
+        return Bytes { n: n };
+    }
+}
+
+test "the trailing default is padded with the slot unfilled" {
+    assert Box2::wrap(5).value == 5;
+}
+
+test "an argument written for the defaulted parameter" {
+    assert Box2::wrap(5, 6).value == 5;
+}
+
+test "the receiver's own arguments fill the slot" {
+    assert Box2::<i32>::wrap(5).value == 5;
+}
+
+test "a non-generic block is unaffected" {
+    assert Plain2::wrap(5) == 14;
+}
+
+test "a concrete impl on an imported generic type is called in its own module" {
+    assert LibCell::<i32>::wrap(7) == 8;
+}
+
+test "the argument picks the block, and the block names the receiver" {
+    assert Cell::wrap(7) == 8;
+    assert Cell::wrap(true) == 100;
+}
+
+test "a turbofish still names it" {
+    assert Cell::<i32>::wrap(7) == 8;
+}
+
+test "a block generic through its head alone is not one instantiation" {
+    let b: Bag<i32> = Bag::make();
+    assert b.v == 0;
+}
+
+test "the alias pads its own declaration's default" {
+    assert Buf::make().n == 1;
+}
+
+test "and the local shadow keeps its own" {
+    assert Bytes::make().n == 99;
+}

@@ -1,0 +1,196 @@
+//! Regression (issue #1977): a parameter default is declared on the trait, so
+//! the `impl` restates the parameter without one and inherits the trait's whole
+//! list — the names, the value defaults, the type defaults, and the module they
+//! resolve in. Carrying none, every `Type::method()` spelling rejected an
+//! omitted argument for arity.
+
+use { Tagged, Boxed, Named } from "./sub/default_arg_trait_lib.wado";
+
+trait Make {
+    fn made(value: i32 = 0) -> i32;
+    fn pair(a: i32, b: i32 = 2) -> i32;
+}
+
+struct Marker {}
+
+impl Make for Marker {
+    fn made(value: i32) -> i32 {
+        return value + 1;
+    }
+
+    fn pair(a: i32, b: i32) -> i32 {
+        return a * b;
+    }
+}
+
+impl Marker {
+    fn twice() -> i32 {
+        return Self::made() + Self::made(4);
+    }
+}
+
+struct Wrapped<T> {
+    value: T,
+}
+
+impl Make for Wrapped<i32> {
+    fn made(value: i32) -> i32 {
+        return value + 10;
+    }
+
+    fn pair(a: i32, b: i32) -> i32 {
+        return a + b;
+    }
+}
+
+impl Tagged for Marker {
+    fn tagged(k: i32) -> i32 {
+        return k * 2;
+    }
+}
+
+// `Tagged`'s default calls this name in *its* module, where it answers 3. This
+// is the one the call site sees: padding under the wrong module takes it.
+fn origin() -> i32 {
+    return 100;
+}
+
+trait Spread {
+    fn spread(a: i32, b: i32 = a + 1) -> i32;
+}
+
+impl Spread for Marker {
+    // Renamed: the trait's default names the trait's `a`, not this block's `x`.
+    fn spread(x: i32, y: i32) -> i32 {
+        return x * 100 + y;
+    }
+}
+
+trait Ready {}
+
+trait Blanketed {
+    fn built(n: i32 = 7) -> i32;
+}
+
+struct Plain {}
+
+impl Ready for Plain {}
+
+// A blanket impl declares its statics under its receiver parameter, so no
+// receiver-keyed lookup reaches them.
+impl<X: Ready> Blanketed for X {
+    fn built(n: i32) -> i32 {
+        return n * 3;
+    }
+}
+
+// A trait's own default-bodied method is the declaration the defaults belong
+// to, so writing one there is not an `impl` re-declaring it. The body is
+// elaborated once per implementing type, and a rejection there fires in every
+// module that implements the trait.
+trait Greet {
+    fn hello(name: String = "world") -> String {
+        return `hi ${name}`;
+    }
+
+    fn shout(&self, mark: String = "!") -> String {
+        return `${Self::hello()}${mark}`;
+    }
+}
+
+struct M {}
+
+impl Greet for M {}
+
+struct N {}
+
+impl Greet for N {
+    fn hello(name: String) -> String {
+        return `yo ${name}`;
+    }
+}
+
+struct Holder {}
+
+impl Boxed for Holder {
+    fn boxed<T: Named>(&self) -> String {
+        return T::name();
+    }
+
+    fn made<T: Named>() -> String {
+        return T::name();
+    }
+}
+
+struct Local {}
+
+impl Named for Local {
+    fn name() -> String {
+        return "local";
+    }
+}
+
+test "trait static fills omitted defaults" {
+    assert Marker::made() == 1;
+    assert Marker::made(7) == 8;
+    assert Marker::pair(3) == 6;
+    assert Marker::pair(3, 4) == 12;
+    assert Marker::twice() == 6;
+}
+
+test "a cross-module default resolves in the trait's module" {
+    assert origin() == 100;
+    assert Marker::tagged() == 6;
+    assert Marker::tagged(5) == 10;
+}
+
+test "a default naming an earlier parameter survives a renamed impl" {
+    assert Marker::spread(3) == 304;
+    assert Marker::spread(3, 9) == 309;
+}
+
+test "a blanket impl's static fills omitted defaults" {
+    assert Plain::built() == 21;
+    assert Plain::built(2) == 6;
+}
+
+test "trait static on a generic target fills omitted defaults" {
+    assert Wrapped::<i32>::made() == 10;
+    assert Wrapped::<i32>::pair(1) == 3;
+    assert Wrapped::<i32>::pair(1, 5) == 6;
+}
+
+test "an inherited default body keeps the trait's defaults" {
+    assert M::hello() == "hi world";
+    assert M::hello("wado") == "hi wado";
+}
+
+test "an inherited default body reaches its defaults through the receiver" {
+    let m = M {};
+    assert m.shout() == "hi world!";
+    assert m.shout("?") == "hi world?";
+}
+
+test "an override keeps the trait's defaults too" {
+    let n = N {};
+    assert N::hello() == "yo world";
+    assert n.shout() == "yo world!";
+}
+
+test "an omitted turbofish takes the trait's declared type default" {
+    let h = Holder {};
+    assert h.boxed() == "tag";
+    assert Holder::made() == "tag";
+}
+
+test "a spelled turbofish still wins" {
+    let h = Holder {};
+    assert h.boxed::<Local>() == "local";
+    assert Holder::made::<Local>() == "local";
+}
+
+test "the receiver-taking spelling reads the same declaration" {
+    let h = Holder {};
+    assert Holder::boxed(&h) == "tag";
+    assert Holder::boxed::<Local>(&h) == "local";
+}

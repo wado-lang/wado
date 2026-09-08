@@ -1,0 +1,41 @@
+// An `impl` restates the trait's declaration; it cannot change its shape. The
+// call is built to the trait's, so an impl that adds a receiver reads an
+// argument nothing pushed, and one that re-specifies a type parameter's default
+// claims a choice the call site already made. Unreported, both reached codegen
+// and failed Wasm validation.
+
+struct M {}
+
+trait Mk {
+    fn made(n: i32) -> i32;
+}
+
+impl Mk for M {
+    fn made(&self, n: i32) -> i32 {
+        return n;
+    }
+}
+
+trait Boxed {
+    fn boxed<T = i32>(&self) -> i32;
+}
+
+impl Boxed for M {
+    fn boxed<T = i32>(&self) -> i32 {
+        return 1;
+    }
+}
+
+export fn run() {
+    let m = M {};
+    let _ = m.boxed();
+}
+
+__DATA__
+{
+  "compile_error": "method `made` takes a receiver but `Mk` declares no receiver",
+  "compile_errors_contains": [
+    "method `made` takes a receiver but `Mk` declares no receiver",
+    "default for type parameter 'T' in method 'boxed' is not allowed; defaults belong to the trait declaration"
+  ]
+}

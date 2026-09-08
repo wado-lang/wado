@@ -1,0 +1,52 @@
+// An argument list no candidate admits is a mismatch to report, not a spelling
+// nothing declares. The bare-name path dropped the parameter list when the
+// resolution picked nothing, so the argument met no list at all, the call was
+// mangled anyway, and WIR build panicked on a name it could not resolve.
+
+trait Conv<T> {
+    fn conv(tag: i32, v: T) -> i32;
+}
+
+struct M {}
+
+// The impls agree on the first argument and differ after it, so `true` matches
+// neither at argument one — a different failure from the first argument
+// matching nothing, and one that was named wrongly while only one argument
+// selected.
+impl Conv<i32> for M {
+    fn conv(tag: i32, v: i32) -> i32 {
+        return 1;
+    }
+}
+
+impl Conv<String> for M {
+    fn conv(tag: i32, v: String) -> i32 {
+        return 2;
+    }
+}
+
+// The survey that names what the receiver does declare read only the bodies a
+// block writes, so an inherited default was invisible to it.
+trait Make {
+    fn make(v: String) -> i32 {
+        return v.len() as i32;
+    }
+}
+
+struct Foo {}
+
+impl Make for Foo {}
+
+export fn run() {
+    let _ = M::conv(0, true);
+    let _ = Foo::make(42);
+}
+
+__DATA__
+{
+  "compile_error": "no impl of 'Conv' for 'M' declares 'conv' for these arguments",
+  "compile_errors_contains": [
+    "no impl of 'Conv' for 'M' declares 'conv' for these arguments",
+    "no impl of 'Make' for 'Foo' takes an argument of type 'i32'; 'Foo::make' is available for 'String'"
+  ]
+}
