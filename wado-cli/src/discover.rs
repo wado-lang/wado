@@ -1,4 +1,4 @@
-//! Source file discovery, shared by `wado test` and `wado format`.
+//! Source file discovery, shared by `wado test`, `wado format` and `wado query`.
 //!
 //! A subcommand's path arguments enter at [`files_in_dir`] or
 //! [`discover_tree`], which pick the root to walk from and recurse into
@@ -238,10 +238,13 @@ fn walk_dir(
             continue;
         }
 
-        let metadata = fs::metadata(&path).map_err(|source| WalkError::Io {
-            path: path.clone(),
-            source,
-        })?;
+        // `metadata` follows the link, so a symlink pointing nowhere fails
+        // here. That names no file to discover, and refusing the whole walk
+        // over one is worse than stepping past it; anything else — a
+        // permission, a racing delete — is still reported with its path.
+        let Some(metadata) = entry_metadata(&path)? else {
+            continue;
+        };
         let is_dir = metadata.is_dir();
 
         if is_dir && submodules.contains(&path) {
@@ -305,6 +308,24 @@ fn walk_dir(
 
     rules.truncate(rules.len() - added_rules);
     Ok(())
+}
+
+/// The entry's metadata, or `None` when it is a symlink to nothing. Only a
+/// dangling link is swallowed: `symlink_metadata` succeeding where `metadata`
+/// failed is what distinguishes it from a permission or a racing delete.
+fn entry_metadata(path: &Path) -> Result<Option<fs::Metadata>, WalkError> {
+    match fs::metadata(path) {
+        Ok(metadata) => Ok(Some(metadata)),
+        Err(source) => {
+            if fs::symlink_metadata(path).is_ok_and(|m| m.is_symlink()) {
+                return Ok(None);
+            }
+            Err(WalkError::Io {
+                path: path.to_path_buf(),
+                source,
+            })
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -908,6 +929,25 @@ pathology = should-not-match\n\
     fn rejects_invalid_exclude_pattern() {
         let err = ExcludeSet::compile(&["[unterminated".to_string()]).unwrap_err();
         assert_matches!(err, WalkError::InvalidExclude { .. });
+    }
+
+    // A symlink pointing nowhere names no file to discover. Refusing to run
+    // any test, format any file, or answer any query because one sits in the
+    // tree is worse than walking past it. A real I/O failure still propagates.
+    #[cfg(unix)]
+    #[test]
+    fn a_dangling_symlink_is_walked_past() {
+        use std::os::unix::fs::symlink;
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        touch(&root.join("a.wado"));
+        symlink(root.join("nowhere"), root.join("broken.wado")).unwrap();
+        symlink(root.join("nowhere"), root.join("broken_dir")).unwrap();
+
+        let files = discover_wado_files(root, &ExcludeSet::default(), &IncludeSet::default())
+            .unwrap()
+            .files;
+        assert_eq!(names_of(root, &files), one("a.wado"));
     }
 
     #[cfg(unix)]
