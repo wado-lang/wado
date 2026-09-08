@@ -26,9 +26,23 @@ impl Boxed for M {
     }
 }
 
+// A type-parameter list is a parameter list: the turbofish is written against
+// the trait's declaration, so a block declaring another count leaves its body's
+// extra slot unfilled.
+trait Counted {
+    fn counted<T>(&self) -> i32;
+}
+
+impl Counted for M {
+    fn counted<T, U>(&self) -> i32 {
+        return 1;
+    }
+}
+
 export fn run() {
     let m = M {};
     let _ = m.boxed();
+    let _ = m.counted::<i32>();
 }
 
 __DATA__
@@ -36,6 +50,7 @@ __DATA__
   "compile_error": "method `made` takes a receiver but `Mk` declares no receiver",
   "compile_errors_contains": [
     "method `made` takes a receiver but `Mk` declares no receiver",
-    "default for type parameter 'T' in method 'boxed' is not allowed; defaults belong to the trait declaration"
+    "default for type parameter 'T' in method 'boxed' is not allowed; defaults belong to the trait declaration",
+    "method `counted` takes 2 type parameter(s) but `Counted` declares 1"
   ]
 }

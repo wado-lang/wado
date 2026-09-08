@@ -2345,7 +2345,7 @@ Inference runs first and the default fills only what it left unbound, so an argu
 
 A default resolves in the declaring module's scope, as a value default does. It may therefore name a type the call site cannot: `NoFields` above is private to `core:log`.
 
-A trait method's type parameter default belongs to the trait, exactly as its value defaults do. The implementation restates the parameter without the default, and every spelling of the call fills it from the trait's declaration:
+A trait method's type parameter default belongs to the trait, exactly as its value defaults do. The implementation restates the list — the same parameters in the same order, with the defaults omitted — and every spelling of the call fills them from the trait's declaration:
 
 ```wado
 pub trait Boxed {

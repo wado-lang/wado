@@ -117,8 +117,8 @@ impl RankGo<String> for M {
 // receiver alone leaves `T` unsubstituted: the parameter list admitted any
 // argument and codegen received a call to the wrong block's body.
 trait Both<T> {
-    fn both(v: T) -> i32 {
-        return 5;
+    fn both(v: T) -> T {
+        return v;
     }
 }
 
@@ -196,7 +196,7 @@ test "the written body outranks it for the receiver-taking kind too" {
 }
 
 test "with both inherited the argument still picks the block" {
-    assert M::both("x") == 5;
+    assert M::both("x") == "x";
     assert M::both(5) == 5;
 }
 

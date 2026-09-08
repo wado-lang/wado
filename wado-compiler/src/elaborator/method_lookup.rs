@@ -411,7 +411,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .instantiate(&self.tysys.type_table, concrete_type_args);
             let declared = self
                 .tysys
-                .build_declared_type_params(&header.ty, &header.type_params);
+                .build_declared_type_params(&header.type_params);
             if let Some(result) = project(self, impl_ref, &impl_sig, &declared) {
                 return Some(result);
             }
@@ -2030,8 +2030,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // If the method wasn't found in the impl block, check the trait
         // declaration for a default method with that name
         if !method_found {
-            let trait_name_base = scope.get_type_name(&trait_type_for_name);
-            let declaring = scope.trait_sig_by_name(&trait_name_base);
+            // The block's own trait, by declaration: a second trait of that
+            // spelling in this frame would otherwise supply the default body,
+            // its module, and the slots it is instantiated in.
+            let declaring = scope.trait_sig_of(&trait_decl);
             let trait_module = declaring.map(|sig| sig.module.clone());
             if let Some(default_method) = declaring
                 .and_then(|sig| sig.method(method_name))

@@ -2432,17 +2432,17 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             );
         }
 
-        // For trait impls, synthesize TIR functions for default methods
-        // not explicitly provided in the impl block. `trait_name`
-        // carries the mangled form ("Maker<i32>") used for method
-        // naming; the trait declaration itself is indexed by its
-        // base name ("Maker"), so we derive that from the AST.
+        // For trait impls, synthesize TIR functions for default methods not
+        // explicitly provided in the impl block. `trait_name` carries the
+        // mangled form ("Maker<i32>") used for method naming; its canonical
+        // head is the declaration whose bodies these are, so a second `Maker`
+        // in this frame supplies none of them.
         if let (Some(trait_n), Some(trait_ast)) =
             (trait_name.as_ref(), impl_block.trait_type.as_ref())
         {
-            let trait_decl_name = scope.get_type_name(trait_ast);
-            let default_methods: Vec<std::rc::Rc<ast::Function>> = scope
-                .trait_sig_by_name(&trait_decl_name)
+            let default_methods: Vec<std::rc::Rc<ast::Function>> = trait_n
+                .canonical()
+                .and_then(|decl| scope.trait_sig_of(&decl))
                 .map(|trait_sig| {
                     trait_sig
                         .default_methods()

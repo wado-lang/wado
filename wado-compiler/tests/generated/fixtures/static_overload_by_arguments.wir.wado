@@ -14,9 +14,11 @@ type "functype//static_overload_by_arguments.wado/__cm_export____test_2_a_local_
 
 type "functype//static_overload_by_arguments.wado/__cm_export____test_3_and_the_generic_sibling_still_answers_for_its_own_shape" = fn();  // TypeId(5)
 
-type "functype//static_overload_by_arguments.wado/__cm_export____test_4_the_argument_s_identity_separates_them__not_its_printed_name" = fn();  // TypeId(6)
+type "functype//static_overload_by_arguments.wado/__cm_export____test_4_a_function_typed_parameter_mentioning_a_slot_admits_a_matching_function" = fn();  // TypeId(6)
 
-type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(7)
+type "functype//static_overload_by_arguments.wado/__cm_export____test_5_the_argument_s_identity_separates_them__not_its_printed_name" = fn();  // TypeId(7)
+
+type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(8)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/task-return from "wasi/task-return";
@@ -64,7 +66,17 @@ fn "static_overload_by_arguments.wado/__cm_export____test_3_and_the_generic_sibl
     "wasi/task-return"(0);
 }
 
-fn "static_overload_by_arguments.wado/__cm_export____test_4_the_argument_s_identity_separates_them__not_its_printed_name"() {
+fn "static_overload_by_arguments.wado/__cm_export____test_4_a_function_typed_parameter_mentioning_a_slot_admits_a_matching_function"() {
+    $inline___initialize_modules_0: block {
+        break_if $inline___initialize_modules_0 @likely(global:static_overload_by_arguments.wado::__modules_initialized);
+        cold_path;
+        "core:prelude/fpfmt.wado/__initialize_module"();
+        global:static_overload_by_arguments.wado::__modules_initialized = 1;
+    };
+    "wasi/task-return"(0);
+}
+
+fn "static_overload_by_arguments.wado/__cm_export____test_5_the_argument_s_identity_separates_them__not_its_printed_name"() {
     $inline___initialize_modules_0: block {
         break_if $inline___initialize_modules_0 @likely(global:static_overload_by_arguments.wado::__modules_initialized);
         cold_path;
@@ -81,4 +93,5 @@ export fn "static_overload_by_arguments.wado/__cm_export____test_0_an_argument_a
 export fn "static_overload_by_arguments.wado/__cm_export____test_1_a_literal_after_the_first_selects_the_impl" as "__test_1_a_literal_after_the_first_selects_the_impl"
 export fn "static_overload_by_arguments.wado/__cm_export____test_2_a_local_s_declared_type_selects_past_a_generic_sibling" as "__test_2_a_local_s_declared_type_selects_past_a_generic_sibling"
 export fn "static_overload_by_arguments.wado/__cm_export____test_3_and_the_generic_sibling_still_answers_for_its_own_shape" as "__test_3_and_the_generic_sibling_still_answers_for_its_own_shape"
-export fn "static_overload_by_arguments.wado/__cm_export____test_4_the_argument_s_identity_separates_them__not_its_printed_name" as "__test_4_the_argument_s_identity_separates_them__not_its_printed_name"
+export fn "static_overload_by_arguments.wado/__cm_export____test_4_a_function_typed_parameter_mentioning_a_slot_admits_a_matching_function" as "__test_4_a_function_typed_parameter_mentioning_a_slot_admits_a_matching_function"
+export fn "static_overload_by_arguments.wado/__cm_export____test_5_the_argument_s_identity_separates_them__not_its_printed_name" as "__test_5_the_argument_s_identity_separates_them__not_its_printed_name"

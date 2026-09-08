@@ -8,7 +8,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::Arc;
 
-use crate::ast::{self, BinaryOp, Expr, Literal, Type, UnaryOp};
+use crate::ast::{self, BinaryOp, Expr, Literal, UnaryOp};
 use crate::builtin_registry::BuiltinRegistry;
 use crate::compiler_item::CompilerItem;
 use crate::component_model::CmInterfaceRegistry;
@@ -316,27 +316,18 @@ pub(crate) fn operator_compiler_item(op: &BinaryOp) -> Option<CompilerItem> {
 /// stringification). They touch only `self.type_table`; the body walk and
 /// reify both reach them through `self.tysys`.
 impl TypeSystem {
-    /// Build declared type params for an impl block, filtering out known type names.
+    /// The slots an `impl` block binds. Its own declaration list is the only
+    /// way in, as [`Self::is_impl_target_param`] reads it: a name the header
+    /// mentions without declaring is not a slot but an undeclared type.
     pub(crate) fn build_declared_type_params(
         &self,
-        impl_ty: &Type,
         impl_type_params: &[ast::GenericParam],
     ) -> IndexSet<String> {
-        let mut declared: IndexSet<String> = impl_type_params
+        impl_type_params
             .iter()
             .map(|p| p.name.clone())
             .filter(|name| !self.is_known_type_name(name))
-            .collect();
-        if let Type::Generic(g) = impl_ty {
-            for arg in &g.args {
-                if let Type::Named(n) = arg
-                    && !self.is_known_type_name(&n.name)
-                {
-                    declared.insert(n.name.clone());
-                }
-            }
-        }
-        declared
+            .collect()
     }
 
     /// Get the struct name from a type ID, if it's a struct, generic instance, newtype, or flags.

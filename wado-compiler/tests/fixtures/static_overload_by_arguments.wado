@@ -67,6 +67,23 @@ impl Sibling<i32> for M {
     }
 }
 
+// A parameter's slots are solved from the argument and the result compared, not
+// its rendered name: a base name embeds a function type's own parameters, so
+// `fn(T) -> i32` and `fn(i32) -> i32` never spell alike however `T` is chosen.
+trait Applied<T> {
+    fn applied(v: T) -> i32;
+}
+
+impl<T> Applied<fn(T) -> i32> for M {
+    fn applied(v: fn(T) -> i32) -> i32 {
+        return 3;
+    }
+}
+
+fn double(n: i32) -> i32 {
+    return n * 2;
+}
+
 trait Ident<T> {
     fn ident(v: T) -> i32;
 }
@@ -101,6 +118,10 @@ test "a local's declared type selects past a generic sibling" {
 test "and the generic sibling still answers for its own shape" {
     let w = Wrap { a: true };
     assert M::sibling(w) == 1;
+}
+
+test "a function-typed parameter mentioning a slot admits a matching function" {
+    assert M::applied(double) == 3;
 }
 
 test "the argument's identity separates them, not its printed name" {

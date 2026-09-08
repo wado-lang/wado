@@ -24,8 +24,8 @@ use crate::world_registry::WorldRegistry;
 
 use super::Elaborator;
 use super::types::{
-    EnumCaseData, EnumInfo, FlagsInfo, FlagsMemberData, GenericNewtypeInfo, ResourceInfo,
-    StructFieldInfo, TypeError, TypeLookup, VariantCaseData, VariantInfo,
+    EnumCaseData, EnumInfo, FlagsInfo, FlagsMemberData, GenericNewtypeInfo, ParamList,
+    ResourceInfo, StructFieldInfo, TypeError, TypeLookup, VariantCaseData, VariantInfo,
 };
 use super::tysys::TypeSystem;
 
@@ -1181,18 +1181,28 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 let Some(declared) = decl.methods.iter().find(|m| m.name == method.name) else {
                     continue;
                 };
-                let (expected, found) = (declared.param_count, method.param_count);
-                if expected != found {
-                    let _ = logger.error_in(
-                        &header.module,
-                        TypeError::TraitMethodArityMismatch {
-                            trait_name: decl.name.clone(),
-                            method_name: method.name.clone(),
-                            expected,
-                            found,
-                            span: method.name_span,
-                        },
-                    );
+                let lists = [
+                    (ParamList::Value, declared.param_count, method.param_count),
+                    (
+                        ParamList::Type,
+                        declared.type_params.len(),
+                        method.type_params.len(),
+                    ),
+                ];
+                for (list, expected, found) in lists {
+                    if expected != found {
+                        let _ = logger.error_in(
+                            &header.module,
+                            TypeError::TraitMethodArityMismatch {
+                                trait_name: decl.name.clone(),
+                                method_name: method.name.clone(),
+                                list,
+                                expected,
+                                found,
+                                span: method.name_span,
+                            },
+                        );
+                    }
                 }
                 if declared.has_receiver != method.has_receiver {
                     let _ = logger.error_in(

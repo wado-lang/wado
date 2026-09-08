@@ -15,7 +15,7 @@ use crate::token::Span;
 use super::Elaborator;
 use super::callee::CalleeRef;
 use super::scope::{BinderInScope, Scope, TraitCheckFrame};
-use super::sig::{Param, TraitSig};
+use super::sig::Param;
 use super::trait_env::InheritedBound;
 use super::types::{
     MethodInfo, MethodOwner, ResolvedTraitMethod, TraitMethodMatch, TypeError, TypeLookup,
@@ -381,12 +381,6 @@ impl TypeSystem {
 }
 
 impl<H: CompilerHost> Elaborator<'_, H> {
-    /// [`Self::trait_sig_of`] for a caller still holding a trait's spelling.
-    pub(super) fn trait_sig_by_name(&self, trait_name: &str) -> Option<&TraitSig> {
-        let decl = self.decl_key_or_local(trait_name)?;
-        trait_sig_of_with(decl, &self.tysys.trait_env, &self.tysys.signatures)
-    }
-
     /// The declaration header of the trait `trait_name` names in this frame.
     pub(super) fn trait_decl_header_in_frame(
         &self,

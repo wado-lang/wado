@@ -8,10 +8,12 @@ use super::sig::AssocConstSig;
 use crate::ast;
 use crate::compiler_host::CompilerHost;
 use crate::compiler_item::CompilerItem;
+use crate::hashmap::IndexMap;
 use crate::name::FqTypeName;
 use crate::tir::{PrimitiveType, ResolvedType, TypeId, TypeTable};
 
 use super::Elaborator;
+use super::infer::unify;
 use super::callee::CalleeRef;
 use super::types::{FunctionContext, MethodOwner};
 use super::util::is_float_only_literal;
@@ -190,6 +192,31 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         class
     }
 
+    /// Whether `param`'s slots can be filled to make it `arg`. Structural, not
+    /// nominal: a rendered base name embeds a function type's own parameters and
+    /// a tuple's elements, so `fn(T) -> i32` and `fn(i32) -> i32` do not spell
+    /// alike however `T` is chosen.
+    fn slots_fill_param_to(&self, param: TypeId, arg: TypeId) -> bool {
+        let mut bindings = IndexMap::default();
+        unify(&self.tysys.type_table, param, arg, &mut bindings);
+        let substitution: IndexMap<u32, TypeId> = {
+            let tt = self.tysys.type_table.borrow();
+            bindings
+                .iter()
+                .filter_map(|(&slot, &filled)| match tt.get(slot) {
+                    ResolvedType::TypeParam { index, .. } => Some((*index, filled)),
+                    _ => None,
+                })
+                .collect()
+        };
+        let filled = self
+            .tysys
+            .type_table
+            .borrow_mut()
+            .substitute_type_params(param, &substitution);
+        filled == arg
+    }
+
     /// Whether a candidate's parameter type is in `class`'s denoted set.
     /// Openness first: a parameter still mentioning a type parameter is not
     /// yet comparable and admits everything.
@@ -211,19 +238,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         match class {
             ArgClass::Opaque(_) => true,
             ArgClass::Exact(t) => {
-                if *t == param {
-                    return true;
-                }
-                // Same shape, whatever the slot inside becomes.
-                if tt.contains_type_param(param)
-                    && tt.fq_base_type_name(param) == tt.fq_base_type_name(*t)
+                if *t == param
+                    || matches!(
+                        (tt.get(param), tt.get(*t)),
+                        (ResolvedType::Ref(p), ResolvedType::MutRef(a)) if p == a
+                    )
                 {
                     return true;
                 }
-                matches!(
-                    (tt.get(param), tt.get(*t)),
-                    (ResolvedType::Ref(p), ResolvedType::MutRef(a)) if p == a
-                )
+                let open = tt.contains_type_param(param);
+                drop(tt);
+                open && self.slots_fill_param_to(param, *t)
             }
             // A newtype over the head is admitted too; admitting more is the
             // safe side.

@@ -241,6 +241,24 @@ pub enum LoopJump {
     Continue,
 }
 
+/// Which of a method's two parameter lists a diagnostic is about.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ParamList {
+    Value,
+    Type,
+}
+
+impl ParamList {
+    /// The word that names this list in a message, spelled to sit before
+    /// "parameter(s)".
+    fn qualifier(self) -> &'static str {
+        match self {
+            ParamList::Value => "",
+            ParamList::Type => "type ",
+        }
+    }
+}
+
 /// Errors from the type resolution phase
 #[derive(Debug, Clone)]
 pub enum TypeError {
@@ -771,6 +789,8 @@ pub enum TypeError {
     TraitMethodArityMismatch {
         trait_name: String,
         method_name: String,
+        /// Which of the method's two lists disagrees.
+        list: ParamList,
         expected: usize,
         found: usize,
         span: Span,
@@ -1732,13 +1752,15 @@ impl TypeError {
             TypeError::TraitMethodArityMismatch {
                 trait_name,
                 method_name,
+                list,
                 expected,
                 found,
                 span,
             } => (
                 Code::TypeMismatch,
                 format!(
-                    "method `{method_name}` takes {found} parameter(s) but `{trait_name}` declares {expected}"
+                    "method `{method_name}` takes {found} {}parameter(s) but `{trait_name}` declares {expected}",
+                    list.qualifier()
                 ),
                 *span,
             ),
