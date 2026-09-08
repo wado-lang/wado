@@ -251,7 +251,6 @@ fn relative_label(invocation_root: &Path, pkg_root: &Path) -> String {
     )
 }
 
-// Directories are walked with the discovery rules; files pass through.
 fn resolve_paths(paths: Vec<String>, extra_excludes: &[String]) -> Result<Vec<String>, CliExit> {
     let excludes = discover::ExcludeSet::compile(extra_excludes).map_err(CliExit::error)?;
     let mut resolved = Vec::new();
@@ -2323,6 +2322,8 @@ pub async fn run(opts: TestOptions) -> Result<(), CliExit> {
 mod tests {
     use super::*;
 
+    use crate::discover::fixture::{one, touch, write_manifest};
+
     fn parse(name: &str) -> TestExportName {
         parse_test_export(name).unwrap_or_else(|| panic!("expected `test-` prefix in {name:?}"))
     }
@@ -2405,27 +2406,12 @@ mod tests {
         assert_eq!(parse("test-tm2000-0-").display, "<test 0>");
     }
 
-    fn touch(path: &Path) {
-        if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent).unwrap();
-        }
-        std::fs::write(path, "").unwrap();
-    }
-
     fn discovered_names(dir: &Path) -> std::collections::BTreeSet<String> {
         discover::files_in_dir(dir, &|root| test_filters(root, &[]))
             .unwrap()
             .iter()
             .map(|p| p.file_name().unwrap().to_string_lossy().into_owned())
             .collect()
-    }
-
-    fn write_manifest(dir: &Path, test_section: &str) {
-        std::fs::write(
-            dir.join("wado.toml"),
-            format!("[package]\nname = \"p\"\nversion = \"0.0.0\"\n\n{test_section}"),
-        )
-        .unwrap();
     }
 
     // A subdirectory below the package root still honours the enclosing
@@ -2441,23 +2427,25 @@ mod tests {
         touch(&root.join("sub/gen/impl.wado"));
         touch(&root.join("sub/gen/impl_test.wado"));
 
-        let got = discovered_names(&root.join("sub"));
-        assert!(got.contains("impl_test.wado"), "{got:?}");
-        assert!(!got.contains("impl.wado"), "{got:?}");
+        assert_eq!(discovered_names(&root.join("sub")), one("impl_test.wado"));
     }
 
-    // Invoking on the package root itself applies the manifest with no
-    // subtree filtering.
+    // `--exclude` extends the manifest's, matched relative to the same root.
     #[test]
-    fn package_root_invocation_applies_manifest_exclude() {
+    fn a_cli_exclude_extends_the_manifest() {
         let tmp = tempfile::tempdir().unwrap();
         let root = tmp.path();
-        write_manifest(root, "[test]\nexclude = [\"skip.wado\"]\n");
-        touch(&root.join("keep.wado"));
-        touch(&root.join("skip.wado"));
+        write_manifest(root, "[test]\nexclude = [\"a.wado\"]\n");
+        touch(&root.join("a.wado"));
+        touch(&root.join("b.wado"));
+        touch(&root.join("c.wado"));
 
-        let got = discovered_names(root);
-        assert!(got.contains("keep.wado"), "{got:?}");
-        assert!(!got.contains("skip.wado"), "{got:?}");
+        let files = discover::files_in_dir(root, &|pkg| test_filters(pkg, &["b.wado".to_string()]))
+            .unwrap();
+        let names: std::collections::BTreeSet<String> = files
+            .iter()
+            .map(|p| p.file_name().unwrap().to_string_lossy().into_owned())
+            .collect();
+        assert_eq!(names, one("c.wado"));
     }
 }

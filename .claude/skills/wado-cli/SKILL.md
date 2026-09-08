@@ -216,12 +216,13 @@ e2e fixtures and the golden format fixtures keep the hand-authored layouts that
 are part of the test.
 
 A directory argument is walked from the package that encloses it, so the globs
-match as authored whichever subdirectory you name: `wado format -w
-wado-compiler/tests` formats nothing, and says so.
+match as authored whichever subdirectory you name. `wado format -w
+wado-compiler/tests` formats nothing and fails, naming the directory it found
+nothing in.
 
-**Caution:** naming a file bypasses the filters, which is how the
-golden-fixture scripts rewrite excluded fixtures. `wado format -w
-wado-compiler/tests/fixtures/x.wado` reformats it anyway, silently discarding a
+**Caution:** naming a file bypasses the filters. The golden-fixture scripts
+rewrite excluded fixtures that way, so `wado format -w
+wado-compiler/tests/fixtures/x.wado` reformats it too, silently discarding a
 layout the test depends on. When the syntax is updated, make sure to add tests
 to `wado-compiler/tests/format.rs`.
 

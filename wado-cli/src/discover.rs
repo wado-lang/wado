@@ -428,8 +428,8 @@ pub fn display_path(p: &Path) -> String {
 }
 
 /// Keep only the files under `dir`, dropping the packages left with none.
-/// The prefix test is valid only because both sides go through
-/// [`display_path`], which is what gives them the same shape.
+/// Both sides go through [`display_path`], so the prefix test compares paths
+/// of the same shape.
 fn retain_under(packages: Vec<PackageFiles>, dir: &Path) -> Vec<PackageFiles> {
     let prefix = display_path(dir);
     packages
@@ -447,6 +447,35 @@ fn retain_under(packages: Vec<PackageFiles>, dir: &Path) -> Vec<PackageFiles> {
 fn path_under(path: &str, dir: &str) -> bool {
     path.strip_prefix(dir)
         .is_some_and(|rest| rest.starts_with('/'))
+}
+
+/// Laying out a package tree on disk, for the tests here and in the
+/// subcommands that drive discovery.
+#[cfg(test)]
+pub(crate) mod fixture {
+    use std::collections::BTreeSet;
+    use std::fs;
+    use std::path::Path;
+
+    /// The one-name set a discovery assertion compares against.
+    pub(crate) fn one(name: &str) -> BTreeSet<String> {
+        [name.to_string()].into_iter().collect()
+    }
+
+    /// Create an empty file, and the directories leading to it.
+    pub(crate) fn touch(path: &Path) {
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(path, "").unwrap();
+    }
+
+    /// Write a `wado.toml` at `dir` carrying `section` verbatim.
+    pub(crate) fn write_manifest(dir: &Path, section: &str) {
+        fs::write(
+            dir.join("wado.toml"),
+            format!("[package]\nname = \"p\"\nversion = \"0.0.0\"\n\n{section}"),
+        )
+        .unwrap();
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -587,6 +616,8 @@ mod tests {
     use std::assert_matches;
     use std::collections::BTreeSet;
 
+    use super::fixture::{one, touch, write_manifest};
+
     fn names_of(root: &Path, paths: &[PathBuf]) -> BTreeSet<String> {
         paths
             .iter()
@@ -597,17 +628,6 @@ mod tests {
                     .replace('\\', "/")
             })
             .collect()
-    }
-
-    fn one(name: &str) -> BTreeSet<String> {
-        [name.to_string()].into_iter().collect()
-    }
-
-    fn touch(path: &Path) {
-        if let Some(parent) = path.parent() {
-            fs::create_dir_all(parent).unwrap();
-        }
-        fs::write(path, "").unwrap();
     }
 
     #[test]
@@ -981,14 +1001,6 @@ pathology = should-not-match\n\
     }
 
     // ---- directory expansion ----
-
-    fn write_manifest(dir: &Path, section: &str) {
-        fs::write(
-            dir.join("wado.toml"),
-            format!("[package]\nname = \"p\"\nversion = \"0.0.0\"\n\n{section}"),
-        )
-        .unwrap();
-    }
 
     // Which section a subcommand names is its own business; the driver is the
     // same either way, so these tests pick one.

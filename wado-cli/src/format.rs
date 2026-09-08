@@ -214,18 +214,7 @@ mod tests {
     use super::*;
     use std::collections::BTreeSet;
 
-    fn touch(path: &Path) {
-        fs::create_dir_all(path.parent().unwrap()).unwrap();
-        fs::write(path, "").unwrap();
-    }
-
-    fn write_manifest(dir: &Path, format_section: &str) {
-        fs::write(
-            dir.join("wado.toml"),
-            format!("[package]\nname = \"p\"\nversion = \"0.0.0\"\n\n{format_section}"),
-        )
-        .unwrap();
-    }
+    use crate::discover::fixture::{one, touch, write_manifest};
 
     fn resolved_names(dir: &Path) -> BTreeSet<String> {
         resolve_inputs(&[dir.to_string_lossy().into_owned()])
@@ -255,19 +244,25 @@ mod tests {
         assert!(!got.contains("drop.wado"), "{got:?}");
     }
 
-    // Invoking on the package root itself applies the manifest with no subtree
-    // narrowing.
+    // The built-in skips apply without a manifest saying so, and `include`
+    // opts a path back in.
     #[test]
-    fn package_root_invocation_applies_manifest_exclude() {
+    fn generated_output_is_skipped_unless_included() {
         let tmp = tempfile::tempdir().unwrap();
         let root = tmp.path();
-        write_manifest(root, "[format]\nexclude = [\"skip.wado\"]\n");
-        touch(&root.join("keep.wado"));
-        touch(&root.join("skip.wado"));
+        touch(&root.join("generated/parser.wado"));
+        touch(&root.join("build/tmp.wado"));
+        touch(&root.join("src/main.wado"));
+        assert_eq!(resolved_names(root), one("main.wado"));
 
-        let got = resolved_names(root);
-        assert!(got.contains("keep.wado"), "{got:?}");
-        assert!(!got.contains("skip.wado"), "{got:?}");
+        write_manifest(root, "[format]\ninclude = [\"generated/**\"]\n");
+        assert_eq!(
+            resolved_names(root),
+            ["main.wado", "parser.wado"]
+                .iter()
+                .map(ToString::to_string)
+                .collect()
+        );
     }
 
     // The golden-fixture scripts format excluded fixture files by naming them,

@@ -138,8 +138,7 @@ Manifest filters are then resolved by the argument's kind:
 
 `wado format` expands its path arguments through the same code, naming
 `[format]` where `wado test` names `[test]`. That section and the subcommand's
-own built-in patterns are the only difference. How a directory becomes a file
-list is one implementation, so the two cannot drift apart.
+own built-in patterns are the only difference, so the two cannot drift apart.
 
 ### CLI flags
 
