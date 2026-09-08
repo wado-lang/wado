@@ -253,6 +253,7 @@ Stream body fixtures are in `wado-compiler/tests/fixtures/stream-http-*.wado`:
 - **Middleware world**: `wasi:http/middleware` is not yet supported as a target world.
 - **Request construction**: Building a `Request` for outbound use requires `Request::new`.
 - **Custom trailers**: Sending non-empty trailers requires constructing a `Fields` and passing it via the trailers future.
+- **`task return` outside the target world**: an `export async fn` the world does not export keeps its body — Wado code can still call it, and `example/http_mock.wado` does — but has no CM task to deliver to. Its `task return value` currently reduces to `value` evaluated for effect, so the call observes nothing. What it should observe instead is undecided: delivering the value to a Wado caller would make an exported handler testable against its own result, which today's tests reach only through the mocks they installed. Closing it means giving the reduced form a destination and saying what a direct call of an `export async fn` returns.
 
 ## Consequences
 

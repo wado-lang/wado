@@ -5,7 +5,8 @@
 //! flatten the value to CM ABI flat slots and emit a `task-return` raw call.
 //!
 //! An `export async fn` the target world does not export has no CM task to
-//! deliver to, so its `task return` is stripped to a no-op instead.
+//! deliver to, so its `task return` reduces to its operand, evaluated for
+//! effect. What such a call should observe is open — see the WASI HTTP WEP.
 
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -74,11 +75,11 @@ pub(super) fn expand_task_returns_in_func(
     func.body = Some(body);
 }
 
-/// Replace every `task return` statement in a function body with a no-op (`Continue`).
+/// Reduce every `task return value` in a function body to `value` evaluated
+/// for effect.
 ///
-/// For an `export async fn` outside the target world's exports. Its body still
-/// runs when Wado code calls it, and the statements must not reach
-/// `monomorphize` intact.
+/// For an `export async fn` outside the target world's exports: there is no CM
+/// task to deliver to, and the statements must not reach `monomorphize` intact.
 pub(super) fn strip_task_returns_in_func(user_func: &Rc<RefCell<TirFunction>>) {
     let mut func = user_func.borrow_mut();
     let Some(mut body) = func.body.take() else {
@@ -149,15 +150,19 @@ fn no_op_stmt(span: crate::token::Span) -> TirStmtKind {
     TirStmtKind::Expr(TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, span))
 }
 
-/// Replaces every `task return` statement with a no-op. Used for the test
-/// world, where async-export bodies are dropped by DCE and only need to be
-/// kept free of `TaskReturn` so they never reach `monomorphize`.
+/// Reduces every `task return value` to `value` evaluated for effect. Only the
+/// delivery goes: the operand is user code, and the body around it still runs.
 struct TaskReturnStripper;
 
 impl TirOptVisitor for TaskReturnStripper {
     fn visit_stmt(&mut self, stmt: &mut TirStmt) -> bool {
         if matches!(&stmt.kind, TirStmtKind::TaskReturn { .. }) {
-            stmt.kind = no_op_stmt(stmt.span);
+            let TirStmtKind::TaskReturn { value } =
+                std::mem::replace(&mut stmt.kind, no_op_stmt(stmt.span))
+            else {
+                unreachable!("the kind matched `TaskReturn` on the line above")
+            };
+            stmt.kind = TirStmtKind::Expr(value);
             return true;
         }
         opt_walk_stmt(self, stmt)
