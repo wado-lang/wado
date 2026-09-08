@@ -146,21 +146,18 @@ Semantic-predicate dead-ends — a gate member is parser state, and the parser's
 state is not part of what a rollback restores:
 
 - A scope **stack** in a gate member (2026-09), for Rust's "no struct literal in
-  a condition". The rule is about the innermost enclosing scope, which neither a
-  flag nor a counter can name. A flag cleared on the way into a bracket never
-  comes back, so `if self.g(&x) || c { }` reads `c { }` as a struct literal. A
-  counter cannot tell a function body from a head inside one, because a block
-  steps it too. One bit per scope in a single int says it exactly: a head pushes
-  `* 2 + 1`, a bracket `* 2`, each pops `/ 2`, and the ban is `noStruct % 2`. It
-  parses every hand-written probe and is far worse on real files. Error recovery
-  and the repeat-exit probe roll back the position but not the parser's members,
-  so a push whose pop never runs shifts the stack for the rest of the file. A
-  flag survives the same rollback because it is idempotent. Restoring members
-  across recovery and speculation is the precondition for any stack-shaped gate.
-- Dropping the bracketing clears, so the ban never lifts inside a head (2026-09).
-  That fixes `if self.g(&x) || c { }` and breaks `if g(S { a: 1 })`. With a flag
-  the two classes are mutually exclusive, and the committed direction is the one
-  that clears.
+  a condition". The rule is about the innermost enclosing scope, which a member
+  alone cannot name: a flag cleared on the way into a bracket never comes back,
+  and a counter cannot tell a function body from a head inside one, because a
+  block steps it too. One bit per scope in a single int says it exactly — a head
+  pushes `* 2 + 1`, a bracket `* 2`, each pops `/ 2`, and the ban is
+  `noStruct % 2`. It parses every hand-written probe and is far worse on real
+  files. Error recovery and the repeat-exit probe roll back the position but not
+  the parser's members, so a push whose pop never runs shifts the stack for the
+  rest of the file. Restoring members across recovery and speculation is the
+  precondition for any stack-shaped gate. A flag survives that rollback because
+  it is idempotent, and the rule-level scope (`locals` + `@init` / `@after`)
+  gives it the nesting a bracket would otherwise take away.
 
 Lexer dead-ends:
 
