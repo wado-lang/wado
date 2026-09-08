@@ -15,18 +15,20 @@ use crate::canonical::CanonicalIntrinsic;
 
 use crate::ast::Type;
 use crate::cm_abi;
+use crate::compiler_item::{CompilerItem, CompilerItems};
 use crate::component_model::CmInterfaceRegistry;
 use crate::hashmap::IndexMap;
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
 use crate::tir::{
-    ResolvedType, TirBlock, TirExpr, TirExprKind, TirFunction, TirLocal, TirMatchArm, TirModule,
-    TirPattern, TirStmt, TirStmtKind, TypeTable,
+    FunctionRef, ResolvedType, TirBlock, TirExpr, TirExprKind, TirFunction, TirLocal, TirMatchArm,
+    TirModule, TirPattern, TirStmt, TirStmtKind, TypeId, TypeTable,
 };
 use crate::tir_visitor::{TirOptVisitor, opt_walk_block, opt_walk_stmt};
+use crate::token::Span;
 
 use crate::synthesis::common::{
     alloc_local, assign, cast, cm_canonical_call, expr_stmt, i32_const, let_mut_stmt, let_stmt,
-    local_ref, synth_span,
+    local_ref, option_none, option_some, synth_span,
 };
 
 use super::cm_free::{CmShapeContext, FlatSlot, synthesize_free_cm_flat};
@@ -75,20 +77,47 @@ pub(super) fn expand_task_returns_in_func(
     func.body = Some(body);
 }
 
-/// Reduce every `task return value` in a function body to `value` evaluated
-/// for effect.
-///
-/// For an `export async fn` outside the target world's exports: there is no CM
-/// task to deliver to, and the statements must not reach `monomorphize` intact.
-pub(super) fn reduce_task_returns_in_func(user_func: &Rc<RefCell<TirFunction>>) {
+/// Reduce every `task return value` in a function body to a binding the
+/// function returns at the end. The delivery belongs to the task entry; a Wado
+/// caller gets the value the same way it gets any other result.
+pub(super) fn reduce_task_returns_in_func(
+    user_func: &Rc<RefCell<TirFunction>>,
+    type_table: &Rc<RefCell<TypeTable>>,
+) {
     let mut func = user_func.borrow_mut();
     let Some(mut body) = func.body.take() else {
         return;
     };
-    let mut reducer = TaskReturnReducer;
+    let declared = func.return_type;
+    let slot_type = type_table.borrow_mut().make_option(declared);
+    let mut next_local = func.local_count;
+    let mut extra: Vec<TirLocal> = Vec::new();
+    let slot = alloc_local(&mut next_local, &mut extra, slot_type);
+    let bound = alloc_local(&mut next_local, &mut extra, declared);
+    let items = type_table.borrow().compiler_items().clone();
+
+    let mut reducer = TaskReturnReducer {
+        slot,
+        slot_type,
+        items: &items,
+        found: false,
+    };
     reducer.visit_block(&mut body);
+
+    if reducer.found {
+        let none = option_none(slot_type, &items);
+        body.stmts
+            .insert(0, let_mut_stmt(TASK_RESULT_LOCAL, slot, slot_type, none));
+        body.stmts
+            .push(take_task_result(slot, slot_type, declared, bound, &items));
+        func.local_count = next_local;
+        func.locals.extend(extra);
+    }
     func.body = Some(body);
 }
+
+/// The local a reduced `task return` writes its value into.
+const TASK_RESULT_LOCAL: &str = "__task_result";
 
 /// The copy of an `export async fn` that the export binding calls. Its
 /// `task return` delivers through the CM canonical op, so it returns nothing.
@@ -173,18 +202,113 @@ fn take_task_return_value(stmt: &mut TirStmt) -> Option<TirExpr> {
     Some(value)
 }
 
-struct TaskReturnReducer;
+struct TaskReturnReducer<'a> {
+    slot: u32,
+    slot_type: TypeId,
+    items: &'a CompilerItems,
+    found: bool,
+}
 
-impl TirOptVisitor for TaskReturnReducer {
+impl TirOptVisitor for TaskReturnReducer<'_> {
     fn visit_stmt(&mut self, stmt: &mut TirStmt) -> bool {
         match take_task_return_value(stmt) {
             Some(value) => {
-                stmt.kind = TirStmtKind::Expr(value);
+                self.found = true;
+                stmt.kind = TirStmtKind::Expr(assign(
+                    local_ref(self.slot, TASK_RESULT_LOCAL, self.slot_type),
+                    option_some(value, self.slot_type, self.items),
+                ));
                 true
             }
             None => opt_walk_stmt(self, stmt),
         }
     }
+}
+
+/// `match __task_result { Some(v) => return v, None => unreachable() }`. A body
+/// that reaches the end without delivering has no result to give, which for the
+/// task entry is a CM protocol error either way.
+fn take_task_result(
+    slot: u32,
+    slot_type: TypeId,
+    declared: TypeId,
+    bound: u32,
+    items: &CompilerItems,
+) -> TirStmt {
+    let span = synth_span();
+    let (_, _, some_name, _) = items.require_variant_case(CompilerItem::OptionSome);
+    let (_, _, none_name, _) = items.require_variant_case(CompilerItem::OptionNone);
+    let arm = |pattern, stmts: Vec<TirStmt>| TirMatchArm {
+        pattern,
+        guard: None,
+        body: TirExpr::new(
+            TirExprKind::Block(TirBlock::new(stmts, span)),
+            TypeTable::UNIT,
+            span,
+        ),
+        span,
+    };
+    let some_arm = arm(
+        TirPattern::Variant {
+            enum_type: slot_type,
+            variant_name: some_name.to_string(),
+            bindings: vec![TirPattern::Binding {
+                name: TASK_VALUE_LOCAL.to_string(),
+                local_index: bound,
+                type_id: declared,
+            }],
+            payload_type: declared,
+        },
+        vec![TirStmt::new(
+            TirStmtKind::Return {
+                value: Some(local_ref(bound, TASK_VALUE_LOCAL, declared)),
+            },
+            span,
+        )],
+    );
+    let none_arm = arm(
+        TirPattern::Variant {
+            enum_type: slot_type,
+            variant_name: none_name.to_string(),
+            bindings: vec![],
+            payload_type: TypeTable::UNIT,
+        },
+        vec![expr_stmt(unreachable_call(declared, span))],
+    );
+    TirStmt::new(
+        TirStmtKind::Expr(TirExpr::new(
+            TirExprKind::Match {
+                expr: Box::new(local_ref(slot, TASK_RESULT_LOCAL, slot_type)),
+                arms: vec![some_arm, none_arm],
+            },
+            TypeTable::UNIT,
+            span,
+        )),
+        span,
+    )
+}
+
+/// The local the `Some` arm binds the delivered value to.
+const TASK_VALUE_LOCAL: &str = "__task_value";
+
+/// A `builtin::unreachable()` typed as `result_type`, for the arm no delivery
+/// reaches.
+fn unreachable_call(result_type: TypeId, span: Span) -> TirExpr {
+    TirExpr::new(
+        TirExprKind::Call {
+            func: Box::new(FunctionRef {
+                module_source: ModuleSource::builtin(),
+                name: "unreachable".to_string(),
+                monomorph_info: None,
+                method_info: None,
+            }),
+            type_args: vec![],
+            args: vec![],
+            has_receiver: false,
+        },
+        result_type,
+        span,
+    )
 }
 
 /// Generate the inline task-return sequence for `task return value`: a `Result`

@@ -1,0 +1,19 @@
+// A Wado call of an `export async fn` receives what `task return` delivered.
+// The CM delivery lives in the task-entry copy the export binding calls, so
+// the function itself carries the result its declaration promises.
+
+use { println, Stdout } from "core:cli";
+
+export async fn deliver(n: i32) -> Result<i32, String> {
+    task return Result::<i32, String>::Ok(n * 2);
+}
+
+export fn run() with Stdout {
+    match deliver(21) {
+        Result::Ok(v) => println(`got ${v}`),
+        Result::Err(e) => println(`err ${e}`),
+    }
+}
+
+__DATA__
+{"stdout": "got 42\n"}

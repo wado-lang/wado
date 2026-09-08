@@ -32,10 +32,6 @@ pub(crate) struct FunctionSig {
     /// Declared `with` effects, resolved in the declaring perspective
     /// (effect parameters stay symbolic as `EffectRef::Param`).
     pub(crate) effects: Vec<crate::tir::EffectRef>,
-    /// Whether `decl.return_type` leaves through `task return` rather than the
-    /// Wasm return. `decl` holds the declared type either way; only a call
-    /// site's own result type is erased to `()`.
-    pub(crate) returns_via_task_return: bool,
 }
 
 impl ModuleDecls {

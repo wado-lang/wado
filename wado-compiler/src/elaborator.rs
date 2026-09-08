@@ -796,9 +796,15 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     pub(super) fn validate_missing_return_ast(
         &self,
         return_type: TypeId,
+        is_async: bool,
         body: Option<&crate::ast::Block>,
         span: crate::token::Span,
     ) {
+        // An `async fn` delivers through `task return`, which cm_binding turns
+        // into the function's return.
+        if is_async {
+            return;
+        }
         if return_type == crate::tir::TypeTable::UNIT || return_type == crate::tir::TypeTable::NEVER
         {
             return;

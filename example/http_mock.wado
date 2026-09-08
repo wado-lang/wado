@@ -117,11 +117,20 @@ test "/status pings the upstream and reports its status" {
 
 test "the exported handle routes through to the upstream" {
     let mut upstream = MockUpstream { status: 204 };
-    with Client => &mut upstream do {
+    let delivered = with Client => &mut upstream do {
         handle(get("/status"));
     };
     let hits: List<String> = ["/health"];
     assert upstream.hits == hits;
+    match delivered {
+        Result::Ok(resp) => {
+            assert resp.get_status_code() == 200;
+            assert header_text(&resp, "x-upstream-status") == "204";
+        },
+        Result::Err(_) => {
+            assert false;
+        },
+    }
 }
 
 test "unknown path is 404 and never touches the upstream" {

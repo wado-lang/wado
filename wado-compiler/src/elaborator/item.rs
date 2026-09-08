@@ -46,12 +46,6 @@ pub(super) fn extract_compiler_item<H: CompilerHost>(
     items.into_iter().next()
 }
 
-/// Whether the declared result leaves through `task return` rather than the
-/// Wasm return, making a Wado call of it `()`. An import returns as declared.
-fn returns_via_task_return(func: &Function) -> bool {
-    func.is_async && func.is_export
-}
-
 /// Body-walk placeholder for a function / method / test. The
 /// body walk records the signature facts (`fn_param_types`,
 /// `fn_return_types`, `decl_type_params`, `function_effects`,
@@ -2266,7 +2260,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 })
                 .collect(),
             effects,
-            returns_via_task_return: returns_via_task_return(func),
         }
     }
 
@@ -2344,11 +2337,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 .unwrap_or(TypeTable::UNIT)
         };
 
-        let return_type = if returns_via_task_return(func) {
-            TypeTable::UNIT
-        } else {
-            declared_return_type
-        };
+        let return_type = declared_return_type;
 
         scope
             .sem
@@ -2460,7 +2449,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             scope.resolve_block(b, &mut ctx, None);
         }
 
-        scope.validate_missing_return_ast(return_type, func.body.as_ref(), func.span);
+        scope.validate_missing_return_ast(
+            return_type,
+            func.is_async,
+            func.body.as_ref(),
+            func.span,
+        );
         scope.validate_loop_jumps_ast(func.body.as_ref());
 
         // Convert AST type params to TIR type params (while type params
@@ -2795,7 +2789,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             scope.resolve_block(b, &mut ctx, None);
         }
 
-        scope.validate_missing_return_ast(return_type, func.body.as_ref(), func.span);
+        scope.validate_missing_return_ast(
+            return_type,
+            func.is_async,
+            func.body.as_ref(),
+            func.span,
+        );
         scope.validate_loop_jumps_ast(func.body.as_ref());
 
         // Convert AST type params to TIR type params (while type params still

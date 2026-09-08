@@ -1213,7 +1213,7 @@ fn reduce_unexpanded_task_returns(project: &Package) {
         for f in &module.functions {
             let needs_strip = f.borrow().is_async;
             if needs_strip {
-                reduce_task_returns_in_func(f);
+                reduce_task_returns_in_func(f, &module.type_table);
             }
         }
     }
