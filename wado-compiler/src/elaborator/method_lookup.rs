@@ -1775,9 +1775,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // For blanket impls where impl_ty is a free type parameter
         if let Some(ref name) = blanket_name
             && !scope.annotate_ctx.trait_ctx.type_params.contains_key(name)
-            && scope
-                .tysys
-                .is_impl_target_param(&header.type_params, name)
+            && scope.tysys.is_impl_target_param(&header.type_params, name)
         {
             if let Some(recv_id) = receiver_type_id {
                 // At the slot the impl gave it, which is 0 only when the

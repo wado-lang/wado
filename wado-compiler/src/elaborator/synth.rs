@@ -169,6 +169,17 @@ fn condition_binding_names(condition: &ast::Condition) -> Vec<String> {
     }
 }
 
+/// Whether an argument of type `arg` answers a parameter of type `param`,
+/// argument passing's one coercion included: a `&mut T` argument answers a `&T`
+/// parameter, as [`unify`] binds it.
+fn param_takes(tt: &TypeTable, param: TypeId, arg: TypeId) -> bool {
+    param == arg
+        || matches!(
+            (tt.get(param), tt.get(arg)),
+            (ResolvedType::Ref(p), ResolvedType::MutRef(a)) if p == a
+        )
+}
+
 impl<H: CompilerHost> Elaborator<'_, H> {
     /// Classify one argument. See the module documentation for the soundness
     /// invariant and the side-effect discipline this entry point enforces.
@@ -200,12 +211,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     fn slots_fill_param_to(&self, param: TypeId, arg: TypeId) -> bool {
         let mut bindings = IndexMap::default();
         unify(&self.tysys.type_table, param, arg, &mut bindings);
+        // A binding dropped here leaves that slot spelled as it was written, so
+        // the parameter can never equal the argument.
         let substitution: IndexMap<u32, TypeId> = {
             let tt = self.tysys.type_table.borrow();
             bindings
                 .iter()
                 .filter_map(|(&slot, &filled)| match tt.get(slot) {
-                    ResolvedType::TypeParam { index, .. } => Some((*index, filled)),
+                    ResolvedType::TypeParam { index, .. }
+                    | ResolvedType::TypePack { index, .. } => Some((*index, filled)),
                     _ => None,
                 })
                 .collect()
@@ -215,18 +229,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .type_table
             .borrow_mut()
             .substitute_type_params(param, &substitution);
-        filled == arg
+        param_takes(&self.tysys.type_table.borrow(), filled, arg)
     }
 
     /// Whether a candidate's parameter type is in `class`'s denoted set.
-    /// Openness first: a parameter still mentioning a type parameter is not
-    /// yet comparable and admits everything.
     pub(super) fn class_admits(&self, param: TypeId, class: &ArgClass) -> bool {
         let tt = self.tysys.type_table.borrow();
-        // A bare slot admits every argument. A *shape* with a slot inside it
-        // does not: `Wrap<A>` is no `i32` however `A` is chosen, and admitting
-        // one made a generic sibling ambiguous with every concrete impl of the
-        // name — on an argument no annotation could have separated.
+        // A bare slot admits every argument. A shape with a slot inside it is
+        // compared like any other type: `Wrap<A>` is no `i32` however `A` is
+        // chosen, and admitting one made a generic sibling ambiguous with every
+        // concrete impl of the name — on an argument no annotation could have
+        // separated.
         if param == TypeTable::UNKNOWN
             || param == TypeTable::ERROR
             || matches!(
@@ -239,12 +252,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         match class {
             ArgClass::Opaque(_) => true,
             ArgClass::Exact(t) => {
-                if *t == param
-                    || matches!(
-                        (tt.get(param), tt.get(*t)),
-                        (ResolvedType::Ref(p), ResolvedType::MutRef(a)) if p == a
-                    )
-                {
+                if param_takes(&tt, param, *t) {
                     return true;
                 }
                 if !tt.contains_type_param(param) {
