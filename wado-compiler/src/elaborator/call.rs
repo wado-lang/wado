@@ -1810,6 +1810,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             && let Some(sig) = self.tysys.signatures.function_sig(def)
             && let Some(return_type) = sig.decl.return_type
         {
+            if sig.returns_via_task_return {
+                return TypeTable::UNIT;
+            }
             return return_type;
         }
 

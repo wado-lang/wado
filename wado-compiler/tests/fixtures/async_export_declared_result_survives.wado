@@ -1,0 +1,16 @@
+// Erasing a call's result type must not erase the declaration it was read
+// from: the generic path recovers the declared result from the recorded
+// signature, and `task return` is checked against it.
+
+use { Display } from "core:prelude";
+
+export async fn deliver<T: Display>() -> Result<i32, String> {
+    task return 5;
+}
+
+export fn run() {
+    deliver::<i32>();
+}
+
+__DATA__
+{"compile_error": "type mismatch: expected 'Result<i32, String>', found 'i32'"}

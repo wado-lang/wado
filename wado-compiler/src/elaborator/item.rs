@@ -46,15 +46,11 @@ pub(super) fn extract_compiler_item<H: CompilerHost>(
     items.into_iter().next()
 }
 
-/// The return type a caller observes. An `export async fn` hands its declared
-/// result to the Component Model runtime through `task return`, so a Wado call
-/// site receives nothing; an imported `async fn` returns as declared.
-pub(super) fn caller_visible_return_type(func: &Function, declared: TypeId) -> TypeId {
-    if func.is_async && func.is_export {
-        TypeTable::UNIT
-    } else {
-        declared
-    }
+/// Whether the declared result leaves through `task return` rather than the
+/// Wasm return, which makes a Wado call of it `()`. An imported `async fn`
+/// stands on the other side of that boundary and returns as declared.
+pub(super) fn returns_via_task_return(func: &Function) -> bool {
+    func.is_async && func.is_export
 }
 
 /// Body-walk placeholder for a function / method / test. The
@@ -2239,10 +2235,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             .iter()
             .map(|p| scope.resolve_type(&p.ty))
             .collect();
-        let return_type = func
-            .return_type
-            .as_ref()
-            .map(|t| caller_visible_return_type(func, scope.resolve_type(t)));
+        let return_type = func.return_type.as_ref().map(|t| scope.resolve_type(t));
         // The frame still holds this function's type parameters, so they are
         // not mistaken for unknown names.
         for param in &func.params {
@@ -2274,6 +2267,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 })
                 .collect(),
             effects,
+            returns_via_task_return: returns_via_task_return(func),
         }
     }
 
@@ -2351,7 +2345,11 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 .unwrap_or(TypeTable::UNIT)
         };
 
-        let return_type = caller_visible_return_type(func, declared_return_type);
+        let return_type = if returns_via_task_return(func) {
+            TypeTable::UNIT
+        } else {
+            declared_return_type
+        };
 
         scope
             .sem
