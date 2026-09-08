@@ -882,6 +882,16 @@ impl IterationDuties {
     pub fn is_empty(&self) -> bool {
         return self.reserve_scan.is_empty() && !self.decline_stranded;
     }
+
+    /// Whether anything past the reserve is owed. `gen_rep_scan_guard` builds
+    /// the reserve into the guard's own scan, so an entry that ran the guard
+    /// and nothing else asserts on this.
+    ///
+    /// Beside `is_empty` on purpose: both name the fields, and a duty added to
+    /// this struct is one edit away from each.
+    pub fn owes_beyond_reserve(&self) -> bool {
+        return self.decline_stranded;
+    }
 }
 
 pub struct RepeatOp {

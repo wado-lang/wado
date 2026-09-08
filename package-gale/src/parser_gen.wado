@@ -4191,39 +4191,24 @@ fn gen_repeat_body(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut GenContext, nc: &
             // Where the body has alternatives its own decision is the guard:
             // finding none ends the loop, and the dispatch commits to a find.
             let body_admits = admits_kinds(&r.body_admits);
-            // A `+` emitted its mandatory iteration above the loop, so every
-            // iteration reaching here is optional.
-            let refusable = Refusable::Always;
+            // The op-driven walker discharges no duty of its own: the guard
+            // below carries the reserve, and nothing here has ever been reached
+            // by a loop owing more. Asserted rather than discharged, because a
+            // discharge no grammar reaches is untested code that reads as
+            // coverage. If one fires, call `gen_iteration_duties` at that site
+            // and bring the grammar that fired it.
             if let Group(g) = &r.body {
                 if let Some(branches) = op_group_alt_decision(g, ctx) {
+                    assert r.duties.is_empty(), "gen_repeat_body: a decided group body owes iteration duties, and this entry discharges none";
                     let [winner, best] = gen_group_decide(w, &branches, &g.scan_group.alts, ctx, nc, false);
                     w.line(&`if ${best} <= p.pos \{ break; \}`);
-                    gen_iteration_duties(
-                        w,
-                        &r.duties,
-                        &body_admits,
-                        &best,
-                        &refusable,
-                        /*reserve_in_guard=*/ false,
-                        ctx,
-                        nc,
-                    );
                     gen_group_body(w, g, ctx, nc, Option::Some(winner));
                     w.end();
                     return;
                 }
             }
+            assert !r.duties.owes_beyond_reserve(), "gen_repeat_body: a scan-guarded loop owes a duty the guard does not discharge";
             let scan_pos = gen_rep_scan_guard(w, &r.scan_body, &r.duties, &body_admits, ctx, nc);
-            gen_iteration_duties(
-                w,
-                &r.duties,
-                &body_admits,
-                &scan_pos,
-                &refusable,
-                /*reserve_in_guard=*/ true,
-                ctx,
-                nc,
-            );
             w.line(&`if ${scan_pos} < 0 \{ break; \}`);
             gen_op(w, &r.body, ctx, nc);
             w.end();
@@ -6359,10 +6344,10 @@ fn gen_rep_decline_stranded(
 /// Discharge, at a position the entry has committed to, every duty the guard
 /// did not.
 ///
-/// The one call an entry path makes. A duty added to `IterationDuties` reaches
-/// every path from here, which is what a hand-listed call per path could not
-/// promise — the guarded body loop and the decided group body each ran a
-/// different subset until this existed.
+/// The one call an entry path that owes duties makes; the paths that owe none
+/// assert it instead of calling here, so no site enumerates duties. A duty
+/// added to `IterationDuties` reaches every discharge from here and trips every
+/// assert that stops being true.
 ///
 /// `reserve_in_guard` says the path ran `gen_rep_scan_guard`, which builds the
 /// reserve into the guard's own scan. That is not a placement detail: failing
@@ -6715,12 +6700,14 @@ fn reserve_starved_cond(
     body_admits: &List<String>,
     ctx: &mut GenContext,
 ) -> String {
-    let another = kind_check_or_none(body_admits, kind, ctx);
-    if another.is_empty() {
-        return `!${*ok}`;
-    }
+    // A reserve is stamped only where the loop's own first set overlaps the
+    // suffix's, so that set is never empty here. Asserted rather than handled:
+    // reading an empty set as "nothing can follow" is exactly the condition
+    // that broke `(A | B)* A`, and a silent fallback to it is a regression
+    // nobody would see.
+    assert !body_admits.is_empty(), "reserve_starved_cond: a reserve whose loop admits nothing would starve every iteration";
     gen_kind_read(w, kind, stream, at);
-    return `!${*ok} && !(${another})`;
+    return `!${*ok} && !(${ctx.kind_check_str(body_admits, kind)})`;
 }
 
 /// Refuse the iteration whose end starves the alternative's mandatory suffix.
