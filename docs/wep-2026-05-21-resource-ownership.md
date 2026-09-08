@@ -256,8 +256,8 @@ where it cannot prove move / share / fresh; no elision pass):
   A function that returns a projection rather than a fresh place is fresh
   exactly when the argument it projects is, and `returns_self_projection`
   records which parameter that is. The caller tests that argument, not the
-  receiver: `VariantCase::extract(&self, w)` returns a component of `w`, and
-  testing `self` would ask about a member descriptor the walk built and call the
+  receiver. `VariantCase::extract(&self, w)` returns a component of `w`; testing
+  `self` asks about a member descriptor the walk built fresh, and calls the
   result fresh while `w` is still held. A `core:builtin` answers the same
   question from `#[returns(part_of(p))]`, which names `p` outright.
 

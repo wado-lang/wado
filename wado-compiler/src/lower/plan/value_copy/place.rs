@@ -157,10 +157,8 @@ pub fn compute_return_paths(
         let Some(Names::Place(place)) = returned.names else {
             return false;
         };
-        let Some(param) = func
-            .params
-            .iter()
-            .position(|p| p.local_index == place.root && lends_storage(p, type_table))
+        let Some(param) = param_position(&func.params, place.root)
+            .filter(|&i| lends_storage(&func.params[i], type_table))
         else {
             return false;
         };
@@ -473,8 +471,14 @@ pub fn is_reference(type_id: TypeId, type_table: &TypeTable) -> bool {
 
 /// Whether this parameter names storage the caller still reaches. A by-value
 /// one was deep-copied at the call, so the body owns what it holds.
-fn lends_storage(param: &TirParam, type_table: &TypeTable) -> bool {
+pub fn lends_storage(param: &TirParam, type_table: &TypeTable) -> bool {
     param.is_mut_ref || is_reference(param.type_id, type_table)
+}
+
+/// The parameter bound to `local`, by position.
+#[must_use]
+pub fn param_position(params: &[TirParam], local: u32) -> Option<usize> {
+    params.iter().position(|p| p.local_index == local)
 }
 
 /// Whether a value of this type could name storage someone else still reaches:

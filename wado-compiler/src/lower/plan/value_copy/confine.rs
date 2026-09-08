@@ -153,16 +153,16 @@ impl Ctx<'_> {
             })
     }
 
-    fn callee_ret(&self, func: &FunctionRef, param_index: usize) -> bool {
+    /// One escape channel of a callee's parameter. A callee with no entry has
+    /// no body this scan read, so every channel of it is raised.
+    fn callee_escape(
+        &self,
+        func: &FunctionRef,
+        param_index: usize,
+        channel: impl Fn(&ParamEscape) -> &[bool],
+    ) -> bool {
         match self.funcs.get(&func.module_source, &func.name) {
-            Some(pe) => pe.ret.get(param_index).copied().unwrap_or(true),
-            None => true,
-        }
-    }
-
-    fn callee_side(&self, func: &FunctionRef, param_index: usize) -> bool {
-        match self.funcs.get(&func.module_source, &func.name) {
-            Some(pe) => pe.side.get(param_index).copied().unwrap_or(true),
+            Some(pe) => channel(pe).get(param_index).copied().unwrap_or(true),
             None => true,
         }
     }
@@ -174,7 +174,7 @@ impl Ctx<'_> {
         match self.kind(func) {
             Kind::ValueCopy => false,
             Kind::Builtin => self.builtins.stored_params(func).contains(&param_index),
-            Kind::HasBody => self.callee_side(func, param_index),
+            Kind::HasBody => self.callee_escape(func, param_index, |pe| &pe.side),
             Kind::Opaque => true,
         }
     }
@@ -402,7 +402,7 @@ fn call_result_taint(
         Kind::HasBody => operands
             .iter()
             .enumerate()
-            .filter(|(i, _)| ctx.callee_ret(func, *i))
+            .filter(|(i, _)| ctx.callee_escape(func, *i, |pe| &pe.ret))
             .fold(Taint::default(), |acc, (_, op)| {
                 union(acc, taint_of(ctx, taint, op))
             }),

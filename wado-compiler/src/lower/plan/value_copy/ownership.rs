@@ -10,7 +10,7 @@
 
 use super::callgraph::CallGraph;
 use super::funcset::{FuncKeyMap, FuncKeySet};
-use super::place::{carries_storage, is_reference};
+use super::place::{carries_storage, is_reference, param_position};
 use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::tir::{
@@ -498,17 +498,15 @@ impl TirRefVisitor for ReturnWalker<'_> {
 }
 
 /// Which parameter `expr` is a projection of — a field / index / payload / cast
-/// chain rooted at one — by position, so it aliases that parameter's storage. A
-/// projection of a fresh argument is itself fresh, which is what lets a call to
-/// a self-projecting callee be treated as fresh when that argument is.
+/// chain rooted at one — by position, so the result is fresh exactly when that
+/// argument is.
 ///
 /// Only the parameter's own reference may be peeled (`*self`): a deref deeper in
 /// the chain reads a reference *stored in* that storage, and its referent is
 /// somebody else's — a template shape holds each hole as a `&V` field, so
 /// `*v.h0` leaves `v` entirely however fresh `v` is.
 pub(super) fn projection_param(expr: &TirExpr, params: &[TirParam]) -> Option<usize> {
-    let root = projection_root(expr)?;
-    params.iter().position(|p| p.local_index == root)
+    param_position(params, projection_root(expr)?)
 }
 
 /// The local a projection chain bottoms out at, following the rule
