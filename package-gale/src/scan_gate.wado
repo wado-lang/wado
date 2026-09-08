@@ -264,16 +264,10 @@ fn rule_prequel_bodies(rule: &ParserRule) -> List<String> {
 
 /// Every name a body mentions, snake_cased — the disqualifying set.
 ///
-/// The whole of it, not the assignment targets in it. Which names a body writes
-/// is a question about the host language's syntax, and every answer that
-/// enumerates write shapes has a shape it does not know: matching `f = 0` alone
-/// misses `if (c) f = 0;`, and matching `=` at all misses `f++`. A body the scan
-/// cannot run tells us nothing about which of its names it leaves alone, so all
-/// of them stop being simulable.
-///
-/// Over-rejecting only ever leaves a gate unsimulated, which is the behaviour
-/// before any of this existed. Under-rejecting is a scan reading a value the
-/// parse never holds.
+/// Mentions, not writes. Which names a body writes is a question about the host
+/// language's syntax, and any answer that enumerates write shapes has one it
+/// does not know (`if (c) f = 0;`, `f++`). Over-rejecting leaves a gate
+/// unsimulated; under-rejecting is a scan reading a value the parse never holds.
 fn mentioned_names(text: &String) -> List<String> {
     let mut out: List<String> = [];
     let mut start = -1;
@@ -282,19 +276,12 @@ fn mentioned_names(text: &String) -> List<String> {
         if in_name && start < 0 {
             start = index;
         } else if !in_name && start >= 0 {
-            push_name(&mut out, &text.substr_bytes(start, index));
+            out.push(to_snake_case(&text.substr_bytes(start, index)));
             start = -1;
         }
     }
     if start >= 0 {
-        push_name(&mut out, &text.substr_bytes(start, text.len()));
+        out.push(to_snake_case(&text.substr_bytes(start, text.len())));
     }
     return out;
-}
-
-fn push_name(out: &mut List<String>, word: &String) {
-    let name = to_snake_case(word);
-    if !out.contains(&name) {
-        out.push(name);
-    }
 }

@@ -607,8 +607,8 @@ fn gen_scan_gate_global(w: &mut CodeWriter, fields: &List<String>, members: &Mem
     w.blank();
 }
 
-/// A gate member's `[type, initialiser]`. `scan_gate_fields` reads the same
-/// members block, so a field with no declaration is a bug there.
+/// A gate member's `[type, initialiser]`. `set_scan_gate_fields` keeps only what
+/// the members block declares, so the miss below cannot be reached from here.
 fn member_field(members: &MemberDecls, name: &String) -> [String, String] {
     for let mf of &members.fields {
         if mf.name == *name {

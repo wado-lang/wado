@@ -1797,8 +1797,13 @@ fn scan_expr(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
         if suffix_kind == TK_OR {
             if 1 >= min_prec {
                 let lr_saved_pos = pos;
+                let lr_saved_pos_no_brace = SCAN_GATE.no_brace;
                 pos = scan_expr_lr_0(tokens, pos);
-                if pos < 0 { pos = lr_saved_pos; break; }
+                if pos < 0 {
+                    pos = lr_saved_pos;
+                    SCAN_GATE.no_brace = lr_saved_pos_no_brace;
+                    break;
+                }
             } else {
                 break;
             }

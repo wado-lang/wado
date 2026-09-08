@@ -930,25 +930,6 @@ fn emit_lr_atn_group_repick(
     }
 }
 
-fn gen_lr_branch_call(
-    w: &mut CodeWriter,
-    fn_name: &String,
-    lr_idx: i32,
-    prec: i32,
-    emit_follow: bool,
-    mid_operand_gated: bool = false,
-    scan_local: &String = &"",
-) {
-    gen_scan_lr_call_with_prec(
-        w,
-        &`${*fn_name}_lr_${lr_idx}`,
-        prec,
-        emit_follow,
-        mid_operand_gated,
-        scan_local,
-    );
-}
-
 fn gen_lr_suffix_dispatch(
     w: &mut CodeWriter,
     fn_name: &String,
@@ -979,7 +960,7 @@ fn gen_scan_lr_call_with_prec(
     w: &mut CodeWriter,
     suffix_fn: &String,
     prec: i32,
-    emit_follow: bool,
+    ctx: &GenContext,
     mid_operand_gated: bool = false,
     scan_local: &String = &"",
 ) {
@@ -992,17 +973,22 @@ fn gen_scan_lr_call_with_prec(
     // achieves the same result at decision time; Gale's first-token dispatch
     // makes the same decision lazily after attempting the suffix.
     w.begin(&`if ${prec} >= min_prec`);
-    w.line(&`let lr_saved_pos = pos;`);
+    // A suffix scan runs the suffix's gate actions, so an abandoned climb has
+    // to put the gate back with the position.
+    gen_scan_mark(w, ctx, &"lr_saved_pos");
     // The guard that selected this branch already ran the scan.
-    let scan = if scan_local.is_empty() { `${*suffix_fn}(tokens, pos${follow_sep(emit_follow)})` } else { *scan_local };
+    let scan = if scan_local.is_empty() {
+        `${*suffix_fn}(tokens, pos${follow_sep(ctx.current_rule_reads_follow())})`;
+    } else {
+        *scan_local;
+    };
     w.line(&`pos = ${scan};`);
-    w.line(&"if pos < 0 { pos = lr_saved_pos; break; }");
+    gen_scan_rewind_break(w, ctx, &"lr_saved_pos", &"pos < 0");
     if mid_operand_gated {
         // Lockstep with the parse loop: the tournament must measure the same
         // climb the parse will take.
-        w.line(
-            &`if !(lr_cont == 0 || ${follow_yields_call_of(&"tokens", &"pos", &"lr_cont")}) { pos = lr_saved_pos; break; }`,
-        );
+        let yields = `!(lr_cont == 0 || ${follow_yields_call_of(&"tokens", &"pos", &"lr_cont")})`;
+        gen_scan_rewind_break(w, ctx, &"lr_saved_pos", &yields);
     }
     w.else_begin(&"else");
     w.line(&"break;");
@@ -1070,12 +1056,11 @@ fn emit_lr_overlap_branch(
 ) {
     match &site.branch {
         ScanCall => {
-            gen_lr_branch_call(
+            gen_scan_lr_call_with_prec(
                 w,
-                &site.scan_fn,
-                lr.alt_index,
+                &`${site.scan_fn}_lr_${lr.alt_index}`,
                 lr.own_prec,
-                ctx.current_rule_reads_follow(),
+                ctx,
                 mid_operand_gated,
                 scan_local,
             );
@@ -6385,10 +6370,9 @@ fn gen_rep_reserve_at(
 ///
 /// The gate is part of where the scan is. An arm that rewinds one and not the
 /// other hands the next arm a value from a walk that did not happen: an `if`
-/// head it entered and never left, whose ban the parse will not apply. Marking
-/// and rewinding are therefore whole operations rather than a two-line idiom
-/// each site repeats — one site forgetting the second line is what this pair
-/// exists to prevent.
+/// head it entered and never left, whose ban the parse will not apply. So
+/// marking and rewinding are whole operations, not a two-line idiom each site
+/// repeats and one site can write half of.
 fn gen_scan_mark(w: &mut CodeWriter, ctx: &GenContext, slot: &String) {
     w.line(&`let ${*slot} = pos;`);
     gen_scan_gate_save(w, ctx, slot);
