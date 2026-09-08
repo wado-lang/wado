@@ -886,7 +886,7 @@ fn lr_atn_alt_decl(lr_dispatch: &LrDispatchData) -> String {
 /// A dispatch measures its candidates one after another and each mutates
 /// `SCAN_GATE`, so one starting from wherever the last ended measures under a
 /// reading nobody took — and the branch the chain picks then commits under a
-/// loser's. Every candidate scan opens with `gen_lr_scan_origin`.
+/// loser's. Every candidate scan opens with `gen_scan_gate_from`.
 variant ScanOrigin {
     /// The parse launches the scan, so the parser holds the truth.
     Parser,
@@ -907,7 +907,7 @@ fn gen_lr_candidates_begin(w: &mut CodeWriter, ctx: &GenContext, parse_launched:
 }
 
 /// Put a candidate's starting gate in place, immediately before its scan.
-fn gen_lr_scan_origin(w: &mut CodeWriter, ctx: &GenContext, from: &ScanOrigin) {
+fn gen_scan_gate_from(w: &mut CodeWriter, ctx: &GenContext, from: &ScanOrigin) {
     match from {
         Parser => gen_scan_gate_seed(w, ctx),
         Entry(slot) => gen_scan_gate_restore(w, ctx, slot),
@@ -957,7 +957,7 @@ fn emit_lr_atn_group_repick(
             let lr = &lr_alts[lr_dispatch.valid_lr_alts[*gi]];
             w.line(&`let mut _lr_s_${*gi}: i32 = -1;`);
             w.begin(&`if ${lr.own_prec} >= min_prec`);
-            gen_lr_scan_origin(w, ctx, &origin);
+            gen_scan_gate_from(w, ctx, &origin);
             w.line(&`_lr_s_${*gi} = ${*scan_fn}_lr_${lr.alt_index}(${*tokens_expr}, ${*pos_expr}${fsep});`);
             w.end();
         }
@@ -1016,13 +1016,15 @@ fn gen_scan_lr_call_with_prec(
     // A suffix scan runs the suffix's gate actions, so an abandoned climb has
     // to put the gate back with the position.
     gen_scan_mark(w, ctx, &"lr_saved_pos");
-    // The guard that selected this branch already ran the scan.
-    let scan = if scan_local.is_empty() {
-        `${*suffix_fn}(tokens, pos${follow_sep(ctx.current_rule_reads_follow())})`;
+    // The guard that selected this branch already ran the scan. Committing to
+    // its end takes the gate it ended under: the chain rolled the global back to
+    // the dispatch's entry before branching, and the live-call sibling below
+    // advances it by running.
+    if scan_local.is_empty() {
+        w.line(&`pos = ${*suffix_fn}(tokens, pos${follow_sep(ctx.current_rule_reads_follow())});`);
     } else {
-        *scan_local;
-    };
-    w.line(&`pos = ${scan};`);
+        gen_scan_rewind(w, ctx, scan_local);
+    }
     gen_scan_rewind_break(w, ctx, &"lr_saved_pos", &"pos < 0");
     if mid_operand_gated {
         // Lockstep with the parse loop: the tournament must measure the same
@@ -1280,12 +1282,17 @@ fn emit_lr_overlap(
             for let c of &conds {
                 if !c.2.is_empty() {
                     let alt = lr_alts[lr_dispatch.valid_lr_alts[group[c.0]]].alt_index;
-                    gen_lr_scan_origin(w, ctx, &origin);
+                    gen_scan_gate_from(w, ctx, &origin);
                     w.line(
                         &`let ${c.2} = ${site.scan_fn}_lr_${alt}(${site.scan_args}${follow_sep(
                             ctx.current_rule_reads_follow(),
                         )});`,
                     );
+                    // A position the branch may commit to, so it keeps the gate
+                    // it was reached under — the run rolls the global back.
+                    for let line of scan_gate_snapshot(ctx, &c.2) {
+                        w.line(&`let ${line}`);
+                    }
                 }
             }
             gen_lr_candidates_end(w, ctx, &origin);
@@ -2443,6 +2450,15 @@ fn gen_scan_entry(w: &mut CodeWriter, ctx: &GenContext, at: &String = &PARSER_PO
     gen_scan_gate_seed(w, ctx);
     w.line(&"let tokens = &p.kinds;");
     w.line(&`let mut pos: i32 = ${*at};`);
+}
+
+/// Enter an inlined scan at a position an earlier scan committed to, under the
+/// gate it committed with. Seeding from the parser instead would run the walk
+/// under the gate as of the parse's position, which is not where it starts.
+fn gen_scan_entry_from(w: &mut CodeWriter, ctx: &GenContext, slot: &String) {
+    w.line(&"let tokens = &p.kinds;");
+    w.line(&`let mut pos: i32 = ${*slot};`);
+    gen_scan_gate_restore(w, ctx, slot);
 }
 
 /// Put the parser's gate into `SCAN_GATE`. A scan reads it as it walks, so one
@@ -3977,7 +3993,7 @@ fn emit_lr_branch(
     let scan_call = if scan_local.is_empty() {
         // The other shape of a scan entry: the generated scan takes the tokens
         // and the position as arguments, so only the gate is left to hand it.
-        gen_lr_scan_origin(w, ctx, &ScanOrigin::Parser);
+        gen_scan_gate_from(w, ctx, &ScanOrigin::Parser);
         `${*scan_fn}_lr_${lr.alt_index}(&p.kinds, p.pos${follow_sep(ctx.current_rule_reads_follow())})`;
     } else {
         *scan_local;
@@ -6426,7 +6442,15 @@ fn gen_rep_reserve_at(
     w.begin(&`if ${*at} >= 0`);
     w.line(&`let mut ${ok} = false;`);
     w.begin(&`${label}:`);
-    gen_scan_entry(w, ctx, at);
+    // `at` is where the iteration the entry committed to ended, so the reserve
+    // walks on from the gate that iteration produced — the same gate its two
+    // twins run under, which is what makes the three refuse the same loops.
+    //
+    // The two gates agree today for a reason outside this function: only a
+    // decided group body reaches here, and `scan_gate_fields` refuses a field
+    // any group alternative's action writes. Taking the iteration's gate says
+    // so anyway, rather than resting on that.
+    gen_scan_entry_from(w, ctx, at);
     for let se of &duties.reserve_scan {
         gen_scan_op_element(w, se, ctx, &`break ${label};`);
     }
@@ -6494,14 +6518,30 @@ fn gen_scan_gate_save(w: &mut CodeWriter, ctx: &GenContext, slot: &String, mutab
     }
 }
 
+/// The assignments that put the gate now in `SCAN_GATE` into `slot`'s fields.
+fn scan_gate_snapshot(ctx: &GenContext, slot: &String) -> List<String> {
+    if !ctx.emit_scan_gate() {
+        return [];
+    }
+    return ctx.scan_gate_fields().iter_ref().map(|f| `${*slot}_${*f} = ${SCAN_GATE_HANDLE}.${*f};`).collect();
+}
+
+/// Commit a position the scan reached to `slot`, with the gate it reached it
+/// under. The twin of `gen_scan_rewind`: a slot nothing snapshots into is a
+/// position whose gate is lost, and the next reader of it invents one.
+fn gen_scan_commit(w: &mut CodeWriter, ctx: &GenContext, slot: &String, end: &String) {
+    w.line(&`${*slot} = ${*end};`);
+    for let line of scan_gate_snapshot(ctx, slot) {
+        w.line(&line);
+    }
+}
+
 /// `if <wins> { <best> = <end>; <gate snapshot> }` as one statement, so a
 /// candidate emitted through a commit string keeps the gate with its length.
 fn scan_gate_best_commit(ctx: &GenContext, best: &String, wins: &String, end: &String) -> String {
     let mut body = `${*best} = ${*end};`;
-    if ctx.emit_scan_gate() {
-        for let f of ctx.scan_gate_fields() {
-            body.push_str(&` ${*best}_${*f} = ${SCAN_GATE_HANDLE}.${*f};`);
-        }
+    for let line of scan_gate_snapshot(ctx, best) {
+        body.push_str(&` ${line}`);
     }
     return `if ${*wins} \{ ${body} \}`;
 }
@@ -6875,8 +6915,32 @@ fn rule_ref_group_all_scannable(sorted_group: &List<i32>, alts: &List<Alternativ
 /// value }`. Both scan-winner sites call this while iterating candidates in
 /// ASCENDING alt-index order, so the first (lowest-index) candidate to reach
 /// the running max keeps it — ANTLR4's ambiguity resolution.
+/// Take the longest candidate, where `best` holds a length: nothing runs a scan
+/// from it, so there is no gate to carry.
 fn emit_argmax_update(w: &mut CodeWriter, best_var: &String, winner_var: &String, end_expr: &String, winner_value: i32) {
     w.begin(&`if ${*end_expr} > ${*best_var}`);
+    w.line(&`${*best_var} = ${*end_expr};`);
+    w.line(&`${*winner_var} = ${winner_value};`);
+    w.end();
+}
+
+/// Take the longest candidate, where `best` holds a *position* something else
+/// walks on from — so the winner's gate travels with it. `from` is the gate the
+/// candidate reached `end_expr` under.
+fn emit_argmax_commit(
+    w: &mut CodeWriter,
+    best_var: &String,
+    winner_var: &String,
+    end_expr: &String,
+    winner_value: i32,
+    from: &ScanOrigin,
+    ctx: &GenContext,
+) {
+    w.begin(&`if ${*end_expr} > ${*best_var}`);
+    gen_scan_gate_from(w, ctx, from);
+    for let line of scan_gate_snapshot(ctx, best_var) {
+        w.line(&line);
+    }
     w.line(&`${*best_var} = ${*end_expr};`);
     w.line(&`${*winner_var} = ${winner_value};`);
     w.end();
@@ -6905,6 +6969,10 @@ fn gen_scan_winner_tournament(
     let best_var = dedup_name(&"gd_best", name_counts);
     w.line(&`let mut ${winner_var}: i32 = -1;`);
     w.line(&`let mut ${best_var}: i32 = -1;`);
+    // The round commits the winner's gate into `best`, so the slot has to exist
+    // wherever `best` is declared — both declarers, not just the one a fixture
+    // happened to reach.
+    gen_scan_gate_save(w, ctx, &best_var, /*mutable=*/ true);
     gen_scan_winner_round(w, sorted_group, scan_alts, ctx, name_counts, &winner_var, &best_var);
     return winner_var;
 }
@@ -6928,13 +6996,15 @@ fn gen_scan_winner_round(
         let ai = order[oi];
         let sb = &scan_alts[ai];
         if sb.elements.is_empty() {
+            // An empty alternative ends where the parse is, under its gate.
             let epsilon = "p.pos";
-            emit_argmax_update(w, best_var, winner_var, &epsilon, ai);
+            emit_argmax_commit(w, best_var, winner_var, &epsilon, ai, &ScanOrigin::Parser, ctx);
         } else {
             let end_var = dedup_name(&"gd_end", name_counts);
             w.line(&`let mut ${end_var}: i32 = -1;`);
+            gen_scan_gate_save(w, ctx, &end_var, /*mutable=*/ true);
             gen_scan_alt_end(w, sb, &end_var, ctx, name_counts);
-            emit_argmax_update(w, best_var, winner_var, &end_var, ai);
+            emit_argmax_commit(w, best_var, winner_var, &end_var, ai, &ScanOrigin::Entry(end_var), ctx);
         }
         // The early exit skips the alts still to come; after the last one
         // there are none.
@@ -7082,6 +7152,9 @@ fn gen_group_decide(
     let best_var = dedup_name(&"gd_best", name_counts);
     w.line(&`let mut ${winner_var}: i32 = -1;`);
     w.line(&`let mut ${best_var}: i32 = -1;`);
+    // `best` is a position a scan reached, so it carries the gate it reached it
+    // under: whoever runs from there — the reserve does — must not invent one.
+    gen_scan_gate_save(w, ctx, &best_var, /*mutable=*/ true);
     if follow_gate {
         w.begin(&`if !(${caller_follow_yields()})`);
     }
@@ -7123,7 +7196,10 @@ fn gen_decision_measure(
     w.line(&`${*winner_var} = ${alt_index};`);
     let sb = &scan_alts[alt_index];
     if sb.elements.is_empty() {
-        w.line(&`${*best_var} = p.pos;`);
+        // An empty alternative walks nowhere, so it ends where the parse is and
+        // under the parse's own gate.
+        gen_scan_gate_seed(w, ctx);
+        gen_scan_commit(w, ctx, best_var, &"p.pos");
         return;
     }
     gen_scan_alt_end(w, sb, best_var, ctx, name_counts);
@@ -7151,7 +7227,7 @@ fn gen_scan_alt_end(
         &sb.gates,
         &sb.gate_cond,
     );
-    w.line(&`${*end_var} = pos;`);
+    gen_scan_commit(w, ctx, end_var, &"pos");
     w.end();
 }
 

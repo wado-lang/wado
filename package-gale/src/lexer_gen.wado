@@ -1910,8 +1910,6 @@ pub enum LexerGroupEmit {
     FirstMatchNoSuffix,
     /// Every arm consumes the same fixed number of chars.
     FirstMatchFixedLenArms,
-    /// An arm carries a semantic predicate anywhere below it.
-    FirstMatchArmPredicate,
     /// No two arms can match at the same position, so which arm wins is not a
     /// decision at all.
     FirstMatchArmsDisjoint,
@@ -1931,7 +1929,12 @@ pub fn lexer_group_emit(alt: &LexerAlternative, index: i32, all_rules: &List<Lex
     if index + 1 >= alt.elements.len() {
         return LexerGroupEmit::FirstMatchNoSuffix;
     }
-    match lexer_alts_scan(g_alts, all_rules) {
+    // `lexer_alts_lengths`, not `lexer_alts_scan`: this is an emit decision, and
+    // the emit runs a predicate while scoring, so an arm carrying one is still
+    // an arm to measure. The carve-out in `lexer_alts_scan` answers the routing
+    // question, where a predicate is disqualifying because `latn_match` cannot
+    // run one.
+    match lexer_alts_lengths(g_alts, all_rules) {
         SingleArm => {
             return LexerGroupEmit::FirstMatchSingleArm;
         },
@@ -1939,7 +1942,7 @@ pub fn lexer_group_emit(alt: &LexerAlternative, index: i32, all_rules: &List<Lex
             return LexerGroupEmit::FirstMatchFixedLenArms;
         },
         ArmPredicate => {
-            return LexerGroupEmit::FirstMatchArmPredicate;
+            panic("lexer_alts_lengths never reports the routing question's predicate carve-out");
         },
         Longest => {
         },

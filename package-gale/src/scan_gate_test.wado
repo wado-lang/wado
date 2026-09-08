@@ -317,14 +317,21 @@ test "scan_gate_fields: an increment disqualifies the field" {
 // what the body does to the names it mentions is exactly what could not be
 // read, and over-rejecting only leaves the gate unsimulated.
 test "scan_gate_fields: a body that merely names the field disqualifies it" {
-    let g = grammar_with(&"log(noStruct);", null);
+    let g = grammar_with(&"noStruct;", null);
     assert scan_gate_fields(&g).is_empty(), `${scan_gate_fields(&g):?}`;
 }
 
-// The rejection case for the rule above: a body naming something else leaves
-// the field alone, so the set is not simply always empty.
+// A call names the method, not the field it writes, so no reading of the body
+// says which fields it leaves alone. The whole set goes.
+test "scan_gate_fields: a body that can call disqualifies every field" {
+    let g = grammar_with(&"ban();", null);
+    assert scan_gate_fields(&g).is_empty(), `${scan_gate_fields(&g):?}`;
+}
+
+// The rejection case for both rules above: a body that names something else and
+// cannot call leaves the field alone, so the set is not simply always empty.
 test "scan_gate_fields: a body naming other things leaves the field simulable" {
-    let g = grammar_with(&"log(depth);", null);
+    let g = grammar_with(&"depth = depth + 1;", null);
     assert scan_gate_fields(&g) == ["no_struct"], `${scan_gate_fields(&g):?}`;
 }
 

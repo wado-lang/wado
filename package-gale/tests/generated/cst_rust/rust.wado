@@ -11926,14 +11926,17 @@ fn scan_expression(tokens: &Array<i32>, pos: i32, follow: i64 = 0, min_prec: i32
                 let lr_pre_no_struct = SCAN_GATE.no_struct;
                 SCAN_GATE.no_struct = lr_pre_no_struct;
                 let _lr_scan_3 = scan_expression_lr_3(tokens, pos, follow);
+                let _lr_scan_3_no_struct = SCAN_GATE.no_struct;
                 SCAN_GATE.no_struct = lr_pre_no_struct;
                 let _lr_scan_4 = scan_expression_lr_4(tokens, pos, follow);
+                let _lr_scan_4_no_struct = SCAN_GATE.no_struct;
                 SCAN_GATE.no_struct = lr_pre_no_struct;
                 if _lr_scan_3 >= 0 {
                     if 21 >= min_prec {
                         let lr_saved_pos = pos;
                         let lr_saved_pos_no_struct = SCAN_GATE.no_struct;
                         pos = _lr_scan_3;
+                        SCAN_GATE.no_struct = _lr_scan_3_no_struct;
                         if pos < 0 {
                             pos = lr_saved_pos;
                             SCAN_GATE.no_struct = lr_saved_pos_no_struct;
@@ -11947,6 +11950,7 @@ fn scan_expression(tokens: &Array<i32>, pos: i32, follow: i64 = 0, min_prec: i32
                         let lr_saved_pos = pos;
                         let lr_saved_pos_no_struct = SCAN_GATE.no_struct;
                         pos = _lr_scan_4;
+                        SCAN_GATE.no_struct = _lr_scan_4_no_struct;
                         if pos < 0 {
                             pos = lr_saved_pos;
                             SCAN_GATE.no_struct = lr_saved_pos_no_struct;
@@ -12118,12 +12122,14 @@ fn scan_expression(tokens: &Array<i32>, pos: i32, follow: i64 = 0, min_prec: i32
                 let lr_pre_2_no_struct = SCAN_GATE.no_struct;
                 SCAN_GATE.no_struct = lr_pre_2_no_struct;
                 let _lr_scan_17 = scan_expression_lr_17(tokens, pos, follow);
+                let _lr_scan_17_no_struct = SCAN_GATE.no_struct;
                 SCAN_GATE.no_struct = lr_pre_2_no_struct;
                 if _lr_scan_17 >= 0 {
                     if 11 >= min_prec {
                         let lr_saved_pos = pos;
                         let lr_saved_pos_no_struct = SCAN_GATE.no_struct;
                         pos = _lr_scan_17;
+                        SCAN_GATE.no_struct = _lr_scan_17_no_struct;
                         if pos < 0 {
                             pos = lr_saved_pos;
                             SCAN_GATE.no_struct = lr_saved_pos_no_struct;
@@ -18819,8 +18825,10 @@ fn _parse_item__inner(p: &mut Parser) -> () with RustParserBase {
     if _kind_set_7(grp_kind) {
         let mut gd_winner: i32 = -1;
         let mut gd_best: i32 = -1;
+        let mut gd_best_no_struct = SCAN_GATE.no_struct;
         gd_tourney: {
             let mut gd_end: i32 = -1;
+            let mut gd_end_no_struct = SCAN_GATE.no_struct;
             gd_scan: {
                 SCAN_GATE.no_struct = p.no_struct;
                 let tokens = &p.kinds;
@@ -18828,8 +18836,11 @@ fn _parse_item__inner(p: &mut Parser) -> () with RustParserBase {
                 pos = scan_vis_item(tokens, pos, 0);
                 if pos < 0 { break gd_scan; }
                 gd_end = pos;
+                gd_end_no_struct = SCAN_GATE.no_struct;
             }
             if gd_end > gd_best {
+                SCAN_GATE.no_struct = gd_end_no_struct;
+                gd_best_no_struct = SCAN_GATE.no_struct;
                 gd_best = gd_end;
                 gd_winner = 0;
             }
@@ -18837,6 +18848,7 @@ fn _parse_item__inner(p: &mut Parser) -> () with RustParserBase {
                 break gd_tourney;
             }
             let mut gd_end_2: i32 = -1;
+            let mut gd_end_2_no_struct = SCAN_GATE.no_struct;
             gd_scan_2: {
                 SCAN_GATE.no_struct = p.no_struct;
                 let tokens = &p.kinds;
@@ -18844,8 +18856,11 @@ fn _parse_item__inner(p: &mut Parser) -> () with RustParserBase {
                 pos = scan_macro_item(tokens, pos, 0);
                 if pos < 0 { break gd_scan_2; }
                 gd_end_2 = pos;
+                gd_end_2_no_struct = SCAN_GATE.no_struct;
             }
             if gd_end_2 > gd_best {
+                SCAN_GATE.no_struct = gd_end_2_no_struct;
+                gd_best_no_struct = SCAN_GATE.no_struct;
                 gd_best = gd_end_2;
                 gd_winner = 1;
             }
@@ -18880,8 +18895,10 @@ fn _parse_vis_item__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParser
     if _kind_set_8(grp_kind) {
         let mut gd_winner: i32 = -1;
         let mut gd_best: i32 = -1;
+        let mut gd_best_no_struct = SCAN_GATE.no_struct;
         gd_tourney: {
             let mut gd_end: i32 = -1;
+            let mut gd_end_no_struct = SCAN_GATE.no_struct;
             gd_scan: {
                 SCAN_GATE.no_struct = p.no_struct;
                 let tokens = &p.kinds;
@@ -18889,8 +18906,11 @@ fn _parse_vis_item__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParser
                 pos = scan_module(tokens, pos, 0);
                 if pos < 0 { break gd_scan; }
                 gd_end = pos;
+                gd_end_no_struct = SCAN_GATE.no_struct;
             }
             if gd_end > gd_best {
+                SCAN_GATE.no_struct = gd_end_no_struct;
+                gd_best_no_struct = SCAN_GATE.no_struct;
                 gd_best = gd_end;
                 gd_winner = 0;
             }
@@ -18898,6 +18918,7 @@ fn _parse_vis_item__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParser
                 break gd_tourney;
             }
             let mut gd_end_2: i32 = -1;
+            let mut gd_end_2_no_struct = SCAN_GATE.no_struct;
             gd_scan_2: {
                 SCAN_GATE.no_struct = p.no_struct;
                 let tokens = &p.kinds;
@@ -18905,8 +18926,11 @@ fn _parse_vis_item__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParser
                 pos = scan_extern_crate(tokens, pos, 0);
                 if pos < 0 { break gd_scan_2; }
                 gd_end_2 = pos;
+                gd_end_2_no_struct = SCAN_GATE.no_struct;
             }
             if gd_end_2 > gd_best {
+                SCAN_GATE.no_struct = gd_end_2_no_struct;
+                gd_best_no_struct = SCAN_GATE.no_struct;
                 gd_best = gd_end_2;
                 gd_winner = 1;
             }
@@ -18914,6 +18938,7 @@ fn _parse_vis_item__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParser
                 break gd_tourney;
             }
             let mut gd_end_3: i32 = -1;
+            let mut gd_end_3_no_struct = SCAN_GATE.no_struct;
             gd_scan_3: {
                 SCAN_GATE.no_struct = p.no_struct;
                 let tokens = &p.kinds;
@@ -18921,8 +18946,11 @@ fn _parse_vis_item__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParser
                 pos = scan_function_(tokens, pos, 0);
                 if pos < 0 { break gd_scan_3; }
                 gd_end_3 = pos;
+                gd_end_3_no_struct = SCAN_GATE.no_struct;
             }
             if gd_end_3 > gd_best {
+                SCAN_GATE.no_struct = gd_end_3_no_struct;
+                gd_best_no_struct = SCAN_GATE.no_struct;
                 gd_best = gd_end_3;
                 gd_winner = 3;
             }
@@ -18930,6 +18958,7 @@ fn _parse_vis_item__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParser
                 break gd_tourney;
             }
             let mut gd_end_4: i32 = -1;
+            let mut gd_end_4_no_struct = SCAN_GATE.no_struct;
             gd_scan_4: {
                 SCAN_GATE.no_struct = p.no_struct;
                 let tokens = &p.kinds;
@@ -18937,8 +18966,11 @@ fn _parse_vis_item__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParser
                 pos = scan_constant_item(tokens, pos, 0);
                 if pos < 0 { break gd_scan_4; }
                 gd_end_4 = pos;
+                gd_end_4_no_struct = SCAN_GATE.no_struct;
             }
             if gd_end_4 > gd_best {
+                SCAN_GATE.no_struct = gd_end_4_no_struct;
+                gd_best_no_struct = SCAN_GATE.no_struct;
                 gd_best = gd_end_4;
                 gd_winner = 8;
             }
@@ -18946,6 +18978,7 @@ fn _parse_vis_item__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParser
                 break gd_tourney;
             }
             let mut gd_end_5: i32 = -1;
+            let mut gd_end_5_no_struct = SCAN_GATE.no_struct;
             gd_scan_5: {
                 SCAN_GATE.no_struct = p.no_struct;
                 let tokens = &p.kinds;
@@ -18953,8 +18986,11 @@ fn _parse_vis_item__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParser
                 pos = scan_trait_(tokens, pos, 0);
                 if pos < 0 { break gd_scan_5; }
                 gd_end_5 = pos;
+                gd_end_5_no_struct = SCAN_GATE.no_struct;
             }
             if gd_end_5 > gd_best {
+                SCAN_GATE.no_struct = gd_end_5_no_struct;
+                gd_best_no_struct = SCAN_GATE.no_struct;
                 gd_best = gd_end_5;
                 gd_winner = 10;
             }
@@ -18962,6 +18998,7 @@ fn _parse_vis_item__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParser
                 break gd_tourney;
             }
             let mut gd_end_6: i32 = -1;
+            let mut gd_end_6_no_struct = SCAN_GATE.no_struct;
             gd_scan_6: {
                 SCAN_GATE.no_struct = p.no_struct;
                 let tokens = &p.kinds;
@@ -18969,8 +19006,11 @@ fn _parse_vis_item__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParser
                 pos = scan_implementation(tokens, pos, 0);
                 if pos < 0 { break gd_scan_6; }
                 gd_end_6 = pos;
+                gd_end_6_no_struct = SCAN_GATE.no_struct;
             }
             if gd_end_6 > gd_best {
+                SCAN_GATE.no_struct = gd_end_6_no_struct;
+                gd_best_no_struct = SCAN_GATE.no_struct;
                 gd_best = gd_end_6;
                 gd_winner = 11;
             }
@@ -18978,6 +19018,7 @@ fn _parse_vis_item__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParser
                 break gd_tourney;
             }
             let mut gd_end_7: i32 = -1;
+            let mut gd_end_7_no_struct = SCAN_GATE.no_struct;
             gd_scan_7: {
                 SCAN_GATE.no_struct = p.no_struct;
                 let tokens = &p.kinds;
@@ -18985,8 +19026,11 @@ fn _parse_vis_item__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParser
                 pos = scan_extern_block(tokens, pos, 0);
                 if pos < 0 { break gd_scan_7; }
                 gd_end_7 = pos;
+                gd_end_7_no_struct = SCAN_GATE.no_struct;
             }
             if gd_end_7 > gd_best {
+                SCAN_GATE.no_struct = gd_end_7_no_struct;
+                gd_best_no_struct = SCAN_GATE.no_struct;
                 gd_best = gd_end_7;
                 gd_winner = 12;
             }
@@ -19977,8 +20021,10 @@ fn _parse_self_param__inner(p: &mut Parser) -> () with RustParserBase {
     if _kind_set_15(grp_kind) {
         let mut gd_winner: i32 = -1;
         let mut gd_best: i32 = -1;
+        let mut gd_best_no_struct = SCAN_GATE.no_struct;
         gd_tourney: {
             let mut gd_end: i32 = -1;
+            let mut gd_end_no_struct = SCAN_GATE.no_struct;
             gd_scan: {
                 SCAN_GATE.no_struct = p.no_struct;
                 let tokens = &p.kinds;
@@ -19986,8 +20032,11 @@ fn _parse_self_param__inner(p: &mut Parser) -> () with RustParserBase {
                 pos = scan_shorthand_self(tokens, pos, 0);
                 if pos < 0 { break gd_scan; }
                 gd_end = pos;
+                gd_end_no_struct = SCAN_GATE.no_struct;
             }
             if gd_end > gd_best {
+                SCAN_GATE.no_struct = gd_end_no_struct;
+                gd_best_no_struct = SCAN_GATE.no_struct;
                 gd_best = gd_end;
                 gd_winner = 0;
             }
@@ -19995,6 +20044,7 @@ fn _parse_self_param__inner(p: &mut Parser) -> () with RustParserBase {
                 break gd_tourney;
             }
             let mut gd_end_2: i32 = -1;
+            let mut gd_end_2_no_struct = SCAN_GATE.no_struct;
             gd_scan_2: {
                 SCAN_GATE.no_struct = p.no_struct;
                 let tokens = &p.kinds;
@@ -20002,8 +20052,11 @@ fn _parse_self_param__inner(p: &mut Parser) -> () with RustParserBase {
                 pos = scan_typed_self(tokens, pos, 0);
                 if pos < 0 { break gd_scan_2; }
                 gd_end_2 = pos;
+                gd_end_2_no_struct = SCAN_GATE.no_struct;
             }
             if gd_end_2 > gd_best {
+                SCAN_GATE.no_struct = gd_end_2_no_struct;
+                gd_best_no_struct = SCAN_GATE.no_struct;
                 gd_best = gd_end_2;
                 gd_winner = 1;
             }
@@ -20110,8 +20163,10 @@ fn _parse_function_param__inner(p: &mut Parser, follow: i64 = 0) -> () with Rust
     if _kind_set_17(grp_kind) {
         let mut gd_winner: i32 = -1;
         let mut gd_best: i32 = -1;
+        let mut gd_best_no_struct = SCAN_GATE.no_struct;
         gd_tourney: {
             let mut gd_end: i32 = -1;
+            let mut gd_end_no_struct = SCAN_GATE.no_struct;
             gd_scan: {
                 SCAN_GATE.no_struct = p.no_struct;
                 let tokens = &p.kinds;
@@ -20119,8 +20174,11 @@ fn _parse_function_param__inner(p: &mut Parser, follow: i64 = 0) -> () with Rust
                 pos = scan_function_param_pattern(tokens, pos, follow);
                 if pos < 0 { break gd_scan; }
                 gd_end = pos;
+                gd_end_no_struct = SCAN_GATE.no_struct;
             }
             if gd_end > gd_best {
+                SCAN_GATE.no_struct = gd_end_no_struct;
+                gd_best_no_struct = SCAN_GATE.no_struct;
                 gd_best = gd_end;
                 gd_winner = 0;
             }
@@ -20128,6 +20186,7 @@ fn _parse_function_param__inner(p: &mut Parser, follow: i64 = 0) -> () with Rust
                 break gd_tourney;
             }
             let mut gd_end_2: i32 = -1;
+            let mut gd_end_2_no_struct = SCAN_GATE.no_struct;
             gd_scan_2: {
                 SCAN_GATE.no_struct = p.no_struct;
                 let tokens = &p.kinds;
@@ -20135,8 +20194,11 @@ fn _parse_function_param__inner(p: &mut Parser, follow: i64 = 0) -> () with Rust
                 pos = scan_type_(tokens, pos, follow);
                 if pos < 0 { break gd_scan_2; }
                 gd_end_2 = pos;
+                gd_end_2_no_struct = SCAN_GATE.no_struct;
             }
             if gd_end_2 > gd_best {
+                SCAN_GATE.no_struct = gd_end_2_no_struct;
+                gd_best_no_struct = SCAN_GATE.no_struct;
                 gd_best = gd_end_2;
                 gd_winner = 2;
             }
@@ -20713,6 +20775,7 @@ fn _parse_enum_item__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParse
     let identifier = _parse_identifier(p);
     let mut gd_winner: i32 = -1;
     let mut gd_best: i32 = -1;
+    let mut gd_best_no_struct = SCAN_GATE.no_struct;
     if !(follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF)) {
         let gd_kind = p.peek_kind();
         if gd_kind == TK_LPAREN {
@@ -20724,6 +20787,7 @@ fn _parse_enum_item__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParse
                 pos = scan_enum_item_tuple(tokens, pos, 0);
                 if pos < 0 { break gd_scan; }
                 gd_best = pos;
+                gd_best_no_struct = SCAN_GATE.no_struct;
             }
         } else if gd_kind == TK_LCURLYBRACE {
             gd_winner = 1;
@@ -20734,6 +20798,7 @@ fn _parse_enum_item__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParse
                 pos = scan_enum_item_struct(tokens, pos, 0);
                 if pos < 0 { break gd_scan_2; }
                 gd_best = pos;
+                gd_best_no_struct = SCAN_GATE.no_struct;
             }
         } else if gd_kind == TK_EQ {
             gd_winner = 2;
@@ -20744,6 +20809,7 @@ fn _parse_enum_item__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParse
                 pos = scan_enum_item_discriminant(tokens, pos, 0);
                 if pos < 0 { break gd_scan_3; }
                 gd_best = pos;
+                gd_best_no_struct = SCAN_GATE.no_struct;
             }
         }
     }
@@ -21752,8 +21818,10 @@ fn _parse_generic_param__inner(p: &mut Parser) -> () with RustParserBase {
     if _kind_set_28(grp_kind) {
         let mut gd_winner: i32 = -1;
         let mut gd_best: i32 = -1;
+        let mut gd_best_no_struct = SCAN_GATE.no_struct;
         gd_tourney: {
             let mut gd_end: i32 = -1;
+            let mut gd_end_no_struct = SCAN_GATE.no_struct;
             gd_scan: {
                 SCAN_GATE.no_struct = p.no_struct;
                 let tokens = &p.kinds;
@@ -21761,8 +21829,11 @@ fn _parse_generic_param__inner(p: &mut Parser) -> () with RustParserBase {
                 pos = scan_lifetime_param(tokens, pos, 0);
                 if pos < 0 { break gd_scan; }
                 gd_end = pos;
+                gd_end_no_struct = SCAN_GATE.no_struct;
             }
             if gd_end > gd_best {
+                SCAN_GATE.no_struct = gd_end_no_struct;
+                gd_best_no_struct = SCAN_GATE.no_struct;
                 gd_best = gd_end;
                 gd_winner = 0;
             }
@@ -21770,6 +21841,7 @@ fn _parse_generic_param__inner(p: &mut Parser) -> () with RustParserBase {
                 break gd_tourney;
             }
             let mut gd_end_2: i32 = -1;
+            let mut gd_end_2_no_struct = SCAN_GATE.no_struct;
             gd_scan_2: {
                 SCAN_GATE.no_struct = p.no_struct;
                 let tokens = &p.kinds;
@@ -21777,8 +21849,11 @@ fn _parse_generic_param__inner(p: &mut Parser) -> () with RustParserBase {
                 pos = scan_type_param(tokens, pos, 0);
                 if pos < 0 { break gd_scan_2; }
                 gd_end_2 = pos;
+                gd_end_2_no_struct = SCAN_GATE.no_struct;
             }
             if gd_end_2 > gd_best {
+                SCAN_GATE.no_struct = gd_end_2_no_struct;
+                gd_best_no_struct = SCAN_GATE.no_struct;
                 gd_best = gd_end_2;
                 gd_winner = 1;
             }
@@ -22142,8 +22217,10 @@ fn _parse_associated_item__inner(p: &mut Parser) -> () with RustParserBase {
         } else if _kind_set_26(grp_kind) {
             let mut gd_winner: i32 = -1;
             let mut gd_best: i32 = -1;
+            let mut gd_best_no_struct = SCAN_GATE.no_struct;
             gd_tourney: {
                 let mut gd_end: i32 = -1;
+                let mut gd_end_no_struct = SCAN_GATE.no_struct;
                 gd_scan: {
                     SCAN_GATE.no_struct = p.no_struct;
                     let tokens = &p.kinds;
@@ -22151,8 +22228,11 @@ fn _parse_associated_item__inner(p: &mut Parser) -> () with RustParserBase {
                     pos = scan_constant_item(tokens, pos, 0);
                     if pos < 0 { break gd_scan; }
                     gd_end = pos;
+                    gd_end_no_struct = SCAN_GATE.no_struct;
                 }
                 if gd_end > gd_best {
+                    SCAN_GATE.no_struct = gd_end_no_struct;
+                    gd_best_no_struct = SCAN_GATE.no_struct;
                     gd_best = gd_end;
                     gd_winner = 1;
                 }
@@ -22160,6 +22240,7 @@ fn _parse_associated_item__inner(p: &mut Parser) -> () with RustParserBase {
                     break gd_tourney;
                 }
                 let mut gd_end_2: i32 = -1;
+                let mut gd_end_2_no_struct = SCAN_GATE.no_struct;
                 gd_scan_2: {
                     SCAN_GATE.no_struct = p.no_struct;
                     let tokens = &p.kinds;
@@ -22167,8 +22248,11 @@ fn _parse_associated_item__inner(p: &mut Parser) -> () with RustParserBase {
                     pos = scan_function_(tokens, pos, 0);
                     if pos < 0 { break gd_scan_2; }
                     gd_end_2 = pos;
+                    gd_end_2_no_struct = SCAN_GATE.no_struct;
                 }
                 if gd_end_2 > gd_best {
+                    SCAN_GATE.no_struct = gd_end_2_no_struct;
+                    gd_best_no_struct = SCAN_GATE.no_struct;
                     gd_best = gd_end_2;
                     gd_winner = 2;
                 }
@@ -23445,8 +23529,10 @@ fn _parse_expression__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) 
             if _sk == TK_DOT {
                 SCAN_GATE.no_struct = p.no_struct;
                 let _lr_scan_3 = scan_expression_lr_3(&p.kinds, p.pos, follow);
+                let _lr_scan_3_no_struct = SCAN_GATE.no_struct;
                 SCAN_GATE.no_struct = p.no_struct;
                 let _lr_scan_4 = scan_expression_lr_4(&p.kinds, p.pos, follow);
+                let _lr_scan_4_no_struct = SCAN_GATE.no_struct;
                 if _lr_scan_3 >= 0 {
                     if 21 >= min_prec {
                         if _lr_scan_3 < 0 {
@@ -23676,6 +23762,7 @@ fn _parse_expression__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) 
             } else if _sk == TK_LT {
                 SCAN_GATE.no_struct = p.no_struct;
                 let _lr_scan_17 = scan_expression_lr_17(&p.kinds, p.pos, follow);
+                let _lr_scan_17_no_struct = SCAN_GATE.no_struct;
                 if _lr_scan_17 >= 0 {
                     if 11 >= min_prec {
                         if _lr_scan_17 < 0 {
@@ -24883,6 +24970,7 @@ fn _parse_struct_expr_struct__inner(p: &mut Parser, follow: i64 = 0) -> () with 
     }
     let mut gd_winner: i32 = -1;
     let mut gd_best: i32 = -1;
+    let mut gd_best_no_struct = SCAN_GATE.no_struct;
     let gd_kind = p.peek_kind();
     if _kind_set_34(gd_kind) {
         gd_winner = 0;
@@ -24893,6 +24981,7 @@ fn _parse_struct_expr_struct__inner(p: &mut Parser, follow: i64 = 0) -> () with 
             pos = scan_struct_expr_fields(tokens, pos, 0);
             if pos < 0 { break gd_scan; }
             gd_best = pos;
+            gd_best_no_struct = SCAN_GATE.no_struct;
         }
     } else if gd_kind == TK_DOTDOT {
         gd_winner = 1;
@@ -24903,6 +24992,7 @@ fn _parse_struct_expr_struct__inner(p: &mut Parser, follow: i64 = 0) -> () with 
             pos = scan_struct_base(tokens, pos, 0);
             if pos < 0 { break gd_scan_2; }
             gd_best = pos;
+            gd_best_no_struct = SCAN_GATE.no_struct;
         }
     }
     if gd_best >= 0 {
@@ -25003,8 +25093,10 @@ fn _parse_struct_expr_fields__inner(p: &mut Parser, follow: i64 = 0) -> () with 
     if grp_kind == TK_COMMA {
         let mut gd_winner: i32 = -1;
         let mut gd_best: i32 = -1;
+        let mut gd_best_no_struct = SCAN_GATE.no_struct;
         gd_tourney: {
             let mut gd_end: i32 = -1;
+            let mut gd_end_no_struct = SCAN_GATE.no_struct;
             gd_scan: {
                 SCAN_GATE.no_struct = p.no_struct;
                 let tokens = &p.kinds;
@@ -25014,8 +25106,11 @@ fn _parse_struct_expr_fields__inner(p: &mut Parser, follow: i64 = 0) -> () with 
                 pos = scan_struct_base(tokens, pos, follow);
                 if pos < 0 { break gd_scan; }
                 gd_end = pos;
+                gd_end_no_struct = SCAN_GATE.no_struct;
             }
             if gd_end > gd_best {
+                SCAN_GATE.no_struct = gd_end_no_struct;
+                gd_best_no_struct = SCAN_GATE.no_struct;
                 gd_best = gd_end;
                 gd_winner = 0;
             }
@@ -25023,6 +25118,7 @@ fn _parse_struct_expr_fields__inner(p: &mut Parser, follow: i64 = 0) -> () with 
                 break gd_tourney;
             }
             let mut gd_end_2: i32 = -1;
+            let mut gd_end_2_no_struct = SCAN_GATE.no_struct;
             gd_scan_2: {
                 SCAN_GATE.no_struct = p.no_struct;
                 let tokens = &p.kinds;
@@ -25031,8 +25127,11 @@ fn _parse_struct_expr_fields__inner(p: &mut Parser, follow: i64 = 0) -> () with 
                     pos += 1;
                 }
                 gd_end_2 = pos;
+                gd_end_2_no_struct = SCAN_GATE.no_struct;
             }
             if gd_end_2 > gd_best {
+                SCAN_GATE.no_struct = gd_end_2_no_struct;
+                gd_best_no_struct = SCAN_GATE.no_struct;
                 gd_best = gd_end_2;
                 gd_winner = 1;
             }
@@ -25098,8 +25197,10 @@ fn _parse_struct_expr_field__inner(p: &mut Parser, follow: i64 = 0) -> () with R
     if _kind_set_36(grp_kind) {
         let mut gd_winner: i32 = -1;
         let mut gd_best: i32 = -1;
+        let mut gd_best_no_struct = SCAN_GATE.no_struct;
         gd_tourney: {
             let mut gd_end: i32 = -1;
+            let mut gd_end_no_struct = SCAN_GATE.no_struct;
             gd_scan: {
                 SCAN_GATE.no_struct = p.no_struct;
                 let tokens = &p.kinds;
@@ -25107,8 +25208,11 @@ fn _parse_struct_expr_field__inner(p: &mut Parser, follow: i64 = 0) -> () with R
                 pos = scan_identifier(tokens, pos);
                 if pos < 0 { break gd_scan; }
                 gd_end = pos;
+                gd_end_no_struct = SCAN_GATE.no_struct;
             }
             if gd_end > gd_best {
+                SCAN_GATE.no_struct = gd_end_no_struct;
+                gd_best_no_struct = SCAN_GATE.no_struct;
                 gd_best = gd_end;
                 gd_winner = 0;
             }
@@ -25116,6 +25220,7 @@ fn _parse_struct_expr_field__inner(p: &mut Parser, follow: i64 = 0) -> () with R
                 break gd_tourney;
             }
             let mut gd_end_2: i32 = -1;
+            let mut gd_end_2_no_struct = SCAN_GATE.no_struct;
             gd_scan_2: {
                 SCAN_GATE.no_struct = p.no_struct;
                 let tokens = &p.kinds;
@@ -25153,8 +25258,11 @@ fn _parse_struct_expr_field__inner(p: &mut Parser, follow: i64 = 0) -> () with R
                 pos = scan_expression(tokens, pos, follow, 0);
                 if pos < 0 { break gd_scan_2; }
                 gd_end_2 = pos;
+                gd_end_2_no_struct = SCAN_GATE.no_struct;
             }
             if gd_end_2 > gd_best {
+                SCAN_GATE.no_struct = gd_end_2_no_struct;
+                gd_best_no_struct = SCAN_GATE.no_struct;
                 gd_best = gd_end_2;
                 gd_winner = 1;
             }
@@ -25993,8 +26101,10 @@ fn _parse_loop_expression__inner(p: &mut Parser, follow: i64 = 0) -> () with Rus
     } else if grp_kind == TK_KW_WHILE {
         let mut gd_winner: i32 = -1;
         let mut gd_best: i32 = -1;
+        let mut gd_best_no_struct = SCAN_GATE.no_struct;
         gd_tourney: {
             let mut gd_end: i32 = -1;
+            let mut gd_end_no_struct = SCAN_GATE.no_struct;
             gd_scan: {
                 SCAN_GATE.no_struct = p.no_struct;
                 let tokens = &p.kinds;
@@ -26002,8 +26112,11 @@ fn _parse_loop_expression__inner(p: &mut Parser, follow: i64 = 0) -> () with Rus
                 pos = scan_predicate_loop_expression(tokens, pos, 0);
                 if pos < 0 { break gd_scan; }
                 gd_end = pos;
+                gd_end_no_struct = SCAN_GATE.no_struct;
             }
             if gd_end > gd_best {
+                SCAN_GATE.no_struct = gd_end_no_struct;
+                gd_best_no_struct = SCAN_GATE.no_struct;
                 gd_best = gd_end;
                 gd_winner = 1;
             }
@@ -26011,6 +26124,7 @@ fn _parse_loop_expression__inner(p: &mut Parser, follow: i64 = 0) -> () with Rus
                 break gd_tourney;
             }
             let mut gd_end_2: i32 = -1;
+            let mut gd_end_2_no_struct = SCAN_GATE.no_struct;
             gd_scan_2: {
                 SCAN_GATE.no_struct = p.no_struct;
                 let tokens = &p.kinds;
@@ -26018,8 +26132,11 @@ fn _parse_loop_expression__inner(p: &mut Parser, follow: i64 = 0) -> () with Rus
                 pos = scan_predicate_pattern_loop_expression(tokens, pos, 0);
                 if pos < 0 { break gd_scan_2; }
                 gd_end_2 = pos;
+                gd_end_2_no_struct = SCAN_GATE.no_struct;
             }
             if gd_end_2 > gd_best {
+                SCAN_GATE.no_struct = gd_end_2_no_struct;
+                gd_best_no_struct = SCAN_GATE.no_struct;
                 gd_best = gd_end_2;
                 gd_winner = 2;
             }
@@ -26264,8 +26381,10 @@ fn _parse_if_expression__inner(p: &mut Parser, follow: i64 = 0) -> () with RustP
         } else if grp_kind == TK_KW_IF {
             let mut gd_winner: i32 = -1;
             let mut gd_best: i32 = -1;
+            let mut gd_best_no_struct = SCAN_GATE.no_struct;
             gd_tourney: {
                 let mut gd_end: i32 = -1;
+                let mut gd_end_no_struct = SCAN_GATE.no_struct;
                 gd_scan: {
                     SCAN_GATE.no_struct = p.no_struct;
                     let tokens = &p.kinds;
@@ -26273,8 +26392,11 @@ fn _parse_if_expression__inner(p: &mut Parser, follow: i64 = 0) -> () with RustP
                     pos = scan_if_expression(tokens, pos, 0);
                     if pos < 0 { break gd_scan; }
                     gd_end = pos;
+                    gd_end_no_struct = SCAN_GATE.no_struct;
                 }
                 if gd_end > gd_best {
+                    SCAN_GATE.no_struct = gd_end_no_struct;
+                    gd_best_no_struct = SCAN_GATE.no_struct;
                     gd_best = gd_end;
                     gd_winner = 1;
                 }
@@ -26282,6 +26404,7 @@ fn _parse_if_expression__inner(p: &mut Parser, follow: i64 = 0) -> () with RustP
                     break gd_tourney;
                 }
                 let mut gd_end_2: i32 = -1;
+                let mut gd_end_2_no_struct = SCAN_GATE.no_struct;
                 gd_scan_2: {
                     SCAN_GATE.no_struct = p.no_struct;
                     let tokens = &p.kinds;
@@ -26289,8 +26412,11 @@ fn _parse_if_expression__inner(p: &mut Parser, follow: i64 = 0) -> () with RustP
                     pos = scan_if_let_expression(tokens, pos, 0);
                     if pos < 0 { break gd_scan_2; }
                     gd_end_2 = pos;
+                    gd_end_2_no_struct = SCAN_GATE.no_struct;
                 }
                 if gd_end_2 > gd_best {
+                    SCAN_GATE.no_struct = gd_end_2_no_struct;
+                    gd_best_no_struct = SCAN_GATE.no_struct;
                     gd_best = gd_end_2;
                     gd_winner = 2;
                 }
@@ -26368,8 +26494,10 @@ fn _parse_if_let_expression__inner(p: &mut Parser, follow: i64 = 0) -> () with R
         } else if grp_kind == TK_KW_IF {
             let mut gd_winner: i32 = -1;
             let mut gd_best: i32 = -1;
+            let mut gd_best_no_struct = SCAN_GATE.no_struct;
             gd_tourney: {
                 let mut gd_end: i32 = -1;
+                let mut gd_end_no_struct = SCAN_GATE.no_struct;
                 gd_scan: {
                     SCAN_GATE.no_struct = p.no_struct;
                     let tokens = &p.kinds;
@@ -26377,8 +26505,11 @@ fn _parse_if_let_expression__inner(p: &mut Parser, follow: i64 = 0) -> () with R
                     pos = scan_if_expression(tokens, pos, 0);
                     if pos < 0 { break gd_scan; }
                     gd_end = pos;
+                    gd_end_no_struct = SCAN_GATE.no_struct;
                 }
                 if gd_end > gd_best {
+                    SCAN_GATE.no_struct = gd_end_no_struct;
+                    gd_best_no_struct = SCAN_GATE.no_struct;
                     gd_best = gd_end;
                     gd_winner = 1;
                 }
@@ -26386,6 +26517,7 @@ fn _parse_if_let_expression__inner(p: &mut Parser, follow: i64 = 0) -> () with R
                     break gd_tourney;
                 }
                 let mut gd_end_2: i32 = -1;
+                let mut gd_end_2_no_struct = SCAN_GATE.no_struct;
                 gd_scan_2: {
                     SCAN_GATE.no_struct = p.no_struct;
                     let tokens = &p.kinds;
@@ -26393,8 +26525,11 @@ fn _parse_if_let_expression__inner(p: &mut Parser, follow: i64 = 0) -> () with R
                     pos = scan_if_let_expression(tokens, pos, 0);
                     if pos < 0 { break gd_scan_2; }
                     gd_end_2 = pos;
+                    gd_end_2_no_struct = SCAN_GATE.no_struct;
                 }
                 if gd_end_2 > gd_best {
+                    SCAN_GATE.no_struct = gd_end_2_no_struct;
+                    gd_best_no_struct = SCAN_GATE.no_struct;
                     gd_best = gd_end_2;
                     gd_winner = 2;
                 }
@@ -27836,8 +27971,10 @@ fn _parse_struct_pattern_field__inner(p: &mut Parser, follow: i64 = 0) -> () wit
     } else if _kind_set_42(grp_kind) {
         let mut gd_winner: i32 = -1;
         let mut gd_best: i32 = -1;
+        let mut gd_best_no_struct = SCAN_GATE.no_struct;
         gd_tourney: {
             let mut gd_end: i32 = -1;
+            let mut gd_end_no_struct = SCAN_GATE.no_struct;
             gd_scan: {
                 SCAN_GATE.no_struct = p.no_struct;
                 let tokens = &p.kinds;
@@ -27849,8 +27986,11 @@ fn _parse_struct_pattern_field__inner(p: &mut Parser, follow: i64 = 0) -> () wit
                 pos = scan_pattern(tokens, pos, follow);
                 if pos < 0 { break gd_scan; }
                 gd_end = pos;
+                gd_end_no_struct = SCAN_GATE.no_struct;
             }
             if gd_end > gd_best {
+                SCAN_GATE.no_struct = gd_end_no_struct;
+                gd_best_no_struct = SCAN_GATE.no_struct;
                 gd_best = gd_end;
                 gd_winner = 1;
             }
@@ -27858,6 +27998,7 @@ fn _parse_struct_pattern_field__inner(p: &mut Parser, follow: i64 = 0) -> () wit
                 break gd_tourney;
             }
             let mut gd_end_2: i32 = -1;
+            let mut gd_end_2_no_struct = SCAN_GATE.no_struct;
             gd_scan_2: {
                 SCAN_GATE.no_struct = p.no_struct;
                 let tokens = &p.kinds;
@@ -27871,8 +28012,11 @@ fn _parse_struct_pattern_field__inner(p: &mut Parser, follow: i64 = 0) -> () wit
                 pos = scan_identifier(tokens, pos);
                 if pos < 0 { break gd_scan_2; }
                 gd_end_2 = pos;
+                gd_end_2_no_struct = SCAN_GATE.no_struct;
             }
             if gd_end_2 > gd_best {
+                SCAN_GATE.no_struct = gd_end_2_no_struct;
+                gd_best_no_struct = SCAN_GATE.no_struct;
                 gd_best = gd_end_2;
                 gd_winner = 2;
             }
@@ -30669,6 +30813,7 @@ fn _parse_type_path_segment__inner(p: &mut Parser, follow: i64 = 0) -> () with R
     }
     let mut gd_winner: i32 = -1;
     let mut gd_best: i32 = -1;
+    let mut gd_best_no_struct = SCAN_GATE.no_struct;
     if !(follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF)) {
         let gd_kind = p.peek_kind();
         if gd_kind == TK_LT {
@@ -30680,6 +30825,7 @@ fn _parse_type_path_segment__inner(p: &mut Parser, follow: i64 = 0) -> () with R
                 pos = scan_generic_args(tokens, pos, 0);
                 if pos < 0 { break gd_scan; }
                 gd_best = pos;
+                gd_best_no_struct = SCAN_GATE.no_struct;
             }
         } else if gd_kind == TK_LPAREN {
             gd_winner = 1;
@@ -30690,6 +30836,7 @@ fn _parse_type_path_segment__inner(p: &mut Parser, follow: i64 = 0) -> () with R
                 pos = scan_type_path_fn(tokens, pos, 0);
                 if pos < 0 { break gd_scan_2; }
                 gd_best = pos;
+                gd_best_no_struct = SCAN_GATE.no_struct;
             }
         }
     }
