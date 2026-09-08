@@ -44,6 +44,46 @@ A : 'a' ;
     assert !out.contains("struct ScanGate"), `a field no member declares must not reach the scan gate: ${out}`;
 }
 
+// Every scan the parse launches starts from the parser's gate. The LR dispatch
+// launches one three ways — the branch call, the fallbacks it binds ahead of
+// its chain, and the ATN repick — and a bare call site records none of that,
+// which is what left the pre-bound ones measuring under a sibling candidate's
+// reading.
+test "every parse-launched LR suffix scan is seeded" {
+    let out = gen_source(&"grammar L;
+@parser::members {
+    int noStruct = 0;
+}
+start : e EOF ;
+e : e OP a b
+  | e OP a c
+  | {noStruct == 0}? ID
+  | LB {noStruct = 1;} e RB
+  ;
+a : A ;
+b : B ;
+c : C ;
+OP : '+' ; A : 'a' ; B : 'b' ; C : 'c' ; ID : 'x' ; LB : '(' ; RB : ')' ;
+WS : [ \\t\\r\\n]+ -> skip ;
+");
+    assert out.contains("let _lr_scan_"), `the grammar must reach the pre-bound fallbacks: ${out}`;
+    let mut calls = 0;
+    let mut seeded = 0;
+    let mut after_seed = false;
+    for let line of out.split("\n") {
+        let l = line.trim();
+        if l.contains("_lr_") && l.contains("(&p.kinds, p.pos") {
+            calls += 1;
+            if after_seed {
+                seeded += 1;
+            }
+        }
+        after_seed = l.starts_with("SCAN_GATE.") && l.contains(" = p.");
+    }
+    assert calls > 0, `the grammar must reach a parse-launched LR scan: ${out}`;
+    assert seeded == calls, `${calls - seeded} of ${calls} parse-launched LR scans start from a stale gate: ${out}`;
+}
+
 // The hit case, so the test above is not passing because nothing ever simulates:
 // the same grammar with a members block that does translate keeps its gate.
 test "a members block that translates keeps its field simulable" {

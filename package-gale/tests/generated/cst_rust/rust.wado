@@ -11923,8 +11923,12 @@ fn scan_expression(tokens: &Array<i32>, pos: i32, follow: i64 = 0, min_prec: i32
         if suffix_kind == TK_DOT {
             if suffix_kind == TK_DOT {
                 let second_kind = if pos + 1 < tokens.len() { tokens[pos + 1] } else { TK_EOF };
+                let lr_pre_no_struct = SCAN_GATE.no_struct;
+                SCAN_GATE.no_struct = lr_pre_no_struct;
                 let _lr_scan_3 = scan_expression_lr_3(tokens, pos, follow);
+                SCAN_GATE.no_struct = lr_pre_no_struct;
                 let _lr_scan_4 = scan_expression_lr_4(tokens, pos, follow);
+                SCAN_GATE.no_struct = lr_pre_no_struct;
                 if _lr_scan_3 >= 0 {
                     if 21 >= min_prec {
                         let lr_saved_pos = pos;
@@ -12111,7 +12115,10 @@ fn scan_expression(tokens: &Array<i32>, pos: i32, follow: i64 = 0, min_prec: i32
                     break;
                 }
             } else if suffix_kind == TK_LT {
+                let lr_pre_2_no_struct = SCAN_GATE.no_struct;
+                SCAN_GATE.no_struct = lr_pre_2_no_struct;
                 let _lr_scan_17 = scan_expression_lr_17(tokens, pos, follow);
+                SCAN_GATE.no_struct = lr_pre_2_no_struct;
                 if _lr_scan_17 >= 0 {
                     if 11 >= min_prec {
                         let lr_saved_pos = pos;
@@ -23436,7 +23443,9 @@ fn _parse_expression__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) 
         let _sk = p.peek_kind();
         if _sk == TK_DOT {
             if _sk == TK_DOT {
+                SCAN_GATE.no_struct = p.no_struct;
                 let _lr_scan_3 = scan_expression_lr_3(&p.kinds, p.pos, follow);
+                SCAN_GATE.no_struct = p.no_struct;
                 let _lr_scan_4 = scan_expression_lr_4(&p.kinds, p.pos, follow);
                 if _lr_scan_3 >= 0 {
                     if 21 >= min_prec {
@@ -23665,6 +23674,7 @@ fn _parse_expression__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) 
                     break;
                 }
             } else if _sk == TK_LT {
+                SCAN_GATE.no_struct = p.no_struct;
                 let _lr_scan_17 = scan_expression_lr_17(&p.kinds, p.pos, follow);
                 if _lr_scan_17 >= 0 {
                     if 11 >= min_prec {

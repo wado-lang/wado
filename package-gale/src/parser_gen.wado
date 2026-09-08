@@ -844,7 +844,7 @@ fn gen_lr_suffix_dispatch_atn(
     w.line(
         &`${decl} = atn_lr_loop_decision(&ATN_SIM, &SCAN_STACK, ${decision}, tokens, pos, TK_EOF, min_prec);`,
     );
-    emit_lr_atn_group_repick(w, lr_alts, lr_dispatch, fn_name, &"tokens", &"pos", ctx);
+    emit_lr_atn_group_repick(w, lr_alts, lr_dispatch, fn_name, &"tokens", &"pos", /*parse_launched=*/ false, ctx);
     w.line(&"let _lr_pos0 = pos;");
     let mut is_first = true;
     for let mut i = 0; i < valid.len(); i += 1 {
@@ -892,6 +892,53 @@ fn lr_atn_alt_decl(lr_dispatch: &LrDispatchData) -> String {
 /// the group does not, and is re-taken from the scan twins by longest match
 /// as the static LR dispatch does. Every scan failing leaves the simulator's
 /// answer, and with it its diagnostic path, untouched.
+/// The gate a candidate suffix scan starts from.
+///
+/// A dispatch measures its candidates one after another and each mutates
+/// `SCAN_GATE`, so one starting from wherever the last ended measures under a
+/// reading nobody took — and the branch the chain picks then commits under a
+/// loser's. Every candidate scan opens with `gen_lr_scan_origin`.
+variant ScanOrigin {
+    /// The parse launches the scan, so the parser holds the truth.
+    Parser,
+    /// A walk launches it, so the gate to start from is the one the dispatch
+    /// entered with, saved in this slot.
+    Entry(String),
+}
+
+/// Remember the gate a run of candidate scans must each start from. The
+/// position needs no saving: a candidate binds its answer to a local rather
+/// than moving `pos`.
+fn gen_lr_candidates_begin(w: &mut CodeWriter, ctx: &GenContext, parse_launched: bool, slot: &String) -> ScanOrigin {
+    if parse_launched {
+        return ScanOrigin::Parser;
+    }
+    gen_scan_gate_save(w, ctx, slot);
+    return ScanOrigin::Entry(*slot);
+}
+
+/// Put a candidate's starting gate in place, immediately before its scan.
+fn gen_lr_scan_origin(w: &mut CodeWriter, ctx: &GenContext, from: &ScanOrigin) {
+    match from {
+        Parser => gen_scan_gate_seed(w, ctx),
+        Entry(slot) => gen_scan_gate_restore(w, ctx, slot),
+    }
+}
+
+/// Close the run, so what follows resumes under the gate the dispatch entered
+/// with rather than the last candidate's. A parse-launched chain needs nothing:
+/// every scan the parse starts seeds itself.
+fn gen_lr_candidates_end(w: &mut CodeWriter, ctx: &GenContext, from: &ScanOrigin) {
+    if let Entry(slot) = from {
+        gen_scan_gate_restore(w, ctx, slot);
+    }
+}
+
+/// Whether the dispatch runs in the parse fn rather than inside a scan walk.
+fn lr_site_is_parse(site: &LrOverlapSite) -> bool {
+    return site.branch matches { ParseBody(_) };
+}
+
 fn emit_lr_atn_group_repick(
     w: &mut CodeWriter,
     lr_alts: &List<LrAlt>,
@@ -899,6 +946,7 @@ fn emit_lr_atn_group_repick(
     scan_fn: &String,
     tokens_expr: &String,
     pos_expr: &String,
+    parse_launched: bool,
     ctx: &GenContext,
 ) {
     let fsep = follow_sep(ctx.current_rule_reads_follow());
@@ -915,13 +963,16 @@ fn emit_lr_atn_group_repick(
         }
         w.begin(&`if ${cond}`);
         w.line(&"let mut _lr_best: i32 = -1;");
+        let origin = gen_lr_candidates_begin(w, ctx, parse_launched, &`lr_pre_${group[0]}`);
         for let gi of group {
             let lr = &lr_alts[lr_dispatch.valid_lr_alts[*gi]];
             w.line(&`let mut _lr_s_${*gi}: i32 = -1;`);
             w.begin(&`if ${lr.own_prec} >= min_prec`);
+            gen_lr_scan_origin(w, ctx, &origin);
             w.line(&`_lr_s_${*gi} = ${*scan_fn}_lr_${lr.alt_index}(${*tokens_expr}, ${*pos_expr}${fsep});`);
             w.end();
         }
+        gen_lr_candidates_end(w, ctx, &origin);
         // Ascending order under a strict `>` gives ANTLR4's tie-break.
         for let gi of group {
             emit_argmax_update(w, &"_lr_best", &"_atn_alt", &`_lr_s_${*gi}`, *gi);
@@ -1233,16 +1284,22 @@ fn emit_lr_overlap(
             w.line(&`let ${site.second_expr} = ${site.second_init};`);
         }
         // Bind every fallback scan ahead of the chain, so the branch it guards
-        // reuses the answer instead of re-running it.
-        for let c of &conds {
-            if !c.2.is_empty() {
-                let alt = lr_alts[lr_dispatch.valid_lr_alts[group[c.0]]].alt_index;
-                w.line(
-                    &`let ${c.2} = ${site.scan_fn}_lr_${alt}(${site.scan_args}${follow_sep(
-                        ctx.current_rule_reads_follow(),
-                    )});`,
-                );
+        // reuses the answer instead of re-running it. Each is a candidate scan
+        // and starts from the dispatch's own gate, not the previous one's end.
+        if conds.iter_ref().any(|c: &[i32, String, String]| !c.2.is_empty()) {
+            let origin = gen_lr_candidates_begin(w, ctx, lr_site_is_parse(site), &dedup_name(&"lr_pre", nc));
+            for let c of &conds {
+                if !c.2.is_empty() {
+                    let alt = lr_alts[lr_dispatch.valid_lr_alts[group[c.0]]].alt_index;
+                    gen_lr_scan_origin(w, ctx, &origin);
+                    w.line(
+                        &`let ${c.2} = ${site.scan_fn}_lr_${alt}(${site.scan_args}${follow_sep(
+                            ctx.current_rule_reads_follow(),
+                        )});`,
+                    );
+                }
             }
+            gen_lr_candidates_end(w, ctx, &origin);
         }
         let mut sub_first = true;
         for let mut k = 0; k < group.len(); k += 1 {
@@ -3872,7 +3929,16 @@ fn gen_lr_fn_atn(
     w.line(
         &`${lr_atn_alt_decl(lr_dispatch)} = atn_lr_loop_decision(&ATN_SIM, &p.atn_stack, ${decision}, &p.kinds, p.pos, TK_EOF, min_prec);`,
     );
-    emit_lr_atn_group_repick(w, lr_alts, lr_dispatch, &`scan_${rule.snake_name}`, &"&p.kinds", &"p.pos", ctx);
+    emit_lr_atn_group_repick(
+        w,
+        lr_alts,
+        lr_dispatch,
+        &`scan_${rule.snake_name}`,
+        &"&p.kinds",
+        &"p.pos",
+        /*parse_launched=*/ true,
+        ctx,
+    );
     w.line(&"let _lr_pos0 = p.pos;");
     let mut is_first = true;
     for let mut i = 0; i < valid.len(); i += 1 {
@@ -3922,7 +3988,7 @@ fn emit_lr_branch(
     let scan_call = if scan_local.is_empty() {
         // The other shape of a scan entry: the generated scan takes the tokens
         // and the position as arguments, so only the gate is left to hand it.
-        gen_scan_gate_seed(w, ctx);
+        gen_lr_scan_origin(w, ctx, &ScanOrigin::Parser);
         `${*scan_fn}_lr_${lr.alt_index}(&p.kinds, p.pos${follow_sep(ctx.current_rule_reads_follow())})`;
     } else {
         *scan_local;
