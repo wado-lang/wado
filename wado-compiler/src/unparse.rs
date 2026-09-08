@@ -4,15 +4,16 @@
 
 use crate::ast::{
     AssertStmt, AssignExpr, AssociatedConst, AttrArg, Attribute, BinaryExpr, BinaryOp, Block,
-    BreakStmt, BuiltinTypeDecl, CallExpr, CastExpr, ClosureExpr, ComparisonChainExpr,
-    CompoundAssignExpr, CompoundAssignOp, Condition, ConditionElement, EnumCase, EnumDecl, Expr,
-    ExprStmt, FieldAccessExpr, FlagsDecl, ForOfStmt, ForStmt, Function, FunctionType, GenericParam,
-    GlobalDecl, IfExpr, IfStmt, ImplBlock, ImportAttributes, IndexExpr, InterfaceDecl, Item,
-    LabeledBlockStmt, LetStmt, Literal, LoopStmt, MatchArm, MatchExpr, MethodCallExpr, Module,
-    Newtype, Param, Pattern, ResourceDecl, RestClause, ReturnStmt, SelfKind, StaticMethodCallExpr,
-    Stmt, StoresEntry, StructDecl, StructField, StructLiteralExpr, TemplateStringExpr, TestDecl,
-    TraitDecl, TupleLiteralExpr, TupleTypeDecl, Type, UnaryExpr, UnaryOp, UseDecl, UseItem,
-    UseItemSimple, VariantCase, VariantDecl, Visibility, WhileStmt, WorldDecl, WorldExport,
+    BreakStmt, BuiltinTypeDecl, CallExpr, CastExpr, ChainedComparison, ClosureExpr,
+    ComparisonChainExpr, CompoundAssignExpr, CompoundAssignOp, Condition, ConditionElement,
+    EnumCase, EnumDecl, Expr, ExprStmt, FieldAccessExpr, FlagsDecl, ForOfStmt, ForStmt, Function,
+    FunctionType, GenericParam, GlobalDecl, IfExpr, IfStmt, ImplBlock, ImportAttributes, IndexExpr,
+    InterfaceDecl, Item, LabeledBlockStmt, LetStmt, Literal, LoopStmt, MatchArm, MatchExpr,
+    MethodCallExpr, Module, Newtype, Param, Pattern, ResourceDecl, RestClause, ReturnStmt,
+    SelfKind, StaticMethodCallExpr, Stmt, StoresEntry, StructDecl, StructField, StructLiteralExpr,
+    TemplateStringExpr, TestDecl, TraitDecl, TupleLiteralExpr, TupleTypeDecl, Type, UnaryExpr,
+    UnaryOp, UseDecl, UseItem, UseItemSimple, VariantCase, VariantDecl, Visibility, WhileStmt,
+    WorldDecl, WorldExport,
 };
 use crate::comment::{Comment, CommentKind};
 use crate::hashmap::IndexSet;
@@ -124,6 +125,14 @@ fn emit_kw_if_into(cond: bool, kw: &str, output: &mut String) {
     if cond {
         output.push_str(kw);
     }
+}
+
+/// Wrap what `emit` appends in `( ... )` if `cond` is true. Free-function
+/// counterpart of `Unparser::with_parens_if`.
+fn with_parens_if_into<F: FnOnce(&mut String)>(cond: bool, output: &mut String, emit: F) {
+    emit_kw_if_into(cond, "(", output);
+    emit(output);
+    emit_kw_if_into(cond, ")", output);
 }
 
 fn emit_visibility_into(visibility: Visibility, output: &mut String) {
@@ -932,9 +941,10 @@ impl<'a> Unparser<'a> {
                     s.output.push('"');
                 });
             }
-            AttrArg::Call(name, names) => {
-                self.output.push_str(name);
-                self.delimited("(", ")", names, |s, v| s.output.push_str(v));
+            AttrArg::KeyIdent(k, v) => {
+                self.output.push_str(k);
+                self.output.push_str(" = ");
+                self.output.push_str(v);
             }
         }
     }
@@ -2161,25 +2171,17 @@ impl<'a> Unparser<'a> {
     }
 
     fn unparse_comparison_chain(&mut self, chain: &ComparisonChainExpr) {
-        // An operand whose unparse ends in a bare `as T` cast, immediately
-        // followed by `<`, re-parses as `T<...>` generic args (`x as T < y` →
-        // `x as T<y>`). Parenthesize any such operand. This covers a bare cast
-        // and a cast reached through the right spine of a higher-precedence
-        // operator (`a - b as T < c`), and every operand in a chain that is
-        // followed by `<` (`a < b as T < c`).
-        let next_is_lt = |i: usize| {
-            chain
-                .comparisons
-                .get(i)
-                .is_some_and(|c| c.op == BinaryOp::Lt)
-        };
-        let wrap_first = next_is_lt(0) && ends_in_trailing_cast(&chain.first);
-        self.with_parens_if(wrap_first, |s| s.unparse_expr(&chain.first));
+        self.with_parens_if(
+            cast_before_lt(&chain.first, chain.comparisons.first()),
+            |s| {
+                s.unparse_expr(&chain.first);
+            },
+        );
         for (i, cmp) in chain.comparisons.iter().enumerate() {
             self.output.push(' ');
             self.output.push_str(binary_op_str(cmp.op));
             self.output.push(' ');
-            let wrap = next_is_lt(i + 1) && ends_in_trailing_cast(&cmp.right);
+            let wrap = cast_before_lt(&cmp.right, chain.comparisons.get(i + 1));
             self.with_parens_if(wrap, |s| s.unparse_expr(&cmp.right));
         }
     }
@@ -2575,7 +2577,9 @@ impl<'a> Unparser<'a> {
             self.unparse_type(ty);
             self.output.push(' ');
         }
-        self.unparse_expr(&c.body);
+        self.with_parens_if(closure_body_needs_parens(&c.body), |s| {
+            s.unparse_expr(&c.body);
+        });
     }
 
     /// Twin of [`unparse_template_string_into`], which prints the same shape
@@ -3292,6 +3296,57 @@ fn ends_in_trailing_cast(expr: &Expr) -> bool {
     }
 }
 
+/// Whether a chain operand needs parens: one whose unparse ends in a bare `as
+/// T`, immediately left of the `<` that `next` carries, re-parses as `T<...>`
+/// generic args (`x as T < y` → `x as T<y>`, `a - b as T < c`, `a < b as T < c`).
+fn cast_before_lt(operand: &Expr, next: Option<&ChainedComparison>) -> bool {
+    next.is_some_and(|c| c.op == BinaryOp::Lt) && ends_in_trailing_cast(operand)
+}
+
+/// Whether a closure body starts with `with`, which re-parses as the closure's
+/// own effect row. Descends the leftmost operand of each form that prints one
+/// bare; exhaustive, so a new [`Expr`] is decided here rather than defaulted.
+fn closure_body_needs_parens(expr: &Expr) -> bool {
+    match expr {
+        Expr::WithHandler(_) => true,
+        Expr::Binary(b) => !needs_parens(&b.left, b.op, true) && closure_body_needs_parens(&b.left),
+        Expr::Range(r) => closure_body_needs_parens(&r.start),
+        Expr::ComparisonChain(c) => {
+            !cast_before_lt(&c.first, c.comparisons.first()) && closure_body_needs_parens(&c.first)
+        }
+        Expr::Matches(m) => {
+            !matches_scrutinee_needs_parens(&m.expr) && closure_body_needs_parens(&m.expr)
+        }
+        Expr::TryOp(t) => closure_body_needs_parens(&t.expr),
+        Expr::Assign(a) => closure_body_needs_parens(&a.target),
+        Expr::CompoundAssign(c) => closure_body_needs_parens(&c.target),
+        Expr::TaggedTemplate(t) => closure_body_needs_parens(&t.tag),
+        // A postfix or cast operand carries parens from `binds_tighter_than`,
+        // and everything else opens with a keyword, delimiter, or operator.
+        Expr::Ident(_)
+        | Expr::Literal(_)
+        | Expr::Unary(_)
+        | Expr::Call(_)
+        | Expr::MethodCall(_)
+        | Expr::StaticMethodCall(_)
+        | Expr::FieldAccess(_)
+        | Expr::Index(_)
+        | Expr::Block(_)
+        | Expr::If(_)
+        | Expr::Match(_)
+        | Expr::Closure(_)
+        | Expr::TemplateString(_)
+        | Expr::Cast(_)
+        | Expr::StructLiteral(_)
+        | Expr::TupleLiteral(_)
+        | Expr::TupleComprehension(_)
+        | Expr::LabeledBlock(_)
+        | Expr::Spread(..)
+        | Expr::Resume(_)
+        | Expr::Error(_) => false,
+    }
+}
+
 /// The operator an operand is about to be joined to, ordered by how tightly it
 /// binds. Each slot admits what the one above it does, and a little more.
 #[derive(Clone, Copy)]
@@ -3718,7 +3773,9 @@ fn unparse_closure_into(c: &ClosureExpr, output: &mut String) {
         unparse_type_into(ty, output);
         output.push(' ');
     }
-    unparse_expr_into(&c.body, output);
+    with_parens_if_into(closure_body_needs_parens(&c.body), output, |o| {
+        unparse_expr_into(&c.body, o);
+    });
 }
 
 /// Twin of [`Unparser::unparse_template_string`]; keep the two in step.
@@ -3896,13 +3953,7 @@ fn unparse_condition_into(cond: &Condition, output: &mut String) {
                         expr,
                         Expr::Binary(b) if matches!(b.op, BinaryOp::And | BinaryOp::Or)
                     );
-                    if needs_parens {
-                        output.push('(');
-                    }
-                    unparse_expr_into(expr, output);
-                    if needs_parens {
-                        output.push(')');
-                    }
+                    with_parens_if_into(needs_parens, output, |o| unparse_expr_into(expr, o));
                 }
             });
         }

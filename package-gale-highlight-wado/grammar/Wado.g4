@@ -58,8 +58,7 @@ attrArgs
     ;
 
 attrArg
-    : identifier '(' (identifier (',' identifier)*)? ')'
-    | identifier ('=' attrValue)?
+    : identifier ('=' attrValue)?
     | attrValue
     ;
 
@@ -592,8 +591,12 @@ arrayElement
     | expression
     ;
 
+// The `with` row is the closure's own, never the handler expression that shares
+// the keyword; a handler reaches the body through a block or parentheses. The
+// compiler parses the row and then reports that it carries none yet, so the
+// shape belongs here either way.
 closure
-    : ('||' | '|' closureParamList? '|') returnType? (block | expression)
+    : ('||' | '|' closureParamList? '|') returnType? withClause? (block | expression)
     ;
 
 closureParamList

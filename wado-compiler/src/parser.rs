@@ -1318,28 +1318,23 @@ impl Parser {
                                 self.expect(&TokenKind::RBracket)?;
                                 AttrArg::KeyArray(value, items)
                             }
-                            _ => AttrArg::Ident(value),
-                        }
-                    } else if self.check(&TokenKind::LParen) {
-                        self.advance();
-                        let mut names: Vec<String> = Vec::new();
-                        while !self.check(&TokenKind::RParen) {
-                            let Some(name) = self.peek_kind().as_ident_name().map(str::to_string)
-                            else {
-                                let span = self.peek().span;
-                                return Err(self
-                                    .error_at_span(span, "expected identifier in attribute call"));
-                            };
-                            self.advance();
-                            names.push(name);
-                            if self.check(&TokenKind::Comma) {
+                            _ => {
+                                // `part_of = arr` names something in the source,
+                                // so it stays unquoted and keeps its own shape.
+                                let Some(named) =
+                                    self.peek_kind().as_ident_name().map(str::to_string)
+                                else {
+                                    let span = self.peek().span;
+                                    return Err(self.error_at_span(
+                                        span,
+                                        "expected a string, an array, or an identifier after `=`",
+                                    ));
+                                };
+                                self.mark_keyword_name();
                                 self.advance();
-                            } else {
-                                break;
+                                AttrArg::KeyIdent(value, named)
                             }
                         }
-                        self.expect(&TokenKind::RParen)?;
-                        AttrArg::Call(value, names)
                     } else {
                         AttrArg::Ident(value)
                     }
@@ -4175,12 +4170,30 @@ impl Parser {
         Ok(expr.with_span(start_span.merge(&end_span)))
     }
 
+    /// Read the `with` row a closure would declare and report that the compiler
+    /// carries none yet. The keyword here is always that row, never a handler
+    /// body: a handler reaches the body through a block or parentheses.
+    fn reject_closure_with_clause(&mut self) -> ParseResult<()> {
+        if !self.check(&TokenKind::With) {
+            return Ok(());
+        }
+        let span = self.peek().span;
+        self.parse_with_clause()?;
+        Err(self.error_at_span(
+            span,
+            "a closure cannot declare `with` yet: its effects are inferred from \
+             the body, and its stores cannot be declared. To make a handler the \
+             body, wrap it: `|| (with H => h do { ... })`",
+        ))
+    }
+
     /// Parse `|| body` — a zero-parameter closure. `||` (logical-or token) has
     /// not been consumed; it is only a closure here because primary position has
     /// no left operand for the binary operator.
     fn parse_zero_arg_closure_expr(&mut self, start_span: Span) -> ParseResult<Expr> {
         self.advance(); // consume `||`
         let return_type = self.parse_optional_closure_return_type()?;
+        self.reject_closure_with_clause()?;
         let body = if self.check(&TokenKind::LBrace) {
             let block = self.parse_block()?;
             Expr::Block(Box::new(block))
@@ -4691,6 +4704,8 @@ impl Parser {
         self.expect(&TokenKind::Pipe)?;
 
         let return_type = self.parse_optional_closure_return_type()?;
+
+        self.reject_closure_with_clause()?;
 
         // Check for block body: |params| { ... }
         let body = if self.check(&TokenKind::LBrace) {
@@ -6507,7 +6522,7 @@ fn serde_attr_advice(args: &[AttrArg]) -> String {
                 let items: Vec<String> = values.iter().map(|v| format!("\"{v}\"")).collect();
                 format!("{key} = [{}]", items.join(", "))
             }
-            AttrArg::Call(name, names) => format!("{name}({})", names.join(", ")),
+            AttrArg::KeyIdent(key, named) => format!("{key} = {named}"),
         })
         .collect();
 

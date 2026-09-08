@@ -1,0 +1,11 @@
+// `with` after a closure's parameter list is always the closure's own effect
+// row, which the compiler does not carry yet. Reading it as the start of a
+// handler expression body would make the two shapes indistinguishable.
+
+export fn run() {
+    let f = || with Log => &mut sink do { Log::emit(`hi`); };
+    f();
+}
+
+__DATA__
+{"compile_error": "a closure cannot declare `with` yet"}

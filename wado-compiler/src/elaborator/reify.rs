@@ -9,7 +9,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use crate::ast::{self, AstId, CompoundAssignOp, Expr, Item, Module, UnaryOp};
-use crate::compiler_host::CompilerHost;
+use crate::compiler_host::{Code, CompilerHost, Diagnostic, DiagnosticSpan, Severity};
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::logger::{Bail, Logger};
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
@@ -1395,7 +1395,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let type_params = self
             .ann_decl_type_params(func.id)
             .expect("resolve_function records the type params for every function reify emits");
-        let declared_return_convention = extract_return_convention_attr(&func.attrs, &params);
+        let declared_return_convention = self.reify_return_convention_attr(&func.attrs, &params);
 
         Some(TirFunction {
             module_source: ModuleSource::default(),
@@ -1830,7 +1830,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let type_params = self.ann_decl_type_params(func.id).expect(
             "resolve_method records the method type params for every impl method reify emits",
         );
-        let declared_return_convention = extract_return_convention_attr(&func.attrs, &params);
+        let declared_return_convention = self.reify_return_convention_attr(&func.attrs, &params);
 
         Some(TirFunction {
             module_source: ModuleSource::default(),
@@ -2013,6 +2013,19 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         })
     }
 
+    /// Report a malformed attribute at the attribute's own span.
+    fn attr_error(&self, code: Code, attr: &ast::Attribute, message: String) {
+        let _ = self.logger.error_in(
+            &self.current_module_source,
+            Diagnostic {
+                severity: Severity::Error,
+                code,
+                message,
+                span: Some(DiagnosticSpan::from_span(&attr.span, None)),
+            },
+        );
+    }
+
     /// Extract and structurally validate a `#[param]` attribute on a global.
     ///
     /// Returns `Some(ParamSpec)` for a well-formed `#[param]`, `None` when the
@@ -2021,20 +2034,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// resolution itself (overrides, env, conversion) happens later in the
     /// param-resolution pass — see `wep-2026-04-26-compile-time-params.md`.
     fn reify_param_attr(&self, global_decl: &ast::GlobalDecl) -> Option<tir::ParamSpec> {
-        use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
-
         let attr = global_decl.attributes.iter().find(|a| a.name == "param")?;
-        let emit = |message: String| {
-            let _ = self.logger.error_in(
-                &self.current_module_source,
-                Diagnostic {
-                    severity: Severity::Error,
-                    code: Code::ParamAttr,
-                    message,
-                    span: Some(DiagnosticSpan::from_span(&attr.span, None)),
-                },
-            );
-        };
+        let emit = |message: String| self.attr_error(Code::ParamAttr, attr, message);
 
         let mut ok = true;
         if global_decl.mutable {
@@ -2045,14 +2046,13 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         for arg in &attr.args {
             match arg {
                 ast::AttrArg::KeyValue(k, _) if k == "name" || k == "from_env" => {}
-                ast::AttrArg::KeyValue(k, _) | ast::AttrArg::KeyArray(k, _) => {
+                ast::AttrArg::KeyValue(k, _)
+                | ast::AttrArg::KeyArray(k, _)
+                | ast::AttrArg::KeyIdent(k, _) => {
                     emit(format!("unknown #[param] argument: {k}"));
                     ok = false;
                 }
-                ast::AttrArg::Str(s)
-                | ast::AttrArg::Ident(s)
-                | ast::AttrArg::Number(s)
-                | ast::AttrArg::Call(s, _) => {
+                ast::AttrArg::Str(s) | ast::AttrArg::Ident(s) | ast::AttrArg::Number(s) => {
                     emit(format!("unknown #[param] argument: {s}"));
                     ok = false;
                 }
@@ -2082,6 +2082,43 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             Some(tir::ParamSpec { name, from_env })
         } else {
             None
+        }
+    }
+
+    /// The `#[returns(...)]` convention, `None` where the declaration states
+    /// none. A malformed one is reported rather than read as that silence, which
+    /// means "allocates" — the reading that elides copies.
+    fn reify_return_convention_attr(
+        &self,
+        attrs: &[ast::Attribute],
+        params: &[tir::TirParam],
+    ) -> Option<tir::ReturnConvention> {
+        let attr = attrs.iter().find(|a| a.name == "returns")?;
+        let emit = |message: String| {
+            self.attr_error(Code::ReturnsAttr, attr, message);
+            None
+        };
+
+        let [arg] = attr.args.as_slice() else {
+            return emit(
+                "#[returns] takes one convention: `owned` or `part_of = param`".to_string(),
+            );
+        };
+        match arg {
+            ast::AttrArg::Ident(name) if name == "owned" => Some(tir::ReturnConvention::Owned),
+            ast::AttrArg::KeyIdent(key, named) if key == "part_of" => {
+                match params.iter().position(|p| &p.name == named) {
+                    Some(index) => Some(tir::ReturnConvention::PartOf(index)),
+                    None => emit(format!("#[returns(part_of = {named})] names no parameter")),
+                }
+            }
+            _ if arg.name() == "part_of" => {
+                emit("#[returns(part_of = ...)] takes a parameter name, unquoted".to_string())
+            }
+            _ => emit(format!(
+                "unknown #[returns] convention: {} (expected `owned` or `part_of = param`)",
+                arg.name()
+            )),
         }
     }
 
@@ -10682,25 +10719,6 @@ fn extract_inline_hint_attr(attrs: &[crate::ast::Attribute]) -> crate::tir::Inli
         Some("never") => crate::tir::InlineHint::Never,
         None => crate::tir::InlineHint::Hint,
         _ => crate::tir::InlineHint::Auto,
-    }
-}
-
-/// The `#[returns(...)]` convention. `None` where the declaration states none,
-/// leaving the return-convention analysis to decide.
-fn extract_return_convention_attr(
-    attrs: &[ast::Attribute],
-    params: &[tir::TirParam],
-) -> Option<tir::ReturnConvention> {
-    let attr = attrs.iter().find(|a| a.name == "returns")?;
-    let arg = attr.args.first()?;
-    match arg.as_str() {
-        "owned" => Some(tir::ReturnConvention::Owned),
-        "part_of" => {
-            let named = arg.call_args().first()?;
-            let index = params.iter().position(|p| &p.name == named)?;
-            Some(tir::ReturnConvention::PartOf(index))
-        }
-        _ => None,
     }
 }
 

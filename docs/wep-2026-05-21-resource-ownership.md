@@ -243,7 +243,7 @@ where it cannot prove move / share / fresh; no elision pass):
   _and_ a bytes literal, both of which lower to a fresh aggregate over a packed
   array. Where a result comes from is one fact: a body is read for it, a
   `core:builtin` declares it. `#[returns(owned)]` says the result is a fresh
-  place; `#[returns(part_of(p))]` says it names a component of parameter `p`.
+  place; `#[returns(part_of = p)]` says it names a component of parameter `p`.
   The declaration is mandatory. Link asserts that a bodyless `core:builtin`
   reading through a reference and returning storage carries one. What is left
   undeclared cannot hand storage out at all, so reading it as fresh is a fact
@@ -252,6 +252,15 @@ where it cannot prove move / share / fresh; no elision pass):
   one is copied at the call. Link also snapshots what it read, since
   monomorphization drops the generic declarations and materializes an instance
   only for the few a later phase rewrites.
+
+  A function that returns a projection rather than a fresh place is fresh
+  exactly when the argument it projects is, and `returns_self_projection`
+  records which parameter that is. The caller tests that argument, not the
+  receiver. `VariantCase::extract(&self, w)` returns a component of `w`; testing
+  `self` asks about a member descriptor the walk built fresh, and calls the
+  result fresh while `w` is still held. A `core:builtin` answers the same
+  question from `#[returns(part_of = p)]`, which names `p` outright.
+
   An _indirect_ call is fresh when every closure `__call` of its
   return type returns owned: closure lowering rewrites every callable value —
   a closure literal and a bare `FuncRef` alike — into a functor whose `__call`
@@ -292,6 +301,12 @@ where it cannot prove move / share / fresh; no elision pass):
   builtin call, so that was every function that indexes an array — including
   `String::cmp`, and so `TreeMap::find_index`, whose key every lookup then
   deep-copied.
+
+  What a builtin keeps of what it was passed is read from its `with stores[p]`,
+  the same clause a body carries. `array_set` and `array_fill` store their
+  `value` into the array; nothing else a builtin is handed outlives the call.
+  Link snapshots the positions alongside the return convention, since
+  monomorphization drops the declarations either fact would be read from.
 - Where a stored reference lands — `stores.rs` separates the position a callee
   routes into its _return value_ from one that reaches a global or is written
   through a reference the caller owns. A caller must assume the union, but the
@@ -415,9 +430,9 @@ unused helper — while a miss leaves the fold no helper to call.
 
 ### Known gap: a borrowed projection behind a variant
 
-`is_projection_of_param` matches a syntactic deref / field / index / payload /
-cast chain rooted at the first parameter, so `build(&self) -> List { return
-*self }` is self-projecting but `SliceValueIter<T>::next` is not:
+`projection_param` matches a syntactic deref / field / index / payload / cast
+chain rooted at a parameter, so `build(&self) -> List { return *self }` is
+self-projecting but `SliceValueIter<T>::next` is not:
 
 ```wado
 let item = builtin::array_get_value(self.repr, self.index);
@@ -622,32 +637,25 @@ Verified against the tree.
       `sqlite_parse` finds 0%. Only a program passing deeply nested aggregates by
       value pays it.
 
-- [ ] Say which by-value argument a builtin stores into a `&mut` one.
-      `confine::raise_builtin_sides` infers it instead: every by-value aggregate
-      leaks once any `&mut` operand is present. That over-marks, which costs a
-      copy. It is exact over the whole population: `array_set`, `array_fill` and
-      `array_copy`. A builtin that retains an argument by some other route goes
-      unmarked, and that one is unsound rather than slow.
-      Closing the gap means a declaration, as the result's origin has. The
-      obligation cannot be checked the same way: a builtin that stores and one
-      that does not have the same signature, so no predicate says where an
-      omission is wrong. Such a declaration puts the fact where its author will
-      look. It does not buy the guarantee the result's origin gets.
+- [ ] Say which _field_ a stored parameter is stored into. The gap above needs
+      it to re-root an iterator's element read at the list, and `array_copy`
+      needs it because its elements reach `dst`. Recorded with the rest of what
+      `stores[...]` cannot yet say, in
+      [WEP: Value Semantics and Reference Stores](./wep-2026-01-12-value-semantics-and-stores.md).
 
-- [ ] Root the self-projection verdict at a parameter, as `ReturnPath` is.
-      `returns_self_projection` says a call is fresh when its receiver is, and
-      `analyze::is_owned_value` reads `args.first()` for that receiver. A wrapper
-      whose storage comes from a later parameter breaks the pairing:
-      `VariantCase::extract(&self, w)` returns a component of `w`, so answering
-      yes for it makes the caller test `c` — a freshly built member descriptor —
-      and call the result fresh. The copy `w` needs then disappears.
-      That is why a `core:builtin` answers no here whatever it declared, even
-      though `#[returns(part_of(p))]` names the parameter exactly. Reading the
-      declaration costs `reflect_member_read_copies` its `case` line and buys 4
-      changed goldens out of 1767, with the json and cbor benchmarks unmoved.
-      Closing it means the verdict carrying its parameter and
-      `is_owned_value` testing that argument, which is the same shape
-      `ReturnPath::param` already has.
+- [ ] Read a call through `projection_param`, and `&fresh` through
+      `is_owned_value`. Together, not separately.
+      `projection_param` matches a syntactic chain, so a wrapper that returns a
+      call gets no verdict: `VariantCase::extract`, `Hole::get` and
+      `StructField::get` each `return builtin::<part_of builtin>(v, …)`.
+      Resolving the callee through `self_projection_param` is sound and gives
+      `extract` the verdict "projects `v`".
+      It buys nothing alone. `is_owned_value` has no `TirUnaryOp::Ref` arm, so
+      `&fresh_local` is never owned, and the caller that would cash the verdict
+      asks exactly that question about its argument. Measured: the resolution on
+      its own leaves all 1768 WIR goldens byte-identical, and a case written to
+      exercise it — `wrap(h: &Holder) -> List<i32> { return get_items(h); }`
+      called with a fresh `Holder` — is byte-identical at `-O0` too.
 
 ## Deferred: the `move` and `unique` keywords
 

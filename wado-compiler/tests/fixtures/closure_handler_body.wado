@@ -1,0 +1,40 @@
+// A closure body may be a handler expression. `with` right after the parameter
+// list is the closure's own row, so a handler reaches the body through
+// parentheses or a block.
+use { println, Stdout } from "core:cli";
+
+interface Log {
+    fn emit(message: String);
+}
+
+struct Sink {
+    lines: List<String> = [],
+}
+
+impl Log for Sink {
+    fn emit(&mut self, message: String) {
+        self.lines.push(message);
+    }
+}
+
+export fn run() with Stdout {
+    let mut parenthesized = Sink {};
+    let one = || (with Log => &mut parenthesized do { Log::emit(`hi`); });
+    one();
+
+    let mut blocked = Sink {};
+    let two = || {
+        with Log => &mut blocked do {
+            Log::emit(`hi`);
+            Log::emit(`there`);
+        };
+    };
+    two();
+
+    println(`${parenthesized.lines.len()} ${blocked.lines.len()}`);
+}
+
+__DATA__
+{
+    "stdout": "1 2\n"
+}

@@ -11,11 +11,12 @@
 use super::callgraph::CallGraph;
 use super::funcset::FuncKeyMap;
 use super::needs_value_copy;
+use super::ownership::BuiltinDeclarations;
 use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::tir::{
     FunctionKind, FunctionRef, ResolvedType, TirBlock, TirExpr, TirExprKind, TirStmt, TirStmtKind,
-    TirUnaryOp, TypeId, TypeTable,
+    TypeId, TypeTable,
 };
 use crate::tir_visitor::TirRefVisitor;
 
@@ -48,7 +49,11 @@ enum Kind {
     Opaque,
 }
 
-pub fn compute_confined_params(project: &FlatPackage, call_graph: &CallGraph) -> ConfinedParams {
+pub fn compute_confined_params(
+    project: &FlatPackage,
+    call_graph: &CallGraph,
+    builtins: &BuiltinDeclarations,
+) -> ConfinedParams {
     let type_table = project.type_table.borrow();
     let kinds = classify_functions(project);
 
@@ -75,6 +80,7 @@ pub fn compute_confined_params(project: &FlatPackage, call_graph: &CallGraph) ->
         };
         let ctx = Ctx {
             type_table: &type_table,
+            builtins,
             kinds: &kinds,
             funcs: &funcs,
         };
@@ -125,6 +131,7 @@ fn classify_functions(project: &FlatPackage) -> FuncKeyMap<Kind> {
 
 struct Ctx<'a> {
     type_table: &'a TypeTable,
+    builtins: &'a BuiltinDeclarations,
     kinds: &'a FuncKeyMap<Kind>,
     funcs: &'a FuncKeyMap<ParamEscape>,
 }
@@ -146,17 +153,29 @@ impl Ctx<'_> {
             })
     }
 
-    fn callee_ret(&self, func: &FunctionRef, param_index: usize) -> bool {
+    /// One escape channel of a callee's parameter. A callee with no entry has
+    /// no body this scan read, so every channel of it is raised.
+    fn callee_escape(
+        &self,
+        func: &FunctionRef,
+        param_index: usize,
+        channel: impl Fn(&ParamEscape) -> &[bool],
+    ) -> bool {
         match self.funcs.get(&func.module_source, &func.name) {
-            Some(pe) => pe.ret.get(param_index).copied().unwrap_or(true),
+            Some(pe) => channel(pe).get(param_index).copied().unwrap_or(true),
             None => true,
         }
     }
 
-    fn callee_side(&self, func: &FunctionRef, param_index: usize) -> bool {
-        match self.funcs.get(&func.module_source, &func.name) {
-            Some(pe) => pe.side.get(param_index).copied().unwrap_or(true),
-            None => true,
+    /// Whether the operand at `param_index` outlives this call. A value-copy
+    /// helper keeps nothing, a builtin keeps what `with stores[p]` names, a body
+    /// answers from the fixpoint, and a callee this scan cannot read keeps all.
+    fn callee_keeps(&self, func: &FunctionRef, param_index: usize) -> bool {
+        match self.kind(func) {
+            Kind::ValueCopy => false,
+            Kind::Builtin => self.builtins.stored_params(func).contains(&param_index),
+            Kind::HasBody => self.callee_escape(func, param_index, |pe| &pe.side),
+            Kind::Opaque => true,
         }
     }
 }
@@ -243,38 +262,8 @@ impl TirRefVisitor for SinkWalker<'_> {
 
 impl SinkWalker<'_> {
     fn raise_call_sides(&mut self, func: &FunctionRef, operands: &[&TirExpr]) {
-        match self.ctx.kind(func) {
-            Kind::ValueCopy => {}
-            Kind::Builtin => self.raise_builtin_sides(operands),
-            Kind::Opaque => {
-                for op in operands {
-                    self.raise_side(op);
-                }
-            }
-            Kind::HasBody => {
-                for (i, op) in operands.iter().enumerate() {
-                    if self.ctx.callee_side(func, i) {
-                        self.raise_side(op);
-                    }
-                }
-            }
-        }
-    }
-
-    /// A store builtin leaks its by-value aggregate operands into a `&mut`
-    /// aggregate the caller retains.
-    fn raise_builtin_sides(&mut self, operands: &[&TirExpr]) {
-        let has_mut_aggregate = operands
-            .iter()
-            .any(|op| is_mut_ref(op, self.ctx.type_table));
-        if !has_mut_aggregate {
-            return;
-        }
-        for op in operands {
-            if is_ref_typed(op, self.ctx.type_table) {
-                continue;
-            }
-            if needs_value_copy(op.type_id, self.ctx.type_table) {
+        for (i, op) in operands.iter().enumerate() {
+            if self.ctx.callee_keeps(func, i) {
                 self.raise_side(op);
             }
         }
@@ -413,7 +402,7 @@ fn call_result_taint(
         Kind::HasBody => operands
             .iter()
             .enumerate()
-            .filter(|(i, _)| ctx.callee_ret(func, *i))
+            .filter(|(i, _)| ctx.callee_escape(func, *i, |pe| &pe.ret))
             .fold(Taint::default(), |acc, (_, op)| {
                 union(acc, taint_of(ctx, taint, op))
             }),
@@ -478,28 +467,6 @@ fn carries_identity(type_id: TypeId, type_table: &TypeTable) -> bool {
         || matches!(
             type_table.get(type_id),
             ResolvedType::Ref(_) | ResolvedType::MutRef(_)
-        )
-}
-
-fn is_mut_ref(expr: &TirExpr, type_table: &TypeTable) -> bool {
-    matches!(type_table.get(expr.type_id), ResolvedType::MutRef(_))
-        || matches!(
-            &expr.kind,
-            TirExprKind::Unary {
-                op: TirUnaryOp::MutRef,
-                ..
-            }
-        )
-}
-
-fn is_ref_typed(expr: &TirExpr, type_table: &TypeTable) -> bool {
-    super::is_reference_type(expr.type_id, type_table)
-        || matches!(
-            &expr.kind,
-            TirExprKind::Unary {
-                op: TirUnaryOp::Ref | TirUnaryOp::MutRef,
-                ..
-            }
         )
 }
 

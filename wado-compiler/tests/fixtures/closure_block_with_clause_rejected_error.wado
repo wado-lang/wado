@@ -1,0 +1,10 @@
+// A block body leaves the closure's `with` row unambiguous, and it still
+// reaches the same diagnostic: the compiler carries no such row yet.
+
+export fn run() {
+    let f = |n: i32| -> i32 with Log { return n; };
+    f(1);
+}
+
+__DATA__
+{"compile_error": "a closure cannot declare `with` yet"}

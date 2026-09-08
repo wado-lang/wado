@@ -75,6 +75,13 @@ impl<V> FuncKeyMap<V> {
             .insert(name, value);
     }
 
+    /// Drop the entry, reporting whether one was there.
+    pub fn remove(&mut self, module: &ModuleSource, name: &str) -> bool {
+        self.by_module
+            .get_mut(module)
+            .is_some_and(|names| names.swap_remove(name).is_some())
+    }
+
     /// Transform every value, preserving keys.
     pub fn map_values<U>(self, mut f: impl FnMut(V) -> U) -> FuncKeyMap<U> {
         let by_module = self

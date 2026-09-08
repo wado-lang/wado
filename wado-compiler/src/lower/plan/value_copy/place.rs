@@ -4,7 +4,7 @@
 
 use super::funcset::{FuncKeyMap, FuncKeySet};
 use super::needs_value_copy;
-use super::ownership::BuiltinConventions;
+use super::ownership::BuiltinDeclarations;
 use crate::hashmap::IndexMap;
 use crate::tir::{
     ResolvedType, TirExpr, TirExprKind, TirFunction, TirParam, TirPattern, TirStmt, TirStmtKind,
@@ -132,7 +132,7 @@ pub fn compute_return_paths(
     call_graph: &super::callgraph::CallGraph,
     type_table: &TypeTable,
     returns_owned: &FuncKeySet,
-    builtins: &BuiltinConventions,
+    builtins: &BuiltinDeclarations,
 ) -> ReturnPaths {
     let mut paths = ReturnPaths::default();
     call_graph.solve(flat, |id| {
@@ -157,10 +157,8 @@ pub fn compute_return_paths(
         let Some(Names::Place(place)) = returned.names else {
             return false;
         };
-        let Some(param) = func
-            .params
-            .iter()
-            .position(|p| p.local_index == place.root && lends_storage(p, type_table))
+        let Some(param) = param_position(&func.params, place.root)
+            .filter(|&i| lends_storage(&func.params[i], type_table))
         else {
             return false;
         };
@@ -190,7 +188,7 @@ impl TirRefVisitor for ReturnedPlace<'_, '_> {
             // A returned construction hands its payload out uncopied, so the
             // storage the call names is the payload's; an empty case carries
             // none and abstains.
-            let value = super::analyze::returned_value(value, true);
+            let value = super::analyze::returned_value(value, true, self.resolver.type_table);
             if !super::analyze::carries_no_storage(value) {
                 let names = self.resolver.names(value);
                 self.names = match self.names.take() {
@@ -213,7 +211,7 @@ pub struct Resolver<'a> {
     /// something this walk will not guess at.
     returns_owned: &'a FuncKeySet,
     /// Where each builtin declared its result comes from.
-    builtins: &'a BuiltinConventions,
+    builtins: &'a BuiltinDeclarations,
     /// Parameters naming storage the caller lent, by the type lent. The only
     /// roots a write in this body reaches out through.
     lent: IndexMap<u32, TypeId>,
@@ -229,7 +227,7 @@ impl<'a> Resolver<'a> {
         type_table: &'a TypeTable,
         return_paths: &'a ReturnPaths,
         returns_owned: &'a FuncKeySet,
-        builtins: &'a BuiltinConventions,
+        builtins: &'a BuiltinDeclarations,
     ) -> Self {
         let mut resolver = Self {
             type_table,
@@ -323,7 +321,7 @@ impl<'a> Resolver<'a> {
                 Names::Value | Names::Unknown => Names::Unknown,
             },
             // A member read borrows the slot in place, so it names the storage
-            // of the parameter its `#[returns(part_of(p))]` names, one `Index`
+            // of the parameter its `#[returns(part_of = p)]` names, one `Index`
             // further in. `Index` is the honest selector: the index is a runtime
             // value, so which component it lands on is not known here.
             TirExprKind::Call { func, args, .. } if func.module_source.is_core_builtin() => {
@@ -467,8 +465,14 @@ pub fn is_reference(type_id: TypeId, type_table: &TypeTable) -> bool {
 
 /// Whether this parameter names storage the caller still reaches. A by-value
 /// one was deep-copied at the call, so the body owns what it holds.
-fn lends_storage(param: &TirParam, type_table: &TypeTable) -> bool {
+pub fn lends_storage(param: &TirParam, type_table: &TypeTable) -> bool {
     param.is_mut_ref || is_reference(param.type_id, type_table)
+}
+
+/// The parameter bound to `local`, by position.
+#[must_use]
+pub fn param_position(params: &[TirParam], local: u32) -> Option<usize> {
+    params.iter().position(|p| p.local_index == local)
 }
 
 /// Whether a value of this type could name storage someone else still reaches:
@@ -477,6 +481,14 @@ fn lends_storage(param: &TirParam, type_table: &TypeTable) -> bool {
 #[must_use]
 pub fn carries_storage(type_id: TypeId, type_table: &TypeTable) -> bool {
     is_reference(type_id, type_table) || needs_value_copy(type_id, type_table)
+}
+
+/// [`carries_storage`] asked before monomorphization. A type parameter is
+/// whatever a call instantiates it with, so it answers for the widest of them.
+#[must_use]
+pub fn may_carry_storage(type_id: TypeId, type_table: &TypeTable) -> bool {
+    carries_storage(type_id, type_table)
+        || matches!(type_table.get(type_id), ResolvedType::TypeParam { .. })
 }
 
 /// A handle a callee can write through. A shared `&` cannot be; a box carries
