@@ -89,34 +89,6 @@ Remaining:
 - **Stage B′ does not oracle a composite.** `antlr4-oracle.sh` invokes the jar on one grammar file with no `-lib` slave lookup, so `stage_b_oracle_eligible` excludes them. Closing it means teaching the oracle script to stage the slaves beside the master and pass `-lib`. The extractor would then hand it composite candidates unchanged.
 - **The dialect consumer still holds a copy.** Kiln `inputs` are relative paths inside the project, so a dialect in its own repository cannot name `Wado.g4` inside a dependency package ([WEP: Markup Dialect](../docs/wep-2026-08-29-markup-dialect.md)). Resolution shrinks that from a drifting fork to a copy a checksum can hold. The rest is a Kiln gap, not a Gale one.
 
-## Rust corpus — this repository's own `.rs`
-
-`tools/rust_corpus_check.wado` (`AGENTS.md` has the invocation) is the repository-wide number, and `wado-compiler/**/*.rs` is the tracked subset. Every failing file reports exactly one diagnostic: it dies once and recovery carries the rest. A class closed is that many files clean. The reported stack is where the check gave up, which recovery can move a long way from the cause.
-
-`wado-compiler`: **327 files, 303 with diagnostics** at `e925ee58bf`, **0** now. Repository-wide: **494 files, 0 with diagnostics**. Every `.rs` this repository tracks parses.
-
-Closed along the way: the caller's continuation stopping at the enclosing group (`useTree`), a greedy loop eating its alternative's mandatory suffix (`matchArms`), a greedy loop stranding its own optional one (`statements`), a nullable alternative at a lookahead nothing selects (`structExprFields`), a recursive non-greedy fragment (`RAW_STRING_LITERAL`), a predicate-carrying alternation scored by first match rather than length (`FLOAT_LITERAL`), a mandatory scan group reporting a match after finding no alternative (`item`), a parser `superClass` that carved actions out of its own grammar, a line comment whose body could start with its own newline and eat the line after it, and the grammar being several Rust versions behind (let-else, let chains, `if let` guards, async closures, `union`, `&&T`, raw borrows, and a string catch-all admitting the backslash).
-
-The largest class was a semantic predicate the scan could not see. Three things closed it, and each is a separate soundness claim:
-
-- A scan **simulates** the gate actions it walks over (`src/scan_gate.wado`). The fields live in one generated `SCAN_GATE` global carrying the parser's own names, and the translator renders the scan's condition from the parser's own predicate text with the handle pointed at that global. Every body the analysis reads is the translator's, never the grammar text: Java writes `{noBrace = 1;}` and Wado `{p.noBrace = 1}`, and both arrive as `p.<declared member> = 1`, so one recogniser answers for either language. Every measurement the parse launches takes its gate on entry, so the simulation starts from the truth; a scan reached from inside another inherits its caller's value instead. A field qualifies on four counts: the parse runs the action, every body reaching it is one the scan can run, the members block declares it, and the rule that scopes it is not left-recursive. A body the scan cannot run disqualifies every name it mentions, and every field at all once it can call — a call reaches a field without naming it. A grammar with no qualifying field is byte-identical.
-- A left-recursive suffix's actions run in its scan too, from `before == 1`. The precedence loop scans a suffix before committing to it, and that emitter was the last one not going through `gen_scan_op_elements`. The alt-initial position is the loop-entry decision rather than a suffix action, so the parse never runs it and the scan does not simulate it.
-- A rule can **scope** a gate — `locals` + `@init` / `@after` — and the scan takes its saved copy from its own call stack. That is the restore a members field cannot express, because the value to restore to is per-invocation; without it the ban a bracket lifts never comes back, and `if f(x) || a { b }` loses its block.
-
-Reaching the last few meant minimising, and the minimiser's oracle is the load-bearing part. `target/shrink.mjs` + `target/shrink.sh` (throwaway, not committed) does greedy line-range removal over delimiter-balanced ranges. Delimiter balance is not Rust validity, and neither is `rustfmt`: it recovers from `match x { y }` where rustc rejects it. Without a faithful oracle the minimiser shrinks to input rustc refuses and then blames the parser for its own error. That happened twice, until the oracle became rustc's own parse errors. Those are the ones with no error code: `error:` is a parse error, while `error[E0425]:` is name resolution complaining about types the fragment no longer declares.
-
-What the whole set cost, against `e925ee58bf` with the same grammar on both
-arms and each row normalised by the ANTLR4 control in the same run:
-
-| row                      | ratio | note                                     |
-| ------------------------ | ----- | ---------------------------------------- |
-| `benchmark-sqlite-parse` | 1.03x | the generated parser's own runtime, flat |
-| `benchmark-gale-gen`     | 1.25x | generator throughput, a build-time cost  |
-
-The generator row is spread across the correctness work rather than
-concentrated. Disabling the decline lowering alone, the largest single addition
-at 88 sites in the Rust parser, recovers about a quarter of it.
-
 ## Gale accepts `\\[` in a char set where ANTLR4 rejects it
 
 `~[\\[\\r\\n]` compiles under Gale and fails under the jar with

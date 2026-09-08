@@ -88,6 +88,8 @@ wado run package-gale/tools/rust_corpus_check.wado -- --paths-from target/rs-cor
 
 `--paths-from` reads one path per line, the only form that survives a path with a space.
 
+Every `.rs` this repository tracks parses clean, so any `ng` line is a regression. Each failing file reports exactly one diagnostic — it dies once and recovery carries the rest — so the count is files, not errors.
+
 ## Running tests
 
 ```sh
