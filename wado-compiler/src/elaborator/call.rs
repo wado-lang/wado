@@ -841,6 +841,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         &args,
                         expected_type,
                         call.span,
+                        None,
                     );
                     impl_type_args_inferred = impl_args;
                     method_type_args = method_args;
@@ -854,6 +855,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         &args,
                         expected_type,
                         call.span,
+                        None,
                     );
                     if impl_type_args_inferred.is_empty() {
                         impl_type_args_inferred = impl_args;
@@ -892,6 +894,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     &impl_type_args_inferred,
                     &method_type_args,
                     call.span,
+                    None,
                 );
                 // Enforce the static method's type-arg bounds (shared rule).
                 if !method_type_args.is_empty() {
@@ -1333,7 +1336,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     }
 
                     // Static method call on a type from the namespace module.
-                    let method_type_args: Vec<TypeId> = call
+                    let mut method_type_args: Vec<TypeId> = call
                         .type_args
                         .iter()
                         .map(|ty| self.resolve_type(ty))
@@ -1373,11 +1376,40 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             let ast_id = self.tysys.resolutions.defs().ast_id(def);
                             self.tysys.type_table.borrow().type_of_symbol(&ast_id)
                         });
+                    // The receiver's own type arguments, and the method's, as the
+                    // two-segment spelling infers them. Without this the branch
+                    // read only a written turbofish, so `ns::Cell::wrap(7)`
+                    // mangled a name with no arguments at all — and where none
+                    // could be inferred it said nothing, leaving WIR build to
+                    // report an impl that is plainly there.
+                    let mut impl_type_args_inferred: Vec<TypeId> = Vec::new();
+                    if method_type_args.is_empty() {
+                        let (impl_args, method_args) = self.infer_static_call_type_args(
+                            type_name,
+                            method_name,
+                            &call.args,
+                            &args,
+                            expected_type,
+                            call.span,
+                            ns_key.as_ref(),
+                        );
+                        impl_type_args_inferred = impl_args;
+                        method_type_args = method_args;
+                    }
+                    self.report_uninferred_static_method_type_args(
+                        type_name,
+                        method_name,
+                        &impl_type_args_inferred,
+                        &method_type_args,
+                        call.span,
+                        ns_key.as_ref(),
+                    );
                     let resolved = self.resolve_static_callee(StaticQuery {
                         site: ident.segments.get(1).map(|segment| segment.id),
                         receiver_key: ns_key.as_ref(),
                         arg_types: &args,
                         receiver_type: ns_receiver_type,
+                        receiver_args: &impl_type_args_inferred,
                         ..StaticQuery::of(type_name, method_name)
                     });
                     if self.report_ambiguous_static(&resolved, method_name, call.span) {
@@ -1439,19 +1471,25 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         method_name,
                     );
 
+                    // The receiver's arguments come first: the declaration
+                    // numbers its own slots 0.. and the method's after them, so
+                    // one flat list substitutes by index (as the two-segment
+                    // spelling does).
+                    let mut combined_type_args = impl_type_args_inferred.clone();
+                    combined_type_args.extend_from_slice(&method_type_args);
                     let mut return_type = resolved.return_type();
-                    if !method_type_args.is_empty() {
+                    if !combined_type_args.is_empty() {
                         return_type = self
                             .tysys
-                            .substitute_type_params(return_type, &method_type_args);
+                            .substitute_type_params(return_type, &combined_type_args);
                     }
 
-                    let monomorph_info = if method_type_args.is_empty() {
+                    let monomorph_info = if combined_type_args.is_empty() {
                         None
                     } else {
                         Some(MonomorphInfo {
                             generic_name: final_mangled.clone(),
-                            impl_type_args: vec![],
+                            impl_type_args: impl_type_args_inferred.clone(),
                             method_type_args: method_type_args.clone(),
                             is_blanket: false,
                         })
@@ -2453,8 +2491,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         impl_type_args: &[TypeId],
         method_type_args: &[TypeId],
         span: crate::token::Span,
+        receiver_key: Option<&ImplTargetKey>,
     ) {
-        let Some(sig) = self.qualified_method_sig(prefix, suffix) else {
+        // Keyed as the inference is, and for the same reason: a namespaced
+        // receiver has no bare name to search, so an unkeyed lookup found no
+        // signature and the call went on with its slots unfilled, unreported.
+        let sig = match receiver_key {
+            Some(key) => self.qualified_method_sig_keyed(key, suffix),
+            None => self.qualified_method_sig(prefix, suffix),
+        };
+        let Some(sig) = sig else {
             return;
         };
         let (declaring_slots, method_slots) = (sig.declaring_type_params(), sig.own_type_params());
@@ -2816,13 +2862,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         args: &[TypeId],
         expected_type: Option<TypeId>,
         span: crate::token::Span,
+        receiver_key: Option<&ImplTargetKey>,
     ) -> (Vec<TypeId>, Vec<TypeId>) {
         let probe = CalleeRef::rendered(self.current_module_source.clone(), suffix);
         let method_args = self.infer_fn_type_args(&probe, raw_args, args, expected_type, span);
         if !method_args.is_empty() {
             return (Vec::new(), method_args);
         }
-        self.infer_static_method_type_args(prefix, suffix, raw_args, args, expected_type, span)
+        self.infer_static_method_type_args(
+            prefix,
+            suffix,
+            raw_args,
+            args,
+            expected_type,
+            span,
+            receiver_key,
+        )
     }
 
     /// Infer a generic static method's type arguments, sharing the three-tier
@@ -2838,8 +2893,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         args: &[TypeId],
         expected_type: Option<TypeId>,
         span: crate::token::Span,
+        receiver_key: Option<&ImplTargetKey>,
     ) -> (Vec<TypeId>, Vec<TypeId>) {
-        let Some(sig) = self.qualified_method_sig(struct_name, method_name) else {
+        // Keyed where the caller resolved the receiver: the importing module
+        // never names a namespaced `Type` on its own, so a bare-name search
+        // finds no signature and every slot goes uninferred.
+        let sig = match receiver_key {
+            Some(key) => self.qualified_method_sig_keyed(key, method_name),
+            None => self.qualified_method_sig(struct_name, method_name),
+        };
+        let Some(sig) = sig else {
             return (vec![], vec![]);
         };
         if sig.decl.type_params.is_empty() {
