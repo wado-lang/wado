@@ -151,7 +151,7 @@ Behaviour that no `--help` will remind you of:
 - A program targets a Wasm _world_: `wasi:cli/command` (default), `wasi:http/service`, or the synthetic `test` world. `--world test` exports the entry module's `test` blocks and drops everything else; `serve` and `test` pick their world automatically.
 - The world selects the allocator: `bump` for CLI (never frees), `freelist` for HTTP (long-running), `debug` for the test world (never reuses freed memory, poisons it with `0xFF`). E2E tests rely on the test world picking `debug`.
 - `wado run` reaches only the directories granted to it: the current one, or exactly the `--dir` grants once any is given. Paths open relative to a grant, so an absolute path never opens.
-- The Wado formatter skips `wado-compiler/tests/**` (`[format] exclude` in its `wado.toml`), so an e2e fixture keeps its hand-authored layout. Naming a file or a directory _inside_ an excluded tree bypasses the exclusion, so never `wado format -w` a fixture path directly. When the syntax changes, add tests to `wado-compiler/tests/format.rs`.
+- The Wado formatter skips `wado-compiler/tests/**` (`[format] exclude` in its `wado.toml`), so an e2e fixture keeps its hand-authored layout. A directory argument is walked from the package enclosing it, so naming a subdirectory honours the exclusion. Naming a file bypasses it, so never `wado format -w` a fixture file directly. When the syntax changes, add tests to `wado-compiler/tests/format.rs`.
 
 ## Dependencies
 

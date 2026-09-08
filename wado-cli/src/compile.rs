@@ -15,6 +15,7 @@ use crate::kiln_driver::{PipelineError, PipelineOutcome};
 use crate::kiln_provider::CliGeneratorProvider;
 use crate::knobs::{CompileKnobs, EmbedOpt, EmbedOptions, KnobOpt};
 use crate::manifest;
+use crate::manifest::openable_dir;
 use crate::run_cache::RunCache;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -895,14 +896,8 @@ fn remap_and_report_conflicts(
 /// Walk up from `entry_file` looking for the nearest `wado.toml`. Returns
 /// `None` (treated as "no Kiln config") on missing or malformed manifest.
 pub fn load_nearest_manifest(entry_file: &Path) -> Option<manifest::ProjectManifest> {
-    let mut dir = entry_file
-        .parent()
-        .map(std::path::Path::to_path_buf)
-        .unwrap_or_else(|| std::path::PathBuf::from("."));
-    if dir.as_os_str().is_empty() {
-        dir = std::path::PathBuf::from(".");
-    }
-    crate::manifest::discover(&dir).ok().flatten()
+    let dir = entry_file.parent().unwrap_or(Path::new("."));
+    manifest::discover(openable_dir(dir)).ok().flatten()
 }
 
 fn wasm_to_wat(wasm: &[u8]) -> Result<String, CliExit> {

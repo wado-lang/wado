@@ -12,7 +12,12 @@ use wado_compiler::kiln::InvocationIndex;
 
 use crate::args::CliExit;
 use crate::compiler_host::FilesystemCompilerHost;
+use crate::discover;
 use crate::manifest::ProjectManifest;
+
+/// The synthetic entry a query opens at its base directory. It is never read
+/// from disk, and discovery must not import it back into itself.
+const QUERY_ENTRY: &str = "__wado_query__.wado";
 
 struct PreparedQuery {
     uri: String,
@@ -210,7 +215,7 @@ async fn symbol_env(notation: &str, base: &str) -> Result<SymbolEnv, CliExit> {
     // its directory anchors relative-module resolution at `base`. Its imports
     // come from the notation, not source text, so there are no inline component
     // deps — pass empty source; manifest `[dependencies]` still resolve.
-    let entry_path = base_dir.join("__wado_query__.wado");
+    let entry_path = base_dir.join(QUERY_ENTRY);
     let manifest_pair = crate::compile::load_nearest_manifest(&entry_path);
     let host = crate::compile::attach_manifest_and_component_deps(
         FilesystemCompilerHost::silent(base_dir.clone()),
@@ -323,7 +328,7 @@ async fn prepare_references_query(notation: &str, base: &str) -> Result<SymbolQu
     let env = symbol_env(notation, base).await?;
     let invocations = symbol_invocations(&env).await;
     let target = env.parsed.module.clone();
-    let workspace = workspace_module_specs(&env.base_dir);
+    let workspace = workspace_module_specs(&env.base_dir)?;
 
     let mut engine = open_entry(
         &env.uri,
@@ -370,35 +375,24 @@ async fn file_analyzes(base_dir: &Path, host: &FilesystemCompilerHost, spec: &st
 }
 
 /// Relative module specs (`./sub/x.wado`) for every `.wado` file under `root`,
-/// sorted. Skips VCS/build directories and the synthetic query entry.
-fn workspace_module_specs(root: &Path) -> Vec<String> {
-    fn walk(root: &Path, dir: &Path, out: &mut Vec<String>) {
-        let Ok(entries) = fs::read_dir(dir) else {
-            return;
-        };
-        for entry in entries.flatten() {
-            let path = entry.path();
-            let name = entry.file_name();
-            let name = name.to_string_lossy();
-            if path.is_dir() {
-                if name.starts_with('.')
-                    || matches!(name.as_ref(), "build" | "target" | "node_modules")
-                {
-                    continue;
-                }
-                walk(root, &path, out);
-            } else if path.extension().is_some_and(|e| e == "wado")
-                && name != "__wado_query__.wado"
-                && let Ok(rel) = path.strip_prefix(root)
-            {
-                out.push(format!("./{}", rel.to_string_lossy().replace('\\', "/")));
-            }
-        }
-    }
-    let mut out = Vec::new();
-    walk(root, root, &mut out);
-    out.sort();
-    out
+/// sorted. Unfiltered by `[test]` / `[format]`: a fixture those sections
+/// exclude is still a place a symbol is used. The queried module itself is
+/// imported by [`imports_with_target`] whatever this returns.
+fn workspace_module_specs(root: &Path) -> Result<Vec<String>, CliExit> {
+    let entry = root.join(QUERY_ENTRY);
+    let mut specs: Vec<String> = discover::discover_tree(root, &discover::no_filters)?
+        .into_iter()
+        .flat_map(|pkg| pkg.files)
+        .filter(|p| *p != entry)
+        .map(|p| {
+            let rel = p
+                .strip_prefix(root)
+                .expect("discover_tree yields paths under the root it walked");
+            format!("./{}", rel.to_string_lossy().replace('\\', "/"))
+        })
+        .collect();
+    specs.sort();
+    Ok(specs)
 }
 
 /// Report a failed symbol resolution on stderr. For a missing symbol, list the
@@ -918,5 +912,91 @@ fn print_inlay_hints_text(
             rendered.insert_str(byte, &format!("‹{}›", hint.label));
         }
         println!("{:>5} | {rendered}", index + 1);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::BTreeSet;
+
+    use crate::discover::fixture::touch;
+
+    fn specs(root: &Path) -> BTreeSet<String> {
+        workspace_module_specs(root).unwrap().into_iter().collect()
+    }
+
+    // `references` spans the workspace, so a nested `wado.toml` is a package
+    // boundary to recurse through, not to stop at.
+    #[test]
+    fn a_subpackage_is_still_part_of_the_workspace() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        touch(&root.join("a.wado"));
+        touch(&root.join("pkg/wado.toml"));
+        touch(&root.join("pkg/b.wado"));
+
+        assert_eq!(
+            specs(root),
+            ["./a.wado", "./pkg/b.wado"]
+                .iter()
+                .map(ToString::to_string)
+                .collect()
+        );
+    }
+
+    // Importing the synthetic entry back into itself would be a cycle. Only its
+    // one path is the entry; the name is free for real source deeper in.
+    #[test]
+    fn the_synthetic_entry_is_not_imported() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        touch(&root.join(QUERY_ENTRY));
+        touch(&root.join("a.wado"));
+        touch(&root.join("pkg").join(QUERY_ENTRY));
+
+        assert_eq!(
+            specs(root),
+            ["./a.wado", &format!("./pkg/{QUERY_ENTRY}")]
+                .iter()
+                .map(ToString::to_string)
+                .collect()
+        );
+    }
+
+    // Discovery now shares the walker, so `.gitignore` prunes here too.
+    #[test]
+    fn a_gitignored_file_is_not_in_the_workspace() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        touch(&root.join("a.wado"));
+        touch(&root.join("target/gen.wado"));
+        fs::write(root.join(".gitignore"), "target/\n").unwrap();
+
+        assert_eq!(specs(root), ["./a.wado".to_string()].into_iter().collect());
+    }
+
+    // `[test]` / `[format]` exclude must not reach `references`: a fixture the
+    // formatter skips is still a place a symbol is used.
+    #[test]
+    fn a_manifest_excluded_file_is_still_in_the_workspace() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        fs::write(
+            root.join("wado.toml"),
+            "[package]\nname = \"p\"\nversion = \"0.0.0\"\n\n[test]\nexclude = [\"fixtures/**\"]\n\n[format]\nexclude = [\"fixtures/**\"]\n",
+        )
+        .unwrap();
+        touch(&root.join("fixtures/x.wado"));
+
+        assert!(specs(root).contains("./fixtures/x.wado"));
+    }
+
+    // The queried module is imported whatever discovery says, so a target that
+    // is gitignored — or inside a submodule — still resolves.
+    #[test]
+    fn the_target_is_imported_even_when_discovery_drops_it() {
+        let imports = imports_with_target("./ignored/t.wado", &["./a.wado".to_string()]);
+        assert_eq!(imports, vec!["./ignored/t.wado", "./a.wado"]);
     }
 }

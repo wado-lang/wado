@@ -53,13 +53,22 @@ pub fn discover(start_dir: &Path) -> Result<Option<ProjectManifest>, DiscoveryEr
             let manifest = resolve_manifest(&dir, &content)?;
             return Ok(Some(ProjectManifest {
                 manifest,
-                root: dir,
+                root: openable_dir(&dir).to_path_buf(),
             }));
         }
         if !dir.pop() {
             return Ok(None);
         }
     }
+}
+
+/// `.` for the empty path, which `pop()` and `Path::parent` both produce. It
+/// joins like `.` but opens like nothing, and a directory is made to be opened.
+pub(crate) fn openable_dir(dir: &Path) -> &Path {
+    if dir.as_os_str().is_empty() {
+        return Path::new(".");
+    }
+    dir
 }
 
 /// Parse a member's `wado.toml`, applying `[workspace.package]` inheritance when
@@ -85,12 +94,7 @@ fn workspace_anchor(member_dir: &Path) -> Cow<'_, Path> {
     if member_dir.is_absolute() && !has_parent_dir {
         return Cow::Borrowed(member_dir);
     }
-    let anchor = if member_dir.as_os_str().is_empty() {
-        Path::new(".")
-    } else {
-        member_dir
-    };
-    fs::canonicalize(anchor)
+    fs::canonicalize(openable_dir(member_dir))
         .map(Cow::Owned)
         .unwrap_or(Cow::Borrowed(member_dir))
 }
@@ -404,6 +408,15 @@ mod tests {
     use super::*;
     use std::assert_matches;
     use std::fs;
+
+    // `wado format sub` walks the root this returns, so it must open.
+    #[test]
+    fn a_root_found_by_popping_a_relative_dir_is_openable() {
+        assert_eq!(openable_dir(Path::new("")), Path::new("."));
+        assert_eq!(openable_dir(Path::new("pkg")), Path::new("pkg"));
+        assert_eq!(openable_dir(Path::new("/abs")), Path::new("/abs"));
+        assert!(fs::read_dir(openable_dir(Path::new(""))).is_ok());
+    }
 
     #[test]
     fn discover_in_current_dir() {
