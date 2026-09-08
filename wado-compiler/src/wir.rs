@@ -3017,11 +3017,6 @@ pub struct WirGlobal {
     pub wado_mutable: bool,
     /// Initial value expression.
     pub init: WirInstr,
-    /// True for lazy-initialized globals: the Wasm slot starts `null` and
-    /// `__initialize_module` runs the original initializer to write the real
-    /// value. Genuine-nullable globals (e.g. `Option<&T> = null`) leave this
-    /// `false` — their `null` is a value, not a pre-init placeholder.
-    pub lazy_init: bool,
     /// Metadata.
     pub meta: WirMeta,
 }

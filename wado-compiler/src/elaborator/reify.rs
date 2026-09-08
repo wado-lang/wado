@@ -1979,8 +1979,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// was already resolved by `annotate_decls` and lives on
     /// `sem.decls.current_module_globals`; reify reads it back and
     /// walks the initializer through a minimal `FunctionContext`.
-    /// `is_nullable` / `lazy_init` are populated by the lower phase
-    /// (kept `false` here, matching `Elaborator::resolve_global`).
+    /// `is_nullable` is populated by the lower phase (kept `false` here,
+    /// matching `Elaborator::resolve_global`).
     fn reify_global(&mut self, global_decl: &ast::GlobalDecl) -> Option<TirGlobal> {
         // `annotate_module_decls` populates `current_module_globals` for every
         // global it sees before any per-item reify runs, so the lookup

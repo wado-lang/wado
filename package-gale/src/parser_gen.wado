@@ -1013,7 +1013,7 @@ fn gen_scan_lr_call_with_prec(
     prec: i32,
     ctx: &GenContext,
     mid_operand_gated: bool = false,
-    scan_local: &String = &"",
+    prebound: &Option<String> = &NO_PREBOUND,
 ) {
     // The LR loop must always commit to the longest valid prefix it can
     // build. If the suffix scan fails (e.g. the suffix's first token matches
@@ -1031,10 +1031,10 @@ fn gen_scan_lr_call_with_prec(
     // its end takes the gate it ended under: the chain rolled the global back to
     // the dispatch's entry before branching, and the live-call sibling below
     // advances it by running.
-    if scan_local.is_empty() {
-        w.line(&`pos = ${*suffix_fn}(tokens, pos${follow_sep(ctx.current_rule_reads_follow())});`);
+    if let Some(local) = prebound {
+        gen_scan_rewind(w, ctx, local);
     } else {
-        gen_scan_rewind(w, ctx, scan_local);
+        w.line(&`pos = ${*suffix_fn}(tokens, pos${follow_sep(ctx.current_rule_reads_follow())});`);
     }
     gen_scan_rewind_break(w, ctx, &"lr_saved_pos", &"pos < 0");
     if mid_operand_gated {
@@ -1105,7 +1105,7 @@ fn emit_lr_overlap_branch(
     ctx: &mut GenContext,
     nc: &mut List<[String, i32]>,
     mid_operand_gated: bool,
-    scan_local: &String = &"",
+    prebound: &Option<String> = &NO_PREBOUND,
 ) {
     match &site.branch {
         ScanCall => {
@@ -1115,14 +1115,18 @@ fn emit_lr_overlap_branch(
                 lr.own_prec,
                 ctx,
                 mid_operand_gated,
-                scan_local,
+                prebound,
             );
         },
         ParseBody(b) => {
-            emit_lr_branch(w, lr, rule, &b.rk, &site.scan_fn, b.labeled, ctx, nc, mid_operand_gated, scan_local);
+            emit_lr_branch(w, lr, rule, &b.rk, &site.scan_fn, b.labeled, ctx, nc, mid_operand_gated, prebound);
         },
     }
 }
+
+/// The branch runs the candidate's suffix scan itself: the dispatch bound
+/// nothing ahead of the chain for it.
+global NO_PREBOUND: Option<String> = null;
 
 /// Open the arm for one leading token, chaining onto any arm already open.
 fn begin_lr_arm(w: &mut CodeWriter, site: &LrOverlapSite, tk: &String, chained: bool) {
@@ -1265,43 +1269,44 @@ fn emit_lr_overlap(
         }
         // Compute the sub-conditions before emitting: each local they read is
         // only declared when one of them reads it.
-        let mut conds: List<[i32, String, String]> = [];
+        let mut plans: List<[i32, LrSubPlan]> = [];
         for let mut k = 0; k < group.len(); k += 1 {
             if k == last_k || !suffix_first_sets[group[k]].contains(shared_tk) {
                 continue;
             }
             let alt = lr_alts[lr_dispatch.valid_lr_alts[group[k]]].alt_index;
-            let plan = lr_second_token_plan(
-                shared_tk,
-                &rule.alternatives[alt].elements,
-                &lr_scan_local(alt),
-                &site.second_expr,
-                lr_second_token_discriminates(k, group, shared_tk, &seconds, suffix_first_sets),
-                ctx,
-            );
-            conds.push([k, plan[0], plan[1]]);
+            plans.push([
+                k, lr_second_token_plan(
+                    shared_tk,
+                    &rule.alternatives[alt].elements,
+                    &lr_scan_local(alt),
+                    &site.second_expr,
+                    lr_second_token_discriminates(k, group, shared_tk, &seconds, suffix_first_sets),
+                    ctx,
+                ),
+            ]);
         }
-        if !site.second_init.is_empty()
-            && conds.iter_ref().any(|c: &[i32, String, String]| c.1.contains(site.second_expr)) {
+        let reads_second = plans.iter_ref().any(|p: &[i32, LrSubPlan]| p.1 matches { SecondToken(_) });
+        if !site.second_init.is_empty() && reads_second {
             w.line(&`let ${site.second_expr} = ${site.second_init};`);
         }
         // Bind every fallback scan ahead of the chain, so the branch it guards
         // reuses the answer instead of re-running it. Each is a candidate scan
         // and starts from the dispatch's own gate, not the previous one's end.
-        if conds.iter_ref().any(|c: &[i32, String, String]| !c.2.is_empty()) {
+        if plans.iter_ref().any(|p: &[i32, LrSubPlan]| p.1 matches { Prebound(_) }) {
             let origin = gen_lr_candidates_begin(w, ctx, lr_site_is_parse(site), &dedup_name(&"lr_pre", nc));
-            for let c of &conds {
-                if !c.2.is_empty() {
-                    let alt = lr_alts[lr_dispatch.valid_lr_alts[group[c.0]]].alt_index;
+            for let p of &plans {
+                if let Prebound(local) = &p.1 {
+                    let alt = lr_alts[lr_dispatch.valid_lr_alts[group[p.0]]].alt_index;
                     gen_scan_gate_from(w, ctx, &origin);
                     w.line(
-                        &`let ${c.2} = ${site.scan_fn}_lr_${alt}(${site.scan_args}${follow_sep(
+                        &`let ${*local} = ${site.scan_fn}_lr_${alt}(${site.scan_args}${follow_sep(
                             ctx.current_rule_reads_follow(),
                         )});`,
                     );
                     // A position the branch may commit to, so it keeps the gate
                     // it was reached under — the run rolls the global back.
-                    for let line of scan_gate_snapshot(ctx, &c.2) {
+                    for let line of scan_gate_snapshot(ctx, local) {
                         w.line(&`let ${line}`);
                     }
                 }
@@ -1323,14 +1328,15 @@ fn emit_lr_overlap(
                     w.end();
                 }
             } else {
-                let plan = conds.iter_ref().find(|c: &[i32, String, String]| c.0 == k).unwrap();
+                let plan = &plans.iter_ref().find(|p: &[i32, LrSubPlan]| p.0 == k).unwrap().1;
+                let cond = lr_sub_plan_condition(plan);
                 if sub_first {
-                    w.begin(&`if ${plan.1}`);
+                    w.begin(&`if ${cond}`);
                     sub_first = false;
                 } else {
-                    w.else_begin(&`else if ${plan.1}`);
+                    w.else_begin(&`else if ${cond}`);
                 }
-                emit_lr_overlap_branch(w, site, lr, rule, ctx, nc, mid_operand_gated, &plan.2);
+                emit_lr_overlap_branch(w, site, lr, rule, ctx, nc, mid_operand_gated, &lr_sub_plan_prebound(plan));
             }
         }
         emitted.insert(*shared_tk);
@@ -3978,17 +3984,17 @@ fn emit_lr_branch(
     ctx: &mut GenContext,
     nc: &mut List<[String, i32]>,
     mid_operand_gated: bool = false,
-    scan_local: &String = &"",
+    prebound: &Option<String> = &NO_PREBOUND,
 ) {
     w.begin(&`if ${lr.own_prec} >= min_prec`);
     // The guard that selected this branch already ran the scan.
-    let scan_call = if scan_local.is_empty() {
+    let scan_call = if let Some(local) = prebound {
+        *local;
+    } else {
         // The other shape of a scan entry: the generated scan takes the tokens
         // and the position as arguments, so only the gate is left to hand it.
         gen_scan_gate_from(w, ctx, &ScanOrigin::Parser);
         `${*scan_fn}_lr_${lr.alt_index}(&p.kinds, p.pos${follow_sep(ctx.current_rule_reads_follow())})`;
-    } else {
-        *scan_local;
     };
     if mid_operand_gated {
         // A caller that needs this operand to leave a delimiter behind hands
@@ -7749,8 +7755,7 @@ fn suffix_second_token(elements: &List<Element>, start: i32, ctx: &mut GenContex
     return [];
 }
 
-/// One candidate's sub-dispatch condition as `[condition, scan_local]`: a
-/// second-token check, else its own suffix scan bound to `scan_local`.
+/// How one candidate's sub-dispatch tells itself from its peers.
 ///
 /// `discriminates` is false when another candidate for the same leading token
 /// can show the same token second. The check would then commit to this
@@ -7765,12 +7770,42 @@ fn lr_second_token_plan(
     accessor: &String,
     discriminates: bool,
     ctx: &mut GenContext,
-) -> [String, String] {
+) -> LrSubPlan {
     let second = compute_lr_second_token(shared_token, elements, ctx);
     if second.is_empty() || !discriminates {
-        return [`${*scan_local} >= 0`, *scan_local];
+        return LrSubPlan::Prebound(*scan_local);
     }
-    return [ctx.kind_check_str(&second, accessor), ""];
+    return LrSubPlan::SecondToken(ctx.kind_check_str(&second, accessor));
+}
+
+/// How a candidate's sub-dispatch tells itself from its peers.
+///
+/// A variant rather than a condition beside a local name, because the two are
+/// not independent: only `Prebound` binds anything ahead of the chain, and its
+/// condition is a reading of what it bound. An empty name for "binds nothing"
+/// is what let three launch sites take a local they had no record of.
+variant LrSubPlan {
+    /// The second token separates them, so nothing runs ahead of the chain.
+    SecondToken(String),
+    /// Nothing else separates them, so the candidate's own suffix scan runs
+    /// ahead of the chain and binds its answer to this local.
+    Prebound(String),
+}
+
+/// The `if` condition a plan tests.
+fn lr_sub_plan_condition(plan: &LrSubPlan) -> String {
+    return match plan {
+        SecondToken(cond) => *cond,
+        Prebound(local) => `${*local} >= 0`,
+    };
+}
+
+/// The local a plan binds ahead of the chain, for the branch that reuses it.
+fn lr_sub_plan_prebound(plan: &LrSubPlan) -> Option<String> {
+    return match plan {
+        SecondToken(_) => null,
+        Prebound(local) => Option::Some(*local),
+    };
 }
 
 /// Whether candidate `k`'s second token separates it from the other candidates
@@ -7898,14 +7933,14 @@ fn emit_scan_tournament(
         // here, where the parser is in scope, and score a refused alternative as
         // no match — otherwise the tournament picks by length an alternative the
         // parse then refuses outright.
-        let gate = alt_initial_gate(idx, ctx);
-        if !gate.is_empty() {
-            any_gated = true;
-        }
-        if gate.is_empty() {
-            w.line(&`let _sd_p_${idx} = ${scan};`);
-        } else {
-            w.line(&`let _sd_p_${idx} = if ${gate} \{ ${scan} \} else \{ -1 \};`);
+        match alt_initial_gate(idx, ctx) {
+            Some(gate) => {
+                any_gated = true;
+                w.line(&`let _sd_p_${idx} = if ${gate} \{ ${scan} \} else \{ -1 \};`);
+            },
+            None => {
+                w.line(&`let _sd_p_${idx} = ${scan};`);
+            },
         }
     }
     if ctx.is_trace() {
@@ -7947,24 +7982,26 @@ fn alts_all_scan_full(indices: &List<i32>, alts: &List<Alternative>, ctx: &mut G
     return true;
 }
 
-/// The gate the current rule's alternative `idx` carries, or empty where it
+/// The gate the current rule's alternative `idx` carries, or `null` where it
 /// carries none. Registering it emits the `pred_<id>` fn the condition names,
 /// which is why this asks `alt_has_gate` first rather than registering
 /// speculatively.
-fn alt_initial_gate(idx: i32, ctx: &mut GenContext) -> String {
+///
+/// `Option`, not an empty string: "carries no gate" and "there is no such
+/// alternative" are different answers, and a tournament candidate silently
+/// ungated is what the second would look like as the first.
+fn alt_initial_gate(idx: i32, ctx: &mut GenContext) -> Option<String> {
     let ridx = ctx.current_rule_index();
     if ridx < 0 {
-        return String::new();
+        return null;
     }
-    let rule = ctx.parser_rules()[ridx];
-    if idx < 0 || idx >= rule.alternatives.len() {
-        return String::new();
+    let rule = &ctx.parser_rules()[ridx];
+    assert idx >= 0 && idx < rule.alternatives.len(), "alt_initial_gate: a tournament candidate is an alternative of the rule it belongs to";
+    let alt = &rule.alternatives[idx];
+    if !alt_has_gate(alt, ctx) {
+        return null;
     }
-    let alt = rule.alternatives[idx];
-    if !alt_has_gate(&alt, ctx) {
-        return String::new();
-    }
-    return join_gate_conds(&alt_initial_gate_conditions(&alt, ctx));
+    return Option::Some(join_gate_conds(&alt_initial_gate_conditions(alt, ctx)));
 }
 
 /// The alts a `Dispatch` node's tournament fallback chooses between, in

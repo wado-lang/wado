@@ -651,15 +651,9 @@ fn register_globals(ctx: &mut WirContext<'_>) {
         }
 
         // A deferred reference slot starts at `ref.null`, so it has to be
-        // nullable; so does one whose declared value is a null. Only some of
-        // them may narrow their reads, and the difference is the type, not the
-        // initializer: an `Option`'s `None` is a value the program observes, so
-        // `ref.as_non_null` on it would trap. Everything else is a lazy-init
-        // placeholder no read can legitimately see.
+        // nullable; so does one whose declared value is a null.
         let deferred = global.init.is_deferred();
         let slot_is_ref = is_wir_reference(&wir_type);
-        let is_option = type_table.as_option(global.ty).is_some();
-        let lazy_init = deferred && slot_is_ref && !is_option;
         let declared_null = global
             .init
             .declared()
@@ -693,7 +687,6 @@ fn register_globals(ctx: &mut WirContext<'_>) {
             mutable: global.wado_mutable || deferred,
             wado_mutable: global.wado_mutable,
             init,
-            lazy_init,
             meta: WirMeta {
                 module_source: Some(module_source.clone()),
                 ..WirMeta::default()

@@ -77,10 +77,10 @@ pub(super) fn dedupe_const_globals(module: &mut WirPackage) {
     // Group eligible globals by a structural key of (slot metadata, type, init).
     // Only immutable, value(reference)-typed, const-expressible, non-exported
     // globals qualify; metadata is in the key so reads keep identical
-    // nullability / lazy-init narrowing after the merge.
+    // nullability after the merge.
     // The type carries no float payload, so its `Debug` string is a safe key
     // component; the init uses the bit-exact [`ConstKey`].
-    type Key = (bool, bool, bool, String, ConstKey);
+    type Key = (bool, bool, String, ConstKey);
     let mut groups: IndexMap<Key, Vec<usize>> = IndexMap::default();
     for (i, g) in module.globals.iter().enumerate() {
         if g.mutable || exported.contains(g.name.fq.as_str()) || !is_reference_type(&g.ty) {
@@ -90,7 +90,6 @@ pub(super) fn dedupe_const_globals(module: &mut WirPackage) {
             continue;
         };
         let key = (
-            g.lazy_init,
             g.wado_mutable,
             matches!(
                 &g.ty,

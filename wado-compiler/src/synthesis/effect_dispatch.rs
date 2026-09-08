@@ -418,12 +418,11 @@ fn synthesize_dispatch_struct(
 /// Synthesise the `__effect_<E>` mutable global for one effect.
 ///
 /// The slot stores `Option<&__Dispatch_<E>>` and starts at `null`
-/// (meaning: no handler installed). `is_nullable: true` makes the
-/// Wasm validator accept the `ref.null` initializer for the `(mut
-/// (ref null $Dispatch))` slot; `lazy_init: false` keeps codegen from
-/// narrowing `global.get` results with `ref.as_non_null` since `None`
-/// reads must round-trip cleanly to express "no handler installed"
-/// at runtime.
+/// (meaning: no handler installed). `is_nullable: true` makes the Wasm
+/// validator accept the `ref.null` initializer for the `(mut (ref null
+/// $Dispatch))` slot, and keeps codegen from narrowing `global.get` reads
+/// with `ref.as_non_null` — a `None` read has to round-trip to express
+/// "no handler installed" at runtime.
 fn synthesize_dispatch_global(
     project: &mut Package,
     entry_source: &ModuleSource,
