@@ -210,10 +210,11 @@ The `wado format` command formats Wado source code.
 wado format -w file.wado  # rewrite in place
 ```
 
-In the wado repository, `mise run format` formats the whole workspace, honouring
-each package's `[format] exclude`. `wado-compiler` excludes `tests/**`, so the
-e2e fixtures and the golden format fixtures keep the hand-authored layouts that
-are part of the test.
+In the wado repository, `mise run format` formats the whole workspace. Every
+package skips `**/generated/**` and `**/build/**` plus its own `[format]
+exclude`; `[format] include` opts any of those back in. `wado-compiler` excludes
+`tests/**`, so the e2e fixtures and the golden format fixtures keep the
+hand-authored layouts that are part of the test.
 
 A directory argument is walked from the package that encloses it, so the globs
 match as authored whichever subdirectory you name. `wado format -w

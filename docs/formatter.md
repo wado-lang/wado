@@ -7,8 +7,9 @@ rules it follows, and how those rules are held in place by tests.
 
 The formatter has no configuration. There is no line-width setting, no brace or
 indent option, no directive that turns it off for a region, and no plan to add
-one. The only input besides the source is the `[format] exclude` list in
-`wado.toml`, which decides which files are formatted at all, never how.
+one. The only inputs besides the source are the `[format]` section of
+`wado.toml` and the built-in skips below, which decide which files are
+formatted at all, never how.
 
 A single style is worth more than any option it forgoes. Every Wado file reads
 the same way, a diff shows what changed rather than who wrote it, layout never
@@ -31,9 +32,11 @@ Four promises, each covered by a test in [Tests](#tests).
 one of the two. `mise run format` formats the whole repository, Rust and
 Markdown included.
 
-`[format] exclude` in a `wado.toml` skips paths, and `[format] include` carves
-them back in. `wado-compiler` excludes `tests/**`, because those fixtures have
-hand-authored layouts that are part of the test.
+`**/generated/**` and `**/build/**` are skipped in every package, because
+nothing there is written by hand. `[format] exclude` in a `wado.toml` skips more
+paths, and `[format] include` carves any of them back in.
+`wado-compiler` excludes `tests/**`, because those fixtures have hand-authored
+layouts that are part of the test.
 
 A directory argument is walked from the package that encloses it, so the globs
 match as authored whichever subdirectory you name. `wado format -w

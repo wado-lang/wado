@@ -57,12 +57,17 @@ fn format_usage() -> String {
     .unwrap();
     writeln!(
         buf,
-        "recursively for *.wado files, honoring the enclosing package's [format]"
+        "recursively for *.wado files, skipping **/generated/** and **/build/**,"
     )
     .unwrap();
     writeln!(
         buf,
-        "exclude/include globs in its wado.toml, .gitignore, and submodules."
+        "the enclosing package's [format] exclude globs, .gitignore, and"
+    )
+    .unwrap();
+    writeln!(
+        buf,
+        "submodules; [format] include opts any of those back in."
     )
     .unwrap();
     writeln!(buf, "A file named directly is formatted regardless.").unwrap();

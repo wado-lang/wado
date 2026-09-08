@@ -379,10 +379,11 @@ async fn file_analyzes(base_dir: &Path, host: &FilesystemCompilerHost, spec: &st
 /// exclude is still a place a symbol is used. The queried module itself is
 /// imported by [`imports_with_target`] whatever this returns.
 fn workspace_module_specs(root: &Path) -> Result<Vec<String>, CliExit> {
+    let entry = root.join(QUERY_ENTRY);
     let mut specs: Vec<String> = discover::discover_tree(root, &discover::no_filters)?
         .into_iter()
         .flat_map(|pkg| pkg.files)
-        .filter(|p| p.file_name().is_some_and(|n| n != QUERY_ENTRY))
+        .filter(|p| *p != entry)
         .map(|p| {
             let rel = p
                 .strip_prefix(root)
@@ -944,16 +945,23 @@ mod tests {
         );
     }
 
-    // The synthetic entry lives at the base directory; importing it back into
-    // itself would be a cycle.
+    // Importing the synthetic entry back into itself would be a cycle. Only its
+    // one path is the entry; the name is free for real source deeper in.
     #[test]
     fn the_synthetic_entry_is_not_imported() {
         let tmp = tempfile::tempdir().unwrap();
         let root = tmp.path();
         touch(&root.join(QUERY_ENTRY));
         touch(&root.join("a.wado"));
+        touch(&root.join("pkg").join(QUERY_ENTRY));
 
-        assert_eq!(specs(root), ["./a.wado".to_string()].into_iter().collect());
+        assert_eq!(
+            specs(root),
+            ["./a.wado", &format!("./pkg/{QUERY_ENTRY}")]
+                .iter()
+                .map(ToString::to_string)
+                .collect()
+        );
     }
 
     // Discovery now shares the walker, so `.gitignore` prunes here too.
