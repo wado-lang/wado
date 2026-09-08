@@ -90,6 +90,27 @@ pub(super) fn reduce_task_returns_in_func(user_func: &Rc<RefCell<TirFunction>>) 
     func.body = Some(body);
 }
 
+/// The copy of an `export async fn` that the export binding calls. Its
+/// `task return` delivers through the CM canonical op, so it returns nothing.
+pub(super) fn task_entry_func_name(export_name: &str) -> String {
+    format!("__cm_task_entry__{export_name}")
+}
+
+/// Split that copy off, leaving the user's own function to keep a lowering its
+/// Wado callers can use. A `FunctionRef` resolves by name, so the rename is
+/// what points the binding at the copy.
+pub(super) fn split_task_entry(
+    user_func: &Rc<RefCell<TirFunction>>,
+    export_name: &str,
+) -> Rc<RefCell<TirFunction>> {
+    let mut entry = user_func.borrow().clone();
+    entry.name = task_entry_func_name(export_name);
+    entry.return_type = TypeTable::UNIT;
+    entry.is_export = false;
+    entry.def_id = None;
+    Rc::new(RefCell::new(entry))
+}
+
 /// Rewrites every `task return value;` statement — wherever it is nested —
 /// into the inline CM `task-return` call sequence. `TirOptVisitor`'s walk
 /// reaches every `TirBlock` (it covers the pre-lowering TIR forms too), so

@@ -39,7 +39,7 @@ use import_adapter::synthesize_adapter;
 pub use lift::synthesize_lift;
 pub use lower::synthesize_lower;
 pub use resource_rewrite::rewrite_async_primitives_monomorphized;
-use task_return::{expand_task_returns_in_func, reduce_task_returns_in_func};
+use task_return::{expand_task_returns_in_func, reduce_task_returns_in_func, split_task_entry};
 use type_fixup::{
     collect_effect_calls_in_block, collect_local_type_updates, rewrite_calls_in_block,
 };
@@ -629,6 +629,7 @@ fn synthesize_export_adapters(project: &mut Package) -> Result<(), String> {
     // Collect adapters in a read-only pass (synthesize_export_binding needs &tir_modules)
     let mut export_adapters: Vec<(String, String, Rc<RefCell<TirFunction>>)> = Vec::new();
     let mut post_returns: Vec<(String, String, Rc<RefCell<TirFunction>>)> = Vec::new();
+    let mut task_entries: Vec<Rc<RefCell<TirFunction>>> = Vec::new();
     {
         let entry_module = project
             .tir_modules
@@ -671,10 +672,10 @@ fn synthesize_export_adapters(project: &mut Package) -> Result<(), String> {
             }
 
             let is_async_export = user_func_rc.borrow().is_async;
+            // The function the binding calls. An async export's delivery lives
+            // in a copy, so the user's own function stays callable from Wado.
+            let mut binding_callee = Rc::clone(&user_func_rc);
             let strategy = if is_async_export {
-                // Async export: the user function calls task-return internally via
-                // `task return expr` stmts. Expand those stmts into CM task-return
-                // calls; the binding only lifts params and calls.
                 if let Some(return_type) = &export.return_type {
                     let flat_types = {
                         let tt = entry_type_table.borrow();
@@ -685,8 +686,9 @@ fn synthesize_export_adapters(project: &mut Package) -> Result<(), String> {
                     // world may have several async exports of distinct
                     // result types).
                     let task_return = CanonicalIntrinsic::TaskReturn(export.name.clone());
+                    let task_entry = split_task_entry(&user_func_rc, &export.name);
                     expand_task_returns_in_func(
-                        &user_func_rc,
+                        &task_entry,
                         return_type,
                         &flat_types,
                         &task_return,
@@ -696,6 +698,8 @@ fn synthesize_export_adapters(project: &mut Package) -> Result<(), String> {
                         &binding_cm_package,
                         &project.interner,
                     );
+                    binding_callee = Rc::clone(&task_entry);
+                    task_entries.push(task_entry);
                 }
                 ExportReturnStrategy::AsyncTaskReturn
             } else if is_lib_world && !is_kiln_generator {
@@ -721,7 +725,7 @@ fn synthesize_export_adapters(project: &mut Package) -> Result<(), String> {
             };
             let adapter = synthesize_export_binding(
                 &export.name,
-                &user_func_rc,
+                &binding_callee,
                 &callee_module,
                 &env,
                 strategy,
@@ -764,6 +768,7 @@ fn synthesize_export_adapters(project: &mut Package) -> Result<(), String> {
             .insert(export_name, binding_name);
         entry_module.functions.push(adapter);
     }
+    entry_module.functions.extend(task_entries);
     for (export_name, func_name, post_return) in post_returns {
         project
             .post_return_binding_names
