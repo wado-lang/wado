@@ -643,6 +643,20 @@ Verified against the tree.
       `stores[...]` cannot yet say, in
       [WEP: Value Semantics and Reference Stores](./wep-2026-01-12-value-semantics-and-stores.md).
 
+- [ ] Read a call through `projection_param`, and `&fresh` through
+      `is_owned_value`. Together, not separately.
+      `projection_param` matches a syntactic chain, so a wrapper that returns a
+      call gets no verdict: `VariantCase::extract`, `Hole::get` and
+      `StructField::get` each `return builtin::<part_of builtin>(v, …)`.
+      Resolving the callee through `self_projection_param` is sound and gives
+      `extract` the verdict "projects `v`".
+      It buys nothing alone. `is_owned_value` has no `TirUnaryOp::Ref` arm, so
+      `&fresh_local` is never owned, and the caller that would cash the verdict
+      asks exactly that question about its argument. Measured: the resolution on
+      its own leaves all 1768 WIR goldens byte-identical, and a case written to
+      exercise it — `wrap(h: &Holder) -> List<i32> { return get_items(h); }`
+      called with a fresh `Holder` — is byte-identical at `-O0` too.
+
 ## Deferred: the `move` and `unique` keywords
 
 Intentionally not implemented. Move-only semantics need no syntax: transfer is
