@@ -340,6 +340,14 @@ answers for one call, which is the disagreement this WEP exists to remove.
 Folding sixteen lookups into one resolver does not prevent it, because two
 _calls_ to that resolver disagree just as well.
 
+So the resolution hands back everything a site needs from it: the declaration it
+picked, what the call returns, and the lists to check and pad against. A site
+that mangles from one and asks again for the other is the shape to look for, and
+the second ask is the one that goes wrong — it is keyed by a bare name in the
+caller's frame, which an alias or a namespace leaves without that name. The
+facts that identify a receiver travel as one value for the same reason: a walk
+given four of them separately is a walk somebody will call with three.
+
 The preselect reads the whole argument list, each argument against the parameter
 written for it, as the selection does. Reading argument zero alone shaped the
 first literal from the impl it picked and left the rest to their own defaults, so

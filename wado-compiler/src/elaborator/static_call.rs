@@ -6,7 +6,7 @@ use crate::ast;
 use crate::compiler_host::CompilerHost;
 use crate::defs::DefId;
 use crate::hashmap::IndexSet;
-use crate::name::{DeclName, FqTraitName};
+use crate::name::FqTraitName;
 use crate::tir::{TypeId, TypeTable};
 use crate::token::Span;
 
@@ -344,21 +344,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // alias's declaration, since a namespaced `lib::Q::twice()` leaves the
         // caller's frame no `Q` to look one up by; the name answers only where
         // the key reaches no declaration to read.
-        match self
-            .newtype_base_of(&key)
-            .or_else(|| self.newtype_base(receiver_name))
-        {
-            Some((base, base_name)) => {
-                let base_key = self.impl_target_of(base, &DeclName::new(&base_name));
-                self.resolve_static_callee(StaticQuery {
-                    receiver_key: Some(&base_key),
-                    arg_types,
-                    receiver_type,
-                    receiver_args,
-                    required_trait,
-                    ..StaticQuery::of(&base_name, method_name)
-                })
-            }
+        match self.newtype_base_target(&key, receiver_name) {
+            Some((base_key, base_name)) => self.resolve_static_callee(StaticQuery {
+                receiver_key: Some(&base_key),
+                arg_types,
+                receiver_type,
+                receiver_args,
+                required_trait,
+                ..StaticQuery::of(&base_name, method_name)
+            }),
             None => StaticLookup::NotStatic,
         }
     }

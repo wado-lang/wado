@@ -12,6 +12,7 @@ use crate::tir::{
 use crate::token::Span;
 
 use super::Elaborator;
+use super::call::SigChoice;
 use super::callee::StaticMethodRef;
 use super::infer::InferCtx;
 use super::method_lookup::MethodInferenceInput;
@@ -3203,8 +3204,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 Selector::Params(params) => params,
             };
             // By the types, as `Selector` is: two distinct types printing one
-            // name are two candidates, and deduping on the rendering dropped
-            // the second so the call took the first in silence.
+            // name are two candidates, not one.
             if survey.candidates.iter().any(|c| c.params == params) {
                 continue;
             }
@@ -3583,14 +3583,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // qualified then lost its binding and left reify emitting a call to a
         // name nothing declares.
         let cm_name = self
-            .static_call_sig(&actual_struct_name, method_name, receiver_key.as_ref())
+            .static_call_sig(
+                &actual_struct_name,
+                method_name,
+                receiver_key.as_ref(),
+                SigChoice::Any,
+            )
             .and_then(|sig| sig.cm_name);
 
-        // The lists the dispatch records, from the resolution that named the
-        // callee. Asking again by the base's bare name asks the *caller's*
-        // frame, which an alias or a namespace leaves without that name: the
-        // lists came back empty, so a declared default was never padded and the
-        // call reached codegen an argument short.
+        // From the resolution that named the callee. Asking again by the base's
+        // bare name asks the *caller's* frame, which an alias leaves without
+        // that name at all.
         let callee_params = resolution.params;
 
         let StaticMethodRef {

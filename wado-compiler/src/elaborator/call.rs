@@ -5,7 +5,7 @@ use crate::hashmap::IndexMap;
 use crate::ast::{self, Expr, Type};
 use crate::compiler_host::CompilerHost;
 use crate::module_source::ModuleSource;
-use crate::name::{DeclName, FqTypeName, LocalMethodName, MethodName};
+use crate::name::{FqTypeName, LocalMethodName, MethodName};
 use crate::tir::{FunctionRef, MonomorphInfo, ResolvedType, TypeId, TypeTable};
 
 use super::Elaborator;
@@ -100,6 +100,17 @@ pub(super) fn merge_turbofish_type_args(
             explicit.push(filled);
         }
     }
+}
+
+/// Which declaration a signature lookup answers with where several declare one
+/// name.
+#[derive(Clone, Copy)]
+pub(super) enum SigChoice {
+    /// Any of them: the caller holds a resolution that settles the pick.
+    Any,
+    /// None, unless exactly one declares it. The caller has no pick to read, so
+    /// answering with one of several names a declaration it may not mean.
+    Unique,
 }
 
 /// View of a `ResolvedType::Function` after peeling references and
@@ -2504,15 +2515,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         span: crate::token::Span,
         receiver_key: Option<&ImplTargetKey>,
     ) {
-        // The *one* declaration of the name, if there is one. This report runs
-        // before any resolution, so where several impls declare the name it has
-        // no pick to read: complaining about one of their slots names a
-        // declaration the arguments may not even select.
-        let sig = match receiver_key {
-            Some(key) => self.unique_qualified_method_sig_keyed(key, suffix),
-            None => self.unique_qualified_method_sig(prefix, suffix),
-        };
-        let Some(sig) = sig else {
+        // This report runs before any resolution, so where several impls
+        // declare the name it has no pick to read: complaining about one of
+        // their slots names a declaration the arguments may not even select.
+        let Some(sig) = self.static_call_sig(prefix, suffix, receiver_key, SigChoice::Unique)
+        else {
             return;
         };
         let (declaring_slots, method_slots) = (sig.declaring_type_params(), sig.own_type_params());
@@ -2907,7 +2914,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         span: crate::token::Span,
         receiver_key: Option<&ImplTargetKey>,
     ) -> (Vec<TypeId>, Vec<TypeId>) {
-        let Some(sig) = self.static_call_sig(struct_name, method_name, receiver_key) else {
+        let Some(sig) =
+            self.static_call_sig(struct_name, method_name, receiver_key, SigChoice::Any)
+        else {
             return (vec![], vec![]);
         };
         if sig.decl.type_params.is_empty() {
@@ -2964,11 +2973,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // name, as the resolution reaches it: checking the spelled receiver
         // alone found an empty bucket, so `type Q = P` passed a call the same
         // call through `P` is rejected for.
-        let entry = self.static_method_entry(receiver, method_name).or_else(|| {
-            let (base, base_name) = self.newtype_base_of(receiver)?;
-            let base_key = self.impl_target_of(base, &DeclName::new(&base_name));
-            self.static_method_entry(&base_key, method_name)
-        });
+        let entry = match self.static_method_entry(receiver, method_name) {
+            Some(entry) => Some(entry),
+            None => self
+                .newtype_base_target(receiver, struct_name)
+                .and_then(|(base_key, _)| self.static_method_entry(&base_key, method_name)),
+        };
         let Some(entry) = entry else {
             return;
         };
@@ -3031,10 +3041,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         struct_name: &str,
         method_name: &str,
         receiver_key: Option<&ImplTargetKey>,
+        choice: SigChoice,
     ) -> Option<MethodSig> {
-        match receiver_key {
-            Some(key) => self.qualified_method_sig_keyed(key, method_name),
-            None => self.qualified_method_sig(struct_name, method_name),
+        match (choice, receiver_key) {
+            (SigChoice::Any, Some(key)) => self.qualified_method_sig_keyed(key, method_name),
+            (SigChoice::Any, None) => self.qualified_method_sig(struct_name, method_name),
+            (SigChoice::Unique, Some(key)) => {
+                self.unique_qualified_method_sig_keyed(key, method_name)
+            }
+            (SigChoice::Unique, None) => self.unique_qualified_method_sig(struct_name, method_name),
         }
     }
 
