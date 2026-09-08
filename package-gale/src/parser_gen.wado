@@ -906,17 +906,28 @@ fn gen_lr_candidates_begin(w: &mut CodeWriter, ctx: &GenContext, parse_launched:
     return ScanOrigin::Entry(*slot);
 }
 
-/// Put a candidate's starting gate in place, immediately before its scan.
+/// Put a known gate in place, immediately before a walk that reads it.
+///
+/// Every measurement the parse starts opens with this. Seeding from the parser
+/// is what starts the simulation from the truth: a scan reached from inside
+/// another inherits its caller's value, which is the simulation working, while
+/// one the parse launches must not inherit whatever a previous scan left.
 fn gen_scan_gate_from(w: &mut CodeWriter, ctx: &GenContext, from: &ScanOrigin) {
     match from {
-        Parser => gen_scan_gate_seed(w, ctx),
+        Parser => {
+            if ctx.emit_scan_gate() {
+                for let f of ctx.scan_gate_fields() {
+                    w.line(&`${SCAN_GATE_HANDLE}.${*f} = ${PARSER_HANDLE}.${*f};`);
+                }
+            }
+        },
         Entry(slot) => gen_scan_gate_restore(w, ctx, slot),
     }
 }
 
 /// Close the run, so what follows resumes under the gate the dispatch entered
 /// with rather than the last candidate's. A parse-launched chain needs nothing:
-/// every scan the parse starts seeds itself.
+/// every scan the parse starts takes its gate on entry.
 fn gen_lr_candidates_end(w: &mut CodeWriter, ctx: &GenContext, from: &ScanOrigin) {
     if let Entry(slot) = from {
         gen_scan_gate_restore(w, ctx, slot);
@@ -2441,40 +2452,21 @@ fn gen_scan_gate_check(w: &mut CodeWriter, gate_cond: &String, fail_stmt: &Strin
 /// simulation working. A scan the parse launches starts from where the parse
 /// actually is, so nothing a previous scan left behind survives to be read —
 /// which is why a tournament seeds per candidate and not once.
-global PARSER_POS: String = "p.pos";
-
-/// Enter an inlined scan from parse context: the parser's gate, the parser's
-/// tokens, and where the walk starts. The whole prologue, not three lines a
-/// site repeats.
-fn gen_scan_entry(w: &mut CodeWriter, ctx: &GenContext, at: &String = &PARSER_POS) {
-    gen_scan_gate_seed(w, ctx);
-    w.line(&"let tokens = &p.kinds;");
-    w.line(&`let mut pos: i32 = ${*at};`);
-}
-
-/// Enter an inlined scan at a position an earlier scan committed to, under the
-/// gate it committed with. Seeding from the parser instead would run the walk
-/// under the gate as of the parse's position, which is not where it starts.
-fn gen_scan_entry_from(w: &mut CodeWriter, ctx: &GenContext, slot: &String) {
-    w.line(&"let tokens = &p.kinds;");
-    w.line(&`let mut pos: i32 = ${*slot};`);
-    gen_scan_gate_restore(w, ctx, slot);
-}
-
-/// Put the parser's gate into `SCAN_GATE`. A scan reads it as it walks, so one
-/// the parse starts without this reads whatever the previous scan left behind.
+/// Enter an inlined scan from parse context: the parser's tokens, where the
+/// walk starts, and the gate it starts under. The whole prologue, not three
+/// lines a site repeats.
 ///
-/// Every scan the parse starts passes through here, in one of two shapes: an
-/// inlined body through `gen_scan_entry`, or the LR suffix call, which hands the
-/// generated scan its tokens and position as arguments instead of locals and so
-/// has no prologue to share.
-fn gen_scan_gate_seed(w: &mut CodeWriter, ctx: &GenContext) {
-    if !ctx.emit_scan_gate() {
-        return;
-    }
-    for let f of ctx.scan_gate_fields() {
-        w.line(&`${SCAN_GATE_HANDLE}.${*f} = ${PARSER_HANDLE}.${*f};`);
-    }
+/// `from` is both, since a walk starts where its gate was taken: at the parse
+/// position under the parser's gate, or at a position an earlier scan committed
+/// to under the gate it committed with.
+fn gen_scan_entry(w: &mut CodeWriter, ctx: &GenContext, from: &ScanOrigin) {
+    gen_scan_gate_from(w, ctx, from);
+    let at = match from {
+        Parser => String::from("p.pos"),
+        Entry(slot) => *slot,
+    };
+    w.line(&"let tokens = &p.kinds;");
+    w.line(&`let mut pos: i32 = ${at};`);
 }
 
 /// Run the gate actions due before element `at`, where the body emitted is
@@ -4151,7 +4143,7 @@ fn gen_viability_probe(
 ) {
     let label = dedup_name(label_base, nc);
     w.begin(&`${label}:`);
-    gen_scan_entry(w, ctx);
+    gen_scan_entry(w, ctx, &ScanOrigin::Parser);
     let fail = `break ${label};`;
     if let Some(body) = prefix_scan {
         gen_scan_op_element(w, &body, ctx, &fail);
@@ -4362,7 +4354,7 @@ fn gen_shape_entry_conditions(
         let label = dedup_name(&"shape_scan", name_counts);
         w.line(&`let mut ${pos_var}: i32 = -1;`);
         w.begin(&`${label}:`);
-        gen_scan_entry(w, ctx);
+        gen_scan_entry(w, ctx, &ScanOrigin::Parser);
         let fail = `break ${label};`;
         for let scan_elem of &entry.scan_body.elements {
             gen_scan_op_element(w, scan_elem, ctx, &fail);
@@ -4588,7 +4580,7 @@ fn gen_op_opt_scan_guard_for_group(
     let scan_label = dedup_name(&"opt_scan", name_counts);
     w.line(&`let mut ${scan_pos_var}: i32 = -1;`);
     w.begin(&`${scan_label}:`);
-    gen_scan_entry(w, ctx);
+    gen_scan_entry(w, ctx, &ScanOrigin::Parser);
     let scan_group = &g_op.scan_group;
     if scan_group.alts.len() == 1 {
         let body = &scan_group.alts[0];
@@ -6450,7 +6442,7 @@ fn gen_rep_reserve_at(
     // decided group body reaches here, and `scan_gate_fields` refuses a field
     // any group alternative's action writes. Taking the iteration's gate says
     // so anyway, rather than resting on that.
-    gen_scan_entry_from(w, ctx, at);
+    gen_scan_entry(w, ctx, &ScanOrigin::Entry(*at));
     for let se of &duties.reserve_scan {
         gen_scan_op_element(w, se, ctx, &`break ${label};`);
     }
@@ -6833,7 +6825,7 @@ fn gen_scan_guard_with_prefix(
     let scan_label = dedup_name(label_prefix, name_counts);
     w.line(&`let mut ${scan_pos_var}: i32 = -1;`);
     w.begin(&`${scan_label}:`);
-    gen_scan_entry(w, ctx);
+    gen_scan_entry(w, ctx, &ScanOrigin::Parser);
     let fail = `break ${scan_label};`;
     gen_scan_op_element(w, scan_inner, ctx, &fail);
     if require_advance {
@@ -7198,7 +7190,7 @@ fn gen_decision_measure(
     if sb.elements.is_empty() {
         // An empty alternative walks nowhere, so it ends where the parse is and
         // under the parse's own gate.
-        gen_scan_gate_seed(w, ctx);
+        gen_scan_gate_from(w, ctx, &ScanOrigin::Parser);
         gen_scan_commit(w, ctx, best_var, &"p.pos");
         return;
     }
@@ -7216,7 +7208,7 @@ fn gen_scan_alt_end(
 ) {
     let scan_label = dedup_name(&"gd_scan", name_counts);
     w.begin(&`${scan_label}:`);
-    gen_scan_entry(w, ctx);
+    gen_scan_entry(w, ctx, &ScanOrigin::Parser);
     gen_scan_op_elements_in_block(
         w,
         &sb.elements,
@@ -7897,7 +7889,7 @@ fn emit_scan_tournament(
     let mut any_gated = false;
     for let mut i = 0; i < sorted_indices.len(); i += 1 {
         let idx = sorted_indices[i];
-        gen_scan_gate_seed(w, ctx);
+        gen_scan_gate_from(w, ctx, &ScanOrigin::Parser);
         // Without the caller follow, a trailing token the helper's
         // `follow_yields` gate rejects still counts toward the score.
         let scan = `${*fn_name}_scan_${idx}(_sd_tokens, _sd_pos${fsep})`;

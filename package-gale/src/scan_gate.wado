@@ -244,15 +244,11 @@ struct Refusals {
 impl Refusals {
     fn refuse(&mut self, body: &String) {
         push_new(&mut self.names, mentioned_names(body));
-        self.any_call = self.any_call || body_can_call(body);
+        // A `(` that is not a call — a grouping, a cast — costs the gate a
+        // simulation it would have been sound without, which is the direction
+        // this whole set errs in.
+        self.any_call = self.any_call || body.contains("(");
     }
-}
-
-/// Whether a body can call. A `(` that is not a call — a grouping, a cast —
-/// only costs the gate a simulation it would still be sound without, which is
-/// the direction this whole set errs in.
-fn body_can_call(body: &String) -> bool {
-    return body.contains("(");
 }
 
 /// Every name an action inside a nested group mentions, added to the refused
