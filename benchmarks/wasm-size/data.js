@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1788852228289,
+  "lastUpdate": 1788877929760,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -54133,6 +54133,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/b02e60400002fddd303917bc7a0dbe99b6738772"
         },
         "date": 1788852227590,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 2013,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6560,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18971,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 288297,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "18d354227e249a8fc396a970194d52c2859218ee",
+          "message": "Merge pull request #2002 from wado-lang/claude/gifted-goodall-jttubd\n\nfeat(value-copy): a builtin declares what it keeps and where its result comes from",
+          "timestamp": "2026-09-08T23:15:04+09:00",
+          "tree_id": "3d6f208762f56e2a1ccc2984c00506c6430eb285",
+          "url": "https://github.com/wado-lang/wado/commit/18d354227e249a8fc396a970194d52c2859218ee"
+        },
+        "date": 1788877928991,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
