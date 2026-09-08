@@ -254,13 +254,13 @@ type "functype//wasi/wasi:http/Fields::new" = fn() -> i32;  // TypeId(47)
 
 type "functype//wasi/wasi:http/Response::new" = fn(i32, i32, i32, i32, i32);  // TypeId(48)
 
-type "functype//cm_waitable_set_poll.wado/handle" = fn(i32);  // TypeId(49)
+type "functype//cm_waitable_set_poll.wado/__cm_binding__Fields_new" = fn() -> i32;  // TypeId(49)
 
-type "functype//cm_waitable_set_poll.wado/__cm_binding__Fields_new" = fn() -> i32;  // TypeId(50)
+type "functype//cm_waitable_set_poll.wado/__cm_binding__Response_new" = fn(i32, ref "core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>", i32) -> ref "tuple//[wasi:http/types.wado/Response, core:prelude/types.wado/Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]";  // TypeId(50)
 
-type "functype//cm_waitable_set_poll.wado/__cm_binding__Response_new" = fn(i32, ref "core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>", i32) -> ref "tuple//[wasi:http/types.wado/Response, core:prelude/types.wado/Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]";  // TypeId(51)
+type "functype//cm_waitable_set_poll.wado/__cm_export__handle" = fn(i32);  // TypeId(51)
 
-type "functype//cm_waitable_set_poll.wado/__cm_export__handle" = fn(i32);  // TypeId(52)
+type "functype//cm_waitable_set_poll.wado/__cm_task_entry__handle" = fn(i32);  // TypeId(52)
 
 type "functype//cm_waitable_set_poll.wado/__cm_future_write_core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Trailers>,wasi:http/types.wado/ErrorCode>" = fn(i32, ref "core:prelude/types.wado//Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>");  // TypeId(53)
 
@@ -291,7 +291,42 @@ import fn wasi/future-write from "wasi/future-write";
 
 global mut global:cm_waitable_set_poll.wado::__modules_initialized: bool = 0;
 
-fn "cm_waitable_set_poll.wado/handle"(request) with WaitableSet {
+fn "cm_waitable_set_poll.wado/__cm_binding__Fields_new"() with Fields {
+    return "wasi/wasi:http/Fields::new"();
+}
+
+fn "cm_waitable_set_poll.wado/__cm_binding__Response_new"(headers, contents, trailers) with Response {
+    let __contents_disc: i32;
+    let __contents_inner0: i32;
+    let __local_6: i32;
+    let __outptr: i32;
+    let __lifted_result_8: i32;
+    let __lifted_result_9: i32;
+    __contents_disc = ref.test "core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>::Some"(contents);
+    __contents_inner0 = 0;
+    if ref.test "core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>::Some"(contents) {
+        __contents_inner0 = local.tee __local_6(ref.cast "core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>::Some"(contents).payload_0);
+    } else {
+    }
+    __outptr = "mem/realloc"(0, 0, 4, 8);
+    "wasi/wasi:http/Response::new"(headers, __contents_disc, __contents_inner0, trailers, __outptr);
+    __lifted_result_8 = builtin::load_i32(__outptr + 0);
+    __lifted_result_9 = builtin::load_i32(__outptr + 4);
+    drop("mem/realloc"(__outptr, 8, 4, 0));
+    return struct.new "tuple//[wasi:http/types.wado/Response, core:prelude/types.wado/Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]" { 0: __lifted_result_8, 1: __lifted_result_9 };
+}
+
+fn "cm_waitable_set_poll.wado/__cm_export__handle"(request) {
+    $inline___initialize_modules_0: block {
+        break_if $inline___initialize_modules_0 @likely(global:cm_waitable_set_poll.wado::__modules_initialized);
+        cold_path;
+        "core:prelude/fpfmt.wado/__initialize_module"();
+        global:cm_waitable_set_poll.wado::__modules_initialized = 1;
+    };
+    "cm_waitable_set_poll.wado/__cm_task_entry__handle"(request);
+}
+
+fn "cm_waitable_set_poll.wado/__cm_task_entry__handle"(request) with WaitableSet {
     let ws_1: i32;
     let headers_5: i32;
     let response_6: i32;
@@ -657,19 +692,13 @@ fn "cm_waitable_set_poll.wado/handle"(request) with WaitableSet {
     let ptr_558: i32;
     let self_559: i32;
     let i_565: i32;
-    $inline___initialize_modules_0: block {
-        break_if $inline___initialize_modules_0 @likely(global:cm_waitable_set_poll.wado::__modules_initialized);
-        cold_path;
-        "core:prelude/fpfmt.wado/__initialize_module"();
-        global:cm_waitable_set_poll.wado::__modules_initialized = 1;
-    };
     ws_1 = "wasi/waitable-set-new"();
-    $fused_$inline_cm_waitable_set_poll_1: block {
+    $fused_$inline_cm_waitable_set_poll_0: block {
         out_ptr = "mem/realloc"(0, 0, 4, 8);
         code = "wasi/waitable-set-poll"(ws_1, out_ptr);
         if code == 0 {
             drop("mem/realloc"(out_ptr, 8, 4, 0));
-            break $fused_$inline_cm_waitable_set_poll_1;
+            break $fused_$inline_cm_waitable_set_poll_0;
         }
         drop(builtin::load_i32(out_ptr));
         drop(builtin::load_i32(out_ptr + 4));
@@ -704,12 +733,12 @@ fn "cm_waitable_set_poll.wado/handle"(request) with WaitableSet {
                 __local_198 = 0;
                 __local_199 = 0;
                 if __local_197 != 0 {
-                    __local_201 = builtin::i32_wrap_i64(local.tee __local_200(s_365 = ref.as_non_null(__local_196); self_369 = s_365.used; bytes_367 = s_365.repr; ptr_368 = "mem/realloc"(0, 0, 1, self_369); i_375 = 0; b5: block {
-                        l6: loop {
-                            break_if b5 i_375 >= self_369;
+                    __local_201 = builtin::i32_wrap_i64(local.tee __local_200(s_365 = ref.as_non_null(__local_196); self_369 = s_365.used; bytes_367 = s_365.repr; ptr_368 = "mem/realloc"(0, 0, 1, self_369); i_375 = 0; b6: block {
+                        l7: loop {
+                            break_if b6 i_375 >= self_369;
                             builtin::store_u8(ptr_368 + i_375, builtin::array_get_value_u8(bytes_367, 0 + i_375));
                             i_375 = i_375 + 1;
-                            continue l6;
+                            continue l7;
                         };
                     }; builtin::i64_extend_i32_s(ptr_368) | (builtin::i64_extend_i32_s(self_369) << 32_i64)));
                     __local_202 = builtin::i32_wrap_i64(__local_200 >> 32_i64);
@@ -752,12 +781,12 @@ fn "cm_waitable_set_poll.wado/handle"(request) with WaitableSet {
                 __local_215 = 0;
                 __local_216 = 0;
                 if __local_214 != 0 {
-                    __local_218 = builtin::i32_wrap_i64(local.tee __local_217(s_376 = ref.as_non_null(__local_213); self_380 = s_376.used; bytes_378 = s_376.repr; ptr_379 = "mem/realloc"(0, 0, 1, self_380); i_386 = 0; b23: block {
-                        l24: loop {
-                            break_if b23 i_386 >= self_380;
+                    __local_218 = builtin::i32_wrap_i64(local.tee __local_217(s_376 = ref.as_non_null(__local_213); self_380 = s_376.used; bytes_378 = s_376.repr; ptr_379 = "mem/realloc"(0, 0, 1, self_380); i_386 = 0; b24: block {
+                        l25: loop {
+                            break_if b24 i_386 >= self_380;
                             builtin::store_u8(ptr_379 + i_386, builtin::array_get_value_u8(bytes_378, 0 + i_386));
                             i_386 = i_386 + 1;
-                            continue l24;
+                            continue l25;
                         };
                     }; builtin::i64_extend_i32_s(ptr_379) | (builtin::i64_extend_i32_s(self_380) << 32_i64)));
                     __local_219 = builtin::i32_wrap_i64(__local_217 >> 32_i64);
@@ -807,12 +836,12 @@ fn "cm_waitable_set_poll.wado/handle"(request) with WaitableSet {
                     __local_241 = 0;
                     __local_242 = 0;
                     if __local_240 != 0 {
-                        __local_244 = builtin::i32_wrap_i64(local.tee __local_243(s_387 = ref.as_non_null(__local_239); self_391 = s_387.used; bytes_389 = s_387.repr; ptr_390 = "mem/realloc"(0, 0, 1, self_391); i_397 = 0; b37: block {
-                            l38: loop {
-                                break_if b37 i_397 >= self_391;
+                        __local_244 = builtin::i32_wrap_i64(local.tee __local_243(s_387 = ref.as_non_null(__local_239); self_391 = s_387.used; bytes_389 = s_387.repr; ptr_390 = "mem/realloc"(0, 0, 1, self_391); i_397 = 0; b38: block {
+                            l39: loop {
+                                break_if b38 i_397 >= self_391;
                                 builtin::store_u8(ptr_390 + i_397, builtin::array_get_value_u8(bytes_389, 0 + i_397));
                                 i_397 = i_397 + 1;
-                                continue l38;
+                                continue l39;
                             };
                         }; builtin::i64_extend_i32_s(ptr_390) | (builtin::i64_extend_i32_s(self_391) << 32_i64)));
                         __local_245 = builtin::i32_wrap_i64(__local_243 >> 32_i64);
@@ -853,12 +882,12 @@ fn "cm_waitable_set_poll.wado/handle"(request) with WaitableSet {
                 __local_259 = 0;
                 __local_260 = 0;
                 if __local_258 != 0 {
-                    __local_262 = builtin::i32_wrap_i64(local.tee __local_261(s_398 = ref.as_non_null(__local_257); self_402 = s_398.used; bytes_400 = s_398.repr; ptr_401 = "mem/realloc"(0, 0, 1, self_402); i_408 = 0; b44: block {
-                        l45: loop {
-                            break_if b44 i_408 >= self_402;
+                    __local_262 = builtin::i32_wrap_i64(local.tee __local_261(s_398 = ref.as_non_null(__local_257); self_402 = s_398.used; bytes_400 = s_398.repr; ptr_401 = "mem/realloc"(0, 0, 1, self_402); i_408 = 0; b45: block {
+                        l46: loop {
+                            break_if b45 i_408 >= self_402;
                             builtin::store_u8(ptr_401 + i_408, builtin::array_get_value_u8(bytes_400, 0 + i_408));
                             i_408 = i_408 + 1;
-                            continue l45;
+                            continue l46;
                         };
                     }; builtin::i64_extend_i32_s(ptr_401) | (builtin::i64_extend_i32_s(self_402) << 32_i64)));
                     __local_263 = builtin::i32_wrap_i64(__local_261 >> 32_i64);
@@ -893,12 +922,12 @@ fn "cm_waitable_set_poll.wado/handle"(request) with WaitableSet {
                 __local_277 = 0;
                 __local_278 = 0;
                 if __local_276 != 0 {
-                    __local_280 = builtin::i32_wrap_i64(local.tee __local_279(s_409 = ref.as_non_null(__local_275); self_413 = s_409.used; bytes_411 = s_409.repr; ptr_412 = "mem/realloc"(0, 0, 1, self_413); i_419 = 0; b52: block {
-                        l53: loop {
-                            break_if b52 i_419 >= self_413;
+                    __local_280 = builtin::i32_wrap_i64(local.tee __local_279(s_409 = ref.as_non_null(__local_275); self_413 = s_409.used; bytes_411 = s_409.repr; ptr_412 = "mem/realloc"(0, 0, 1, self_413); i_419 = 0; b53: block {
+                        l54: loop {
+                            break_if b53 i_419 >= self_413;
                             builtin::store_u8(ptr_412 + i_419, builtin::array_get_value_u8(bytes_411, 0 + i_419));
                             i_419 = i_419 + 1;
-                            continue l53;
+                            continue l54;
                         };
                     }; builtin::i64_extend_i32_s(ptr_412) | (builtin::i64_extend_i32_s(self_413) << 32_i64)));
                     __local_281 = builtin::i32_wrap_i64(__local_279 >> 32_i64);
@@ -941,12 +970,12 @@ fn "cm_waitable_set_poll.wado/handle"(request) with WaitableSet {
                 __local_300 = 0;
                 __local_301 = 0;
                 if __local_299 != 0 {
-                    __local_303 = builtin::i32_wrap_i64(local.tee __local_302(s_420 = ref.as_non_null(__local_298); self_424 = s_420.used; bytes_422 = s_420.repr; ptr_423 = "mem/realloc"(0, 0, 1, self_424); i_430 = 0; b61: block {
-                        l62: loop {
-                            break_if b61 i_430 >= self_424;
+                    __local_303 = builtin::i32_wrap_i64(local.tee __local_302(s_420 = ref.as_non_null(__local_298); self_424 = s_420.used; bytes_422 = s_420.repr; ptr_423 = "mem/realloc"(0, 0, 1, self_424); i_430 = 0; b62: block {
+                        l63: loop {
+                            break_if b62 i_430 >= self_424;
                             builtin::store_u8(ptr_423 + i_430, builtin::array_get_value_u8(bytes_422, 0 + i_430));
                             i_430 = i_430 + 1;
-                            continue l62;
+                            continue l63;
                         };
                     }; builtin::i64_extend_i32_s(ptr_423) | (builtin::i64_extend_i32_s(self_424) << 32_i64)));
                     __local_304 = builtin::i32_wrap_i64(__local_302 >> 32_i64);
@@ -970,12 +999,12 @@ fn "cm_waitable_set_poll.wado/handle"(request) with WaitableSet {
                 __local_312 = 0;
                 __local_313 = 0;
                 if __local_311 != 0 {
-                    __local_315 = builtin::i32_wrap_i64(local.tee __local_314(s_431 = ref.as_non_null(__local_309); self_435 = s_431.used; bytes_433 = s_431.repr; ptr_434 = "mem/realloc"(0, 0, 1, self_435); i_441 = 0; b66: block {
-                        l67: loop {
-                            break_if b66 i_441 >= self_435;
+                    __local_315 = builtin::i32_wrap_i64(local.tee __local_314(s_431 = ref.as_non_null(__local_309); self_435 = s_431.used; bytes_433 = s_431.repr; ptr_434 = "mem/realloc"(0, 0, 1, self_435); i_441 = 0; b67: block {
+                        l68: loop {
+                            break_if b67 i_441 >= self_435;
                             builtin::store_u8(ptr_434 + i_441, builtin::array_get_value_u8(bytes_433, 0 + i_441));
                             i_441 = i_441 + 1;
-                            continue l67;
+                            continue l68;
                         };
                     }; builtin::i64_extend_i32_s(ptr_434) | (builtin::i64_extend_i32_s(self_435) << 32_i64)));
                     __local_316 = builtin::i32_wrap_i64(__local_314 >> 32_i64);
@@ -991,12 +1020,12 @@ fn "cm_waitable_set_poll.wado/handle"(request) with WaitableSet {
                 __local_320 = 0;
                 __local_321 = 0;
                 if __local_319 != 0 {
-                    __local_323 = builtin::i32_wrap_i64(local.tee __local_322(s_442 = ref.as_non_null(__local_317); self_446 = s_442.used; bytes_444 = s_442.repr; ptr_445 = "mem/realloc"(0, 0, 1, self_446); i_452 = 0; b70: block {
-                        l71: loop {
-                            break_if b70 i_452 >= self_446;
+                    __local_323 = builtin::i32_wrap_i64(local.tee __local_322(s_442 = ref.as_non_null(__local_317); self_446 = s_442.used; bytes_444 = s_442.repr; ptr_445 = "mem/realloc"(0, 0, 1, self_446); i_452 = 0; b71: block {
+                        l72: loop {
+                            break_if b71 i_452 >= self_446;
                             builtin::store_u8(ptr_445 + i_452, builtin::array_get_value_u8(bytes_444, 0 + i_452));
                             i_452 = i_452 + 1;
-                            continue l71;
+                            continue l72;
                         };
                     }; builtin::i64_extend_i32_s(ptr_445) | (builtin::i64_extend_i32_s(self_446) << 32_i64)));
                     __local_324 = builtin::i32_wrap_i64(__local_322 >> 32_i64);
@@ -1017,12 +1046,12 @@ fn "cm_waitable_set_poll.wado/handle"(request) with WaitableSet {
                 __local_328 = 0;
                 __local_329 = 0;
                 if __local_327 != 0 {
-                    __local_331 = builtin::i32_wrap_i64(local.tee __local_330(s_453 = ref.as_non_null(__local_325); self_457 = s_453.used; bytes_455 = s_453.repr; ptr_456 = "mem/realloc"(0, 0, 1, self_457); i_463 = 0; b78: block {
-                        l79: loop {
-                            break_if b78 i_463 >= self_457;
+                    __local_331 = builtin::i32_wrap_i64(local.tee __local_330(s_453 = ref.as_non_null(__local_325); self_457 = s_453.used; bytes_455 = s_453.repr; ptr_456 = "mem/realloc"(0, 0, 1, self_457); i_463 = 0; b79: block {
+                        l80: loop {
+                            break_if b79 i_463 >= self_457;
                             builtin::store_u8(ptr_456 + i_463, builtin::array_get_value_u8(bytes_455, 0 + i_463));
                             i_463 = i_463 + 1;
-                            continue l79;
+                            continue l80;
                         };
                     }; builtin::i64_extend_i32_s(ptr_456) | (builtin::i64_extend_i32_s(self_457) << 32_i64)));
                     __local_332 = builtin::i32_wrap_i64(__local_330 >> 32_i64);
@@ -1105,7 +1134,7 @@ fn "cm_waitable_set_poll.wado/handle"(request) with WaitableSet {
             }
         }
         "cm_waitable_set_poll.wado/__cm_future_write_core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Trailers>,wasi:http/types.wado/ErrorCode>"(tx_364, struct.new "core:prelude/types.wado//Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>::Ok" { discriminant: 0, payload_0: struct.new "core:prelude/types.wado//Option<wasi:http/types.wado/Fields>" { 1 } });
-        break $fused_$inline_cm_waitable_set_poll_1;
+        break $fused_$inline_cm_waitable_set_poll_0;
     };
     "wasi/waitable-set-drop"(ws_1);
     rx_465 = builtin::i32_wrap_i64(local.tee packed_464("wasi/future-new"()));
@@ -1138,12 +1167,12 @@ fn "cm_waitable_set_poll.wado/handle"(request) with WaitableSet {
             __local_29 = 0;
             __local_30 = 0;
             if __local_28 != 0 {
-                __local_32 = builtin::i32_wrap_i64(local.tee __local_31(s_467 = ref.as_non_null(__local_27); self_471 = s_467.used; bytes_469 = s_467.repr; ptr_470 = "mem/realloc"(0, 0, 1, self_471); i_477 = 0; b113: block {
-                    l114: loop {
-                        break_if b113 i_477 >= self_471;
+                __local_32 = builtin::i32_wrap_i64(local.tee __local_31(s_467 = ref.as_non_null(__local_27); self_471 = s_467.used; bytes_469 = s_467.repr; ptr_470 = "mem/realloc"(0, 0, 1, self_471); i_477 = 0; b114: block {
+                    l115: loop {
+                        break_if b114 i_477 >= self_471;
                         builtin::store_u8(ptr_470 + i_477, builtin::array_get_value_u8(bytes_469, 0 + i_477));
                         i_477 = i_477 + 1;
-                        continue l114;
+                        continue l115;
                     };
                 }; builtin::i64_extend_i32_s(ptr_470) | (builtin::i64_extend_i32_s(self_471) << 32_i64)));
                 __local_33 = builtin::i32_wrap_i64(__local_31 >> 32_i64);
@@ -1186,12 +1215,12 @@ fn "cm_waitable_set_poll.wado/handle"(request) with WaitableSet {
             __local_46 = 0;
             __local_47 = 0;
             if __local_45 != 0 {
-                __local_49 = builtin::i32_wrap_i64(local.tee __local_48(s_478 = ref.as_non_null(__local_44); self_482 = s_478.used; bytes_480 = s_478.repr; ptr_481 = "mem/realloc"(0, 0, 1, self_482); i_488 = 0; b131: block {
-                    l132: loop {
-                        break_if b131 i_488 >= self_482;
+                __local_49 = builtin::i32_wrap_i64(local.tee __local_48(s_478 = ref.as_non_null(__local_44); self_482 = s_478.used; bytes_480 = s_478.repr; ptr_481 = "mem/realloc"(0, 0, 1, self_482); i_488 = 0; b132: block {
+                    l133: loop {
+                        break_if b132 i_488 >= self_482;
                         builtin::store_u8(ptr_481 + i_488, builtin::array_get_value_u8(bytes_480, 0 + i_488));
                         i_488 = i_488 + 1;
-                        continue l132;
+                        continue l133;
                     };
                 }; builtin::i64_extend_i32_s(ptr_481) | (builtin::i64_extend_i32_s(self_482) << 32_i64)));
                 __local_50 = builtin::i32_wrap_i64(__local_48 >> 32_i64);
@@ -1241,12 +1270,12 @@ fn "cm_waitable_set_poll.wado/handle"(request) with WaitableSet {
                 __local_72 = 0;
                 __local_73 = 0;
                 if __local_71 != 0 {
-                    __local_75 = builtin::i32_wrap_i64(local.tee __local_74(s_489 = ref.as_non_null(__local_70); self_493 = s_489.used; bytes_491 = s_489.repr; ptr_492 = "mem/realloc"(0, 0, 1, self_493); i_499 = 0; b145: block {
-                        l146: loop {
-                            break_if b145 i_499 >= self_493;
+                    __local_75 = builtin::i32_wrap_i64(local.tee __local_74(s_489 = ref.as_non_null(__local_70); self_493 = s_489.used; bytes_491 = s_489.repr; ptr_492 = "mem/realloc"(0, 0, 1, self_493); i_499 = 0; b146: block {
+                        l147: loop {
+                            break_if b146 i_499 >= self_493;
                             builtin::store_u8(ptr_492 + i_499, builtin::array_get_value_u8(bytes_491, 0 + i_499));
                             i_499 = i_499 + 1;
-                            continue l146;
+                            continue l147;
                         };
                     }; builtin::i64_extend_i32_s(ptr_492) | (builtin::i64_extend_i32_s(self_493) << 32_i64)));
                     __local_76 = builtin::i32_wrap_i64(__local_74 >> 32_i64);
@@ -1287,12 +1316,12 @@ fn "cm_waitable_set_poll.wado/handle"(request) with WaitableSet {
             __local_90 = 0;
             __local_91 = 0;
             if __local_89 != 0 {
-                __local_93 = builtin::i32_wrap_i64(local.tee __local_92(s_500 = ref.as_non_null(__local_88); self_504 = s_500.used; bytes_502 = s_500.repr; ptr_503 = "mem/realloc"(0, 0, 1, self_504); i_510 = 0; b152: block {
-                    l153: loop {
-                        break_if b152 i_510 >= self_504;
+                __local_93 = builtin::i32_wrap_i64(local.tee __local_92(s_500 = ref.as_non_null(__local_88); self_504 = s_500.used; bytes_502 = s_500.repr; ptr_503 = "mem/realloc"(0, 0, 1, self_504); i_510 = 0; b153: block {
+                    l154: loop {
+                        break_if b153 i_510 >= self_504;
                         builtin::store_u8(ptr_503 + i_510, builtin::array_get_value_u8(bytes_502, 0 + i_510));
                         i_510 = i_510 + 1;
-                        continue l153;
+                        continue l154;
                     };
                 }; builtin::i64_extend_i32_s(ptr_503) | (builtin::i64_extend_i32_s(self_504) << 32_i64)));
                 __local_94 = builtin::i32_wrap_i64(__local_92 >> 32_i64);
@@ -1327,12 +1356,12 @@ fn "cm_waitable_set_poll.wado/handle"(request) with WaitableSet {
             __local_108 = 0;
             __local_109 = 0;
             if __local_107 != 0 {
-                __local_111 = builtin::i32_wrap_i64(local.tee __local_110(s_511 = ref.as_non_null(__local_106); self_515 = s_511.used; bytes_513 = s_511.repr; ptr_514 = "mem/realloc"(0, 0, 1, self_515); i_521 = 0; b160: block {
-                    l161: loop {
-                        break_if b160 i_521 >= self_515;
+                __local_111 = builtin::i32_wrap_i64(local.tee __local_110(s_511 = ref.as_non_null(__local_106); self_515 = s_511.used; bytes_513 = s_511.repr; ptr_514 = "mem/realloc"(0, 0, 1, self_515); i_521 = 0; b161: block {
+                    l162: loop {
+                        break_if b161 i_521 >= self_515;
                         builtin::store_u8(ptr_514 + i_521, builtin::array_get_value_u8(bytes_513, 0 + i_521));
                         i_521 = i_521 + 1;
-                        continue l161;
+                        continue l162;
                     };
                 }; builtin::i64_extend_i32_s(ptr_514) | (builtin::i64_extend_i32_s(self_515) << 32_i64)));
                 __local_112 = builtin::i32_wrap_i64(__local_110 >> 32_i64);
@@ -1375,12 +1404,12 @@ fn "cm_waitable_set_poll.wado/handle"(request) with WaitableSet {
             __local_131 = 0;
             __local_132 = 0;
             if __local_130 != 0 {
-                __local_134 = builtin::i32_wrap_i64(local.tee __local_133(s_522 = ref.as_non_null(__local_129); self_526 = s_522.used; bytes_524 = s_522.repr; ptr_525 = "mem/realloc"(0, 0, 1, self_526); i_532 = 0; b169: block {
-                    l170: loop {
-                        break_if b169 i_532 >= self_526;
+                __local_134 = builtin::i32_wrap_i64(local.tee __local_133(s_522 = ref.as_non_null(__local_129); self_526 = s_522.used; bytes_524 = s_522.repr; ptr_525 = "mem/realloc"(0, 0, 1, self_526); i_532 = 0; b170: block {
+                    l171: loop {
+                        break_if b170 i_532 >= self_526;
                         builtin::store_u8(ptr_525 + i_532, builtin::array_get_value_u8(bytes_524, 0 + i_532));
                         i_532 = i_532 + 1;
-                        continue l170;
+                        continue l171;
                     };
                 }; builtin::i64_extend_i32_s(ptr_525) | (builtin::i64_extend_i32_s(self_526) << 32_i64)));
                 __local_135 = builtin::i32_wrap_i64(__local_133 >> 32_i64);
@@ -1404,12 +1433,12 @@ fn "cm_waitable_set_poll.wado/handle"(request) with WaitableSet {
             __local_143 = 0;
             __local_144 = 0;
             if __local_142 != 0 {
-                __local_146 = builtin::i32_wrap_i64(local.tee __local_145(s_533 = ref.as_non_null(__local_140); self_537 = s_533.used; bytes_535 = s_533.repr; ptr_536 = "mem/realloc"(0, 0, 1, self_537); i_543 = 0; b174: block {
-                    l175: loop {
-                        break_if b174 i_543 >= self_537;
+                __local_146 = builtin::i32_wrap_i64(local.tee __local_145(s_533 = ref.as_non_null(__local_140); self_537 = s_533.used; bytes_535 = s_533.repr; ptr_536 = "mem/realloc"(0, 0, 1, self_537); i_543 = 0; b175: block {
+                    l176: loop {
+                        break_if b175 i_543 >= self_537;
                         builtin::store_u8(ptr_536 + i_543, builtin::array_get_value_u8(bytes_535, 0 + i_543));
                         i_543 = i_543 + 1;
-                        continue l175;
+                        continue l176;
                     };
                 }; builtin::i64_extend_i32_s(ptr_536) | (builtin::i64_extend_i32_s(self_537) << 32_i64)));
                 __local_147 = builtin::i32_wrap_i64(__local_145 >> 32_i64);
@@ -1425,12 +1454,12 @@ fn "cm_waitable_set_poll.wado/handle"(request) with WaitableSet {
             __local_151 = 0;
             __local_152 = 0;
             if __local_150 != 0 {
-                __local_154 = builtin::i32_wrap_i64(local.tee __local_153(s_544 = ref.as_non_null(__local_148); self_548 = s_544.used; bytes_546 = s_544.repr; ptr_547 = "mem/realloc"(0, 0, 1, self_548); i_554 = 0; b178: block {
-                    l179: loop {
-                        break_if b178 i_554 >= self_548;
+                __local_154 = builtin::i32_wrap_i64(local.tee __local_153(s_544 = ref.as_non_null(__local_148); self_548 = s_544.used; bytes_546 = s_544.repr; ptr_547 = "mem/realloc"(0, 0, 1, self_548); i_554 = 0; b179: block {
+                    l180: loop {
+                        break_if b179 i_554 >= self_548;
                         builtin::store_u8(ptr_547 + i_554, builtin::array_get_value_u8(bytes_546, 0 + i_554));
                         i_554 = i_554 + 1;
-                        continue l179;
+                        continue l180;
                     };
                 }; builtin::i64_extend_i32_s(ptr_547) | (builtin::i64_extend_i32_s(self_548) << 32_i64)));
                 __local_155 = builtin::i32_wrap_i64(__local_153 >> 32_i64);
@@ -1451,12 +1480,12 @@ fn "cm_waitable_set_poll.wado/handle"(request) with WaitableSet {
             __local_159 = 0;
             __local_160 = 0;
             if __local_158 != 0 {
-                __local_162 = builtin::i32_wrap_i64(local.tee __local_161(s_555 = ref.as_non_null(__local_156); self_559 = s_555.used; bytes_557 = s_555.repr; ptr_558 = "mem/realloc"(0, 0, 1, self_559); i_565 = 0; b186: block {
-                    l187: loop {
-                        break_if b186 i_565 >= self_559;
+                __local_162 = builtin::i32_wrap_i64(local.tee __local_161(s_555 = ref.as_non_null(__local_156); self_559 = s_555.used; bytes_557 = s_555.repr; ptr_558 = "mem/realloc"(0, 0, 1, self_559); i_565 = 0; b187: block {
+                    l188: loop {
+                        break_if b187 i_565 >= self_559;
                         builtin::store_u8(ptr_558 + i_565, builtin::array_get_value_u8(bytes_557, 0 + i_565));
                         i_565 = i_565 + 1;
-                        continue l187;
+                        continue l188;
                     };
                 }; builtin::i64_extend_i32_s(ptr_558) | (builtin::i64_extend_i32_s(self_559) << 32_i64)));
                 __local_163 = builtin::i32_wrap_i64(__local_161 >> 32_i64);
@@ -1540,41 +1569,6 @@ fn "cm_waitable_set_poll.wado/handle"(request) with WaitableSet {
     }
     "cm_waitable_set_poll.wado/__cm_future_write_core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Trailers>,wasi:http/types.wado/ErrorCode>"(tx_466, struct.new "core:prelude/types.wado//Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>::Ok" { discriminant: 0, payload_0: struct.new "core:prelude/types.wado//Option<wasi:http/types.wado/Fields>" { 1 } });
     "wasi/resource-drop:request"(request);
-}
-
-fn "cm_waitable_set_poll.wado/__cm_binding__Fields_new"() with Fields {
-    return "wasi/wasi:http/Fields::new"();
-}
-
-fn "cm_waitable_set_poll.wado/__cm_binding__Response_new"(headers, contents, trailers) with Response {
-    let __contents_disc: i32;
-    let __contents_inner0: i32;
-    let __local_6: i32;
-    let __outptr: i32;
-    let __lifted_result_8: i32;
-    let __lifted_result_9: i32;
-    __contents_disc = ref.test "core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>::Some"(contents);
-    __contents_inner0 = 0;
-    if ref.test "core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>::Some"(contents) {
-        __contents_inner0 = local.tee __local_6(ref.cast "core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>::Some"(contents).payload_0);
-    } else {
-    }
-    __outptr = "mem/realloc"(0, 0, 4, 8);
-    "wasi/wasi:http/Response::new"(headers, __contents_disc, __contents_inner0, trailers, __outptr);
-    __lifted_result_8 = builtin::load_i32(__outptr + 0);
-    __lifted_result_9 = builtin::load_i32(__outptr + 4);
-    drop("mem/realloc"(__outptr, 8, 4, 0));
-    return struct.new "tuple//[wasi:http/types.wado/Response, core:prelude/types.wado/Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]" { 0: __lifted_result_8, 1: __lifted_result_9 };
-}
-
-fn "cm_waitable_set_poll.wado/__cm_export__handle"(request) {
-    $inline___initialize_modules_0: block {
-        break_if $inline___initialize_modules_0 @likely(global:cm_waitable_set_poll.wado::__modules_initialized);
-        cold_path;
-        "core:prelude/fpfmt.wado/__initialize_module"();
-        global:cm_waitable_set_poll.wado::__modules_initialized = 1;
-    };
-    "cm_waitable_set_poll.wado/handle"(request);
 }
 
 fn "cm_waitable_set_poll.wado/__cm_future_write_core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Trailers>,wasi:http/types.wado/ErrorCode>"(handle, value) {

@@ -200,9 +200,9 @@ type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(32)
 
 type "functype//wasi/task-return" = fn(i32, i32, i32, i64, i32, i32, i32, i32);  // TypeId(33)
 
-type "functype//http_error_code_payload.wado/handle" = fn(i32);  // TypeId(34)
+type "functype//http_error_code_payload.wado/__cm_export__handle" = fn(i32);  // TypeId(34)
 
-type "functype//http_error_code_payload.wado/__cm_export__handle" = fn(i32);  // TypeId(35)
+type "functype//http_error_code_payload.wado/__cm_task_entry__handle" = fn(i32);  // TypeId(35)
 
 type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(36)
 
@@ -218,7 +218,17 @@ import fn wasi/resource-drop:request from "wasi/resource-drop:request";
 
 global mut global:http_error_code_payload.wado::__modules_initialized: bool = 0;
 
-fn "http_error_code_payload.wado/handle"(request) {
+fn "http_error_code_payload.wado/__cm_export__handle"(request) {
+    $inline___initialize_modules_0: block {
+        break_if $inline___initialize_modules_0 @likely(global:http_error_code_payload.wado::__modules_initialized);
+        cold_path;
+        "core:prelude/fpfmt.wado/__initialize_module"();
+        global:http_error_code_payload.wado::__modules_initialized = 1;
+    };
+    "http_error_code_payload.wado/__cm_task_entry__handle"(request);
+}
+
+fn "http_error_code_payload.wado/__cm_task_entry__handle"(request) {
     let __task_ret: ref "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>";
     let __tv_0: i32;
     let __tv_1: i32;
@@ -394,12 +404,6 @@ fn "http_error_code_payload.wado/handle"(request) {
     let ptr_261: i32;
     let self_262: i32;
     let i_268: i32;
-    $inline___initialize_modules_0: block {
-        break_if $inline___initialize_modules_0 @likely(global:http_error_code_payload.wado::__modules_initialized);
-        cold_path;
-        "core:prelude/fpfmt.wado/__initialize_module"();
-        global:http_error_code_payload.wado::__modules_initialized = 1;
-    };
     __task_ret = struct.new "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>::Err" { discriminant: 1, payload_0: struct.new "wasi:http/types.wado//ErrorCode::InternalError" { discriminant: 38, payload_0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("custom error"), used: 12 } } };
     __tv_0 = 0;
     __tv_1 = 0;
@@ -827,16 +831,6 @@ fn "http_error_code_payload.wado/handle"(request) {
         }
     }
     "wasi/resource-drop:request"(request);
-}
-
-fn "http_error_code_payload.wado/__cm_export__handle"(request) {
-    $inline___initialize_modules_0: block {
-        break_if $inline___initialize_modules_0 @likely(global:http_error_code_payload.wado::__modules_initialized);
-        cold_path;
-        "core:prelude/fpfmt.wado/__initialize_module"();
-        global:http_error_code_payload.wado::__modules_initialized = 1;
-    };
-    "http_error_code_payload.wado/handle"(request);
 }
 
 fn "core:prelude/fpfmt.wado/__initialize_module"() {
