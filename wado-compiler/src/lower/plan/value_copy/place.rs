@@ -188,7 +188,7 @@ impl TirRefVisitor for ReturnedPlace<'_, '_> {
             // A returned construction hands its payload out uncopied, so the
             // storage the call names is the payload's; an empty case carries
             // none and abstains.
-            let value = super::analyze::returned_value(value, true, self.resolver.type_table());
+            let value = super::analyze::returned_value(value, true, self.resolver.type_table);
             if !super::analyze::carries_no_storage(value) {
                 let names = self.resolver.names(value);
                 self.names = match self.names.take() {
@@ -249,12 +249,6 @@ impl<'a> Resolver<'a> {
             collector.visit_block(body);
         }
         resolver
-    }
-
-    /// The type table this resolver reads.
-    #[must_use]
-    pub fn type_table(&self) -> &TypeTable {
-        self.type_table
     }
 
     /// What `local` stands for, where a binder gave it a name.

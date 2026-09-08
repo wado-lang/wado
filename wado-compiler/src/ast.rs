@@ -1285,9 +1285,8 @@ pub enum AttrArg {
 }
 
 impl AttrArg {
-    /// Returns the string value: for `Str`/`Ident`/`Number` the contained string;
-    /// for `KeyValue`/`KeyIdent` the value side; for `KeyArray` the first element
-    /// (empty if none).
+    /// The value this argument carries, the key side aside. An array answers
+    /// with its first element, empty where it holds none.
     pub fn as_str(&self) -> &str {
         match self {
             Self::Str(s) | Self::Ident(s) | Self::Number(s) => s,

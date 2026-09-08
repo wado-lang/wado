@@ -72,11 +72,10 @@ pub fn plan(flat: &mut FlatPackage, errors: &dyn ErrorSink) -> Result<LowerPlan,
     // Confinement and receiver-ref capture run before boxing collapses `&mut T`
     // / `&T` onto `Box<T>`; both results key on parameter position, unchanged by
     // boxing.
-    let confined_params = value_copy::confine::compute_confined_params(
-        flat,
-        &pre_boxing_calls,
-        &value_copy::ownership::BuiltinDeclarations::collect(flat),
-    );
+    // Snapshotted once: boxing rewrites types, never what a builtin declared.
+    let builtins = value_copy::ownership::BuiltinDeclarations::collect(flat);
+    let confined_params =
+        value_copy::confine::compute_confined_params(flat, &pre_boxing_calls, &builtins);
     let ref_receiver_methods = ref_receiver_methods(flat);
     let box_plan = boxing::prepare_types(flat);
     boxing::shadow_params(flat, &box_plan);
@@ -86,7 +85,7 @@ pub fn plan(flat: &mut FlatPackage, errors: &dyn ErrorSink) -> Result<LowerPlan,
     globals::build_initialize_modules(flat);
     flat.rebuild_variant_indices();
     lift_mut::lift_mut_match_bindings(flat);
-    let value_copy = value_copy::plan(flat, confined_params, ref_receiver_methods);
+    let value_copy = value_copy::plan(flat, builtins, confined_params, ref_receiver_methods);
     Ok(LowerPlan {
         box_plan,
         closure,

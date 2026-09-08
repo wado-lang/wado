@@ -126,6 +126,14 @@ fn emit_kw_if_into(cond: bool, kw: &str, output: &mut String) {
     }
 }
 
+/// Wrap what `emit` appends in `( ... )` if `cond` is true. Free-function
+/// counterpart of `Unparser::with_parens_if`.
+fn with_parens_if_into<F: FnOnce(&mut String)>(cond: bool, output: &mut String, emit: F) {
+    emit_kw_if_into(cond, "(", output);
+    emit(output);
+    emit_kw_if_into(cond, ")", output);
+}
+
 fn emit_visibility_into(visibility: Visibility, output: &mut String) {
     output.push_str(visibility.keyword());
 }
@@ -3295,12 +3303,10 @@ fn ends_in_trailing_cast(expr: &Expr) -> bool {
     }
 }
 
-/// Whether a closure body must be parenthesized. `with` after the parameter
-/// list is the closure's own effect row, so a body whose first token is `with`
-/// re-parses as a declaration. Mirrors [`ends_in_trailing_cast`] down the
-/// leftmost spine, descending only where the operand is printed bare — a
-/// handler in any other slot already carries parens from
-/// [`binds_tighter_than`].
+/// Whether a closure body starts with `with`, which re-parses as the closure's
+/// own effect row. Follows the leftmost spine like [`ends_in_trailing_cast`]
+/// does the right, descending only where the operand prints bare:
+/// [`binds_tighter_than`] already parenthesizes a handler in every other slot.
 fn closure_body_needs_parens(expr: &Expr) -> bool {
     match expr {
         Expr::WithHandler(_) => true,
@@ -3736,14 +3742,9 @@ fn unparse_closure_into(c: &ClosureExpr, output: &mut String) {
         unparse_type_into(ty, output);
         output.push(' ');
     }
-    let parens = closure_body_needs_parens(&c.body);
-    if parens {
-        output.push('(');
-    }
-    unparse_expr_into(&c.body, output);
-    if parens {
-        output.push(')');
-    }
+    with_parens_if_into(closure_body_needs_parens(&c.body), output, |o| {
+        unparse_expr_into(&c.body, o);
+    });
 }
 
 /// Twin of [`Unparser::unparse_template_string`]; keep the two in step.
@@ -3921,13 +3922,7 @@ fn unparse_condition_into(cond: &Condition, output: &mut String) {
                         expr,
                         Expr::Binary(b) if matches!(b.op, BinaryOp::And | BinaryOp::Or)
                     );
-                    if needs_parens {
-                        output.push('(');
-                    }
-                    unparse_expr_into(expr, output);
-                    if needs_parens {
-                        output.push(')');
-                    }
+                    with_parens_if_into(needs_parens, output, |o| unparse_expr_into(expr, o));
                 }
             });
         }

@@ -9,7 +9,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use crate::ast::{self, AstId, CompoundAssignOp, Expr, Item, Module, UnaryOp};
-use crate::compiler_host::CompilerHost;
+use crate::compiler_host::{Code, CompilerHost, Diagnostic, DiagnosticSpan, Severity};
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::logger::{Bail, Logger};
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
@@ -2013,6 +2013,19 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         })
     }
 
+    /// Report a malformed attribute at the attribute's own span.
+    fn attr_error(&self, code: Code, attr: &ast::Attribute, message: String) {
+        let _ = self.logger.error_in(
+            &self.current_module_source,
+            Diagnostic {
+                severity: Severity::Error,
+                code,
+                message,
+                span: Some(DiagnosticSpan::from_span(&attr.span, None)),
+            },
+        );
+    }
+
     /// Extract and structurally validate a `#[param]` attribute on a global.
     ///
     /// Returns `Some(ParamSpec)` for a well-formed `#[param]`, `None` when the
@@ -2021,20 +2034,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// resolution itself (overrides, env, conversion) happens later in the
     /// param-resolution pass — see `wep-2026-04-26-compile-time-params.md`.
     fn reify_param_attr(&self, global_decl: &ast::GlobalDecl) -> Option<tir::ParamSpec> {
-        use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
-
         let attr = global_decl.attributes.iter().find(|a| a.name == "param")?;
-        let emit = |message: String| {
-            let _ = self.logger.error_in(
-                &self.current_module_source,
-                Diagnostic {
-                    severity: Severity::Error,
-                    code: Code::ParamAttr,
-                    message,
-                    span: Some(DiagnosticSpan::from_span(&attr.span, None)),
-                },
-            );
-        };
+        let emit = |message: String| self.attr_error(Code::ParamAttr, attr, message);
 
         let mut ok = true;
         if global_decl.mutable {
@@ -2084,29 +2085,17 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         }
     }
 
-    /// Extract and structurally validate a `#[returns(...)]` attribute.
-    ///
-    /// `None` where the declaration states none, leaving the return-convention
-    /// analysis to decide. A malformed attribute is reported rather than read as
-    /// silence: silence means "allocates", the reading that elides copies.
+    /// The `#[returns(...)]` convention, `None` where the declaration states
+    /// none. A malformed one is reported rather than read as that silence, which
+    /// means "allocates" — the reading that elides copies.
     fn reify_return_convention_attr(
         &self,
         attrs: &[ast::Attribute],
         params: &[tir::TirParam],
     ) -> Option<tir::ReturnConvention> {
-        use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
-
         let attr = attrs.iter().find(|a| a.name == "returns")?;
         let emit = |message: String| {
-            let _ = self.logger.error_in(
-                &self.current_module_source,
-                Diagnostic {
-                    severity: Severity::Error,
-                    code: Code::ReturnsAttr,
-                    message,
-                    span: Some(DiagnosticSpan::from_span(&attr.span, None)),
-                },
-            );
+            self.attr_error(Code::ReturnsAttr, attr, message);
             None
         };
 

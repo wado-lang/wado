@@ -167,13 +167,13 @@ let f = || { return local_var; };
 // Inferred type: fn() -> i32 (captures local_var)
 ```
 
-A closure declares neither its effects nor its stores. The parser reads a `with`
-row where one would go and reports that the compiler does not carry it yet, so
-the shape is a diagnostic rather than a parse error.
+A closure declares neither its effects nor its stores. The parser still reads a
+`with` row where one would go, and reports that the compiler does not carry it
+yet.
 
-`with` right after the parameter list, or after the return type, is always that
-row — never the start of a handler expression. A handler reaches the body
-through a block or a pair of parentheses:
+That keyword is always the closure's row, whether it follows the parameter list
+or the return type. It never starts a handler expression, so a handler reaches
+the body through a block or a pair of parentheses:
 
 ```wado
 let f = || (with Log => &mut sink do { Log::emit(`hi`); });
@@ -207,8 +207,8 @@ to the argument, which each consumer reads for itself:
 - `wir_optimize::const_forward` forwards no constant into a stored parameter.
 - `niri` runs no function that stores at compile time.
 
-The type checker reads it too, which is why it is a signature and not an
-annotation: see §4's functor rule.
+The type checker reads it too. §4's functor rule makes the row part of the
+function type, so a caller sees it without reading the body.
 
 ### 6. Closures Capture by Reference
 

@@ -4171,9 +4171,8 @@ impl Parser {
     }
 
     /// Read the `with` row a closure would declare and report that the compiler
-    /// does not carry one. The keyword in this position is always the closure's
-    /// own row, never a handler expression body; a handler reaches the body
-    /// through a block or a pair of parentheses.
+    /// carries none yet. The keyword here is always that row, never a handler
+    /// body: a handler reaches the body through a block or parentheses.
     fn reject_closure_with_clause(&mut self) -> ParseResult<()> {
         if !self.check(&TokenKind::With) {
             return Ok(());

@@ -637,9 +637,9 @@ Verified against the tree.
       `sqlite_parse` finds 0%. Only a program passing deeply nested aggregates by
       value pays it.
 
-- [ ] Say which _field_ a stored parameter is stored into. The item above wants
-      it to re-root an iterator's element read at the list; `array_copy`'s
-      elements reaching `dst` want it too. Recorded with the rest of what
+- [ ] Say which _field_ a stored parameter is stored into. The gap above needs
+      it to re-root an iterator's element read at the list, and `array_copy`
+      needs it because its elements reach `dst`. Recorded with the rest of what
       `stores[...]` cannot yet say, in
       [WEP: Value Semantics and Reference Stores](./wep-2026-01-12-value-semantics-and-stores.md).
 

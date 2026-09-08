@@ -20,10 +20,9 @@ use crate::tir::{
 };
 use crate::tir_visitor::TirRefVisitor;
 
-/// Whether any input names storage the caller still reaches. A by-value one was
-/// deep-copied at the call, so only a reference can carry storage back out:
-/// `struct_field_get(v: &T, i) -> F` reads a field of what `v` points at, while
-/// `array_new(len) -> Array<T>` allocates.
+/// Whether any input names storage the caller still reaches, which is what a
+/// result can be a part of: `struct_field_get(v: &T, i) -> F` reads a field of
+/// what `v` points at, while `array_new(len) -> Array<T>` allocates.
 fn reads_through_reference(func: &TirFunction, type_table: &TypeTable) -> bool {
     func.params
         .iter()
@@ -33,17 +32,13 @@ fn reads_through_reference(func: &TirFunction, type_table: &TypeTable) -> bool {
 /// Whether a bodyless declaration's result may be storage its caller still
 /// owns, asked over monomorphized TIR. A declaration answering no is fresh
 /// without declaring anything.
-pub fn hands_out_storage(func: &TirFunction, type_table: &TypeTable) -> bool {
+fn hands_out_storage(func: &TirFunction, type_table: &TypeTable) -> bool {
     reads_through_reference(func, type_table) && carries_storage(func.return_type, type_table)
 }
 
-/// The obligation a bodyless `core:builtin` carries at its declaration: one that
-/// answers yes must say which parameter its result comes from with
-/// `#[returns(part_of = p)]`, or `#[returns(owned)]` that it allocates.
-///
-/// Link asks this before monomorphization, so a generic declaration is judged on
-/// the widest instantiation of its return type rather than on the bare type
-/// parameter it reads as there.
+/// [`hands_out_storage`] asked at the declaration, where link runs before
+/// monomorphization: a builtin answering yes owes `#[returns(part_of = p)]`, or
+/// `#[returns(owned)]` that it allocates.
 pub fn owes_return_convention(func: &TirFunction, type_table: &TypeTable) -> bool {
     reads_through_reference(func, type_table) && may_carry_storage(func.return_type, type_table)
 }

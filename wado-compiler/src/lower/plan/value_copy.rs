@@ -138,11 +138,11 @@ pub struct ValueCopyPlan {
 
 pub fn plan(
     flat: &mut FlatPackage,
+    builtins: ownership::BuiltinDeclarations,
     confined_params: confine::ConfinedParams,
     ref_receiver_methods: FuncKeySet,
 ) -> ValueCopyPlan {
     register_variant_cases(flat);
-    let builtins = ownership::BuiltinDeclarations::collect(flat);
     let seed = analyze::collect_seed_types(flat, &builtins);
     let helpers = synthesize::synthesize_helpers(flat, seed);
     // Built after synthesis so the value-copy helpers (always owned) are present

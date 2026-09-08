@@ -2253,8 +2253,9 @@ Parameter types are always required (never inferred). A `?` in the body needs
 the return type known — via `-> Type` or an expected `fn(..) -> R`.
 
 A closure declares neither effects nor stores; both are inferred from the body.
-`with` in the position where a function writes its row is read as that row and
-reported as not yet carried, so a handler body needs a block or parentheses:
+`with` after the parameter list would be that declaration, which the compiler
+does not carry yet and rejects. A handler body therefore needs a block or
+parentheses:
 
 ```wado
 let f = || (with Log => &mut sink do { Log::emit(`hi`); });

@@ -1,9 +1,5 @@
-// A block body leaves the closure's `with` row unambiguous, and it reaches the
-// same diagnostic: the row is syntax the compiler does not carry yet.
-
-interface Log {
-    fn emit(message: String);
-}
+// A block body leaves the closure's `with` row unambiguous, and it still
+// reaches the same diagnostic: the compiler carries no such row yet.
 
 export fn run() {
     let f = |n: i32| -> i32 with Log { return n; };
