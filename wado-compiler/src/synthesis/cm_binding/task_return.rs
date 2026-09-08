@@ -80,13 +80,13 @@ pub(super) fn expand_task_returns_in_func(
 ///
 /// For an `export async fn` outside the target world's exports: there is no CM
 /// task to deliver to, and the statements must not reach `monomorphize` intact.
-pub(super) fn strip_task_returns_in_func(user_func: &Rc<RefCell<TirFunction>>) {
+pub(super) fn reduce_task_returns_in_func(user_func: &Rc<RefCell<TirFunction>>) {
     let mut func = user_func.borrow_mut();
     let Some(mut body) = func.body.take() else {
         return;
     };
-    let mut stripper = TaskReturnStripper;
-    stripper.visit_block(&mut body);
+    let mut reducer = TaskReturnReducer;
+    reducer.visit_block(&mut body);
     func.body = Some(body);
 }
 
@@ -114,26 +114,21 @@ impl TirOptVisitor for TaskReturnExpander<'_> {
         let stmts = std::mem::take(&mut block.stmts);
         let mut new_stmts: Vec<TirStmt> = Vec::with_capacity(stmts.len());
         for mut stmt in stmts {
-            if matches!(&stmt.kind, TirStmtKind::TaskReturn { .. }) {
-                if let TirStmtKind::TaskReturn { value } =
-                    std::mem::replace(&mut stmt.kind, no_op_stmt(stmt.span))
-                {
-                    new_stmts.extend(generate_inline_task_return(
-                        value,
-                        self.return_type,
-                        self.flat_return_types,
-                        self.task_return,
-                        &mut self.next_local,
-                        &mut self.extra_locals,
-                        self.tir_modules,
-                        self.type_table,
-                        self.cm_interface_registry,
-                        self.cm_package,
-                        self.interner,
-                    ));
-                }
-            } else {
-                new_stmts.push(stmt);
+            match take_task_return_value(&mut stmt) {
+                Some(value) => new_stmts.extend(generate_inline_task_return(
+                    value,
+                    self.return_type,
+                    self.flat_return_types,
+                    self.task_return,
+                    &mut self.next_local,
+                    &mut self.extra_locals,
+                    self.tir_modules,
+                    self.type_table,
+                    self.cm_interface_registry,
+                    self.cm_package,
+                    self.interner,
+                )),
+                None => new_stmts.push(stmt),
             }
         }
         block.stmts = new_stmts;
@@ -143,29 +138,31 @@ impl TirOptVisitor for TaskReturnExpander<'_> {
     }
 }
 
-/// A statement that does nothing, for a rewrite that has to leave something
-/// behind. `Continue` is not one: it branches to the enclosing loop, and
-/// outside one it has no target at all.
-fn no_op_stmt(span: crate::token::Span) -> TirStmtKind {
-    TirStmtKind::Expr(TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, span))
+/// Take the operand out of a `task return`, leaving a placeholder both callers
+/// overwrite. `None` for any other statement, which is left as it was.
+fn take_task_return_value(stmt: &mut TirStmt) -> Option<TirExpr> {
+    if !matches!(&stmt.kind, TirStmtKind::TaskReturn { .. }) {
+        return None;
+    }
+    let placeholder =
+        TirStmtKind::Expr(TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, stmt.span));
+    let TirStmtKind::TaskReturn { value } = std::mem::replace(&mut stmt.kind, placeholder) else {
+        unreachable!("`TaskReturn` was matched on the line above")
+    };
+    Some(value)
 }
 
-/// Reduces every `task return value` to `value` evaluated for effect. Only the
-/// delivery goes: the operand is user code, and the body around it still runs.
-struct TaskReturnStripper;
+struct TaskReturnReducer;
 
-impl TirOptVisitor for TaskReturnStripper {
+impl TirOptVisitor for TaskReturnReducer {
     fn visit_stmt(&mut self, stmt: &mut TirStmt) -> bool {
-        if matches!(&stmt.kind, TirStmtKind::TaskReturn { .. }) {
-            let TirStmtKind::TaskReturn { value } =
-                std::mem::replace(&mut stmt.kind, no_op_stmt(stmt.span))
-            else {
-                unreachable!("the kind matched `TaskReturn` on the line above")
-            };
-            stmt.kind = TirStmtKind::Expr(value);
-            return true;
+        match take_task_return_value(stmt) {
+            Some(value) => {
+                stmt.kind = TirStmtKind::Expr(value);
+                true
+            }
+            None => opt_walk_stmt(self, stmt),
         }
-        opt_walk_stmt(self, stmt)
     }
 }
 

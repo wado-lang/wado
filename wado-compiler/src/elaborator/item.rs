@@ -47,9 +47,8 @@ pub(super) fn extract_compiler_item<H: CompilerHost>(
 }
 
 /// Whether the declared result leaves through `task return` rather than the
-/// Wasm return, which makes a Wado call of it `()`. An imported `async fn`
-/// stands on the other side of that boundary and returns as declared.
-pub(super) fn returns_via_task_return(func: &Function) -> bool {
+/// Wasm return, making a Wado call of it `()`. An import returns as declared.
+fn returns_via_task_return(func: &Function) -> bool {
     func.is_async && func.is_export
 }
 

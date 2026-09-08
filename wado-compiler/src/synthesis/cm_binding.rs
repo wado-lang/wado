@@ -39,7 +39,7 @@ use import_adapter::synthesize_adapter;
 pub use lift::synthesize_lift;
 pub use lower::synthesize_lower;
 pub use resource_rewrite::rewrite_async_primitives_monomorphized;
-use task_return::{expand_task_returns_in_func, strip_task_returns_in_func};
+use task_return::{expand_task_returns_in_func, reduce_task_returns_in_func};
 use type_fixup::{
     collect_effect_calls_in_block, collect_local_type_updates, rewrite_calls_in_block,
 };
@@ -466,7 +466,7 @@ pub fn generate_adapters(mut project: Package) -> Result<Package, String> {
     record_task_return_flat_params(&mut project);
     generate_test_world_bindings(&mut project);
     let validated = reject_unresolvable_record_payloads(&project)?;
-    strip_unexpanded_task_returns(&project);
+    reduce_unexpanded_task_returns(&project);
     resource_rewrite::rewrite_async_primitives(&mut project, validated);
     Ok(project)
 }
@@ -1199,18 +1199,16 @@ fn generate_test_world_bindings(project: &mut Package) {
     }
 }
 
-/// Strip remaining `TaskReturn` stmts from all modules. `task return` is only
-/// valid inside `async fn` (checked by elaborator); export synthesis expands
-/// `TaskReturn` into CM calls for async exports that match the target world.
-/// An async fn left over — an unmatched export, an imported module — has no CM
-/// task to deliver to, so its `TaskReturn` stmts become no-ops rather than
-/// reaching monomorphize. Idempotent: an expanded function has none left.
-fn strip_unexpanded_task_returns(project: &Package) {
+/// Reduce every `TaskReturn` the export synthesis above did not expand, in any
+/// module. Such a function is an async fn the target world does not export, so
+/// there is no CM task to deliver to; its operand is still evaluated, and
+/// nothing reaches monomorphize. Idempotent: an expanded function has none left.
+fn reduce_unexpanded_task_returns(project: &Package) {
     for module in project.tir_modules.values() {
         for f in &module.functions {
             let needs_strip = f.borrow().is_async;
             if needs_strip {
-                strip_task_returns_in_func(f);
+                reduce_task_returns_in_func(f);
             }
         }
     }
