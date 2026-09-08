@@ -10,12 +10,17 @@ use std::collections::VecDeque;
 use cranelift_entity::EntityRef;
 
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::nir::NirLocal;
+use crate::nir::{FuncId, NirLocal};
 use crate::nir_arena::{
     ArmData, BlockId, BlockNode, Body, ExprId, ExprKind, ExprNode, NodeRef, Operand, PatId,
     PatKind, PatNode, StmtId, StmtKind, StmtNode,
 };
+<<<<<<< HEAD
 use crate::nir_value_graph::ValueId;
+||||||| e925ee58b
+=======
+use crate::nir_value_graph::{ValueId, ValueKind};
+>>>>>>> origin/main
 use crate::tir::TypeId;
 use crate::token::Span;
 
@@ -283,7 +288,7 @@ impl EngineBuffers {
 
 /// What a value-graph walk reads where the session was told nothing. Empty is
 /// conservative — it leaves a call opaque — and shared, so asking costs no map.
-static NO_PURE_BUILTINS: std::sync::LazyLock<IndexSet<crate::nir::FuncId>> =
+static NO_PURE_BUILTINS: std::sync::LazyLock<IndexSet<FuncId>> =
     std::sync::LazyLock::new(IndexSet::default);
 static NO_CTFE_BUILTINS: std::sync::LazyLock<crate::niri::CtfeBuiltinMap> =
     std::sync::LazyLock::new(crate::niri::CtfeBuiltinMap::default);
@@ -343,13 +348,13 @@ pub struct Engine<'a> {
     /// panic block by callee id (not the call node's `FunctionRef`). `None` (the
     /// default) means "no callee is a panic". Set via
     /// [`Engine::set_panic_callee_ids`].
-    panic_callee_ids: Option<&'a IndexSet<crate::nir::FuncId>>,
+    panic_callee_ids: Option<&'a IndexSet<FuncId>>,
     /// [`FuncId`]s of pure builtin intrinsics (`array_get_value`, `array_len`, …),
     /// supplied by a value-graph pass so the builder knows such a call writes no
     /// heap — the call node no longer carries a `FunctionRef` to classify by.
     /// `None` (the default) is conservative: every call is a heap write. Set via
     /// [`Engine::set_pure_builtin_callees`] before the first value query.
-    pure_builtin_callees: Option<&'a IndexSet<crate::nir::FuncId>>,
+    pure_builtin_callees: Option<&'a IndexSet<FuncId>>,
     /// Memoized promoted-read census ([`Body::promoted_read_counts`]) for the
     /// session. See [`Engine::promoted_read_count`].
     ///
@@ -462,7 +467,13 @@ impl<'a> Engine<'a> {
         Some(v)
     }
 
+<<<<<<< HEAD
     /// The [`ValueId`] of an operand: the
+||||||| e925ee58b
+    /// The [`ValueId`](crate::nir_value_graph::ValueId) of an operand: the
+=======
+    /// The [`ValueId`](ValueId) of an operand: the
+>>>>>>> origin/main
     /// promoted value directly, or the skeleton expr's value from the graph.
     pub fn operand_value(&mut self, op: Operand) -> Option<ValueId> {
         match op {
@@ -474,7 +485,16 @@ impl<'a> Engine<'a> {
     /// Read-only view of a value's kind. The returned reference borrows the
     /// engine's value-graph cache; callers that need to hold the kind across
     /// further `engine` calls should clone it.
+<<<<<<< HEAD
     pub fn value_kind(&mut self, id: ValueId) -> &crate::nir_value_graph::ValueKind {
+||||||| e925ee58b
+    pub fn value_kind(
+        &mut self,
+        id: crate::nir_value_graph::ValueId,
+    ) -> &crate::nir_value_graph::ValueKind {
+=======
+    pub fn value_kind(&mut self, id: ValueId) -> &ValueKind {
+>>>>>>> origin/main
         self.ensure_value_graph();
         self.body.values.kind(id)
     }
@@ -743,7 +763,7 @@ impl<'a> Engine<'a> {
 
     /// Supply the panic / `unreachable` callee ids for `condition_implication`'s
     /// panic-block recognizer. See [`Engine::is_panic_callee`].
-    pub fn set_panic_callee_ids(&mut self, ids: &'a IndexSet<crate::nir::FuncId>) {
+    pub fn set_panic_callee_ids(&mut self, ids: &'a IndexSet<FuncId>) {
         self.panic_callee_ids = Some(ids);
     }
 
@@ -751,7 +771,7 @@ impl<'a> Engine<'a> {
     /// call's heap effect by `func_id`. See `Engine::pure_builtin_callees`.
     /// Must be set before the first value query to take effect (the graph is
     /// built once and reused).
-    pub fn set_pure_builtin_callees(&mut self, ids: &'a IndexSet<crate::nir::FuncId>) {
+    pub fn set_pure_builtin_callees(&mut self, ids: &'a IndexSet<FuncId>) {
         self.pure_builtin_callees = Some(ids);
     }
 
@@ -764,7 +784,7 @@ impl<'a> Engine<'a> {
 
     /// Whether `func_id` is one of the supplied panic / `unreachable` callees.
     /// `false` when no set was supplied.
-    pub fn is_panic_callee(&self, func_id: crate::nir::FuncId) -> bool {
+    pub fn is_panic_callee(&self, func_id: FuncId) -> bool {
         self.panic_callee_ids.is_some_and(|s| s.contains(&func_id))
     }
 
@@ -1193,7 +1213,7 @@ impl<'a> Engine<'a> {
     /// the skeleton form.
     pub fn replace_expr_with_value(&mut self, id: ExprId, value: crate::const_eval::Value) -> bool {
         use crate::const_eval::Value;
-        use crate::nir_value_graph::ValueKind;
+        use ValueKind;
         let type_id = self.body.exprs[id].type_id;
         let kind = match value {
             Value::Int { value, .. } => ValueKind::Int(value, type_id),
@@ -1317,11 +1337,7 @@ impl<'a> Engine<'a> {
     /// return it as an `Operand::Value`. For passes
     /// that synthesize a constant in an operand position (a method arg, an
     /// assigned value) without a source node.
-    pub fn const_operand(
-        &mut self,
-        kind: crate::nir_value_graph::ValueKind,
-        type_id: crate::tir::TypeId,
-    ) -> Operand {
+    pub fn const_operand(&mut self, kind: ValueKind, type_id: TypeId) -> Operand {
         Operand::Value(self.body.values.alloc_unshared(kind, type_id))
     }
 
@@ -1778,7 +1794,7 @@ mod tests {
     use crate::nir::NirBinaryOp;
     use crate::nir_arena::{BlockNode, ExprNode, StmtNode};
     use crate::tir::TypeTable;
-    use crate::token::Span;
+    use Span;
     use std::assert_matches;
 
     /// Build a `Body` whose root block holds the statements `build` produces.
@@ -1800,10 +1816,10 @@ mod tests {
         })
     }
     fn lit(body: &mut Body, n: u64) -> Operand {
-        Operand::Value(body.values.alloc_unshared(
-            crate::nir_value_graph::ValueKind::Int(n, TypeTable::I32),
-            TypeTable::I32,
-        ))
+        Operand::Value(
+            body.values
+                .alloc_unshared(ValueKind::Int(n, TypeTable::I32), TypeTable::I32),
+        )
     }
     fn bin(
         body: &mut Body,
@@ -1986,10 +2002,7 @@ mod tests {
         let Operand::Value(v) = value else {
             panic!("expected folded constant operand, got {value:?}");
         };
-        assert_matches!(
-            body.values.kind(*v),
-            crate::nir_value_graph::ValueKind::Int(12, _)
-        );
+        assert_matches!(body.values.kind(*v), ValueKind::Int(12, _));
     }
 
     #[test]
@@ -2036,7 +2049,7 @@ mod tests {
                 .copied()
                 .filter(|s| {
                     !matches!(&e.body.stmts[*s].kind,
-                        StmtKind::Expr(op) if op.as_value().is_some_and(|v| matches!(e.body.values.kind(v), crate::nir_value_graph::ValueKind::Unit)))
+                        StmtKind::Expr(op) if op.as_value().is_some_and(|v| matches!(e.body.values.kind(v), ValueKind::Unit)))
                 })
                 .collect();
             if kept.len() == stmts.len() {
@@ -2055,10 +2068,10 @@ mod tests {
             let two = lit(b, 2);
             let add = bin(b, one, NirBinaryOp::Add, two);
             let let_stmt = let_x(b, add, false);
-            let unit = Operand::Value(b.values.alloc_unshared(
-                crate::nir_value_graph::ValueKind::Unit,
-                crate::tir::TypeTable::UNIT,
-            ));
+            let unit = Operand::Value(
+                b.values
+                    .alloc_unshared(ValueKind::Unit, crate::tir::TypeTable::UNIT),
+            );
             let unit_stmt = s(b, StmtKind::Expr(unit));
             let ret = ret_x(b);
             vec![let_stmt, unit_stmt, ret]

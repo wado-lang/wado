@@ -11,7 +11,13 @@ use cranelift_entity::EntityRef;
 use super::arena_query::strip_one_value_copy;
 use super::gate::{FunctionGate, GatedPass};
 use crate::hashmap::{IndexMap, IndexSet};
+<<<<<<< HEAD
 use crate::nir::{FuncId, NirFunction};
+||||||| e925ee58b
+use crate::nir::NirFunction;
+=======
+use crate::nir::{FuncId, NirFunction, NirUnaryOp};
+>>>>>>> origin/main
 use crate::nir_arena::{
     ArenaStructField, BlockId, Body, ExprId, ExprKind, NodeRef, Operand, StmtId, StmtKind,
 };
@@ -268,10 +274,7 @@ fn collect_ref_locals_in_fields(body: &Body, expr: ExprId, stores_aliased: &mut 
 
 fn extract_ref_local(body: &Body, expr: ExprId, stores_aliased: &mut IndexSet<u32>) {
     if let ExprKind::Unary { op, expr: inner } = &body.exprs[expr].kind
-        && matches!(
-            op,
-            crate::nir::NirUnaryOp::Ref | crate::nir::NirUnaryOp::MutRef
-        )
+        && matches!(op, NirUnaryOp::Ref | NirUnaryOp::MutRef)
         && let Some(ExprKind::Local { index, .. }) = inner.as_expr().map(|e| &body.exprs[e].kind)
     {
         stores_aliased.insert(*index);
@@ -435,12 +438,9 @@ fn ref_to_candidate_local(
         return None;
     };
     let is_mut = match op {
-        crate::nir::NirUnaryOp::Ref => false,
-        crate::nir::NirUnaryOp::MutRef => true,
-        crate::nir::NirUnaryOp::Not
-        | crate::nir::NirUnaryOp::Neg
-        | crate::nir::NirUnaryOp::BitNot
-        | crate::nir::NirUnaryOp::Deref => return None,
+        NirUnaryOp::Ref => false,
+        NirUnaryOp::MutRef => true,
+        NirUnaryOp::Not | NirUnaryOp::Neg | NirUnaryOp::BitNot | NirUnaryOp::Deref => return None,
     };
     let ie = inner.as_expr()?;
     let ExprKind::Local { index, .. } = &body.exprs[ie].kind else {

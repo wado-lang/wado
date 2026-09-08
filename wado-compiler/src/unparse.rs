@@ -932,6 +932,10 @@ impl<'a> Unparser<'a> {
                     s.output.push('"');
                 });
             }
+            AttrArg::Call(name, names) => {
+                self.output.push_str(name);
+                self.delimited("(", ")", names, |s, v| s.output.push_str(v));
+            }
         }
     }
 

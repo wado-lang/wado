@@ -8,11 +8,23 @@
 use std::cell::Cell;
 
 use crate::hashmap::{IndexMap, IndexSet};
+<<<<<<< HEAD
 use crate::nir::NirFunction;
+||||||| e925ee58b
+use crate::hashmap::IndexSet;
+use crate::nir::NirFunction;
+=======
+use crate::nir::{FuncId, NirFunction};
+>>>>>>> origin/main
 use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, NodeRef};
 use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
 use crate::nir_value_graph::ValueId;
+<<<<<<< HEAD
+||||||| e925ee58b
+=======
+use crate::tir::TypeTable;
+>>>>>>> origin/main
 
 /// Forwards stores to loads in every function. Used by the post-`field_scalarize`
 /// cleanup so the scalarization shadow inits (`__hfs_x = obj.f`) get their fields
@@ -45,10 +57,10 @@ pub fn forward_stores_to_loads_all(project: &mut NirPackage) -> bool {
 /// changed.
 fn forward_one(
     func: &mut NirFunction,
-    type_table: &crate::tir::TypeTable,
+    type_table: &TypeTable,
     first_param_types: &super::alias::FirstParamTypes,
     call_immutability: &super::alias::CallImmutability,
-    pure_builtin_callees: &crate::hashmap::IndexSet<crate::nir::FuncId>,
+    pure_builtin_callees: &IndexSet<FuncId>,
     ctfe_builtins: &crate::niri::CtfeBuiltinMap,
     buffers: &mut EngineBuffers,
 ) -> bool {

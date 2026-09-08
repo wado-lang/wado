@@ -102,6 +102,9 @@ pub struct ValueCopyPlan {
     /// finalized by `.build()` is not defensively copied. Superset of
     /// `returns_owned`.
     pub returns_self_projection: FuncKeySet,
+    /// Where each builtin said its result comes from: a fresh place, or a
+    /// component of one named parameter.
+    pub builtin_conventions: ownership::BuiltinConventions,
     /// Per-callee, per-position reference-storage: which parameter positions a
     /// callee may persist a reference to. A local whose `&`/`&mut` is passed at
     /// a *stored* position is borrow-escaped and cannot be moved; passed at a
@@ -141,7 +144,8 @@ pub fn plan(
     ref_receiver_methods: FuncKeySet,
 ) -> ValueCopyPlan {
     register_variant_cases(flat);
-    let seed = analyze::collect_seed_types(flat);
+    let builtin_conventions = ownership::BuiltinConventions::collect(flat);
+    let seed = analyze::collect_seed_types(flat, &builtin_conventions);
     let helpers = synthesize::synthesize_helpers(flat, seed);
     // Built after synthesis so the value-copy helpers (always owned) are present
     // in `flat.functions`, and shared: every summary below is a monotone
@@ -150,15 +154,25 @@ pub fn plan(
     // Three passes, because the paths gate the conventions
     // ([`hands_out_payload`]) and the conventions place the paths: a seed pass
     // without the gate breaks the knot.
-    let seed_conventions =
-        ownership::compute_return_conventions(flat, &call_graph, &place::ReturnPaths::default());
+    let seed_conventions = ownership::compute_return_conventions(
+        flat,
+        &call_graph,
+        &place::ReturnPaths::default(),
+        &builtin_conventions,
+    );
     let return_paths = place::compute_return_paths(
         flat,
         &call_graph,
         &flat.type_table.borrow(),
         &seed_conventions.returns_owned,
+        &builtin_conventions,
     );
-    let conventions = ownership::compute_return_conventions(flat, &call_graph, &return_paths);
+    let conventions = ownership::compute_return_conventions(
+        flat,
+        &call_graph,
+        &return_paths,
+        &builtin_conventions,
+    );
     let stored_params = stores::compute_stored_params(flat, &call_graph);
     let mut mut_receiver_methods = FuncKeySet::default();
     let mut mut_ref_params = FuncKeyMap::default();
@@ -178,15 +192,22 @@ pub fn plan(
         &call_graph,
         &return_paths,
         &flat.type_table.borrow(),
+        &builtin_conventions,
     );
     let indirect_owned_returns =
         ownership::compute_indirect_owned_returns(flat, &conventions.returns_owned);
     ValueCopyPlan {
         helpers,
-        mod_ref: modref::compute_mod_ref(flat, &return_paths, &conventions.returns_owned),
+        mod_ref: modref::compute_mod_ref(
+            flat,
+            &return_paths,
+            &conventions.returns_owned,
+            &builtin_conventions,
+        ),
         return_paths,
         returns_owned: conventions.returns_owned,
         returns_self_projection: conventions.returns_self_projection,
+        builtin_conventions,
         stored_params,
         mut_receiver_methods,
         confined_params,

@@ -1395,6 +1395,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let type_params = self
             .ann_decl_type_params(func.id)
             .expect("resolve_function records the type params for every function reify emits");
+        let declared_return_convention = extract_return_convention_attr(&func.attrs, &params);
 
         Some(TirFunction {
             module_source: ModuleSource::default(),
@@ -1455,6 +1456,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             ),
             export_name: extract_export_name_attr(&func.attrs),
             allocator_tag: extract_allocator_tag_attr(&func.attrs),
+            declared_return_convention,
             kind: tir::FunctionKind::Regular,
             return_abi: tir::ReturnAbi::Single,
         })
@@ -1828,6 +1830,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let type_params = self.ann_decl_type_params(func.id).expect(
             "resolve_method records the method type params for every impl method reify emits",
         );
+        let declared_return_convention = extract_return_convention_attr(&func.attrs, &params);
 
         Some(TirFunction {
             module_source: ModuleSource::default(),
@@ -1888,6 +1891,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             ),
             export_name: extract_export_name_attr(&func.attrs),
             allocator_tag: extract_allocator_tag_attr(&func.attrs),
+            declared_return_convention,
             kind: crate::tir::FunctionKind::Regular,
             return_abi: crate::tir::ReturnAbi::Single,
         })
@@ -1952,6 +1956,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             compiler_item: None,
             export_name: None,
             allocator_tag: None,
+            declared_return_convention: None,
             kind: FunctionKind::Regular,
             return_abi: ReturnAbi::default(),
         };
@@ -2044,7 +2049,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     emit(format!("unknown #[param] argument: {k}"));
                     ok = false;
                 }
-                ast::AttrArg::Str(s) | ast::AttrArg::Ident(s) | ast::AttrArg::Number(s) => {
+                ast::AttrArg::Str(s)
+                | ast::AttrArg::Ident(s)
+                | ast::AttrArg::Number(s)
+                | ast::AttrArg::Call(s, _) => {
                     emit(format!("unknown #[param] argument: {s}"));
                     ok = false;
                 }
@@ -10674,6 +10682,25 @@ fn extract_inline_hint_attr(attrs: &[crate::ast::Attribute]) -> crate::tir::Inli
         Some("never") => crate::tir::InlineHint::Never,
         None => crate::tir::InlineHint::Hint,
         _ => crate::tir::InlineHint::Auto,
+    }
+}
+
+/// The `#[returns(...)]` convention. `None` where the declaration states none,
+/// leaving the return-convention analysis to decide.
+fn extract_return_convention_attr(
+    attrs: &[ast::Attribute],
+    params: &[tir::TirParam],
+) -> Option<tir::ReturnConvention> {
+    let attr = attrs.iter().find(|a| a.name == "returns")?;
+    let arg = attr.args.first()?;
+    match arg.as_str() {
+        "owned" => Some(tir::ReturnConvention::Owned),
+        "part_of" => {
+            let named = arg.call_args().first()?;
+            let index = params.iter().position(|p| &p.name == named)?;
+            Some(tir::ReturnConvention::PartOf(index))
+        }
+        _ => None,
     }
 }
 

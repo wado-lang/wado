@@ -241,7 +241,18 @@ where it cannot prove move / share / fresh; no elision pass):
 - Freshness — `ownership.rs` return conventions (a call is fresh iff the callee
   returns owned), plus the literals that materialize their own storage: a string
   _and_ a bytes literal, both of which lower to a fresh aggregate over a packed
-  array. An _indirect_ call is fresh when every closure `__call` of its
+  array. Where a result comes from is one fact: a body is read for it, a
+  `core:builtin` declares it. `#[returns(owned)]` says the result is a fresh
+  place; `#[returns(part_of(p))]` says it names a component of parameter `p`.
+  The declaration is mandatory. Link asserts that a bodyless `core:builtin`
+  reading through a reference and returning storage carries one. What is left
+  undeclared cannot hand storage out at all, so reading it as fresh is a fact
+  rather than a guess. The obligation is checkable from the
+  signature because only a reference argument can carry storage out: a by-value
+  one is copied at the call. Link also snapshots what it read, since
+  monomorphization drops the generic declarations and materializes an instance
+  only for the few a later phase rewrites.
+  An _indirect_ call is fresh when every closure `__call` of its
   return type returns owned: closure lowering rewrites every callable value —
   a closure literal and a bare `FuncRef` alike — into a functor whose `__call`
   is an ordinary function, so those are the complete set of targets, and the
@@ -581,9 +592,15 @@ Verified against the tree.
 
       Only where the caller can name what it got, because one copy in a callee
       is shared by every call site and moving it out puts a copy on each of them
-      instead. Naming it means a `place::ReturnPath` that stays inside the
-      receiver's own storage; a path leaving through a `&` field lands where the
+      instead. Naming it means a `place::ReturnPath` that stays inside one
+      parameter's own storage; a path leaving through a `&` field lands where the
       caller cannot follow.
+
+      The path records _which_ parameter, not just the selectors. An accessor
+      need not hand out its receiver: `StructField::get(&self, v: &T)` returns a
+      field of `v`. Reading every path as the receiver's drops those, and a
+      dropped path leaves a place nothing can name. That is what made
+      `core:serde` deep-copy every field of every value it serialized.
 
       Whether a place is reached through a borrow is decided by the walk that
       resolves it, never re-derived from an expression's syntax. The walk
@@ -604,6 +621,33 @@ Verified against the tree.
       though — the same measurement over `syntax_highlight`, `json_catalog` and
       `sqlite_parse` finds 0%. Only a program passing deeply nested aggregates by
       value pays it.
+
+- [ ] Say which by-value argument a builtin stores into a `&mut` one.
+      `confine::raise_builtin_sides` infers it instead: every by-value aggregate
+      leaks once any `&mut` operand is present. That over-marks, which costs a
+      copy. It is exact over the whole population: `array_set`, `array_fill` and
+      `array_copy`. A builtin that retains an argument by some other route goes
+      unmarked, and that one is unsound rather than slow.
+      Closing the gap means a declaration, as the result's origin has. The
+      obligation cannot be checked the same way: a builtin that stores and one
+      that does not have the same signature, so no predicate says where an
+      omission is wrong. Such a declaration puts the fact where its author will
+      look. It does not buy the guarantee the result's origin gets.
+
+- [ ] Root the self-projection verdict at a parameter, as `ReturnPath` is.
+      `returns_self_projection` says a call is fresh when its receiver is, and
+      `analyze::is_owned_value` reads `args.first()` for that receiver. A wrapper
+      whose storage comes from a later parameter breaks the pairing:
+      `VariantCase::extract(&self, w)` returns a component of `w`, so answering
+      yes for it makes the caller test `c` — a freshly built member descriptor —
+      and call the result fresh. The copy `w` needs then disappears.
+      That is why a `core:builtin` answers no here whatever it declared, even
+      though `#[returns(part_of(p))]` names the parameter exactly. Reading the
+      declaration costs `reflect_member_read_copies` its `case` line and buys 4
+      changed goldens out of 1767, with the json and cbor benchmarks unmoved.
+      Closing it means the verdict carrying its parameter and
+      `is_owned_value` testing that argument, which is the same shape
+      `ReturnPath::param` already has.
 
 ## Deferred: the `move` and `unique` keywords
 

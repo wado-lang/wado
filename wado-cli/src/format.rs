@@ -7,7 +7,6 @@ use lexopt::Arg::Value;
 
 use crate::args::{self, CliExit};
 use crate::discover;
-use crate::manifest as project_manifest;
 
 pub struct FormatOptions {
     pub inputs: Vec<String>,
@@ -58,14 +57,20 @@ fn format_usage() -> String {
     .unwrap();
     writeln!(
         buf,
-        "recursively for *.wado files, honoring each package's [format]"
+        "recursively for *.wado files, skipping **/generated/** and **/build/**,"
     )
     .unwrap();
     writeln!(
         buf,
-        "exclude/include globs in its wado.toml, .gitignore, and submodules."
+        "the enclosing package's [format] exclude globs, .gitignore, and"
     )
     .unwrap();
+    writeln!(
+        buf,
+        "submodules; [format] include opts any of those back in."
+    )
+    .unwrap();
+    writeln!(buf, "A file named directly is formatted regardless.").unwrap();
     writeln!(buf).unwrap();
     writeln!(
         buf,
@@ -114,16 +119,15 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<FormatOptions, CliExit> 
     })
 }
 
-/// Expand the raw input paths into a concrete list of `*.wado` files.
-/// A file is kept as-is; a directory is searched recursively per package (see
-/// [`collect_package_tree`]), honoring each package's `[format]` filters plus
-/// `.gitignore` and git submodules.
+/// Expand the raw input paths into a concrete list of `*.wado` files. An
+/// explicit file is kept as-is: the golden-fixture scripts format excluded
+/// fixtures by naming them, so only directory expansion is filtered.
 fn resolve_inputs(inputs: &[String]) -> Result<Vec<PathBuf>, CliExit> {
     let mut files = Vec::new();
     for input in inputs {
         let path = Path::new(input);
         if path.is_dir() {
-            collect_package_tree(path, &mut files)?;
+            files.extend(discover::files_in_dir(path, &format_filters)?);
         } else {
             files.push(path.to_path_buf());
         }
@@ -131,49 +135,18 @@ fn resolve_inputs(inputs: &[String]) -> Result<Vec<PathBuf>, CliExit> {
     Ok(files)
 }
 
-/// Collect every formattable `*.wado` file at and below `root`, processing each
-/// package (a directory with its own `wado.toml`) with its own `[format]`
-/// filters — exactly how `wado test` discovers per-package. A nested package's
-/// `exclude`/`include` is relative to that package's root, so e.g.
-/// `package-gale/wado.toml` can exclude its own `tests/generated/**`.
-fn collect_package_tree(root: &Path, files: &mut Vec<PathBuf>) -> Result<(), CliExit> {
-    let mut queue = vec![root.to_path_buf()];
-    while let Some(pkg) = queue.pop() {
-        let (excludes, includes) = format_filters_for(&pkg)?;
-        let result =
-            discover::discover_wado_files(&pkg, &excludes, &includes).map_err(CliExit::error)?;
-        files.extend(result.files);
-        queue.extend(result.subpackages);
-    }
-    Ok(())
-}
-
 /// Directories never formatted by default: machine-generated parser output and
 /// build intermediates. A package can opt a path back in via `[format].include`.
 const BUILTIN_FORMAT_EXCLUDES: &[&str] = &["**/generated/**", "**/build/**"];
 
-/// The effective exclude / include filters for the package rooted exactly at
-/// `dir`: the built-in skips above plus the package's own `[format].exclude`,
-/// and its `[format].include` (which overrides both). A manifest discovered
-/// only in an ancestor directory does not apply (its globs are relative to a
-/// different root), mirroring how `wado test` reads `[test]` filters.
-fn format_filters_for(dir: &Path) -> Result<(discover::ExcludeSet, discover::IncludeSet), CliExit> {
-    let (exclude, include) = match project_manifest::discover(dir) {
-        Ok(Some(project)) if project.root == dir => (
-            project.manifest.format.exclude,
-            project.manifest.format.include,
-        ),
-        Ok(_) => (Vec::new(), Vec::new()),
-        Err(e) => return Err(CliExit::error(e)),
-    };
-    let patterns: Vec<&str> = BUILTIN_FORMAT_EXCLUDES
-        .iter()
-        .copied()
-        .chain(exclude.iter().map(String::as_str))
-        .collect();
-    let excludes = discover::ExcludeSet::compile(&patterns).map_err(CliExit::error)?;
-    let includes = discover::IncludeSet::compile(&include).map_err(CliExit::error)?;
-    Ok((excludes, includes))
+fn format_filters(
+    pkg_root: &Path,
+) -> Result<(discover::ExcludeSet, discover::IncludeSet), CliExit> {
+    discover::filters_at(
+        pkg_root,
+        |m| (&m.format.exclude, &m.format.include),
+        BUILTIN_FORMAT_EXCLUDES,
+    )
 }
 
 pub fn run(opts: FormatOptions) -> Result<(), CliExit> {
@@ -239,4 +212,75 @@ pub fn run(opts: FormatOptions) -> Result<(), CliExit> {
         return Err(CliExit::silent_failure(1));
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::BTreeSet;
+
+    use crate::discover::fixture::{one, touch, write_manifest};
+
+    fn resolved_names(dir: &Path) -> BTreeSet<String> {
+        resolve_inputs(&[dir.to_string_lossy().into_owned()])
+            .unwrap()
+            .iter()
+            .map(|p| p.file_name().unwrap().to_string_lossy().into_owned())
+            .collect()
+    }
+
+    // `[format]` globs are package-root-relative, so a subdirectory argument
+    // must still be walked under the enclosing manifest — otherwise
+    // `wado format wado-compiler/tests` rewrites the very fixtures that
+    // manifest excludes.
+    #[test]
+    fn subdir_invocation_honours_enclosing_manifest() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        write_manifest(
+            root,
+            "[format]\nexclude = [\"sub/gen/**\"]\ninclude = [\"sub/**/keep.wado\"]\n",
+        );
+        touch(&root.join("sub/gen/drop.wado"));
+        touch(&root.join("sub/gen/keep.wado"));
+
+        let got = resolved_names(&root.join("sub"));
+        assert!(got.contains("keep.wado"), "{got:?}");
+        assert!(!got.contains("drop.wado"), "{got:?}");
+    }
+
+    // The built-in skips apply without a manifest saying so, and `include`
+    // opts a path back in.
+    #[test]
+    fn generated_output_is_skipped_unless_included() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        touch(&root.join("generated/parser.wado"));
+        touch(&root.join("build/tmp.wado"));
+        touch(&root.join("src/main.wado"));
+        assert_eq!(resolved_names(root), one("main.wado"));
+
+        write_manifest(root, "[format]\ninclude = [\"generated/**\"]\n");
+        assert_eq!(
+            resolved_names(root),
+            ["main.wado", "parser.wado"]
+                .iter()
+                .map(ToString::to_string)
+                .collect()
+        );
+    }
+
+    // The golden-fixture scripts format excluded fixture files by naming them,
+    // so an explicit file argument bypasses the filters by design.
+    #[test]
+    fn an_explicit_file_bypasses_the_filters() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        write_manifest(root, "[format]\nexclude = [\"tests/**\"]\n");
+        let skipped = root.join("tests/skip.wado");
+        touch(&skipped);
+
+        let files = resolve_inputs(&[skipped.to_string_lossy().into_owned()]).unwrap();
+        assert_eq!(files, vec![skipped]);
+    }
 }

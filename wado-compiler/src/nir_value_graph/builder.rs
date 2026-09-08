@@ -10,6 +10,7 @@ use crate::nir::{FuncId, NirBinaryOp, NirUnaryOp};
 use crate::nir_arena::{
     ArmData, BlockId, Body, ExprId, ExprKind, NodeRef, Operand, PatId, PatKind, StmtId, StmtKind,
 };
+use crate::tir::TypeTable;
 
 use super::{HeapVersion, OpaqueSource, ValueId, ValueKind, ValuePool};
 
@@ -209,7 +210,7 @@ pub fn build(
     untrackable: &IndexSet<u32>,
     mut_escaped: &IndexSet<u32>,
     calls: CallFacts<'_>,
-    type_table: Option<&crate::tir::TypeTable>,
+    type_table: Option<&TypeTable>,
 ) -> ValueGraphBuild {
     // Build into the body's own pool: take it out as the seed (so a promoted
     // `Operand::Value` resolves through the same ids), grow it during the walk,
@@ -246,7 +247,16 @@ pub(crate) fn build_scoped(
     aliased: &IndexSet<u32>,
     untrackable: &IndexSet<u32>,
     mut_escaped: &IndexSet<u32>,
+<<<<<<< HEAD
     type_table: Option<&crate::tir::TypeTable>,
+||||||| e925ee58b
+    aliased: &crate::hashmap::IndexSet<u32>,
+    untrackable: &crate::hashmap::IndexSet<u32>,
+    mut_escaped: &crate::hashmap::IndexSet<u32>,
+    type_table: Option<&crate::tir::TypeTable>,
+=======
+    type_table: Option<&TypeTable>,
+>>>>>>> origin/main
     calls: CallFacts<'_>,
     scratch: &mut ValuePool,
     heap_seed: Option<&HeapSnapshot>,
@@ -294,7 +304,16 @@ pub(crate) fn walk_scoped(
     aliased: &IndexSet<u32>,
     untrackable: &IndexSet<u32>,
     mut_escaped: &IndexSet<u32>,
+<<<<<<< HEAD
     type_table: Option<&crate::tir::TypeTable>,
+||||||| e925ee58b
+    aliased: &crate::hashmap::IndexSet<u32>,
+    untrackable: &crate::hashmap::IndexSet<u32>,
+    mut_escaped: &crate::hashmap::IndexSet<u32>,
+    type_table: Option<&crate::tir::TypeTable>,
+=======
+    type_table: Option<&TypeTable>,
+>>>>>>> origin/main
     calls: CallFacts<'_>,
     scratch: &mut ValuePool,
     heap_seed: Option<&HeapSnapshot>,
@@ -383,7 +402,7 @@ fn reintern_live_rooted(
     live: &mut ValuePool,
     id: ValueId,
     live_base: u32,
-    type_table: Option<&crate::tir::TypeTable>,
+    type_table: Option<&TypeTable>,
 ) -> Option<ValueId> {
     if id.index() < live_base {
         return Some(id);
@@ -492,7 +511,7 @@ struct Builder<'a> {
     /// Type table for constant folding of pure arithmetic on literal operands
     /// (`Binary` / `Unary`). `None` disables folding (the value graph still
     /// builds structural nodes). See [`Builder::fold_binary_const`].
-    type_table: Option<&'a crate::tir::TypeTable>,
+    type_table: Option<&'a TypeTable>,
     /// Per-loop pre-header `current_value` snapshots. See
     /// [`ValueGraphBuild::loop_entry_values`].
     loop_entry_values: IndexMap<BlockId, IndexMap<u32, ValueId>>,
@@ -518,7 +537,16 @@ impl<'a> Builder<'a> {
         aliased: &IndexSet<u32>,
         untrackable: &IndexSet<u32>,
         mut_escaped: &IndexSet<u32>,
+<<<<<<< HEAD
         type_table: Option<&'a crate::tir::TypeTable>,
+||||||| e925ee58b
+        aliased: &crate::hashmap::IndexSet<u32>,
+        untrackable: &crate::hashmap::IndexSet<u32>,
+        mut_escaped: &crate::hashmap::IndexSet<u32>,
+        type_table: Option<&'a crate::tir::TypeTable>,
+=======
+        type_table: Option<&'a TypeTable>,
+>>>>>>> origin/main
         pool: ValuePool,
     ) -> Self {
         Self {
@@ -664,7 +692,7 @@ impl<'a> Builder<'a> {
         &self,
         vn: ValueId,
         op: Operand,
-        tt: &crate::tir::TypeTable,
+        tt: &TypeTable,
     ) -> Option<const_eval::Value> {
         let prim = const_eval::prim_of(self.operand_type(op), tt);
         super::value_kind_to_const(self.pool.kind(vn), prim)
@@ -2389,7 +2417,7 @@ fn collect_writes_in_pattern(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::tir::TypeTable;
+    use TypeTable;
 
     // ----- Body builders for tests -----
 
