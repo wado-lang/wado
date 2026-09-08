@@ -327,7 +327,7 @@ impl<'a> Resolver<'a> {
                 Names::Value | Names::Unknown => Names::Unknown,
             },
             // A member read borrows the slot in place, so it names the storage
-            // of the parameter its `#[returns(part_of(p))]` names, one `Index`
+            // of the parameter its `#[returns(part_of = p)]` names, one `Index`
             // further in. `Index` is the honest selector: the index is a runtime
             // value, so which component it lands on is not known here.
             TirExprKind::Call { func, args, .. } if func.module_source.is_core_builtin() => {

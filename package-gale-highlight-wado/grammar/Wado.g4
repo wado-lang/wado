@@ -58,8 +58,7 @@ attrArgs
     ;
 
 attrArg
-    : identifier '(' (identifier (',' identifier)*)? ')'
-    | identifier ('=' attrValue)?
+    : identifier ('=' attrValue)?
     | attrValue
     ;
 

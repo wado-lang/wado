@@ -5841,7 +5841,7 @@ pub enum ReturnConvention {
     /// `#[returns(owned)]` — every returned value is freshly materialized, so a
     /// caller may consume it as a move.
     Owned,
-    /// `#[returns(part_of(p))]` — the result names a component of parameter `p`
+    /// `#[returns(part_of = p)]` — the result names a component of parameter `p`
     /// in place, so it lives as long as that argument's storage does.
     PartOf(usize),
 }

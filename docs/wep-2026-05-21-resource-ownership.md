@@ -243,7 +243,7 @@ where it cannot prove move / share / fresh; no elision pass):
   _and_ a bytes literal, both of which lower to a fresh aggregate over a packed
   array. Where a result comes from is one fact: a body is read for it, a
   `core:builtin` declares it. `#[returns(owned)]` says the result is a fresh
-  place; `#[returns(part_of(p))]` says it names a component of parameter `p`.
+  place; `#[returns(part_of = p)]` says it names a component of parameter `p`.
   The declaration is mandatory. Link asserts that a bodyless `core:builtin`
   reading through a reference and returning storage carries one. What is left
   undeclared cannot hand storage out at all, so reading it as fresh is a fact
@@ -259,7 +259,7 @@ where it cannot prove move / share / fresh; no elision pass):
   receiver. `VariantCase::extract(&self, w)` returns a component of `w`; testing
   `self` asks about a member descriptor the walk built fresh, and calls the
   result fresh while `w` is still held. A `core:builtin` answers the same
-  question from `#[returns(part_of(p))]`, which names `p` outright.
+  question from `#[returns(part_of = p)]`, which names `p` outright.
 
   An _indirect_ call is fresh when every closure `__call` of its
   return type returns owned: closure lowering rewrites every callable value —

@@ -932,9 +932,10 @@ impl<'a> Unparser<'a> {
                     s.output.push('"');
                 });
             }
-            AttrArg::Call(name, names) => {
-                self.output.push_str(name);
-                self.delimited("(", ")", names, |s, v| s.output.push_str(v));
+            AttrArg::KeyIdent(k, v) => {
+                self.output.push_str(k);
+                self.output.push_str(" = ");
+                self.output.push_str(v);
             }
         }
     }
@@ -3303,9 +3304,7 @@ fn ends_in_trailing_cast(expr: &Expr) -> bool {
 fn closure_body_needs_parens(expr: &Expr) -> bool {
     match expr {
         Expr::WithHandler(_) => true,
-        Expr::Binary(b) => {
-            !needs_parens(&b.left, b.op, true) && closure_body_needs_parens(&b.left)
-        }
+        Expr::Binary(b) => !needs_parens(&b.left, b.op, true) && closure_body_needs_parens(&b.left),
         Expr::Range(r) => closure_body_needs_parens(&r.start),
         _ => false,
     }

@@ -39,7 +39,7 @@ pub fn hands_out_storage(func: &TirFunction, type_table: &TypeTable) -> bool {
 
 /// The obligation a bodyless `core:builtin` carries at its declaration: one that
 /// answers yes must say which parameter its result comes from with
-/// `#[returns(part_of(p))]`, or `#[returns(owned)]` that it allocates.
+/// `#[returns(part_of = p)]`, or `#[returns(owned)]` that it allocates.
 ///
 /// Link asks this before monomorphization, so a generic declaration is judged on
 /// the widest instantiation of its return type rather than on the bare type
@@ -75,7 +75,7 @@ impl BuiltinDeclarations {
     }
 
     /// The parameter a builtin's result is a component of, for a call that
-    /// declared `#[returns(part_of(p))]`.
+    /// declared `#[returns(part_of = p)]`.
     pub fn part_of(&self, func: &FunctionRef) -> Option<usize> {
         match self.get(func)?.returns? {
             ReturnConvention::PartOf(param) => Some(param),
@@ -129,7 +129,7 @@ impl<'a> OwnedCalls<'a> {
 
     /// Whether a call to `func` yields an owned (fresh) value. A `core:builtin`
     /// answers from its declaration: one that hands out an argument's storage
-    /// must say `#[returns(part_of(p))]`, so anything that did not is fresh. A
+    /// must say `#[returns(part_of = p)]`, so anything that did not is fresh. A
     /// body function is owned iff the fixpoint proved it so, and an extern /
     /// opaque callee defaults to borrowed.
     pub fn is_owned(&self, func: &FunctionRef) -> bool {
@@ -141,7 +141,7 @@ impl<'a> OwnedCalls<'a> {
 
     /// The parameter `func` returns a projection of, by position, so a call to
     /// it is fresh exactly when *that* argument is. A body function answers from
-    /// the fixpoint; a `core:builtin` from `#[returns(part_of(p))]`, which says
+    /// the fixpoint; a `core:builtin` from `#[returns(part_of = p)]`, which says
     /// the result is a component of `p` — and a component of a place nothing
     /// else reaches is one nothing else reaches. A wasm asset declares neither.
     pub fn self_projection_param(&self, func: &FunctionRef) -> Option<usize> {
@@ -269,7 +269,7 @@ fn is_receiver_projection(
         | TirExprKind::VariantPayload { expr: inner, .. }
         | TirExprKind::Cast { expr: inner, .. }
         | TirExprKind::Index { expr: inner, .. } => recurse(inner),
-        // A builtin hands out the parameter its `#[returns(part_of(p))]` names,
+        // A builtin hands out the parameter its `#[returns(part_of = p)]` names,
         // which need not be the first: `struct_field_get(v, i)` reads `v`.
         TirExprKind::Call { func, args, .. } if func.module_source.is_core_builtin() => builtins
             .part_of(func)

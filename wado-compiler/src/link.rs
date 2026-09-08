@@ -30,7 +30,7 @@ fn record_builtin_declaration(
     assert!(
         func.declared_return_convention.is_some() || !owes_return_convention(func, type_table),
         "builtin `{}` reads through a reference and returns storage: \
-         declare #[returns(part_of(p))] or #[returns(owned)]",
+         declare #[returns(part_of = p)] or #[returns(owned)]",
         func.name,
     );
     let stores: Vec<usize> = func

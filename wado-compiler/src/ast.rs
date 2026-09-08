@@ -1279,33 +1279,30 @@ pub enum AttrArg {
     KeyArray(String, Vec<String>),
     /// A numeric literal, e.g. `120000`.
     Number(String),
-    /// A name applied to bare identifiers, e.g. `part_of(arr)`.
-    Call(String, Vec<String>),
+    /// A `key = ident` pair, whose value names something in the source rather
+    /// than carrying text, e.g. `part_of = arr`.
+    KeyIdent(String, String),
 }
 
 impl AttrArg {
     /// Returns the string value: for `Str`/`Ident`/`Number` the contained string;
-    /// for `KeyValue` the value side; for `KeyArray` the first element (empty if
-    /// none); for `Call` the applied name, so `part_of(arr)` reads as `part_of`.
+    /// for `KeyValue`/`KeyIdent` the value side; for `KeyArray` the first element
+    /// (empty if none).
     pub fn as_str(&self) -> &str {
         match self {
-            Self::Str(s) | Self::Ident(s) | Self::Number(s) | Self::Call(s, _) => s,
-            Self::KeyValue(_, v) => v,
+            Self::Str(s) | Self::Ident(s) | Self::Number(s) => s,
+            Self::KeyValue(_, v) | Self::KeyIdent(_, v) => v,
             Self::KeyArray(_, vs) => vs.first().map(String::as_str).unwrap_or(""),
         }
     }
 
-    /// The identifiers this arg applies, for a `Call`; empty for every other
-    /// shape.
+    /// The name this argument is written under: the key of a `key = ...` pair,
+    /// or the argument itself where it is a bare word.
     #[must_use]
-    pub fn call_args(&self) -> &[String] {
+    pub fn name(&self) -> &str {
         match self {
-            Self::Call(_, args) => args,
-            Self::Str(_)
-            | Self::Ident(_)
-            | Self::Number(_)
-            | Self::KeyValue(..)
-            | Self::KeyArray(..) => &[],
+            Self::Str(s) | Self::Ident(s) | Self::Number(s) => s,
+            Self::KeyValue(k, _) | Self::KeyArray(k, _) | Self::KeyIdent(k, _) => k,
         }
     }
 }
@@ -1346,12 +1343,7 @@ impl Attribute {
     ///
     /// For `#[wire(default)]`, `attr.has_arg("default")` returns `true`.
     pub fn has_arg(&self, name: &str) -> bool {
-        self.args.iter().any(|arg| match arg {
-            AttrArg::Str(s) | AttrArg::Ident(s) | AttrArg::Number(s) | AttrArg::Call(s, _) => {
-                s == name
-            }
-            AttrArg::KeyValue(k, _) | AttrArg::KeyArray(k, _) => k == name,
-        })
+        self.args.iter().any(|arg| arg.name() == name)
     }
 
     /// The backing `#[cm(..., type=...)]` declares, if any.

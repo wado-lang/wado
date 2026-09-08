@@ -2045,14 +2045,13 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         for arg in &attr.args {
             match arg {
                 ast::AttrArg::KeyValue(k, _) if k == "name" || k == "from_env" => {}
-                ast::AttrArg::KeyValue(k, _) | ast::AttrArg::KeyArray(k, _) => {
+                ast::AttrArg::KeyValue(k, _)
+                | ast::AttrArg::KeyArray(k, _)
+                | ast::AttrArg::KeyIdent(k, _) => {
                     emit(format!("unknown #[param] argument: {k}"));
                     ok = false;
                 }
-                ast::AttrArg::Str(s)
-                | ast::AttrArg::Ident(s)
-                | ast::AttrArg::Number(s)
-                | ast::AttrArg::Call(s, _) => {
+                ast::AttrArg::Str(s) | ast::AttrArg::Ident(s) | ast::AttrArg::Number(s) => {
                     emit(format!("unknown #[param] argument: {s}"));
                     ok = false;
                 }
@@ -2112,21 +2111,22 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         };
 
         let Some(arg) = attr.args.first() else {
-            return emit("#[returns] takes `owned` or `part_of(param)`".to_string());
+            return emit("#[returns] takes `owned` or `part_of = param`".to_string());
         };
-        match arg.as_str() {
-            "owned" => Some(tir::ReturnConvention::Owned),
-            "part_of" => {
-                let Some(named) = arg.call_args().first() else {
-                    return emit("#[returns(part_of(...))] takes a parameter name".to_string());
-                };
+        match arg {
+            ast::AttrArg::Ident(name) if name == "owned" => Some(tir::ReturnConvention::Owned),
+            ast::AttrArg::KeyIdent(key, named) if key == "part_of" => {
                 match params.iter().position(|p| &p.name == named) {
                     Some(index) => Some(tir::ReturnConvention::PartOf(index)),
-                    None => emit(format!("#[returns(part_of({named}))] names no parameter")),
+                    None => emit(format!("#[returns(part_of = {named})] names no parameter")),
                 }
             }
-            other => emit(format!(
-                "unknown #[returns] convention: {other} (expected `owned` or `part_of(param)`)"
+            _ if arg.name() == "part_of" => {
+                emit("#[returns(part_of = ...)] takes a parameter name, unquoted".to_string())
+            }
+            _ => emit(format!(
+                "unknown #[returns] convention: {} (expected `owned` or `part_of = param`)",
+                arg.name()
             )),
         }
     }
