@@ -1,0 +1,26 @@
+//! `impl Default for List<T>` declares no `impl<T>` and is still generic in
+//! `T`, which the receiver fills. Reading "declares no parameters" as "written
+//! for one instantiation" named its function under the head as written, and
+//! `List::default()` then reached WIR build unresolved.
+
+struct Bag<T> {
+    v: T,
+}
+
+trait Make {
+    fn make() -> Self;
+}
+
+impl Make for Bag<T> {
+    fn make() -> Bag<T> {
+        return Bag { v: 0 as T };
+    }
+}
+
+test "a block generic through its head alone is not one instantiation" {
+    let b: Bag<i32> = Bag::make();
+    assert b.v == 0;
+}
+
+__DATA__
+{"test": {}}

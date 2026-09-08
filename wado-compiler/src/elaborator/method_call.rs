@@ -3252,23 +3252,30 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.import_original_name(&head, impl_module)
     }
 
-    /// The *concrete* block a selection came from — one written for a single
-    /// instantiation, which hosts its own function under its own head. `None`
-    /// for a generic block, whose instance monomorphization materialises in the
+    /// The block a selection came from, where it is written for a single
+    /// instantiation: it hosts its own function, under its own head. `None` for
+    /// a generic block, whose instance monomorphization materialises in the
     /// receiver's module and under the receiver's own name, and for a spelling
     /// no trait impl answered.
+    ///
+    /// Read from the target's resolved arguments, not from the block's declared
+    /// parameters: `impl Default for List<T>` declares none and is still
+    /// generic in `T`, which the receiver fills. An argument that *contains* a
+    /// parameter leaves the block open too — `Holder<fn(T) -> i32>` is no one
+    /// instantiation.
     fn concrete_impl_of(&self, selected: Option<&StaticMethodRef>) -> Option<DefId> {
         let impl_def = self
             .tysys
             .signatures
             .method_sig(selected?.method_id?)?
             .declaring_impl?;
-        self.tysys
-            .trait_env
-            .impl_headers
-            .get(&impl_def)
-            .filter(|header| header.is_concrete())
-            .map(|_| impl_def)
+        let sig = self.tysys.signatures.impl_sig(impl_def)?;
+        let table = self.tysys.type_table.borrow();
+        let open = sig
+            .target_type_args
+            .iter()
+            .any(|&arg| table.contains_type_param(arg));
+        (!open).then_some(impl_def)
     }
 
     /// The module a concrete block hosts its function in — its own.
