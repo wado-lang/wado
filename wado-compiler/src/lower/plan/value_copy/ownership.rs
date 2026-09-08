@@ -48,9 +48,9 @@ fn declares_owned(func: &TirFunction) -> bool {
 /// [`FlatPackage::builtin_declarations`], which link snapshots before
 /// monomorphization drops the generic declarations.
 #[derive(Default)]
-pub struct BuiltinConventions(IndexMap<String, BuiltinDeclaration>);
+pub struct BuiltinDeclarations(IndexMap<String, BuiltinDeclaration>);
 
-impl BuiltinConventions {
+impl BuiltinDeclarations {
     pub fn collect(project: &FlatPackage) -> Self {
         Self(project.builtin_declarations.clone())
     }
@@ -82,7 +82,7 @@ impl BuiltinConventions {
 pub struct OwnedCalls<'a> {
     returns_owned: &'a FuncKeySet,
     returns_self_projection: &'a FuncKeyMap<usize>,
-    builtin_conventions: &'a BuiltinConventions,
+    builtins: &'a BuiltinDeclarations,
     indirect_owned_returns: Option<&'a IndexSet<TypeId>>,
 }
 
@@ -90,12 +90,12 @@ impl<'a> OwnedCalls<'a> {
     pub fn new(
         returns_owned: &'a FuncKeySet,
         returns_self_projection: &'a FuncKeyMap<usize>,
-        builtin_conventions: &'a BuiltinConventions,
+        builtins: &'a BuiltinDeclarations,
     ) -> Self {
         Self {
             returns_owned,
             returns_self_projection,
-            builtin_conventions,
+            builtins,
             indirect_owned_returns: None,
         }
     }
@@ -123,7 +123,7 @@ impl<'a> OwnedCalls<'a> {
     /// opaque callee defaults to borrowed.
     pub fn is_owned(&self, func: &FunctionRef) -> bool {
         if func.module_source.is_core_builtin() {
-            return self.builtin_conventions.part_of(func).is_none();
+            return self.builtins.part_of(func).is_none();
         }
         self.returns_owned.contains(&func.module_source, &func.name)
     }
@@ -135,7 +135,7 @@ impl<'a> OwnedCalls<'a> {
     /// else reaches is one nothing else reaches. A wasm asset declares neither.
     pub fn self_projection_param(&self, func: &FunctionRef) -> Option<usize> {
         if func.module_source.is_core_builtin() {
-            return self.builtin_conventions.part_of(func);
+            return self.builtins.part_of(func);
         }
         if func.module_source.is_wasm_asset() {
             return None;
@@ -164,7 +164,7 @@ pub fn compute_receiver_alias(
     call_graph: &CallGraph,
     return_paths: &super::place::ReturnPaths,
     type_table: &TypeTable,
-    builtins: &BuiltinConventions,
+    builtins: &BuiltinDeclarations,
 ) -> FuncKeySet {
     let mut set = FuncKeySet::default();
     call_graph.solve(project, |id| {
@@ -191,13 +191,13 @@ pub fn compute_receiver_alias(
 fn function_returns_receiver_alias(
     body: &TirBlock,
     set: &FuncKeySet,
-    builtins: &BuiltinConventions,
+    builtins: &BuiltinDeclarations,
     type_table: &TypeTable,
     hands_out_payload: bool,
 ) -> bool {
     struct W<'a> {
         set: &'a FuncKeySet,
-        builtins: &'a BuiltinConventions,
+        builtins: &'a BuiltinDeclarations,
         type_table: &'a TypeTable,
         hands_out_payload: bool,
         all_alias: bool,
@@ -241,7 +241,7 @@ fn is_receiver_projection(
     expr: &TirExpr,
     param: u32,
     set: &FuncKeySet,
-    builtins: &BuiltinConventions,
+    builtins: &BuiltinDeclarations,
 ) -> bool {
     let recurse = |inner| is_receiver_projection(inner, param, set, builtins);
     match &expr.kind {
@@ -286,7 +286,7 @@ pub fn compute_return_conventions(
     project: &FlatPackage,
     call_graph: &CallGraph,
     return_paths: &super::place::ReturnPaths,
-    builtin_conventions: &BuiltinConventions,
+    builtins: &BuiltinDeclarations,
 ) -> ReturnConventions {
     let type_table = project.type_table.borrow();
 
@@ -311,7 +311,7 @@ pub fn compute_return_conventions(
             call_graph,
             return_paths,
             &type_table,
-            builtin_conventions,
+            builtins,
             &mut owned,
             &mut self_proj,
         );
@@ -333,7 +333,7 @@ fn settle_component(
     call_graph: &CallGraph,
     return_paths: &super::place::ReturnPaths,
     type_table: &TypeTable,
-    builtin_conventions: &BuiltinConventions,
+    builtins: &BuiltinDeclarations,
     owned: &mut FuncKeySet,
     self_proj: &mut FuncKeyMap<usize>,
 ) {
@@ -366,7 +366,7 @@ fn settle_component(
         }
         let body = func.body.as_ref().expect("members have bodies");
         let (ret_owned, ret_self_proj) = {
-            let oracle = OwnedCalls::new(owned, self_proj, builtin_conventions);
+            let oracle = OwnedCalls::new(owned, self_proj, builtins);
             let hands_out_payload = super::hands_out_payload(&func, return_paths);
             function_return_convention(body, &func.params, &oracle, type_table, hands_out_payload)
         };

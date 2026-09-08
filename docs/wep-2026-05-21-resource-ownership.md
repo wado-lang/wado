@@ -637,17 +637,11 @@ Verified against the tree.
       `sqlite_parse` finds 0%. Only a program passing deeply nested aggregates by
       value pays it.
 
-- [ ] Say which _field_ a stored parameter is stored into. `stores[p]` records
-      that `p` outlives the call, not where it lands, and `array_copy(dst, _,
-      src, _, _)` is the case that needs the difference: for a reference `T` its
-      elements reach `dst` afterwards, so `src` escapes into a place the caller
-      may still hold.
-      Written with what exists, `with stores[src]` marks the whole reference
-      borrow-escaped at all twenty call sites. Fifteen are `Array<u8>`, where a
-      scalar element escapes nothing. The other five are the backing-array swap
-      in `List::grow` and its neighbours, which hand elements from an array they
-      then discard — the hottest paths in the stdlib, paying for a leak none of
-      them has. So the declaration to add is not this one; the granularity is.
+- [ ] Say which _field_ a stored parameter is stored into. The item above wants
+      it to re-root an iterator's element read at the list; `array_copy`'s
+      elements reaching `dst` want it too. Recorded with the rest of what
+      `stores[...]` cannot yet say, in
+      [WEP: Value Semantics and Reference Stores](./wep-2026-01-12-value-semantics-and-stores.md).
 
 ## Deferred: the `move` and `unique` keywords
 

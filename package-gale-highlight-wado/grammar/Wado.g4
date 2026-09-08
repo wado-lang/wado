@@ -592,8 +592,11 @@ arrayElement
     | expression
     ;
 
+// The `with` row is the closure's own, not the handler expression that shares
+// the keyword: a handler is written inside the body. The compiler reads it and
+// reports that it carries none yet, so the shape is syntax either way.
 closure
-    : ('||' | '|' closureParamList? '|') returnType? (block | expression)
+    : ('||' | '|' closureParamList? '|') returnType? withClause? (block | expression)
     ;
 
 closureParamList

@@ -8,7 +8,7 @@
 
 use super::funcset::{FuncKeyMap, FuncKeySet};
 use super::needs_value_copy;
-use super::ownership::{BuiltinConventions, OwnedCalls};
+use super::ownership::{BuiltinDeclarations, OwnedCalls};
 use crate::flat_package::FlatPackage;
 use crate::hashmap::IndexSet;
 use crate::tir::{
@@ -25,12 +25,12 @@ use crate::tir_visitor::TirRefVisitor;
 /// owned yet. A seed the precise fold never calls is dead-code-eliminated.
 pub fn collect_seed_types(
     project: &FlatPackage,
-    builtins: &BuiltinConventions,
+    builtins: &BuiltinDeclarations,
 ) -> IndexSet<TypeId> {
     let type_table = project.type_table.borrow();
     let no_owned = FuncKeySet::default();
     let no_self_proj = FuncKeyMap::default();
-    // The builtin conventions must be the real ones even here: they are
+    // The builtin declarations must be the real ones even here: they are
     // declared rather than inferred, and an empty set reads every builtin as
     // fresh, which misses the seed a borrowed one needs.
     let oracle = OwnedCalls::new(&no_owned, &no_self_proj, builtins);

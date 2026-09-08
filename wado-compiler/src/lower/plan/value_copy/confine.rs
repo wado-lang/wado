@@ -11,7 +11,7 @@
 use super::callgraph::CallGraph;
 use super::funcset::FuncKeyMap;
 use super::needs_value_copy;
-use super::ownership::BuiltinConventions;
+use super::ownership::BuiltinDeclarations;
 use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::tir::{
@@ -52,7 +52,7 @@ enum Kind {
 pub fn compute_confined_params(
     project: &FlatPackage,
     call_graph: &CallGraph,
-    builtins: &BuiltinConventions,
+    builtins: &BuiltinDeclarations,
 ) -> ConfinedParams {
     let type_table = project.type_table.borrow();
     let kinds = classify_functions(project);
@@ -131,7 +131,7 @@ fn classify_functions(project: &FlatPackage) -> FuncKeyMap<Kind> {
 
 struct Ctx<'a> {
     type_table: &'a TypeTable,
-    builtins: &'a BuiltinConventions,
+    builtins: &'a BuiltinDeclarations,
     kinds: &'a FuncKeyMap<Kind>,
     funcs: &'a FuncKeyMap<ParamEscape>,
 }
@@ -164,6 +164,18 @@ impl Ctx<'_> {
         match self.funcs.get(&func.module_source, &func.name) {
             Some(pe) => pe.side.get(param_index).copied().unwrap_or(true),
             None => true,
+        }
+    }
+
+    /// Whether the operand at `param_index` outlives this call. A value-copy
+    /// helper keeps nothing, a builtin keeps what `with stores[p]` names, a body
+    /// answers from the fixpoint, and a callee this scan cannot read keeps all.
+    fn callee_keeps(&self, func: &FunctionRef, param_index: usize) -> bool {
+        match self.kind(func) {
+            Kind::ValueCopy => false,
+            Kind::Builtin => self.builtins.stored_params(func).contains(&param_index),
+            Kind::HasBody => self.callee_side(func, param_index),
+            Kind::Opaque => true,
         }
     }
 }
@@ -250,29 +262,8 @@ impl TirRefVisitor for SinkWalker<'_> {
 
 impl SinkWalker<'_> {
     fn raise_call_sides(&mut self, func: &FunctionRef, operands: &[&TirExpr]) {
-        match self.ctx.kind(func) {
-            Kind::ValueCopy => {}
-            Kind::Builtin => self.raise_builtin_sides(func, operands),
-            Kind::Opaque => {
-                for op in operands {
-                    self.raise_side(op);
-                }
-            }
-            Kind::HasBody => {
-                for (i, op) in operands.iter().enumerate() {
-                    if self.ctx.callee_side(func, i) {
-                        self.raise_side(op);
-                    }
-                }
-            }
-        }
-    }
-
-    /// A store builtin keeps the arguments its `with stores[p]` names, into the
-    /// `&mut` one it was handed. Nothing else a builtin is passed outlives it.
-    fn raise_builtin_sides(&mut self, func: &FunctionRef, operands: &[&TirExpr]) {
-        for &p in self.ctx.builtins.stored_params(func) {
-            if let Some(op) = operands.get(p) {
+        for (i, op) in operands.iter().enumerate() {
+            if self.ctx.callee_keeps(func, i) {
                 self.raise_side(op);
             }
         }

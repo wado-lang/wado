@@ -4,7 +4,7 @@
 
 use super::funcset::{FuncKeyMap, FuncKeySet};
 use super::needs_value_copy;
-use super::ownership::BuiltinConventions;
+use super::ownership::BuiltinDeclarations;
 use crate::hashmap::IndexMap;
 use crate::tir::{
     ResolvedType, TirExpr, TirExprKind, TirFunction, TirParam, TirPattern, TirStmt, TirStmtKind,
@@ -132,7 +132,7 @@ pub fn compute_return_paths(
     call_graph: &super::callgraph::CallGraph,
     type_table: &TypeTable,
     returns_owned: &FuncKeySet,
-    builtins: &BuiltinConventions,
+    builtins: &BuiltinDeclarations,
 ) -> ReturnPaths {
     let mut paths = ReturnPaths::default();
     call_graph.solve(flat, |id| {
@@ -213,7 +213,7 @@ pub struct Resolver<'a> {
     /// something this walk will not guess at.
     returns_owned: &'a FuncKeySet,
     /// Where each builtin declared its result comes from.
-    builtins: &'a BuiltinConventions,
+    builtins: &'a BuiltinDeclarations,
     /// Parameters naming storage the caller lent, by the type lent. The only
     /// roots a write in this body reaches out through.
     lent: IndexMap<u32, TypeId>,
@@ -229,7 +229,7 @@ impl<'a> Resolver<'a> {
         type_table: &'a TypeTable,
         return_paths: &'a ReturnPaths,
         returns_owned: &'a FuncKeySet,
-        builtins: &'a BuiltinConventions,
+        builtins: &'a BuiltinDeclarations,
     ) -> Self {
         let mut resolver = Self {
             type_table,

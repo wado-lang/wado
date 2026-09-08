@@ -165,10 +165,12 @@ fn process(data: &Data) -> Result { ... }  // no stores = cannot store
 // Closure captures inferred from usage
 let f = || { return local_var; };
 // Inferred type: fn() -> i32 (captures local_var)
-
-// Explicit stores annotation for parameters
-let g = |data| stores[data] { ... };
 ```
+
+A closure declares neither its effects nor its stores. The parser reads a `with`
+row where one would go and reports that the compiler does not carry it yet, so
+the shape is a diagnostic rather than a parse error. The row belongs to the
+closure; a handler is written inside the body.
 
 **Functor types**:
 
@@ -178,24 +180,27 @@ fn take_storing(f: fn(&Data) with stores[0]) { ... }
 fn take_pure(f: fn(&Data) -> Result) { ... }  // cannot store
 ```
 
-### 5. Heap Promotion Based on Stores
+The row is part of the function type's identity, mangled into the type's name.
+It orders the two types: a function storing nothing goes where one that stores
+is expected, never the reverse. Passing a storing function to `take_pure` is an
+error naming the position.
 
-When a reference is passed to something declaring `stores[...]`, the referenced value is automatically heap-promoted:
+### 5. What a Declared `stores` Buys
 
-```wado
-fn store(data: &Data) -> Handle with stores[data] { ... }
+Components running on GC hold a reference as a reference, so nothing is promoted
+to reach it. What the declaration buys is what the compiler may then stop doing
+to the argument, which each consumer reads for itself:
 
-fn caller() {
-    let local = Data{};
-    let handle = store(&local);  // local automatically heap-promoted
-}
-```
+- `lower::plan::mut_ref_writeback` writes no `&mut` argument back at a call that
+  keeps it: the borrow outlives the call, so the call is no place to write it.
+- `lower::plan::value_copy::stores` runs the interprocedural fixpoint over the
+  declared positions. A local passed at a stored position is borrow-escaped and
+  cannot be moved out of.
+- `wir_optimize::const_forward` forwards no constant into a stored parameter.
+- `niri` runs no function that stores at compile time.
 
-**Rationale**:
-
-- Compiler can determine heap promotion statically
-- No runtime checks needed
-- Transparent to programmer
+The type checker reads it too, which is why it is a signature and not an
+annotation: see §4's functor rule.
 
 ### 6. Closures Capture by Reference
 
@@ -447,6 +452,32 @@ fn store_and_log(data: &Data) -> Handle with (Stdout, stores[data]) {
     return create_handle(data);
 }
 ```
+
+## Known gaps
+
+- [ ] Let a closure declare `with (Effect, stores[p])`, which §4 says it cannot.
+      Closing it means the elaborator checking the declared row against what the
+      body does, as it does for a named function, and the closure's functor type
+      carrying the row so a caller sees it.
+
+- [ ] Say which field a stored parameter is stored into. `stores[p]` records
+      that `p` outlives the call, not where it lands, and `array_copy(dst, _,
+      src, _, _)` is the case that needs the difference: for a reference `T` its
+      elements reach `dst` afterwards, so `src` escapes into a place the caller
+      may still hold.
+      Written with what exists, `with stores[src]` marks the whole reference
+      borrow-escaped at all twenty call sites. Fifteen are `Array<u8>`, where a
+      scalar element escapes nothing. The other five are the backing-array swap
+      in `List::grow` and its neighbours, which hand elements from an array they
+      then discard, so the declaration would cost the hottest paths in the
+      stdlib for a leak none of them has.
+
+- [ ] Populate `NirFunction::stores_aliased_locals` from a `stores` call, or say
+      it is not that. Its doc reads "when inlining `fn f(x: &T) with stores[x]`
+      with argument `&local`, `local` is added here", and no writer does that:
+      `sroa` adds the aliases it mints, `inline`, `cold_outline` and `dae` carry
+      and renumber what is already there. Either the field is fed only by SROA
+      and the doc names an intent, or a caller-side write is missing.
 
 ## Terminology: Reference vs Pointer
 

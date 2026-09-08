@@ -75,7 +75,7 @@ pub fn plan(flat: &mut FlatPackage, errors: &dyn ErrorSink) -> Result<LowerPlan,
     let confined_params = value_copy::confine::compute_confined_params(
         flat,
         &pre_boxing_calls,
-        &value_copy::ownership::BuiltinConventions::collect(flat),
+        &value_copy::ownership::BuiltinDeclarations::collect(flat),
     );
     let ref_receiver_methods = ref_receiver_methods(flat);
     let box_plan = boxing::prepare_types(flat);

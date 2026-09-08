@@ -2,7 +2,7 @@
 //! carrying them. A callee this analysis cannot read through writes everything.
 
 use super::funcset::{FuncKeyMap, FuncKeySet};
-use super::ownership::BuiltinConventions;
+use super::ownership::BuiltinDeclarations;
 use super::place::{Names, Resolver, ReturnPaths, Selector, could_write_through, field_owner};
 use crate::flat_package::FlatPackage;
 use crate::hashmap::IndexSet;
@@ -103,7 +103,7 @@ pub fn compute_mod_ref(
     flat: &FlatPackage,
     return_paths: &ReturnPaths,
     returns_owned: &FuncKeySet,
-    builtins: &BuiltinConventions,
+    builtins: &BuiltinDeclarations,
 ) -> ModRef {
     let type_table = flat.type_table.borrow();
     // A body this scan reads. One without reaches the caller only through what
@@ -190,7 +190,7 @@ fn scan(
     defined: &FuncKeySet,
     return_paths: &ReturnPaths,
     returns_owned: &FuncKeySet,
-    builtins: &BuiltinConventions,
+    builtins: &BuiltinDeclarations,
 ) -> (Writes, Vec<(ModuleSource, String)>, Vec<PendingProjection>) {
     let Some(body) = &func.body else {
         return (
@@ -219,7 +219,7 @@ fn scan(
 struct Walker<'a> {
     type_table: &'a TypeTable,
     defined: &'a FuncKeySet,
-    builtins: &'a BuiltinConventions,
+    builtins: &'a BuiltinDeclarations,
     resolver: &'a Resolver<'a>,
     writes: Writes,
     callees: Vec<(ModuleSource, String)>,

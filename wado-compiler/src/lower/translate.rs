@@ -402,12 +402,12 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
                 &type_table,
                 &base.value_copy.return_paths,
                 &base.value_copy.returns_owned,
-                &base.value_copy.builtin_conventions,
+                &base.value_copy.builtins,
             );
             let oracle = value_copy::ownership::OwnedCalls::new(
                 &base.value_copy.returns_owned,
                 &base.value_copy.returns_self_projection,
-                &base.value_copy.builtin_conventions,
+                &base.value_copy.builtins,
             )
             .with_indirect(&base.value_copy.indirect_owned_returns);
             (
@@ -712,7 +712,7 @@ impl FunctionTranslator<'_, '_> {
         let oracle = value_copy::ownership::OwnedCalls::new(
             &self.base.value_copy.returns_owned,
             &self.base.value_copy.returns_self_projection,
-            &self.base.value_copy.builtin_conventions,
+            &self.base.value_copy.builtins,
         )
         .with_indirect(&self.base.value_copy.indirect_owned_returns);
         value_copy::analyze::should_wrap(value, &self.base.type_table.borrow(), &oracle)
