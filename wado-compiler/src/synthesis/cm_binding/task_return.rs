@@ -4,8 +4,8 @@
 //! `task return value;` with the inline CM `task-return` call sequence:
 //! flatten the value to CM ABI flat slots and emit a `task-return` raw call.
 //!
-//! For non-async or non-export contexts (test world), `task return` is
-//! stripped to a no-op so it never reaches monomorphize.
+//! An `export async fn` the target world does not export has no CM task to
+//! deliver to, so its `task return` is stripped to a no-op instead.
 
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -76,8 +76,9 @@ pub(super) fn expand_task_returns_in_func(
 
 /// Replace every `task return` statement in a function body with a no-op (`Continue`).
 ///
-/// Used in the test world where `export async fn` bodies are not exported and will
-/// be removed by DCE. The statements must not reach `monomorphize` intact.
+/// For an `export async fn` outside the target world's exports. Its body still
+/// runs when Wado code calls it, and the statements must not reach
+/// `monomorphize` intact.
 pub(super) fn strip_task_returns_in_func(user_func: &Rc<RefCell<TirFunction>>) {
     let mut func = user_func.borrow_mut();
     let Some(mut body) = func.body.take() else {

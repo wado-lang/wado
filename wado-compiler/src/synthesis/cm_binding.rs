@@ -1202,9 +1202,9 @@ fn generate_test_world_bindings(project: &mut Package) {
 /// Strip remaining `TaskReturn` stmts from all modules. `task return` is only
 /// valid inside `async fn` (checked by elaborator); export synthesis expands
 /// `TaskReturn` into CM calls for async exports that match the target world.
-/// Any remaining async fn (unmatched exports, imported modules) will be DCE'd
-/// — strip their `TaskReturn` stmts so they don't reach monomorphize. This is
-/// idempotent: already-expanded functions have no `TaskReturn` stmts left.
+/// An async fn left over — an unmatched export, an imported module — has no CM
+/// task to deliver to, so its `TaskReturn` stmts become no-ops rather than
+/// reaching monomorphize. Idempotent: an expanded function has none left.
 fn strip_unexpanded_task_returns(project: &Package) {
     for module in project.tir_modules.values() {
         for f in &module.functions {
