@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1788877929760,
+  "lastUpdate": 1788881971574,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -54177,6 +54177,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/18d354227e249a8fc396a970194d52c2859218ee"
         },
         "date": 1788877928991,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 2013,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6560,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18971,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 288297,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "b311d2d563226b2d8650d8544226f72d65afaeba",
+          "message": "Merge pull request #2003 from wado-lang/claude/trait-static-param-defaults-z0mkzx\n\nfeat(compiler): one resolution behind every `Type::method()` spelling",
+          "timestamp": "2026-09-09T00:22:31+09:00",
+          "tree_id": "2e57daf70a637a8b9126ba00801f9b66c9fa53fb",
+          "url": "https://github.com/wado-lang/wado/commit/b311d2d563226b2d8650d8544226f72d65afaeba"
+        },
+        "date": 1788881971212,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
