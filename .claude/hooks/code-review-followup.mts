@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env -S mise x -- node
 // Hands the findings of a /code-review run to the skill that answers them.
 
 import { type HookPayload, invokesSkill, readPayload } from "./skill-invocation.mts";

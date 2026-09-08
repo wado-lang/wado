@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env -S mise x -- node
 // PreToolUse hook for the Bash tool: deny the command words below, read the way
 // a shell reads them, so one is caught wherever it runs.
 

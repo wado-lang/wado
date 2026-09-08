@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env -S mise x -- node
 // PreToolUse hook for the editing tools: refuse a Rust edit that adds an item
 // named through `crate::` or `super::` instead of imported.
 // `mise run check-rust-paths` ratchets the same count once the edit has landed.

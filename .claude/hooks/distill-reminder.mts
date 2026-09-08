@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env -S mise x -- node
 // Asks for a distill pass before the turn that finished the work ends.
 // A session is asked once: a nudge repeated every turn is noise, not guidance.
 
