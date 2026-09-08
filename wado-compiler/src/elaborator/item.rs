@@ -1293,6 +1293,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 })
                 .collect();
             let declaring_slot_count = type_params.len() as u32;
+            let method_slot_base = method_param_offset(&frame.impl_type_params);
             type_params.extend(frame.method_type_params.iter().cloned());
             let self_kind = method
                 .params
@@ -1321,6 +1322,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         })
                         .collect(),
                     declaring_slot_count,
+                    method_slot_base,
                     declaring_impl: Some(impl_def),
                     own_params: super::sig::own_params_of(&method.type_params),
                     cm_name: method
@@ -1725,6 +1727,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             })
                             .collect(),
                         declaring_slot_count: decl_slots.len() as u32,
+                        // A declaration numbers its own slots densely from
+                        // zero, so the count is also where the method's begin.
+                        method_slot_base: decl_slots.len() as u32,
                         declaring_impl: None,
                         own_params: super::sig::own_params_of(&method.type_params),
                         cm_name: method
@@ -1936,6 +1941,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     self_kind,
                     params: sig_params,
                     declaring_slot_count: decl_slots.len() as u32,
+                    // A declaration numbers its own slots densely from zero, so
+                    // the count is also where the method's begin.
+                    method_slot_base: decl_slots.len() as u32,
                     declaring_impl: None,
                     // An `interface` / `resource` operation declares no type
                     // parameters of its own.

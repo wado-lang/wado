@@ -1531,13 +1531,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             Some(recv_name) => {
                 let recv_name = recv_name.clone();
                 self.preselect_static_args(
-                    &recv_name,
+                    StaticReceiver {
+                        key: struct_key_for_lookup.as_ref(),
+                        ty: Some(target_type_id),
+                        required_trait,
+                        ..StaticReceiver::of(&recv_name)
+                    },
                     &static_call.method,
                     &static_call.args,
                     static_call.span,
                     ctx,
-                    struct_key_for_lookup.as_ref(),
-                    required_trait,
                 )
             }
             None => PreselectedArg::Undecided,
@@ -2976,14 +2979,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// instead of building an unresolvable mangled name (an ICE at WIR build).
     pub(super) fn report_unmatched_static_arg(
         &mut self,
-        struct_name: &str,
+        recv: StaticReceiver<'_>,
         method_name: &str,
         arg_types: &[TypeId],
         span: Span,
-        target_hint: Option<&ImplTargetKey>,
-        required_trait: Option<DefId>,
     ) -> bool {
-        let survey = self.static_arg_survey(struct_name, method_name, target_hint, required_trait);
+        let struct_name = recv.name;
+        let survey = self.static_arg_survey(recv, method_name);
         let spelled = render_type_list(&self.tysys.type_table.borrow(), arg_types);
         if let Some(trait_name) = survey.blanket_trait {
             let _ = self.emit(TypeError::UnsupportedBlanketInstantiation {
@@ -3035,28 +3037,29 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// for one call.
     pub(super) fn preselect_static_args(
         &mut self,
-        recv_name: &str,
+        recv: StaticReceiver<'_>,
         method_name: &str,
         args: &[ast::Expr],
         span: Span,
         ctx: &mut FunctionContext,
-        target_hint: Option<&ImplTargetKey>,
-        required_trait: Option<DefId>,
     ) -> PreselectedArg {
-        if args.is_empty() || self.has_inherent_static_method(recv_name, method_name, target_hint) {
+        let recv_name = recv.name;
+        if args.is_empty() || self.has_inherent_static_method(recv_name, method_name, recv.key) {
             return PreselectedArg::Undecided;
         }
         let classes: Vec<ArgClass> = args
             .iter()
             .map(|arg| self.synthesize_arg_class(arg, ctx))
             .collect();
-        match self.static_arg_preselect(
-            recv_name,
-            method_name,
-            &classes,
-            target_hint,
-            required_trait,
-        ) {
+        // A trait's default body reads `Self` off the receiver's type. Resolved
+        // here rather than asked of every caller: it costs a scope, and the
+        // returns above are the calls that never survey (WEP: "Resolving is not
+        // free").
+        let mut recv = recv;
+        if recv.ty.is_none() {
+            recv.ty = Some(self.resolve_unsited_type_name(recv_name, span));
+        }
+        match self.static_arg_preselect(recv, method_name, &classes) {
             ArgPreselect::Selected(params) => PreselectedArg::Types(params),
             ArgPreselect::Ambiguous(candidates) => {
                 let _ = self.emit(TypeError::AmbiguousStaticArgument {
@@ -3092,11 +3095,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// over each impl's *resolved* parameter type, since spelling under-admits.
     pub(super) fn static_arg_preselect(
         &mut self,
-        struct_name: &str,
+        recv: StaticReceiver<'_>,
         method_name: &str,
         classes: &[ArgClass],
-        target_hint: Option<&ImplTargetKey>,
-        required_trait: Option<DefId>,
     ) -> ArgPreselect {
         // Every argument opaque leaves nothing to select on. One opaque among
         // others admits every parameter, so the rest still decide.
@@ -3104,7 +3105,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return ArgPreselect::Pass;
         }
         let admitted: Vec<ArgCandidate> = self
-            .static_arg_survey(struct_name, method_name, target_hint, required_trait)
+            .static_arg_survey(recv, method_name)
             .candidates
             .into_iter()
             .filter(|c| self.params_admit(&c.params, classes))
@@ -3145,17 +3146,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// its consumers need every candidate and the resolution keeps one.
     pub(super) fn static_arg_survey(
         &self,
-        struct_name: &str,
+        recv: StaticReceiver<'_>,
         method_name: &str,
-        target_hint: Option<&ImplTargetKey>,
-        required_trait: Option<DefId>,
     ) -> StaticArgSurvey {
         let mut survey = StaticArgSurvey::default();
-        for impl_def in self.trait_impls_for_receiver(struct_name, target_hint) {
+        for impl_def in self.trait_impls_for_receiver(recv.name, recv.key) {
             // A qualified spelling names a trait, so another trait's impl is
             // not a candidate to weigh against — the same rule the resolution
             // applies, asked where the arguments are surveyed.
-            if let Some(required) = required_trait
+            if let Some(required) = recv.required_trait
                 && self
                     .tysys
                     .signatures
@@ -3177,7 +3176,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // The same walk the rules read, so a body the block inherits is a
             // candidate here too.
             let Some(offer) =
-                self.impl_static_offer(header, impl_def, trait_decl, method_name, None)
+                self.impl_static_offer(header, impl_def, trait_decl, method_name, recv.ty)
             else {
                 continue;
             };
@@ -3203,13 +3202,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
                 Selector::Params(params) => params,
             };
+            // By the types, as `Selector` is: two distinct types printing one
+            // name are two candidates, and deduping on the rendering dropped
+            // the second so the call took the first in silence.
+            if survey.candidates.iter().any(|c| c.params == params) {
+                continue;
+            }
             let table = self.tysys.type_table.borrow();
             // The parameters as the impl's own frame resolved them, so a
             // private or aliased name means what the impl wrote.
             let spelling = render_type_list(&table, &params);
-            if survey.candidates.iter().any(|c| c.spelling == spelling) {
-                continue;
-            }
             survey.candidates.push(ArgCandidate {
                 spelling,
                 params,
@@ -3323,11 +3325,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let table = self.tysys.type_table.borrow();
         // A reference to a slot is the slot. A slot the receiver mentions is the
         // receiver's to fill, not the argument's, and one at or past
-        // `declaring_slot_count` is the method's.
+        // `method_slot_base` is the method's. By the numbering, not the count:
+        // a concrete head argument leaves a gap, and the block's last slot then
+        // sits past how many names it contributed.
         match table.get(table.peel_refs(param)) {
             ResolvedType::TypeParam { index, name }
             | ResolvedType::TypePack { index, name, .. } => {
-                *index < sig.declaring_slot_count && !header.ty.mentions(name)
+                *index < sig.method_slot_base && !header.ty.mentions(name)
             }
             _ => false,
         }
@@ -3579,27 +3583,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // qualified then lost its binding and left reify emitting a call to a
         // name nothing declares.
         let cm_name = self
-            .qualified_method_sig(&actual_struct_name, method_name)
+            .static_call_sig(&actual_struct_name, method_name, receiver_key.as_ref())
             .and_then(|sig| sig.cm_name);
 
-        // The lists the dispatch records, from the same answer the call site
-        // checked against, so the two agree on where the receiver sits.
-        // The ambiguous case is reported where the arguments are checked, which
-        // every spelling reaching here has already passed.
-        let receiver_key = self.impl_target(&actual_struct_name);
-        let receiver_type = self.resolve_unsited_type_name(&actual_struct_name, span);
-        // Keyed by the same argument the selection above read, or the lists
-        // recorded here describe a different declaration than the one mangled.
-        let (callee_params, _) = self
-            .static_callee_params(
-                &receiver_key,
-                receiver_type,
-                method_name,
-                &actual_struct_name,
-                args,
-                None,
-            )
-            .params();
+        // The lists the dispatch records, from the resolution that named the
+        // callee. Asking again by the base's bare name asks the *caller's*
+        // frame, which an alias or a namespace leaves without that name: the
+        // lists came back empty, so a declared default was never padded and the
+        // call reached codegen an argument short.
+        let callee_params = resolution.params;
 
         let StaticMethodRef {
             module: struct_module,
@@ -3697,6 +3689,33 @@ pub(super) fn render_type_list(table: &TypeTable, types: &[TypeId]) -> String {
     match names.as_slice() {
         [one] => one.clone(),
         _ => format!("({})", names.join(", ")),
+    }
+}
+
+/// The receiver a static call names, as the walks that ask about its impls
+/// before the arguments are elaborated read it. The same facts
+/// [`StaticQuery`] carries, so the survey and the rules see one receiver.
+#[derive(Clone, Copy)]
+pub(super) struct StaticReceiver<'a> {
+    pub(super) name: &'a str,
+    pub(super) key: Option<&'a ImplTargetKey>,
+    /// Its type, which a trait's default body reads `Self` from. Without it
+    /// every `Self`-typed parameter instantiates to `unknown`, which no
+    /// argument admits.
+    pub(super) ty: Option<TypeId>,
+    /// The trait a qualified spelling names; only its impls answer.
+    pub(super) required_trait: Option<DefId>,
+}
+
+impl<'a> StaticReceiver<'a> {
+    /// The name alone. Every other fact is what a call site adds.
+    pub(super) fn of(name: &'a str) -> Self {
+        Self {
+            name,
+            key: None,
+            ty: None,
+            required_trait: None,
+        }
     }
 }
 

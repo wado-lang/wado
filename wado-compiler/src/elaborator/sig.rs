@@ -187,6 +187,12 @@ pub(crate) struct MethodSig {
     /// separately (`Type<A>::method<B>()`), so it needs the split; nothing
     /// else does, because a slot carries its own index.
     pub(crate) declaring_slot_count: u32,
+    /// The index the method's own slots start at. Not the count above: a
+    /// concrete head argument (`impl<A, B> Tr<B> for Pair<String, A>`) consumes
+    /// no slot, so the block's numbering has a gap and its last slot sits past
+    /// how many names it contributed. Read where an index is classified, as the
+    /// count is read where a list is split.
+    pub(crate) method_slot_base: u32,
     /// The `impl` block that declares this method, where one does. How a caller
     /// reaches [`ImplSig::spelled_slots`], which aligns a spelled turbofish
     /// with the block's slots.

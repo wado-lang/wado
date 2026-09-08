@@ -195,7 +195,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// yet comparable and admits everything.
     pub(super) fn class_admits(&self, param: TypeId, class: &ArgClass) -> bool {
         let tt = self.tysys.type_table.borrow();
-        if param == TypeTable::UNKNOWN || param == TypeTable::ERROR || tt.contains_type_param(param)
+        // A bare slot admits every argument. A *shape* with a slot inside it
+        // does not: `Wrap<A>` is no `i32` however `A` is chosen, and admitting
+        // one made a generic sibling ambiguous with every concrete impl of the
+        // name — on an argument no annotation could have separated.
+        if param == TypeTable::UNKNOWN
+            || param == TypeTable::ERROR
+            || matches!(
+                tt.get(tt.peel_refs(param)),
+                ResolvedType::TypeParam { .. } | ResolvedType::TypePack { .. }
+            )
         {
             return true;
         }
@@ -203,6 +212,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             ArgClass::Opaque(_) => true,
             ArgClass::Exact(t) => {
                 if *t == param {
+                    return true;
+                }
+                // Same shape, whatever the slot inside becomes.
+                if tt.contains_type_param(param)
+                    && tt.fq_base_type_name(param) == tt.fq_base_type_name(*t)
+                {
                     return true;
                 }
                 matches!(

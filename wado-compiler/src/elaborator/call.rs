@@ -5,7 +5,7 @@ use crate::hashmap::IndexMap;
 use crate::ast::{self, Expr, Type};
 use crate::compiler_host::CompilerHost;
 use crate::module_source::ModuleSource;
-use crate::name::{FqTypeName, LocalMethodName, MethodName};
+use crate::name::{DeclName, FqTypeName, LocalMethodName, MethodName};
 use crate::tir::{FunctionRef, MonomorphInfo, ResolvedType, TypeId, TypeTable};
 
 use super::Elaborator;
@@ -13,7 +13,7 @@ use super::callee::{CalleeRef, StaticMethodRef};
 use super::expr::BareCase;
 use super::infer::InferCtx;
 use super::instantiate::Instantiation;
-use super::method_call::PreselectedArg;
+use super::method_call::{PreselectedArg, StaticReceiver};
 use super::scope::{BinderInScope, Scope};
 use super::sem::types::{CalleeParams, StaticMethodDispatch};
 use super::sig::{MethodSig, Param};
@@ -634,13 +634,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 effective_name[pos + 2..].to_string(),
             );
             let preselected = self.preselect_static_args(
-                &recv_name,
+                StaticReceiver {
+                    key: Some(&self.impl_target_at(receiver_site, &recv_name)),
+                    ..StaticReceiver::of(&recv_name)
+                },
                 &method_name,
                 &call.args,
                 call.span,
                 ctx,
-                None,
-                None,
             );
             if matches!(preselected, PreselectedArg::Reported) {
                 return TypeTable::ERROR;
@@ -972,7 +973,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // i32/f64, so re-coerce once the substitution is known. A
                 // non-generic call is checked too, or a mismatch only shows at
                 // codegen, as an invalid module rather than at its own span.
-                let receiver_key = self.impl_target(prefix);
+                // Keyed at the receiver's own segment, as the resolution that
+                // recorded the use→def edge above is: a key derived from the
+                // bare name asks the caller's frame, which an alias leaves
+                // without that name at all.
+                let receiver_key = self.impl_target_at(receiver_site, prefix);
                 let receiver_type = self.resolve_unsited_type_name(prefix, call.span);
                 // The same argument the selection above read: without it this
                 // re-check resolves a different declaration than the call was
@@ -995,12 +1000,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     && !args.is_empty()
                     && !self.has_inherent_static_method(prefix, suffix, Some(&receiver_key))
                     && self.report_unmatched_static_arg(
-                        prefix,
+                        StaticReceiver {
+                            key: Some(&receiver_key),
+                            ty: Some(receiver_type),
+                            ..StaticReceiver::of(prefix)
+                        },
                         suffix,
                         &args,
                         call.span,
-                        Some(&receiver_key),
-                        None,
                     )
                 {
                     return TypeTable::ERROR;
@@ -2497,7 +2504,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         span: crate::token::Span,
         receiver_key: Option<&ImplTargetKey>,
     ) {
-        let Some(sig) = self.static_call_sig(prefix, suffix, receiver_key) else {
+        // The *one* declaration of the name, if there is one. This report runs
+        // before any resolution, so where several impls declare the name it has
+        // no pick to read: complaining about one of their slots names a
+        // declaration the arguments may not even select.
+        let sig = match receiver_key {
+            Some(key) => self.unique_qualified_method_sig_keyed(key, suffix),
+            None => self.unique_qualified_method_sig(prefix, suffix),
+        };
+        let Some(sig) = sig else {
             return;
         };
         let (declaring_slots, method_slots) = (sig.declaring_type_params(), sig.own_type_params());
@@ -2945,7 +2960,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let Some((struct_name, method_name)) = effective_name.rsplit_once("::") else {
             return;
         };
-        let Some(entry) = self.static_method_entry(receiver, method_name) else {
+        // Through the newtype base where the alias declares nothing of the
+        // name, as the resolution reaches it: checking the spelled receiver
+        // alone found an empty bucket, so `type Q = P` passed a call the same
+        // call through `P` is rejected for.
+        let entry = self.static_method_entry(receiver, method_name).or_else(|| {
+            let (base, base_name) = self.newtype_base_of(receiver)?;
+            let base_key = self.impl_target_of(base, &DeclName::new(&base_name));
+            self.static_method_entry(&base_key, method_name)
+        });
+        let Some(entry) = entry else {
             return;
         };
         let (module, visibility) = (entry.module.clone(), entry.inherent_visibility);

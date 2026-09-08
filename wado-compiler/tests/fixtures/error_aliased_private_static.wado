@@ -1,0 +1,14 @@
+// A private static is private however the receiver is spelled. The check read
+// the alias's own bucket, which declares nothing, so `type Q = P` passed the
+// call that `P::make` is rejected for.
+
+use { P } from "./sub/error_aliased_private_static.wado";
+
+type Q = P;
+
+export fn run() {
+    let _ = Q::make(1);
+}
+
+__DATA__
+{"compile_error": "method `make` of `Q` is private to its defining file"}

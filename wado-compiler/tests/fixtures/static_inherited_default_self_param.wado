@@ -1,0 +1,23 @@
+//! A trait's default body reads `Self` off the receiver's type. The argument
+//! survey asked for it without one, so every `Self`-typed parameter came back
+//! `unknown`: no argument admitted it, and the diagnostic named `unknown` as
+//! what the receiver accepts.
+
+struct M {}
+
+trait Pick {
+    fn pick(v: Self) -> Self {
+        return v;
+    }
+}
+
+impl Pick for M {}
+
+test "an inherited default takes the receiver as its Self" {
+    let m = M {};
+    let _ = M::pick(m);
+    assert true;
+}
+
+__DATA__
+{"test": {}}

@@ -12,6 +12,7 @@ use crate::token::Span;
 
 use super::Elaborator;
 use super::callee::StaticMethodRef;
+use super::method_call::StaticReceiver;
 use super::sem::types::CalleeParams;
 use super::sig::MethodSig;
 use super::synth::ArgClass;
@@ -147,6 +148,9 @@ pub(super) struct StaticTraitRef {
     /// answers with a trait-less one.
     pub(super) selected: Option<StaticMethodRef>,
     pub(super) return_type: TypeId,
+    /// The lists this same resolution read, so a site that mangles from
+    /// `selected` and records from these cannot describe two declarations.
+    pub(super) params: CalleeParams,
 }
 
 /// What the rules made of the candidates.
@@ -521,7 +525,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> Result<StaticTraitRef, Reported> {
         let (receiver_name, method_name) = (query.receiver_name, query.method_name);
         let (receiver_key, arg_types) = (query.receiver_key, query.arg_types);
-        let required_trait = query.required_trait;
+        let recv = StaticReceiver {
+            key: receiver_key,
+            ty: query.receiver_type,
+            required_trait: query.required_trait,
+            ..StaticReceiver::of(receiver_name)
+        };
         let lookup = self.resolve_static_callee(query);
         let return_type = lookup.return_type();
         let selected = lookup
@@ -531,20 +540,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if selected.is_none()
             && !arg_types.is_empty()
             && !self.has_inherent_static_method(receiver_name, method_name, receiver_key)
-            && self.report_unmatched_static_arg(
-                receiver_name,
-                method_name,
-                arg_types,
-                span,
-                receiver_key,
-                required_trait,
-            )
+            && self.report_unmatched_static_arg(recv, method_name, arg_types, span)
         {
             return Err(Reported);
         }
+        let (params, _) = lookup.params();
         Ok(StaticTraitRef {
             selected,
             return_type,
+            params,
         })
     }
 
