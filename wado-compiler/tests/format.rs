@@ -3513,21 +3513,48 @@ fn test_format_keeps_a_comment_wedged_in_any_token_gap() {
     );
 }
 
-/// A closure body that starts with `with` keeps its parentheses: the keyword
-/// in that position is the closure's own effect row, so dropping them makes
-/// the output stop parsing.
+/// A closure body starting with `with` keeps its parentheses, or the output
+/// stops parsing. One case per construct that prints its leftmost operand bare.
 #[test]
 fn test_format_keeps_parens_around_a_handler_closure_body() {
+    for body in [
+        "(with Log => &mut sink do { Log::emit(`hi`); })",
+        "(with Log => &mut sink do { 1 }) + 2",
+        "(with Log => &mut sink do { 1 }) < 2 < 3",
+        "(with Log => &mut sink do { 1 }) matches { 1 }",
+        "(with Log => &mut sink do { 1 })..<4",
+    ] {
+        let source = format!("fn run() {{\n    let f = || {body};\n}}\n");
+        let formatted = wado_compiler::format(&source).expect("format failed");
+        assert!(
+            formatted.contains("|| (with Log => &mut sink do {"),
+            "expected the body to stay parenthesized, got:\n{formatted}"
+        );
+        assert_format_preserves_ast(&source);
+    }
+}
+
+/// `#[returns(part_of = p)]` names a parameter, so the value stays an
+/// identifier while `#[param(name = "...")]` keeps its quotes.
+#[test]
+fn test_format_keeps_an_attribute_identifier_value_unquoted() {
     let source = concat!(
-        "fn run() {\n",
-        "    let f = || (with Log => &mut sink do { Log::emit(`hi`); });\n",
-        "    let g = || (with Log => &mut sink do { 1 }) + 2;\n",
+        "#[param(name = \"build.id\")]\n",
+        "global BUILD_ID: String = \"dev\";\n",
+        "\n",
+        "#[returns(part_of = xs)]\n",
+        "fn first(xs: &List<i32>) -> i32 {\n",
+        "    return xs[0];\n",
         "}\n"
     );
     let formatted = wado_compiler::format(source).expect("format failed");
     assert!(
-        formatted.contains("|| (with Log => &mut sink do {"),
-        "expected the body to stay parenthesized, got:\n{formatted}"
+        formatted.contains("#[returns(part_of = xs)]"),
+        "expected the parameter name to stay unquoted, got:\n{formatted}"
+    );
+    assert!(
+        formatted.contains("#[param(name = \"build.id\")]"),
+        "expected the string value to keep its quotes, got:\n{formatted}"
     );
     assert_format_preserves_ast(source);
 }

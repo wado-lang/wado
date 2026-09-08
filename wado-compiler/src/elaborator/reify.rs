@@ -2099,8 +2099,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             None
         };
 
-        let Some(arg) = attr.args.first() else {
-            return emit("#[returns] takes `owned` or `part_of = param`".to_string());
+        let [arg] = attr.args.as_slice() else {
+            return emit(
+                "#[returns] takes one convention: `owned` or `part_of = param`".to_string(),
+            );
         };
         match arg {
             ast::AttrArg::Ident(name) if name == "owned" => Some(tir::ReturnConvention::Owned),

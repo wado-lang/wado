@@ -21,8 +21,16 @@ fn fourth(xs: &List<i32>) -> i32 {
     return xs[1];
 }
 
+// One convention, not the first of several: a surplus argument is an author
+// error, and reading past it would apply a row nobody wrote.
+#[returns(owned, bogus)]
+fn fifth(xs: &List<i32>) -> i32 {
+    return xs[0];
+}
+
 export fn run() {
-    assert first(&[1, 2]) + second(&[1, 2]) + third(&[1, 2]) + fourth(&[1, 2]) == 6;
+    assert first(&[1, 2]) + second(&[1, 2]) + third(&[1, 2]) + fourth(&[1, 2]) + fifth(&[1, 2])
+        == 7;
 }
 
 __DATA__
@@ -30,7 +38,7 @@ __DATA__
     "compile_error": "#[returns(part_of = nope)] names no parameter",
     "compile_errors_contains": [
         "unknown #[returns] convention: borrowed",
-        "#[returns] takes `owned` or `part_of = param`",
+        "#[returns] takes one convention: `owned` or `part_of = param`",
         "#[returns(part_of = ...)] takes a parameter name, unquoted"
     ]
 }
