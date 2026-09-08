@@ -912,6 +912,11 @@ pub fn translate_function_bodies(ctx: &mut WirContext<'_>) {
     }
 }
 
+/// `Option`'s `None` case index. Its declaration is a compiler item, so the
+/// index is fixed; both the expression translator and a global's slot build
+/// `None` from it.
+pub(super) const OPTION_NONE_CASE: u32 = 1;
+
 /// Tracks a Wasm block scope in the label stack for computing br depths.
 pub(super) struct LabelEntry {
     /// Label name from TIR (for labeled blocks).
@@ -2184,7 +2189,13 @@ impl FunctionTranslator<'_, '_> {
                         !matches!(self.type_table.get(inner), ResolvedType::Unknown),
                         "[WIR] promoted Null with unresolved Option inner type"
                     );
-                    self.translate_variant_construct(type_id, 1, "None", None, type_id)
+                    self.translate_variant_construct(
+                        type_id,
+                        OPTION_NONE_CASE,
+                        "None",
+                        None,
+                        type_id,
+                    )
                 } else {
                     WirInstr::RefNull {
                         heap_type: WirAbstractHeapType::None,

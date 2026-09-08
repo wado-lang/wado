@@ -6496,6 +6496,14 @@ fn gen_scan_rewind_break(
     w.end();
 }
 
+/// The local a slot's gate lives in. One name per slot, not one per gate field:
+/// a field is named in the grammar, so a per-field local would put grammar text
+/// in the same space as the suffixes the emitter mints (`_ok`, `_exit`), where a
+/// gate named `ok` collides with a reserve probe's verdict.
+fn scan_gate_local(slot: &String) -> String {
+    return `${*slot}_gate`;
+}
+
 /// The gate half of `gen_scan_mark`, for the one slot that is not a position
 /// the scan walked to: a tournament's `best` is refilled by each candidate that
 /// takes the lead, so the gate travels with it the way the position does.
@@ -6504,17 +6512,15 @@ fn gen_scan_gate_save(w: &mut CodeWriter, ctx: &GenContext, slot: &String, mutab
         return;
     }
     let decl = if mutable { "let mut" } else { "let" };
-    for let f of ctx.scan_gate_fields() {
-        w.line(&`${decl} ${*slot}_${*f} = ${SCAN_GATE_HANDLE}.${*f};`);
-    }
+    w.line(&`${decl} ${scan_gate_local(slot)} = ${SCAN_GATE_HANDLE};`);
 }
 
-/// The assignments that put the gate now in `SCAN_GATE` into `slot`'s fields.
+/// The assignment that puts the gate now in `SCAN_GATE` into `slot`'s local.
 fn scan_gate_snapshot(ctx: &GenContext, slot: &String) -> List<String> {
     if !ctx.emit_scan_gate() {
         return [];
     }
-    return ctx.scan_gate_fields().iter_ref().map(|f| `${*slot}_${*f} = ${SCAN_GATE_HANDLE}.${*f};`).collect();
+    return [`${scan_gate_local(slot)} = ${SCAN_GATE_HANDLE};`];
 }
 
 /// Commit a position the scan reached to `slot`, with the gate it reached it
@@ -6556,9 +6562,7 @@ fn gen_scan_gate_restore(w: &mut CodeWriter, ctx: &GenContext, slot: &String) {
     if !ctx.emit_scan_gate() {
         return;
     }
-    for let f of ctx.scan_gate_fields() {
-        w.line(&`${SCAN_GATE_HANDLE}.${*f} = ${*slot}_${*f};`);
-    }
+    w.line(&`${SCAN_GATE_HANDLE} = ${scan_gate_local(slot)};`);
 }
 
 /// The lookahead read every gate and probe opens with: the kind at `at`, EOF

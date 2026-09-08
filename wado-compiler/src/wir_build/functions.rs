@@ -11,9 +11,12 @@ use crate::nir::{NirFunction, NirUnaryOp};
 use crate::nir_arena::{Body, ExprKind, Operand};
 use crate::nir_value_graph::ValueKind;
 use crate::tir::{PrimitiveType, TypeTable};
-use crate::wir::{WirFunction, WirGlobal, WirImport, WirImportDesc, WirMeta, WirName, WirType};
+use crate::wir::{
+    WirFunction, WirGlobal, WirImport, WirImportDesc, WirInstr, WirMeta, WirName, WirType,
+};
 
 use super::context::{PendingFunctionBody, WirContext};
+use super::translate::OPTION_NONE_CASE;
 
 /// Collect all functions from the `NirPackage`, register imports, and create function stubs.
 pub fn collect_functions(ctx: &mut WirContext<'_>) {
@@ -651,14 +654,11 @@ fn register_globals(ctx: &mut WirContext<'_>) {
         }
 
         // A deferred reference slot starts at `ref.null`, so it has to be
-        // nullable; so does one whose declared value is a null.
+        // nullable. A slot holding a value is not: whether *that* value is a
+        // null is the type's own answer, and `wir_optimize::nullable_ref` gives
+        // it by substituting the type here along with every other use.
         let deferred = global.init.is_deferred();
-        let slot_is_ref = is_wir_reference(&wir_type);
-        let declared_null = global
-            .init
-            .declared()
-            .is_some_and(|d| is_null_operand(d.body(), d.expr()));
-        if (deferred && slot_is_ref) || declared_null {
+        if deferred && is_wir_reference(&wir_type) {
             match &mut wir_type {
                 WirType::Ref { nullable, .. } | WirType::AbstractRef { nullable, .. } => {
                     *nullable = true;
@@ -670,13 +670,18 @@ fn register_globals(ctx: &mut WirContext<'_>) {
         let slot = global.init.slot_expr();
         let init_body = slot.body();
         let init_op = slot.expr();
-        let init = translate_global_init(
-            init_body,
-            init_op,
-            init_body.operand_type(init_op),
-            type_table,
-            &wir_type,
-        );
+        let init =
+            if is_null_operand(init_body, init_op) && type_table.as_option(global.ty).is_some() {
+                option_none(&wir_type)
+            } else {
+                translate_global_init(
+                    init_body,
+                    init_op,
+                    init_body.operand_type(init_op),
+                    type_table,
+                    &wir_type,
+                )
+            };
 
         let idx = u32::try_from(ctx.globals.len()).expect("too many globals");
         ctx.global_map.insert(global_name.clone(), idx);
@@ -774,6 +779,22 @@ fn global_init_value(body: &Body, op: Operand, type_table: &TypeTable) -> Option
     }
 }
 
+/// An `Option`'s `None`, built the way every other `None` in the program is.
+/// Whether it *is* a null reference is `wir_optimize::nullable_ref`'s answer,
+/// which reaches this slot by rewriting it along with the rest; deciding it here
+/// is what let a global disagree with the module around it.
+fn option_none(wir_type: &WirType) -> WirInstr {
+    let WirType::Ref { type_id, .. } = wir_type else {
+        panic!("[WIR] an Option-typed global's slot is not a reference: {wir_type:?}");
+    };
+    WirInstr::StructNew {
+        type_id: type_id.clone(),
+        fields: vec![WirInstr::I32Const(
+            i32::try_from(OPTION_NONE_CASE).expect("case index fits i32"),
+        )],
+    }
+}
+
 /// The value a slot starts at when its initializer is assigned by the module
 /// initialization function instead of being reduced here. It has to inhabit the
 /// slot's own Wasm type: `ref.null` is a value only for a reference slot.
@@ -831,11 +852,9 @@ fn translate_global_init(
                 _ => WirInstr::F64Const(value),
             };
         }
-        // `null` at a reference slot is the placeholder itself.
-        Value::Null | Value::Unit => return init_placeholder(wir_type),
-        Value::Aggregate { .. } | Value::Seq { .. } | Value::Variant { .. } => {
-            return init_placeholder(wir_type);
-        }
+        // `global_init_value` reduces literals and arithmetic over them, and the
+        // evaluators it shares only ever widen that to another scalar.
+        other => unreachable!("[WIR] global_init_value produced a non-scalar: {other:?}"),
     };
     match type_table.get(type_id) {
         ResolvedType::Primitive(PrimitiveType::I64 | PrimitiveType::U64) => {

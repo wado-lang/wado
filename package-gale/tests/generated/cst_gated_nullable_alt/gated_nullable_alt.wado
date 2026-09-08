@@ -1616,13 +1616,13 @@ impl Parser {
 
 fn scan_start(tokens: &Array<i32>, pos: i32) -> i32 {
     let start = pos;
-    let start_on = SCAN_GATE.on;
+    let start_gate = SCAN_GATE;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
         if alt_kind == TK_ON {
             pos = start + 1;
-            SCAN_GATE.on = start_on;
+            SCAN_GATE = start_gate;
             try_0: {
                 SCAN_GATE.on = 1;
                 pos = scan_body(tokens, pos);
@@ -1632,7 +1632,7 @@ fn scan_start(tokens: &Array<i32>, pos: i32) -> i32 {
             return -1;
         } else if alt_kind == TK_OFF {
             pos = start + 1;
-            SCAN_GATE.on = start_on;
+            SCAN_GATE = start_gate;
             try_1: {
                 pos = scan_body(tokens, pos);
                 if pos < 0 { break try_1; }
@@ -1651,34 +1651,34 @@ fn scan_body(tokens: &Array<i32>, pos: i32) -> i32 {
     if pos >= tokens.len() || tokens[pos] != TK_LB { return -1; }
     pos += 1;
     let gp_0 = pos;
-    let gp_0_on = SCAN_GATE.on;
+    let gp_0_gate = SCAN_GATE;
     let sgk_0 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     let mut sg_0_best = -1;
-    let mut sg_0_best_on = SCAN_GATE.on;
+    let mut sg_0_best_gate = SCAN_GATE;
     if sgk_0 == TK_ID {
         pos = gp_0;
-        SCAN_GATE.on = gp_0_on;
+        SCAN_GATE = gp_0_gate;
         sg_0_0: {
             if pos < tokens.len() && tokens[pos] == TK_ID {
                 pos += 1;
             }
-            if pos > sg_0_best { sg_0_best = pos; sg_0_best_on = SCAN_GATE.on; }
+            if pos > sg_0_best { sg_0_best = pos; sg_0_best_gate = SCAN_GATE; }
         }
     } else if sgk_0 == TK_LP {
         pos = gp_0;
-        SCAN_GATE.on = gp_0_on;
+        SCAN_GATE = gp_0_gate;
         sg_0_1: {
             if pos >= tokens.len() || tokens[pos] != TK_LP { break sg_0_1; }
             pos += 1;
-            if pos > sg_0_best { sg_0_best = pos; sg_0_best_on = SCAN_GATE.on; }
+            if pos > sg_0_best { sg_0_best = pos; sg_0_best_gate = SCAN_GATE; }
         }
     }
     if sg_0_best >= 0 {
         pos = sg_0_best;
-        SCAN_GATE.on = sg_0_best_on;
+        SCAN_GATE = sg_0_best_gate;
     } else {
         pos = gp_0;
-        SCAN_GATE.on = gp_0_on;
+        SCAN_GATE = gp_0_gate;
     }
     if pos >= tokens.len() || tokens[pos] != TK_RB { return -1; }
     pos += 1;

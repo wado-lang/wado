@@ -1632,11 +1632,11 @@ fn scan_start(tokens: &Array<i32>, pos: i32) -> i32 {
     if pos < 0 { return -1; }
     while pos < tokens.len() && _kind_set_0(tokens[pos]) {
         let sp = pos;
-        let sp_no_brace = SCAN_GATE.no_brace;
+        let sp_gate = SCAN_GATE;
         pos = scan_stmt(tokens, pos);
         if pos < 0 {
             pos = sp;
-            SCAN_GATE.no_brace = sp_no_brace;
+            SCAN_GATE = sp_gate;
             break;
         }
         if pos == sp { break; }
@@ -1648,13 +1648,13 @@ fn scan_start(tokens: &Array<i32>, pos: i32) -> i32 {
 
 fn scan_stmt(tokens: &Array<i32>, pos: i32) -> i32 {
     let start = pos;
-    let start_no_brace = SCAN_GATE.no_brace;
+    let start_gate = SCAN_GATE;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
         if alt_kind == TK_IF {
             pos = start + 1;
-            SCAN_GATE.no_brace = start_no_brace;
+            SCAN_GATE = start_gate;
             try_0: {
                 SCAN_GATE.no_brace = 1;
                 pos = scan_expr(tokens, pos, 0);
@@ -1667,7 +1667,7 @@ fn scan_stmt(tokens: &Array<i32>, pos: i32) -> i32 {
             return -1;
         } else if alt_kind == TK_ID {
             pos = start;
-            SCAN_GATE.no_brace = start_no_brace;
+            SCAN_GATE = start_gate;
             try_1: {
                 pos = scan_expr(tokens, pos, 0);
                 if pos < 0 { break try_1; }
@@ -1696,15 +1696,15 @@ fn scan_block(tokens: &Array<i32>, pos: i32) -> i32 {
 
 fn scan_expr_atom(tokens: &Array<i32>, pos: i32) -> i32 {
     let start = pos;
-    let start_no_brace = SCAN_GATE.no_brace;
+    let start_gate = SCAN_GATE;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
         if alt_kind == TK_ID {
             let mut best: i32 = -1;
-            let mut best_no_brace = SCAN_GATE.no_brace;
+            let mut best_gate = SCAN_GATE;
             pos = start + 1;
-            SCAN_GATE.no_brace = start_no_brace;
+            SCAN_GATE = start_gate;
             try_0: {
                 if !((SCAN_GATE.no_brace == 0)) { break try_0; }
                 if pos >= tokens.len() || tokens[pos] != TK_LB { break try_0; }
@@ -1713,14 +1713,14 @@ fn scan_expr_atom(tokens: &Array<i32>, pos: i32) -> i32 {
                 pos += 1;
                 if pos >= tokens.len() || tokens[pos] != TK_RB { break try_0; }
                 pos += 1;
-                if pos > best { best = pos; best_no_brace = SCAN_GATE.no_brace; }
+                if pos > best { best = pos; best_gate = SCAN_GATE; }
             }
             pos = start + 1;
-            SCAN_GATE.no_brace = start_no_brace;
-            if pos > best { best = pos; best_no_brace = SCAN_GATE.no_brace; }
+            SCAN_GATE = start_gate;
+            if pos > best { best = pos; best_gate = SCAN_GATE; }
             if best >= 0 {
                 pos = best;
-                SCAN_GATE.no_brace = best_no_brace;
+                SCAN_GATE = best_gate;
                 break scan_alts;
             }
             return -1;
@@ -1752,11 +1752,11 @@ fn scan_expr(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
         if suffix_kind == TK_LSQ {
             if 1 >= min_prec {
                 let lr_saved_pos = pos;
-                let lr_saved_pos_no_brace = SCAN_GATE.no_brace;
+                let lr_saved_pos_gate = SCAN_GATE;
                 pos = scan_expr_lr_0(tokens, pos);
                 if pos < 0 {
                     pos = lr_saved_pos;
-                    SCAN_GATE.no_brace = lr_saved_pos_no_brace;
+                    SCAN_GATE = lr_saved_pos_gate;
                     break;
                 }
             } else {

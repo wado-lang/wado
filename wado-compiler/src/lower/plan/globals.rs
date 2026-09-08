@@ -38,13 +38,8 @@ fn is_constant_initializer(expr: &TirExpr, type_table: &TypeTable) -> bool {
         | TirExprKind::FloatLiteral { .. }
         | TirExprKind::BoolLiteral(_)
         | TirExprKind::CharLiteral(_)
-        | TirExprKind::Unit => true,
-        // A `null` slot holds a null reference, which is not what an `Option`'s
-        // `None` is: `translate_variant_construct` builds every one as a
-        // `struct.new` carrying the discriminant, so the initialization function
-        // has to. A bare null there traps on the first read asking which case it
-        // is.
-        TirExprKind::Null => type_table.as_option(expr.type_id).is_none(),
+        | TirExprKind::Unit
+        | TirExprKind::Null => true,
         TirExprKind::Cast { expr: inner, .. } => is_constant_initializer(inner, type_table),
         TirExprKind::Unary { op, expr: inner } => {
             // Negation of literals is constant

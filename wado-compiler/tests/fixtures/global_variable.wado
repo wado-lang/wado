@@ -289,12 +289,12 @@ test "a genuinely nullable global keeps its None" {
 }
 
 test "an Option global declared null keeps its None, whatever it wraps" {
-    // Every `None` is a struct carrying the discriminant, so `null` at an
-    // `Option` is a value the initialization function builds and never a
-    // constant the slot can hold. Initializing the slot to a bare null instead
-    // left the first read asking which case it is trapping. `Option::Some` in
-    // the same position always worked, which is what made this look like
-    // nullable-reference handling rather than the constant a global may hold.
+    // Whether a `None` is a bare null or a struct carrying the discriminant is
+    // the null-niche lowering's answer, and it says null only for the two-case
+    // variant over a reference. The slot answered it for itself and said null
+    // to every `Option`, so a read of a scalar one trapped asking which case it
+    // is. `Option::Some` in the same position always worked, which is what made
+    // this look like nullable-reference handling.
     assert SCALAR_NONE matches { None };
     assert SCALAR_NONE_MUT matches { None };
     assert VARIANT_NONE matches { None };

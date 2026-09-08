@@ -1626,13 +1626,13 @@ fn scan_start(tokens: &Array<i32>, pos: i32) -> i32 {
 
 fn scan_stmt(tokens: &Array<i32>, pos: i32) -> i32 {
     let start = pos;
-    let start_on = SCAN_GATE.on;
+    let start_gate = SCAN_GATE;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
         if alt_kind == TK_OFF {
             pos = start + 1;
-            SCAN_GATE.on = start_on;
+            SCAN_GATE = start_gate;
             try_0: {
                 pos = scan_pick(tokens, pos);
                 if pos < 0 { break try_0; }
@@ -1641,7 +1641,7 @@ fn scan_stmt(tokens: &Array<i32>, pos: i32) -> i32 {
             return -1;
         } else if alt_kind == TK_ON {
             pos = start + 1;
-            SCAN_GATE.on = start_on;
+            SCAN_GATE = start_gate;
             try_1: {
                 SCAN_GATE.on = 1;
                 pos = scan_pick(tokens, pos);
@@ -1658,15 +1658,15 @@ fn scan_stmt(tokens: &Array<i32>, pos: i32) -> i32 {
 
 fn scan_pick(tokens: &Array<i32>, pos: i32) -> i32 {
     let start = pos;
-    let start_on = SCAN_GATE.on;
+    let start_gate = SCAN_GATE;
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
         if alt_kind == TK_ID {
             let mut best: i32 = -1;
-            let mut best_on = SCAN_GATE.on;
+            let mut best_gate = SCAN_GATE;
             pos = start + 1;
-            SCAN_GATE.on = start_on;
+            SCAN_GATE = start_gate;
             try_1: {
                 if !((SCAN_GATE.on == 1)) { break try_1; }
                 if pos >= tokens.len() || tokens[pos] != TK_LB { break try_1; }
@@ -1677,10 +1677,10 @@ fn scan_pick(tokens: &Array<i32>, pos: i32) -> i32 {
                 pos += 1;
                 if pos >= tokens.len() || tokens[pos] != TK_SEMI { break try_1; }
                 pos += 1;
-                if pos > best { best = pos; best_on = SCAN_GATE.on; }
+                if pos > best { best = pos; best_gate = SCAN_GATE; }
             }
             pos = start + 1;
-            SCAN_GATE.on = start_on;
+            SCAN_GATE = start_gate;
             try_0: {
                 if !((SCAN_GATE.on == 1)) { break try_0; }
                 if pos >= tokens.len() || tokens[pos] != TK_LB { break try_0; }
@@ -1689,11 +1689,11 @@ fn scan_pick(tokens: &Array<i32>, pos: i32) -> i32 {
                 pos += 1;
                 if pos >= tokens.len() || tokens[pos] != TK_RB { break try_0; }
                 pos += 1;
-                if pos > best { best = pos; best_on = SCAN_GATE.on; }
+                if pos > best { best = pos; best_gate = SCAN_GATE; }
             }
             if best >= 0 {
                 pos = best;
-                SCAN_GATE.on = best_on;
+                SCAN_GATE = best_gate;
                 break scan_alts;
             }
             return -1;
