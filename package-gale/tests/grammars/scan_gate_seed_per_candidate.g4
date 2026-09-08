@@ -1,6 +1,3 @@
-// Source: Gale test fixture (a tournament candidate leaking its gate to the next)
-// License: same as the Gale package
-//
 // Every candidate of a longest-match tournament scans from the same position,
 // so every one has to start from the parser's gate. A candidate that walks into
 // a head and fails before walking out of it leaves the ban set; seeding the

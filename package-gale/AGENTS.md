@@ -117,7 +117,9 @@ scripts/check-unicode-properties.sh
 scripts/regen-unicode-tables.sh          # back to latest
 ```
 
-To add an e2e grammar: drop the `.g4` in `tests/grammars/` (with `// Source:` / `// License:` headers), add a parse test in `src/g4/integration_test.wado`, and a driver test that imports it via the generator.
+To add an e2e grammar: drop the `.g4` in `tests/grammars/`, add a parse test in `src/g4/integration_test.wado`, and a driver test that imports it via the generator. Open the file with a comment saying which shape it pins and why that shape is hard.
+
+A grammar taken from elsewhere carries `// Source:` (the URL it came from) and `// License:` as well. A fixture written here carries neither. Most of the older ones do — "Source: Gale test fixture", "License: same as the Gale package" — and those two lines say nothing the directory has not already said. Don't copy them into a new file.
 
 ## Inlined runtime
 

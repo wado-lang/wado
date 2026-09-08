@@ -1,6 +1,3 @@
-// Source: Gale test fixture (lexer alternation + semantic predicate)
-// License: same as the Gale package
-//
 // An alternation in tail position whose arms reach different lengths, where
 // one arm carries a semantic predicate. ANTLR4's lexer takes the longest
 // match; the predicate decides whether its own arm matches at all, not how the

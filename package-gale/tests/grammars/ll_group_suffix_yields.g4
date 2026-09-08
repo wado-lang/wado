@@ -1,6 +1,3 @@
-// Source: hand-written for Gale's LL prediction tests.
-// License: same as the Gale package.
-//
 // A tail-greedy loop whose yield is proved only PAST the group holding it.
 // `path`'s `(SEP ID)*` sits inside `(path? SEP)?`, so the caller wants one SEP
 // — but every iteration of the loop starts with one too, and only the token

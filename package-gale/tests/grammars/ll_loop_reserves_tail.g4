@@ -1,6 +1,3 @@
-// Source: hand-written for Gale's LL prediction tests.
-// License: same as the Gale package.
-//
 // A greedy loop in front of a mandatory suffix that starts where the loop body
 // does. `(arm SEMI)* arm` lets the loop take the only arm of `a;`, after which
 // the mandatory `arm` has none — the loop has to leave one behind. Nothing at

@@ -1,6 +1,3 @@
-// Source: Gale test fixture (a mandatory group a lenient scan lets pass)
-// License: same as the Gale package
-//
 // A required scan group is emitted lenient by default: finding no alternative
 // it rewinds to its entry position and the rule reports a match. That is an
 // over-approximation the longest-match tournament wants -- except where the

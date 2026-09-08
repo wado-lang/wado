@@ -1,6 +1,3 @@
-// Source: Gale test fixture (a tournament whose every candidate is gated off)
-// License: same as the Gale package
-//
 // The pick after a longest-match tournament runs its last alternative with no
 // test, because the one before it already returned and some alternative always
 // matched. A gated candidate breaks that: it scores no-match for a reason the

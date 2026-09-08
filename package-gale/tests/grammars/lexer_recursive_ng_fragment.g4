@@ -1,6 +1,3 @@
-// Source: hand-written for Gale's lexer tests.
-// License: same as the Gale package.
-//
 // A non-greedy loop whose stopping point the rule's own recursion decides,
 // reached through a fragment. `STR_BODY` recurses in one alternative and holds
 // the `.*?` in the other, so the `"` the loop must stop at is a different one

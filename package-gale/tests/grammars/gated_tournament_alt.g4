@@ -1,6 +1,3 @@
-// Source: Gale test fixture (semantic predicate on a scan-tournament alternative)
-// License: same as the Gale package
-//
 // An alternative the lookahead cannot separate from its sibling, decided by
 // length — and gated by a semantic predicate a caller toggles. `expr`'s first
 // alternative is strictly longer, so the tournament always takes it; inside

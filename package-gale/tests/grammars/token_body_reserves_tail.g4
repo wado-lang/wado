@@ -1,6 +1,3 @@
-// Source: Gale test fixture (a token-bodied loop reserving its alternative's tail)
-// License: same as the Gale package
-//
 // `ll_loop_reserves_tail.g4` gives its loop a group body, which the scan walks
 // through the ordinary iteration path. A body the loop's own guard already
 // implies -- one token -- takes a shortcut instead: the scan advances by one and

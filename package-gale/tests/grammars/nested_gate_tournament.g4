@@ -1,6 +1,3 @@
-// Source: Gale test fixture (a scan tournament that walks over a gate action)
-// License: same as the Gale package
-//
 // `gated_tournament_alt.g4` covers the gate a parse function evaluates just
 // before the tournament it guards. This one covers the position that one does
 // not reach: an outer tournament whose scan walks *through* the `IF` head. The

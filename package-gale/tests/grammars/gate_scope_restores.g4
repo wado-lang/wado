@@ -1,6 +1,3 @@
-// Source: Gale test fixture (a rule that scopes a gate and puts it back)
-// License: same as the Gale package
-//
 // A gate a bracketing rule clears never comes back, so the ban it lifted stays
 // lifted for the rest of the enclosing head: `if f(x) || a { b }` reads
 // `a { b }` as the braced form and takes the block the `if` still owes. A

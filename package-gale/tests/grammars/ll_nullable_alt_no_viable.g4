@@ -1,6 +1,3 @@
-// Source: hand-written for Gale's LL prediction tests.
-// License: same as the Gale package.
-//
 // A group whose second alternative matches empty, at a lookahead neither
 // alternative selects. `(COMMA base | COMMA?)` closes `fields`, and at the `}`
 // the only reading left is the empty one — reporting "no viable alternative"

@@ -1,6 +1,3 @@
-// Source: Gale test fixture (a greedy loop declining an iteration that strands its own alternative)
-// License: same as the Gale package
-//
 // `stmts` is `stmt+ expr?`, and `stmt`'s block form and `expr` both start with
 // `{`. A greedy loop takes every iteration its body scans, so `{ y }.m()` loses
 // its head to the loop and leaves `.m()` where nothing in the alternative can

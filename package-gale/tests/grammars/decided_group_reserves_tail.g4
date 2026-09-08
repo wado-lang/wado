@@ -1,6 +1,3 @@
-// Source: Gale test fixture (a token-decided group body skipping its reserve)
-// License: same as the Gale package
-//
 // A loop whose body is a group the lookahead decides outright takes a separate
 // parse-side entry: it asks the decision which alternative to run and commits.
 // That entry emitted no reserve, while the scan's ordinary iteration path did —

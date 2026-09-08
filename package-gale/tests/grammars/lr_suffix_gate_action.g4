@@ -1,6 +1,3 @@
-// Source: Gale test fixture (a gate action inside a left-recursive suffix)
-// License: same as the Gale package
-//
 // A left-recursive rule's precedence loop *scans* a suffix before committing to
 // it, so an action inside the suffix has to run on both sides. Where only the
 // parse runs it, the scan measures the suffix under a gate the parse will have

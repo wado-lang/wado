@@ -1,6 +1,3 @@
-// Source: Gale test fixture (a gated alternative that also matches empty)
-// License: same as the Gale package
-//
 // A group dispatch gives its nullable alternative the last arm, for the
 // lookahead none of the others select. When that alternative is also gated, the
 // arm that selects it on its own tokens folds the predicate into that arm's
