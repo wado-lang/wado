@@ -249,9 +249,7 @@ pub enum ParamList {
 }
 
 impl ParamList {
-    /// The word that names this list in a message, spelled to sit before
-    /// "parameter(s)".
-    fn qualifier(self) -> &'static str {
+    fn prefix(self) -> &'static str {
         match self {
             ParamList::Value => "",
             ParamList::Type => "type ",
@@ -789,7 +787,6 @@ pub enum TypeError {
     TraitMethodArityMismatch {
         trait_name: String,
         method_name: String,
-        /// Which of the method's two lists disagrees.
         list: ParamList,
         expected: usize,
         found: usize,
@@ -1760,7 +1757,7 @@ impl TypeError {
                 Code::TypeMismatch,
                 format!(
                     "method `{method_name}` takes {found} {}parameter(s) but `{trait_name}` declares {expected}",
-                    list.qualifier()
+                    list.prefix()
                 ),
                 *span,
             ),

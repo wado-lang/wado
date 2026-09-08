@@ -409,7 +409,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .impl_sig(impl_ref.0)
                 .expect("the decl pass records every impl block's declaration facts")
                 .instantiate(&self.tysys.type_table, concrete_type_args);
-            let declared = TypeSystem::build_declared_type_params(&header.type_params);
+            let declared: IndexSet<String> =
+                header.type_params.iter().map(|p| p.name.clone()).collect();
             if let Some(result) = project(self, impl_ref, &impl_sig, &declared) {
                 return Some(result);
             }
@@ -1655,7 +1656,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let impl_struct_name = self.get_type_name(&header.ty);
         let is_blanket_type_param = matches!(
             &header.ty,
-            Type::Named(named) if !self.tysys.is_known_type_name(&named.name)
+            Type::Named(named)
+                if self.tysys.is_impl_target_param(&header.type_params, &named.name)
         );
         // Qualified in the impl's own frame by the decl pass: the call site's
         // imports may name the same declaration differently, or not at all.
@@ -1773,7 +1775,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // For blanket impls where impl_ty is a free type parameter
         if let Some(ref name) = blanket_name
             && !scope.annotate_ctx.trait_ctx.type_params.contains_key(name)
-            && !scope.tysys.is_known_type_name(name)
+            && scope
+                .tysys
+                .is_impl_target_param(&header.type_params, name)
         {
             if let Some(recv_id) = receiver_type_id {
                 // At the slot the impl gave it, which is 0 only when the

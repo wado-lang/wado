@@ -193,9 +193,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Whether `param`'s slots can be filled to make it `arg`. Structural, not
-    /// nominal: a rendered base name embeds a function type's own parameters and
-    /// a tuple's elements, so `fn(T) -> i32` and `fn(i32) -> i32` do not spell
-    /// alike however `T` is chosen.
+    /// nominal: a base name renders a function type's own parameters, so
+    /// `fn(T) -> i32` and `fn(i32) -> i32` never spell alike however `T` is
+    /// chosen, and it drops a generic's arguments, so `Holder<T, T>` spells like
+    /// `Holder<i32, String>`, which no `T` makes it.
     fn slots_fill_param_to(&self, param: TypeId, arg: TypeId) -> bool {
         let mut bindings = IndexMap::default();
         unify(&self.tysys.type_table, param, arg, &mut bindings);
@@ -246,9 +247,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 {
                     return true;
                 }
-                let open = tt.contains_type_param(param);
+                if !tt.contains_type_param(param) {
+                    return false;
+                }
                 drop(tt);
-                open && self.slots_fill_param_to(param, *t)
+                self.slots_fill_param_to(param, *t)
             }
             // A newtype over the head is admitted too; admitting more is the
             // safe side.

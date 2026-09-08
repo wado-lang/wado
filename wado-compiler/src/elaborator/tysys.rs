@@ -8,7 +8,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::Arc;
 
-use crate::ast::{self, BinaryOp, Expr, Literal, UnaryOp};
+use crate::ast::{BinaryOp, Expr, Literal, UnaryOp};
 use crate::builtin_registry::BuiltinRegistry;
 use crate::compiler_item::CompilerItem;
 use crate::component_model::CmInterfaceRegistry;
@@ -222,8 +222,9 @@ impl TypeSystem {
 
     /// Whether an impl target's generic argument names a type parameter of that
     /// impl rather than a concrete type. The block's own declaration list is the
-    /// only way in, so `String` in `impl Tr for Foo<String>` fills an argument
-    /// position and binds no slot.
+    /// only way in and the whole of it: `String` in `impl Tr for Foo<String>`
+    /// fills an argument position and binds no slot, and a name the block does
+    /// declare is a slot however many modules name a type that.
     pub(crate) fn is_impl_target_param(
         &self,
         declared: &[crate::ast::GenericParam],
@@ -316,16 +317,6 @@ pub(crate) fn operator_compiler_item(op: &BinaryOp) -> Option<CompilerItem> {
 /// stringification). They touch only `self.type_table`; the body walk and
 /// reify both reach them through `self.tysys`.
 impl TypeSystem {
-    /// The slots an `impl` block binds. Its own declaration list is the only
-    /// way in, as [`Self::is_impl_target_param`] reads it: a name the header
-    /// mentions without declaring is not a slot but an undeclared type, and a
-    /// name it declares is a slot however many modules name a type that.
-    pub(crate) fn build_declared_type_params(
-        impl_type_params: &[ast::GenericParam],
-    ) -> IndexSet<String> {
-        impl_type_params.iter().map(|p| p.name.clone()).collect()
-    }
-
     /// Get the struct name from a type ID, if it's a struct, generic instance, newtype, or flags.
     pub(crate) fn struct_name_for_type(&self, type_id: TypeId) -> Option<String> {
         match self.type_table.borrow().get(type_id) {

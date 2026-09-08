@@ -184,6 +184,12 @@ A static call is selected by the parameters the impl declares, each compared
 against the argument written for it. The comparison is by `TypeId`, so two
 distinct types that print one name are two candidates.
 
+A parameter still holding slots is compared by shape: the slots are solved from
+the argument and what that makes of the parameter is compared. Neither half of
+this is a name. A rendered name spells a function type's own parameters, so
+`fn(T) -> i32` never matches `fn(i32) -> i32`, and it drops a generic's
+arguments, so `Holder<T, T>` matches a `Holder<i32, String>` that no `T` makes.
+
 `From<T>` made that rule look like two narrower ones. Its source type is also
 its trait argument, so the trait reference could stand in for the parameter, and
 `from` takes exactly one argument, so one argument looked like the whole list.

@@ -1181,15 +1181,14 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 let Some(declared) = decl.methods.iter().find(|m| m.name == method.name) else {
                     continue;
                 };
-                let lists = [
+                for (list, expected, found) in [
                     (ParamList::Value, declared.param_count, method.param_count),
                     (
                         ParamList::Type,
                         declared.type_params.len(),
                         method.type_params.len(),
                     ),
-                ];
-                for (list, expected, found) in lists {
+                ] {
                     if expected != found {
                         let _ = logger.error_in(
                             &header.module,
