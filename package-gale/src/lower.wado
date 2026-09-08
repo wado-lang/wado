@@ -2132,12 +2132,13 @@ fn lower_scan_body(alt: &Alternative, ctx: &mut GenContext, rule_name: &String, 
 /// Empty unless the grammar declares a simulable gate member, so a grammar
 /// without one lowers exactly as before.
 ///
-/// `from` is the surface index the scan body starts at, so an LR suffix — which
-/// walks `elements[1..]` — positions its gates against what it actually emits.
-/// A gate before `from` is one the LR rewrite stripped with the leading
-/// self-ref, and `emit_lr_branch_body` interleaves the alternative's actions
-/// from `before == 1`: the parse never runs it, so simulating it would leave the
-/// scan holding a value no parse produces.
+/// `from` is the surface index the scan body starts at. An LR suffix walks
+/// `elements[1..]`, so it positions its gates against what it actually emits.
+///
+/// A gate before `from` is dropped, not repositioned. The LR rewrite stripped it
+/// with the leading self-ref, and `emit_lr_branch_body` interleaves the
+/// alternative's actions from `before == 1`. The parse never runs it, so
+/// simulating it leaves the scan holding a value no parse produces.
 pub fn scan_gates_for(alt: &Alternative, ctx: &GenContext, from: i32 = 0) -> List<ScanGate> {
     if !ctx.emit_scan_gate() {
         return [];
