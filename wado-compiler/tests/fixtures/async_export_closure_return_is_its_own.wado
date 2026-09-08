@@ -1,0 +1,30 @@
+// A closure nested in an `export async fn` ends at its own `return`. Reading
+// that `return` as the enclosing function's made a closure hand back the
+// async result.
+
+use { println, Stdout } from "core:cli";
+
+export async fn deliver(n: i32) -> Result<i32, String> with Stdout {
+    let f = |x: i32| {
+        if x > 0 {
+            return;
+        }
+        println("not positive");
+    };
+    f(n);
+    task return Result::<i32, String>::Ok(n);
+}
+
+export fn run() with Stdout {
+    match deliver(3) {
+        Result::Ok(v) => println(`ok ${v}`),
+        Result::Err(e) => println(`err ${e}`),
+    }
+    match deliver(-1) {
+        Result::Ok(v) => println(`ok ${v}`),
+        Result::Err(e) => println(`err ${e}`),
+    }
+}
+
+__DATA__
+{"stdout": "ok 3\nnot positive\nok -1\n"}

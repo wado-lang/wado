@@ -23,7 +23,7 @@ use crate::tir::{
     FunctionRef, ResolvedType, TirBlock, TirExpr, TirExprKind, TirFunction, TirLocal, TirMatchArm,
     TirModule, TirPattern, TirStmt, TirStmtKind, TypeId, TypeTable,
 };
-use crate::tir_visitor::{TirOptVisitor, opt_walk_block, opt_walk_stmt};
+use crate::tir_visitor::{TirOptVisitor, opt_walk_block, opt_walk_expr, opt_walk_stmt};
 use crate::token::Span;
 
 use crate::synthesis::common::{
@@ -89,35 +89,49 @@ pub(super) fn reduce_task_returns_in_func(
         return;
     };
     let declared = func.return_type;
-    let slot_type = type_table.borrow_mut().make_option(declared);
+    let items = type_table.borrow().compiler_items().clone();
     let mut next_local = func.local_count;
     let mut extra: Vec<TirLocal> = Vec::new();
-    let slot = alloc_local(&mut next_local, &mut extra, slot_type);
-    let bound = alloc_local(&mut next_local, &mut extra, declared);
-    let items = type_table.borrow().compiler_items().clone();
+    // A unit result needs no slot; the body already returns nothing, and the
+    // operand is all a `task return` leaves behind. Otherwise the result has to
+    // come from somewhere, and a function no `task return` reaches has none —
+    // it says so rather than handing back a zeroed value.
+    let result = (declared != TypeTable::UNIT).then(|| {
+        let slot_type = type_table.borrow_mut().make_option(declared);
+        ResultSlot {
+            slot: alloc_local(&mut next_local, &mut extra, slot_type),
+            slot_type,
+            declared,
+            bound: alloc_local(&mut next_local, &mut extra, declared),
+        }
+    });
 
     let mut reducer = TaskReturnReducer {
-        slot,
-        slot_type,
-        declared,
-        bound,
+        result: result.as_ref(),
         items: &items,
     };
     reducer.visit_block(&mut body);
 
-    // A unit result needs no slot; the body already returns nothing. Otherwise
-    // the result has to come from somewhere, and a function no `task return`
-    // reaches has none — it says so rather than handing back a zeroed value.
-    if declared != TypeTable::UNIT {
-        let none = option_none(slot_type, &items);
-        body.stmts
-            .insert(0, let_mut_stmt(TASK_RESULT_LOCAL, slot, slot_type, none));
-        body.stmts
-            .push(take_task_result(slot, slot_type, declared, bound, &items));
+    if let Some(result) = &result {
+        let none = option_none(result.slot_type, &items);
+        body.stmts.insert(
+            0,
+            let_mut_stmt(TASK_RESULT_LOCAL, result.slot, result.slot_type, none),
+        );
+        body.stmts.push(take_task_result(result, &items));
         func.local_count = next_local;
         func.locals.extend(extra);
     }
     func.body = Some(body);
+}
+
+/// Where a reduced `task return` puts its value: an `Option` slot the body
+/// binds out and returns at the end.
+struct ResultSlot {
+    slot: u32,
+    slot_type: TypeId,
+    declared: TypeId,
+    bound: u32,
 }
 
 /// The local a reduced `task return` writes its value into.
@@ -190,6 +204,10 @@ impl TirOptVisitor for TaskReturnExpander<'_> {
         // `let` values, …); the generated sequences contain no `task return`.
         opt_walk_block(self, block)
     }
+
+    fn visit_expr(&mut self, expr: &mut TirExpr) -> bool {
+        walk_outside_closures(self, expr)
+    }
 }
 
 /// Take the operand out of a `task return`, leaving a placeholder both callers
@@ -207,50 +225,57 @@ fn take_task_return_value(stmt: &mut TirStmt) -> Option<TirExpr> {
 }
 
 struct TaskReturnReducer<'a> {
-    slot: u32,
-    slot_type: TypeId,
-    declared: TypeId,
-    bound: u32,
+    result: Option<&'a ResultSlot>,
     items: &'a CompilerItems,
 }
 
 impl TirOptVisitor for TaskReturnReducer<'_> {
     fn visit_stmt(&mut self, stmt: &mut TirStmt) -> bool {
         if let Some(value) = take_task_return_value(stmt) {
-            stmt.kind = TirStmtKind::Expr(assign(
-                local_ref(self.slot, TASK_RESULT_LOCAL, self.slot_type),
-                option_some(value, self.slot_type, self.items),
-            ));
+            stmt.kind = match self.result {
+                Some(result) => TirStmtKind::Expr(assign(
+                    local_ref(result.slot, TASK_RESULT_LOCAL, result.slot_type),
+                    option_some(value, result.slot_type, self.items),
+                )),
+                None => TirStmtKind::Expr(value),
+            };
             return true;
         }
         // A bare `return` ends the function carrying what was delivered, which
         // is what the end of the body does too.
-        if self.declared != TypeTable::UNIT
+        if let Some(result) = self.result
             && matches!(&stmt.kind, TirStmtKind::Return { value: None })
         {
-            *stmt = take_task_result(
-                self.slot,
-                self.slot_type,
-                self.declared,
-                self.bound,
-                self.items,
-            );
+            *stmt = take_task_result(result, self.items);
             return true;
         }
         opt_walk_stmt(self, stmt)
     }
+
+    fn visit_expr(&mut self, expr: &mut TirExpr) -> bool {
+        walk_outside_closures(self, expr)
+    }
+}
+
+/// A closure body is a function of its own: its `return` ends the closure, and
+/// `task return` cannot appear there at all. Neither rewrite crosses into one.
+fn walk_outside_closures(visitor: &mut impl TirOptVisitor, expr: &mut TirExpr) -> bool {
+    if matches!(&expr.kind, TirExprKind::Closure { .. }) {
+        return false;
+    }
+    opt_walk_expr(visitor, expr)
 }
 
 /// `match __task_result { Some(v) => return v, None => unreachable() }`. A body
 /// that reaches the end without delivering has no result to give, which for the
 /// task entry is a CM protocol error either way.
-fn take_task_result(
-    slot: u32,
-    slot_type: TypeId,
-    declared: TypeId,
-    bound: u32,
-    items: &CompilerItems,
-) -> TirStmt {
+fn take_task_result(result: &ResultSlot, items: &CompilerItems) -> TirStmt {
+    let &ResultSlot {
+        slot,
+        slot_type,
+        declared,
+        bound,
+    } = result;
     let span = synth_span();
     let (_, _, some_name, _) = items.require_variant_case(CompilerItem::OptionSome);
     let (_, _, none_name, _) = items.require_variant_case(CompilerItem::OptionNone);

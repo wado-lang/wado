@@ -49,7 +49,9 @@ For each world export, `cm_binding_gen` synthesizes an binding that wraps the us
 
 So the delivery lives in a copy. `split_task_entry` clones the user's function as `__cm_task_entry__<name>`, `expand_task_returns_in_func` rewrites the copy's `task return` statements into the canonical calls, and the export binding calls the copy. A `FunctionRef` resolves by name, so the rename is the whole redirection, and DCE drops whichever copy nothing reaches.
 
-The user's own function keeps its `task return` statements for `reduce_unexpanded_task_returns`, which runs after export synthesis. There each `task return value` becomes a binding into an `Option` slot, and the body ends by returning what it bound — trapping if it reaches the end having delivered nothing, which for the task entry is a CM protocol error either way. The `Option` is what lets a delivery sitting under a branch type-check without demanding a default for the declared type.
+The user's own function keeps its `task return` statements for `reduce_unexpanded_task_returns`, which runs after export synthesis. There each `task return value` becomes a binding into an `Option` slot, and the body ends by returning what it bound — trapping if it reaches the end having delivered nothing, which for the task entry is a CM protocol error either way. The `Option` is what lets a delivery sitting under a branch type-check without demanding a default for the declared type. A unit result takes no slot: there is nothing to bind, so only the operand is left behind.
+
+Both rewrites stop at a closure boundary. A closure is a function of its own — its `return` ends the closure, and `task return` is rejected there — so neither the delivery nor the binding may cross into one.
 
 The delivery point stays inside the body in both copies. A binding that waited for the body to return before delivering would buffer a streamed response body in full, which is the deadlock `task return` exists to avoid.
 

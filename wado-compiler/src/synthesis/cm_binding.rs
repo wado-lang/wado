@@ -455,7 +455,7 @@ fn named_decl_of<'a>(tt: &'a TypeTable, ty: &ResolvedType) -> Option<(&'a str, &
 ///
 /// Ordered pipeline: import adapters, export adapters, the shared task-return
 /// signature, test-world bindings, payload validation (producing the
-/// `PayloadsValidated` witness), task-return stripping, and finally
+/// `PayloadsValidated` witness), task-return reduction, and finally
 /// the async/resource primitive rewrites (consuming the witness).
 ///
 /// Adapter functions flow through monomorphize → lower → optimize → codegen
@@ -1221,8 +1221,8 @@ fn generate_test_world_bindings(project: &mut Package) {
 fn reduce_unexpanded_task_returns(project: &Package) {
     for module in project.tir_modules.values() {
         for f in &module.functions {
-            let needs_strip = f.borrow().is_async;
-            if needs_strip {
+            let is_async = f.borrow().is_async;
+            if is_async {
                 reduce_task_returns_in_func(f, &module.type_table);
             }
         }
