@@ -7,7 +7,7 @@ use std::rc::Rc;
 
 use crate::flat_package::FlatPackage;
 use crate::hashmap::IndexMap;
-use crate::lower::plan::value_copy::ownership::hands_out_storage;
+use crate::lower::plan::value_copy::ownership::owes_return_convention;
 use crate::module_source::ModuleSource;
 use crate::package::Package;
 use crate::tir::{BuiltinDeclaration, TirFunction, TypeTable};
@@ -28,7 +28,7 @@ fn record_builtin_declaration(
         return;
     }
     assert!(
-        func.declared_return_convention.is_some() || !hands_out_storage(func, type_table),
+        func.declared_return_convention.is_some() || !owes_return_convention(func, type_table),
         "builtin `{}` reads through a reference and returns storage: \
          declare #[returns(part_of(p))] or #[returns(owned)]",
         func.name,

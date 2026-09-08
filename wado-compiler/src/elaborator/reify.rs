@@ -1395,7 +1395,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let type_params = self
             .ann_decl_type_params(func.id)
             .expect("resolve_function records the type params for every function reify emits");
-        let declared_return_convention = extract_return_convention_attr(&func.attrs, &params);
+        let declared_return_convention = self.reify_return_convention_attr(&func.attrs, &params);
 
         Some(TirFunction {
             module_source: ModuleSource::default(),
@@ -1830,7 +1830,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let type_params = self.ann_decl_type_params(func.id).expect(
             "resolve_method records the method type params for every impl method reify emits",
         );
-        let declared_return_convention = extract_return_convention_attr(&func.attrs, &params);
+        let declared_return_convention = self.reify_return_convention_attr(&func.attrs, &params);
 
         Some(TirFunction {
             module_source: ModuleSource::default(),
@@ -2082,6 +2082,52 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             Some(tir::ParamSpec { name, from_env })
         } else {
             None
+        }
+    }
+
+    /// Extract and structurally validate a `#[returns(...)]` attribute.
+    ///
+    /// `None` where the declaration states none, leaving the return-convention
+    /// analysis to decide. A malformed attribute is reported rather than read as
+    /// silence: silence means "allocates", the reading that elides copies.
+    fn reify_return_convention_attr(
+        &self,
+        attrs: &[ast::Attribute],
+        params: &[tir::TirParam],
+    ) -> Option<tir::ReturnConvention> {
+        use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
+
+        let attr = attrs.iter().find(|a| a.name == "returns")?;
+        let emit = |message: String| {
+            let _ = self.logger.error_in(
+                &self.current_module_source,
+                Diagnostic {
+                    severity: Severity::Error,
+                    code: Code::ReturnsAttr,
+                    message,
+                    span: Some(DiagnosticSpan::from_span(&attr.span, None)),
+                },
+            );
+            None
+        };
+
+        let Some(arg) = attr.args.first() else {
+            return emit("#[returns] takes `owned` or `part_of(param)`".to_string());
+        };
+        match arg.as_str() {
+            "owned" => Some(tir::ReturnConvention::Owned),
+            "part_of" => {
+                let Some(named) = arg.call_args().first() else {
+                    return emit("#[returns(part_of(...))] takes a parameter name".to_string());
+                };
+                match params.iter().position(|p| &p.name == named) {
+                    Some(index) => Some(tir::ReturnConvention::PartOf(index)),
+                    None => emit(format!("#[returns(part_of({named}))] names no parameter")),
+                }
+            }
+            other => emit(format!(
+                "unknown #[returns] convention: {other} (expected `owned` or `part_of(param)`)"
+            )),
         }
     }
 
@@ -10682,25 +10728,6 @@ fn extract_inline_hint_attr(attrs: &[crate::ast::Attribute]) -> crate::tir::Inli
         Some("never") => crate::tir::InlineHint::Never,
         None => crate::tir::InlineHint::Hint,
         _ => crate::tir::InlineHint::Auto,
-    }
-}
-
-/// The `#[returns(...)]` convention. `None` where the declaration states none,
-/// leaving the return-convention analysis to decide.
-fn extract_return_convention_attr(
-    attrs: &[ast::Attribute],
-    params: &[tir::TirParam],
-) -> Option<tir::ReturnConvention> {
-    let attr = attrs.iter().find(|a| a.name == "returns")?;
-    let arg = attr.args.first()?;
-    match arg.as_str() {
-        "owned" => Some(tir::ReturnConvention::Owned),
-        "part_of" => {
-            let named = arg.call_args().first()?;
-            let index = params.iter().position(|p| &p.name == named)?;
-            Some(tir::ReturnConvention::PartOf(index))
-        }
-        _ => None,
     }
 }
 

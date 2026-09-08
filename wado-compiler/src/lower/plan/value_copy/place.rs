@@ -489,6 +489,14 @@ pub fn carries_storage(type_id: TypeId, type_table: &TypeTable) -> bool {
     is_reference(type_id, type_table) || needs_value_copy(type_id, type_table)
 }
 
+/// [`carries_storage`] asked before monomorphization. A type parameter is
+/// whatever a call instantiates it with, so it answers for the widest of them.
+#[must_use]
+pub fn may_carry_storage(type_id: TypeId, type_table: &TypeTable) -> bool {
+    carries_storage(type_id, type_table)
+        || matches!(type_table.get(type_id), ResolvedType::TypeParam { .. })
+}
+
 /// A handle a callee can write through. A shared `&` cannot be; a box carries
 /// either spelling and answers for both.
 #[must_use]

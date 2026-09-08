@@ -1,0 +1,30 @@
+// A malformed `#[returns(...)]` is reported, never read as silence: silence
+// means the result is freshly allocated, which is what elides a copy.
+
+#[returns(part_of(nope))]
+fn first(xs: &List<i32>) -> i32 {
+    return xs[0];
+}
+
+#[returns(borrowed)]
+fn second(xs: &List<i32>) -> i32 {
+    return xs[1];
+}
+
+#[returns]
+fn third(xs: &List<i32>) -> i32 {
+    return xs[0];
+}
+
+export fn run() {
+    assert first(&[1, 2]) + second(&[1, 2]) + third(&[1, 2]) == 4;
+}
+
+__DATA__
+{
+    "compile_error": "#[returns(part_of(nope))] names no parameter",
+    "compile_errors_contains": [
+        "unknown #[returns] convention: borrowed",
+        "#[returns] takes `owned` or `part_of(param)`"
+    ]
+}

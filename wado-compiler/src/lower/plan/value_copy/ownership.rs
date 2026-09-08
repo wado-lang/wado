@@ -10,7 +10,7 @@
 
 use super::callgraph::CallGraph;
 use super::funcset::{FuncKeyMap, FuncKeySet};
-use super::place::{carries_storage, is_reference, param_position};
+use super::place::{carries_storage, is_reference, may_carry_storage, param_position};
 use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::tir::{
@@ -20,21 +20,32 @@ use crate::tir::{
 };
 use crate::tir_visitor::TirRefVisitor;
 
-/// Whether a bodyless declaration's result may be storage its caller still
-/// owns. Only a reference input can carry storage out, since a by-value one is
-/// already deep-copied at the call: `struct_field_get(v: &T, i) -> F` reads a
-/// field of what `v` points at, while `array_new(len) -> Array<T>` allocates.
-///
-/// For a `core:builtin` this is the *obligation*, checked at the declaration —
-/// one that answers yes must say which parameter with `#[returns(part_of(p))]`,
-/// or `#[returns(owned)]` that it allocates. Here it seeds the bodyless
-/// declarations the obligation does not cover, which never hand storage out.
-pub fn hands_out_storage(func: &TirFunction, type_table: &TypeTable) -> bool {
-    let has_ref_input = func
-        .params
+/// Whether any input names storage the caller still reaches. A by-value one was
+/// deep-copied at the call, so only a reference can carry storage back out:
+/// `struct_field_get(v: &T, i) -> F` reads a field of what `v` points at, while
+/// `array_new(len) -> Array<T>` allocates.
+fn reads_through_reference(func: &TirFunction, type_table: &TypeTable) -> bool {
+    func.params
         .iter()
-        .any(|p| is_reference(p.type_id, type_table));
-    has_ref_input && carries_storage(func.return_type, type_table)
+        .any(|p| is_reference(p.type_id, type_table))
+}
+
+/// Whether a bodyless declaration's result may be storage its caller still
+/// owns, asked over monomorphized TIR. A declaration answering no is fresh
+/// without declaring anything.
+pub fn hands_out_storage(func: &TirFunction, type_table: &TypeTable) -> bool {
+    reads_through_reference(func, type_table) && carries_storage(func.return_type, type_table)
+}
+
+/// The obligation a bodyless `core:builtin` carries at its declaration: one that
+/// answers yes must say which parameter its result comes from with
+/// `#[returns(part_of(p))]`, or `#[returns(owned)]` that it allocates.
+///
+/// Link asks this before monomorphization, so a generic declaration is judged on
+/// the widest instantiation of its return type rather than on the bare type
+/// parameter it reads as there.
+pub fn owes_return_convention(func: &TirFunction, type_table: &TypeTable) -> bool {
+    reads_through_reference(func, type_table) && may_carry_storage(func.return_type, type_table)
 }
 
 /// Whether `func` declares `#[returns(owned)]`. Only a declaration with no body

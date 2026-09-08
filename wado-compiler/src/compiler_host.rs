@@ -180,6 +180,9 @@ pub enum Code {
     /// is unknown, the attribute is attached to the wrong declaration
     /// kind, or it appears outside a `core::*` stdlib module.
     CompilerItemAttr,
+    /// A `#[returns(...)]` attribute is malformed — no argument, an unknown
+    /// convention, or a `part_of` naming something that is not a parameter.
+    ReturnsAttr,
     ResourceExtends,
 
     // Compile-time parameters (`#[param]`)
@@ -246,6 +249,7 @@ impl std::fmt::Display for Code {
             Code::KilnGeneratedStaleOnDisk => "KILN_GENERATED_STALE_ON_DISK",
             Code::KilnRedirectConflict => "KILN_REDIRECT_CONFLICT",
             Code::CompilerItemAttr => "COMPILER_ITEM_ATTR",
+            Code::ReturnsAttr => "RETURNS_ATTR",
             Code::ResourceExtends => "RESOURCE_EXTENDS",
             Code::ParamAttr => "PARAM_ATTR",
             Code::ParamUnknown => "PARAM_UNKNOWN",
