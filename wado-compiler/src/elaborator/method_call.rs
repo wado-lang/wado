@@ -1726,19 +1726,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // wrote (WEP 2026-04-11), as every other spelling does. Without it
             // a block declaring slots of its own rejected the call the same
             // declaration accepts on a receiver that declares none.
-            let defaulted = sig.own_params.iter().any(|p| p.default.is_some())
-                && self.fill_defaulted_method_type_args(
-                    &sig.own_params,
-                    target_type_id,
-                    sig.declaring_impl
-                        .and_then(|impl_def| self.tysys.signatures.impl_sig(impl_def)?.trait_decl),
-                    &own_ids,
-                    sig.defaults_module.clone().or_else(|| {
-                        sig.declaring_impl
-                            .map(|impl_def| self.tysys.resolutions.defs().module(impl_def).clone())
-                    }),
-                    &mut inferred,
-                );
+            let defaulted = self.fill_static_default_type_args(&sig, target_type_id, &mut inferred);
             if defaulted || own_ids.iter().all(|id| bindings.contains_key(id)) {
                 method_type_args = inferred;
                 let declaring_args = self
@@ -2380,9 +2368,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         // A concrete block hosts its own function; a generic one's instance is
-        // materialised in the receiver's module (see `FuncInstState::impl_module`).
+        // materialised in the receiver's module (`FuncInstState::impl_module`).
         // Naming the receiver's for both minted an extern stub beside a
-        // definition of that very name, where the two modules differ.
+        // definition of that name, where the two modules differ.
         let func_ref = FunctionRef {
             module_source: self
                 .concrete_impl_module_of(selected.as_ref())
@@ -3187,8 +3175,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 continue;
             };
             // The same walk the rules read, so a body the block inherits is a
-            // candidate here too: surveying `header.methods` alone left every
-            // inherited static without a parameter list to check against.
+            // candidate here too.
             let Some(offer) =
                 self.impl_static_offer(header, impl_def, trait_decl, method_name, None)
             else {

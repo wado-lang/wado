@@ -57,6 +57,12 @@ base up by its bare name asks the caller's frame for a name a namespaced
 and the call is mangled under the base the resolution answered with — mangling
 under the spelled `Q` names an impl WIR cannot find.
 
+It holds for the inference too. `ns::Type::method()` infers the receiver's type
+arguments from the key its site resolved, and reports the slots it could not
+fill, exactly as `Type::method()` does. The namespaced spelling asked neither
+question while it read only a written turbofish, so it mangled a name with no
+arguments and said nothing where none could be inferred.
+
 ### A qualified spelling names a trait
 
 `Tagged::<V>::tag(5)` asks for `Tagged`'s declaration, so only its impls are
@@ -253,6 +259,24 @@ list at the call, and `Counter<T>` resolved from the name would answer with its
 own parameters. So the query carries the arguments, and derives them from the
 receiver type only where the call brings none.
 
+### A concrete block is named where it is written
+
+A block written for one instantiation hosts its own function, in its own module
+and under the head it wrote. `impl Wrap<i32> for Cell<i32>` emits
+`Cell<i32>::wrap` beside the block. A generic block has no such head:
+monomorphization materialises each instance in the receiver's module, under the
+receiver's own name.
+
+So a call names the block it resolved to, not the receiver it spelled.
+`Cell::wrap(7)` picks the concrete block by its argument, and then names
+`Cell<i32>` in that block's module. Naming the receiver for both put the call and
+the body in different modules, and the mangled name carried no arguments where
+the body's did.
+
+This is what the receiver's type arguments are inferred _for_. The turbofish is
+not the only way to write them: the arguments select the block, and the block's
+head says what the receiver is.
+
 ### Every parameter a block declares is a slot of that block
 
 `bind_declared_target_params` numbers a block's slots by the position each takes
@@ -391,4 +415,9 @@ they instantiate what the rules picked rather than picking it.
 
 ## Known gaps
 
-None.
+- The identity question resolves twice. `is_static_method_at` runs the whole
+  walk and keeps only whether it answered, and the branch it guards then runs it
+  again. Asking the resolution rather than a second index is this WEP's point,
+  so the fix is to remember the answer, not to look it up another way. It has
+  one caller and runs once per static call, never in a loop, and nothing here
+  measures what the repeat costs.

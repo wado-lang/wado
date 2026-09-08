@@ -19,7 +19,7 @@ use crate::token::Span;
 use super::Elaborator;
 use super::infer::InferCtx;
 use super::instantiate::Instantiation;
-use super::sig::{InstantiatedImplSig, Param};
+use super::sig::{InstantiatedImplSig, MethodSig, Param};
 use super::static_call::{StaticLookup, StaticQuery};
 use super::synth::{ArgClass, ArgProbe};
 use super::trait_env::{ImplHeader, TraitEnv};
@@ -1157,6 +1157,34 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 _ => None,
             })
             .unwrap_or(0)
+    }
+
+    /// [`Self::fill_defaulted_method_type_args`] for a static's own slots,
+    /// reading the trait and the declaring module off its signature.
+    pub(super) fn fill_static_default_type_args(
+        &mut self,
+        sig: &MethodSig,
+        receiver_type: TypeId,
+        inferred: &mut [TypeId],
+    ) -> bool {
+        if !sig.own_params.iter().any(|p| p.default.is_some()) {
+            return false;
+        }
+        let declaring_module = sig.defaults_module.clone().or_else(|| {
+            sig.declaring_impl
+                .map(|impl_def| self.tysys.resolutions.defs().module(impl_def).clone())
+        });
+        let trait_decl = sig
+            .declaring_impl
+            .and_then(|impl_def| self.tysys.signatures.impl_sig(impl_def)?.trait_decl);
+        self.fill_defaulted_method_type_args(
+            &sig.own_params,
+            receiver_type,
+            trait_decl,
+            &sig.own_type_param_ids(),
+            declaring_module,
+            inferred,
+        )
     }
 
     /// Bind a still-unbound method type param to its declared default,

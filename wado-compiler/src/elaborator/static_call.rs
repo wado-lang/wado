@@ -755,18 +755,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .collect()
     }
 
-    /// The candidate for a body the block writes. Its parameter is already in
-    /// the block's own frame, so a slot the block fills is a blanket and
-    /// anything else is what the argument is compared against.
-    /// What an `impl` block offers for `method_name` — the body it wrote, else
-    /// the trait default it leaves to answer. One walk, so the survey that
-    /// lists a receiver's candidates and the rules that pick among them cannot
-    /// see different sets: reading only `header.methods` made every inherited
-    /// static invisible to the survey.
+    /// What an `impl` block offers for `method_name`: the body it wrote, else
+    /// the trait default it leaves to answer. One walk, so the argument survey
+    /// and the rules cannot see different candidate sets.
     ///
-    /// `None` where the block offers nothing: it declares another name, or the
-    /// trait left the method required — the block's own error, reported where
-    /// the two are compared.
+    /// `None` where the block offers nothing — it declares another name, or the
+    /// trait left the method required, which is reported where the two are
+    /// compared.
     pub(super) fn impl_static_offer(
         &self,
         header: &ImplHeader,

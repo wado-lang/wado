@@ -988,10 +988,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 if self.report_ambiguous_static(&resolved, suffix, call.span) {
                     return TypeTable::ERROR;
                 }
-                // No candidate the arguments admitted. The same report the
-                // static-call spelling makes: unreported, the call carried no
-                // parameter list to reject the argument, was mangled anyway,
-                // and reached WIR build unresolved.
+                // No candidate the arguments admitted — the same report the
+                // static-call spelling makes. Unreported, the call is mangled
+                // anyway and reaches WIR build unresolved.
                 if resolved.found().is_none()
                     && !args.is_empty()
                     && !self.has_inherent_static_method(prefix, suffix, Some(&receiver_key))
@@ -1376,12 +1375,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             let ast_id = self.tysys.resolutions.defs().ast_id(def);
                             self.tysys.type_table.borrow().type_of_symbol(&ast_id)
                         });
-                    // The receiver's own type arguments, and the method's, as the
-                    // two-segment spelling infers them. Without this the branch
-                    // read only a written turbofish, so `ns::Cell::wrap(7)`
-                    // mangled a name with no arguments at all — and where none
-                    // could be inferred it said nothing, leaving WIR build to
-                    // report an impl that is plainly there.
+                    // The receiver's own type arguments, and the method's, as
+                    // the two-segment spelling infers them. Reading only a
+                    // written turbofish mangled `ns::Cell::wrap(7)` with no
+                    // arguments at all, and reported nothing where none could
+                    // be inferred.
                     let mut impl_type_args_inferred: Vec<TypeId> = Vec::new();
                     if method_type_args.is_empty() {
                         let (impl_args, method_args) = self.infer_static_call_type_args(
@@ -2499,14 +2497,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         span: crate::token::Span,
         receiver_key: Option<&ImplTargetKey>,
     ) {
-        // Keyed as the inference is, and for the same reason: a namespaced
-        // receiver has no bare name to search, so an unkeyed lookup found no
-        // signature and the call went on with its slots unfilled, unreported.
-        let sig = match receiver_key {
-            Some(key) => self.qualified_method_sig_keyed(key, suffix),
-            None => self.qualified_method_sig(prefix, suffix),
-        };
-        let Some(sig) = sig else {
+        let Some(sig) = self.static_call_sig(prefix, suffix, receiver_key) else {
             return;
         };
         let (declaring_slots, method_slots) = (sig.declaring_type_params(), sig.own_type_params());
@@ -2901,14 +2892,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         span: crate::token::Span,
         receiver_key: Option<&ImplTargetKey>,
     ) -> (Vec<TypeId>, Vec<TypeId>) {
-        // Keyed where the caller resolved the receiver: the importing module
-        // never names a namespaced `Type` on its own, so a bare-name search
-        // finds no signature and every slot goes uninferred.
-        let sig = match receiver_key {
-            Some(key) => self.qualified_method_sig_keyed(key, method_name),
-            None => self.qualified_method_sig(struct_name, method_name),
-        };
-        let Some(sig) = sig else {
+        let Some(sig) = self.static_call_sig(struct_name, method_name, receiver_key) else {
             return (vec![], vec![]);
         };
         if sig.decl.type_params.is_empty() {
@@ -2940,25 +2924,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // A method-level slot the arguments do not pin takes the default its
         // declaration wrote (WEP 2026-04-11), as the instance spelling does.
-        let mut defaulted = false;
-        if sig.own_params.iter().any(|p| p.default.is_some()) {
-            let receiver = self.resolve_unsited_type_name(struct_name, span);
-            let declaring_module = sig.defaults_module.clone().or_else(|| {
-                sig.declaring_impl
-                    .map(|impl_def| self.tysys.resolutions.defs().module(impl_def).clone())
-            });
-            let trait_decl = sig
-                .declaring_impl
-                .and_then(|impl_def| self.tysys.signatures.impl_sig(impl_def)?.trait_decl);
-            defaulted = self.fill_defaulted_method_type_args(
-                &sig.own_params,
-                receiver,
-                trait_decl,
-                &sig.own_type_param_ids(),
-                declaring_module,
-                &mut inferred[split..],
-            );
-        }
+        let receiver = self.resolve_unsited_type_name(struct_name, span);
+        let defaulted = self.fill_static_default_type_args(&sig, receiver, &mut inferred[split..]);
         if !defaulted && !all_param_ids.iter().any(|p| bindings.contains_key(p)) {
             return (vec![], vec![]);
         }
@@ -3030,6 +2997,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return None;
         }
         self.qualified_method_sig_keyed(key, method_name)
+    }
+
+    /// The signature a static call names, from the key its site resolved where
+    /// it has one: a namespaced receiver has no bare name for the importing
+    /// module to search, so an unkeyed lookup finds nothing.
+    pub(super) fn static_call_sig(
+        &self,
+        struct_name: &str,
+        method_name: &str,
+        receiver_key: Option<&ImplTargetKey>,
+    ) -> Option<MethodSig> {
+        match receiver_key {
+            Some(key) => self.qualified_method_sig_keyed(key, method_name),
+            None => self.qualified_method_sig(struct_name, method_name),
+        }
     }
 
     /// The canonical signature `struct_name::method_name` names, receiver-less
