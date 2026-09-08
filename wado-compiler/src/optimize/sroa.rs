@@ -11,13 +11,7 @@ use cranelift_entity::EntityRef;
 use super::arena_query::strip_one_value_copy;
 use super::gate::{FunctionGate, GatedPass};
 use crate::hashmap::{IndexMap, IndexSet};
-<<<<<<< HEAD
-use crate::nir::{FuncId, NirFunction};
-||||||| e925ee58b
-use crate::nir::NirFunction;
-=======
 use crate::nir::{FuncId, NirFunction, NirUnaryOp};
->>>>>>> origin/main
 use crate::nir_arena::{
     ArenaStructField, BlockId, Body, ExprId, ExprKind, NodeRef, Operand, StmtId, StmtKind,
 };

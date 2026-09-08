@@ -8,23 +8,12 @@
 use std::cell::Cell;
 
 use crate::hashmap::{IndexMap, IndexSet};
-<<<<<<< HEAD
-use crate::nir::NirFunction;
-||||||| e925ee58b
-use crate::hashmap::IndexSet;
-use crate::nir::NirFunction;
-=======
 use crate::nir::{FuncId, NirFunction};
->>>>>>> origin/main
 use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, NodeRef};
 use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
 use crate::nir_value_graph::ValueId;
-<<<<<<< HEAD
-||||||| e925ee58b
-=======
 use crate::tir::TypeTable;
->>>>>>> origin/main
 
 /// Forwards stores to loads in every function. Used by the post-`field_scalarize`
 /// cleanup so the scalarization shadow inits (`__hfs_x = obj.f`) get their fields

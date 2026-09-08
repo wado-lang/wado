@@ -247,16 +247,7 @@ pub(crate) fn build_scoped(
     aliased: &IndexSet<u32>,
     untrackable: &IndexSet<u32>,
     mut_escaped: &IndexSet<u32>,
-<<<<<<< HEAD
-    type_table: Option<&crate::tir::TypeTable>,
-||||||| e925ee58b
-    aliased: &crate::hashmap::IndexSet<u32>,
-    untrackable: &crate::hashmap::IndexSet<u32>,
-    mut_escaped: &crate::hashmap::IndexSet<u32>,
-    type_table: Option<&crate::tir::TypeTable>,
-=======
     type_table: Option<&TypeTable>,
->>>>>>> origin/main
     calls: CallFacts<'_>,
     scratch: &mut ValuePool,
     heap_seed: Option<&HeapSnapshot>,
@@ -304,16 +295,7 @@ pub(crate) fn walk_scoped(
     aliased: &IndexSet<u32>,
     untrackable: &IndexSet<u32>,
     mut_escaped: &IndexSet<u32>,
-<<<<<<< HEAD
-    type_table: Option<&crate::tir::TypeTable>,
-||||||| e925ee58b
-    aliased: &crate::hashmap::IndexSet<u32>,
-    untrackable: &crate::hashmap::IndexSet<u32>,
-    mut_escaped: &crate::hashmap::IndexSet<u32>,
-    type_table: Option<&crate::tir::TypeTable>,
-=======
     type_table: Option<&TypeTable>,
->>>>>>> origin/main
     calls: CallFacts<'_>,
     scratch: &mut ValuePool,
     heap_seed: Option<&HeapSnapshot>,
@@ -537,16 +519,7 @@ impl<'a> Builder<'a> {
         aliased: &IndexSet<u32>,
         untrackable: &IndexSet<u32>,
         mut_escaped: &IndexSet<u32>,
-<<<<<<< HEAD
-        type_table: Option<&'a crate::tir::TypeTable>,
-||||||| e925ee58b
-        aliased: &crate::hashmap::IndexSet<u32>,
-        untrackable: &crate::hashmap::IndexSet<u32>,
-        mut_escaped: &crate::hashmap::IndexSet<u32>,
-        type_table: Option<&'a crate::tir::TypeTable>,
-=======
         type_table: Option<&'a TypeTable>,
->>>>>>> origin/main
         pool: ValuePool,
     ) -> Self {
         Self {

@@ -15,12 +15,7 @@ use crate::nir_arena::{
     ArmData, BlockId, BlockNode, Body, ExprId, ExprKind, ExprNode, NodeRef, Operand, PatId,
     PatKind, PatNode, StmtId, StmtKind, StmtNode,
 };
-<<<<<<< HEAD
-use crate::nir_value_graph::ValueId;
-||||||| e925ee58b
-=======
 use crate::nir_value_graph::{ValueId, ValueKind};
->>>>>>> origin/main
 use crate::tir::TypeId;
 use crate::token::Span;
 
@@ -467,13 +462,7 @@ impl<'a> Engine<'a> {
         Some(v)
     }
 
-<<<<<<< HEAD
-    /// The [`ValueId`] of an operand: the
-||||||| e925ee58b
-    /// The [`ValueId`](crate::nir_value_graph::ValueId) of an operand: the
-=======
     /// The [`ValueId`](ValueId) of an operand: the
->>>>>>> origin/main
     /// promoted value directly, or the skeleton expr's value from the graph.
     pub fn operand_value(&mut self, op: Operand) -> Option<ValueId> {
         match op {
@@ -485,16 +474,7 @@ impl<'a> Engine<'a> {
     /// Read-only view of a value's kind. The returned reference borrows the
     /// engine's value-graph cache; callers that need to hold the kind across
     /// further `engine` calls should clone it.
-<<<<<<< HEAD
-    pub fn value_kind(&mut self, id: ValueId) -> &crate::nir_value_graph::ValueKind {
-||||||| e925ee58b
-    pub fn value_kind(
-        &mut self,
-        id: crate::nir_value_graph::ValueId,
-    ) -> &crate::nir_value_graph::ValueKind {
-=======
     pub fn value_kind(&mut self, id: ValueId) -> &ValueKind {
->>>>>>> origin/main
         self.ensure_value_graph();
         self.body.values.kind(id)
     }
