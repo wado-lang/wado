@@ -99,13 +99,15 @@ pub(super) fn reduce_task_returns_in_func(
     let mut reducer = TaskReturnReducer {
         slot,
         slot_type,
+        declared,
+        bound,
         items: &items,
     };
     reducer.visit_block(&mut body);
 
-    // Whether or not the body delivers, a declared result has to come from
-    // somewhere: a function no `task return` reaches has none, and says so
-    // rather than handing back a zeroed value.
+    // A unit result needs no slot; the body already returns nothing. Otherwise
+    // the result has to come from somewhere, and a function no `task return`
+    // reaches has none — it says so rather than handing back a zeroed value.
     if declared != TypeTable::UNIT {
         let none = option_none(slot_type, &items);
         body.stmts
@@ -207,21 +209,35 @@ fn take_task_return_value(stmt: &mut TirStmt) -> Option<TirExpr> {
 struct TaskReturnReducer<'a> {
     slot: u32,
     slot_type: TypeId,
+    declared: TypeId,
+    bound: u32,
     items: &'a CompilerItems,
 }
 
 impl TirOptVisitor for TaskReturnReducer<'_> {
     fn visit_stmt(&mut self, stmt: &mut TirStmt) -> bool {
-        match take_task_return_value(stmt) {
-            Some(value) => {
-                stmt.kind = TirStmtKind::Expr(assign(
-                    local_ref(self.slot, TASK_RESULT_LOCAL, self.slot_type),
-                    option_some(value, self.slot_type, self.items),
-                ));
-                true
-            }
-            None => opt_walk_stmt(self, stmt),
+        if let Some(value) = take_task_return_value(stmt) {
+            stmt.kind = TirStmtKind::Expr(assign(
+                local_ref(self.slot, TASK_RESULT_LOCAL, self.slot_type),
+                option_some(value, self.slot_type, self.items),
+            ));
+            return true;
         }
+        // A bare `return` ends the function carrying what was delivered, which
+        // is what the end of the body does too.
+        if self.declared != TypeTable::UNIT
+            && matches!(&stmt.kind, TirStmtKind::Return { value: None })
+        {
+            *stmt = take_task_result(
+                self.slot,
+                self.slot_type,
+                self.declared,
+                self.bound,
+                self.items,
+            );
+            return true;
+        }
+        opt_walk_stmt(self, stmt)
     }
 }
 

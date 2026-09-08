@@ -1,0 +1,27 @@
+// A bare `return` in an `export async fn` ends the function carrying what
+// `task return` already delivered. Rejecting it would break the early-exit
+// after an error delivery; leaving it alone left the Wasm return unfilled.
+
+use { println, Stdout } from "core:cli";
+
+export async fn deliver(n: i32) -> Result<i32, String> {
+    if n < 0 {
+        task return Result::<i32, String>::Err("negative");
+        return;
+    }
+    task return Result::<i32, String>::Ok(n);
+}
+
+export fn run() with Stdout {
+    match deliver(-1) {
+        Result::Ok(v) => println(`ok ${v}`),
+        Result::Err(e) => println(`err ${e}`),
+    }
+    match deliver(7) {
+        Result::Ok(v) => println(`ok ${v}`),
+        Result::Err(e) => println(`err ${e}`),
+    }
+}
+
+__DATA__
+{"stdout": "err negative\nok 7\n"}
