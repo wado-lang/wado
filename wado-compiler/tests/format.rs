@@ -3523,6 +3523,9 @@ fn test_format_keeps_parens_around_a_handler_closure_body() {
         "(with Log => &mut sink do { 1 }) < 2 < 3",
         "(with Log => &mut sink do { 1 }) matches { 1 }",
         "(with Log => &mut sink do { 1 })..<4",
+        "(with Log => &mut sink do { 1 })?",
+        "(with Log => &mut sink do { x }) = 1",
+        "(with Log => &mut sink do { x }) += 1",
     ] {
         let source = format!("fn run() {{\n    let f = || {body};\n}}\n");
         let formatted = wado_compiler::format(&source).expect("format failed");

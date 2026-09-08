@@ -3304,8 +3304,8 @@ fn cast_before_lt(operand: &Expr, next: Option<&ChainedComparison>) -> bool {
 }
 
 /// Whether a closure body starts with `with`, which re-parses as the closure's
-/// own effect row. Follows the leftmost spine, descending past each operand the
-/// enclosing rule prints bare — a wrapped one already starts with `(`.
+/// own effect row. Descends the leftmost operand of each form that prints one
+/// bare; exhaustive, so a new [`Expr`] is decided here rather than defaulted.
 fn closure_body_needs_parens(expr: &Expr) -> bool {
     match expr {
         Expr::WithHandler(_) => true,
@@ -3317,7 +3317,33 @@ fn closure_body_needs_parens(expr: &Expr) -> bool {
         Expr::Matches(m) => {
             !matches_scrutinee_needs_parens(&m.expr) && closure_body_needs_parens(&m.expr)
         }
-        _ => false,
+        Expr::TryOp(t) => closure_body_needs_parens(&t.expr),
+        Expr::Assign(a) => closure_body_needs_parens(&a.target),
+        Expr::CompoundAssign(c) => closure_body_needs_parens(&c.target),
+        Expr::TaggedTemplate(t) => closure_body_needs_parens(&t.tag),
+        // A postfix or cast operand carries parens from `binds_tighter_than`,
+        // and everything else opens with a keyword, delimiter, or operator.
+        Expr::Ident(_)
+        | Expr::Literal(_)
+        | Expr::Unary(_)
+        | Expr::Call(_)
+        | Expr::MethodCall(_)
+        | Expr::StaticMethodCall(_)
+        | Expr::FieldAccess(_)
+        | Expr::Index(_)
+        | Expr::Block(_)
+        | Expr::If(_)
+        | Expr::Match(_)
+        | Expr::Closure(_)
+        | Expr::TemplateString(_)
+        | Expr::Cast(_)
+        | Expr::StructLiteral(_)
+        | Expr::TupleLiteral(_)
+        | Expr::TupleComprehension(_)
+        | Expr::LabeledBlock(_)
+        | Expr::Spread(..)
+        | Expr::Resume(_)
+        | Expr::Error(_) => false,
     }
 }
 
