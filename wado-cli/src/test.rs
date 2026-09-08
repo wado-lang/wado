@@ -2,7 +2,7 @@ use std::any::Any;
 use std::fmt::Write as _;
 use std::future::Future;
 use std::panic::AssertUnwindSafe;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, Weak};
@@ -23,7 +23,6 @@ use crate::args::{self, CliExit};
 use crate::compile::{self, CompileFlags};
 use crate::discover;
 use crate::knobs::{CompileKnobs, KnobOpt, OptLevel};
-use crate::manifest as project_manifest;
 use crate::run_cache::RunCache;
 use crate::runtime::{self, ProfileMode, WasiState};
 use crate::sync::lock;
@@ -228,143 +227,42 @@ fn format_usage() -> String {
     buf
 }
 
-/// Cargo-workspace-style walk: one `PackageRun` for `root`, plus one per
-/// transitively discovered sub-package. Returned root-first.
-///
-/// `apply_manifest_excludes` gates the root's `[test].exclude`
-/// (sub-packages always apply their own). `extra_excludes` (CLI
-/// `--exclude`) apply per-package and are matched relative to the package
-/// being walked.
-fn discover_packages(
-    root: &Path,
-    apply_manifest_excludes: bool,
-    extra_excludes: &[String],
-) -> Result<Vec<PackageRun>, CliExit> {
-    let invocation_root = root.to_path_buf();
-    let mut runs: Vec<PackageRun> = Vec::new();
-    let mut queue: Vec<PathBuf> = Vec::new();
-
-    let (root_exclude_manifest, root_include_manifest) = if apply_manifest_excludes {
-        package_manifest_test_filters(&invocation_root)?
-    } else {
-        (Vec::new(), Vec::new())
-    };
-    let root_excludes = compile_excludes(&root_exclude_manifest, extra_excludes)?;
-    let root_includes = compile_includes(&root_include_manifest)?;
-    walk_into(
-        &invocation_root,
-        &invocation_root,
-        &root_excludes,
-        &root_includes,
-        &mut runs,
-        &mut queue,
-    )?;
-
-    while let Some(pkg_root) = queue.pop() {
-        let (exclude_manifest, include_manifest) = package_manifest_test_filters(&pkg_root)?;
-        let excludes = compile_excludes(&exclude_manifest, extra_excludes)?;
-        let includes = compile_includes(&include_manifest)?;
-        walk_into(
-            &pkg_root,
-            &invocation_root,
-            &excludes,
-            &includes,
-            &mut runs,
-            &mut queue,
-        )?;
-    }
-
-    Ok(runs)
-}
-
-// `[test].exclude` (manifest) + `--exclude` (CLI) share the same shape so
-// the walker treats them uniformly.
-fn compile_excludes(
-    manifest: &[String],
-    extra_excludes: &[String],
-) -> Result<discover::ExcludeSet, CliExit> {
-    let combined: Vec<&str> = manifest
+/// The filters for the package rooted exactly at `pkg_root`: its
+/// `[test].exclude` plus the CLI `--exclude` patterns (the same shape, so the
+/// walker treats them uniformly), and its `[test].include`, which overrides
+/// both — that is how a stdlib-style package keeps `*_test.wado` visible
+/// inside an excluded directory. There is no CLI flag for include yet.
+fn test_filters(
+    pkg_root: &Path,
+    cli_excludes: &[String],
+) -> Result<(discover::ExcludeSet, discover::IncludeSet), CliExit> {
+    let settings = discover::manifest_at(pkg_root)?
+        .map(|m| m.test)
+        .unwrap_or_default();
+    let excludes: Vec<&str> = settings
+        .exclude
         .iter()
         .map(String::as_str)
-        .chain(extra_excludes.iter().map(String::as_str))
+        .chain(cli_excludes.iter().map(String::as_str))
         .collect();
-    discover::ExcludeSet::compile(&combined).map_err(CliExit::error)
+    Ok((
+        discover::ExcludeSet::compile(&excludes).map_err(CliExit::error)?,
+        discover::IncludeSet::compile(&settings.include).map_err(CliExit::error)?,
+    ))
 }
 
-// `[test].include` is manifest-only (no CLI flag yet) and lets stdlib-style
-// packages keep `*_test.wado` files visible inside an excluded directory.
-fn compile_includes(manifest: &[String]) -> Result<discover::IncludeSet, CliExit> {
-    discover::IncludeSet::compile(manifest).map_err(CliExit::error)
-}
-
-fn walk_into(
-    pkg_root: &Path,
-    invocation_root: &Path,
-    excludes: &discover::ExcludeSet,
-    includes: &discover::IncludeSet,
-    runs: &mut Vec<PackageRun>,
-    queue: &mut Vec<PathBuf>,
-) -> Result<(), CliExit> {
-    let result =
-        discover::discover_wado_files(pkg_root, excludes, includes).map_err(CliExit::error)?;
-    let label = relative_label(invocation_root, pkg_root);
-    let paths = result.files.iter().map(|p| display_path(p)).collect();
-    runs.push(PackageRun { label, paths });
-    for sub in result.subpackages.into_iter().rev() {
-        queue.push(sub);
-    }
-    Ok(())
-}
-
-// `[test].exclude`/`include` globs are written relative to the package root, so
-// when `dir` is a subdirectory *inside* a package we root the walk at that
-// package (making the globs match as authored) and keep only the files under
-// `dir`. When `dir` is itself the package root, or lies outside any package,
-// the walk is rooted at `dir` directly.
-fn discover_in_dir(dir: &Path, extra_excludes: &[String]) -> Result<Vec<PackageRun>, CliExit> {
-    let enclosing = match project_manifest::discover(dir) {
-        Ok(project) => project.map(|p| p.root),
-        Err(e) => return Err(CliExit::error(e)),
-    };
-    match enclosing {
-        Some(pkg_root) if pkg_root != dir => {
-            let runs = discover_packages(&pkg_root, true, extra_excludes)?;
-            Ok(retain_under(runs, dir))
-        }
-        _ => discover_packages(dir, true, extra_excludes),
-    }
-}
-
-// The prefix test below is only valid if `path` and `dir` both came through
-// `display_path`, which is what gives them the same shape.
-fn retain_under(runs: Vec<PackageRun>, dir: &Path) -> Vec<PackageRun> {
-    let prefix = display_path(dir);
-    runs.into_iter()
-        .filter_map(|mut run| {
-            run.paths.retain(|p| path_under(p, &prefix));
-            (!run.paths.is_empty()).then_some(run)
+fn package_runs(packages: Vec<discover::PackageFiles>, invocation_root: &Path) -> Vec<PackageRun> {
+    packages
+        .into_iter()
+        .map(|pkg| PackageRun {
+            label: relative_label(invocation_root, &pkg.root),
+            paths: pkg
+                .files
+                .iter()
+                .map(|p| discover::display_path(p))
+                .collect(),
         })
         .collect()
-}
-
-// A plain `starts_with(dir)` would wrongly match `core2/foo` against `core`;
-// requiring a `/` right after the prefix pins the match to a path-segment
-// boundary.
-fn path_under(path: &str, dir: &str) -> bool {
-    path.strip_prefix(dir)
-        .is_some_and(|rest| rest.starts_with('/'))
-}
-
-// Returns `(exclude, include)` from the `wado.toml` rooted exactly at
-// `pkg_root`. Sub-packages without their own manifest contribute nothing.
-fn package_manifest_test_filters(pkg_root: &Path) -> Result<(Vec<String>, Vec<String>), CliExit> {
-    match project_manifest::discover(pkg_root) {
-        Ok(Some(project)) if project.root == pkg_root => {
-            Ok((project.manifest.test.exclude, project.manifest.test.include))
-        }
-        Ok(_) => Ok((Vec::new(), Vec::new())),
-        Err(e) => Err(CliExit::error(e)),
-    }
 }
 
 fn relative_label(invocation_root: &Path, pkg_root: &Path) -> String {
@@ -377,27 +275,6 @@ fn relative_label(invocation_root: &Path, pkg_root: &Path) -> String {
     )
 }
 
-// Canonical path shape: forward-slashes, no leading `./`, no trailing one,
-// regardless of OS or invocation root. `--filter` and `[test].exclude` patterns
-// are documented as forward-slash globs and rely on this.
-fn display_path(p: &Path) -> String {
-    let raw = p.display().to_string();
-    let normalised = if cfg!(windows) {
-        raw.replace('\\', "/")
-    } else {
-        raw
-    };
-    let stripped = normalised.strip_prefix("./").unwrap_or(&normalised);
-    // Shell completion appends the separator to a directory argument, and a
-    // path joined from one already ending in it arrives with several. The root
-    // is the one path a separator belongs to.
-    let trimmed = stripped.trim_end_matches('/');
-    if trimmed.is_empty() {
-        return stripped.to_string();
-    }
-    trimmed.to_string()
-}
-
 // Directories are walked with the discovery rules; files pass through.
 fn resolve_paths(paths: Vec<String>, extra_excludes: &[String]) -> Result<Vec<String>, CliExit> {
     let excludes = discover::ExcludeSet::compile(extra_excludes).map_err(CliExit::error)?;
@@ -405,22 +282,25 @@ fn resolve_paths(paths: Vec<String>, extra_excludes: &[String]) -> Result<Vec<St
     for path in paths {
         let p = Path::new(&path);
         if p.is_dir() {
-            let runs = discover_in_dir(p, extra_excludes)?;
-            let total: usize = runs.iter().map(|r| r.paths.len()).sum();
-            if total == 0 {
+            let files = discover::discover_dir(p, &|root| test_filters(root, extra_excludes))?;
+            let before = resolved.len();
+            resolved.extend(
+                files
+                    .iter()
+                    .flat_map(|pkg| pkg.files.iter())
+                    .map(|f| discover::display_path(f)),
+            );
+            if resolved.len() == before {
                 return Err(CliExit::error(format!(
                     "no .wado files found in directory '{path}'"
                 )));
-            }
-            for run in runs {
-                resolved.extend(run.paths);
             }
         } else {
             // Canonicalize so explicit args and discovered paths match
             // filters/excludes against the same shape. `--exclude` applies
             // to explicit args too — the flag is documented as "drop files
             // whose path matches".
-            let canonical = display_path(p);
+            let canonical = discover::display_path(p);
             if !excludes.matches_str(&canonical) {
                 resolved.push(canonical);
             }
@@ -501,7 +381,9 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<TestOptions, CliExit> {
     // No args ⇒ project-wide recursion through every nested `wado.toml`.
     // With explicit args, collapse everything into one synthetic root run.
     let mut package_runs: Vec<PackageRun> = if paths.is_empty() {
-        discover_packages(Path::new("."), true, &cli_excludes)?
+        let root = Path::new(".");
+        let packages = discover::discover_tree(root, &|pkg| test_filters(pkg, &cli_excludes))?;
+        package_runs(packages, root)
     } else {
         let resolved = resolve_paths(paths, &cli_excludes)?;
         vec![PackageRun {
@@ -2496,20 +2378,6 @@ mod tests {
         ));
     }
 
-    // Shell completion writes `wado test some/dir/`, and `retain_under`
-    // compares that prefix against the walker's paths.
-    #[test]
-    fn a_trailing_separator_leaves_the_same_prefix() {
-        assert_eq!(display_path(Path::new("pkg/tests/")), "pkg/tests");
-        assert_eq!(display_path(Path::new("./pkg/tests/")), "pkg/tests");
-        assert_eq!(display_path(Path::new("pkg/tests//")), "pkg/tests");
-        assert_eq!(display_path(Path::new("/")), "/");
-        assert!(path_under(
-            "pkg/tests/a.wado",
-            &display_path(Path::new("pkg/tests/"))
-        ));
-    }
-
     #[test]
     fn parses_kind() {
         assert_eq!(parse("test-0-simple").kind, TestKind::Normal);
@@ -2571,17 +2439,11 @@ mod tests {
     }
 
     fn discovered_names(dir: &Path) -> std::collections::BTreeSet<String> {
-        discover_in_dir(dir, &[])
+        discover::discover_dir(dir, &|root| test_filters(root, &[]))
             .unwrap()
-            .into_iter()
-            .flat_map(|r| r.paths)
-            .map(|p| {
-                Path::new(&p)
-                    .file_name()
-                    .unwrap()
-                    .to_string_lossy()
-                    .into_owned()
-            })
+            .iter()
+            .flat_map(|pkg| pkg.files.iter())
+            .map(|p| p.file_name().unwrap().to_string_lossy().into_owned())
             .collect()
     }
 
@@ -2639,12 +2501,5 @@ mod tests {
         let got = discovered_names(root);
         assert!(got.contains("keep.wado"), "{got:?}");
         assert!(!got.contains("skip.wado"), "{got:?}");
-    }
-
-    #[test]
-    fn path_under_respects_segment_boundary() {
-        assert!(path_under("pkg/lib/core/a.wado", "pkg/lib/core"));
-        assert!(!path_under("pkg/lib/core2/a.wado", "pkg/lib/core"));
-        assert!(!path_under("pkg/lib/core", "pkg/lib/core"));
     }
 }

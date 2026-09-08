@@ -31,10 +31,15 @@ Four promises, each covered by a test in [Tests](#tests).
 one of the two. `mise run format` formats the whole repository, Rust and
 Markdown included.
 
-`[format] exclude` in a `wado.toml` skips paths. `wado-compiler` excludes
-`tests/**`, because those fixtures have hand-authored layouts that are part of
-the test. The exclusion applies to the directory walk, not to a path you name,
-so never run `wado format -w` on a fixture path.
+`[format] exclude` in a `wado.toml` skips paths, and `[format] include` carves
+them back in. `wado-compiler` excludes `tests/**`, because those fixtures have
+hand-authored layouts that are part of the test.
+
+A directory argument is walked from the package that encloses it, so the globs
+match as authored no matter which subdirectory you name: `wado format -w
+wado-compiler/tests` formats nothing. Naming a _file_ bypasses the filters —
+that is how the golden-fixture scripts rewrite excluded fixtures — so never run
+`wado format -w` on a fixture file.
 
 ## Layout
 

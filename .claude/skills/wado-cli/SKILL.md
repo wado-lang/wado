@@ -215,11 +215,15 @@ each package's `[format] exclude`. `wado-compiler` excludes `tests/**`, so the
 e2e fixtures and the golden format fixtures keep the hand-authored layouts that
 are part of the test.
 
-**Caution:** the exclusion applies to the directory walk, not to a path you
-name. `wado format -w wado-compiler/tests/fixtures/x.wado` — or `-w` on that
-directory — reformats it anyway, silently discarding a layout the test depends
-on. When the syntax is updated, make sure to add tests to
-`wado-compiler/tests/format.rs`.
+A directory argument is walked from the package that encloses it, so the globs
+match as authored whichever subdirectory you name: `wado format -w
+wado-compiler/tests` formats nothing, and says so.
+
+**Caution:** naming a _file_ bypasses the filters — that is how the
+golden-fixture scripts rewrite excluded fixtures. `wado format -w
+wado-compiler/tests/fixtures/x.wado` reformats it anyway, silently discarding a
+layout the test depends on. When the syntax is updated, make sure to add tests
+to `wado-compiler/tests/format.rs`.
 
 What the formatter decides — width, wrapping, comment placement — is in
 `docs/formatter.md`.

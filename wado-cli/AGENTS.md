@@ -36,7 +36,7 @@ How to _use_ the CLI is the `wado-cli` skill, not this file.
 - `kiln_driver.rs`, `kiln_provider.rs`, `kiln_runtime.rs`, `kiln_wit.rs`, `kiln_metadata.rs` — Kiln generators. `check` re-runs them and byte-compares against the committed source.
 - `manifest.rs`, `build.rs`, `build_dep.rs`, `dep_component.rs`, `fetch.rs`, `git.rs`, `oci.rs`, `registry.rs`, `publish.rs` — `wado.toml` handling and the dependency backends behind `wado-manifest`'s `DependencyProvider` seam.
 - `query_adapter.rs`, `lsp.rs` — bridge to `wado-lsp`, for the `query` subcommand and the stdio server.
-- `discover.rs`, `test_report.rs` — source file discovery (shared by `test` and `format`) and the progress digest.
+- `discover.rs`, `test_report.rs` — source file discovery (shared by `test` and `format`) and the progress digest. A path argument goes through `discover_dir` / `discover_tree`: the subcommand supplies only a `Filters` callback naming its manifest section, so how a directory expands cannot drift between the two.
 - `sync.rs` — how production code locks a mutex: recover a poisoned guard. Test mocks may still `unwrap`.
 - `run_cache.rs` — what one CLI run resolves once and holds fixed: AOT generator components, generator resolutions, and a watch over the sources it read. `wado test` shares one across every fixture, so a mid-run edit cannot split the run and is named in the failure at the end.
 
