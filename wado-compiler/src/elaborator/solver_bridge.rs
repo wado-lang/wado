@@ -410,22 +410,15 @@ pub(super) fn lower_impls<'a>(
 ) -> Vec<&'a ImplHeader> {
     let mut sources: Vec<&ImplHeader> = Vec::new();
     for (&def, header) in impl_headers {
-        let implicit = header.implicit_params(resolutions);
-        let declared = header.type_params.len();
         let param = |name: &str| -> Option<ParamKind> {
             let index =
                 |i: usize| u32::try_from(i).expect("an impl declares fewer than 2^32 params");
-            if let Some(i) = header.type_params.iter().position(|p| p.name == name) {
-                return Some(if header.type_params[i].is_pack {
-                    ParamKind::Pack(index(i))
-                } else {
-                    ParamKind::Type(index(i))
-                });
-            }
-            implicit
-                .iter()
-                .position(|n| *n == name)
-                .map(|i| ParamKind::Type(index(declared + i)))
+            let i = header.type_params.iter().position(|p| p.name == name)?;
+            Some(if header.type_params[i].is_pack {
+                ParamKind::Pack(index(i))
+            } else {
+                ParamKind::Type(index(i))
+            })
         };
         let Some(target) = lowering.ast_type(&header.ty, &param, resolutions, None) else {
             continue;
@@ -472,7 +465,6 @@ pub(super) fn lower_impls<'a>(
                 }
                 def
             })
-            .chain(implicit.iter().map(|_| ParamDef::default()))
             .collect();
         let id = program.push_impl(ImplDef {
             trait_: implemented,

@@ -4,13 +4,13 @@ struct NestedMap<K, V> {
     values: List<V>,
 }
 
-impl NestedMap<K, V> {
+impl<K, V> NestedMap<K, V> {
     fn new() -> NestedMap<K, V> {
         return NestedMap { keys: [], values: [] };
     }
 }
 
-impl From<Array<[String, V]>> for NestedMap<List<String>, V> {
+impl<V> From<Array<[String, V]>> for NestedMap<List<String>, V> {
     fn from(entries: Array<[String, V]>) -> NestedMap<List<String>, V> {
         let mut out: NestedMap<List<String>, V> = NestedMap::<List<String>, V>::new();
         for let [key, value] of entries {

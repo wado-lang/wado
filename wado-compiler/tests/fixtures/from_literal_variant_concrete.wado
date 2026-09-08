@@ -10,7 +10,7 @@ struct StatusMap<S, V> {
     values: List<V>,
 }
 
-impl From<Array<[String, V]>> for StatusMap<Status, V> {
+impl<V> From<Array<[String, V]>> for StatusMap<Status, V> {
     fn from(entries: Array<[String, V]>) -> StatusMap<Status, V> {
         let mut out: StatusMap<Status, V> = StatusMap { keys: [], values: [] };
         for let [key, value] of entries {

@@ -257,6 +257,13 @@ pub enum TypeError {
         span: Span,
     },
 
+    /// An `impl` head names a type the module does not declare. A block's own
+    /// `impl<…>` list is the only way to introduce a type parameter.
+    UndeclaredImplTypeParam {
+        name: String,
+        span: Span,
+    },
+
     /// A `flags` declaration with more members than the CM ABI's single-word
     /// bitmask can represent (at most 32).
     FlagsTooManyMembers {
@@ -1119,6 +1126,13 @@ impl TypeError {
             TypeError::UnknownType { name, span } => {
                 (Code::UnknownType, format!("unknown type '{name}'"), *span)
             }
+            TypeError::UndeclaredImplTypeParam { name, span } => (
+                Code::UnknownType,
+                format!(
+                    "unknown type '{name}' in the impl target; declare it as a type parameter ('impl<{name}> …') or spell a type the module declares"
+                ),
+                *span,
+            ),
             TypeError::FlagsTooManyMembers { name, count, span } => (
                 Code::UnsupportedFeature,
                 format!(

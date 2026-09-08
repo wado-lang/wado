@@ -8,7 +8,7 @@ struct FrozenMap<V> {
     values: List<V>,
 }
 
-impl FrozenMap<V> {
+impl<V> FrozenMap<V> {
     fn len(&self) -> i32 {
         return self.keys.len();
     }
@@ -25,7 +25,7 @@ impl FrozenMap<V> {
     }
 }
 
-impl From<Array<[String, V]>> for FrozenMap<V> {
+impl<V> From<Array<[String, V]>> for FrozenMap<V> {
     fn from(entries: Array<[String, V]>) -> FrozenMap<V> {
         let mut keys: List<String> = [];
         let mut values: List<V> = [];
@@ -42,7 +42,7 @@ struct EitherBag<T> {
     values: List<T>,
 }
 
-impl EitherBag<T> {
+impl<T> EitherBag<T> {
     fn len(&self) -> i32 {
         return self.values.len();
     }
@@ -67,7 +67,7 @@ impl EitherBag<T> {
     }
 }
 
-impl From<Array<[String, T]>> for EitherBag<T> {
+impl<T> From<Array<[String, T]>> for EitherBag<T> {
     fn from(entries: Array<[String, T]>) -> EitherBag<T> {
         let mut keys: List<String> = [];
         let mut values: List<T> = [];
@@ -79,7 +79,7 @@ impl From<Array<[String, T]>> for EitherBag<T> {
     }
 }
 
-impl From<Array<T>> for EitherBag<T> {
+impl<T> From<Array<T>> for EitherBag<T> {
     fn from(elements: Array<T>) -> EitherBag<T> {
         let mut values = List::<T>::with_capacity(elements.len());
         for let element of elements {
@@ -117,7 +117,7 @@ struct BuiltBag<V> {
     values: List<V>,
 }
 
-impl KeyValueLiteralBuilder for BuiltBag<V> {
+impl<V> KeyValueLiteralBuilder for BuiltBag<V> {
     type Value = V;
     type Output = BuiltBag<V>;
 

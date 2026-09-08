@@ -8,7 +8,7 @@ struct TagMap<K, V> {
     values: List<V>,
 }
 
-impl From<Array<[String, V]>> for TagMap<Tag, V> {
+impl<V> From<Array<[String, V]>> for TagMap<Tag, V> {
     fn from(entries: Array<[String, V]>) -> TagMap<Tag, V> {
         let mut out: TagMap<Tag, V> = TagMap { keys: [], values: [] };
         for let [key, value] of entries {

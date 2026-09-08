@@ -267,28 +267,6 @@ impl ImplHeader {
         self.type_params.is_empty()
     }
 
-    /// The target arguments no declaration answers, in order:
-    /// `impl FromIterator for List<T>` binds `T` without an `impl<T>`.
-    pub(super) fn implicit_params(&self, resolutions: &crate::resolve::Resolutions) -> Vec<&str> {
-        let Type::Generic(generic) = &self.ty else {
-            return Vec::new();
-        };
-        generic
-            .args
-            .iter()
-            .filter_map(|arg| match arg {
-                Type::Named(named)
-                    if !self.type_params.iter().any(|p| p.name == named.name)
-                        && resolutions.declared(named.id).is_none()
-                        && !name::is_builtin_shape_name(&named.name) =>
-                {
-                    Some(named.name.as_str())
-                }
-                _ => None,
-            })
-            .collect()
-    }
-
     /// The implemented trait as a mangled method name embeds it: named by the
     /// module that declares it, carrying the header's written type arguments.
     /// `None` for an inherent impl, and for a trait position filled by a

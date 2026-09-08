@@ -12,7 +12,7 @@ struct Pinned<K, V> {
 }
 
 // Position 0 is pinned, so only `V` is a slot the receiver fills.
-impl From<Array<V>> for Pinned<i32, V> {
+impl<V> From<Array<V>> for Pinned<i32, V> {
     fn from(values: Array<V>) -> Pinned<i32, V> {
         return Pinned { tag: builtin::array_len(&values), value: values[0] };
     }

@@ -1672,11 +1672,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .enumerate()
                 .filter_map(|(i, arg)| match arg {
                     Type::Named(named)
-                        if self.tysys.is_impl_target_param(
-                            &impl_home,
-                            &header.type_params,
-                            &named.name,
-                        ) =>
+                        if self
+                            .tysys
+                            .is_impl_target_param(&header.type_params, &named.name) =>
                     {
                         Some((named.name.clone(), i as u32))
                     }
@@ -1728,7 +1726,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         } else {
             None
         };
-        let impl_module_source = impl_home.clone();
+        let impl_module_source = impl_home;
         // A concrete generic instantiation trait impl (`impl Tag for
         // List<u8>`) yields a per-instantiation concrete method, called
         // directly (no monomorphization), living in the impl's module.

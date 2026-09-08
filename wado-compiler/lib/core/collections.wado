@@ -77,7 +77,7 @@ pub struct TreeMap<K, V> {
     deleted_count: i32,
 }
 
-impl<K: Ord> TreeMap<K, V> {
+impl<K: Ord, V> TreeMap<K, V> {
     /// Creates a new empty TreeMap.
     pub fn new() -> TreeMap<K, V> {
         return TreeMap {
@@ -335,7 +335,7 @@ impl<K: Ord> TreeMap<K, V> {
 }
 
 // IndexAssign for map[key] = value
-impl<K: Ord> IndexAssign<K> for TreeMap<K, V> {
+impl<K: Ord, V> IndexAssign<K> for TreeMap<K, V> {
     type Output = V;
 
     fn index_assign(&mut self, key: K, value: Self::Output) {
@@ -344,7 +344,7 @@ impl<K: Ord> IndexAssign<K> for TreeMap<K, V> {
 }
 
 // IndexValue for map[key] -> V (panics if key not found)
-impl<K: Ord> IndexValue<K> for TreeMap<K, V> {
+impl<K: Ord, V> IndexValue<K> for TreeMap<K, V> {
     type Output = V;
 
     fn index_value(&self, key: K) -> Self::Output {
@@ -384,7 +384,7 @@ impl<K: Ord, V: RefMut> IndexRefMut<K> for TreeMap<K, V> {
 
 // `{ key: value, … }` as a `TreeMap<String, V>` — an array of pairs in source
 // order, last write wins (WEP 2026-08-24).
-impl From<Array<[String, V]>> for TreeMap<String, V> {
+impl<V> From<Array<[String, V]>> for TreeMap<String, V> {
     fn from(entries: Array<[String, V]>) -> TreeMap<String, V> {
         let mut map = TreeMap::<String, V>::new();
         for let [key, value] of entries {
@@ -394,7 +394,7 @@ impl From<Array<[String, V]>> for TreeMap<String, V> {
     }
 }
 
-impl LiteralSpread for TreeMap<String, V> {
+impl<V> LiteralSpread for TreeMap<String, V> {
     fn spread_literal(&mut self, base: TreeMap<String, V>) {
         for let [k, v] of base.entries() {
             self.insert(*k, *v);
@@ -430,7 +430,7 @@ impl<T> Iterator for TreeSetRefIter<T> {
     }
 }
 
-impl TreeSetRefIter<T> {
+impl<T> TreeSetRefIter<T> {
     pub fn iter_value(&self) -> TreeSetValueIter<T> with stores[self] {
         return TreeSetValueIter { entries: self.entries, index: self.index };
     }
@@ -476,7 +476,7 @@ impl<K, V> Iterator for TreeMapKeysRefIter<K, V> {
     }
 }
 
-impl TreeMapKeysRefIter<K, V> {
+impl<K, V> TreeMapKeysRefIter<K, V> {
     pub fn iter_value(&self) -> TreeMapKeysValueIter<K, V> with stores[self] {
         return TreeMapKeysValueIter { entries: self.entries, index: self.index };
     }
@@ -522,7 +522,7 @@ impl<K, V> Iterator for TreeMapValuesRefIter<K, V> {
     }
 }
 
-impl TreeMapValuesRefIter<K, V> {
+impl<K, V> TreeMapValuesRefIter<K, V> {
     pub fn iter_value(&self) -> TreeMapValuesValueIter<K, V> with stores[self] {
         return TreeMapValuesValueIter { entries: self.entries, index: self.index };
     }
@@ -570,7 +570,7 @@ impl<K, V> Iterator for TreeMapEntriesRefIter<K, V> {
     }
 }
 
-impl TreeMapEntriesRefIter<K, V> {
+impl<K, V> TreeMapEntriesRefIter<K, V> {
     pub fn iter_value(&self) -> TreeMapEntriesValueIter<K, V> with stores[self] {
         return TreeMapEntriesValueIter { entries: self.entries, index: self.index };
     }

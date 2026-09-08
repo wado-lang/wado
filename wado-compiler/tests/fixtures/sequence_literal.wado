@@ -6,7 +6,7 @@ struct SeqVec<T> {
     items: List<T>,
 }
 
-impl SeqVec<T> {
+impl<T> SeqVec<T> {
     fn new() -> SeqVec<T> {
         return SeqVec { items: [] };
     }
@@ -20,7 +20,7 @@ impl SeqVec<T> {
     }
 }
 
-impl From<Array<T>> for SeqVec<T> {
+impl<T> From<Array<T>> for SeqVec<T> {
     fn from(elements: Array<T>) -> SeqVec<T> {
         let mut out = SeqVec::<T>::new();
         for let element of elements {
@@ -35,7 +35,7 @@ struct FrozenVec<T> {
     items: List<T>,
 }
 
-impl FrozenVec<T> {
+impl<T> FrozenVec<T> {
     fn len(&self) -> i32 {
         return self.items.len();
     }
@@ -45,7 +45,7 @@ impl FrozenVec<T> {
     }
 }
 
-impl From<Array<T>> for FrozenVec<T> {
+impl<T> From<Array<T>> for FrozenVec<T> {
     fn from(elements: Array<T>) -> FrozenVec<T> {
         let mut items = List::<T>::with_capacity(elements.len());
         for let element of elements {

@@ -619,13 +619,21 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
                 continue;
             };
             let name = &named.name;
-            if self.annotate_ctx.trait_ctx.type_params.contains_key(name)
-                || !self.tysys.is_impl_target_param(
-                    &self.current_module_source,
-                    impl_declared_params,
-                    name,
-                )
-            {
+            if self.annotate_ctx.trait_ctx.type_params.contains_key(name) {
+                continue;
+            }
+            if !self.tysys.is_impl_target_param(impl_declared_params, name) {
+                // A name the block does not declare has to be a type the module
+                // does; otherwise it names nothing at all.
+                if !self
+                    .tysys
+                    .is_known_type_name_in(&self.current_module_source, name)
+                {
+                    let _ = self.emit(TypeError::UndeclaredImplTypeParam {
+                        name: name.clone(),
+                        span: named.span,
+                    });
+                }
                 continue;
             }
             params.push(self.bind_target_param(

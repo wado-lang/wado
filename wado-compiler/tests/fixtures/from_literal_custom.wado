@@ -7,7 +7,7 @@ struct LinearMap<V> {
     values: List<V>,
 }
 
-impl LinearMap<V> {
+impl<V> LinearMap<V> {
     fn new() -> LinearMap<V> {
         return LinearMap { keys: [], values: [] };
     }
@@ -17,7 +17,7 @@ impl LinearMap<V> {
     }
 }
 
-impl From<Array<[String, V]>> for LinearMap<V> {
+impl<V> From<Array<[String, V]>> for LinearMap<V> {
     fn from(entries: Array<[String, V]>) -> LinearMap<V> {
         let mut map = LinearMap::<V>::new();
         for let [key, value] of entries {

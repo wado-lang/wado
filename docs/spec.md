@@ -2111,7 +2111,7 @@ let map: TreeMap<String, i32> = { width: 1920, height: 1080 };
 Making a user type literal-constructible is one ordinary impl:
 
 ```wado
-impl From<Array<T>> for MyVec<T> {
+impl<T> From<Array<T>> for MyVec<T> {
     fn from(elements: Array<T>) -> MyVec<T> { ... }
 }
 ```
@@ -2933,6 +2933,18 @@ impl<T: CollectionBuilder<Output = T>> Collection for T {
 
 This avoids the need for explicit `impl Collection for ...` on every self-building type. The compiler resolves `T::Element` via associated type projection on the type parameter.
 
+#### Impl Type Parameters Are Declared
+
+An `impl` declares its type parameters in `impl<...>`, and that list is the only way to introduce one. A name in the target or the trait reference that the list does not hold is a type, and the module must declare it:
+
+```wado
+impl<T> List<T> { ... }                 // inherent
+impl<T: Ord> List<T> { ... }            // with a bound
+impl<K: Ord, V> TreeMap<K, V> { ... }   // every parameter listed
+impl<T> Default for List<T> { ... }     // trait implementation
+impl Display for List<i32> { ... }      // one instantiation declares none
+```
+
 #### Impl Type Parameters Must Be Determined
 
 An `impl`'s target and trait reference between them must name every type parameter it declares. A use site determines them from the receiver and the trait arguments and from nothing else, so one neither mentions has no value to be given:
@@ -2979,7 +2991,7 @@ fn max<T: Ord>(a: T, b: T) -> T {
 }
 
 // Bounded impl blocks - methods only available when T: Ord
-impl List<T: Ord> {
+impl<T: Ord> List<T> {
     pub fn sort(&mut self) { ... }
     pub fn sorted(&self) -> List<T> { ... }
 }
@@ -3302,12 +3314,12 @@ Any type can be made iterable by implementing `IntoIterator`:
 struct Stack<T> { items: List<T> }
 struct StackIter<T> { items: List<T>, index: i32 }
 
-impl Iterator for StackIter<T> {
+impl<T> Iterator for StackIter<T> {
     type Item = T;
     fn next(&mut self) -> Option<Self::Item> { ... }
 }
 
-impl IntoIterator for Stack<T> {
+impl<T> IntoIterator for Stack<T> {
     type Item = T;
     type Iter = StackIter<T>;
     fn into_iter(&self) -> StackIter<T> { ... }

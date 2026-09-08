@@ -1080,6 +1080,12 @@ fn max<T: Ord>(a: T, b: T) -> T {
     return b;
 }
 
+// An impl declares its type parameters in `impl<...>`, as Rust does. A name
+// the list does not hold is a type the module declares.
+impl<T> List<T> { ... }
+impl<K: Ord, V> TreeMap<K, V> { ... }
+impl Display for List<i32> { ... }   // one instantiation declares none
+
 // Bounded impl blocks — methods only available when bound is satisfied
 impl<T: Ord> List<T> {
     pub fn sort(&mut self) { ... }
