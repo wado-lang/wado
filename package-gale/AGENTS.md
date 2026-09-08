@@ -140,28 +140,27 @@ Prediction dead-ends — the static path always has edges (a decidability limit)
 
 - RuleRef expansion via a return stack (2026-03): expanding multi-token RuleRefs during SLL prediction to cut backtracking. Tokens from inside an expanded sub-rule can't be used at the decision point without an ATN-grade depth mapping, and dedup-by-alt merges alts that share a sub-rule. Left as zero-overhead scaffolding.
 - LL(\*) static variant emit (2026-05), three over-broad attempts at per-(rule, follow-mask) variants. Static analysis can't distinguish "tail-greedy that should yield to the caller" from "one that legitimately re-enters" — each over-broad guard silently broke a real grammar (`htmlContent`, CSS `selector`). Superseded by the runtime FOLLOW gate; pair any LL repair with a rejection-case fixture, not just a hit-case one.
-- A caller-FOLLOW tier on the scan tournament (2026-09): among the alternatives that scan, prefer the longest whose END the caller's continuation can start at, falling back to plain longest when none clears it. Aimed at `if any_error { None }`, where `any_error { None }` is a longer expression than `any_error` and only the block the `if` still owes separates them — Rust's condition-excludes-struct-literal rule, which neither this grammar nor ANTLR4 encodes. It works there (the whole `else` class, 60 → 56 files) and is wrong in general: an alternative's scan end is not the rule's end, so on an LR atom the tier reads a position the precedence loop has not finished with. `driver_cst_sqlite_oracle_test` catches it on `SELECT CASE WHEN a THEN CASE WHEN b THEN 1 END ELSE 2 END`, where it hands the dangling `ELSE` to the inner `CASE` and the jar gives it to the outer. The answer is full-context simulation, not a tie-break: ANTLR4 decides this by simulating the continuation through the whole rule, which is the ATN.
+- A caller-FOLLOW tier on the scan tournament (2026-09): among the alternatives that scan, prefer the longest whose end the caller's continuation can start at, and fall back to plain longest when none clears it. It was aimed at `if any_error { None }`, where `any_error { None }` is the longer expression and only the block the `if` still owes separates them. That is Rust's condition-excludes-struct-literal rule, which neither this grammar nor ANTLR4 encodes. The tier gets that class right and is wrong in general: an alternative's scan end is not the rule's end, so on an LR atom it reads a position the precedence loop has not finished with. `driver_cst_sqlite_oracle_test` catches it on `SELECT CASE WHEN a THEN CASE WHEN b THEN 1 END ELSE 2 END`, where it hands the dangling `ELSE` to the inner `CASE` and the jar gives it to the outer. The answer is full-context simulation rather than a tie-break: ANTLR4 simulates the continuation through the whole rule, which is the ATN.
 
 Semantic-predicate dead-ends — a gate member is parser state, and the parser's
 state is not part of what a rollback restores:
 
 - A scope **stack** in a gate member (2026-09), for Rust's "no struct literal in
   a condition". The rule is about the innermost enclosing scope, which neither a
-  flag nor a counter can name: a flag cleared on the way into a bracket never
-  comes back (`if self.g(&x) || c { }` reads `c { }` as a struct literal), and a
+  flag nor a counter can name. A flag cleared on the way into a bracket never
+  comes back, so `if self.g(&x) || c { }` reads `c { }` as a struct literal. A
   counter cannot tell a function body from a head inside one, because a block
-  steps it too. One bit per scope in a single int says it exactly — a head
-  pushes `* 2 + 1`, a bracket `* 2`, each pops `/ 2`, and the ban is
-  `noStruct % 2`. It parses every hand-written probe and takes the corpus from
-  3 failing files to **33**: error recovery and the repeat-exit probe roll back
-  the position but not the parser's members, so a push whose pop never runs
-  shifts the stack for the rest of the file. A flag survives the same rollback
-  because it is idempotent. Restoring members across recovery and speculation is
-  the precondition for any stack-shaped gate.
-- Dropping the bracketing clears instead, so the ban never lifts inside a head
-  (2026-09): fixes `if self.g(&x) || c { }` and breaks `if g(S { a: 1 })` — the
-  corpus stays at 3 with a different three. With a flag the two classes are
-  mutually exclusive; the committed direction is the one that clears.
+  steps it too. One bit per scope in a single int says it exactly: a head pushes
+  `* 2 + 1`, a bracket `* 2`, each pops `/ 2`, and the ban is `noStruct % 2`. It
+  parses every hand-written probe and is far worse on real files. Error recovery
+  and the repeat-exit probe roll back the position but not the parser's members,
+  so a push whose pop never runs shifts the stack for the rest of the file. A
+  flag survives the same rollback because it is idempotent. Restoring members
+  across recovery and speculation is the precondition for any stack-shaped gate.
+- Dropping the bracketing clears, so the ban never lifts inside a head (2026-09).
+  That fixes `if self.g(&x) || c { }` and breaks `if g(S { a: 1 })`. With a flag
+  the two classes are mutually exclusive, and the committed direction is the one
+  that clears.
 
 Lexer dead-ends:
 
