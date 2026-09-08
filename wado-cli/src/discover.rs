@@ -352,6 +352,14 @@ pub fn filters_at<S: AsRef<str>>(
     ))
 }
 
+/// Filters that drop nothing, for a caller that must see every `*.wado` in the
+/// tree whatever a package excludes. `.gitignore`, submodules and dot-prefixed
+/// entries still prune: those hide a file from the repository, not from one
+/// subcommand.
+pub fn no_filters(_pkg_root: &Path) -> Result<(ExcludeSet, IncludeSet), CliExit> {
+    Ok((ExcludeSet::default(), IncludeSet::default()))
+}
+
 /// Cargo-workspace-style walk from `root`: one entry for `root` itself, then
 /// one per transitively discovered sub-package, depth-first and root-first.
 pub fn discover_tree(root: &Path, filters: Filters<'_>) -> Result<Vec<PackageFiles>, CliExit> {

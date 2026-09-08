@@ -140,6 +140,12 @@ Manifest filters are then resolved by the argument's kind:
 `[format]` where `wado test` names `[test]`. That section and the subcommand's
 own built-in patterns are the only difference, so the two cannot drift apart.
 
+`wado query references` walks the same way but names no section: a fixture
+`[test]` or `[format]` excludes is still a place a symbol is used. `.gitignore`,
+submodules and dot-prefixed entries do prune it, because those hide a file from
+the repository rather than from one subcommand. The queried module is imported
+whatever the walk returns, so naming a file directly always resolves it.
+
 ### CLI flags
 
 | Flag                    | Effect                                                                  |
