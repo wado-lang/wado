@@ -1333,7 +1333,7 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> {
 }
 ```
 
-`task return expr;` delivers the function's result to the CM runtime without terminating the function. Valid only inside `export async fn`. Regular `return` is forbidden in `async fn` bodies.
+`task return expr;` delivers the function's result to the CM runtime without terminating the function. Valid only inside `export async fn`. Regular `return` is forbidden in `async fn` bodies. A Wado call of such a function has type `()`: the result goes to the runtime, not to the caller.
 
 ## Test Blocks
 

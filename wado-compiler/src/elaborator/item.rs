@@ -46,6 +46,17 @@ pub(super) fn extract_compiler_item<H: CompilerHost>(
     items.into_iter().next()
 }
 
+/// The return type a caller observes. An `export async fn` hands its declared
+/// result to the Component Model runtime through `task return`, so a Wado call
+/// site receives nothing; an imported `async fn` returns as declared.
+pub(super) fn caller_visible_return_type(func: &Function, declared: TypeId) -> TypeId {
+    if func.is_async && func.is_export {
+        TypeTable::UNIT
+    } else {
+        declared
+    }
+}
+
 /// Body-walk placeholder for a function / method / test. The
 /// body walk records the signature facts (`fn_param_types`,
 /// `fn_return_types`, `decl_type_params`, `function_effects`,
@@ -2228,7 +2239,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             .iter()
             .map(|p| scope.resolve_type(&p.ty))
             .collect();
-        let return_type = func.return_type.as_ref().map(|t| scope.resolve_type(t));
+        let return_type = func
+            .return_type
+            .as_ref()
+            .map(|t| caller_visible_return_type(func, scope.resolve_type(t)));
         // The frame still holds this function's type parameters, so they are
         // not mistaken for unknown names.
         for param in &func.params {
@@ -2337,14 +2351,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 .unwrap_or(TypeTable::UNIT)
         };
 
-        // For async functions, the Wasm-level return type is unit (the result is delivered
-        // via `task return`, not via the Wasm function return). The declared return type is
-        // stored as `task_return_type` for validating `task return expr`.
-        let return_type = if func.is_async {
-            TypeTable::UNIT
-        } else {
-            declared_return_type
-        };
+        let return_type = caller_visible_return_type(func, declared_return_type);
 
         scope
             .sem

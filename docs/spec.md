@@ -5271,7 +5271,8 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> {
 - `task return` is only valid inside `export async fn` bodies.
 - Regular `return` is forbidden in `async fn` bodies — it would exit the Wasm function without notifying the CM runtime.
 - The `task return` expression is type-checked against the declared return type of the enclosing `export async fn`.
-- The `async` keyword on a function declaration has no effect on callers; Wado is fully colorless. `async` only appears in `export async fn` declarations to signal CM async calling convention at the component boundary.
+- A Wado call of an `export async fn` has type `()`. The declared return type is the Component Model contract; `task return` hands the value to the runtime, not to a Wado caller.
+- The `async` keyword asks nothing of a call site; Wado has no `await` and is fully colorless. `async` only appears in `export async fn` declarations to signal CM async calling convention at the component boundary.
 
 ### Attribute Syntax for Component Model Linking
 

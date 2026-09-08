@@ -47,7 +47,7 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> {
 }
 ```
 
-**Why `task return` only at the CM boundary:** Wado's internal async model is colorless — async suspension and resumption happen transparently at the WASI call level. There is no user-visible async/await inside Wado. `task return` is a CM-specific mechanism and has no meaning inside Wado-to-Wado function calls.
+**Why `task return` only at the CM boundary:** Wado's internal async model is colorless — async suspension and resumption happen transparently at the WASI call level. There is no user-visible async/await inside Wado. `task return` is a CM-specific mechanism and has no meaning inside Wado-to-Wado function calls. An `export async fn` therefore carries no Wasm result, and a Wado call of one has type `()`.
 
 Rules:
 
