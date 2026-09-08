@@ -2134,22 +2134,23 @@ fn lower_scan_body(alt: &Alternative, ctx: &mut GenContext, rule_name: &String, 
 ///
 /// `from` is the surface index the scan body starts at, so an LR suffix — which
 /// walks `elements[1..]` — positions its gates against what it actually emits.
-/// A gate ahead of `from` still runs, at the body's start: the parse ran it
-/// before this body, and the scan's copy has to hold the same value on entry.
+/// A gate before `from` is one the LR rewrite stripped with the leading
+/// self-ref, and `emit_lr_branch_body` interleaves the alternative's actions
+/// from `before == 1`: the parse never runs it, so simulating it would leave the
+/// scan holding a value no parse produces.
 pub fn scan_gates_for(alt: &Alternative, ctx: &GenContext, from: i32 = 0) -> List<ScanGate> {
     if !ctx.emit_scan_gate() {
         return [];
     }
     let mut gates: List<ScanGate> = [];
     for let a of &alt.actions {
-        if a.kind matches { Predicate } {
+        if a.kind matches { Predicate } || a.before_index < from {
             continue;
         }
         let body = ctx.gate_body(a.source.action_id);
         if let Some(hit) = gate_assignment(&body) {
             if ctx.scan_gate_fields().contains(&hit.0) {
-                let at = if a.before_index > from { a.before_index - from } else { 0 };
-                gates.push(ScanGate { field: hit.0, value: hit.1, before_index: at });
+                gates.push(ScanGate { field: hit.0, value: hit.1, before_index: a.before_index - from });
             }
         }
     }
