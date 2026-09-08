@@ -238,10 +238,6 @@ fn walk_dir(
             continue;
         }
 
-        // `metadata` follows the link, so a symlink pointing nowhere fails
-        // here. That names no file to discover, and refusing the whole walk
-        // over one is worse than stepping past it; anything else — a
-        // permission, a racing delete — is still reported with its path.
         let Some(metadata) = entry_metadata(&path)? else {
             continue;
         };
@@ -310,9 +306,8 @@ fn walk_dir(
     Ok(())
 }
 
-/// The entry's metadata, or `None` when it is a symlink to nothing. Only a
-/// dangling link is swallowed: `symlink_metadata` succeeding where `metadata`
-/// failed is what distinguishes it from a permission or a racing delete.
+/// The entry's metadata, or `None` for a symlink to nothing — which names no
+/// file to discover. A permission or a racing delete is still an error.
 fn entry_metadata(path: &Path) -> Result<Option<fs::Metadata>, WalkError> {
     match fs::metadata(path) {
         Ok(metadata) => Ok(Some(metadata)),
@@ -343,13 +338,10 @@ pub struct PackageFiles {
 /// relative to it. A subcommand's implementation is one [`filters_at`] call.
 pub type Filters<'a> = &'a dyn Fn(&Path) -> Result<(ExcludeSet, IncludeSet), CliExit>;
 
-/// The compiled filters for the package rooted exactly at `pkg_root`:
-/// `section` picks `(exclude, include)` out of its `wado.toml`, and
-/// `extra_excludes` are the subcommand's own patterns (built-in skips, CLI
-/// `--exclude`). `include` overrides both exclude sources.
-///
-/// A manifest found only in an *ancestor* governs a different root, so its
-/// package-root-relative globs would not match here and are not read.
+/// The compiled filters for the package rooted exactly at `pkg_root`: its
+/// manifest's `section`, plus the subcommand's own `extra_excludes`. A
+/// manifest found only in an ancestor governs a different root, so it is not
+/// read here.
 pub fn filters_at<S: AsRef<str>>(
     pkg_root: &Path,
     section: impl Fn(&Manifest) -> (&[String], &[String]),
@@ -373,10 +365,9 @@ pub fn filters_at<S: AsRef<str>>(
     ))
 }
 
-/// Filters that drop nothing, for a caller that must see every `*.wado` in the
-/// tree whatever a package excludes. `.gitignore`, submodules and dot-prefixed
-/// entries still prune: those hide a file from the repository, not from one
-/// subcommand.
+/// Filters that drop nothing, for a caller that must see what a package
+/// excludes. `.gitignore` and submodules still prune: they hide a file from
+/// the repository, not from one subcommand.
 pub fn no_filters(_pkg_root: &Path) -> Result<(ExcludeSet, IncludeSet), CliExit> {
     Ok((ExcludeSet::default(), IncludeSet::default()))
 }
@@ -415,13 +406,9 @@ pub fn files_in_dir(dir: &Path, filters: Filters<'_>) -> Result<Vec<PathBuf>, Cl
     Ok(files)
 }
 
-/// Expand one directory argument.
-///
-/// `exclude` / `include` globs are written relative to a package root, so a
-/// `dir` *inside* a package is walked from that package — making the globs
-/// match as authored, and picking up the `.gitignore` files above `dir` — then
-/// narrowed back to `dir`. A `dir` that is itself a package root, or that lies
-/// outside any package, is walked directly.
+/// Expand one directory argument. A `dir` inside a package is walked from that
+/// package, so its root-relative globs match as authored, then narrowed back to
+/// `dir`; a package root, or a `dir` outside any package, is walked directly.
 fn discover_dir(dir: &Path, filters: Filters<'_>) -> Result<Vec<PackageFiles>, CliExit> {
     let enclosing = match project_manifest::discover(dir) {
         Ok(project) => project.map(|p| p.root),
