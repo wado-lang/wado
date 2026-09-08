@@ -13,8 +13,8 @@ use crate::name::FqTypeName;
 use crate::tir::{PrimitiveType, ResolvedType, TypeId, TypeTable};
 
 use super::Elaborator;
-use super::infer::unify;
 use super::callee::CalleeRef;
+use super::infer::unify;
 use super::types::{FunctionContext, MethodOwner};
 use super::util::is_float_only_literal;
 
