@@ -42,7 +42,7 @@ pub struct List<T> {
     used: i32,
 }
 
-impl List<T> {
+impl<T> List<T> {
     pub fn with_capacity(capacity: i32) -> List<T> {
         return List { repr: builtin::array_new(capacity), used: 0 };
     }
@@ -309,7 +309,7 @@ impl List<T> {
     }
 }
 
-impl IndexValue<i32> for List<T> {
+impl<T> IndexValue<i32> for List<T> {
     type Output = T;
 
     fn index_value(&self, index: i32) -> Self::Output {
@@ -318,7 +318,7 @@ impl IndexValue<i32> for List<T> {
     }
 }
 
-impl IndexAssign<i32> for List<T> {
+impl<T> IndexAssign<i32> for List<T> {
     type Output = T;
 
     fn index_assign(&mut self, index: i32, value: Self::Output) with stores[value] {
@@ -406,7 +406,7 @@ impl<T: Ord> Ord for List<T> {
     }
 }
 
-impl List<T> {
+impl<T> List<T> {
     /// Yields `&mut T` only where `T: RefMut`: a scalar element has no
     /// addressable cell, so a write through the reference would be lost.
     pub fn iter_ref_mut(&mut self) -> SliceRefMutIter<T> with stores[self] {
@@ -465,7 +465,7 @@ impl List<T> {
     }
 }
 
-impl IndexValue<RangeExclusive<i32>> for List<T> {
+impl<T> IndexValue<RangeExclusive<i32>> for List<T> {
     type Output = Slice<T>;
 
     fn index_value(&self, range: RangeExclusive<i32>) -> Slice<T> {
@@ -473,7 +473,7 @@ impl IndexValue<RangeExclusive<i32>> for List<T> {
     }
 }
 
-impl IndexValue<RangeInclusive<i32>> for List<T> {
+impl<T> IndexValue<RangeInclusive<i32>> for List<T> {
     type Output = Slice<T>;
 
     fn index_value(&self, range: RangeInclusive<i32>) -> Slice<T> {
@@ -544,7 +544,7 @@ impl<T: Display> List<T> {
     }
 }
 
-impl FromIterator for List<T> {
+impl<T> FromIterator for List<T> {
     type Elem = T;
 
     fn from_iter<I: Iterator<Item = T>>(iter: &mut I) -> List<T> {
@@ -558,13 +558,13 @@ impl FromIterator for List<T> {
 
 // `[e0, e1, …]` as a `List<T>`: the literal is the backing array already, so
 // the list is its spine over it (WEP 2026-08-24).
-impl From<Array<T>> for List<T> {
+impl<T> From<Array<T>> for List<T> {
     fn from(elements: Array<T>) -> List<T> {
         return List { repr: elements, used: builtin::array_len(&elements) };
     }
 }
 
-impl Default for List<T> {
+impl<T> Default for List<T> {
     pub fn default() -> List<T> {
         return [] as List<T>;
     }

@@ -1,0 +1,56 @@
+// The imported half of `static_namespaced_receiver.wado`: a type the importing
+// module reaches only through its namespace, carrying each trait shape that
+// spelling has to resolve — a written static, an inherited default body, an
+// inherited body returning `Self`, and a base a `type` alias renames.
+
+pub struct P {
+    pub n: i32,
+}
+
+pub trait Mk {
+    fn make(n: i32 = 7) -> i32;
+}
+
+impl Mk for P {
+    fn make(n: i32) -> i32 {
+        return n;
+    }
+}
+
+pub trait Made {
+    fn made(n: i32 = 7) -> i32 {
+        return n;
+    }
+}
+
+impl Made for P {}
+
+pub trait Twice {
+    fn of(n: i32) -> Self;
+
+    fn twice(n: i32) -> Self {
+        return Self::of(n * 2);
+    }
+}
+
+impl Twice for P {
+    fn of(n: i32) -> P {
+        return P { n: n };
+    }
+}
+
+pub trait Doubled {
+    fn doubled() -> i32;
+}
+
+impl Doubled for P {
+    fn doubled() -> i32 {
+        return 42;
+    }
+}
+
+pub type Q = P;
+
+pub struct Cell<T> {
+    pub v: T,
+}

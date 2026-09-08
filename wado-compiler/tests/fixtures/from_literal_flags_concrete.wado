@@ -10,7 +10,7 @@ struct PermsMap<P, V> {
     values: List<V>,
 }
 
-impl From<Array<[String, V]>> for PermsMap<Perms, V> {
+impl<V> From<Array<[String, V]>> for PermsMap<Perms, V> {
     fn from(entries: Array<[String, V]>) -> PermsMap<Perms, V> {
         let mut out: PermsMap<Perms, V> = PermsMap { keys: [], values: [] };
         for let [key, value] of entries {

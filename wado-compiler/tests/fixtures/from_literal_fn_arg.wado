@@ -6,7 +6,7 @@ struct SimpleMap<V> {
     values: List<V>,
 }
 
-impl SimpleMap<V> {
+impl<V> SimpleMap<V> {
     fn new() -> SimpleMap<V> {
         return SimpleMap { keys: [], values: [] };
     }
@@ -25,7 +25,7 @@ impl SimpleMap<V> {
     }
 }
 
-impl From<Array<[String, V]>> for SimpleMap<V> {
+impl<V> From<Array<[String, V]>> for SimpleMap<V> {
     fn from(entries: Array<[String, V]>) -> SimpleMap<V> {
         let mut out = SimpleMap::<V>::new();
         for let [key, value] of entries {

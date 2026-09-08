@@ -66,7 +66,7 @@ impl<T: Eq, E: Eq> Eq for Result<T, E> {
     }
 }
 
-impl Option<T> {
+impl<T> Option<T> {
     /// Returns the contained value, panicking if None.
     pub fn unwrap(self) -> T {
         if let Some(v) = self {
@@ -89,7 +89,7 @@ internal fn unwrap_failed<V>(msg: String, value: V) -> ! {
     panic(`${msg}: ${value:?}`);
 }
 
-impl Result<T, E> {
+impl<T, E> Result<T, E> {
     /// Returns the contained Ok value, panicking (with the Err value) if Err.
     pub fn unwrap(self) -> T {
         return match self {
@@ -139,7 +139,7 @@ impl Result<T, E> {
     }
 }
 
-impl Default for Option<T> {
+impl<T> Default for Option<T> {
     pub fn default() -> Option<T> {
         return null;
     }
@@ -239,7 +239,7 @@ pub resource Stream<T> {
     fn drop(self);
 }
 
-impl Stream<T> {
+impl<T> Stream<T> {
     /// Read until the writable end drops, and return everything it wrote.
     /// Only the result stops it: an empty `Completed` copy is the writer
     /// offering nothing this time, and more can still follow.
@@ -294,7 +294,7 @@ internal fn write_copy_is_final(written: &StreamWrite) -> bool {
     return written.result != CopyResult::Completed || written.count <= 0;
 }
 
-impl StreamWritable<T> {
+impl<T> StreamWritable<T> {
     /// Write every element, or stop early when the readable end drops.
     /// Returns the result of the copy that ended the loop.
     pub fn write_all(&self, data: List<T>) -> CopyResult {
@@ -465,7 +465,7 @@ pub struct AsyncCall<T> {
     __cm_lift: fn(i32) -> T,
 }
 
-impl AsyncCall<T> {
+impl<T> AsyncCall<T> {
     /// Wait for the subtask to complete and return the lifted result.
     /// Drops the CM subtask handle and frees the result buffer before
     /// returning. After `wait` returns, the `AsyncCall<T>` value must not be

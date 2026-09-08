@@ -6,7 +6,7 @@ struct PairList<V> {
     values: List<V>,
 }
 
-impl PairList<V> {
+impl<V> PairList<V> {
     fn new() -> PairList<V> {
         return PairList { keys: [], values: [] };
     }
@@ -16,7 +16,7 @@ impl PairList<V> {
     }
 }
 
-impl From<Array<[String, V]>> for PairList<V> {
+impl<V> From<Array<[String, V]>> for PairList<V> {
     fn from(entries: Array<[String, V]>) -> PairList<V> {
         let mut out = PairList::<V>::new();
         for let [key, value] of entries {

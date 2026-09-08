@@ -19,7 +19,8 @@ use crate::token::Span;
 use super::Elaborator;
 use super::infer::InferCtx;
 use super::instantiate::Instantiation;
-use super::sig::InstantiatedImplSig;
+use super::sig::{InstantiatedImplSig, MethodSig, Param};
+use super::static_call::{StaticLookup, StaticQuery};
 use super::synth::{ArgClass, ArgProbe};
 use super::trait_env::{ImplHeader, TraitEnv};
 use super::types::{
@@ -408,9 +409,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .impl_sig(impl_ref.0)
                 .expect("the decl pass records every impl block's declaration facts")
                 .instantiate(&self.tysys.type_table, concrete_type_args);
-            let declared = self
-                .tysys
-                .build_declared_type_params(&header.ty, &header.type_params);
+            let declared: IndexSet<String> =
+                header.type_params.iter().map(|p| p.name.clone()).collect();
             if let Some(result) = project(self, impl_ref, &impl_sig, &declared) {
                 return Some(result);
             }
@@ -714,6 +714,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             param_names: vec![],
                             consumes_self: false,
                             inherent_visibility: None,
+                            defaults_module: None,
                         });
                     }
                     if method_name == "zip" {
@@ -757,6 +758,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             param_names: vec![],
                             consumes_self: false,
                             inherent_visibility: None,
+                            defaults_module: None,
                         });
                     }
                     (
@@ -1005,7 +1007,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return_type: instantiated.return_type,
             self_kind: sig.self_kind,
             param_types: instantiated.param_types[first_value..].to_vec(),
-            param_is_mut: super::sig::Param::is_mut_flags(&sig.params),
+            param_is_mut: Param::is_mut_flags(&sig.params),
             owner: MethodOwner::Receiver,
             cm_name: None,
             is_ref_impl: false,
@@ -1013,10 +1015,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             method_own_params: sig.own_params.clone(),
             impl_module: Some(self.impl_block_module_source(impl_ref)),
             from_concrete_impl: self.impl_is_concrete_instantiation(&header.ty),
-            param_defaults: sig.params.iter().map(|p| p.default.clone()).collect(),
-            param_names: super::sig::Param::names(&sig.params),
+            param_defaults: Param::defaults(&sig.params),
+            param_names: Param::names(&sig.params),
             consumes_self: sig.self_kind == ast::SelfKind::Value,
             inherent_visibility: Some(method_header.visibility),
+            defaults_module: sig.defaults_module.clone(),
         })
     }
 
@@ -1124,7 +1127,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return_type: instantiated.return_type,
             self_kind: sig.self_kind,
             param_types: instantiated.param_types[first_value..].to_vec(),
-            param_is_mut: super::sig::Param::is_mut_flags(&sig.params),
+            param_is_mut: Param::is_mut_flags(&sig.params),
             owner: MethodOwner::Receiver,
             cm_name: sig.cm_name,
             is_ref_impl: false,
@@ -1132,10 +1135,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             method_own_params: sig.own_params.clone(),
             impl_module: None,
             from_concrete_impl: false,
-            param_defaults: sig.params.iter().map(|p| p.default.clone()).collect(),
-            param_names: super::sig::Param::names(&sig.params),
+            param_defaults: Param::defaults(&sig.params),
+            param_names: Param::names(&sig.params),
             consumes_self: sig.self_kind == ast::SelfKind::Value,
             inherent_visibility: None,
+            defaults_module: sig.defaults_module.clone(),
         })
     }
 
@@ -1154,13 +1158,43 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .unwrap_or(0)
     }
 
+    /// [`Self::fill_defaulted_method_type_args`] for a static's own slots,
+    /// reading the trait and the declaring module off its signature.
+    pub(super) fn fill_static_default_type_args(
+        &mut self,
+        sig: &MethodSig,
+        receiver_type: TypeId,
+        inferred: &mut [TypeId],
+    ) -> bool {
+        if !sig.own_params.iter().any(|p| p.default.is_some()) {
+            return false;
+        }
+        let declaring_module = sig.defaults_module.clone().or_else(|| {
+            sig.declaring_impl
+                .map(|impl_def| self.tysys.resolutions.defs().module(impl_def).clone())
+        });
+        let trait_decl = sig
+            .declaring_impl
+            .and_then(|impl_def| self.tysys.signatures.impl_sig(impl_def)?.trait_decl);
+        self.fill_defaulted_method_type_args(
+            &sig.own_params,
+            receiver_type,
+            trait_decl,
+            &sig.own_type_param_ids(),
+            declaring_module,
+            inferred,
+        )
+    }
+
     /// Bind a still-unbound method type param to its declared default,
     /// resolving the default with `Self` set to the concrete receiver and
     /// `default_scope_module` pointed at the declaring module — a default may
     /// name a type private to that module (`<T = Priv>`), which the call site
     /// cannot resolve. The free-function path does the same
     /// ([`Self::fill_defaulted_fn_type_args`]).
-    fn fill_defaulted_method_type_args(
+    ///
+    /// Reports whether any slot took a default.
+    pub(super) fn fill_defaulted_method_type_args(
         &mut self,
         method_type_params: &[ast::GenericParam],
         receiver_type: TypeId,
@@ -1168,17 +1202,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         slots: &[TypeId],
         declaring_module: Option<ModuleSource>,
         inferred: &mut [TypeId],
-    ) {
+    ) -> bool {
         let receiver_type = self.tysys.get_base_type(receiver_type);
         if self.is_unbound_type_param(receiver_type) {
-            return;
+            return false;
         }
         let has_fillable = method_type_params
             .iter()
             .zip(inferred.iter())
             .any(|(p, &tid)| p.default.is_some() && self.is_unbound_type_param(tid));
         if !has_fillable {
-            return;
+            return false;
         }
         if let Some(trait_) = trait_decl {
             self.register_assoc_types_for_concrete_type_and_trait(receiver_type, trait_);
@@ -1199,6 +1233,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .collect()
             })
         });
+        let mut filled = false;
         for i in 0..inferred.len() {
             if self.is_unbound_type_param(inferred[i])
                 && let Some(default_ty) = defaults[i]
@@ -1210,8 +1245,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .contains_type_param(default_ty)
             {
                 inferred[i] = default_ty;
+                filled = true;
             }
         }
+        filled
     }
 
     /// Infer an instance call's method-level type arguments from the method's
@@ -1442,6 +1479,27 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         );
     }
 
+    /// The lists a `Type::method(...)` call checks and pads against. Every
+    /// static spelling asks this one question, so none of them differs on the
+    /// arity it checks.
+    pub(super) fn static_callee_params(
+        &mut self,
+        receiver: &ImplTargetKey,
+        receiver_type: TypeId,
+        method_name: &str,
+        receiver_name: &str,
+        arg_types: &[TypeId],
+        required_trait: Option<DefId>,
+    ) -> StaticLookup {
+        self.resolve_static_callee(StaticQuery {
+            receiver_key: Some(receiver),
+            arg_types,
+            receiver_type: Some(receiver_type),
+            required_trait,
+            ..StaticQuery::of(receiver_name, method_name)
+        })
+    }
+
     /// Find a trait method for a given type and method name, for when an
     /// inherent method is not found.
     ///
@@ -1598,7 +1656,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let impl_struct_name = self.get_type_name(&header.ty);
         let is_blanket_type_param = matches!(
             &header.ty,
-            Type::Named(named) if !self.tysys.is_known_type_name(&named.name)
+            Type::Named(named)
+                if self.tysys.is_impl_target_param(&header.type_params, &named.name)
         );
         // Qualified in the impl's own frame by the decl pass: the call site's
         // imports may name the same declaration differently, or not at all.
@@ -1613,11 +1672,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .enumerate()
                 .filter_map(|(i, arg)| match arg {
                     Type::Named(named)
-                        if self.tysys.is_impl_target_param(
-                            &impl_home,
-                            &header.type_params,
-                            &named.name,
-                        ) =>
+                        if self
+                            .tysys
+                            .is_impl_target_param(&header.type_params, &named.name) =>
                     {
                         Some((named.name.clone(), i as u32))
                     }
@@ -1669,7 +1726,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         } else {
             None
         };
-        let impl_module_source = impl_home.clone();
+        let impl_module_source = impl_home;
         // A concrete generic instantiation trait impl (`impl Tag for
         // List<u8>`) yields a per-instantiation concrete method, called
         // directly (no monomorphization), living in the impl's module.
@@ -1715,43 +1772,39 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
 
-        // For blanket impls where impl_ty is a free type parameter
+        // For blanket impls where impl_ty is a free type parameter, at the slot
+        // the impl gave it. That is 0 only when the receiver is the first
+        // parameter written: `impl<A, T: Holder<Item = A>> Trait for T` puts it
+        // at 1, and binding it at 0 leaves the target itself unsubstituted.
+        // Finding the slot is what asks whether there is one — an effect or
+        // `fn`-bound parameter holds none, and binding such a name to slot 0
+        // would claim another parameter's.
         if let Some(ref name) = blanket_name
             && !scope.annotate_ctx.trait_ctx.type_params.contains_key(name)
-            && !scope.tysys.is_known_type_name(name)
+            && let Some(slot) = header
+                .type_params
+                .iter()
+                .filter(|p| p.is_real_type_param())
+                .position(|p| &p.name == name)
         {
-            if let Some(recv_id) = receiver_type_id {
-                // At the slot the impl gave it, which is 0 only when the
-                // receiver is the first parameter written. `impl<A, T:
-                // Holder<Item = A>> Trait for T` puts it at 1, and binding it
-                // at 0 leaves the target itself unsubstituted.
-                let slot = header
-                    .type_params
-                    .iter()
-                    .filter(|p| p.is_real_type_param())
-                    .position(|p| &p.name == name)
-                    .unwrap_or(0) as u32;
-                Self::bind_type_param(
-                    &mut scope,
-                    super::scope::param_decl(&header.type_params, name),
-                    name,
-                    slot,
-                    recv_id,
-                );
-            } else {
-                let type_id = scope
+            let slot = slot as u32;
+            // With no receiver type to fill the slot, the parameter at it stands
+            // for itself.
+            let bound = match receiver_type_id {
+                Some(recv_id) => recv_id,
+                None => scope
                     .tysys
                     .type_table
                     .borrow_mut()
-                    .make_type_param(name.clone(), 0);
-                Self::bind_type_param(
-                    &mut scope,
-                    super::scope::param_decl(&header.type_params, name),
-                    name,
-                    0,
-                    type_id,
-                );
-            }
+                    .make_type_param(name.clone(), slot),
+            };
+            Self::bind_type_param(
+                &mut scope,
+                super::scope::param_decl(&header.type_params, name),
+                name,
+                slot,
+                bound,
+            );
         }
 
         // The receiver's type arguments, aligned to the impl's slots per its
@@ -1923,28 +1976,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .type_param_bounds
                     .shift_remove(&type_param.name);
             }
-            let param_is_mut = crate::elaborator::sig::Param::is_mut_flags(&method_sig.params);
-            let param_names = crate::elaborator::sig::Param::names(&method_sig.params);
-            // Parameter defaults live on the trait declaration only (WEP
-            // 2026-04-11). Pull them from the trait's method, keyed by
-            // parameter name, instead of the impl's re-specified params.
-            let trait_name_base = scope.get_type_name(&trait_type_for_name);
-            let param_defaults: Vec<Option<ast::Expr>> = {
-                let trait_method_params = scope
-                    .trait_sig_by_name(&trait_name_base)
-                    .and_then(|sig| sig.method(method_name))
-                    .map(|method| method.sig.params.clone());
-                param_names
-                    .iter()
-                    .map(|name| {
-                        trait_method_params.as_ref().and_then(|tp| {
-                            tp.iter()
-                                .find(|p| &p.name == name)
-                                .and_then(|p| p.default.clone())
-                        })
-                    })
-                    .collect()
-            };
+            let param_is_mut = Param::is_mut_flags(&method_sig.params);
+            let param_names = Param::names(&method_sig.params);
+            let param_defaults = Param::defaults(&method_sig.params);
             found_traits.push(TraitMethodMatch {
                 trait_name: scope.tysys.trait_env.fq_trait_named_by_impl(
                     crate::name::FqTraitName::declared(&defs, trait_decl).with_args(
@@ -1976,6 +2010,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     param_names,
                     consumes_self: self_kind == ast::SelfKind::Value,
                     inherent_visibility: None,
+                    defaults_module: method_sig.defaults_module,
                 },
                 impl_module_source: impl_module_source.clone(),
                 blanket_type_param: blanket_type_param.clone(),
@@ -1991,9 +2026,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // If the method wasn't found in the impl block, check the trait
         // declaration for a default method with that name
         if !method_found {
-            let trait_name_base = scope.get_type_name(&trait_type_for_name);
-            if let Some(default_method) = scope
-                .trait_sig_by_name(&trait_name_base)
+            // The block's own trait, by declaration: a second trait of that
+            // spelling in this frame would otherwise supply the default body,
+            // its module, and the slots it is instantiated in.
+            let declaring = scope.trait_sig_of(&trait_decl);
+            let trait_module = declaring.map(|sig| sig.module.clone());
+            if let Some(default_method) = declaring
                 .and_then(|sig| sig.method(method_name))
                 .filter(|m| m.default_body.is_some())
                 .cloned()
@@ -2027,9 +2065,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         return_type: instantiated.return_type,
                         self_kind,
                         param_types: instantiated.param_types[first_value_param..].to_vec(),
-                        param_is_mut: crate::elaborator::sig::Param::is_mut_flags(
-                            &default_method.sig.params,
-                        ),
+                        param_is_mut: Param::is_mut_flags(&default_method.sig.params),
                         owner: MethodOwner::Receiver,
                         cm_name: None,
                         is_ref_impl: false,
@@ -2037,17 +2073,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         method_own_params: default_method.sig.own_params.clone(),
                         impl_module: Some(impl_module_source.clone()),
                         from_concrete_impl: impl_is_concrete,
-                        param_defaults: default_method
-                            .sig
-                            .params
-                            .iter()
-                            .map(|p| p.default.clone())
-                            .collect(),
-                        param_names: crate::elaborator::sig::Param::names(
-                            &default_method.sig.params,
-                        ),
+                        param_defaults: Param::defaults(&default_method.sig.params),
+                        param_names: Param::names(&default_method.sig.params),
                         consumes_self: self_kind == ast::SelfKind::Value,
                         inherent_visibility: None,
+                        // The body and its defaults are the trait's, so both
+                        // resolve where the trait wrote them.
+                        defaults_module: trait_module,
                     },
                     impl_module_source,
                     blanket_type_param,
@@ -2658,24 +2690,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         )
     }
 
-    /// Look up the type parameters of a static method from its impl header.
-    /// Scans the pre-digested impl headers for `impl StructName { fn method_name<...> }`;
-    /// `impl_headers` already covers every loaded module (including the current one).
+    /// The method's own slots as its declaration wrote them, read off the
+    /// declaration [`Elaborator::resolve_static_callee`] picked: a trait-`impl`
+    /// method reports the trait's bounds and defaults, which the block itself
+    /// does not restate.
     pub(super) fn lookup_static_method_type_params(
-        &self,
+        &mut self,
         struct_name: &str,
         method_name: &str,
     ) -> Vec<ast::GenericParam> {
-        for header in self.tysys.trait_env.impl_headers.values() {
-            if super::trait_env::get_type_name_static(&header.ty) == struct_name {
-                for method in &header.methods {
-                    if method.name == method_name && !method.type_params.is_empty() {
-                        return method.type_params.clone();
-                    }
-                }
-            }
-        }
-        vec![]
+        self.resolve_static_callee(StaticQuery::of(struct_name, method_name))
+            .found()
+            .map(|callee| callee.own_params.clone())
+            .unwrap_or_default()
     }
 
     /// Look up the type parameters of a function from its AST definition.
@@ -2918,6 +2945,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             param_names: method_param_names,
             consumes_self: _,
             inherent_visibility,
+            // Reify pads a `MethodDispatch` under the caller: no swap reads it.
+            defaults_module: _,
         } = method_info?;
 
         // Only use IndexMut if the method requires &mut self

@@ -1,0 +1,27 @@
+// The trait half of `default_arg_and_type_param.wado`: defaults declared in
+// another module than the impl, naming items only this module can see.
+
+fn origin() -> i32 {
+    return 3;
+}
+
+pub trait Tagged {
+    fn tagged(n: i32 = origin()) -> i32;
+}
+
+struct Tag {}
+
+pub trait Named {
+    fn name() -> String;
+}
+
+impl Named for Tag {
+    fn name() -> String {
+        return "tag";
+    }
+}
+
+pub trait Boxed {
+    fn boxed<T: Named = Tag>(&self) -> String;
+    fn made<T: Named = Tag>() -> String;
+}

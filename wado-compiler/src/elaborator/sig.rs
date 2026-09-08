@@ -3,6 +3,8 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
+use crate::ast::{Expr, GenericParam};
+use crate::defs::{DefId, DefTable};
 use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
 use crate::tir::{TypeId, TypeTable};
@@ -15,7 +17,7 @@ pub(crate) struct AssocConstSig {
     /// The impl-declaring module; reify walks [`Self::value`] under it.
     pub(crate) module: ModuleSource,
     pub(crate) ty: TypeId,
-    pub(crate) value: crate::ast::Expr,
+    pub(crate) value: Expr,
     /// The declared rung; `None` on a trait impl's constant.
     pub(crate) inherent_visibility: Option<crate::ast::Visibility>,
 }
@@ -30,25 +32,25 @@ pub(crate) struct Signatures {
     /// Canonical free-function signatures, keyed by the declaration. The
     /// entries are shared with the per-module digests they are assembled from
     /// rather than copied — a signature carries its parameter defaults' AST.
-    pub(crate) function_sigs: IndexMap<crate::defs::DefId, Rc<FunctionSig>>,
+    pub(crate) function_sigs: IndexMap<DefId, Rc<FunctionSig>>,
 
-    /// Canonical method signatures, keyed by the method's [`crate::defs::DefId`]
+    /// Canonical method signatures, keyed by the method's [`DefId`]
     /// — `impl`-block methods and `interface` / `resource` operations alike.
     /// Dispatch goes index → signature, never AST.
-    pub(crate) method_sigs: IndexMap<crate::defs::DefId, MethodSig>,
+    pub(crate) method_sigs: IndexMap<DefId, MethodSig>,
 
     /// The name-keyed index over [`Self::method_sigs`] for `interface` /
     /// `resource` operations, which callers reach by name, not by node.
-    pub(crate) resource_method_ids: IndexMap<(crate::defs::DefId, String), crate::defs::DefId>,
+    pub(crate) resource_method_ids: IndexMap<(DefId, String), DefId>,
 
     /// Per-`impl`-block facts shared by the block's methods, keyed by the
-    /// block's [`crate::defs::DefId`].
-    pub(crate) impl_sigs: IndexMap<crate::defs::DefId, ImplSig>,
+    /// block's [`DefId`].
+    pub(crate) impl_sigs: IndexMap<DefId, ImplSig>,
 
     /// Per-`trait`-declaration facts, keyed by the declaration's
-    /// [`crate::defs::DefId`], so a query reaches a trait's methods without
+    /// [`DefId`], so a query reaches a trait's methods without
     /// loading the declaring module's AST.
-    pub(crate) trait_sigs: IndexMap<crate::defs::DefId, TraitSig>,
+    pub(crate) trait_sigs: IndexMap<DefId, TraitSig>,
 
     /// Global-variable declarations, declaring module → name →
     /// `(declared type, is_mut)`.
@@ -57,7 +59,7 @@ pub(crate) struct Signatures {
     /// Impl-associated constants, keyed by `(owning type declaration,
     /// constant name)`. The owner is an identity, so two modules' same-named
     /// types cannot share an entry.
-    pub(crate) associated_constants: IndexMap<(crate::defs::DefId, String), AssocConstSig>,
+    pub(crate) associated_constants: IndexMap<(DefId, String), AssocConstSig>,
 
     /// Per-module `__DATA__` section contents; modules without one have no
     /// entry.
@@ -66,33 +68,29 @@ pub(crate) struct Signatures {
 
 impl Signatures {
     /// Canonical signature of the free function `def` declares.
-    pub(crate) fn function_sig(&self, def: crate::defs::DefId) -> Option<&FunctionSig> {
+    pub(crate) fn function_sig(&self, def: DefId) -> Option<&FunctionSig> {
         self.function_sigs.get(&def).map(Rc::as_ref)
     }
 
     /// Canonical signature of the method `def` declares.
-    pub(crate) fn method_sig(&self, def: crate::defs::DefId) -> Option<&MethodSig> {
+    pub(crate) fn method_sig(&self, def: DefId) -> Option<&MethodSig> {
         self.method_sigs.get(&def)
     }
 
     /// Canonical signature of the operation `name` on the `interface` /
     /// `resource` declaration `decl`.
-    pub(crate) fn resource_method_sig(
-        &self,
-        decl: crate::defs::DefId,
-        name: &str,
-    ) -> Option<&MethodSig> {
+    pub(crate) fn resource_method_sig(&self, decl: DefId, name: &str) -> Option<&MethodSig> {
         let method = self.resource_method_ids.get(&(decl, name.to_string()))?;
         self.method_sig(*method)
     }
 
     /// Declaration facts of the `impl` block `def`.
-    pub(crate) fn impl_sig(&self, def: crate::defs::DefId) -> Option<&ImplSig> {
+    pub(crate) fn impl_sig(&self, def: DefId) -> Option<&ImplSig> {
         self.impl_sigs.get(&def)
     }
 
     /// Declaration facts of the `trait` `def` declares.
-    pub(crate) fn trait_sig(&self, def: crate::defs::DefId) -> Option<&TraitSig> {
+    pub(crate) fn trait_sig(&self, def: DefId) -> Option<&TraitSig> {
         self.trait_sigs.get(&def)
     }
 
@@ -102,17 +100,52 @@ impl Signatures {
     }
 
     /// The constant `name` declared on the type `owner`.
-    pub(crate) fn associated_constant(
-        &self,
-        owner: crate::defs::DefId,
-        name: &str,
-    ) -> Option<&AssocConstSig> {
+    pub(crate) fn associated_constant(&self, owner: DefId, name: &str) -> Option<&AssocConstSig> {
         self.associated_constants.get(&(owner, name.to_string()))
     }
 
     /// The `__DATA__` section of `module`, if it declares one.
     pub(crate) fn data_section(&self, module: &ModuleSource) -> Option<&str> {
         self.data_sections.get(module).map(String::as_str)
+    }
+
+    /// Make a trait-`impl` method's parameters say what its trait declared,
+    /// value and type parameters alike, names included: only the trait may
+    /// declare a default (WEP 2026-04-11), and a default names its neighbours
+    /// as the trait called them. Not the decl pass: the trait may be elsewhere.
+    pub(crate) fn inherit_trait_param_defaults(&mut self, defs: &DefTable) {
+        let inherited: Vec<(DefId, ModuleSource, Vec<Param>, Vec<GenericParam>)> = self
+            .method_sigs
+            .values()
+            .filter(|sig| !sig.params.is_empty() || !sig.own_params.is_empty())
+            .filter_map(|sig| {
+                let trait_decl = self.impl_sig(sig.declaring_impl?)?.trait_decl?;
+                let declaring = self.trait_sig(trait_decl)?;
+                let declared = declaring.method(defs.name(sig.def))?;
+                Some((
+                    sig.def,
+                    declaring.module.clone(),
+                    declared.sig.params.clone(),
+                    declared.sig.own_params.clone(),
+                ))
+            })
+            .collect();
+        for (def, module, params, own_params) in inherited {
+            let sig = self
+                .method_sigs
+                .get_mut(&def)
+                .expect("every key was just read from this map");
+            sig.defaults_module = Some(module);
+            for (param, from_trait) in sig.params.iter_mut().zip(params) {
+                param.name = from_trait.name;
+                param.default = from_trait.default;
+            }
+            // Whole entries: bounds and default are both the trait's. The slots
+            // stay the impl's own, numbered in `decl.type_params`, untouched.
+            for (param, from_trait) in sig.own_params.iter_mut().zip(own_params) {
+                *param = from_trait;
+            }
+        }
     }
 }
 
@@ -141,7 +174,7 @@ pub(crate) struct MethodSig {
     /// The declaration — the key this signature is filed under, carried
     /// inside so a consumer holding the signature holds the identity too.
     /// A use→def edge is recorded from here, never from a name re-scan.
-    pub(crate) def: crate::defs::DefId,
+    pub(crate) def: DefId,
     pub(crate) decl: DeclSig,
     pub(crate) self_kind: crate::ast::SelfKind,
     /// The non-receiver parameters, in order. `decl.param_types` includes
@@ -154,22 +187,33 @@ pub(crate) struct MethodSig {
     /// separately (`Type<A>::method<B>()`), so it needs the split; nothing
     /// else does, because a slot carries its own index.
     pub(crate) declaring_slot_count: u32,
+    /// The index the method's own slots start at. Not the count above: a
+    /// concrete head argument (`impl<A, B> Tr<B> for Pair<String, A>`) consumes
+    /// no slot, so the block's numbering has a gap and its last slot sits past
+    /// how many names it contributed. Read where an index is classified, as the
+    /// count is read where a list is split.
+    pub(crate) method_slot_base: u32,
     /// The `impl` block that declares this method, where one does. How a caller
     /// reaches [`ImplSig::spelled_slots`], which aligns a spelled turbofish
     /// with the block's slots.
-    pub(crate) declaring_impl: Option<crate::defs::DefId>,
-    /// The method's own slots as the declaration wrote them, parallel to
-    /// [`Self::own_type_params`]. Bounds and defaults are irreducibly AST and
-    /// live nowhere else, and a use site needs them to enforce the one and
-    /// fill the other.
+    pub(crate) declaring_impl: Option<DefId>,
+    /// The method's own slots as its declaration wrote them, parallel to
+    /// [`Self::own_type_params`] — on an impl of a trait, as the trait wrote
+    /// them. Bounds and defaults are irreducibly AST and live nowhere else, and
+    /// a use site needs them to enforce the one and fill the other.
     ///
     /// Carried rather than re-found by name. A name scan cannot tell which
     /// declaration dispatch actually chose, so it could answer with an
     /// unrelated trait's same-named method — and did.
-    pub(crate) own_params: Vec<crate::ast::GenericParam>,
+    pub(crate) own_params: Vec<GenericParam>,
     /// Canonical name from `#[cm("…")]`, resolved at the declaration.
     pub(crate) cm_name: Option<String>,
     pub(crate) is_async: bool,
+    /// Where this method's defaults were written, value and type parameters
+    /// alike, when another declaration wrote them: the trait's module, for a
+    /// method implementing one. A default resolves in the scope that wrote it,
+    /// so a call site pads from here, not from the module it reached it through.
+    pub(crate) defaults_module: Option<ModuleSource>,
 }
 
 /// What a declaration says about one parameter beyond its type. One record
@@ -180,11 +224,17 @@ pub(crate) struct Param {
     pub(crate) name: String,
     pub(crate) is_mut: bool,
     /// Irreducibly AST — re-resolved per call site under the callee's scope
-    /// (WEP 2026-04-11).
-    pub(crate) default: Option<crate::ast::Expr>,
+    /// (WEP 2026-04-11). An impl of a trait declares none of its own:
+    /// [`Signatures::inherit_trait_param_defaults`] fills in the trait's, in
+    /// [`MethodSig::defaults_module`]'s scope.
+    pub(crate) default: Option<Expr>,
 }
 
 impl Param {
+    pub(crate) fn defaults(params: &[Self]) -> Vec<Option<Expr>> {
+        params.iter().map(|p| p.default.clone()).collect()
+    }
+
     pub(crate) fn names(params: &[Self]) -> Vec<String> {
         params.iter().map(|p| p.name.clone()).collect()
     }
@@ -193,7 +243,7 @@ impl Param {
         params.iter().map(|p| p.is_mut).collect()
     }
 
-    pub(crate) fn named_defaults(params: &[Self]) -> Vec<(String, Option<crate::ast::Expr>)> {
+    pub(crate) fn named_defaults(params: &[Self]) -> Vec<(String, Option<Expr>)> {
         params
             .iter()
             .map(|p| (p.name.clone(), p.default.clone()))
@@ -204,9 +254,7 @@ impl Param {
 /// The slot-consuming subset of a declaration's type parameters, in order —
 /// the AST counterpart of [`MethodSig::own_type_params`], filtered by the same
 /// rule so the two stay parallel by construction.
-pub(super) fn own_params_of(
-    type_params: &[crate::ast::GenericParam],
-) -> Vec<crate::ast::GenericParam> {
+pub(super) fn own_params_of(type_params: &[GenericParam]) -> Vec<GenericParam> {
     type_params
         .iter()
         .filter(|p| p.is_real_type_param())
@@ -378,7 +426,7 @@ pub(crate) struct ImplSig {
     pub(crate) target_fq: crate::name::FqTypeName,
     /// Which trait declaration the block implements, answered by the header's
     /// own reference site. `None` for an inherent impl.
-    pub(crate) trait_decl: Option<crate::defs::DefId>,
+    pub(crate) trait_decl: Option<DefId>,
 }
 
 impl ImplSig {

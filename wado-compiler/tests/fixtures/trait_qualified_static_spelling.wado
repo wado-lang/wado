@@ -1,0 +1,85 @@
+//! `Trait::<T>::method(…)` for a receiver-less declaration, the counterpart of
+//! Rust's `<T as Trait>::method`. An instance method's `Trait::method(&v)`
+//! works because the receiver argument pins `Self`; a static has none, so the
+//! turbofish supplies it. Only on a trait declaring no parameters of its own:
+//! `Take::<A>::take(recv)` already claims the turbofish for those.
+
+trait Tagged {
+    fn tag(v: i32) -> i32 {
+        return v * 2;
+    }
+
+    fn named() -> String;
+}
+
+struct V {}
+
+impl Tagged for V {
+    fn named() -> String {
+        return "v";
+    }
+}
+
+// The spelling names the trait, so a case `W` declares of that name does not
+// shadow it: read as `W::tag(5)` the case answered first and the trait's static
+// was unreachable.
+trait Cased {
+    fn tag(v: i32) -> i32 {
+        return v * 2;
+    }
+}
+
+variant W {
+    tag(i32),
+    none,
+}
+
+impl Cased for W {}
+
+// `A::<Foo>::make(1)` names `A`, so `B`'s impl is not a candidate to weigh the
+// literal against. The argument preselect runs before the resolution and has to
+// be told which trait the spelling named, or it surveys both impls and reports
+// the literal as ambiguous between `i32` and `i64`.
+struct Foo {}
+
+trait A {
+    fn make(v: i32) -> i32;
+}
+
+trait B {
+    fn make(v: i64) -> i32;
+}
+
+impl A for Foo {
+    fn make(v: i32) -> i32 {
+        return 1;
+    }
+}
+
+impl B for Foo {
+    fn make(v: i64) -> i32 {
+        return 2;
+    }
+}
+
+test "the trait names an inherited default-bodied static" {
+    assert Tagged::<V>::tag(5) == 10;
+}
+
+test "and one the block writes" {
+    assert Tagged::<V>::named() == "v";
+}
+
+test "the trait's static answers past a case of the same name" {
+    assert Cased::<W>::tag(5) == 10;
+}
+
+test "and the plain spelling still builds the case" {
+    let built = W::tag(3);
+    assert built matches { W::tag(3) };
+}
+
+test "the spelling's trait narrows the preselect" {
+    assert A::<Foo>::make(1) == 1;
+    assert B::<Foo>::make(1) == 2;
+}

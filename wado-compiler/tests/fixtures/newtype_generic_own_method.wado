@@ -1,9 +1,9 @@
 // Regression test for wado-lang/wado#1626: an inherent method on a generic
-// newtype (`impl MyArray<T> { fn ... }`), including element access under
+// newtype (`impl<T> MyArray<T> { fn ... }`), including element access under
 // monomorphization.
 type MyArray<T> = List<T>;
 
-impl MyArray<T> {
+impl<T> MyArray<T> {
     fn second(&self) -> T {
         return self[1];
     }

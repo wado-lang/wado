@@ -8,7 +8,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::Arc;
 
-use crate::ast::{self, BinaryOp, Expr, Literal, Type, UnaryOp};
+use crate::ast::{BinaryOp, Expr, Literal, UnaryOp};
 use crate::builtin_registry::BuiltinRegistry;
 use crate::compiler_item::CompilerItem;
 use crate::component_model::CmInterfaceRegistry;
@@ -220,17 +220,17 @@ impl TypeSystem {
             .find(|&member| defs.name(member) == name)
     }
 
-    /// Whether an impl target's generic argument names a type parameter of
-    /// that impl rather than a concrete type: either the impl declares it, or
-    /// the impl's module knows no type by that name. `String` in
-    /// `impl Tr for Foo<String>` fills an argument position but binds no slot.
+    /// Whether an impl target's generic argument names a type parameter of that
+    /// impl rather than a concrete type. The block's own declaration list is the
+    /// only way in and the whole of it: `String` in `impl Tr for Foo<String>`
+    /// fills an argument position and binds no slot, and a name the block does
+    /// declare is a slot however many modules name a type that.
     pub(crate) fn is_impl_target_param(
         &self,
-        module: &ModuleSource,
         declared: &[crate::ast::GenericParam],
         name: &str,
     ) -> bool {
-        declared.iter().any(|p| p.name == name) || !self.is_known_type_name_in(module, name)
+        declared.iter().any(|p| p.name == name)
     }
 
     /// Whether `expr` is the bare `null` literal. A bare `null` resolves to
@@ -317,29 +317,6 @@ pub(crate) fn operator_compiler_item(op: &BinaryOp) -> Option<CompilerItem> {
 /// stringification). They touch only `self.type_table`; the body walk and
 /// reify both reach them through `self.tysys`.
 impl TypeSystem {
-    /// Build declared type params for an impl block, filtering out known type names.
-    pub(crate) fn build_declared_type_params(
-        &self,
-        impl_ty: &Type,
-        impl_type_params: &[ast::GenericParam],
-    ) -> IndexSet<String> {
-        let mut declared: IndexSet<String> = impl_type_params
-            .iter()
-            .map(|p| p.name.clone())
-            .filter(|name| !self.is_known_type_name(name))
-            .collect();
-        if let Type::Generic(g) = impl_ty {
-            for arg in &g.args {
-                if let Type::Named(n) = arg
-                    && !self.is_known_type_name(&n.name)
-                {
-                    declared.insert(n.name.clone());
-                }
-            }
-        }
-        declared
-    }
-
     /// Get the struct name from a type ID, if it's a struct, generic instance, newtype, or flags.
     pub(crate) fn struct_name_for_type(&self, type_id: TypeId) -> Option<String> {
         match self.type_table.borrow().get(type_id) {

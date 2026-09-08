@@ -28,6 +28,7 @@ mod scope;
 pub(crate) mod sem;
 pub(crate) mod sig;
 mod solver_bridge;
+mod static_call;
 mod stmt;
 mod synth;
 mod tagged_template;
@@ -616,9 +617,41 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// `pub type ByteList = List<u8>;` — since the alias declares no method of
     /// its own. `None` when `name` names no such declaration.
     pub(super) fn newtype_base(&self, name: &str) -> Option<(tir::TypeId, String)> {
-        // `type Buf = ByteList;` chains, so this peels to the type that
-        // declares methods rather than stopping at the first link.
-        let mut current = self.lookup_newtype(name)?;
+        Some(self.peeled_base(self.lookup_newtype(name)?))
+    }
+
+    /// [`Self::newtype_base`] keyed on the alias's own declaration. A caller
+    /// reaching the type only through a namespace (`lib::Q`) has no bare name
+    /// its frame answers for, and the declaration is what it does have.
+    pub(super) fn newtype_base_of(
+        &self,
+        key: &trait_env::ImplTargetKey,
+    ) -> Option<(tir::TypeId, String)> {
+        let trait_env::ImplTargetKey::Decl(def) = key else {
+            return None;
+        };
+        Some(self.peeled_base(self.lookup_newtype_of_decl(*def)?))
+    }
+
+    /// The base a newtype receiver wraps: the key its impls answer at, and the
+    /// name it answers under. The declaration first, since a namespaced
+    /// `lib::Q::twice()` leaves the caller's frame no `Q` to look one up by.
+    pub(super) fn newtype_base_target(
+        &mut self,
+        key: &trait_env::ImplTargetKey,
+        receiver_name: &str,
+    ) -> Option<(trait_env::ImplTargetKey, String)> {
+        let (base, base_name) = self
+            .newtype_base_of(key)
+            .or_else(|| self.newtype_base(receiver_name))?;
+        let base_key = self.impl_target_of(base, &name::DeclName::new(&base_name));
+        Some((base_key, base_name))
+    }
+
+    /// `type Buf = ByteList;` chains, so this peels to the type that declares
+    /// methods rather than stopping at the first link.
+    fn peeled_base(&self, alias: tir::TypeId) -> (tir::TypeId, String) {
+        let mut current = alias;
         loop {
             let peeled = match self.tysys.type_table.borrow().get(current).clone() {
                 tir::ResolvedType::Newtype { base_type, .. } => base_type,
@@ -630,7 +663,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             }
             current = peeled;
         }
-        Some((current, self.tysys.get_ultimate_base_struct_name(current)))
+        (current, self.tysys.get_ultimate_base_struct_name(current))
     }
 
     /// The declaration a `Type::method` call resolves to, seeing through a
@@ -693,6 +726,26 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             .filter(|e| !e.has_self)
     }
 
+    /// Whether the receiver's own declaration of this name and kind shadows a
+    /// trait impl's. Stated once here because every walk reaching both kinds
+    /// has to apply it, and one that reimplements it applies its own.
+    pub(crate) fn inherent_shadows(
+        &self,
+        receiver: &trait_env::ImplTargetKey,
+        method_name: &str,
+        has_self: bool,
+    ) -> bool {
+        self.tysys
+            .trait_env
+            .impl_method_index
+            .get(receiver)
+            .is_some_and(|bucket| {
+                bucket
+                    .iter()
+                    .any(|e| e.name == method_name && e.has_self == has_self && e.is_inherent())
+            })
+    }
+
     /// Every declaration of `method_name` an impl block on `receiver` makes,
     /// receiver-less first. The one walk behind every qualified lookup.
     ///
@@ -711,12 +764,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             .get(receiver)
             .map_or(&[], Vec::as_slice);
         let named = move |entry: &&trait_env::ImplMethodEntry| entry.name == method_name;
-        let inherent_of_kind = |has_self: bool| {
-            bucket
-                .iter()
-                .any(|e| e.name == method_name && e.has_self == has_self && e.is_inherent())
-        };
-        let shadowed = [inherent_of_kind(false), inherent_of_kind(true)];
+        let shadowed = [
+            self.inherent_shadows(receiver, method_name, false),
+            self.inherent_shadows(receiver, method_name, true),
+        ];
         let survives = move |entry: &&trait_env::ImplMethodEntry| {
             entry.is_inherent() || !shadowed[usize::from(entry.has_self)]
         };
@@ -2381,17 +2432,17 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             );
         }
 
-        // For trait impls, synthesize TIR functions for default methods
-        // not explicitly provided in the impl block. `trait_name`
-        // carries the mangled form ("Maker<i32>") used for method
-        // naming; the trait declaration itself is indexed by its
-        // base name ("Maker"), so we derive that from the AST.
+        // For trait impls, synthesize TIR functions for default methods not
+        // explicitly provided in the impl block. `trait_name` carries the
+        // mangled form ("Maker<i32>") used for method naming; its canonical
+        // head is the declaration whose bodies these are, so a second `Maker`
+        // in this frame supplies none of them.
         if let (Some(trait_n), Some(trait_ast)) =
             (trait_name.as_ref(), impl_block.trait_type.as_ref())
         {
-            let trait_decl_name = scope.get_type_name(trait_ast);
-            let default_methods: Vec<std::rc::Rc<ast::Function>> = scope
-                .trait_sig_by_name(&trait_decl_name)
+            let default_methods: Vec<std::rc::Rc<ast::Function>> = trait_n
+                .canonical()
+                .and_then(|decl| scope.trait_sig_of(&decl))
                 .map(|trait_sig| {
                     trait_sig
                         .default_methods()

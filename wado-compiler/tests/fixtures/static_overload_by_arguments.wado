@@ -1,0 +1,132 @@
+//! Selection reads the whole argument list, each argument against the
+//! parameter written for it, and compares `TypeId`s rather than printed names.
+//! Reading argument zero alone left impls that agree there an overload nothing
+//! settles, elaborated a later literal under its own default type, and made two
+//! distinct types that print one name look like a single candidate.
+
+use { Item as AItem } from "./sub/same_name_item_a.wado";
+use { Item as BItem } from "./sub/same_name_item_b.wado";
+
+struct M {}
+
+trait Later<T> {
+    fn later(tag: i32, v: T) -> i32;
+}
+
+impl Later<i32> for M {
+    fn later(tag: i32, v: i32) -> i32 {
+        return 1;
+    }
+}
+
+impl Later<String> for M {
+    fn later(tag: i32, v: String) -> i32 {
+        return 2;
+    }
+}
+
+// The selected impl's parameters shape every literal in the list, not only the
+// first: `5` elaborated under its own default `i32` matched neither impl.
+trait Shaped<T> {
+    fn shaped(tag: i32, v: T) -> i32;
+}
+
+impl Shaped<i64> for M {
+    fn shaped(tag: i32, v: i64) -> i32 {
+        return 1;
+    }
+}
+
+impl Shaped<String> for M {
+    fn shaped(tag: i32, v: String) -> i32 {
+        return 2;
+    }
+}
+
+struct Wrap<A> {
+    a: A,
+}
+
+// A bare slot admits every argument; a shape with a slot inside it admits only
+// that shape. `Wrap<A>` is no `i32` however `A` is chosen, and admitting one
+// made the generic sibling ambiguous with the concrete impl of the name — on an
+// argument no annotation could have separated.
+trait Sibling<T> {
+    fn sibling(v: T) -> i32;
+}
+
+impl<A> Sibling<Wrap<A>> for M {
+    fn sibling(v: Wrap<A>) -> i32 {
+        return 1;
+    }
+}
+
+impl Sibling<i32> for M {
+    fn sibling(v: i32) -> i32 {
+        return 2;
+    }
+}
+
+// A parameter's slots are solved from the argument and the result compared, not
+// its rendered name: a base name embeds a function type's own parameters, so
+// `fn(T) -> i32` and `fn(i32) -> i32` never spell alike however `T` is chosen.
+trait Applied<T> {
+    fn applied(v: T) -> i32;
+}
+
+impl<T> Applied<fn(T) -> i32> for M {
+    fn applied(v: fn(T) -> i32) -> i32 {
+        return 3;
+    }
+}
+
+fn double(n: i32) -> i32 {
+    return n * 2;
+}
+
+trait Ident<T> {
+    fn ident(v: T) -> i32;
+}
+
+impl Ident<AItem> for M {
+    fn ident(v: AItem) -> i32 {
+        return 1;
+    }
+}
+
+impl Ident<BItem> for M {
+    fn ident(v: BItem) -> i32 {
+        return 2;
+    }
+}
+
+test "an argument after the first separates the impls" {
+    assert M::later(0, "x") == 2;
+    assert M::later(0, 5) == 1;
+}
+
+test "a literal after the first selects the impl" {
+    assert M::shaped(0, 5) == 1;
+    assert M::shaped(0, "x") == 2;
+}
+
+test "a local's declared type selects past a generic sibling" {
+    let n: i32 = 5;
+    assert M::sibling(n) == 2;
+}
+
+test "and the generic sibling still answers for its own shape" {
+    let w = Wrap { a: true };
+    assert M::sibling(w) == 1;
+}
+
+test "a function-typed parameter mentioning a slot admits a matching function" {
+    assert M::applied(double) == 3;
+}
+
+test "the argument's identity separates them, not its printed name" {
+    let a = AItem { v: 0 };
+    let b = BItem { v: 0 };
+    assert M::ident(a) == 1;
+    assert M::ident(b) == 2;
+}

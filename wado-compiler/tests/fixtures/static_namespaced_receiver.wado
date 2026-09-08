@@ -1,0 +1,41 @@
+//! `ns::Type::method(…)` resolves like the two-segment spelling: the same
+//! candidates, the same parameter lists, the same receiver type arguments read
+//! off the call. Written as a parallel path it searched by the bare type name —
+//! which the importing module never declares — so nothing was found, the callee
+//! lost its trait segment, and WIR build reported the call unresolved.
+
+use lib from "./sub/static_namespaced_receiver.wado";
+
+trait Wrap<T> {
+    fn wrap(v: T) -> i32;
+}
+
+impl<T> Wrap<T> for lib::Cell<T> {
+    fn wrap(v: T) -> i32 {
+        return 1;
+    }
+}
+
+test "a namespace-qualified trait static resolves to its impl" {
+    assert lib::P::make(3) == 3;
+    assert lib::P::make() == 7;
+}
+
+test "the namespace spelling pads an inherited default body's default" {
+    assert lib::P::made() == 7;
+    assert lib::P::made(2) == 2;
+}
+
+test "an inherited Self-returning static through a namespace" {
+    let p = lib::P::twice(5);
+    assert p.n == 10;
+}
+
+test "the argument fills the namespaced receiver's slot" {
+    assert lib::Cell::wrap(7) == 1;
+}
+
+test "a newtype over a namespaced type reaches its base's statics" {
+    assert lib::P::doubled() == 42;
+    assert lib::Q::doubled() == 42;
+}

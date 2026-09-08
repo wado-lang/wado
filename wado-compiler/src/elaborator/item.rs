@@ -18,7 +18,7 @@ use crate::tir::{
 use crate::token::Span;
 
 use super::Elaborator;
-use super::scope::{BinderInScope, TypeParamScope};
+use super::scope::{BinderInScope, TypeParamScope, param_decl};
 use super::sig::{DeclSig, MethodSig};
 use super::types::{FunctionContext, TypeError};
 
@@ -620,13 +620,21 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
                 continue;
             };
             let name = &named.name;
-            if self.annotate_ctx.trait_ctx.type_params.contains_key(name)
-                || !self.tysys.is_impl_target_param(
-                    &self.current_module_source,
-                    impl_declared_params,
-                    name,
-                )
-            {
+            if self.annotate_ctx.trait_ctx.type_params.contains_key(name) {
+                continue;
+            }
+            if !self.tysys.is_impl_target_param(impl_declared_params, name) {
+                // A name the block does not declare has to be a type the module
+                // does; otherwise it names nothing at all.
+                if !self
+                    .tysys
+                    .is_known_type_name_in(&self.current_module_source, name)
+                {
+                    let _ = self.emit(TypeError::UndeclaredImplTypeParam {
+                        name: name.clone(),
+                        span: named.span,
+                    });
+                }
                 continue;
             }
             params.push(self.bind_target_param(
@@ -635,7 +643,7 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
                 false,
                 vec![],
                 None,
-                super::scope::param_decl(impl_declared_params, name),
+                param_decl(impl_declared_params, name),
             ));
         }
         params
@@ -800,6 +808,47 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
 
         let saved_bounds = saved.type_param_bounds.clone();
         self.annotate_ctx.trait_ctx.type_param_bounds = saved_bounds;
+
+        // A slot the target never mentions is the block's too, numbered after
+        // the ones it does. `impl<T: Display> From<T> for ByAny` binds `T`, so
+        // `fn from(v: T)` reads a slot rather than no type at all. Only an
+        // argument can fill it — that is what makes the block a blanket — but a
+        // slot is what it is either way.
+        //
+        // Before the trait's parameters, since `From<T>`'s is spelled `T` too:
+        // binding the trait's first claims the name for an argument that does
+        // not resolve yet, and the block's own slot never gets made.
+        let mut impl_type_params = impl_type_params;
+        let mut next_slot = method_param_offset(&impl_type_params);
+        for param in impl_declared_params
+            .iter()
+            .filter(|p| p.is_real_type_param())
+        {
+            // `impl<i32> IndexValue<i32> for Box` writes a concrete type where a
+            // parameter goes, and binding one shadows the type it names with a
+            // slot of the same spelling — `expected 'i32', found 'i32'`.
+            if self
+                .tysys
+                .is_known_type_name_in(&self.current_module_source, &param.name)
+                || self
+                    .annotate_ctx
+                    .trait_ctx
+                    .type_params
+                    .contains_key(&param.name)
+            {
+                continue;
+            }
+            let bounds = self.saved_param_bounds(&param.name);
+            impl_type_params.push(self.bind_target_param(
+                &param.name,
+                next_slot,
+                param.is_pack,
+                bounds,
+                None,
+                Some(param.id),
+            ));
+            next_slot += 1;
+        }
 
         // Bind the trait's own type parameters to the impl's concrete trait
         // args so that references like `T` inside a default method body resolve
@@ -1245,6 +1294,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 })
                 .collect();
             let declaring_slot_count = type_params.len() as u32;
+            let method_slot_base = method_param_offset(&frame.impl_type_params);
             type_params.extend(frame.method_type_params.iter().cloned());
             let self_kind = method
                 .params
@@ -1273,6 +1323,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         })
                         .collect(),
                     declaring_slot_count,
+                    method_slot_base,
                     declaring_impl: Some(impl_def),
                     own_params: super::sig::own_params_of(&method.type_params),
                     cm_name: method
@@ -1280,6 +1331,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         .iter()
                         .find_map(crate::ast::Attribute::cm_identifier),
                     is_async: method.is_async,
+                    // A trait impl takes the trait's, once every module's
+                    // declarations are assembled.
+                    defaults_module: None,
                 },
             );
         }
@@ -1674,6 +1728,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             })
                             .collect(),
                         declaring_slot_count: decl_slots.len() as u32,
+                        // A declaration numbers its own slots densely from
+                        // zero, so the count is also where the method's begin.
+                        method_slot_base: decl_slots.len() as u32,
                         declaring_impl: None,
                         own_params: super::sig::own_params_of(&method.type_params),
                         cm_name: method
@@ -1681,6 +1738,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             .iter()
                             .find_map(crate::ast::Attribute::cm_identifier),
                         is_async: method.is_async,
+                        defaults_module: None,
                     },
                     default_body: method
                         .body
@@ -1884,12 +1942,16 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     self_kind,
                     params: sig_params,
                     declaring_slot_count: decl_slots.len() as u32,
+                    // A declaration numbers its own slots densely from zero, so
+                    // the count is also where the method's begin.
+                    method_slot_base: decl_slots.len() as u32,
                     declaring_impl: None,
                     // An `interface` / `resource` operation declares no type
                     // parameters of its own.
                     own_params: Vec::new(),
                     cm_name: cm_name.clone(),
                     is_async: method.is_async,
+                    defaults_module: None,
                 },
             );
 
@@ -2732,23 +2794,38 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 .collect(),
         };
 
+        // Defaults are the trait's, value and type parameters alike (WEP
+        // 2026-04-11), and the block restates the lists without one.
+        // `recorded_sig` is `None` for a trait's own default-bodied method,
+        // elaborated here once per implementing type: that one is the
+        // declaration, so it may write both.
+        if trait_name.is_some() && recorded_sig.is_some() {
+            for type_param in &func.type_params {
+                if let Some(default) = &type_param.default {
+                    let _ = scope.emit(TypeError::TypeParamDefaultInTraitImpl {
+                        method: func.name.clone(),
+                        param: type_param.name.clone(),
+                        span: default.span(),
+                    });
+                }
+            }
+            for param in &func.params {
+                if let Some(default) = &param.default {
+                    let _ = scope.emit(TypeError::DefaultInTraitImpl {
+                        method: func.name.clone(),
+                        param: param.name.clone(),
+                        span: default.span(),
+                    });
+                }
+            }
+        }
+
         // Resolve parameters (including &self). Defaults are resolved in the
         // method's lexical scope with earlier parameters already bound.
         let mut params = Vec::new();
         for (param, &type_id) in func.params.iter().zip(param_types.iter()) {
             if param.self_kind == ast::SelfKind::Value {
                 scope.check_self_by_value(type_id, param.span);
-            }
-            // Reject parameter defaults on trait-impl methods: defaults live
-            // on the trait declaration only (WEP 2026-04-11).
-            if trait_name.is_some()
-                && let Some(default_ast) = &param.default
-            {
-                let _ = scope.emit(TypeError::DefaultInTraitImpl {
-                    method: func.name.clone(),
-                    param: param.name.clone(),
-                    span: default_ast.span(),
-                });
             }
             // Walk the default for its side-effect fact recording; the
             // resolved TIR is discarded (reify re-emits it from the AST).

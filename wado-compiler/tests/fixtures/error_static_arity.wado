@@ -1,0 +1,46 @@
+// A static's arity is the declaration's, whichever declaration supplies its
+// parameter list. Unchecked, both of these reached codegen and failed Wasm
+// validation instead of their own span.
+
+// An inherited default body's list lives on the trait alone, so no signature
+// keyed on the receiver answers for it.
+trait Greet {
+    fn hello(name: String) -> String {
+        return `hi ${name}`;
+    }
+}
+
+struct M {}
+
+impl Greet for M {}
+
+// The literal preselect shapes the *first* argument; it does not say how many
+// parameters the callee has. Installed as the whole parameter list, it left a
+// three-parameter static looking like a one-parameter one.
+trait Triple<T> {
+    fn triple(a: T, b: i32, c: i32) -> i32;
+}
+
+struct Boxed<T> {
+    v: T,
+}
+
+impl Triple<i32> for Boxed<i32> {
+    fn triple(a: i32, b: i32, c: i32) -> i32 {
+        return a + b + c;
+    }
+}
+
+export fn run() {
+    let _ = M::hello();
+    let _ = Boxed::<i32>::triple(1);
+}
+
+__DATA__
+{
+  "compile_error": "expected 1 arguments, found 0",
+  "compile_errors_contains": [
+    "expected 1 arguments, found 0",
+    "expected 3 arguments, found 1"
+  ]
+}

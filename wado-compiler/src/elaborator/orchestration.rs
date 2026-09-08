@@ -24,8 +24,8 @@ use crate::world_registry::WorldRegistry;
 
 use super::Elaborator;
 use super::types::{
-    EnumCaseData, EnumInfo, FlagsInfo, FlagsMemberData, GenericNewtypeInfo, ResourceInfo,
-    StructFieldInfo, TypeError, TypeLookup, VariantCaseData, VariantInfo,
+    EnumCaseData, EnumInfo, FlagsInfo, FlagsMemberData, GenericNewtypeInfo, ParamList,
+    ResourceInfo, StructFieldInfo, TypeError, TypeLookup, VariantCaseData, VariantInfo,
 };
 use super::tysys::TypeSystem;
 
@@ -1157,10 +1157,11 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             }
         }
 
-        // An `impl` method whose parameter count differs from the trait's is
-        // never rejected downstream — the call is built to the trait's arity
-        // and only fails Wasm validation — so compare the two here, where every
-        // declaration and impl is in hand.
+        // An `impl` method whose parameter list differs from the trait's is
+        // never rejected downstream: the call is built to the trait's shape and
+        // only fails Wasm validation. Compare the two here, where every
+        // declaration and impl is in hand. The receiver counts as much as the
+        // rest, since no call site writes one the trait did not declare.
         //
         // The impl's trait is the one its header resolved to, so a module
         // implementing its own `Encode` is never checked against another
@@ -1180,15 +1181,36 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 let Some(declared) = decl.methods.iter().find(|m| m.name == method.name) else {
                     continue;
                 };
-                let (expected, found) = (declared.param_count, method.param_count);
-                if expected != found {
+                for (list, expected, found) in [
+                    (ParamList::Value, declared.param_count, method.param_count),
+                    (
+                        ParamList::Type,
+                        declared.type_params.len(),
+                        method.type_params.len(),
+                    ),
+                ] {
+                    if expected != found {
+                        let _ = logger.error_in(
+                            &header.module,
+                            TypeError::TraitMethodArityMismatch {
+                                trait_name: decl.name.clone(),
+                                method_name: method.name.clone(),
+                                list,
+                                expected,
+                                found,
+                                span: method.name_span,
+                            },
+                        );
+                    }
+                }
+                if declared.has_receiver != method.has_receiver {
                     let _ = logger.error_in(
                         &header.module,
-                        TypeError::TraitMethodArityMismatch {
+                        TypeError::TraitMethodReceiverMismatch {
                             trait_name: decl.name.clone(),
                             method_name: method.name.clone(),
-                            expected,
-                            found,
+                            expected: declared.has_receiver,
+                            found: method.has_receiver,
                             span: method.name_span,
                         },
                     );
@@ -1670,6 +1692,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     sem.decls.current_module_globals.clone(),
                 );
             }
+            signatures.inherit_trait_param_defaults(state.tysys.resolutions.defs());
             state.tysys.signatures = Rc::new(signatures);
         }
         // Every declaration is resolved, so the solver reads them all at once.

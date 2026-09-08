@@ -1,0 +1,162 @@
+// Two traits declaring one method name on one receiver: no argument separates
+// traits, so the spelling names neither. The ambiguity was asked only of
+// receiver-less declarations supplying a default body, so every other shape
+// fell through to an overload carrying no declaration — a mangled name left
+// without its trait segment, which WIR build reported as an unresolved call.
+
+use lib from "./sub/error_static_ambiguous_trait.wado";
+
+struct M {}
+
+trait Alpha {
+    fn make() -> i32;
+}
+
+trait Beta {
+    fn make() -> i32;
+}
+
+impl Alpha for M {
+    fn make() -> i32 {
+        return 1;
+    }
+}
+
+impl Beta for M {
+    fn make() -> i32 {
+        return 2;
+    }
+}
+
+// `s.go()` reports the ambiguity; `S::go(&s)` names the same two declarations
+// and must report it too.
+struct S {}
+
+trait Gamma {
+    fn go(&self) -> i32;
+}
+
+trait Delta {
+    fn go(&self) -> i32;
+}
+
+impl Gamma for S {
+    fn go(&self) -> i32 {
+        return 1;
+    }
+}
+
+impl Delta for S {
+    fn go(&self) -> i32 {
+        return 2;
+    }
+}
+
+// One trait implemented twice with a second between the blocks. Deduping an
+// unsorted list of rendered names named the non-adjacent trait twice — an
+// alternative list a reader cannot act on; deduping by declaration settles it
+// whatever the order.
+struct X {}
+
+struct Y {}
+
+struct R {}
+
+trait Ranked<T> {
+    fn ranked() -> i32 {
+        return 1;
+    }
+}
+
+trait Between {
+    fn ranked() -> i32 {
+        return 2;
+    }
+}
+
+impl Ranked<X> for R {}
+
+impl Between for R {}
+
+impl Ranked<Y> for R {}
+
+// Two traits both supplying a default-bodied static of one name. Unreported,
+// the call was built to whichever impl came first and reached codegen as a
+// module nothing validates.
+struct D {}
+
+trait DefA {
+    fn defaulted(n: i32 = 1) -> i32 {
+        return n;
+    }
+}
+
+trait DefB {
+    fn defaulted(a: i32, b: i32) -> i32 {
+        return a + b;
+    }
+}
+
+impl DefA for D {}
+
+impl DefB for D {}
+
+// Two value blankets of two traits both cover `B` and both declare `built`. The
+// blanket path ran as a fallback after the resolution answered nothing, so it
+// took the first applicable blanket and the call compiled — where the same
+// shape written as concrete impls is reported. A blanket is a candidate now,
+// and the ambiguity rule reads its trait like any other's.
+trait Marker {
+    fn kind() -> i32;
+}
+
+trait BlanketA {
+    fn built() -> i32;
+}
+
+trait BlanketB {
+    fn built() -> i32;
+}
+
+impl<T: Marker> BlanketA for T {
+    fn built() -> i32 {
+        return 1;
+    }
+}
+
+impl<T: Marker> BlanketB for T {
+    fn built() -> i32 {
+        return 2;
+    }
+}
+
+struct B {}
+
+impl Marker for B {
+    fn kind() -> i32 {
+        return 0;
+    }
+}
+
+export fn run() {
+    let s = S {};
+    let _ = M::make();
+    let _ = S::go(&s);
+    let _ = R::ranked();
+    let _ = D::defaulted(1, 2);
+    let _ = B::built();
+    let _ = lib::M::ns_make();
+}
+
+__DATA__
+{
+  "compile_error": "ambiguous method 'make': declared by 'Alpha' and 'Beta'",
+  "compile_errors_contains": [
+    "ambiguous method 'make': declared by 'Alpha' and 'Beta'",
+    "ambiguous method 'go': declared by 'Gamma' and 'Delta'",
+    "ambiguous method 'ranked': declared by 'Ranked' and 'Between';",
+    "ambiguous method 'defaulted': declared by 'DefA' and 'DefB'",
+    "ambiguous method 'built': declared by 'BlanketA' and 'BlanketB'",
+    "ambiguous method 'ns_make': declared by 'NsAlpha' and 'NsBeta'"
+  ]
+}

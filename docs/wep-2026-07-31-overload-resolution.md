@@ -31,7 +31,7 @@ site:
   `IndexValue<i32>`, `IndexValue<RangeExclusive<i32>>` and
   `IndexValue<RangeInclusive<i32>>` at once.
 - `Type::from(x)` / `try_from` filter `From<T>` / `TryFrom<T>` impls by the
-  argument (`conversion_preselect`, `locate_static_method_impl`).
+  argument (`static_arg_preselect`, `select_candidate`).
 
 Both bake the winning trait's spelling into the mangled method name
 (`Type^Trait::method`), which is also how monomorphization discriminates
@@ -433,15 +433,16 @@ forward-inference non-goal and so needs its own decision), or a turbofish naming
 
 ### Conversions
 
-`Type::from(x)` preselects among the receiver's conversion impls _before_ the
+`from` is a trait static, so `Type::from(x)` takes the static path: the
+receiver's impls are surveyed and the argument weighed against them _before_ the
 argument is elaborated, which is what removes the circular ordering at its root.
 Admissibility is the same table selection uses, applied to each impl's source
-type resolved in the impl's own frame (`conversion_impl_survey`) — so an integer
+type resolved in the impl's own frame (`static_arg_survey`) — so an integer
 newtype admits an integer literal here exactly as it does there, and `From<i64>`
 beside `From<Meters>` is ambiguous rather than silently primitive. One admitted
 impl supplies the argument's expected type; several report
-`AmbiguousConversionArgument`, whose fix is the cast — `from` has no `self`, so
-the trait-turbofish escape cannot apply.
+`AmbiguousStaticArgument`, whose fix is the cast — `from` has no `self`, so the
+trait-turbofish escape cannot apply.
 
 An argument that synthesizes a type selects through it. The matcher compares the
 head (un-aliased in the impl's module) and, for a generic argument spelling, the
@@ -571,8 +572,9 @@ Where the pieces live:
   and `MethodCallInput::required_trait` constrains which impls may answer, which
   the order keeps to. No parser change: both `Greet::greet(&p)` and
   `Take::<A>::take(&f, x)` already parse, and the AST retains the turbofish.
-- Conversions: `conversion_preselect` and `conversion_impl_survey`
-  (`elaborator/method_call.rs`).
+- Conversions: no path of their own. `preselect_static_args` and
+  `static_arg_survey` (`elaborator/method_call.rs`) answer `from` as they answer
+  every other static.
 - Argument synthesis: `elaborator/synth.rs` — `ArgClass`, the admissibility
   table, the judgement, and `ArgProbe`, the per-call handle holding the
   argument ASTs, the `FunctionContext` and the memo. It is threaded through

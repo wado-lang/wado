@@ -702,6 +702,10 @@ pub(crate) struct CalleeParams {
     pub(crate) param_defaults: Vec<(String, Option<crate::ast::Expr>)>,
     pub(crate) param_types: Vec<TypeId>,
     pub(crate) self_in_args: bool,
+    /// The module the defaults were written in, when that is not the callee's
+    /// own: the trait it implements. See
+    /// [`StaticMethodDispatch::defaults_module`].
+    pub(crate) defaults_module: Option<crate::module_source::ModuleSource>,
 }
 
 impl CalleeParams {
@@ -733,24 +737,25 @@ impl CalleeParams {
             // declares one, which is exactly where the spelling writes one.
             param_types: sig.decl.param_types.clone(),
             self_in_args: receiver,
+            defaults_module: sig.defaults_module.clone(),
         }
     }
 }
 
 impl StaticMethodDispatch {
-    /// The dispatch a call records for a callee it resolved to `sig`. The
-    /// per-parameter lists come from [`CalleeParams`], so the recorded fact
-    /// says what the call site checked against.
-    pub(crate) fn of_signature(
+    /// The dispatch a call records, from the same [`CalleeParams`] its site
+    /// checked against, so the recorded fact says what the call was built to.
+    pub(crate) fn of_params(
         method_def: Option<crate::defs::DefId>,
         function_ref: FunctionRef,
         type_args: Vec<TypeId>,
-        sig: Option<&crate::elaborator::sig::MethodSig>,
+        params: CalleeParams,
     ) -> Self {
-        let params = CalleeParams::of_signature(sig);
         Self {
             method_def,
-            defaults_module: function_ref.module_source.clone(),
+            defaults_module: params
+                .defaults_module
+                .unwrap_or_else(|| function_ref.module_source.clone()),
             function_ref,
             type_args,
             param_is_mut: params.param_is_mut,

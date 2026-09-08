@@ -2111,7 +2111,7 @@ let map: TreeMap<String, i32> = { width: 1920, height: 1080 };
 Making a user type literal-constructible is one ordinary impl:
 
 ```wado
-impl From<Array<T>> for MyVec<T> {
+impl<T> From<Array<T>> for MyVec<T> {
     fn from(elements: Array<T>) -> MyVec<T> { ... }
 }
 ```
@@ -2338,6 +2338,47 @@ make_rect(10.0);  // → make_rect(10.0, 10.0)
 - Closures cannot declare defaults: a closure value's arity must match its `fn(...)` type. The parser accepts `= expr` on closure parameters for recovery only and the elaborator rejects it.
 - `export fn` cannot declare defaults — exported functions appear in the component's WIT signature where every parameter is required by the CM ABI. Split into a private helper plus a thin `export fn` wrapper if defaults are needed.
 - Trait methods may declare defaults only in the trait definition; implementations receive every parameter and cannot add, remove, or change defaults. Direct `impl Type { ... }` methods (not part of any trait) may declare defaults freely.
+
+#### Type Parameter Defaults
+
+A type parameter may declare a default with `= Type`, on a free function, an inherent method or a trait method. An omitted turbofish takes the default; a spelled one wins. `core:log` uses it:
+
+```wado
+pub fn info<T: Serialize = NoFields>(message: String, fields: T = NoFields {}, ...) { ... }
+
+info("started");                  // → info::<NoFields>("started", NoFields {})
+info::<Fields>("started", f);
+```
+
+Inference runs first and the default fills only what it left unbound, so an argument or an expected type always decides the slot it pins.
+
+A default resolves in the declaring module's scope, as a value default does. It may therefore name a type the call site cannot: `NoFields` above is private to `core:log`.
+
+A trait method's type parameter default belongs to the trait, exactly as its value defaults do. The implementation restates the list — the same parameters in the same order, with the defaults omitted — and every spelling of the call fills them from the trait's declaration:
+
+```wado
+pub trait Boxed {
+    fn boxed<T: Named = Tag>(&self) -> String;   // `Tag` is private to this module
+    fn made<T: Named = Tag>() -> String;
+}
+
+impl Boxed for M {
+    fn boxed<T: Named>(&self) -> String {        // no default here
+        return T::name();
+    }
+
+    fn made<T: Named>() -> String {
+        return T::name();
+    }
+}
+
+m.boxed();            // → m.boxed::<Tag>()
+m.boxed::<Local>();   // spelled, so `Local`
+M::made();            // the static spelling reads the same declaration
+M::boxed(&m);         // and so does the receiver-taking one
+```
+
+Rust rejects a type parameter default on every function, method and `impl` (rust-lang#36887), allowing them only on type and trait declarations. Wado accepts them wherever a parameter list is written.
 
 The same `= expr` syntax applies to struct fields; see [Struct Field Defaults](#struct-field-defaults).
 
@@ -2901,6 +2942,18 @@ impl<T: CollectionBuilder<Output = T>> Collection for T {
 
 This avoids the need for explicit `impl Collection for ...` on every self-building type. The compiler resolves `T::Element` via associated type projection on the type parameter.
 
+#### Impl Type Parameters Are Declared
+
+An `impl` declares its type parameters in `impl<...>`, and that list is the only way to introduce one. A name in the target or the trait reference that the list does not hold is a type, and the module must declare it:
+
+```wado
+impl<T> List<T> { ... }                 // inherent
+impl<T: Ord> List<T> { ... }            // with a bound
+impl<K: Ord, V> TreeMap<K, V> { ... }   // every parameter listed
+impl<T> Default for List<T> { ... }     // trait implementation
+impl Display for List<i32> { ... }      // one instantiation declares none
+```
+
 #### Impl Type Parameters Must Be Determined
 
 An `impl`'s target and trait reference between them must name every type parameter it declares. A use site determines them from the receiver and the trait arguments and from nothing else, so one neither mentions has no value to be given:
@@ -2947,7 +3000,7 @@ fn max<T: Ord>(a: T, b: T) -> T {
 }
 
 // Bounded impl blocks - methods only available when T: Ord
-impl List<T: Ord> {
+impl<T: Ord> List<T> {
     pub fn sort(&mut self) { ... }
     pub fn sorted(&self) -> List<T> { ... }
 }
@@ -3147,6 +3200,19 @@ why `List<T>` implements `IndexValue<i32>`, `IndexValue<RangeExclusive<i32>>`,
 and `IndexValue<RangeInclusive<i32>>` at once — and why the same impls answer
 the method spelling, `l.index_value(i)`.
 
+A trait's associated function obeys the same rule, selected on its first
+argument. It has no receiver to fix `Self`, so the type is written out and the
+argument chooses among the impls that declare the function. Rust needs
+`<M as Enc<A>>::make` here:
+
+```wado
+impl Enc<A> for M { fn make(v: A) -> i32 { … } }
+impl Enc<B> for M { fn make(v: B) -> i32 { … } }
+
+M::make(A { })               // selects Enc<A>
+M::make(B { })               // selects Enc<B>
+```
+
 Two _different_ traits declaring one method name for one receiver is a
 separate case and is always reported: name the trait
 (`Alpha::describe(&x)`). Argument selection never crosses trait lines —
@@ -3257,12 +3323,12 @@ Any type can be made iterable by implementing `IntoIterator`:
 struct Stack<T> { items: List<T> }
 struct StackIter<T> { items: List<T>, index: i32 }
 
-impl Iterator for StackIter<T> {
+impl<T> Iterator for StackIter<T> {
     type Item = T;
     fn next(&mut self) -> Option<Self::Item> { ... }
 }
 
-impl IntoIterator for Stack<T> {
+impl<T> IntoIterator for Stack<T> {
     type Item = T;
     type Iter = StackIter<T>;
     fn into_iter(&self) -> StackIter<T> { ... }

@@ -764,9 +764,13 @@ export fn run() { ... }
 // Default args, trailing only
 fn connect(host: String, port: i32 = 8080) { ... }
 connect("localhost");           // → connect("localhost", 8080)
+
+// Type parameters take defaults too; Rust allows these on types only
+fn info<T: Serialize = NoFields>(message: String, fields: T = NoFields {}) { ... }
+info("started");                // → info::<NoFields>("started", NoFields {})
 ```
 
-A function must have `return` if it returns a value. Default expressions must be effect-free; `export fn` and closures cannot have defaults.
+A function must have `return` if it returns a value. Default expressions must be effect-free; `export fn` and closures cannot have defaults. On a trait method both kinds of default belong to the trait: the `impl` restates the parameters without them, and the call site fills them from the declaration.
 
 ### Local Items
 
@@ -1075,6 +1079,12 @@ fn max<T: Ord>(a: T, b: T) -> T {
     if a > b { return a; }
     return b;
 }
+
+// An impl declares its type parameters in `impl<...>`, as Rust does. A name
+// the list does not hold is a type the module declares.
+impl<T> List<T> { ... }
+impl<K: Ord, V> TreeMap<K, V> { ... }
+impl Display for List<i32> { ... }   // one instantiation declares none
 
 // Bounded impl blocks — methods only available when bound is satisfied
 impl<T: Ord> List<T> {

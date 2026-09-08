@@ -1,0 +1,123 @@
+//! `Type::method(…)` names every declaration the type carries, not only the
+//! receiver-less ones a block writes: an instance method takes the receiver as
+//! its first argument, and an inherited default body answers under the trait
+//! reference the block wrote. The ladder was built from the questions the
+//! lookup it replaced answered rather than from the spellings the language
+//! admits, so each of these shapes lost its rung.
+
+struct S {}
+
+trait Greet {
+    fn go(&self) -> i32;
+}
+
+trait Add {
+    fn add(&self, v: i32) -> i32;
+}
+
+impl Greet for S {
+    fn go(&self) -> i32 {
+        return 1;
+    }
+}
+
+impl Add for S {
+    fn add(&self, v: i32) -> i32 {
+        return v + 1;
+    }
+}
+
+// The rung that answered for an inherited default asked only for receiver-less
+// declarations, and the trait's frame has to be filled past `Self` for the
+// parameter to resolve.
+trait Bump {
+    fn bump(&self, v: i32) -> i32 {
+        return v + 10;
+    }
+}
+
+impl Bump for S {}
+
+struct A {}
+
+struct M {}
+
+// The body is emitted under the trait reference the block wrote (`Enc<A>`), so
+// the call has to name that too: minting the segment from the trait declaration
+// drops the arguments and names `Enc::make`, which nothing declares.
+trait Enc<T> {
+    fn make() -> i32 {
+        return 7;
+    }
+}
+
+impl Enc<A> for M {}
+
+// The selection reaches the trait's own declaration, whose signature
+// `method_sig` does not hold — the impl-declared ones are its, a trait's own
+// its `TraitSig`'s.
+trait Made {
+    fn made(n: i32 = 3) -> i32 {
+        return n;
+    }
+}
+
+trait Other {
+    fn other() -> i32;
+}
+
+impl Made for M {}
+
+impl Other for M {
+    fn other() -> i32 {
+        return 1;
+    }
+}
+
+// A default body reads `Self` off the receiver's type. The argument survey
+// asked for it without one, so every `Self`-typed parameter came back
+// `unknown`: no argument admitted it, and the diagnostic named `unknown` as
+// what the receiver accepts.
+struct Held {
+    n: i32,
+}
+
+trait Pick {
+    fn pick(v: Self) -> Self {
+        return v;
+    }
+}
+
+impl Pick for Held {}
+
+test "a trait's instance method answers its receiver type's spelling" {
+    let s = S {};
+    assert S::go(&s) == 1;
+    assert Greet::go(&s) == 1;
+}
+
+test "and the arguments after the receiver reach its parameters" {
+    let s = S {};
+    assert S::add(&s, 5) == 6;
+    assert Add::add(&s, 5) == 6;
+}
+
+test "an inherited default-bodied instance method through the type spelling" {
+    let s = S {};
+    assert S::bump(&s, 5) == 15;
+}
+
+test "an inherited default body keeps the block's trait arguments" {
+    assert M::make() == 7;
+}
+
+test "the inherited static resolves beside a declared one" {
+    assert M::made() == 3;
+    assert M::made(8) == 8;
+    assert M::other() == 1;
+}
+
+test "an inherited default takes the receiver as its Self" {
+    let picked = Held::pick(Held { n: 4 });
+    assert picked.n == 4;
+}

@@ -8,11 +8,13 @@ use super::sig::AssocConstSig;
 use crate::ast;
 use crate::compiler_host::CompilerHost;
 use crate::compiler_item::CompilerItem;
+use crate::hashmap::IndexMap;
 use crate::name::FqTypeName;
 use crate::tir::{PrimitiveType, ResolvedType, TypeId, TypeTable};
 
 use super::Elaborator;
 use super::callee::CalleeRef;
+use super::infer::unify;
 use super::types::{FunctionContext, MethodOwner};
 use super::util::is_float_only_literal;
 
@@ -167,6 +169,17 @@ fn condition_binding_names(condition: &ast::Condition) -> Vec<String> {
     }
 }
 
+/// Whether an argument of type `arg` answers a parameter of type `param`,
+/// argument passing's one coercion included: a `&mut T` argument answers a `&T`
+/// parameter, as [`unify`] binds it.
+fn param_takes(tt: &TypeTable, param: TypeId, arg: TypeId) -> bool {
+    param == arg
+        || matches!(
+            (tt.get(param), tt.get(arg)),
+            (ResolvedType::Ref(p), ResolvedType::MutRef(a)) if p == a
+        )
+}
+
 impl<H: CompilerHost> Elaborator<'_, H> {
     /// Classify one argument. See the module documentation for the soundness
     /// invariant and the side-effect discipline this entry point enforces.
@@ -190,25 +203,63 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         class
     }
 
+    /// Whether `param`'s slots can be filled to make it `arg`. Structural, not
+    /// nominal: a base name renders a function type's own parameters, so
+    /// `fn(T) -> i32` and `fn(i32) -> i32` never spell alike however `T` is
+    /// chosen, and it drops a generic's arguments, so `Holder<T, T>` spells like
+    /// `Holder<i32, String>`, which no `T` makes it.
+    fn slots_fill_param_to(&self, param: TypeId, arg: TypeId) -> bool {
+        let mut bindings = IndexMap::default();
+        unify(&self.tysys.type_table, param, arg, &mut bindings);
+        // A binding dropped here leaves that slot spelled as it was written, so
+        // the parameter can never equal the argument.
+        let substitution: IndexMap<u32, TypeId> = {
+            let tt = self.tysys.type_table.borrow();
+            bindings
+                .iter()
+                .filter_map(|(&slot, &filled)| match tt.get(slot) {
+                    ResolvedType::TypeParam { index, .. }
+                    | ResolvedType::TypePack { index, .. } => Some((*index, filled)),
+                    _ => None,
+                })
+                .collect()
+        };
+        let filled = self
+            .tysys
+            .type_table
+            .borrow_mut()
+            .substitute_type_params(param, &substitution);
+        param_takes(&self.tysys.type_table.borrow(), filled, arg)
+    }
+
     /// Whether a candidate's parameter type is in `class`'s denoted set.
-    /// Openness first: a parameter still mentioning a type parameter is not
-    /// yet comparable and admits everything.
     pub(super) fn class_admits(&self, param: TypeId, class: &ArgClass) -> bool {
         let tt = self.tysys.type_table.borrow();
-        if param == TypeTable::UNKNOWN || param == TypeTable::ERROR || tt.contains_type_param(param)
+        // A bare slot admits every argument. A shape with a slot inside it is
+        // compared like any other type: `Wrap<A>` is no `i32` however `A` is
+        // chosen, and admitting one made a generic sibling ambiguous with every
+        // concrete impl of the name — on an argument no annotation could have
+        // separated.
+        if param == TypeTable::UNKNOWN
+            || param == TypeTable::ERROR
+            || matches!(
+                tt.get(tt.peel_refs(param)),
+                ResolvedType::TypeParam { .. } | ResolvedType::TypePack { .. }
+            )
         {
             return true;
         }
         match class {
             ArgClass::Opaque(_) => true,
             ArgClass::Exact(t) => {
-                if *t == param {
+                if param_takes(&tt, param, *t) {
                     return true;
                 }
-                matches!(
-                    (tt.get(param), tt.get(*t)),
-                    (ResolvedType::Ref(p), ResolvedType::MutRef(a)) if p == a
-                )
+                if !tt.contains_type_param(param) {
+                    return false;
+                }
+                drop(tt);
+                self.slots_fill_param_to(param, *t)
             }
             // A newtype over the head is admitted too; admitting more is the
             // safe side.

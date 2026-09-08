@@ -3286,6 +3286,27 @@ impl Type {
         }
     }
 
+    /// Whether `name` is spelled anywhere in this type. Exhaustive, as
+    /// [`Self::mentioned_names`] is: a spelling a walk like this skips reads as
+    /// a name the type does not mention, which is never what a caller wants.
+    #[must_use]
+    pub fn mentions(&self, name: &str) -> bool {
+        match self {
+            Type::Named(n) => n.name == name,
+            Type::Generic(g) => g.name == name || g.args.iter().any(|a| a.mentions(name)),
+            Type::NamespacedGeneric(g) => {
+                g.namespace == name || g.name == name || g.args.iter().any(|a| a.mentions(name))
+            }
+            Type::Function(f) => {
+                f.params.iter().any(|p| p.mentions(name)) || f.return_type.mentions(name)
+            }
+            Type::Tuple(elems) => elems.iter().any(|e| e.mentions(name)),
+            Type::Reference(inner) | Type::MutReference(inner) => inner.mentions(name),
+            Type::TypePackSpread(spread, _) => spread == name,
+            Type::Infer(_) | Type::Error(_) => false,
+        }
+    }
+
     /// Whether this is the unit type, spelled `()`.
     #[must_use]
     pub fn is_unit(&self) -> bool {

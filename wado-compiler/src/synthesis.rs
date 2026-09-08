@@ -161,12 +161,8 @@ fn receiver_is_per_module_synth(
     receiver_type_id: crate::tir::TypeId,
     tt: &crate::tir::TypeTable,
 ) -> bool {
-    let mut tid = receiver_type_id;
-    loop {
-        match tt.get(tid) {
-            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => tid = *inner,
-            ResolvedType::Function { .. } | ResolvedType::GenericResource { .. } => return true,
-            _ => return false,
-        }
-    }
+    matches!(
+        tt.get(tt.peel_refs(receiver_type_id)),
+        ResolvedType::Function { .. } | ResolvedType::GenericResource { .. }
+    )
 }

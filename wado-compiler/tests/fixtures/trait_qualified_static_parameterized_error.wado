@@ -1,0 +1,24 @@
+// On a trait declaring parameters of its own the turbofish is that trait's
+// argument list, so `Take::<i32>::take()` names no receiver. A static's
+// receiver is written out instead — `V::take()` below — and where several
+// impls declare the function, the arguments select among them.
+
+trait Take<A> {
+    fn take() -> A;
+}
+
+struct V {}
+
+impl Take<i32> for V {
+    fn take() -> i32 {
+        return 7;
+    }
+}
+
+export fn run() {
+    let _ = V::take();
+    let _ = Take::<i32>::take();
+}
+
+__DATA__
+{"compile_error": "the turbofish of 'Take::<…>::take' is its argument list and names no receiver; write the receiver out"}

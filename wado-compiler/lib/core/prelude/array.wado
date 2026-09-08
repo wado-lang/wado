@@ -37,7 +37,7 @@ use { Formatter } from "core:prelude/format.wado";
 #[compiler_item("array")]
 pub type Array<T>;
 
-impl Array<T> {
+impl<T> Array<T> {
     /// Creates a new array of `len` elements, each initialised to the
     /// default value of `T` (`array.new_default`).
     pub fn new(len: i32) -> Array<T> {
@@ -80,7 +80,7 @@ impl Array<T> {
     }
 }
 
-impl Default for Array<T> {
+impl<T> Default for Array<T> {
     pub fn default() -> Array<T> {
         return builtin::array_new(0);
     }
@@ -132,7 +132,7 @@ impl<T> IntoIterator for &Array<T> {
     }
 }
 
-impl IndexValue<i32> for Array<T> {
+impl<T> IndexValue<i32> for Array<T> {
     type Output = T;
 
     fn index_value(&self, index: i32) -> Self::Output {
@@ -140,7 +140,7 @@ impl IndexValue<i32> for Array<T> {
     }
 }
 
-impl IndexAssign<i32> for Array<T> {
+impl<T> IndexAssign<i32> for Array<T> {
     type Output = T;
 
     fn index_assign(&mut self, index: i32, value: Self::Output) with stores[value] {
@@ -164,7 +164,7 @@ impl<T: RefMut> IndexRefMut<i32> for Array<T> {
     }
 }
 
-impl IndexValue<RangeExclusive<i32>> for Array<T> {
+impl<T> IndexValue<RangeExclusive<i32>> for Array<T> {
     type Output = Slice<T>;
 
     fn index_value(&self, range: RangeExclusive<i32>) -> Slice<T> with stores[self] {
@@ -172,7 +172,7 @@ impl IndexValue<RangeExclusive<i32>> for Array<T> {
     }
 }
 
-impl IndexValue<RangeInclusive<i32>> for Array<T> {
+impl<T> IndexValue<RangeInclusive<i32>> for Array<T> {
     type Output = Slice<T>;
 
     fn index_value(&self, range: RangeInclusive<i32>) -> Slice<T> with stores[self] {

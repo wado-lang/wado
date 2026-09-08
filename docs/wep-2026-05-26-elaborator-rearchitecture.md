@@ -328,15 +328,16 @@ Every convergence below was forced by a defect where two of them disagreed:
   keeps a walk of its own. A block that declares no method of the name still
   answers: `impl Factory for Wrap<T> {}` gives `Wrap::make()` the trait's
   default, and no method index holds that block. So the selection consults the
-  resolver for the one fact the two questions share — whether an inherent
-  associated function shadows the name — and declines where one does. It asks
-  about receiver-less methods because those are the ones it selects.
+  resolver for the one fact the two questions share, `inherent_shadows`:
+  whether the receiver's own declaration shadows the name. It asks per kind,
+  because a receiver-less declaration and a receiver-taking one are reached by
+  different argument lists and so shadow separately.
 
 - How many of a callee's parameters a call's arguments cover — the call syntax,
   not the signature. Written qualified, an instance method's receiver is the
-  first argument, so `qualified_call_param_types` answers with the whole list;
-  the method spelling holds the receiver separately, and there the value
-  parameters alone are the answer.
+  first argument, so `CalleeParams` answers with the whole list; the method
+  spelling holds the receiver separately, and there the value parameters alone
+  are the answer.
 - What a projection means in a frame — `frame_projection`, answering from the
   bindings a projection receiver carries and then from the enclosing bounds.
   Three implementations of this question disagreed, and the

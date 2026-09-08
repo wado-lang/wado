@@ -241,6 +241,22 @@ pub enum LoopJump {
     Continue,
 }
 
+/// Which of a method's two parameter lists a diagnostic is about.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ParamList {
+    Value,
+    Type,
+}
+
+impl ParamList {
+    fn prefix(self) -> &'static str {
+        match self {
+            ParamList::Value => "",
+            ParamList::Type => "type ",
+        }
+    }
+}
+
 /// Errors from the type resolution phase
 #[derive(Debug, Clone)]
 pub enum TypeError {
@@ -253,6 +269,13 @@ pub enum TypeError {
 
     /// Unknown type name
     UnknownType {
+        name: String,
+        span: Span,
+    },
+
+    /// An `impl` head names a type the module does not declare. A block's own
+    /// `impl<…>` list is the only way to introduce a type parameter.
+    UndeclaredImplTypeParam {
         name: String,
         span: Span,
     },
@@ -518,12 +541,12 @@ pub enum TypeError {
         span: Span,
     },
 
-    /// A conversion reachable only through a blanket impl generic in its
-    /// source type (`impl<T: Display> From<T> for Wrapper`). Selecting the
-    /// instantiation from the argument's type is phase-4 work
+    /// A static reachable only through a blanket impl generic in the
+    /// parameter it declares (`impl<T: Display> From<T> for Wrapper`).
+    /// Selecting the instantiation from the argument's type is phase-4 work
     /// (WEP 2026-07-31); until then the call is rejected rather than reaching
     /// WIR build unresolved.
-    UnsupportedBlanketConversion {
+    UnsupportedBlanketInstantiation {
         trait_name: String,
         receiver: String,
         method: String,
@@ -531,12 +554,34 @@ pub enum TypeError {
         span: Span,
     },
 
-    /// A conversion call whose literal argument admits several impls
+    /// A static declaring type parameters of its own, on an `impl` block that
+    /// declares some too. The block's are spelled at the receiver and the
+    /// method's are not inferred from the arguments, so an unspelled one
+    /// reaches codegen unsubstituted.
+    UninferredStaticTypeArg {
+        receiver: String,
+        method: String,
+        /// The first of the method's own parameters, which the call must spell.
+        param: String,
+        span: Span,
+    },
+
+    /// `Trait::<T>::method()` on a trait declaring parameters of its own. The
+    /// turbofish is that trait's argument list, so it names no receiver; a
+    /// static's receiver is written out instead (`docs/spec.md`, "A trait's
+    /// associated function").
+    StaticNeedsWrittenReceiver {
+        trait_name: String,
+        method: String,
+        span: Span,
+    },
+
+    /// A static call whose literal argument admits several impls
     /// (`Wrapper::from(42)` against `From<i32>` beside `From<i64>`). A literal
     /// never selects between the widths it could coerce to (WEP 2026-07-31),
-    /// and `from` has no `self`, so the trait turbofish escape does not apply
-    /// — the fix is annotating the argument.
-    AmbiguousConversionArgument {
+    /// and a static has no `self`, so the trait turbofish escape does not
+    /// apply — the fix is annotating the argument.
+    AmbiguousStaticArgument {
         receiver: String,
         method: String,
         /// The admitted source types, in candidate order.
@@ -555,6 +600,16 @@ pub enum TypeError {
         arg_type: String,
         /// The argument types the impls do take, in candidate order.
         candidates: Vec<String>,
+        span: Span,
+    },
+
+    /// An impl of the trait accepts the first argument, but none accepts the
+    /// list. Distinct from [`Self::NoMatchingTraitArgument`], which is the
+    /// first argument matching nothing at all.
+    NoMatchingArgumentList {
+        trait_name: String,
+        receiver: String,
+        method: String,
         span: Span,
     },
 
@@ -732,8 +787,21 @@ pub enum TypeError {
     TraitMethodArityMismatch {
         trait_name: String,
         method_name: String,
+        list: ParamList,
         expected: usize,
         found: usize,
+        span: Span,
+    },
+
+    /// An `impl` method's receiver disagrees with the trait's declaration. The
+    /// same defect as an arity mismatch: no call site writes a receiver, so the
+    /// call is built to the trait's shape and only fails Wasm validation.
+    TraitMethodReceiverMismatch {
+        trait_name: String,
+        method_name: String,
+        /// Whether the trait declares a receiver, and whether the impl does.
+        expected: bool,
+        found: bool,
         span: Span,
     },
 
@@ -831,6 +899,14 @@ pub enum TypeError {
     /// Trait impl cannot re-specify a parameter default (defaults belong to
     /// the trait declaration).
     DefaultInTraitImpl {
+        method: String,
+        param: String,
+        span: Span,
+    },
+
+    /// [`Self::DefaultInTraitImpl`] for a type parameter's default: the trait
+    /// declares it and the call site fills it from there.
+    TypeParamDefaultInTraitImpl {
         method: String,
         param: String,
         span: Span,
@@ -1067,6 +1143,13 @@ impl TypeError {
             TypeError::UnknownType { name, span } => {
                 (Code::UnknownType, format!("unknown type '{name}'"), *span)
             }
+            TypeError::UndeclaredImplTypeParam { name, span } => (
+                Code::UnknownType,
+                format!(
+                    "unknown type '{name}' in the impl target; declare it as a type parameter ('impl<{name}> …') or spell a type the module declares"
+                ),
+                *span,
+            ),
             TypeError::FlagsTooManyMembers { name, count, span } => (
                 Code::UnsupportedFeature,
                 format!(
@@ -1381,7 +1464,19 @@ impl TypeError {
                 ),
                 *span,
             ),
-            TypeError::AmbiguousConversionArgument {
+            TypeError::UninferredStaticTypeArg {
+                receiver,
+                method,
+                param,
+                span,
+            } => (
+                Code::TypeMismatch,
+                format!(
+                    "'{receiver}::{method}' declares the type parameter '{param}', which is not inferred from the arguments here; spell it: '{receiver}::{method}::<{param}>(…)'"
+                ),
+                *span,
+            ),
+            TypeError::AmbiguousStaticArgument {
                 receiver,
                 method,
                 candidates,
@@ -1398,7 +1493,7 @@ impl TypeError {
                 ),
                 *span,
             ),
-            TypeError::UnsupportedBlanketConversion {
+            TypeError::UnsupportedBlanketInstantiation {
                 trait_name,
                 receiver,
                 method,
@@ -1408,6 +1503,17 @@ impl TypeError {
                 Code::TypeMismatch,
                 format!(
                     "'{receiver}::{method}' resolves to a blanket '{trait_name}' impl, and selecting its instantiation from the argument is not supported yet; write a concrete 'impl {trait_name}<{arg_type}> for {receiver}'"
+                ),
+                *span,
+            ),
+            TypeError::StaticNeedsWrittenReceiver {
+                trait_name,
+                method,
+                span,
+            } => (
+                Code::TypeMismatch,
+                format!(
+                    "'{trait_name}' declares type parameters of its own, so the turbofish of '{trait_name}::<…>::{method}' is its argument list and names no receiver; write the receiver out ('Receiver::{method}(…)'), where the arguments select the impl"
                 ),
                 *span,
             ),
@@ -1427,6 +1533,18 @@ impl TypeError {
                         .map(|c| format!("'{c}'"))
                         .collect::<Vec<_>>()
                         .join(" and ")
+                ),
+                *span,
+            ),
+            TypeError::NoMatchingArgumentList {
+                trait_name,
+                receiver,
+                method,
+                span,
+            } => (
+                Code::TypeMismatch,
+                format!(
+                    "no impl of '{trait_name}' for '{receiver}' declares '{method}' for these arguments"
                 ),
                 *span,
             ),
@@ -1631,14 +1749,34 @@ impl TypeError {
             TypeError::TraitMethodArityMismatch {
                 trait_name,
                 method_name,
+                list,
                 expected,
                 found,
                 span,
             } => (
                 Code::TypeMismatch,
                 format!(
-                    "method `{method_name}` takes {found} parameter(s) but `{trait_name}` declares {expected}"
+                    "method `{method_name}` takes {found} {}parameter(s) but `{trait_name}` declares {expected}",
+                    list.prefix()
                 ),
+                *span,
+            ),
+            TypeError::TraitMethodReceiverMismatch {
+                trait_name,
+                method_name,
+                expected,
+                found,
+                span,
+            } => (
+                Code::TypeMismatch,
+                {
+                    let receiver = |has: bool| if has { "a receiver" } else { "no receiver" };
+                    format!(
+                        "method `{method_name}` takes {} but `{trait_name}` declares {}",
+                        receiver(*found),
+                        receiver(*expected)
+                    )
+                },
                 *span,
             ),
             TypeError::UnknownTraitImpl { name, span } => (
@@ -1787,6 +1925,17 @@ impl TypeError {
                 Code::TypeMismatch,
                 format!(
                     "default value for parameter '{param}' in method '{method}' is not allowed; defaults belong to the trait declaration"
+                ),
+                *span,
+            ),
+            TypeError::TypeParamDefaultInTraitImpl {
+                method,
+                param,
+                span,
+            } => (
+                Code::TypeMismatch,
+                format!(
+                    "default for type parameter '{param}' in method '{method}' is not allowed; defaults belong to the trait declaration"
                 ),
                 *span,
             ),
@@ -2100,6 +2249,10 @@ pub(super) struct MethodInfo {
     /// An inherent member's declared rung. `None` where the member does not
     /// decide its own reach: trait impls, resource methods, builtins.
     pub(super) inherent_visibility: Option<crate::ast::Visibility>,
+    /// Where [`Self::param_defaults`] were written, when that is not the
+    /// selected method's own module: the trait it implements declares them
+    /// (WEP 2026-04-11), and a default resolves in the scope that wrote it.
+    pub(super) defaults_module: Option<ModuleSource>,
 }
 
 /// Labeled block expression target for tracking break types
