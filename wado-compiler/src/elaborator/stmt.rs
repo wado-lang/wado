@@ -1281,12 +1281,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     pub(super) fn resolve_return(&mut self, ret_stmt: &ReturnStmt, ctx: &mut FunctionContext) {
-        // In async functions, `return expr` (with a value) is forbidden; use `task return expr`
-        if ctx.is_async && ret_stmt.value.is_some() {
+        // `task return` is an `async fn`'s only exit: a bare `return` leaves
+        // the declared result undelivered, and its Wasm return unfilled.
+        if ctx.is_async {
             let _ = self.emit(TypeError::InvalidLiteral {
-                message:
-                    "cannot use `return expr` in `export async fn`; use `task return expr` instead"
-                        .to_string(),
+                message: "cannot use `return` in `export async fn`; use `task return expr` instead"
+                    .to_string(),
                 span: ret_stmt.span,
             });
         }

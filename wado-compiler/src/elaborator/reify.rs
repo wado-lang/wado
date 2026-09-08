@@ -1300,16 +1300,16 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     // Items with function bodies — the bulk of reify_*.
     // ─────────────────────────────────────────────────────────────────
 
-    /// The declared result of an `async fn`, which `erased` has replaced with
-    /// unit. Annotate records it for free functions only; a method falls back.
-    fn declared_task_return(&self, func: &ast::Function, erased: TypeId) -> Option<TypeId> {
+    /// The result an `async fn` delivers through `task return`. Annotate
+    /// records it for free functions only; a method falls back to `declared`.
+    fn declared_task_return(&self, func: &ast::Function, declared: TypeId) -> Option<TypeId> {
         func.is_async.then(|| {
             self.sem
                 .types
                 .function_task_returns
                 .get(&func.id)
                 .copied()
-                .unwrap_or(erased)
+                .unwrap_or(declared)
         })
     }
 
@@ -1320,7 +1320,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// Parameters are added in declaration order to pin the walk-order
     /// invariant.
     fn reify_function(&mut self, func: &ast::Function) -> Option<TirFunction> {
-        // Single source of truth: read the (post-async-erasure) return type
+        // Single source of truth: read the return type
         // `resolve_function` resolved, rather than re-reading the fragile
         // name-keyed `function_return_types` map (shared with call sites and
         // overwritable by later registrations).

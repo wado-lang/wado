@@ -264,8 +264,8 @@ struct Emitter<'a> {
 struct ExportedFn {
     name: String,
     params: Vec<(String, TypeId)>,
-    /// The CM result type. For `async` exports this is the `task return` type
-    /// (the declared `return_type` is erased to unit by reify).
+    /// The CM result type, which for an `async` export is what `task return`
+    /// delivers.
     return_type: TypeId,
     is_async: bool,
 }

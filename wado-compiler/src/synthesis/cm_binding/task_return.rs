@@ -4,9 +4,9 @@
 //! `task return value;` with the inline CM `task-return` call sequence:
 //! flatten the value to CM ABI flat slots and emit a `task-return` raw call.
 //!
-//! An `export async fn` the target world does not export has no CM task to
-//! deliver to, so its `task return` reduces to its operand, evaluated for
-//! effect. What such a call should observe is open — see the WASI HTTP WEP.
+//! The delivery lives in a copy the export binding calls. The user's own
+//! function keeps a lowering that binds the value and returns it, so a Wado
+//! caller receives what `task return` named.
 
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -100,11 +100,13 @@ pub(super) fn reduce_task_returns_in_func(
         slot,
         slot_type,
         items: &items,
-        found: false,
     };
     reducer.visit_block(&mut body);
 
-    if reducer.found {
+    // Whether or not the body delivers, a declared result has to come from
+    // somewhere: a function no `task return` reaches has none, and says so
+    // rather than handing back a zeroed value.
+    if declared != TypeTable::UNIT {
         let none = option_none(slot_type, &items);
         body.stmts
             .insert(0, let_mut_stmt(TASK_RESULT_LOCAL, slot, slot_type, none));
@@ -206,14 +208,12 @@ struct TaskReturnReducer<'a> {
     slot: u32,
     slot_type: TypeId,
     items: &'a CompilerItems,
-    found: bool,
 }
 
 impl TirOptVisitor for TaskReturnReducer<'_> {
     fn visit_stmt(&mut self, stmt: &mut TirStmt) -> bool {
         match take_task_return_value(stmt) {
             Some(value) => {
-                self.found = true;
                 stmt.kind = TirStmtKind::Expr(assign(
                     local_ref(self.slot, TASK_RESULT_LOCAL, self.slot_type),
                     option_some(value, self.slot_type, self.items),

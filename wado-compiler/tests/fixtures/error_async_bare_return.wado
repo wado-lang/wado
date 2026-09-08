@@ -1,0 +1,16 @@
+// `task return` is an `async fn`'s only exit. A bare `return` leaves the
+// declared result undelivered and its Wasm return unfilled.
+
+export async fn deliver(n: i32) -> Result<i32, String> {
+    if n < 0 {
+        return;
+    }
+    task return Result::<i32, String>::Ok(n);
+}
+
+export fn run() {
+    deliver(1);
+}
+
+__DATA__
+{"compile_error": "cannot use `return` in `export async fn`"}

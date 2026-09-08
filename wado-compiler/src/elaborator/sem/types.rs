@@ -298,7 +298,7 @@ pub(crate) struct TypeAnnotations {
     /// [`crate::tir::TirFunction::effects`] — it has no
     /// `current_effect_param_decls` scope to redo the lookup faithfully.
     pub(crate) function_effects: IndexMap<AstId, Vec<crate::tir::EffectRef>>,
-    /// Declared (pre-erasure) return [`TypeId`] for every `async`
+    /// The result [`TypeId`] `task return` delivers, for every `async`
     /// function / method, keyed by the function's [`AstId`]. An async
     /// function's wasm-level `return_type` is erased to `()` (the value
     /// travels via `task return`), so reify cannot recover the real type
@@ -320,7 +320,7 @@ pub(crate) struct TypeAnnotations {
     /// `resolve_function` / `resolve_method` resolved them. Reify reads these
     /// instead of re-resolving each param.
     pub(crate) fn_param_types: IndexMap<AstId, Vec<crate::tir::TypeId>>,
-    /// Resolved (post-async-erasure) return type per function/method `AstId`.
+    /// Resolved return type per function/method `AstId`.
     /// Reify reads it instead of re-resolving the return annotation.
     pub(crate) fn_return_types: IndexMap<AstId, crate::tir::TypeId>,
     /// Resolved operation signatures per effect / resource decl `AstId`

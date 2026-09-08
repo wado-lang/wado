@@ -2499,9 +2499,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         let func_key = func.id;
         scope.sem.types.function_effects.insert(func_key, effects);
 
-        // An async function's wasm return type is erased to
-        // `()`; record the declared (pre-erasure) return type so reify
-        // can set `task_return_type` for resource-store inference.
+        // Record what `task return` delivers, so reify can set
+        // `task_return_type` for resource-store inference.
         if func.is_async {
             let task_key = func.id;
             scope
@@ -2513,7 +2512,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
         drop(scope);
 
-        // The return type recorded here is post-async-erasure.
         let sig_key = func.id;
         self.sem
             .types

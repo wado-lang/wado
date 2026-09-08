@@ -629,7 +629,7 @@ fn synthesize_export_adapters(project: &mut Package) -> Result<(), String> {
     // Collect adapters in a read-only pass (synthesize_export_binding needs &tir_modules)
     let mut export_adapters: Vec<(String, String, Rc<RefCell<TirFunction>>)> = Vec::new();
     let mut post_returns: Vec<(String, String, Rc<RefCell<TirFunction>>)> = Vec::new();
-    let mut task_entries: Vec<Rc<RefCell<TirFunction>>> = Vec::new();
+    let mut task_entries: Vec<(ModuleSource, Rc<RefCell<TirFunction>>)> = Vec::new();
     {
         let entry_module = project
             .tir_modules
@@ -699,7 +699,10 @@ fn synthesize_export_adapters(project: &mut Package) -> Result<(), String> {
                         &project.interner,
                     );
                     binding_callee = Rc::clone(&task_entry);
-                    task_entries.push(task_entry);
+                    // The binding calls it through `callee_module`, so that is where the
+                    // copy has to live: a lib world spreads its exports across
+                    // submodules.
+                    task_entries.push((callee_module.clone(), task_entry));
                 }
                 ExportReturnStrategy::AsyncTaskReturn
             } else if is_lib_world && !is_kiln_generator {
@@ -768,12 +771,19 @@ fn synthesize_export_adapters(project: &mut Package) -> Result<(), String> {
             .insert(export_name, binding_name);
         entry_module.functions.push(adapter);
     }
-    entry_module.functions.extend(task_entries);
     for (export_name, func_name, post_return) in post_returns {
         project
             .post_return_binding_names
             .insert(export_name, func_name);
         entry_module.functions.push(post_return);
+    }
+    for (module_source, task_entry) in task_entries {
+        project
+            .tir_modules
+            .get_mut(&module_source)
+            .expect("the export's own module is the one the binding calls into")
+            .functions
+            .push(task_entry);
     }
     Ok(())
 }
