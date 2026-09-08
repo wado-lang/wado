@@ -1500,8 +1500,7 @@ fn gen_scan_multi_alt(
     let groups_tokens = &plan.groups_tokens;
     let unguarded_idx = &plan.unguarded_idx;
 
-    w.line(&"let start = pos;");
-    gen_scan_gate_save(w, ctx, &"start");
+    gen_scan_mark(w, ctx, &"start");
     w.line(&"let mut pos = pos;");
     w.line(&"let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };");
 
@@ -1615,6 +1614,9 @@ fn gen_scan_partition_body(
     for let mut k = 0; k < all_idx.len(); k += 1 {
         let i = all_idx[k];
         if plan.is_hoisted(i) {
+            // The gate half of a rewind alone: a hoisted candidate takes `start`
+            // as an argument rather than through `pos`, so the position is
+            // already where it belongs and only the gate has to follow it.
             gen_scan_gate_restore(w, ctx, &"start");
             w.line(
                 &`let try_${i}_end = ${scan_alt_helper_name(base_name, i)}(tokens, start${follow_sep(
@@ -1629,15 +1631,7 @@ fn gen_scan_partition_body(
         let commit = scan_gate_best_commit(ctx, &"best", &"pos > best", &"pos");
         let _ = gen_scan_alt_candidate(w, i, body, skip, ctx, &commit);
     }
-    if ctx.emit_scan_gate() {
-        w.begin(&"if best >= 0");
-        w.line(&"pos = best;");
-        gen_scan_gate_restore(w, ctx, &"best");
-        w.line(&"break scan_alts;");
-        w.end();
-    } else {
-        w.line(&"if best >= 0 { pos = best; break scan_alts; }");
-    }
+    gen_scan_rewind_break(w, ctx, &"best", &"best >= 0", &"break scan_alts;");
     w.line(&"return -1;");
 }
 
@@ -1694,14 +1688,12 @@ fn gen_scan_alt_candidate(
     commit_stmt: &String,
 ) -> bool {
     if skip && body.elements.len() == 1 && body.gates.is_empty() && body.gate_cond.is_empty() {
-        w.line(&"pos = start + 1;");
-        gen_scan_gate_restore(w, ctx, &"start");
+        gen_scan_rewind(w, ctx, &"start", /*skip=*/ 1);
         w.line(commit_stmt);
         return false;
     }
     let label = `try_${i}`;
-    w.line(&if skip { "pos = start + 1;" } else { "pos = start;" });
-    gen_scan_gate_restore(w, ctx, &"start");
+    gen_scan_rewind(w, ctx, &"start", if skip { 1 } else { 0 });
     w.begin(&`${label}:`);
     let from = if skip { 1 } else { 0 };
     gen_scan_op_elements_in_block(
@@ -1933,15 +1925,12 @@ fn gen_scan_optional_probe(
     caller_follow_gate: &String,
 ) {
     w.begin(&`if ${scan_repeat_guard(&re.inner_admits, caller_follow_gate, ctx)}`);
-    w.line(&"let sp = pos;");
-    gen_scan_gate_save(w, ctx, &"sp");
+    gen_scan_mark(w, ctx, &"sp");
     gen_scan_op_element_assign(w, &re.body, ctx);
     w.begin(&"if pos < 0");
-    w.line(&"pos = sp;");
-    gen_scan_gate_restore(w, ctx, &"sp");
+    gen_scan_rewind(w, ctx, &"sp");
     w.else_begin(&"else");
-    w.line(&"let bp = pos;");
-    gen_scan_gate_save(w, ctx, &"bp");
+    gen_scan_mark(w, ctx, &"bp");
     w.line(&"let mut opt_ok: bool = false;");
     w.begin(&"opt_probe:");
     let fail = "break opt_probe;";
@@ -1956,11 +1945,9 @@ fn gen_scan_optional_probe(
     // means the gate before the iteration.
     if ctx.emit_scan_gate() {
         w.begin(&"if opt_ok");
-        w.line(&"pos = bp;");
-        gen_scan_gate_restore(w, ctx, &"bp");
+        gen_scan_rewind(w, ctx, &"bp");
         w.else_begin(&"else");
-        w.line(&"pos = sp;");
-        gen_scan_gate_restore(w, ctx, &"sp");
+        gen_scan_rewind(w, ctx, &"sp");
         w.end();
     } else {
         w.line(&"pos = if opt_ok { bp } else { sp };");
@@ -1976,8 +1963,7 @@ fn gen_scan_non_greedy_probe_loop(w: &mut CodeWriter, re: &ScanRepeatElement, ct
     let no_gate = String::new();
     let guard = scan_repeat_guard(&re.inner_admits, &no_gate, ctx);
     w.begin(&"loop");
-    w.line(&"let ep = pos;");
-    gen_scan_gate_save(w, ctx, &"ep");
+    gen_scan_mark(w, ctx, &"ep");
     w.line(&"let mut ng_exit: bool = false;");
     w.begin(&"ng_exit_scan:");
     let fail = "break ng_exit_scan;";
@@ -1987,12 +1973,10 @@ fn gen_scan_non_greedy_probe_loop(w: &mut CodeWriter, re: &ScanRepeatElement, ct
     let ng_exit = "ng_exit";
     emit_probe_verdict(w, &re.probe_viable, &ng_exit, ctx);
     w.end();
-    w.line(&"pos = ep;");
-    gen_scan_gate_restore(w, ctx, &"ep");
+    gen_scan_rewind(w, ctx, &"ep");
     w.line(&"if ng_exit { break; }");
     w.line(&`if !(${guard}) \{ break; \}`);
-    w.line(&"let sp = pos;");
-    gen_scan_gate_save(w, ctx, &"sp");
+    gen_scan_mark(w, ctx, &"sp");
     gen_scan_op_element_assign(w, &re.body, ctx);
     gen_scan_iteration_rewind(w, ctx, /*looping=*/ true);
     w.line(&"if pos == sp { break; }");
@@ -2186,8 +2170,7 @@ fn gen_scan_iteration(w: &mut CodeWriter, re: &ScanRepeatElement, admits: &Admit
         w.line(&"pos += 1;");
         return;
     }
-    w.line(&"let sp = pos;");
-    gen_scan_gate_save(w, ctx, &"sp");
+    gen_scan_mark(w, ctx, &"sp");
     gen_scan_op_element_assign(w, &re.body, ctx);
     if !looping {
         gen_scan_iteration_rewind(w, ctx, /*looping=*/ false);
@@ -2233,10 +2216,12 @@ fn gen_scan_decline_stranded(
         kind_check_or_none(&duties.decline_viable, &`dk_${gc}`, ctx),
     ]);
     w.begin(&`if !(${can_continue})`);
-    w.line(&`let dc_${gc} = pos;`);
-    gen_scan_gate_save(w, ctx, &`dc_${gc}`);
+    gen_scan_mark(w, ctx, &`dc_${gc}`);
     w.line(&`let mut dc_${gc}_exit = false;`);
-    w.line(&`pos = sp;`);
+    // The probe re-walks the continuation from the iteration's start, so it
+    // starts from the gate the iteration started with — not the one it ended
+    // with, which is a reading the parse has not taken here.
+    gen_scan_rewind(w, ctx, &"sp");
     w.begin(&`dcl_${gc}:`);
     for let se of &duties.decline_scan {
         gen_scan_op_element(w, se, ctx, &`break dcl_${gc};`);
@@ -2246,17 +2231,8 @@ fn gen_scan_decline_stranded(
     // Both exits leave a walk that did not happen, so both put the gate back:
     // declining rewinds to the iteration's start, and continuing resumes at the
     // iteration's end with the gate that iteration actually produced.
-    if ctx.emit_scan_gate() {
-        w.begin(&`if dc_${gc}_exit`);
-        w.line(&"pos = sp;");
-        gen_scan_gate_restore(w, ctx, &"sp");
-        w.line(&"break;");
-        w.end();
-    } else {
-        w.line(&`if dc_${gc}_exit \{ pos = sp; break; \}`);
-    }
-    w.line(&`pos = dc_${gc};`);
-    gen_scan_gate_restore(w, ctx, &`dc_${gc}`);
+    gen_scan_rewind_break(w, ctx, &"sp", &`dc_${gc}_exit`);
+    gen_scan_rewind(w, ctx, &`dc_${gc}`);
     w.end();
 }
 
@@ -2271,15 +2247,7 @@ fn gen_scan_reserve(w: &mut CodeWriter, duties: &IterationDuties, loop_first: &L
     let gc = ctx.next_scan_group();
     gen_reserve_probe(w, &duties.reserve_scan, &`rs_${gc}`, &`rs_${gc}_ok`, &`rsv_${gc}`, ctx);
     let starved = reserve_starved_cond(w, &`rs_${gc}_ok`, &`rk_${gc}`, &"tokens", &"pos", loop_first, ctx);
-    if ctx.emit_scan_gate() {
-        w.begin(&`if ${starved}`);
-        w.line(&"pos = sp;");
-        gen_scan_gate_restore(w, ctx, &"sp");
-        w.line(&"break;");
-        w.end();
-    } else {
-        w.line(&`if ${starved} \{ pos = sp; break; \}`);
-    }
+    gen_scan_rewind_break(w, ctx, &"sp", &starved);
 }
 
 /// Op-driven scan emitter for `ScanElement::Group`: the same partition the
@@ -2297,8 +2265,7 @@ fn gen_scan_op_group(w: &mut CodeWriter, ge: &ScanGroupElement, ctx: &mut GenCon
         let done = `sg_${gc}_done`;
         let save_var = `sg_${gc}_save`;
         if lenient {
-            w.line(&`let ${save_var} = pos;`);
-            gen_scan_gate_save(w, ctx, &save_var);
+            gen_scan_mark(w, ctx, &save_var);
         }
         w.begin(&`${done}:`);
         w.begin(&`${body}:`);
@@ -2306,8 +2273,7 @@ fn gen_scan_op_group(w: &mut CodeWriter, ge: &ScanGroupElement, ctx: &mut GenCon
         w.line(&`break ${done};`);
         w.end();
         if lenient {
-            w.line(&`pos = ${save_var};`);
-            gen_scan_gate_restore(w, ctx, &save_var);
+            gen_scan_rewind(w, ctx, &save_var);
         } else {
             w.line(fail_stmt);
         }
@@ -2319,8 +2285,7 @@ fn gen_scan_op_group(w: &mut CodeWriter, ge: &ScanGroupElement, ctx: &mut GenCon
     let best_var = `sg_${gc}_best`;
     let kind_var = `sgk_${gc}`;
     let branches = scan_decision_branches(ge);
-    w.line(&`let ${gp_var} = pos;`);
-    gen_scan_gate_save(w, ctx, &gp_var);
+    gen_scan_mark(w, ctx, &gp_var);
     if decision_reads_lookahead(&branches) {
         gen_kind_read(w, &kind_var, &"tokens", &"pos");
     }
@@ -2334,8 +2299,7 @@ fn gen_scan_op_group(w: &mut CodeWriter, ge: &ScanGroupElement, ctx: &mut GenCon
         open_decision_branch(w, &branches, i, &kind_var, ctx);
         for let ai of &branches[i].alts {
             let inner = `sg_${gc}_${*ai}`;
-            w.line(&`pos = ${gp_var};`);
-            gen_scan_gate_restore(w, ctx, &gp_var);
+            gen_scan_rewind(w, ctx, &gp_var);
             w.begin(&`${inner}:`);
             gen_scan_op_elements_in_block(w, &ge.alts[*ai].elements, 0, ge.alts[*ai].elements.len(), ctx, &inner);
             w.line(&scan_gate_best_commit(ctx, &best_var, &`pos > ${best_var}`, &"pos"));
@@ -2344,12 +2308,10 @@ fn gen_scan_op_group(w: &mut CodeWriter, ge: &ScanGroupElement, ctx: &mut GenCon
     }
     close_decision_chain(w, &branches);
     w.begin(&`if ${best_var} >= 0`);
-    w.line(&`pos = ${best_var};`);
-    gen_scan_gate_restore(w, ctx, &best_var);
+    gen_scan_rewind(w, ctx, &best_var);
     w.else_begin(&"else");
     if lenient {
-        w.line(&`pos = ${gp_var};`);
-        gen_scan_gate_restore(w, ctx, &gp_var);
+        gen_scan_rewind(w, ctx, &gp_var);
     } else {
         w.line(fail_stmt);
     }
@@ -2378,16 +2340,14 @@ fn gen_scan_op_optional_lookahead(w: &mut CodeWriter, ole: &ScanOptionalLookahea
         let body = `sol_${gc}`;
         let save_var = `sol_${gc}_save`;
         let fail = `break ${body};`;
-        w.line(&`let ${save_var} = pos;`);
-        gen_scan_gate_save(w, ctx, &save_var);
+        gen_scan_mark(w, ctx, &save_var);
         w.begin(&`${body}:`);
         for let elem_se of &ole.bodies[si].elements {
             gen_scan_op_element(w, elem_se, ctx, &fail);
         }
         w.line(&`break ${chain_done};`);
         w.end();
-        w.line(&`pos = ${save_var};`);
-        gen_scan_gate_restore(w, ctx, &save_var);
+        gen_scan_rewind(w, ctx, &save_var);
         if !ole.scan_guarded {
             w.line(&`break ${chain_done};`);
         }
@@ -6421,16 +6381,53 @@ fn gen_rep_reserve_at(
     w.end();
 }
 
-/// Save the scan's gate beside a position the scan may rewind to, so
-/// `gen_scan_gate_restore` can put it back with that position.
+/// Mark where the scan is: the position, and the gate that goes with it.
 ///
 /// The gate is part of where the scan is. An arm that rewinds one and not the
 /// other hands the next arm a value from a walk that did not happen: an `if`
-/// head it entered and never left, whose ban the parse will not apply.
+/// head it entered and never left, whose ban the parse will not apply. Marking
+/// and rewinding are therefore whole operations rather than a two-line idiom
+/// each site repeats — one site forgetting the second line is what this pair
+/// exists to prevent.
+fn gen_scan_mark(w: &mut CodeWriter, ctx: &GenContext, slot: &String) {
+    w.line(&`let ${*slot} = pos;`);
+    gen_scan_gate_save(w, ctx, slot);
+}
+
+/// Rewind to a marked slot: its position, and the gate marked with it.
 ///
-/// A tournament needs `mutable`, because its slot is refilled by each candidate
-/// that takes the lead — the gate travels with `best` the way the position does,
-/// since every candidate runs and the global ends up holding the last one's.
+/// `skip` resumes that many tokens past the slot, still under the slot's gate —
+/// a token the guard already proved consumes no gate, so `start + 1` is `start`'s
+/// reading of the input.
+fn gen_scan_rewind(w: &mut CodeWriter, ctx: &GenContext, slot: &String, skip: i32 = 0) {
+    w.line(&if skip == 0 { `pos = ${*slot};` } else { `pos = ${*slot} + ${skip};` });
+    gen_scan_gate_restore(w, ctx, slot);
+}
+
+global PLAIN_BREAK: String = "break;";
+
+/// `if <cond> { <rewind to slot>; <brk> }`. A gate-free build keeps the one
+/// line it has always emitted.
+fn gen_scan_rewind_break(
+    w: &mut CodeWriter,
+    ctx: &GenContext,
+    slot: &String,
+    cond: &String,
+    brk: &String = &PLAIN_BREAK,
+) {
+    if !ctx.emit_scan_gate() {
+        w.line(&`if ${*cond} \{ pos = ${*slot}; ${*brk} \}`);
+        return;
+    }
+    w.begin(&`if ${*cond}`);
+    gen_scan_rewind(w, ctx, slot);
+    w.line(brk);
+    w.end();
+}
+
+/// The gate half of `gen_scan_mark`, for the one slot that is not a position
+/// the scan walked to: a tournament's `best` is refilled by each candidate that
+/// takes the lead, so the gate travels with it the way the position does.
 fn gen_scan_gate_save(w: &mut CodeWriter, ctx: &GenContext, slot: &String, mutable: bool = false) {
     if !ctx.emit_scan_gate() {
         return;
@@ -6461,8 +6458,7 @@ fn gen_scan_iteration_rewind(w: &mut CodeWriter, ctx: &GenContext, looping: bool
         return;
     }
     w.begin(&"if pos < 0");
-    w.line(&"pos = sp;");
-    gen_scan_gate_restore(w, ctx, &"sp");
+    gen_scan_rewind(w, ctx, &"sp");
     if looping {
         w.line(&"break;");
     }
@@ -6669,8 +6665,7 @@ fn gen_reserve_probe(
     label: &String,
     ctx: &mut GenContext,
 ) {
-    w.line(&`let ${*slot} = pos;`);
-    gen_scan_gate_save(w, ctx, slot);
+    gen_scan_mark(w, ctx, slot);
     w.line(&`let mut ${*ok} = false;`);
     w.begin(&`${*label}:`);
     for let se of reserve {
@@ -6678,8 +6673,7 @@ fn gen_reserve_probe(
     }
     w.line(&`${*ok} = true;`);
     w.end();
-    w.line(&`pos = ${*slot};`);
-    gen_scan_gate_restore(w, ctx, slot);
+    gen_scan_rewind(w, ctx, slot);
 }
 
 /// Whether a failed reserve starves the alternative's mandatory suffix.

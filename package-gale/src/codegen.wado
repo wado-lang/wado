@@ -158,7 +158,6 @@ pub fn analysis_context(grammar: &Grammar, lit_tokens: &List<LitToken>, token_ki
     ctx.set_vocab_names(vocab_display_names(&grammar.lexer_rules, lit_tokens, ctx.token_kind_names()));
     ctx.set_action_language(&grammar.action_language);
     ctx.set_grammar_name(&grammar.name);
-    ctx.set_scan_gate_fields(scan_gate_fields(grammar));
     return ctx;
 }
 
@@ -182,6 +181,10 @@ pub fn install_action_context(grammar: &mut Grammar, ctx: &mut GenContext) -> [M
     let lexer_members = collect_members(grammar, ctx, /*lexer=*/ true);
     let parser_members = collect_members(grammar, ctx, /*lexer=*/ false);
     ctx.set_action_members(member_names(&parser_members));
+    // After the members, never before: which fields a scan can simulate is the
+    // action bodies' answer narrowed by what the block actually declares, and
+    // only one of those is known here.
+    ctx.set_scan_gate_fields(scan_gate_fields(grammar));
     return [lexer_members, parser_members];
 }
 

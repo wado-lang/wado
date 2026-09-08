@@ -11,6 +11,53 @@ use {
     ParserRule,
     Visibility,
 } from "./ir.wado";
+use { parse } from "./g4/parser.wado";
+use { generate, GenerateOptions } from "./codegen.wado";
+
+global GEN_OPTS: GenerateOptions = GenerateOptions {};
+
+fn gen_source(src: &String) -> String {
+    let mut g = parse(*src).unwrap();
+    return generate(&mut g, &GEN_OPTS).source;
+}
+
+// The action bodies and the members block are two readings of the same grammar,
+// and either can come back empty on its own. A block the translator refuses
+// declares nothing, so the fields its actions name have no type to copy — the
+// gate has to go unsimulated, which is warn-and-degrade, not a dead emit.
+test "a members block the translator refuses leaves the gate unsimulated" {
+    let src = &"grammar C;
+options { language = Java; }
+@parser::members {
+    java.util.Map<String, Integer> seen = new java.util.HashMap<>();
+    int n = 0;
+}
+r : A { n = 1; } A ;
+A : 'a' ;
+";
+    // The action side names the field, so what removes it is the members side
+    // and nothing else. Without this the assertion below would hold for a
+    // grammar that simulates nothing to begin with.
+    let mut g = parse(*src).unwrap();
+    assert scan_gate_fields(&g) == ["n"], `the action must name a gate candidate: ${scan_gate_fields(&g):?}`;
+    let out = generate(&mut g, &GEN_OPTS).source;
+    assert !out.contains("struct ScanGate"), `a field no member declares must not reach the scan gate: ${out}`;
+}
+
+// The hit case, so the test above is not passing because nothing ever simulates:
+// the same grammar with a members block that does translate keeps its gate.
+test "a members block that translates keeps its field simulable" {
+    let out = gen_source(&"grammar C;
+options { language = Java; }
+@parser::members {
+    int n = 0;
+}
+r : A { n = 1; } A ;
+A : 'a' ;
+");
+    assert out.contains("struct ScanGate"), `a declared field stays simulable: ${out}`;
+    assert out.contains("n: i32 = 0"), `the gate copies the member's own type and initialiser: ${out}`;
+}
 
 test "gate_assignment: a bare constant assignment" {
     let hit = gate_assignment(&"noStruct = 1;");
@@ -174,14 +221,47 @@ test "scan_gate_fields: an unrunnable rule-level write disqualifies the field" {
     assert scan_gate_fields(&g).is_empty(), `${scan_gate_fields(&g):?}`;
 }
 
-// The disqualifying set is generous on purpose, so an operator nobody listed
-// still has to reach it: a field the scan simulates for one write and misses
-// for another holds a value the parse never does.
+// The disqualifying set is every name in a body the scan cannot run, not the
+// write shapes someone listed. A field the scan simulates for one write and
+// misses for another holds a value the parse never does, and any enumeration of
+// shapes has one it does not know.
 test "scan_gate_fields: a compound assignment disqualifies the field" {
     for let op of ["+=", "|=", "&=", "^=", "%=", "<<=", ">>="] as List<String> {
         let g = grammar_with(&`noStruct ${op} 1;`, null);
         assert scan_gate_fields(&g).is_empty(), `${op} left the field simulable`;
     }
+}
+
+// The shapes an assignment-target matcher misses. The first has a plain `f = 0`
+// in it that only a statement splitter would find on its own; the second has no
+// `=` at all.
+test "scan_gate_fields: a conditional write disqualifies the field" {
+    for let body of ["if (c) noStruct = 0;", "while (c) noStruct = 0;", "for (;;) noStruct = 0;"] as List<String> {
+        let g = grammar_with(&body, null);
+        assert scan_gate_fields(&g).is_empty(), `${body} left the field simulable`;
+    }
+}
+
+test "scan_gate_fields: an increment disqualifies the field" {
+    for let body of ["noStruct++;", "--noStruct;", "noStruct--;"] as List<String> {
+        let g = grammar_with(&body, null);
+        assert scan_gate_fields(&g).is_empty(), `${body} left the field simulable`;
+    }
+}
+
+// A body naming the field disqualifies it even where it plainly only reads:
+// what the body does to the names it mentions is exactly what could not be
+// read, and over-rejecting only leaves the gate unsimulated.
+test "scan_gate_fields: a body that merely names the field disqualifies it" {
+    let g = grammar_with(&"log(noStruct);", null);
+    assert scan_gate_fields(&g).is_empty(), `${scan_gate_fields(&g):?}`;
+}
+
+// The rejection case for the rule above: a body naming something else leaves
+// the field alone, so the set is not simply always empty.
+test "scan_gate_fields: a body naming other things leaves the field simulable" {
+    let g = grammar_with(&"log(depth);", null);
+    assert scan_gate_fields(&g) == ["no_struct"], `${scan_gate_fields(&g):?}`;
 }
 
 test "scan_gate_fields: a write through a receiver disqualifies the field" {

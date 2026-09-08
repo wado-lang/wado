@@ -166,24 +166,23 @@ fn statements(text: &String) -> List<String> {
 }
 
 /// Every field the grammar's parser actions assign an integer literal to,
-/// snake_cased, first-assignment order. A field assigned anywhere by anything
-/// else is not here: a scan that simulated only some of a field's writes would
-/// answer with a value the parse never holds.
+/// snake_cased, first-assignment order.
 ///
-/// "Anywhere" is the whole of it — a rule's `@init` / `@after` write to a gate
-/// field as much as an alternative's action does, and the pair `gate_scope`
-/// recognises is the only one of those a scan can run.
+/// A field is simulable only while *every* body naming it is one the scan can
+/// run — `gate_assignment`, or the `gate_scope` pair. One the scan cannot run
+/// disqualifies every name in it, because what such a body does to a name it
+/// mentions is exactly what we could not read.
+///
+/// "Every body" is the whole grammar: a rule's `@init` / `@after` reach a gate
+/// field as much as an alternative's action does, and a group's alternatives
+/// carry actions the parse runs where lowering puts no gate on the scan.
 pub fn scan_gate_fields(grammar: &Grammar) -> List<String> {
     let mut simulable: List<String> = [];
     let mut rejected: List<String> = [];
     for let rule of &grammar.parser_rules {
         if gate_scope(rule) matches { None } {
             for let text of rule_prequel_bodies(rule) {
-                for let name of assigned_names(&text) {
-                    if !rejected.contains(&name) {
-                        rejected.push(name);
-                    }
-                }
+                push_new(&mut rejected, mentioned_names(&text));
             }
         }
         for let alt of &rule.alternatives {
@@ -198,7 +197,7 @@ pub fn scan_gate_fields(grammar: &Grammar) -> List<String> {
                         }
                     },
                     None => {
-                        push_new(&mut rejected, assigned_names(&a.source.text));
+                        push_new(&mut rejected, mentioned_names(&a.source.text));
                     },
                 }
             }
@@ -212,7 +211,9 @@ pub fn scan_gate_fields(grammar: &Grammar) -> List<String> {
     return simulable.iter_ref().filter(|f| !rejected.contains(f)).map(|f| *f).collect();
 }
 
-/// Every field an action inside a nested group writes, added to the refused set.
+/// Every name an action inside a nested group mentions, added to the refused
+/// set: lowering puts no gate on a group alternative's scan body, so the scan
+/// cannot run any of them.
 fn reject_nested_writes(elements: &List<Element>, rejected: &mut List<String>) {
     for let e of elements {
         reject_element_writes(e, rejected);
@@ -225,7 +226,7 @@ fn reject_element_writes(e: &Element, rejected: &mut List<String>) {
             for let alt of &g.alternatives {
                 for let a of &alt.actions {
                     if !a.kind matches { Predicate } {
-                        push_new(rejected, assigned_names(&a.source.text));
+                        push_new(rejected, mentioned_names(&a.source.text));
                     }
                 }
                 reject_nested_writes(&alt.elements, rejected);
@@ -261,54 +262,39 @@ fn rule_prequel_bodies(rule: &ParserRule) -> List<String> {
     return out;
 }
 
-/// The snake_cased names an action body assigns to, however it does it — the
-/// disqualifying set. Deliberately generous: a compound assignment and a write
-/// through a receiver both count, so either still disqualifies the field.
-fn assigned_names(text: &String) -> List<String> {
+/// Every name a body mentions, snake_cased — the disqualifying set.
+///
+/// The whole of it, not the assignment targets in it. Which names a body writes
+/// is a question about the host language's syntax, and every answer that
+/// enumerates write shapes has a shape it does not know: matching `f = 0` alone
+/// misses `if (c) f = 0;`, and matching `=` at all misses `f++`. A body the scan
+/// cannot run tells us nothing about which of its names it leaves alone, so all
+/// of them stop being simulable.
+///
+/// Over-rejecting only ever leaves a gate unsimulated, which is the behaviour
+/// before any of this existed. Under-rejecting is a scan reading a value the
+/// parse never holds.
+fn mentioned_names(text: &String) -> List<String> {
     let mut out: List<String> = [];
-    for let stmt of statements(text) {
-        if let Some(target) = assignment_target(&stmt) {
-            out.push(to_snake_case(&target));
+    let mut start = -1;
+    for let [index, c] of text.char_indices() {
+        let in_name = c == '_' || c.is_ascii_alphanumeric();
+        if in_name && start < 0 {
+            start = index;
+        } else if !in_name && start >= 0 {
+            push_name(&mut out, &text.substr_bytes(start, index));
+            start = -1;
         }
+    }
+    if start >= 0 {
+        push_name(&mut out, &text.substr_bytes(start, text.len()));
     }
     return out;
 }
 
-/// The name a statement assigns to, or `null`. `a.b = 1` names `b`, because a
-/// receiver hides the field rather than changing which one is written;
-/// `a += 1` names `a`, because the operator sits outside the name.
-fn assignment_target(stmt: &String) -> Option<String> {
-    let [lhs, rhs] = match stmt.split_once("=") {
-        Some(pair) => pair,
-        None => {
-            return null;
-        },
-    };
-    // `==` leaves its second `=` at the head of the right-hand side.
-    if rhs.starts_with("=") {
-        return null;
+fn push_name(out: &mut List<String>, word: &String) {
+    let name = to_snake_case(word);
+    if !out.contains(&name) {
+        out.push(name);
     }
-    let target = strip_trailing_operator(&lhs.trim());
-    let name = match target.rsplit_once(".") {
-        Some(parts) => parts.1,
-        None => target,
-    };
-    return if is_plain_ident(&name) { Option::Some(name) } else { null };
-}
-
-/// `name` from the `name +=` / `name |=` / `name <<=` a compound assignment
-/// leaves on the left.
-///
-/// Cuts back to the last character a name may hold rather than listing the
-/// operators, so one nobody thought of still disqualifies its field — which is
-/// the whole point of the set this feeds. `==`, `!=`, `<=` and `>=` never reach
-/// here: a comparison is refused by its right-hand side.
-fn strip_trailing_operator(lhs: &String) -> String {
-    let mut end = 0;
-    for let [index, c] of lhs.char_indices() {
-        if c == '_' || c.is_ascii_alphanumeric() {
-            end = index + c.len_utf8();
-        }
-    }
-    return lhs.substr_bytes(0, end);
 }

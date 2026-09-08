@@ -703,8 +703,16 @@ impl GenContext {
     }
 
     /// The members fields a scan simulates as it walks — see `scan_gate.wado`.
+    ///
+    /// Keeps only what the members block declares, so the set can never name a
+    /// field the generated `SCAN_GATE` has no type or initialiser to copy. The
+    /// action bodies and the members block are two readings of the grammar and
+    /// either can come back empty on its own: a block the translator refuses
+    /// warns and declares nothing, which has to degrade to an unsimulated gate
+    /// rather than kill the emit. Call after `set_action_members`.
     pub fn set_scan_gate_fields(&mut self, fields: List<String>) {
-        self.scan_gate_fields = fields;
+        let declared = &self.action_members.fields;
+        self.scan_gate_fields = fields.iter_ref().filter(|f| declared.contains(f)).map(|f| *f).collect();
     }
 
     pub fn scan_gate_fields(&self) -> &List<String> with stores[self] {
