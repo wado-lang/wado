@@ -909,9 +909,10 @@ fn gen_lr_candidates_begin(w: &mut CodeWriter, ctx: &GenContext, parse_launched:
 /// Put a known gate in place, immediately before a walk that reads it.
 ///
 /// Every measurement the parse starts opens with this. Seeding from the parser
-/// is what starts the simulation from the truth: a scan reached from inside
-/// another inherits its caller's value, which is the simulation working, while
-/// one the parse launches must not inherit whatever a previous scan left.
+/// starts the simulation from the truth: a scan reached from inside another
+/// inherits its caller's value, which is the simulation working, while one the
+/// parse launches must not inherit whatever a previous scan left. That is why a
+/// tournament seeds per candidate rather than once.
 fn gen_scan_gate_from(w: &mut CodeWriter, ctx: &GenContext, from: &ScanOrigin) {
     match from {
         Parser => {
@@ -1276,7 +1277,7 @@ fn emit_lr_overlap(
             }
             let alt = lr_alts[lr_dispatch.valid_lr_alts[group[k]]].alt_index;
             plans.push([
-                k, lr_second_token_plan(
+                k, lr_sub_plan(
                     shared_tk,
                     &rule.alternatives[alt].elements,
                     &lr_scan_local(alt),
@@ -2450,14 +2451,6 @@ fn gen_scan_gate_check(w: &mut CodeWriter, gate_cond: &String, fail_stmt: &Strin
     w.line(&`if !(${*gate_cond}) \{ ${*fail_stmt} \}`);
 }
 
-/// Seed the scan's copy of the gate members from the parser, once per scan the
-/// parse launches.
-///
-/// This is what starts the simulation from the truth. A scan reached from
-/// inside another scan inherits its caller's value instead, which is the
-/// simulation working. A scan the parse launches starts from where the parse
-/// actually is, so nothing a previous scan left behind survives to be read —
-/// which is why a tournament seeds per candidate and not once.
 /// Enter an inlined scan from parse context: the parser's tokens, where the
 /// walk starts, and the gate it starts under. The whole prologue, not three
 /// lines a site repeats.
@@ -7755,15 +7748,15 @@ fn suffix_second_token(elements: &List<Element>, start: i32, ctx: &mut GenContex
     return [];
 }
 
-/// How one candidate's sub-dispatch tells itself from its peers.
+/// Pick how a candidate separates itself, preferring the second token.
 ///
 /// `discriminates` is false when another candidate for the same leading token
 /// can show the same token second. The check would then commit to this
-/// candidate on a token both admit and leave the other unreachable —
+/// candidate on a token both admit and leave the other unreachable:
 /// `e DOT ID LPAREN RPAREN` swallowing every `e DOT ID`. The scan is what
-/// separates them: it is the whole suffix, so it fails where the shorter
+/// separates them, being the whole suffix, so it fails where the shorter
 /// candidate is the reading.
-fn lr_second_token_plan(
+fn lr_sub_plan(
     shared_token: &String,
     elements: &List<Element>,
     scan_local: &String,
@@ -7780,10 +7773,8 @@ fn lr_second_token_plan(
 
 /// How a candidate's sub-dispatch tells itself from its peers.
 ///
-/// A variant rather than a condition beside a local name, because the two are
-/// not independent: only `Prebound` binds anything ahead of the chain, and its
-/// condition is a reading of what it bound. An empty name for "binds nothing"
-/// is what let three launch sites take a local they had no record of.
+/// One value rather than a condition beside a local name: only `Prebound` binds
+/// anything ahead of the chain, and its condition is a reading of what it bound.
 variant LrSubPlan {
     /// The second token separates them, so nothing runs ahead of the chain.
     SecondToken(String),
