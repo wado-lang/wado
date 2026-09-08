@@ -161,7 +161,7 @@ The gate machinery reads Java-shaped action text throughout. A Wado action quali
 
 Fixing it is a naming decision, not a patch. `gate_assignment` snake_cases because java2wado snake_cases Java members into the struct, while a Wado member keeps the name it was written with. The name an action writes therefore maps to the field the scan simulates differently per language, and four places assume it does not: `gate_assignment`, the `@init` / `@after` pair in `runnable_gate_scope`, the `declared.contains` filter in `set_scan_gate_fields`, and `gate_condition_for`, whose `body_needs_no_translator` path returns `pred_<id>(p)` before it reads its `handle` argument.
 
-Consider resolving the name once, at the boundary. `gate_assignment` returns it as written, and `set_scan_gate_fields` resolves it to a declared field, exact match first and snake_case second. That is the only place that knows what the members block declares. Lowering then asks the same resolver instead of re-deriving. Java output stays byte-identical and no new convention is needed.
+What a Wado gate member should be called in the generated `ScanGate` is undecided, so nothing here proposes a shape.
 
 ## Performance
 
