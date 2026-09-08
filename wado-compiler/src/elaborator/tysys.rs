@@ -318,16 +318,12 @@ pub(crate) fn operator_compiler_item(op: &BinaryOp) -> Option<CompilerItem> {
 impl TypeSystem {
     /// The slots an `impl` block binds. Its own declaration list is the only
     /// way in, as [`Self::is_impl_target_param`] reads it: a name the header
-    /// mentions without declaring is not a slot but an undeclared type.
+    /// mentions without declaring is not a slot but an undeclared type, and a
+    /// name it declares is a slot however many modules name a type that.
     pub(crate) fn build_declared_type_params(
-        &self,
         impl_type_params: &[ast::GenericParam],
     ) -> IndexSet<String> {
-        impl_type_params
-            .iter()
-            .map(|p| p.name.clone())
-            .filter(|name| !self.is_known_type_name(name))
-            .collect()
+        impl_type_params.iter().map(|p| p.name.clone()).collect()
     }
 
     /// Get the struct name from a type ID, if it's a struct, generic instance, newtype, or flags.

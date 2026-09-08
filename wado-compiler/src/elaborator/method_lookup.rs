@@ -409,7 +409,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .impl_sig(impl_ref.0)
                 .expect("the decl pass records every impl block's declaration facts")
                 .instantiate(&self.tysys.type_table, concrete_type_args);
-            let declared = self.tysys.build_declared_type_params(&header.type_params);
+            let declared = TypeSystem::build_declared_type_params(&header.type_params);
             if let Some(result) = project(self, impl_ref, &impl_sig, &declared) {
                 return Some(result);
             }
