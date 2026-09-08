@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1788817575924,
+  "lastUpdate": 1788852228289,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -54089,6 +54089,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/93cf566522f9f3b08e87f34f11c4466729472308"
         },
         "date": 1788817574984,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 2013,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6560,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18971,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 288297,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "b02e60400002fddd303917bc7a0dbe99b6738772",
+          "message": "Merge pull request #2001 from wado-lang/claude/wcdo-cli-wado-directory-5d12el\n\nfix(cli): one implementation of directory expansion, shared by test, format and query",
+          "timestamp": "2026-09-08T16:08:18+09:00",
+          "tree_id": "22236447ec3b680882032bcf7b267f88d586ff73",
+          "url": "https://github.com/wado-lang/wado/commit/b02e60400002fddd303917bc7a0dbe99b6738772"
+        },
+        "date": 1788852227590,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
