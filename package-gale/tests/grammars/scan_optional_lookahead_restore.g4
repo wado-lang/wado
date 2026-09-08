@@ -1,6 +1,7 @@
-// Source: hand-written regression for the scan-side optional rewind and the
-// nullable-repeat walk (the SQLite `table_or_subquery` / `FROM f(1)` shape).
-// License: BSD-3-Clause (matches the rest of the gale test corpus).
+// A regression for the scan-side optional rewind and the nullable-repeat walk,
+// on the `table_or_subquery` / `FROM f(1)` shape in the `SQLite.g4` beside this
+// file: MIT, Copyright (c) 2014 by Bart Kiers,
+// https://github.com/bkiers/sqlite-parser. The rules below are written here.
 //
 // `item`'s alts share a rule ref and a '(' chain deeper than the static walk
 // can separate, so the decision lands on the longest-match tournament. On

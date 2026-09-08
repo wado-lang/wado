@@ -1,6 +1,3 @@
-// Source: Gale test fixture (Stage C context-dependent predicate on a rule arg)
-// License: same as the Gale package
-//
 // An alt-initial predicate reads a threaded rule argument (`$mode`), so the
 // caller's `e[1]` selects the predicated alternative.
 grammar WadoArgPred;

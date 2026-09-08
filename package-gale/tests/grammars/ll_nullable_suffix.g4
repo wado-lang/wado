@@ -1,6 +1,3 @@
-// Source: hand-written for Gale's LL prediction tests.
-// License: same as the Gale package.
-//
 // A tail-greedy Optional whose caller's next sibling is optional on the same
 // token: `a`'s `Y?` and alt 0's `b?` both want the `Y`. Both readings complete
 // — `(a X Y)` with `b?` empty, or `(a X)` then `(b Y)` — so the decision is an

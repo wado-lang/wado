@@ -1,6 +1,3 @@
-// Source: hand-written regression grammar for Gale's `+` first iteration.
-// License: same as the Gale package.
-//
 // A `+`'s mandatory first iteration is a required position, and what decides
 // it is prediction, not validation. Measured against the published jar:
 //

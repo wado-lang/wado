@@ -1,6 +1,3 @@
-// Source: Hand-authored for Gale's labeled-alternative accessor coverage.
-// License: BSD-3-Clause (matches the Gale repo).
-//
 // Minimal labeled-alternative grammar for the `<rule>_alt` accessor. `expr`
 // has two labeled alts with disjoint first tokens (INT vs '('), so a clean
 // parse stamps each `expr` node's alternative. An input like `()` drives the

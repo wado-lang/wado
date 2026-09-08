@@ -1,6 +1,3 @@
-// Source: hand-written regression grammar for Gale's rule-alternative order.
-// License: same as the Gale package.
-//
 // `r : A? | B ;` — the first alternative can match nothing, so it is viable
 // everywhere and its arm carries no lookahead test. Which alternative ANTLR4
 // takes on `b` depends on the caller's continuation, not on the rule:

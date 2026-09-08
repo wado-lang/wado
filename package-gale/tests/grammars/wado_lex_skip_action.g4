@@ -1,6 +1,3 @@
-// Source: Gale test fixture (Stage C lexer skip / set_channel actions)
-// License: same as the Gale package
-//
 // `language = Wado` lexer `{ ... }` actions that route the matched token away
 // from the parser: `lx.skip()` drops it, `lx.set_channel(1)` moves it to a
 // hidden channel. Both run at the tournament commit for the winning rule. The

@@ -1,6 +1,3 @@
-// Source: Gale test fixture (lexer alternation with a suffix)
-// License: same as the Gale package
-//
 // ANTLR4's lexer simulates the whole rule, so an alternation followed by a
 // suffix must take the arm that lets the WHOLE rule match, not the first arm
 // that matches on its own.

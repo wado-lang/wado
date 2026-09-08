@@ -1,6 +1,3 @@
-// Source: Hand-authored for Gale's lexer-command coverage.
-// License: BSD-3-Clause (matches the Gale repo).
-//
 // Covers three lexer-command gaps that no existing driver grammar
 // exercises end-to-end:
 //

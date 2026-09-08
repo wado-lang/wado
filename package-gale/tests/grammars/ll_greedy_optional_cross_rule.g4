@@ -1,6 +1,3 @@
-// Source: hand-written for Gale's LL prediction tests.
-// License: same as the Gale package.
-//
 // The same token opens a greedy optional in two rules at once: `('else'
 // block)?` ends `ifExpr`, and another `('else' block)?` ends the enclosing
 // `stmt`. ANTLR4's greedy subrule takes the innermost, so the `else` is the

@@ -1,6 +1,3 @@
-// Source: Gale test fixture (lexer alternation maximal munch)
-// License: same as the Gale package
-//
 // ANTLR4's lexer simulates the whole rule, so an alternation in tail position
 // yields the longest alternative. One with a suffix after it is decided by the
 // suffix instead: `K` must match `xyz` by taking the SHORT arm, since `xy`

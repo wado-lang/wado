@@ -1,6 +1,3 @@
-// Source: Gale test fixture (Stage C semantic predicates)
-// License: same as the Gale package
-//
 // A mid-alt semantic predicate `{cond}?` gates the parse: when false during a
 // real parse the rule fails. `ok` reads a token then a true predicate lets it
 // finish; `bad` uses a false predicate so the parse never completes.

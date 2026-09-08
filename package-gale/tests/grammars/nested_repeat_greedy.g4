@@ -1,6 +1,4 @@
-// Source: hand-written regression grammar for Gale's repeat-over-repeat
-// collapse.
-// License: same as the Gale package.
+// A regression for Gale's repeat-over-repeat collapse.
 //
 // A repeat over a repeat collapses to one repeat, and the collapse has one
 // greediness flag to carry two. The one that survives is the surviving loop's:

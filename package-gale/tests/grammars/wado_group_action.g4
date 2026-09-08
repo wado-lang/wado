@@ -1,6 +1,3 @@
-// Source: Gale test fixture (Stage C group-scoped actions / predicates)
-// License: same as the Gale package
-//
 // An action written in a group's alternative belongs to that alternative: it
 // runs when that alternative is taken, and once per iteration under a repeat.
 // A predicate at a group alternative's head selects the alternative the way one

@@ -1,5 +1,6 @@
-// Source: distilled from SQLite.g4's `expr : … | expr K_NOT? K_BETWEEN expr K_AND expr`.
-// License: same as the Gale package.
+// The shape of `expr : … | expr K_NOT? K_BETWEEN expr K_AND expr` in the
+// `SQLite.g4` beside this file: MIT, Copyright (c) 2014 by Bart Kiers,
+// https://github.com/bkiers/sqlite-parser. The rules below are written here.
 //
 // The LR-suffix twin of `lr_between.g4`: the `between` operand sits INSIDE a
 // left-recursive alternative, not in an atom alt. ANTLR4 rewrites a mid-alt

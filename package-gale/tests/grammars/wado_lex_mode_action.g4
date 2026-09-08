@@ -1,6 +1,3 @@
-// Source: Gale test fixture (Stage C lexer mode-op actions)
-// License: same as the Gale package
-//
 // `language = Wado` lexer `{ ... }` actions that switch lexer mode:
 // `lx.push_mode(MODE_INNER)` and `lx.pop_mode()`, plus the `$mode` attribute,
 // which reads the current mode and assigns a switch to it. Letters lex as `W`

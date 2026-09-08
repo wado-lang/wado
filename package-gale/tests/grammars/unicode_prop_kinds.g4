@@ -1,6 +1,3 @@
-// Source: Hand-authored for Gale's Unicode property coverage.
-// License: BSD-3-Clause (matches the Gale repo).
-//
 // The property surface beyond the general categories: a script, a block
 // (spelled with the `In` prefix ANTLR4 documents), a binary property, and an
 // enumerated `Property=Value` name.

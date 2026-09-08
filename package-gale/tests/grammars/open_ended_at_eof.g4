@@ -1,6 +1,3 @@
-// Source: hand-written regression grammar for an open-ended body at EOF.
-// License: same as the Gale package.
-//
 // `.` and `~X` admit every *token*, and EOF is not one, so an optional or
 // loop over such a body declines at EOF — on the parse side as on the scan
 // side, whose bounds check and wildcard EOF test both fail there.

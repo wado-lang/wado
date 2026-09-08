@@ -1,6 +1,3 @@
-// Source: Gale test fixture (Stage C: lexer action placement)
-// License: same as the Gale package
-//
 // A lexer action runs where it sits, not at the end of the match: each one
 // below sees only the text matched so far. Only the winning group alternative's
 // actions run — the losing arm is tried during matching but must stay silent.

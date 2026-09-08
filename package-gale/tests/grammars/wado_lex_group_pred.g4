@@ -1,6 +1,3 @@
-// Source: Gale test fixture (Stage C group-inlined lexer semantic predicate)
-// License: same as the Gale package
-//
 // A predicate lives inside a group (not at the rule's alt boundary): `KW`'s
 // single alt is a group whose first branch matches a letter run only when it
 // spells `cat`, whose second branch matches the literal `dog`. A false

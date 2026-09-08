@@ -1,6 +1,3 @@
-// Source: Gale test fixture (Stage C surface matrix)
-// License: same as the Gale package
-//
 // One grammar reaching as much of the action pipeline as a single grammar can,
 // driven by a test whose real assertion is that it compiles at all. Every
 // defect this fixture was added for reached the user the same way — generation

@@ -1,6 +1,3 @@
-// Source: hand-written for Gale's left-recursion tests.
-// License: same as the Gale package.
-//
 // A shape-lookahead optional (`( 'a'? 'b' )?`) inside a left-recursive SUFFIX
 // alternative. Which tokens may start the group depends on which nested
 // optionals fire, so a one-token first-set check ({'a','b'}) enters on the bare

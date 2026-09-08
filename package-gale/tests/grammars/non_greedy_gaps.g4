@@ -1,6 +1,3 @@
-// Source: Hand-authored for Gale's parser-level non-greedy coverage.
-// License: BSD-3-Clause (matches the Gale repo).
-//
 // Minimal grammar that exercises PARSER-level non-greedy operators. The
 // canonical fuzzy-parsing idiom from `vendor/antlr4/doc/wildcard.md`:
 //

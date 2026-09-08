@@ -1,6 +1,3 @@
-// Source: Gale test fixture (Stage C superClass action ops, language = Java)
-// License: same as the Gale package
-//
 // The real-world shape: a default (`language = Java`) lexer grammar whose
 // actions are nothing but `{this.m();}` base calls — TypeScriptLexer's
 // `ProcessOpenBrace`, ANTLRv4Lexer's `handleBeginArgument`. java2wado is carved

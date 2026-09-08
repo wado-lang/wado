@@ -1,6 +1,3 @@
-// Source: Gale test fixture (Stage C superClass action ops, lexer)
-// License: same as the Gale package
-//
 // A `superClass` base with **action** ops, not only predicates: `{ this.mark() }`
 // and `{ this.done() }` lower to unit-returning `SaBase` operations, alongside
 // the `{ this.enabled() }?` predicate op. Actions run through the winner replay,

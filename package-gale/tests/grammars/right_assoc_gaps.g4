@@ -1,6 +1,3 @@
-// Source: Hand-authored for Gale's right-associative-operator coverage.
-// License: BSD-3-Clause (matches the Gale repo).
-//
 // Minimal left-recursive grammar that uses the `<assoc=right>` rule-element
 // option on a single alternative (exponentiation `^`). ANTLR4 defaults to
 // left associativity; `<assoc=right>` flips a single alternative. The

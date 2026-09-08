@@ -1,6 +1,3 @@
-// Source: Gale test fixture (Stage C value channel)
-// License: same as the Gale package
-//
 // A `language = Wado` grammar whose rule declares a `returns` value channel.
 // One action writes `$v`, a later action reads it back through a template and
 // emits the result, exercising substitution ($v -> vals.v) end to end.

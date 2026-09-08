@@ -1,6 +1,3 @@
-// Source: Gale test fixture (catch-all reachability from a dispatch branch)
-// License: same as the Gale package
-//
 // The mode dispatch routes on the first character, and a catch-all (`C : .`)
 // is left out of every specific branch on the assumption that a rule reaching
 // that branch matches at least one char. That holds only for a rule whose

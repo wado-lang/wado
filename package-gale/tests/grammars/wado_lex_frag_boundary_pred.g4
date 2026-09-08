@@ -1,6 +1,3 @@
-// Source: Gale test fixture (Stage C boundary predicate on a single-alt fragment)
-// License: same as the Gale package
-//
 // A trailing predicate on a *single-alt* fragment inlined at its use site:
 // `KW` references `LETTERS`, whose one alt matches a letter run gated by
 // `{ $text == "cat" }?`. Unlike a multi-alt fragment (which goes through

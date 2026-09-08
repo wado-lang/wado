@@ -1,6 +1,3 @@
-// Source: Gale test fixture (Stage C surface matrix)
-// License: same as the Gale package
-//
 // Elements named after the locals a generated parse function binds. Each one
 // snake_cases onto a name the emitted body already reads — the handle `p`, the
 // value channel `vals`, the multi-alt dispatch's lookahead `kind`, the FOLLOW

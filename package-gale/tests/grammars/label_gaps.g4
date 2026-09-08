@@ -1,6 +1,3 @@
-// Source: Hand-authored for Gale's parser-label coverage.
-// License: BSD-3-Clause (matches the Gale repo).
-//
 // Minimal grammar that exercises scalar (single-valued) element labels at
 // parser level. The list form `items += ITEM` is covered by parser_gaps.g4
 // (A2); this fixture targets the distinct `name = TOK` and `name = rule`

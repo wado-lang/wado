@@ -1,6 +1,3 @@
-// Source: Gale test fixture (issue #1752 — an aliased rule keeps its action)
-// License: same as the Gale package
-//
 // `'kw'` is an alias for `K`, so `K`'s action must still run. The counter
 // makes that observable: the second `kw` retypes to `X`.
 grammar LitAliasAction;

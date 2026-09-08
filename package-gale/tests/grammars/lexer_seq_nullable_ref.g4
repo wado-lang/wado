@@ -1,6 +1,3 @@
-// Source: hand-written for Gale's lexer ATN tests.
-// License: same as the Gale package.
-//
 // `STR`'s loop arms overlap, so the rule routes to `latn_match` rather than a
 // static choice. One arm calls the same nullable fragment twice in a row, which
 // the ATN closure walks by entering `DASH`, reaching its stop through the `?`,

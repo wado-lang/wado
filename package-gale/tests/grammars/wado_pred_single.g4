@@ -1,6 +1,3 @@
-// Source: Gale test fixture (Stage C predicate-gated single-token prediction)
-// License: same as the Gale package
-//
 // The canonical `SemPredEvalParser/Simple` shape in Wado: every alternative is
 // a single token, so the compact single-token fast path would normally run no
 // actions or predicates. With actions present the rule must take the general

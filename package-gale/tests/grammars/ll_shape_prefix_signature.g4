@@ -1,6 +1,3 @@
-// Source: hand-written for Gale's LL prediction tests.
-// License: same as the Gale package.
-//
 // Two shapes of one optional whose signatures are in a prefix relation: the
 // longer shape truncates at the multi-token `m`, leaving `['=', '@']`, which
 // the shorter shape's `['=', '@', '#']` starts with.

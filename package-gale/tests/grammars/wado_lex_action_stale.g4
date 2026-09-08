@@ -1,6 +1,3 @@
-// Source: Gale test fixture (Stage C lexer-action best_act regression)
-// License: same as the Gale package
-//
 // Regression for a winner-replay bug: `SHORT` (an action rule) and `LONG` (no
 // action) share a first char, so both run in one dispatch group. On "ab",
 // `SHORT` matches "a" first (recording its replay index), then `LONG` matches

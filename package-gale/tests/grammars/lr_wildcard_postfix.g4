@@ -1,6 +1,3 @@
-// Source: hand-written for Gale's left-recursion tests.
-// License: same as the Gale package.
-//
 // A `.`-led LR suffix is a catch-all postfix: `e .` absorbs any single trailing
 // token. ANTLR4 rejects it, but the semantics is uniquely determined by
 // precedence climbing — `.` admits any token and sits at its declared

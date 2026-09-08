@@ -1,6 +1,3 @@
-// Source: hand-written regression grammar for Gale's overlap partition.
-// License: same as the Gale package.
-//
 // A wildcard admits every token, so no lookahead test separates any
 // alternative from it: all three share one branch and the scan lengths decide,
 // with the empty alternative ranked as epsilon — left out of that merge it is

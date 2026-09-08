@@ -1,5 +1,6 @@
-// Source: distilled from SQLite.g4's `expr … K_IN ( … | ( database_name '.' )? table_name )`.
-// License: same as the Gale package.
+// The shape of `expr … K_IN ( … | ( database_name '.' )? table_name )` in the
+// `SQLite.g4` beside this file: MIT, Copyright (c) 2014 by Bart Kiers,
+// https://github.com/bkiers/sqlite-parser. The rules below are written here.
 //
 // A two-token optional (`( d '.' )? t` where FIRST(d) == FIRST(t)) inside a
 // left-recursive alternative's suffix. Deciding it needs the second token, the

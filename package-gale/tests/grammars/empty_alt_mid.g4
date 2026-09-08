@@ -1,6 +1,3 @@
-// Source: hand-written regression grammar for Gale's empty alternative.
-// License: same as the Gale package.
-//
 // An empty alternative in a group is not a case the lookahead selects — it
 // has no first set at all. What admits it is what may FOLLOW the group, and
 // its alternative index is what ranks it against the alternatives that do

@@ -1,6 +1,4 @@
-// Source: hand-written Gale regression fixture for the fragment_entry option
-// (off-variant copy for the on/off identity test).
-// License: same terms as the Gale package (see package-gale/README.md).
+// The off-variant copy of `fragment_entry.g4`, for the on/off identity test.
 
 grammar FragmentEntryOff;
 

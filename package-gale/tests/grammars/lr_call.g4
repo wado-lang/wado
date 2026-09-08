@@ -1,6 +1,3 @@
-// Source: hand-written for Gale's left-recursion tests.
-// License: same as the Gale package.
-//
 // Postfix call alt (`e '(' (e (',' e)*)? ')'`) nests self-refs inside a
 // Group/Repeat in an LR suffix. Those args are PRIMARY references (prec 0):
 // `a(b(c))` keeps the inner call and `a(b+c)` admits a lower-precedence arg,

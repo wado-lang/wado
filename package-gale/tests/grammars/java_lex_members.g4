@@ -1,6 +1,3 @@
-// Source: Gale test fixture (Stage C @lexer::members under language = Java)
-// License: same as the Gale package
-//
 // A Java `@lexer::members` block. The field is written by an action — which runs
 // only for the rule that won the tournament — and read by a predicate, which is
 // evaluated for every candidate, losers included. `deep()` therefore has to take

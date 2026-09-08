@@ -1,6 +1,3 @@
-// Source: Hand-authored for Gale's rule-level caseInsensitive override.
-// License: BSD-3-Clause (matches the Gale repo).
-//
 // Grammar-level `caseInsensitive = true` enables CI matching for all
 // lexer rules. Individual rules can *opt out* via a rule-level option
 // `options { caseInsensitive = false; }`. This is the inverse of

@@ -1,6 +1,4 @@
-// Source: hand-written regression grammar for a nullable alternative in a
-// SimpleCst group.
-// License: same as the Gale package.
+// A regression for a nullable alternative in a SimpleCst group.
 //
 // `( x | y )` is one distinct rule call per alternative, so it lowers to the
 // SimpleCst shape. `x` is nullable through the rule it calls, so what selects

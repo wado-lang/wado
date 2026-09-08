@@ -1,6 +1,3 @@
-// Source: Gale test fixture (a label must not change a repeat's shape decisions)
-// License: same as the Gale package
-//
 // A Repeat supplies its own `List<>` typing, so lower peels both label forms off
 // the body op. Every decision taken from the surface element has to peel with
 // it, or a labelled repeat is analysed as though its body were not a group at

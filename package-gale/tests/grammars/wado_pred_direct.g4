@@ -1,6 +1,3 @@
-// Source: Gale test fixture (Stage C predicate on a token-led branch)
-// License: same as the Gale package
-//
 // The alternatives have distinct first tokens, so dispatch is token-led
 // (`Direct`), not a tournament. An alt-initial predicate must still guard its
 // branch (ANTLR's "predicate tested even when unambiguous"): a false predicate

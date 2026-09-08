@@ -1,6 +1,3 @@
-// Source: hand-written for Gale's LL prediction tests.
-// License: same as the Gale package.
-//
 // A greedy optional whose fixed-token prefix runs out at a RuleRef, competing
 // with a caller loop that opens on the same token. `seg : ID (SEP args)?` sits
 // inside `path : seg (SEP seg)*`, so SEP alone cannot decide: `a::b` belongs to

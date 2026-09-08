@@ -1,5 +1,4 @@
-// Source: hand-written, pinning how the tournament breaks an EOF tie.
-// License: BSD-3-Clause (matches the rest of the gale test corpus).
+// Pins how the tournament breaks an EOF tie.
 //
 // Both alternatives match the same single token. The scan counts `t`'s EOF
 // as one more token than the parse consumes, so `t` wins the tie — which is

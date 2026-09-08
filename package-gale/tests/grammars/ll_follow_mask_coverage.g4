@@ -1,6 +1,3 @@
-// Source: hand-written for Gale's LL prediction tests.
-// License: same as the Gale package.
-//
 // Both sides of the caller-FOLLOW yield gate in one grammar. `a`'s tail-greedy
 // `Y?` competes with the caller's continuation in each alternative; the mask
 // the caller threads decides who takes the `Y`.

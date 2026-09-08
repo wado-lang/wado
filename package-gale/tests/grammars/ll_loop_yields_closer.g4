@@ -1,6 +1,3 @@
-// Source: hand-written for Gale's LL prediction tests.
-// License: same as the Gale package.
-//
 // A tail-greedy loop on the very token its caller closes with. `name`'s
 // `(OR ID)*` sits inside `block : OR names? OR ID`, so the `|` after the first
 // name is the closer, not another iteration — but the loop sees the same token

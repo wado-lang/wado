@@ -1,6 +1,3 @@
-// Source: Gale test fixture (Stage C java2wado predicate gating)
-// License: same as the Gale package
-//
 // The `SemPredEvalParser/Simple` shape: two single-token alts gated by
 // context-independent member-field predicates, with actions that mutate the
 // member so the next decision flips. java2wado translates the predicates and

@@ -1,6 +1,3 @@
-// Source: Gale test fixture (Stage C lexer `$text` predicate)
-// License: same as the Gale package
-//
 // The `language = Wado` analog of ANTLR's `SemPredEvalLexer/EnumNotID`
 // (`ENUM : [a-z]+ { getText().equals("enum") }? ;`): a trailing lexer
 // predicate reads `$text` — the matched slice so far — so `ENUM` wins the

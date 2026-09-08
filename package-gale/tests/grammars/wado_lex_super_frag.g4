@@ -1,6 +1,3 @@
-// Source: Gale test fixture (superClass predicate reached through a fragment)
-// License: same as the Gale package
-//
 // The `{this.enabled()}?` predicate sits in a `fragment`, referenced by KW.
 // A non-recursive fragment is inlined into the referencing rule's match fn, so
 // `try_KW` evaluates `SlBase::enabled(...)` even though the call is textually in

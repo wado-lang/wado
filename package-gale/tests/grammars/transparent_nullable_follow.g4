@@ -1,6 +1,4 @@
-// Source: hand-written regression grammar for a nullable alternative behind a
-// transparent group.
-// License: same as the Gale package.
+// A regression for a nullable alternative behind a transparent group.
 //
 // `( ( A? | B ) )` wraps a group in a group of one alternative of one element,
 // which lowers to the Transparent shape and adds nothing between the inner

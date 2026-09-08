@@ -1,6 +1,3 @@
-// Source: Gale test fixture (Stage C predicate on a non-interchangeable group)
-// License: same as the Gale package
-//
 // The two alts share the prefix `A B` but differ in length (`A B C`), so they
 // do NOT tie — the longest-match tournament, not a grammar-order predicate
 // chain, must disambiguate. A predicate on one alt must not hijack the group

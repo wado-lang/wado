@@ -1,5 +1,4 @@
-// Source: Gale test fixture (Stage C @lexer::members predicate read)
-// License: same as the Gale package
+// Stage C: an `@lexer::members` field read from a predicate.
 grammar WadoLexMemberPred;
 
 options { language = Wado; }

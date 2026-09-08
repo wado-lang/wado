@@ -1,6 +1,3 @@
-// Source: hand-written regression grammar for Gale's open-ended alternative.
-// License: same as the Gale package.
-//
 // `r` is open-ended, but through a rule reference: its first set is empty for
 // the reason a surface `.`'s is, not because it matches nothing. Answering
 // that from the surface elements alone makes the parse and the scan partition

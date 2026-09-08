@@ -1,6 +1,3 @@
-// Source: Gale test fixture (Stage C lexer semantic predicates)
-// License: same as the Gale package
-//
 // A trailing lexer predicate gates whether a rule wins: `KW` matches a run of
 // letters only when exactly four were consumed (`pos - start == 4`, with the
 // match fn's `chars` / `start` / `pos` in scope). A four-letter word lexes as

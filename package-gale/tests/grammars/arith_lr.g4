@@ -1,6 +1,3 @@
-// Source: hand-written for Gale's resilient-parser left-recursion tests.
-// License: same as the Gale package.
-//
 // Direct left recursion with precedence: `*` binds tighter than `+`. ANTLR4 /
 // Gale rewrite this into a precedence-climbing parser.
 grammar ArithLR;

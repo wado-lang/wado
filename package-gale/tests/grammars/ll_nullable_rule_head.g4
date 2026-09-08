@@ -1,6 +1,3 @@
-// Source: hand-written for Gale's LL prediction tests.
-// License: same as the Gale package.
-//
 // An alternative that starts with a rule reference whose whole body is
 // optional. `FIRST(member)` must reach past nullable `mods` to `'fn'`, or the
 // `member*` loop never enters on a bare `fn`.
