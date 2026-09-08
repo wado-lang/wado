@@ -3681,7 +3681,7 @@ fn lower_simple_cst_alt_call(elem: &Element, counts: &mut List<[String, i32]>) -
 /// with a gateable alt-initial predicate is selected by the predicate instead,
 /// and keeps the unconditional branch the gate hangs on.
 fn alt_earns_group_follow(alt: &Alternative, ctx: &mut GenContext) -> bool {
-    if ctx.emit_actions() && alt_has_gate(alt, ctx) {
+    if alt_has_gate(alt, ctx) {
         return false;
     }
     return alt_class_is_nullable(&alt_class_of(alt, ctx));

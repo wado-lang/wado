@@ -751,6 +751,9 @@ pub fn emit_atn_disabled_seed(
 /// inline guard) is what this refuses to make possible. Ask `alt_has_gate` for
 /// the question alone.
 pub fn alt_initial_gate_conditions(alt: &Alternative, ctx: &mut GenContext) -> List<String> {
+    if !ctx.emit_actions() {
+        return [];
+    }
     let mut conds: List<String> = [];
     for let a of &alt.actions {
         if let Some(c) = gate_condition_for(a, ctx) {
@@ -761,10 +764,17 @@ pub fn alt_initial_gate_conditions(alt: &Alternative, ctx: &mut GenContext) -> L
     return conds;
 }
 
-/// Whether `alt` carries a gateable alt-initial predicate, without registering
-/// anything — for a caller deciding how to shape a dispatch, not emitting one.
+/// Whether `alt` carries an alt-initial predicate that will reach its emitted
+/// arm, without registering anything — for a caller deciding how to shape a
+/// dispatch, not emitting one.
+///
+/// "Will reach" is half the question and lives here rather than at each caller.
+/// With actions retained but not emitted the condition renders nothing, so the
+/// arm is unconditional and everything behind it dead; a caller that asked only
+/// whether the IR carries a predicate would gate on a condition that is never
+/// written.
 pub fn alt_has_gate(alt: &Alternative, ctx: &GenContext) -> bool {
-    return alt.actions.iter_ref().any(|a| is_gateable_alt_initial_predicate(a, ctx));
+    return ctx.emit_actions() && alt.actions.iter_ref().any(|a| is_gateable_alt_initial_predicate(a, ctx));
 }
 
 /// Whether any alt in an `Ambiguous` overlap group carries a gateable

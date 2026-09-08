@@ -2388,6 +2388,24 @@ fn gen_scan_gate_check(w: &mut CodeWriter, gate_cond: &String, fail_stmt: &Strin
 /// simulation working. A scan the parse launches starts from where the parse
 /// actually is, so nothing a previous scan left behind survives to be read —
 /// which is why a tournament seeds per candidate and not once.
+global PARSER_POS: String = "p.pos";
+
+/// Enter an inlined scan from parse context: the parser's gate, the parser's
+/// tokens, and where the walk starts. The whole prologue, not three lines a
+/// site repeats.
+fn gen_scan_entry(w: &mut CodeWriter, ctx: &GenContext, at: &String = &PARSER_POS) {
+    gen_scan_gate_seed(w, ctx);
+    w.line(&"let tokens = &p.kinds;");
+    w.line(&`let mut pos: i32 = ${*at};`);
+}
+
+/// Put the parser's gate into `SCAN_GATE`. A scan reads it as it walks, so one
+/// the parse starts without this reads whatever the previous scan left behind.
+///
+/// Every scan the parse starts passes through here, in one of two shapes: an
+/// inlined body through `gen_scan_entry`, or the LR suffix call, which hands the
+/// generated scan its tokens and position as arguments instead of locals and so
+/// has no prologue to share.
 fn gen_scan_gate_seed(w: &mut CodeWriter, ctx: &GenContext) {
     if !ctx.emit_scan_gate() {
         return;
@@ -3147,7 +3165,7 @@ fn gen_multi_alt_body(
         // Asked once and read by the arm loop: a Java predicate resolves
         // through `ctx.alt_bindings()`, which `gen_alt_elements` overwrites per
         // arm, so asking twice can order an arm as gated that renders nothing.
-        all_gate_conds.push(if ctx.emit_actions() { alt_initial_gate_conditions(alt, ctx) } else { [] });
+        all_gate_conds.push(alt_initial_gate_conditions(alt, ctx));
         untestable.push(no_cond && selected_by_nothing && all_gate_conds[i].is_empty());
     }
 
@@ -3902,6 +3920,9 @@ fn emit_lr_branch(
     w.begin(&`if ${lr.own_prec} >= min_prec`);
     // The guard that selected this branch already ran the scan.
     let scan_call = if scan_local.is_empty() {
+        // The other shape of a scan entry: the generated scan takes the tokens
+        // and the position as arguments, so only the gate is left to hand it.
+        gen_scan_gate_seed(w, ctx);
         `${*scan_fn}_lr_${lr.alt_index}(&p.kinds, p.pos${follow_sep(ctx.current_rule_reads_follow())})`;
     } else {
         *scan_local;
@@ -4059,9 +4080,7 @@ fn gen_viability_probe(
 ) {
     let label = dedup_name(label_base, nc);
     w.begin(&`${label}:`);
-    gen_scan_gate_seed(w, ctx);
-    w.line(&"let tokens = &p.kinds;");
-    w.line(&"let mut pos: i32 = p.pos;");
+    gen_scan_entry(w, ctx);
     let fail = `break ${label};`;
     if let Some(body) = prefix_scan {
         gen_scan_op_element(w, &body, ctx, &fail);
@@ -4272,9 +4291,7 @@ fn gen_shape_entry_conditions(
         let label = dedup_name(&"shape_scan", name_counts);
         w.line(&`let mut ${pos_var}: i32 = -1;`);
         w.begin(&`${label}:`);
-        gen_scan_gate_seed(w, ctx);
-        w.line(&"let tokens = &p.kinds;");
-        w.line(&"let mut pos: i32 = p.pos;");
+        gen_scan_entry(w, ctx);
         let fail = `break ${label};`;
         for let scan_elem of &entry.scan_body.elements {
             gen_scan_op_element(w, scan_elem, ctx, &fail);
@@ -4500,9 +4517,7 @@ fn gen_op_opt_scan_guard_for_group(
     let scan_label = dedup_name(&"opt_scan", name_counts);
     w.line(&`let mut ${scan_pos_var}: i32 = -1;`);
     w.begin(&`${scan_label}:`);
-    gen_scan_gate_seed(w, ctx);
-    w.line(&"let tokens = &p.kinds;");
-    w.line(&"let mut pos: i32 = p.pos;");
+    gen_scan_entry(w, ctx);
     let scan_group = &g_op.scan_group;
     if scan_group.alts.len() == 1 {
         let body = &scan_group.alts[0];
@@ -4825,17 +4840,10 @@ fn prequel_expected_names(rule_name: &String, at_entry: bool, ctx: &mut GenConte
 
 /// Whether any branch carries an alt-initial predicate the dispatch gates on.
 /// Only a lone alternative has a branch of its own to hang one on
-/// (`group_gate`); off with action execution, so an inert grammar stays
-/// byte-identical.
-fn any_alt_gated(branches: &List<DecisionBranch>, ctx: &GenContext) -> bool {
-    return ctx.emit_actions() && branches.iter_ref().any(|b: &DecisionBranch| !b.gate.is_empty());
-}
-
-/// Whether an alternative's predicate actually reaches its emitted arm. With
-/// actions retained but not emitted it renders nothing, so the arm is
-/// unconditional and everything behind it dead — `alt_has_gate` alone misses that.
-fn alt_gates_branch(alt: &Alternative, ctx: &GenContext) -> bool {
-    return ctx.emit_actions() && alt_has_gate(alt, ctx);
+/// (`group_gate`). A branch's gate is already empty where actions do not
+/// execute, so an inert grammar stays byte-identical without asking again.
+fn any_alt_gated(branches: &List<DecisionBranch>) -> bool {
+    return branches.iter_ref().any(|b: &DecisionBranch| !b.gate.is_empty());
 }
 
 /// The alternatives of a repeat's group body, or `null` when the body is not a
@@ -4881,7 +4889,7 @@ fn group_admits(inner: &Element, ctx: &mut GenContext) -> Option<GroupAdmits> {
     }
     return Option::Some(GroupAdmits {
         condition: parts.join(" || "),
-        gated: any_alt_gated(&branches, ctx),
+        gated: any_alt_gated(&branches),
         expected: classes_union(&classes),
     });
 }
@@ -6322,9 +6330,25 @@ fn gen_iteration_duties(
     ctx: &mut GenContext,
     nc: &mut List<[String, i32]>,
 ) {
+    if duties.is_empty() {
+        return;
+    }
+    // The exemption is the entry's, not a duty's, so it wraps the whole
+    // discharge. Applied per duty it can reach one and miss another, and a
+    // decline that fires on a `+`'s mandatory iteration emits a `+` matching
+    // zero times.
+    let exempt_first = if let UnlessFirst(flag) = refusable {
+        w.begin(&`if !${*flag}`);
+        true;
+    } else {
+        false;
+    };
     gen_rep_decline_stranded(w, duties, body_admits, at, ctx, nc);
     if !reserve_in_guard {
-        gen_rep_reserve_at(w, duties, body_admits, at, refusable, ctx, nc);
+        gen_rep_reserve_at(w, duties, body_admits, at, ctx, nc);
+    }
+    if exempt_first {
+        w.end();
     }
 }
 
@@ -6334,7 +6358,6 @@ fn gen_rep_reserve_at(
     duties: &IterationDuties,
     body_admits: &List<String>,
     at: &String,
-    refusable: &Refusable,
     ctx: &mut GenContext,
     nc: &mut List<[String, i32]>,
 ) {
@@ -6348,9 +6371,7 @@ fn gen_rep_reserve_at(
     w.begin(&`if ${*at} >= 0`);
     w.line(&`let mut ${ok} = false;`);
     w.begin(&`${label}:`);
-    gen_scan_gate_seed(w, ctx);
-    w.line(&"let tokens = &p.kinds;");
-    w.line(&`let mut pos: i32 = ${*at};`);
+    gen_scan_entry(w, ctx, at);
     for let se of &duties.reserve_scan {
         gen_scan_op_element(w, se, ctx, &`break ${label};`);
     }
@@ -6358,11 +6379,7 @@ fn gen_rep_reserve_at(
     w.end();
     let kind = dedup_name(&"rep_reserve_kind", nc);
     let starved = reserve_starved_cond(w, &ok, &kind, &"p.kinds", at, body_admits, ctx);
-    let guard = match refusable {
-        Always => starved,
-        UnlessFirst(flag) => `!${*flag} && (${starved})`,
-    };
-    w.line(&`if ${guard} \{ break; \}`);
+    w.line(&`if ${starved} \{ break; \}`);
     w.end();
 }
 
@@ -6721,9 +6738,7 @@ fn gen_scan_guard_with_prefix(
     let scan_label = dedup_name(label_prefix, name_counts);
     w.line(&`let mut ${scan_pos_var}: i32 = -1;`);
     w.begin(&`${scan_label}:`);
-    gen_scan_gate_seed(w, ctx);
-    w.line(&"let tokens = &p.kinds;");
-    w.line(&"let mut pos: i32 = p.pos;");
+    gen_scan_entry(w, ctx);
     let fail = `break ${scan_label};`;
     gen_scan_op_element(w, scan_inner, ctx, &fail);
     if require_advance {
@@ -7070,9 +7085,7 @@ fn gen_scan_alt_end(
 ) {
     let scan_label = dedup_name(&"gd_scan", name_counts);
     w.begin(&`${scan_label}:`);
-    gen_scan_gate_seed(w, ctx);
-    w.line(&"let tokens = &p.kinds;");
-    w.line(&"let mut pos: i32 = p.pos;");
+    gen_scan_entry(w, ctx);
     gen_scan_op_elements_in_block(
         w,
         &sb.elements,
@@ -7253,7 +7266,7 @@ fn gen_group_dispatch(
     // also what decides whether the last branch may drop its condition and
     // become the `else` — so the nullable arm below reads it rather than
     // clearing it, or the two both claim that `else`.
-    let must_answer = !ends_in_fallback && (any_alt_gated(branches, ctx) || entry matches { Required });
+    let must_answer = !ends_in_fallback && (any_alt_gated(branches) || entry matches { Required });
     // A nullable alternative matches empty, so it takes a lookahead no branch
     // tests for and there is nothing to report. `apply_empty_alt_admits`
     // answers this by name where the group's FOLLOW is exact; where it is not,
@@ -8112,7 +8125,7 @@ fn gen_multi_alt_body_alt(
     let mut admits: List<Admits> = [];
     let mut untestable: List<bool> = [];
     for let group of groups {
-        let ungated = group.len() != 1 || !alt_gates_branch(&rule.alternatives[non_lr_indices[group[0]]], ctx);
+        let ungated = group.len() != 1 || !alt_has_gate(&rule.alternatives[non_lr_indices[group[0]]], ctx);
         admits.push(group_branch_admits(group, &classes));
         untestable.push(admits_is_untestable(&admits[admits.len() - 1]) && ungated);
     }

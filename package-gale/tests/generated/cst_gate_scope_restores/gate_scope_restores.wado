@@ -2055,6 +2055,7 @@ fn _parse_expr__inner(p: &mut Parser, min_prec: i32 = 0) -> () {
         let _sk = p.peek_kind();
         if _sk == TK_OR {
             if 1 >= min_prec {
+                SCAN_GATE.no_brace = p.no_brace;
                 if scan_expr_lr_0(&p.kinds, p.pos) < 0 {
                     break;
                 }
