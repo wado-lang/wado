@@ -31,7 +31,7 @@ use {
     lexer_mode_attr_use,
 } from "./lexer_gen.wado";
 use { gen_parser, grammar_has_at_end_conflict } from "./parser_gen.wado";
-use { collect_members } from "./action_gen.wado";
+use { collect_members, translate_gate_bodies } from "./action_gen.wado";
 use { gen_kind_set_helpers, gen_follow_mask_globals, gen_sync_set_globals } from "./kind_set_gen.wado";
 use { gen_node_kinds, gen_alt_enums, gen_string_tree_helper } from "./cst_gen.wado";
 use {
@@ -183,8 +183,11 @@ pub fn install_action_context(grammar: &mut Grammar, ctx: &mut GenContext) -> [M
     ctx.set_action_members(member_names(&parser_members));
     // After the members, never before: which fields a scan can simulate is the
     // action bodies' answer narrowed by what the block actually declares, and
-    // only one of those is known here.
-    ctx.set_scan_gate_fields(scan_gate_fields(grammar));
+    // only one of those is known here. The bodies are the translator's, so both
+    // action languages name a member the one way the generated struct does.
+    let gate_bodies = translate_gate_bodies(grammar, ctx);
+    ctx.set_scan_gate_fields(scan_gate_fields(grammar, &gate_bodies));
+    ctx.set_gate_bodies(gate_bodies);
     return [lexer_members, parser_members];
 }
 

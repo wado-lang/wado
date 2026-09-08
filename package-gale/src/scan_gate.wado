@@ -7,40 +7,65 @@
 //! walk can be simulated: `field = <int literal>`, and the `locals` + `@init` /
 //! `@after` pair that scopes one. Anything else leaves the gate unsimulated, as
 //! it was before this existed.
+//!
+//! Every body here is the translator's, never the grammar text. Java and Wado
+//! spell a member write differently and identically once translated, so one
+//! recogniser answers for both and the member is already named the way the
+//! generated struct names it.
 
 use { Element, Grammar, ParserRule } from "./ir.wado";
-use { to_snake_case } from "./ident.wado";
+use { PARSER_HANDLE, VALS_LOCAL, to_snake_case } from "./ident.wado";
+use { TreeMap } from "core:collections";
 use { rule_is_left_recursive } from "./action_translate.wado";
 
 /// The generated global the scan mutates, and its struct type.
 pub global SCAN_GATE_HANDLE: String = "SCAN_GATE";
 pub global SCAN_GATE_TYPE: String = "ScanGate";
 
-/// `field = <int literal>`, with an optional trailing `;` and any surrounding
-/// whitespace — the whole body, not a prefix of it. Returns the snake_cased
-/// field and the value.
+/// `<parser handle>.<member> = <int literal>`, with an optional trailing `;` and
+/// any surrounding whitespace — the whole body, not a prefix of it. Returns the
+/// member and the value.
 ///
-/// A Wado body qualifies the member with the parser handle (`p.noBrace = 1`)
-/// where a Java one names it bare, so no `language = Wado` grammar has a
-/// simulable gate today — see "Wado-language gates" in `TODO.md`.
+/// Takes the body as the translator renders it, never the grammar text. Java
+/// writes `{noBrace = 1;}` and Wado `{p.noBrace = 1}`, and both arrive here as
+/// `p.<declared member> = 1`, so one recogniser answers for both and the member
+/// is already named the way the generated struct names it.
 pub fn gate_assignment(text: &String) -> Option<[String, i32]> {
     let stmts = statements(text);
     if stmts.len() != 1 {
         return null;
     }
-    let [name, rhs] = match one_assignment(&stmts[0]) {
+    let [target, rhs] = match one_assignment(&stmts[0]) {
         Some(pair) => pair,
         None => {
             return null;
         },
     };
-    if !is_plain_ident(&name) {
+    let Some(field) = parser_member(&target) else {
         return null;
-    }
+    };
     return match i32::from_str_radix(&rhs, 10) {
-        Ok(value) => Option::Some([to_snake_case(&name), value]),
+        Ok(value) => Option::Some([field, value]),
         Err(_) => null,
     };
+}
+
+/// The member named by `<parser handle>.<ident>`, or `null` for anything else.
+///
+/// A translated body reaches a member through the handle and nothing else, so
+/// this is what tells a member write from a subscript, a call, or a local.
+fn parser_member(target: &String) -> Option<String> {
+    let Some(name) = target.strip_prefix(`${PARSER_HANDLE}.`) else {
+        return null;
+    };
+    let field = name.trim();
+    if field.is_empty() {
+        return null;
+    }
+    if field.find_char(|c| !(c == '_' || c.is_ascii_alphanumeric())) matches { Some(_) } {
+        return null;
+    }
+    return Option::Some(field);
 }
 
 /// `lhs = rhs` with both sides trimmed, or `null` when the text is not one
@@ -61,6 +86,25 @@ fn one_assignment(text: &String) -> Option<[String, String]> {
     return Option::Some([name, value]);
 }
 
+/// A parse-side condition rendered for the scan: every simulated member read
+/// re-pointed at `SCAN_GATE`.
+///
+/// A Java body reaches a member through a bare name, so the translator renders
+/// it against whichever handle it is given and this finds nothing left to do. A
+/// Wado body writes the handle itself, so re-pointing it is the same step taken
+/// after the fact. Only the simulated members are moved — anything else naming
+/// the parser stays put for `reads_only_scan_gate_fields` to refuse, which is
+/// the safe direction.
+///
+/// Longest field first, for the prefix reason below.
+pub fn scan_gate_condition(code: &String, fields: &List<String>) -> String {
+    let mut out = *code;
+    for let f of fields.sorted_by(|a: &String, b: &String| b.len().cmp(&a.len())) {
+        out = out.replace(`${PARSER_HANDLE}.${f}`, `${SCAN_GATE_HANDLE}.${f}`);
+    }
+    return out;
+}
+
 /// Whether a rendered predicate reads nothing but simulated gate fields.
 ///
 /// Take the simulated reads out and see what is left. What a condition may keep
@@ -79,16 +123,6 @@ pub fn reads_only_scan_gate_fields(code: &String, fields: &List<String>) -> bool
         rest = rest.replace(`${SCAN_GATE_HANDLE}.${f}`, "");
     }
     return rest.find_char(|c| c == '_' || c.is_ascii_alphabetic()) matches { None };
-}
-
-/// Whether the assigned name is a bare identifier. A receiver (`this.f`) or a
-/// subscript is a write a scan cannot claim to run, and both differ from a
-/// field name only by a character the name may not hold.
-fn is_plain_ident(name: &String) -> bool {
-    if name.is_empty() {
-        return false;
-    }
-    return name.find_char(|c| !(c == '_' || c.is_ascii_alphanumeric())) matches { None };
 }
 
 /// A rule that sets a gate field for its own extent and puts it back after.
@@ -112,30 +146,46 @@ pub struct GateScope {
 /// scan cannot run. Answered here rather than at the emit that would have
 /// wrapped it: the field is unsimulable everywhere, not only in this rule, and
 /// only the set knows that in time.
-pub fn runnable_gate_scope(rule: &ParserRule) -> Option<GateScope> {
+pub fn runnable_gate_scope(rule: &ParserRule, bodies: &TreeMap<i32, String>) -> Option<GateScope> {
     if rule_is_left_recursive(rule) {
         return null;
     }
-    return gate_scope(rule);
+    return gate_scope(rule, bodies);
 }
 
-/// The gate scope `rule` opens, or `null`.
-pub fn gate_scope(rule: &ParserRule) -> Option<GateScope> {
+/// The body for `action_id`, or `""` where the translator refused it. A body it
+/// cannot render is one the scan has no standing to run, so the empty string
+/// reaches the same refusal.
+pub fn gate_body_of(bodies: &TreeMap<i32, String>, action_id: i32) -> String {
+    return match bodies.get(action_id) {
+        Some(text) => text,
+        None => String::new(),
+    };
+}
+
+/// The gate scope `rule` opens, or `null`. Reads the translated `@init` /
+/// `@after`, as `gate_assignment` does.
+pub fn gate_scope(rule: &ParserRule, bodies: &TreeMap<i32, String>) -> Option<GateScope> {
     let init = match &rule.init_action {
-        Some(a) => a.text,
+        Some(a) => gate_body_of(bodies, a.action_id),
         None => {
             return null;
         },
     };
     let after = match &rule.after_action {
-        Some(a) => a.text,
+        Some(a) => gate_body_of(bodies, a.action_id),
         None => {
             return null;
         },
     };
+    return gate_scope_of(&init, &after);
+}
+
+/// The scope a translated `@init` / `@after` pair opens, or `null`.
+pub fn gate_scope_of(init: &String, after: &String) -> Option<GateScope> {
     // `<field> = $L`, and the whole of `@after`: a body that does anything else
     // does more than a scan can put back.
-    let restores = statements(&after);
+    let restores = statements(after);
     if restores.len() != 1 {
         return null;
     }
@@ -145,10 +195,12 @@ pub fn gate_scope(rule: &ParserRule) -> Option<GateScope> {
             return null;
         },
     };
-    if !local.starts_with("$") {
+    // `$L` after translation: the rule's own value channel. The parse restores
+    // from it and the scan from a local of its own, which is the same shape.
+    if !local.starts_with(`${VALS_LOCAL}.`) {
         return null;
     }
-    let stmts = statements(&init);
+    let stmts = statements(init);
     if stmts.len() != 2 {
         return null;
     }
@@ -162,12 +214,11 @@ pub fn gate_scope(rule: &ParserRule) -> Option<GateScope> {
     if saved_into != local || saved_from != restored {
         return null;
     }
+    let Some(scoped) = parser_member(&restored) else {
+        return null;
+    };
     return match gate_assignment(&stmts[1]) {
-        Some(w) => if w.0 == to_snake_case(&restored) {
-            Option::Some(GateScope { field: w.0, value: w.1 });
-        } else {
-            null;
-        },
+        Some(w) => if w.0 == scoped { Option::Some(GateScope { field: w.0, value: w.1 }) } else { null },
         None => null,
     };
 }
@@ -199,11 +250,11 @@ fn statements(text: &String) -> List<String> {
 /// "Every body" is the whole grammar: a rule's `@init` / `@after` reach a gate
 /// field as much as an alternative's action does, and a group's alternatives
 /// carry actions the parse runs where lowering puts no gate on the scan.
-pub fn scan_gate_fields(grammar: &Grammar) -> List<String> {
+pub fn scan_gate_fields(grammar: &Grammar, bodies: &TreeMap<i32, String>) -> List<String> {
     let mut simulable: List<String> = [];
     let mut refused = Refusals {};
     for let rule of &grammar.parser_rules {
-        if runnable_gate_scope(rule) matches { None } {
+        if runnable_gate_scope(rule, bodies) matches { None } {
             for let text of rule_prequel_bodies(rule) {
                 refused.refuse(&text);
             }
@@ -213,7 +264,8 @@ pub fn scan_gate_fields(grammar: &Grammar) -> List<String> {
                 if a.kind matches { Predicate } {
                     continue;
                 }
-                match gate_assignment(&a.source.text) {
+                let body = gate_body_of(bodies, a.source.action_id);
+                match gate_assignment(&body) {
                     Some(hit) => {
                         if !simulable.contains(&hit.0) {
                             simulable.push(hit.0);
@@ -306,12 +358,16 @@ fn rule_prequel_bodies(rule: &ParserRule) -> List<String> {
     return out;
 }
 
-/// Every name a body mentions, snake_cased — the disqualifying set.
+/// Every name a body mentions, in both spellings — the disqualifying set.
 ///
 /// Mentions, not writes. Which names a body writes is a question about the host
 /// language's syntax, and any answer that enumerates write shapes has one it
 /// does not know (`if (c) f = 0;`, `f++`). Over-rejecting leaves a gate
 /// unsimulated; under-rejecting is a scan reading a value the parse never holds.
+///
+/// This reads the grammar text, which is where an untranslatable body still says
+/// what it touches. A member is declared as written in Wado and snake_cased in
+/// Java, so a name is refused under both and the safe direction is taken.
 fn mentioned_names(text: &String) -> List<String> {
     let mut out: List<String> = [];
     let mut start = -1;
@@ -320,12 +376,20 @@ fn mentioned_names(text: &String) -> List<String> {
         if in_name && start < 0 {
             start = index;
         } else if !in_name && start >= 0 {
-            out.push(to_snake_case(&text.substr_bytes(start, index)));
+            push_both_spellings(&mut out, &text.substr_bytes(start, index));
             start = -1;
         }
     }
     if start >= 0 {
-        out.push(to_snake_case(&text.substr_bytes(start, text.len())));
+        push_both_spellings(&mut out, &text.substr_bytes(start, text.len()));
     }
     return out;
+}
+
+fn push_both_spellings(out: &mut List<String>, name: &String) {
+    out.push(*name);
+    let snake = to_snake_case(name);
+    if snake != *name {
+        out.push(snake);
+    }
 }

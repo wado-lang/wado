@@ -6,6 +6,7 @@ use { Admits, Diagnostic, DiagnosticKind, DiagnosticOwner, admits_or_everything 
 use { AltBinding } from "./attr_resolve.wado";
 use { MemberNames } from "./java2wado/jmembers.wado";
 use { TokenKinds, append_ids } from "./token_kinds.wado";
+use { gate_body_of } from "./scan_gate.wado";
 use { FOLLOW_MAX_DEPTH } from "./runtime/follow.wado";
 use { TreeMap } from "core:collections";
 
@@ -225,6 +226,12 @@ pub struct GenContext {
     /// The members fields a scan simulates: assigned only integer literals, so
     /// a walk can run their actions without a parser. See `scan_gate.wado`.
     scan_gate_fields: List<String>,
+    /// Each gate-relevant action body as the translator renders it, by
+    /// `ActionSource::action_id`. Java and Wado spell a member write
+    /// differently in the grammar and identically after translation, so this is
+    /// the one form the gate analysis reads. Reading the grammar text instead
+    /// meant predicting what the translator would name the member.
+    gate_bodies: TreeMap<i32, String>,
     /// The lexer's `superClass` base effect-interface name, or `""` when none.
     /// See `action.md`, "SuperClass — an effect interface".
     superclass_name: String,
@@ -286,6 +293,7 @@ impl GenContext {
             scan_cyclic,
             lit_tokens: *lit_tokens,
             rule_index,
+            gate_bodies: TreeMap::<i32, String>::new(),
             token_kinds: TokenKinds::empty(),
             kind_rank: [],
             first_cache: none_int_list_cache(rule_count),
@@ -717,6 +725,22 @@ impl GenContext {
 
     pub fn scan_gate_fields(&self) -> &List<String> with stores[self] {
         return &self.scan_gate_fields;
+    }
+
+    /// Call before `set_scan_gate_fields`: which fields are simulable is read
+    /// off these bodies.
+    pub fn set_gate_bodies(&mut self, bodies: TreeMap<i32, String>) {
+        self.gate_bodies = bodies;
+    }
+
+    pub fn gate_bodies(&self) -> &TreeMap<i32, String> with stores[self] {
+        return &self.gate_bodies;
+    }
+
+    /// The translated body for `action_id`, or `""` where the translator
+    /// refused it.
+    pub fn gate_body(&self, action_id: i32) -> String {
+        return gate_body_of(&self.gate_bodies, action_id);
     }
 
     /// Whether the generated parser carries the `SCAN_GATE` global at all. Off

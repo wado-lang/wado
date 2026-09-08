@@ -1,22 +1,31 @@
-use { gate_assignment, gate_scope, reads_only_scan_gate_fields, scan_gate_fields } from "./scan_gate.wado";
-use {
-    ActionKind,
-    ActionSource,
-    AltAction,
-    Alternative,
-    Element,
-    Grammar,
-    GrammarKind,
-    GroupElement,
-    ParserRule,
-    RuleRefElement,
-    TokenRefElement,
-    Visibility,
-} from "./ir.wado";
+use { gate_assignment, gate_scope_of, reads_only_scan_gate_fields, scan_gate_fields } from "./scan_gate.wado";
+use { Grammar } from "./ir.wado";
 use { parse } from "./g4/parser.wado";
-use { generate, GenerateOptions } from "./codegen.wado";
+use {
+    analysis_context,
+    canonicalize_for_analysis,
+    generate,
+    GenerateOptions,
+    install_action_context,
+} from "./codegen.wado";
+use { collect_literal_tokens } from "./lexer_gen.wado";
 
 global GEN_OPTS: GenerateOptions = GenerateOptions {};
+
+/// The simulable field set, through the path `generate` takes: stamp the action
+/// ids, then let `install_action_context` translate the bodies and narrow them
+/// to what the members block declares.
+///
+/// Asking `scan_gate_fields` directly would hand it no translated bodies, and
+/// every rejection case below would then pass for the wrong reason.
+fn gate_fields(g: &Grammar) -> List<String> {
+    let mut grammar = *g;
+    let token_kinds = canonicalize_for_analysis(&mut grammar);
+    let lit_tokens = collect_literal_tokens(&grammar.parser_rules);
+    let mut ctx = analysis_context(&mut grammar, &lit_tokens, token_kinds);
+    install_action_context(&mut grammar, &mut ctx);
+    return *ctx.scan_gate_fields();
+}
 
 fn gen_source(src: &String) -> String {
     let mut g = parse(*src).unwrap();
@@ -27,23 +36,31 @@ fn gen_source(src: &String) -> String {
 // and either can come back empty on its own. A block the translator refuses
 // declares nothing, so the fields its actions name have no type to copy — the
 // gate has to go unsimulated, which is warn-and-degrade, not a dead emit.
-test "a members block the translator refuses leaves the gate unsimulated" {
-    let src = &"grammar C;
-options { language = Java; }
-@parser::members {
-    java.util.Map<String, Integer> seen = new java.util.HashMap<>();
-    int n = 0;
-}
-r : A { n = 1; } A ;
+fn members_grammar(members: &String) -> String {
+    return `grammar C;
+options \{ language = Java; \}
+@parser::members \{
+${*members}
+\}
+r : A \{ n = 1; \} A ;
 A : 'a' ;
-";
-    // The action side names the field, so what removes it is the members side
-    // and nothing else. Without this the assertion below would hold for a
-    // grammar that simulates nothing to begin with.
-    let mut g = parse(*src).unwrap();
-    assert scan_gate_fields(&g) == ["n"], `the action must name a gate candidate: ${scan_gate_fields(&g):?}`;
-    let out = generate(&mut g, &GEN_OPTS).source;
+`;
+}
+
+test "a members block the translator refuses leaves the gate unsimulated" {
+    let out = gen_source(&members_grammar(
+        &"    java.util.Map<String, Integer> seen = new java.util.HashMap<>();\n    int n = 0;",
+    ));
     assert !out.contains("struct ScanGate"), `a field no member declares must not reach the scan gate: ${out}`;
+}
+
+// The rejection case for the one above: the same grammar and the same action,
+// with a members block the translator accepts. Without it that assertion would
+// hold for a grammar that simulates nothing to begin with.
+test "the same action with a translatable members block reaches the gate" {
+    let out = gen_source(&members_grammar(&"    int n = 0;"));
+    assert out.contains("struct ScanGate"), `a declared field stays simulable: ${out}`;
+    assert out.contains("n: i32 = 0"), `the gate copies the member's own type and initialiser: ${out}`;
 }
 
 // Every scan the parse launches starts from the parser's gate. The LR dispatch
@@ -101,8 +118,12 @@ A : 'a' ;
     assert out.contains("n: i32 = 0"), `the gate copies the member's own type and initialiser: ${out}`;
 }
 
-test "gate_assignment: a bare constant assignment" {
-    let hit = gate_assignment(&"noStruct = 1;");
+// `gate_assignment` reads the body the translator produced, never the grammar
+// text, so every input below is written the way both action languages arrive:
+// the member reached through the parser handle, named as the members block
+// declares it.
+test "gate_assignment: a constant assignment" {
+    let hit = gate_assignment(&"p.no_struct = 1;");
     assert hit matches { Some(_) }, `${hit:?}`;
     if let Some(h) = hit {
         assert h.0 == "no_struct", &h.0;
@@ -110,8 +131,20 @@ test "gate_assignment: a bare constant assignment" {
     }
 }
 
+// A Wado grammar's member keeps the name it was written with, and reaches here
+// through the same handle. Snake_casing it was what left every such grammar
+// without a simulable gate.
+test "gate_assignment: a member the translator did not rename" {
+    let hit = gate_assignment(&"p.noBrace = 1;");
+    assert hit matches { Some(_) }, `${hit:?}`;
+    if let Some(h) = hit {
+        assert h.0 == "noBrace", &h.0;
+        assert h.1 == 1, `${h.1}`;
+    }
+}
+
 test "gate_assignment: whitespace and a missing semicolon" {
-    let hit = gate_assignment(&"  noStruct   =   0  ");
+    let hit = gate_assignment(&"  p.no_struct   =   0  ");
     assert hit matches { Some(_) }, `${hit:?}`;
     if let Some(h) = hit {
         assert h.0 == "no_struct", &h.0;
@@ -120,7 +153,7 @@ test "gate_assignment: whitespace and a missing semicolon" {
 }
 
 test "gate_assignment: a negative constant" {
-    let hit = gate_assignment(&"depth = -1;");
+    let hit = gate_assignment(&"p.depth = -1;");
     assert hit matches { Some(_) }, `${hit:?}`;
     if let Some(h) = hit {
         assert h.1 == -1, `${h.1}`;
@@ -130,37 +163,38 @@ test "gate_assignment: a negative constant" {
 // The rejection cases. Each is a body a scan cannot run by walking alone, so
 // simulating it would answer with a value the parse never holds.
 test "gate_assignment: a comparison is not an assignment" {
-    assert gate_assignment(&"noStruct == 0") matches { None };
+    assert gate_assignment(&"p.no_struct == 0") matches { None };
 }
 
 test "gate_assignment: an expression right-hand side" {
-    assert gate_assignment(&"noStruct = noStruct + 1;") matches { None };
+    assert gate_assignment(&"p.no_struct = p.no_struct + 1;") matches { None };
 }
 
 test "gate_assignment: a second statement" {
-    assert gate_assignment(&"noStruct = 1; depth = 2;") matches { None };
+    assert gate_assignment(&"p.no_struct = 1; p.depth = 2;") matches { None };
 }
 
 test "gate_assignment: a call" {
-    assert gate_assignment(&"reset();") matches { None };
+    assert gate_assignment(&"p.reset();") matches { None };
 }
 
-test "gate_assignment: a field write through a receiver" {
-    assert gate_assignment(&"this.noStruct = 1;") matches { None };
+// Not reached through the parser handle, so not a member write the scan can
+// claim to run — a local, or a receiver the translator left standing.
+test "gate_assignment: a write that does not go through the handle" {
+    assert gate_assignment(&"no_struct = 1;") matches { None };
+    assert gate_assignment(&"this.no_struct = 1;") matches { None };
+}
+
+test "gate_assignment: a subscript is not a member" {
+    assert gate_assignment(&"p.stack[0] = 1;") matches { None };
 }
 
 // A gate scope: the save/restore a members field alone cannot express, because
 // each invocation of the rule keeps its own copy of the saved value.
+// `$L` reaches the translated body as the rule's own value channel, the way a
+// member reaches it through the parser handle.
 test "gate_scope: the @init / @after pair" {
-    let r = ParserRule {
-        name: "callParams",
-        visibility: Visibility::Public,
-        options: [],
-        alternatives: [],
-        init_action: Option::Some(ActionSource { text: "$sv = noStruct; noStruct = 0;" }),
-        after_action: Option::Some(ActionSource { text: "noStruct = $sv;" }),
-    };
-    let s = gate_scope(&r);
+    let s = gate_scope_of(&"vals.sv = p.no_struct; p.no_struct = 0;", &"p.no_struct = vals.sv;");
     assert s matches { Some(_) }, `${s:?}`;
     if let Some(g) = s {
         assert g.field == "no_struct", &g.field;
@@ -168,94 +202,81 @@ test "gate_scope: the @init / @after pair" {
     }
 }
 
+test "gate_scope: a member the translator did not rename" {
+    let s = gate_scope_of(&"vals.sv = p.noBrace; p.noBrace = 0;", &"p.noBrace = vals.sv;");
+    assert s matches { Some(_) }, `${s:?}`;
+    if let Some(g) = s {
+        assert g.field == "noBrace", &g.field;
+    }
+}
+
 // The rejection cases. Each is a pair a scan cannot run as a save/restore, so
 // running it anyway would leave the gate holding a value the parse never does.
 test "gate_scope: a restore of a different field" {
-    let r = ParserRule {
-        name: "r",
-        visibility: Visibility::Public,
-        options: [],
-        alternatives: [],
-        init_action: Option::Some(ActionSource { text: "$sv = noStruct; noStruct = 0;" }),
-        after_action: Option::Some(ActionSource { text: "depth = $sv;" }),
-    };
-    assert gate_scope(&r) matches { None };
+    assert gate_scope_of(&"vals.sv = p.no_struct; p.no_struct = 0;", &"p.depth = vals.sv;") matches { None };
 }
 
 test "gate_scope: a save the restore does not read" {
-    let r = ParserRule {
-        name: "r",
-        visibility: Visibility::Public,
-        options: [],
-        alternatives: [],
-        init_action: Option::Some(ActionSource { text: "$sv = noStruct; noStruct = 0;" }),
-        after_action: Option::Some(ActionSource { text: "noStruct = $other;" }),
-    };
-    assert gate_scope(&r) matches { None };
+    assert gate_scope_of(&"vals.sv = p.no_struct; p.no_struct = 0;", &"p.no_struct = vals.other;") matches { None };
+}
+
+test "gate_scope: a restore from something other than the value channel" {
+    assert gate_scope_of(&"vals.sv = p.no_struct; p.no_struct = 0;", &"p.no_struct = p.saved;") matches { None };
 }
 
 test "gate_scope: no @after is no scope" {
-    let r = ParserRule {
-        name: "r",
-        visibility: Visibility::Public,
-        options: [],
-        alternatives: [],
-        init_action: Option::Some(ActionSource { text: "$sv = noStruct; noStruct = 0;" }),
-    };
-    assert gate_scope(&r) matches { None };
+    assert gate_scope_of(&"vals.sv = p.no_struct; p.no_struct = 0;", &"") matches { None };
 }
 
 // A gate field is simulated only when the scan can run *every* write to it, and
 // a rule's `@init` / `@after` write to one as much as an alternative's action.
-fn grammar_with(init: &String, after: Option<ActionSource>) -> Grammar {
-    return Grammar {
-        name: "G",
-        kind: GrammarKind::Combined,
-        lexer_rules: [],
-        mode_names: [],
-        channels: [],
-        options: [],
-        named_actions: [],
-        pending_refs: [],
-        source_files: [],
-        parser_rules: [
-            ParserRule {
-                name: "scope",
-                visibility: Visibility::Public,
-                options: [],
-                alternatives: [],
-                init_action: Option::Some(ActionSource { text: *init }),
-                after_action: after,
-            },
-            ParserRule {
-                name: "head",
-                visibility: Visibility::Public,
-                options: [],
-                alternatives: [
-                    Alternative {
-                        label: null,
-                        options: [],
-                        elements: [],
-                        actions: [
-                            AltAction {
-                                kind: ActionKind::Action,
-                                source: ActionSource { text: "noStruct = 1;" },
-                                before_index: 0,
-                            },
-                        ],
-                    },
-                ],
-            },
-        ],
-    };
+//
+// The members block is load-bearing twice over: a bare name resolves to a field
+// only where one is declared, and a field the block does not declare has no type
+// for the generated `ScanGate` to copy.
+global GATE_MEMBERS: String = "int noStruct = 0; int depth = 0; int other = 0;";
+
+global SCOPE_BODY: String = "A";
+global HEAD_BODY: String = "A { noStruct = 1; } A";
+
+/// A grammar whose `scope` rule carries `init` (and `after`, when given) and
+/// whose `head` rule writes the gate field plainly.
+///
+/// Written as source and parsed, not built as IR: a rule reaches `$sv` through
+/// its `locals`, and the translator that resolves it is what the gate analysis
+/// now reads.
+fn gate_source(
+    init: &String,
+    after: &String = &"",
+    scope_body: &String = &SCOPE_BODY,
+    head_body: &String = &HEAD_BODY,
+) -> String {
+    let after_clause = if after.is_empty() { String::new() } else { `@after \{ ${*after} \}` };
+    return `grammar G;
+options \{ language = Java; \}
+@parser::members \{ ${GATE_MEMBERS} \}
+r : scope | head ;
+scope
+locals [int sv]
+@init \{ ${*init} \}
+${after_clause}
+ : ${*scope_body} ;
+head : ${*head_body} ;
+A : 'a' ;
+`;
 }
 
+fn gate_fields_of(src: &String) -> List<String> {
+    let g = parse(*src).unwrap();
+    return gate_fields(&g);
+}
+
+global GATE_SCOPE_INIT: String = "$sv = noStruct; noStruct = 0;";
+global GATE_SCOPE_AFTER: String = "noStruct = $sv;";
+
 test "scan_gate_fields: the recognised scope pair leaves its field simulable" {
-    let g = grammar_with(
-        &"$sv = noStruct; noStruct = 0;",
-        Option::Some(ActionSource { text: "noStruct = $sv;" }),
-    );
-    assert scan_gate_fields(&g) == ["no_struct"], `${scan_gate_fields(&g):?}`;
+    let f = gate_fields_of(&gate_source(&GATE_SCOPE_INIT, &GATE_SCOPE_AFTER));
+    assert f == ["no_struct"], `${f:?}`;
 }
 
 // A left-recursive rule's scan carries `min_prec`, so the scope wrapper cannot
@@ -263,26 +284,13 @@ test "scan_gate_fields: the recognised scope pair leaves its field simulable" {
 // that rule: leaving it in the set would have every other scan restoring a ban
 // this one never lifts.
 test "scan_gate_fields: a left-recursive rule's scope disqualifies its field" {
-    let mut g = grammar_with(
-        &"$sv = noStruct; noStruct = 0;",
-        Option::Some(ActionSource { text: "noStruct = $sv;" }),
-    );
-    g.parser_rules[0].alternatives = [
-        Alternative {
-            label: null,
-            options: [],
-            elements: [
-                Element::RuleRef(RuleRefElement::new("scope")),
-                Element::TokenRef(TokenRefElement::new("A")),
-            ],
-        },
-    ];
-    assert scan_gate_fields(&g).is_empty(), `${scan_gate_fields(&g):?}`;
+    let f = gate_fields_of(&gate_source(&GATE_SCOPE_INIT, &GATE_SCOPE_AFTER, &"scope A | A"));
+    assert f.is_empty(), `${f:?}`;
 }
 
 test "scan_gate_fields: an unrunnable rule-level write disqualifies the field" {
-    let g = grammar_with(&"noStruct = depth();", null);
-    assert scan_gate_fields(&g).is_empty(), `${scan_gate_fields(&g):?}`;
+    let f = gate_fields_of(&gate_source(&"noStruct = depth();"));
+    assert f.is_empty(), `${f:?}`;
 }
 
 // The disqualifying set is every name in a body the scan cannot run, not the
@@ -291,8 +299,8 @@ test "scan_gate_fields: an unrunnable rule-level write disqualifies the field" {
 // shapes has one it does not know.
 test "scan_gate_fields: a compound assignment disqualifies the field" {
     for let op of ["+=", "|=", "&=", "^=", "%=", "<<=", ">>="] as List<String> {
-        let g = grammar_with(&`noStruct ${op} 1;`, null);
-        assert scan_gate_fields(&g).is_empty(), `${op} left the field simulable`;
+        let f = gate_fields_of(&gate_source(&`noStruct ${op} 1;`));
+        assert f.is_empty(), `${op} left the field simulable`;
     }
 }
 
@@ -301,15 +309,15 @@ test "scan_gate_fields: a compound assignment disqualifies the field" {
 // `=` at all.
 test "scan_gate_fields: a conditional write disqualifies the field" {
     for let body of ["if (c) noStruct = 0;", "while (c) noStruct = 0;", "for (;;) noStruct = 0;"] as List<String> {
-        let g = grammar_with(&body, null);
-        assert scan_gate_fields(&g).is_empty(), `${body} left the field simulable`;
+        let f = gate_fields_of(&gate_source(&body));
+        assert f.is_empty(), `${body} left the field simulable`;
     }
 }
 
 test "scan_gate_fields: an increment disqualifies the field" {
     for let body of ["noStruct++;", "--noStruct;", "noStruct--;"] as List<String> {
-        let g = grammar_with(&body, null);
-        assert scan_gate_fields(&g).is_empty(), `${body} left the field simulable`;
+        let f = gate_fields_of(&gate_source(&body));
+        assert f.is_empty(), `${body} left the field simulable`;
     }
 }
 
@@ -317,53 +325,40 @@ test "scan_gate_fields: an increment disqualifies the field" {
 // what the body does to the names it mentions is exactly what could not be
 // read, and over-rejecting only leaves the gate unsimulated.
 test "scan_gate_fields: a body that merely names the field disqualifies it" {
-    let g = grammar_with(&"noStruct;", null);
-    assert scan_gate_fields(&g).is_empty(), `${scan_gate_fields(&g):?}`;
+    let f = gate_fields_of(&gate_source(&"noStruct;"));
+    assert f.is_empty(), `${f:?}`;
 }
 
 // A call names the method, not the field it writes, so no reading of the body
 // says which fields it leaves alone. The whole set goes.
 test "scan_gate_fields: a body that can call disqualifies every field" {
-    let g = grammar_with(&"ban();", null);
-    assert scan_gate_fields(&g).is_empty(), `${scan_gate_fields(&g):?}`;
+    let f = gate_fields_of(&gate_source(&"ban();"));
+    assert f.is_empty(), `${f:?}`;
 }
 
 // The rejection case for both rules above: a body that names something else and
 // cannot call leaves the field alone, so the set is not simply always empty.
 test "scan_gate_fields: a body naming other things leaves the field simulable" {
-    let g = grammar_with(&"depth = depth + 1;", null);
-    assert scan_gate_fields(&g) == ["no_struct"], `${scan_gate_fields(&g):?}`;
+    let f = gate_fields_of(&gate_source(&"depth = depth + 1;"));
+    assert f == ["no_struct"], `${f:?}`;
 }
 
 test "scan_gate_fields: a write through a receiver disqualifies the field" {
-    let g = grammar_with(&"this.noStruct = depth();", null);
-    assert scan_gate_fields(&g).is_empty(), `${scan_gate_fields(&g):?}`;
+    let f = gate_fields_of(&gate_source(&"this.noStruct = depth();"));
+    assert f.is_empty(), `${f:?}`;
 }
 
 // An inline group's alternatives carry actions the parse runs, and lowering
 // puts no gates on a group alternative's scan body — so the scan cannot run
 // them however simply they are written.
 test "scan_gate_fields: a write inside a group disqualifies the field" {
-    let mut g = grammar_with(&"other = 1;", null);
-    let inner = Alternative {
-        label: null,
-        options: [],
-        elements: [],
-        actions: [
-            AltAction {
-                kind: ActionKind::Action,
-                source: ActionSource { text: "noStruct = 0;" },
-                before_index: 0,
-            },
-        ],
-    };
-    g.parser_rules[1].alternatives[0].elements = [
-        Element::Group(GroupElement {
-            alternatives: [inner],
-            options: [],
-        }),
-    ];
-    assert scan_gate_fields(&g).is_empty(), `${scan_gate_fields(&g):?}`;
+    let f = gate_fields_of(&gate_source(
+        &"other = 1;",
+        &"",
+        &SCOPE_BODY,
+        &"A ( { noStruct = 0; } A | A ) A",
+    ));
+    assert f.is_empty(), `${f:?}`;
 }
 
 // A condition the scan may evaluate reads simulated fields and nothing else.

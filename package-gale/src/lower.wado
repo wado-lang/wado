@@ -2145,7 +2145,8 @@ pub fn scan_gates_for(alt: &Alternative, ctx: &GenContext, from: i32 = 0) -> Lis
         if a.kind matches { Predicate } {
             continue;
         }
-        if let Some(hit) = gate_assignment(&a.source.text) {
+        let body = ctx.gate_body(a.source.action_id);
+        if let Some(hit) = gate_assignment(&body) {
             if ctx.scan_gate_fields().contains(&hit.0) {
                 let at = if a.before_index > from { a.before_index - from } else { 0 };
                 gates.push(ScanGate { field: hit.0, value: hit.1, before_index: at });

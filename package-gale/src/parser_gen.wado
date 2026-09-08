@@ -418,7 +418,7 @@ fn scan_gate_scope(rule: &ParserRule, lowered_rule: &Rule, ctx: &GenContext) -> 
     if !ctx.emit_scan_gate() {
         return null;
     }
-    let scope = match runnable_gate_scope(rule) {
+    let scope = match runnable_gate_scope(rule, ctx.gate_bodies()) {
         Some(s) => if ctx.scan_gate_fields().contains(&s.field) {
             s;
         } else {

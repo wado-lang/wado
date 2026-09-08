@@ -47,10 +47,11 @@ use {
     translate_predicate,
 } from "./java2wado.wado";
 use { MemberDecls } from "./java2wado/jmembers.wado";
+use { AltBinding } from "./attr_resolve.wado";
 use { find_attr_refs } from "./attr_scan.wado";
 use { body_is_base_calls_only, body_names_this, opaque_span_end } from "./superclass.wado";
 use { escape_ident, PARSER_HANDLE } from "./ident.wado";
-use { SCAN_GATE_HANDLE, reads_only_scan_gate_fields } from "./scan_gate.wado";
+use { SCAN_GATE_HANDLE, reads_only_scan_gate_fields, scan_gate_condition } from "./scan_gate.wado";
 
 /// The callee-local parameter name a rule argument binds to. `escape_ident`
 /// keeps a keyword-named arg (`type`) a legal identifier; the value is stored
@@ -167,6 +168,77 @@ fn translate_caller_arg(expr: &String, ctx: &GenContext) -> Option<String> {
         Err(_) => null,
     };
 }
+
+/// Every gate-relevant action body as the translator renders it, by action id.
+///
+/// A member write is spelled `{noBrace = 1;}` in Java and `{p.noBrace = 1}` in
+/// Wado, and both come out of the translator as `p.<declared member> = 1`. That
+/// is the form `scan_gate.wado` reads. It used to read the grammar text and
+/// snake_case the name to guess what the translator would call it, which is a
+/// second answer to a question the translator already answers — right for Java
+/// by construction and wrong for every Wado grammar.
+///
+/// A body the translator refuses is simply absent, and the gate analysis refuses
+/// it in turn.
+pub fn translate_gate_bodies(grammar: &Grammar, ctx: &GenContext) -> TreeMap<i32, String> {
+    let mut out = TreeMap::<i32, String>::new();
+    if !ctx.emit_actions() {
+        return out;
+    }
+    for let rule of &grammar.parser_rules {
+        for let src of rule_gate_sources(rule) {
+            if src.action_id < 0 {
+                continue;
+            }
+            if let Some(code) = translate_gate_body(&src.text, rule, grammar, ctx) {
+                out[src.action_id] = code;
+            }
+        }
+    }
+    return out;
+}
+
+/// The bodies a gate can live in: an alternative's actions, and the `@init` /
+/// `@after` pair that scopes one. Predicates are not among them — a gate's
+/// condition is rendered per dispatch by `gate_condition_for`.
+fn rule_gate_sources(rule: &ParserRule) -> List<ActionSource> {
+    let mut out: List<ActionSource> = [];
+    if let Some(a) = &rule.init_action {
+        out.push(*a);
+    }
+    if let Some(a) = &rule.after_action {
+        out.push(*a);
+    }
+    for let alt of &rule.alternatives {
+        for let a of &alt.actions {
+            if a.kind matches { Predicate } {
+                continue;
+            }
+            out.push(a.source);
+        }
+    }
+    return out;
+}
+
+fn translate_gate_body(text: &String, rule: &ParserRule, grammar: &Grammar, ctx: &GenContext) -> Option<String> {
+    return match translate_action(
+        &grammar.action_language,
+        rule,
+        &grammar.parser_rules,
+        text,
+        /*vals_in_scope=*/ true,
+        &NO_GATE_BINDINGS,
+        &grammar.name,
+        ctx.action_members(),
+    ) {
+        Ok(code) => Option::Some(code),
+        Err(_) => null,
+    };
+}
+
+/// A gate body is `<member> = <int literal>` and the `$L` of its scope, neither
+/// of which reads an alternative's labels.
+global NO_GATE_BINDINGS: List<AltBinding> = [];
 
 /// Split an argument-action text on commas that are not nested inside
 /// parentheses / brackets / braces / angle brackets, so `f(a, b), c` splits
@@ -625,9 +697,11 @@ fn gate_condition_for(a: &AltAction, ctx: &GenContext, handle: &String = &PARSER
     if body_names_unwired_base(&a.source.text, ctx) {
         return null;
     }
-    if body_needs_no_translator(&a.source.text, ctx) {
+    if body_needs_no_translator(&a.source.text, ctx) && *handle == PARSER_HANDLE {
         // Extracted to a standalone `pred_<id>(p)` fn (`gen_predicate_fns`), so
-        // the dispatch calls it rather than inlining the condition.
+        // the dispatch calls it rather than inlining the condition. Only for the
+        // parser: the fn takes one, and a scan has none. A scan asks for its own
+        // handle and falls through to the translator, which renders against it.
         return Option::Some(`${pred_fn_name(a.source.action_id)}(p)`);
     }
     let ridx = ctx.current_rule_index();
@@ -675,12 +749,13 @@ pub fn alt_scan_gate_conditions(alt: &Alternative, ctx: &GenContext) -> String {
         if a.before_index != 0 || a.kind matches { Action } {
             continue;
         }
-        let code = match gate_condition_for(a, ctx, &SCAN_GATE_HANDLE) {
+        let rendered = match gate_condition_for(a, ctx, &SCAN_GATE_HANDLE) {
             Some(c) => c,
             None => {
                 return String::new();
             },
         };
+        let code = scan_gate_condition(&rendered, ctx.scan_gate_fields());
         if !reads_only_scan_gate_fields(&code, ctx.scan_gate_fields()) {
             return String::new();
         }
