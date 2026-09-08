@@ -219,7 +219,7 @@ A directory argument is walked from the package that encloses it, so the globs
 match as authored whichever subdirectory you name: `wado format -w
 wado-compiler/tests` formats nothing, and says so.
 
-**Caution:** naming a _file_ bypasses the filters — that is how the
+**Caution:** naming a file bypasses the filters, which is how the
 golden-fixture scripts rewrite excluded fixtures. `wado format -w
 wado-compiler/tests/fixtures/x.wado` reformats it anyway, silently discarding a
 layout the test depends on. When the syntax is updated, make sure to add tests

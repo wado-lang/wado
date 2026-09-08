@@ -136,9 +136,9 @@ Manifest filters are then resolved by the argument's kind:
 - An explicit file argument bypasses manifest filtering — naming a file is an
   unambiguous request to run it. (`--exclude` still applies.)
 
-`wado format` expands its path arguments through the same code, supplying
-`[format]` where `wado test` supplies `[test]`. Only the manifest section and
-the subcommand's own built-in patterns differ; how a directory becomes a file
+`wado format` expands its path arguments through the same code, naming
+`[format]` where `wado test` names `[test]`. That section and the subcommand's
+own built-in patterns are the only difference. How a directory becomes a file
 list is one implementation, so the two cannot drift apart.
 
 ### CLI flags

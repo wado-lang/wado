@@ -36,10 +36,12 @@ them back in. `wado-compiler` excludes `tests/**`, because those fixtures have
 hand-authored layouts that are part of the test.
 
 A directory argument is walked from the package that encloses it, so the globs
-match as authored no matter which subdirectory you name: `wado format -w
-wado-compiler/tests` formats nothing. Naming a _file_ bypasses the filters —
-that is how the golden-fixture scripts rewrite excluded fixtures — so never run
-`wado format -w` on a fixture file.
+match as authored whichever subdirectory you name. `wado format -w
+wado-compiler/tests` formats nothing, and says so.
+
+Naming a file bypasses the filters. The golden-fixture scripts rely on that to
+rewrite excluded fixtures, so never run `wado format -w` on a fixture file
+yourself.
 
 ## Layout
 

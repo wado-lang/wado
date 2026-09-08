@@ -1,12 +1,8 @@
 //! Source file discovery, shared by `wado test` and `wado format`.
 //!
-//! Two layers. [`discover_wado_files`] is the walker: one package root in,
-//! its `*.wado` files and its sub-package roots out. [`discover_dir`] and
-//! [`discover_tree`] are the drivers a subcommand's path arguments go
-//! through — they decide which root to walk from and recurse into
-//! sub-packages, asking the subcommand for each package's filters.
-//!
-//! The walker honours:
+//! A subcommand's path arguments enter at [`files_in_dir`] or
+//! [`discover_tree`], which pick the root to walk from and recurse into
+//! sub-packages; the walker below them honours:
 //!
 //! - `.gitignore` files at any depth (parsed in-process; no `git` binary required)
 //! - submodule directories listed in the root `.gitmodules`
@@ -165,13 +161,12 @@ impl std::error::Error for WalkError {}
 
 /// Result of a package-rooted discovery walk.
 #[derive(Debug, Default)]
-pub struct DiscoveryResult {
+struct DiscoveryResult {
     /// `*.wado` files belonging to this package, sorted.
-    pub files: Vec<PathBuf>,
-    /// Sub-directories that were skipped because they contain their own
-    /// `wado.toml`. The caller is expected to recurse into them as separate
-    /// package contexts (cargo workspace style).
-    pub subpackages: Vec<PathBuf>,
+    files: Vec<PathBuf>,
+    /// Sub-directories skipped because they contain their own `wado.toml`.
+    /// [`discover_tree`] recurses into them as separate package contexts.
+    subpackages: Vec<PathBuf>,
 }
 
 /// Discover all `*.wado` files reachable from `root`.
@@ -179,7 +174,7 @@ pub struct DiscoveryResult {
 /// `excludes` are shell-style globs evaluated against paths relative to `root`.
 /// Returned paths are absolute (relative to whatever `root` was given) and
 /// sorted for stable output. Returned sub-package roots are sorted as well.
-pub fn discover_wado_files(
+fn discover_wado_files(
     root: &Path,
     excludes: &ExcludeSet,
     includes: &IncludeSet,
@@ -319,26 +314,42 @@ fn walk_dir(
 /// One package reached by a directory walk, and the `*.wado` files it owns.
 #[derive(Debug)]
 pub struct PackageFiles {
-    /// The directory the walk was rooted at, i.e. the package root.
     pub root: PathBuf,
     pub files: Vec<PathBuf>,
 }
 
-/// Per-package filter lookup. Which manifest section supplies the globs
-/// (`[test]` or `[format]`) and what the subcommand adds of its own (built-in
-/// skips, CLI `--exclude`) is the subcommand's business; the driver asks once
-/// per package root it reaches, because the globs are written relative to it.
+/// Asked once per package root reached, because the globs are written
+/// relative to it. A subcommand's implementation is one [`filters_at`] call.
 pub type Filters<'a> = &'a dyn Fn(&Path) -> Result<(ExcludeSet, IncludeSet), CliExit>;
 
-/// The `wado.toml` rooted exactly at `pkg_root`, for a subcommand to read its
-/// filters from. A manifest found only in an ancestor governs a different
-/// root, so its package-root-relative globs would not match here.
-pub fn manifest_at(pkg_root: &Path) -> Result<Option<Manifest>, CliExit> {
-    match project_manifest::discover(pkg_root) {
-        Ok(Some(project)) if project.root == pkg_root => Ok(Some(project.manifest)),
-        Ok(_) => Ok(None),
-        Err(e) => Err(CliExit::error(e)),
-    }
+/// The compiled filters for the package rooted exactly at `pkg_root`:
+/// `section` picks `(exclude, include)` out of its `wado.toml`, and
+/// `extra_excludes` are the subcommand's own patterns (built-in skips, CLI
+/// `--exclude`). `include` overrides both exclude sources.
+///
+/// A manifest found only in an *ancestor* governs a different root, so its
+/// package-root-relative globs would not match here and are not read.
+pub fn filters_at<S: AsRef<str>>(
+    pkg_root: &Path,
+    section: impl Fn(&Manifest) -> (&[String], &[String]),
+    extra_excludes: &[S],
+) -> Result<(ExcludeSet, IncludeSet), CliExit> {
+    let manifest = match project_manifest::discover(pkg_root) {
+        Ok(Some(project)) if project.root == pkg_root => Some(project.manifest),
+        Ok(_) => None,
+        Err(e) => return Err(CliExit::error(e)),
+    };
+    let none: &[String] = &[];
+    let (exclude, include) = manifest.as_ref().map_or((none, none), section);
+    let excludes: Vec<&str> = exclude
+        .iter()
+        .map(String::as_str)
+        .chain(extra_excludes.iter().map(AsRef::as_ref))
+        .collect();
+    Ok((
+        ExcludeSet::compile(&excludes).map_err(CliExit::error)?,
+        IncludeSet::compile(include).map_err(CliExit::error)?,
+    ))
 }
 
 /// Cargo-workspace-style walk from `root`: one entry for `root` itself, then
@@ -359,6 +370,22 @@ pub fn discover_tree(root: &Path, filters: Filters<'_>) -> Result<Vec<PackageFil
     Ok(packages)
 }
 
+/// The `*.wado` files one directory argument expands to. Matching nothing is
+/// an error: silence cannot distinguish an over-eager filter from an empty tree.
+pub fn files_in_dir(dir: &Path, filters: Filters<'_>) -> Result<Vec<PathBuf>, CliExit> {
+    let files: Vec<PathBuf> = discover_dir(dir, filters)?
+        .into_iter()
+        .flat_map(|pkg| pkg.files)
+        .collect();
+    if files.is_empty() {
+        return Err(CliExit::error(format!(
+            "no .wado files found in directory '{}'",
+            dir.display()
+        )));
+    }
+    Ok(files)
+}
+
 /// Expand one directory argument.
 ///
 /// `exclude` / `include` globs are written relative to a package root, so a
@@ -366,7 +393,7 @@ pub fn discover_tree(root: &Path, filters: Filters<'_>) -> Result<Vec<PackageFil
 /// match as authored, and picking up the `.gitignore` files above `dir` — then
 /// narrowed back to `dir`. A `dir` that is itself a package root, or that lies
 /// outside any package, is walked directly.
-pub fn discover_dir(dir: &Path, filters: Filters<'_>) -> Result<Vec<PackageFiles>, CliExit> {
+fn discover_dir(dir: &Path, filters: Filters<'_>) -> Result<Vec<PackageFiles>, CliExit> {
     let enclosing = match project_manifest::discover(dir) {
         Ok(project) => project.map(|p| p.root),
         Err(e) => return Err(CliExit::error(e)),
@@ -570,6 +597,10 @@ mod tests {
                     .replace('\\', "/")
             })
             .collect()
+    }
+
+    fn one(name: &str) -> BTreeSet<String> {
+        [name.to_string()].into_iter().collect()
     }
 
     fn touch(path: &Path) {
@@ -959,42 +990,10 @@ pathology = should-not-match\n\
         .unwrap();
     }
 
-    /// Filters drawn from `[test]`, the shape every subcommand's lookup has.
-    fn test_section_filters(pkg_root: &Path) -> Result<(ExcludeSet, IncludeSet), CliExit> {
-        let settings = manifest_at(pkg_root)?.map(|m| m.test).unwrap_or_default();
-        Ok((
-            ExcludeSet::compile(&settings.exclude).map_err(CliExit::error)?,
-            IncludeSet::compile(&settings.include).map_err(CliExit::error)?,
-        ))
-    }
-
-    fn expanded(dir: &Path) -> BTreeSet<String> {
-        discover_dir(dir, &test_section_filters)
-            .unwrap()
-            .iter()
-            .flat_map(|pkg| pkg.files.iter())
-            .map(|p| p.file_name().unwrap().to_string_lossy().into_owned())
-            .collect()
-    }
-
-    // The globs are package-root-relative, so a subdirectory argument has to be
-    // walked from the enclosing package for them to match as authored.
-    #[test]
-    fn subdir_expansion_honours_enclosing_manifest() {
-        let tmp = tempfile::tempdir().unwrap();
-        let root = tmp.path();
-        write_manifest(
-            root,
-            "[test]\nexclude = [\"sub/gen/**\"]\ninclude = [\"sub/**/*_test.wado\"]\n",
-        );
-        touch(&root.join("sub/keep.wado"));
-        touch(&root.join("sub/gen/drop.wado"));
-        touch(&root.join("sub/gen/drop_test.wado"));
-
-        let got = expanded(&root.join("sub"));
-        assert!(got.contains("keep.wado"), "{got:?}");
-        assert!(got.contains("drop_test.wado"), "{got:?}");
-        assert!(!got.contains("drop.wado"), "{got:?}");
+    // Which section a subcommand names is its own business; the driver is the
+    // same either way, so these tests pick one.
+    fn section_filters(pkg_root: &Path) -> Result<(ExcludeSet, IncludeSet), CliExit> {
+        filters_at::<&str>(pkg_root, |m| (&m.test.exclude, &m.test.include), &[])
     }
 
     // Narrowing back to the subdirectory must not leak the rest of the package.
@@ -1008,21 +1007,8 @@ pathology = should-not-match\n\
         // A sibling sharing the argument's name as a prefix stays out too.
         touch(&root.join("sub2/sibling.wado"));
 
-        let got = expanded(&root.join("sub"));
-        assert_eq!(got, ["inside.wado".to_string()].into_iter().collect());
-    }
-
-    // A directory that is itself a package root is walked directly.
-    #[test]
-    fn package_root_expansion_applies_its_own_manifest() {
-        let tmp = tempfile::tempdir().unwrap();
-        let root = tmp.path();
-        write_manifest(root, "[test]\nexclude = [\"skip.wado\"]\n");
-        touch(&root.join("keep.wado"));
-        touch(&root.join("skip.wado"));
-
-        let got = expanded(root);
-        assert_eq!(got, ["keep.wado".to_string()].into_iter().collect());
+        let files = files_in_dir(&root.join("sub"), &section_filters).unwrap();
+        assert_eq!(names_of(root, &files), one("sub/inside.wado"));
     }
 
     // Each package's globs are read from its own manifest, so a sub-package's
@@ -1031,48 +1017,55 @@ pathology = should-not-match\n\
     fn tree_expansion_reads_each_subpackage_manifest() {
         let tmp = tempfile::tempdir().unwrap();
         let root = tmp.path();
+        let sub = root.join("sub");
+        fs::create_dir_all(&sub).unwrap();
         write_manifest(root, "[test]\nexclude = [\"skip.wado\"]\n");
-        touch(&root.join("keep.wado"));
-        touch(&root.join("skip.wado"));
-        write_manifest(
-            &{
-                let sub = root.join("sub");
-                fs::create_dir_all(&sub).unwrap();
-                sub
-            },
-            "[test]\nexclude = [\"skip.wado\"]\n",
+        write_manifest(&sub, "[test]\nexclude = [\"skip.wado\"]\n");
+        for dir in [root, &sub] {
+            touch(&dir.join("keep.wado"));
+            touch(&dir.join("skip.wado"));
+        }
+
+        let packages = discover_tree(root, &section_filters).unwrap();
+        let roots: Vec<_> = packages.iter().map(|p| p.root.clone()).collect();
+        assert_eq!(roots, vec![root.to_path_buf(), sub]);
+        let files: Vec<_> = packages.into_iter().flat_map(|p| p.files).collect();
+        assert_eq!(
+            names_of(root, &files),
+            ["keep.wado", "sub/keep.wado"]
+                .iter()
+                .map(ToString::to_string)
+                .collect()
         );
-        touch(&root.join("sub/keep.wado"));
+    }
+
+    // A directory that matches nothing is an error naming it, so an over-eager
+    // filter cannot look like an empty tree.
+    #[test]
+    fn a_directory_matching_nothing_is_an_error() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        write_manifest(root, "[test]\nexclude = [\"sub/**\"]\n");
         touch(&root.join("sub/skip.wado"));
 
-        let packages = discover_tree(root, &test_section_filters).unwrap();
-        let roots: Vec<_> = packages.iter().map(|p| p.root.clone()).collect();
-        assert_eq!(roots, vec![root.to_path_buf(), root.join("sub")]);
-        let got = names_of(
-            root,
-            &packages
-                .iter()
-                .flat_map(|p| p.files.clone())
-                .collect::<Vec<_>>(),
-        );
-        let want: BTreeSet<_> = ["keep.wado", "sub/keep.wado"]
-            .iter()
-            .map(ToString::to_string)
-            .collect();
-        assert_eq!(got, want);
+        let err = files_in_dir(&root.join("sub"), &section_filters).unwrap_err();
+        assert!(err.message.contains("no .wado files found"), "{err:?}");
     }
 
     // A manifest found only in an ancestor governs a different root, so its
-    // globs must not be applied to this one.
+    // globs must not be applied to this one. Reaching up would exclude
+    // `sub/skip.wado` here, because the pattern is relative to `root`.
     #[test]
-    fn manifest_at_ignores_an_ancestor_manifest() {
+    fn filters_at_ignores_an_ancestor_manifest() {
         let tmp = tempfile::tempdir().unwrap();
         let root = tmp.path();
-        write_manifest(root, "[test]\n");
-        fs::create_dir_all(root.join("sub")).unwrap();
+        write_manifest(root, "[test]\nexclude = [\"skip.wado\"]\n");
+        touch(&root.join("sub/skip.wado"));
 
-        assert!(manifest_at(root).unwrap().is_some());
-        assert!(manifest_at(&root.join("sub")).unwrap().is_none());
+        let (excludes, _) = section_filters(&root.join("sub")).unwrap();
+        assert!(!excludes.matches_str("skip.wado"));
+        let (excludes, _) = section_filters(root).unwrap();
+        assert!(excludes.matches_str("skip.wado"));
     }
 
     // Shell completion writes `wado test some/dir/`, and `retain_under`

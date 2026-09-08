@@ -114,26 +114,15 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<FormatOptions, CliExit> 
     })
 }
 
-/// Expand the raw input paths into a concrete list of `*.wado` files.
-///
-/// A directory goes through [`discover::discover_dir`], which walks it per
-/// package under that package's `[format]` filters, `.gitignore`, and
-/// submodules. An explicit file is kept as-is: the golden-fixture scripts
-/// format excluded fixtures by naming them, so only directory expansion is
-/// filtered.
+/// Expand the raw input paths into a concrete list of `*.wado` files. An
+/// explicit file is kept as-is: the golden-fixture scripts format excluded
+/// fixtures by naming them, so only directory expansion is filtered.
 fn resolve_inputs(inputs: &[String]) -> Result<Vec<PathBuf>, CliExit> {
     let mut files = Vec::new();
     for input in inputs {
         let path = Path::new(input);
         if path.is_dir() {
-            let packages = discover::discover_dir(path, &format_filters)?;
-            let before = files.len();
-            files.extend(packages.into_iter().flat_map(|pkg| pkg.files));
-            if files.len() == before {
-                return Err(CliExit::error(format!(
-                    "no .wado files found in directory '{input}'"
-                )));
-            }
+            files.extend(discover::files_in_dir(path, &format_filters)?);
         } else {
             files.push(path.to_path_buf());
         }
@@ -145,24 +134,14 @@ fn resolve_inputs(inputs: &[String]) -> Result<Vec<PathBuf>, CliExit> {
 /// build intermediates. A package can opt a path back in via `[format].include`.
 const BUILTIN_FORMAT_EXCLUDES: &[&str] = &["**/generated/**", "**/build/**"];
 
-/// The filters for the package rooted exactly at `pkg_root`: the built-in
-/// skips above plus its `[format].exclude`, and its `[format].include`, which
-/// overrides both.
 fn format_filters(
     pkg_root: &Path,
 ) -> Result<(discover::ExcludeSet, discover::IncludeSet), CliExit> {
-    let settings = discover::manifest_at(pkg_root)?
-        .map(|m| m.format)
-        .unwrap_or_default();
-    let excludes: Vec<&str> = BUILTIN_FORMAT_EXCLUDES
-        .iter()
-        .copied()
-        .chain(settings.exclude.iter().map(String::as_str))
-        .collect();
-    Ok((
-        discover::ExcludeSet::compile(&excludes).map_err(CliExit::error)?,
-        discover::IncludeSet::compile(&settings.include).map_err(CliExit::error)?,
-    ))
+    discover::filters_at(
+        pkg_root,
+        |m| (&m.format.exclude, &m.format.include),
+        BUILTIN_FORMAT_EXCLUDES,
+    )
 }
 
 pub fn run(opts: FormatOptions) -> Result<(), CliExit> {
@@ -256,27 +235,12 @@ mod tests {
             .collect()
     }
 
-    // `[format].exclude` globs are package-root-relative, so a subdirectory
-    // argument must still be walked under the enclosing manifest — otherwise
+    // `[format]` globs are package-root-relative, so a subdirectory argument
+    // must still be walked under the enclosing manifest — otherwise
     // `wado format wado-compiler/tests` rewrites the very fixtures that
     // manifest excludes.
     #[test]
-    fn subdir_invocation_honours_enclosing_manifest_exclude() {
-        let tmp = tempfile::tempdir().unwrap();
-        let root = tmp.path();
-        write_manifest(root, "[format]\nexclude = [\"tests/skip.wado\"]\n");
-        touch(&root.join("tests/keep.wado"));
-        touch(&root.join("tests/skip.wado"));
-
-        let got = resolved_names(&root.join("tests"));
-        assert!(got.contains("keep.wado"), "{got:?}");
-        assert!(!got.contains("skip.wado"), "{got:?}");
-    }
-
-    // `[format].include` carves files back out of an excluded subtree, and it
-    // must do so from a subdirectory invocation too.
-    #[test]
-    fn subdir_invocation_honours_enclosing_manifest_include() {
+    fn subdir_invocation_honours_enclosing_manifest() {
         let tmp = tempfile::tempdir().unwrap();
         let root = tmp.path();
         write_manifest(
@@ -304,15 +268,6 @@ mod tests {
         let got = resolved_names(root);
         assert!(got.contains("keep.wado"), "{got:?}");
         assert!(!got.contains("skip.wado"), "{got:?}");
-    }
-
-    // A directory that yields nothing is an error, not a silent success: the
-    // user cannot otherwise tell an over-eager filter from an empty tree.
-    #[test]
-    fn an_empty_directory_is_an_error() {
-        let tmp = tempfile::tempdir().unwrap();
-        let err = resolve_inputs(&[tmp.path().to_string_lossy().into_owned()]).unwrap_err();
-        assert!(err.message.contains("no .wado files found"), "{err:?}");
     }
 
     // The golden-fixture scripts format excluded fixture files by naming them,
