@@ -3512,3 +3512,22 @@ fn test_format_keeps_a_comment_wedged_in_any_token_gap() {
         failures[..failures.len().min(5)].join("\n")
     );
 }
+
+/// A closure body that starts with `with` keeps its parentheses: the keyword
+/// in that position is the closure's own effect row, so dropping them makes
+/// the output stop parsing.
+#[test]
+fn test_format_keeps_parens_around_a_handler_closure_body() {
+    let source = concat!(
+        "fn run() {\n",
+        "    let f = || (with Log => &mut sink do { Log::emit(`hi`); });\n",
+        "    let g = || (with Log => &mut sink do { 1 }) + 2;\n",
+        "}\n"
+    );
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert!(
+        formatted.contains("|| (with Log => &mut sink do {"),
+        "expected the body to stay parenthesized, got:\n{formatted}"
+    );
+    assert_format_preserves_ast(source);
+}

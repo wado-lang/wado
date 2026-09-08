@@ -2575,7 +2575,9 @@ impl<'a> Unparser<'a> {
             self.unparse_type(ty);
             self.output.push(' ');
         }
-        self.unparse_expr(&c.body);
+        self.with_parens_if(closure_body_needs_parens(&c.body), |s| {
+            s.unparse_expr(&c.body);
+        });
     }
 
     /// Twin of [`unparse_template_string_into`], which prints the same shape
@@ -3292,6 +3294,23 @@ fn ends_in_trailing_cast(expr: &Expr) -> bool {
     }
 }
 
+/// Whether a closure body must be parenthesized. `with` after the parameter
+/// list is the closure's own effect row, so a body whose first token is `with`
+/// re-parses as a declaration. Mirrors [`ends_in_trailing_cast`] down the
+/// leftmost spine, descending only where the operand is printed bare — a
+/// handler in any other slot already carries parens from
+/// [`binds_tighter_than`].
+fn closure_body_needs_parens(expr: &Expr) -> bool {
+    match expr {
+        Expr::WithHandler(_) => true,
+        Expr::Binary(b) => {
+            !needs_parens(&b.left, b.op, true) && closure_body_needs_parens(&b.left)
+        }
+        Expr::Range(r) => closure_body_needs_parens(&r.start),
+        _ => false,
+    }
+}
+
 /// The operator an operand is about to be joined to, ordered by how tightly it
 /// binds. Each slot admits what the one above it does, and a little more.
 #[derive(Clone, Copy)]
@@ -3718,7 +3737,14 @@ fn unparse_closure_into(c: &ClosureExpr, output: &mut String) {
         unparse_type_into(ty, output);
         output.push(' ');
     }
+    let parens = closure_body_needs_parens(&c.body);
+    if parens {
+        output.push('(');
+    }
     unparse_expr_into(&c.body, output);
+    if parens {
+        output.push(')');
+    }
 }
 
 /// Twin of [`Unparser::unparse_template_string`]; keep the two in step.

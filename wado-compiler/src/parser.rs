@@ -4176,9 +4176,9 @@ impl Parser {
     }
 
     /// Read the `with` row a closure would declare and report that the compiler
-    /// does not carry one. The row belongs to the closure here, never to the
-    /// handler expression that otherwise claims the keyword: a handler is
-    /// written inside the body.
+    /// does not carry one. The keyword in this position is always the closure's
+    /// own row, never a handler expression body; a handler reaches the body
+    /// through a block or a pair of parentheses.
     fn reject_closure_with_clause(&mut self) -> ParseResult<()> {
         if !self.check(&TokenKind::With) {
             return Ok(());
@@ -4188,7 +4188,8 @@ impl Parser {
         Err(self.error_at_span(
             span,
             "a closure cannot declare `with` yet: its effects are inferred from \
-             the body, and its stores cannot be declared",
+             the body, and its stores cannot be declared. To make a handler the \
+             body, wrap it: `|| (with H => h do { ... })`",
         ))
     }
 

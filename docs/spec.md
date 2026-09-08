@@ -2252,6 +2252,14 @@ let parse = |s: String| -> Result<i32, String> {
 Parameter types are always required (never inferred). A `?` in the body needs
 the return type known — via `-> Type` or an expected `fn(..) -> R`.
 
+A closure declares neither effects nor stores; both are inferred from the body.
+`with` in the position where a function writes its row is read as that row and
+reported as not yet carried, so a handler body needs a block or parentheses:
+
+```wado
+let f = || (with Log => &mut sink do { Log::emit(`hi`); });
+```
+
 Closures auto-capture each free variable by reference; the reference kind is inferred from body usage (`&T` for read-only, `&mut T` for mutating). Pure read-only captures keep the closure type at `fn`; any `&mut` capture promotes it to `fn mut`. Calling a `fn mut` closure requires the _root_ of the callee place to be a mutable binding (mirrors Rust's `FnMut` rule); this applies whether the closure is called directly (`f()`) or reached through field access or indexing (`(h.f)()`, `arr[i]()`). A temporary root — a call result, a literal — has no binding and is always accepted.
 
 Shared mutable state across closures is automatic — multiple closures referring to the same outer binding share the underlying location, with no explicit reference dance needed:

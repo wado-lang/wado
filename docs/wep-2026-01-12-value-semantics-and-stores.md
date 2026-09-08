@@ -169,8 +169,16 @@ let f = || { return local_var; };
 
 A closure declares neither its effects nor its stores. The parser reads a `with`
 row where one would go and reports that the compiler does not carry it yet, so
-the shape is a diagnostic rather than a parse error. The row belongs to the
-closure; a handler is written inside the body.
+the shape is a diagnostic rather than a parse error.
+
+`with` right after the parameter list, or after the return type, is always that
+row — never the start of a handler expression. A handler reaches the body
+through a block or a pair of parentheses:
+
+```wado
+let f = || (with Log => &mut sink do { Log::emit(`hi`); });
+let g = || { with Log => &mut sink do { Log::emit(`hi`); } };
+```
 
 **Functor types**:
 
