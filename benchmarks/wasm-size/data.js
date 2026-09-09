@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1788913108507,
+  "lastUpdate": 1788914397341,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -54285,6 +54285,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 288297,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "4bc0f8e42765ac41415c40dce00553e308b1c056",
+          "message": "Merge pull request #2004 from wado-lang/claude/gale-rust-parse-compiler-sources\n\nfeat(gale): every `.rs` in the repository parses",
+          "timestamp": "2026-09-09T09:14:27+09:00",
+          "tree_id": "e31be24a1d8be27dd5e3b75c599f385159b57241",
+          "url": "https://github.com/wado-lang/wado/commit/4bc0f8e42765ac41415c40dce00553e308b1c056"
+        },
+        "date": 1788914396619,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 2013,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6560,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18971,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 288933,
             "unit": "bytes"
           }
         ]
