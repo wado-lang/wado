@@ -1551,10 +1551,8 @@ mod tests {
         assert_eq!(cm_interface_module("my:pkg/iface"), None);
     }
 
-    /// The bridge back to the AST has to spell unit the way the parser does.
-    /// Every AST-level predicate asks [`Type::is_unit`], which the empty tuple
-    /// does not answer — a manufactured `[]` reads as a tuple of no elements,
-    /// and a `Result<(), E>` then lowers an `Ok` payload it does not have.
+    /// The bridge back to the AST spells unit the way the parser does, since
+    /// [`Type::is_unit`] is what every AST-level predicate asks.
     #[test]
     fn the_unit_type_id_spells_the_unit_type() {
         let (registry, _) = CmInterfaceRegistry::build_from_stdlib();

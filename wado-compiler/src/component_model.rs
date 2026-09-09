@@ -4310,9 +4310,7 @@ impl CmTypeGen {
                 }
                 _ => panic!("unsupported generic type for CM instance: {}", generic.name),
             },
-            Type::Tuple(elems) if elems.is_empty() => {
-                unreachable!("{EMPTY_TUPLE_AT_BOUNDARY}")
-            }
+            Type::Tuple(elems) if elems.is_empty() => unreachable!("{EMPTY_TUPLE_AT_BOUNDARY}"),
             Type::Tuple(elems) => {
                 let cm_elems: Vec<ComponentValType> = elems
                     .iter()
@@ -4467,8 +4465,6 @@ fn is_param_type_supported_with_types(
                 false
             }
         }
-        // `[]` falls to the catch-all: a `tuple` carries at least one type, and
-        // unit is the named `()` matched above.
         Type::Tuple(elems) if !elems.is_empty() => elems
             .iter()
             .all(|e| is_param_type_supported_with_types(e, enums, resources, structs)),
@@ -4583,9 +4579,8 @@ pub fn is_cm_function_supported(func: &CmFunctionInfo) -> bool {
 /// Canonical ABI maximum flat results before a return must use an outptr.
 pub const MAX_FLAT_RESULTS: usize = 1;
 
-/// Why no boundary path carries the empty tuple. `check_cm_boundary_representable`
-/// rejects one, and unit arrives as the named `()`, so neither spelling reaches
-/// the arms that state this.
+/// What every boundary path says when it meets the empty tuple, which none of
+/// them does.
 pub const EMPTY_TUPLE_AT_BOUNDARY: &str = "the empty tuple `[]` has no Component Model \
      representation, and the boundary rejects one before synthesis";
 
