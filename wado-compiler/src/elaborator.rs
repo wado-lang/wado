@@ -852,21 +852,18 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     pub(super) fn validate_missing_return_ast(
         &self,
         return_type: TypeId,
-        is_async: bool,
-        body: Option<&crate::ast::Block>,
-        function: &str,
-        span: crate::token::Span,
+        func: &crate::ast::Function,
     ) {
-        let Some(body) = body else {
+        let Some(body) = func.body.as_ref() else {
             return;
         };
-        if is_async {
+        if func.is_async {
             if !control_flow::block_delivers(self.ctrl_flow_ctx(), body)
                 && !control_flow::block_always_exits(self.ctrl_flow_ctx(), body)
             {
                 let _ = self.emit(types::TypeError::MissingTaskReturn {
-                    function: function.to_string(),
-                    span,
+                    function: func.name.clone(),
+                    span: func.span,
                 });
             }
             return;
@@ -880,7 +877,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         }
         let _ = self.emit(types::TypeError::MissingReturn {
             return_type: self.tysys.type_table.borrow().type_name(return_type),
-            span,
+            span: func.span,
         });
     }
 

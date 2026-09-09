@@ -212,7 +212,7 @@ Parameter count validation is implemented: if the user's export function has a d
 
 Return type validation covers the worlds declaring `Result<_, _>`: the export returns one too, or unit for the `Ok(())` wrap. It holds for `async` exports as well as sync ones. While they were exempt, a plain `i32` was delivered onto the world's discriminant and reached the host as an error the program never named.
 
-An `export async fn` also has to carry a `task return`. The check sits beside the missing-return one, since both ask whether a body can produce the result its signature promises, and both exempt a body that provably exits on every path first. They differ in what counts as an answer: a `return` satisfies missing-return only when every path takes one, while a single `task return` anywhere satisfies this one. Delivering under a branch is what `task return` is for, and a path that misses it traps at the boundary — a runtime answer the compiler cannot improve on.
+An `export async fn` also has to carry a `task return`. The check sits beside the missing-return one, since both ask whether a body can produce the result its signature promises, and both exempt a body that provably exits on every path first. They differ in what counts as an answer: a `return` satisfies missing-return only when every path takes one, while a single `task return` anywhere satisfies this one. Delivering under a branch is what `task return` is for, and a path that misses it traps at the boundary. No static answer improves on that.
 
 ### Summary
 
