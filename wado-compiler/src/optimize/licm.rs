@@ -7,6 +7,8 @@
 use std::cell::Cell;
 use std::ops::ControlFlow;
 
+use crate::compiler_trace;
+
 use crate::hashmap::IndexMap;
 use crate::hashmap::IndexSet;
 use crate::nir::{NirBinaryOp, NirFunction, NirUnaryOp};
@@ -184,6 +186,7 @@ pub fn apply_licm(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
         if func.body.is_none() {
             return false;
         }
+        let traced_name = func.name.clone();
         let rule = LicmRule {
             type_table: &type_table,
             applied: Cell::new(false),
@@ -220,6 +223,12 @@ pub fn apply_licm(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
         // document order as the standalone passes — so it still sees the hoisted
         // body.
         let cond_changed = super::condition_implication::eliminate_at_root(&mut engine);
+        if licm_changed || cond_changed {
+            compiler_trace!(
+                "opt_loop",
+                "licm changed {traced_name} (licm={licm_changed} cond={cond_changed})"
+            );
+        }
         licm_changed || cond_changed
     })
 }

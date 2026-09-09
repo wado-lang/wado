@@ -8,6 +8,7 @@ use std::cell::Cell;
 
 use cranelift_entity::EntityRef;
 
+use crate::compiler_trace;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::nir::{FuncId, NirFunction, NirUnaryOp};
 use crate::nir_arena::{
@@ -140,7 +141,15 @@ fn analyze_copy_binding(
     // `let x = Operand::Value(v)`: a copy of a promoted operand. Forward `x`'s
     // reads to it (the value is pooled-immutable, so it is always stable). This
     // is independent of `skip_value_copy` — the source is a value, not a place.
-    if let Operand::Value(v) = value {
+    //
+    // Only a constant. A pooled value is re-materialised at each use, which for
+    // a constant is cheaper than sharing and for a computation need not be —
+    // and `licm` binds one precisely to evaluate it once outside a loop, so
+    // forwarding it back is the hoist undone. The two then alternate for as
+    // long as the fixed-point loop runs.
+    if let Operand::Value(v) = value
+        && body.values.kind(v).is_operand_constant()
+    {
         return Some(CopyBinding {
             target_local: local_index,
             source: CopySource::Promoted(v),
@@ -957,9 +966,14 @@ pub fn propagate_copies(project: &mut NirPackage, gate: &mut FunctionGate) -> bo
             param_count: func.params.len(),
             applied: Cell::new(false),
         };
+        let traced_name = func.name.clone();
         let NirFunction { body, locals, .. } = &mut *func;
         let body = body.as_mut().expect("checked above");
         let mut engine = Engine::new(body, &mut buffers, locals);
-        engine.run(&[&rule])
+        let changed = engine.run(&[&rule]);
+        if changed {
+            compiler_trace!("opt_loop", "copy_prop changed {traced_name}");
+        }
+        changed
     })
 }
