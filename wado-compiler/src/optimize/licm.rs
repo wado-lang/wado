@@ -186,7 +186,6 @@ pub fn apply_licm(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
         if func.body.is_none() {
             return false;
         }
-        let traced_name = func.name.clone();
         let rule = LicmRule {
             type_table: &type_table,
             applied: Cell::new(false),
@@ -197,6 +196,7 @@ pub fn apply_licm(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
             params,
             address_taken_locals,
             stores_aliased_locals,
+            name,
             ..
         } = &mut *func;
         let body = body.as_mut().expect("checked above");
@@ -226,7 +226,7 @@ pub fn apply_licm(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
         if licm_changed || cond_changed {
             compiler_trace!(
                 "opt_loop",
-                "licm changed {traced_name} (licm={licm_changed} cond={cond_changed})"
+                "licm changed {name} (licm={licm_changed} cond={cond_changed})"
             );
         }
         licm_changed || cond_changed

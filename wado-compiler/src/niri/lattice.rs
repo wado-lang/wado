@@ -65,13 +65,17 @@ impl Interpreter<'_> {
         };
         match body.values.kind(v).clone() {
             // The frame holds what a local denotes here; the recipe says which.
+            // An aliased local is read through its place, never out of `env` —
+            // the same refusal `Self::expr_to_lattice` makes of a skeleton
+            // `Local`, which this arm is the promoted twin of.
             ValueKind::Opaque(oid) => match body.values.opaque_source(oid) {
-                Some(OpaqueSource::Local(idx)) => self
-                    .frame
-                    .env
-                    .get(&idx)
-                    .cloned()
-                    .unwrap_or(Lattice::Unevaluated),
+                Some(OpaqueSource::Local(idx)) if !self.frame.place_aliases.contains_key(&idx) => {
+                    self.frame
+                        .env
+                        .get(&idx)
+                        .cloned()
+                        .unwrap_or(Lattice::Unevaluated)
+                }
                 _ => Lattice::Unevaluated,
             },
             ValueKind::Binary { op, lhs, rhs, .. } => {

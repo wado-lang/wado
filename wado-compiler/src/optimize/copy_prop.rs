@@ -966,13 +966,14 @@ pub fn propagate_copies(project: &mut NirPackage, gate: &mut FunctionGate) -> bo
             param_count: func.params.len(),
             applied: Cell::new(false),
         };
-        let traced_name = func.name.clone();
-        let NirFunction { body, locals, .. } = &mut *func;
+        let NirFunction {
+            body, locals, name, ..
+        } = &mut *func;
         let body = body.as_mut().expect("checked above");
         let mut engine = Engine::new(body, &mut buffers, locals);
         let changed = engine.run(&[&rule]);
         if changed {
-            compiler_trace!("opt_loop", "copy_prop changed {traced_name}");
+            compiler_trace!("opt_loop", "copy_prop changed {name}");
         }
         changed
     })

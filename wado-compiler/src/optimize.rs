@@ -50,9 +50,13 @@ mod tuple_projection;
 mod value_copy;
 mod value_copy_demote;
 
+// The promoted-read audit is the only reader, and it is debug-only.
+#[cfg(debug_assertions)]
 use crate::hashmap::IndexSet;
+#[cfg(debug_assertions)]
 use crate::nir_arena::{NodeRef, PatKind, StmtKind};
-use crate::trace::filter as trace_filter;
+#[cfg(debug_assertions)]
+use crate::trace::filter;
 
 use const_branch_prune::{prune_constant_branches, prune_template_block_wrappers};
 use const_folding::{ConstFoldCache, fold_constants, fold_constants_all};
@@ -379,7 +383,7 @@ fn run_pass(
     // The always-on check runs once, at the end of `optimize`; this one earns
     // its cost only when a developer wants the pass named.
     #[cfg(debug_assertions)]
-    if trace_filter().enabled(PROMOTED_READ_AUDIT) {
+    if filter().enabled(PROMOTED_READ_AUDIT) {
         audit_promoted_reads(project, name);
     }
     changed
@@ -387,6 +391,7 @@ fn run_pass(
 
 /// `WADO_TRACE` target that puts [`audit_promoted_reads`] at every pass
 /// boundary, so a break names the pass that caused it.
+#[cfg(debug_assertions)]
 const PROMOTED_READ_AUDIT: &str = "promoted_reads";
 
 /// Every local a promoted operand reads still has a definition. A pooled read

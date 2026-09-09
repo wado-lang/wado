@@ -805,8 +805,6 @@ impl ValuePool {
         });
     }
 
-    /// Every `Opaque(Local)` leaf under `v`, with the leaf's own id — the one
-    /// [`Self::type_of`] answers for.
     /// Every skeleton expression the value tree at `v` names as an extraction
     /// source. Those nodes produce this value's code, so a reachability walk
     /// that skipped them would call them orphans and let a rewrite pass by.
@@ -831,6 +829,8 @@ impl ValuePool {
         }
     }
 
+    /// Every `Opaque(Local)` leaf under `v`, with the leaf's own id — the one
+    /// [`Self::type_of`] answers for.
     pub fn for_each_opaque_local(
         &self,
         v: ValueId,

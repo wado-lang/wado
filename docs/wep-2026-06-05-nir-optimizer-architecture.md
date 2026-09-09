@@ -220,12 +220,12 @@ These are settled by measurement and re-derived at a cost.
   pool is append-only and also holds reads that folded away.
 - That census is session-scoped, never per-application. It walks the whole
   body, so recomputing it per rule application is quadratic. It is memoized, and
-  the memo is held across edits while it is empty. That is the case that decides
-  the cost, since inside the loop nothing reachable names a local. Only a
-  local-naming operand becoming reachable drops it, and the edit API is what
-  reports that. A rule therefore never writes such an operand into the body
-  behind the API's back. A debug-only audit at session end is a backstop, not a
-  proof.
+  the memo is maintained across edits rather than dropped: an operand becoming
+  reachable adds its locals, and one leaving is never subtracted, so the memo is
+  an upper bound. Over-counting keeps a binding alive, costing an elision and
+  never correctness. The edit API is what reports an arrival, so a rule never
+  writes an operand into the body behind its back. A debug-only audit at session
+  end checks the bound, not equality — a backstop, not a proof.
 - No whole-body walk per rule application, in an assertion either. A rewrite
   that deletes a binding records the local, and the session audits the batch
   once. Checking at each rewrite cost more than half the loop. The audit reads
@@ -308,18 +308,31 @@ quote.
 
 Two things price a walk. One is how many nodes it covers: every step runs the
 inlined slot match, and 61 to 77 % of the nodes are pure kinds carrying no
-children. The other is the allocator, and it was the larger of the two. Pooling
-the traversal stacks, one per call, bought 1.3 % of the SQLite parser's compile
-and 2 % of `json_twitter`'s and took allocation from 17 % to 15 %. What that
-left behind is a second buffer: a walk that mutates as it recurses cannot hold
-the callback's borrow, so it snapshots each node's children into a fresh `Vec`
-— per node, not per call — and the walks that only read had copied the shape
-without needing it. Retiring both cut the parser's compile 6.9 % and
-`json_twitter`'s 4.2 %, with byte-identical output on each.
+children. The other is the allocator, and it was the larger of the two: the
+walks allocated a buffer per node, and retiring those cut the parser's compile
+6.9 % and `json_twitter`'s 4.2 %.
 
-A walk that only reads recurses inside the `for_each_child` callback and needs
-no buffer at all. One that mutates borrows a pooled `NodeBuf` through
-`Body::children`, which holds no borrow of the arena.
+A buffer exists to break `for_each_child`'s borrow, which a walk cannot hold
+while it mutates. Three cases, and only the last needs one.
+
+- The walk only reads. It recurses inside the callback and needs no buffer. This
+  covers `walk_nodes_under`, so the arena's own traversal has no explicit stack:
+  the arena is a tree and the call stack is the traversal stack.
+- The walk mutates something other than the body. `Engine`'s parent map and
+  worklist are fields beside `Body`, not inside it, so splitting the borrow lets
+  the callback write them.
+- The walk mutates the body as it recurses. It threads one `Vec` down: each
+  level appends its children at the tail, indexes them out by value, and
+  truncates back, so the peak is the deepest path and the cost is one
+  allocation for the walk.
+
+No walk buffer is thread-local. A pooled one was tried and measured the same as
+recursion, which leaves nothing to pay for the hidden state.
+
+Siblings are visited in source order, matching `for_each_child`. The stack-based
+walk this replaced visited them in reverse, which nothing documented and nothing
+depends on; it permutes `TypeId` and const-object numbering and the order two
+specializations of one function are emitted in, at identical code size.
 
 - [ ] Fold the graph build into `lower`. The build's inputs do not exist during
       lowering. `builder::build` takes the alias sets and the per-call purity
@@ -575,8 +588,8 @@ Each was built, verified, and reverted. Do not retry as-is.
   reads of a mutable reference parameter.
 - Dropping the promoted-read census memo on every edit. The obvious invalidation
   rule, and measurably worse than no memo: a whole-body walk per rewrite, where
-  the per-block recomputation it replaced at least amortised over a block. Only
-  holding an empty memo across edits pays.
+  the per-block recomputation it replaced at least amortised over a block.
+  Maintaining the memo as an upper bound is what pays.
 - One `dyn FnMut` slot walk in place of the monomorphized ones. The slot match is
   inlined into every instantiation of `for_each_child`, and a dev build folds 125
   of them onto one address, so a single indirect call promised that code size

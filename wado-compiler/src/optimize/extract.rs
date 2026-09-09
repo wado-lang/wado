@@ -11,6 +11,7 @@ use crate::hashmap::IndexMap;
 use crate::nir_arena::{ExprId, ExprKind, NodeRef, StmtKind};
 use crate::nir_engine::Engine;
 use crate::nir_value_graph::{ValueId, ValueKind};
+use crate::trace::filter;
 
 use super::arena_query::value_may_trap;
 use super::census;
@@ -303,7 +304,7 @@ pub(super) fn freeze_pure_arith(
     let call_immutability = super::alias::CallImmutability::new(project, &type_table);
     let pure_builtin_callees = project.pure_builtin_callee_ids();
     let mut buffers = EngineBuffers::default();
-    let mut refusals = Refusals::default();
+    let mut refusals = Refusals::new();
     let mut changed = false;
     for func_rc in &project.functions {
         let mut func = func_rc.borrow_mut();
@@ -382,21 +383,12 @@ pub(super) fn freeze_pure_arith(
             include_fields,
         };
         let candidates: Vec<ExprId> = engine.body.exprs.keys().collect();
-        // Which splice-reach bucket the enclosing function sits in. The anchor
-        // rule exists because a later splice re-contextualizes the operand, and
-        // only `inline` splices after this pass runs — so a body far past its
-        // threshold is one whose operands cannot move.
         let mut to_freeze: Vec<(ExprId, ValueId)> = Vec::new();
         for id in candidates {
-            // Only a pure kind is tallied: it is the population the pool could
-            // hold, so a refusal over it is what keeps the node in the skeleton.
-            let kind = census::classify(&engine.body.exprs[id].kind);
-            match classify_candidate(&mut engine, &ctx, id) {
-                Ok(entry) => {
-                    refusals.note(kind, None);
-                    to_freeze.push(entry);
-                }
-                Err(refusal) => refusals.note(kind, Some(refusal)),
+            let verdict = classify_candidate(&mut engine, &ctx, id);
+            refusals.note(&engine.body.exprs[id].kind, verdict.err());
+            if let Ok(entry) = verdict {
+                to_freeze.push(entry);
             }
         }
 
@@ -431,9 +423,10 @@ pub(super) fn freeze_pure_arith(
 }
 
 /// Per-run tally of what kept the pure kinds in the skeleton, printed under
-/// `WADO_TRACE=freeze_refusals`.
-#[derive(Default)]
+/// `WADO_TRACE=freeze_refusals`. Off, it counts nothing: the tally is a lookup
+/// per candidate expression, on every freeze of every function.
 struct Refusals {
+    enabled: bool,
     pure_kinds: usize,
     frozen: usize,
     /// Refusal reason and the node kind it refused, so a reason that is really
@@ -442,8 +435,22 @@ struct Refusals {
 }
 
 impl Refusals {
-    fn note(&mut self, kind: (&'static str, bool), refusal: Option<Refusal>) {
-        let (kind_name, pure_kind) = kind;
+    fn new() -> Self {
+        Self {
+            enabled: filter().enabled(TRACE_TARGET),
+            pure_kinds: 0,
+            frozen: 0,
+            by_reason: IndexMap::default(),
+        }
+    }
+
+    /// Only a pure kind is tallied: it is the population the pool could hold, so
+    /// a refusal over it is what keeps the node in the skeleton.
+    fn note(&mut self, kind: &ExprKind, refusal: Option<Refusal>) {
+        if !self.enabled {
+            return;
+        }
+        let (kind_name, pure_kind) = census::classify(kind);
         if !pure_kind {
             return;
         }
