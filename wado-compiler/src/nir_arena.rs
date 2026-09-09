@@ -1139,6 +1139,37 @@ impl Body {
         });
     }
 
+    /// [`Body::for_each_node_under`] plus the nodes a promoted operand names as
+    /// its extraction source. Those produce the operand's code, so a walk that
+    /// took only skeleton children would call them orphans — and a rewrite that
+    /// trusted the walk would pass them by.
+    pub fn for_each_live_node_under(&self, root: NodeRef, mut f: impl FnMut(NodeRef)) {
+        let mut pool_seen: IndexSet<ValueId> = IndexSet::default();
+        let mut sourced: Vec<ExprId> = Vec::new();
+        self.for_each_node_under(root, |node| {
+            f(node);
+            self.for_each_operand(node, |op| {
+                if let Some(v) = op.as_value() {
+                    self.values
+                        .for_each_opaque_expr(v, &mut pool_seen, |e| sourced.push(e));
+                }
+            });
+        });
+        // A sourced node's own subtree is live too, and may name further
+        // sources; the pool-side visited set bounds the second walk.
+        while let Some(e) = sourced.pop() {
+            self.for_each_node_under(NodeRef::Expr(e), |node| {
+                f(node);
+                self.for_each_operand(node, |op| {
+                    if let Some(v) = op.as_value() {
+                        self.values
+                            .for_each_opaque_expr(v, &mut pool_seen, |e| sourced.push(e));
+                    }
+                });
+            });
+        }
+    }
+
     /// The first value `f` gives for `root` or a node beneath it, parents before
     /// children. `None` when it gives one for none of them.
     pub fn find_in_nodes_under<T>(
@@ -1195,7 +1226,7 @@ impl Body {
             }
             return;
         }
-        self.for_each_node_under(NodeRef::Block(self.root), f);
+        self.for_each_live_node_under(NodeRef::Block(self.root), f);
     }
 
     /// The distinct promoted values the reachable skeleton carries, and how many

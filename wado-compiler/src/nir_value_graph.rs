@@ -8,6 +8,7 @@ pub mod builder;
 
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::nir::{NirBinaryOp, NirUnaryOp};
+use crate::nir_arena::ExprId;
 use crate::tir::{PrimitiveType, TypeId, TypeTable};
 
 /// The constant a [`ValueKind`] denotes, as niri's
@@ -806,6 +807,30 @@ impl ValuePool {
 
     /// Every `Opaque(Local)` leaf under `v`, with the leaf's own id — the one
     /// [`Self::type_of`] answers for.
+    /// Every skeleton expression the value tree at `v` names as an extraction
+    /// source. Those nodes produce this value's code, so a reachability walk
+    /// that skipped them would call them orphans and let a rewrite pass by.
+    pub fn for_each_opaque_expr(
+        &self,
+        v: ValueId,
+        seen: &mut IndexSet<ValueId>,
+        mut f: impl FnMut(ExprId),
+    ) {
+        let mut stack = vec![v];
+        while let Some(v) = stack.pop() {
+            if !seen.insert(v) {
+                continue;
+            }
+            if let ValueKind::Opaque(oid) = self.kind(v) {
+                if let Some(OpaqueSource::Expr(e)) = self.opaque_source(*oid) {
+                    f(e);
+                }
+                continue;
+            }
+            self.push_value_children(v, &mut stack);
+        }
+    }
+
     pub fn for_each_opaque_local(
         &self,
         v: ValueId,
