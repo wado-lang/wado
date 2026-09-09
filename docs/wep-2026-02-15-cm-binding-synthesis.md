@@ -103,7 +103,7 @@ Used by Command world's `run()` and test functions. The binding calls the user f
 
 A `--lib` export can instead declare no result at all, as `export async fn ping()` does. It lifts through no CM type, so it flattens to no slot and delivers with `task-return()`, against a canon carrying no result type. Whether a result is there at all comes from the export's declared result in both places, so the canon and `canon lift` agree on its presence.
 
-They do not share how they resolve it: `lib_task_return_valtype` resolves the declared type, `emit_world_exports` resolves it preserving local newtypes. A `pub type Meters = i32` result reaches the lift as the named `meters` and the canon as bare `s32`. Interning makes those the same component type.
+The two resolve it differently. `lib_task_return_valtype` takes the declared type; `emit_world_exports` preserves local newtypes. A `pub type Meters = i32` result reaches the lift as the named `meters` and the canon as bare `s32`. Interning makes those the same component type.
 
 #### Result-returning exports (`(...) -> Result<T, E>`)
 
@@ -204,15 +204,17 @@ This requires:
 ### Export Validation
 
 - [x] Validate that user's export function parameter count matches the world declaration
-- [ ] Validate parameter types match (beyond count)
+- [x] Validate parameter types match (beyond count)
 - [x] Validate return type compatibility
-- [ ] Produce clear error messages for type mismatches
+- [x] Produce clear error messages for type mismatches
 
-Parameter count validation is implemented: if the user's export function has a different number of parameters than the world declaration, a clear compile error is produced.
+`validate_world_signature_compatibility` decides all of it in one place. The arity has to match, and then every type has to lower to the same flat CM values as the world's — the criterion the adapters already read the boundary by, so a program it rejects is one whose adapter would have read the boundary's words against a layout that is not theirs. `flat_types_from_ast_type` flattens the world's declared type and `flat_types_from_type_id` the export's own; the two are compared as sequences.
 
-Return type validation covers the worlds declaring `Result<_, _>`: the export returns one too. Unit stands in only where the world's `Ok` payload is itself unit, which is all the `Ok(())` wrap fills — `wasi:cli/command`'s `Result<(), ()>` takes it, `wasi:http/service`'s `Result<Response, ErrorCode>` does not. The rule holds for `async` exports as well as sync ones.
+Flat shapes alone are too coarse for one case: `i32` and `Result<(), ()>` both flatten to a single `i32`, so a world declaring a `Result` needs the export to return one as well. Unit stands in only where the world's `Ok` payload is itself unit, which is all the `Ok(())` wrap fills — `wasi:cli/command`'s `Result<(), ()>` takes it, `wasi:http/service`'s `Result<Response, ErrorCode>` does not. The rule holds for `async` exports as well as sync ones.
 
-An `export async fn` also has to carry a `task return`. The check sits beside the missing-return one, since both ask whether a body can produce the result its signature promises, and both exempt a body that provably exits on every path first. They differ in what counts as an answer: a `return` satisfies missing-return only when every path takes one, while a single `task return` anywhere satisfies this one. Delivering under a branch is what `task return` is for, and a path that misses it traps at the boundary. No static answer improves on that.
+An `export async fn` also has to carry a `task return`. The check sits beside the missing-return one: both ask whether a body can produce the result its signature promises, and both exempt a body that provably exits on every path first.
+
+What counts as an answer differs. Missing-return needs a `return` on every path. This one needs a single `task return` anywhere, because delivering under a branch is what `task return` is for. A path that misses it traps at the boundary, and no static answer improves on that.
 
 ### Summary
 
@@ -221,9 +223,9 @@ An `export async fn` also has to carry a `task return`. The check sits beside th
 | Parameter lifting           | Medium     | Done    | `synthesize_lift_from_flat_params`                                 |
 | Non-Result return types     | Low        | Done    | `synthesize_general_export_binding`                                |
 | Sync export support         | Medium     | Pending | World metadata for async/sync distinction                          |
-| Export signature validation | Low        | Partial | Parameter count and return type validated; parameter types not yet |
+| Export signature validation | Low        | Done    | Arity, parameter types and return type all validated               |
 
-The type-driven synthesizer (`synthesize_lift`, `synthesize_lower_to_flat`, flat type computation) is already generic. The remaining work is sync export support and full type validation.
+The type-driven synthesizer (`synthesize_lift`, `synthesize_lower_to_flat`, flat type computation) is already generic. The remaining work is sync export support.
 
 ### Known Limitations and Edge Cases
 

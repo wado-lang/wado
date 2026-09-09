@@ -1,0 +1,15 @@
+// The arity matching is not the signature matching. `wasi:http/service`
+// declares `handle(request: request)`, a resource handle; a `String` parameter
+// takes two words from a boundary that passes one.
+
+use { Response, ErrorCode } from "wasi:http";
+
+export async fn handle(request: String) -> Result<Response, ErrorCode> {
+    panic(`unreachable`);
+}
+
+__DATA__
+{
+    "wasi:http/service": {},
+    "compile_error": "lowers to different Component Model values than the world's"
+}

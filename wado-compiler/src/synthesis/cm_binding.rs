@@ -27,6 +27,7 @@ use crate::name::DeclPath;
 use crate::package::Package;
 use crate::tir::{ResolvedType, TirExpr, TirExprKind, TirFunction, TirModule, TypeId, TypeTable};
 use crate::tir_visitor::TirRefVisitor;
+use crate::unparse::unparse_type_into;
 use crate::world_registry::{WorldExportInfo, WorldInfo};
 
 pub use export_adapter::export_binding_func_name;
@@ -43,10 +44,10 @@ use task_return::{expand_task_returns_in_func, reduce_task_returns_in_func, spli
 use type_fixup::{
     collect_effect_calls_in_block, collect_local_type_updates, rewrite_calls_in_block,
 };
-use types::compute_export_flat_return_types;
 pub use types::{
     LiftContext, cm_enum_byte_size, cm_flags_byte_size, cm_type_to_type_id, flatten_param_type,
 };
+use types::{flat_types_from_ast_type, flat_types_from_type_id};
 
 /// Build a `(module_source, name)` set for every effect/resource declared in
 /// the loaded TIR modules. The CM binding synthesizer uses this to attach the
@@ -660,14 +661,18 @@ fn synthesize_export_adapters(project: &mut Package) -> Result<(), String> {
             {
                 let user_func = user_func_rc.borrow();
                 let tt = entry_type_table.borrow();
-                validate_export_param_count(&user_func, export)?;
                 validate_boundary_representable(
                     &user_func,
                     &export.name,
                     &tt,
                     &project.tir_modules,
                 )?;
-                validate_world_return_compatibility(&user_func, export, &tt)?;
+                validate_world_signature_compatibility(
+                    &user_func,
+                    export,
+                    &tt,
+                    &project.tir_modules,
+                )?;
             }
 
             let is_async_export = user_func_rc.borrow().is_async;
@@ -680,7 +685,7 @@ fn synthesize_export_adapters(project: &mut Package) -> Result<(), String> {
                 let return_type = export.return_type.as_ref();
                 let flat_types = return_type.map_or_else(Vec::new, |ty| {
                     let tt = entry_type_table.borrow();
-                    compute_export_flat_return_types(ty, &project.tir_modules, &tt)
+                    flat_types_from_ast_type(ty, &project.tir_modules, &tt)
                 });
                 let task_return = CanonicalIntrinsic::TaskReturn(export.name.clone());
                 let task_entry = split_task_entry(&user_func_rc, &export.name);
@@ -979,24 +984,6 @@ fn find_export_user_func(
     }
 }
 
-/// Validate that the export function's parameter count matches the world
-/// declaration.
-fn validate_export_param_count(
-    user_func: &TirFunction,
-    export: &WorldExportInfo,
-) -> Result<(), String> {
-    if user_func.params.len() == export.params.len() {
-        return Ok(());
-    }
-    Err(format!(
-        "export function `{}` has {} parameter(s), \
-         but the world expects {} parameter(s)",
-        export.name,
-        user_func.params.len(),
-        export.params.len()
-    ))
-}
-
 /// Reject any param/return type with no Component Model value representation
 /// in any world (empty records, 128-bit/v128 scalars) with a proper compile
 /// error rather than emitting an invalid component or panicking in codegen.
@@ -1020,25 +1007,73 @@ fn validate_boundary_representable(
     Ok(())
 }
 
-/// The boundary carries what the world declares. An export of a `Result<_, _>`
-/// world returns one too; unit stands in only for a `Result<(), _>`, which is
-/// all the `Ok(())` wrap fills. Every other pairing lowers against a shape the
-/// world does not have, and reaches the host as a value nothing named.
-fn validate_world_return_compatibility(
+/// The boundary carries what the world declares, so the export's signature has
+/// to agree with it: the same arity, and every type lowering to the same flat
+/// Component Model values. Anything else reaches the host as a value nothing
+/// named.
+fn validate_world_signature_compatibility(
     user_func: &TirFunction,
     export: &WorldExportInfo,
     tt: &TypeTable,
+    tir_modules: &IndexMap<ModuleSource, TirModule>,
+) -> Result<(), String> {
+    if user_func.params.len() != export.params.len() {
+        return Err(format!(
+            "export function `{}` has {} parameter(s), \
+             but the world expects {} parameter(s)",
+            export.name,
+            user_func.params.len(),
+            export.params.len()
+        ));
+    }
+    for (user_param, (world_name, world_ty)) in user_func.params.iter().zip(&export.params) {
+        validate_flat_shape_agrees(
+            &format!(
+                "parameter `{world_name}` of export function `{}`",
+                export.name
+            ),
+            user_param.type_id,
+            world_ty,
+            tt,
+            tir_modules,
+        )?;
+    }
+    let Some(world_return) = export.return_type.as_ref() else {
+        return Ok(());
+    };
+    validate_result_wrapper_agrees(user_func, export, world_return, tt)?;
+    if matches!(tt.get(user_func.return_type), ResolvedType::Unit) {
+        // The unit the wrapper check let through is delivered as the world's
+        // own `Ok(())`, so there is no user shape left to compare.
+        return Ok(());
+    }
+    validate_flat_shape_agrees(
+        &format!("the return type of export function `{}`", export.name),
+        user_func.return_type,
+        world_return,
+        tt,
+        tir_modules,
+    )
+}
+
+/// A `Result` world return needs a `Result` export, which flat shapes alone do
+/// not say: `i32` and `Result<(), ()>` both flatten to one `i32`. Unit stands in
+/// only for a `Result<(), _>`, which is all the synthesized `Ok(())` fills.
+fn validate_result_wrapper_agrees(
+    user_func: &TirFunction,
+    export: &WorldExportInfo,
+    world_return: &Type,
+    tt: &TypeTable,
 ) -> Result<(), String> {
     let result_name = tt.compiler_variant_name(CompilerItem::Result);
-    let world_ok = match &export.return_type {
-        Some(Type::Generic(g)) if g.name == result_name => g.args.first(),
-        _ => return Ok(()),
+    let Type::Generic(world) = world_return else {
+        return Ok(());
     };
-    if tt.is_result(user_func.return_type) {
+    if world.name != result_name || tt.is_result(user_func.return_type) {
         return Ok(());
     }
     let user_is_unit = matches!(tt.get(user_func.return_type), ResolvedType::Unit);
-    if user_is_unit && world_ok.is_some_and(Type::is_unit) {
+    if user_is_unit && world.args.first().is_some_and(Type::is_unit) {
         return Ok(());
     }
     let user_return_name = tt.type_name(user_func.return_type);
@@ -1048,6 +1083,30 @@ fn validate_world_return_compatibility(
          for a `{result_name}<(), _>`, which is all the `Ok(())` wrap fills). \
          Change the signature to return the `{result_name}` the world declares.",
         export.name
+    ))
+}
+
+/// Both sides name a type; they have to lower to the same flat CM values, or
+/// the adapter reads the boundary's words against a layout that is not theirs.
+fn validate_flat_shape_agrees(
+    site: &str,
+    user_type: TypeId,
+    world_type: &Type,
+    tt: &TypeTable,
+    tir_modules: &IndexMap<ModuleSource, TirModule>,
+) -> Result<(), String> {
+    let user_flat = flat_types_from_type_id(user_type, tir_modules, tt);
+    let world_flat = flat_types_from_ast_type(world_type, tir_modules, tt);
+    if user_flat == world_flat {
+        return Ok(());
+    }
+    let mut world_name = String::new();
+    unparse_type_into(world_type, &mut world_name);
+    Err(format!(
+        "{site} is `{}`, which lowers to different Component Model values than \
+         the world's `{world_name}`. Change the signature to the type the world \
+         declares.",
+        tt.type_name(user_type)
     ))
 }
 

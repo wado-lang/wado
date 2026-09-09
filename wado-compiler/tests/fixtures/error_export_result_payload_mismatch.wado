@@ -1,0 +1,16 @@
+// A `Result` on both sides is not agreement. `wasi:http/service` declares
+// `Result<Response, ErrorCode>`, whose `Ok` is a resource handle; a `String`
+// lowers to a pointer and a length. The boundary would write those two words
+// where the world named one handle.
+
+use { Request } from "wasi:http";
+
+export async fn handle(request: Request) -> Result<String, String> {
+    task return Result::<String, String>::Ok("hi");
+}
+
+__DATA__
+{
+    "wasi:http/service": {},
+    "compile_error": "lowers to different Component Model values than the world's"
+}

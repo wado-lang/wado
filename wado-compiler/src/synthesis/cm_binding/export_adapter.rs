@@ -36,8 +36,8 @@ use super::lower::synthesize_lower_wasi_type_to_memory;
 use super::types::{
     CmStdlibNames, LiftContext, LowerContext, binary_add, binary_ne, cm_val_type_to_type_id,
     cm_zero, coerce_flat_lift, coerce_flat_lower, compute_export_flat_param_types,
-    compute_export_flat_return_types, export_needs_param_lifting, field_access, find_struct_decl,
-    find_variant_decl, flat_types_from_type_id, flatten_export_type, struct_decl_of,
+    export_needs_param_lifting, field_access, find_struct_decl, find_variant_decl,
+    flat_types_from_ast_type, flat_types_from_type_id, flatten_export_type, struct_decl_of,
     type_id_to_ast_type, variant_decl_of, variant_payload, variant_tag, variant_test,
 };
 
@@ -1656,7 +1656,7 @@ fn push_sync_return_epilogue(
         .world_return
         .map(|ty| {
             let tt = env.type_table.borrow();
-            compute_export_flat_return_types(ty, env.tir_modules, &tt).len()
+            flat_types_from_ast_type(ty, env.tir_modules, &tt).len()
         })
         .unwrap_or(0);
 
@@ -1762,7 +1762,7 @@ pub(super) fn synthesize_post_return(
     let ty = env.world_return?;
     let flat_count = {
         let tt = env.type_table.borrow();
-        compute_export_flat_return_types(ty, env.tir_modules, &tt).len()
+        flat_types_from_ast_type(ty, env.tir_modules, &tt).len()
     };
     // The condition `push_sync_return_epilogue` allocates the area under.
     if flat_count <= 1 {
@@ -1835,7 +1835,7 @@ fn push_result_task_return_epilogue(
         .expect("Result export binding requires a world return type");
     let flat_return_types = {
         let tt = env.type_table.borrow();
-        compute_export_flat_return_types(return_ast, env.tir_modules, &tt)
+        flat_types_from_ast_type(return_ast, env.tir_modules, &tt)
     };
 
     let result_local = alloc_local(next_local, locals, user_return_type);
