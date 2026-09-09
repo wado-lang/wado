@@ -207,9 +207,9 @@ run = """
 #!/usr/bin/env bash
 set -xe -o pipefail
 # The level is spelled without its dash so mise does not read it as a flag of
-# its own. `wado-compiler`'s [test] include/exclude is what narrows the package
-# to the stdlib's `*_test.wado` files. Same batch-compilation shape as
-# `test-gale-o2`, whose comment explains the purge.
+# its own. `wado-compiler` is the stdlib package; its [test] filters pick the
+# `lib/` modules and the `*_test.wado` siblings holding the prelude's. Same
+# batch-compilation shape as `test-gale-o2`, whose comment explains the purge.
 level="${1:-O2}"
 case "${level}" in
     O0 | O1 | O2 | O3 | Os) ;;
