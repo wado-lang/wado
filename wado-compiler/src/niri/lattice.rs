@@ -13,7 +13,7 @@ use crate::nir::{NirBinaryOp, NirUnaryOp};
 use crate::nir_arena::{
     ArmData, BlockId, Body, ExprId, ExprKind, Operand, PatId, PatKind, StmtKind,
 };
-use crate::nir_value_graph::ValueId;
+use crate::nir_value_graph::{OpaqueSource, ValueId, ValueKind, value_kind_to_const};
 use crate::tir::{PrimitiveType, ResolvedType, TypeId};
 
 use super::CtfeBuiltin;
@@ -45,9 +45,75 @@ impl Interpreter<'_> {
             matches!(self.type_table.get(ty), ResolvedType::Enum { .. })
                 .then_some(PrimitiveType::I32)
         });
-        match crate::nir_value_graph::value_kind_to_const(body.values.kind(v), prim) {
-            Some(value) => Lattice::Const(value),
-            None => Lattice::Unevaluated,
+        if let Some(value) = value_kind_to_const(body.values.kind(v), prim) {
+            return Lattice::Const(value);
+        }
+        // Not a bare constant. A promoted operand holds the same computation the
+        // skeleton would have, so the interpreter evaluates it the same way: a
+        // local leaf reads the frame, arithmetic folds over what its operands
+        // gave. Stopping at the pool boundary is what leaves a frozen `i * i`
+        // unevaluable, and a foldable loop then survives to run time.
+        self.value_tree_to_lattice(body, v)
+    }
+
+    /// [`Self::value_to_lattice`] for a value the pool does not hold as a
+    /// constant: resolve its leaves against the frame, then fold.
+    fn value_tree_to_lattice(&self, body: &Body, v: ValueId) -> Lattice {
+        let konst = |l: Lattice| match l {
+            Lattice::Const(c) => Some(c),
+            _ => None,
+        };
+        match body.values.kind(v).clone() {
+            // The frame holds what a local denotes here; the recipe says which.
+            ValueKind::Opaque(oid) => match body.values.opaque_source(oid) {
+                Some(OpaqueSource::Local(idx)) => self
+                    .frame
+                    .env
+                    .get(&idx)
+                    .cloned()
+                    .unwrap_or(Lattice::Unevaluated),
+                _ => Lattice::Unevaluated,
+            },
+            ValueKind::Binary { op, lhs, rhs, .. } => {
+                match (
+                    konst(self.value_to_lattice(body, lhs)),
+                    konst(self.value_to_lattice(body, rhs)),
+                ) {
+                    (Some(l), Some(r)) => {
+                        eval_binary(l, op, r).map_or(Lattice::Unevaluated, Lattice::Const)
+                    }
+                    _ => Lattice::Unevaluated,
+                }
+            }
+            ValueKind::Unary { op, operand, .. } => {
+                match konst(self.value_to_lattice(body, operand)) {
+                    Some(o) => eval_unary(op, o).map_or(Lattice::Unevaluated, Lattice::Const),
+                    None => Lattice::Unevaluated,
+                }
+            }
+            ValueKind::Cast { operand, target } => {
+                match (
+                    konst(self.value_to_lattice(body, operand)),
+                    prim_of(target, self.type_table),
+                ) {
+                    (Some(o), Some(p)) => {
+                        eval_cast(o, p).map_or(Lattice::Unevaluated, Lattice::Const)
+                    }
+                    _ => Lattice::Unevaluated,
+                }
+            }
+            // A merge, a recurrence and a field read each need a program point
+            // the pool does not carry; that is the builder's to supply.
+            ValueKind::Select { .. }
+            | ValueKind::LoopPhi { .. }
+            | ValueKind::FieldAccess { .. }
+            | ValueKind::Int(..)
+            | ValueKind::Float(..)
+            | ValueKind::Bool(_)
+            | ValueKind::Char(_)
+            | ValueKind::Const(..)
+            | ValueKind::Null
+            | ValueKind::Unit => Lattice::Unevaluated,
         }
     }
 
