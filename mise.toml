@@ -244,9 +244,10 @@ set -xe -o pipefail
 # against 3442s) for a peak RSS of 5941 MiB against 4798, which is comfortable
 # on a 16 GiB runner and the first thing to revisit on a smaller one.
 # Serializing the compiles (`-p 1`) leaves the page traffic where it was, so it
-# is the per-file heap that costs, not the threads. Batch compilation only: `wado serve` is long-running, and
-# reclaiming after a spike is what the purge is for. The standing fix is the
-# allocation volume itself — ~31% of a compile's CPU is in the allocator.
+# is the per-file heap that costs, not the threads. Batch compilation only:
+# `wado serve` is long-running, and reclaiming after a spike is what the purge
+# is for. The standing fix is the allocation volume itself — ~31% of a
+# compile's CPU is in the allocator.
 export MIMALLOC_PURGE_DELAY=-1
 extra_args=()
 if [ -n "${CI:-}" ]; then
