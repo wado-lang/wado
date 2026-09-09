@@ -10,7 +10,7 @@ use crate::compiler_item::CompilerItem;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::nir::{FunctionKind, NirFunction};
-use crate::nir_arena::{Body, ExprId, ExprKind, NodeRef, Operand, PatKind, StmtKind};
+use crate::nir_arena::{Body, ExprId, ExprKind, NodeRef, PatKind, StmtKind};
 use crate::nir_package::NirPackage;
 
 use super::arena_query;
@@ -257,14 +257,12 @@ fn validate_call(
             continue;
         }
         // Dropping the argument erases its evaluation, so a trapping (but
-        // side-effect-free) argument must keep the param alive.
-        let pure = match args.get(i).map(|a| a.expr) {
-            Some(Operand::Value(_)) => true,
-            Some(Operand::Expr(e)) => {
-                arena_query::is_pure_nontrapping_expr_typed(body, e, Some(type_table))
-            }
-            None => false,
-        };
+        // side-effect-free) argument must keep the param alive. A promoted
+        // operand is not exempt: it is pure by construction but `100 / zero`
+        // still traps, and the shared predicate answers for either form.
+        let pure = args.get(i).is_some_and(|a| {
+            arena_query::is_pure_nontrapping_operand_typed(body, a.expr, Some(type_table))
+        });
         if !pure {
             rejected.insert(key);
             break;
