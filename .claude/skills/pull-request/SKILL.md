@@ -5,8 +5,8 @@ description: The rules for opening a PR you must read before creating or editing
 
 ## Before writing
 
-Read `git diff origin/main...HEAD` (three dots). The description comes from that
-diff, not from the session that produced it.
+Read `git diff origin/main...HEAD` (three dots). The title and description come
+from that diff, not from the session that produced it.
 
 Revise the branch while you are there: clean up comments and docs according to
 the project rules.
@@ -23,24 +23,32 @@ touches neither the worktree nor the index.
 
 If conflicting, resolve with the `git-upstream-sync` skill.
 
-## PR Title
+## Title
 
-Use the Conventional Commits style for pull request titles:
+One line saying what the branch is worth. Not what was edited — a reader
+scanning a list of PRs is deciding whether to care, and an inventory of the
+change does not help them decide.
 
-- `feat`: add a new feature
-- `feat!`: add a new feature with a breaking change
-- `fix`: bug fix
-- `fix!`: bug fix with a breaking change
-- `docs`: documentation-only changes
-- `perf`: code change that improves performance
-- `refactor`: code change that neither fixes a bug nor adds a feature
-- `chore`: anything else (e.g. CI, build process, dependencies)
+`<type>(<scope>): <the value>`
 
-It may include a scope, e.g. `feat(optimizer)`.
+- No: `refactor(nir): thread a frame stack through the arena visitors`
+- Yes: `perf(nir): 7 % off a debug compile of the SQLite parser`
+- No: `fix(elaborator): add an arity check to impl resolution`
+- Yes: `fix(elaborator): an impl on [] no longer matches ()`
 
-## PR Description
+Where the value is a number, the number is the title. Where it is a behaviour,
+name the behaviour. Where a branch does two unrelated things worth naming, name
+both and keep it to one line; where it does five, the title names the largest
+and the description carries the rest.
 
-Describe the outcome of the whole branch — what holds once it is merged.
+`type` is `feat`, `fix`, `docs`, `perf`, `refactor` or `chore`, with `!` for a
+breaking change (`feat!`, `fix!`). The scope is optional.
+
+## Description
+
+Open with the outcome, in a paragraph a reader can stop after. What holds once
+this is merged, and what it is worth — the numbers if the value is a number, the
+behaviour if it is a behaviour. Mechanism comes after, under headings.
 
 Do not include trial-and-error history in the branch; the commit history is the
 SSoT. That is any sentence which only parses against the pre-branch state:
@@ -51,21 +59,24 @@ for someone who sees only the merged tree. If it needs the old state, cut it.
 - No: "Codegen looked the global up by name; it now compares the read's type."
 - Yes: "Codegen compares the read site's `result_ty` against the slot's type."
 
+The same test applies to the opening paragraph, and it is where the temptation
+is worst: a speedup is worth stating, the struggle to find it is not.
+
 If the branch obviously closes a known issue, add a closing keyword
 (`Closes #N`). Do not go looking for one to attach.
 
 No need to include a test section. CI runs the full test suite.
 
-Angle brackets need nothing but a code span: `` `t_<Name>` `` renders as written.
-Reading the body back through the GitHub MCP server shows it as `t_` — that path
-mangles the text it returns (it HTML-escapes quotes in the same response), so
-what it hands back is not what GitHub stored. Check the web UI before believing
-the description is broken, and never rewrite prose to work around it.
+Angle brackets need nothing but a code span: `` `t_<Name>` `` renders as
+written. The GitHub MCP server mangles the text it reads back — it drops the
+brackets and HTML-escapes quotes — so check the web UI before believing the
+description is broken, and never rewrite prose to work around it.
 
 ## After opening & Periodic status checks
 
 Subscribe to the PR with `subscribe_pr_activity`. Handle every event it
-delivers; skipping one is a decision you state.
+delivers; skipping one is a decision you state. If the tool is unavailable, say
+so when reporting the PR rather than implying you are watching it.
 
 Check mergeability (`mergeable_state`). If conflicting, resolve it with the
 `git-upstream-sync` skill.
