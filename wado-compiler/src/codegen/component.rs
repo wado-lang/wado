@@ -1729,29 +1729,41 @@ fn emit_canonical_intrinsics(
             }
             CanonicalIntrinsic::TaskReturn(key) => {
                 let memory_idx = ctx.memory_idx();
-                let result_ty = lib_task_return_valtype(
-                    key,
-                    component_plan,
-                    project,
-                    builder,
-                    ctx,
-                    lib_type_gen,
-                )
-                .unwrap_or_else(|| {
-                    resolve_task_return_valtype(
+                // An export declaring no result delivers with no value: the
+                // canon carries no type, so the core import is `(func)`. Only a
+                // `--lib` export can say so; every other world export lifts
+                // through `result<...>`, as does the empty key (the test world,
+                // whose exports are not world exports).
+                let declares_result = component_plan
+                    .world_exports
+                    .iter()
+                    .find(|e| e.name == *key)
+                    .is_none_or(|e| !e.is_lib || e.result_type.is_some());
+                let result_ty = declares_result.then(|| {
+                    lib_task_return_valtype(
                         key,
                         component_plan,
                         project,
+                        builder,
                         ctx,
-                        result_unit_type,
-                        trailers_future_type,
-                        transmission_future_types,
-                        scalar_future_types,
-                        value_future_types,
-                        stream_types,
+                        lib_type_gen,
                     )
+                    .unwrap_or_else(|| {
+                        resolve_task_return_valtype(
+                            key,
+                            component_plan,
+                            project,
+                            ctx,
+                            result_unit_type,
+                            trailers_future_type,
+                            transmission_future_types,
+                            scalar_future_types,
+                            value_future_types,
+                            stream_types,
+                        )
+                    })
                 });
-                builder.task_return(Some(result_ty), [CanonicalOption::Memory(memory_idx)]);
+                builder.task_return(result_ty, [CanonicalOption::Memory(memory_idx)]);
             }
             CanonicalIntrinsic::WaitableSetNew => {
                 builder.waitable_set_new();

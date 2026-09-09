@@ -99,7 +99,9 @@ Export adapters currently handle two cases:
 
 #### Void exports (`() -> ()`)
 
-Used by Command world's `run()` and test functions. The binding calls the user function, then calls `task-return(0)`.
+Used by Command world's `run()` and test functions. The binding calls the user function, then calls `task-return(0)` — the Ok discriminant of the `result<>` those exports lift through.
+
+An export declaring no result at all (a `--lib` `export async fn ping()`) lifts through no CM type, so its delivery carries no flat slot: `task-return()`, against a canon carrying no result type. Whether the canon carries one follows the export's declared result, the same source `canon lift` takes its result from, so the two cannot disagree.
 
 #### Result-returning exports (`(...) -> Result<T, E>`)
 

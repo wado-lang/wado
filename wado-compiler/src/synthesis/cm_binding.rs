@@ -676,34 +676,36 @@ fn synthesize_export_adapters(project: &mut Package) -> Result<(), String> {
             // in a copy, so the user's own function stays callable from Wado.
             let mut binding_callee = Rc::clone(&user_func_rc);
             let strategy = if is_async_export {
-                if let Some(return_type) = &export.return_type {
-                    let flat_types = {
-                        let tt = entry_type_table.borrow();
-                        compute_export_flat_return_types(return_type, &project.tir_modules, &tt)
-                    };
-                    // Per-export `task.return` import, so codegen can type
-                    // the canon to this export's own result (a `--lib`
-                    // world may have several async exports of distinct
-                    // result types).
-                    let task_return = CanonicalIntrinsic::TaskReturn(export.name.clone());
-                    let task_entry = split_task_entry(&user_func_rc, &export.name);
-                    expand_task_returns_in_func(
-                        &task_entry,
-                        return_type,
-                        &flat_types,
-                        &task_return,
-                        &project.tir_modules,
-                        &entry_type_table,
-                        &project.cm_interface_registry,
-                        &binding_cm_package,
-                        &project.interner,
-                    );
-                    binding_callee = Rc::clone(&task_entry);
-                    // The binding calls it through `callee_module`, so that is where the
-                    // copy has to live: a lib world spreads its exports across
-                    // submodules.
-                    task_entries.push((callee_module.clone(), task_entry));
-                }
+                // An export declaring no result still delivers: its
+                // `task.return` carries no flat slot, and the canon it calls
+                // is typed with no result.
+                let return_type = export.return_type.as_ref();
+                let flat_types = return_type.map_or_else(Vec::new, |ty| {
+                    let tt = entry_type_table.borrow();
+                    compute_export_flat_return_types(ty, &project.tir_modules, &tt)
+                });
+                // Per-export `task.return` import, so codegen can type
+                // the canon to this export's own result (a `--lib`
+                // world may have several async exports of distinct
+                // result types).
+                let task_return = CanonicalIntrinsic::TaskReturn(export.name.clone());
+                let task_entry = split_task_entry(&user_func_rc, &export.name);
+                expand_task_returns_in_func(
+                    &task_entry,
+                    return_type,
+                    &flat_types,
+                    &task_return,
+                    &project.tir_modules,
+                    &entry_type_table,
+                    &project.cm_interface_registry,
+                    &binding_cm_package,
+                    &project.interner,
+                );
+                binding_callee = Rc::clone(&task_entry);
+                // The binding calls it through `callee_module`, so that is where the
+                // copy has to live: a lib world spreads its exports across
+                // submodules.
+                task_entries.push((callee_module.clone(), task_entry));
                 ExportReturnStrategy::AsyncTaskReturn
             } else if is_lib_world && !is_kiln_generator {
                 // Library exports: synchronous lift. The core function

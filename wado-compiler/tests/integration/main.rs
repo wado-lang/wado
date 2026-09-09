@@ -39,6 +39,7 @@ mod kiln_loader_redirect;
 mod kiln_options;
 mod lexer_recovery;
 mod lib_async_task_return_free;
+mod lib_async_void_export;
 mod lib_sync_lift_post_return;
 mod literals;
 mod loader_canonical_identity;

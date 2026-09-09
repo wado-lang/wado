@@ -45,7 +45,7 @@ use super::types::{
 /// New locals are appended to the function's `locals` and `local_count` is updated.
 pub(super) fn expand_task_returns_in_func(
     user_func: &Rc<RefCell<TirFunction>>,
-    return_type: &Type,
+    return_type: Option<&Type>,
     flat_return_types: &[cm_abi::CmValType],
     task_return: &CanonicalIntrinsic,
     tir_modules: &IndexMap<ModuleSource, TirModule>,
@@ -164,8 +164,9 @@ pub(super) fn split_task_entry(
 /// no nesting position is missed; `visit_block` rebuilds each block's
 /// statement list because one `task return` expands to several statements.
 struct TaskReturnExpander<'a> {
-    /// The world-declared result, whose flattening defines the slots.
-    return_type: &'a Type,
+    /// The world-declared result, whose flattening defines the slots. `None`
+    /// for an export declaring no result: it delivers with no slot at all.
+    return_type: Option<&'a Type>,
     flat_return_types: &'a [cm_abi::CmValType],
     task_return: &'a CanonicalIntrinsic,
     next_local: u32,
@@ -332,6 +333,12 @@ fn take_task_result(result: &ResultSlot, items: &CompilerItems) -> TirStmt {
 /// The local the `Some` arm binds the delivered value to.
 const TASK_VALUE_LOCAL: &str = "__task_value";
 
+/// The declared result behind a flat slot. Reached only where slots exist, and
+/// a slot comes from a declared result.
+fn declared_result(return_type: Option<&Type>) -> &Type {
+    return_type.expect("a flat slot comes from a declared result")
+}
+
 /// A `builtin::unreachable()` typed as `result_type`, for the arm no delivery
 /// reaches.
 fn unreachable_call(result_type: TypeId, span: Span) -> TirExpr {
@@ -359,7 +366,7 @@ fn unreachable_call(result_type: TypeId, span: Span) -> TirExpr {
 /// `post-return` is illegal under `async`, so the sequence frees its buffers.
 fn generate_inline_task_return(
     value: TirExpr,
-    return_type: &Type,
+    return_type: Option<&Type>,
     flat_return_types: &[cm_abi::CmValType],
     task_return: &CanonicalIntrinsic,
     next_local: &mut u32,
@@ -370,6 +377,10 @@ fn generate_inline_task_return(
     cm_package: &str,
     interner: &RefCell<ModuleSourceInterner>,
 ) -> Vec<TirStmt> {
+    assert!(
+        return_type.is_some() || flat_return_types.is_empty(),
+        "an export declaring no result flattens to no slot"
+    );
     let lift_ctx = LiftContext {
         cm_interface_registry,
         type_table,
@@ -612,7 +623,7 @@ fn generate_inline_task_return(
         // One walk after the match, not one per arm: the slots outlive it, and
         // their discriminant tells the walk which payload is live.
         stmts.extend(synthesize_free_cm_flat(
-            return_type,
+            declared_result(return_type),
             &FlatSlot::joined(&flat_locals, flat_return_types),
             &shape_ctx,
             next_local,
@@ -670,7 +681,7 @@ fn generate_inline_task_return(
                 TypeTable::UNIT,
             )));
             stmts.extend(synthesize_free_cm_flat(
-                return_type,
+                declared_result(return_type),
                 &FlatSlot::lowered(&lowered),
                 &shape_ctx,
                 next_local,
