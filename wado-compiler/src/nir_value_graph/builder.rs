@@ -1059,20 +1059,18 @@ impl<'a> Builder<'a> {
                 Some(self.pool.binary(op, lhs, rhs, result_type))
             }
             ExprKind::Unary { op, expr: inner } => {
-                // `Ref` / `MutRef` / `Deref` are address-taking / heap-bearing
-                // operations — not pure values. Walk the child (so pure
-                // subtrees still land in `value_of`) but do not assign an id
-                // to this expr.
-                if matches!(op, NirUnaryOp::Ref | NirUnaryOp::MutRef | NirUnaryOp::Deref) {
-                    self.walk_operand(inner);
-                    None
-                } else {
+                if op.is_pooled() {
                     let operand = self.walk_operand(inner)?;
                     let result_type = self.body.exprs[expr].type_id;
                     if let Some(folded) = self.fold_unary_const(op, operand, inner, result_type) {
                         return Some(folded);
                     }
                     Some(self.pool.unary(op, operand, result_type))
+                } else {
+                    // Still walk the child, so pure subtrees under a borrow land
+                    // in `value_of`; only this expr goes unnamed.
+                    self.walk_operand(inner);
+                    None
                 }
             }
             ExprKind::Cast {

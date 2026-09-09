@@ -422,9 +422,11 @@ pub(super) fn freeze_pure_arith(
     changed
 }
 
+const TRACE_TARGET: &str = "freeze_refusals";
+
 /// Per-run tally of what kept the pure kinds in the skeleton, printed under
-/// `WADO_TRACE=freeze_refusals`. Off, it counts nothing: the tally is a lookup
-/// per candidate expression, on every freeze of every function.
+/// `WADO_TRACE=freeze_refusals`. It counts nothing with the target off — this
+/// runs once per candidate expression of every function.
 struct Refusals {
     enabled: bool,
     pure_kinds: usize,
@@ -486,8 +488,6 @@ impl Refusals {
         }
     }
 }
-
-const TRACE_TARGET: &str = "freeze_refusals";
 
 /// Per-function analysis inputs consumed by the freeze decision. Borrowed sets
 /// computed once in [`freeze_pure_arith`]'s setup; the decision reads them and
@@ -592,15 +592,11 @@ fn classify_candidate(
         _ => engine.value(id),
     }
     .ok_or(Refusal::NoValue)?;
-    // An early freeze plants no value naming a local. The bar is cost, not
-    // soundness: what it was covering is one pass that dropped a binding without
-    // counting the reads living in the value pool, and that pass now counts them
-    // (`scalar_forward::sole_value_use`), with `optimize::run_pass` auditing the
-    // invariant. Lifting the bar measured 80 % onto the compile — the
-    // promoted-read census is a whole-body walk memoized on the memo staying
-    // *empty*, which holds only while nothing inside the loop names a local —
-    // 5.8 % onto the parser's code size, and the fixed-point loop stops
-    // converging inside its cap. See the WEP.
+    // An early freeze plants no value naming a local. The bar is cost now, not
+    // soundness: the five miscompiles it was covering are fixed, and
+    // `optimize::run_pass` audits the invariant they broke. Lifting it grows the
+    // parser's code 6.4 % and stops the fixed-point loop converging inside its
+    // cap. See the WEP for the split of that 6.4 %.
     if ctx.phase == FreezePhase::Early && engine.body.values.names_a_local(rep) {
         return Err(Refusal::NamesALocal);
     }

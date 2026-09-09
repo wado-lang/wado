@@ -329,10 +329,11 @@ while it mutates. Three cases, and only the last needs one.
 No walk buffer is thread-local. A pooled one was tried and measured the same as
 recursion, which leaves nothing to pay for the hidden state.
 
-Siblings are visited in source order, matching `for_each_child`. The stack-based
-walk this replaced visited them in reverse, which nothing documented and nothing
-depends on; it permutes `TypeId` and const-object numbering and the order two
-specializations of one function are emitted in, at identical code size.
+Siblings are visited in source order, matching `for_each_child`. The stack walk
+this replaced visited them in reverse, which nothing documented. The order does
+reach the output: it permutes `TypeId` and const-object numbering, and the order
+two specializations of one function are emitted in. Code size is unchanged on
+both benchmarks.
 
 - [ ] Fold the graph build into `lower`. The build's inputs do not exist during
       lowering. `builder::build` takes the alias sets and the per-call purity
@@ -400,10 +401,10 @@ for being unjustified. None is a performance change.
 
 ### Naming a local, before and after
 
-The early freeze plants no value naming a local. That refusal used to be a
-soundness rule and is now a cost decision, and the two are worth keeping apart.
+The early freeze plants no value naming a local. That refusal was a soundness
+rule. It is now a cost decision, and the two reasons are worth keeping apart.
 
-What it was covering is five miscompiles, each a place where the skeleton had an
+It was covering five miscompiles, each one a place where the skeleton had an
 ability the pool did not. `scalar_forward` forwarded a scalar temp and dropped
 its binding while counting only the skeleton's reads, so a read living in the
 value pool was left naming a slot that no longer existed and the extractor
@@ -422,15 +423,15 @@ fixed: with the refusal removed the corpus is correct, 4 977 of 4 982 e2e
 fixtures passing and every one of the five failures a `wir_expect` shape
 assertion rather than a miscompile.
 
-The rule's own account of itself was wrong, and worth recording as a way to be
-wrong: it read the failure as an over-merge — one version-free id standing for
-two runtime values — and the reductions that account predicts do not reproduce.
+The rule's own account of itself was wrong, and the mistake is worth recording.
+It read the failure as an over-merge, one version-free id standing for two
+runtime values. The reductions that account predicts do not reproduce.
 Arithmetic over a parameter, inlined into a loop, is correct. Identity per read
 rather than per local changes nothing. `e2e/opt_early_freeze_names_a_local`
 reduces the real failure, and it is a dropped binding, not a merged value.
 
-What is unpaid is cost, measured by removing the refusal and keeping everything
-else. Three things.
+What stays unpaid is cost. Removing the refusal and keeping everything else
+measures three things.
 
 - ~~The compile took 80 % longer, the promoted-read census re-walking at 14 % of
   self CPU.~~ Paid. The census adds to its memo rather than dropping it, so it
@@ -443,14 +444,14 @@ else. Three things.
 - The fixed-point loop stops converging inside its cap, with `copy_prop` and
   `licm` still changing at 15 iterations.
 
-The refusal stands while the two open ones are, and they are not next in line.
-Removing it is worth no compile time on its own — the census fix already paid
-that back — so what it buys is a prerequisite for retiring the pure node kinds,
-and that item is held up by something larger anyway: a value query has no flow,
-so a read of a multi-version local resolves to nothing whether the refusal is
-there or not. Taking the walk buffers off the allocator was a comparable amount
-of compile time for mechanical work and byte-identical output, so it went
-first. Coming back here is a matter of when, not whether.
+The refusal stands until those two are closed, and they are not next in line.
+Removing it buys no compile time on its own, since the census fix already paid
+that back. What it buys is a prerequisite for retiring the pure node kinds, and
+that item is held up by something larger anyway: a value query has no flow, so a
+read of a multi-version local resolves to nothing whether the refusal is there
+or not. Taking the walk buffers off the allocator was worth comparable compile
+time for mechanical work and byte-identical output, so it went first. Coming
+back here is a matter of when, not whether.
 
 Skipping `scalar_forward` separates the two, on `sqlite_parse` at `-O2`:
 

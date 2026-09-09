@@ -16,8 +16,8 @@ use crate::token::Span;
 
 use super::arena_query::block_contains_loop;
 use super::condition_implication::{
-    Binds, BoundKey, build_copy_bindings, eliminate_condition, ge_check_operands, is_panic_block,
-    node_modifies, opaque_local, parse_break_guard_head, parse_cmp, parse_var_offset, resolve,
+    Binds, BoundKey, build_copy_bindings, eliminate_condition, ge_check_operands, node_modifies,
+    opaque_local, panic_guard_check, parse_break_guard_head, parse_cmp, parse_var_offset, resolve,
     resolve_panic_ids, stmt_modifies,
 };
 use super::const_branch_prune::{BranchPruneRule, PruneMode};
@@ -244,29 +244,8 @@ fn collect_checks_in_node(
     var: u32,
     out: &mut Vec<(NodeRef, Operand, u32)>,
 ) {
-    let mut stack = vec![node];
-    while let Some(n) = stack.pop() {
-        let cand = match n {
-            NodeRef::Stmt(s) => match &engine.body.stmts[s].kind {
-                StmtKind::If {
-                    condition,
-                    then_block,
-                    else_block: None,
-                } => Some((*condition, *then_block)),
-                _ => None,
-            },
-            NodeRef::Expr(e) => match &engine.body.exprs[e].kind {
-                ExprKind::If {
-                    condition,
-                    then_branch,
-                    else_branch: None,
-                } => Some((*condition, *then_branch)),
-                _ => None,
-            },
-            NodeRef::Block(_) | NodeRef::Pat(_) => None,
-        };
-        if let Some((cond, then_b)) = cand
-            && is_panic_block(engine, then_b)
+    engine.body.for_each_node_under(node, |n| {
+        if let Some(cond) = panic_guard_check(engine, n)
             && let Some((left, right)) = ge_check_operands(engine, binds, cond)
             && let Some((cvar, cj)) = parse_var_offset(engine, binds, left)
             && cvar == var
@@ -275,8 +254,7 @@ fn collect_checks_in_node(
         {
             out.push((n, cond, b));
         }
-        engine.body.for_each_child(n, |c| stack.push(c));
-    }
+    });
 }
 
 /// Parse an operand as a direct local read, without resolving through copy

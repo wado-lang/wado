@@ -5,7 +5,6 @@ use std::cmp::Reverse;
 
 use crate::compiler_trace;
 use crate::hashmap::IndexMap;
-use crate::nir::NirUnaryOp;
 use crate::nir_arena::{Body, ExprId, ExprKind, NodeRef, Operand};
 use crate::nir_package::NirPackage;
 use crate::trace::filter;
@@ -51,10 +50,7 @@ fn flow_resolvable(body: &Body, id: ExprId) -> bool {
         ExprKind::Binary { left, right, .. } => {
             resolvable_operand(body, *left) && resolvable_operand(body, *right)
         }
-        ExprKind::Unary { op, expr } => {
-            !matches!(op, NirUnaryOp::Ref | NirUnaryOp::MutRef | NirUnaryOp::Deref)
-                && resolvable_operand(body, *expr)
-        }
+        ExprKind::Unary { op, expr } => op.is_pooled() && resolvable_operand(body, *expr),
         ExprKind::Cast { expr, .. } => resolvable_operand(body, *expr),
         _ => false,
     }
@@ -196,11 +192,7 @@ pub(super) fn classify(kind: &ExprKind) -> (&'static str, bool) {
         ExprKind::GlobalVarGet { .. } => ("GlobalVarGet", false),
         ExprKind::GlobalVarSet { .. } => ("GlobalVarSet", false),
         ExprKind::Binary { .. } => ("Binary", true),
-        // A borrow is a place, not a value, and no `ValueKind` carries one.
-        ExprKind::Unary { op, .. } => (
-            "Unary",
-            !matches!(op, NirUnaryOp::Ref | NirUnaryOp::MutRef | NirUnaryOp::Deref),
-        ),
+        ExprKind::Unary { op, .. } => ("Unary", op.is_pooled()),
         ExprKind::Assign { .. } => ("Assign", false),
         ExprKind::Cast { .. } => ("Cast", true),
         ExprKind::Call { .. } => ("Call", false),

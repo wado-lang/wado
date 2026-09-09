@@ -746,27 +746,7 @@ fn refute_panic_checks(
 ) -> bool {
     let mut holders: Vec<(NodeRef, Operand)> = Vec::new();
     engine.body.for_each_node_under(node, |n| {
-        let cand = match n {
-            NodeRef::Stmt(s) => match &engine.body.stmts[s].kind {
-                StmtKind::If {
-                    condition,
-                    then_block,
-                    else_block: None,
-                } => Some((*condition, *then_block)),
-                _ => None,
-            },
-            NodeRef::Expr(e) => match &engine.body.exprs[e].kind {
-                ExprKind::If {
-                    condition,
-                    then_branch,
-                    else_branch: None,
-                } => Some((*condition, *then_branch)),
-                _ => None,
-            },
-            _ => None,
-        };
-        if let Some((cond, then_b)) = cand
-            && is_panic_block(engine, then_b)
+        if let Some(cond) = panic_guard_check(engine, n)
             && refute(engine, binds, cond)
         {
             holders.push((n, cond));
@@ -1312,7 +1292,7 @@ fn len_minus_fact(engine: &Engine, binds: &Binds, node: NodeRef) -> Option<Prove
 
 /// A panic-guard `if <check> { panic }` (no else, `then` a panic block): the
 /// implicit bounds check every `arr[i]` lowers to. Returns its check condition.
-fn panic_guard_check(engine: &Engine, node: NodeRef) -> Option<Operand> {
+pub(super) fn panic_guard_check(engine: &Engine, node: NodeRef) -> Option<Operand> {
     let (cond, then_b) = match node {
         NodeRef::Stmt(s) => match &engine.body.stmts[s].kind {
             StmtKind::If {

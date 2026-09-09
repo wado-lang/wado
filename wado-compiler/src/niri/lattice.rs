@@ -59,10 +59,6 @@ impl Interpreter<'_> {
     /// [`Self::value_to_lattice`] for a value the pool does not hold as a
     /// constant: resolve its leaves against the frame, then fold.
     fn value_tree_to_lattice(&self, body: &Body, v: ValueId) -> Lattice {
-        let konst = |l: Lattice| match l {
-            Lattice::Const(c) => Some(c),
-            _ => None,
-        };
         match body.values.kind(v).clone() {
             // The frame holds what a local denotes here; the recipe says which.
             // An aliased local is read through its place, never out of `env` —
@@ -80,8 +76,8 @@ impl Interpreter<'_> {
             },
             ValueKind::Binary { op, lhs, rhs, .. } => {
                 match (
-                    konst(self.value_to_lattice(body, lhs)),
-                    konst(self.value_to_lattice(body, rhs)),
+                    self.value_to_lattice(body, lhs).as_const(),
+                    self.value_to_lattice(body, rhs).as_const(),
                 ) {
                     (Some(l), Some(r)) => {
                         eval_binary(l, op, r).map_or(Lattice::Unevaluated, Lattice::Const)
@@ -90,14 +86,14 @@ impl Interpreter<'_> {
                 }
             }
             ValueKind::Unary { op, operand, .. } => {
-                match konst(self.value_to_lattice(body, operand)) {
+                match self.value_to_lattice(body, operand).as_const() {
                     Some(o) => eval_unary(op, o).map_or(Lattice::Unevaluated, Lattice::Const),
                     None => Lattice::Unevaluated,
                 }
             }
             ValueKind::Cast { operand, target } => {
                 match (
-                    konst(self.value_to_lattice(body, operand)),
+                    self.value_to_lattice(body, operand).as_const(),
                     prim_of(target, self.type_table),
                 ) {
                     (Some(o), Some(p)) => {
@@ -110,8 +106,9 @@ impl Interpreter<'_> {
             // the pool does not carry; that is the builder's to supply.
             ValueKind::Select { .. }
             | ValueKind::LoopPhi { .. }
-            | ValueKind::FieldAccess { .. }
-            | ValueKind::Int(..)
+            | ValueKind::FieldAccess { .. } => Lattice::Unevaluated,
+            // The caller returned already for every constant kind.
+            ValueKind::Int(..)
             | ValueKind::Float(..)
             | ValueKind::Bool(_)
             | ValueKind::Char(_)

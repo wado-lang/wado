@@ -6,6 +6,8 @@
 
 pub mod builder;
 
+use std::ops::ControlFlow;
+
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::nir::{NirBinaryOp, NirUnaryOp};
 use crate::nir_arena::ExprId;
@@ -683,21 +685,11 @@ impl ValuePool {
         if self.child_count(v) == 0 {
             return self.is_local_opaque(v);
         }
-        let mut seen = IndexSet::default();
-        let mut stack = vec![v];
-        while let Some(v) = stack.pop() {
-            if !seen.insert(v) {
-                continue;
-            }
-            if matches!(self.kind(v), ValueKind::Opaque(_)) {
-                if self.is_local_opaque(v) {
-                    return true;
-                }
-                continue;
-            }
-            self.push_value_children(v, &mut stack);
-        }
-        false
+        self.walk_opaques(v, &mut IndexSet::default(), |src, _| match src {
+            Some(OpaqueSource::Local(_)) => ControlFlow::Break(()),
+            _ => ControlFlow::Continue(()),
+        })
+        .is_some()
     }
 
     /// Whether `v` is itself an `Opaque` sourced from a local.
@@ -732,8 +724,37 @@ impl ValuePool {
         }
     }
 
-    /// Push the pure-value children of `v` — the edges both leaf walks follow.
-    /// An `Opaque` is a leaf: it stands for what the graph cannot reconstruct.
+    /// Walk the values reachable from `root`, invoking `f` at each `Opaque`
+    /// leaf with its source. `Break` stops the walk and is its result.
+    ///
+    /// Worklist with a visited set, not recursion: an induction `LoopPhi` is
+    /// self-referential (`body_iter` = `binary(phi, step)`), so a recursive walk
+    /// would not terminate. The visited set bounds it at each canonical id.
+    fn walk_opaques<T>(
+        &self,
+        root: ValueId,
+        seen: &mut IndexSet<ValueId>,
+        mut f: impl FnMut(Option<OpaqueSource>, ValueId) -> ControlFlow<T>,
+    ) -> Option<T> {
+        let mut stack = vec![root];
+        while let Some(v) = stack.pop() {
+            if !seen.insert(v) {
+                continue;
+            }
+            if let ValueKind::Opaque(oid) = self.kind(v) {
+                if let ControlFlow::Break(found) = f(self.opaque_source(*oid), v) {
+                    return Some(found);
+                }
+                continue;
+            }
+            self.push_value_children(v, &mut stack);
+        }
+        None
+    }
+
+    /// Push the pure-value children of `v`, the edges [`Self::walk_opaques`]
+    /// follows. An `Opaque` is a leaf: it stands for what the graph cannot
+    /// reconstruct.
     fn push_value_children(&self, v: ValueId, stack: &mut Vec<ValueId>) {
         match self.kind(v) {
             ValueKind::Binary { lhs, rhs, .. } => {
@@ -773,21 +794,14 @@ impl ValuePool {
             return matches!(self.kind(v), ValueKind::Opaque(oid)
                 if self.opaque_source(*oid) == Some(OpaqueSource::Local(idx)));
         }
-        let mut stack = vec![v];
-        let mut seen: IndexSet<ValueId> = IndexSet::default();
-        while let Some(v) = stack.pop() {
-            if !seen.insert(v) {
-                continue;
+        self.walk_opaques(v, &mut IndexSet::default(), |src, _| {
+            if src == Some(OpaqueSource::Local(idx)) {
+                ControlFlow::Break(())
+            } else {
+                ControlFlow::Continue(())
             }
-            if let ValueKind::Opaque(oid) = self.kind(v) {
-                if self.opaque_source(*oid) == Some(OpaqueSource::Local(idx)) {
-                    return true;
-                }
-                continue;
-            }
-            self.push_value_children(v, &mut stack);
-        }
-        false
+        })
+        .is_some()
     }
 
     /// [`ValuePool::collect_opaque_locals`] carrying its visited set across
@@ -814,19 +828,12 @@ impl ValuePool {
         seen: &mut IndexSet<ValueId>,
         mut f: impl FnMut(ExprId),
     ) {
-        let mut stack = vec![v];
-        while let Some(v) = stack.pop() {
-            if !seen.insert(v) {
-                continue;
+        self.walk_opaques::<()>(v, seen, |src, _| {
+            if let Some(OpaqueSource::Expr(e)) = src {
+                f(e);
             }
-            if let ValueKind::Opaque(oid) = self.kind(v) {
-                if let Some(OpaqueSource::Expr(e)) = self.opaque_source(*oid) {
-                    f(e);
-                }
-                continue;
-            }
-            self.push_value_children(v, &mut stack);
-        }
+            ControlFlow::Continue(())
+        });
     }
 
     /// Every `Opaque(Local)` leaf under `v`, with the leaf's own id — the one
@@ -837,23 +844,12 @@ impl ValuePool {
         seen: &mut IndexSet<ValueId>,
         mut f: impl FnMut(u32, ValueId),
     ) {
-        // Worklist with a visited set, not recursion: an induction `LoopPhi` is
-        // self-referential (`body_iter` = `binary(phi, step)`), so a recursive walk
-        // would not terminate. The visited set bounds the traversal at each value's
-        // canonical id.
-        let mut stack = vec![v];
-        while let Some(v) = stack.pop() {
-            if !seen.insert(v) {
-                continue;
+        self.walk_opaques::<()>(v, seen, |src, id| {
+            if let Some(OpaqueSource::Local(idx)) = src {
+                f(idx, id);
             }
-            if let ValueKind::Opaque(oid) = self.kind(v) {
-                if let Some(OpaqueSource::Local(idx)) = self.opaque_source(*oid) {
-                    f(idx, v);
-                }
-                continue;
-            }
-            self.push_value_children(v, &mut stack);
-        }
+            ControlFlow::Continue(())
+        });
     }
 
     /// Remap every `OpaqueSource::Local` index through `remap` (old → new), which

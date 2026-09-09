@@ -1,22 +1,26 @@
-// Soundness regression for the early operand freeze (WEP 2026-06-05, "The
-// anchor rule"): before the structural passes, a frozen operand may not name a
-// local.
+// Soundness regression for the early operand freeze (WEP 2026-06-05, "Naming a
+// local, before and after"): before the structural passes, a frozen operand may
+// not name a local.
 //
 // `List::push_within_capacity` is the shape that breaks, and this is the
 // smallest program that reaches it:
 //
-//     let used = self.used;      // single-version, bound once per call
+//     let used = self.used;      // one skeleton read, one pooled read
 //     self.repr[used] = value;
 //     self.used = used + 1;      // freeze candidate, names `used`
 //
-// `used` passes the single-version test *in the callee*, so the early freeze
-// would plant an operand naming it. The inliner then splices the body into the
-// loop below, where the binding runs once per iteration — one `ValueId` for
-// four different values. "Its binding executes once" is a property of the
-// callee that inlining does not preserve.
+// The early freeze plants `used + 1` as a pool value naming `used`. That read
+// has no skeleton node, so a pass counting only skeleton reads sees `used` read
+// once, forwards its binding into that one use, and drops the binding — leaving
+// the pooled operand naming a slot with no definition.
 //
-// With the rule removed, `used + 1` is computed once and `self.used` stays at
-// 1, so the third push asserts `index out of bounds: index 1, self.used 1`.
+// The failure is a dropped binding, not a merged value. This fixture is what
+// showed that: the WEP's earlier account read it as one `ValueId` standing for
+// four runtime values, and the reductions that account predicts do not
+// reproduce.
+//
+// Symptom: `used + 1` is computed once, `self.used` stays at 1, and the third
+// push asserts `index out of bounds: index 1, self.used 1`.
 //
 // `black_box` keeps the loop bound off the constant path; with a constant one
 // the loop folds at compile time and there is nothing left to inline.

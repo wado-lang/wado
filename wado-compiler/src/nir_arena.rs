@@ -1167,13 +1167,13 @@ impl Body {
     /// answers `Continue(true)` to descend into a node's children,
     /// `Continue(false)` to skip them, or `Break(value)` to stop the walk.
     ///
-    /// Siblings come in source order. A walk that edits the body as it goes
-    /// keeps its own loop: `f` holds `&Body` and cannot mutate through it.
+    /// Siblings come in source order. A walk that edits the body as it goes, or
+    /// that descends into some children of a node and not others, keeps its own
+    /// loop: `f` holds `&Body` and cannot mutate through it, and `Continue`
+    /// chooses for all of a node's children at once.
     ///
-    /// The recursion is the traversal stack — the arena is a tree, so no
-    /// explicit one is needed, and the call stack costs no allocation. Depth is
-    /// the body's nesting depth, which every other walk here already recurses
-    /// to.
+    /// Recursion depth is the body's nesting depth, which every other walk in
+    /// this module already recurses to.
     pub fn walk_nodes_under<T>(
         &self,
         root: NodeRef,

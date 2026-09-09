@@ -449,8 +449,7 @@ impl<'a> Engine<'a> {
                 self.body.values.binary_folded(op, lhs, rhs, result_ty, tt)
             }
             ExprKind::Unary { op, expr: inner } => {
-                use crate::nir::NirUnaryOp;
-                if matches!(op, NirUnaryOp::Ref | NirUnaryOp::MutRef | NirUnaryOp::Deref) {
+                if !op.is_pooled() {
                     return None;
                 }
                 let operand = self.operand_value(inner)?;
