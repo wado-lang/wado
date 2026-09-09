@@ -6,6 +6,7 @@
 
 use crate::ast::{NamedType, Type};
 use crate::cm_abi;
+use crate::component_model::EMPTY_TUPLE_AT_BOUNDARY;
 use crate::module_source::ModuleSource;
 use crate::name::LocalMethodName;
 use crate::tir::{
@@ -89,6 +90,8 @@ pub fn synthesize_lower(
             stmts
         }
         Type::Named(named) => match named.name.as_str() {
+            // Unit occupies no memory, so there is nothing to store.
+            TypeTable::UNIT_TYPE_NAME => vec![],
             "i32" | "u32" => vec![expr_stmt(builtin_call(
                 "i32_store",
                 vec![addr, value],
@@ -155,7 +158,7 @@ pub fn synthesize_lower(
              which handles aggregate layout; synthesize_lower covers primitives only",
             g.name
         ),
-        Type::Tuple(elems) if elems.is_empty() => vec![],
+        Type::Tuple(elems) if elems.is_empty() => unreachable!("{EMPTY_TUPLE_AT_BOUNDARY}"),
         Type::Tuple(_) => panic!(
             "tuples must lower via synthesize_lower_tuple, \
              which computes element offsets; synthesize_lower covers primitives only"

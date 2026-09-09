@@ -539,9 +539,7 @@ fn emit_cm_val_type(
                 None
             } else {
                 let ok = &g.args[0];
-                if let Type::Named(named) = ok
-                    && named.name == "()"
-                {
+                if ok.is_unit() {
                     None
                 } else if let Type::Named(named) = ok
                     && own_resource_type_indices.contains_key(&named.name)

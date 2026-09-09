@@ -4225,10 +4225,8 @@ impl CmTypeGen {
                     ComponentValType::Type(idx)
                 }
                 "Result" => {
-                    let is_ok_unit = matches!(&generic.args[0], Type::Tuple(t) if t.is_empty())
-                        || matches!(&generic.args[0], Type::Named(n) if n.name == "()");
-                    let is_err_unit = matches!(&generic.args[1], Type::Tuple(t) if t.is_empty())
-                        || matches!(&generic.args[1], Type::Named(n) if n.name == "()");
+                    let is_ok_unit = generic.args[0].is_unit();
+                    let is_err_unit = generic.args[1].is_unit();
                     let ok_type = if is_ok_unit {
                         None
                     } else {
@@ -4312,9 +4310,7 @@ impl CmTypeGen {
                 }
                 _ => panic!("unsupported generic type for CM instance: {}", generic.name),
             },
-            Type::Tuple(elems) if elems.is_empty() => {
-                panic!("unit type should be handled at Result level, not directly")
-            }
+            Type::Tuple(elems) if elems.is_empty() => unreachable!("{EMPTY_TUPLE_AT_BOUNDARY}"),
             Type::Tuple(elems) => {
                 let cm_elems: Vec<ComponentValType> = elems
                     .iter()
@@ -4459,7 +4455,7 @@ fn is_param_type_supported_with_types(
             matches!(
                 generic.name.as_str(),
                 "Stream" | "Result" | "Future" | "Option" | "List"
-            )
+            ) && !generic.args.iter().any(mentions_empty_tuple)
         }
         Type::Reference(inner) | Type::MutReference(inner) => {
             // borrow<resource> - passed as i32 handle at CM boundary
@@ -4469,9 +4465,21 @@ fn is_param_type_supported_with_types(
                 false
             }
         }
-        Type::Tuple(elems) => elems
+        Type::Tuple(elems) if !elems.is_empty() => elems
             .iter()
             .all(|e| is_param_type_supported_with_types(e, enums, resources, structs)),
+        _ => false,
+    }
+}
+
+/// Whether `ty` names the empty tuple anywhere, including under a generic. The
+/// shape predicates ask this where they accept a generic without judging its
+/// arguments, so a payload of `[]` cannot ride in past them.
+fn mentions_empty_tuple(ty: &Type) -> bool {
+    match ty {
+        Type::Tuple(elems) => elems.is_empty() || elems.iter().any(mentions_empty_tuple),
+        Type::Generic(generic) => generic.args.iter().any(mentions_empty_tuple),
+        Type::Reference(inner) | Type::MutReference(inner) => mentions_empty_tuple(inner),
         _ => false,
     }
 }
@@ -4513,7 +4521,7 @@ fn is_return_type_supported_with_types(
         }
         Type::Generic(generic) => {
             match generic.name.as_str() {
-                "Stream" | "Future" => true,
+                "Stream" | "Future" => !generic.args.iter().any(mentions_empty_tuple),
                 "AsyncCall" if generic.args.len() == 1 => {
                     // `AsyncCall<T>` is the Wado-level wrapper for async CM imports;
                     // the CM ABI return is the inner `T`. Support depends on `T`.
@@ -4535,15 +4543,9 @@ fn is_return_type_supported_with_types(
                 _ => false,
             }
         }
-        Type::Tuple(elements) => {
-            // Empty tuple () is the unit type, which is always supported
-            if elements.is_empty() {
-                return true;
-            }
-            elements
-                .iter()
-                .all(|el| is_return_type_supported_with_types(el, enums, resources, structs))
-        }
+        Type::Tuple(elements) if !elements.is_empty() => elements
+            .iter()
+            .all(|el| is_return_type_supported_with_types(el, enums, resources, structs)),
         _ => false,
     }
 }
@@ -4588,6 +4590,11 @@ pub fn is_cm_function_supported(func: &CmFunctionInfo) -> bool {
 
 /// Canonical ABI maximum flat results before a return must use an outptr.
 pub const MAX_FLAT_RESULTS: usize = 1;
+
+/// What every boundary path says when it meets the empty tuple, which none of
+/// them does.
+pub const EMPTY_TUPLE_AT_BOUNDARY: &str = "the empty tuple `[]` has no Component Model \
+     representation, and the boundary rejects one before synthesis";
 
 /// Whether a return type must use an outptr rather than flat core results. The
 /// flat count is the single rule: a type returns via the outptr iff it flattens

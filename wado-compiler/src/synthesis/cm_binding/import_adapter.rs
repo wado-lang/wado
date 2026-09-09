@@ -8,7 +8,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use crate::ast::{NamedType, Type};
-use crate::component_model::{CmFunctionInfo, CmInterfaceRegistry};
+use crate::component_model::{CmFunctionInfo, CmInterfaceRegistry, EMPTY_TUPLE_AT_BOUNDARY};
 use crate::hashmap::IndexSet;
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
 use crate::name::LocalMethodName;
@@ -725,7 +725,7 @@ fn classify_param<'t>(
         Type::Generic(g) if matches!(g.name.as_str(), "Stream" | "Future" | "Own" | "Borrow") => {
             ParamLowering::Direct
         }
-        Type::Tuple(elems) if elems.is_empty() => ParamLowering::Direct,
+        Type::Tuple(elems) if elems.is_empty() => unreachable!("{EMPTY_TUPLE_AT_BOUNDARY}"),
         other => panic!("unsupported param type shape for CM import lowering: {other:?}"),
     }
 }

@@ -10,7 +10,7 @@ use std::rc::Rc;
 use crate::ast::Type;
 use crate::canonical::CanonicalIntrinsic;
 use crate::cm_abi;
-use crate::component_model::CmInterfaceRegistry;
+use crate::component_model::{CmInterfaceRegistry, EMPTY_TUPLE_AT_BOUNDARY};
 use crate::hashmap::IndexMap;
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
 use crate::name::LocalMethodName;
@@ -1070,10 +1070,7 @@ pub(super) fn synthesize_lift_from_flat_params(
             // Stream<T>, Future<T>, Own<T>, Borrow<T> — i32 handles
             _ => (local_ref(flat_param_locals[0], "__p", TypeTable::I32), 1),
         },
-        Type::Tuple(elems) if elems.is_empty() => {
-            let unit = TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, synth_span());
-            (unit, 0)
-        }
+        Type::Tuple(elems) if elems.is_empty() => unreachable!("{EMPTY_TUPLE_AT_BOUNDARY}"),
         Type::Tuple(elems) => {
             // Tuple: lift each element from consecutive flat params
             let mut total_consumed = 0;
