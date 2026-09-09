@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1788923525422,
+  "lastUpdate": 1788954903829,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -54353,6 +54353,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/0b5da6f0b1de264d62553fd3830b26ae88858dac"
         },
         "date": 1788923524676,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 2013,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6560,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18971,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 288933,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "060da46266807ceef6c98074dac2edb0ba08c581",
+          "message": "Merge pull request #2008 from wado-lang/claude/latest-issue-solution-design-6x1kfq\n\nfix(cm-binding): every `export async fn` delivers the result its world declares",
+          "timestamp": "2026-09-09T20:38:47+09:00",
+          "tree_id": "ee9751825c69afb8b04569ec4be454858ac7d0e1",
+          "url": "https://github.com/wado-lang/wado/commit/060da46266807ceef6c98074dac2edb0ba08c581"
+        },
+        "date": 1788954902876,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
