@@ -7,6 +7,7 @@
 mod aggregate_forward;
 mod alias;
 mod arena_query;
+mod census;
 mod clone_forward;
 mod cold_outline;
 mod condition_implication;
@@ -146,6 +147,7 @@ pub fn optimize(
     // pick a constant `array.new_fixed<u8>` repr for strings at or below it —
     // which lets a constant string global promote to an eager Wasm constant.
     project.string_inline_max_bytes = string_inline_max_bytes(opt_level);
+    census::report(&project, "post-lower");
     match opt_level {
         OptLevel::O0 => {
             // No optimizations, but still run DCE to reduce codegen work
@@ -287,6 +289,7 @@ pub fn optimize(
     // The born-resolved invariant is now enforced by the type system: a call
     // node's `func_id` is a non-optional `FuncId`, stamped at its synthesis site.
 
+    census::report(&project, "end-of-optimize");
     project
 }
 
