@@ -563,7 +563,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     pub(super) fn get_type_name(&self, ty: &Type) -> String {
         match ty {
-            Type::Named(named) if named.name == "()" => TypeTable::UNIT_TYPE_NAME.to_string(),
             Type::Named(named) => named.name.clone(),
             Type::Generic(generic) => generic.name.clone(),
             // The `ns$Name` alias a namespace import registers, which is the

@@ -2725,7 +2725,6 @@ fn written_type_source(ty: &ast::Type) -> String {
 
 pub(super) fn get_type_name_static(ty: &ast::Type) -> String {
     match ty {
-        ast::Type::Named(named) if named.name == "()" => TypeTable::UNIT_TYPE_NAME.to_string(),
         ast::Type::Named(named) => named.name.clone(),
         ast::Type::Generic(generic) => generic.name.clone(),
         ast::Type::Reference(_) | ast::Type::MutReference(_) => name::RefKind::from_ast(ty)

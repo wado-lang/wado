@@ -1954,6 +1954,13 @@ let unit: () = ();    // Unit type/value
 let empty: [] = [];   // Empty tuple (rarely used)
 ```
 
+Being distinct types, they take separate `impl`s: a method defined on one is not
+found on the other.
+
+`[]` has no Component Model representation — a `tuple` carries at least one type,
+and `()` is the type that carries none — so it cannot cross a component boundary.
+An export naming one is rejected at compile time.
+
 ##### The `never` type (`!`) — bottom type
 
 `never` is the bottom type: it is a subtype of every type. An expression of type `never` never returns — it always diverges (traps). `panic()` and `unreachable()` both return `!`.

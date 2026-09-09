@@ -9,7 +9,8 @@ use std::cell::RefCell;
 use crate::ast::{NamedType, Type};
 use crate::cm_abi;
 use crate::component_model::{
-    CmInterfaceRegistry, cm_align_with_registry_scoped, cm_size_with_registry_scoped,
+    CmInterfaceRegistry, EMPTY_TUPLE_AT_BOUNDARY, cm_align_with_registry_scoped,
+    cm_size_with_registry_scoped,
 };
 use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
@@ -95,7 +96,7 @@ pub(super) fn cm_shape(ty: &Type, ctx: &CmShapeContext<'_>) -> CmShape {
     match &resolved {
         Type::Named(named) if named.name == names.string => CmShape::Str,
         Type::Named(named) => named_shape(named, ctx),
-        Type::Tuple(elems) if elems.is_empty() => CmShape::Scalar,
+        Type::Tuple(elems) if elems.is_empty() => unreachable!("{EMPTY_TUPLE_AT_BOUNDARY}"),
         Type::Tuple(elems) => CmShape::Record(field_list(elems, ctx)),
         Type::Generic(g) if g.name == names.array && g.args.len() == 1 => {
             CmShape::List(Box::new(field_of(&g.args[0], 0, ctx)))
