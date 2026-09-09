@@ -214,11 +214,11 @@ Return type validation covers the worlds declaring `Result<_, _>`: the export re
 
 ### Summary
 
-| Task                        | Difficulty | Status  | Notes                                     |
-| --------------------------- | ---------- | ------- | ----------------------------------------- |
-| Parameter lifting           | Medium     | Done    | `synthesize_lift_from_flat_params`        |
-| Non-Result return types     | Low        | Done    | `synthesize_general_export_binding`       |
-| Sync export support         | Medium     | Pending | World metadata for async/sync distinction |
+| Task                        | Difficulty | Status  | Notes                                                              |
+| --------------------------- | ---------- | ------- | ------------------------------------------------------------------ |
+| Parameter lifting           | Medium     | Done    | `synthesize_lift_from_flat_params`                                 |
+| Non-Result return types     | Low        | Done    | `synthesize_general_export_binding`                                |
+| Sync export support         | Medium     | Pending | World metadata for async/sync distinction                          |
 | Export signature validation | Low        | Partial | Parameter count and return type validated; parameter types not yet |
 
 The type-driven synthesizer (`synthesize_lift`, `synthesize_lower_to_flat`, flat type computation) is already generic. The remaining work is sync export support and full type validation.
