@@ -381,14 +381,24 @@ for being unjustified. None is a performance change.
 The early freeze plants no value naming a local. That refusal used to be a
 soundness rule and is now a cost decision, and the two are worth keeping apart.
 
-What it was covering is one pass. `scalar_forward` forwarded a scalar temp and
-dropped its binding while counting only the skeleton's reads, so a read living
-in the value pool was left naming a slot that no longer existed and the
-extractor emitted a `local.get` of it. `copy_prop` and `elide_local` each count
-the pooled reads; that one did not. Counting them is each pass's own obligation,
-and `optimize::run_pass` audits the invariant — every local a promoted operand
-reads still has a definition — at end-of-optimize, or at every pass boundary
-under `WADO_TRACE=promoted_reads`, which is what named the pass.
+What it was covering is five miscompiles, each a place where the skeleton had an
+ability the pool did not. `scalar_forward` forwarded a scalar temp and dropped
+its binding while counting only the skeleton's reads, so a read living in the
+value pool was left naming a slot that no longer existed and the extractor
+emitted a `local.get` of it. `copy_prop` forwarded a promoted binding that was
+not constant. `dae` read "promoted" as "safe to delete", but purity is not the
+question it asks: `100 / zero` is pure and still traps. `niri` stopped at the
+pool instead of evaluating the operand behind it. The pool folded no
+short-circuit identity, so `x || false` survived in a promoted operand that the
+skeleton would have collapsed.
+
+Counting pooled reads is each pass's own obligation, and `optimize::run_pass`
+audits the invariant — every local a promoted operand reads still has a
+definition — at end-of-optimize, or at every pass boundary under
+`WADO_TRACE=promoted_reads`, which is what named `scalar_forward`. All five are
+fixed: with the refusal removed the corpus is correct, 4 977 of 4 982 e2e
+fixtures passing and every one of the five failures a `wir_expect` shape
+assertion rather than a miscompile.
 
 The rule's own account of itself was wrong, and worth recording as a way to be
 wrong: it read the failure as an over-merge — one version-free id standing for
@@ -406,13 +416,41 @@ else. Three things.
   query. Over-counting keeps a binding alive, which costs an elision and never
   correctness; the session-end audit checks the bound, not equality. With the
   refusal removed the compile is back to its baseline.
-- The parser's code grows 5.8 %, from re-materialising a non-constant at each
-  use. That is the extraction cost model, still open.
+- The parser's code grows 6.4 %. Two thirds of that is the extraction cost
+  model, one third is `scalar_forward` going blind; see below.
 - The fixed-point loop stops converging inside its cap, with `copy_prop` and
   `licm` still changing at 15 iterations.
 
 The two open ones are separate pieces of work, and the refusal stands until they
 are done.
+
+Skipping `scalar_forward` separates the two, on `sqlite_parse` at `-O2`:
+
+| bytes            | `scalar_forward` on | skipped |
+| ---------------- | ------------------: | ------: |
+| refusal in place |             393 702 | 412 659 |
+| refusal removed  |             418 914 | 429 640 |
+
+The pass is worth 19.0 KB with the refusal in place and 10.7 KB without it, so
+8.2 KB of the 25.2 KB growth is forwarding it can no longer do. The other
+17.0 KB is re-materialisation, and it is there whether the pass runs or not.
+
+What blinds the pass is the shape `let c = <expr>; if !c { … }`. The `!c` read
+is pure, so it is promoted, and the skeleton is then left with zero reads of
+`c` — `sole_value_use` finds nothing to forward into. `cond_impl_post_promote`
+then never prunes the bounds check the forward would have exposed, which is
+where `wir_optimize_branchless_increment` and
+`wir_optimize_copy_prop_destructure` fail; `array_bounds_elim_version_fill_wir`
+and `match_switch_large_range_body_cost` read the same unpruned shape.
+`tuple_literal_projection_wir` is not yet reduced.
+
+Substituting into the pool does not reach it. Forwarding means replacing
+`Opaque(Local c)` with the value of `i < len`, and that does not intern: `i` is
+a loop counter, so `local_has_one_version` fails and the tree has no `ValueId`.
+The operand has to go back to the skeleton instead — a NIR-level twin of
+`wir_build`'s `extract_value`, rebuilding expressions from a value tree. The
+same primitive is what the extraction cost model needs, to bind a
+multiply-used local-naming value once rather than re-materialise it per use.
 
 There is no in-loop freeze. One was
 built under the rule and promoted nothing on either benchmark, at 11.3 % of the
