@@ -2188,11 +2188,7 @@ fn collect_loop_heap_node(
     if let NodeRef::Expr(e) = node {
         record_loop_heap_write(body, facts, e, eff);
     }
-    let mut kids = Vec::new();
-    body.for_each_child(node, |c| kids.push(c));
-    for c in kids {
-        collect_loop_heap_node(body, facts, c, eff);
-    }
+    body.for_each_child(node, |c| collect_loop_heap_node(body, facts, c, eff));
 }
 
 fn record_loop_heap_write(
@@ -2318,16 +2314,12 @@ fn collect_writes_in_stmt(
             collect_writes_in_operand(body, *value, out, cache);
         }
         _ => {
-            let mut kids = Vec::new();
-            body.for_each_child(NodeRef::Stmt(stmt), |c| kids.push(c));
-            for c in kids {
-                match c {
-                    NodeRef::Expr(e) => collect_writes_in_expr(body, e, out, cache),
-                    NodeRef::Stmt(s) => collect_writes_in_stmt(body, s, out, cache),
-                    NodeRef::Block(b) => collect_writes_in_block(body, b, out, cache),
-                    NodeRef::Pat(p) => collect_writes_in_pattern(body, p, out, cache),
-                }
-            }
+            body.for_each_child(NodeRef::Stmt(stmt), |c| match c {
+                NodeRef::Expr(e) => collect_writes_in_expr(body, e, out, cache),
+                NodeRef::Stmt(s) => collect_writes_in_stmt(body, s, out, cache),
+                NodeRef::Block(b) => collect_writes_in_block(body, b, out, cache),
+                NodeRef::Pat(p) => collect_writes_in_pattern(body, p, out, cache),
+            });
         }
     }
 }

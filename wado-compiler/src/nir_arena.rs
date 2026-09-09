@@ -1092,11 +1092,46 @@ impl Body {
 }
 
 thread_local! {
-    /// Scratch stacks for the walks below, kept at the capacity a body needs.
-    /// The compile runs the same whole-body walk over every function on every
-    /// iteration, so allocating one stack per walk was the optimizer's largest
-    /// single source of allocation.
+    /// Scratch buffers for the walks, kept at the capacity a body needs. The
+    /// compile runs the same whole-body walk over every function on every
+    /// iteration, so allocating one per walk — let alone one per node, which
+    /// [`NodeBuf`] serves — was the optimizer's largest source of allocation.
     static WALK_STACKS: RefCell<Vec<Vec<NodeRef>>> = const { RefCell::new(Vec::new()) };
+}
+
+/// A pooled `Vec<NodeRef>` holding no borrow of the arena, so a walk may mutate
+/// the arena while holding it — which is what keeps a mutating walk off the
+/// allocator. Returns to the pool on drop; a nested walk takes its own.
+pub struct NodeBuf(Vec<NodeRef>);
+
+impl NodeBuf {
+    pub fn empty() -> Self {
+        Self(WALK_STACKS.with_borrow_mut(Vec::pop).unwrap_or_default())
+    }
+
+    pub fn push(&mut self, node: NodeRef) {
+        self.0.push(node);
+    }
+
+    pub fn pop(&mut self) -> Option<NodeRef> {
+        self.0.pop()
+    }
+}
+
+impl std::ops::Deref for NodeBuf {
+    type Target = [NodeRef];
+
+    fn deref(&self) -> &[NodeRef] {
+        &self.0
+    }
+}
+
+impl Drop for NodeBuf {
+    fn drop(&mut self) {
+        let mut buf = std::mem::take(&mut self.0);
+        buf.clear();
+        WALK_STACKS.with_borrow_mut(|pool| pool.push(buf));
+    }
 }
 
 /// Run `f` with a scratch stack holding `root`. A nested walk takes its own, so
@@ -1317,11 +1352,7 @@ impl Body {
                 _ => {}
             }
         }
-        let mut kids = Vec::new();
-        self.for_each_child(node, |c| kids.push(c));
-        for c in kids {
-            self.collect_local_reads_node(c, out);
-        }
+        self.for_each_child(node, |c| self.collect_local_reads_node(c, out));
     }
 
     /// The first of `locals` that still has a reachable read, in the skeleton or
@@ -1536,6 +1567,14 @@ impl Body {
             Slot::Operand(Operand::Value(_)) => {}
             Slot::Node(child) => f(child),
         });
+    }
+
+    /// [`Body::for_each_child`] snapshotted into a pooled buffer, for a walk that
+    /// mutates the arena as it recurses and so cannot hold the callback's borrow.
+    pub fn children(&self, node: NodeRef) -> NodeBuf {
+        let mut buf = NodeBuf::empty();
+        self.for_each_child(node, |c| buf.push(c));
+        buf
     }
 
     /// Invoke `f` on what every `break label` in `node`'s subtree carries. A

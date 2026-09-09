@@ -1183,10 +1183,8 @@ impl<'a> Engine<'a> {
             self.buf.uses_entry(index).reads.push(id);
         }
         // Re-parent and re-enqueue the new kind's children.
-        let mut children = Vec::new();
-        self.body
-            .for_each_child(NodeRef::Expr(id), |c| children.push(c));
-        for c in children {
+        let children = self.body.children(NodeRef::Expr(id));
+        for &c in children.iter() {
             self.set_parent(c, Some(NodeRef::Expr(id)));
             self.enqueue(c);
         }
@@ -1326,10 +1324,8 @@ impl<'a> Engine<'a> {
         // A fresh node is detached, so its operands are not reachable and the
         // census does not count them. The attach that reaches it does.
         self.buf.note_alloc(NodeRef::Expr(id));
-        let mut children = Vec::new();
-        self.body
-            .for_each_child(NodeRef::Expr(id), |c| children.push(c));
-        for c in children {
+        let children = self.body.children(NodeRef::Expr(id));
+        for &c in children.iter() {
             self.set_parent(c, Some(NodeRef::Expr(id)));
         }
         if let ExprKind::Local { index, .. } = &self.body.exprs[id].kind {
@@ -1352,10 +1348,8 @@ impl<'a> Engine<'a> {
     pub fn alloc_stmt(&mut self, kind: StmtKind, span: Span) -> StmtId {
         let id = self.body.stmts.push(StmtNode { kind, span });
         self.buf.note_alloc(NodeRef::Stmt(id));
-        let mut children = Vec::new();
-        self.body
-            .for_each_child(NodeRef::Stmt(id), |c| children.push(c));
-        for c in children {
+        let children = self.body.children(NodeRef::Stmt(id));
+        for &c in children.iter() {
             self.set_parent(c, Some(NodeRef::Stmt(id)));
         }
         if let StmtKind::Let { local_index, .. } = &self.body.stmts[id].kind {
@@ -1388,10 +1382,8 @@ impl<'a> Engine<'a> {
     pub fn alloc_pat(&mut self, kind: PatKind, span: Span) -> PatId {
         let id = self.body.pats.push(PatNode { kind, span });
         self.buf.note_alloc(NodeRef::Pat(id));
-        let mut children = Vec::new();
-        self.body
-            .for_each_child(NodeRef::Pat(id), |c| children.push(c));
-        for c in children {
+        let children = self.body.children(NodeRef::Pat(id));
+        for &c in children.iter() {
             self.set_parent(c, Some(NodeRef::Pat(id)));
         }
         self.enqueue(NodeRef::Pat(id));

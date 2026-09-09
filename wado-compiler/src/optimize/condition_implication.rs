@@ -6,7 +6,9 @@
 
 use super::arena_query::local_written_by;
 use crate::nir::{NirBinaryOp, NirUnaryOp};
-use crate::nir_arena::{BlockId, ExprId, ExprKind, NodeRef, Operand, PatId, StmtId, StmtKind};
+use crate::nir_arena::{
+    BlockId, ExprId, ExprKind, NodeBuf, NodeRef, Operand, PatId, StmtId, StmtKind,
+};
 use crate::nir_engine::Engine;
 use crate::nir_value_graph::ValueKind;
 
@@ -670,7 +672,8 @@ pub(super) fn node_modifies(engine: &Engine, node: NodeRef, var: u32, bound: Bou
             }
         }
     };
-    let mut stack = vec![node];
+    let mut stack = NodeBuf::empty();
+    stack.push(node);
     while let Some(n) = stack.pop() {
         visit(n);
         engine.body.for_each_child(n, |c| stack.push(c));
@@ -740,7 +743,8 @@ fn refute_panic_checks(
     refute: impl Fn(&Engine, &Binds, Operand) -> bool,
 ) -> bool {
     let mut holders: Vec<(NodeRef, Operand)> = Vec::new();
-    let mut stack = vec![node];
+    let mut stack = NodeBuf::empty();
+    stack.push(node);
     while let Some(n) = stack.pop() {
         let cand = match n {
             NodeRef::Stmt(s) => match &engine.body.stmts[s].kind {
@@ -929,7 +933,8 @@ fn process_stmt(engine: &mut Engine, s: StmtId, binds: &Binds) -> bool {
 /// tree. The walk stops at each block, since `process_block` recurses itself.
 fn process_nested_blocks(engine: &mut Engine, node: NodeRef, binds: &Binds) -> bool {
     let mut blocks: Vec<BlockId> = Vec::new();
-    let mut stack = vec![node];
+    let mut stack = NodeBuf::empty();
+    stack.push(node);
     while let Some(n) = stack.pop() {
         if let NodeRef::Block(b) = n {
             blocks.push(b);
@@ -1444,9 +1449,8 @@ fn rbce_walk(engine: &mut Engine, node: NodeRef, facts: &mut Vec<ProvenLt>, bind
     if fresh_region {
         let mut inner: Vec<ProvenLt> = Vec::new();
         let mut changed = false;
-        let mut kids = Vec::new();
-        engine.body.for_each_child(node, |c| kids.push(c));
-        for c in kids {
+        let kids = engine.body.children(node);
+        for &c in kids.iter() {
             changed |= rbce_walk(engine, c, &mut inner, binds);
         }
         invalidate(engine, node, facts);
@@ -1467,10 +1471,9 @@ fn rbce_walk(engine: &mut Engine, node: NodeRef, facts: &mut Vec<ProvenLt>, bind
     };
     if let Some(scrutinee) = scrutinee {
         let scrut_child = scrutinee.as_expr().map(NodeRef::Expr);
-        let mut kids = Vec::new();
-        engine.body.for_each_child(node, |c| kids.push(c));
+        let kids = engine.body.children(node);
         let mut changed = false;
-        for c in kids {
+        for &c in kids.iter() {
             if Some(c) == scrut_child {
                 changed |= rbce_walk(engine, c, facts, binds);
                 invalidate(engine, c, facts);
@@ -1485,10 +1488,9 @@ fn rbce_walk(engine: &mut Engine, node: NodeRef, facts: &mut Vec<ProvenLt>, bind
 
     // Every child runs unconditionally in order; a `let idx = arr.len() - k`
     // harvests `idx < arr.len()` for the checks that follow it.
-    let mut kids = Vec::new();
-    engine.body.for_each_child(node, |c| kids.push(c));
+    let kids = engine.body.children(node);
     let mut changed = false;
-    for c in kids {
+    for &c in kids.iter() {
         changed |= rbce_walk(engine, c, facts, binds);
         invalidate(engine, c, facts);
         if let Some(fact) = len_minus_fact(engine, binds, c) {
@@ -1537,10 +1539,9 @@ trait ArenaOptVisitor {
 /// kinds in place (never add/remove nodes), so the upfront child snapshot stays
 /// valid through the walk.
 fn arena_opt_walk<V: ArenaOptVisitor>(v: &mut V, engine: &mut Engine, node: NodeRef) -> bool {
-    let mut kids = Vec::new();
-    engine.body.for_each_child(node, |c| kids.push(c));
+    let kids = engine.body.children(node);
     let mut changed = false;
-    for c in kids {
+    for &c in kids.iter() {
         changed |= match c {
             NodeRef::Stmt(s) => v.visit_stmt(engine, s),
             NodeRef::Expr(e) => v.visit_expr(engine, e),

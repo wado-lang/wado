@@ -174,11 +174,7 @@ impl Collector<'_> {
     }
 
     fn scan_children(&mut self, body: &Body, node: NodeRef) {
-        let mut kids = Vec::new();
-        body.for_each_child(node, |c| kids.push(c));
-        for c in kids {
-            self.scan_node(body, c);
-        }
+        body.for_each_child(node, |c| self.scan_node(body, c));
     }
 }
 

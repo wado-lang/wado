@@ -746,11 +746,7 @@ impl MutRefAliases {
             },
             NodeRef::Block(_) | NodeRef::Pat(_) => {}
         }
-        let mut kids = Vec::new();
-        body.for_each_child(node, |c| kids.push(c));
-        for c in kids {
-            self.build_walk(body, c, borrowed_refs);
-        }
+        body.for_each_child(node, |c| self.build_walk(body, c, borrowed_refs));
     }
 
     /// Record the storage a `&mut place` (or `mut`-flagged argument) may

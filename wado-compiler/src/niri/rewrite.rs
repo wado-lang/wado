@@ -709,10 +709,9 @@ impl Interpreter<'_> {
     }
 
     fn walk_children(&mut self, body: &mut Body, node: NodeRef) -> bool {
-        let mut children = Vec::new();
-        body.for_each_child(node, |c| children.push(c));
+        let children = body.children(node);
         let mut changed = false;
-        for child in children {
+        for &child in children.iter() {
             changed |= self.reduce_in_place_node(body, child);
         }
         changed

@@ -1181,11 +1181,7 @@ fn collect_loop_writes(body: &Body, node: NodeRef, effects: &mut LoopWriteEffect
     if let NodeRef::Expr(e) = node {
         record_loop_write(body, e, effects);
     }
-    let mut kids = Vec::new();
-    body.for_each_child(node, |c| kids.push(c));
-    for c in kids {
-        collect_loop_writes(body, c, effects);
-    }
+    body.for_each_child(node, |c| collect_loop_writes(body, c, effects));
 }
 
 fn record_loop_write(body: &Body, e: ExprId, effects: &mut LoopWriteEffects) {

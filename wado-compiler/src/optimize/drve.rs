@@ -222,15 +222,11 @@ impl ValidateCtx<'_> {
         }
         // Non-Expr stmt: blocks re-enter the drop-position logic; expr / pattern
         // children are use-scanned.
-        let mut kids = Vec::new();
-        body.for_each_child(NodeRef::Stmt(stmt), |c| kids.push(c));
-        for c in kids {
-            match c {
-                NodeRef::Block(b) => self.block(body, b),
-                NodeRef::Expr(_) | NodeRef::Pat(_) => self.scan_node(body, c),
-                NodeRef::Stmt(_) => {}
-            }
-        }
+        body.for_each_child(NodeRef::Stmt(stmt), |c| match c {
+            NodeRef::Block(b) => self.block(body, b),
+            NodeRef::Expr(_) | NodeRef::Pat(_) => self.scan_node(body, c),
+            NodeRef::Stmt(_) => {}
+        });
     }
 
     /// Reject every candidate that appears as a call anywhere in the subtree
@@ -242,11 +238,7 @@ impl ValidateCtx<'_> {
         {
             self.rejected.insert(*func_id);
         }
-        let mut kids = Vec::new();
-        body.for_each_child(node, |c| kids.push(c));
-        for c in kids {
-            self.scan_node(body, c);
-        }
+        body.for_each_child(node, |c| self.scan_node(body, c));
     }
 }
 

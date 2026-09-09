@@ -306,11 +306,20 @@ shares with every other pass, not its own arithmetic.
 `WADO_TRACE=arena_census` reports the node-mix and bloat numbers these items
 quote.
 
-What is left in the walks is the slot dispatch, not the stacks: pooling the
-`Vec<NodeRef>` they used to allocate per call bought 1.3 % of the SQLite parser's
-compile and 2 % of `json_twitter`'s, and took allocation from 17 % to 15 %. Every walk step runs the inlined slot match, and 61
-to 77 % of the nodes it steps over are pure kinds that carry no children, so what
-prices the walks is how many nodes they cover.
+Two things price a walk. One is how many nodes it covers: every step runs the
+inlined slot match, and 61 to 77 % of the nodes are pure kinds carrying no
+children. The other is the allocator, and it was the larger of the two. Pooling
+the traversal stacks, one per call, bought 1.3 % of the SQLite parser's compile
+and 2 % of `json_twitter`'s and took allocation from 17 % to 15 %. What that
+left behind is a second buffer: a walk that mutates as it recurses cannot hold
+the callback's borrow, so it snapshots each node's children into a fresh `Vec`
+— per node, not per call — and the walks that only read had copied the shape
+without needing it. Retiring both cut the parser's compile 6.9 % and
+`json_twitter`'s 4.2 %, with byte-identical output on each.
+
+A walk that only reads recurses inside the `for_each_child` callback and needs
+no buffer at all. One that mutates borrows a pooled `NodeBuf` through
+`Body::children`, which holds no borrow of the arena.
 
 - [ ] Fold the graph build into `lower`. The build's inputs do not exist during
       lowering. `builder::build` takes the alias sets and the per-call purity
@@ -421,8 +430,14 @@ else. Three things.
 - The fixed-point loop stops converging inside its cap, with `copy_prop` and
   `licm` still changing at 15 iterations.
 
-The two open ones are separate pieces of work, and the refusal stands until they
-are done.
+The refusal stands while the two open ones are, and they are not next in line.
+Removing it is worth no compile time on its own — the census fix already paid
+that back — so what it buys is a prerequisite for retiring the pure node kinds,
+and that item is held up by something larger anyway: a value query has no flow,
+so a read of a multi-version local resolves to nothing whether the refusal is
+there or not. Taking the walk buffers off the allocator was a comparable amount
+of compile time for mechanical work and byte-identical output, so it went
+first. Coming back here is a matter of when, not whether.
 
 Skipping `scalar_forward` separates the two, on `sqlite_parse` at `-O2`:
 
@@ -450,7 +465,9 @@ a loop counter, so `local_has_one_version` fails and the tree has no `ValueId`.
 The operand has to go back to the skeleton instead — a NIR-level twin of
 `wir_build`'s `extract_value`, rebuilding expressions from a value tree. The
 same primitive is what the extraction cost model needs, to bind a
-multiply-used local-naming value once rather than re-materialise it per use.
+multiply-used local-naming value once rather than re-materialise it per use, so
+one mechanism closes both open items. That is the shape of the work whenever it
+is picked up.
 
 There is no in-loop freeze. One was
 built under the rule and promoted nothing on either benchmark, at 11.3 % of the

@@ -745,11 +745,7 @@ fn collect_inner_labels(callee: &Body, node: NodeRef, labels: &mut IndexSet<Stri
         }
         NodeRef::Block(_) | NodeRef::Pat(_) => {}
     }
-    let mut kids = Vec::new();
-    callee.for_each_child(node, |c| kids.push(c));
-    for c in kids {
-        collect_inner_labels(callee, c, labels);
-    }
+    callee.for_each_child(node, |c| collect_inner_labels(callee, c, labels));
 }
 
 /// Whether the folds `view` licenses delete a loop — directly, or inside a

@@ -206,9 +206,5 @@ fn collect_candidate_reads_node(body: &Body, node: NodeRef, out: &mut Vec<(ExprI
             _ => {}
         }
     }
-    let mut kids = Vec::new();
-    body.for_each_child(node, |c| kids.push(c));
-    for c in kids {
-        collect_candidate_reads_node(body, c, out);
-    }
+    body.for_each_child(node, |c| collect_candidate_reads_node(body, c, out));
 }
