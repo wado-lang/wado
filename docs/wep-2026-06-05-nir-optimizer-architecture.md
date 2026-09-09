@@ -110,6 +110,13 @@ to answer a query, and it dies with the query. An unpromoted skeleton leaf
 therefore resolves to no value. That is sound because "no value" is the finest
 partition: a consumer skips the expression rather than over-merging.
 
+A rule about a pure value is written against `Operand`, once. A promoted operand
+is the same computation as the skeleton node it replaced, so it has to answer to
+the same rules — and the two tiers spell that computation differently, so a rule
+written once per tier drifts. The interpreter's arithmetic folding takes this
+shape: one set of rules over a view that resolves the tier at the leaves. A rule
+that reaches for `ExprKind` and `ValueKind` in two places is the shape to avoid.
+
 Promotion is staged, and the staging is the design. A freeze is sound only where
 nothing later re-contextualizes the operand it plants. Arithmetic freezes before
 the loop, on a clean graph. Field reads freeze once the structural passes have
