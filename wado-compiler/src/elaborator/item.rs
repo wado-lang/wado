@@ -2399,14 +2399,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 .unwrap_or(TypeTable::UNIT)
         };
 
-        // For async functions, the Wasm-level return type is unit (the result is delivered
-        // via `task return`, not via the Wasm function return). The declared return type is
-        // stored as `task_return_type` for validating `task return expr`.
-        let return_type = if func.is_async {
-            TypeTable::UNIT
-        } else {
-            declared_return_type
-        };
+        let return_type = declared_return_type;
 
         scope
             .sem
@@ -2518,7 +2511,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             scope.resolve_block(b, &mut ctx, None);
         }
 
-        scope.validate_missing_return_ast(return_type, func.body.as_ref(), func.span);
+        scope.validate_missing_return_ast(
+            return_type,
+            func.is_async,
+            func.body.as_ref(),
+            func.span,
+        );
         scope.validate_loop_jumps_ast(func.body.as_ref());
 
         // Convert AST type params to TIR type params (while type params
@@ -2563,9 +2561,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         let func_key = func.id;
         scope.sem.types.function_effects.insert(func_key, effects);
 
-        // An async function's wasm return type is erased to
-        // `()`; record the declared (pre-erasure) return type so reify
-        // can set `task_return_type` for resource-store inference.
+        // Record what `task return` delivers, so reify can set
+        // `task_return_type` for resource-store inference.
         if func.is_async {
             let task_key = func.id;
             scope
@@ -2577,7 +2574,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
         drop(scope);
 
-        // The return type recorded here is post-async-erasure.
         let sig_key = func.id;
         self.sem
             .types
@@ -2868,7 +2864,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             scope.resolve_block(b, &mut ctx, None);
         }
 
-        scope.validate_missing_return_ast(return_type, func.body.as_ref(), func.span);
+        scope.validate_missing_return_ast(
+            return_type,
+            func.is_async,
+            func.body.as_ref(),
+            func.span,
+        );
         scope.validate_loop_jumps_ast(func.body.as_ref());
 
         // Convert AST type params to TIR type params (while type params still

@@ -1,0 +1,16 @@
+// An `export async fn` that reaches the end without a `task return` has no
+// result to give. It says so rather than handing back a zeroed value, which
+// for a reference result would fail far from the cause.
+
+use { println, Stdout } from "core:cli";
+
+export async fn deliver(n: i32) -> i32 {
+    let _ = n;
+}
+
+export fn run() with Stdout {
+    println(`got ${deliver(1)}`);
+}
+
+__DATA__
+{"trapped": true}

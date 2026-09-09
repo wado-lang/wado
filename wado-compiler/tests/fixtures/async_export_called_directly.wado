@@ -1,0 +1,19 @@
+// Regression: a direct Wado call to an `export async fn`. `task return` hands
+// the result to the Component Model runtime, so the callee's core signature
+// carries none, and a call site typed on the declared return type drops or
+// stores an empty stack.
+
+use { println, Stdout } from "core:cli";
+
+export async fn deliver(n: i32) -> Result<i32, String> with Stdout {
+    println(`deliver ${n}`);
+    task return Result::<i32, String>::Ok(n);
+}
+
+export fn run() with Stdout {
+    deliver(1);
+    println("done");
+}
+
+__DATA__
+{"stdout": "deliver 1\ndone\n"}

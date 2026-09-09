@@ -34,7 +34,7 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> {
 
 ### 2. `task return` — CM Boundary Result Delivery
 
-`task return expr;` is a statement valid only inside `export async fn` bodies. It calls the CM `task.return` instruction to deliver the function's result to the CM runtime without terminating the Wasm function.
+`task return expr;` is a statement valid only inside `export async fn` bodies. Entered through the export binding, it calls the CM `task.return` instruction to deliver the function's result to the CM runtime without terminating the Wasm function.
 
 ```wado
 export async fn handle(request: Request) -> Result<Response, ErrorCode> {
@@ -47,15 +47,16 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> {
 }
 ```
 
-**Why `task return` only at the CM boundary:** Wado's internal async model is colorless — async suspension and resumption happen transparently at the WASI call level. There is no user-visible async/await inside Wado. `task return` is a CM-specific mechanism and has no meaning inside Wado-to-Wado function calls.
+**Why `task return` only at the CM boundary:** Wado's internal async model is colorless — async suspension and resumption happen transparently at the WASI call level. There is no user-visible async/await inside Wado. Only the CM boundary needs a delivery separate from the return, which is what `task return` expresses.
 
 Rules:
 
 - `task return expr` is only valid in `export async fn` bodies.
 - `return` is forbidden in `async fn` bodies.
 - The expression is type-checked against the declared return type of the enclosing `export async fn`.
+- A Wado call of an `export async fn` receives what `task return` delivered, as an ordinary return value. A test can therefore assert on an exported handler's own response.
 
-The compiler expands `task return` during the synthesis phase (CM binding generation) into a sequence that lowers the Wado value to flat CM ABI values and calls `builtin::task_return`. See [WEP: TIR-Level CM Binding Synthesis](wep-2026-02-15-cm-binding-synthesis.md) for implementation details.
+`task return` names the function's result; where the value goes depends on who entered the function. The export binding calls a copy of the body in which `task return` becomes the canonical `task.return`; the function Wado callers see binds the value and returns it. See [WEP: TIR-Level CM Binding Synthesis](wep-2026-02-15-cm-binding-synthesis.md) for how the two are generated.
 
 ### 3. Trailers Future Pattern
 

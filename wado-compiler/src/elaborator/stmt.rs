@@ -1281,7 +1281,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     pub(super) fn resolve_return(&mut self, ret_stmt: &ReturnStmt, ctx: &mut FunctionContext) {
-        // In async functions, `return expr` (with a value) is forbidden; use `task return expr`
+        // An `async fn` names its result with `task return`; a bare `return`
+        // still ends the function, carrying whatever was already delivered.
         if ctx.is_async && ret_stmt.value.is_some() {
             let _ = self.emit(TypeError::InvalidLiteral {
                 message:

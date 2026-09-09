@@ -1300,6 +1300,19 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     // Items with function bodies — the bulk of reify_*.
     // ─────────────────────────────────────────────────────────────────
 
+    /// The result an `async fn` delivers through `task return`. Annotate
+    /// records it for free functions only; a method falls back to `declared`.
+    fn declared_task_return(&self, func: &ast::Function, declared: TypeId) -> Option<TypeId> {
+        func.is_async.then(|| {
+            self.sem
+                .types
+                .function_task_returns
+                .get(&func.id)
+                .copied()
+                .unwrap_or(declared)
+        })
+    }
+
     /// Reify a free function. Builds a fresh `FunctionContext`, walks
     /// params + body, and assembles `TirFunction`. All inference
     /// decisions are read from `sem.types`; reify only emits TIR.
@@ -1307,7 +1320,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// Parameters are added in declaration order to pin the walk-order
     /// invariant.
     fn reify_function(&mut self, func: &ast::Function) -> Option<TirFunction> {
-        // Single source of truth: read the (post-async-erasure) return type
+        // Single source of truth: read the return type
         // `resolve_function` resolved, rather than re-reading the fragile
         // name-keyed `function_return_types` map (shared with call sites and
         // overwritable by later registrations).
@@ -1318,7 +1331,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let mut ctx = FunctionContext::new(return_type, func.name.clone());
         if func.is_async {
             ctx.is_async = true;
-            ctx.task_return_type = Some(return_type);
+            ctx.task_return_type = self.declared_task_return(func, return_type);
         }
 
         // Real type params only (effect params and `<F: fn(...)>` bounds
@@ -1410,24 +1423,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             method_info: None,
             params,
             return_type,
-            // Async functions erase `return_type` to `()`; the real
-            // (declared) return travels via `task return` and is recorded
-            // by annotate in `function_task_returns`. Resource-store
-            // inference (effect_check) walks `task_return_type`, so it
-            // must carry the real type, not the erased unit. (Methods are
-            // not recorded there and fall back to `return_type`.)
-            task_return_type: if func.is_async {
-                Some(
-                    self.sem
-                        .types
-                        .function_task_returns
-                        .get(&func.id)
-                        .copied()
-                        .unwrap_or(return_type),
-                )
-            } else {
-                None
-            },
+            task_return_type: self.declared_task_return(func, return_type),
             effects: self
                 .sem
                 .types
@@ -1773,7 +1769,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         ctx.in_handler_method = facts.is_handler_method;
         if func.is_async {
             ctx.is_async = true;
-            ctx.task_return_type = Some(return_type);
+            ctx.task_return_type = self.declared_task_return(func, return_type);
         }
 
         // Publish the body's type-param scope so turbofish args in the
@@ -1845,24 +1841,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             method_info: Some(method_info),
             params,
             return_type,
-            // Async functions erase `return_type` to `()`; the real
-            // (declared) return travels via `task return` and is recorded
-            // by annotate in `function_task_returns`. Resource-store
-            // inference (effect_check) walks `task_return_type`, so it
-            // must carry the real type, not the erased unit. (Methods are
-            // not recorded there and fall back to `return_type`.)
-            task_return_type: if func.is_async {
-                Some(
-                    self.sem
-                        .types
-                        .function_task_returns
-                        .get(&func.id)
-                        .copied()
-                        .unwrap_or(return_type),
-                )
-            } else {
-                None
-            },
+            task_return_type: self.declared_task_return(func, return_type),
             effects: self
                 .sem
                 .types

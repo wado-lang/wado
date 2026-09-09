@@ -298,14 +298,11 @@ pub(crate) struct TypeAnnotations {
     /// [`crate::tir::TirFunction::effects`] — it has no
     /// `current_effect_param_decls` scope to redo the lookup faithfully.
     pub(crate) function_effects: IndexMap<AstId, Vec<crate::tir::EffectRef>>,
-    /// Declared (pre-erasure) return [`TypeId`] for every `async`
-    /// function / method, keyed by the function's [`AstId`]. An async
-    /// function's wasm-level `return_type` is erased to `()` (the value
-    /// travels via `task return`), so reify cannot recover the real type
-    /// from `function_return_types` (which records the erased unit).
-    /// reify reads this to set `TirFunction::task_return_type` — needed
-    /// for resource-store inference over the return type (e.g. an async
-    /// `handle` returning `Result<Response, _>` must surface `Response`).
+    /// The result `task return` delivers, per `async` function / method, keyed
+    /// by [`AstId`]. Reify sets `TirFunction::task_return_type` from it, so
+    /// resource-store inference sees the `Response` in a `Result<Response, _>`.
+    /// The name-keyed `function_return_types` cannot serve: a later
+    /// registration of the same name overwrites it.
     pub(crate) function_task_returns: IndexMap<AstId, TypeId>,
     /// Impl-level type parameters as `Elaborator::resolve_method` (the
     /// battle-tested original path) computed them, keyed per impl-method
@@ -320,7 +317,7 @@ pub(crate) struct TypeAnnotations {
     /// `resolve_function` / `resolve_method` resolved them. Reify reads these
     /// instead of re-resolving each param.
     pub(crate) fn_param_types: IndexMap<AstId, Vec<crate::tir::TypeId>>,
-    /// Resolved (post-async-erasure) return type per function/method `AstId`.
+    /// Resolved return type per function/method `AstId`.
     /// Reify reads it instead of re-resolving the return annotation.
     pub(crate) fn_return_types: IndexMap<AstId, crate::tir::TypeId>,
     /// Resolved operation signatures per effect / resource decl `AstId`

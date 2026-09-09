@@ -1,0 +1,22 @@
+// `task return` outside the target world's exports has no CM task to deliver
+// to, but its operand is still user code. Discarding the statement whole drops
+// whatever the operand does — here the upstream call a test is asserting on.
+
+use { println, Stdout } from "core:cli";
+
+fn compute() -> i32 with Stdout {
+    println("evaluated");
+    return 1;
+}
+
+export async fn deliver() -> i32 with Stdout {
+    task return compute();
+}
+
+export fn run() with Stdout {
+    deliver();
+    println("done");
+}
+
+__DATA__
+{"stdout": "evaluated\ndone\n"}

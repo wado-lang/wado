@@ -4,8 +4,9 @@
 //! `task return value;` with the inline CM `task-return` call sequence:
 //! flatten the value to CM ABI flat slots and emit a `task-return` raw call.
 //!
-//! For non-async or non-export contexts (test world), `task return` is
-//! stripped to a no-op so it never reaches monomorphize.
+//! The delivery lives in a copy the export binding calls. The user's own
+//! function keeps a lowering that binds the value and returns it, so a Wado
+//! caller receives what `task return` named.
 
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -14,18 +15,20 @@ use crate::canonical::CanonicalIntrinsic;
 
 use crate::ast::Type;
 use crate::cm_abi;
+use crate::compiler_item::{CompilerItem, CompilerItems};
 use crate::component_model::CmInterfaceRegistry;
 use crate::hashmap::IndexMap;
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
 use crate::tir::{
-    ResolvedType, TirBlock, TirExpr, TirExprKind, TirFunction, TirLocal, TirMatchArm, TirModule,
-    TirPattern, TirStmt, TirStmtKind, TypeTable,
+    FunctionRef, ResolvedType, TirBlock, TirExpr, TirExprKind, TirFunction, TirLocal, TirMatchArm,
+    TirModule, TirPattern, TirStmt, TirStmtKind, TypeId, TypeTable,
 };
-use crate::tir_visitor::{TirOptVisitor, opt_walk_block, opt_walk_stmt};
+use crate::tir_visitor::{TirOptVisitor, opt_walk_block, opt_walk_expr, opt_walk_stmt};
+use crate::token::Span;
 
 use crate::synthesis::common::{
     alloc_local, assign, cast, cm_canonical_call, expr_stmt, i32_const, let_mut_stmt, let_stmt,
-    local_ref, synth_span,
+    local_ref, option_none, option_some, synth_span,
 };
 
 use super::cm_free::{CmShapeContext, FlatSlot, synthesize_free_cm_flat};
@@ -74,18 +77,85 @@ pub(super) fn expand_task_returns_in_func(
     func.body = Some(body);
 }
 
-/// Replace every `task return` statement in a function body with a no-op (`Continue`).
-///
-/// Used in the test world where `export async fn` bodies are not exported and will
-/// be removed by DCE. The statements must not reach `monomorphize` intact.
-pub(super) fn strip_task_returns_in_func(user_func: &Rc<RefCell<TirFunction>>) {
+/// Reduce every `task return value` in a function body to a binding the
+/// function returns at the end. The delivery belongs to the task entry; a Wado
+/// caller gets the value the same way it gets any other result.
+pub(super) fn reduce_task_returns_in_func(
+    user_func: &Rc<RefCell<TirFunction>>,
+    type_table: &Rc<RefCell<TypeTable>>,
+) {
     let mut func = user_func.borrow_mut();
     let Some(mut body) = func.body.take() else {
         return;
     };
-    let mut stripper = TaskReturnStripper;
-    stripper.visit_block(&mut body);
+    let declared = func.return_type;
+    let items = type_table.borrow().compiler_items().clone();
+    let mut next_local = func.local_count;
+    let mut extra: Vec<TirLocal> = Vec::new();
+    // A unit result needs no slot; the body already returns nothing, and the
+    // operand is all a `task return` leaves behind. Otherwise the result has to
+    // come from somewhere, and a function no `task return` reaches has none —
+    // it says so rather than handing back a zeroed value.
+    let result = (declared != TypeTable::UNIT).then(|| {
+        let slot_type = type_table.borrow_mut().make_option(declared);
+        ResultSlot {
+            slot: alloc_local(&mut next_local, &mut extra, slot_type),
+            slot_type,
+            declared,
+            bound: alloc_local(&mut next_local, &mut extra, declared),
+        }
+    });
+
+    let mut reducer = TaskReturnReducer {
+        result: result.as_ref(),
+        items: &items,
+    };
+    reducer.visit_block(&mut body);
+
+    if let Some(result) = &result {
+        let none = option_none(result.slot_type, &items);
+        body.stmts.insert(
+            0,
+            let_mut_stmt(TASK_RESULT_LOCAL, result.slot, result.slot_type, none),
+        );
+        body.stmts.push(take_task_result(result, &items));
+        func.local_count = next_local;
+        func.locals.extend(extra);
+    }
     func.body = Some(body);
+}
+
+/// Where a reduced `task return` puts its value: an `Option` slot the body
+/// binds out and returns at the end.
+struct ResultSlot {
+    slot: u32,
+    slot_type: TypeId,
+    declared: TypeId,
+    bound: u32,
+}
+
+/// The local a reduced `task return` writes its value into.
+const TASK_RESULT_LOCAL: &str = "__task_result";
+
+/// The copy of an `export async fn` that the export binding calls. Its
+/// `task return` delivers through the CM canonical op, so it returns nothing.
+pub(super) fn task_entry_func_name(export_name: &str) -> String {
+    format!("__cm_task_entry__{export_name}")
+}
+
+/// Split that copy off, leaving the user's own function to keep a lowering its
+/// Wado callers can use. A `FunctionRef` resolves by name, so the rename is
+/// what points the binding at the copy.
+pub(super) fn split_task_entry(
+    user_func: &Rc<RefCell<TirFunction>>,
+    export_name: &str,
+) -> Rc<RefCell<TirFunction>> {
+    let mut entry = user_func.borrow().clone();
+    entry.name = task_entry_func_name(export_name);
+    entry.return_type = TypeTable::UNIT;
+    entry.is_export = false;
+    entry.def_id = None;
+    Rc::new(RefCell::new(entry))
 }
 
 /// Rewrites every `task return value;` statement — wherever it is nested —
@@ -112,26 +182,21 @@ impl TirOptVisitor for TaskReturnExpander<'_> {
         let stmts = std::mem::take(&mut block.stmts);
         let mut new_stmts: Vec<TirStmt> = Vec::with_capacity(stmts.len());
         for mut stmt in stmts {
-            if matches!(&stmt.kind, TirStmtKind::TaskReturn { .. }) {
-                if let TirStmtKind::TaskReturn { value } =
-                    std::mem::replace(&mut stmt.kind, no_op_stmt(stmt.span))
-                {
-                    new_stmts.extend(generate_inline_task_return(
-                        value,
-                        self.return_type,
-                        self.flat_return_types,
-                        self.task_return,
-                        &mut self.next_local,
-                        &mut self.extra_locals,
-                        self.tir_modules,
-                        self.type_table,
-                        self.cm_interface_registry,
-                        self.cm_package,
-                        self.interner,
-                    ));
-                }
-            } else {
-                new_stmts.push(stmt);
+            match take_task_return_value(&mut stmt) {
+                Some(value) => new_stmts.extend(generate_inline_task_return(
+                    value,
+                    self.return_type,
+                    self.flat_return_types,
+                    self.task_return,
+                    &mut self.next_local,
+                    &mut self.extra_locals,
+                    self.tir_modules,
+                    self.type_table,
+                    self.cm_interface_registry,
+                    self.cm_package,
+                    self.interner,
+                )),
+                None => new_stmts.push(stmt),
             }
         }
         block.stmts = new_stmts;
@@ -139,28 +204,152 @@ impl TirOptVisitor for TaskReturnExpander<'_> {
         // `let` values, …); the generated sequences contain no `task return`.
         opt_walk_block(self, block)
     }
+
+    fn visit_expr(&mut self, expr: &mut TirExpr) -> bool {
+        walk_outside_closures(self, expr)
+    }
 }
 
-/// A statement that does nothing, for a rewrite that has to leave something
-/// behind. `Continue` is not one: it branches to the enclosing loop, and
-/// outside one it has no target at all.
-fn no_op_stmt(span: crate::token::Span) -> TirStmtKind {
-    TirStmtKind::Expr(TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, span))
+/// Take the operand out of a `task return`, leaving a placeholder both callers
+/// overwrite. `None` for any other statement, which is left as it was.
+fn take_task_return_value(stmt: &mut TirStmt) -> Option<TirExpr> {
+    if !matches!(&stmt.kind, TirStmtKind::TaskReturn { .. }) {
+        return None;
+    }
+    let placeholder =
+        TirStmtKind::Expr(TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, stmt.span));
+    let TirStmtKind::TaskReturn { value } = std::mem::replace(&mut stmt.kind, placeholder) else {
+        unreachable!("`TaskReturn` was matched on the line above")
+    };
+    Some(value)
 }
 
-/// Replaces every `task return` statement with a no-op. Used for the test
-/// world, where async-export bodies are dropped by DCE and only need to be
-/// kept free of `TaskReturn` so they never reach `monomorphize`.
-struct TaskReturnStripper;
+struct TaskReturnReducer<'a> {
+    result: Option<&'a ResultSlot>,
+    items: &'a CompilerItems,
+}
 
-impl TirOptVisitor for TaskReturnStripper {
+impl TirOptVisitor for TaskReturnReducer<'_> {
     fn visit_stmt(&mut self, stmt: &mut TirStmt) -> bool {
-        if matches!(&stmt.kind, TirStmtKind::TaskReturn { .. }) {
-            stmt.kind = no_op_stmt(stmt.span);
+        if let Some(value) = take_task_return_value(stmt) {
+            stmt.kind = match self.result {
+                Some(result) => TirStmtKind::Expr(assign(
+                    local_ref(result.slot, TASK_RESULT_LOCAL, result.slot_type),
+                    option_some(value, result.slot_type, self.items),
+                )),
+                None => TirStmtKind::Expr(value),
+            };
+            return true;
+        }
+        // A bare `return` ends the function carrying what was delivered, which
+        // is what the end of the body does too.
+        if let Some(result) = self.result
+            && matches!(&stmt.kind, TirStmtKind::Return { value: None })
+        {
+            *stmt = take_task_result(result, self.items);
             return true;
         }
         opt_walk_stmt(self, stmt)
     }
+
+    fn visit_expr(&mut self, expr: &mut TirExpr) -> bool {
+        walk_outside_closures(self, expr)
+    }
+}
+
+/// A closure body is a function of its own: its `return` ends the closure, and
+/// `task return` cannot appear there at all. Neither rewrite crosses into one.
+fn walk_outside_closures(visitor: &mut impl TirOptVisitor, expr: &mut TirExpr) -> bool {
+    if matches!(&expr.kind, TirExprKind::Closure { .. }) {
+        return false;
+    }
+    opt_walk_expr(visitor, expr)
+}
+
+/// `match __task_result { Some(v) => return v, None => unreachable() }`. A body
+/// that reaches the end without delivering has no result to give, which for the
+/// task entry is a CM protocol error either way.
+fn take_task_result(result: &ResultSlot, items: &CompilerItems) -> TirStmt {
+    let &ResultSlot {
+        slot,
+        slot_type,
+        declared,
+        bound,
+    } = result;
+    let span = synth_span();
+    let (_, _, some_name, _) = items.require_variant_case(CompilerItem::OptionSome);
+    let (_, _, none_name, _) = items.require_variant_case(CompilerItem::OptionNone);
+    let arm = |pattern, stmts: Vec<TirStmt>| TirMatchArm {
+        pattern,
+        guard: None,
+        body: TirExpr::new(
+            TirExprKind::Block(TirBlock::new(stmts, span)),
+            TypeTable::UNIT,
+            span,
+        ),
+        span,
+    };
+    let some_arm = arm(
+        TirPattern::Variant {
+            enum_type: slot_type,
+            variant_name: some_name.to_string(),
+            bindings: vec![TirPattern::Binding {
+                name: TASK_VALUE_LOCAL.to_string(),
+                local_index: bound,
+                type_id: declared,
+            }],
+            payload_type: declared,
+        },
+        vec![TirStmt::new(
+            TirStmtKind::Return {
+                value: Some(local_ref(bound, TASK_VALUE_LOCAL, declared)),
+            },
+            span,
+        )],
+    );
+    let none_arm = arm(
+        TirPattern::Variant {
+            enum_type: slot_type,
+            variant_name: none_name.to_string(),
+            bindings: vec![],
+            payload_type: TypeTable::UNIT,
+        },
+        vec![expr_stmt(unreachable_call(declared, span))],
+    );
+    TirStmt::new(
+        TirStmtKind::Expr(TirExpr::new(
+            TirExprKind::Match {
+                expr: Box::new(local_ref(slot, TASK_RESULT_LOCAL, slot_type)),
+                arms: vec![some_arm, none_arm],
+            },
+            TypeTable::UNIT,
+            span,
+        )),
+        span,
+    )
+}
+
+/// The local the `Some` arm binds the delivered value to.
+const TASK_VALUE_LOCAL: &str = "__task_value";
+
+/// A `builtin::unreachable()` typed as `result_type`, for the arm no delivery
+/// reaches.
+fn unreachable_call(result_type: TypeId, span: Span) -> TirExpr {
+    TirExpr::new(
+        TirExprKind::Call {
+            func: Box::new(FunctionRef {
+                module_source: ModuleSource::builtin(),
+                name: "unreachable".to_string(),
+                monomorph_info: None,
+                method_info: None,
+            }),
+            type_args: vec![],
+            args: vec![],
+            has_receiver: false,
+        },
+        result_type,
+        span,
+    )
 }
 
 /// Generate the inline task-return sequence for `task return value`: a `Result`

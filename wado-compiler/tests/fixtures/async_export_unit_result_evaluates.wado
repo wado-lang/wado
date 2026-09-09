@@ -1,0 +1,21 @@
+// A unit result has nothing to bind: `task return` leaves only its operand.
+// Reducing it to a slot write instead left the write naming a local the
+// function never declared.
+
+use { println, Stdout } from "core:cli";
+
+fn compute() with Stdout {
+    println("evaluated");
+}
+
+export async fn deliver() with Stdout {
+    task return compute();
+}
+
+export fn run() with Stdout {
+    deliver();
+    println("done");
+}
+
+__DATA__
+{"stdout": "evaluated\ndone\n"}

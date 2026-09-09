@@ -1,7 +1,6 @@
-// Test: `async fn` erases its declared return type to unit (the result
-// travels through `task return`), but the *declared* return type is still
-// visible for signature-resource inference. So an `async fn` returning
-// `Result<Response, ErrorCode>` does not need to repeat `with Response`.
+// Test: the result an `async fn` delivers through `task return` is visible to
+// signature-resource inference, so one returning `Result<Response, ErrorCode>`
+// does not need to repeat `with Response`.
 
 use { Request, Response, ErrorCode, Fields, Headers, Trailers } from "wasi:http";
 

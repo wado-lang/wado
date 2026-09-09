@@ -39,7 +39,7 @@ use import_adapter::synthesize_adapter;
 pub use lift::synthesize_lift;
 pub use lower::synthesize_lower;
 pub use resource_rewrite::rewrite_async_primitives_monomorphized;
-use task_return::{expand_task_returns_in_func, strip_task_returns_in_func};
+use task_return::{expand_task_returns_in_func, reduce_task_returns_in_func, split_task_entry};
 use type_fixup::{
     collect_effect_calls_in_block, collect_local_type_updates, rewrite_calls_in_block,
 };
@@ -455,7 +455,7 @@ fn named_decl_of<'a>(tt: &'a TypeTable, ty: &ResolvedType) -> Option<(&'a str, &
 ///
 /// Ordered pipeline: import adapters, export adapters, the shared task-return
 /// signature, test-world bindings, payload validation (producing the
-/// `PayloadsValidated` witness), task-return stripping, and finally
+/// `PayloadsValidated` witness), task-return reduction, and finally
 /// the async/resource primitive rewrites (consuming the witness).
 ///
 /// Adapter functions flow through monomorphize → lower → optimize → codegen
@@ -466,7 +466,7 @@ pub fn generate_adapters(mut project: Package) -> Result<Package, String> {
     record_task_return_flat_params(&mut project);
     generate_test_world_bindings(&mut project);
     let validated = reject_unresolvable_record_payloads(&project)?;
-    strip_unexpanded_task_returns(&project);
+    reduce_unexpanded_task_returns(&project);
     resource_rewrite::rewrite_async_primitives(&mut project, validated);
     Ok(project)
 }
@@ -629,6 +629,7 @@ fn synthesize_export_adapters(project: &mut Package) -> Result<(), String> {
     // Collect adapters in a read-only pass (synthesize_export_binding needs &tir_modules)
     let mut export_adapters: Vec<(String, String, Rc<RefCell<TirFunction>>)> = Vec::new();
     let mut post_returns: Vec<(String, String, Rc<RefCell<TirFunction>>)> = Vec::new();
+    let mut task_entries: Vec<(ModuleSource, Rc<RefCell<TirFunction>>)> = Vec::new();
     {
         let entry_module = project
             .tir_modules
@@ -671,10 +672,10 @@ fn synthesize_export_adapters(project: &mut Package) -> Result<(), String> {
             }
 
             let is_async_export = user_func_rc.borrow().is_async;
+            // The function the binding calls. An async export's delivery lives
+            // in a copy, so the user's own function stays callable from Wado.
+            let mut binding_callee = Rc::clone(&user_func_rc);
             let strategy = if is_async_export {
-                // Async export: the user function calls task-return internally via
-                // `task return expr` stmts. Expand those stmts into CM task-return
-                // calls; the binding only lifts params and calls.
                 if let Some(return_type) = &export.return_type {
                     let flat_types = {
                         let tt = entry_type_table.borrow();
@@ -685,8 +686,9 @@ fn synthesize_export_adapters(project: &mut Package) -> Result<(), String> {
                     // world may have several async exports of distinct
                     // result types).
                     let task_return = CanonicalIntrinsic::TaskReturn(export.name.clone());
+                    let task_entry = split_task_entry(&user_func_rc, &export.name);
                     expand_task_returns_in_func(
-                        &user_func_rc,
+                        &task_entry,
                         return_type,
                         &flat_types,
                         &task_return,
@@ -696,6 +698,11 @@ fn synthesize_export_adapters(project: &mut Package) -> Result<(), String> {
                         &binding_cm_package,
                         &project.interner,
                     );
+                    binding_callee = Rc::clone(&task_entry);
+                    // The binding calls it through `callee_module`, so that is where the
+                    // copy has to live: a lib world spreads its exports across
+                    // submodules.
+                    task_entries.push((callee_module.clone(), task_entry));
                 }
                 ExportReturnStrategy::AsyncTaskReturn
             } else if is_lib_world && !is_kiln_generator {
@@ -721,7 +728,7 @@ fn synthesize_export_adapters(project: &mut Package) -> Result<(), String> {
             };
             let adapter = synthesize_export_binding(
                 &export.name,
-                &user_func_rc,
+                &binding_callee,
                 &callee_module,
                 &env,
                 strategy,
@@ -769,6 +776,14 @@ fn synthesize_export_adapters(project: &mut Package) -> Result<(), String> {
             .post_return_binding_names
             .insert(export_name, func_name);
         entry_module.functions.push(post_return);
+    }
+    for (module_source, task_entry) in task_entries {
+        project
+            .tir_modules
+            .get_mut(&module_source)
+            .expect("the export's own module is the one the binding calls into")
+            .functions
+            .push(task_entry);
     }
     Ok(())
 }
@@ -1199,18 +1214,16 @@ fn generate_test_world_bindings(project: &mut Package) {
     }
 }
 
-/// Strip remaining `TaskReturn` stmts from all modules. `task return` is only
-/// valid inside `async fn` (checked by elaborator); export synthesis expands
-/// `TaskReturn` into CM calls for async exports that match the target world.
-/// Any remaining async fn (unmatched exports, imported modules) will be DCE'd
-/// — strip their `TaskReturn` stmts so they don't reach monomorphize. This is
-/// idempotent: already-expanded functions have no `TaskReturn` stmts left.
-fn strip_unexpanded_task_returns(project: &Package) {
+/// Reduce every `TaskReturn` the export synthesis above did not expand, in any
+/// module. Such a function is an async fn the target world does not export, so
+/// there is no CM task to deliver to; its operand is still evaluated, and
+/// nothing reaches monomorphize. Idempotent: an expanded function has none left.
+fn reduce_unexpanded_task_returns(project: &Package) {
     for module in project.tir_modules.values() {
         for f in &module.functions {
-            let needs_strip = f.borrow().is_async;
-            if needs_strip {
-                strip_task_returns_in_func(f);
+            let is_async = f.borrow().is_async;
+            if is_async {
+                reduce_task_returns_in_func(f, &module.type_table);
             }
         }
     }
