@@ -819,9 +819,10 @@ impl ValuePool {
         });
     }
 
-    /// Every skeleton expression the value tree at `v` names as an extraction
-    /// source. Those nodes produce this value's code, so a reachability walk
-    /// that skipped them would call them orphans and let a rewrite pass by.
+    /// Every expression the value tree at `v` names as an extraction source.
+    /// Those nodes produce this value's code and hang outside the skeleton, so
+    /// a reachability walk that skipped them would call them orphans and let a
+    /// rewrite pass by.
     pub fn for_each_opaque_expr(
         &self,
         v: ValueId,
