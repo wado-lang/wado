@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1788954903829,
+  "lastUpdate": 1788960517907,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -54397,6 +54397,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/060da46266807ceef6c98074dac2edb0ba08c581"
         },
         "date": 1788954902876,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 2013,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6560,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18971,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 288933,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "017e3db2317800d5da877f50f1992114c9aa9d01",
+          "message": "Merge pull request #2009 from wado-lang/gfx/upgrade_vscode_ext_deps\n\nchore: upgrade package-lock.json",
+          "timestamp": "2026-09-09T22:11:39+09:00",
+          "tree_id": "7c652a49941a6dd6b97c3da297c063ed42e9da26",
+          "url": "https://github.com/wado-lang/wado/commit/017e3db2317800d5da877f50f1992114c9aa9d01"
+        },
+        "date": 1788960516927,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
