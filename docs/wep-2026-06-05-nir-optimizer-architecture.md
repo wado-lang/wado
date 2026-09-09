@@ -299,14 +299,19 @@ over `peephole` at 21 %, `const_fold` at 16 %, and `inline`, `copy_prop` and
 
 Self CPU says something the per-pass spans do not, and it is what the items below
 are sized against. The generic arena walks — `for_each_child`,
-`for_each_reachable_node`, `for_each_operand` — are 17 % of the whole compile.
-Allocation is another 17 %, and its largest single requester is the
-`Vec<NodeRef>` those walks allocate per call. `Engine::new`'s index derivation is
-4.7 %. The graph build is about 6 % of the phase, down from 21 % before
-build-once, while the whole `nir_value_graph` module is 1.2 % of self CPU: what
-the build costs is the walk it shares with every other pass, not its own
-arithmetic. `WADO_TRACE=arena_census` reports the node-mix and bloat numbers
-these items quote.
+`for_each_reachable_node`, `for_each_operand` — are 14 % of the whole compile, and
+allocation another 15 %. `Engine::new`'s index derivation is 4.7 %. The graph
+build is about 6 % of the phase, down from 21 % before build-once, while the whole
+`nir_value_graph` module is 1.2 % of self CPU: what the build costs is the walk it
+shares with every other pass, not its own arithmetic.
+`WADO_TRACE=arena_census` reports the node-mix and bloat numbers these items
+quote.
+
+What is left in the walks is the slot dispatch, not the stacks: pooling the
+`Vec<NodeRef>` they used to allocate per call bought 1.3 % of the SQLite parser's
+compile and 2 % of `json_twitter`'s, and took allocation from 17 % to 15 %. Every walk step runs the inlined slot match, and 61
+to 77 % of the nodes it steps over are pure kinds that carry no children, so what
+prices the walks is how many nodes they cover.
 
 - [ ] Fold the graph build into `lower`. The build's inputs do not exist during
       lowering. `builder::build` takes the alias sets and the per-call purity
@@ -502,6 +507,11 @@ Each was built, verified, and reverted. Do not retry as-is.
   rule, and measurably worse than no memo: a whole-body walk per rewrite, where
   the per-block recomputation it replaced at least amortised over a block. Only
   holding an empty memo across edits pays.
+- One `dyn FnMut` slot walk in place of the monomorphized ones. The slot match is
+  inlined into every instantiation of `for_each_child`, and a dev build folds 125
+  of them onto one address, so a single indirect call promised that code size
+  back. It measured 6.5 % slower: the per-slot indirect call costs more than the
+  instruction cache it buys.
 
 A value's identity is sound only when an operand the edits maintain carries it,
 or when the query itself proves the leaf has a single version. It is never
