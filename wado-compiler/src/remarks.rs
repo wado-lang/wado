@@ -308,7 +308,7 @@ struct ParamOrigin {
 /// and the operand it writes there.
 fn global_assignments(body: &Body) -> Vec<(GlobalKey, crate::nir_arena::Operand)> {
     let mut out = Vec::new();
-    body.for_each_node_under(NodeRef::Block(body.root), |node| {
+    body.for_each_reachable_node(|node| {
         if let NodeRef::Expr(e) = node
             && let ExprKind::GlobalVarSet {
                 module_source,
@@ -328,7 +328,7 @@ fn reads_decided_global(
     op: crate::nir_arena::Operand,
     decided: &IndexMap<GlobalKey, ParamOrigin>,
 ) -> Option<String> {
-    body.find_in_nodes_under(NodeRef::Expr(op.as_expr()?), |node| {
+    body.find_in_live_node_under(NodeRef::Expr(op.as_expr()?), |node| {
         if let NodeRef::Expr(e) = node
             && let ExprKind::GlobalVarGet {
                 module_source,

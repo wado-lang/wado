@@ -1097,7 +1097,7 @@ impl Body {
     /// go stale after `inline` / `ref_elim` copy reference nodes, so
     /// alias-sensitive consumers union this scan in.
     pub fn collect_address_taken_locals(&self, out: &mut crate::hashmap::IndexSet<u32>) {
-        self.for_each_node_under(NodeRef::Block(self.root), |node| {
+        self.for_each_reachable_node(|node| {
             if let NodeRef::Expr(id) = node
                 && let ExprKind::Unary {
                     op: crate::nir::NirUnaryOp::Ref | crate::nir::NirUnaryOp::MutRef,
@@ -1112,7 +1112,19 @@ impl Body {
     }
 
     /// Invoke `f` on `root` and every node beneath it, parents before children.
-    pub fn for_each_node_under(&self, root: NodeRef, mut f: impl FnMut(NodeRef)) {
+    /// A subtree walk: the whole body is [`Body::for_each_reachable_node`].
+    pub fn for_each_node_under(&self, root: NodeRef, f: impl FnMut(NodeRef)) {
+        debug_assert!(
+            self.blocks.is_empty() || root != NodeRef::Block(self.root),
+            "[NIR] a whole-body walk is `for_each_reachable_node`, which also covers what a \
+             promoted operand names as its extraction source"
+        );
+        self.for_each_skeleton_node(root, f);
+    }
+
+    /// [`Body::for_each_node_under`] without its whole-body check, for the two
+    /// walks [`Body::for_each_live_node_under`] is itself made of.
+    fn for_each_skeleton_node(&self, root: NodeRef, mut f: impl FnMut(NodeRef)) {
         self.walk_nodes_under::<()>(root, |node| {
             f(node);
             ControlFlow::Continue(true)
@@ -1124,9 +1136,13 @@ impl Body {
     /// took only skeleton children would call them orphans — and a rewrite that
     /// trusted the walk would pass them by.
     pub fn for_each_live_node_under(&self, root: NodeRef, mut f: impl FnMut(NodeRef)) {
+        if !self.values.has_expr_source() {
+            self.for_each_skeleton_node(root, f);
+            return;
+        }
         let mut pool_seen: IndexSet<ValueId> = IndexSet::default();
         let mut sourced: Vec<ExprId> = Vec::new();
-        self.for_each_node_under(root, |node| {
+        self.for_each_skeleton_node(root, |node| {
             f(node);
             self.for_each_operand(node, |op| {
                 if let Some(v) = op.as_value() {
@@ -1140,7 +1156,7 @@ impl Body {
         let mut covered: IndexSet<ExprId> = IndexSet::default();
         #[cfg(debug_assertions)]
         if !sourced.is_empty() {
-            self.for_each_node_under(root, |node| {
+            self.for_each_skeleton_node(root, |node| {
                 if let NodeRef::Expr(e) = node {
                     covered.insert(e);
                 }
@@ -1154,7 +1170,7 @@ impl Body {
                 "[NIR] {e:?} is an extraction source this walk already covered, so \
                  `reachable_operand_values` counts its slots twice"
             );
-            self.for_each_node_under(NodeRef::Expr(e), |node| {
+            self.for_each_skeleton_node(NodeRef::Expr(e), |node| {
                 f(node);
                 #[cfg(debug_assertions)]
                 if let NodeRef::Expr(inner) = node {
@@ -1251,6 +1267,33 @@ impl Body {
             return;
         }
         self.for_each_live_node_under(NodeRef::Block(self.root), f);
+    }
+
+    /// The first value `f` gives for a reachable node. [`Body::find_in_nodes_under`]
+    /// is the skeleton form, and stops at the first hit; this one walks on.
+    pub fn find_in_reachable_node<T>(&self, mut f: impl FnMut(NodeRef) -> Option<T>) -> Option<T> {
+        let mut found = None;
+        self.for_each_reachable_node(|node| {
+            if found.is_none() {
+                found = f(node);
+            }
+        });
+        found
+    }
+
+    /// [`Body::find_in_reachable_node`] over one subtree.
+    pub fn find_in_live_node_under<T>(
+        &self,
+        root: NodeRef,
+        mut f: impl FnMut(NodeRef) -> Option<T>,
+    ) -> Option<T> {
+        let mut found = None;
+        self.for_each_live_node_under(root, |node| {
+            if found.is_none() {
+                found = f(node);
+            }
+        });
+        found
     }
 
     /// The distinct promoted values the reachable skeleton carries, and how many

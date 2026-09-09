@@ -769,7 +769,7 @@ fn set_then_get_block(
 fn locals_declared_once(body: &Body) -> IndexSet<u32> {
     let mut seen: IndexSet<u32> = IndexSet::default();
     let mut dupes: IndexSet<u32> = IndexSet::default();
-    body.for_each_node_under(NodeRef::Block(body.root), |node| {
+    body.for_each_reachable_node(|node| {
         if let NodeRef::Stmt(s) = node
             && let StmtKind::Let { local_index, .. } = &body.stmts[s].kind
             && !seen.insert(*local_index)
@@ -1025,7 +1025,7 @@ fn detach_stmts(body: &mut Body, stmts: &[StmtId]) {
 /// The `GlobalVarSet` a hoist just planted, which every sibling rewrite folds
 /// its moved definitions into.
 fn find_global_var_set(body: &Body, module_source: &ModuleSource, name: &str) -> ExprId {
-    if let Some(e) = body.find_in_nodes_under(NodeRef::Block(body.root), |node| {
+    if let Some(e) = body.find_in_reachable_node(|node| {
         if let NodeRef::Expr(e) = node
             && let ExprKind::GlobalVarSet {
                 name: n,
@@ -1052,7 +1052,7 @@ fn stmts_within_operand(body: &Body, value: Operand) -> IndexSet<StmtId> {
     let Some(e) = value.as_expr() else {
         return out;
     };
-    body.for_each_node_under(NodeRef::Expr(e), |node| {
+    body.for_each_live_node_under(NodeRef::Expr(e), |node| {
         if let NodeRef::Stmt(s) = node {
             out.insert(s);
         }
@@ -1080,7 +1080,7 @@ fn sibling_const_locals(
     let mut sc = SiblingConsts::default();
     loop {
         let mut changed = false;
-        body.for_each_node_under(NodeRef::Block(body.root), |node| {
+        body.for_each_reachable_node(|node| {
             if let NodeRef::Stmt(s) = node
                 && let StmtKind::Let {
                     local_index,
@@ -1126,7 +1126,7 @@ fn mutated_locals(body: &Body, gate: &Gate<'_>) -> IndexSet<u32> {
         }
     };
     let mut out: IndexSet<u32> = IndexSet::default();
-    body.for_each_node_under(NodeRef::Block(body.root), |node| {
+    body.for_each_reachable_node(|node| {
         if let NodeRef::Expr(id) = node {
             match &body.exprs[id].kind {
                 ExprKind::Assign { target, .. } => {
@@ -1178,7 +1178,7 @@ fn seeded_locals_read(body: &Body, value: Operand, siblings: &SiblingConsts) -> 
     while let Some(op) = pending.pop() {
         let Some(e) = op.as_expr() else { continue };
         let mut found = IndexSet::default();
-        body.for_each_node_under(NodeRef::Expr(e), |node| {
+        body.for_each_live_node_under(NodeRef::Expr(e), |node| {
             if let NodeRef::Expr(id) = node
                 && let ExprKind::Local { index, .. } = &body.exprs[id].kind
                 && siblings.set.contains(index)
@@ -1207,7 +1207,7 @@ fn seeded_locals_read(body: &Body, value: Operand, siblings: &SiblingConsts) -> 
 /// unseen.
 fn count_reads_of(body: &Body, node: NodeRef, wanted: &IndexSet<u32>) -> IndexMap<u32, usize> {
     let mut counts: IndexMap<u32, usize> = IndexMap::default();
-    body.for_each_node_under(node, |node| {
+    body.for_each_live_node_under(node, |node| {
         if let NodeRef::Expr(id) = node
             && let ExprKind::Local { index, .. } = &body.exprs[id].kind
             && wanted.contains(index)
@@ -1820,7 +1820,7 @@ fn written_through(body: &Body, idx: u32, gate: &Gate<'_>) -> bool {
 fn param_storage_escapes(body: &Body, idx: u32, gate: &Gate<'_>) -> bool {
     let roots = projection_alias_roots(body, idx, gate, AliasRoots::WithReassigned);
     let escapes = |op: Operand| delivers_projection_operand(body, op, &roots, gate);
-    body.find_in_nodes_under(NodeRef::Block(body.root), |node| {
+    body.find_in_reachable_node(|node| {
         match node {
             NodeRef::Stmt(s) => match &body.stmts[s].kind {
                 StmtKind::Return { value } | StmtKind::Break { value, .. } => {
@@ -1938,7 +1938,7 @@ fn projection_alias_roots(body: &Body, idx: u32, gate: &Gate<'_>, which: AliasRo
             sites.push(AliasSite { yields, binds });
         }
     };
-    body.for_each_node_under(NodeRef::Block(body.root), |node| {
+    body.for_each_reachable_node(|node| {
         match node {
             NodeRef::Stmt(s) => match &body.stmts[s].kind {
                 StmtKind::Let {
@@ -2060,7 +2060,7 @@ fn block_tail_delivers(body: &Body, block: BlockId, roots: &[u32], gate: &Gate<'
 
 /// Every local a pattern binds, appended to `out` if not already there.
 fn collect_pattern_bindings(body: &Body, pattern: crate::nir_arena::PatId, out: &mut Vec<u32>) {
-    body.for_each_node_under(NodeRef::Pat(pattern), |node| {
+    body.for_each_live_node_under(NodeRef::Pat(pattern), |node| {
         if let NodeRef::Pat(p) = node
             && let crate::nir_arena::PatKind::Binding { local_index, .. } = &body.pats[p].kind
             && !out.contains(local_index)
@@ -2078,7 +2078,7 @@ fn yielded_roots(body: &Body, op: Operand, gate: &Gate<'_>) -> Vec<u32> {
     let Some(expr) = op.as_expr() else {
         return out;
     };
-    body.for_each_node_under(NodeRef::Expr(expr), |node| {
+    body.for_each_live_node_under(NodeRef::Expr(expr), |node| {
         if let NodeRef::Expr(e) = node
             && gate.is_reference_type(body.exprs[e].type_id)
             && let Some(root) = projection_root_of(body, e, gate)
@@ -2379,7 +2379,7 @@ fn rewrite_reads(
     ty: TypeId,
 ) {
     let mut targets = Vec::new();
-    body.for_each_node_under(NodeRef::Block(body.root), |node| {
+    body.for_each_reachable_node(|node| {
         if let NodeRef::Expr(id) = node
             && matches!(&body.exprs[id].kind, ExprKind::Local { index, .. } if *index == local_index)
         {
@@ -2509,7 +2509,7 @@ fn inline_sibling_lets(
 /// past `ARRAY_NEW_FIXED_LIMIT`, which becomes a build sequence; and one
 /// `promote_constant_arrays_to_data` will rewrite to `array.new_data`.
 fn needs_lazy_guard(body: &Body, expr: ExprId, gate: &Gate<'_>, prefer_fixed: bool) -> bool {
-    body.find_in_nodes_under(NodeRef::Expr(expr), |node| {
+    body.find_in_live_node_under(NodeRef::Expr(expr), |node| {
         let NodeRef::Expr(id) = node else { return None };
         match &body.exprs[id].kind {
             ExprKind::Call { .. } | ExprKind::IndirectCall { .. } | ExprKind::CmRawCall { .. } => {

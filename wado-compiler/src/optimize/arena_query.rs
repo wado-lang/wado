@@ -22,7 +22,7 @@ use crate::tir::TypeTable;
 /// is needed.
 pub(super) fn reachable_blocks(body: &Body) -> Vec<BlockId> {
     let mut out = Vec::new();
-    body.for_each_node_under(NodeRef::Block(body.root), |node| {
+    body.for_each_reachable_node(|node| {
         if let NodeRef::Block(b) = node {
             out.push(b);
         }
@@ -352,7 +352,7 @@ fn node_mentions_local(body: &Body, node: NodeRef, idx: u32) -> bool {
 /// nesting. Shared by the inliner (cold-cost) and labeled-block fusion
 /// (unlabeled-break capture guard).
 pub(super) fn block_contains_loop(body: &Body, block: BlockId) -> bool {
-    body.find_in_nodes_under(NodeRef::Block(block), |n| {
+    body.find_in_live_node_under(NodeRef::Block(block), |n| {
         matches!(n, NodeRef::Stmt(s) if matches!(body.stmts[s].kind, StmtKind::Loop { .. }))
             .then_some(())
     })

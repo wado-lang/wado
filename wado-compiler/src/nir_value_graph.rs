@@ -515,6 +515,9 @@ pub struct ValuePool {
     /// scheduled skeleton expression (a call result kept in the skeleton).
     /// Empty for opaques minted without a recorded source.
     opaque_sources: IndexMap<OpaqueId, OpaqueSource>,
+    /// Whether any [`OpaqueSource::Expr`] has ever been recorded. Sticky, so it
+    /// over-estimates rather than reporting a source the walks would then skip.
+    expr_sources: bool,
     /// One stable `Opaque(Local idx)` per local, memoized so repeated requests
     /// (e.g. a loop-stability re-seed of a local's reads after maintenance
     /// dropped them) share a single identity — the precondition for matching the
@@ -650,8 +653,16 @@ impl ValuePool {
     pub fn fresh_opaque_with_source(&mut self, source: OpaqueSource) -> ValueId {
         let opaque = OpaqueId(self.next_opaque);
         self.next_opaque += 1;
+        self.expr_sources |= matches!(source, OpaqueSource::Expr(_));
         self.opaque_sources.insert(opaque, source);
         self.intern(ValueKind::Opaque(opaque))
+    }
+
+    /// Whether any operand can name a skeleton-external extraction source. False
+    /// lets a reachability walk stay on the skeleton.
+    #[inline]
+    pub fn has_expr_source(&self) -> bool {
+        self.expr_sources
     }
 
     /// The recorded extraction source of an `Opaque`, if any.

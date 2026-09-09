@@ -139,7 +139,7 @@ pub(super) type Binds = crate::hashmap::IndexMap<u32, Operand>;
 /// so resolving through it can never read a stale value.
 pub(super) fn build_copy_bindings(body: &crate::nir_arena::Body) -> Binds {
     let mut reassigned = crate::hashmap::IndexSet::default();
-    body.for_each_node_under(NodeRef::Block(body.root), |n| {
+    body.for_each_reachable_node(|n| {
         if let Some(r) = local_written_by(body, n) {
             reassigned.insert(r);
         }
@@ -679,7 +679,7 @@ pub(super) fn node_modifies(engine: &Engine, node: NodeRef, var: u32, bound: Bou
             }
         }
     };
-    engine.body.for_each_node_under(node, visit);
+    engine.body.for_each_live_node_under(node, visit);
     hit
 }
 
@@ -745,7 +745,7 @@ fn refute_panic_checks(
     refute: impl Fn(&Engine, &Binds, Operand) -> bool,
 ) -> bool {
     let mut holders: Vec<(NodeRef, Operand)> = Vec::new();
-    engine.body.for_each_node_under(node, |n| {
+    engine.body.for_each_live_node_under(node, |n| {
         if let Some(cond) = panic_guard_check(engine, n)
             && refute(engine, binds, cond)
         {

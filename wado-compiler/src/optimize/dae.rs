@@ -228,7 +228,7 @@ fn validate_in_body(
     rejected: &mut IndexSet<FnKey>,
     type_table: &crate::tir::TypeTable,
 ) {
-    body.for_each_node_under(NodeRef::Block(body.root), |node| {
+    body.for_each_reachable_node(|node| {
         if let NodeRef::Expr(id) = node {
             validate_call(body, id, candidates, rejected, type_table);
         }
@@ -310,7 +310,7 @@ fn apply_dae(project: &mut NirPackage, confirmed: &IndexMap<FnKey, Vec<bool>>) -
 /// arguments, clearing `has_receiver` when the receiver itself is dropped.
 fn rewrite_calls_in_body(body: &mut Body, confirmed: &IndexMap<FnKey, Vec<bool>>) -> bool {
     let mut calls = Vec::new();
-    body.for_each_node_under(NodeRef::Block(body.root), |node| {
+    body.for_each_reachable_node(|node| {
         if let NodeRef::Expr(id) = node
             && matches!(&body.exprs[id].kind, ExprKind::Call { .. })
         {
@@ -439,7 +439,7 @@ fn remap_locals(body: &mut Body, remap: &[Option<u32>]) {
     let mut exprs = Vec::new();
     let mut stmts = Vec::new();
     let mut pats = Vec::new();
-    body.for_each_node_under(NodeRef::Block(body.root), |node| match node {
+    body.for_each_reachable_node(|node| match node {
         NodeRef::Expr(id) => exprs.push(id),
         NodeRef::Stmt(id) => stmts.push(id),
         NodeRef::Pat(id) => pats.push(id),

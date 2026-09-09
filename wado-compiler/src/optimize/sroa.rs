@@ -294,7 +294,7 @@ struct ReconstructInfo {
 
 fn collect_candidates(body: &Body) -> Vec<SroaCandidate> {
     let mut candidates = Vec::new();
-    body.for_each_node_under(NodeRef::Block(body.root), |node| {
+    body.for_each_reachable_node(|node| {
         if let NodeRef::Stmt(s) = node {
             candidate_from_stmt(body, s, &mut candidates);
         }

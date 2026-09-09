@@ -191,7 +191,7 @@ pub(super) fn region_needs(
     let mut seen = LocalSet::default();
     let mut mentioned: Vec<(u32, Option<TypeId>)> = Vec::new();
     let mut written = LocalSet::default();
-    body.for_each_node_under(NodeRef::Block(block), |node| {
+    body.for_each_live_node_under(NodeRef::Block(block), |node| {
         match node {
             NodeRef::Stmt(s) => {
                 if let StmtKind::Let { local_index, .. } = &body.stmts[s].kind {

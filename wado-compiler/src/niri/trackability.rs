@@ -42,14 +42,10 @@ fn performed_exprs(body: &Body) -> IndexSet<ExprId> {
     performed
 }
 
-/// Every statement id reachable from the body root, in walk order — or every
-/// statement, for a bare-expression body with no block structure.
+/// Every reachable statement id, in walk order.
 fn reachable_stmts(body: &Body) -> Vec<StmtId> {
-    if body.blocks.is_empty() {
-        return body.stmts.iter().map(|(s, _)| s).collect();
-    }
     let mut stmts = Vec::new();
-    body.for_each_node_under(NodeRef::Block(body.root), |node| {
+    body.for_each_reachable_node(|node| {
         if let NodeRef::Stmt(s) = node {
             stmts.push(s);
         }
