@@ -382,6 +382,11 @@ pub(super) fn freeze_pure_arith(
             include_fields,
         };
         let candidates: Vec<ExprId> = engine.body.exprs.keys().collect();
+        // Which splice-reach bucket the enclosing function sits in. The anchor
+        // rule exists because a later splice re-contextualizes the operand, and
+        // only `inline` splices after this pass runs — so a body far past its
+        // threshold is one whose operands cannot move.
+        let size_bucket = size_bucket(engine.body.exprs.len());
         let mut to_freeze: Vec<(ExprId, ValueId)> = Vec::new();
         for id in candidates {
             // Only a pure kind is tallied: it is the population the pool could
@@ -389,10 +394,10 @@ pub(super) fn freeze_pure_arith(
             let kind = census::classify(&engine.body.exprs[id].kind);
             match classify_candidate(&mut engine, &ctx, id) {
                 Ok(entry) => {
-                    refusals.note(kind, None);
+                    refusals.note(kind, size_bucket, None);
                     to_freeze.push(entry);
                 }
-                Err(refusal) => refusals.note(kind, Some(refusal)),
+                Err(refusal) => refusals.note(kind, size_bucket, Some(refusal)),
             }
         }
 
@@ -435,10 +440,29 @@ struct Refusals {
     /// Refusal reason and the node kind it refused, so a reason that is really
     /// one kind's story reads as one.
     by_reason: IndexMap<(&'static str, &'static str), usize>,
+    /// Anchor-rule refusals by the size of the body holding them.
+    anchor_by_size: IndexMap<&'static str, usize>,
+}
+
+/// How far the enclosing body is from the size a splice would copy. The inline
+/// threshold is 16 in a weighted cost, so a body of even a few dozen nodes is
+/// already past what any caller will take.
+fn size_bucket(exprs: usize) -> &'static str {
+    match exprs {
+        0..=32 => "body <=32 exprs",
+        33..=128 => "body 33-128 exprs",
+        129..=512 => "body 129-512 exprs",
+        _ => "body >512 exprs",
+    }
 }
 
 impl Refusals {
-    fn note(&mut self, kind: (&'static str, bool), refusal: Option<Refusal>) {
+    fn note(
+        &mut self,
+        kind: (&'static str, bool),
+        size_bucket: &'static str,
+        refusal: Option<Refusal>,
+    ) {
         let (kind_name, pure_kind) = kind;
         if !pure_kind {
             return;
@@ -446,7 +470,12 @@ impl Refusals {
         self.pure_kinds += 1;
         match refusal {
             None => self.frozen += 1,
-            Some(r) => *self.by_reason.entry((r.name(), kind_name)).or_default() += 1,
+            Some(r) => {
+                *self.by_reason.entry((r.name(), kind_name)).or_default() += 1;
+                if matches!(r, Refusal::AnchorRule) {
+                    *self.anchor_by_size.entry(size_bucket).or_default() += 1;
+                }
+            }
         }
     }
 
@@ -471,6 +500,12 @@ impl Refusals {
                 TRACE_TARGET,
                 "{phase} (fields={include_fields}):   {n:>7} {:>5.1}%  {reason} / {kind}",
                 pct(n)
+            );
+        }
+        for (bucket, n) in &self.anchor_by_size {
+            compiler_trace!(
+                TRACE_TARGET,
+                "{phase} (fields={include_fields}):   anchor-rule in {bucket}: {n}"
             );
         }
     }
