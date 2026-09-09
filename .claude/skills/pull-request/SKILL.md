@@ -30,11 +30,6 @@ a list of PRs is deciding whether to care.
 
 `<type>(<scope>): <the value>`
 
-- No: `refactor(nir): thread a frame stack through the arena visitors`
-- Yes: `perf(nir): 7 % off a debug compile of the SQLite parser`
-- No: `fix(elaborator): add an arity check to impl resolution`
-- Yes: `fix(elaborator): an impl on [] no longer matches ()`
-
 Where the value is a number, the number is the title. Name two things if two are
 worth it, still on one line. If five are, name the largest and leave the rest to
 the description.
