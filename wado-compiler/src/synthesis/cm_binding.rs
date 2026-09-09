@@ -681,10 +681,6 @@ fn synthesize_export_adapters(project: &mut Package) -> Result<(), String> {
                     let tt = entry_type_table.borrow();
                     compute_export_flat_return_types(ty, &project.tir_modules, &tt)
                 });
-                // Per-export `task.return` import, so codegen can type
-                // the canon to this export's own result (a `--lib`
-                // world may have several async exports of distinct
-                // result types).
                 let task_return = CanonicalIntrinsic::TaskReturn(export.name.clone());
                 let task_entry = split_task_entry(&user_func_rc, &export.name);
                 expand_task_returns_in_func(

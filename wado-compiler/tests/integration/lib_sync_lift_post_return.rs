@@ -13,13 +13,11 @@
 //! Covered: the returned payload, an incoming `string` parameter, and the
 //! canonical option itself, which tracks the indirect return.
 
-use std::path::Path;
-
-use wado_compiler::{CompilerOptions, OptLevel};
+use wado_compiler::OptLevel;
+use wasmtime::Store;
 use wasmtime::component::{Component, Val};
-use wasmtime::{Config, Engine, InstanceAllocationStrategy, PoolingAllocationConfig, Store};
 
-use crate::common::lib_func;
+use crate::common::{WasiState, capped_engine, compile_lib_world, lib_func, linker, runtime};
 
 /// FQ of the synthesized library world; any stable name works, the compiler
 /// only uses it to key the world it builds for `--lib`.
@@ -42,51 +40,14 @@ const CALLS: usize = 48;
 /// Enough for a few live payloads, far below `CALLS * PAYLOAD` (48 MiB).
 const MEMORY_CAP: usize = 12 << 20;
 
-/// An engine matching `crate::common::engine`'s feature set, with a hard cap on guest
-/// linear memory so an unreclaimed payload cannot hide in address space.
-fn capped_engine() -> Engine {
-    let mut pooling = PoolingAllocationConfig::default();
-    pooling.max_memory_size(MEMORY_CAP);
-    pooling.total_memories(16);
-    pooling.total_core_instances(64);
-    pooling.total_component_instances(16);
-
-    let mut config = Config::new();
-    config.wasm_component_model_gc(true);
-    config.wasm_component_model_async(true);
-    config.wasm_component_model_more_async_builtins(true);
-    config.wasm_component_model_async_stackful(true);
-    config.wasm_component_model_error_context(true);
-    config.wasm_wide_arithmetic(true);
-    config.collector(wasmtime::Collector::Copying);
-    config.cranelift_opt_level(wasmtime::OptLevel::None);
-    config.allocation_strategy(InstanceAllocationStrategy::Pooling(pooling));
-    Engine::new(&config).expect("build capped engine")
-}
-
-fn compile_lib(source: &str, opt_level: OptLevel) -> Vec<u8> {
-    let options = CompilerOptions {
-        opt_level,
-        lib_world: Some(LIB_WORLD_FQ.to_string()),
-        // The library world's own default. `bump` never frees anything, so it
-        // cannot distinguish a leak from correct behavior, and `freelist` traps
-        // on double-free, so it also catches an over-eager free.
-        allocator: Some("freelist".to_string()),
-        ..Default::default()
-    };
-    crate::common::compile_source_with_compiler_options(Path::new("lib.wado"), source, options)
-        .expect("library failed to compile")
-        .wasm
-}
-
 fn run(opt_level: OptLevel) {
-    let engine = capped_engine();
-    let wasm = compile_lib(SOURCE, opt_level);
+    let engine = capped_engine(MEMORY_CAP);
+    let wasm = compile_lib_world(SOURCE, LIB_WORLD_FQ, opt_level, Some("freelist"));
     let component = Component::new(&engine, &wasm).expect("component failed to load");
 
-    crate::common::runtime().block_on(async {
-        let linker = crate::common::linker(&engine).expect("build linker");
-        let mut store = Store::new(&engine, crate::common::WasiState::new());
+    runtime().block_on(async {
+        let linker = linker(&engine).expect("build linker");
+        let mut store = Store::new(&engine, WasiState::new());
         let instance = linker
             .instantiate_async(&mut store, &component)
             .await
@@ -136,14 +97,14 @@ export fn measure(s: String) -> u32 {
 "#;
 
 fn run_param(opt_level: OptLevel) {
-    let engine = capped_engine();
-    let wasm = compile_lib(PARAM_SOURCE, opt_level);
+    let engine = capped_engine(MEMORY_CAP);
+    let wasm = compile_lib_world(PARAM_SOURCE, LIB_WORLD_FQ, opt_level, Some("freelist"));
     let component = Component::new(&engine, &wasm).expect("component failed to load");
     let arg = "x".repeat(PAYLOAD);
 
-    crate::common::runtime().block_on(async {
-        let linker = crate::common::linker(&engine).expect("build linker");
-        let mut store = Store::new(&engine, crate::common::WasiState::new());
+    runtime().block_on(async {
+        let linker = linker(&engine).expect("build linker");
+        let mut store = Store::new(&engine, WasiState::new());
         let instance = linker
             .instantiate_async(&mut store, &component)
             .await
@@ -213,7 +174,7 @@ export fn direct(n: u32) -> u32 {
 /// option off and its component stays as it was before `post-return` existed.
 #[test]
 fn post_return_tracks_the_indirect_return() {
-    let wasm = compile_lib(OPTION_SOURCE, OptLevel::O0);
+    let wasm = compile_lib_world(OPTION_SOURCE, LIB_WORLD_FQ, OptLevel::O0, Some("freelist"));
     let wat = wasmprinter::print_bytes(&wasm).expect("print component");
 
     let lift_of = |name: &str| -> String {

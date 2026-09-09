@@ -15,13 +15,11 @@
 //! joined slots with the other case), and a `list<string>` (whose element
 //! buffers are out of the outer pointer's reach).
 
-use std::path::Path;
-
-use wado_compiler::{CompilerOptions, OptLevel};
+use wado_compiler::OptLevel;
+use wasmtime::Store;
 use wasmtime::component::{Component, Val};
-use wasmtime::{Config, Engine, InstanceAllocationStrategy, PoolingAllocationConfig, Store};
 
-use crate::common::lib_func;
+use crate::common::{WasiState, capped_engine, compile_lib_world, lib_func, linker, runtime};
 
 /// FQ of the synthesized library world; any stable name works, the compiler
 /// only uses it to key the world it builds for `--lib`.
@@ -33,43 +31,6 @@ const CALLS: usize = 48;
 /// Enough for a few live payloads, far below the 48 MiB the string cases move.
 const MEMORY_CAP: usize = 12 << 20;
 
-/// An engine matching `crate::common::engine`'s feature set, with a hard cap on guest
-/// linear memory so an unreclaimed payload cannot hide in address space.
-fn capped_engine() -> Engine {
-    let mut pooling = PoolingAllocationConfig::default();
-    pooling.max_memory_size(MEMORY_CAP);
-    pooling.total_memories(16);
-    pooling.total_core_instances(64);
-    pooling.total_component_instances(16);
-
-    let mut config = Config::new();
-    config.wasm_component_model_gc(true);
-    config.wasm_component_model_async(true);
-    config.wasm_component_model_more_async_builtins(true);
-    config.wasm_component_model_async_stackful(true);
-    config.wasm_component_model_error_context(true);
-    config.wasm_wide_arithmetic(true);
-    config.collector(wasmtime::Collector::Copying);
-    config.cranelift_opt_level(wasmtime::OptLevel::None);
-    config.allocation_strategy(InstanceAllocationStrategy::Pooling(pooling));
-    Engine::new(&config).expect("build capped engine")
-}
-
-fn compile_lib(source: &str, opt_level: OptLevel) -> Vec<u8> {
-    let options = CompilerOptions {
-        opt_level,
-        lib_world: Some(LIB_WORLD_FQ.to_string()),
-        // The library world's own default. `bump` never frees anything, so it
-        // cannot distinguish a leak from correct behavior, and `freelist` traps
-        // on double-free, so it also catches an over-eager free.
-        allocator: Some("freelist".to_string()),
-        ..Default::default()
-    };
-    crate::common::compile_source_with_compiler_options(Path::new("lib.wado"), source, options)
-        .expect("library failed to compile")
-        .wasm
-}
-
 /// Call `export` `CALLS` times under the memory cap, checking each result with
 /// `check`.
 fn run_calls(
@@ -80,13 +41,13 @@ fn run_calls(
     check: impl Fn(&Val, usize),
 ) {
     let payload = 16usize << doublings;
-    let engine = capped_engine();
-    let wasm = compile_lib(source, opt_level);
+    let engine = capped_engine(MEMORY_CAP);
+    let wasm = compile_lib_world(source, LIB_WORLD_FQ, opt_level, Some("freelist"));
     let component = Component::new(&engine, &wasm).expect("component failed to load");
 
-    crate::common::runtime().block_on(async {
-        let linker = crate::common::linker(&engine).expect("build linker");
-        let mut store = Store::new(&engine, crate::common::WasiState::new());
+    runtime().block_on(async {
+        let linker = linker(&engine).expect("build linker");
+        let mut store = Store::new(&engine, WasiState::new());
         let instance = linker
             .instantiate_async(&mut store, &component)
             .await

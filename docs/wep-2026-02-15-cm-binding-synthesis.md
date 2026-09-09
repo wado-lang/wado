@@ -103,7 +103,7 @@ Used by Command world's `run()` and test functions. The binding calls the user f
 
 A `--lib` export can instead declare no result at all, as `export async fn ping()` does. It lifts through no CM type, so it flattens to no slot and delivers with `task-return()`, against a canon carrying no result type. Whether a result is there at all comes from the export's declared result in both places, so the canon and `canon lift` agree on its presence.
 
-They do not share how they resolve it: `lib_task_return_valtype` resolves the declared type, `emit_world_exports` resolves it preserving local newtypes. A `pub type Meters = i32` result reaches the lift as the named `meters` and the canon as bare `s32`, which interning makes the same component type.
+They do not share how they resolve it: `lib_task_return_valtype` resolves the declared type, `emit_world_exports` resolves it preserving local newtypes. A `pub type Meters = i32` result reaches the lift as the named `meters` and the canon as bare `s32`. Interning makes those the same component type.
 
 #### Result-returning exports (`(...) -> Result<T, E>`)
 
@@ -210,7 +210,7 @@ This requires:
 
 Parameter count validation is implemented: if the user's export function has a different number of parameters than the world declaration, a clear compile error is produced.
 
-Return type validation covers the worlds declaring `Result<_, _>`: the export returns one too, or unit for the `Ok(())` wrap. It holds for `async` exports as well as sync ones — exempting them let a plain `i32` be delivered onto the world's discriminant, reaching the host as an error the program never named.
+Return type validation covers the worlds declaring `Result<_, _>`: the export returns one too, or unit for the `Ok(())` wrap. It holds for `async` exports as well as sync ones. While they were exempt, a plain `i32` was delivered onto the world's discriminant and reached the host as an error the program never named.
 
 ### Summary
 
@@ -219,7 +219,7 @@ Return type validation covers the worlds declaring `Result<_, _>`: the export re
 | Parameter lifting           | Medium     | Done    | `synthesize_lift_from_flat_params`        |
 | Non-Result return types     | Low        | Done    | `synthesize_general_export_binding`       |
 | Sync export support         | Medium     | Pending | World metadata for async/sync distinction |
-| Export signature validation | Low        | Partial | Parameter count validated; types not yet  |
+| Export signature validation | Low        | Partial | Parameter count and return type validated; parameter types not yet |
 
 The type-driven synthesizer (`synthesize_lift`, `synthesize_lower_to_flat`, flat type computation) is already generic. The remaining work is sync export support and full type validation.
 

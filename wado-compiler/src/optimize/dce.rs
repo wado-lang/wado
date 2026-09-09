@@ -618,9 +618,8 @@ fn resolve_imports(
     // realloc is always needed for memory management
     add_import_by_name(&mut imports, "realloc");
 
-    // `task-return` is absent by design: WIR translation types each delivery's
-    // canon from the flat args at its own call site, so the signature is per
-    // delivery rather than one the whole world has to agree on.
+    // No `task-return` here: WIR translation types each delivery's canon from
+    // the flat args at its own call site.
 
     // Store imports in the project
     project.imports = imports.into_iter().collect();

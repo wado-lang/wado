@@ -2,15 +2,11 @@
 //! result has nothing to hand back, but the host task still has to be told it
 //! is done, and without that delivery the call never completes.
 
-use std::path::Path;
-
-use wado_compiler::{CompilerOptions, OptLevel};
+use wado_compiler::OptLevel;
 use wasmtime::Store;
 use wasmtime::component::{Component, Val};
 
-use crate::common::{
-    WasiState, compile_source_with_compiler_options, engine, lib_func, limit_store, linker, runtime,
-};
+use crate::common::{WasiState, compile_lib_world, engine, lib_func, limit_store, linker, runtime};
 
 /// FQ of the synthesized library world; any stable name works.
 const LIB_WORLD_FQ: &str = "wado-lang:cm-catalog/cm-catalog@0.0.23";
@@ -33,20 +29,9 @@ export fn hit_count() -> i32 {
 }
 "#;
 
-fn compile_lib(opt_level: OptLevel) -> Vec<u8> {
-    let options = CompilerOptions {
-        opt_level,
-        lib_world: Some(LIB_WORLD_FQ.to_string()),
-        ..Default::default()
-    };
-    compile_source_with_compiler_options(Path::new("lib.wado"), SOURCE, options)
-        .expect("library failed to compile")
-        .wasm
-}
-
 fn void_async_export_completes(opt_level: OptLevel) {
     let engine = engine();
-    let wasm = compile_lib(opt_level);
+    let wasm = compile_lib_world(SOURCE, LIB_WORLD_FQ, opt_level, None);
     let component = Component::new(engine, &wasm).expect("component failed to load");
 
     runtime().block_on(async {

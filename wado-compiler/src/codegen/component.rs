@@ -1726,13 +1726,13 @@ fn emit_canonical_intrinsics(
             }
             CanonicalIntrinsic::TaskReturn(key) => {
                 let memory_idx = ctx.memory_idx();
-                let export = task_return_export(key, component_plan);
-                // A `--lib` export is the only one that can declare no result,
-                // and it then delivers no value: the canon carries no type, so
-                // the core import is `(func)`.
-                let result_ty = export
-                    .is_none_or(|e| !e.is_lib || e.result_type.is_some())
-                    .then(|| {
+                let result_ty = match task_return_export(key, component_plan) {
+                    None => Some(ComponentValType::Type(result_unit_type)),
+                    // A `--lib` export is the only one that can declare no
+                    // result, and it then delivers no value: the canon carries
+                    // no type, so the core import is `(func)`.
+                    Some(export) if export.is_lib && export.result_type.is_none() => None,
+                    Some(export) => Some(
                         lib_task_return_valtype(export, project, builder, ctx, lib_type_gen)
                             .unwrap_or_else(|| {
                                 resolve_task_return_valtype(
@@ -1746,8 +1746,9 @@ fn emit_canonical_intrinsics(
                                     value_future_types,
                                     stream_types,
                                 )
-                            })
-                    });
+                            }),
+                    ),
+                };
                 builder.task_return(result_ty, [CanonicalOption::Memory(memory_idx)]);
             }
             CanonicalIntrinsic::WaitableSetNew => {
@@ -1834,17 +1835,16 @@ fn task_return_export<'a>(
 /// plain Wado type (e.g. the kiln generator's `Result<Response, Error>`), from
 /// the raw AST via the shared `lib_type_gen`. Named types land top-level and are
 /// cache-shared with [`emit_world_exports`], so the canon and the export func
-/// type reference the same defined types. Returns `None` for non-lib exports,
-/// exports without a result type, and `Future`/`Stream` results (handled by
-/// [`resolve_task_return_valtype`]).
+/// type reference the same defined types. Returns `None` for a non-lib export
+/// and for a `Future`/`Stream` result, both of which
+/// [`resolve_task_return_valtype`] handles.
 fn lib_task_return_valtype(
-    export: Option<&WorldExportPlan>,
+    export: &WorldExportPlan,
     project: &NirPackage,
     builder: &mut ComponentBuilder,
     ctx: &mut ComponentModelContext,
     lib_type_gen: &mut Option<CmTypeGen>,
 ) -> Option<ComponentValType> {
-    let export = export?;
     if !export.is_lib {
         return None;
     }
@@ -1870,7 +1870,7 @@ fn lib_task_return_valtype(
 /// else (WASI handler results, unit) resolves through `cm_result`.
 #[allow(clippy::too_many_arguments)]
 fn resolve_task_return_valtype(
-    export: Option<&WorldExportPlan>,
+    export: &WorldExportPlan,
     project: &NirPackage,
     ctx: &ComponentModelContext,
     result_unit_type: u32,
@@ -1880,9 +1880,6 @@ fn resolve_task_return_valtype(
     value_future_types: &IndexMap<CmPayloadType, u32>,
     stream_types: &IndexMap<CmStreamPayload, u32>,
 ) -> ComponentValType {
-    let Some(export) = export else {
-        return ComponentValType::Type(result_unit_type);
-    };
     if export.is_lib
         && let Some(crate::ast::Type::Generic(g)) = &export.result_type
         && g.args.len() == 1

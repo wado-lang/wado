@@ -1434,8 +1434,7 @@ fn build_export_adapter_params(
 #[derive(Clone, Copy)]
 pub(super) enum ExportReturnStrategy {
     /// Async `() -> ()` export: call, then `task-return(0)` — the Ok
-    /// discriminant of the `result<>` it lifts through. That result is fixed,
-    /// so the delivery goes through the shared canon rather than a keyed one.
+    /// discriminant of the `result<>` it lifts through, so it shares that canon.
     VoidTaskReturn,
     /// Sync `--lib` export: the synchronous canon lift returns the lowered
     /// value directly — a single-core-value result verbatim, a multi-value

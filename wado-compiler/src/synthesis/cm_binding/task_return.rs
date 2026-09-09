@@ -333,7 +333,6 @@ fn take_task_result(result: &ResultSlot, items: &CompilerItems) -> TirStmt {
 /// The local the `Some` arm binds the delivered value to.
 const TASK_VALUE_LOCAL: &str = "__task_value";
 
-/// The declared result a flat slot came from.
 fn declared_result(return_type: Option<&Type>) -> &Type {
     return_type.expect("a flat slot comes from a declared result")
 }
@@ -411,15 +410,12 @@ fn generate_inline_task_return(
             _ => panic!("Expected Result<T, E> type"),
         };
         let items = tt.compiler_items();
-        let (_, _, ok_case_name, ok_case_index) =
-            items.require_variant_case(crate::compiler_item::CompilerItem::ResultOk);
+        let (_, _, ok_case_name, _) = items.require_variant_case(CompilerItem::ResultOk);
         let ok_case_name = ok_case_name.to_string();
-        let (_, _, err_case_name, err_case_index) =
-            items.require_variant_case(crate::compiler_item::CompilerItem::ResultErr);
+        let (_, _, err_case_name, _) = items.require_variant_case(CompilerItem::ResultErr);
         let err_case_name = err_case_name.to_string();
         drop(tt);
 
-        // Store result in local
         let result_local = alloc_local(next_local, locals, value_type_id);
         stmts.push(let_stmt("__task_ret", result_local, value_type_id, value));
 
@@ -628,33 +624,16 @@ fn generate_inline_task_return(
             next_local,
             locals,
         ));
-        // Suppress unused-variable warning for the case names since the
-        // pattern paths now read them directly above (no separate
-        // variant_test argument).
-        let _ = (ok_case_index, err_case_index);
     } else {
         let value_is_unit = matches!(tt.get(value_type_id), ResolvedType::Unit);
         drop(tt);
-        // Non-Result task return — flatten the value and forward the flat
-        // slots verbatim. Unit-returning exports (`flat_return_types`
-        // empty) collapse to `task-return()` with the value evaluated for
-        // its side effects.
-        if flat_return_types.is_empty() {
-            // Evaluate `value` for side effects, then signal completion
-            // with no flat payload.
-            stmts.push(expr_stmt(value));
-            stmts.push(expr_stmt(cm_canonical_call(
-                task_return.clone(),
-                vec![],
-                TypeTable::UNIT,
-            )));
-        } else if value_is_unit {
-            // A unit return against a world result that has slots: the world
-            // declares the `Result<(), _>` the unit is wrapped into
-            // (`validate_world_return_compatibility` admits no other shape).
-            // `Ok` is the zero discriminant and its payload is empty, so every
-            // slot is zero — the same delivery `VoidTaskReturn` makes for the
-            // sync binding.
+        // Non-Result task return. Nothing to lower where the operand fills no
+        // slot: an export declaring no result has none, and a unit operand
+        // against a `Result<(), _>` world means the `Ok` whose discriminant and
+        // empty payload are zeros — the only other pairing
+        // `validate_world_return_compatibility` admits. The operand is still
+        // evaluated, for its effects.
+        if flat_return_types.is_empty() || value_is_unit {
             stmts.push(expr_stmt(value));
             stmts.push(expr_stmt(cm_canonical_call(
                 task_return.clone(),

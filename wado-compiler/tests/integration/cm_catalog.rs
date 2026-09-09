@@ -30,7 +30,7 @@ use wasmtime::component::{
 };
 use wasmtime::{AsContextMut, Store, StoreContextMut};
 
-use crate::common::lookup_func as common_lookup_func;
+use crate::common::lookup_func;
 
 /// Stream producer that delivers a batch with `Completed`, then signals
 /// end-of-stream with a separate `Dropped` poll. Unlike the built-in `Vec`
@@ -316,13 +316,13 @@ fn flags(names: &[&str]) -> Val {
     Val::Flags(names.iter().map(|s| (*s).to_string()).collect())
 }
 
-fn lookup_func(
+fn require_func(
     store: &mut Store<crate::common::WasiState>,
     instance: &Instance,
     iface: Option<&ComponentExportIndex>,
     export: &str,
 ) -> Result<wasmtime::component::Func, String> {
-    common_lookup_func(store, instance, iface, export)
+    lookup_func(store, instance, iface, export)
         .ok_or_else(|| format!("export `{export}` not found"))
 }
 
@@ -347,7 +347,7 @@ where
         + 'static,
 {
     let expected = payload.clone();
-    let func = lookup_func(store, instance, iface, export)?;
+    let func = require_func(store, instance, iface, export)?;
     let f = FutureReader::new(&mut *store, async move { wasmtime::error::Ok(payload) })
         .map_err(|e| format!("`${export}`: host future create failed: {e:#}"))?;
     let any = f
@@ -407,7 +407,7 @@ where
         + 'static,
 {
     let expected = payload.clone();
-    let func = lookup_func(store, instance, iface, export)?;
+    let func = require_func(store, instance, iface, export)?;
     let s = StreamReader::new(&mut *store, ChunkedStreamProducer(Some(payload)))
         .map_err(|e| format!("`${export}`: host stream create failed: {e:#}"))?;
     let any = s
@@ -468,7 +468,7 @@ async fn embedded_future_round_trip(
     let any = f
         .try_into_future_any(&mut *store)
         .map_err(|e| format!("`${export}`: future -> any failed: {e:#}"))?;
-    let func = lookup_func(store, instance, iface, export)?;
+    let func = require_func(store, instance, iface, export)?;
     let mut results = vec![Val::Bool(false); 1];
     func.call_async(&mut *store, &[wrap(Val::Future(any))], &mut results)
         .await
@@ -509,7 +509,7 @@ async fn embedded_stream_round_trip(
     let any = s
         .try_into_stream_any(&mut *store)
         .map_err(|e| format!("`${export}`: stream -> any failed: {e:#}"))?;
-    let func = lookup_func(store, instance, iface, export)?;
+    let func = require_func(store, instance, iface, export)?;
     let mut results = vec![Val::Bool(false); 1];
     func.call_async(&mut *store, &[wrap(Val::Stream(any))], &mut results)
         .await
@@ -817,7 +817,7 @@ async fn produce_and_read_back<T>(
 where
     T: wasmtime::component::Lift + PartialEq + std::fmt::Debug + Send + 'static,
 {
-    let func = lookup_func(store, instance, iface, export)?;
+    let func = require_func(store, instance, iface, export)?;
     let mut results = vec![Val::Bool(false); 1];
     func.call_async(&mut *store, &[input], &mut results)
         .await
@@ -966,7 +966,7 @@ async fn produce_stream_and_read_back<T>(
 where
     T: wasmtime::component::Lift + PartialEq + std::fmt::Debug + Send + Sync + Unpin + 'static,
 {
-    let func = lookup_func(store, instance, iface, export)?;
+    let func = require_func(store, instance, iface, export)?;
     let mut results = vec![Val::Bool(false); 1];
     func.call_async(&mut *store, &[input], &mut results)
         .await

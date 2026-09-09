@@ -219,9 +219,8 @@ pub enum CanonicalIntrinsic {
     ErrorContextNew,
     ErrorContextDebugMessage,
     ErrorContextDrop,
-    /// Keyed by the export whose result it delivers, since one canon can only
-    /// carry one result type. The empty key is the shared canon of the
-    /// deliveries whose result is `result<>`, which every world agrees on.
+    /// Keyed by the export whose result it delivers; one canon carries one
+    /// result type. The empty key is the shared canon of the `result<>` ones.
     TaskReturn(String),
     /// By the resource's CM name.
     ResourceDrop(String),
