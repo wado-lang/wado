@@ -503,10 +503,6 @@ mod tests {
             Type::Named(NamedType::new(AstId::fresh(), "()".to_string(), span()))
         }
 
-        pub fn empty_tuple() -> Type {
-            Type::Tuple(vec![])
-        }
-
         pub fn named(name: &str) -> Type {
             Type::Named(NamedType::new(AstId::fresh(), name.to_string(), span()))
         }
@@ -526,23 +522,17 @@ mod tests {
         use resolver_helpers::*;
         let (registry, _) = crate::component_model::CmInterfaceRegistry::build_from_stdlib();
 
-        // Bare unit forms
+        // `()` is the type that carries nothing. The empty tuple `[]` is a type
+        // of its own with no CM representation, rejected at the boundary before
+        // a world export resolves — see `tests/integration/empty_tuple_boundary.rs`.
         assert_matches!(
             resolve_cm_export_type(&unit_named(), &registry, None),
-            CmExportType::Unit
-        );
-        assert_matches!(
-            resolve_cm_export_type(&empty_tuple(), &registry, None),
             CmExportType::Unit
         );
 
         // Result<(), ()> — both arms unit → still Unit (CLI Command::run shape)
         assert_matches!(
             resolve_cm_export_type(&result_of(unit_named(), unit_named()), &registry, None),
-            CmExportType::Unit
-        );
-        assert_matches!(
-            resolve_cm_export_type(&result_of(empty_tuple(), empty_tuple()), &registry, None),
             CmExportType::Unit
         );
     }
