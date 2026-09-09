@@ -4,7 +4,6 @@
 //! representation, traversal, and cloning; the parent map, use index and edit
 //! API sit on [`crate::nir_engine::Engine`]. See WEP 2026-06-05.
 
-use std::cell::RefCell;
 use std::ops::ControlFlow;
 
 use cranelift_entity::{EntityRef, PrimaryMap, entity_impl};
@@ -1091,60 +1090,6 @@ impl Body {
     }
 }
 
-thread_local! {
-    /// Scratch buffers for the walks, kept at the capacity a body needs. The
-    /// compile runs the same whole-body walk over every function on every
-    /// iteration, so allocating one per walk — let alone one per node, which
-    /// [`NodeBuf`] serves — was the optimizer's largest source of allocation.
-    static WALK_STACKS: RefCell<Vec<Vec<NodeRef>>> = const { RefCell::new(Vec::new()) };
-}
-
-/// A pooled `Vec<NodeRef>` holding no borrow of the arena, so a walk may mutate
-/// the arena while holding it — which is what keeps a mutating walk off the
-/// allocator. Returns to the pool on drop; a nested walk takes its own.
-pub struct NodeBuf(Vec<NodeRef>);
-
-impl NodeBuf {
-    pub fn empty() -> Self {
-        Self(WALK_STACKS.with_borrow_mut(Vec::pop).unwrap_or_default())
-    }
-
-    pub fn push(&mut self, node: NodeRef) {
-        self.0.push(node);
-    }
-
-    pub fn pop(&mut self) -> Option<NodeRef> {
-        self.0.pop()
-    }
-}
-
-impl std::ops::Deref for NodeBuf {
-    type Target = [NodeRef];
-
-    fn deref(&self) -> &[NodeRef] {
-        &self.0
-    }
-}
-
-impl Drop for NodeBuf {
-    fn drop(&mut self) {
-        let mut buf = std::mem::take(&mut self.0);
-        buf.clear();
-        WALK_STACKS.with_borrow_mut(|pool| pool.push(buf));
-    }
-}
-
-/// Run `f` with a scratch stack holding `root`. A nested walk takes its own, so
-/// `f` may walk again.
-fn with_walk_stack<R>(root: NodeRef, f: impl FnOnce(&mut Vec<NodeRef>) -> R) -> R {
-    let mut stack = WALK_STACKS.with_borrow_mut(Vec::pop).unwrap_or_default();
-    stack.push(root);
-    let out = f(&mut stack);
-    stack.clear();
-    WALK_STACKS.with_borrow_mut(|pool| pool.push(stack));
-    out
-}
-
 /// Structural navigation used by the rewrite engine (parent map + worklist).
 impl Body {
     /// Collect every local with a live `&local` / `&mut local` in the body.
@@ -1222,24 +1167,48 @@ impl Body {
     /// answers `Continue(true)` to descend into a node's children,
     /// `Continue(false)` to skip them, or `Break(value)` to stop the walk.
     ///
-    /// A walk that edits the body as it goes, or descends into some children of
-    /// a node and not others, keeps its own loop: `f` holds `&Body` and cannot
-    /// reach the stack.
+    /// Siblings come in source order. A walk that edits the body as it goes
+    /// keeps its own loop: `f` holds `&Body` and cannot mutate through it.
+    ///
+    /// The recursion is the traversal stack — the arena is a tree, so no
+    /// explicit one is needed, and the call stack costs no allocation. Depth is
+    /// the body's nesting depth, which every other walk here already recurses
+    /// to.
     pub fn walk_nodes_under<T>(
         &self,
         root: NodeRef,
         mut f: impl FnMut(NodeRef) -> ControlFlow<T, bool>,
     ) -> Option<T> {
-        with_walk_stack(root, |stack| {
-            while let Some(node) = stack.pop() {
-                match f(node) {
-                    ControlFlow::Break(found) => return Some(found),
-                    ControlFlow::Continue(true) => self.for_each_child(node, |c| stack.push(c)),
-                    ControlFlow::Continue(false) => {}
-                }
+        match self.walk_node(root, &mut f) {
+            ControlFlow::Break(found) => Some(found),
+            ControlFlow::Continue(()) => None,
+        }
+    }
+
+    fn walk_node<T>(
+        &self,
+        node: NodeRef,
+        f: &mut impl FnMut(NodeRef) -> ControlFlow<T, bool>,
+    ) -> ControlFlow<T, ()> {
+        match f(node) {
+            ControlFlow::Break(found) => return ControlFlow::Break(found),
+            ControlFlow::Continue(false) => return ControlFlow::Continue(()),
+            ControlFlow::Continue(true) => {}
+        }
+        // `for_each_child` cannot stop early, so a break is carried out in a
+        // flag; the siblings after it cost one check each and no descent.
+        let mut broke = None;
+        self.for_each_child(node, |c| {
+            if broke.is_none()
+                && let ControlFlow::Break(found) = self.walk_node(c, f)
+            {
+                broke = Some(found);
             }
-            None
-        })
+        });
+        match broke {
+            Some(found) => ControlFlow::Break(found),
+            None => ControlFlow::Continue(()),
+        }
     }
 
     /// Invoke `f` on every node reachable from [`Body::root`], parents before
@@ -1281,32 +1250,6 @@ impl Body {
             });
         });
         slots
-    }
-
-    /// Whether *any* operand slot in the arena holds a value naming a local,
-    /// reachable or not — what the reachability-scoped censuses below cannot
-    /// see of a node allocated but not yet spliced in
-    /// (`Engine::census_note_structure`).
-    ///
-    /// Counts orphans too, which nothing can re-attach. Its only wrong answer
-    /// is "recompute the census", never a wrong census.
-    pub fn any_operand_names_a_local(&self) -> bool {
-        let mut found = false;
-        for node in (0..self.exprs.len())
-            .map(|i| NodeRef::Expr(ExprId::new(i)))
-            .chain((0..self.stmts.len()).map(|i| NodeRef::Stmt(StmtId::new(i))))
-            .chain((0..self.pats.len()).map(|i| NodeRef::Pat(PatId::new(i))))
-        {
-            if found {
-                break;
-            }
-            self.for_each_operand(node, |op| {
-                if let Some(v) = op.as_value() {
-                    found |= self.values.names_a_local(v);
-                }
-            });
-        }
-        found
     }
 
     /// Every local a reachable promoted operand reads, unioned into `out`.
@@ -1567,14 +1510,6 @@ impl Body {
             Slot::Operand(Operand::Value(_)) => {}
             Slot::Node(child) => f(child),
         });
-    }
-
-    /// [`Body::for_each_child`] snapshotted into a pooled buffer, for a walk that
-    /// mutates the arena as it recurses and so cannot hold the callback's borrow.
-    pub fn children(&self, node: NodeRef) -> NodeBuf {
-        let mut buf = NodeBuf::empty();
-        self.for_each_child(node, |c| buf.push(c));
-        buf
     }
 
     /// Invoke `f` on what every `break label` in `node`'s subtree carries. A

@@ -708,10 +708,16 @@ impl Interpreter<'_> {
         }
     }
 
+    /// The snapshot is needed because the reduction mutates the body the
+    /// callback borrows. Its own `Vec` rather than a threaded frame stack: this
+    /// walk runs only where `niri` const-evaluates, which no compile profile
+    /// puts on the allocator's hot list, and threading one would reach five
+    /// signatures.
     fn walk_children(&mut self, body: &mut Body, node: NodeRef) -> bool {
-        let children = body.children(node);
+        let mut children = Vec::new();
+        body.for_each_child(node, |c| children.push(c));
         let mut changed = false;
-        for &child in children.iter() {
+        for child in children {
             changed |= self.reduce_in_place_node(body, child);
         }
         changed

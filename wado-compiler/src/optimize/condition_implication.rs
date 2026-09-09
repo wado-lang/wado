@@ -4,11 +4,11 @@
 //! earlier panic-guard, a `len() - k`. Matching is syntactic over the skeleton
 //! and value pool, with flow-correctness from a position-aware modification scan.
 
+use std::ops::ControlFlow;
+
 use super::arena_query::local_written_by;
 use crate::nir::{NirBinaryOp, NirUnaryOp};
-use crate::nir_arena::{
-    BlockId, ExprId, ExprKind, NodeBuf, NodeRef, Operand, PatId, StmtId, StmtKind,
-};
+use crate::nir_arena::{BlockId, ExprId, ExprKind, NodeRef, Operand, PatId, StmtId, StmtKind};
 use crate::nir_engine::Engine;
 use crate::nir_value_graph::ValueKind;
 
@@ -25,14 +25,21 @@ pub(super) fn eliminate_at_root(engine: &mut Engine) -> bool {
     // (bitmask-bounded, const-bound index, short-circuit `||`), so one subtree
     // walk from the root refutes every nesting depth once — rather than a full
     // walk per top-level statement of every enclosing block.
-    let mut changed = BitmaskEliminator { binds: &binds }.visit_block(engine, root);
-    changed |= ConstBoundIndexEliminator { binds: &binds }.visit_block(engine, root);
-    changed |= ShortCircuitEliminator { binds: &binds }.visit_block(engine, root);
+    let mut frames = Frames::new();
+    let mut changed = BitmaskEliminator { binds: &binds }.visit_block(engine, root, &mut frames);
+    changed |= ConstBoundIndexEliminator { binds: &binds }.visit_block(engine, root, &mut frames);
+    changed |= ShortCircuitEliminator { binds: &binds }.visit_block(engine, root, &mut frames);
     // Flow-sensitive elimination: loop guards, dominating-ifs, and early-exit
     // facts, threaded through the block structure.
     changed |= process_block(engine, root, &binds);
     let mut facts: Vec<ProvenLt> = Vec::new();
-    changed |= rbce_walk(engine, NodeRef::Block(root), &mut facts, &binds);
+    changed |= rbce_walk(
+        engine,
+        NodeRef::Block(root),
+        &mut facts,
+        &binds,
+        &mut frames,
+    );
     changed
 }
 
@@ -635,7 +642,7 @@ pub(super) fn node_modifies(engine: &Engine, node: NodeRef, var: u32, bound: Bou
     let roots = [Some(var), bound_root(bound)];
     let is_root = |l: u32| roots.contains(&Some(l));
     let mut hit = false;
-    let mut visit = |node: NodeRef| {
+    let visit = |node: NodeRef| {
         if let NodeRef::Expr(e) = node {
             match &engine.body.exprs[e].kind {
                 ExprKind::Assign { target, .. } => {
@@ -672,12 +679,7 @@ pub(super) fn node_modifies(engine: &Engine, node: NodeRef, var: u32, bound: Bou
             }
         }
     };
-    let mut stack = NodeBuf::empty();
-    stack.push(node);
-    while let Some(n) = stack.pop() {
-        visit(n);
-        engine.body.for_each_child(n, |c| stack.push(c));
-    }
+    engine.body.for_each_node_under(node, visit);
     hit
 }
 
@@ -743,9 +745,7 @@ fn refute_panic_checks(
     refute: impl Fn(&Engine, &Binds, Operand) -> bool,
 ) -> bool {
     let mut holders: Vec<(NodeRef, Operand)> = Vec::new();
-    let mut stack = NodeBuf::empty();
-    stack.push(node);
-    while let Some(n) = stack.pop() {
+    engine.body.for_each_node_under(node, |n| {
         let cand = match n {
             NodeRef::Stmt(s) => match &engine.body.stmts[s].kind {
                 StmtKind::If {
@@ -771,8 +771,7 @@ fn refute_panic_checks(
         {
             holders.push((n, cond));
         }
-        engine.body.for_each_child(n, |c| stack.push(c));
-    }
+    });
     let mut changed = false;
     for (holder, cond) in holders {
         eliminate_condition(engine, holder, cond);
@@ -933,15 +932,13 @@ fn process_stmt(engine: &mut Engine, s: StmtId, binds: &Binds) -> bool {
 /// tree. The walk stops at each block, since `process_block` recurses itself.
 fn process_nested_blocks(engine: &mut Engine, node: NodeRef, binds: &Binds) -> bool {
     let mut blocks: Vec<BlockId> = Vec::new();
-    let mut stack = NodeBuf::empty();
-    stack.push(node);
-    while let Some(n) = stack.pop() {
-        if let NodeRef::Block(b) = n {
+    engine.body.walk_nodes_under::<()>(node, |n| match n {
+        NodeRef::Block(b) => {
             blocks.push(b);
-            continue;
+            ControlFlow::Continue(false)
         }
-        engine.body.for_each_child(n, |c| stack.push(c));
-    }
+        _ => ControlFlow::Continue(true),
+    });
     let mut changed = false;
     for b in blocks {
         changed |= process_block(engine, b, binds);
@@ -1065,7 +1062,7 @@ struct BitmaskEliminator<'a> {
 }
 
 impl ArenaOptVisitor for BitmaskEliminator<'_> {
-    fn visit_stmt(&mut self, engine: &mut Engine, s: StmtId) -> bool {
+    fn visit_stmt(&mut self, engine: &mut Engine, s: StmtId, frames: &mut Frames) -> bool {
         let if_ids = match &engine.body.stmts[s].kind {
             StmtKind::If {
                 condition,
@@ -1081,7 +1078,7 @@ impl ArenaOptVisitor for BitmaskEliminator<'_> {
             eliminate_condition(engine, NodeRef::Stmt(s), condition);
             return true;
         }
-        arena_opt_walk(self, engine, NodeRef::Stmt(s))
+        arena_opt_walk(self, engine, NodeRef::Stmt(s), frames)
     }
 }
 
@@ -1096,7 +1093,7 @@ struct ShortCircuitEliminator<'a> {
 }
 
 impl ArenaOptVisitor for ShortCircuitEliminator<'_> {
-    fn visit_expr(&mut self, engine: &mut Engine, e: ExprId) -> bool {
+    fn visit_expr(&mut self, engine: &mut Engine, e: ExprId, frames: &mut Frames) -> bool {
         let or_ids = match &engine.body.exprs[e].kind {
             ExprKind::Binary {
                 left,
@@ -1106,7 +1103,10 @@ impl ArenaOptVisitor for ShortCircuitEliminator<'_> {
             _ => None,
         };
         if let Some((left, right)) = or_ids {
-            let mut changed = left.as_expr().is_some_and(|le| self.visit_expr(engine, le));
+            let mut changed = match left.as_expr() {
+                Some(le) => self.visit_expr(engine, le, frames),
+                None => false,
+            };
             if let Some((var, k, bound)) = parse_check(engine, self.binds, left)
                 && let Some(re) = right.as_expr()
                 && !node_modifies(engine, NodeRef::Expr(re), var, bound)
@@ -1115,11 +1115,11 @@ impl ArenaOptVisitor for ShortCircuitEliminator<'_> {
                     eliminate_checks_in_node(engine, NodeRef::Expr(re), var, k, bound, self.binds);
             }
             if let Some(re) = right.as_expr() {
-                changed |= self.visit_expr(engine, re);
+                changed |= self.visit_expr(engine, re, frames);
             }
             return changed;
         }
-        arena_opt_walk(self, engine, NodeRef::Expr(e))
+        arena_opt_walk(self, engine, NodeRef::Expr(e), frames)
     }
 }
 
@@ -1216,7 +1216,7 @@ struct ConstBoundIndexEliminator<'a> {
 }
 
 impl ArenaOptVisitor for ConstBoundIndexEliminator<'_> {
-    fn visit_stmt(&mut self, engine: &mut Engine, s: StmtId) -> bool {
+    fn visit_stmt(&mut self, engine: &mut Engine, s: StmtId, frames: &mut Frames) -> bool {
         let if_ids = match &engine.body.stmts[s].kind {
             StmtKind::If {
                 condition,
@@ -1235,7 +1235,7 @@ impl ArenaOptVisitor for ConstBoundIndexEliminator<'_> {
             eliminate_condition(engine, NodeRef::Stmt(s), condition);
             return true;
         }
-        arena_opt_walk(self, engine, NodeRef::Stmt(s))
+        arena_opt_walk(self, engine, NodeRef::Stmt(s), frames)
     }
 }
 
@@ -1378,7 +1378,13 @@ fn short_circuit_parts(engine: &Engine, node: NodeRef) -> Option<(Operand, Opera
 /// unconditionally-executed positions and driving to `false` any later check they
 /// refute. Facts thread by `&mut` through straight-line positions, by clone into
 /// conditional ones, and afresh into loop bodies; [`invalidate`] drops stale ones.
-fn rbce_walk(engine: &mut Engine, node: NodeRef, facts: &mut Vec<ProvenLt>, binds: &Binds) -> bool {
+fn rbce_walk(
+    engine: &mut Engine,
+    node: NodeRef,
+    facts: &mut Vec<ProvenLt>,
+    binds: &Binds,
+    frames: &mut Frames,
+) -> bool {
     if let Some(cond) = panic_guard_check(engine, node) {
         if let Some((var, off, bound)) = parse_check(engine, binds, cond) {
             if facts_refute(facts, var, off, bound) {
@@ -1389,7 +1395,7 @@ fn rbce_walk(engine: &mut Engine, node: NodeRef, facts: &mut Vec<ProvenLt>, bind
             return false;
         }
         if let Some(ce) = cond.as_expr() {
-            return rbce_walk(engine, NodeRef::Expr(ce), facts, binds);
+            return rbce_walk(engine, NodeRef::Expr(ce), facts, binds, frames);
         }
         return false;
     }
@@ -1397,14 +1403,14 @@ fn rbce_walk(engine: &mut Engine, node: NodeRef, facts: &mut Vec<ProvenLt>, bind
     if let Some((cond, then_b, else_b)) = if_parts(engine, node) {
         let mut changed = false;
         if let Some(ce) = cond.as_expr() {
-            changed |= rbce_walk(engine, NodeRef::Expr(ce), facts, binds);
+            changed |= rbce_walk(engine, NodeRef::Expr(ce), facts, binds, frames);
             invalidate(engine, NodeRef::Expr(ce), facts);
         }
         let mut ft = facts.clone();
-        changed |= rbce_walk(engine, NodeRef::Block(then_b), &mut ft, binds);
+        changed |= rbce_walk(engine, NodeRef::Block(then_b), &mut ft, binds, frames);
         if let Some(eb) = else_b {
             let mut fe = facts.clone();
-            changed |= rbce_walk(engine, NodeRef::Block(eb), &mut fe, binds);
+            changed |= rbce_walk(engine, NodeRef::Block(eb), &mut fe, binds, frames);
             invalidate(engine, NodeRef::Block(eb), facts);
         }
         invalidate(engine, NodeRef::Block(then_b), facts);
@@ -1414,12 +1420,12 @@ fn rbce_walk(engine: &mut Engine, node: NodeRef, facts: &mut Vec<ProvenLt>, bind
     if let Some((left, right)) = short_circuit_parts(engine, node) {
         let mut changed = false;
         if let Some(le) = left.as_expr() {
-            changed |= rbce_walk(engine, NodeRef::Expr(le), facts, binds);
+            changed |= rbce_walk(engine, NodeRef::Expr(le), facts, binds, frames);
             invalidate(engine, NodeRef::Expr(le), facts);
         }
         if let Some(re) = right.as_expr() {
             let mut fr = facts.clone();
-            changed |= rbce_walk(engine, NodeRef::Expr(re), &mut fr, binds);
+            changed |= rbce_walk(engine, NodeRef::Expr(re), &mut fr, binds, frames);
             invalidate(engine, NodeRef::Expr(re), facts);
         }
         return changed;
@@ -1449,10 +1455,13 @@ fn rbce_walk(engine: &mut Engine, node: NodeRef, facts: &mut Vec<ProvenLt>, bind
     if fresh_region {
         let mut inner: Vec<ProvenLt> = Vec::new();
         let mut changed = false;
-        let kids = engine.body.children(node);
-        for &c in kids.iter() {
-            changed |= rbce_walk(engine, c, &mut inner, binds);
+        let base = frames.len();
+        engine.body.for_each_child(node, |c| frames.push(c));
+        for i in base..frames.len() {
+            let c = frames[i];
+            changed |= rbce_walk(engine, c, &mut inner, binds, frames);
         }
+        frames.truncate(base);
         invalidate(engine, node, facts);
         return changed;
     }
@@ -1471,32 +1480,38 @@ fn rbce_walk(engine: &mut Engine, node: NodeRef, facts: &mut Vec<ProvenLt>, bind
     };
     if let Some(scrutinee) = scrutinee {
         let scrut_child = scrutinee.as_expr().map(NodeRef::Expr);
-        let kids = engine.body.children(node);
         let mut changed = false;
-        for &c in kids.iter() {
+        let base = frames.len();
+        engine.body.for_each_child(node, |c| frames.push(c));
+        for i in base..frames.len() {
+            let c = frames[i];
             if Some(c) == scrut_child {
-                changed |= rbce_walk(engine, c, facts, binds);
+                changed |= rbce_walk(engine, c, facts, binds, frames);
                 invalidate(engine, c, facts);
             } else {
                 let mut arm = facts.clone();
-                changed |= rbce_walk(engine, c, &mut arm, binds);
+                changed |= rbce_walk(engine, c, &mut arm, binds, frames);
             }
         }
+        frames.truncate(base);
         invalidate(engine, node, facts);
         return changed;
     }
 
     // Every child runs unconditionally in order; a `let idx = arr.len() - k`
     // harvests `idx < arr.len()` for the checks that follow it.
-    let kids = engine.body.children(node);
     let mut changed = false;
-    for &c in kids.iter() {
-        changed |= rbce_walk(engine, c, facts, binds);
+    let base = frames.len();
+    engine.body.for_each_child(node, |c| frames.push(c));
+    for i in base..frames.len() {
+        let c = frames[i];
+        changed |= rbce_walk(engine, c, facts, binds, frames);
         invalidate(engine, c, facts);
         if let Some(fact) = len_minus_fact(engine, binds, c) {
             facts.push(fact);
         }
     }
+    frames.truncate(base);
     changed
 }
 
@@ -1504,50 +1519,67 @@ fn rbce_walk(engine: &mut Engine, node: NodeRef, facts: &mut Vec<ProvenLt>, bind
 // Arena opt-visitor
 // ---------------------------------------------------------------------------
 
+/// Child ids of the levels a depth-first mutating walk currently has open. One
+/// buffer per walk, not per node: a level appends at the tail and truncates
+/// back, so the peak is the deepest path, not the tree.
+type Frames = Vec<NodeRef>;
+
 /// A mutating arena walk that returns `true` when any node changed. The default
 /// `visit_*` delegate to [`arena_opt_walk`], which recurses into every
 /// id-bearing child; the eliminators override the nodes they rewrite.
 trait ArenaOptVisitor {
-    fn visit_stmt(&mut self, engine: &mut Engine, s: StmtId) -> bool
+    fn visit_stmt(&mut self, engine: &mut Engine, s: StmtId, frames: &mut Frames) -> bool
     where
         Self: Sized,
     {
-        arena_opt_walk(self, engine, NodeRef::Stmt(s))
+        arena_opt_walk(self, engine, NodeRef::Stmt(s), frames)
     }
-    fn visit_expr(&mut self, engine: &mut Engine, e: ExprId) -> bool
+    fn visit_expr(&mut self, engine: &mut Engine, e: ExprId, frames: &mut Frames) -> bool
     where
         Self: Sized,
     {
-        arena_opt_walk(self, engine, NodeRef::Expr(e))
+        arena_opt_walk(self, engine, NodeRef::Expr(e), frames)
     }
-    fn visit_block(&mut self, engine: &mut Engine, b: BlockId) -> bool
+    fn visit_block(&mut self, engine: &mut Engine, b: BlockId, frames: &mut Frames) -> bool
     where
         Self: Sized,
     {
-        arena_opt_walk(self, engine, NodeRef::Block(b))
+        arena_opt_walk(self, engine, NodeRef::Block(b), frames)
     }
-    fn visit_pattern(&mut self, engine: &mut Engine, p: PatId) -> bool
+    fn visit_pattern(&mut self, engine: &mut Engine, p: PatId, frames: &mut Frames) -> bool
     where
         Self: Sized,
     {
-        arena_opt_walk(self, engine, NodeRef::Pat(p))
+        arena_opt_walk(self, engine, NodeRef::Pat(p), frames)
     }
 }
 
 /// Recurse into every id-bearing child of `node`, dispatching by category, and
 /// OR the per-child change flags. The eliminators here only rewrite condition
-/// kinds in place (never add/remove nodes), so the upfront child snapshot stays
-/// valid through the walk.
-fn arena_opt_walk<V: ArenaOptVisitor>(v: &mut V, engine: &mut Engine, node: NodeRef) -> bool {
-    let kids = engine.body.children(node);
+/// kinds in place (never add/remove nodes), so the child snapshot stays valid
+/// through the walk.
+///
+/// The snapshot is needed because `v` mutates the body the callback borrows.
+/// `frames` is one buffer for the whole walk: each level appends its children
+/// at the tail, indexes them out by value, and truncates back on the way out.
+fn arena_opt_walk<V: ArenaOptVisitor>(
+    v: &mut V,
+    engine: &mut Engine,
+    node: NodeRef,
+    frames: &mut Frames,
+) -> bool {
+    let base = frames.len();
+    engine.body.for_each_child(node, |c| frames.push(c));
     let mut changed = false;
-    for &c in kids.iter() {
+    for i in base..frames.len() {
+        let c = frames[i];
         changed |= match c {
-            NodeRef::Stmt(s) => v.visit_stmt(engine, s),
-            NodeRef::Expr(e) => v.visit_expr(engine, e),
-            NodeRef::Block(b) => v.visit_block(engine, b),
-            NodeRef::Pat(p) => v.visit_pattern(engine, p),
+            NodeRef::Stmt(s) => v.visit_stmt(engine, s, frames),
+            NodeRef::Expr(e) => v.visit_expr(engine, e, frames),
+            NodeRef::Block(b) => v.visit_block(engine, b, frames),
+            NodeRef::Pat(p) => v.visit_pattern(engine, p, frames),
         };
     }
+    frames.truncate(base);
     changed
 }
