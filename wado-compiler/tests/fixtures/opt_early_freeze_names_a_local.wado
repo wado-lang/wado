@@ -1,0 +1,36 @@
+// Soundness regression for the early operand freeze (WEP 2026-06-05, "The
+// anchor rule"): before the structural passes, a frozen operand may not name a
+// local.
+//
+// `List::push_within_capacity` is the shape that breaks, and this is the
+// smallest program that reaches it:
+//
+//     let used = self.used;      // single-version, bound once per call
+//     self.repr[used] = value;
+//     self.used = used + 1;      // freeze candidate, names `used`
+//
+// `used` passes the single-version test *in the callee*, so the early freeze
+// would plant an operand naming it. The inliner then splices the body into the
+// loop below, where the binding runs once per iteration — one `ValueId` for
+// four different values. "Its binding executes once" is a property of the
+// callee that inlining does not preserve.
+//
+// With the rule removed, `used + 1` is computed once and `self.used` stays at
+// 1, so the third push asserts `index out of bounds: index 1, self.used 1`.
+//
+// `black_box` keeps the loop bound off the constant path; with a constant one
+// the loop folds at compile time and there is nothing left to inline.
+
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let n = builtin::black_box(4);
+    let mut xs: List<i32> = List::with_capacity(8);
+    for let mut i = 0; i < n; i += 1 {
+        xs.push_within_capacity(i * 10);
+    }
+    println(`${xs.len()} ${xs[0]} ${xs[1]} ${xs[2]} ${xs[3]}`);
+}
+
+__DATA__
+{ "stdout": "4 0 10 20 30\n" }
