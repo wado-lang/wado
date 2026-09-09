@@ -4455,7 +4455,7 @@ fn is_param_type_supported_with_types(
             matches!(
                 generic.name.as_str(),
                 "Stream" | "Result" | "Future" | "Option" | "List"
-            )
+            ) && !generic.args.iter().any(mentions_empty_tuple)
         }
         Type::Reference(inner) | Type::MutReference(inner) => {
             // borrow<resource> - passed as i32 handle at CM boundary
@@ -4468,6 +4468,18 @@ fn is_param_type_supported_with_types(
         Type::Tuple(elems) if !elems.is_empty() => elems
             .iter()
             .all(|e| is_param_type_supported_with_types(e, enums, resources, structs)),
+        _ => false,
+    }
+}
+
+/// Whether `ty` names the empty tuple anywhere, including under a generic. The
+/// shape predicates ask this where they accept a generic without judging its
+/// arguments, so a payload of `[]` cannot ride in past them.
+fn mentions_empty_tuple(ty: &Type) -> bool {
+    match ty {
+        Type::Tuple(elems) => elems.is_empty() || elems.iter().any(mentions_empty_tuple),
+        Type::Generic(generic) => generic.args.iter().any(mentions_empty_tuple),
+        Type::Reference(inner) | Type::MutReference(inner) => mentions_empty_tuple(inner),
         _ => false,
     }
 }
@@ -4509,7 +4521,7 @@ fn is_return_type_supported_with_types(
         }
         Type::Generic(generic) => {
             match generic.name.as_str() {
-                "Stream" | "Future" => true,
+                "Stream" | "Future" => !generic.args.iter().any(mentions_empty_tuple),
                 "AsyncCall" if generic.args.len() == 1 => {
                     // `AsyncCall<T>` is the Wado-level wrapper for async CM imports;
                     // the CM ABI return is the inner `T`. Support depends on `T`.
