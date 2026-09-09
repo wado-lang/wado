@@ -52,6 +52,7 @@ mod value_copy_demote;
 
 use crate::hashmap::IndexSet;
 use crate::nir_arena::{NodeRef, PatKind, StmtKind};
+use crate::trace::filter as trace_filter;
 
 use const_branch_prune::{prune_constant_branches, prune_template_block_wrappers};
 use const_folding::{ConstFoldCache, fold_constants, fold_constants_all};
@@ -378,7 +379,7 @@ fn run_pass(
     // The always-on check runs once, at the end of `optimize`; this one earns
     // its cost only when a developer wants the pass named.
     #[cfg(debug_assertions)]
-    if crate::trace::filter().enabled(PROMOTED_READ_AUDIT) {
+    if trace_filter().enabled(PROMOTED_READ_AUDIT) {
         audit_promoted_reads(project, name);
     }
     changed
