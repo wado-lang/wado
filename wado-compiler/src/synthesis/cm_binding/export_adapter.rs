@@ -37,7 +37,7 @@ use super::types::{
     CmStdlibNames, LiftContext, LowerContext, binary_add, binary_ne, cm_val_type_to_type_id,
     cm_zero, coerce_flat_lift, coerce_flat_lower, compute_export_flat_param_types,
     compute_export_flat_return_types, export_needs_param_lifting, field_access, find_struct_decl,
-    find_variant_decl, flat_types_from_type_id, flatten_export_type, is_unit_type, struct_decl_of,
+    find_variant_decl, flat_types_from_type_id, flatten_export_type, struct_decl_of,
     type_id_to_ast_type, variant_decl_of, variant_payload, variant_tag, variant_test,
 };
 
@@ -1268,7 +1268,7 @@ fn lift_variant_from_flat_params(
     for (i, case) in variant_decl.cases.iter().enumerate().rev() {
         let payload_ty = &case_payload_tys[i];
         let mut case_stmts: Vec<TirStmt> = Vec::new();
-        let payload = if is_unit_type(payload_ty) {
+        let payload = if payload_ty.is_unit() {
             None
         } else {
             // Re-map the joined payload slots to this case's natural flat types,

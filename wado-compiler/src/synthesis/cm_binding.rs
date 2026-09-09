@@ -46,7 +46,7 @@ use type_fixup::{
 pub use types::{
     LiftContext, cm_enum_byte_size, cm_flags_byte_size, cm_type_to_type_id, flatten_param_type,
 };
-use types::{compute_export_flat_return_types, is_unit_type};
+use types::compute_export_flat_return_types;
 
 /// Build a `(module_source, name)` set for every effect/resource declared in
 /// the loaded TIR modules. The CM binding synthesizer uses this to attach the
@@ -1038,7 +1038,7 @@ fn validate_world_return_compatibility(
         return Ok(());
     }
     let user_is_unit = matches!(tt.get(user_func.return_type), ResolvedType::Unit);
-    if user_is_unit && world_ok.is_some_and(|ok| is_unit_type(ok)) {
+    if user_is_unit && world_ok.is_some_and(Type::is_unit) {
         return Ok(());
     }
     let user_return_name = tt.type_name(user_func.return_type);

@@ -31,6 +31,7 @@ mod digest_interop;
 mod dump_moved_spans;
 mod dump_tir_resolved;
 mod effect_check_sem;
+mod empty_tuple_boundary;
 mod extern_handle_resource;
 mod fn_dispatch_stubs;
 mod guest_effect_import;

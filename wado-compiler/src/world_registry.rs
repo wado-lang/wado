@@ -197,8 +197,7 @@ fn returns_non_unit_result(return_type: Option<&Type>) -> bool {
     };
     generic.name == "Result"
         && generic.args.len() == 2
-        && !(crate::component_model::is_unit_type(&generic.args[0])
-            && crate::component_model::is_unit_type(&generic.args[1]))
+        && !(generic.args[0].is_unit() && generic.args[1].is_unit())
 }
 
 /// Extract the package segment of a CM-style fully-qualified name

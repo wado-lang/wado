@@ -21,7 +21,7 @@ use crate::synthesis::common::{
 
 use super::types::{
     LowerContext, binary_add, cm_type_to_type_id, cm_val_type_from_type_id, coerce_flat_lower,
-    field_access, flatten_param_type, is_unit_type, kebab_to_pascal, variant_tag, variant_test,
+    field_access, flatten_param_type, kebab_to_pascal, variant_tag, variant_test,
 };
 
 /// Join two CM flat slot types via the single Canonical ABI join
@@ -597,7 +597,7 @@ pub(super) fn synthesize_lower_result_to_memory(
     };
 
     let arm = |name: String, ty: &Type, tid: TypeId| -> CmMemCase {
-        if is_unit_type(ty) {
+        if ty.is_unit() {
             (name, None)
         } else {
             (name, Some((ty.clone(), tid)))

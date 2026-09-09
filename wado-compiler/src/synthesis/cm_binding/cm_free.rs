@@ -23,7 +23,7 @@ use crate::synthesis::common::{
 use super::export_adapter::FlatLocal;
 use super::types::{
     CmStdlibNames, binary_add, cm_val_type_to_type_id, coerce_flat_lift,
-    compute_export_flat_return_types, is_unit_type,
+    compute_export_flat_return_types,
 };
 
 /// Lighter than `LowerContext`: freeing reads the value out of memory or out of
@@ -209,7 +209,7 @@ fn flat_slot_count(ty: &Type, ctx: &CmShapeContext<'_>) -> usize {
 
 /// A case's payload, or `None` when it is unit and so carries nothing to free.
 fn payload_case(ty: &Type, offset: u32, ctx: &CmShapeContext<'_>) -> Option<CmField> {
-    if is_unit_type(ty) {
+    if ty.is_unit() {
         return None;
     }
     Some(field_of(ty, offset, ctx))
