@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1788914397341,
+  "lastUpdate": 1788923525422,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -54309,6 +54309,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/4bc0f8e42765ac41415c40dce00553e308b1c056"
         },
         "date": 1788914396619,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 2013,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6560,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18971,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 288933,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "0b5da6f0b1de264d62553fd3830b26ae88858dac",
+          "message": "Merge pull request #2007 from wado-lang/claude/ci-reorganization-5r711z\n\nchore(ci): test the stdlib at every optimization level",
+          "timestamp": "2026-09-09T11:55:35+09:00",
+          "tree_id": "4151c46cf76252176c005bc194fdad3432efddb1",
+          "url": "https://github.com/wado-lang/wado/commit/0b5da6f0b1de264d62553fd3830b26ae88858dac"
+        },
+        "date": 1788923524676,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
