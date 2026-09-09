@@ -145,17 +145,6 @@ impl ParamSpecState {
 }
 
 // ---------------------------------------------------------------------------
-// Reachable-node enumeration
-// ---------------------------------------------------------------------------
-
-/// Visit every node reachable from the body root. Orphaned nodes an earlier
-/// rewrite left behind are skipped, so a stale read cannot make a live
-/// parameter look opaque.
-fn for_each_reachable(body: &Body, f: impl FnMut(NodeRef)) {
-    body.for_each_node_under(NodeRef::Block(body.root), f);
-}
-
-// ---------------------------------------------------------------------------
 // Use classification
 // ---------------------------------------------------------------------------
 
@@ -276,7 +265,7 @@ fn collect_local_uses(
 ) {
     let (assigned, borrowed) = collect_place_contexts(body);
     let mut classified: IndexSet<ExprId> = IndexSet::default();
-    for_each_reachable(body, |node| {
+    body.for_each_reachable_node(|node| {
         let NodeRef::Expr(id) = node else {
             return;
         };
@@ -336,7 +325,7 @@ fn collect_local_uses(
 fn collect_place_contexts(body: &Body) -> (IndexMap<ExprId, Operand>, IndexSet<ExprId>) {
     let mut assigned: IndexMap<ExprId, Operand> = IndexMap::default();
     let mut borrowed: IndexSet<ExprId> = IndexSet::default();
-    for_each_reachable(body, |node| {
+    body.for_each_reachable_node(|node| {
         let NodeRef::Expr(id) = node else {
             return;
         };
@@ -367,7 +356,7 @@ fn mark_unclassified_opaque(
     classified: &IndexSet<ExprId>,
     out: &mut IndexMap<u32, LocalUses>,
 ) {
-    for_each_reachable(body, |node| match node {
+    body.for_each_reachable_node(|node| match node {
         NodeRef::Expr(id) => {
             if let ExprKind::Local { index, .. } = &body.exprs[id].kind
                 && tracked.contains(index)
@@ -597,7 +586,7 @@ fn collect_roots(
         }
     };
 
-    for_each_reachable(body, |node| match node {
+    body.for_each_reachable_node(|node| match node {
         NodeRef::Stmt(id) => {
             if let StmtKind::Let {
                 local_index, value, ..
@@ -681,7 +670,7 @@ fn select_sites(
     state: &ParamSpecState,
 ) -> Vec<Site> {
     let mut sites = Vec::new();
-    for_each_reachable(body, |node| {
+    body.for_each_reachable_node(|node| {
         let NodeRef::Expr(id) = node else {
             return;
         };
@@ -991,7 +980,7 @@ fn substitute_fields(
 ) {
     let mut engine = Engine::new(body, buffers, locals);
     let mut reads: Vec<(ExprId, FieldConst)> = Vec::new();
-    for_each_reachable(engine.body, |node| {
+    engine.body.for_each_reachable_node(|node| {
         let NodeRef::Expr(id) = node else {
             return;
         };
