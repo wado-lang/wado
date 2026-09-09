@@ -1,0 +1,53 @@
+// Read-only-share soundness: a binding read through a reference-typed field
+// names storage its holder only borrows, so the holder's root answers for none
+// of the writes that reach it. Sharing the referent would make a later write
+// through it visible in the binding (wado-lang/wado#1998). The same read behind
+// a callee resolves to the same borrowed path and must copy alike.
+
+struct Cell {
+    r: &mut List<i32>,
+}
+
+// Two reference fields may name one storage, so splitting the read and the
+// write at them is no proof they miss each other either.
+struct Pair {
+    p: &mut List<i32>,
+    q: &mut List<i32>,
+}
+
+fn peel(c: &Cell) -> List<i32> {
+    return *c.r;
+}
+
+test "a read through a reference field does not share the referent" {
+    let b: List<i32> = [1, 2];
+    let mut xs = builtin::black_box(b);
+    let c = Cell { r: &mut xs };
+    let v = *c.r;
+    xs.push(999);
+    assert v == [1, 2];
+    assert xs == [1, 2, 999];
+}
+
+test "a read through a callee's reference field does not share the referent" {
+    let b: List<i32> = [1, 2];
+    let mut xs = builtin::black_box(b);
+    let c = Cell { r: &mut xs };
+    let v = peel(&c);
+    xs.push(999);
+    assert v == [1, 2];
+    assert xs == [1, 2, 999];
+}
+
+test "a read through one reference field does not share a sibling's referent" {
+    let b: List<i32> = [1, 2];
+    let mut xs = builtin::black_box(b);
+    let c = Pair { p: &mut xs, q: &mut xs };
+    let v = *c.p;
+    c.q.push(999);
+    assert v == [1, 2];
+    assert xs == [1, 2, 999];
+}
+
+__DATA__
+{"test": {}}

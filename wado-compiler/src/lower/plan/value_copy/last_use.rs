@@ -378,6 +378,15 @@ impl Analyzer<'_> {
                 if path.root == local {
                     return None;
                 }
+                // A path that reads a reference *stored in* its root lands on
+                // storage the root only borrows, and neither test below holds
+                // over one: a write through whoever lent the storage is rooted
+                // elsewhere, so the root-keyed scan never meets it, and two
+                // reference fields of one root may name the same storage, so
+                // splitting at them is no disjointness. Copy (wado-lang/wado#1998).
+                if path.through_borrow {
+                    return None;
+                }
                 // A `List` / `String` copy right-sizes its backing storage to
                 // the current length (WEP 2026-05-21, capacity is not part of
                 // the value but is still observable): sharing skips that only
