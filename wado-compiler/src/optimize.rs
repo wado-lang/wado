@@ -50,6 +50,9 @@ mod tuple_projection;
 mod value_copy;
 mod value_copy_demote;
 
+use crate::hashmap::IndexSet;
+use crate::nir_arena::{NodeRef, PatKind, StmtKind};
+
 use const_branch_prune::{prune_constant_branches, prune_template_block_wrappers};
 use const_folding::{ConstFoldCache, fold_constants, fold_constants_all};
 use const_object_globalization::globalize_const_objects;
@@ -290,6 +293,8 @@ pub fn optimize(
     // node's `func_id` is a non-optional `FuncId`, stamped at its synthesis site.
 
     census::report(&project, "end-of-optimize");
+    #[cfg(debug_assertions)]
+    audit_promoted_reads(&project, "end-of-optimize");
     project
 }
 
@@ -369,7 +374,59 @@ fn run_pass(
     let changed = f(project);
     profiler.span_end(name);
     pass_dump::dump_nir(name, project, pass_dump::Phase::After);
+    // Per pass this is a body walk per function, which doubles a debug compile.
+    // The always-on check runs once, at the end of `optimize`; this one earns
+    // its cost only when a developer wants the pass named.
+    #[cfg(debug_assertions)]
+    if crate::trace::filter().enabled(PROMOTED_READ_AUDIT) {
+        audit_promoted_reads(project, name);
+    }
     changed
+}
+
+/// `WADO_TRACE` target that puts [`audit_promoted_reads`] at every pass
+/// boundary, so a break names the pass that caused it.
+const PROMOTED_READ_AUDIT: &str = "promoted_reads";
+
+/// Every local a promoted operand reads still has a definition. A pooled read
+/// is invisible to a skeleton walk, so a pass that drops the binding leaves the
+/// operand naming a slot that no longer exists, and the extractor emits a
+/// `local.get` of it.
+#[cfg(debug_assertions)]
+fn audit_promoted_reads(project: &NirPackage, pass: &str) {
+    for func in &project.functions {
+        let func = func.borrow();
+        let Some(body) = &func.body else {
+            continue;
+        };
+        let mut read: IndexSet<u32> = IndexSet::default();
+        body.promoted_local_reads(&mut read);
+        if read.is_empty() {
+            continue;
+        }
+        let mut bound: IndexSet<u32> = func.params.iter().map(|p| p.local_index).collect();
+        body.for_each_reachable_node(|node| match node {
+            NodeRef::Stmt(s) => {
+                if let StmtKind::Let { local_index, .. } = &body.stmts[s].kind {
+                    bound.insert(*local_index);
+                }
+            }
+            NodeRef::Pat(p) => {
+                if let PatKind::Binding { local_index, .. } = &body.pats[p].kind {
+                    bound.insert(*local_index);
+                }
+            }
+            NodeRef::Expr(_) | NodeRef::Block(_) => {}
+        });
+        for idx in &read {
+            assert!(
+                bound.contains(idx),
+                "[NIR] {pass}: a promoted operand of `{}` reads local {idx}, which has no \
+                 definition left",
+                func.name
+            );
+        }
+    }
 }
 
 pub mod pass_dump {

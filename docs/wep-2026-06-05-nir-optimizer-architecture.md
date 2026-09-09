@@ -191,8 +191,7 @@ interprocedural over-approximation.
   instead, to a version-free value standing for that local. Version-free is the
   hazard: it is one value for every assignment of the local, so it is sound only
   under a proof that the local has exactly one. Without the proof the query
-  answers with no value, never with a guess. The anchor rule below is the same
-  obligation seen from the freeze side.
+  answers with no value, never with a guess.
 - Pointwise maintenance. A structural edit keeps the graph coherent at the point
   of the edit. Pruning a branch repoints the surviving operands past the dead
   merge arm. Splicing an inlined body or an SROA split interns value nodes for
@@ -377,28 +376,43 @@ was designed on the way and is priced out by the same fact. Each removed
 conservatism stands on the principle that an unjustified conservatism is dropped
 for being unjustified. None is a performance change.
 
-### The anchor rule
+### Naming a local, before and after
 
-A frozen operand may name a local only when that local's defining statement
-travels with the operand.
+The early freeze plants no value naming a local. That refusal used to be a
+soundness rule and is now a cost decision, and the two are worth keeping apart.
 
-A source local fails that. A parameter is defined by the function entry, which
-is not a statement that can travel. Inlining splices the operand into a caller
-where the same slot is assigned once per call, and since a query-time local
-value is version-free, two reads that now denote different values share an id.
-That is the over-merge behind `String::substr_bytes` under Measured dead ends.
-The guard is the single-version predicate itself plus a dominance check at the
-placement. "Every leaf is a parameter" was an earlier proxy for it, and
-parameter-ness does not survive inlining.
+What it was covering is one pass. `scalar_forward` forwarded a scalar temp and
+dropped its binding while counting only the skeleton's reads, so a read living
+in the value pool was left naming a slot that no longer existed and the
+extractor emitted a `local.get` of it. `copy_prop` and `elide_local` each count
+the pooled reads; that one did not. Counting them is each pass's own obligation,
+and `optimize::run_pass` audits the invariant — every local a promoted operand
+reads still has a definition — at end-of-optimize, or at every pass boundary
+under `WADO_TRACE=promoted_reads`, which is what named the pass.
 
-A freeze-minted temp satisfies the rule by construction. It is a fresh immutable
-binding in the same body, assigned once, so any pass that copies the operand
-copies the definition with it, and one value per binding holds in every context
-it lands in. So a value naming a source local is never frozen. It is
-materialised into such a temp, and the temp is named. That is the only way a
-local may be named.
+The rule's own account of itself was wrong, and worth recording as a way to be
+wrong: it read the failure as an over-merge — one version-free id standing for
+two runtime values — and the reductions that account predicts do not reproduce.
+Arithmetic over a parameter, inlined into a loop, is correct. Identity per read
+rather than per local changes nothing. `e2e/opt_early_freeze_names_a_local`
+reduces the real failure, and it is a dropped binding, not a merged value.
 
-The rule is necessary and not sufficient. There is no in-loop freeze. One was
+What is unpaid is cost, measured by removing the refusal and keeping everything
+else. Three things.
+
+- The compile takes 80 % longer, the promoted-read census re-walking at 14 % of
+  self CPU. That census is a whole-body walk memoized on the memo staying
+  _empty_, and it stayed empty only because nothing inside the loop named a
+  local — which is what this refusal guaranteed. It wants a maintained per-local
+  index, not a walk.
+- The parser's code grows 5.8 %, from re-materialising a non-constant at each
+  use. That is the extraction cost model, still open.
+- The fixed-point loop stops converging inside its cap, with `copy_prop` and
+  `licm` still changing at 15 iterations.
+
+Each is a separate piece of work, and the refusal stands until they are done.
+
+There is no in-loop freeze. One was
 built under the rule and promoted nothing on either benchmark, at 11.3 % of the
 loop, so it was removed with its phase. Reviving it means adding the phase back
 under the rule, not flipping a flag. Two things have to hold and neither did.
@@ -423,8 +437,8 @@ invariant.
 - [ ] Reach the in-loop consumers. Every freeze that may plant a local-naming
       value runs after the fixed-point loop, so the passes inside it still see
       none: LICM's value hoist collected zero loop-entry locals in 10 900
-      queries. An in-loop freeze cannot simply be added; see The anchor rule. The early freeze is separately bound by the
-      context-free rule under Measured dead ends. Moving the build to lowering
+      queries. An in-loop freeze cannot simply be added; see Naming a local,
+      before and after. Moving the build to lowering
       does not lift that bound: the extraction is point-dependent, not the
       build. This and resolving every single-version local share the anchor
       rule as prerequisite. It also gates nearly all of retiring the pure node
@@ -489,15 +503,14 @@ Each was built, verified, and reverted. Do not retry as-is.
   resolver keyed one `ValueId` per local, where the builder mints one per
   assignment, so the id spanned every version of the local, and an induction
   variable has one per iteration. Traps `closure_capture`.
-- Freezing a local-naming value before the structural passes. The early freeze
-  is sound because a frozen value survives inlining and SROA copying the operand
-  around. That is true of a constant, which means the same thing wherever it
-  lands. It is false of a value naming a local, because those passes renumber
-  locals and splice a callee body into a caller, re-contextualizing the slot
-  underneath the value. `String::substr_bytes`'s parameters, frozen early and
-  inlined into `trim_start`'s loop, read back as an iteration's worth of values
-  and trap with "allocation size too large". The invariant is explicit at the
-  freeze decision: early plants only context-free values.
+- Freezing a local-naming value before the structural passes, as a _soundness_
+  bar. It was read as a re-contextualization: those passes renumber locals and
+  splice a callee into a caller, so a value naming a slot was thought to survive
+  into a frame where the slot means something else. Both halves of that are
+  maintained — `dae` remaps the pool's recipes beside the skeleton's, `inline`
+  mints a fresh caller opaque per splice — and the reductions the account
+  predicts do not reproduce. The real failure was a dropped binding; see Naming
+  a local, before and after. The refusal stands on cost now, not on this.
 - A query-time materialiser for a field read at function entry. Miscompiled
   about 165 fixtures. Reference and aggregate fields change copy and alias
   semantics.

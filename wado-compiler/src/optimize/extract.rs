@@ -386,7 +386,6 @@ pub(super) fn freeze_pure_arith(
         // rule exists because a later splice re-contextualizes the operand, and
         // only `inline` splices after this pass runs — so a body far past its
         // threshold is one whose operands cannot move.
-        let size_bucket = size_bucket(engine.body.exprs.len());
         let mut to_freeze: Vec<(ExprId, ValueId)> = Vec::new();
         for id in candidates {
             // Only a pure kind is tallied: it is the population the pool could
@@ -394,10 +393,10 @@ pub(super) fn freeze_pure_arith(
             let kind = census::classify(&engine.body.exprs[id].kind);
             match classify_candidate(&mut engine, &ctx, id) {
                 Ok(entry) => {
-                    refusals.note(kind, size_bucket, None);
+                    refusals.note(kind, None);
                     to_freeze.push(entry);
                 }
-                Err(refusal) => refusals.note(kind, size_bucket, Some(refusal)),
+                Err(refusal) => refusals.note(kind, Some(refusal)),
             }
         }
 
@@ -440,29 +439,10 @@ struct Refusals {
     /// Refusal reason and the node kind it refused, so a reason that is really
     /// one kind's story reads as one.
     by_reason: IndexMap<(&'static str, &'static str), usize>,
-    /// Anchor-rule refusals by the size of the body holding them.
-    anchor_by_size: IndexMap<&'static str, usize>,
-}
-
-/// How far the enclosing body is from the size a splice would copy. The inline
-/// threshold is 16 in a weighted cost, so a body of even a few dozen nodes is
-/// already past what any caller will take.
-fn size_bucket(exprs: usize) -> &'static str {
-    match exprs {
-        0..=32 => "body <=32 exprs",
-        33..=128 => "body 33-128 exprs",
-        129..=512 => "body 129-512 exprs",
-        _ => "body >512 exprs",
-    }
 }
 
 impl Refusals {
-    fn note(
-        &mut self,
-        kind: (&'static str, bool),
-        size_bucket: &'static str,
-        refusal: Option<Refusal>,
-    ) {
+    fn note(&mut self, kind: (&'static str, bool), refusal: Option<Refusal>) {
         let (kind_name, pure_kind) = kind;
         if !pure_kind {
             return;
@@ -470,12 +450,7 @@ impl Refusals {
         self.pure_kinds += 1;
         match refusal {
             None => self.frozen += 1,
-            Some(r) => {
-                *self.by_reason.entry((r.name(), kind_name)).or_default() += 1;
-                if matches!(r, Refusal::AnchorRule) {
-                    *self.anchor_by_size.entry(size_bucket).or_default() += 1;
-                }
-            }
+            Some(r) => *self.by_reason.entry((r.name(), kind_name)).or_default() += 1,
         }
     }
 
@@ -500,12 +475,6 @@ impl Refusals {
                 TRACE_TARGET,
                 "{phase} (fields={include_fields}):   {n:>7} {:>5.1}%  {reason} / {kind}",
                 pct(n)
-            );
-        }
-        for (bucket, n) in &self.anchor_by_size {
-            compiler_trace!(
-                TRACE_TARGET,
-                "{phase} (fields={include_fields}):   anchor-rule in {bucket}: {n}"
             );
         }
     }
@@ -557,8 +526,8 @@ enum Refusal {
     NotPureArith,
     /// The value query resolved to nothing.
     NoValue,
-    /// The anchor rule: an early freeze plants context-free values only.
-    AnchorRule,
+    /// An early freeze plants no value naming a local; the bar is cost.
+    NamesALocal,
     /// The value cannot be re-emitted at the use.
     NotReemittable,
     /// Re-emitting at each use would repeat work.
@@ -571,7 +540,7 @@ impl Refusal {
             Refusal::LValue => "lvalue-or-let-value",
             Refusal::NotPureArith => "not-a-candidate-kind",
             Refusal::NoValue => "no-value",
-            Refusal::AnchorRule => "anchor-rule",
+            Refusal::NamesALocal => "names-a-local",
             Refusal::NotReemittable => "not-reemittable",
             Refusal::DuplicatesWork => "duplicates-work",
         }
@@ -616,13 +585,17 @@ fn classify_candidate(
         _ => engine.value(id),
     }
     .ok_or(Refusal::NoValue)?;
-    // An early freeze may plant only context-free values. A constant means the
-    // same thing wherever `inline` and `sroa` copy the operand to; a value naming
-    // a local does not, because those passes renumber locals and splice a callee
-    // body into a caller, so the slot moves out from under it. The post-loop
-    // freezes take these, after the structural passes have finished.
+    // An early freeze plants no value naming a local. The bar is cost, not
+    // soundness: what it was covering is one pass that dropped a binding without
+    // counting the reads living in the value pool, and that pass now counts them
+    // (`scalar_forward::sole_value_use`), with `optimize::run_pass` auditing the
+    // invariant. Lifting the bar measured 80 % onto the compile — the
+    // promoted-read census is a whole-body walk memoized on the memo staying
+    // *empty*, which holds only while nothing inside the loop names a local —
+    // 5.8 % onto the parser's code size, and the fixed-point loop stops
+    // converging inside its cap. See the WEP.
     if ctx.phase == FreezePhase::Early && engine.body.values.names_a_local(rep) {
-        return Err(Refusal::AnchorRule);
+        return Err(Refusal::NamesALocal);
     }
     // A standalone `FieldAccess` is reemittable when its receiver is (it
     // materialises via the source-point path). For every other value,
