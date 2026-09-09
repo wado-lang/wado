@@ -22,6 +22,7 @@ use crate::nir_arena::{
 };
 use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
+use crate::nir_value_graph::ValueId;
 use crate::niri::{
     AggregateShapes, BorrowRoot, CalleeMap, CtfeBuiltinMap, EditSink, GlobalEnv, GlobalFieldEnv,
     GlobalKey, Interpreter, Lattice, MaterializingGlobals, build_callee_map,
@@ -242,6 +243,9 @@ impl EditSink for EngineSink<'_, '_> {
     }
     fn become_expr(&mut self, dst: ExprId, src: ExprId) {
         self.engine.become_expr(dst, src);
+    }
+    fn redirect_to_value(&mut self, e: ExprId, v: ValueId) -> bool {
+        self.engine.redirect_expr(e, Operand::Value(v))
     }
     fn alloc_expr(&mut self, kind: ExprKind, type_id: TypeId, span: crate::token::Span) -> ExprId {
         self.engine.alloc_expr(kind, type_id, span)

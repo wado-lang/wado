@@ -1124,11 +1124,15 @@ pub(super) fn rewrite_short_circuit_via<S: EditSink>(sink: &mut S, e: ExprId) ->
         }
         _ => return false,
     };
-    let Some(keep_e) = keep.as_expr() else {
-        return false;
-    };
-    sink.become_expr(e, keep_e);
-    true
+    // The surviving side may be promoted, and then there is no node to move
+    // into `e` — the slot takes the value instead.
+    match keep {
+        Operand::Expr(keep_e) => {
+            sink.become_expr(e, keep_e);
+            true
+        }
+        Operand::Value(v) => sink.redirect_to_value(e, v),
+    }
 }
 
 /// The value a short-circuit collapses to when one operand is its absorbing

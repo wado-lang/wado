@@ -13,7 +13,7 @@ use crate::nir_arena::{
     PatKind, StmtId, StmtKind, StmtNode,
 };
 use crate::nir_package::NirPackage;
-use crate::nir_value_graph::ValueKind;
+use crate::nir_value_graph::{ValueId, ValueKind};
 use crate::tir::{TypeId, TypeTable};
 
 /// Three-state lattice over compile-time evaluation results, ordered
@@ -172,6 +172,11 @@ pub trait EditSink {
     fn const_operand(&mut self, kind: ValueKind, type_id: TypeId) -> Operand;
     /// Make `dst` take `src`'s content (`dst` becomes `src`).
     fn become_expr(&mut self, dst: ExprId, src: ExprId);
+    /// Redirect `e`'s slot to a value already in the pool, reporting whether the
+    /// edit was applied. [`EditSink::become_expr`]'s counterpart for a rewrite
+    /// whose surviving operand is promoted and so has no node to move; declined
+    /// on the scratch backend, which writes nothing back.
+    fn redirect_to_value(&mut self, e: ExprId, v: ValueId) -> bool;
     fn alloc_expr(&mut self, kind: ExprKind, type_id: TypeId, span: crate::token::Span) -> ExprId;
     fn alloc_stmt(&mut self, kind: StmtKind, span: crate::token::Span) -> StmtId;
     fn alloc_block(&mut self, stmts: Vec<StmtId>, span: crate::token::Span) -> BlockId;
@@ -204,6 +209,9 @@ impl EditSink for BodySink<'_> {
     fn become_expr(&mut self, dst: ExprId, src: ExprId) {
         let node = self.body.exprs[src].clone();
         self.body.exprs[dst] = node;
+    }
+    fn redirect_to_value(&mut self, _e: ExprId, _v: ValueId) -> bool {
+        false
     }
     fn alloc_expr(&mut self, kind: ExprKind, type_id: TypeId, span: crate::token::Span) -> ExprId {
         self.body.exprs.push(ExprNode {

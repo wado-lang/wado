@@ -1047,6 +1047,20 @@ impl ValuePool {
         ty: TypeId,
         type_table: Option<&TypeTable>,
     ) -> ValueId {
+        // `false || x` and `true && x` are `x`, either way round: the constant
+        // side decides nothing and the other side is kept, so no evaluation is
+        // dropped. `ValuePool::select` carries the same identity for the form a
+        // short-circuit takes there; without it here, a promoted `false || x`
+        // is a node no skeleton rule can reach and no folding removes.
+        if matches!(op, NirBinaryOp::Or | NirBinaryOp::And) {
+            let neutral = op == NirBinaryOp::And;
+            if self.kind(lhs).as_bool() == Some(neutral) {
+                return rhs;
+            }
+            if self.kind(rhs).as_bool() == Some(neutral) {
+                return lhs;
+            }
+        }
         let folded = type_table.and_then(|tt| {
             let l = self.const_of(lhs, tt)?;
             let r = self.const_of(rhs, tt)?;
