@@ -101,7 +101,9 @@ Export adapters currently handle two cases:
 
 Used by Command world's `run()` and test functions. The binding calls the user function, then calls `task-return(0)`. Those exports lift through `result<>`, and 0 is its Ok discriminant.
 
-A `--lib` export can instead declare no result at all, as `export async fn ping()` does. It lifts through no CM type, so it flattens to no slot and delivers with `task-return()`, against a canon carrying no result type. Both the canon and `canon lift` read that from the export's declared result, so the two cannot disagree.
+A `--lib` export can instead declare no result at all, as `export async fn ping()` does. It lifts through no CM type, so it flattens to no slot and delivers with `task-return()`, against a canon carrying no result type. Whether a result is there at all comes from the export's declared result in both places, so the canon and `canon lift` agree on its presence.
+
+They do not share how they resolve it: `lib_task_return_valtype` resolves the declared type, `emit_world_exports` resolves it preserving local newtypes. A `pub type Meters = i32` result reaches the lift as the named `meters` and the canon as bare `s32`, which interning makes the same component type.
 
 #### Result-returning exports (`(...) -> Result<T, E>`)
 
@@ -203,10 +205,12 @@ This requires:
 
 - [x] Validate that user's export function parameter count matches the world declaration
 - [ ] Validate parameter types match (beyond count)
-- [ ] Validate return type compatibility
+- [x] Validate return type compatibility
 - [ ] Produce clear error messages for type mismatches
 
 Parameter count validation is implemented: if the user's export function has a different number of parameters than the world declaration, a clear compile error is produced.
+
+Return type validation covers the worlds declaring `Result<_, _>`: the export returns one too, or unit for the `Ok(())` wrap. It holds for `async` exports as well as sync ones — exempting them let a plain `i32` be delivered onto the world's discriminant, reaching the host as an error the program never named.
 
 ### Summary
 

@@ -1024,14 +1024,15 @@ fn validate_boundary_representable(
     Ok(())
 }
 
-/// Validate return-type compatibility with the world. Strategy dispatch
-/// routes an async export to the task-return adapters (async / Result / `()`
-/// shapes) and a sync export to the synchronous lift. When an async world
-/// expects only a discriminant (`Result<(), ()>`, the wasi:cli/command shape)
-/// but the user supplies, say, `i32`, the async adapter would emit an extra
-/// flat value beyond what the runtime declares for task-return — surfacing as
-/// an opaque "values remaining on stack" wasm-validation panic at codegen.
-/// Catch the mismatch here with a readable diagnostic instead.
+/// Validate return-type compatibility with the world. What the boundary
+/// carries is what the world declares, so an export of a world returning
+/// `Result<_, _>` (`wasi:cli/command`'s `run`, `wasi:http/service`'s `handle`)
+/// must return one too, or unit for the `Ok(())` wrap both bindings apply.
+///
+/// Any other type has nowhere to go: the sync lift would emit a flat value
+/// beyond what `task.return` declares, and the async delivery — flattening the
+/// operand against its own type — would land it on the world's discriminant,
+/// reaching the host as an error it never named.
 fn validate_world_return_compatibility(
     user_func: &TirFunction,
     export: &WorldExportInfo,
@@ -1043,11 +1044,7 @@ fn validate_world_return_compatibility(
         Some(crate::ast::Type::Generic(g)) if g.name == result_name
     );
     let user_is_unit = matches!(tt.get(user_func.return_type), ResolvedType::Unit);
-    if !world_expects_result
-        || user_func.is_async
-        || user_is_unit
-        || tt.is_result(user_func.return_type)
-    {
+    if !world_expects_result || user_is_unit || tt.is_result(user_func.return_type) {
         return Ok(());
     }
     let user_return_name = tt.type_name(user_func.return_type);

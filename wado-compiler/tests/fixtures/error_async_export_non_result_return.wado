@@ -1,0 +1,11 @@
+// The CLI world declares `run` returning `Result<(), ()>`, and the boundary
+// carries what the world declares. An async export was exempt from the check
+// the sync one takes, so this `i32` was delivered into the world's result —
+// its value landing on the discriminant, `1` reaching the host as an error.
+
+export async fn run() -> i32 {
+    task return 1;
+}
+
+__DATA__
+{"compile_error": "but the world expects a `Result<_, _>`"}

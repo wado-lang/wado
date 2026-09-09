@@ -633,6 +633,7 @@ fn generate_inline_task_return(
         // variant_test argument).
         let _ = (ok_case_index, err_case_index);
     } else {
+        let value_is_unit = matches!(tt.get(value_type_id), ResolvedType::Unit);
         drop(tt);
         // Non-Result task return — flatten the value and forward the flat
         // slots verbatim. Unit-returning exports (`flat_return_types`
@@ -645,6 +646,19 @@ fn generate_inline_task_return(
             stmts.push(expr_stmt(cm_canonical_call(
                 task_return.clone(),
                 vec![],
+                TypeTable::UNIT,
+            )));
+        } else if value_is_unit {
+            // A unit return against a world result that has slots: the world
+            // declares the `Result<(), _>` the unit is wrapped into
+            // (`validate_world_return_compatibility` admits no other shape).
+            // `Ok` is the zero discriminant and its payload is empty, so every
+            // slot is zero — the same delivery `VoidTaskReturn` makes for the
+            // sync binding.
+            stmts.push(expr_stmt(value));
+            stmts.push(expr_stmt(cm_canonical_call(
+                task_return.clone(),
+                flat_return_types.iter().map(|&vt| cm_zero(vt)).collect(),
                 TypeTable::UNIT,
             )));
         } else {

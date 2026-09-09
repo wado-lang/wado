@@ -1,0 +1,14 @@
+// The CLI world declares `run` returning `Result<(), ()>`, and a unit return
+// is wrapped as `Ok(())` — the rule the mismatch diagnostic states. The sync
+// binding has always applied it; the async delivery flattened the unit operand
+// against the world's result and asserted on the slot it was missing.
+
+use { println, Stdout } from "core:cli";
+
+export async fn run() with Stdout {
+    println("ran");
+    task return ();
+}
+
+__DATA__
+{"stdout": "ran\n"}
