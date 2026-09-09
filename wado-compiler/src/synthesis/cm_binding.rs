@@ -19,6 +19,7 @@ use std::rc::Rc;
 
 use crate::hashmap::{IndexMap, IndexSet};
 
+use crate::ast::Type;
 use crate::canonical::{CanonicalIntrinsic, CmPayloadType};
 use crate::compiler_item::CompilerItem;
 use crate::module_source::{CmNamespace, ModuleSource};
@@ -883,7 +884,7 @@ fn wado_names_by_cm_name(world_info: &WorldInfo) -> IndexMap<String, IndexSet<St
     out
 }
 
-fn export_signature_types(world_info: &WorldInfo) -> impl Iterator<Item = &crate::ast::Type> {
+fn export_signature_types(world_info: &WorldInfo) -> impl Iterator<Item = &Type> {
     world_info.exports.iter().flat_map(|export| {
         export
             .params
@@ -893,8 +894,7 @@ fn export_signature_types(world_info: &WorldInfo) -> impl Iterator<Item = &crate
     })
 }
 
-fn collect_named_types(ty: &crate::ast::Type, out: &mut IndexMap<String, IndexSet<String>>) {
-    use crate::ast::Type;
+fn collect_named_types(ty: &Type, out: &mut IndexMap<String, IndexSet<String>>) {
     match ty {
         Type::Named(named) => {
             out.entry(crate::name::to_kebab(&named.name))
@@ -1023,33 +1023,38 @@ fn validate_boundary_representable(
 /// Validate return-type compatibility with the world. What the boundary
 /// carries is what the world declares, so an export of a world returning
 /// `Result<_, _>` (`wasi:cli/command`'s `run`, `wasi:http/service`'s `handle`)
-/// must return one too, or unit for the `Ok(())` wrap both bindings apply.
+/// must return one too. Unit stands in only where the world's `Ok` payload is
+/// itself unit, which is the whole of what the `Ok(())` wrap can fill.
 ///
 /// Any other type has nowhere to go: the sync lift would emit a flat value
 /// beyond what `task.return` declares, and the async delivery — flattening the
 /// operand against its own type — would land it on the world's discriminant,
-/// reaching the host as an error it never named.
+/// reaching the host as an error it never named. Unit against a payload-
+/// carrying `Ok` is that defect from the other side: the wrap zeroes every
+/// slot, handing the host a resource handle nothing created.
 fn validate_world_return_compatibility(
     user_func: &TirFunction,
     export: &WorldExportInfo,
     tt: &TypeTable,
 ) -> Result<(), String> {
     let result_name = tt.compiler_variant_name(CompilerItem::Result);
-    let world_expects_result = matches!(
-        &export.return_type,
-        Some(crate::ast::Type::Generic(g)) if g.name == result_name
-    );
+    let world_ok = match &export.return_type {
+        Some(Type::Generic(g)) if g.name == result_name => g.args.first(),
+        _ => return Ok(()),
+    };
+    if tt.is_result(user_func.return_type) {
+        return Ok(());
+    }
     let user_is_unit = matches!(tt.get(user_func.return_type), ResolvedType::Unit);
-    if !world_expects_result || user_is_unit || tt.is_result(user_func.return_type) {
+    if user_is_unit && world_ok.is_some_and(Type::is_unit) {
         return Ok(());
     }
     let user_return_name = tt.type_name(user_func.return_type);
     Err(format!(
         "export function `{}` has return type `{user_return_name}`, \
-         but the world expects a `{result_name}<_, _>` (or unit, \
-         which is automatically wrapped as `{result_name}<(), _>`). \
-         Change the signature to return a `{result_name}` or remove \
-         the explicit return type.",
+         but the world expects a `{result_name}<_, _>` (unit stands in only \
+         for a `{result_name}<(), _>`, which is all the `Ok(())` wrap fills). \
+         Change the signature to return the `{result_name}` the world declares.",
         export.name
     ))
 }
