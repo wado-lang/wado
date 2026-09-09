@@ -1,0 +1,13 @@
+// The CLI world declares `run` returning `Result<(), ()>`, so a unit return
+// delivers the `Ok(())` it stands in for: the discriminant and its empty
+// payload, every slot zero. Both bindings apply that wrap, sync and async.
+
+use { println, Stdout } from "core:cli";
+
+export async fn run() with Stdout {
+    println("ran");
+    task return ();
+}
+
+__DATA__
+{"stdout": "ran\n"}

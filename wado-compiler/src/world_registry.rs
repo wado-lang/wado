@@ -141,11 +141,6 @@ pub struct WorldInfo {
 }
 
 impl WorldInfo {
-    /// Check if this world has any async export.
-    pub fn has_async_export(&self) -> bool {
-        self.exports.iter().any(|e| e.is_async)
-    }
-
     /// Whether this world exports the WASI HTTP handler — a handler-instance
     /// export whose interface is in the `http` package. Gates HTTP-specific
     /// behavior (importing `wasi:http/types`, the free-list allocator), so the
@@ -202,8 +197,7 @@ fn returns_non_unit_result(return_type: Option<&Type>) -> bool {
     };
     generic.name == "Result"
         && generic.args.len() == 2
-        && !(crate::component_model::is_unit_type(&generic.args[0])
-            && crate::component_model::is_unit_type(&generic.args[1]))
+        && !(generic.args[0].is_unit() && generic.args[1].is_unit())
 }
 
 /// Extract the package segment of a CM-style fully-qualified name
@@ -421,12 +415,7 @@ mod tests {
                 is_async: true,
                 params: vec![],
                 params_span: make_span(),
-                return_type: Some(Type::Generic(crate::ast::GenericType {
-                    id: crate::ast::AstId::fresh(),
-                    name: "Result".to_string(),
-                    args: vec![Type::Tuple(vec![]), Type::Tuple(vec![])],
-                    span: make_span(),
-                })),
+                return_type: Some(result_return("()", "()")),
                 span: make_span(),
             })],
             span: make_span(),
@@ -623,22 +612,12 @@ mod tests {
             name: "run".to_string(),
             is_async: true,
             params: vec![],
-            return_type: Some(result_return_unit()),
+            return_type: Some(result_return("()", "()")),
             from_interface_fq: Some("wasi:http/run@1.0.0".to_string()),
             reexport_origin: None,
         });
         assert!(!unit_export.exports[0].is_handler_instance_export());
         assert!(!unit_export.has_http_handler_export());
-    }
-
-    /// `Result<(), ()>` built from empty tuples.
-    fn result_return_unit() -> Type {
-        Type::Generic(crate::ast::GenericType {
-            id: crate::ast::AstId::fresh(),
-            name: "Result".to_string(),
-            args: vec![Type::Tuple(vec![]), Type::Tuple(vec![])],
-            span: make_span(),
-        })
     }
 
     #[test]

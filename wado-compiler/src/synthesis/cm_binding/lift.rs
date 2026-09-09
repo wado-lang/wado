@@ -24,7 +24,7 @@ use crate::synthesis::common::{
 
 use super::types::{
     LiftContext, binary_add, cm_enum_byte_size, cm_flags_byte_size, cm_type_to_type_id,
-    disc_load_op, is_unit_type, kebab_to_pascal,
+    disc_load_op, kebab_to_pascal,
 };
 
 /// Synthesize a TIR expression that loads a CM value from linear memory.
@@ -907,7 +907,7 @@ fn synthesize_lift_result_inner(
 
     // Ok case
     let mut ok_stmts: Vec<TirStmt> = Vec::new();
-    let ok_is_unit = is_unit_type(ok_ty);
+    let ok_is_unit = ok_ty.is_unit();
     let ok_payload = if ok_is_unit {
         None
     } else {
@@ -937,7 +937,7 @@ fn synthesize_lift_result_inner(
 
     // Err case
     let mut err_stmts: Vec<TirStmt> = Vec::new();
-    let err_is_unit = is_unit_type(err_ty);
+    let err_is_unit = err_ty.is_unit();
     let err_payload = if err_is_unit {
         None
     } else {

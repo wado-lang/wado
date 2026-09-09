@@ -2511,12 +2511,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             scope.resolve_block(b, &mut ctx, None);
         }
 
-        scope.validate_missing_return_ast(
-            return_type,
-            func.is_async,
-            func.body.as_ref(),
-            func.span,
-        );
+        scope.validate_missing_return_ast(return_type, func);
         scope.validate_loop_jumps_ast(func.body.as_ref());
 
         // Convert AST type params to TIR type params (while type params
@@ -2864,12 +2859,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             scope.resolve_block(b, &mut ctx, None);
         }
 
-        scope.validate_missing_return_ast(
-            return_type,
-            func.is_async,
-            func.body.as_ref(),
-            func.span,
-        );
+        scope.validate_missing_return_ast(return_type, func);
         scope.validate_loop_jumps_ast(func.body.as_ref());
 
         // Convert AST type params to TIR type params (while type params still

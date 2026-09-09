@@ -1,0 +1,13 @@
+// An `export async fn` delivers its result with `task return`. A body
+// carrying none can never deliver, so every call reaches the boundary with
+// the task unfinished and traps, after whatever the body did on the way.
+// Nothing about that depends on the input, so it is a compile error.
+
+use { println, Stdout } from "core:cli";
+
+export async fn run() with Stdout {
+    println("ran");
+}
+
+__DATA__
+{ "compile_error": "`export async fn run` never delivers its result" }

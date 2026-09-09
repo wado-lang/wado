@@ -36,8 +36,8 @@ use super::lower::synthesize_lower_wasi_type_to_memory;
 use super::types::{
     CmStdlibNames, LiftContext, LowerContext, binary_add, binary_ne, cm_val_type_to_type_id,
     cm_zero, coerce_flat_lift, coerce_flat_lower, compute_export_flat_param_types,
-    compute_export_flat_return_types, export_needs_param_lifting, field_access, find_struct_decl,
-    find_variant_decl, flat_types_from_type_id, flatten_export_type, is_unit_type, struct_decl_of,
+    export_needs_param_lifting, field_access, find_struct_decl, find_variant_decl,
+    flat_types_from_ast_type, flat_types_from_type_id, flatten_export_type, struct_decl_of,
     type_id_to_ast_type, variant_decl_of, variant_payload, variant_tag, variant_test,
 };
 
@@ -1268,7 +1268,7 @@ fn lift_variant_from_flat_params(
     for (i, case) in variant_decl.cases.iter().enumerate().rev() {
         let payload_ty = &case_payload_tys[i];
         let mut case_stmts: Vec<TirStmt> = Vec::new();
-        let payload = if is_unit_type(payload_ty) {
+        let payload = if payload_ty.is_unit() {
             None
         } else {
             // Re-map the joined payload slots to this case's natural flat types,
@@ -1433,8 +1433,8 @@ fn build_export_adapter_params(
 /// call the user function once) is shared by every strategy.
 #[derive(Clone, Copy)]
 pub(super) enum ExportReturnStrategy {
-    /// Async `() -> ()` export: call, then `task-return(0)` (the Ok
-    /// discriminant for `result<_, _>`).
+    /// Async `() -> ()` export: call, then `task-return(0)` — the Ok
+    /// discriminant of the `result<>` it lifts through, so it shares that canon.
     VoidTaskReturn,
     /// Sync `--lib` export: the synchronous canon lift returns the lowered
     /// value directly — a single-core-value result verbatim, a multi-value
@@ -1556,6 +1556,7 @@ pub(super) fn synthesize_export_binding(
         ),
         ExportReturnStrategy::ResultTaskReturn => {
             push_result_task_return_epilogue(
+                export_name,
                 call_user,
                 user_return_type,
                 env,
@@ -1655,7 +1656,7 @@ fn push_sync_return_epilogue(
         .world_return
         .map(|ty| {
             let tt = env.type_table.borrow();
-            compute_export_flat_return_types(ty, env.tir_modules, &tt).len()
+            flat_types_from_ast_type(ty, env.tir_modules, &tt).len()
         })
         .unwrap_or(0);
 
@@ -1761,7 +1762,7 @@ pub(super) fn synthesize_post_return(
     let ty = env.world_return?;
     let flat_count = {
         let tt = env.type_table.borrow();
-        compute_export_flat_return_types(ty, env.tir_modules, &tt).len()
+        flat_types_from_ast_type(ty, env.tir_modules, &tt).len()
     };
     // The condition `push_sync_return_epilogue` allocates the area under.
     if flat_count <= 1 {
@@ -1820,6 +1821,7 @@ pub(super) fn synthesize_post_return(
 /// joined slots ([`lower_result_arm`]), then call `task-return` once with the
 /// filled slots.
 fn push_result_task_return_epilogue(
+    export_name: &str,
     call_user: TirExpr,
     user_return_type: TypeId,
     env: &ExportBindingEnv<'_>,
@@ -1833,7 +1835,7 @@ fn push_result_task_return_epilogue(
         .expect("Result export binding requires a world return type");
     let flat_return_types = {
         let tt = env.type_table.borrow();
-        compute_export_flat_return_types(return_ast, env.tir_modules, &tt)
+        flat_types_from_ast_type(return_ast, env.tir_modules, &tt)
     };
 
     let result_local = alloc_local(next_local, locals, user_return_type);
@@ -1955,7 +1957,7 @@ fn push_result_task_return_epilogue(
         .map(|((local, name), &vt)| local_ref(*local, name, cm_val_type_to_type_id(vt)))
         .collect();
     body_stmts.push(expr_stmt(cm_canonical_call(
-        CanonicalIntrinsic::TaskReturn(String::new()),
+        CanonicalIntrinsic::TaskReturn(export_name.to_string()),
         task_return_args,
         TypeTable::UNIT,
     )));

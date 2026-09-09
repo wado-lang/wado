@@ -310,7 +310,7 @@ pub fn cm_payload_type_from_ast(
             ))),
             "Result" if g.args.len() == 2 => {
                 let arm = |t: &Type| -> Option<Option<Box<CmPayloadType>>> {
-                    if is_unit_type(t) {
+                    if t.is_unit() {
                         Some(None)
                     } else {
                         Some(Some(Box::new(cm_payload_type_from_ast(t, registry)?)))
@@ -366,7 +366,7 @@ pub fn classify_future_payload_from_ast(
     if let Type::Generic(g) = &resolved
         && g.name == "Result"
         && g.args.len() == 2
-        && is_unit_type(&g.args[0])
+        && g.args[0].is_unit()
         && let Some(source) = wasi_error_code_source_from_ast(&g.args[1], registry)
     {
         return CmFuturePayload::Transmission(source);
@@ -501,23 +501,12 @@ pub fn unwrap_async_call_if_async(is_async: bool, declared: &Option<Type>) -> Op
     match declared {
         Some(Type::Generic(generic)) if generic.name == "AsyncCall" && generic.args.len() == 1 => {
             let inner = &generic.args[0];
-            if is_unit_type(inner) {
+            if inner.is_unit() {
                 return None;
             }
             Some(inner.clone())
         }
         other => other.clone(),
-    }
-}
-
-/// Returns true if `ty` is the Wado unit type. Recognises both surface
-/// syntaxes that the parser may emit: the empty tuple `[]` and the
-/// named form `()`.
-pub fn is_unit_type(ty: &Type) -> bool {
-    match ty {
-        Type::Tuple(elems) => elems.is_empty(),
-        Type::Named(named) => matches!(named.name.as_str(), "()" | "Unit" | "unit"),
-        _ => false,
     }
 }
 

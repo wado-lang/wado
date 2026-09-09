@@ -485,11 +485,6 @@ pub(super) fn kebab_to_pascal(s: &str) -> String {
     s.to_upper_camel_case()
 }
 
-pub(super) fn is_unit_type(ty: &Type) -> bool {
-    matches!(ty, Type::Tuple(elems) if elems.is_empty())
-        || matches!(ty, Type::Named(n) if n.name == "()")
-}
-
 pub(super) fn is_gc_passthrough_param(
     ty: &Type,
     cm_interface_registry: &CmInterfaceRegistry,
@@ -567,6 +562,13 @@ fn check_cm_boundary_representable_inner(
             return recurse(elem, visited);
         }
         if let Some(elems) = type_table.as_tuple(type_id) {
+            if elems.is_empty() {
+                return Err(
+                    "the empty tuple `[]` has no Component Model representation — a `tuple` \
+                     carries at least one type, and `()` is the type that carries none"
+                        .to_string(),
+                );
+            }
             for e in elems {
                 recurse(e, visited)?;
             }
@@ -911,7 +913,10 @@ pub(super) fn needs_flat_result_lifting(ty: &Type, names: &CmStdlibNames) -> boo
     matches!(ty, Type::Generic(g) if g.name == names.result && g.args.len() == 2)
 }
 
-pub(super) fn compute_export_flat_return_types(
+/// Flat CM ABI types of a boundary type the world declares, the AST-side twin
+/// of [`flat_types_from_type_id`]. Comparing the two says whether an export's
+/// own type lowers to the values the world's does.
+pub(super) fn flat_types_from_ast_type(
     ty: &Type,
     tir_modules: &IndexMap<ModuleSource, TirModule>,
     type_table: &TypeTable,

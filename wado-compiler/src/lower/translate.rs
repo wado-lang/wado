@@ -96,7 +96,6 @@ pub fn translate(flat: FlatPackage, plan: LowerPlan) -> NirPackage {
         export_binding_names,
         component_plan,
         builtin_registry,
-        task_return_flat_params,
         wasm_assets,
         trait_env,
         moved_local_spans,
@@ -194,7 +193,6 @@ pub fn translate(flat: FlatPackage, plan: LowerPlan) -> NirPackage {
         export_binding_names,
         component_plan,
         builtin_registry,
-        task_return_flat_params,
         wasm_assets,
         trait_env,
         // Before the interner is drained: a helper only `array_clone::<T>`
