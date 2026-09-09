@@ -2006,7 +2006,7 @@ flags Access {
 fn grow_memory(new_offset: i32) {
     let current_bytes: i32 = (core::builtin::memory_size() * 65536);
     let deficit: i32 = (new_offset - current_bytes);
-    let sixteen_mb: i32 = ((16 * 1024) * 1024);
+    let sixteen_mb: i32 = 16777216;
     let normal_grow: i32 = if (current_bytes < sixteen_mb) {
         current_bytes;
     } else {
@@ -3531,7 +3531,7 @@ pub fn unpack64(f: f64) -> UnpackResult {
     let bits: u64 = Box<f64> { value: f }.f64::to_bits() as u64;
     let mantissa_mask: u64 = 4503599627370495;
     let exp_mask: u64 = 2047;
-    let shift: i32 = (64 - 53);
+    let shift: i32 = 11;
     let shift_u64: u64 = shift as u64;
     let min_exp: i32 = -(1074 + shift);
     let raw_mantissa: u64 = (bits & mantissa_mask);
@@ -3554,7 +3554,7 @@ pub fn unpack32(f: f32) -> UnpackResult {
     let bits: u32 = Box<f32> { value: f }.f32::to_bits() as u32;
     let mantissa_mask: u32 = 8388607;
     let exp_mask: u32 = 255;
-    let shift: i32 = (64 - 24);
+    let shift: i32 = 40;
     let shift_u64: u64 = shift as u64;
     let min_exp: i32 = -(149 + shift);
     let raw_mantissa: u64 = (bits & mantissa_mask) as u64;
@@ -3644,7 +3644,7 @@ pub fn mul_pow10(p: i32) -> PmHiLo {
     let f: u64 = "core::prelude/fpfmt.wado::pow10_fine"(r);
     let borrow: u64 = (c.lo != 0) as u64;
     let c_hi_raw: u64 = (c.hi - borrow);
-    let c_lo_raw: u64 = (0 as u64 - c.lo);
+    let c_lo_raw: u64 = (0 - c.lo);
     let [a1_lo_i, a1_hi_i] = core::builtin::i64_mul_wide_u(c_hi_raw as i64, f as i64);
     let a1_lo: u64 = a1_lo_i as u64;
     let a1_hi: u64 = a1_hi_i as u64;
@@ -3666,7 +3666,7 @@ pub fn mul_pow10(p: i32) -> PmHiLo {
         top_lo = (top_lo << 1);
     }
     if (top_lo != 0) {
-        return PmHiLo { hi: (top_hi + 1), lo: (0 as u64 - top_lo) };
+        return PmHiLo { hi: (top_hi + 1), lo: (0 - top_lo) };
     }
     return PmHiLo { hi: top_hi, lo: 0 };
 }
@@ -3682,9 +3682,9 @@ pub fn uscale(x: u64, pm_hi: u64, pm_lo: u64, s: i32) -> u64 {
     let [mid_i64, hi_tmp] = core::builtin::i64_mul_wide_u(x as i64, pm_hi as i64);
     let mid: u64 = mid_i64 as u64;
     let mut hi: u64 = hi_tmp as u64;
-    let mut sticky: u64 = 1 as u64;
+    let mut sticky: u64 = 1;
     let s_mod_64: u64 = (s & 63) as u64;
-    let check_mask: u64 = ((1 as u64 << s_mod_64) - 1);
+    let check_mask: u64 = ((1 << s_mod_64) - 1);
     if ((hi & check_mask) == 0) {
         let [_, mid2_i64] = core::builtin::i64_mul_wide_u(x as i64, pm_lo as i64);
         let mid2: u64 = mid2_i64 as u64;
@@ -3806,15 +3806,15 @@ pub fn short(f: f64) -> FormatResult {
     let m_is_power_of_2: bool = (m == 9223372036854775808);
     if (m_is_power_of_2 && (e > min_exp)) {
         p = -"core::prelude/fpfmt.wado::skewed"((e + z));
-        min_m = (m - (1 as u64 << (z - 2) as u64));
+        min_m = (m - (1 << (z - 2) as u64));
     } else {
         if (e < min_exp) {
             z = (11 + (min_exp - e));
         }
         p = -"core::prelude/fpfmt.wado::log10_pow2"((e + z));
-        min_m = (m - (1 as u64 << (z - 1) as u64));
+        min_m = (m - (1 << (z - 1) as u64));
     }
-    let max_m: u64 = (m + (1 as u64 << (z - 1) as u64));
+    let max_m: u64 = (m + (1 << (z - 1) as u64));
     let odd: i32 = ((m >> z as u64) & 1) as i32;
     let lp: i32 = "core::prelude/fpfmt.wado::log2_pow10"(p);
     let pm: PmHiLo = "core::prelude/fpfmt.wado::get_pow10"(p);
@@ -3847,15 +3847,15 @@ pub fn short32(f: f32) -> FormatResult {
     let m_is_power_of_2: bool = (m == 9223372036854775808);
     if (m_is_power_of_2 && (e > min_exp)) {
         p = -"core::prelude/fpfmt.wado::skewed"((e + z));
-        min_m = (m - (1 as u64 << (z - 2) as u64));
+        min_m = (m - (1 << (z - 2) as u64));
     } else {
         if (e < min_exp) {
             z = (40 + (min_exp - e));
         }
         p = -"core::prelude/fpfmt.wado::log10_pow2"((e + z));
-        min_m = (m - (1 as u64 << (z - 1) as u64));
+        min_m = (m - (1 << (z - 1) as u64));
     }
-    let max_m: u64 = (m + (1 as u64 << (z - 1) as u64));
+    let max_m: u64 = (m + (1 << (z - 1) as u64));
     let odd: i32 = ((m >> z as u64) & 1) as i32;
     let lp: i32 = "core::prelude/fpfmt.wado::log2_pow10"(p);
     let pm: PmHiLo = "core::prelude/fpfmt.wado::get_pow10"(p);
@@ -3937,11 +3937,11 @@ pub fn digits(d: u64) -> i32 {
 }
 
 fn i2a_first(n: i32) -> char {
-    return "core::prelude/primitive.wado::char::from_u32_unchecked"(('0' as u32 + (n / 10) as u32));
+    return "core::prelude/primitive.wado::char::from_u32_unchecked"((48 + (n / 10) as u32));
 }
 
 fn i2a_second(n: i32) -> char {
-    return "core::prelude/primitive.wado::char::from_u32_unchecked"(('0' as u32 + (n % 10) as u32));
+    return "core::prelude/primitive.wado::char::from_u32_unchecked"((48 + (n % 10) as u32));
 }
 
 fn write_digits_at(buf: &mut String, offset: i32, val: u64, nd: i32) {
@@ -4035,13 +4035,13 @@ pub fn write_exp(buf: &mut String, d: u64, p: i32, nd: i32, upper: bool) {
         exp;
     };
     if (abs_exp < 10) {
-        buf."core:prelude/string.wado/String::push"("core::prelude/primitive.wado::char::from_u32_unchecked"(('0' as u32 + abs_exp as u32)));
+        buf."core:prelude/string.wado/String::push"("core::prelude/primitive.wado::char::from_u32_unchecked"((48 + abs_exp as u32)));
     } else {
         if (abs_exp < 100) {
             buf."core:prelude/string.wado/String::push"("core::prelude/fpfmt.wado::i2a_first"(abs_exp));
             buf."core:prelude/string.wado/String::push"("core::prelude/fpfmt.wado::i2a_second"(abs_exp));
         } else {
-            buf."core:prelude/string.wado/String::push"("core::prelude/primitive.wado::char::from_u32_unchecked"(('0' as u32 + (abs_exp / 100) as u32)));
+            buf."core:prelude/string.wado/String::push"("core::prelude/primitive.wado::char::from_u32_unchecked"((48 + (abs_exp / 100) as u32)));
             buf."core:prelude/string.wado/String::push"("core::prelude/fpfmt.wado::i2a_first"((abs_exp % 100)));
             buf."core:prelude/string.wado/String::push"("core::prelude/fpfmt.wado::i2a_second"((abs_exp % 100)));
         }
@@ -4200,13 +4200,13 @@ pub fn write_exp_prec(buf: &mut String, d: u64, p: i32, nd: i32, precision: i32,
         exp;
     };
     if (abs_exp < 10) {
-        buf."core:prelude/string.wado/String::push"("core::prelude/primitive.wado::char::from_u32_unchecked"(('0' as u32 + abs_exp as u32)));
+        buf."core:prelude/string.wado/String::push"("core::prelude/primitive.wado::char::from_u32_unchecked"((48 + abs_exp as u32)));
     } else {
         if (abs_exp < 100) {
             buf."core:prelude/string.wado/String::push"("core::prelude/fpfmt.wado::i2a_first"(abs_exp));
             buf."core:prelude/string.wado/String::push"("core::prelude/fpfmt.wado::i2a_second"(abs_exp));
         } else {
-            buf."core:prelude/string.wado/String::push"("core::prelude/primitive.wado::char::from_u32_unchecked"(('0' as u32 + (abs_exp / 100) as u32)));
+            buf."core:prelude/string.wado/String::push"("core::prelude/primitive.wado::char::from_u32_unchecked"((48 + (abs_exp / 100) as u32)));
             buf."core:prelude/string.wado/String::push"("core::prelude/fpfmt.wado::i2a_first"((abs_exp % 100)));
             buf."core:prelude/string.wado/String::push"("core::prelude/fpfmt.wado::i2a_second"((abs_exp % 100)));
         }
@@ -4224,7 +4224,7 @@ pub fn check_special(f: f64) -> [bool, bool, SpecialKind] {
     if (bits == 0) {
         return [true, false, SpecialKind::Zero];
     }
-    if (bits == -9223372036854775808 as i64) {
+    if (bits == -9223372036854775808) {
         return [true, true, SpecialKind::Zero];
     }
     let is_neg: bool = (bits < 0);
@@ -4241,7 +4241,7 @@ pub fn check_special(f: f64) -> [bool, bool, SpecialKind] {
 }
 
 fn pack64(m: u64, e: i32) -> f64 {
-    let bit52: u64 = (1 as u64 << 52);
+    let bit52: u64 = 4503599627370496;
     if ((m & bit52) == 0) {
         return "core::prelude/primitive.wado::f64::from_bits"(m as i64);
     }
@@ -4258,7 +4258,7 @@ pub fn parse(d: u64, p: i32) -> f64 {
     let pm: PmHiLo = "core::prelude/fpfmt.wado::get_pow10"(p);
     let s_val: i32 = -(((e - (64 - b)) + lp) + 3);
     let mut u: u64 = "core::prelude/fpfmt.wado::uscale"(x, pm.hi, pm.lo, s_val);
-    let unmin_val: u64 = ((1 as u64 << 55) - 2);
+    let unmin_val: u64 = 36028797018963966;
     let shift: u64 = (u >= unmin_val) as u64;
     u = ((u >> shift) | (u & 1));
     e = (e - shift as i32);
@@ -4292,7 +4292,7 @@ pub fn parse_text_range(s: &String, start: i32, end: i32) -> Option<f64> {
         let c2: u8 = s."core:prelude/string.wado/String::get_byte_unchecked"((i + 2));
         if (Box<u8> { value: c1 }.u8::eq_ignore_ascii_case(Box<u8> { value: 110 }) && Box<u8> { value: c2 }.u8::eq_ignore_ascii_case(Box<u8> { value: 102 })) {
             if (remaining == 3) {
-                return Option<f64>::Some(core::builtin::f64_copysign((1.0 / 0.0), sign));
+                return Option<f64>::Some(core::builtin::f64_copysign(Infinity, sign));
             }
             if (remaining == 8) {
                 let c3: u8 = s."core:prelude/string.wado/String::get_byte_unchecked"((i + 3));
@@ -4301,7 +4301,7 @@ pub fn parse_text_range(s: &String, start: i32, end: i32) -> Option<f64> {
                 let c6: u8 = s."core:prelude/string.wado/String::get_byte_unchecked"((i + 6));
                 let c7: u8 = s."core:prelude/string.wado/String::get_byte_unchecked"((i + 7));
                 if ((((Box<u8> { value: c3 }.u8::eq_ignore_ascii_case(Box<u8> { value: 105 }) && Box<u8> { value: c4 }.u8::eq_ignore_ascii_case(Box<u8> { value: 110 })) && Box<u8> { value: c5 }.u8::eq_ignore_ascii_case(Box<u8> { value: 105 })) && Box<u8> { value: c6 }.u8::eq_ignore_ascii_case(Box<u8> { value: 116 })) && Box<u8> { value: c7 }.u8::eq_ignore_ascii_case(Box<u8> { value: 121 })) {
-                    return Option<f64>::Some(core::builtin::f64_copysign((1.0 / 0.0), sign));
+                    return Option<f64>::Some(core::builtin::f64_copysign(Infinity, sign));
                 }
             }
         }
@@ -4394,7 +4394,7 @@ pub fn parse_text_range(s: &String, start: i32, end: i32) -> Option<f64> {
     }
     let eff_p: i32 = (p - frac);
     if (eff_p > core::prelude/fpfmt.wado::PARSE_EXP_MAX) {
-        return Option<f64>::Some(core::builtin::f64_copysign((1.0 / 0.0), sign));
+        return Option<f64>::Some(core::builtin::f64_copysign(Infinity, sign));
     }
     if (eff_p < core::prelude/fpfmt.wado::PARSE_EXP_MIN) {
         return Option<f64>::Some(core::builtin::f64_copysign(0.0, sign));
@@ -4747,7 +4747,7 @@ pub fn "core:prelude/int128.wado/u128::as_f64"(self: &u128) -> f64 {
     let m: u64 = __pattern_temp_0.0;
     let exp: i64 = __pattern_temp_0.1;
     let biased: u64 = (exp + 1023) as u64;
-    let mantissa: u64 = (m & ((1 << 52) - 1));
+    let mantissa: u64 = (m & 4503599627370495);
     let bits: u64 = ((biased << 52) | mantissa);
     return core::builtin::f64_reinterpret_i64(bits as i64);
 }
@@ -4760,7 +4760,7 @@ pub fn "core:prelude/int128.wado/u128::as_f32"(self: &u128) -> f32 {
     let m: u64 = __pattern_temp_0.0;
     let exp: i64 = __pattern_temp_0.1;
     let biased: u32 = (exp + 127) as u32;
-    let mantissa: u32 = (m as u32 & ((1 << 23) - 1));
+    let mantissa: u32 = (m as u32 & 8388607);
     let bits: u32 = ((biased << 23) | mantissa);
     return core::builtin::f32_reinterpret_i32(bits as i32);
 }
@@ -5007,12 +5007,12 @@ fn "core:prelude/int128.wado/u128::fmt_base"(self: &u128, f: &mut Formatter, bas
             pos = (pos - 1);
             let digit: i32 = (lo & mask) as i32;
             let ch: i32 = if (digit < 10) {
-                ('0' as i32 + digit);
+                (48 + digit);
             } else {
                 if upper {
-                    (('A' as i32 + digit) - 10);
+                    ((65 + digit) - 10);
                 } else {
-                    (('a' as i32 + digit) - 10);
+                    ((97 + digit) - 10);
                 };
             };
             core::builtin::array_set_u8(arr, pos, ch as u8);
@@ -5257,7 +5257,7 @@ pub fn "core:prelude/int128.wado/i128::from_str_radix_range"(s: &String, start: 
     };
     let is_negative: bool = __pattern_temp_0.0;
     let digit_start: i32 = __pattern_temp_0.1;
-    let max_pos: u128 = "core::prelude/int128.wado::core:prelude/int128.wado/u128::from_pair"(18446744073709551615, 9223372036854775807 as u64);
+    let max_pos: u128 = "core::prelude/int128.wado::core:prelude/int128.wado/u128::from_pair"(18446744073709551615, 9223372036854775807);
     let max_neg_abs: u128 = "core::prelude/int128.wado::core:prelude/int128.wado/u128::from_pair"(0, 9223372036854775808);
     return match "core::prelude/intparse.wado::parse_u128_digits"(s, digit_start, end, radix) {
         Ok(v) => if is_negative {
@@ -5550,14 +5550,14 @@ pub fn "core:prelude/intparse.wado/ParseFloatError::new"(kind: FloatErrorKind) -
 
 fn digit_value(b: u8) -> i32 {
     let c: i32 = b as i32;
-    if ((c >= '0' as i32) && (c <= '9' as i32)) {
-        return (c - '0' as i32);
+    if ((c >= 48) && (c <= 57)) {
+        return (c - 48);
     }
-    if ((c >= 'a' as i32) && (c <= 'z' as i32)) {
-        return ((c - 'a' as i32) + 10);
+    if ((c >= 97) && (c <= 122)) {
+        return ((c - 97) + 10);
     }
-    if ((c >= 'A' as i32) && (c <= 'Z' as i32)) {
-        return ((c - 'A' as i32) + 10);
+    if ((c >= 65) && (c <= 90)) {
+        return ((c - 65) + 10);
     }
     return -1;
 }
@@ -5966,7 +5966,7 @@ fn write_decimal_digits(arr: &mut Array<u8>, offset: i32, val: u64, digit_count:
         }
         $for_0_body: {
             pos = (pos - 1);
-            core::builtin::array_set_u8(arr, pos, ('0' as i32 + (t % 10) as i32) as u8);
+            core::builtin::array_set_u8(arr, pos, (48 + (t % 10) as i32) as u8);
             t = (t / 10);
         }
         i = (i + 1);
@@ -6124,12 +6124,12 @@ fn write_u64_base_digits(arr: &mut Array<u8>, offset: i32, val_i64: i64, digit_c
             pos = (pos - 1);
             let digit: i32 = (temp & mask64) as i32;
             let ch: i32 = if (digit < 10) {
-                ('0' as i32 + digit);
+                (48 + digit);
             } else {
                 if upper {
-                    (('A' as i32 + digit) - 10);
+                    ((65 + digit) - 10);
                 } else {
-                    (('a' as i32 + digit) - 10);
+                    ((97 + digit) - 10);
                 };
             };
             core::builtin::array_set_u8(arr, pos, ch as u8);
@@ -6175,12 +6175,12 @@ pub fn char::is_ascii_whitespace(self: Box<char>) -> bool {
 }
 
 pub fn char::is_ascii_uppercase(self: Box<char>) -> bool {
-    return ((self.value as u32 - 'A' as u32) < 26);
+    return ((self.value as u32 - 65) < 26);
 }
 
 pub fn char::to_ascii_lowercase(self: Box<char>) -> char {
     let c: u32 = self.value as u32;
-    return "core::prelude/primitive.wado::char::from_u32_unchecked"((c | (self.char::is_ascii_uppercase() as u32 * ('A' as u32 ^ 'a' as u32))));
+    return "core::prelude/primitive.wado::char::from_u32_unchecked"((c | (self.char::is_ascii_uppercase() as u32 * 32)));
 }
 
 pub fn char::eq_ignore_ascii_case(self: Box<char>, other: Box<char>) -> bool {
@@ -6188,7 +6188,7 @@ pub fn char::eq_ignore_ascii_case(self: Box<char>, other: Box<char>) -> bool {
 }
 
 pub fn char::is_ascii_digit(self: Box<char>) -> bool {
-    return ((self.value as u32 - '0' as u32) < 10);
+    return ((self.value as u32 - 48) < 10);
 }
 
 pub fn char::len_utf8(self: Box<char>) -> i32 {
@@ -7357,14 +7357,14 @@ fn "i8^core:prelude/range.wado/Step::next_step"(self: Box<i8>) -> Option<i8> {
     if (self.value == 127) {
         return null;
     }
-    return Option<i8>::Some((self.value + 1 as i8));
+    return Option<i8>::Some((self.value + 1));
 }
 
 fn "i16^core:prelude/range.wado/Step::next_step"(self: Box<i16>) -> Option<i16> {
     if (self.value == 32767) {
         return null;
     }
-    return Option<i16>::Some((self.value + 1 as i16));
+    return Option<i16>::Some((self.value + 1));
 }
 
 fn "i32^core:prelude/range.wado/Step::next_step"(self: Box<i32>) -> Option<i32> {
@@ -7378,39 +7378,39 @@ fn "i64^core:prelude/range.wado/Step::next_step"(self: Box<i64>) -> Option<i64> 
     if (self.value == 9223372036854775807) {
         return null;
     }
-    return Option<i64>::Some((self.value + 1 as i64));
+    return Option<i64>::Some((self.value + 1));
 }
 
 fn "u8^core:prelude/range.wado/Step::next_step"(self: Box<u8>) -> Option<u8> {
     if (self.value == 255) {
         return null;
     }
-    return Option<u8>::Some((self.value + 1 as u8));
+    return Option<u8>::Some((self.value + 1));
 }
 
 fn "u16^core:prelude/range.wado/Step::next_step"(self: Box<u16>) -> Option<u16> {
     if (self.value == 65535) {
         return null;
     }
-    return Option<u16>::Some((self.value + 1 as u16));
+    return Option<u16>::Some((self.value + 1));
 }
 
 fn "u32^core:prelude/range.wado/Step::next_step"(self: Box<u32>) -> Option<u32> {
     if (self.value == 4294967295) {
         return null;
     }
-    return Option<u32>::Some((self.value + 1 as u32));
+    return Option<u32>::Some((self.value + 1));
 }
 
 fn "u64^core:prelude/range.wado/Step::next_step"(self: Box<u64>) -> Option<u64> {
     if (self.value == 18446744073709551615) {
         return null;
     }
-    return Option<u64>::Some((self.value + 1 as u64));
+    return Option<u64>::Some((self.value + 1));
 }
 
 fn "char^core:prelude/range.wado/Step::next_step"(self: Box<char>) -> Option<char> {
-    let code: u32 = (self.value as u32 + 1 as u32);
+    let code: u32 = (self.value as u32 + 1);
     return "core::prelude/primitive.wado::char::from_u32"(code);
 }
 
@@ -12127,7 +12127,7 @@ pub fn "mess_dirty.wado/Access^core:prelude/traits.wado/ReflectFlags::from_bits"
 }
 
 pub fn "mess_dirty.wado/Access^core:prelude/traits.wado/ReflectFlags::members"() -> [FlagsBit<u32>, FlagsBit<u32>, FlagsBit<u32>] {
-    return [FlagsBit<mess_dirty.wado/Access> { bit: 1, value: 1 as u32, member_name: String { repr: packed"Read", used: 4 } }, FlagsBit<mess_dirty.wado/Access> { bit: 2, value: 2 as u32, member_name: String { repr: packed"Write", used: 5 } }, FlagsBit<mess_dirty.wado/Access> { bit: 4, value: 4 as u32, member_name: String { repr: packed"Execute", used: 7 } }];
+    return [FlagsBit<mess_dirty.wado/Access> { bit: 1, value: 1, member_name: String { repr: packed"Read", used: 4 } }, FlagsBit<mess_dirty.wado/Access> { bit: 2, value: 2, member_name: String { repr: packed"Write", used: 5 } }, FlagsBit<mess_dirty.wado/Access> { bit: 4, value: 4, member_name: String { repr: packed"Execute", used: 7 } }];
 }
 
 pub fn "mess_dirty.wado/Access^core:prelude/traits.wado/Reflect::wire_name_policy"() -> CaseStyle {

@@ -2184,7 +2184,7 @@ fn "core:json/write_escaped_string$spec0"(buf, s) {
     _licm_repr_40 = s.repr;
     b220: block {
         l221: loop {
-            break_if b220 i >= 4;
+            break_if b220 i >= 10;
             self_41 = _licm_repr_40;
             b = builtin::array_get_value<u8>(self_41, i);
             if select i32(select i32(b >=u 32, b != 34, 0), b != 92, 0) {
@@ -2205,7 +2205,7 @@ fn "core:json/write_escaped_string$spec0"(buf, s) {
     start_16 = buf.used;
     buf.used = new_used_15;
     builtin::array_set_u8(buf.repr, start_16, 34);
-    new_used_27 = buf.used + 5;
+    new_used_27 = buf.used + 11;
     if @unlikely(new_used_27 > builtin::array_len(buf.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(buf, new_used_27);
@@ -2213,8 +2213,8 @@ fn "core:json/write_escaped_string$spec0"(buf, s) {
     start_28 = buf.used;
     buf.used = new_used_27;
     self_30 = buf.repr;
-    builtin::array_copy<u8>(self_30, start_28, s.repr, 0, 4);
-    builtin::array_set_u8(buf.repr, start_28 + 4, 34);
+    builtin::array_copy<u8>(self_30, start_28, s.repr, 0, 10);
+    builtin::array_set_u8(buf.repr, start_28 + 10, 34);
 }
 
 fn "core:json/write_escaped_string$spec1"(buf, s) {
@@ -2231,7 +2231,7 @@ fn "core:json/write_escaped_string$spec1"(buf, s) {
     _licm_repr_40 = s.repr;
     b225: block {
         l226: loop {
-            break_if b225 i >= 10;
+            break_if b225 i >= 4;
             self_41 = _licm_repr_40;
             b = builtin::array_get_value<u8>(self_41, i);
             if select i32(select i32(b >=u 32, b != 34, 0), b != 92, 0) {
@@ -2252,7 +2252,7 @@ fn "core:json/write_escaped_string$spec1"(buf, s) {
     start_16 = buf.used;
     buf.used = new_used_15;
     builtin::array_set_u8(buf.repr, start_16, 34);
-    new_used_27 = buf.used + 11;
+    new_used_27 = buf.used + 5;
     if @unlikely(new_used_27 > builtin::array_len(buf.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(buf, new_used_27);
@@ -2260,8 +2260,8 @@ fn "core:json/write_escaped_string$spec1"(buf, s) {
     start_28 = buf.used;
     buf.used = new_used_27;
     self_30 = buf.repr;
-    builtin::array_copy<u8>(self_30, start_28, s.repr, 0, 10);
-    builtin::array_set_u8(buf.repr, start_28 + 10, 34);
+    builtin::array_copy<u8>(self_30, start_28, s.repr, 0, 4);
+    builtin::array_set_u8(buf.repr, start_28 + 4, 34);
 }
 
 fn "core:json/write_escaped_string_from$spec0"(buf, s, first) {
@@ -2289,7 +2289,7 @@ fn "core:json/write_escaped_string_from$spec0"(buf, s, first) {
     _licm_repr_52 = s.repr;
     b231: block {
         l232: loop {
-            break_if b231 @likely(i >= 4);
+            break_if b231 @likely(i >= 10);
             $for_0_body: block {
                 b_6 = builtin::array_get_value<u8>(_licm_repr_52, i);
                 break_if $for_0_body @likely(select i32(select i32(b_6 >=u 32, b_6 != 34, 0), b_6 != 92, 0));
@@ -2303,7 +2303,7 @@ fn "core:json/write_escaped_string_from$spec0"(buf, s, first) {
         };
     };
     $inline_core_prelude_string_wado_String__push_str_range_unchecked_9: block {
-        n_31 = 4 - run_start;
+        n_31 = 10 - run_start;
         break_if $inline_core_prelude_string_wado_String__push_str_range_unchecked_9 n_31 <= 0;
         new_used_35 = buf.used + n_31;
         if @unlikely(new_used_35 > builtin::array_len(buf.repr)) {
@@ -2349,7 +2349,7 @@ fn "core:json/write_escaped_string_from$spec1"(buf, s, first) {
     _licm_repr_52 = s.repr;
     b236: block {
         l237: loop {
-            break_if b236 @likely(i >= 10);
+            break_if b236 @likely(i >= 4);
             $for_0_body: block {
                 b_6 = builtin::array_get_value<u8>(_licm_repr_52, i);
                 break_if $for_0_body @likely(select i32(select i32(b_6 >=u 32, b_6 != 34, 0), b_6 != 92, 0));
@@ -2363,7 +2363,7 @@ fn "core:json/write_escaped_string_from$spec1"(buf, s, first) {
         };
     };
     $inline_core_prelude_string_wado_String__push_str_range_unchecked_9: block {
-        n_31 = 10 - run_start;
+        n_31 = 4 - run_start;
         break_if $inline_core_prelude_string_wado_String__push_str_range_unchecked_9 n_31 <= 0;
         new_used_35 = buf.used + n_31;
         if @unlikely(new_used_35 > builtin::array_len(buf.repr)) {
@@ -3362,10 +3362,10 @@ fn "core:json/core:json/JsonDeserializer::expect_char_error"(self, c) {
         return struct.new "core:serde//DeserializeError" { kind: 8, message: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("unexpected end of input"), used: 23 }, offset: builtin::i64_extend_i32_s(_av_62) };
     }
     b = builtin::array_get_value<u8>(self.input.repr, self.input.start + _av_62);
-    return __local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(53), used: 0 }, __local_3.used = 10, builtin::array_copy<u8>(__local_3.repr, 0, global:core:json::__const_obj_16, 0, 10), __local_4 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_3 }, __sroa_self_value_61 = c & 255, f_24 = __local_4, self_26 = f_24.buf, "core:prelude/string.wado/core:prelude/string.wado/String::push"(self_26, __sroa_self_value_61), new_used_36 = __local_3.used + 10, if @unlikely(new_used_36 > builtin::array_len(__local_3.repr)) {
+    return __local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(53), used: 0 }, __local_3.used = 10, builtin::array_copy<u8>(__local_3.repr, 0, global:core:json::__const_obj_16, 0, 10), __local_4 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_3 }, __sroa_self_value_60 = c & 255, f_24 = __local_4, self_26 = f_24.buf, "core:prelude/string.wado/core:prelude/string.wado/String::push"(self_26, __sroa_self_value_60), new_used_36 = __local_3.used + 10, if @unlikely(new_used_36 > builtin::array_len(__local_3.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(__local_3, new_used_36);
-    }, start_37 = __local_3.used, __local_3.used = new_used_36, builtin::array_copy<u8>(__local_3.repr, start_37, global:core:json::__const_obj_15, 0, 10), __local_4 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_3 }, __sroa_self_value_60 = b & 255, f_41 = __local_4, self_43 = f_41.buf, "core:prelude/string.wado/core:prelude/string.wado/String::push"(self_43, __sroa_self_value_60), new_used_51 = __local_3.used + 1, if @unlikely(new_used_51 > builtin::array_len(__local_3.repr)) {
+    }, start_37 = __local_3.used, __local_3.used = new_used_36, builtin::array_copy<u8>(__local_3.repr, start_37, global:core:json::__const_obj_15, 0, 10), __local_4 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_3 }, __sroa_self_value_61 = b & 255, f_41 = __local_4, self_43 = f_41.buf, "core:prelude/string.wado/core:prelude/string.wado/String::push"(self_43, __sroa_self_value_61), new_used_51 = __local_3.used + 1, if @unlikely(new_used_51 > builtin::array_len(__local_3.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(__local_3, new_used_51);
     }, start_52 = __local_3.used, __local_3.used = new_used_51, builtin::array_set_u8(__local_3.repr, start_52, 39), struct.new "core:serde//DeserializeError" { kind: 6, message: __local_3, offset: builtin::i64_extend_i32_s(self.pos) };
@@ -4421,7 +4421,7 @@ fn "core:serde/serde_case_rename.wado/Command^core:serde/Serialize::serialize<co
         start_63 = s.used;
         s.used = new_used_62;
         builtin::array_set_u8(s.repr, start_63, 123);
-        "core:json/write_escaped_string$spec1"(s, global:core:serde::__const_obj_64);
+        "core:json/write_escaped_string$spec0"(s, global:core:serde::__const_obj_64);
         new_used_76 = s.used + 1;
         if @unlikely(new_used_76 > builtin::array_len(s.repr)) {
             cold_path;
@@ -4447,7 +4447,7 @@ fn "core:serde/serde_case_rename.wado/Command^core:serde/Serialize::serialize<co
         }, start_102 = s.used, s.used = new_used_101, builtin::array_set_u8(s.repr, start_102, 125), ref.null none;
     }
     if self.value.discriminant == 1 {
-        return "core:json/write_escaped_string$spec0"(s, global:core:serde::__const_obj_63), ref.null none;
+        return "core:json/write_escaped_string$spec1"(s, global:core:serde::__const_obj_63), ref.null none;
     }
     case_23 = global:core:serde::__const_obj_65.2;
     if self.value.discriminant == 2 {
