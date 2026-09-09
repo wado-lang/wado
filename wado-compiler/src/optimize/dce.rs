@@ -4,6 +4,8 @@
 //! filter passes are pure mutators over those sets, with no re-analysis. See
 //! `crate::optimize::run_dce`: analyze once, then mutate in dependency order.
 
+use std::ops::ControlFlow;
+
 use crate::canonical::CmCallTarget;
 use crate::hashmap::IndexSet;
 
@@ -438,8 +440,7 @@ fn has_short_push_str_candidate(project: &NirPackage, push_str_id: crate::nir::F
 const SHORT_PUSH_STR_MAX_LEN: usize = 8;
 
 fn body_has_short_push_str(body: &Body, push_str_id: crate::nir::FuncId) -> bool {
-    let mut stack = vec![NodeRef::Block(body.root)];
-    while let Some(node) = stack.pop() {
+    body.find_in_nodes_under(NodeRef::Block(body.root), |node| {
         if let NodeRef::Expr(e) = node
             && let Some((_, func_id, args)) = body.exprs[e].kind.as_method_call()
             && func_id == push_str_id
@@ -461,11 +462,11 @@ fn body_has_short_push_str(body: &Body, push_str_id: crate::nir::FuncId) -> bool
             && bytes.len() <= SHORT_PUSH_STR_MAX_LEN
             && bytes.is_ascii()
         {
-            return true;
+            return Some(());
         }
-        body.for_each_child(node, |c| stack.push(c));
-    }
-    false
+        None
+    })
+    .is_some()
 }
 
 /// Walk `block`'s expression tree and collect every `T` such that
@@ -477,8 +478,7 @@ fn collect_array_clone_element_types(
     descriptors: &[FunctionRef],
     out: &mut IndexSet<crate::tir::TypeId>,
 ) {
-    let mut stack = vec![NodeRef::Block(body.root)];
-    while let Some(node) = stack.pop() {
+    body.for_each_node_under(NodeRef::Block(body.root), |node| {
         if let NodeRef::Expr(e) = node
             && let ExprKind::Call {
                 func_id, type_args, ..
@@ -504,8 +504,7 @@ fn collect_array_clone_element_types(
                 out.insert(elem);
             }
         }
-        body.for_each_child(node, |c| stack.push(c));
-    }
+    });
 }
 
 /// Compute reachable functions from all entry points via call graph traversal.
@@ -685,18 +684,17 @@ fn collect_bytes_literals_block(body: &Body, root: BlockId, used: &mut IndexSet<
     // any string / bytes literal), excluding patterns (the tree walk never
     // descended into `LetDestructure` / match-arm patterns, so a payload inside
     // a `ConstantValue` pattern is not counted).
-    let mut stack = vec![NodeRef::Block(root)];
-    while let Some(node) = stack.pop() {
+    body.walk_nodes_under::<()>(NodeRef::Block(root), |node| {
         if matches!(node, NodeRef::Pat(_)) {
-            continue;
+            return ControlFlow::Continue(false);
         }
         if let NodeRef::Expr(e) = node
             && let ExprKind::PackedArray(b) = &body.exprs[e].kind
         {
             used.insert(b.clone());
         }
-        body.for_each_child(node, |c| stack.push(c));
-    }
+        ControlFlow::Continue(true)
+    });
 }
 /// Remove closure functors whose `__call` method was eliminated by function DCE.
 pub fn remove_unreachable_closure_functors(project: &mut NirPackage) {
@@ -934,8 +932,7 @@ fn scan_inspect_signatures_block(
     inspect_name: &str,
     sigs: &mut InspectableSignatures,
 ) {
-    let mut stack = vec![NodeRef::Block(body.root)];
-    while let Some(node) = stack.pop() {
+    body.for_each_node_under(NodeRef::Block(body.root), |node| {
         if let NodeRef::Expr(e) = node
             && let Some((receiver, func_id, _)) = body.exprs[e].kind.as_method_call()
             && let Some(info) = &callee_descriptor(descriptors, func_id).method_info
@@ -955,8 +952,7 @@ fn scan_inspect_signatures_block(
                 sigs.insert((params.len(), *return_type));
             }
         }
-        body.for_each_child(node, |c| stack.push(c));
-    }
+    });
 }
 
 /// Single-walk DCE fact collector: a [`NirRefVisitor`] that collects
@@ -2045,41 +2041,29 @@ pub(super) fn deletable_value(
     let Some(root) = value.as_expr() else {
         return false;
     };
-    let mut stack = vec![NodeRef::Expr(root)];
-    while let Some(node) = stack.pop() {
-        match node {
-            NodeRef::Expr(id) => match &body.exprs[id].kind {
-                ExprKind::Call { func_id, .. } => {
-                    let effect = effects
-                        .get(func_id.index())
-                        .copied()
-                        .unwrap_or_else(super::mod_ref::FnEffect::opaque);
-                    if !effect.is_pure() || effect.may_trap {
-                        return false;
-                    }
-                }
-                ExprKind::GlobalVarSet { .. }
-                | ExprKind::Assign { .. }
-                | ExprKind::IndirectCall { .. }
-                | ExprKind::CmRawCall { .. } => return false,
-                _ => {
-                    if super::arena_query::expr_node_may_trap(body, id) {
-                        return false;
-                    }
-                }
-            },
-            // A block statement that is not a binding or a discarded value
-            // leaves the region, and deleting it would take the exit with it.
-            NodeRef::Stmt(s) => {
-                if !matches!(body.stmts[s].kind, StmtKind::Let { .. } | StmtKind::Expr(_)) {
-                    return false;
-                }
+    body.find_in_nodes_under(NodeRef::Expr(root), |node| match node {
+        NodeRef::Expr(id) => match &body.exprs[id].kind {
+            ExprKind::Call { func_id, .. } => {
+                let effect = effects
+                    .get(func_id.index())
+                    .copied()
+                    .unwrap_or_else(super::mod_ref::FnEffect::opaque);
+                (!effect.is_pure() || effect.may_trap).then_some(())
             }
-            NodeRef::Block(_) | NodeRef::Pat(_) => {}
+            ExprKind::GlobalVarSet { .. }
+            | ExprKind::Assign { .. }
+            | ExprKind::IndirectCall { .. }
+            | ExprKind::CmRawCall { .. } => Some(()),
+            _ => super::arena_query::expr_node_may_trap(body, id).then_some(()),
+        },
+        // A block statement that is not a binding or a discarded value
+        // leaves the region, and deleting it would take the exit with it.
+        NodeRef::Stmt(s) => {
+            (!matches!(body.stmts[s].kind, StmtKind::Let { .. } | StmtKind::Expr(_))).then_some(())
         }
-        body.for_each_child(node, |c| stack.push(c));
-    }
-    true
+        NodeRef::Block(_) | NodeRef::Pat(_) => None,
+    })
+    .is_none()
 }
 
 fn lazy_guard_global(

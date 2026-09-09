@@ -974,7 +974,7 @@ fn "core:json/write_plain_key$spec0"(buf, name, count) {
     start_25 = buf.used;
     buf.used = new_used_24;
     builtin::array_set_u8(buf.repr, start_25, 34);
-    new_used_36 = buf.used + 7;
+    new_used_36 = buf.used + 6;
     if @unlikely(new_used_36 > builtin::array_len(buf.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(buf, new_used_36);
@@ -982,9 +982,9 @@ fn "core:json/write_plain_key$spec0"(buf, name, count) {
     start_37 = buf.used;
     buf.used = new_used_36;
     self_39 = buf.repr;
-    builtin::array_copy<u8>(self_39, start_37, name.repr, 0, 5);
-    builtin::array_set_u8(buf.repr, start_37 + 5, 34);
-    builtin::array_set_u8(buf.repr, start_37 + 6, 58);
+    builtin::array_copy<u8>(self_39, start_37, name.repr, 0, 4);
+    builtin::array_set_u8(buf.repr, start_37 + 4, 34);
+    builtin::array_set_u8(buf.repr, start_37 + 5, 58);
 }
 
 fn "core:json/write_plain_key$spec1"(buf, name, count) {
@@ -1013,7 +1013,7 @@ fn "core:json/write_plain_key$spec1"(buf, name, count) {
     start_25 = buf.used;
     buf.used = new_used_24;
     builtin::array_set_u8(buf.repr, start_25, 34);
-    new_used_36 = buf.used + 6;
+    new_used_36 = buf.used + 7;
     if @unlikely(new_used_36 > builtin::array_len(buf.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(buf, new_used_36);
@@ -1021,9 +1021,9 @@ fn "core:json/write_plain_key$spec1"(buf, name, count) {
     start_37 = buf.used;
     buf.used = new_used_36;
     self_39 = buf.repr;
-    builtin::array_copy<u8>(self_39, start_37, name.repr, 0, 4);
-    builtin::array_set_u8(buf.repr, start_37 + 4, 34);
-    builtin::array_set_u8(buf.repr, start_37 + 5, 58);
+    builtin::array_copy<u8>(self_39, start_37, name.repr, 0, 5);
+    builtin::array_set_u8(buf.repr, start_37 + 5, 34);
+    builtin::array_set_u8(buf.repr, start_37 + 6, 58);
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(capacity) {
@@ -2106,7 +2106,7 @@ fn "core:serde/const_object_unhoist_unobserved.wado/Pair^core:serde/Serialize::s
     s.used = new_used_30;
     builtin::array_set_u8(s.repr, start_31, 123);
     v_47 = self.left;
-    "core:json/write_plain_key$spec1"(s, global:core:serde::__const_obj_59, 0);
+    "core:json/write_plain_key$spec0"(s, global:core:serde::__const_obj_59, 0);
     "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(v_47, s);
     if @likely(ref.is_null(ref.null none)) {
     } else {
@@ -2118,7 +2118,7 @@ fn "core:serde/const_object_unhoist_unobserved.wado/Pair^core:serde/Serialize::s
         global:core:serde::__const_obj_58 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("right"), used: 5 };
     }
     v_56 = self.right;
-    "core:json/write_plain_key$spec0"(s, global:core:serde::__const_obj_58, 1);
+    "core:json/write_plain_key$spec1"(s, global:core:serde::__const_obj_58, 1);
     "core:json/write_escaped_string"(s, v_56);
     if @likely(ref.is_null(ref.null none)) {
     } else {

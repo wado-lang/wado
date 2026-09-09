@@ -13,7 +13,7 @@ use crate::nir::{NirBinaryOp, NirUnaryOp};
 use crate::nir_arena::{
     ArmData, BlockId, Body, ExprId, ExprKind, Operand, PatId, PatKind, StmtKind,
 };
-use crate::nir_value_graph::ValueId;
+use crate::nir_value_graph::{OpaqueSource, ValueId, ValueKind, value_kind_to_const};
 use crate::tir::{PrimitiveType, ResolvedType, TypeId};
 
 use super::CtfeBuiltin;
@@ -35,6 +35,11 @@ impl Interpreter<'_> {
     /// A promoted pure value as a `Lattice`, through the one projection,
     /// [`crate::nir_value_graph::value_kind_to_const`]. A copy here would
     /// silently drop whatever kind it was not taught about.
+    #[cfg(test)]
+    pub(super) fn value_to_lattice_for_test(&self, body: &Body, v: ValueId) -> Lattice {
+        self.value_to_lattice(body, v)
+    }
+
     fn value_to_lattice(&self, body: &Body, v: ValueId) -> Lattice {
         let Some(ty) = body.values.type_of(v) else {
             return Lattice::Unevaluated;
@@ -45,10 +50,34 @@ impl Interpreter<'_> {
             matches!(self.type_table.get(ty), ResolvedType::Enum { .. })
                 .then_some(PrimitiveType::I32)
         });
-        match crate::nir_value_graph::value_kind_to_const(body.values.kind(v), prim) {
-            Some(value) => Lattice::Const(value),
-            None => Lattice::Unevaluated,
+        if let Some(value) = value_kind_to_const(body.values.kind(v), prim) {
+            return Lattice::Const(value);
         }
+        // Not a bare constant. A promoted operand holds the computation the
+        // skeleton would have held, so it goes to the same rules: `try_fold` for
+        // arithmetic, the frame for a local leaf. Stopping at the pool boundary
+        // is what leaves a frozen `i * i` unevaluable, and a foldable loop then
+        // survives to run time.
+        if let ValueKind::Opaque(oid) = body.values.kind(v) {
+            return match body.values.opaque_source(*oid) {
+                Some(OpaqueSource::Local(idx)) => self.local_lattice(idx),
+                _ => Lattice::Unevaluated,
+            };
+        }
+        self.try_fold_operand(body, Operand::Value(v))
+    }
+
+    /// What a local denotes at this point. An aliased local is read through its
+    /// place, never out of `env`; only [`Self::projected_lattice`] resolves one.
+    fn local_lattice(&self, idx: u32) -> Lattice {
+        if self.frame.place_aliases.contains_key(&idx) {
+            return Lattice::Unevaluated;
+        }
+        self.frame
+            .env
+            .get(&idx)
+            .cloned()
+            .unwrap_or(Lattice::Unevaluated)
     }
 
     /// The global a field read resolves against: a direct `GLOBAL.f`, or a
@@ -238,17 +267,7 @@ impl Interpreter<'_> {
         }
         let node = &body.exprs[e];
         match &node.kind {
-            // Only a projection resolves an alias — see
-            // [`Self::projected_lattice`].
-            ExprKind::Local { index, .. } if self.frame.place_aliases.contains_key(index) => {
-                Lattice::Unevaluated
-            }
-            ExprKind::Local { index, .. } => self
-                .frame
-                .env
-                .get(index)
-                .cloned()
-                .unwrap_or(Lattice::Unevaluated),
+            ExprKind::Local { index, .. } => self.local_lattice(*index),
             ExprKind::FieldAccess {
                 expr: inner,
                 field_index,
@@ -362,46 +381,48 @@ impl Interpreter<'_> {
     /// operating on it, and `eval_unary` would bury the referent's own constant
     /// as non-constant.
     pub fn try_fold(&self, body: &Body, e: ExprId) -> Lattice {
-        let node = &body.exprs[e];
-        match &node.kind {
-            ExprKind::Binary { left, op, right } => {
-                let l = match self.operand_to_lattice(body, *left) {
+        self.try_fold_operand(body, Operand::Expr(e))
+    }
+
+    /// [`Self::try_fold`] over either tier. The rules live here and nowhere
+    /// else: a promoted operand is the same computation as the skeleton node it
+    /// replaced, so it must fold by the same ones.
+    pub fn try_fold_operand(&self, body: &Body, operand: Operand) -> Lattice {
+        match arith_view(body, operand) {
+            Some(Arith::Binary { op, lhs, rhs }) => {
+                let l = match self.operand_to_lattice(body, lhs) {
                     Lattice::Const(v) => v,
                     other => return other,
                 };
                 // The right operand does not run at run time either, so what it
                 // would have done — a read past the end, guarded by the very
                 // test that short-circuits — must not leave the test unknown.
-                if let Some(decided) = short_circuit_result(&l, *op) {
+                if let Some(decided) = short_circuit_result(&l, op) {
                     return Lattice::Const(Value::Bool(decided));
                 }
-                let r = match self.operand_to_lattice(body, *right) {
+                let r = match self.operand_to_lattice(body, rhs) {
                     Lattice::Const(v) => v,
                     other => return other,
                 };
-                option_to_lattice(eval_binary(l, *op, r))
+                option_to_lattice(eval_binary(l, op, r))
             }
-            ExprKind::Unary {
-                op: NirUnaryOp::Ref,
-                ..
-            } => Lattice::Unevaluated,
-            ExprKind::Unary { op, expr: inner } => {
-                let v = match self.operand_to_lattice(body, *inner) {
+            Some(Arith::Unary { op, operand }) => {
+                let v = match self.operand_to_lattice(body, operand) {
                     Lattice::Const(v) => v,
                     other => return other,
                 };
-                option_to_lattice(eval_unary(*op, v))
+                option_to_lattice(eval_unary(op, v))
             }
-            ExprKind::Cast { expr: inner, .. } => {
-                let Some(target) = prim_of(node.type_id, self.type_table) else {
+            Some(Arith::Cast { operand, target }) => {
+                let Some(target) = prim_of(target, self.type_table) else {
                     return Lattice::Unevaluated;
                 };
-                match self.operand_to_lattice(body, *inner) {
+                match self.operand_to_lattice(body, operand) {
                     Lattice::Const(v) => option_to_lattice(eval_cast(v, target)),
                     other => other,
                 }
             }
-            _ => Lattice::Unevaluated,
+            None => Lattice::Unevaluated,
         }
     }
 
@@ -746,6 +767,68 @@ pub(super) fn pattern_is_catch_all(body: &Body, pat: PatId) -> bool {
 
 /// What a short-circuit yields on its left operand alone: `false && _` and
 /// `true || _`. `None` where the right operand still decides.
+/// One arithmetic node, whichever tier holds it. The two tiers spell the same
+/// computation differently, and every rule written against this shape is
+/// written once for both.
+enum Arith {
+    Binary {
+        op: NirBinaryOp,
+        lhs: Operand,
+        rhs: Operand,
+    },
+    Unary {
+        op: NirUnaryOp,
+        operand: Operand,
+    },
+    Cast {
+        operand: Operand,
+        /// The type cast *to*, which the skeleton carries on the node and the
+        /// pool inside the kind.
+        target: TypeId,
+    },
+}
+
+/// `operand` as an [`Arith`], or `None` where it is not arithmetic. A borrow
+/// denotes its referent rather than operating on it, so it is not one; the pool
+/// has no kind for it either.
+fn arith_view(body: &Body, operand: Operand) -> Option<Arith> {
+    match operand {
+        Operand::Expr(e) => match &body.exprs[e].kind {
+            ExprKind::Binary { left, op, right } => Some(Arith::Binary {
+                op: *op,
+                lhs: *left,
+                rhs: *right,
+            }),
+            ExprKind::Unary { op, .. } if !op.is_pooled() => None,
+            ExprKind::Unary { op, expr: inner } => Some(Arith::Unary {
+                op: *op,
+                operand: *inner,
+            }),
+            ExprKind::Cast { expr: inner, .. } => Some(Arith::Cast {
+                operand: *inner,
+                target: body.exprs[e].type_id,
+            }),
+            _ => None,
+        },
+        Operand::Value(v) => match body.values.kind(v) {
+            ValueKind::Binary { op, lhs, rhs, .. } => Some(Arith::Binary {
+                op: *op,
+                lhs: Operand::Value(*lhs),
+                rhs: Operand::Value(*rhs),
+            }),
+            ValueKind::Unary { op, operand, .. } => Some(Arith::Unary {
+                op: *op,
+                operand: Operand::Value(*operand),
+            }),
+            ValueKind::Cast { operand, target } => Some(Arith::Cast {
+                operand: Operand::Value(*operand),
+                target: *target,
+            }),
+            _ => None,
+        },
+    }
+}
+
 fn short_circuit_result(left: &Value, op: NirBinaryOp) -> Option<bool> {
     match (left.as_bool()?, op) {
         (false, NirBinaryOp::And) => Some(false),

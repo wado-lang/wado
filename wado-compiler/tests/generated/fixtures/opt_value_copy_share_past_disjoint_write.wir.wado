@@ -131,9 +131,9 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::set_by
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar" = fn(ref Array<u8>, i32, ref "core:prelude/string.wado//String", i32);  // TypeId(41)
 
-type "functype//core:prelude/traits.wado/opt_value_copy_share_past_disjoint_write.wado/Reader^core:prelude/traits.wado/Inspect::inspect$spec0" = fn(ref "opt_value_copy_share_past_disjoint_write.wado//Reader", ref "core:prelude/format.wado//Formatter");  // TypeId(42)
+type "functype//opt_value_copy_share_past_disjoint_write.wado/opt_value_copy_share_past_disjoint_write.wado/Reader::scan$spec0" = fn(ref "opt_value_copy_share_past_disjoint_write.wado//Reader") -> i32;  // TypeId(42)
 
-type "functype//opt_value_copy_share_past_disjoint_write.wado/opt_value_copy_share_past_disjoint_write.wado/Reader::scan$spec0" = fn(ref "opt_value_copy_share_past_disjoint_write.wado//Reader") -> i32;  // TypeId(43)
+type "functype//core:prelude/traits.wado/opt_value_copy_share_past_disjoint_write.wado/Reader^core:prelude/traits.wado/Inspect::inspect$spec0" = fn(ref "opt_value_copy_share_past_disjoint_write.wado//Reader", ref "core:prelude/format.wado//Formatter");  // TypeId(43)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(44)
 
@@ -1502,6 +1502,90 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str
     builtin::array_copy<u8>(self, offset, s.repr, 0, n);
 }
 
+fn "opt_value_copy_share_past_disjoint_write.wado/opt_value_copy_share_past_disjoint_write.wado/Reader::scan$spec0"(self) {
+    let raw: ref "core:prelude//List<i32>";
+    let pos: i32;
+    let b: i32;
+    let index_7: i32;
+    let index_22: i32;
+    let _licm_buf_27: ref "core:prelude//List<i32>";
+    let _licm_used_28: i32;
+    let _licm_repr_29: ref Array<i32>;
+    let _licm_used_30: i32;
+    let _licm_repr_31: ref Array<i32>;
+    let _licm_buf_32: ref "core:prelude//List<i32>";
+    let _licm_used_33: i32;
+    let _licm_repr_34: ref Array<i32>;
+    let __hfs_pos_39: i32;
+    let __hfs_pos_40: i32;
+    _licm_buf_27 = self.buf;
+    _licm_used_28 = _licm_buf_27.used;
+    _licm_repr_29 = _licm_buf_27.repr;
+    __hfs_pos_39 = self.pos;
+    b144: block {
+        l145: loop {
+            if (if __hfs_pos_39 < 3 -> i32 {
+                index_7 = __hfs_pos_39; if @unlikely(index_7 >= _licm_used_28) {
+                    cold_path;
+                    "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"(index_7, _licm_used_28);
+                    unreachable;
+                }; builtin::array_get_value<i32>(_licm_repr_29, index_7) == 0;
+            } else {
+                0;
+            }) == 0 {
+                self.pos = __hfs_pos_39;
+                break b144;
+            }
+            __hfs_pos_39 = __hfs_pos_39 + 1;
+            continue l145;
+        };
+    };
+    raw = self.buf;
+    pos = self.pos;
+    _licm_used_30 = raw.used;
+    _licm_repr_31 = raw.repr;
+    _licm_buf_32 = self.buf;
+    _licm_used_33 = _licm_buf_32.used;
+    _licm_repr_34 = _licm_buf_32.repr;
+    b149: block {
+        l150: loop {
+            break_if b149 pos >= 3;
+            if @unlikely(pos >= _licm_used_30) {
+                cold_path;
+                "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"(pos, _licm_used_30);
+                unreachable;
+            }
+            b = builtin::array_get_value<i32>(_licm_repr_31, pos);
+            if b > 0 {
+                self.pos = pos + 1;
+                __hfs_pos_40 = self.pos;
+                b153: block {
+                    l154: loop {
+                        if (if __hfs_pos_40 < 3 -> i32 {
+                            index_22 = __hfs_pos_40; if @unlikely(index_22 >= _licm_used_33) {
+                                cold_path;
+                                "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"(index_22, _licm_used_33);
+                                unreachable;
+                            }; builtin::array_get_value<i32>(_licm_repr_34, index_22) == 0;
+                        } else {
+                            0;
+                        }) == 0 {
+                            self.pos = __hfs_pos_40;
+                            break b153;
+                        }
+                        __hfs_pos_40 = __hfs_pos_40 + 1;
+                        continue l154;
+                    };
+                };
+                return b;
+            }
+            pos = pos + 1;
+            continue l150;
+        };
+    };
+    return -1;
+}
+
 fn "core:prelude/traits.wado/opt_value_copy_share_past_disjoint_write.wado/Reader^core:prelude/traits.wado/Inspect::inspect$spec0"(self, f) {
     let field_6: ref "core:prelude/traits.wado//StructField<opt_value_copy_share_past_disjoint_write.wado/Reader,core:prelude/list.wado/List<i32>>";
     let field_7: ref "core:prelude/traits.wado//StructField<opt_value_copy_share_past_disjoint_write.wado/Reader,i32>";
@@ -1660,90 +1744,6 @@ fn "core:prelude/traits.wado/opt_value_copy_share_past_disjoint_write.wado/Reade
     start_210 = self_200.used;
     self_200.used = new_used_209;
     builtin::array_copy<u8>(self_200.repr, start_210, global:core:prelude/traits.wado::__const_obj_49, 0, 2);
-}
-
-fn "opt_value_copy_share_past_disjoint_write.wado/opt_value_copy_share_past_disjoint_write.wado/Reader::scan$spec0"(self) {
-    let raw: ref "core:prelude//List<i32>";
-    let pos: i32;
-    let b: i32;
-    let index_7: i32;
-    let index_22: i32;
-    let _licm_buf_27: ref "core:prelude//List<i32>";
-    let _licm_used_28: i32;
-    let _licm_repr_29: ref Array<i32>;
-    let _licm_used_30: i32;
-    let _licm_repr_31: ref Array<i32>;
-    let _licm_buf_32: ref "core:prelude//List<i32>";
-    let _licm_used_33: i32;
-    let _licm_repr_34: ref Array<i32>;
-    let __hfs_pos_39: i32;
-    let __hfs_pos_40: i32;
-    _licm_buf_27 = self.buf;
-    _licm_used_28 = _licm_buf_27.used;
-    _licm_repr_29 = _licm_buf_27.repr;
-    __hfs_pos_39 = self.pos;
-    b158: block {
-        l159: loop {
-            if (if __hfs_pos_39 < 3 -> i32 {
-                index_7 = __hfs_pos_39; if @unlikely(index_7 >= _licm_used_28) {
-                    cold_path;
-                    "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"(index_7, _licm_used_28);
-                    unreachable;
-                }; builtin::array_get_value<i32>(_licm_repr_29, index_7) == 0;
-            } else {
-                0;
-            }) == 0 {
-                self.pos = __hfs_pos_39;
-                break b158;
-            }
-            __hfs_pos_39 = __hfs_pos_39 + 1;
-            continue l159;
-        };
-    };
-    raw = self.buf;
-    pos = self.pos;
-    _licm_used_30 = raw.used;
-    _licm_repr_31 = raw.repr;
-    _licm_buf_32 = self.buf;
-    _licm_used_33 = _licm_buf_32.used;
-    _licm_repr_34 = _licm_buf_32.repr;
-    b163: block {
-        l164: loop {
-            break_if b163 pos >= 3;
-            if @unlikely(pos >= _licm_used_30) {
-                cold_path;
-                "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"(pos, _licm_used_30);
-                unreachable;
-            }
-            b = builtin::array_get_value<i32>(_licm_repr_31, pos);
-            if b > 0 {
-                self.pos = pos + 1;
-                __hfs_pos_40 = self.pos;
-                b167: block {
-                    l168: loop {
-                        if (if __hfs_pos_40 < 3 -> i32 {
-                            index_22 = __hfs_pos_40; if @unlikely(index_22 >= _licm_used_33) {
-                                cold_path;
-                                "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"(index_22, _licm_used_33);
-                                unreachable;
-                            }; builtin::array_get_value<i32>(_licm_repr_34, index_22) == 0;
-                        } else {
-                            0;
-                        }) == 0 {
-                            self.pos = __hfs_pos_40;
-                            break b167;
-                        }
-                        __hfs_pos_40 = __hfs_pos_40 + 1;
-                        continue l168;
-                    };
-                };
-                return b;
-            }
-            pos = pos + 1;
-            continue l164;
-        };
-    };
-    return -1;
 }
 
 export fn "opt_value_copy_share_past_disjoint_write.wado/__cm_export____test_0_scan" as "__test_0_scan"

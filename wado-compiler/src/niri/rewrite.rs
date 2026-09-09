@@ -708,6 +708,11 @@ impl Interpreter<'_> {
         }
     }
 
+    /// The snapshot is needed because the reduction mutates the body the
+    /// callback borrows. Its own `Vec` rather than a threaded frame stack: this
+    /// walk runs only where `niri` const-evaluates, which no compile profile
+    /// puts on the allocator's hot list, and threading one would reach five
+    /// signatures.
     fn walk_children(&mut self, body: &mut Body, node: NodeRef) -> bool {
         let mut children = Vec::new();
         body.for_each_child(node, |c| children.push(c));
@@ -1124,11 +1129,15 @@ pub(super) fn rewrite_short_circuit_via<S: EditSink>(sink: &mut S, e: ExprId) ->
         }
         _ => return false,
     };
-    let Some(keep_e) = keep.as_expr() else {
-        return false;
-    };
-    sink.become_expr(e, keep_e);
-    true
+    // The surviving side may be promoted, and then there is no node to move
+    // into `e` — the slot takes the value instead.
+    match keep {
+        Operand::Expr(keep_e) => {
+            sink.become_expr(e, keep_e);
+            true
+        }
+        Operand::Value(v) => sink.redirect_to_value(e, v),
+    }
 }
 
 /// The value a short-circuit collapses to when one operand is its absorbing
@@ -1316,14 +1325,10 @@ fn existing_fields(
 /// Whether anything inside `block` binds `local` — storage the block opened, as
 /// against a local it read from outside.
 fn block_binds_local(body: &Body, block: BlockId, local: u32) -> bool {
-    let mut stack = vec![NodeRef::Block(block)];
-    while let Some(node) = stack.pop() {
-        if body.binds_local(node, local) {
-            return true;
-        }
-        body.for_each_child(node, |c| stack.push(c));
-    }
-    false
+    body.find_in_nodes_under(NodeRef::Block(block), |node| {
+        body.binds_local(node, local).then_some(())
+    })
+    .is_some()
 }
 
 /// The operand `previous` holds at `index`, or `None` where it holds none.
@@ -1449,6 +1454,41 @@ mod tests {
         Value::Int {
             value,
             prim: crate::tir::PrimitiveType::I32,
+        }
+    }
+
+    /// A short circuit decides the same way in either tier. `false && x` is
+    /// `false` however unevaluable `x` is, and the pool holds that `Binary`
+    /// verbatim: `binary_folded` folds the neutral identities, not the
+    /// absorbing ones. Evaluating a promoted operand by rules of its own is how
+    /// this answered `Unevaluated` where the skeleton answered `Const(false)`.
+    #[test]
+    fn a_short_circuit_decides_in_the_pool_too() {
+        let table = TypeTable::new();
+        let interp = Interpreter::new(&table);
+        let mut body = Body::empty();
+
+        let never = body.values.fresh_opaque();
+        body.values.set_type(never, TypeTable::BOOL);
+        assert_eq!(
+            interp.value_to_lattice_for_test(&body, never),
+            Lattice::Unevaluated,
+            "the right operand has to be unevaluable for the test to mean anything"
+        );
+
+        for (op, konst, expected) in [
+            (NirBinaryOp::And, false, false),
+            (NirBinaryOp::Or, true, true),
+        ] {
+            let lhs = body.values.bool(konst);
+            body.values.set_type(lhs, TypeTable::BOOL);
+            let v = body.values.binary(op, lhs, never, TypeTable::BOOL);
+            body.values.set_type(v, TypeTable::BOOL);
+            assert_eq!(
+                interp.value_to_lattice_for_test(&body, v),
+                Lattice::Const(Value::Bool(expected)),
+                "{konst:?} {op:?} <unevaluable>"
+            );
         }
     }
 

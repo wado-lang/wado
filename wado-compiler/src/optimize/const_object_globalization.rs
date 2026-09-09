@@ -769,16 +769,14 @@ fn set_then_get_block(
 fn locals_declared_once(body: &Body) -> IndexSet<u32> {
     let mut seen: IndexSet<u32> = IndexSet::default();
     let mut dupes: IndexSet<u32> = IndexSet::default();
-    let mut stack = vec![NodeRef::Block(body.root)];
-    while let Some(node) = stack.pop() {
+    body.for_each_node_under(NodeRef::Block(body.root), |node| {
         if let NodeRef::Stmt(s) = node
             && let StmtKind::Let { local_index, .. } = &body.stmts[s].kind
             && !seen.insert(*local_index)
         {
             dupes.insert(*local_index);
         }
-        body.for_each_child(node, |c| stack.push(c));
-    }
+    });
     seen.retain(|idx| !dupes.contains(idx));
     seen
 }
@@ -1027,8 +1025,7 @@ fn detach_stmts(body: &mut Body, stmts: &[StmtId]) {
 /// The `GlobalVarSet` a hoist just planted, which every sibling rewrite folds
 /// its moved definitions into.
 fn find_global_var_set(body: &Body, module_source: &ModuleSource, name: &str) -> ExprId {
-    let mut stack = vec![NodeRef::Block(body.root)];
-    while let Some(node) = stack.pop() {
+    if let Some(e) = body.find_in_nodes_under(NodeRef::Block(body.root), |node| {
         if let NodeRef::Expr(e) = node
             && let ExprKind::GlobalVarSet {
                 name: n,
@@ -1038,9 +1035,11 @@ fn find_global_var_set(body: &Body, module_source: &ModuleSource, name: &str) ->
             && n == name
             && ms == module_source
         {
-            return e;
+            return Some(e);
         }
-        body.for_each_child(node, |c| stack.push(c));
+        None
+    }) {
+        return e;
     }
     panic!(
         "[NIR] const_object_globalization: GlobalVarSet for {name} went missing \
@@ -1053,13 +1052,11 @@ fn stmts_within_operand(body: &Body, value: Operand) -> IndexSet<StmtId> {
     let Some(e) = value.as_expr() else {
         return out;
     };
-    let mut stack = vec![NodeRef::Expr(e)];
-    while let Some(node) = stack.pop() {
+    body.for_each_node_under(NodeRef::Expr(e), |node| {
         if let NodeRef::Stmt(s) = node {
             out.insert(s);
         }
-        body.for_each_child(node, |c| stack.push(c));
-    }
+    });
     out
 }
 
@@ -1083,8 +1080,7 @@ fn sibling_const_locals(
     let mut sc = SiblingConsts::default();
     loop {
         let mut changed = false;
-        let mut stack = vec![NodeRef::Block(body.root)];
-        while let Some(node) = stack.pop() {
+        body.for_each_node_under(NodeRef::Block(body.root), |node| {
             if let NodeRef::Stmt(s) = node
                 && let StmtKind::Let {
                     local_index,
@@ -1103,8 +1099,7 @@ fn sibling_const_locals(
                 sc.let_stmts.insert(*local_index, s);
                 changed = true;
             }
-            body.for_each_child(node, |c| stack.push(c));
-        }
+        });
         if !changed {
             break;
         }
@@ -1131,8 +1126,7 @@ fn mutated_locals(body: &Body, gate: &Gate<'_>) -> IndexSet<u32> {
         }
     };
     let mut out: IndexSet<u32> = IndexSet::default();
-    let mut stack = vec![NodeRef::Block(body.root)];
-    while let Some(node) = stack.pop() {
+    body.for_each_node_under(NodeRef::Block(body.root), |node| {
         if let NodeRef::Expr(id) = node {
             match &body.exprs[id].kind {
                 ExprKind::Assign { target, .. } => {
@@ -1170,8 +1164,7 @@ fn mutated_locals(body: &Body, gate: &Gate<'_>) -> IndexSet<u32> {
                 _ => {}
             }
         }
-        body.for_each_child(node, |c| stack.push(c));
-    }
+    });
     out
 }
 
@@ -1185,8 +1178,7 @@ fn seeded_locals_read(body: &Body, value: Operand, siblings: &SiblingConsts) -> 
     while let Some(op) = pending.pop() {
         let Some(e) = op.as_expr() else { continue };
         let mut found = IndexSet::default();
-        let mut stack = vec![NodeRef::Expr(e)];
-        while let Some(node) = stack.pop() {
+        body.for_each_node_under(NodeRef::Expr(e), |node| {
             if let NodeRef::Expr(id) = node
                 && let ExprKind::Local { index, .. } = &body.exprs[id].kind
                 && siblings.set.contains(index)
@@ -1198,8 +1190,7 @@ fn seeded_locals_read(body: &Body, value: Operand, siblings: &SiblingConsts) -> 
                     body.values.collect_opaque_locals(v, &mut found);
                 }
             });
-            body.for_each_child(node, |c| stack.push(c));
-        }
+        });
         for idx in found {
             if siblings.set.contains(&idx) && out.insert(idx) {
                 pending.extend(siblings.defs.get(&idx).copied());
@@ -1216,8 +1207,7 @@ fn seeded_locals_read(body: &Body, value: Operand, siblings: &SiblingConsts) -> 
 /// unseen.
 fn count_reads_of(body: &Body, node: NodeRef, wanted: &IndexSet<u32>) -> IndexMap<u32, usize> {
     let mut counts: IndexMap<u32, usize> = IndexMap::default();
-    let mut stack = vec![node];
-    while let Some(node) = stack.pop() {
+    body.for_each_node_under(node, |node| {
         if let NodeRef::Expr(id) = node
             && let ExprKind::Local { index, .. } = &body.exprs[id].kind
             && wanted.contains(index)
@@ -1234,8 +1224,7 @@ fn count_reads_of(body: &Body, node: NodeRef, wanted: &IndexSet<u32>) -> IndexMa
                 *counts.entry(*idx).or_default() += 1;
             }
         });
-        body.for_each_child(node, |c| stack.push(c));
-    }
+    });
     counts
 }
 
@@ -1831,13 +1820,12 @@ fn written_through(body: &Body, idx: u32, gate: &Gate<'_>) -> bool {
 fn param_storage_escapes(body: &Body, idx: u32, gate: &Gate<'_>) -> bool {
     let roots = projection_alias_roots(body, idx, gate, AliasRoots::WithReassigned);
     let escapes = |op: Operand| delivers_projection_operand(body, op, &roots, gate);
-    let mut stack = vec![NodeRef::Block(body.root)];
-    while let Some(node) = stack.pop() {
+    body.find_in_nodes_under(NodeRef::Block(body.root), |node| {
         match node {
             NodeRef::Stmt(s) => match &body.stmts[s].kind {
                 StmtKind::Return { value } | StmtKind::Break { value, .. } => {
                     if value.is_some_and(escapes) {
-                        return true;
+                        return Some(());
                     }
                 }
                 StmtKind::Let { value, .. } => {
@@ -1860,7 +1848,7 @@ fn param_storage_escapes(body: &Body, idx: u32, gate: &Gate<'_>) -> bool {
                     if escapes(*value)
                         && !assign_target_local(body, *target).is_some_and(|l| roots.contains(&l))
                     {
-                        return true;
+                        return Some(());
                     }
                 }
                 // A by-value `self` receiver hands the storage to the callee,
@@ -1873,7 +1861,7 @@ fn param_storage_escapes(body: &Body, idx: u32, gate: &Gate<'_>) -> bool {
                 } => {
                     let (receiver, first_rest) = match (has_receiver, args.split_first()) {
                         (true, Some(_)) => (args.first(), 1),
-                        (true, None) => return true,
+                        (true, None) => return Some(()),
                         (false, _) => (None, 0),
                     };
                     // Handing the storage on as a read-only borrow is not an
@@ -1891,27 +1879,27 @@ fn param_storage_escapes(body: &Body, idx: u32, gate: &Gate<'_>) -> bool {
                         {
                             continue;
                         }
-                        return true;
+                        return Some(());
                     }
                     if let Some(receiver) = receiver
                         && escapes(receiver.expr)
                         && !gate.callee_borrows_self(*func_id)
                     {
-                        return true;
+                        return Some(());
                     }
                 }
                 ExprKind::IndirectCall { args, .. } => {
                     if args.iter().any(|&a| escapes(a)) {
-                        return true;
+                        return Some(());
                     }
                 }
                 _ => {}
             },
             NodeRef::Block(_) | NodeRef::Pat(_) => {}
         }
-        body.for_each_child(node, |c| stack.push(c));
-    }
-    false
+        None
+    })
+    .is_some()
 }
 
 /// `idx` plus every local bound from something that can yield one of their
@@ -1950,8 +1938,7 @@ fn projection_alias_roots(body: &Body, idx: u32, gate: &Gate<'_>, which: AliasRo
             sites.push(AliasSite { yields, binds });
         }
     };
-    let mut stack = vec![NodeRef::Block(body.root)];
-    while let Some(node) = stack.pop() {
+    body.for_each_node_under(NodeRef::Block(body.root), |node| {
         match node {
             NodeRef::Stmt(s) => match &body.stmts[s].kind {
                 StmtKind::Let {
@@ -1990,8 +1977,7 @@ fn projection_alias_roots(body: &Body, idx: u32, gate: &Gate<'_>, which: AliasRo
             },
             NodeRef::Block(_) | NodeRef::Pat(_) => {}
         }
-        body.for_each_child(node, |c| stack.push(c));
-    }
+    });
     let mut roots = vec![idx];
     let mut i = 0;
     while i < roots.len() {
@@ -2074,16 +2060,14 @@ fn block_tail_delivers(body: &Body, block: BlockId, roots: &[u32], gate: &Gate<'
 
 /// Every local a pattern binds, appended to `out` if not already there.
 fn collect_pattern_bindings(body: &Body, pattern: crate::nir_arena::PatId, out: &mut Vec<u32>) {
-    let mut stack = vec![NodeRef::Pat(pattern)];
-    while let Some(node) = stack.pop() {
+    body.for_each_node_under(NodeRef::Pat(pattern), |node| {
         if let NodeRef::Pat(p) = node
             && let crate::nir_arena::PatKind::Binding { local_index, .. } = &body.pats[p].kind
             && !out.contains(local_index)
         {
             out.push(*local_index);
         }
-        body.for_each_child(node, |c| stack.push(c));
-    }
+    });
 }
 
 /// Every local whose storage evaluating `op` can produce: the root of each
@@ -2094,8 +2078,7 @@ fn yielded_roots(body: &Body, op: Operand, gate: &Gate<'_>) -> Vec<u32> {
     let Some(expr) = op.as_expr() else {
         return out;
     };
-    let mut stack = vec![NodeRef::Expr(expr)];
-    while let Some(node) = stack.pop() {
+    body.for_each_node_under(NodeRef::Expr(expr), |node| {
         if let NodeRef::Expr(e) = node
             && gate.is_reference_type(body.exprs[e].type_id)
             && let Some(root) = projection_root_of(body, e, gate)
@@ -2103,8 +2086,7 @@ fn yielded_roots(body: &Body, op: Operand, gate: &Gate<'_>) -> Vec<u32> {
         {
             out.push(root);
         }
-        body.for_each_child(node, |c| stack.push(c));
-    }
+    });
     out
 }
 
@@ -2397,15 +2379,13 @@ fn rewrite_reads(
     ty: TypeId,
 ) {
     let mut targets = Vec::new();
-    let mut stack = vec![NodeRef::Block(body.root)];
-    while let Some(node) = stack.pop() {
+    body.for_each_node_under(NodeRef::Block(body.root), |node| {
         if let NodeRef::Expr(id) = node
             && matches!(&body.exprs[id].kind, ExprKind::Local { index, .. } if *index == local_index)
         {
             targets.push(id);
         }
-        body.for_each_child(node, |c| stack.push(c));
-    }
+    });
     for id in targets {
         body.exprs[id].kind = ExprKind::GlobalVarGet {
             module_source: module_source.clone(),
@@ -2529,36 +2509,26 @@ fn inline_sibling_lets(
 /// past `ARRAY_NEW_FIXED_LIMIT`, which becomes a build sequence; and one
 /// `promote_constant_arrays_to_data` will rewrite to `array.new_data`.
 fn needs_lazy_guard(body: &Body, expr: ExprId, gate: &Gate<'_>, prefer_fixed: bool) -> bool {
-    let mut stack = vec![NodeRef::Expr(expr)];
-    while let Some(node) = stack.pop() {
-        if let NodeRef::Expr(id) = node {
-            match &body.exprs[id].kind {
-                ExprKind::Call { .. }
-                | ExprKind::IndirectCall { .. }
-                | ExprKind::CmRawCall { .. } => return true,
-                ExprKind::PackedArray(bytes) => {
-                    if !crate::wir_build::packed_array_is_eager(
-                        bytes.len(),
-                        gate.string_inline_max_bytes,
-                        prefer_fixed,
-                    ) {
-                        return true;
-                    }
-                }
-                ExprKind::ArrayLiteral { elements } => {
-                    if elements.len() > crate::wir_optimize::array::ARRAY_NEW_FIXED_LIMIT {
-                        return true;
-                    }
-                    if array_literal_promotes_to_data(body, elements, gate) {
-                        return true;
-                    }
-                }
-                _ => {}
+    body.find_in_nodes_under(NodeRef::Expr(expr), |node| {
+        let NodeRef::Expr(id) = node else { return None };
+        match &body.exprs[id].kind {
+            ExprKind::Call { .. } | ExprKind::IndirectCall { .. } | ExprKind::CmRawCall { .. } => {
+                Some(())
             }
+            ExprKind::PackedArray(bytes) => (!crate::wir_build::packed_array_is_eager(
+                bytes.len(),
+                gate.string_inline_max_bytes,
+                prefer_fixed,
+            ))
+            .then_some(()),
+            ExprKind::ArrayLiteral { elements } => (elements.len()
+                > crate::wir_optimize::array::ARRAY_NEW_FIXED_LIMIT
+                || array_literal_promotes_to_data(body, elements, gate))
+            .then_some(()),
+            _ => None,
         }
-        body.for_each_child(node, |c| stack.push(c));
-    }
-    false
+    })
+    .is_some()
 }
 
 /// Whether `promote_constant_arrays_to_data` will rewrite this literal to

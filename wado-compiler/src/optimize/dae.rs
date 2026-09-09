@@ -10,7 +10,7 @@ use crate::compiler_item::CompilerItem;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::nir::{FunctionKind, NirFunction};
-use crate::nir_arena::{Body, ExprId, ExprKind, NodeRef, Operand, PatKind, StmtKind};
+use crate::nir_arena::{Body, ExprId, ExprKind, NodeRef, PatKind, StmtKind};
 use crate::nir_package::NirPackage;
 
 use super::arena_query;
@@ -228,13 +228,11 @@ fn validate_in_body(
     rejected: &mut IndexSet<FnKey>,
     type_table: &crate::tir::TypeTable,
 ) {
-    let mut stack = vec![NodeRef::Block(body.root)];
-    while let Some(node) = stack.pop() {
+    body.for_each_node_under(NodeRef::Block(body.root), |node| {
         if let NodeRef::Expr(id) = node {
             validate_call(body, id, candidates, rejected, type_table);
         }
-        body.for_each_child(node, |c| stack.push(c));
-    }
+    });
 }
 
 fn validate_call(
@@ -259,14 +257,12 @@ fn validate_call(
             continue;
         }
         // Dropping the argument erases its evaluation, so a trapping (but
-        // side-effect-free) argument must keep the param alive.
-        let pure = match args.get(i).map(|a| a.expr) {
-            Some(Operand::Value(_)) => true,
-            Some(Operand::Expr(e)) => {
-                arena_query::is_pure_nontrapping_expr_typed(body, e, Some(type_table))
-            }
-            None => false,
-        };
+        // side-effect-free) argument must keep the param alive. A promoted
+        // operand is not exempt: it is pure by construction but `100 / zero`
+        // still traps, and the shared predicate answers for either form.
+        let pure = args.get(i).is_some_and(|a| {
+            arena_query::is_pure_nontrapping_operand_typed(body, a.expr, Some(type_table))
+        });
         if !pure {
             rejected.insert(key);
             break;
@@ -314,15 +310,13 @@ fn apply_dae(project: &mut NirPackage, confirmed: &IndexMap<FnKey, Vec<bool>>) -
 /// arguments, clearing `has_receiver` when the receiver itself is dropped.
 fn rewrite_calls_in_body(body: &mut Body, confirmed: &IndexMap<FnKey, Vec<bool>>) -> bool {
     let mut calls = Vec::new();
-    let mut stack = vec![NodeRef::Block(body.root)];
-    while let Some(node) = stack.pop() {
+    body.for_each_node_under(NodeRef::Block(body.root), |node| {
         if let NodeRef::Expr(id) = node
             && matches!(&body.exprs[id].kind, ExprKind::Call { .. })
         {
             calls.push(id);
         }
-        body.for_each_child(node, |c| stack.push(c));
-    }
+    });
     // Each rewrite drops arguments / collapses by the callee's dead set,
     // independent of the call's position, so processing order does not matter.
     let mut changed = false;
@@ -445,16 +439,12 @@ fn remap_locals(body: &mut Body, remap: &[Option<u32>]) {
     let mut exprs = Vec::new();
     let mut stmts = Vec::new();
     let mut pats = Vec::new();
-    let mut stack = vec![NodeRef::Block(body.root)];
-    while let Some(node) = stack.pop() {
-        match node {
-            NodeRef::Expr(id) => exprs.push(id),
-            NodeRef::Stmt(id) => stmts.push(id),
-            NodeRef::Pat(id) => pats.push(id),
-            NodeRef::Block(_) => {}
-        }
-        body.for_each_child(node, |c| stack.push(c));
-    }
+    body.for_each_node_under(NodeRef::Block(body.root), |node| match node {
+        NodeRef::Expr(id) => exprs.push(id),
+        NodeRef::Stmt(id) => stmts.push(id),
+        NodeRef::Pat(id) => pats.push(id),
+        NodeRef::Block(_) => {}
+    });
     for id in exprs {
         if let ExprKind::Local { index, .. } = &mut body.exprs[id].kind {
             *index = lookup(*index);

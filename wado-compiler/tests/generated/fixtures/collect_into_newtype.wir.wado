@@ -141,9 +141,9 @@ type "functype//core:prelude/primitive.wado/i32::fmt_decimal$scalar" = fn(i32, r
 
 type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write$spec0$scalar" = fn(ref "core:prelude/string.wado//String", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(47)
 
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar" = fn(i32, ref "core:prelude/string.wado//String");  // TypeId(48)
+type "functype//core:prelude/primitive.wado/u32::fmt_decimal$scalar$spec0$scalar" = fn(u32, ref "core:prelude/string.wado//String");  // TypeId(48)
 
-type "functype//core:prelude/primitive.wado/u32::fmt_decimal$scalar$spec0$scalar" = fn(u32, ref "core:prelude/string.wado//String");  // TypeId(49)
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar" = fn(i32, ref "core:prelude/string.wado//String");  // TypeId(49)
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(50)
 
@@ -1561,6 +1561,50 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
     }, start_57 = self.used, self.used = new_used_56, start_57;
 }
 
+fn "core:prelude/primitive.wado/u32::fmt_decimal$scalar$spec0$scalar"(self, f) {
+    let value: u64;
+    let digit_count_3: i32;
+    let offset_4: i32;
+    let n: i32;
+    let t_7: u64;
+    let arr: ref Array<u8>;
+    let pos: i32;
+    let t_13: u64;
+    let i: i32;
+    value = builtin::i64_extend_i32_u(self);
+    digit_count_3 = $inline_count_digits_u64_0: block -> i32 {
+        if value == 0_i64 {
+            break $inline_count_digits_u64_0: 1;
+        }
+        n = 0;
+        t_7 = value;
+        b149: block {
+            l150: loop {
+                break_if b149 t_7 <=u 0_i64;
+                n = n + 1;
+                t_7 = t_7 /u 10_i64;
+                continue l150;
+            };
+        };
+        break $inline_count_digits_u64_0: n;
+    };
+    offset_4 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write$spec0$scalar"(f, 0, global:core:prelude/primitive.wado::__const_obj_11, digit_count_3);
+    arr = f.repr;
+    pos = offset_4 + digit_count_3;
+    t_13 = value;
+    i = 0;
+    b151: block {
+        l152: loop {
+            break_if b151 i >= digit_count_3;
+            pos = pos - 1;
+            builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(t_13 %u 10_i64)) & 255);
+            t_13 = t_13 /u 10_i64;
+            i = i + 1;
+            continue l152;
+        };
+    };
+}
+
 fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(self, f) {
     let is_negative: bool;
     let abs_val: u64;
@@ -1582,12 +1626,12 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(self, f) {
         }
         n = 0;
         t_9 = abs_val;
-        b149: block {
-            l150: loop {
-                break_if b149 t_9 <=u 0_i64;
+        b154: block {
+            l155: loop {
+                break_if b154 t_9 <=u 0_i64;
                 n = n + 1;
                 t_9 = t_9 /u 10_i64;
-                continue l150;
+                continue l155;
             };
         };
         break $inline_count_digits_u64_1: n;
@@ -1597,56 +1641,12 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(self, f) {
     pos = offset_5 + digit_count_4;
     t_15 = abs_val;
     i = 0;
-    b151: block {
-        l152: loop {
-            break_if b151 i >= digit_count_4;
+    b156: block {
+        l157: loop {
+            break_if b156 i >= digit_count_4;
             pos = pos - 1;
             builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(t_15 %u 10_i64)) & 255);
             t_15 = t_15 /u 10_i64;
-            i = i + 1;
-            continue l152;
-        };
-    };
-}
-
-fn "core:prelude/primitive.wado/u32::fmt_decimal$scalar$spec0$scalar"(self, f) {
-    let value: u64;
-    let digit_count_3: i32;
-    let offset_4: i32;
-    let n: i32;
-    let t_7: u64;
-    let arr: ref Array<u8>;
-    let pos: i32;
-    let t_13: u64;
-    let i: i32;
-    value = builtin::i64_extend_i32_u(self);
-    digit_count_3 = $inline_count_digits_u64_0: block -> i32 {
-        if value == 0_i64 {
-            break $inline_count_digits_u64_0: 1;
-        }
-        n = 0;
-        t_7 = value;
-        b154: block {
-            l155: loop {
-                break_if b154 t_7 <=u 0_i64;
-                n = n + 1;
-                t_7 = t_7 /u 10_i64;
-                continue l155;
-            };
-        };
-        break $inline_count_digits_u64_0: n;
-    };
-    offset_4 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write$spec0$scalar"(f, 0, global:core:prelude/primitive.wado::__const_obj_11, digit_count_3);
-    arr = f.repr;
-    pos = offset_4 + digit_count_3;
-    t_13 = value;
-    i = 0;
-    b156: block {
-        l157: loop {
-            break_if b156 i >= digit_count_3;
-            pos = pos - 1;
-            builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(t_13 %u 10_i64)) & 255);
-            t_13 = t_13 /u 10_i64;
             i = i + 1;
             continue l157;
         };

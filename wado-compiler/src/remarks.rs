@@ -174,11 +174,7 @@ impl Collector<'_> {
     }
 
     fn scan_children(&mut self, body: &Body, node: NodeRef) {
-        let mut kids = Vec::new();
-        body.for_each_child(node, |c| kids.push(c));
-        for c in kids {
-            self.scan_node(body, c);
-        }
+        body.for_each_child(node, |c| self.scan_node(body, c));
     }
 }
 
@@ -312,8 +308,7 @@ struct ParamOrigin {
 /// and the operand it writes there.
 fn global_assignments(body: &Body) -> Vec<(GlobalKey, crate::nir_arena::Operand)> {
     let mut out = Vec::new();
-    let mut stack = vec![NodeRef::Block(body.root)];
-    while let Some(node) = stack.pop() {
+    body.for_each_node_under(NodeRef::Block(body.root), |node| {
         if let NodeRef::Expr(e) = node
             && let ExprKind::GlobalVarSet {
                 module_source,
@@ -323,8 +318,7 @@ fn global_assignments(body: &Body) -> Vec<(GlobalKey, crate::nir_arena::Operand)
         {
             out.push(((module_source.clone(), name.clone()), *value));
         }
-        body.for_each_child(node, |c| stack.push(c));
-    }
+    });
     out
 }
 
@@ -334,8 +328,7 @@ fn reads_decided_global(
     op: crate::nir_arena::Operand,
     decided: &IndexMap<GlobalKey, ParamOrigin>,
 ) -> Option<String> {
-    let mut stack = vec![NodeRef::Expr(op.as_expr()?)];
-    while let Some(node) = stack.pop() {
+    body.find_in_nodes_under(NodeRef::Expr(op.as_expr()?), |node| {
         if let NodeRef::Expr(e) = node
             && let ExprKind::GlobalVarGet {
                 module_source,
@@ -345,9 +338,8 @@ fn reads_decided_global(
         {
             return Some(origin.param.clone());
         }
-        body.for_each_child(node, |c| stack.push(c));
-    }
-    None
+        None
+    })
 }
 
 type GlobalKey = (ModuleSource, String);

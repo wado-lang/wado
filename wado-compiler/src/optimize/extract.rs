@@ -4,11 +4,17 @@
 //! rematerialize than to share, so they need no cost decision.
 //! [`extract_const`] is the shared primitive, used by `store_load_forward`.
 
+use std::cmp::Reverse;
+
+use crate::compiler_trace;
+use crate::hashmap::IndexMap;
 use crate::nir_arena::{ExprId, ExprKind, NodeRef, StmtKind};
 use crate::nir_engine::Engine;
 use crate::nir_value_graph::{ValueId, ValueKind};
+use crate::trace::filter;
 
 use super::arena_query::value_may_trap;
+use super::census;
 
 /// Rewrite a pure expression whose `ValueGraph` representative is a literal into
 /// that literal. Idempotent: an expression already holding the target literal
@@ -298,6 +304,7 @@ pub(super) fn freeze_pure_arith(
     let call_immutability = super::alias::CallImmutability::new(project, &type_table);
     let pure_builtin_callees = project.pure_builtin_callee_ids();
     let mut buffers = EngineBuffers::default();
+    let mut refusals = Refusals::new();
     let mut changed = false;
     for func_rc in &project.functions {
         let mut func = func_rc.borrow_mut();
@@ -378,7 +385,9 @@ pub(super) fn freeze_pure_arith(
         let candidates: Vec<ExprId> = engine.body.exprs.keys().collect();
         let mut to_freeze: Vec<(ExprId, ValueId)> = Vec::new();
         for id in candidates {
-            if let Some(entry) = classify_candidate(&mut engine, &ctx, id) {
+            let verdict = classify_candidate(&mut engine, &ctx, id);
+            refusals.note(&engine.body.exprs[id].kind, verdict.err());
+            if let Ok(entry) = verdict {
                 to_freeze.push(entry);
             }
         }
@@ -409,7 +418,75 @@ pub(super) fn freeze_pure_arith(
             }
         }
     }
+    refusals.report(phase, include_fields);
     changed
+}
+
+const TRACE_TARGET: &str = "freeze_refusals";
+
+/// Per-run tally of what kept the pure kinds in the skeleton, printed under
+/// `WADO_TRACE=freeze_refusals`. It counts nothing with the target off — this
+/// runs once per candidate expression of every function.
+struct Refusals {
+    enabled: bool,
+    pure_kinds: usize,
+    frozen: usize,
+    /// Refusal reason and the node kind it refused, so a reason that is really
+    /// one kind's story reads as one.
+    by_reason: IndexMap<(&'static str, &'static str), usize>,
+}
+
+impl Refusals {
+    fn new() -> Self {
+        Self {
+            enabled: filter().enabled(TRACE_TARGET),
+            pure_kinds: 0,
+            frozen: 0,
+            by_reason: IndexMap::default(),
+        }
+    }
+
+    /// Only a pure kind is tallied: it is the population the pool could hold, so
+    /// a refusal over it is what keeps the node in the skeleton.
+    fn note(&mut self, kind: &ExprKind, refusal: Option<Refusal>) {
+        if !self.enabled {
+            return;
+        }
+        let (kind_name, pure_kind) = census::classify(kind);
+        if !pure_kind {
+            return;
+        }
+        self.pure_kinds += 1;
+        match refusal {
+            None => self.frozen += 1,
+            Some(r) => *self.by_reason.entry((r.name(), kind_name)).or_default() += 1,
+        }
+    }
+
+    fn report(&self, phase: FreezePhase, include_fields: bool) {
+        let phase = match phase {
+            FreezePhase::Early => "early",
+            FreezePhase::Terminal => "terminal",
+        };
+        let pct = |n: usize| 100.0 * n as f64 / self.pure_kinds.max(1) as f64;
+        compiler_trace!(
+            TRACE_TARGET,
+            "{phase} (fields={include_fields}): {} pure kinds, {} frozen ({:.1}%)",
+            self.pure_kinds,
+            self.frozen,
+            pct(self.frozen)
+        );
+        let mut rows: Vec<((&str, &str), usize)> =
+            self.by_reason.iter().map(|(&k, &n)| (k, n)).collect();
+        rows.sort_by_key(|&(_, n)| Reverse(n));
+        for ((reason, kind), n) in rows {
+            compiler_trace!(
+                TRACE_TARGET,
+                "{phase} (fields={include_fields}):   {n:>7} {:>5.1}%  {reason} / {kind}",
+                pct(n)
+            );
+        }
+    }
 }
 
 /// Per-function analysis inputs consumed by the freeze decision. Borrowed sets
@@ -445,16 +522,48 @@ pub(super) enum FreezePhase {
     Terminal,
 }
 
+/// Why a candidate stayed in the skeleton. Tallied over the pure kinds under
+/// `WADO_TRACE=freeze_refusals`, which is how the gap between what the pool
+/// could hold and what it holds is sized.
+#[derive(Clone, Copy)]
+enum Refusal {
+    /// An lvalue position or a `let` value, where the skeleton form is wanted.
+    LValue,
+    /// Not one of the freeze's candidate kinds.
+    NotPureArith,
+    /// The value query resolved to nothing.
+    NoValue,
+    /// An early freeze plants no value naming a local; the bar is cost.
+    NamesALocal,
+    /// The value cannot be re-emitted at the use.
+    NotReemittable,
+    /// Re-emitting at each use would repeat work.
+    DuplicatesWork,
+}
+
+impl Refusal {
+    fn name(self) -> &'static str {
+        match self {
+            Refusal::LValue => "lvalue-or-let-value",
+            Refusal::NotPureArith => "not-a-candidate-kind",
+            Refusal::NoValue => "no-value",
+            Refusal::NamesALocal => "names-a-local",
+            Refusal::NotReemittable => "not-reemittable",
+            Refusal::DuplicatesWork => "duplicates-work",
+        }
+    }
+}
+
 /// Decide whether the value at `id` should be frozen, and to which
-/// representative. `None` leaves it in the skeleton. Two admission paths: an
-/// early constant-leaf promotion, and the pure-arith reemittability gate.
+/// representative. Two admission paths: an early constant-leaf promotion, and
+/// the pure-arith reemittability gate.
 fn classify_candidate(
     engine: &mut Engine,
     ctx: &FreezeCtx,
     id: ExprId,
-) -> Option<(ExprId, ValueId)> {
+) -> Result<(ExprId, ValueId), Refusal> {
     if engine.is_assign_target(id) || is_let_value(engine, id) {
-        return None;
+        return Err(Refusal::LValue);
     }
     // Constant-leaf promotion (early only, clean graph): a value-position
     // `Local` / `FieldAccess` read whose graph value is a constant literal is
@@ -473,22 +582,23 @@ fn classify_candidate(
         && let Some(vid) = engine.value(id)
         && crate::nir_value_graph::builder::is_const_value(&engine.body.values, vid)
     {
-        return Some((id, vid));
+        return Ok((id, vid));
     }
     if !is_pure_arith(engine, id, ctx.include_fields) {
-        return None;
+        return Err(Refusal::NotPureArith);
     }
     let rep = match &engine.body.exprs[id].kind {
-        ExprKind::FieldAccess { .. } => ctx.field_values.get(&id).copied()?,
-        _ => engine.value(id)?,
-    };
-    // An early freeze may plant only context-free values. A constant means the
-    // same thing wherever `inline` and `sroa` copy the operand to; a value naming
-    // a local does not, because those passes renumber locals and splice a callee
-    // body into a caller, so the slot moves out from under it. The post-loop
-    // freezes take these, after the structural passes have finished.
+        ExprKind::FieldAccess { .. } => ctx.field_values.get(&id).copied(),
+        _ => engine.value(id),
+    }
+    .ok_or(Refusal::NoValue)?;
+    // An early freeze plants no value naming a local. The bar is cost now, not
+    // soundness: the five miscompiles it was covering are fixed, and
+    // `optimize::run_pass` audits the invariant they broke. Lifting it grows the
+    // parser's code 6.4 % and stops the fixed-point loop converging inside its
+    // cap. See the WEP for the split of that 6.4 %.
     if ctx.phase == FreezePhase::Early && engine.body.values.names_a_local(rep) {
-        return None;
+        return Err(Refusal::NamesALocal);
     }
     // A standalone `FieldAccess` is reemittable when its receiver is (it
     // materialises via the source-point path). For every other value,
@@ -536,12 +646,12 @@ fn classify_candidate(
             .value_fully_reemittable_locally(rep, ctx.multi_version_locals),
     };
     if !reemittable {
-        return None;
+        return Err(Refusal::NotReemittable);
     }
     if engine.body.values.extraction_duplicates_work(rep) {
-        return None;
+        return Err(Refusal::DuplicatesWork);
     }
-    Some((id, rep))
+    Ok((id, rep))
 }
 
 /// Pin a shared `FieldAccess` in a `let _av` dominating its uses. A

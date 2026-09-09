@@ -109,9 +109,9 @@ type "functype//core:prelude/primitive.wado/i32::fmt_decimal$scalar" = fn(i32, r
 
 type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write$spec0$scalar" = fn(ref "core:prelude/string.wado//String", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(41)
 
-type "functype//core:prelude/primitive.wado/f64::fmt_fixed$scalar$spec0$scalar" = fn(f64, i32, ref "core:prelude/string.wado//String");  // TypeId(42)
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar" = fn(i32, ref "core:prelude/string.wado//String");  // TypeId(42)
 
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar" = fn(i32, ref "core:prelude/string.wado//String");  // TypeId(43)
+type "functype//core:prelude/primitive.wado/f64::fmt_fixed$scalar$spec0$scalar" = fn(f64, i32, ref "core:prelude/string.wado//String");  // TypeId(43)
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(44)
 
@@ -146,7 +146,7 @@ global global:core:prelude/list.wado::__const_obj_8: ref null Array<u8> = array.
 global global:core:prelude/list.wado::__const_obj_9: ref null Array<u8> = array.new_fixed<u8>(76, 105, 115, 116, 58, 58, 105, 110, 100, 101, 120, 95, 118, 97, 108, 117, 101);
 global global:core:prelude/list.wado::__const_obj_10: ref null Array<u8> = array.new_fixed<u8>(65, 115, 115, 101, 114, 116, 105, 111, 110, 32, 102, 97, 105, 108, 101, 100, 32, 105, 110, 32);
 global global:core:prelude/primitive.wado::__const_obj_11: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
-global global:core:prelude/primitive.wado::__const_obj_16: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(48), used: 1 };
+global global:core:prelude/primitive.wado::__const_obj_17: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(48), used: 1 };
 
 fn "tmpl_hoist_formatter.wado/run"() with Stdout {
     let total: i32;
@@ -1887,6 +1887,54 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
     }, start_57 = self.used, self.used = new_used_56, start_57;
 }
 
+fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(self, f) {
+    let is_negative: bool;
+    let abs_val: u64;
+    let digit_count_4: i32;
+    let offset_5: i32;
+    let val_6: i64;
+    let n: i32;
+    let t_9: u64;
+    let arr: ref Array<u8>;
+    let pos: i32;
+    let t_15: u64;
+    let i: i32;
+    is_negative = self < 0;
+    val_6 = builtin::i64_extend_i32_s(self);
+    abs_val = select i64(val_6 < 0_i64, 0_i64 - val_6, val_6);
+    digit_count_4 = $inline_count_digits_u64_1: block -> i32 {
+        if abs_val == 0_i64 {
+            break $inline_count_digits_u64_1: 1;
+        }
+        n = 0;
+        t_9 = abs_val;
+        b202: block {
+            l203: loop {
+                break_if b202 t_9 <=u 0_i64;
+                n = n + 1;
+                t_9 = t_9 /u 10_i64;
+                continue l203;
+            };
+        };
+        break $inline_count_digits_u64_1: n;
+    };
+    offset_5 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write$spec0$scalar"(f, is_negative, global:core:prelude/primitive.wado::__const_obj_11, digit_count_4);
+    arr = f.repr;
+    pos = offset_5 + digit_count_4;
+    t_15 = abs_val;
+    i = 0;
+    b204: block {
+        l205: loop {
+            break_if b204 i >= digit_count_4;
+            pos = pos - 1;
+            builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(t_15 %u 10_i64)) & 255);
+            t_15 = t_15 /u 10_i64;
+            i = i + 1;
+            continue l205;
+        };
+    };
+}
+
 fn "core:prelude/primitive.wado/f64::fmt_fixed$scalar$spec0$scalar"(self, precision, f) {
     let bits: i64;
     let is_neg_17: bool;
@@ -1939,7 +1987,7 @@ fn "core:prelude/primitive.wado/f64::fmt_fixed$scalar$spec0$scalar"(self, precis
     };
     if __sroa_slot_126 {
         if select i32(__sroa_slot_128 == 3, 1, __sroa_slot_128 == 2) {
-            "core:prelude/primitive.wado/fmt_float_special$spec0$scalar"(f, __sroa_slot_127, __sroa_slot_128, global:core:prelude/primitive.wado::__const_obj_16);
+            "core:prelude/primitive.wado/fmt_float_special$spec0$scalar"(f, __sroa_slot_127, __sroa_slot_128, global:core:prelude/primitive.wado::__const_obj_17);
             return;
         }
         if __sroa_slot_127 {
@@ -2000,54 +2048,6 @@ fn "core:prelude/primitive.wado/f64::fmt_fixed$scalar$spec0$scalar"(self, precis
     } else {
     }
     "core:prelude/fpfmt.wado/write_decimal_prec"(f, result_mv_digits, result_mv_exponent, result_mv_n_digits, precision);
-}
-
-fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(self, f) {
-    let is_negative: bool;
-    let abs_val: u64;
-    let digit_count_4: i32;
-    let offset_5: i32;
-    let val_6: i64;
-    let n: i32;
-    let t_9: u64;
-    let arr: ref Array<u8>;
-    let pos: i32;
-    let t_15: u64;
-    let i: i32;
-    is_negative = self < 0;
-    val_6 = builtin::i64_extend_i32_s(self);
-    abs_val = select i64(val_6 < 0_i64, 0_i64 - val_6, val_6);
-    digit_count_4 = $inline_count_digits_u64_1: block -> i32 {
-        if abs_val == 0_i64 {
-            break $inline_count_digits_u64_1: 1;
-        }
-        n = 0;
-        t_9 = abs_val;
-        b216: block {
-            l217: loop {
-                break_if b216 t_9 <=u 0_i64;
-                n = n + 1;
-                t_9 = t_9 /u 10_i64;
-                continue l217;
-            };
-        };
-        break $inline_count_digits_u64_1: n;
-    };
-    offset_5 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write$spec0$scalar"(f, is_negative, global:core:prelude/primitive.wado::__const_obj_11, digit_count_4);
-    arr = f.repr;
-    pos = offset_5 + digit_count_4;
-    t_15 = abs_val;
-    i = 0;
-    b218: block {
-        l219: loop {
-            break_if b218 i >= digit_count_4;
-            pos = pos - 1;
-            builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(t_15 %u 10_i64)) & 255);
-            t_15 = t_15 /u 10_i64;
-            i = i + 1;
-            continue l219;
-        };
-    };
 }
 
 export fn "tmpl_hoist_formatter.wado/__cm_export__run" as "run"
