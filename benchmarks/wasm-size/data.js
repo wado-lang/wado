@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1788881971574,
+  "lastUpdate": 1788913108507,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -54221,6 +54221,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/b311d2d563226b2d8650d8544226f72d65afaeba"
         },
         "date": 1788881971212,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 2013,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6560,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18971,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 288297,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "c12997338f3e82cb0af8cdce94a5a656a7b7ecc4",
+          "message": "Merge pull request #2005 from wado-lang/claude/wcdo-cli-wado-directory-5d12el\n\nfix(cm-binding): a Wado call of an `export async fn` gets what `task return` delivered",
+          "timestamp": "2026-09-09T09:04:07+09:00",
+          "tree_id": "94502a6d3b5c55cf93998b797e838f22f76543b9",
+          "url": "https://github.com/wado-lang/wado/commit/c12997338f3e82cb0af8cdce94a5a656a7b7ecc4"
+        },
+        "date": 1788913107722,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
