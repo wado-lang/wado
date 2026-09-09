@@ -6,7 +6,7 @@ use std::cmp::Reverse;
 use crate::compiler_trace;
 use crate::hashmap::IndexMap;
 use crate::nir::NirUnaryOp;
-use crate::nir_arena::{Body, ExprKind, NodeRef, Operand};
+use crate::nir_arena::{Body, ExprId, ExprKind, NodeRef, Operand};
 use crate::nir_package::NirPackage;
 use crate::trace::filter;
 
@@ -33,6 +33,39 @@ struct Census {
     loop_entry_locals: usize,
     /// Reachable expressions per `classify` verdict.
     per_kind: IndexMap<(&'static str, bool), usize>,
+    /// Reachable expressions [`flow_resolvable`] admits.
+    flow_resolvable: usize,
+}
+
+/// Whether `lower` could intern this expression as a value with the flow
+/// resolved into it, needing no reference out of the pool: arithmetic whose
+/// leaves are constants or reads of a local no borrow can write through. A
+/// field read or a call result is excluded — those need the heap versions and
+/// the alias facts that only exist over the whole lowered package.
+fn flow_resolvable(body: &Body, id: ExprId) -> bool {
+    match &body.exprs[id].kind {
+        ExprKind::Local { index, .. } => {
+            !body.address_taken_locals.contains(index)
+                && !body.stores_aliased_locals.contains(index)
+        }
+        ExprKind::Binary { left, right, .. } => {
+            resolvable_operand(body, *left) && resolvable_operand(body, *right)
+        }
+        ExprKind::Unary { op, expr } => {
+            !matches!(op, NirUnaryOp::Ref | NirUnaryOp::MutRef | NirUnaryOp::Deref)
+                && resolvable_operand(body, *expr)
+        }
+        ExprKind::Cast { expr, .. } => resolvable_operand(body, *expr),
+        _ => false,
+    }
+}
+
+fn resolvable_operand(body: &Body, op: Operand) -> bool {
+    match op {
+        // A promoted value is already in the pool.
+        Operand::Value(_) => true,
+        Operand::Expr(e) => flow_resolvable(body, e),
+    }
 }
 
 /// Report the census for `project` at the pipeline point named by `at`.
@@ -77,6 +110,9 @@ impl Census {
                         .per_kind
                         .entry(classify(&body.exprs[e].kind))
                         .or_default() += 1;
+                    if flow_resolvable(body, e) {
+                        self.flow_resolvable += 1;
+                    }
                 }
                 NodeRef::Stmt(_) => self.stmts_reachable += 1,
                 NodeRef::Block(_) => self.blocks_reachable += 1,
@@ -123,6 +159,12 @@ impl Census {
             TARGET,
             "{at}: pure kinds {:.1}% of reachable exprs",
             pct(pure)
+        );
+        compiler_trace!(
+            TARGET,
+            "{at}: flow-resolvable at lower {:.1}% ({} exprs)",
+            pct(self.flow_resolvable),
+            self.flow_resolvable
         );
         let mut rows: Vec<(usize, &str, bool)> = self
             .per_kind
