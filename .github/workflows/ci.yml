@@ -80,85 +80,41 @@ jobs:
           save-if: false
       - run: cargo test --locked --all -- --skip fixture_test_
 
-  test-e2e-o0:
-    name: Test (E2E O0)
+  # One job per optimization level runs the compiler's full test at that level:
+  # the e2e fixtures, then the stdlib. Before this the stdlib ran at -O2 only,
+  # so an optimizer bug reachable from `core:*` at another level had nothing to
+  # catch it. `fail-fast: false` keeps the other levels running, because which
+  # levels break says where the bug is.
+  test-level:
+    name: Test (E2E+stdlib ${{ matrix.level }})
     needs: changes
     if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions:
       contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        level: [O0, O1, O2, O3, Os]
+    env:
+      LEVEL: ${{ matrix.level }}
     steps:
       - uses: actions/checkout@v7
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: ci
           save-if: false
-      - run: cargo test --locked -p wado-compiler --test e2e -- fixture_test_o0
+      - uses: jdx/mise-action@v4.3.0
+        with:
+          cache: true
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+        env:
+          MISE_VERBOSE: ${{ runner.debug }}
 
-  test-e2e-o1:
-    name: Test (E2E O1)
-    needs: changes
-    if: needs.changes.outputs.code == 'true'
-    runs-on: ubuntu-latest
-    timeout-minutes: 60
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@v7
-      - uses: Swatinem/rust-cache@v2
-        with:
-          shared-key: ci
-          save-if: false
-      - run: cargo test --locked -p wado-compiler --test e2e -- fixture_test_o1
-
-  test-e2e-o2:
-    name: Test (E2E O2)
-    needs: changes
-    if: needs.changes.outputs.code == 'true'
-    runs-on: ubuntu-latest
-    timeout-minutes: 60
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@v7
-      - uses: Swatinem/rust-cache@v2
-        with:
-          shared-key: ci
-          save-if: false
-      - run: cargo test --locked -p wado-compiler --test e2e -- fixture_test_o2
-
-  test-e2e-o3:
-    name: Test (E2E O3)
-    needs: changes
-    if: needs.changes.outputs.code == 'true'
-    runs-on: ubuntu-latest
-    timeout-minutes: 60
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@v7
-      - uses: Swatinem/rust-cache@v2
-        with:
-          shared-key: ci
-          save-if: false
-      - run: cargo test --locked -p wado-compiler --test e2e -- fixture_test_o3
-
-  test-e2e-os:
-    name: Test (E2E Os)
-    needs: changes
-    if: needs.changes.outputs.code == 'true'
-    runs-on: ubuntu-latest
-    timeout-minutes: 60
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@v7
-      - uses: Swatinem/rust-cache@v2
-        with:
-          shared-key: ci
-          save-if: false
-      - run: cargo test --locked -p wado-compiler --test e2e -- fixture_test_os
+      # The e2e test names are lower case.
+      - run: cargo test --locked -p wado-compiler --test e2e -- "fixture_test_${LEVEL,,}"
+      - run: mise run test-stdlib "$LEVEL"
 
   test-wado:
     name: Test (Wado)
@@ -198,8 +154,8 @@ jobs:
       # component) without pushing, so no wkg or credentials are needed.
       - run: cargo run --locked -p wado-cli -- publish --dry-run
 
-  test-gale-o3:
-    name: Test (Gale O3)
+  test-gale-o2:
+    name: Test (Gale O2)
     needs: changes
     if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
@@ -219,7 +175,7 @@ jobs:
         env:
           MISE_VERBOSE: ${{ runner.debug }}
 
-      - run: mise run test-gale-o3
+      - run: mise run test-gale-o2
 
   # Build-light static gates folded into one sub-minute job. Neither needs the
   # shared `ci` build cache: `check-deps` is a pure `cargo tree -d` resolution,
@@ -265,12 +221,8 @@ jobs:
         changes,
         test-core,
         test-wado,
-        test-gale-o3,
-        test-e2e-o0,
-        test-e2e-o1,
-        test-e2e-o2,
-        test-e2e-o3,
-        test-e2e-os,
+        test-gale-o2,
+        test-level,
         check,
       ]
     runs-on: ubuntu-latest
@@ -290,7 +242,9 @@ jobs:
             echo "Docs-only change: test jobs skipped, reporting success."
             exit 0
           fi
-          results="${{ needs.test-core.result }} ${{ needs.test-wado.result }} ${{ needs.test-gale-o3.result }} ${{ needs.test-e2e-o0.result }} ${{ needs.test-e2e-o1.result }} ${{ needs.test-e2e-o2.result }} ${{ needs.test-e2e-o3.result }} ${{ needs.test-e2e-os.result }} ${{ needs.check.result }}"
+          # `test-level` is one matrix job. Its result is success only if
+          # every level succeeded.
+          results="${{ needs.test-core.result }} ${{ needs.test-wado.result }} ${{ needs.test-gale-o2.result }} ${{ needs.test-level.result }} ${{ needs.check.result }}"
           for result in $results; do
             if [ "$result" != "success" ]; then
               echo "One or more jobs failed"
