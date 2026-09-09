@@ -19,8 +19,7 @@ fn rejection(source: &str) -> String {
         ..Default::default()
     };
     let error = compile_source_with_compiler_options(Path::new("lib.wado"), source, options)
-        .err()
-        .expect("an empty tuple has no Component Model representation");
+        .expect_err("an empty tuple has no Component Model representation");
     error.to_string()
 }
 
