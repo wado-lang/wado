@@ -17,7 +17,6 @@ mod types;
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use crate::cm_abi::CmValType;
 use crate::hashmap::{IndexMap, IndexSet};
 
 use crate::canonical::{CanonicalIntrinsic, CmPayloadType};
@@ -43,10 +42,10 @@ use task_return::{expand_task_returns_in_func, reduce_task_returns_in_func, spli
 use type_fixup::{
     collect_effect_calls_in_block, collect_local_type_updates, rewrite_calls_in_block,
 };
+use types::compute_export_flat_return_types;
 pub use types::{
     LiftContext, cm_enum_byte_size, cm_flags_byte_size, cm_type_to_type_id, flatten_param_type,
 };
-use types::{cm_val_type_to_type_id, compute_export_flat_return_types};
 
 /// Build a `(module_source, name)` set for every effect/resource declared in
 /// the loaded TIR modules. The CM binding synthesizer uses this to attach the
@@ -463,7 +462,6 @@ fn named_decl_of<'a>(tt: &'a TypeTable, ty: &ResolvedType) -> Option<(&'a str, &
 pub fn generate_adapters(mut project: Package) -> Result<Package, String> {
     generate_import_adapters(&mut project);
     synthesize_export_adapters(&mut project)?;
-    record_task_return_flat_params(&mut project);
     generate_test_world_bindings(&mut project);
     let validated = reject_unresolvable_record_payloads(&project)?;
     reduce_unexpanded_task_returns(&project);
@@ -676,9 +674,8 @@ fn synthesize_export_adapters(project: &mut Package) -> Result<(), String> {
             // in a copy, so the user's own function stays callable from Wado.
             let mut binding_callee = Rc::clone(&user_func_rc);
             let strategy = if is_async_export {
-                // An export declaring no result still delivers: its
-                // `task.return` carries no flat slot, and the canon it calls
-                // is typed with no result.
+                // An export declaring no result still delivers; it has no slot
+                // to flatten.
                 let return_type = export.return_type.as_ref();
                 let flat_types = return_type.map_or_else(Vec::new, |ty| {
                     let tt = entry_type_table.borrow();
@@ -1087,51 +1084,6 @@ fn sync_wasi_export_strategy(
     // (`.async_(false)`), so an async task-return lowering produces an
     // invalid core module.
     ExportReturnStrategy::SyncReturn
-}
-
-/// Record the flattened task-return params on the `Package` for `optimize_dce`
-/// to type the shared `task_return` NIR import — the builtin takes one i32, but
-/// a Result-returning export passes its full flattened result. Lib worlds are
-/// skipped, bar the kiln generator. The import is one shared symbol, so a
-/// disagreement between returning exports cannot be represented and is an ICE.
-fn record_task_return_flat_params(project: &mut Package) {
-    let Some(world_info) = project.active_world_info().cloned() else {
-        return;
-    };
-    if project.is_lib_world()
-        && !project
-            .world_registry
-            .is_generator_world(&project.target_world)
-    {
-        return;
-    }
-    let entry_type_table = entry_type_table(project);
-    let tt = entry_type_table.borrow();
-    let mut recorded: Option<(&str, Vec<CmValType>)> = None;
-    for export in &world_info.exports {
-        let Some(return_type) = &export.return_type else {
-            continue;
-        };
-        let flat_types = compute_export_flat_return_types(return_type, &project.tir_modules, &tt);
-        match &recorded {
-            None => recorded = Some((&export.name, flat_types)),
-            Some((first_name, first_flat)) => assert!(
-                *first_flat == flat_types,
-                "exports `{first_name}` and `{}` flatten to different task-return \
-                 signatures ({first_flat:?} vs {flat_types:?}); the shared \
-                 `task_return` import cannot represent both",
-                export.name
-            ),
-        }
-    }
-    if let Some((_, flat_types)) = recorded {
-        project.task_return_flat_params = Some(
-            flat_types
-                .iter()
-                .map(|&vt| cm_val_type_to_type_id(vt))
-                .collect(),
-        );
-    }
 }
 
 /// Synthesize export bindings for test functions (`__test_*`). Only when

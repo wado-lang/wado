@@ -99,9 +99,9 @@ Export adapters currently handle two cases:
 
 #### Void exports (`() -> ()`)
 
-Used by Command world's `run()` and test functions. The binding calls the user function, then calls `task-return(0)` — the Ok discriminant of the `result<>` those exports lift through.
+Used by Command world's `run()` and test functions. The binding calls the user function, then calls `task-return(0)`. Those exports lift through `result<>`, and 0 is its Ok discriminant.
 
-An export declaring no result at all (a `--lib` `export async fn ping()`) lifts through no CM type, so its delivery carries no flat slot: `task-return()`, against a canon carrying no result type. Whether the canon carries one follows the export's declared result, the same source `canon lift` takes its result from, so the two cannot disagree.
+A `--lib` export can instead declare no result at all, as `export async fn ping()` does. It lifts through no CM type, so it flattens to no slot and delivers with `task-return()`, against a canon carrying no result type. Both the canon and `canon lift` read that from the export's declared result, so the two cannot disagree.
 
 #### Result-returning exports (`(...) -> Result<T, E>`)
 
@@ -113,6 +113,12 @@ Used by Service world's `handle()`. The binding:
 4. Err: lowers E (variant, struct, or primitive) to flat CM values, calls `task-return`
 
 The lowering is fully generic — `synthesize_lower_to_flat` recurses into any type structure (primitives, strings, options, structs, variants) without hard-coded type names.
+
+#### The `task-return` canon
+
+One `canon task.return` carries one result type, so the import is keyed by the export whose result it delivers: `task-return:handle`, `task-return:ping`. A `--lib` world can then export `ping()` beside `label() -> String`, each with its own signature. WIR translation types each canon from the flat arguments at its call site, so no signature has to be agreed on ahead of the call.
+
+The empty key is the one shared canon, for the deliveries whose result is `result<>`: a test export, and a WASI export taking no params and returning unit. That result is fixed rather than read off an export, so a test world carrying hundreds of deliveries still needs only the one canon.
 
 ### What's Generic vs What's Specific
 

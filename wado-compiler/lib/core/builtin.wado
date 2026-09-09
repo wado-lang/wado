@@ -20,8 +20,9 @@
 use { Formatter } from "core:prelude/format.wado";
 use { i128 } from "core:prelude/int128.wado";
 
-/// Signals task completion with a result value.
-/// Used internally by the compiler to complete async exports.
+/// Completes the current task with a `result<>`, whose flattening is the one
+/// i32 discriminant: 0 for Ok. An export delivering anything else goes through
+/// its own canon, keyed by the export (`synthesis::cm_binding`).
 #[canonical("wasi", "task-return")]
 pub fn task_return(result: i32);
 

@@ -141,11 +141,6 @@ pub struct WorldInfo {
 }
 
 impl WorldInfo {
-    /// Check if this world has any async export.
-    pub fn has_async_export(&self) -> bool {
-        self.exports.iter().any(|e| e.is_async)
-    }
-
     /// Whether this world exports the WASI HTTP handler — a handler-instance
     /// export whose interface is in the `http` package. Gates HTTP-specific
     /// behavior (importing `wasi:http/types`, the free-list allocator), so the

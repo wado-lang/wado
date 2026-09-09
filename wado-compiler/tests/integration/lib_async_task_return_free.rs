@@ -21,6 +21,8 @@ use wado_compiler::{CompilerOptions, OptLevel};
 use wasmtime::component::{Component, Val};
 use wasmtime::{Config, Engine, InstanceAllocationStrategy, PoolingAllocationConfig, Store};
 
+use crate::common::lib_func;
+
 /// FQ of the synthesized library world; any stable name works, the compiler
 /// only uses it to key the world it builds for `--lib`.
 const LIB_WORLD_FQ: &str = "wado-lang:cm-catalog/cm-catalog@0.0.23";
@@ -68,25 +70,6 @@ fn compile_lib(source: &str, opt_level: OptLevel) -> Vec<u8> {
         .wasm
 }
 
-/// Resolve `name` in the library world's instance export, falling back to a
-/// bare top-level export.
-fn lib_func(
-    store: &mut Store<crate::common::WasiState>,
-    instance: &wasmtime::component::Instance,
-    name: &str,
-) -> wasmtime::component::Func {
-    let iface = instance
-        .get_export(&mut *store, None, LIB_WORLD_FQ)
-        .map(|(_, idx)| idx);
-    let (_, func_idx) = iface
-        .and_then(|i| instance.get_export(&mut *store, Some(&i), name))
-        .or_else(|| instance.get_export(&mut *store, None, name))
-        .unwrap_or_else(|| panic!("`{name}` export not found"));
-    instance
-        .get_func(&mut *store, func_idx)
-        .unwrap_or_else(|| panic!("`{name}` is not a func"))
-}
-
 /// Call `export` `CALLS` times under the memory cap, checking each result with
 /// `check`.
 fn run_calls(
@@ -108,7 +91,7 @@ fn run_calls(
             .instantiate_async(&mut store, &component)
             .await
             .expect("instantiate library component");
-        let func = lib_func(&mut store, &instance, export);
+        let func = lib_func(&mut store, &instance, LIB_WORLD_FQ, export);
 
         for call in 0..CALLS {
             let mut results = vec![Val::Bool(false)];

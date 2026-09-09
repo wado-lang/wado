@@ -1433,8 +1433,9 @@ fn build_export_adapter_params(
 /// call the user function once) is shared by every strategy.
 #[derive(Clone, Copy)]
 pub(super) enum ExportReturnStrategy {
-    /// Async `() -> ()` export: call, then `task-return(0)` (the Ok
-    /// discriminant for `result<_, _>`).
+    /// Async `() -> ()` export: call, then `task-return(0)` — the Ok
+    /// discriminant of the `result<>` it lifts through. That result is fixed,
+    /// so the delivery goes through the shared canon rather than a keyed one.
     VoidTaskReturn,
     /// Sync `--lib` export: the synchronous canon lift returns the lowered
     /// value directly — a single-core-value result verbatim, a multi-value
@@ -1556,6 +1557,7 @@ pub(super) fn synthesize_export_binding(
         ),
         ExportReturnStrategy::ResultTaskReturn => {
             push_result_task_return_epilogue(
+                export_name,
                 call_user,
                 user_return_type,
                 env,
@@ -1820,6 +1822,7 @@ pub(super) fn synthesize_post_return(
 /// joined slots ([`lower_result_arm`]), then call `task-return` once with the
 /// filled slots.
 fn push_result_task_return_epilogue(
+    export_name: &str,
     call_user: TirExpr,
     user_return_type: TypeId,
     env: &ExportBindingEnv<'_>,
@@ -1955,7 +1958,7 @@ fn push_result_task_return_epilogue(
         .map(|((local, name), &vt)| local_ref(*local, name, cm_val_type_to_type_id(vt)))
         .collect();
     body_stmts.push(expr_stmt(cm_canonical_call(
-        CanonicalIntrinsic::TaskReturn(String::new()),
+        CanonicalIntrinsic::TaskReturn(export_name.to_string()),
         task_return_args,
         TypeTable::UNIT,
     )));

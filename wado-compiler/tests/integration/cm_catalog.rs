@@ -30,6 +30,8 @@ use wasmtime::component::{
 };
 use wasmtime::{AsContextMut, Store, StoreContextMut};
 
+use crate::common::lookup_func as common_lookup_func;
+
 /// Stream producer that delivers a batch with `Completed`, then signals
 /// end-of-stream with a separate `Dropped` poll. Unlike the built-in `Vec`
 /// producer (which coalesces data and the drop into one `Dropped(n)` result),
@@ -320,15 +322,8 @@ fn lookup_func(
     iface: Option<&ComponentExportIndex>,
     export: &str,
 ) -> Result<wasmtime::component::Func, String> {
-    // Named-type libraries group exports into a default interface; a library of
-    // only structural types exports them directly at the component root. Try the
-    // interface first, then fall back to the root.
-    iface
-        .and_then(|i| instance.get_export(&mut *store, Some(i), export))
-        .or_else(|| instance.get_export(&mut *store, None, export))
-        .map(|(_, idx)| idx)
-        .and_then(|idx| instance.get_func(&mut *store, idx))
-        .ok_or_else(|| format!("export `${export}` not found"))
+    common_lookup_func(store, instance, iface, export)
+        .ok_or_else(|| format!("export `{export}` not found"))
 }
 
 /// Round-trip a future's payload and assert it survived, not just the handle:

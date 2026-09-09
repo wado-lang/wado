@@ -13,7 +13,7 @@
 use std::future::Future;
 use std::path::PathBuf;
 use std::sync::{Mutex, OnceLock};
-use wasmtime::component::{Linker, ResourceTable};
+use wasmtime::component::{ComponentExportIndex, Func, Instance, Linker, ResourceTable};
 use wasmtime::{Config, Engine, Store};
 use wasmtime_wasi::{DirPerms, FilePerms, WasiCtx, WasiCtxBuilder, WasiCtxView, WasiView};
 use wasmtime_wasi_http::WasiHttpCtx;
@@ -892,6 +892,36 @@ pub fn linker(engine: &Engine) -> anyhow::Result<Linker<WasiState>> {
     wasmtime_wasi_tls::p3::add_to_linker(&mut linker)?;
     timezone_host::add_to_linker(&mut linker)?;
     Ok(linker)
+}
+
+/// Resolve `name` in `iface`, falling back to a bare top-level export: a
+/// library groups its exports into an interface only when it has named types.
+pub fn lookup_func(
+    store: &mut Store<WasiState>,
+    instance: &Instance,
+    iface: Option<&ComponentExportIndex>,
+    name: &str,
+) -> Option<Func> {
+    iface
+        .and_then(|i| instance.get_export(&mut *store, Some(i), name))
+        .or_else(|| instance.get_export(&mut *store, None, name))
+        .map(|(_, idx)| idx)
+        .and_then(|idx| instance.get_func(&mut *store, idx))
+}
+
+/// [`lookup_func`] against the `world_fq` library world's instance export,
+/// panicking where the export is not there.
+pub fn lib_func(
+    store: &mut Store<WasiState>,
+    instance: &Instance,
+    world_fq: &str,
+    name: &str,
+) -> Func {
+    let iface = instance
+        .get_export(&mut *store, None, world_fq)
+        .map(|(_, idx)| idx);
+    lookup_func(store, instance, iface.as_ref(), name)
+        .unwrap_or_else(|| panic!("`{name}` export not found"))
 }
 
 /// Host implementation for `wasi:clocks/timezone`. Mirrors

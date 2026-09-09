@@ -1,18 +1,15 @@
-//! A void `export async fn` delivers task completion.
-//!
-//! An export declaring no result has nothing to hand back, but the host task
-//! still has to be told it is done. The delivery is a `task.return` carrying no
-//! value; without it the call never completes and the guest's effects are
-//! unobservable.
+//! A void `export async fn` delivers task completion. An export declaring no
+//! result has nothing to hand back, but the host task still has to be told it
+//! is done, and without that delivery the call never completes.
 
 use std::path::Path;
 
 use wado_compiler::{CompilerOptions, OptLevel};
 use wasmtime::Store;
-use wasmtime::component::{Component, Func, Instance, Val};
+use wasmtime::component::{Component, Val};
 
 use crate::common::{
-    WasiState, compile_source_with_compiler_options, engine, limit_store, linker, runtime,
+    WasiState, compile_source_with_compiler_options, engine, lib_func, limit_store, linker, runtime,
 };
 
 /// FQ of the synthesized library world; any stable name works.
@@ -47,19 +44,6 @@ fn compile_lib(opt_level: OptLevel) -> Vec<u8> {
         .wasm
 }
 
-fn lib_func(store: &mut Store<WasiState>, instance: &Instance, name: &str) -> Func {
-    let iface = instance
-        .get_export(&mut *store, None, LIB_WORLD_FQ)
-        .map(|(_, idx)| idx);
-    let (_, func_idx) = iface
-        .and_then(|i| instance.get_export(&mut *store, Some(&i), name))
-        .or_else(|| instance.get_export(&mut *store, None, name))
-        .unwrap_or_else(|| panic!("`{name}` export not found"));
-    instance
-        .get_func(&mut *store, func_idx)
-        .unwrap_or_else(|| panic!("`{name}` is not a func"))
-}
-
 fn void_async_export_completes(opt_level: OptLevel) {
     let engine = engine();
     let wasm = compile_lib(opt_level);
@@ -74,12 +58,12 @@ fn void_async_export_completes(opt_level: OptLevel) {
             .await
             .expect("instantiate library component");
 
-        let ping = lib_func(&mut store, &instance, "ping");
+        let ping = lib_func(&mut store, &instance, LIB_WORLD_FQ, "ping");
         ping.call_async(&mut store, &[], &mut [])
             .await
             .expect("the void async export never delivered task completion");
 
-        let hit_count = lib_func(&mut store, &instance, "hit-count");
+        let hit_count = lib_func(&mut store, &instance, LIB_WORLD_FQ, "hit-count");
         let mut results = vec![Val::Bool(false)];
         hit_count
             .call_async(&mut store, &[], &mut results)

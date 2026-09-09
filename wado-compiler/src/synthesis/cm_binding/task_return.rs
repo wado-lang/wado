@@ -333,8 +333,7 @@ fn take_task_result(result: &ResultSlot, items: &CompilerItems) -> TirStmt {
 /// The local the `Some` arm binds the delivered value to.
 const TASK_VALUE_LOCAL: &str = "__task_value";
 
-/// The declared result behind a flat slot. Reached only where slots exist, and
-/// a slot comes from a declared result.
+/// The declared result a flat slot came from.
 fn declared_result(return_type: Option<&Type>) -> &Type {
     return_type.expect("a flat slot comes from a declared result")
 }
