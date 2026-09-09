@@ -152,6 +152,10 @@ fn synthesize_lift_inner(
                     binary(TirBinaryOp::NotEq, raw, i32_const(0), TypeTable::BOOL)
                 }
                 "char" => builtin_call("i32_load", vec![addr], TypeTable::CHAR),
+                // Unit occupies no memory, so there is nothing to load.
+                TypeTable::UNIT_TYPE_NAME => {
+                    TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, synth_span())
+                }
                 _ => {
                     // CM named types arrive with `source_interface` populated
                     // either by stdlib bootstrap or by `resolve_cm_source_for`

@@ -1383,7 +1383,7 @@ pub(super) fn type_id_to_ast_type(
     };
     match resolved {
         ResolvedType::Primitive(p) => named_no_source(p.as_str()),
-        ResolvedType::Unit => Type::Tuple(Vec::new()),
+        ResolvedType::Unit => named_no_source(TypeTable::UNIT_TYPE_NAME),
         // `Flags` joins them: its own CM type, 1 byte at <=8 labels, not a
         // four-byte `i32`.
         ResolvedType::Struct { .. }
@@ -1549,5 +1549,17 @@ mod tests {
             Some((None, "kiln/types.wado".into()))
         );
         assert_eq!(cm_interface_module("my:pkg/iface"), None);
+    }
+
+    /// The bridge back to the AST has to spell unit the way the parser does.
+    /// Every AST-level predicate asks [`Type::is_unit`], which the empty tuple
+    /// does not answer — a manufactured `[]` reads as a tuple of no elements,
+    /// and a `Result<(), E>` then lowers an `Ok` payload it does not have.
+    #[test]
+    fn the_unit_type_id_spells_the_unit_type() {
+        let (registry, _) = CmInterfaceRegistry::build_from_stdlib();
+        let type_table = TypeTable::new();
+        let unit = type_id_to_ast_type(TypeTable::UNIT, &type_table, &registry);
+        assert!(unit.is_unit(), "unit spelled as {unit:?}");
     }
 }

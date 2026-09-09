@@ -4225,10 +4225,8 @@ impl CmTypeGen {
                     ComponentValType::Type(idx)
                 }
                 "Result" => {
-                    let is_ok_unit = matches!(&generic.args[0], Type::Tuple(t) if t.is_empty())
-                        || matches!(&generic.args[0], Type::Named(n) if n.name == "()");
-                    let is_err_unit = matches!(&generic.args[1], Type::Tuple(t) if t.is_empty())
-                        || matches!(&generic.args[1], Type::Named(n) if n.name == "()");
+                    let is_ok_unit = generic.args[0].is_unit();
+                    let is_err_unit = generic.args[1].is_unit();
                     let ok_type = if is_ok_unit {
                         None
                     } else {

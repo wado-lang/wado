@@ -89,6 +89,8 @@ pub fn synthesize_lower(
             stmts
         }
         Type::Named(named) => match named.name.as_str() {
+            // Unit occupies no memory, so there is nothing to store.
+            TypeTable::UNIT_TYPE_NAME => vec![],
             "i32" | "u32" => vec![expr_stmt(builtin_call(
                 "i32_store",
                 vec![addr, value],
