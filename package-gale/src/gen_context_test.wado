@@ -629,15 +629,13 @@ test "deep_position_first_sets_from: halt inside expanded RuleRef stops outer wa
     // elements at misaligned depths.
     //
     // Setup: r : c Z ;  c : X (A | B) ;
-    //  - `c`'s body walks `X` (push {X}) then halts at the multi-alt
-    //    Group `(A | B)`.
+    //  - `c`'s body walks `X` (push {X}), then the multi-alt Group
+    //    `(A | B)` contributes its head — exact, since the group is not
+    //    nullable and whichever alt runs starts inside it — and halts.
     //  - If the outer walk naïvely incremented cursor past `c`, it
-    //    would push {Z} at depth 1, but actual input depth 1 inside
-    //    the expanded `c` is `{A, B}` (or further depending on the
-    //    Group's first set). The result would mis-claim `Z` at depth 1.
-    //
-    // Expected: walk halts after pushing {X}; subsequent {Z} must NOT
-    // appear in the result, and `consumed` reflects "halted inside c".
+    //    would push {Z} at depth 2, but actual input depth 2 inside
+    //    the expanded `c` is wherever the group's alts end up. `Z` must
+    //    not appear at any depth.
     let c_rule = mk_rule("c", [
         alt([
             tk("X"),
@@ -655,8 +653,12 @@ test "deep_position_first_sets_from: halt inside expanded RuleRef stops outer wa
     let mut visiting: List<String> = [];
     let [prefixes, consumed] = ctx.deep_position_first_sets_from(&elements, 0, 4, &mut visiting);
     let expected_x: List<String> = ["TK_X"];
-    assert prefixes.len() == 1, `expected K=1 (halt after X), got ${prefixes.len()}: ${prefixes}`;
+    let expected_group: List<String> = ["TK_A", "TK_B"];
+    assert prefixes.len() == 2, `expected K=2 (X then the group's head), got ${prefixes.len()}: ${prefixes}`;
     assert prefixes[0] == expected_x;
+    let mut head = prefixes[1];
+    head.sort();
+    assert head == expected_group, `group head must be its own first set, got ${head}`;
     assert consumed == 0, `expansion of 'c' must NOT advance cursor when its body halts, got ${consumed}`;
 }
 

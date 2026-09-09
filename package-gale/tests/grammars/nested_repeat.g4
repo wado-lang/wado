@@ -1,6 +1,3 @@
-// Source: hand-written regression grammar for Gale's repeat canonicalisation.
-// License: same as the Gale package.
-//
 // A repeat over a repeat is a shape lowering cannot name, and surface g4
 // cannot spell one (`e**` is a syntax error) — but two things produce it:
 // parentheses around an already-repeating body, and the fold of `( X | )`

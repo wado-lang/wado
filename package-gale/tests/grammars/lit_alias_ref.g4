@@ -1,5 +1,4 @@
-// Source: Gale test fixture (issue #1752 repro).
-// License: same as the Gale package
+// Issue #1752 repro.
 //
 // `'kw'` and `K` are two spellings of one token. Minting a separate token for
 // `'kw'` makes the `K 'x'` alternative unreachable and leaves the trailing `x`

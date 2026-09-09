@@ -1,6 +1,3 @@
-// Source: Gale test fixture (Stage C multi-alt rule argument + overlap @init)
-// License: same as the Gale package
-//
 // A multi-alt rule argument (`e[i32 base]`) threads through the `_alt_<n>`
 // dispatch helpers, and an @init seed reaches an overlapping-alt group too:
 // both `A B` alts share their prefix (an overlap group), yet @init's `$acc`

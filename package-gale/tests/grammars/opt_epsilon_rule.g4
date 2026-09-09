@@ -1,6 +1,3 @@
-// Source: hand-written regression grammar for an optional over an epsilon rule.
-// License: same as the Gale package.
-//
 // `x : ;` derives only the empty string, so no token selects `x?` — and it
 // matches anyway, here and everywhere, because matching nothing is what it
 // does. The jar enters it and produces the empty node.

@@ -1,5 +1,6 @@
-// Source: distilled from SQLite.g4's `column_def : column_name type_name? column_constraint*`.
-// License: same as the Gale package.
+// The shape of `column_def : column_name type_name? column_constraint*` in the
+// `SQLite.g4` beside this file: MIT, Copyright (c) 2014 by Bart Kiers,
+// https://github.com/bkiers/sqlite-parser. The rules below are written here.
 //
 // An ambiguous greedy optional: FIRST(t) and FIRST(c) share NULL, so `x null`
 // parses either as `t=null` (enter the optional) or `c=null` (skip it, let the

@@ -56,7 +56,8 @@ use {
     scan_decision_branches,
     sort_group_by_element_count,
 } from "./alt_grouping.wado";
-use { alt_has_gate } from "./action_gen.wado";
+use { alt_has_gate, alt_scan_gate_conditions } from "./action_gen.wado";
+use { gate_assignment } from "./scan_gate.wado";
 use {
     rule_type_name,
     literal_const_name,
@@ -99,11 +100,13 @@ use {
     DispatchBranch,
     TournamentDispatch,
     ScanBody,
+    ScanGate,
     ScanElement,
     ScanTokenElement,
     ScanRuleCallElement,
     ScanExcludedElement,
     ScanRepeatElement,
+    IterationDuties,
     ScanGroupElement,
     ScanOptionalLookaheadElement,
     Op,
@@ -1113,7 +1116,7 @@ fn stamp_lr_self_ref_min_prec(
             }
         }
         lr_alts[i].suffix.ops = new_ops;
-        lr_alts[i].scan_suffix = ScanBody { elements: new_scan };
+        lr_alts[i].scan_suffix = ScanBody { ..lr_alts[i].scan_suffix, elements: new_scan };
     }
     return mid_operand_gated;
 }
@@ -1509,7 +1512,7 @@ fn stamp_scan_follow(
                         pos_follow,
                     ));
                 }
-                new_alts.push(ScanBody { elements: new_elements });
+                new_alts.push(ScanBody { ..*scan_alt, elements: new_elements });
             }
             g.alts = new_alts;
             ScanElement::Group(g);
@@ -1528,7 +1531,7 @@ fn stamp_scan_follow(
                         pos_follow,
                     ));
                 }
-                new_bodies.push(ScanBody { elements: new_elements });
+                new_bodies.push(ScanBody { ..*body, elements: new_elements });
             }
             ole.bodies = new_bodies;
             ScanElement::OptionalLookahead(ole);
@@ -1729,10 +1732,10 @@ fn lower_lr_alt_suffix(
             elem_follow_exact,
             &elements_from(&alt.elements, i + 1),
         );
-        if let Repeat(rep_op) = &op {
+        if let Some(rep_op) = op_repeat_inner(&op) {
             let basic_follow = ctx.first_of_elements_from(&alt.elements, i + 1);
             let basic_second = compute_caller_follow_second(&alt.elements, i + 1, ctx);
-            op = Op::Repeat(patch_repeat_op_caller_follow(
+            let patched = Op::Repeat(patch_repeat_op_caller_follow(
                 rep_op,
                 basic_follow,
                 basic_second,
@@ -1742,6 +1745,7 @@ fn lower_lr_alt_suffix(
                 false,
                 &rule.name,
             ));
+            op = rewrap_op_repeat(op, patched);
         }
         ops.push(op);
     }
@@ -1774,7 +1778,7 @@ fn lower_lr_alt_scan_suffix(rule: &ParserRule, alt_index: i32, ctx: &mut GenCont
             false,
         ));
     }
-    return ScanBody { elements };
+    return ScanBody { elements, gates: scan_gates_for(alt, ctx, 1) };
 }
 
 /// Index (within `alt.elements`) of the LAST self-reference to
@@ -2117,7 +2121,41 @@ fn lower_scan_body(alt: &Alternative, ctx: &mut GenContext, rule_name: &String, 
             rule_name,
         ));
     }
-    return ScanBody { elements };
+    return ScanBody {
+        elements,
+        gates: scan_gates_for(alt, ctx),
+        gate_cond: alt_scan_gate_conditions(alt, ctx),
+    };
+}
+
+/// The gate actions of `alt` a scan can run by walking — see `scan_gate.wado`.
+/// Empty unless the grammar declares a simulable gate member, so a grammar
+/// without one lowers exactly as before.
+///
+/// `from` is the surface index the scan body starts at. An LR suffix walks
+/// `elements[1..]`, so it positions its gates against what it actually emits.
+///
+/// A gate before `from` is dropped, not repositioned. The LR rewrite stripped it
+/// with the leading self-ref, and `emit_lr_branch_body` interleaves the
+/// alternative's actions from `before == 1`. The parse never runs it, so
+/// simulating it leaves the scan holding a value no parse produces.
+pub fn scan_gates_for(alt: &Alternative, ctx: &GenContext, from: i32 = 0) -> List<ScanGate> {
+    if !ctx.emit_scan_gate() {
+        return [];
+    }
+    let mut gates: List<ScanGate> = [];
+    for let a of &alt.actions {
+        if a.kind matches { Predicate } || a.before_index < from {
+            continue;
+        }
+        let body = ctx.gate_body(a.source.action_id);
+        if let Some(hit) = gate_assignment(&body) {
+            if ctx.scan_gate_fields().contains(&hit.0) {
+                gates.push(ScanGate { field: hit.0, value: hit.1, before_index: a.before_index - from });
+            }
+        }
+    }
+    return gates;
 }
 
 fn lower_scan_element(
@@ -2352,8 +2390,39 @@ fn scan_group_lenient(alts: &List<Alternative>, ctx: &mut GenContext) -> bool {
     if scan_group_is_nullable(alts, ctx) {
         return true;
     }
+    // A group the scan decides rather than approximates: finding no alternative
+    // is then the answer the parse will give, and rewinding instead reports the
+    // prefix before the group as a match —
+    // `item : outerAttribute* (visItem | macroItem)` measures `#[a]` as an item
+    // the parse refuses, and the tournament has already committed to it.
+    if scan_group_is_decidable(alts, ctx) {
+        return false;
+    }
     let cyclic = ctx.is_rule_scan_cyclic(ctx.current_rule_index());
     return !cyclic;
+}
+
+/// True iff every alternative is a flat sequence of scannable rule / token
+/// references — no repeat, group or wildcard.
+///
+/// The shape is the point, not just scannability. A scan measures a non-greedy
+/// repeat rather than deciding it, so a group containing one can fail where the
+/// parse succeeds, and making that group strict loses the whole rule: SQLite's
+/// `create_table_stmt` has `( ',' column_def )*?` inside exactly such a group.
+/// A flat sequence has no such decision in it — it matches or it does not.
+fn scan_group_is_decidable(alts: &List<Alternative>, ctx: &mut GenContext) -> bool {
+    for let alt of alts {
+        for let e of &alt.elements {
+            if !peel_repeat_body_label(e) matches { RuleRef(_) | TokenRef(_) | Literal(_) } {
+                return false;
+            }
+            let mut visiting: List<String> = [];
+            if !ctx.is_element_scannable(e, &mut visiting) {
+                return false;
+            }
+        }
+    }
+    return true;
 }
 
 /// True iff some alternative of the group is fully nullable (the group can match
@@ -2507,6 +2576,16 @@ fn rebind_scan_repeat_caller_follow(
             &scan_repeat_body_second(&alt_elements[index], ctx),
             &compute_caller_follow_second(alt_elements, index + 1, ctx),
         );
+        let duties = lower_iteration_duties(
+            re.non_greedy,
+            re.kind,
+            &admits_kinds(&re.inner_admits),
+            alt_elements,
+            index,
+            ctx,
+            reaches_rule_tail,
+            rule_name,
+        );
         return ScanElement::Repeat(ScanRepeatElement {
             kind: re.kind,
             body: re.body,
@@ -2519,6 +2598,7 @@ fn rebind_scan_repeat_caller_follow(
             static_exit_undecided,
             probe_viable,
             body_scannable: re.body_scannable,
+            duties,
         });
     }
     return se;
@@ -2963,10 +3043,10 @@ fn lower_alt_body(
         // returns the deep follow (which considers deep-nullable
         // suffixes); emit's per-position `gen_repeat*` decisions use the
         // simpler `first_of_elements_from`.
-        if let Repeat(rep_op) = &op {
+        if let Some(rep_op) = op_repeat_inner(&op) {
             let basic_follow = ctx.first_of_elements_from(&alt.elements, i + 1);
             let basic_second = compute_caller_follow_second(&alt.elements, i + 1, ctx);
-            op = Op::Repeat(patch_repeat_op_caller_follow(
+            let patched = Op::Repeat(patch_repeat_op_caller_follow(
                 rep_op,
                 basic_follow,
                 basic_second,
@@ -2976,6 +3056,7 @@ fn lower_alt_body(
                 reaches_rule_tail,
                 &rule.name,
             ));
+            op = rewrap_op_repeat(op, patched);
         }
         ops.push(op);
     }
@@ -3283,13 +3364,13 @@ fn lower_group_alt(
         // `Op::ListLabel(Repeat(_))` on parse, but the scan side still
         // surfaces a top-level `ScanElement::Repeat` — so the scan
         // rebind needs an independent check, not an `&&` of the two.
-        let op_is_repeat = op matches { Repeat(_) };
+        let op_is_repeat = op_repeat_inner(&op) matches { Some(_) };
         let se_is_repeat = se matches { Repeat(_) };
         if op_is_repeat || se_is_repeat {
             let basic_follow = ctx.first_of_elements_from(&alt.elements, i + 1);
-            if let Repeat(rep_op) = &op {
+            if let Some(rep_op) = op_repeat_inner(&op) {
                 let basic_second = compute_caller_follow_second(&alt.elements, i + 1, ctx);
-                op = Op::Repeat(patch_repeat_op_caller_follow(
+                let patched = Op::Repeat(patch_repeat_op_caller_follow(
                     rep_op,
                     basic_follow,
                     basic_second,
@@ -3299,6 +3380,7 @@ fn lower_group_alt(
                     false,
                     rule_name,
                 ));
+                op = rewrap_op_repeat(op, patched);
             }
             if se_is_repeat {
                 se = rebind_scan_repeat_caller_follow(se, basic_follow, &alt.elements, i, ctx, false);
@@ -3308,6 +3390,34 @@ fn lower_group_alt(
         scan_elements.push(se);
     }
     return [ops, scan_elements];
+}
+
+/// The `RepeatOp` an op is, through a list label — the parse side's answer to
+/// the question the scan side asks as `se matches { Repeat(_) }`.
+///
+/// A scalar `Label(Repeat(_))` collapses to `Op::Repeat`, but a list one lands
+/// as `Op::ListLabel(Repeat(_))` while the scan still surfaces a top-level
+/// `ScanElement::Repeat`. Every site that rebinds a repeat's caller FOLLOW asks
+/// through here, so `x+=(y*)` cannot take that rebind — and with it the reserve
+/// and decline guards — on the scan alone.
+fn op_repeat_inner(op: &Op) -> Option<&RepeatOp> with stores[op] {
+    return match op {
+        Repeat(r) => Option::Some(r),
+        ListLabel(l) => if let Repeat(r) = &l.inner {
+            Option::Some(r);
+        } else {
+            null;
+        },
+        _ => null,
+    };
+}
+
+/// Put a patched `RepeatOp` back under whatever wrapper `op` had.
+fn rewrap_op_repeat(op: Op, patched: Op) -> Op {
+    return match op {
+        ListLabel(l) => Op::ListLabel(ListLabelOp { ..l, inner: patched }),
+        _ => patched,
+    };
 }
 
 /// Single-alt with ≥ 2 elements: `(name=ID '=' expr)` lowers to a
@@ -3574,7 +3684,7 @@ fn lower_simple_cst_alt_call(elem: &Element, counts: &mut List<[String, i32]>) -
 /// with a gateable alt-initial predicate is selected by the predicate instead,
 /// and keeps the unconditional branch the gate hangs on.
 fn alt_earns_group_follow(alt: &Alternative, ctx: &mut GenContext) -> bool {
-    if ctx.emit_actions() && alt_has_gate(alt, ctx) {
+    if alt_has_gate(alt, ctx) {
         return false;
     }
     return alt_class_is_nullable(&alt_class_of(alt, ctx));
@@ -4374,6 +4484,16 @@ fn patch_repeat_op_caller_follow(
         &rep_op.body_second_position_first,
         &caller_follow_second,
     );
+    let duties = lower_iteration_duties(
+        rep_op.non_greedy,
+        rep_op.kind,
+        &admits_kinds(&rep_op.body_admits),
+        alt_elements,
+        index,
+        ctx,
+        reaches_rule_tail,
+        rule_name,
+    );
     return RepeatOp {
         ..*rep_op,
         caller_follow_first,
@@ -4382,6 +4502,117 @@ fn patch_repeat_op_caller_follow(
         continuation_scannable,
         static_exit_undecided,
         probe_viable,
+        duties,
+    };
+}
+
+/// Everything a loop's iteration owes, in one value.
+///
+/// The loop arrives as its three deciding properties rather than as an op, so
+/// the parse's `RepeatOp` and the scan's `ScanRepeatElement` build their duties
+/// from the same body. Two calls with the same arguments cannot disagree, which
+/// is the invariant the mirrored stamps could only assert.
+fn lower_iteration_duties(
+    non_greedy: bool,
+    kind: RepeatKind,
+    loop_first: &List<String>,
+    alt_elements: &List<Element>,
+    index: i32,
+    ctx: &mut GenContext,
+    reaches_rule_tail: bool,
+    rule_name: &String,
+) -> IterationDuties {
+    let mut duties = IterationDuties {};
+    if let Some(scan) = lower_reserve_scan(non_greedy, kind, loop_first, alt_elements, index, ctx) {
+        duties.reserve_scan = scan;
+    }
+    // No `mark_rule_reads_follow` for the decline: it asks the rule's classical
+    // FOLLOW, a superset of anything a caller's mask admits, so the runtime mask
+    // would decide nothing. Marking it would thread a `follow` parameter through
+    // every caller of every rule carrying such a loop — 6000 lines of SQLite's
+    // parser, for no answer.
+    if let Some(hit) = lower_decline_scan(non_greedy, kind, loop_first, alt_elements, index, ctx, reaches_rule_tail) {
+        duties.decline_stranded = true;
+        duties.decline_scan = hit.0;
+        duties.decline_cont_first = hit.1;
+        duties.decline_viable = ctx.rule_follow_for_probe(rule_name);
+    }
+    return duties;
+}
+
+/// The mandatory suffix a loop must leave to its own alternative, as scan
+/// elements. `null` wherever the loop cannot starve it, which is every loop
+/// but the `X* X` shape.
+///
+/// Each condition rules out a reservation that would decide nothing and only
+/// cost a scan: a non-greedy loop already stops at its continuation; a
+/// nullable suffix is nothing to reserve, since the alternative completes
+/// without it; a suffix whose head no iteration admits can never be eaten; and
+/// an unscannable one would be reserved on a prefix, which proves nothing about
+/// the whole.
+fn lower_reserve_scan(
+    non_greedy: bool,
+    kind: RepeatKind,
+    loop_first: &List<String>,
+    alt_elements: &List<Element>,
+    index: i32,
+    ctx: &mut GenContext,
+) -> Option<List<ScanElement>> {
+    if non_greedy || !kind matches { Star | Plus } {
+        return null;
+    }
+    if index + 1 >= alt_elements.len() || ctx.tail_is_nullable_deep(alt_elements, index + 1) {
+        return null;
+    }
+    if !sets_overlap(loop_first, &ctx.first_of_elements_from(alt_elements, index + 1)) {
+        return null;
+    }
+    return lower_scan_continuation_elements(alt_elements, index, ctx);
+}
+
+/// The continuation a greedy loop asks before committing to an iteration, or
+/// `null` wherever the loop cannot strand its own alternative — which leaves
+/// every other loop's emit unchanged.
+///
+/// `X* Y?` where an `X` and a `Y` can start on the same token: the loop takes
+/// every `X` its body scans, so the input that reads as `Y` loses its head to
+/// the loop and what follows the head has no taker. `stmt+ expr?` over
+/// `{ y }.m()` is the shape — the `{ y }` scans as a statement and strands the
+/// `.m()`.
+///
+/// The conditions mirror `lower_reserve_scan`'s and answer the other half of
+/// the same question. A reservation protects a *mandatory* suffix from the
+/// loop; this protects an *optional* one, which nothing else does. Both need
+/// the two heads to overlap, or the loop could not have taken the suffix's
+/// input in the first place. Only this one needs the rule's tail, because it
+/// ends by asking the caller's FOLLOW.
+///
+/// Returns the continuation's scan and its FIRST set together: the guard needs
+/// both and the set is what decides whether to build the scan at all, so
+/// computing it once is the difference between one `first_of_elements_from` per
+/// qualifying loop and two.
+fn lower_decline_scan(
+    non_greedy: bool,
+    kind: RepeatKind,
+    loop_first: &List<String>,
+    alt_elements: &List<Element>,
+    index: i32,
+    ctx: &mut GenContext,
+    reaches_rule_tail: bool,
+) -> Option<[List<ScanElement>, List<String>]> {
+    if non_greedy || !kind matches { Star | Plus } || !reaches_rule_tail {
+        return null;
+    }
+    if index + 1 >= alt_elements.len() || !ctx.tail_is_nullable_deep(alt_elements, index + 1) {
+        return null;
+    }
+    let suffix_first = ctx.first_of_elements_from(alt_elements, index + 1);
+    if !sets_overlap(loop_first, &suffix_first) {
+        return null;
+    }
+    return match lower_scan_continuation_elements(alt_elements, index, ctx) {
+        Some(scan) => Option::Some([scan, suffix_first]),
+        None => null,
     };
 }
 

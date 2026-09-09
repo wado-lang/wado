@@ -1,5 +1,4 @@
-// Source: Gale test fixture (Stage C camelCase binding)
-// License: same as the Gale package
+// Stage C camelCase binding.
 grammar WadoCamelLabel;
 options { language = Wado; }
 r : myTok=ID { p.emit($myTok.text); } ;

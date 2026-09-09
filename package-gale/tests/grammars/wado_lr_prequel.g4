@@ -1,6 +1,3 @@
-// Source: Gale test fixture (Stage C @init / @after on a left-recursive rule)
-// License: same as the Gale package
-//
 // `@init` seeds the invocation's value channel at rule entry (ANTLR's
 // enterRecursionRule): the primary alt's action reads the seed (`$v` starts at
 // 1000). `@after` runs once at rule exit on the final accumulated value. Each

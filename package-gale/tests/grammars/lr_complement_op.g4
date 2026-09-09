@@ -1,6 +1,3 @@
-// Source: hand-written for Gale's left-recursion tests.
-// License: same as the Gale package.
-//
 // A `~X`-led LR suffix is a binary operator over an OPEN operator set: `e ~';'
 // e` treats any token except `;` as the infix operator. ANTLR4 rejects this
 // (no operator token to climb on), but the semantics is uniquely determined by

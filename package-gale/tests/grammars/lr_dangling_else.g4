@@ -1,6 +1,3 @@
-// Source: hand-written for Gale's left-recursion tests.
-// License: same as the Gale package.
-//
 // Non-greedy `??` inside a left-recursive rule: the dangling-else binds to the
 // nearest `if` (`if 1 then if 2 then 3 else 4` → the else is the inner if's).
 // The `??` enter/skip is decided by the runtime ATN simulator with the rule's

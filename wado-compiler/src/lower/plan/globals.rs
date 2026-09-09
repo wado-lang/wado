@@ -38,8 +38,8 @@ fn is_constant_initializer(expr: &TirExpr, type_table: &TypeTable) -> bool {
         | TirExprKind::FloatLiteral { .. }
         | TirExprKind::BoolLiteral(_)
         | TirExprKind::CharLiteral(_)
-        | TirExprKind::Null
-        | TirExprKind::Unit => true,
+        | TirExprKind::Unit
+        | TirExprKind::Null => true,
         TirExprKind::Cast { expr: inner, .. } => is_constant_initializer(inner, type_table),
         TirExprKind::Unary { op, expr: inner } => {
             // Negation of literals is constant

@@ -1,0 +1,33 @@
+//! A loop whose body its own guard implies still reserves its alternative's tail.
+//!
+//! The scan takes a shortcut for a body of one token — advance by one and
+//! return — and that shortcut ran before the reserve. The parse side applies it
+//! either way, so the two disagreed about a loop the guard happens to imply.
+
+use g from "./grammars/token_body_reserves_tail.g4"
+    with {
+        generator: { module: "../src/generator.wado", output_dir: "./generated/cst_token_body_reserves_tail" },
+    };
+
+fn assert_tree(input: &String, expected: &String) {
+    let result = g::parse(input);
+    assert result.ok(), `unexpected diagnostics for ${*input}: ${result.diagnostics:?}`;
+    let actual = g::to_string_tree(&result);
+    assert actual == *expected, `\ninput:    ${*input}\nexpected: ${*expected}\nactual:   ${actual}`;
+}
+
+// The hit case: the loop must leave the last `a` to the mandatory tail, or the
+// scan scores the only viable alternative as no match.
+test "a token-bodied loop leaves the tail its own token" {
+    assert_tree(&"a a", &"(start (pick (as a a)))");
+}
+
+// The rejection cases: one token is the tail's, and the loop still runs where
+// the alternative has somewhere to put what it takes.
+test "a single token is the tail's" {
+    assert_tree(&"a", &"(start (pick (as a)))");
+}
+
+test "the other alternative still wins where it matches" {
+    assert_tree(&"a a ;", &"(start (pick (as a a) ;))");
+}

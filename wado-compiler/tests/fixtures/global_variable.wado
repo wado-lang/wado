@@ -80,6 +80,18 @@ global mut RUNTIME_LEVEL: Level = DEFAULT_LEVEL;
 
 global mut current_counter: Option<&mut Counter> = null;
 
+variant Shape {
+    Dot,
+    Line(i32),
+}
+
+global SCALAR_NONE: Option<i32> = null;
+global mut SCALAR_NONE_MUT: Option<bool> = null;
+global SCALAR_SOME: Option<i32> = Option::Some(7);
+global VARIANT_NONE: Option<Shape> = null;
+global STRUCT_NONE: Option<GPoint> = null;
+global STRING_NONE: Option<String> = null;
+
 global mut INIT_MARKS: i32 = 0;
 global READY: () = mark_init();
 global mut LATER: () = ();
@@ -274,4 +286,23 @@ test "a genuinely nullable global keeps its None" {
     assert read_counter() == 7;
     current_counter = null;
     assert read_counter() == -1;
+}
+
+test "an Option global declared null keeps its None, whatever it wraps" {
+    // Whether a `None` is a bare null or a struct carrying the discriminant is
+    // the null-niche lowering's answer, and it says null only for the two-case
+    // variant over a reference. The slot answered it for itself and said null
+    // to every `Option`, so a read of a scalar one trapped asking which case it
+    // is. `Option::Some` in the same position always worked, which is what made
+    // this look like nullable-reference handling.
+    assert SCALAR_NONE matches { None };
+    assert SCALAR_NONE_MUT matches { None };
+    assert VARIANT_NONE matches { None };
+    assert STRUCT_NONE matches { None };
+    assert STRING_NONE matches { None };
+    assert SCALAR_SOME matches { Some(7) };
+    SCALAR_NONE_MUT = Option::Some(true);
+    assert SCALAR_NONE_MUT matches { Some(true) };
+    SCALAR_NONE_MUT = null;
+    assert SCALAR_NONE_MUT matches { None };
 }

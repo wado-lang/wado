@@ -1,0 +1,35 @@
+//! A scan tournament that walks over the action closing a gate.
+//!
+//! `driver_cst_gated_tournament_alt_test` evaluates the gate in the parse
+//! function that owns it, which covers a head the parser is already inside.
+//! Here the deciding tournament is an outer one and its scan crosses the `IF`
+//! head without running the action, so the gate the parse will apply is
+//! invisible to the measurement that picks the alternative. The scan has to
+//! simulate the action as it walks.
+
+use g from "./grammars/nested_gate_tournament.g4"
+    with {
+        generator: { module: "../src/generator.wado", output_dir: "./generated/cst_nested_gate_tournament" },
+    };
+
+fn assert_tree(input: &String, expected: &String) {
+    let result = g::parse(input);
+    assert result.ok(), `unexpected diagnostics for ${*input}: ${result.diagnostics:?}`;
+    let actual = g::to_string_tree(&result);
+    assert actual == *expected, `\ninput:    ${*input}\nexpected: ${*expected}\nactual:   ${actual}`;
+}
+
+// The rejection case: outside any head the braced alternative is still the one
+// the tournament must take, so a repair that stopped preferring it fails here.
+test "outside a head the braced alternative wins under the outer tournament" {
+    assert_tree(&"{ y = v { a } ; }", &"(start (block { (stmts (stmt (expr (expr y) = (expr v { a })) ;)) }))");
+}
+
+// The hit case: the outer tournament measures a stretch containing an `IF`
+// head, so its scan must close the gate the head closes.
+test "the outer tournament sees the gate its scan walks over" {
+    assert_tree(
+        &"{ y = if v { a } ; }",
+        &"(start (block { (stmts (stmt (expr (expr y) = (expr if (expr v) (blk { a }))) ;)) }))",
+    );
+}

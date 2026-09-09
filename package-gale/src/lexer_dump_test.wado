@@ -312,14 +312,17 @@ CMT : '/*' (CMT | .)+? '*/' ;");
     assert str_contains(&report, &"ATN-class 1"), report;
 }
 
-test "lexer dump keeps a predicate-carrying alternation off the scoring scan" {
-    // Scanning every arm would evaluate the predicate more often than the
-    // grammar says, so the emit stays first-match.
+test "lexer dump scores a predicate-carrying alternation by length" {
+    // ANTLR4's lexer takes the longest arm, and a predicate says whether its own
+    // arm matches — never how the arms compare on length. The carve-out in
+    // `lexer_alts_scan` answers the routing question, where `latn_match` cannot
+    // run a predicate; both emit decisions read `lexer_alts_lengths`.
     let report = lexer_dump(&"grammar T;
 r : I ;
 I : ('a' | {true}? 'ab') 'bc' ;");
 
-    assert str_contains(&report, &"first-match: an arm carries a semantic predicate"), report;
+    assert !str_contains(&report, &"an arm carries a semantic predicate"), report;
+    assert str_contains(&report, &"arm scoring"), report;
 }
 
 test "lexer dump names a rule's constructs with its own element text" {

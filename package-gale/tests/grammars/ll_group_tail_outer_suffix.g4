@@ -1,6 +1,3 @@
-// Source: hand-written for Gale's LL prediction tests.
-// License: same as the Gale package.
-//
 // The same loop as `ll_loop_yields_closer.g4`, with the closer inside a group:
 // `block : (OR names? OR) body`. What continues past `names` is the group's
 // own OR and then `body`, which sits in the enclosing alternative — a

@@ -1,6 +1,3 @@
-// Source: Gale test fixture (predicate after a greedy repeat)
-// License: same as the Gale package
-//
 // A predicate positioned after a greedy repeat has nowhere to go in the
 // peek/commit emit, so the repeat keeps the plain greedy loop. `A`'s suffix
 // (`B`, a rule reference) is peekable and `[a-b]` can eat a `'b'` that `B`

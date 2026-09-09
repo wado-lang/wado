@@ -22,7 +22,37 @@ OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 // $antlr-format alignTrailingComments true, columnLimit 150, minEmptyLines 1, maxEmptyLinesToKeep 1, reflowComments false, useTab false
 // $antlr-format allowShortRulesOnASingleLine false, allowShortBlocksOnASingleLine true, alignSemicolons hanging, alignColons hanging
 
+// Local changes to the vendored grammar are marked `// LOCAL:` at the rule
+// they change. Upstream tracks the Rust of its day; most of these are
+// constructs the language has stabilised since, which this repository's own
+// sources use. ANTLR4 accepts every form below, so the grammar stays
+// oracle-comparable.
+
 parser grammar RustParser;
+
+// LOCAL: Rust's "no struct literal in a condition" rule, which upstream leaves
+// as the `/*except structExpression*/` comment on `predicateLoopExpression`.
+//
+// `if any_error { None }` is `any_error` and a block, not the struct literal
+// `any_error { None }`. Only position separates them, because `{ None }` is a
+// valid shorthand field list as well as a valid block. Rust spells it with a
+// Scrutinee that excludes struct expressions; a members flag is what an ANTLR4
+// grammar has instead.
+//
+// Set across the head of `if` / `while` / `for` / `match` and a let chain's
+// scrutinee. Cleared by any bracketing — `(…)`, `[…]`, a call's arguments, a
+// block — where Rust allows a struct literal again. A rule that can hold a
+// whole expression (`callParams`, `arrayElements`, `tupleElements`) restores
+// the flag on the way out, through `locals` + `@init` / `@after`.
+//
+// One flag, not a stack, so the ban does not resume after a bracket that ends
+// inside the same head: `if f(x) + P { y: 1 }` is accepted where Rust rejects
+// it. That direction only ever accepts more, which is the safe one for a
+// parser. A stack in a members field is a documented dead end — see
+// `AGENTS.md`, "Failed approaches".
+@parser::members {
+    int noStruct = 0;
+}
 
 // Insert here @header for C++ parser.
 
@@ -403,8 +433,12 @@ outerAttribute
     : POUND LSQUAREBRACKET attr RSQUAREBRACKET
     ;
 
+// LOCAL: `KW_UNSAFE` — the unsafe attribute `#[unsafe(no_mangle)]` (Rust 2024,
+// and required there for the attributes that were always unsafe). `unsafe` is a
+// keyword, so `simplePath` cannot start with it.
 attr
-    : simplePath attrInput?
+    : KW_UNSAFE LPAREN attr RPAREN
+    | simplePath attrInput?
     ;
 
 attrInput
@@ -430,8 +464,9 @@ statement
     | macroInvocationSemi
     ;
 
+// LOCAL: `else blockExpression` is let-else (Rust 1.65), absent upstream.
 letStatement
-    : outerAttribute* KW_LET patternNoTopAlt (COLON type_)? (EQ expression)? SEMI
+    : outerAttribute* KW_LET patternNoTopAlt (COLON type_)? (EQ expression (KW_ELSE blockExpression)?)? SEMI
     ;
 
 expressionStatement
@@ -449,8 +484,12 @@ expression
     | expression DOT tupleIndex                                      # TupleIndexingExpression       // 8.2.7
     | expression DOT KW_AWAIT                                        # AwaitExpression               // 8.2.18
     | expression LPAREN callParams? RPAREN                           # CallExpression                // 8.2.9
-    | expression LSQUAREBRACKET expression RSQUAREBRACKET            # IndexExpression               // 8.2.6
+    | expression LSQUAREBRACKET {noStruct = 0;} expression RSQUAREBRACKET # IndexExpression           // 8.2.6
     | expression QUESTION                                            # ErrorPropagationExpression    // 8.2.4
+    // LOCAL: `KW_RAW (KW_CONST | KW_MUT)` — the raw borrow `&raw const p` /
+    // `&raw mut p` (Rust 1.82). `raw` is not a keyword, so the two readings are
+    // separated by what follows it: only a raw borrow has `const` / `mut` there.
+    | (AND | ANDAND) KW_RAW (KW_CONST | KW_MUT) expression           # RawBorrowExpression
     | (AND | ANDAND) KW_MUT? expression                              # BorrowExpression              // 8.2.4
     | STAR expression                                                # DereferenceExpression         // 8.2.4
     | (MINUS | NOT) expression                                         # NegationExpression            // 8.2.4
@@ -473,11 +512,11 @@ expression
     | KW_CONTINUE LIFETIME_OR_LABEL? expression?                     # ContinueExpression            // 8.2.13
     | KW_BREAK LIFETIME_OR_LABEL? expression?                        # BreakExpression               // 8.2.13
     | KW_RETURN expression?                                          # ReturnExpression              // 8.2.17
-    | LPAREN innerAttribute* expression RPAREN                       # GroupedExpression             // 8.2.5
+    | LPAREN {noStruct = 0;} innerAttribute* expression RPAREN       # GroupedExpression             // 8.2.5
     | LSQUAREBRACKET innerAttribute* arrayElements? RSQUAREBRACKET   # ArrayExpression               // 8.2.6
     | LPAREN innerAttribute* tupleElements? RPAREN                   # TupleExpression               // 8.2.7
-    | structExpression                                               # StructExpression_             // 8.2.8
-    | enumerationVariantExpression                                   # EnumerationVariantExpression_
+    | {noStruct == 0}? structExpression                              # StructExpression_             // 8.2.8
+    | {noStruct == 0}? enumerationVariantExpression                  # EnumerationVariantExpression_
     | closureExpression                                              # ClosureExpression_            // 8.2.12
     | expressionWithBlock                                            # ExpressionWithBlock_
     | macroInvocation                                                # MacroInvocationAsExpression
@@ -537,8 +576,10 @@ pathExpression
     ;
 
 // 8.2.3
+// LOCAL: `{noStruct = 0;}` — a brace is bracketing too, so a struct literal is
+// legal again inside the block a condition guards.
 blockExpression
-    : LCURLYBRACE innerAttribute* statements? RCURLYBRACE
+    : LCURLYBRACE {noStruct = 0;} innerAttribute* statements? RCURLYBRACE
     ;
 
 statements
@@ -555,13 +596,23 @@ unsafeBlockExpression
     ;
 
 // 8.2.6
+// LOCAL: the `noStruct` scope — inside the brackets a struct literal is legal,
+// and the ban comes back after them.
 arrayElements
+locals [int sv]
+@init { $sv = noStruct; noStruct = 0; }
+@after { noStruct = $sv; }
     : expression (COMMA expression)* COMMA?
     | expression SEMI expression
     ;
 
 // 8.2.7
+// LOCAL: the `noStruct` scope — inside the parentheses a struct literal is
+// legal, and the ban comes back after them.
 tupleElements
+locals [int sv]
+@init { $sv = noStruct; noStruct = 0; }
+@after { noStruct = $sv; }
     : (expression COMMA)+ expression?
     ;
 
@@ -629,13 +680,20 @@ enumExprFieldless
     ;
 
 // 8.2.9
+// LOCAL: the `noStruct` scope — a call's arguments are bracketing, so
+// `if f(Point { x: 1 }) { … }` is the struct literal Rust reads there.
 callParams
+locals [int sv]
+@init { $sv = noStruct; noStruct = 0; }
+@after { noStruct = $sv; }
     : expression (COMMA expression)* COMMA?
     ;
 
 // 8.2.12
+// LOCAL: `KW_ASYNC?` — the async closure (Rust 2024), absent upstream.
+// `async move |_| rx.await` had no parse at all.
 closureExpression
-    : KW_MOVE? (OROR | OR closureParameters? OR) (expression | RARROW typeNoBounds blockExpression)
+    : KW_ASYNC? KW_MOVE? (OROR | OR closureParameters? OR) (expression | RARROW typeNoBounds blockExpression)
     ;
 
 closureParameters
@@ -660,16 +718,21 @@ infiniteLoopExpression
     : KW_LOOP blockExpression
     ;
 
+// LOCAL: `letChainTail*` — the `while` half of the let chain above.
 predicateLoopExpression
-    : KW_WHILE expression /*except structExpression*/ blockExpression
+    : KW_WHILE {noStruct = 1;} expression {noStruct = 0;} (
+        letChainTail* blockExpression
+    )
     ;
 
 predicatePatternLoopExpression
-    : KW_WHILE KW_LET pattern EQ expression blockExpression
+    : KW_WHILE KW_LET pattern EQ {noStruct = 1;} expression {noStruct = 0;} (
+        letChainTail* blockExpression
+    )
     ;
 
 iteratorLoopExpression
-    : KW_FOR pattern KW_IN expression blockExpression
+    : KW_FOR pattern KW_IN {noStruct = 1;} expression {noStruct = 0;} blockExpression
     ;
 
 loopLabel
@@ -677,19 +740,39 @@ loopLabel
     ;
 
 // 8.2.15
+// LOCAL: `letChainTail*` on each condition is the let chain (Rust 2024),
+// absent upstream. Both heads start one, and only a link that binds needs the
+// rule — a link that does not is already part of the expression before it.
+//
+// The scrutinee stays the full `expression`, so `if let P = e && cond` reads
+// `e && cond` as one scrutinee where rustc reads a two-link chain. Rust spells
+// the difference with a Scrutinee excluding the lazy-boolean operators, which
+// needs a second expression hierarchy; the trees differ, the parse does not.
+// The chain and the block it guards are one group on purpose: a bare
+// `letChainTail*` is a nullable element between the condition and the block,
+// and a nullable suffix head switches the caller-FOLLOW gate off, which is
+// what stops `if return { 1 }` eating its own block. Grouped, the suffix head
+// is mandatory again. The group is transparent, so no tree changes.
 ifExpression
-    : KW_IF expression blockExpression (KW_ELSE (blockExpression | ifExpression | ifLetExpression))?
+    : KW_IF {noStruct = 1;} expression {noStruct = 0;} (
+        letChainTail* blockExpression
+    ) (KW_ELSE (blockExpression | ifExpression | ifLetExpression))?
     ;
 
 ifLetExpression
-    : KW_IF KW_LET pattern EQ expression blockExpression (
-        KW_ELSE (blockExpression | ifExpression | ifLetExpression)
-    )?
+    : KW_IF KW_LET pattern EQ {noStruct = 1;} expression {noStruct = 0;} (
+        letChainTail* blockExpression
+    ) (KW_ELSE (blockExpression | ifExpression | ifLetExpression))?
+    ;
+
+letChainTail
+    : ANDAND KW_LET pattern EQ {noStruct = 1;} expression {noStruct = 0;}
     ;
 
 // 8.2.16
 matchExpression
-    : KW_MATCH expression LCURLYBRACE innerAttribute* matchArms? RCURLYBRACE
+    : KW_MATCH {noStruct = 1;} expression {noStruct = 0;} LCURLYBRACE innerAttribute* matchArms?
+        RCURLYBRACE
     ;
 
 matchArms
@@ -705,8 +788,11 @@ matchArm
     : outerAttribute* pattern matchArmGuard?
     ;
 
+// LOCAL: `if let` guards (Rust 1.88), and the let chain a guard may continue
+// into — the same `letChainTail` an `if` condition uses.
 matchArmGuard
-    : KW_IF expression
+    : KW_IF KW_LET pattern EQ expression letChainTail*
+    | KW_IF expression letChainTail*
     ;
 
 // 9
@@ -882,8 +968,12 @@ sliceType
     ;
 
 // 10.1.13
+// LOCAL: `ANDAND` — `&&str` lexes as one token, and in type position it is
+// always two references. `borrowExpression` and `referencePattern` already
+// spell the pair this way; this rule was the one that did not, so no `&&T`
+// parsed at all.
 referenceType
-    : AND lifetime? KW_MUT? typeNoBounds
+    : (AND | ANDAND) lifetime? KW_MUT? typeNoBounds
     ;
 
 rawPointerType
@@ -1068,10 +1158,17 @@ visibility
     ;
 
 // technical
+// LOCAL: `KW_UNION`. `union` is a weak keyword — it opens an item only in
+// `union Foo { … }`, and is an ordinary identifier everywhere else. Upstream
+// admits `macro_rules` for the same reason and stopped there, so `fn union(…)`
+// and `facts.union()` had no parse at all.
 identifier
     : NON_KEYWORD_IDENTIFIER
     | RAW_IDENTIFIER
     | KW_MACRORULES
+    | KW_UNION
+    // LOCAL: `raw` is weak — a keyword only in `&raw const` / `&raw mut`.
+    | KW_RAW
     ;
 
 keyword

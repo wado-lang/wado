@@ -1,5 +1,3 @@
-// Source: hand-written regression for the nested-list caller-FOLLOW gate.
-// License: project-internal test fixture.
 // A bracketed comma-list `[ item (',' item)* ]` as an element of a bare
 // `item (',' item)*` list (targs): the array's inner loop must not yield its
 // comma to the enclosing list's FOLLOW.

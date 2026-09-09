@@ -1,0 +1,30 @@
+//! `driver_cst_nested_gate_tournament_wado_test.wado` with the gate member named
+//! the way Wado names things.
+//!
+//! Same trees, same code path, no bug of its own to catch — `no_brace` and
+//! `noBrace` differ only in spelling and the gate reads neither by predicting
+//! it. This is here because `no_brace` is the spelling a Wado grammar will be
+//! written with, and it is otherwise pinned nowhere from the `.g4` to the tree.
+
+use g from "./grammars/nested_gate_tournament_wado_snake.g4"
+    with {
+        generator: { module: "../src/generator.wado", output_dir: "./generated/cst_nested_gate_tournament_wado_snake" },
+    };
+
+fn assert_tree(input: &String, expected: &String) {
+    let result = g::parse(input);
+    assert result.ok(), `unexpected diagnostics for ${*input}: ${result.diagnostics:?}`;
+    let actual = g::to_string_tree(&result);
+    assert actual == *expected, `\ninput:    ${*input}\nexpected: ${*expected}\nactual:   ${actual}`;
+}
+
+test "outside a head the braced alternative wins under the outer tournament" {
+    assert_tree(&"{ y = v { a } ; }", &"(start (block { (stmts (stmt (expr (expr y) = (expr v { a })) ;)) }))");
+}
+
+test "the outer tournament sees the gate its scan walks over" {
+    assert_tree(
+        &"{ y = if v { a } ; }",
+        &"(start (block { (stmts (stmt (expr (expr y) = (expr if (expr v) (blk { a }))) ;)) }))",
+    );
+}

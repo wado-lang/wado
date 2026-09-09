@@ -1,6 +1,3 @@
-// Source: Gale test fixture (Stage C mid-alt lexer semantic predicate)
-// License: same as the Gale package
-//
 // A predicate sits *between* elements of one alt (not at a boundary): after
 // `KW`'s first letter and before the rest, `{ $text == "c" }?` requires that
 // first letter to be `c`. So a three-letter run lexes as KW only when it starts

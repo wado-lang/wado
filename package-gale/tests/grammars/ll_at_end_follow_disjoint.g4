@@ -1,6 +1,7 @@
-// Source: hand-written regression for the FOLLOW-disjoint at-end-conflict
-// refinement (the SQLite `UNION` / `UNION ALL` shape).
-// License: BSD-3-Clause (matches the rest of the gale test corpus).
+// A regression for the FOLLOW-disjoint at-end-conflict refinement, on the
+// `UNION` / `UNION ALL` shape in the `SQLite.g4` beside this file: MIT,
+// Copyright (c) 2014 by Bart Kiers, https://github.com/bkiers/sqlite-parser.
+// The rules below are written here.
 //
 // x has an at-end conflict ('a' 'b' ends while 'a' 'b' 'c' continues), but
 // the divergence token 'c' cannot continue the caller (FOLLOW(x) = {'d'}),

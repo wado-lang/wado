@@ -1,6 +1,3 @@
-// Source: Gale test fixture (Stage C fragment-inlined lexer semantic predicate)
-// License: same as the Gale package
-//
 // A predicate lives inside a (non-recursive, multi-alt) fragment that is
 // inlined at its use site: `KW` references `LETTERS`, whose first alt matches a
 // letter run only when it spells `cat` and whose second matches `dog`. `$text`

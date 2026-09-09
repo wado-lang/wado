@@ -1,0 +1,35 @@
+//! An LR alternative's gate action sitting before the leading self-ref.
+//!
+//! The parse never runs it — `emit_lr_branch_body` interleaves an LR
+//! alternative's actions from `before == 1`, and the alt-initial position is the
+//! loop-entry decision rather than a suffix action. The suffix scan carried it
+//! anyway, so the scan closed a gate the parse leaves open: the inner atom
+//! refused itself and the precedence loop declined the suffix.
+
+use g from "./grammars/lr_alt_initial_gate.g4"
+    with {
+        generator: { module: "../src/generator.wado", output_dir: "./generated/cst_lr_alt_initial_gate" },
+    };
+
+fn assert_tree(input: &String, expected: &String) {
+    let result = g::parse(input);
+    assert result.ok(), `unexpected diagnostics for ${*input}: ${result.diagnostics:?}`;
+    let actual = g::to_string_tree(&result);
+    assert actual == *expected, `\ninput:    ${*input}\nexpected: ${*expected}\nactual:   ${actual}`;
+}
+
+// The hit case: the suffix has to be taken, which it is not while the scan holds
+// a `noStruct` the parse never sets.
+test "the precedence loop takes a suffix whose gate action never runs" {
+    assert_tree(&"x + x", &"(start (stmt (e (e x) + (e x))))");
+}
+
+test "and keeps taking it as the chain grows" {
+    assert_tree(&"x + x + x", &"(start (stmt (e (e (e x) + (e x)) + (e x))))");
+}
+
+// The rejection case: the atom's own gate still holds where the parse does set
+// it, so a repair that simply stopped simulating the field would fail here.
+test "a gate the parse does run still refuses the atom" {
+    assert_tree(&"( x )", &"(start (stmt (e ( (e x) ))))");
+}

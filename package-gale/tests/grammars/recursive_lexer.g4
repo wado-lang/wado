@@ -1,6 +1,3 @@
-// Source: Hand-authored for Gale's recursive-fragment coverage.
-// License: BSD-3-Clause (matches the Gale repo).
-//
 // ANTLR4 lexer fragments may reference themselves or each other,
 // enabling lexer-time recursion. Canonical use case: matching a
 // balanced brace block as a single token — the lexer has to recurse

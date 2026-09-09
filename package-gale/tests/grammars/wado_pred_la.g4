@@ -1,6 +1,3 @@
-// Source: Gale test fixture (Stage C context-free predicate reading `p`)
-// License: same as the Gale package
-//
 // A context-free (`$`-free) alt-initial predicate that actually reads the
 // parser context API — `{ p.la(1) == TK_NUM }?` — rather than a bare
 // `{true}?` / `{false}?` literal. It is extracted to a standalone

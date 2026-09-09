@@ -1,6 +1,3 @@
-// Source: hand-written for Gale's LL prediction tests.
-// License: same as the Gale package.
-//
 // A greedy optional at a rule's deep tail, against a caller loop that opens on
 // the same token. `seg : ID SEP? (args | fn_)?` sits inside
 // `path : seg (SEP seg)*`, where the loop is the caller's last element, so the

@@ -1,6 +1,3 @@
-// Source: Gale test fixture (Stage C predicate on an ATN-routed decision)
-// License: same as the Gale package
-//
 // `xt` / `xr` have the `AtEndConflict` shape (`'a' 'b'` is a prefix of
 // `'a' 'b' 'c'`), so the decision cannot be made statically and routes through
 // the runtime ATN simulator. An alt-initial predicate on the longer alt must

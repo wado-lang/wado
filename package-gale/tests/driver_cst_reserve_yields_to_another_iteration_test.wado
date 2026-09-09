@@ -1,0 +1,41 @@
+//! A reserve stops a loop only where nothing else can carry it.
+//!
+//! `(A | B)* A` owes an `A` after the loop, and an iteration ending where no
+//! `A` starts is not a starve while the loop itself can go round again. Breaking
+//! on the reserve alone made `b b a` unparseable.
+
+use g from "./grammars/reserve_yields_to_another_iteration.g4"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            output_dir: "./generated/cst_reserve_yields_to_another_iteration",
+        },
+    };
+
+fn assert_tree(input: &String, expected: &String) {
+    let result = g::parse(input);
+    assert result.ok(), `unexpected diagnostics for ${*input}: ${result.diagnostics:?}`;
+    let actual = g::to_string_tree(&result);
+    assert actual == *expected, `\ninput:    ${*input}\nexpected: ${*expected}\nactual:   ${actual}`;
+}
+
+// The hit cases: the iteration that fails the reserve is followed by one that
+// can still run, so the loop keeps going.
+test "the loop iterates past a position the tail cannot start at" {
+    assert_tree(&"b b a", &"(start (xs b b a))");
+}
+
+test "the loop yields the last token the tail also admits" {
+    assert_tree(&"a a", &"(start (xs a a))");
+}
+
+// The rejection cases: the reserve still stops a loop with nothing left to
+// iterate on, and a missing tail is still an error.
+test "the loop takes nothing where the tail is all there is" {
+    assert_tree(&"a", &"(start (xs a))");
+}
+
+test "a body the tail cannot follow is rejected" {
+    let result = g::parse(&"b b");
+    assert !result.ok(), `expected a diagnostic: ${g::to_string_tree(&result)}`;
+}

@@ -1,6 +1,3 @@
-// Source: Gale test fixture (Stage C `$_p` on a left-recursive rule)
-// License: same as the Gale package
-//
 // `$_p` is the precedence threshold the current invocation was entered with
 // (ANTLR's `_p`), which Gale threads as the `min_prec` parameter every rule fn
 // carries. The entry invocation runs at `min_prec == 0`; a right operand is a

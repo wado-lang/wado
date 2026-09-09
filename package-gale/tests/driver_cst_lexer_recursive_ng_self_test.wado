@@ -1,0 +1,48 @@
+//! The recursive non-greedy shape as one rule, where the recursion is the entry
+//! rule's own.
+//!
+//! `STR : '#' STR '#' | '"' .*? '"'` is `lexer_recursive_ng_fragment.g4`'s
+//! grammar with the fragment folded in. The recursion and the `.*?` are still
+//! separate alternatives and the loop still has to stop at a `"` that is a
+//! different one at each `#` depth, so the rule is ATN-class for the same
+//! reason. Reaching it through a fragment used to be the only route Gale took:
+//! `lexer_rule_is_atn_class` seeded its reachability walk with the entry rule,
+//! so the walk answered `false` at exactly the reference it looks for when the
+//! entry rule *is* the recursion.
+//!
+//! Expected token streams are the published ANTLR4 jar's.
+
+use g from "./grammars/lexer_recursive_ng_self.g4"
+    with {
+        generator: { module: "../src/generator.wado", output_dir: "./generated/cst_lexer_recursive_ng_self" },
+    };
+
+fn kinds(input: &String) -> List<String> {
+    let tokens = g::tokenize(input);
+    let mut out: List<String> = [];
+    for let mut i = 0; i < tokens.len(); i += 1 {
+        out.push(g::token_kind_name(tokens.kinds[i]));
+    }
+    return out;
+}
+
+fn assert_kinds(input: &String, expected: &List<String>) {
+    let actual = kinds(input);
+    assert actual == *expected, `\ninput:    ${*input}\nexpected: ${*expected}\nactual:   ${actual}`;
+}
+
+// Unhashed, so the `.*?` has only one `"` to stop at and the static path was
+// already right. The rejection case for a repair that stopped routing here.
+test "an unhashed string is one token" {
+    assert_kinds(&"\"abc\"", &["STR", "Eof"]);
+}
+
+// The hit case: the inner quotes are content, and the loop has to run past them
+// to the `"` that the closing `#` follows.
+test "a quoted hash-delimited string is one token" {
+    assert_kinds(&"#\"a \"b\" c\"#", &["STR", "Eof"]);
+}
+
+test "two hashes nest the same way" {
+    assert_kinds(&"##\"a \"#\" b\"##", &["STR", "Eof"]);
+}

@@ -1,6 +1,3 @@
-// Source: hand-written Gale regression fixture for parse-error positioning.
-// License: same terms as the Gale package (see package-gale/README.md).
-//
 // Exercises two recovery paths:
 //
 //  * `prog : item* EOF` — a scan-gated repetition. When an item starts validly

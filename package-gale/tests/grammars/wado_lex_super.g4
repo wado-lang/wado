@@ -1,6 +1,3 @@
-// Source: Gale test fixture (Stage C superClass effect interface, lexer)
-// License: same as the Gale package
-//
 // A `language = Wado` lexer grammar with `options { superClass = SlBase }`.
 // The alt-initial predicate `{ this.enabled() }?` on KW calls a base method,
 // which Gale lowers to the ambient effect operation `SlBase::enabled()`.

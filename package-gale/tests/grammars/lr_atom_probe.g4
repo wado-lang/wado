@@ -1,5 +1,6 @@
-// Source: distilled from SQLite.g4's `expr : … | K_CASE expr? (K_WHEN expr K_THEN expr)+ … K_END`.
-// License: same as the Gale package.
+// The shape of `expr : … | K_CASE expr? (K_WHEN expr K_THEN expr)+ … K_END` in
+// the `SQLite.g4` beside this file: MIT, Copyright (c) 2014 by Bart Kiers,
+// https://github.com/bkiers/sqlite-parser. The rules below are written here.
 //
 // A viability probe inside an LR rule's ATOM alternative. Keywords double as
 // identifiers, so the optional's body and its continuation share a first

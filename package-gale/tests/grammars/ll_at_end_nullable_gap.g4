@@ -1,6 +1,5 @@
-// Source: hand-written regression for the FOLLOW-disjoint at-end-conflict
-// refinement — the nullable-rule-reference suffix gap.
-// License: BSD-3-Clause (matches the rest of the gale test corpus).
+// A regression for the FOLLOW-disjoint at-end-conflict refinement: the
+// nullable-rule-reference suffix gap.
 //
 // x has an at-end conflict ('a' 'b' ends vs 'a' 'b' 'c' continues on 'c').
 // The caller `s : x nb 'c'` presents 'c' after x through the *nullable* rule

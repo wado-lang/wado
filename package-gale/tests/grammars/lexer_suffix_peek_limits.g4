@@ -1,6 +1,3 @@
-// Source: Gale test fixture (suffix shapes the peek has to lower faithfully)
-// License: same as the Gale package
-//
 // The arm / iteration scoring peeks the suffix by emitting it a second time
 // (`lexer_alt_suffix_shapes.g4`), so the peek has to lower it exactly as the
 // commit will — anything weaker reports "no match" for input the commit would

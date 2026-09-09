@@ -1,6 +1,3 @@
-// Source: Gale test fixture (Stage C $start / $stop / multi-alt $text)
-// License: same as the Gale package
-//
 // `$start` / `$stop` are the rule's first / last token (member-addressable like
 // any token), and `$text` is the rule's consumed input — all from the captured
 // first-token index. Exercised on a multi-alt rule so the span capture is

@@ -1,6 +1,3 @@
-// Source: Gale test fixture (Stage C multi-alt lexer action)
-// License: same as the Gale package
-//
 // A multi-alternative lexer rule where each alternative carries its own
 // `{ ... }` action. `T` matches 'a' or 'b'; the winning alternative's action
 // retypes the token (`lx.set_type`), so 'a' emits an `AA` and 'b' a `BB`. The

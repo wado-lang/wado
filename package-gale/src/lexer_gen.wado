@@ -1483,7 +1483,7 @@ fn gen_lexer_alts(
         let label = `alts_${id}_${i}`;
         w.begin(&`${label}:`);
         w.line(&`pos = alts_saved_${id};`);
-        gen_lexer_alt_seq(w, &alts[i], &plan.arms[i], 0, all_rules, &`break ${label}`, ci, ea, hm, false);
+        gen_lexer_arm_probe(w, &alts[i], &plan.arms[i], all_rules, &`break ${label}`, ci, ea, hm, replay);
         w.line(&`alts_ok_${id} = true;`);
         w.end();
     }
@@ -1516,7 +1516,7 @@ fn gen_lexer_alts_longest(
         let label = `alts_${id}_${i}`;
         w.begin(&`${label}:`);
         w.line(&`pos = alts_saved_${id};`);
-        gen_lexer_alt_seq(w, &alts[i], &plan.arms[i], 0, all_rules, &`break ${label}`, ci, ea, hm, false);
+        gen_lexer_arm_probe(w, &alts[i], &plan.arms[i], all_rules, &`break ${label}`, ci, ea, hm, /*replay=*/ false);
         w.line(&`if pos > alts_best_${id} \{ alts_best_${id} = pos; \}`);
         w.end();
     }
@@ -1553,10 +1553,7 @@ fn gen_lexer_alts_replay(
         let label = `sel_${id}_${i}`;
         w.begin(&`${label}:`);
         w.line(&`pos = sel_saved_${id};`);
-        // The selection has to pick the arm the match picked, so it always
-        // evaluates the predicates the match evaluated — even where the
-        // enclosing replay body does not.
-        gen_lexer_alt_seq(w, &alts[i], &plan.arms[i], 0, all_rules, &`break ${label}`, ci, true, hm, false);
+        gen_lexer_arm_probe(w, &alts[i], &plan.arms[i], all_rules, &`break ${label}`, ci, ea, hm, /*replay=*/ true);
         if longest {
             w.line(&`if pos > sel_best_${id} \{ sel_best_${id} = pos; sel_alt_${id} = ${i}; \}`);
         } else {
@@ -1595,19 +1592,19 @@ pub enum LexerAltsScan {
     /// Every arm consumes the same fixed number of chars, so longest and
     /// first-match coincide and the cheaper emit stays byte-identical.
     FixedLenArms,
-    /// An arm carries a semantic predicate anywhere below it; scanning every
-    /// arm would change how often the grammar sees it.
+    /// An arm carries a semantic predicate anywhere below it, which the lexer
+    /// ATN cannot run. Only the routing question reads this; the emit measures
+    /// such an arm like any other (`lexer_alts_lengths`).
     ArmPredicate,
 }
 
-pub fn lexer_alts_scan(alts: &List<LexerAlternative>, all_rules: &List<LexerRule>) -> LexerAltsScan {
+/// How the arms compare on length, which is the whole of what the emit needs:
+/// it runs a predicate while scoring, so an arm carrying one is still an arm to
+/// measure. A predicate says whether its own arm matches, never how the lengths
+/// compare, so it is orthogonal to this question.
+pub fn lexer_alts_lengths(alts: &List<LexerAlternative>, all_rules: &List<LexerRule>) -> LexerAltsScan {
     if alts.len() < 2 {
         return LexerAltsScan::SingleArm;
-    }
-    for let alt of alts {
-        if lexer_alt_has_predicate_below(alt, all_rules) {
-            return LexerAltsScan::ArmPredicate;
-        }
     }
     let mut common = -1;
     for let alt of alts {
@@ -1625,6 +1622,21 @@ pub fn lexer_alts_scan(alts: &List<LexerAlternative>, all_rules: &List<LexerRule
     return LexerAltsScan::FixedLenArms;
 }
 
+/// `lexer_alts_lengths` for the routing question, where a predicate is
+/// disqualifying: `latn_match` refuses one, so a predicate-carrying alternation
+/// is never the undecidable-arms case that routes to the lexer ATN.
+pub fn lexer_alts_scan(alts: &List<LexerAlternative>, all_rules: &List<LexerRule>) -> LexerAltsScan {
+    if alts.len() < 2 {
+        return LexerAltsScan::SingleArm;
+    }
+    for let alt of alts {
+        if lexer_alt_has_predicate_below(alt, all_rules) {
+            return LexerAltsScan::ArmPredicate;
+        }
+    }
+    return lexer_alts_lengths(alts, all_rules);
+}
+
 /// Whether a tail-position alternation needs the maximal-munch emit.
 /// The emit an alternation takes, tail position included: the whole
 /// `gen_lexer_alts` decision as one value.
@@ -1635,18 +1647,17 @@ pub enum LexerAltsEmit {
     FirstMatchNotTail,
     FirstMatchSingleArm,
     FirstMatchFixedLenArms,
-    FirstMatchArmPredicate,
 }
 
 pub fn lexer_alts_emit(alts: &List<LexerAlternative>, all_rules: &List<LexerRule>, tail: bool) -> LexerAltsEmit {
     if !tail {
         return LexerAltsEmit::FirstMatchNotTail;
     }
-    return match lexer_alts_scan(alts, all_rules) {
+    return match lexer_alts_lengths(alts, all_rules) {
         Longest => LexerAltsEmit::MaximalMunch,
         SingleArm => LexerAltsEmit::FirstMatchSingleArm,
         FixedLenArms => LexerAltsEmit::FirstMatchFixedLenArms,
-        ArmPredicate => LexerAltsEmit::FirstMatchArmPredicate,
+        ArmPredicate => panic("lexer_alts_lengths never reports the routing question's predicate carve-out"),
     };
 }
 
@@ -1658,7 +1669,7 @@ fn lexer_rule_has_non_greedy(rule: &LexerRule, all_rules: &List<LexerRule>) -> b
     return lexer_alts_have_non_greedy(&rule.body, all_rules, &mut visiting);
 }
 
-fn lexer_alts_have_non_greedy(
+pub fn lexer_alts_have_non_greedy(
     alts: &List<LexerAlternative>,
     all_rules: &List<LexerRule>,
     visiting: &mut List<String>,
@@ -1822,6 +1833,24 @@ fn probe_ea(replay: bool, ea: bool) -> bool {
     return replay || ea;
 }
 
+/// Match an arm for a selection pass: no actions, and predicates exactly where
+/// the match evaluated them. Every arm-scoring and first-match selection goes
+/// through here, so none can hand the enclosing body's `ea` to a decision and
+/// score an arm the match had ruled out.
+fn gen_lexer_arm_probe(
+    w: &mut CodeWriter,
+    alt: &LexerAlternative,
+    plan: &LexerSeqPlan,
+    all_rules: &List<LexerRule>,
+    fail_action: &String,
+    ci: bool,
+    ea: bool,
+    hm: bool,
+    replay: bool,
+) {
+    gen_lexer_alt_seq(w, alt, plan, 0, all_rules, fail_action, ci, probe_ea(replay, ea), hm, false);
+}
+
 /// The id a probe's locals carry. Only a replay emits a probe, so only a replay
 /// mints one — the match pass keeps the numbering it had.
 fn probe_id(w: &mut CodeWriter, replay: bool) -> i32 {
@@ -1896,8 +1925,6 @@ pub enum LexerGroupEmit {
     FirstMatchNoSuffix,
     /// Every arm consumes the same fixed number of chars.
     FirstMatchFixedLenArms,
-    /// An arm carries a semantic predicate anywhere below it.
-    FirstMatchArmPredicate,
     /// No two arms can match at the same position, so which arm wins is not a
     /// decision at all.
     FirstMatchArmsDisjoint,
@@ -1917,7 +1944,12 @@ pub fn lexer_group_emit(alt: &LexerAlternative, index: i32, all_rules: &List<Lex
     if index + 1 >= alt.elements.len() {
         return LexerGroupEmit::FirstMatchNoSuffix;
     }
-    match lexer_alts_scan(g_alts, all_rules) {
+    // `lexer_alts_lengths`, not `lexer_alts_scan`: this is an emit decision, and
+    // the emit runs a predicate while scoring, so an arm carrying one is still
+    // an arm to measure. The carve-out in `lexer_alts_scan` answers the routing
+    // question, where a predicate is disqualifying because `latn_match` cannot
+    // run one.
+    match lexer_alts_lengths(g_alts, all_rules) {
         SingleArm => {
             return LexerGroupEmit::FirstMatchSingleArm;
         },
@@ -1925,7 +1957,7 @@ pub fn lexer_group_emit(alt: &LexerAlternative, index: i32, all_rules: &List<Lex
             return LexerGroupEmit::FirstMatchFixedLenArms;
         },
         ArmPredicate => {
-            return LexerGroupEmit::FirstMatchArmPredicate;
+            panic("lexer_alts_lengths never reports the routing question's predicate carve-out");
         },
         Longest => {
         },
@@ -2875,10 +2907,21 @@ fn gen_lexer_alts_lookahead_aware(
         let label = `la_alt_${id}_${i}`;
         w.begin(&`${label}:`);
         w.line(&`pos = la_saved_${id};`);
-        gen_lexer_alt_seq(w, &alts[i], &arms[i], 0, all_rules, &`break ${label}`, ci, ea, hm, false);
+        gen_lexer_arm_probe(w, &alts[i], &arms[i], all_rules, &`break ${label}`, ci, ea, hm, replay);
         w.line(&`let la_arm_${id}_${i} = pos;`);
         w.line(&`let mut la_tot_${id}_${i}: i32 = -1;`);
-        gen_lexer_suffix_peek(w, alt, plan, from, all_rules, &`la_tot_${id}_${i}`, ci, ea, hm, /*record_end=*/ true);
+        gen_lexer_suffix_peek(
+            w,
+            alt,
+            plan,
+            from,
+            all_rules,
+            &`la_tot_${id}_${i}`,
+            ci,
+            probe_ea(replay, ea),
+            hm,
+            /*record_end=*/ true,
+        );
         // Strict `>` over arms in source order gives ANTLR4's tie-break.
         w.begin(&`if la_tot_${id}_${i} > la_reach_${id}`);
         w.line(&`la_reach_${id} = la_tot_${id}_${i};`);

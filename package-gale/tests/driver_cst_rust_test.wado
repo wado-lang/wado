@@ -1,11 +1,10 @@
-/// Driver test for the Rust grammar parser.
+/// Driver test for the Rust grammar parser: items and expressions, plus
+/// negative tripwires. The repository-wide measure is
+/// `tools/rust_corpus_check.wado`; what belongs here is the shape a corpus
+/// failure narrowed to.
 ///
-/// A top-level `fn` item is not parsed yet (`expected Eof, got "fn"`) — a
-/// dispatch gap in `item`, not a semantic-predicate gap: `function_` uses no
-/// predicate, and `match` / nested generics parse fine. The lexer's superClass
-/// predicates (`SOF`, float disambiguation) do run here via the installed base
-/// handler. These tests cover items and expressions that parse correctly, plus
-/// a couple of negative tripwires.
+/// The lexer's superClass predicates (`SOF`, float disambiguation) run through
+/// the base handler installed below.
 use rust from "./grammars/RustLexer.g4"
     with {
         generator: {
@@ -764,5 +763,41 @@ test "comparison: a bare > is not a shift" {
 
 test "comparison: a bare < is not a shift" {
     let r = rlex_prs(&"const X: bool = 1 < 2;");
+    assert r.ok(), `unexpected diagnostics: ${r.diagnostics:?}`;
+}
+
+// A shebang is stripped only when what follows `#!` is not `[`, which is what
+// separates it from a crate-level inner attribute. Reading any character there
+// gave the whole first line to the hidden channel, so an attribute on one line
+// vanished without a diagnostic and one across two lines left `)]` behind.
+test "shebang: a crate-level inner attribute is not a shebang" {
+    let r = rlex_prs(&"#![allow(dead_code)]\nfn main() {}");
+    assert r.ok(), `unexpected diagnostics: ${r.diagnostics:?}`;
+    let actual = rust::to_string_tree(&r);
+    assert actual.contains("innerAttribute"), `the attribute went to the hidden channel: ${actual}`;
+}
+
+test "shebang: an inner attribute spanning lines keeps its closing bracket" {
+    let r = rlex_prs(&"#![allow(\n    dead_code\n)]\nfn main() {}");
+    assert r.ok(), `unexpected diagnostics: ${r.diagnostics:?}`;
+}
+
+// The rejection case: a real shebang is still stripped.
+test "shebang: a real one is still hidden" {
+    let r = rlex_prs(&"#!/usr/bin/env run-cargo-script\nfn main() {}");
+    assert r.ok(), `unexpected diagnostics: ${r.diagnostics:?}`;
+    let actual = rust::to_string_tree(&r);
+    assert !actual.contains("innerAttribute"), `a real shebang is not an attribute: ${actual}`;
+}
+
+// `#[unsafe(...)]` wraps the attributes that were always unsafe (Rust 2024).
+// `unsafe` is a keyword, so `attr`'s `simplePath` cannot start with it.
+test "attr: the unsafe attribute wrapper" {
+    let r = rlex_prs(&"#[unsafe(no_mangle)]\npub extern \"C\" fn f() {}");
+    assert r.ok(), `unexpected diagnostics: ${r.diagnostics:?}`;
+}
+
+test "attr: an unsafe attribute with a value" {
+    let r = rlex_prs(&"#[unsafe(export_name = \"g\")]\npub fn f() {}");
     assert r.ok(), `unexpected diagnostics: ${r.diagnostics:?}`;
 }

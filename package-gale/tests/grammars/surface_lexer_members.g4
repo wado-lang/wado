@@ -1,6 +1,3 @@
-// Source: Gale test fixture (Stage C surface matrix)
-// License: same as the Gale package
-//
 // A lexer whose only action content is its `@members` block. The machinery a
 // member reaches is not always the machinery an action turns on — the output
 // sink here — so a members-only grammar is its own surface, and one that

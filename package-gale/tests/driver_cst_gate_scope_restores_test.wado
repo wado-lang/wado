@@ -1,0 +1,40 @@
+//! A rule that scopes a gate for its own extent and puts it back after.
+//!
+//! A gate a bracketing rule clears never comes back, so the ban stays lifted
+//! for the rest of the enclosing head. `locals` + `@init` / `@after` is the
+//! restore, and the parse takes its copy from its own frame; the scan has to
+//! take one from its call stack, or the two disagree about the head's tail.
+
+use g from "./grammars/gate_scope_restores.g4"
+    with {
+        generator: { module: "../src/generator.wado", output_dir: "./generated/cst_gate_scope_restores" },
+    };
+
+fn assert_tree(input: &String, expected: &String) {
+    let result = g::parse(input);
+    assert result.ok(), `unexpected diagnostics for ${*input}: ${result.diagnostics:?}`;
+    let actual = g::to_string_tree(&result);
+    assert actual == *expected, `\ninput:    ${*input}\nexpected: ${*expected}\nactual:   ${actual}`;
+}
+
+// The hit case: the ban resumes after the `)`, so `a { b }` is not the braced
+// form and the `{ b }` is the block the `if` owes.
+test "the ban resumes after a scope inside the head" {
+    assert_tree(
+        &"if f(x) || a { b }",
+        &"(start (stmt if (expr (expr f ( (args (expr x)) )) || (expr a)) (block { b })))",
+    );
+}
+
+// The rejection cases: inside the scope the ban really is lifted, and outside
+// any head it was never on.
+test "inside the scope the braced form is allowed" {
+    assert_tree(
+        &"if f(a { b }) { c }",
+        &"(start (stmt if (expr f ( (args (expr a { b })) )) (block { c })))",
+    );
+}
+
+test "outside a head the braced form still wins" {
+    assert_tree(&"a { b } ;", &"(start (stmt (expr a { b }) ;))");
+}

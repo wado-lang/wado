@@ -1,6 +1,3 @@
-// Source: Gale test fixture (labelled transparent group)
-// License: same as the Gale package
-//
 // `(e)` is a purely syntactic wrapper, so `x=(ID)` binds exactly what `x=ID`
 // binds and `y+=(ID)+` repeats exactly what `y+=ID+` repeats. The wrapper has
 // no binding slot of its own: left in place it either drops the binding or

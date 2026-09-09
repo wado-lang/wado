@@ -1,6 +1,3 @@
-// Source: Gale test fixture (keyword shortcut carrier reachability)
-// License: same as the Gale package
-//
 // The keyword classifier is an optimisation: a keyword-shaped rule is left out
 // of the dispatch and instead rewrites a CARRIER rule's match, once a carrier
 // has matched the same characters. Admission checks that some later carrier

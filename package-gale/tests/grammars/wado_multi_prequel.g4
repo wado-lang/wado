@@ -1,6 +1,3 @@
-// Source: Gale test fixture (Stage C @init / @after on a multi-alt rule)
-// License: same as the Gale package
-//
 // `@init` runs at rule entry before the dispatch, `@after` after the chosen
 // alt's body — both on a multi-alt rule, sharing its value channel. @init seeds
 // `$v`, the selected alt updates it, @after reads the final value.

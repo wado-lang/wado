@@ -1,5 +1,3 @@
-// Source: hand-written regression for the mode / inline-literal shadow.
-// License: project-internal test fixture.
 // `{` is an inline literal in `block`, so it is a parser literal token. A `{`
 // rule (INTERP_OPEN) also lives in the STR mode; it must keep its matcher —
 // inline literals are only matched in the default mode, so shadowing it would

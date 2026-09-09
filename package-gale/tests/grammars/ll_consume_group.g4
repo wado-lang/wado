@@ -1,10 +1,8 @@
 // LL regression: a Consume prediction node whose overlap group does NOT
 // contain alternative 0.
 //
-// Source: hand-written minimal fixture (code-health.md, "Consume-node
-// validation compares against alts[0]").
-//
-// License: same as Gale.
+// Minimal fixture for code-health.md, "Consume-node validation compares
+// against alts[0]".
 //
 // Pattern: alts 1 and 2 share the terminal prefix ID, so their overlap
 // group builds `Consume(ID) -> Dispatch{X, Y}`. Alternative 0 (`A`) is in

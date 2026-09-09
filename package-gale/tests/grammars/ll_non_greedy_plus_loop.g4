@@ -1,5 +1,6 @@
-// Source: distilled from SQLite.g4's `type_name : name+? ( '(' … ')' )?`.
-// License: same as the Gale package.
+// The shape of `type_name : name+? ( '(' … ')' )?` in the `SQLite.g4` beside
+// this file: MIT, Copyright (c) 2014 by Bart Kiers,
+// https://github.com/bkiers/sqlite-parser. The rules below are written here.
 //
 // A non-greedy `+?` whose body FIRST equals the continuation's FIRST. The loop
 // cannot be decided by lookahead alone: exiting is correct only when the rest

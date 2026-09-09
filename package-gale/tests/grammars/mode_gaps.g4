@@ -1,6 +1,3 @@
-// Source: Hand-authored for Gale's mode/more coverage.
-// License: BSD-3-Clause (matches the Gale repo).
-//
 // Minimal grammar that exercises lexer-command features uncovered by the
 // existing driver-test grammars — see TODO.md "Driver-level verification
 // (remaining gaps)":

@@ -1,6 +1,3 @@
-// Source: Gale test fixture (Stage C superClass operation with arguments)
-// License: same as the Gale package
-//
 // A base predicate that takes an argument, the shape `TypeScriptParser` uses
 // (`{this.p("of")}?`). The call sites are the operation's only signature
 // source, so the literal they pass is what the generated interface declares.

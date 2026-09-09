@@ -1,0 +1,33 @@
+//! A gated alternative that also matches empty keeps its gate in the else arm.
+//!
+//! The arm that selects it on its own tokens folds the predicate into that
+//! arm's condition and marks it answered, so the body carries no guard. The
+//! else arm is the empty match — and a bare one runs, on the very tokens the
+//! first arm refused, the alternative the predicate says does not exist.
+
+use g from "./grammars/gated_nullable_alt.g4"
+    with {
+        generator: { module: "../src/generator.wado", output_dir: "./generated/cst_gated_nullable_alt" },
+    };
+
+// The hit case: with the gate shut the alternative does not exist, so the `x`
+// it would have matched has no taker.
+test "the else arm does not run a gated-off alternative" {
+    let result = g::parse(&"off { x }");
+    assert !result.ok(), `expected a diagnostic, got ${g::to_string_tree(&result)}`;
+}
+
+// The rejection cases: the gate open, and the empty match the gate still allows.
+test "with the gate open the alternative matches" {
+    let result = g::parse(&"on { x }");
+    assert result.ok(), `unexpected diagnostics: ${result.diagnostics:?}`;
+    let actual = g::to_string_tree(&result);
+    assert actual == "(start on (body { x }))", &actual;
+}
+
+test "the other alternative is unaffected" {
+    let result = g::parse(&"off { ( }");
+    assert result.ok(), `unexpected diagnostics: ${result.diagnostics:?}`;
+    let actual = g::to_string_tree(&result);
+    assert actual == "(start off (body { ( }))", &actual;
+}

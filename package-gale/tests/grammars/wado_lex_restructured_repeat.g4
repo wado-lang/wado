@@ -1,6 +1,3 @@
-// Source: Gale test fixture (Stage C lexer action under a restructured repeat)
-// License: same as the Gale package
-//
 // Four repeats the emitter restructures the sequence around, each leaving
 // `count` at 2 when its actions run where they are written:
 //

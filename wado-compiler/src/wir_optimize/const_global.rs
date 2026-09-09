@@ -53,11 +53,10 @@ pub(super) fn promote_const_global_inits(module: &mut WirPackage) {
             let global = &mut module.globals[g_idx];
             global.init = value;
             global.mutable = false;
-            // `lazy_init` and slot nullability are left as `register_globals`
-            // set them: the slot stays nullable (a non-null const init is a
-            // valid subtype) and codegen keeps narrowing reads with
-            // `ref.as_non_null`, which is correct since the eager value is
-            // non-null.
+            // Slot nullability is left as `register_globals` set it: a non-null
+            // const init is a valid subtype of a nullable slot, and the eager
+            // value is non-null, so codegen's `ref.as_non_null` reads stay
+            // correct.
             promoted.insert(global.name.fq.clone());
         }
     }

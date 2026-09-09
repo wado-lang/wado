@@ -45,6 +45,18 @@ use {
 } from "./prediction.wado";
 use { rule_overlap_groups } from "./parser_gen.wado";
 use { literal_const_name } from "./gen_util.wado";
+use { build_atn_with, dump_atn } from "./atn.wado";
+
+/// The `--atn` report: the surface-IR ATN the runtime simulator walks, built
+/// off the lowering the caller already has.
+///
+/// `build_atn`'s own re-lowering is the unstamped-grammar convenience entry —
+/// it mints a fresh `GenContext` that knows none of the token ids
+/// `canonicalize_for_analysis` stamped, so the first `names_of` on one indexes
+/// an empty table.
+pub fn render_atn_dump(grammar: &Grammar, lowered: &LoweredGrammar) -> String {
+    return dump_atn(&build_atn_with(grammar, lowered), grammar);
+}
 
 /// Render the full per-rule dump report for a lowered grammar.
 ///

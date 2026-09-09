@@ -100,3 +100,34 @@ B : 'b' ;
     assert out.contains("grp_kind == TK_EOF"), `the empty alternative must test the follow set: ${out}`;
     assert out.contains("no viable alternative"), `a lookahead no alternative admits must report: ${out}`;
 }
+
+// A host language Gale does not emit keeps the predicate in the IR and writes
+// none of it. An alternative gated on a condition that renders nothing is
+// selected by nothing, so the empty match it was supposed to guard is reported
+// as "no viable alternative" instead of taken. `alt_has_gate` answers "will
+// reach its arm", not "exists in the IR", so no caller has to remember this.
+test "a predicate in an unemitted host language gates nothing" {
+    let gated = &"grammar T;
+options { language = Cpp; }
+s : 'k' ( A | {p()}? | B ) EOF ;
+A : 'a' ;
+B : 'b' ;
+";
+    let out = gen_source(gated);
+    assert !out.contains("pred_"), `an unwritten predicate must not be named by a dispatch: ${out}`;
+    assert out.contains("grp_kind == TK_EOF"), `the empty alternative keeps the follow set that selects it: ${out}`;
+}
+
+// The rejection case: the same shape in a language Gale does emit is selected
+// by the predicate, so the test above is not passing because nothing ever gates.
+test "the same predicate in an emitted language does gate" {
+    let gated = &"grammar T;
+options { language = Wado; }
+s : 'k' ( A | {false}? | B ) EOF ;
+A : 'a' ;
+B : 'b' ;
+";
+    let out = gen_source(gated);
+    assert out.contains("(pred_0(p))"), `an emitted predicate selects its alternative: ${out}`;
+    assert !out.contains("grp_kind == TK_EOF"), `and takes it off the follow set: ${out}`;
+}

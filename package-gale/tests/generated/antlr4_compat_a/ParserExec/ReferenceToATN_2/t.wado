@@ -1661,6 +1661,21 @@ fn scan_a(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
         }
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
+        let dk_1 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+        if !(_kind_set_0(dk_1) || dk_1 == TK_ATN || dk_1 == TK_EOF) {
+            let dc_1 = pos;
+            let mut dc_1_exit = false;
+            pos = sp;
+            dcl_1: {
+                if pos < tokens.len() && tokens[pos] == TK_ATN {
+                    pos += 1;
+                }
+                let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+                if (follow == 0 || follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) && (probe_kind == TK_EOF) { dc_1_exit = true; }
+            }
+            if dc_1_exit { pos = sp; break; }
+            pos = dc_1;
+        }
     }
     if pos < tokens.len() && tokens[pos] == TK_ATN && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
         pos += 1;
@@ -1677,31 +1692,47 @@ fn _parse_a__inner(p: &mut Parser, follow: i64 = 0) -> () {
         rep_scan: {
             let tokens = &p.kinds;
             let mut pos: i32 = p.pos;
-            let gp_1 = pos;
-            let sgk_1 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-            let mut sg_1_best = -1;
-            if sgk_1 == TK_ID {
-                pos = gp_1;
-                sg_1_0: {
-                    if pos >= tokens.len() || tokens[pos] != TK_ID { break sg_1_0; }
+            let gp_2 = pos;
+            let sgk_2 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+            let mut sg_2_best = -1;
+            if sgk_2 == TK_ID {
+                pos = gp_2;
+                sg_2_0: {
+                    if pos >= tokens.len() || tokens[pos] != TK_ID { break sg_2_0; }
                     pos += 1;
-                    if pos > sg_1_best { sg_1_best = pos; }
+                    if pos > sg_2_best { sg_2_best = pos; }
                 }
-            } else if sgk_1 == TK_ATN {
-                pos = gp_1;
-                sg_1_1: {
-                    if pos >= tokens.len() || tokens[pos] != TK_ATN { break sg_1_1; }
+            } else if sgk_2 == TK_ATN {
+                pos = gp_2;
+                sg_2_1: {
+                    if pos >= tokens.len() || tokens[pos] != TK_ATN { break sg_2_1; }
                     pos += 1;
-                    if pos > sg_1_best { sg_1_best = pos; }
+                    if pos > sg_2_best { sg_2_best = pos; }
                 }
             }
-            if sg_1_best >= 0 {
-                pos = sg_1_best;
+            if sg_2_best >= 0 {
+                pos = sg_2_best;
             } else {
                 break rep_scan;
             }
             if pos <= p.pos { break rep_scan; }
             rep_scan_pos = pos;
+        }
+        if rep_scan_pos >= 0 {
+            let decline_kind = if rep_scan_pos < p.kinds.len() { p.kinds[rep_scan_pos] } else { TK_EOF };
+            if !(_kind_set_0(decline_kind) || decline_kind == TK_ATN || decline_kind == TK_EOF) {
+                let mut decline_dead: bool = false;
+                decline_scan: {
+                    let tokens = &p.kinds;
+                    let mut pos: i32 = p.pos;
+                    if pos < tokens.len() && tokens[pos] == TK_ATN {
+                        pos += 1;
+                    }
+                    let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+                    if (follow == 0 || follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) && (probe_kind == TK_EOF) { decline_dead = true; }
+                }
+                if decline_dead { break; }
+            }
         }
         if rep_scan_pos < 0 { break; }
         let id_or_atn = p.expect_set(&SYNC_0);

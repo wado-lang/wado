@@ -1636,6 +1636,29 @@ fn scan_if_statement(tokens: &Array<i32>, pos: i32) -> i32 {
                         pos = scan_executable_statement(tokens, pos);
                         if pos < 0 { pos = sp; break; }
                         if pos == sp { break; }
+                        let rs_2 = pos;
+                        let mut rs_2_ok = false;
+                        rsv_2: {
+                            while pos < tokens.len() && tokens[pos] == TK_LIT_ELSE {
+                                let sp = pos;
+                                pos = scan_else_if_statement(tokens, pos, 0);
+                                if pos < 0 { pos = sp; break; }
+                                if pos == sp { break; }
+                            }
+                            if pos < tokens.len() && tokens[pos] == TK_LIT_A {
+                                let sp = pos;
+                                pos = scan_else_statement(tokens, pos);
+                                if pos < 0 { pos = sp; }
+                            }
+                            if pos >= tokens.len() || tokens[pos] != TK_LIT_END { break rsv_2; }
+                            pos += 1;
+                            if pos >= tokens.len() || tokens[pos] != TK_LIT_IF { break rsv_2; }
+                            pos += 1;
+                            rs_2_ok = true;
+                        }
+                        pos = rs_2;
+                        let rk_2 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+                        if !rs_2_ok && !(rk_2 == TK_LIT_A) { pos = sp; break; }
                     }
                     while pos < tokens.len() && tokens[pos] == TK_LIT_ELSE {
                         let sp = pos;
@@ -1729,6 +1752,29 @@ fn _parse_if_statement__inner(p: &mut Parser) -> () {
                 pos = scan_executable_statement(tokens, pos);
                 if pos < 0 { break rep_scan; }
                 if pos <= p.pos { break rep_scan; }
+                let rep_body_end = pos;
+                let mut rep_body_end_ok = false;
+                rep_body_end_scan: {
+                    while pos < tokens.len() && tokens[pos] == TK_LIT_ELSE {
+                        let sp = pos;
+                        pos = scan_else_if_statement(tokens, pos, 0);
+                        if pos < 0 { pos = sp; break; }
+                        if pos == sp { break; }
+                    }
+                    if pos < tokens.len() && tokens[pos] == TK_LIT_A {
+                        let sp = pos;
+                        pos = scan_else_statement(tokens, pos);
+                        if pos < 0 { pos = sp; }
+                    }
+                    if pos >= tokens.len() || tokens[pos] != TK_LIT_END { break rep_body_end_scan; }
+                    pos += 1;
+                    if pos >= tokens.len() || tokens[pos] != TK_LIT_IF { break rep_body_end_scan; }
+                    pos += 1;
+                    rep_body_end_ok = true;
+                }
+                pos = rep_body_end;
+                let rep_body_end_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+                if !rep_body_end_ok && !(rep_body_end_kind == TK_LIT_A) { break rep_scan; }
                 rep_scan_pos = pos;
             }
             if rep_scan_pos < 0 {

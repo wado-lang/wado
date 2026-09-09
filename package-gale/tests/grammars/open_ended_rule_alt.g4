@@ -1,6 +1,4 @@
-// Source: hand-written regression grammar for a rule-level open-ended
-// alternative.
-// License: same as the Gale package.
+// A regression for a rule-level open-ended alternative.
 //
 // `A? . C` reaches a wildcard behind a nullable prefix, so it has a first set
 // (`a`) and still admits every token. An arm built from it therefore tests

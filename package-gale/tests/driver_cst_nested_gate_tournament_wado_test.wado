@@ -1,0 +1,39 @@
+//! `driver_cst_nested_gate_tournament_test.wado`'s grammar with Wado actions.
+//!
+//! A scan simulates the gate the parse evaluates, and one collector writes both
+//! sides. It read the grammar text and snake_cased the member to predict what
+//! the translator would name it, which Java satisfies by construction and Wado
+//! never does — so no `language = Wado` grammar had a simulable gate, and this
+//! grammar mis-parsed where the Java one it mirrors does not.
+//!
+//! Expected trees are the Java twin's, which the published jar pinned. The two
+//! grammars differ only in how their actions are spelled, so any answer that
+//! differs is the two languages disagreeing.
+
+use g from "./grammars/nested_gate_tournament_wado.g4"
+    with {
+        generator: { module: "../src/generator.wado", output_dir: "./generated/cst_nested_gate_tournament_wado" },
+    };
+
+fn assert_tree(input: &String, expected: &String) {
+    let result = g::parse(input);
+    assert result.ok(), `unexpected diagnostics for ${*input}: ${result.diagnostics:?}`;
+    let actual = g::to_string_tree(&result);
+    assert actual == *expected, `\ninput:    ${*input}\nexpected: ${*expected}\nactual:   ${actual}`;
+}
+
+// The rejection case: outside any head the braced alternative is still the one
+// the tournament must take.
+test "outside a head the braced alternative wins under the outer tournament" {
+    assert_tree(&"{ y = v { a } ; }", &"(start (block { (stmts (stmt (expr (expr y) = (expr v { a })) ;)) }))");
+}
+
+// The hit case: the outer tournament measures a stretch containing an `IF` head,
+// so its scan has to close the gate the head closes. This is the parse that
+// failed with `expected RB; got "="`.
+test "the outer tournament sees the gate its scan walks over" {
+    assert_tree(
+        &"{ y = if v { a } ; }",
+        &"(start (block { (stmts (stmt (expr (expr y) = (expr if (expr v) (blk { a }))) ;)) }))",
+    );
+}

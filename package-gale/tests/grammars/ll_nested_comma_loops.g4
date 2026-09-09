@@ -1,6 +1,3 @@
-// Source: hand-written for Gale's LL prediction tests.
-// License: same as the Gale package.
-//
 // Three loops nested inside one another, the innermost behind a closing brace:
 // `fields` iterates on a comma inside `{ … }`, `alt` on a bar, and `elems` on a
 // comma again. Each hands the one below it an alternation — another iteration,

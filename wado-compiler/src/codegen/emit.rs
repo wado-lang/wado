@@ -2858,7 +2858,6 @@ mod tests {
                 type_id: tid,
                 fields: vec![WirInstr::I32Const(3), WirInstr::I32Const(4)],
             },
-            lazy_init: false,
             meta: WirMeta::default(),
         };
         let mut pkg = empty_package();
@@ -2893,7 +2892,6 @@ mod tests {
                 type_id: missing,
                 fields: vec![WirInstr::I32Const(3), WirInstr::I32Const(4)],
             },
-            lazy_init: false,
             meta: WirMeta::default(),
         });
 

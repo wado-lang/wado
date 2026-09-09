@@ -1,6 +1,3 @@
-// Source: Gale test fixture (Stage C left-recursive value channel)
-// License: same as the Gale package
-//
 // The corpus LR-binary shape: a left-recursive rule computes a value from its
 // two operands. The leading self-ref (`l=e`) is the accumulated left operand,
 // the trailing self-ref (`r=e`) the recursively-parsed right operand, and `$v`

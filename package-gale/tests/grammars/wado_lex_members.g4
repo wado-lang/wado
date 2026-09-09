@@ -1,5 +1,4 @@
-// Source: Gale test fixture (Stage C @lexer::members)
-// License: same as the Gale package
+// Stage C: `@lexer::members`.
 grammar WadoLexMembers;
 
 options { language = Wado; }

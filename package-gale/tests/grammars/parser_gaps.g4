@@ -1,6 +1,3 @@
-// Source: Hand-authored for Gale's parser-gaps coverage.
-// License: BSD-3-Clause (matches the Gale repo).
-//
 // A minimal combined grammar that exercises parser-level features that
 // were uncovered by the existing driver-test grammars — see TODO.md
 // "Driver-level verification (remaining gaps)":

@@ -1,6 +1,3 @@
-// Source: hand-written regression grammar for Gale's optional-group decision.
-// License: same as the Gale package.
-//
 // An optional whose group needs a longest-match decision. The scan that
 // decides whether to enter the group is the scan that picks the alternative,
 // so the two cannot disagree:

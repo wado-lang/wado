@@ -1,6 +1,3 @@
-// Source: Gale test fixture (Stage C lexer $-attribute surface)
-// License: same as the Gale package
-//
 // ANTLR's lexer attributes in a `language = Wado` body. `$type` is the
 // assignable token type — writing it is exactly what `lx.set_type(...)` does —
 // and `$text` / `$index` / `$pos` read the match window: the matched slice, the

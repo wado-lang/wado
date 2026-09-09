@@ -1,0 +1,42 @@
+//! A greedy loop that must leave its alternative's mandatory suffix an arm.
+//!
+//! `arms : (arm SEMI)* arm SEMI?`. On `a;` the loop body matches the whole
+//! input, and the mandatory `arm` after it then has nothing — so the loop has
+//! to decline an iteration it can perfectly well take. Its own decision point
+//! cannot see that: `a` opens an iteration and the tail alike.
+//!
+//! `RustParser.g4` has this shape as `matchArms`, where it cost every `match`
+//! whose last arm ends with a comma.
+
+use g from "./grammars/ll_loop_reserves_tail.g4"
+    with {
+        generator: { module: "../src/generator.wado", output_dir: "./generated/cst_ll_loop_reserves_tail" },
+    };
+
+fn assert_tree(input: &String, expected: &String) {
+    let result = g::parse(input);
+    assert result.ok(), `unexpected diagnostics for ${*input}: ${result.diagnostics:?}`;
+    let actual = g::to_string_tree(&result);
+    assert actual == *expected, `\ninput:    ${*input}\nexpected: ${*expected}\nactual:   ${actual}`;
+}
+
+test "a lone arm goes to the tail, not the loop" {
+    assert_tree(&"a", &"(start (arms (arm a)))");
+}
+
+// The hit case: the loop body matches `a ;` whole, and taking it strands the
+// mandatory tail.
+test "a lone arm with its separator still goes to the tail" {
+    assert_tree(&"a;", &"(start (arms (arm a) ;))");
+}
+
+// The rejection case: the loop must still run when there IS an arm left over
+// for the tail. A repair that declines whenever the body matches parses only
+// the last arm here and drops the rest.
+test "the loop runs for every arm but the last" {
+    assert_tree(&"a; b; c", &"(start (arms (arm a) ; (arm b) ; (arm c)))");
+}
+
+test "and keeps running when the last arm is separated too" {
+    assert_tree(&"a; b; c;", &"(start (arms (arm a) ; (arm b) ; (arm c) ;))");
+}

@@ -1478,6 +1478,18 @@ fn scan_prog(tokens: &Array<i32>, pos: i32) -> i32 {
         pos = scan_item(tokens, pos);
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
+        let rs_0 = pos;
+        let mut rs_0_ok = false;
+        rsv_0: {
+            pos = scan_trailer(tokens, pos);
+            if pos < 0 { break rsv_0; }
+            if pos >= tokens.len() || tokens[pos] != TK_EOF { break rsv_0; }
+            pos += 1;
+            rs_0_ok = true;
+        }
+        pos = rs_0;
+        let rk_0 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+        if !rs_0_ok && !(rk_0 == TK_LIT_X) { pos = sp; break; }
     }
     pos = scan_trailer(tokens, pos);
     if pos < 0 { return -1; }
@@ -1514,6 +1526,18 @@ fn _parse_prog__inner(p: &mut Parser) -> () {
             pos = scan_item(tokens, pos);
             if pos < 0 { break rep_scan; }
             if pos <= p.pos { break rep_scan; }
+            let rep_body_end = pos;
+            let mut rep_body_end_ok = false;
+            rep_body_end_scan: {
+                pos = scan_trailer(tokens, pos);
+                if pos < 0 { break rep_body_end_scan; }
+                if pos >= tokens.len() || tokens[pos] != TK_EOF { break rep_body_end_scan; }
+                pos += 1;
+                rep_body_end_ok = true;
+            }
+            pos = rep_body_end;
+            let rep_body_end_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+            if !rep_body_end_ok && !(rep_body_end_kind == TK_LIT_X) { break rep_scan; }
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 {

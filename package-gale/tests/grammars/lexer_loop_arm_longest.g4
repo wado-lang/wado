@@ -1,6 +1,3 @@
-// Source: hand-written for Gale's lexer emit tests.
-// License: same as the Gale package.
-//
 // A greedy loop whose body is an alternation with overlapping arms, where the
 // longer arm is the reading: `STR : '"' (~["] | ESC)* '"'` over `"a\"b"`. `~["]`
 // matches the backslash on its own, so a first-match loop ends the token at the

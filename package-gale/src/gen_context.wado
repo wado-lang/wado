@@ -6,6 +6,7 @@ use { Admits, Diagnostic, DiagnosticKind, DiagnosticOwner, admits_or_everything 
 use { AltBinding } from "./attr_resolve.wado";
 use { MemberNames } from "./java2wado/jmembers.wado";
 use { TokenKinds, append_ids } from "./token_kinds.wado";
+use { gate_body_of } from "./scan_gate.wado";
 use { FOLLOW_MAX_DEPTH } from "./runtime/follow.wado";
 use { TreeMap } from "core:collections";
 
@@ -208,6 +209,11 @@ pub struct GenContext {
     /// currently emit (`language = Wado`). Actionless / other-language
     /// grammars stay byte-identical.
     emit_actions: bool,
+    /// Whether `install_action_context` has run. Lowering asks `emit_actions`,
+    /// which reads `false` both for a grammar without actions and for a context
+    /// nobody installed one on — so the flag alone cannot tell a consumer that
+    /// skipped the step from one that had nothing to do.
+    action_context_installed: bool,
     /// The grammar's action language (`options { language = X }`), so the
     /// action / predicate splice sites route to the right translator front
     /// end (identity for Wado, java2wado for Java). Set once at codegen entry.
@@ -217,6 +223,15 @@ pub struct GenContext {
     /// field reads against real declarations. Set once at codegen entry.
     grammar_name: String,
     action_members: MemberNames,
+    /// The members fields a scan simulates: assigned only integer literals, so
+    /// a walk can run their actions without a parser. See `scan_gate.wado`.
+    scan_gate_fields: List<String>,
+    /// Each gate-relevant action body as the translator renders it, by
+    /// `ActionSource::action_id`. Java and Wado spell a member write
+    /// differently in the grammar and identically after translation, so this is
+    /// the one form the gate analysis reads. Reading the grammar text instead
+    /// meant predicting what the translator would name the member.
+    gate_bodies: TreeMap<i32, String>,
     /// The lexer's `superClass` base effect-interface name, or `""` when none.
     /// See `action.md`, "SuperClass — an effect interface".
     superclass_name: String,
@@ -278,6 +293,7 @@ impl GenContext {
             scan_cyclic,
             lit_tokens: *lit_tokens,
             rule_index,
+            gate_bodies: TreeMap::<i32, String>::new(),
             token_kinds: TokenKinds::empty(),
             kind_rank: [],
             first_cache: none_int_list_cache(rule_count),
@@ -309,9 +325,11 @@ impl GenContext {
             trace: false,
             fragment_entries: [],
             emit_actions: false,
+            action_context_installed: false,
             action_language: ActionLanguage::Wado,
             grammar_name: "",
             action_members: MemberNames {},
+            scan_gate_fields: [],
             superclass_name: "",
             superclass_ops: [],
             parser_superclass_name: "",
@@ -650,6 +668,15 @@ impl GenContext {
     /// `gen_alt_elements` (the interleaved action bodies).
     pub fn set_emit_actions(&mut self, on: bool) {
         self.emit_actions = on;
+        self.action_context_installed = true;
+    }
+
+    /// Whether the action context is in place, which `lower_for_analysis`
+    /// asserts. A consumer that assembles the prologue itself and stops one
+    /// step short lowers a different `AltClass` and reports a parser nobody
+    /// builds.
+    pub fn action_context_installed(&self) -> bool {
+        return self.action_context_installed;
     }
 
     /// Whether retained actions should be executed rather than discarded.
@@ -681,6 +708,45 @@ impl GenContext {
 
     pub fn action_members(&self) -> &MemberNames with stores[self] {
         return &self.action_members;
+    }
+
+    /// The members fields a scan simulates as it walks — see `scan_gate.wado`.
+    ///
+    /// Keeps only what the members block declares, so the set can never name a
+    /// field the generated `SCAN_GATE` has no type or initialiser to copy. The
+    /// action bodies and the members block are two readings of the grammar and
+    /// either can come back empty on its own: a block the translator refuses
+    /// warns and declares nothing, which has to degrade to an unsimulated gate
+    /// rather than kill the emit. Call after `set_action_members`.
+    pub fn set_scan_gate_fields(&mut self, fields: List<String>) {
+        let declared = &self.action_members.fields;
+        self.scan_gate_fields = fields.iter_ref().filter(|f| declared.contains(f)).map(|f| *f).collect();
+    }
+
+    pub fn scan_gate_fields(&self) -> &List<String> with stores[self] {
+        return &self.scan_gate_fields;
+    }
+
+    /// Call before `set_scan_gate_fields`: which fields are simulable is read
+    /// off these bodies.
+    pub fn set_gate_bodies(&mut self, bodies: TreeMap<i32, String>) {
+        self.gate_bodies = bodies;
+    }
+
+    pub fn gate_bodies(&self) -> &TreeMap<i32, String> with stores[self] {
+        return &self.gate_bodies;
+    }
+
+    /// The translated body for `action_id`, or `""` where the translator
+    /// refused it.
+    pub fn gate_body(&self, action_id: i32) -> String {
+        return gate_body_of(&self.gate_bodies, action_id);
+    }
+
+    /// Whether the generated parser carries the `SCAN_GATE` global at all. Off
+    /// leaves every scan byte-identical to one emitted before it existed.
+    pub fn emit_scan_gate(&self) -> bool {
+        return self.emit_actions && !self.scan_gate_fields.is_empty();
     }
 
     pub fn set_superclass(&mut self, name: &String, ops: List<SuperOp>) {
@@ -1221,10 +1287,26 @@ impl GenContext {
                     }
                     cursor += 1;
                 },
-                Group(_) | Repeat(_) | Wildcard(_) | Not(_) => {
-                    // Conservative halt: per-depth union across alts /
-                    // optional iterations would over-yield; static
-                    // wildcards can't be enumerated.
+                Group(_) => {
+                    // Same shape as a multi-alt `RuleRef` above: the alts
+                    // diverge past their head, so a per-depth union would
+                    // over-yield, but at the head it is exact. Contribute that
+                    // one position and halt. A nullable group contributes none
+                    // — the position may be the next element's.
+                    let mut null_visiting: List<String> = [];
+                    if !self.element_is_nullable_deep(elem, &mut null_visiting) {
+                        let mut first_visiting: List<String> = [];
+                        let first = self.first_of_element(elem, &mut first_visiting);
+                        if !first.is_empty() {
+                            result.push(first);
+                        }
+                    }
+                    return cursor;
+                },
+                Repeat(_) | Wildcard(_) | Not(_) => {
+                    // Conservative halt: a repeat's head is also the position
+                    // after it when it iterates zero times, and a static
+                    // wildcard can't be enumerated.
                     return cursor;
                 },
             }

@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env -S mise x -- node
 // SessionStart hook: restore the shared cargo caches from GCS.
 //
 // Two objects are restored (both produced by .github/workflows/cargo-cache.yml):

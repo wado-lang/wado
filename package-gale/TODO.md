@@ -89,6 +89,30 @@ Remaining:
 - **Stage B′ does not oracle a composite.** `antlr4-oracle.sh` invokes the jar on one grammar file with no `-lib` slave lookup, so `stage_b_oracle_eligible` excludes them. Closing it means teaching the oracle script to stage the slaves beside the master and pass `-lib`. The extractor would then hand it composite candidates unchanged.
 - **The dialect consumer still holds a copy.** Kiln `inputs` are relative paths inside the project, so a dialect in its own repository cannot name `Wado.g4` inside a dependency package ([WEP: Markup Dialect](../docs/wep-2026-08-29-markup-dialect.md)). Resolution shrinks that from a drifting fork to a copy a checksum can hold. The rest is a Kiln gap, not a Gale one.
 
+## Gale accepts `\\[` in a char set where ANTLR4 rejects it
+
+`~[\\[\\r\\n]` compiles under Gale and fails under the jar with
+`invalid escape sequence \\[`. A `[` inside a set needs no escape, so the
+portable spelling is `~[[\\r\\n]` and the two agree on the meaning. Accepting the
+other form silently is what let a grammar in this repository reach the oracle
+scripts in a shape they cannot run. Being a superset is allowed where the meaning
+is unique, which it is here; being a _silent_ superset is what cost the
+comparison.
+
+## `x += (a*)` panics instead of emitting
+
+A list label over a _block_ holding a repeat lowers to
+`Op::ListLabel(Repeat(_))`, and `gen_op_list_label` then panics in
+`element_field_info`. A suffix binds outside a label, so `x += a*` is the
+label _inside_ the repeat and takes a different path; only the parenthesised
+form reaches this one.
+
+ANTLR4 accepts the form, so refusing it is a compatibility gap, and dying rather
+than diagnosing is the worse half. Found while checking whether the parse and
+scan sides stamp the same loops for that shape. They now do, but nothing can
+reach the divergence while the emitter dies first, which is why that fix carries
+no fixture.
+
 ## LL prediction — parked gaps
 
 Not queued work: both are known edges of the static path, and the complete answer is the runtime ATN simulator (`AGENTS.md` records three over-broad static repairs that each silently broke a real grammar). Revisit only when a descriptor or a real grammar surfaces a regression, and pair any repair with a rejection-case fixture.

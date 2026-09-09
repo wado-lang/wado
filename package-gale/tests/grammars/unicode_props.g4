@@ -1,6 +1,3 @@
-// Source: Hand-authored for Gale's Unicode property coverage.
-// License: BSD-3-Clause (matches the Gale repo).
-//
 // ANTLR4 supports Unicode property escapes `\p{Name}` inside character
 // sets. Common use cases: `\p{L}` (any letter), `\p{Nd}` (decimal
 // digit), `\p{Zs}` (space separator). These expand into character

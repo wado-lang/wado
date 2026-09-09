@@ -1,6 +1,3 @@
-// Source: hand-written regression grammar for Gale's nullable alternative.
-// License: same as the Gale package.
-//
 // A nullable alternative is selected by two things at once: its own first
 // set, and — because it can match nothing — whatever may follow the group.
 // `A?` is not the empty alternative; it is an alternative that has a first

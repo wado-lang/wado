@@ -1,6 +1,3 @@
-// Source: Gale test fixture (Stage C multi-alt lexer semantic predicate)
-// License: same as the Gale package
-//
 // A multi-alt lexer rule carries a per-alt predicate: `KW`'s first alt matches
 // a letter run only when it spells `cat`, its second alt matches the literal
 // `dog`. A false predicate on the first alt falls through to the next alt (and,

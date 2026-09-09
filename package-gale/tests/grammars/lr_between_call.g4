@@ -1,5 +1,4 @@
-// Source: hand-written for Gale's left-recursion tests (extends lr_between.g4).
-// License: same as the Gale package.
+// Extends `lr_between.g4`.
 //
 // ATN-class LR rule (the shared `'and'` delimiter forces the runtime
 // loop-entry) that also carries a postfix call alt whose args are self-refs

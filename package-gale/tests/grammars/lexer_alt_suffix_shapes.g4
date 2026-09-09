@@ -1,6 +1,4 @@
-// Source: Gale test fixture (lexer alternation whose suffix is not a plain
-// char sequence)
-// License: same as the Gale package
+// A lexer alternation whose suffix is not a plain char sequence.
 //
 // The arm of an alternation followed by a suffix is chosen by how far the
 // WHOLE rule reaches (`lexer_alt_suffix_longest.g4`), whatever the suffix is

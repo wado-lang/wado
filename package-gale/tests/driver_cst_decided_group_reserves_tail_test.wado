@@ -1,0 +1,39 @@
+//! A loop whose group body the lookahead decides still reserves its tail.
+//!
+//! That body takes a parse-side entry of its own — ask the decision, commit to
+//! the alternative — and the reserve was not on it, though the scan's ordinary
+//! iteration path applies one. The scan then measures a loop the parse runs
+//! greedily, which is the same asymmetry a token body has in the other
+//! direction.
+
+use g from "./grammars/decided_group_reserves_tail.g4"
+    with {
+        generator: { module: "../src/generator.wado", output_dir: "./generated/cst_decided_group_reserves_tail" },
+    };
+
+fn assert_tree(input: &String, expected: &String) {
+    let result = g::parse(input);
+    assert result.ok(), `unexpected diagnostics for ${*input}: ${result.diagnostics:?}`;
+    let actual = g::to_string_tree(&result);
+    assert actual == *expected, `\ninput:    ${*input}\nexpected: ${*expected}\nactual:   ${actual}`;
+}
+
+// The hit case: the loop's alternative is the tail, so the last `a z` is the
+// tail's and only the reserve stops the loop taking it.
+test "a decided group body leaves the tail what it needs" {
+    assert_tree(&"a z a z", &"(start (body a z a z))");
+}
+
+test "the group's other alternative loses its tail the same way" {
+    assert_tree(&"b y a z", &"(start (body b y a z))");
+}
+
+// The rejection cases: the loop still runs while the tail is not the next thing
+// at stake, and takes nothing where the tail is all there is.
+test "the loop runs while the tail is still ahead" {
+    assert_tree(&"a z a z a z", &"(start (body a z a z a z))");
+}
+
+test "the loop takes nothing where the tail is all there is" {
+    assert_tree(&"a z", &"(start (body a z))");
+}

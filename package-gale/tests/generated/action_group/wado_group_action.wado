@@ -1552,7 +1552,7 @@ fn scan_alts(tokens: &Array<i32>, pos: i32) -> i32 {
     if sg_0_best >= 0 {
         pos = sg_0_best;
     } else {
-        pos = gp_0;
+        return -1;
     }
     while pos < tokens.len() && _kind_set_0(tokens[pos]) {
         let sp = pos;
@@ -1645,6 +1645,18 @@ fn scan_gated(tokens: &Array<i32>, pos: i32) -> i32 {
         }
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
+        let rs_4 = pos;
+        let mut rs_4_ok = false;
+        rsv_4: {
+            if pos >= tokens.len() || tokens[pos] != TK_B { break rsv_4; }
+            pos += 1;
+            if pos >= tokens.len() || tokens[pos] != TK_EOF { break rsv_4; }
+            pos += 1;
+            rs_4_ok = true;
+        }
+        pos = rs_4;
+        let rk_4 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+        if !rs_4_ok && !(_kind_set_0(rk_4)) { pos = sp; break; }
     }
     if pos >= tokens.len() || tokens[pos] != TK_B { return -1; }
     pos += 1;
@@ -1782,6 +1794,20 @@ fn _parse_gated__inner(p: &mut Parser) -> () {
             }
         }
         if gd_best <= p.pos { break; }
+        if gd_best >= 0 {
+            let mut rep_reserve_ok = false;
+            rep_reserve: {
+                let tokens = &p.kinds;
+                let mut pos: i32 = gd_best;
+                if pos >= tokens.len() || tokens[pos] != TK_B { break rep_reserve; }
+                pos += 1;
+                if pos >= tokens.len() || tokens[pos] != TK_EOF { break rep_reserve; }
+                pos += 1;
+                rep_reserve_ok = true;
+            }
+            let rep_reserve_kind = if gd_best < p.kinds.len() { p.kinds[gd_best] } else { TK_EOF };
+            if !rep_reserve_ok && !(_kind_set_0(rep_reserve_kind)) { break; }
+        }
         if gd_winner == 0 {
             let a = p.expect(TK_A, &EMPTY_SYNC);
             if !p.speculating {

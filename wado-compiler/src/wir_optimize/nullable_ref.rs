@@ -1,8 +1,9 @@
 //! `NullableRef` representation lowering: a 2-case `{Unit, Payload(T)}` variant
 //! over a non-nullable reference becomes a null niche — unit to `ref.null none`,
 //! payload to the ref itself, no Wasm types emitted. Dropping the discriminant
-//! struct is a size win, but this is mandatory lowering, not optimization: the
-//! frontend already emits `None` as `ref.null`. Runs before SROA.
+//! struct is a size win, but this is mandatory lowering, not optimization: it
+//! substitutes the variant's type away, so every value of that type has to be
+//! rewritten with it. Runs before SROA.
 
 use crate::hashmap::IndexMap;
 use crate::wir::{WirAbstractHeapType, WirInstr, WirPackage, WirType, WirTypeDef, WirVariantRepr};
@@ -48,6 +49,13 @@ pub(super) fn lower_nullable_refs(module: &mut WirPackage) {
                 strip_nonnull_in_multivalue_returns(body, &result_nullable);
             }
         }
+    }
+
+    // A global's slot holds a value the same way a local does, so the
+    // initializer is rewritten with the bodies. Substituting only the slot's
+    // type leaves a `struct.new` of a type this pass just deleted.
+    for global in &mut module.globals {
+        transform_instr(&mut global.init, &module.types, &vci, &nullable_map);
     }
 
     // Phase 5: Mark case struct types as dead so compact_dead_items removes them.

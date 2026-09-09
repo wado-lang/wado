@@ -1313,6 +1313,11 @@ impl FunctionTranslator<'_, '_> {
         let Some(case) = vt.cases.get(case_index as usize) else {
             panic!("[WIR] variant `{variant_key}` has no case at index {case_index}");
         };
+        assert_eq!(
+            case.name, case_name,
+            "[WIR] variant `{variant_key}` case {case_index} is `{}`, not `{case_name}`",
+            case.name
+        );
         let struct_type_id = if case.payload.is_empty() {
             self.ref_type_id(result_type)
         } else {

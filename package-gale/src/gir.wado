@@ -840,6 +840,60 @@ pub struct ListLabelOp {
     pub dedup_base: String,
 }
 
+/// What a loop's iteration owes before it commits, as one value both sides
+/// carry and every entry path discharges through `gen_iteration_duties`.
+///
+/// Grouped rather than left as loose stamps because each of these has to reach
+/// three places at once — the parse's guarded entry, the parse's decided entry,
+/// and the scan — and a stamp that reaches two of them is a length the
+/// tournament commits to and the parse refuses. Ask `is_empty`, never the
+/// fields: that is what a shortcut has to get right, and it is right here for
+/// any duty added later.
+pub struct IterationDuties {
+    /// The mandatory suffix the loop must leave to its own alternative. A
+    /// greedy iteration whose body starts where the suffix does takes what the
+    /// suffix needs: `(matchArm FATARROW matchArmExpression)* matchArm FATARROW
+    /// expression` eats the only arm of `match x { A => 1, }`. Empty where the
+    /// two heads cannot overlap, so such a loop emits the guard it always did.
+    pub reserve_scan: List<ScanElement> = [],
+    /// Whether an iteration that would strand the loop's *optional*
+    /// continuation declines instead: `stmt+ expr?` over `{ y }.m()` gives the
+    /// loop the `{ y }` and leaves the `.m()` to nobody. The three fields below
+    /// are what that iteration asks, and are meaningless while this is false.
+    pub decline_stranded: bool = false,
+    /// FIRST of what follows the Repeat in its own alternative. With the body's
+    /// own first set and the caller's FOLLOW it answers "can anything continue
+    /// from where this iteration would end".
+    pub decline_cont_first: List<String> = [],
+    /// Scan mirror of that continuation, run from the iteration's *start* to
+    /// ask the other half: is exiting here viable at all? A loop declines only
+    /// when the answer is yes, so an iteration whose alternative has no other
+    /// reading is still taken.
+    pub decline_scan: List<ScanElement> = [],
+    /// The enclosing rule's FOLLOW, conjoined into the exit-viability verdict
+    /// exactly as `probe_viable` is into the non-greedy probe's.
+    pub decline_viable: List<String> = [],
+}
+
+impl IterationDuties {
+    /// Whether an iteration owes nothing past advancing. The only question a
+    /// shortcut may ask: naming the fields instead is what let the scan's
+    /// take-the-token path skip a reserve the parse applies.
+    pub fn is_empty(&self) -> bool {
+        return self.reserve_scan.is_empty() && !self.decline_stranded;
+    }
+
+    /// Whether anything past the reserve is owed. `gen_rep_scan_guard` builds
+    /// the reserve into the guard's own scan, so an entry that ran the guard
+    /// and nothing else asserts on this.
+    ///
+    /// Beside `is_empty` on purpose: both name the fields, and a duty added to
+    /// this struct is one edit away from each.
+    pub fn owes_beyond_reserve(&self) -> bool {
+        return self.decline_stranded;
+    }
+}
+
 pub struct RepeatOp {
     pub kind: RepeatKind,
     /// Surface `RepeatElement.non_greedy`. A `??` lowers to
@@ -928,6 +982,8 @@ pub struct RepeatOp {
     /// continuation fits and the caller's FOLLOW is the right question at the
     /// position it ended on. False keeps emit on the static condition.
     pub continuation_scannable: bool = false,
+    /// What each iteration owes before it commits. See `IterationDuties`.
+    pub duties: IterationDuties = IterationDuties {},
     /// `non_greedy_static_undecided` for this Repeat — no lookahead
     /// separates the loop body from the continuation. Stamped rather than
     /// recomputed so the two emit walkers and the scan side cannot answer
@@ -1154,6 +1210,15 @@ pub struct GeneralShape {
 /// parse side but drops the storage decisions.
 pub struct ScanBody {
     pub elements: List<ScanElement>,
+    /// The gate actions this alternative runs as the scan walks it. Empty
+    /// unless the grammar has a simulable gate member, which keeps every other
+    /// grammar's scan byte-identical.
+    pub gates: List<ScanGate> = [],
+    /// The alt-initial gate this body has to clear, rendered against the scan's
+    /// copy of the members, or `""` for none. Its parse-side twin is
+    /// `alt_initial_gate_conditions`; the two must agree or the tournament
+    /// commits to a length the parse refuses.
+    pub gate_cond: String = "",
 }
 
 pub variant ScanElement {
@@ -1169,6 +1234,18 @@ pub variant ScanElement {
     /// parse-side `OptionalLookaheadStrategy`. Exists in scan IR
     /// because scan-side has its own `gen_scan_optional_with_lookahead`.
     OptionalLookahead(ScanOptionalLookaheadElement),
+}
+
+/// A gate action the scan runs as it walks, so a tournament measuring a stretch
+/// that crosses one measures it under the gate the parse will apply. Positioned
+/// into `elements` the way `AltAction` is into the surface elements, and held in
+/// a sidecar for the same reason: it consumes nothing, and every index-based
+/// analysis over the element sequence stays unchanged. See `scan_gate.wado`.
+pub struct ScanGate {
+    pub field: String,
+    pub value: i32,
+    /// Runs after `elements[before_index - 1]` and before `elements[before_index]`.
+    pub before_index: i32,
 }
 
 pub struct ScanTokenElement {
@@ -1235,6 +1312,10 @@ pub struct ScanRepeatElement {
     /// Mirrors `RepeatOp.body_scannable`. The probe entry gate reads it on
     /// both sides, so an unscannable body cannot probe on the scan alone.
     pub body_scannable: bool = false,
+    /// The same `IterationDuties` value `RepeatOp` carries, from the same
+    /// `lower_iteration_duties` call shape. A scan that counts an iteration the
+    /// parse refuses measures a length the tournament then commits to.
+    pub duties: IterationDuties = IterationDuties {},
 }
 
 pub struct ScanGroupElement {

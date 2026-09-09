@@ -92,6 +92,9 @@ KW_YIELD    : 'yield';
 KW_TRY: 'try';
 
 // weak
+// LOCAL: `raw`, for the raw borrow `&raw const p` (Rust 1.82). Weak like
+// `union`: `identifier` admits it, so `let raw = 1;` still reads as a name.
+KW_RAW            : 'raw';
 KW_UNION          : 'union';
 KW_STATICLIFETIME : '\'static';
 
@@ -114,7 +117,13 @@ fragment UNICODE_OIDC: '\u00b7' | '\u0387' | '\u1369' ..'\u1371' | '\u19da';
 
 RAW_IDENTIFIER: 'r#' NON_KEYWORD_IDENTIFIER;
 // comments https://doc.rust-lang.org/reference/comments.html
-LINE_COMMENT: ('//' (~[/!] | '//') ~[\r\n]* | '//') -> channel (HIDDEN);
+// LOCAL: `~[/!\r\n]`, not `~[/!]`. The character after `//` disambiguates a
+// line comment from a doc comment, and upstream lets it be the line's own
+// newline — after which `~[\r\n]*` runs on and eats the *next* line. An empty
+// `//` before a closing brace therefore swallows the brace. A line comment ends
+// at its newline, so the newline cannot be the character that starts it; the
+// `| '//'` alternative already covers a comment with nothing after it.
+LINE_COMMENT: ('//' (~[/!\r\n] | '//') ~[\r\n]* | '//') -> channel (HIDDEN);
 
 BLOCK_COMMENT:
     (
@@ -128,7 +137,10 @@ INNER_LINE_DOC: '//!' ~[\n\r]* -> channel (HIDDEN); // isolated cr
 
 INNER_BLOCK_DOC: '/*!' ( BLOCK_COMMENT_OR_DOC | ~[*])*? '*/' -> channel (HIDDEN);
 
-OUTER_LINE_DOC: '///' (~[/] ~[\n\r]*)? -> channel (HIDDEN); // isolated cr
+// LOCAL: `~[/\r\n]`, not `~[/]` — the same defect as `LINE_COMMENT`. A bare
+// `///` line ended up consuming the line after it, so `/// x` parsed and a
+// blank `///` silently ate whatever followed.
+OUTER_LINE_DOC: '///' (~[/\r\n] ~[\n\r]*)? -> channel (HIDDEN); // isolated cr
 
 OUTER_BLOCK_DOC:
     '/**' (~[*] | BLOCK_COMMENT_OR_DOC) (BLOCK_COMMENT_OR_DOC | ~[*])*? '*/' -> channel (HIDDEN)
@@ -136,7 +148,13 @@ OUTER_BLOCK_DOC:
 
 BLOCK_COMMENT_OR_DOC: ( BLOCK_COMMENT | INNER_BLOCK_DOC | OUTER_BLOCK_DOC) -> channel (HIDDEN);
 
-SHEBANG: {this.SOF()}? '\ufeff'? '#!' ~[\r\n]* -> channel(HIDDEN);
+// LOCAL: `~[[\r\n]` for the character after `#!`. Rust strips a shebang only
+// when the token after `#!` is not `[`, which is what separates it from a
+// crate-level inner attribute. Upstream accepts any character there, so maximal
+// munch gave `#![allow(...)]` to this rule: on one line the whole attribute
+// vanished onto the hidden channel, and across two the rule stopped at the
+// newline and left `)]` behind.
+SHEBANG: {this.SOF()}? '\ufeff'? '#!' ~[[\r\n] ~[\r\n]* -> channel(HIDDEN);
 
 // whitespace https://doc.rust-lang.org/reference/whitespace.html
 WHITESPACE : [\p{Zs}]          -> channel(HIDDEN);
@@ -145,15 +163,25 @@ NEWLINE    : ('\r\n' | [\r\n]) -> channel(HIDDEN);
 // tokens char and string
 CHAR_LITERAL: '\'' ( ~['\\\n\r\t] | QUOTE_ESCAPE | ASCII_ESCAPE | UNICODE_ESCAPE) '\'';
 
-STRING_LITERAL: '"' ( ~["] | QUOTE_ESCAPE | ASCII_ESCAPE | UNICODE_ESCAPE | ESC_NEWLINE)* '"';
+// LOCAL: `~["\\]`, not `~["]`. A catch-all that admits the backslash makes the
+// rule ambiguous with its own escape arms, and the longest reading wins: in
+// `"\\\\"` the first three backslashes go to the catch-all and the fourth pairs
+// with the closing quote as a QUOTE_ESCAPE, so the token runs on to the next
+// string in the file. `CHAR_LITERAL` above already excludes it; these two did
+// not. An escape is the only way to spell a backslash, so nothing is lost.
+STRING_LITERAL: '"' ( ~["\\] | QUOTE_ESCAPE | ASCII_ESCAPE | UNICODE_ESCAPE | ESC_NEWLINE)* '"';
 
 RAW_STRING_LITERAL: 'r' RAW_STRING_CONTENT;
 
 fragment RAW_STRING_CONTENT: '#' RAW_STRING_CONTENT '#' | '"' .*? '"';
 
-BYTE_LITERAL: 'b\'' (. | QUOTE_ESCAPE | BYTE_ESCAPE) '\'';
+// LOCAL: `~['\\]`, not `.` — same ambiguity as the two above, and the same
+// answer `CHAR_LITERAL` already gives: `b'\''` needs the escape arm to take the
+// `\'`, which a catch-all admitting the backslash beats it to.
+BYTE_LITERAL: 'b\'' (~['\\] | QUOTE_ESCAPE | BYTE_ESCAPE) '\'';
 
-BYTE_STRING_LITERAL: 'b"' (~["] | QUOTE_ESCAPE | BYTE_ESCAPE)* '"';
+// LOCAL: `~["\\]` — the byte-string twin of the `STRING_LITERAL` note above.
+BYTE_STRING_LITERAL: 'b"' (~["\\] | QUOTE_ESCAPE | BYTE_ESCAPE)* '"';
 
 RAW_BYTE_STRING_LITERAL: 'br' RAW_STRING_CONTENT;
 

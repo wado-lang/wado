@@ -1,0 +1,48 @@
+//! A tail-greedy loop whose yield is proved only past the group holding it.
+//!
+//! `path : ID (SEP ID)*` inside `tree : (path? SEP) (STAR | LBRACE ID RBRACE)`.
+//! At every SEP the loop can iterate or hand the SEP to the caller, and the
+//! token after it is what decides — but that token is in the group beside the
+//! call site, not in the alternative the call site is in. A mask that stops at
+//! the alternative's own end holds only `SEP`, which every iteration also
+//! matches, so the loop yields the FIRST separator instead of the last.
+//!
+//! `RustParser.g4` has this shape as `useTree`, where it cost every
+//! `use a::b::*;` and `use a::b::{c};`.
+
+use g from "./grammars/ll_group_suffix_yields.g4"
+    with {
+        generator: { module: "../src/generator.wado", output_dir: "./generated/cst_ll_group_suffix_yields" },
+    };
+
+fn assert_tree(input: &String, expected: &String) {
+    let result = g::parse(input);
+    assert result.ok(), `unexpected diagnostics for ${*input}: ${result.diagnostics:?}`;
+    let actual = g::to_string_tree(&result);
+    assert actual == *expected, `\ninput:    ${*input}\nexpected: ${*expected}\nactual:   ${actual}`;
+}
+
+test "one segment yields its separator to the caller" {
+    assert_tree(&"a::*", &"(start (tree (path a) :: *))");
+}
+
+// The hit case. The loop must run once and yield only the second SEP; nothing
+// in `tree`'s own alternative separates the two, since both are `SEP`.
+test "two segments yield only the last separator" {
+    assert_tree(&"a::b::*", &"(start (tree (path a :: b) :: *))");
+}
+
+test "the group arm proves the yield the same way the star does" {
+    assert_tree(&"a::b::{c}", &"(start (tree (path a :: b) :: { c }))");
+}
+
+// The rejection case: no group follows, so the loop must keep every separator.
+// A repair that reads only "the caller could take a SEP" hands back the last
+// one here too, and `path` comes out a segment short.
+test "with no group to follow, the loop keeps every separator" {
+    assert_tree(&"a::b::c", &"(start (tree (path a :: b :: c)))");
+}
+
+test "a bare path is still the second alternative" {
+    assert_tree(&"a", &"(start (tree (path a)))");
+}

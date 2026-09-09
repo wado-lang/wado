@@ -1,0 +1,43 @@
+//! A greedy loop that has to decline an iteration its body scans.
+//!
+//! `stmt+ expr?` where `stmt` and `expr` share a leading token: taking every
+//! iteration the body matches strands the alternative when what the iteration
+//! ends on is something only the continuation could have consumed.
+
+use g from "./grammars/loop_declines_stranded_iteration.g4"
+    with {
+        generator: { module: "../src/generator.wado", output_dir: "./generated/cst_loop_declines_stranded_iteration" },
+    };
+
+fn assert_tree(input: &String, expected: &String) {
+    let result = g::parse(input);
+    assert result.ok(), `unexpected diagnostics for ${*input}: ${result.diagnostics:?}`;
+    let actual = g::to_string_tree(&result);
+    assert actual == *expected, `\ninput:    ${*input}\nexpected: ${*expected}\nactual:   ${actual}`;
+}
+
+// The hit case: the loop must leave `{ y }` to `expr?`, because the `.m()` it
+// would otherwise strand has no other taker.
+test "the loop declines an iteration that would strand the alternative" {
+    assert_tree(
+        &"{ let a = x; { y }.m() }",
+        &"(start (block { (stmts (stmt let a = (expr x) ;) (expr (expr (blk { y })) . m ( ))) }))",
+    );
+}
+
+// The rejection cases. A loop that simply stopped preferring an iteration
+// fails both: here the iteration is the right reading and taking it is what
+// lets the rest of the alternative match.
+test "an iteration another iteration can follow is still taken" {
+    assert_tree(
+        &"{ let a = x; { y } { z } }",
+        &"(start (block { (stmts (stmt let a = (expr x) ;) (stmt (blk { y })) (stmt (blk { z }))) }))",
+    );
+}
+
+test "an iteration the continuation follows is still taken" {
+    assert_tree(
+        &"{ { y } z }",
+        &"(start (block { (stmts (stmt (blk { y })) (expr z)) }))",
+    );
+}

@@ -1,0 +1,43 @@
+//! A `+`'s mandatory first iteration is never refused.
+//!
+//! It takes what prediction picked, whatever the loop owes. The exemption is
+//! the entry's rather than a duty's, so applying it to the reserve and not the
+//! decline let `(A B | C D)+ (A B E)?` decline its only iteration and emit a
+//! `+` that matched zero times.
+
+use g from "./grammars/plus_first_iteration_never_declines.g4"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            output_dir: "./generated/cst_plus_first_iteration_never_declines",
+        },
+    };
+
+fn assert_tree(input: &String, expected: &String) {
+    let result = g::parse(input);
+    assert result.ok(), `unexpected diagnostics for ${*input}: ${result.diagnostics:?}`;
+    let actual = g::to_string_tree(&result);
+    assert actual == *expected, `\ninput:    ${*input}\nexpected: ${*expected}\nactual:   ${actual}`;
+}
+
+// The rejection case, and the one the bug turned into a parse: the loop owes at
+// least one iteration, so `a b e` has no reading — the suffix cannot have the
+// `a b` the loop must take.
+test "a `+` that would strand its suffix still takes its first iteration" {
+    let result = g::parse(&"a b e");
+    assert !result.ok(), `expected a diagnostic: ${g::to_string_tree(&result)}`;
+}
+
+// The hit cases: with an iteration to spare the loop yields the suffix's input,
+// and with none to spare it keeps iterating.
+test "a later iteration still yields what the suffix needs" {
+    assert_tree(&"a b a b e", &"(start (body a b a b e))");
+}
+
+test "the loop keeps iterating where the suffix cannot start" {
+    assert_tree(&"a b a b", &"(start (body a b a b))");
+}
+
+test "the loop's other alternative takes the mandatory iteration too" {
+    assert_tree(&"c d a b e", &"(start (body c d a b e))");
+}

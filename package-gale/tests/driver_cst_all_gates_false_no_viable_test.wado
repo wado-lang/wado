@@ -1,0 +1,26 @@
+//! A tournament whose every candidate is gated off has no viable alternative.
+//!
+//! The pick runs its last alternative untested, which held while some
+//! alternative always matched. A gated candidate scores no-match for a reason
+//! the lookahead did not predict, so the tail has to be guarded or it parses
+//! what the predicate refused.
+
+use g from "./grammars/all_gates_false_no_viable.g4"
+    with {
+        generator: { module: "../src/generator.wado", output_dir: "./generated/cst_all_gates_false_no_viable" },
+    };
+
+// The hit case: with the flag off neither alternative exists, so the parse
+// reports rather than taking the one the tournament happened to list last.
+test "every candidate gated off reports no viable alternative" {
+    let result = g::parse(&"off a { b }");
+    assert !result.ok(), `expected a diagnostic, got ${g::to_string_tree(&result)}`;
+}
+
+// The rejection case: with the flag on the tournament still picks by length.
+test "with the gate open the tournament still picks the longest" {
+    let result = g::parse(&"on a { b } ;");
+    assert result.ok(), `unexpected diagnostics: ${result.diagnostics:?}`;
+    let actual = g::to_string_tree(&result);
+    assert actual == "(start (stmt on (pick a { b } ;)))", &actual;
+}

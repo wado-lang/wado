@@ -71,9 +71,9 @@ fully lowered. The pass:
   per entry export, which a top-level-only scan would leave lazy.
 
 `dce` / `cleanup` reclaim the emptied init body and the
-`__modules_initialized` guard in the same phase. Promotion leaves `lazy_init`
-and the nullable slot as `register_globals` set them — a non-null const init is
-a valid subtype of a nullable slot.
+`__modules_initialized` guard in the same phase. Promotion leaves the nullable
+slot as `register_globals` set it. A non-null const init is a valid subtype of a
+nullable slot.
 
 The classifier sits at WIR because the value is already correctly lowered there
 — variant representation, non-null field wrapping and builder collapse all baked

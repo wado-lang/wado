@@ -6,8 +6,6 @@
 // the 'x' and fails at the SAME EOF position ("expected ="). The two
 // errors tie on span.start, and the input-entry must prefer the
 // malformed element ("expected ID") over the next construct ("expected =").
-// Source: hand-authored for Gale (no upstream grammar).
-// License: same as the Gale project (see repository root).
 grammar TieRecovery;
 prog    : item* trailer EOF ;
 item    : 'x' ID ;

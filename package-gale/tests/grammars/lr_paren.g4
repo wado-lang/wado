@@ -1,6 +1,3 @@
-// Source: hand-written for Gale's left-recursion tests.
-// License: same as the Gale package.
-//
 // Top-level parenthesised self-ref in an LR suffix (`e '(' e ')'`). The
 // bracketed `e` is a PRIMARY reference (prec 0, a full expression) because the
 // `)` that follows is not an LR operator — `a(b(c))` keeps the inner group and
