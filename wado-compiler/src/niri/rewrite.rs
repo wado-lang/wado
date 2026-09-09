@@ -1316,14 +1316,10 @@ fn existing_fields(
 /// Whether anything inside `block` binds `local` — storage the block opened, as
 /// against a local it read from outside.
 fn block_binds_local(body: &Body, block: BlockId, local: u32) -> bool {
-    let mut stack = vec![NodeRef::Block(block)];
-    while let Some(node) = stack.pop() {
-        if body.binds_local(node, local) {
-            return true;
-        }
-        body.for_each_child(node, |c| stack.push(c));
-    }
-    false
+    body.find_in_nodes_under(NodeRef::Block(block), |node| {
+        body.binds_local(node, local).then_some(())
+    })
+    .is_some()
 }
 
 /// The operand `previous` holds at `index`, or `None` where it holds none.

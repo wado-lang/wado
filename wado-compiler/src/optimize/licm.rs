@@ -5,6 +5,7 @@
 //! [`Rule`] whose `apply_block` fires once and covers every loop in the body.
 
 use std::cell::Cell;
+use std::ops::ControlFlow;
 
 use crate::hashmap::IndexMap;
 use crate::hashmap::IndexSet;
@@ -2619,16 +2620,15 @@ fn hoist_invariant_value_operands(
 fn collect_loop_subtree(body: &Body, loop_body: BlockId) -> (Vec<ExprId>, Vec<StmtId>) {
     let mut expr_ids = Vec::new();
     let mut stmt_ids = Vec::new();
-    let mut work = vec![NodeRef::Block(loop_body)];
-    while let Some(node) = work.pop() {
+    body.walk_nodes_under::<()>(NodeRef::Block(loop_body), |node| {
         match node {
             NodeRef::Expr(e) => expr_ids.push(e),
             NodeRef::Stmt(s) => stmt_ids.push(s),
             NodeRef::Block(_) => {}
-            NodeRef::Pat(_) => continue,
+            NodeRef::Pat(_) => return ControlFlow::Continue(false),
         }
-        body.for_each_child(node, |c| work.push(c));
-    }
+        ControlFlow::Continue(true)
+    });
     (expr_ids, stmt_ids)
 }
 

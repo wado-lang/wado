@@ -294,13 +294,11 @@ struct ReconstructInfo {
 
 fn collect_candidates(body: &Body) -> Vec<SroaCandidate> {
     let mut candidates = Vec::new();
-    let mut stack = vec![NodeRef::Block(body.root)];
-    while let Some(node) = stack.pop() {
+    body.for_each_node_under(NodeRef::Block(body.root), |node| {
         if let NodeRef::Stmt(s) = node {
             candidate_from_stmt(body, s, &mut candidates);
         }
-        body.for_each_child(node, |c| stack.push(c));
-    }
+    });
     candidates
 }
 

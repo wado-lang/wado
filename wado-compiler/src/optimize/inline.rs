@@ -1266,15 +1266,13 @@ fn recursive_scc_members(call_graph: &[Vec<usize>]) -> Vec<bool> {
 /// graph). Each stamped `func_id` is total and resolves to a position in
 /// `project.functions`, which is exactly the call-graph node index.
 fn collect_callees(body: &Body, callees: &mut IndexSet<usize>) {
-    let mut stack = vec![NodeRef::Block(body.root)];
-    while let Some(node) = stack.pop() {
+    body.for_each_node_under(NodeRef::Block(body.root), |node| {
         if let NodeRef::Expr(id) = node
             && let ExprKind::Call { func_id, .. } = &body.exprs[id].kind
         {
             callees.insert(func_id.index());
         }
-        body.for_each_child(node, |c| stack.push(c));
-    }
+    });
 }
 
 /// How many call sites each callee has, counted with repetition and keyed by
@@ -1288,16 +1286,14 @@ fn call_site_counts(project: &NirPackage) -> Vec<usize> {
         let Some(body) = func.body.as_ref() else {
             continue;
         };
-        let mut stack = vec![NodeRef::Block(body.root)];
-        while let Some(node) = stack.pop() {
+        body.for_each_node_under(NodeRef::Block(body.root), |node| {
             if let NodeRef::Expr(id) = node
                 && let ExprKind::Call { func_id, .. } = &body.exprs[id].kind
                 && let Some(slot) = counts.get_mut(func_id.index())
             {
                 *slot += 1;
             }
-            body.for_each_child(node, |c| stack.push(c));
-        }
+        });
     }
     counts
 }

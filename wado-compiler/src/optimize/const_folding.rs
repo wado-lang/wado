@@ -487,15 +487,11 @@ struct GlobalStoreCollector<'a> {
 
 impl GlobalStoreCollector<'_> {
     fn visit_body(&mut self, body: &Body) {
-        let mut stack = vec![NodeRef::Block(body.root)];
-        while let Some(node) = stack.pop() {
-            match node {
-                NodeRef::Expr(e) => self.visit_expr(body, e),
-                NodeRef::Stmt(s) => self.visit_stmt(body, s),
-                NodeRef::Block(_) | NodeRef::Pat(_) => {}
-            }
-            body.for_each_child(node, |c| stack.push(c));
-        }
+        body.for_each_node_under(NodeRef::Block(body.root), |node| match node {
+            NodeRef::Expr(e) => self.visit_expr(body, e),
+            NodeRef::Stmt(s) => self.visit_stmt(body, s),
+            NodeRef::Block(_) | NodeRef::Pat(_) => {}
+        });
     }
 
     fn visit_expr(&mut self, body: &Body, e: ExprId) {
@@ -972,8 +968,7 @@ impl ConstFoldVisitor<'_> {
             // drop the stale entry for every local the pattern binds; otherwise a
             // reused index keeps the earlier `let`'s constant.
             StmtKind::LetDestructure { pattern, .. } => {
-                let mut stack = vec![NodeRef::Pat(*pattern)];
-                while let Some(node) = stack.pop() {
+                body.for_each_node_under(NodeRef::Pat(*pattern), |node| {
                     if let NodeRef::Pat(p) = node
                         && let PatKind::Binding { local_index, .. } = &body.pats[p].kind
                     {
@@ -981,8 +976,7 @@ impl ConstFoldVisitor<'_> {
                         self.interpreter
                             .record_ref_root(*local_index, BorrowRoot::NotABorrow);
                     }
-                    body.for_each_child(node, |c| stack.push(c));
-                }
+                });
                 return;
             }
             _ => return,

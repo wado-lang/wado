@@ -241,16 +241,14 @@ fn is_valid_referent(body: &Body, id: ExprId) -> bool {
 fn find_rebound_locals(body: &Body) -> IndexSet<u32> {
     let mut seen: IndexSet<u32> = IndexSet::default();
     let mut rebound: IndexSet<u32> = IndexSet::default();
-    let mut stack = vec![NodeRef::Block(body.root)];
-    while let Some(node) = stack.pop() {
+    body.for_each_node_under(NodeRef::Block(body.root), |node| {
         if let NodeRef::Stmt(s) = node
             && let StmtKind::Let { local_index, .. } = &body.stmts[s].kind
             && !seen.insert(*local_index)
         {
             rebound.insert(*local_index);
         }
-        body.for_each_child(node, |c| stack.push(c));
-    }
+    });
     rebound
 }
 

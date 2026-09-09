@@ -191,8 +191,7 @@ pub(super) fn region_needs(
     let mut seen = LocalSet::default();
     let mut mentioned: Vec<(u32, Option<TypeId>)> = Vec::new();
     let mut written = LocalSet::default();
-    let mut stack = vec![NodeRef::Block(block)];
-    while let Some(node) = stack.pop() {
+    body.for_each_node_under(NodeRef::Block(block), |node| {
         match node {
             NodeRef::Stmt(s) => {
                 if let StmtKind::Let { local_index, .. } = &body.stmts[s].kind {
@@ -281,8 +280,7 @@ pub(super) fn region_needs(
                     }
                 });
         });
-        body.for_each_child(node, |c| stack.push(c));
-    }
+    });
     let mut out = Vec::new();
     let mut writes_outer = false;
     for (index, ty) in mentioned {

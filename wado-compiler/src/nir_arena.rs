@@ -4,6 +4,9 @@
 //! representation, traversal, and cloning; the parent map, use index and edit
 //! API sit on [`crate::nir_engine::Engine`]. See WEP 2026-06-05.
 
+use std::cell::RefCell;
+use std::ops::ControlFlow;
+
 use cranelift_entity::{EntityRef, PrimaryMap, entity_impl};
 
 use crate::canonical::CmCallTarget;
@@ -1088,6 +1091,25 @@ impl Body {
     }
 }
 
+thread_local! {
+    /// Scratch stacks for the walks below, kept at the capacity a body needs.
+    /// The compile runs the same whole-body walk over every function on every
+    /// iteration, so allocating one stack per walk was the optimizer's largest
+    /// single source of allocation.
+    static WALK_STACKS: RefCell<Vec<Vec<NodeRef>>> = const { RefCell::new(Vec::new()) };
+}
+
+/// Run `f` with a scratch stack holding `root`. A nested walk takes its own, so
+/// `f` may walk again.
+fn with_walk_stack<R>(root: NodeRef, f: impl FnOnce(&mut Vec<NodeRef>) -> R) -> R {
+    let mut stack = WALK_STACKS.with_borrow_mut(Vec::pop).unwrap_or_default();
+    stack.push(root);
+    let out = f(&mut stack);
+    stack.clear();
+    WALK_STACKS.with_borrow_mut(|pool| pool.push(stack));
+    out
+}
+
 /// Structural navigation used by the rewrite engine (parent map + worklist).
 impl Body {
     /// Collect every local with a live `&local` / `&mut local` in the body.
@@ -1095,8 +1117,7 @@ impl Body {
     /// go stale after `inline` / `ref_elim` copy reference nodes, so
     /// alias-sensitive consumers union this scan in.
     pub fn collect_address_taken_locals(&self, out: &mut crate::hashmap::IndexSet<u32>) {
-        let mut stack: Vec<NodeRef> = vec![NodeRef::Block(self.root)];
-        while let Some(node) = stack.pop() {
+        self.for_each_node_under(NodeRef::Block(self.root), |node| {
             if let NodeRef::Expr(id) = node
                 && let ExprKind::Unary {
                     op: crate::nir::NirUnaryOp::Ref | crate::nir::NirUnaryOp::MutRef,
@@ -1107,8 +1128,52 @@ impl Body {
             {
                 out.insert(*index);
             }
-            self.for_each_child(node, |c| stack.push(c));
-        }
+        });
+    }
+
+    /// Invoke `f` on `root` and every node beneath it, parents before children.
+    pub fn for_each_node_under(&self, root: NodeRef, mut f: impl FnMut(NodeRef)) {
+        self.walk_nodes_under::<()>(root, |node| {
+            f(node);
+            ControlFlow::Continue(true)
+        });
+    }
+
+    /// The first value `f` gives for `root` or a node beneath it, parents before
+    /// children. `None` when it gives one for none of them.
+    pub fn find_in_nodes_under<T>(
+        &self,
+        root: NodeRef,
+        mut f: impl FnMut(NodeRef) -> Option<T>,
+    ) -> Option<T> {
+        self.walk_nodes_under(root, |node| match f(node) {
+            Some(found) => ControlFlow::Break(found),
+            None => ControlFlow::Continue(true),
+        })
+    }
+
+    /// Walk `root` and the nodes beneath it, parents before children. `f`
+    /// answers `Continue(true)` to descend into a node's children,
+    /// `Continue(false)` to skip them, or `Break(value)` to stop the walk.
+    ///
+    /// A walk that edits the body as it goes, or descends into some children of
+    /// a node and not others, keeps its own loop: `f` holds `&Body` and cannot
+    /// reach the stack.
+    pub fn walk_nodes_under<T>(
+        &self,
+        root: NodeRef,
+        mut f: impl FnMut(NodeRef) -> ControlFlow<T, bool>,
+    ) -> Option<T> {
+        with_walk_stack(root, |stack| {
+            while let Some(node) = stack.pop() {
+                match f(node) {
+                    ControlFlow::Break(found) => return Some(found),
+                    ControlFlow::Continue(true) => self.for_each_child(node, |c| stack.push(c)),
+                    ControlFlow::Continue(false) => {}
+                }
+            }
+            None
+        })
     }
 
     /// Invoke `f` on every node reachable from [`Body::root`], parents before
@@ -1130,11 +1195,7 @@ impl Body {
             }
             return;
         }
-        let mut stack = vec![NodeRef::Block(self.root)];
-        while let Some(node) = stack.pop() {
-            f(node);
-            self.for_each_child(node, |c| stack.push(c));
-        }
+        self.for_each_node_under(NodeRef::Block(self.root), f);
     }
 
     /// The distinct promoted values the reachable skeleton carries, and how many

@@ -392,8 +392,7 @@ pub fn region_queries(
         shapes: None,
     };
     let mut out = Vec::new();
-    let mut stack = vec![NodeRef::Block(body.root)];
-    while let Some(node) = stack.pop() {
+    body.for_each_node_under(NodeRef::Block(body.root), |node| {
         if let NodeRef::Expr(e) = node
             && let Some((block, _)) = region::region_shape(body, e, type_table)
         {
@@ -405,8 +404,7 @@ pub fn region_queries(
                 refusal: needs.refusal,
             });
         }
-        body.for_each_child(node, |c| stack.push(c));
-    }
+    });
     out
 }
 

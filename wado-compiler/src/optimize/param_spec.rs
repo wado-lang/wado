@@ -151,12 +151,8 @@ impl ParamSpecState {
 /// Visit every node reachable from the body root. Orphaned nodes an earlier
 /// rewrite left behind are skipped, so a stale read cannot make a live
 /// parameter look opaque.
-fn for_each_reachable(body: &Body, mut f: impl FnMut(NodeRef)) {
-    let mut stack = vec![NodeRef::Block(body.root)];
-    while let Some(node) = stack.pop() {
-        f(node);
-        body.for_each_child(node, |child| stack.push(child));
-    }
+fn for_each_reachable(body: &Body, f: impl FnMut(NodeRef)) {
+    body.for_each_node_under(NodeRef::Block(body.root), f);
 }
 
 // ---------------------------------------------------------------------------
