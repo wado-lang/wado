@@ -1137,7 +1137,24 @@ impl Body {
         });
         // A sourced node's own subtree is live too, and may name further
         // sources; the pool-side visited set bounds the second walk.
+        #[cfg(debug_assertions)]
+        let mut sourced_seen: IndexSet<ExprId> = IndexSet::default();
         while let Some(e) = sourced.pop() {
+            #[cfg(debug_assertions)]
+            {
+                assert!(
+                    sourced_seen.insert(e),
+                    "[NIR] two promoted values name {e:?} as their extraction source, so this \
+                     walk covers it twice and `reachable_operand_values` counts its slots twice"
+                );
+                assert!(
+                    self.find_in_nodes_under(root, |n| (n == NodeRef::Expr(e)).then_some(()))
+                        .is_none(),
+                    "[NIR] {e:?} is an extraction source and still reachable through the \
+                     skeleton, so this walk covers it twice and `reachable_operand_values` \
+                     counts its slots twice"
+                );
+            }
             self.for_each_node_under(NodeRef::Expr(e), |node| {
                 f(node);
                 self.for_each_operand(node, |op| {
