@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1788960517907,
+  "lastUpdate": 1788965332785,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -54441,6 +54441,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/017e3db2317800d5da877f50f1992114c9aa9d01"
         },
         "date": 1788960516927,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 2013,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6560,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18971,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 288933,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "8be68177ccc011babbd848a17c5c07c1e0f9bbc7",
+          "message": "Merge pull request #2010 from wado-lang/claude/latest-issue-solution-design-6x1kfq\n\nfix: the empty tuple is not unit, on either side of the compiler",
+          "timestamp": "2026-09-09T23:34:58+09:00",
+          "tree_id": "6bdb5cf725afb8930f07e2c816529ee0ec98e63b",
+          "url": "https://github.com/wado-lang/wado/commit/8be68177ccc011babbd848a17c5c07c1e0f9bbc7"
+        },
+        "date": 1788965332298,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
