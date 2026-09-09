@@ -4467,7 +4467,9 @@ fn is_param_type_supported_with_types(
                 false
             }
         }
-        Type::Tuple(elems) => elems
+        // `[]` falls to the catch-all: a `tuple` carries at least one type, and
+        // unit is the named `()` matched above.
+        Type::Tuple(elems) if !elems.is_empty() => elems
             .iter()
             .all(|e| is_param_type_supported_with_types(e, enums, resources, structs)),
         _ => false,
@@ -4533,15 +4535,9 @@ fn is_return_type_supported_with_types(
                 _ => false,
             }
         }
-        Type::Tuple(elements) => {
-            // Empty tuple () is the unit type, which is always supported
-            if elements.is_empty() {
-                return true;
-            }
-            elements
-                .iter()
-                .all(|el| is_return_type_supported_with_types(el, enums, resources, structs))
-        }
+        Type::Tuple(elements) if !elements.is_empty() => elements
+            .iter()
+            .all(|el| is_return_type_supported_with_types(el, enums, resources, structs)),
         _ => false,
     }
 }
