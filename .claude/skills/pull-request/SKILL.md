@@ -30,8 +30,8 @@ a list of PRs is deciding whether to care.
 
 `<type>(<scope>): <the value>`
 
-Where the value is a number, the number is the title. Name two things if two are
-worth it, still on one line. If five are, name the largest and leave the rest to
+If the value is a number, put the number in. Name two things if two are worth
+it, on the same line. If there are more, name the largest and leave the rest to
 the description.
 
 `type` is `feat`, `fix`, `docs`, `perf`, `refactor` or `chore`, with `!` for a
@@ -42,8 +42,8 @@ breaking change. The scope is optional.
 Open with the outcome, in a paragraph a reader can stop after: what holds once
 this is merged, and what it is worth. Mechanism comes after, under headings.
 
-Do not include trial-and-error history in the branch; the commit history is the
-SSoT. That is any sentence which only parses against the pre-branch state:
+Do not include trial-and-error history in the description; the commit history is
+the SSoT. That is any sentence which only parses against the pre-branch state:
 "previously X, now Y", "an earlier approach", "X was replaced by Y", a count
 given as a delta ("2 -> 0"). Read each sentence back and ask whether it works
 for someone who sees only the merged tree. If it needs the old state, cut it.
@@ -61,7 +61,7 @@ No need to include a test section. CI runs the full test suite.
 
 Angle brackets need nothing but a code span: `` `t_<Name>` `` renders as
 written. The GitHub MCP server drops them and HTML-escapes quotes in the text it
-reads back, so check the web UI before believing the description is broken, and
+reads back. Check the web UI before believing the description is broken, and
 never rewrite prose to work around it.
 
 Cut the draft before posting. A first draft follows the shape of the work: a
