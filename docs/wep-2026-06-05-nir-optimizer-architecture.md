@@ -293,45 +293,46 @@ Compile speed here means the debug build, the compiler-developer inner loop, so
 every timing in this WEP includes `debug_assert!`s.
 
 `optimize` is 71 % of a warm `-O2` compile of the Gale-generated SQLite parser
-and 78 % of `json_twitter`, the fixed-point loop about a third of it, spread over
-`peephole` at 21 %, `const_fold` at 16 %, and `inline`, `copy_prop` and `licm` at
-about 12 % each, with no dominant iteration. Read against self CPU rather than
-per-pass spans the shape is different and is what the items below are sized
-against: the generic arena walks (`for_each_child` / `for_each_reachable_node` /
-`for_each_operand`) are 17 % of the whole compile, allocation another 17 % — its
-largest single requester being those walks' per-call `Vec<NodeRef>` — and
-`Engine::new`'s index derivation 4.7 %. The graph build is about 6 % of the
-phase, where it was 21 % before build-once, and the whole `nir_value_graph`
-module is 1.2 % of self CPU: what the build costs is the walk it shares with
-every other pass, not its own arithmetic. `WADO_TRACE=arena_census` reports the
-node-mix and bloat numbers these items quote.
+and 78 % of `json_twitter`. The fixed-point loop is about a third of that, spread
+over `peephole` at 21 %, `const_fold` at 16 %, and `inline`, `copy_prop` and
+`licm` at about 12 % each, with no dominant iteration.
 
-- [ ] Fold the graph build into `lower`. Blocked, on the facts rather than on the
-      mechanism: `builder::build` takes the alias sets and the per-call purity
-      verdicts, and those are derived over the whole lowered package, while an
-      empty alias set is the _optimistic_ direction rather than a conservative
-      one — so building without them is unsound, not imprecise. A call's verdict
-      is keyed by `FuncId` besides, and `translate` finalizes callee ids only at
-      its end. Keeping the facts means building once every body exists, which is
-      the separate walk this item wanted to remove. What it buys is that one body
-      walk per function, not earlier availability: the early freeze already walks
-      every body before the loop, so the lazy first-query path is eager in
-      practice.
+Self CPU says something the per-pass spans do not, and it is what the items below
+are sized against. The generic arena walks — `for_each_child`,
+`for_each_reachable_node`, `for_each_operand` — are 17 % of the whole compile.
+Allocation is another 17 %, and its largest single requester is the
+`Vec<NodeRef>` those walks allocate per call. `Engine::new`'s index derivation is
+4.7 %. The graph build is about 6 % of the phase, down from 21 % before
+build-once, while the whole `nir_value_graph` module is 1.2 % of self CPU: what
+the build costs is the walk it shares with every other pass, not its own
+arithmetic. `WADO_TRACE=arena_census` reports the node-mix and bloat numbers
+these items quote.
+
+- [ ] Fold the graph build into `lower`. The build's inputs do not exist during
+      lowering. `builder::build` takes the alias sets and the per-call purity
+      verdicts, and both are derived over the whole lowered package. An empty
+      alias set is the _optimistic_ direction, not a conservative one, so
+      building without them is unsound rather than imprecise. A call's verdict is
+      keyed by `FuncId` besides, and `translate` finalizes callee ids only at its
+      end. Keeping the facts therefore means building once every body exists,
+      which is the separate walk this item wanted to remove. What it buys is that
+      one body walk per function, not earlier availability: the early freeze
+      already walks every body before the loop, so the lazy first-query path is
+      eager in practice.
 
 - [ ] Retire the pure node kinds still left in the skeleton, so every pure
       position is an operand. This is a compile-speed item as much as a
       saturation prerequisite. Pure kinds are 61 % of the reachable expressions
-      after lower and 77 % at end-of-optimize on the SQLite parser (62 % / 70 %
-      on `json_twitter`), and the local reads the use index is made of are 31–39 %
-      of them, so retiring them cuts what every session walk covers by about two
-      thirds rather than half. The promoted-operand ratio is why the share climbs
-      rather than falls: only 17 % of the reachable operand slots carry a value,
-      so a pure kind stays in the skeleton for want of a freeze that reaches it.
-      The other compile-speed items are sized against a skeleton this shrinks.
-      Almost none of it is reachable on its own. A value query recurses through
-      operands, so arithmetic left in the skeleton bottoms out on a field load or
-      a call result and yields no value at all. It waits on a consumer; see
-      Precision.
+      after lower and 77 % at end-of-optimize on the SQLite parser, 61 % and 70 %
+      on `json_twitter`. The local reads the use index is made of are 31–39 % of
+      them. Retiring them therefore cuts what every session walk covers by about
+      two thirds rather than half. The share climbs across the loop because the
+      freeze reaches so little: only 17 % of the reachable operand slots carry a
+      value, so a pure kind stays in the skeleton for want of a freeze. The other
+      compile-speed items are sized against a skeleton this shrinks. Almost none
+      of it is reachable on its own. A value query recurses through operands, so
+      arithmetic left in the skeleton bottoms out on a field load or a call
+      result and yields no value at all. It waits on a consumer; see Precision.
 
 - [ ] Arena compaction. In-place rewrites orphan nodes that are never freed
       mid-run. At end-of-optimize the arena holds 1.9× the reachable expressions
