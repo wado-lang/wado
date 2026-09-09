@@ -2515,6 +2515,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             return_type,
             func.is_async,
             func.body.as_ref(),
+            &func.name,
             func.span,
         );
         scope.validate_loop_jumps_ast(func.body.as_ref());
@@ -2868,6 +2869,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             return_type,
             func.is_async,
             func.body.as_ref(),
+            &func.name,
             func.span,
         );
         scope.validate_loop_jumps_ast(func.body.as_ref());

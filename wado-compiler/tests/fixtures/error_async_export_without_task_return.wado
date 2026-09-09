@@ -1,0 +1,16 @@
+// An `export async fn` delivers its result with `task return`. A body
+// carrying none can never deliver, so every call reaches the boundary with
+// the task unfinished and traps. Nothing about that depends on the input, so
+// it is a compile error rather than a trap to discover at run time.
+
+use { println, Stdout } from "core:cli";
+
+global mut hits: i32 = 0;
+
+export async fn run() with Stdout {
+    hits = hits + 1;
+    println(`${hits}`);
+}
+
+__DATA__
+{ "compile_error": "`export async fn run` never delivers its result" }

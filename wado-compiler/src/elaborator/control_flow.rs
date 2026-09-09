@@ -472,6 +472,23 @@ pub(super) fn collect_unresolved_null_breaks(
     probe.spans
 }
 
+/// Whether the body names its result anywhere. The walk stops at a closure
+/// body, which is a function of its own and where `task return` is rejected.
+pub(super) fn block_delivers(ctx: CtrlFlowCtx<'_>, block: &ast::Block) -> bool {
+    any_in_tree(ctx, block, &mut TaskReturnPresent)
+}
+
+struct TaskReturnPresent;
+
+impl AstTreeProbe for TaskReturnPresent {
+    fn check_stmt(&mut self, stmt: &ast::Stmt) -> Step {
+        match stmt {
+            ast::Stmt::TaskReturn(_) => Step::Match,
+            _ => Step::Descend,
+        }
+    }
+}
+
 /// Searches for an unlabeled `break` / `continue` that no loop binds. A loop
 /// binds every such jump inside it, so the walk stops at one.
 struct UnboundLoopJump {

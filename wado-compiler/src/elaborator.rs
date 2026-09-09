@@ -839,30 +839,42 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         self.sem.types.expression_types.get(&expr.id()).copied()
     }
 
-    /// Emit `MissingReturn` when a declared non-Unit return type cannot be
-    /// satisfied. Skipped for `Unit` / `Never`, for a bodyless external, and for a
-    /// body whose every control path provably exits first. The analysis is
-    /// definite-exit, not "contains a `return` somewhere": accepting one carried
-    /// by a single `if` branch produced an invalid core Wasm module.
+    /// Emit when a body cannot produce the result its signature promises. A
+    /// sync function returns it; an `export async fn` delivers it with `task
+    /// return`. Skipped for a bodyless external and for a body whose every
+    /// control path provably exits first.
+    ///
+    /// The sync analysis is definite-exit, not "contains a `return` somewhere":
+    /// accepting one carried by a single `if` branch produced an invalid core
+    /// Wasm module. The async one is the opposite — presence, not definite
+    /// delivery — because a `task return` under a branch is legitimate, and a
+    /// path that misses it is the runtime's to trap on.
     pub(super) fn validate_missing_return_ast(
         &self,
         return_type: TypeId,
         is_async: bool,
         body: Option<&crate::ast::Block>,
+        function: &str,
         span: crate::token::Span,
     ) {
-        // An `async fn` delivers through `task return`, which cm_binding turns
-        // into the function's return.
+        let Some(body) = body else {
+            return;
+        };
         if is_async {
+            if !control_flow::block_delivers(self.ctrl_flow_ctx(), body)
+                && !control_flow::block_always_exits(self.ctrl_flow_ctx(), body)
+            {
+                let _ = self.emit(types::TypeError::MissingTaskReturn {
+                    function: function.to_string(),
+                    span,
+                });
+            }
             return;
         }
         if return_type == crate::tir::TypeTable::UNIT || return_type == crate::tir::TypeTable::NEVER
         {
             return;
         }
-        let Some(body) = body else {
-            return;
-        };
         if control_flow::block_always_exits(self.ctrl_flow_ctx(), body) {
             return;
         }

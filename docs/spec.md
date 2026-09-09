@@ -5344,6 +5344,8 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> {
 #### Rules
 
 - `task return` is only valid inside `export async fn` bodies.
+- An `export async fn` body must carry a `task return`. One that carries none can never deliver, so every call of it would reach the boundary with the task unfinished; the compiler rejects it instead. A body whose every path provably exits first — `panic`, an endless loop — has no delivery to make and is exempt.
+- Whether a `task return` under a branch is reached is not checked. A path that misses it traps at the boundary, the same as a declared result the body never binds.
 - Regular `return` is forbidden in `async fn` bodies — it would exit the Wasm function without notifying the CM runtime.
 - The `task return` expression is type-checked against the declared return type of the enclosing `export async fn`.
 - `task return` names the function's result, and where it goes depends on who entered the function. The Component Model runtime receives it when the export binding did; a Wado caller receives it as an ordinary return value.
