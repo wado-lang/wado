@@ -1457,6 +1457,41 @@ mod tests {
         }
     }
 
+    /// A short circuit decides the same way in either tier. `false && x` is
+    /// `false` however unevaluable `x` is, and the pool holds that `Binary`
+    /// verbatim: `binary_folded` folds the neutral identities, not the
+    /// absorbing ones. Evaluating a promoted operand by rules of its own is how
+    /// this answered `Unevaluated` where the skeleton answered `Const(false)`.
+    #[test]
+    fn a_short_circuit_decides_in_the_pool_too() {
+        let table = TypeTable::new();
+        let interp = Interpreter::new(&table);
+        let mut body = Body::empty();
+
+        let never = body.values.fresh_opaque();
+        body.values.set_type(never, TypeTable::BOOL);
+        assert_eq!(
+            interp.value_to_lattice_for_test(&body, never),
+            Lattice::Unevaluated,
+            "the right operand has to be unevaluable for the test to mean anything"
+        );
+
+        for (op, konst, expected) in [
+            (NirBinaryOp::And, false, false),
+            (NirBinaryOp::Or, true, true),
+        ] {
+            let lhs = body.values.bool(konst);
+            body.values.set_type(lhs, TypeTable::BOOL);
+            let v = body.values.binary(op, lhs, never, TypeTable::BOOL);
+            body.values.set_type(v, TypeTable::BOOL);
+            assert_eq!(
+                interp.value_to_lattice_for_test(&body, v),
+                Lattice::Const(Value::Bool(expected)),
+                "{konst:?} {op:?} <unevaluable>"
+            );
+        }
+    }
+
     /// A declined fold is remembered whichever backend declined it: the node a
     /// value was folded from does not always survive the rewrite that takes it,
     /// so a later read cannot be asked to recompute.
