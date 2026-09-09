@@ -5,6 +5,7 @@ use std::cmp::Reverse;
 
 use crate::compiler_trace;
 use crate::hashmap::IndexMap;
+use crate::nir::NirUnaryOp;
 use crate::nir_arena::{Body, ExprKind, NodeRef, Operand};
 use crate::nir_package::NirPackage;
 use crate::trace::filter;
@@ -144,7 +145,7 @@ impl Census {
 /// An expression kind's census name, and whether it is a *pure kind*: one the
 /// value pool has a `ValueKind` for, so only a freeze that reaches it stands
 /// between the node and retirement from the skeleton.
-fn classify(kind: &ExprKind) -> (&'static str, bool) {
+pub(super) fn classify(kind: &ExprKind) -> (&'static str, bool) {
     match kind {
         ExprKind::Dead => ("Dead", false),
         ExprKind::PackedArray(_) => ("PackedArray", false),
@@ -153,7 +154,11 @@ fn classify(kind: &ExprKind) -> (&'static str, bool) {
         ExprKind::GlobalVarGet { .. } => ("GlobalVarGet", false),
         ExprKind::GlobalVarSet { .. } => ("GlobalVarSet", false),
         ExprKind::Binary { .. } => ("Binary", true),
-        ExprKind::Unary { .. } => ("Unary", true),
+        // A borrow is a place, not a value, and no `ValueKind` carries one.
+        ExprKind::Unary { op, .. } => (
+            "Unary",
+            !matches!(op, NirUnaryOp::Ref | NirUnaryOp::MutRef | NirUnaryOp::Deref),
+        ),
         ExprKind::Assign { .. } => ("Assign", false),
         ExprKind::Cast { .. } => ("Cast", true),
         ExprKind::Call { .. } => ("Call", false),
