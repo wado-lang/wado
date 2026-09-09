@@ -11,7 +11,8 @@ use crate::common::{WasiState, compile_lib_world, engine, lib_func, limit_store,
 /// FQ of the synthesized library world; any stable name works.
 const LIB_WORLD_FQ: &str = "wado-lang:cm-catalog/cm-catalog@0.0.23";
 
-/// Budget for the two calls; an undelivered task burns it rather than hanging.
+/// Bounds runaway guest work, as every metered test does. An undelivered task
+/// does not reach it: the async lift traps the call.
 const TIMEOUT_MS: u64 = 5_000;
 
 /// A void async export beside a sync reader, so the effect the void export had
