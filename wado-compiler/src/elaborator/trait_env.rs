@@ -2634,9 +2634,6 @@ pub(super) fn written_type_arg(
         ast::Type::MutReference(inner) => {
             written_type_arg(inner, resolutions).with_reference(name::RefKind::Mut)
         }
-        ast::Type::Tuple(elems) if elems.is_empty() => {
-            name::FqTypeName::builtin(TypeTable::UNIT_TYPE_NAME)
-        }
         ast::Type::Tuple(elems) => name::FqTypeName::tuple(nested(elems)),
         // Spelled by the whole shape, matching the resolved form: the two
         // sides of a lookup have to render one type one way.

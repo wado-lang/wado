@@ -210,10 +210,6 @@ impl Lowering {
                     .collect::<Option<Vec<_>>>()?;
                 Some(SolverType::Decl(head, args))
             }
-            Type::Tuple(elems) if elems.is_empty() => Some(SolverType::Decl(
-                self.builtin(TypeTable::UNIT_TYPE_NAME),
-                Vec::new(),
-            )),
             Type::Tuple(elems) => elems
                 .iter()
                 .map(|elem| self.ast_type(elem, param, resolutions, self_type))
