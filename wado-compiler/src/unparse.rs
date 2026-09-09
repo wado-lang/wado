@@ -27,12 +27,6 @@ fn effective_start_line(attrs: &[Attribute], span_line: usize) -> usize {
         .map_or(span_line, |attr| attr.span.line.min(span_line))
 }
 
-/// Returns true if `ty` is the unit type `()`, which is the default return type
-/// and therefore omitted from rendered signatures.
-fn is_unit_type(ty: &Type) -> bool {
-    ty.is_unit()
-}
-
 /// The namespace name of a `use name from "..."` import, if this declaration is
 /// one (a single `Namespace` item).
 fn use_namespace_name(u: &UseDecl) -> Option<&str> {
@@ -874,7 +868,7 @@ impl<'a> Unparser<'a> {
         self.unparse_generic_params(&f.type_params);
         self.delimited_params(&f.params, f.params_span, |s| {
             if let Some(ret) = &f.return_type
-                && !is_unit_type(ret)
+                && !ret.is_unit()
             {
                 s.output.push_str(" -> ");
                 s.unparse_type(ret);
@@ -1339,7 +1333,7 @@ impl<'a> Unparser<'a> {
                         this.output.push_str(&func.name);
                         this.delimited_params(&func.params, func.params_span, |s| {
                             if let Some(ret) = &func.return_type
-                                && !is_unit_type(ret)
+                                && !ret.is_unit()
                             {
                                 s.output.push_str(" -> ");
                                 s.unparse_type(ret);
@@ -4172,7 +4166,7 @@ pub fn unparse_function_signature_into(f: &Function, output: &mut String) {
     unparse_generic_params_into(&f.type_params, output);
     delimited_into("(", ")", &f.params, output, unparse_param_into);
     if let Some(ret) = &f.return_type
-        && !is_unit_type(ret)
+        && !ret.is_unit()
     {
         output.push_str(" -> ");
         unparse_type_into(ret, output);
@@ -4436,7 +4430,7 @@ pub(crate) fn unparse_with_row_into(items: &[String], output: &mut String) {
 /// is the unit type — same rule as function declarations, so `fn mut(T)` and
 /// `fn mut(T) -> ()` round-trip to the canonical arrowless form.
 fn unparse_fn_return_into(return_type: &Type, output: &mut String) {
-    if !is_unit_type(return_type) {
+    if !return_type.is_unit() {
         output.push_str(" -> ");
         unparse_type_into(return_type, output);
     }

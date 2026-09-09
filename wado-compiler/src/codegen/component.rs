@@ -12,6 +12,7 @@ use crate::component_model::{CmFunctionInfo, CmTypeGen, CmVariantCase};
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::nir_package::NirPackage;
 use crate::wir::WirPackage;
+use crate::wir_build::component_plan::{CmExportType, ComponentPlan, WorldExportPlan};
 use wasm_encoder::{
     Alias, CanonicalOption, ComponentBuilder, ComponentExportKind, ComponentOuterAliasKind,
     ComponentValType, ExportKind, InstanceType, ModuleArg, PrimitiveValType, TypeBounds,
@@ -538,9 +539,7 @@ fn emit_cm_val_type(
                 None
             } else {
                 let ok = &g.args[0];
-                if let Type::Named(named) = ok
-                    && named.name == "()"
-                {
+                if ok.is_unit() {
                     None
                 } else if let Type::Named(named) = ok
                     && own_resource_type_indices.contains_key(&named.name)
@@ -1594,13 +1593,9 @@ fn emit_canonical_intrinsics(
     transmission_future_types: &IndexMap<String, u32>,
     scalar_future_types: &IndexSet<(CmScalarType, u32)>,
     value_future_types: &IndexMap<CmPayloadType, u32>,
-    component_plan: &crate::wir_build::component_plan::ComponentPlan,
+    component_plan: &ComponentPlan,
     lib_type_gen: &mut Option<CmTypeGen>,
 ) {
-    // The `task.return` canon needs the export's CM-resolved result type.
-    // Worlds with one boundary export (HTTP service `handle`, kiln
-    // `generate`, CLI `Command::run`) all share this single-task assumption;
-    // the test world emits zero world exports so we fall back to `result<>`.
     for intrinsic in canonical_intrinsics {
         ctx.register_core_func(&intrinsic.import_name());
 
@@ -1729,29 +1724,30 @@ fn emit_canonical_intrinsics(
             }
             CanonicalIntrinsic::TaskReturn(key) => {
                 let memory_idx = ctx.memory_idx();
-                let result_ty = lib_task_return_valtype(
-                    key,
-                    component_plan,
-                    project,
-                    builder,
-                    ctx,
-                    lib_type_gen,
-                )
-                .unwrap_or_else(|| {
-                    resolve_task_return_valtype(
-                        key,
-                        component_plan,
-                        project,
-                        ctx,
-                        result_unit_type,
-                        trailers_future_type,
-                        transmission_future_types,
-                        scalar_future_types,
-                        value_future_types,
-                        stream_types,
-                    )
-                });
-                builder.task_return(Some(result_ty), [CanonicalOption::Memory(memory_idx)]);
+                let result_ty = match task_return_export(key, component_plan) {
+                    None => Some(ComponentValType::Type(result_unit_type)),
+                    // A `--lib` export is the only one that can declare no
+                    // result, and it then delivers no value: the canon carries
+                    // no type, so the core import is `(func)`.
+                    Some(export) if export.is_lib && export.result_type.is_none() => None,
+                    Some(export) => Some(
+                        lib_task_return_valtype(export, project, builder, ctx, lib_type_gen)
+                            .unwrap_or_else(|| {
+                                resolve_task_return_valtype(
+                                    export,
+                                    project,
+                                    ctx,
+                                    result_unit_type,
+                                    trailers_future_type,
+                                    transmission_future_types,
+                                    scalar_future_types,
+                                    value_future_types,
+                                    stream_types,
+                                )
+                            }),
+                    ),
+                };
+                builder.task_return(result_ty, [CanonicalOption::Memory(memory_idx)]);
             }
             CanonicalIntrinsic::WaitableSetNew => {
                 builder.waitable_set_new();
@@ -1814,26 +1810,39 @@ fn emit_canonical_intrinsics(
     }
 }
 
+/// The export a `task.return` canon is keyed by. The empty key names no export:
+/// it is the shared canon of the deliveries whose result is `result<>` — a test
+/// export, or a WASI export taking no params and returning unit.
+fn task_return_export<'a>(
+    key: &str,
+    component_plan: &'a ComponentPlan,
+) -> Option<&'a WorldExportPlan> {
+    if key.is_empty() {
+        return None;
+    }
+    Some(
+        component_plan
+            .world_exports
+            .iter()
+            .find(|e| e.name == key)
+            .unwrap_or_else(|| panic!("`task.return` keyed by `{key}`, which is no world export")),
+    )
+}
+
 /// Build the `task.return` result type for a `--lib` export whose result is a
 /// plain Wado type (e.g. the kiln generator's `Result<Response, Error>`), from
 /// the raw AST via the shared `lib_type_gen`. Named types land top-level and are
 /// cache-shared with [`emit_world_exports`], so the canon and the export func
-/// type reference the same defined types. Returns `None` for non-lib exports,
-/// exports without a result type, and `Future`/`Stream` results (handled by
-/// [`resolve_task_return_valtype`]).
+/// type reference the same defined types. Returns `None` for a non-lib export
+/// and for a `Future`/`Stream` result, both of which
+/// [`resolve_task_return_valtype`] handles.
 fn lib_task_return_valtype(
-    key: &str,
-    component_plan: &crate::wir_build::component_plan::ComponentPlan,
+    export: &WorldExportPlan,
     project: &NirPackage,
     builder: &mut ComponentBuilder,
     ctx: &mut ComponentModelContext,
     lib_type_gen: &mut Option<CmTypeGen>,
 ) -> Option<ComponentValType> {
-    let export = component_plan
-        .world_exports
-        .iter()
-        .find(|e| e.name == key)
-        .or_else(|| component_plan.world_exports.first())?;
     if !export.is_lib {
         return None;
     }
@@ -1854,14 +1863,12 @@ fn lib_task_return_valtype(
     ))
 }
 
-/// Resolve the `task.return` result type for an `async` export, keyed by its
-/// name. A `--lib` `future<T>` result resolves to the interned `future<T>`
-/// type; everything else (WASI handler results, unit) resolves through
-/// `cm_result`. An unmatched/empty key falls back to the first export.
+/// Resolve the `task.return` result type for an `async` export. A `--lib`
+/// `future<T>` result resolves to the interned `future<T>` type; everything
+/// else (WASI handler results, unit) resolves through `cm_result`.
 #[allow(clippy::too_many_arguments)]
 fn resolve_task_return_valtype(
-    key: &str,
-    component_plan: &crate::wir_build::component_plan::ComponentPlan,
+    export: &WorldExportPlan,
     project: &NirPackage,
     ctx: &ComponentModelContext,
     result_unit_type: u32,
@@ -1871,14 +1878,6 @@ fn resolve_task_return_valtype(
     value_future_types: &IndexMap<CmPayloadType, u32>,
     stream_types: &IndexMap<CmStreamPayload, u32>,
 ) -> ComponentValType {
-    let export = component_plan
-        .world_exports
-        .iter()
-        .find(|e| e.name == key)
-        .or_else(|| component_plan.world_exports.first());
-    let Some(export) = export else {
-        return ComponentValType::Type(result_unit_type);
-    };
     if export.is_lib
         && let Some(crate::ast::Type::Generic(g)) = &export.result_type
         && g.args.len() == 1
@@ -1946,10 +1945,9 @@ fn resolve_future_type(
 /// per-world name.
 fn cm_export_type_to_idx(
     ctx: &ComponentModelContext,
-    ty: &crate::wir_build::component_plan::CmExportType,
+    ty: &CmExportType,
     result_unit_type: u32,
 ) -> u32 {
-    use crate::wir_build::component_plan::CmExportType;
     match ty {
         CmExportType::Unit => result_unit_type,
         CmExportType::Primitive(name) => panic!(
@@ -1997,10 +1995,9 @@ fn cm_export_type_to_idx(
 /// index.
 fn cm_export_type_to_valtype(
     ctx: &ComponentModelContext,
-    ty: &crate::wir_build::component_plan::CmExportType,
+    ty: &CmExportType,
     result_unit_type: u32,
 ) -> ComponentValType {
-    use crate::wir_build::component_plan::CmExportType;
     match ty {
         CmExportType::Primitive(name) => cm_primitive_name_to_valtype(name),
         other => ComponentValType::Type(cm_export_type_to_idx(ctx, other, result_unit_type)),
@@ -2050,7 +2047,7 @@ fn emit_world_exports(
     builder: &mut ComponentBuilder,
     ctx: &mut ComponentModelContext,
     project: &NirPackage,
-    component_plan: &crate::wir_build::component_plan::ComponentPlan,
+    component_plan: &ComponentPlan,
     result_unit_type: u32,
     lib_type_gen: &mut Option<crate::component_model::CmTypeGen>,
 ) {
@@ -4326,9 +4323,8 @@ fn lower_wasi_functions(
 fn append_interface_instance_exports(
     component_bytes: &mut Vec<u8>,
     ctx: &ComponentModelContext,
-    component_plan: &crate::wir_build::component_plan::ComponentPlan,
+    component_plan: &ComponentPlan,
 ) {
-    use crate::wir_build::component_plan::CmExportType;
     use wasm_encoder::{ComponentExportSection, ComponentInstanceSection, ComponentSection};
 
     // The named CM types a boundary type references, in signature order.
@@ -4371,8 +4367,7 @@ fn append_interface_instance_exports(
         }
     }
 
-    let mut groups: IndexMap<&str, Vec<&crate::wir_build::component_plan::WorldExportPlan>> =
-        IndexMap::default();
+    let mut groups: IndexMap<&str, Vec<&WorldExportPlan>> = IndexMap::default();
     for export in &component_plan.world_exports {
         if let Some(fq) = &export.from_interface_fq {
             groups.entry(fq.as_str()).or_default().push(export);

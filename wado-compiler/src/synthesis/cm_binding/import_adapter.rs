@@ -8,7 +8,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use crate::ast::{NamedType, Type};
-use crate::component_model::{CmFunctionInfo, CmInterfaceRegistry};
+use crate::component_model::{CmFunctionInfo, CmInterfaceRegistry, EMPTY_TUPLE_AT_BOUNDARY};
 use crate::hashmap::IndexSet;
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
 use crate::name::LocalMethodName;
@@ -76,10 +76,8 @@ fn synthesize_lift_flat_result(
         let ok_ty = &g.args[0];
         let err_ty = &g.args[1];
 
-        let ok_is_unit = matches!(ok_ty, Type::Named(n) if n.name == "()")
-            || matches!(ok_ty, Type::Tuple(elems) if elems.is_empty());
-        let err_is_unit = matches!(err_ty, Type::Named(n) if n.name == "()")
-            || matches!(err_ty, Type::Tuple(elems) if elems.is_empty());
+        let ok_is_unit = ok_ty.is_unit();
+        let err_is_unit = err_ty.is_unit();
 
         let (ok_name, ok_index, err_name, err_index) = {
             let tt = ctx.type_table.borrow();
@@ -727,7 +725,7 @@ fn classify_param<'t>(
         Type::Generic(g) if matches!(g.name.as_str(), "Stream" | "Future" | "Own" | "Borrow") => {
             ParamLowering::Direct
         }
-        Type::Tuple(elems) if elems.is_empty() => ParamLowering::Direct,
+        Type::Tuple(elems) if elems.is_empty() => unreachable!("{EMPTY_TUPLE_AT_BOUNDARY}"),
         other => panic!("unsupported param type shape for CM import lowering: {other:?}"),
     }
 }

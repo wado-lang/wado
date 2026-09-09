@@ -11,10 +11,10 @@
 #![allow(dead_code)]
 
 use std::future::Future;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::{Mutex, OnceLock};
-use wasmtime::component::{Linker, ResourceTable};
-use wasmtime::{Config, Engine, Store};
+use wasmtime::component::{ComponentExportIndex, Func, Instance, Linker, ResourceTable};
+use wasmtime::{Config, Engine, InstanceAllocationStrategy, PoolingAllocationConfig, Store};
 use wasmtime_wasi::{DirPerms, FilePerms, WasiCtx, WasiCtxBuilder, WasiCtxView, WasiView};
 use wasmtime_wasi_http::WasiHttpCtx;
 use wasmtime_wasi_http::p3::{WasiHttpCtxView, WasiHttpHooks, WasiHttpView};
@@ -35,7 +35,7 @@ pub fn install_rustls_provider_for_tests() {
 }
 
 use wado_compiler::{
-    CompileError, CompileFailure, CompilerHost, Diagnostic, OptLevel, SourceError,
+    CompileError, CompileFailure, CompilerHost, CompilerOptions, Diagnostic, OptLevel, SourceError,
 };
 
 /// A located diagnostic names the file it is in — what a per-document consumer
@@ -387,11 +387,11 @@ pub struct CompiledFixture {
 }
 
 /// Compile a fixture on a compile worker, unparsing its WIR there when
-/// [`wado_compiler::CompilerOptions::retain_wir`] asked for it.
+/// [`CompilerOptions::retain_wir`] asked for it.
 pub fn compile_fixture_on_worker(
     path: PathBuf,
     source: String,
-    options: wado_compiler::CompilerOptions,
+    options: CompilerOptions,
     env: indexmap::IndexMap<String, String>,
     dependencies: indexmap::IndexMap<String, String>,
 ) -> CompiledFixture {
@@ -485,29 +485,51 @@ pub fn report_fuel_used<T>(store: &mut Store<T>, label: &str, timeout_ms: u64) {
     report_fuel(label, budget.saturating_sub(store.get_fuel().unwrap_or(0)));
 }
 
+/// The Wasm features every test engine runs with. [`engine`] adds metering and
+/// backtraces on top of these, [`capped_engine`] a pooling memory cap.
+fn base_config() -> Config {
+    let mut config = Config::new();
+    config.wasm_component_model_gc(true);
+    config.wasm_component_model_async(true);
+    config.wasm_component_model_more_async_builtins(true);
+    config.wasm_component_model_async_stackful(true);
+    config.wasm_component_model_error_context(true);
+    config.wasm_wide_arithmetic(true);
+    // Match the wado CLI's default collector so the suite exercises the
+    // collector users actually get (see `runtime::DEFAULT_COLLECTOR`).
+    config.collector(wasmtime::Collector::Copying);
+    // Minimal optimization, for faster compilation in tests.
+    config.cranelift_opt_level(wasmtime::OptLevel::None);
+    config
+}
+
+/// An engine whose guest linear memory is capped at `memory_cap` bytes, so an
+/// unreclaimed payload cannot hide in address space. Under `freelist` it also
+/// traps on double-free, catching an over-eager free.
+pub fn capped_engine(memory_cap: usize) -> Engine {
+    let mut pooling = PoolingAllocationConfig::default();
+    pooling.max_memory_size(memory_cap);
+    pooling.total_memories(16);
+    pooling.total_core_instances(64);
+    pooling.total_component_instances(16);
+
+    let mut config = base_config();
+    config.allocation_strategy(InstanceAllocationStrategy::Pooling(pooling));
+    Engine::new(&config).expect("build capped engine")
+}
+
 /// Get or initialize the shared wasmtime Engine for all tests.
 /// The engine meters fuel and enables epoch interruption; a background thread
 /// increments the epoch every `EPOCH_INTERVAL_MS`. Stores take both limits from
 /// [`limit_store`].
 pub fn engine() -> &'static Engine {
     ENGINE.get_or_init(|| {
-        let mut config = Config::new();
-        config.wasm_component_model_gc(true);
-        config.wasm_component_model_async(true);
-        config.wasm_component_model_more_async_builtins(true);
-        config.wasm_component_model_async_stackful(true);
-        config.wasm_component_model_error_context(true);
-        config.wasm_wide_arithmetic(true);
+        let mut config = base_config();
         // Honor the `metadata.code.branch_hint` custom section the compiler
         // emits for `builtin::cold_path()`, matching the wado CLI runtime so
         // the e2e suite validates the hints it produces.
         config.wasm_branch_hinting(true);
-        // Match the wado CLI's default collector so the e2e suite exercises
-        // the collector users actually get (see `runtime::DEFAULT_COLLECTOR`).
-        config.collector(wasmtime::Collector::Copying);
         config.wasm_backtrace_details(wasmtime::WasmBacktraceDetails::Enable);
-        // Use minimal optimization for faster compilation in tests
-        config.cranelift_opt_level(wasmtime::OptLevel::None);
         // Enable epoch-based interruption for timeout enforcement
         config.epoch_interruption(true);
         // Meter guest execution. Fuel counts instructions the guest actually
@@ -894,6 +916,55 @@ pub fn linker(engine: &Engine) -> anyhow::Result<Linker<WasiState>> {
     Ok(linker)
 }
 
+/// Compile `source` as the `world_fq` library world, under `allocator` where
+/// one is named and the world's own default otherwise.
+pub fn compile_lib_world(
+    source: &str,
+    world_fq: &str,
+    opt_level: OptLevel,
+    allocator: Option<&str>,
+) -> Vec<u8> {
+    let options = CompilerOptions {
+        opt_level,
+        lib_world: Some(world_fq.to_string()),
+        allocator: allocator.map(str::to_string),
+        ..Default::default()
+    };
+    compile_source_with_compiler_options(Path::new("lib.wado"), source, options)
+        .expect("library failed to compile")
+        .wasm
+}
+
+/// Resolve `name` in `iface`, falling back to a bare top-level export: a
+/// library groups its exports into an interface only when it has named types.
+pub fn lookup_func(
+    store: &mut Store<WasiState>,
+    instance: &Instance,
+    iface: Option<&ComponentExportIndex>,
+    name: &str,
+) -> Option<Func> {
+    iface
+        .and_then(|i| instance.get_export(&mut *store, Some(i), name))
+        .or_else(|| instance.get_export(&mut *store, None, name))
+        .map(|(_, idx)| idx)
+        .and_then(|idx| instance.get_func(&mut *store, idx))
+}
+
+/// [`lookup_func`] against the `world_fq` library world's instance export,
+/// panicking where the export is not there.
+pub fn lib_func(
+    store: &mut Store<WasiState>,
+    instance: &Instance,
+    world_fq: &str,
+    name: &str,
+) -> Func {
+    let iface = instance
+        .get_export(&mut *store, None, world_fq)
+        .map(|(_, idx)| idx);
+    lookup_func(store, instance, iface.as_ref(), name)
+        .unwrap_or_else(|| panic!("`{name}` export not found"))
+}
+
 /// Host implementation for `wasi:clocks/timezone`. Mirrors
 /// `wado_cli::timezone_host` (we cannot depend on `wado-cli` from the
 /// compiler tests because of the dependency direction).
@@ -998,13 +1069,13 @@ pub fn compile_source(source: &str) -> Result<wado_compiler::CompileResult, Comp
 }
 
 /// Compile a file using filesystem host
-pub fn compile_file(path: &std::path::Path) -> Result<wado_compiler::CompileResult, CompileError> {
+pub fn compile_file(path: &Path) -> Result<wado_compiler::CompileResult, CompileError> {
     compile_file_with_opts(path, OptLevel::default())
 }
 
 /// Compile a file with specific optimization level
 pub fn compile_file_with_opts(
-    path: &std::path::Path,
+    path: &Path,
     opt_level: OptLevel,
 ) -> Result<wado_compiler::CompileResult, CompileError> {
     let source = std::fs::read_to_string(path).map_err(|e| CompileError::Io {
@@ -1017,14 +1088,11 @@ pub fn compile_file_with_opts(
 
 /// Compile source code with a file path for module resolution
 pub fn compile_source_with_opts(
-    path: &std::path::Path,
+    path: &Path,
     source: &str,
     opt_level: OptLevel,
 ) -> Result<wado_compiler::CompileResult, CompileError> {
-    let base_path = path
-        .parent()
-        .map(std::path::Path::to_path_buf)
-        .unwrap_or_default();
+    let base_path = path.parent().map(Path::to_path_buf).unwrap_or_default();
     let host = FilesystemHost::new(base_path);
     let filename = path.to_string_lossy();
 
@@ -1039,8 +1107,8 @@ pub fn compile_source_with_opts(
 }
 
 /// Compile `source` and unparse the WIR it retained.
-pub fn wir_text(path: &std::path::Path, source: &str, opt_level: OptLevel) -> String {
-    let options = wado_compiler::CompilerOptions {
+pub fn wir_text(path: &Path, source: &str, opt_level: OptLevel) -> String {
+    let options = CompilerOptions {
         opt_level,
         retain_wir: true,
         ..Default::default()
@@ -1053,7 +1121,7 @@ pub fn wir_text(path: &std::path::Path, source: &str, opt_level: OptLevel) -> St
 /// [`wir_text`], cut to the one function whose header starts with `fn_header`
 /// and ending at the next top-level `fn`.
 pub fn wir_function_body(
-    path: &std::path::Path,
+    path: &Path,
     source: &str,
     opt_level: OptLevel,
     fn_header: &str,
@@ -1092,9 +1160,9 @@ pub fn assert_pushes_by_move(body: &str, dst: &str) {
 
 /// Compile source code with full compiler options (including WIR backend flag)
 pub fn compile_source_with_compiler_options(
-    path: &std::path::Path,
+    path: &Path,
     source: &str,
-    options: wado_compiler::CompilerOptions,
+    options: CompilerOptions,
 ) -> Result<wado_compiler::CompileResult, CompileError> {
     compile_source_with_compiler_options_and_filename(path, source, options, None)
 }
@@ -1105,9 +1173,9 @@ pub fn compile_source_with_compiler_options(
 /// (for `#file` and assertion messages) instead of `path`. The `path` is still used for
 /// module resolution (its parent directory becomes the filesystem host's base path).
 pub fn compile_source_with_compiler_options_and_filename(
-    path: &std::path::Path,
+    path: &Path,
     source: &str,
-    options: wado_compiler::CompilerOptions,
+    options: CompilerOptions,
     display_filename: Option<&str>,
 ) -> Result<wado_compiler::CompileResult, CompileError> {
     compile_capturing_diagnostics(
@@ -1133,18 +1201,15 @@ pub struct CapturedCompile {
 /// received, on both success and failure — what `warnings_contains` /
 /// `warnings_not_contains` / `compile_errors_contains` assert against.
 pub fn compile_capturing_diagnostics(
-    path: &std::path::Path,
+    path: &Path,
     source: &str,
-    options: wado_compiler::CompilerOptions,
+    options: CompilerOptions,
     display_filename: Option<&str>,
     env: indexmap::IndexMap<String, String>,
     dependencies: indexmap::IndexMap<String, String>,
 ) -> CapturedCompile {
     use wado_compiler::Severity;
-    let base_path = path
-        .parent()
-        .map(std::path::Path::to_path_buf)
-        .unwrap_or_default();
+    let base_path = path.parent().map(Path::to_path_buf).unwrap_or_default();
     let host = FilesystemHost::new(base_path)
         .with_env(env)
         .with_dependencies(dependencies);
@@ -1180,7 +1245,7 @@ pub fn compile_capturing_diagnostics(
 
 /// Compile a file asynchronously (for use within async context)
 pub async fn compile_file_async(
-    path: &std::path::Path,
+    path: &Path,
     opt_level: OptLevel,
 ) -> Result<wado_compiler::CompileResult, CompileError> {
     let source = std::fs::read_to_string(path).map_err(|e| CompileError::Io {
@@ -1188,10 +1253,7 @@ pub async fn compile_file_async(
         message: e.to_string(),
     })?;
 
-    let base_path = path
-        .parent()
-        .map(std::path::Path::to_path_buf)
-        .unwrap_or_default();
+    let base_path = path.parent().map(Path::to_path_buf).unwrap_or_default();
     let host = FilesystemHost::new(base_path);
     let filename = path.to_string_lossy();
 

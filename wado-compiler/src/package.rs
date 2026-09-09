@@ -10,7 +10,7 @@ use crate::elaborator::trait_env::TraitEnv;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
 use crate::symbol::SymbolTable;
-use crate::tir::{TirModule, TypeId};
+use crate::tir::TirModule;
 use crate::world_registry::{self, WorldInfo, WorldRegistry};
 use std::sync::Arc;
 
@@ -78,10 +78,6 @@ pub struct Package {
     /// `export_binding_names`; absent for every other export, which gets no
     /// `post-return` canonical option.
     pub post_return_binding_names: IndexMap<String, String>,
-    /// Flattened CM ABI parameter types for the `task-return` canonical intrinsic.
-    /// Populated by `synthesis::cm_binding` when an export returns a Result type.
-    /// Used by `optimize_dce` to override the builtin registry's single-`i32` signature.
-    pub task_return_flat_params: Option<Vec<TypeId>>,
 
     /// Wasm assets loaded by the loader from
     /// `use ... from "<path>" with { type: "wat"|"wasm" }` declarations.
@@ -180,7 +176,6 @@ impl Package {
             // CM export adapter mapping
             export_binding_names: IndexMap::default(),
             post_return_binding_names: IndexMap::default(),
-            task_return_flat_params: None,
             // Wasm assets loaded from `use _ from "<path>" with { type: ... }`
             wasm_assets: IndexMap::default(),
             // Effect-dispatch plans flow from pre-cm_binding to post-check

@@ -1,0 +1,21 @@
+// `[]` is a type of its own, not unit. An `impl` on one is not an `impl` on
+// the other, so a `()` receiver does not find the empty tuple's method.
+
+trait Marker {
+    fn tag(&self) -> i32;
+}
+
+impl Marker for [] {
+    fn tag(&self) -> i32 {
+        return 7;
+    }
+}
+
+export fn run() {
+    let u: () = ();
+    let n: i32 = u.tag();
+    assert n == 7;
+}
+
+__DATA__
+{"compile_error": "no method 'tag' found on type '()'"}

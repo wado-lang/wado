@@ -617,34 +617,8 @@ fn resolve_imports(
     // realloc is always needed for memory management
     add_import_by_name(&mut imports, "realloc");
 
-    // Async exports require task-return and potentially other canonical intrinsics.
-    // The test world always has async exports (each test is an async component export).
-    let has_async_export = project.is_test_world()
-        || project
-            .world_registry
-            .get(&project.target_world)
-            .is_some_and(crate::world_registry::WorldInfo::has_async_export);
-    if has_async_export {
-        // TaskReturn is always needed for async exports.
-        // For Result-returning exports (e.g., HTTP handler), synthesis::cm_binding computes
-        // the correct flattened CM ABI params. Override the builtin registry's default
-        // single-i32 signature with the correct flat params.
-        if let Some(flat_params) = project.task_return_flat_params.clone() {
-            if let Some(info) = project.builtin_registry.get("task_return")
-                && let Some(canonical_name) = &info.canonical_name
-            {
-                imports.insert(NirImport {
-                    namespace: info.namespace.clone(),
-                    canonical_name: canonical_name.clone(),
-                    func_name: "task_return".to_string(),
-                    params: flat_params,
-                    return_type: info.return_type,
-                });
-            }
-        } else {
-            add_import_by_name(&mut imports, "task_return");
-        }
-    }
+    // No `task-return` here: WIR translation types each delivery's canon from
+    // the flat args at its own call site.
 
     // Store imports in the project
     project.imports = imports.into_iter().collect();

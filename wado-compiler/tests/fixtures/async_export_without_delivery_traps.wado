@@ -1,11 +1,16 @@
 // An `export async fn` that reaches the end without a `task return` has no
 // result to give. It says so rather than handing back a zeroed value, which
 // for a reference result would fail far from the cause.
+//
+// The delivery sits under a branch, where no static check can rule it out.
+// Only a body carrying no `task return` at all is rejected outright.
 
 use { println, Stdout } from "core:cli";
 
 export async fn deliver(n: i32) -> i32 {
-    let _ = n;
+    if n > 100 {
+        task return n;
+    }
 }
 
 export fn run() with Stdout {

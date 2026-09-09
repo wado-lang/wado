@@ -9,7 +9,7 @@
 
 use crate::ast::{NamedType, Type};
 use crate::cm_abi;
-use crate::component_model::CmVariantCase;
+use crate::component_model::{CmVariantCase, EMPTY_TUPLE_AT_BOUNDARY};
 use crate::module_source::ModuleSource;
 use crate::tir::{
     TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirLocal, TirStmt, TirStructField, TypeId,
@@ -24,7 +24,7 @@ use crate::synthesis::common::{
 
 use super::types::{
     LiftContext, binary_add, cm_enum_byte_size, cm_flags_byte_size, cm_type_to_type_id,
-    disc_load_op, is_unit_type, kebab_to_pascal,
+    disc_load_op, kebab_to_pascal,
 };
 
 /// Synthesize a TIR expression that loads a CM value from linear memory.
@@ -152,6 +152,10 @@ fn synthesize_lift_inner(
                     binary(TirBinaryOp::NotEq, raw, i32_const(0), TypeTable::BOOL)
                 }
                 "char" => builtin_call("i32_load", vec![addr], TypeTable::CHAR),
+                // Unit occupies no memory, so there is nothing to load.
+                TypeTable::UNIT_TYPE_NAME => {
+                    TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, synth_span())
+                }
                 _ => {
                     // CM named types arrive with `source_interface` populated
                     // either by stdlib bootstrap or by `resolve_cm_source_for`
@@ -230,9 +234,7 @@ fn synthesize_lift_inner(
                 panic!("unsupported generic type for CM lift: {gname}")
             }
         }
-        Type::Tuple(elems) if elems.is_empty() => {
-            TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, synth_span())
-        }
+        Type::Tuple(elems) if elems.is_empty() => unreachable!("{EMPTY_TUPLE_AT_BOUNDARY}"),
         Type::Tuple(elems) => synthesize_lift_tuple(elems, addr, next_local, stmts, locals, ctx),
         Type::Reference(_) | Type::MutReference(_) => {
             builtin_call("i32_load", vec![addr], TypeTable::I32)
@@ -907,7 +909,7 @@ fn synthesize_lift_result_inner(
 
     // Ok case
     let mut ok_stmts: Vec<TirStmt> = Vec::new();
-    let ok_is_unit = is_unit_type(ok_ty);
+    let ok_is_unit = ok_ty.is_unit();
     let ok_payload = if ok_is_unit {
         None
     } else {
@@ -937,7 +939,7 @@ fn synthesize_lift_result_inner(
 
     // Err case
     let mut err_stmts: Vec<TirStmt> = Vec::new();
-    let err_is_unit = is_unit_type(err_ty);
+    let err_is_unit = err_ty.is_unit();
     let err_payload = if err_is_unit {
         None
     } else {

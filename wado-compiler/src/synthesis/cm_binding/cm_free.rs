@@ -9,7 +9,8 @@ use std::cell::RefCell;
 use crate::ast::{NamedType, Type};
 use crate::cm_abi;
 use crate::component_model::{
-    CmInterfaceRegistry, cm_align_with_registry_scoped, cm_size_with_registry_scoped,
+    CmInterfaceRegistry, EMPTY_TUPLE_AT_BOUNDARY, cm_align_with_registry_scoped,
+    cm_size_with_registry_scoped,
 };
 use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
@@ -22,8 +23,7 @@ use crate::synthesis::common::{
 
 use super::export_adapter::FlatLocal;
 use super::types::{
-    CmStdlibNames, binary_add, cm_val_type_to_type_id, coerce_flat_lift,
-    compute_export_flat_return_types, is_unit_type,
+    CmStdlibNames, binary_add, cm_val_type_to_type_id, coerce_flat_lift, flat_types_from_ast_type,
 };
 
 /// Lighter than `LowerContext`: freeing reads the value out of memory or out of
@@ -96,7 +96,7 @@ pub(super) fn cm_shape(ty: &Type, ctx: &CmShapeContext<'_>) -> CmShape {
     match &resolved {
         Type::Named(named) if named.name == names.string => CmShape::Str,
         Type::Named(named) => named_shape(named, ctx),
-        Type::Tuple(elems) if elems.is_empty() => CmShape::Scalar,
+        Type::Tuple(elems) if elems.is_empty() => unreachable!("{EMPTY_TUPLE_AT_BOUNDARY}"),
         Type::Tuple(elems) => CmShape::Record(field_list(elems, ctx)),
         Type::Generic(g) if g.name == names.array && g.args.len() == 1 => {
             CmShape::List(Box::new(field_of(&g.args[0], 0, ctx)))
@@ -204,12 +204,12 @@ fn field_of(ty: &Type, offset: u32, ctx: &CmShapeContext<'_>) -> CmField {
 /// out an export's flat signature — the slot list this walk indexes into.
 fn flat_slot_count(ty: &Type, ctx: &CmShapeContext<'_>) -> usize {
     let tt = ctx.type_table.borrow();
-    compute_export_flat_return_types(ty, ctx.tir_modules, &tt).len()
+    flat_types_from_ast_type(ty, ctx.tir_modules, &tt).len()
 }
 
 /// A case's payload, or `None` when it is unit and so carries nothing to free.
 fn payload_case(ty: &Type, offset: u32, ctx: &CmShapeContext<'_>) -> Option<CmField> {
-    if is_unit_type(ty) {
+    if ty.is_unit() {
         return None;
     }
     Some(field_of(ty, offset, ctx))

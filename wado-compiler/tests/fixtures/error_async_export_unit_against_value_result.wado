@@ -1,0 +1,16 @@
+// Unit stands in for the `Ok(())` its world declares, which only a world whose
+// `Ok` payload is unit has to give. `wasi:http/service` declares
+// `Result<Response, ErrorCode>`, and the wrap has no `Response` for the payload
+// it fills.
+
+use { Request } from "wasi:http";
+
+export async fn handle(request: Request) {
+    task return ();
+}
+
+__DATA__
+{
+    "wasi:http/service": {},
+    "compile_error": "but the world expects a `Result<_, _>`"
+}

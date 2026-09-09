@@ -696,6 +696,13 @@ pub enum TypeError {
         span: Span,
     },
 
+    /// `export async fn` whose body carries no `task return`, so no call of it
+    /// can ever finish its Component Model task.
+    MissingTaskReturn {
+        function: String,
+        span: Span,
+    },
+
     /// The else block of a `let ... else` does not diverge. It must exit the
     /// enclosing control flow (`return`, `break`, `continue`, `panic`, …) on
     /// every path, since it only runs when the refutable pattern fails to bind.
@@ -1651,6 +1658,14 @@ impl TypeError {
             TypeError::MissingReturn { return_type, span } => (
                 Code::TypeMismatch,
                 format!("function with return type '{return_type}' must use explicit `return`"),
+                *span,
+            ),
+            TypeError::MissingTaskReturn { function, span } => (
+                Code::TypeMismatch,
+                format!(
+                    "`export async fn {function}` never delivers its result; \
+                     add a `task return` where the result is ready"
+                ),
                 *span,
             ),
             TypeError::LetElseMustDiverge { span } => (

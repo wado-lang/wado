@@ -17,9 +17,9 @@ mod types;
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use crate::cm_abi::CmValType;
 use crate::hashmap::{IndexMap, IndexSet};
 
+use crate::ast::Type;
 use crate::canonical::{CanonicalIntrinsic, CmPayloadType};
 use crate::compiler_item::CompilerItem;
 use crate::module_source::{CmNamespace, ModuleSource};
@@ -27,6 +27,7 @@ use crate::name::DeclPath;
 use crate::package::Package;
 use crate::tir::{ResolvedType, TirExpr, TirExprKind, TirFunction, TirModule, TypeId, TypeTable};
 use crate::tir_visitor::TirRefVisitor;
+use crate::unparse::unparse_type_into;
 use crate::world_registry::{WorldExportInfo, WorldInfo};
 
 pub use export_adapter::export_binding_func_name;
@@ -46,7 +47,7 @@ use type_fixup::{
 pub use types::{
     LiftContext, cm_enum_byte_size, cm_flags_byte_size, cm_type_to_type_id, flatten_param_type,
 };
-use types::{cm_val_type_to_type_id, compute_export_flat_return_types};
+use types::{flat_types_from_ast_type, flat_types_from_type_id};
 
 /// Build a `(module_source, name)` set for every effect/resource declared in
 /// the loaded TIR modules. The CM binding synthesizer uses this to attach the
@@ -463,7 +464,6 @@ fn named_decl_of<'a>(tt: &'a TypeTable, ty: &ResolvedType) -> Option<(&'a str, &
 pub fn generate_adapters(mut project: Package) -> Result<Package, String> {
     generate_import_adapters(&mut project);
     synthesize_export_adapters(&mut project)?;
-    record_task_return_flat_params(&mut project);
     generate_test_world_bindings(&mut project);
     let validated = reject_unresolvable_record_payloads(&project)?;
     reduce_unexpanded_task_returns(&project);
@@ -661,14 +661,18 @@ fn synthesize_export_adapters(project: &mut Package) -> Result<(), String> {
             {
                 let user_func = user_func_rc.borrow();
                 let tt = entry_type_table.borrow();
-                validate_export_param_count(&user_func, export)?;
                 validate_boundary_representable(
                     &user_func,
                     &export.name,
                     &tt,
                     &project.tir_modules,
                 )?;
-                validate_world_return_compatibility(&user_func, export, &tt)?;
+                validate_world_signature_compatibility(
+                    &user_func,
+                    export,
+                    &tt,
+                    &project.tir_modules,
+                )?;
             }
 
             let is_async_export = user_func_rc.borrow().is_async;
@@ -676,34 +680,31 @@ fn synthesize_export_adapters(project: &mut Package) -> Result<(), String> {
             // in a copy, so the user's own function stays callable from Wado.
             let mut binding_callee = Rc::clone(&user_func_rc);
             let strategy = if is_async_export {
-                if let Some(return_type) = &export.return_type {
-                    let flat_types = {
-                        let tt = entry_type_table.borrow();
-                        compute_export_flat_return_types(return_type, &project.tir_modules, &tt)
-                    };
-                    // Per-export `task.return` import, so codegen can type
-                    // the canon to this export's own result (a `--lib`
-                    // world may have several async exports of distinct
-                    // result types).
-                    let task_return = CanonicalIntrinsic::TaskReturn(export.name.clone());
-                    let task_entry = split_task_entry(&user_func_rc, &export.name);
-                    expand_task_returns_in_func(
-                        &task_entry,
-                        return_type,
-                        &flat_types,
-                        &task_return,
-                        &project.tir_modules,
-                        &entry_type_table,
-                        &project.cm_interface_registry,
-                        &binding_cm_package,
-                        &project.interner,
-                    );
-                    binding_callee = Rc::clone(&task_entry);
-                    // The binding calls it through `callee_module`, so that is where the
-                    // copy has to live: a lib world spreads its exports across
-                    // submodules.
-                    task_entries.push((callee_module.clone(), task_entry));
-                }
+                // An export declaring no result still delivers; it has no slot
+                // to flatten.
+                let return_type = export.return_type.as_ref();
+                let flat_types = return_type.map_or_else(Vec::new, |ty| {
+                    let tt = entry_type_table.borrow();
+                    flat_types_from_ast_type(ty, &project.tir_modules, &tt)
+                });
+                let task_return = CanonicalIntrinsic::TaskReturn(export.name.clone());
+                let task_entry = split_task_entry(&user_func_rc, &export.name);
+                expand_task_returns_in_func(
+                    &task_entry,
+                    return_type,
+                    &flat_types,
+                    &task_return,
+                    &project.tir_modules,
+                    &entry_type_table,
+                    &project.cm_interface_registry,
+                    &binding_cm_package,
+                    &project.interner,
+                );
+                binding_callee = Rc::clone(&task_entry);
+                // The binding calls it through `callee_module`, so that is where the
+                // copy has to live: a lib world spreads its exports across
+                // submodules.
+                task_entries.push((callee_module.clone(), task_entry));
                 ExportReturnStrategy::AsyncTaskReturn
             } else if is_lib_world && !is_kiln_generator {
                 // Library exports: synchronous lift. The core function
@@ -888,7 +889,7 @@ fn wado_names_by_cm_name(world_info: &WorldInfo) -> IndexMap<String, IndexSet<St
     out
 }
 
-fn export_signature_types(world_info: &WorldInfo) -> impl Iterator<Item = &crate::ast::Type> {
+fn export_signature_types(world_info: &WorldInfo) -> impl Iterator<Item = &Type> {
     world_info.exports.iter().flat_map(|export| {
         export
             .params
@@ -898,8 +899,7 @@ fn export_signature_types(world_info: &WorldInfo) -> impl Iterator<Item = &crate
     })
 }
 
-fn collect_named_types(ty: &crate::ast::Type, out: &mut IndexMap<String, IndexSet<String>>) {
-    use crate::ast::Type;
+fn collect_named_types(ty: &Type, out: &mut IndexMap<String, IndexSet<String>>) {
     match ty {
         Type::Named(named) => {
             out.entry(crate::name::to_kebab(&named.name))
@@ -984,24 +984,6 @@ fn find_export_user_func(
     }
 }
 
-/// Validate that the export function's parameter count matches the world
-/// declaration.
-fn validate_export_param_count(
-    user_func: &TirFunction,
-    export: &WorldExportInfo,
-) -> Result<(), String> {
-    if user_func.params.len() == export.params.len() {
-        return Ok(());
-    }
-    Err(format!(
-        "export function `{}` has {} parameter(s), \
-         but the world expects {} parameter(s)",
-        export.name,
-        user_func.params.len(),
-        export.params.len()
-    ))
-}
-
 /// Reject any param/return type with no Component Model value representation
 /// in any world (empty records, 128-bit/v128 scalars) with a proper compile
 /// error rather than emitting an invalid component or panicking in codegen.
@@ -1025,40 +1007,106 @@ fn validate_boundary_representable(
     Ok(())
 }
 
-/// Validate return-type compatibility with the world. Strategy dispatch
-/// routes an async export to the task-return adapters (async / Result / `()`
-/// shapes) and a sync export to the synchronous lift. When an async world
-/// expects only a discriminant (`Result<(), ()>`, the wasi:cli/command shape)
-/// but the user supplies, say, `i32`, the async adapter would emit an extra
-/// flat value beyond what the runtime declares for task-return — surfacing as
-/// an opaque "values remaining on stack" wasm-validation panic at codegen.
-/// Catch the mismatch here with a readable diagnostic instead.
-fn validate_world_return_compatibility(
+/// The boundary carries what the world declares, so the export's signature has
+/// to agree with it: the same arity, and every type lowering to the same flat
+/// Component Model values. Anything else reaches the host as a value nothing
+/// named.
+fn validate_world_signature_compatibility(
     user_func: &TirFunction,
     export: &WorldExportInfo,
     tt: &TypeTable,
+    tir_modules: &IndexMap<ModuleSource, TirModule>,
+) -> Result<(), String> {
+    if user_func.params.len() != export.params.len() {
+        return Err(format!(
+            "export function `{}` has {} parameter(s), \
+             but the world expects {} parameter(s)",
+            export.name,
+            user_func.params.len(),
+            export.params.len()
+        ));
+    }
+    for (user_param, (world_name, world_ty)) in user_func.params.iter().zip(&export.params) {
+        validate_flat_shape_agrees(
+            &format!(
+                "parameter `{world_name}` of export function `{}`",
+                export.name
+            ),
+            user_param.type_id,
+            world_ty,
+            tt,
+            tir_modules,
+        )?;
+    }
+    let Some(world_return) = export.return_type.as_ref() else {
+        return Ok(());
+    };
+    validate_result_wrapper_agrees(user_func, export, world_return, tt)?;
+    if matches!(tt.get(user_func.return_type), ResolvedType::Unit) {
+        // The unit the wrapper check let through is delivered as the world's
+        // own `Ok(())`, so there is no user shape left to compare.
+        return Ok(());
+    }
+    validate_flat_shape_agrees(
+        &format!("the return type of export function `{}`", export.name),
+        user_func.return_type,
+        world_return,
+        tt,
+        tir_modules,
+    )
+}
+
+/// A `Result` world return needs a `Result` export, which flat shapes alone do
+/// not say: `i32` and `Result<(), ()>` both flatten to one `i32`. Unit stands in
+/// only for a `Result<(), _>`, which is all the synthesized `Ok(())` fills.
+fn validate_result_wrapper_agrees(
+    user_func: &TirFunction,
+    export: &WorldExportInfo,
+    world_return: &Type,
+    tt: &TypeTable,
 ) -> Result<(), String> {
     let result_name = tt.compiler_variant_name(CompilerItem::Result);
-    let world_expects_result = matches!(
-        &export.return_type,
-        Some(crate::ast::Type::Generic(g)) if g.name == result_name
-    );
+    let Type::Generic(world) = world_return else {
+        return Ok(());
+    };
+    if world.name != result_name || tt.is_result(user_func.return_type) {
+        return Ok(());
+    }
     let user_is_unit = matches!(tt.get(user_func.return_type), ResolvedType::Unit);
-    if !world_expects_result
-        || user_func.is_async
-        || user_is_unit
-        || tt.is_result(user_func.return_type)
-    {
+    if user_is_unit && world.args.first().is_some_and(Type::is_unit) {
         return Ok(());
     }
     let user_return_name = tt.type_name(user_func.return_type);
     Err(format!(
         "export function `{}` has return type `{user_return_name}`, \
-         but the world expects a `{result_name}<_, _>` (or unit, \
-         which is automatically wrapped as `{result_name}<(), _>`). \
-         Change the signature to return a `{result_name}` or remove \
-         the explicit return type.",
+         but the world expects a `{result_name}<_, _>` (unit stands in only \
+         for a `{result_name}<(), _>`, which is all the `Ok(())` wrap fills). \
+         Change the signature to return the `{result_name}` the world declares.",
         export.name
+    ))
+}
+
+/// Both sides name a type; they have to lower to the same flat CM values, or
+/// the adapter reads the boundary's words against a layout that is not theirs.
+fn validate_flat_shape_agrees(
+    site: &str,
+    user_type: TypeId,
+    world_type: &Type,
+    tt: &TypeTable,
+    tir_modules: &IndexMap<ModuleSource, TirModule>,
+) -> Result<(), String> {
+    let user_flat = flat_types_from_type_id(user_type, tir_modules, tt);
+    let world_flat = flat_types_from_ast_type(world_type, tir_modules, tt);
+    if user_flat == world_flat {
+        return Ok(());
+    }
+    let mut world_name = String::new();
+    unparse_type_into(world_type, &mut world_name);
+    Err(format!(
+        "{site} is `{}`, which lowers to different Component Model values than \
+         the world's `{world_name}`. Change the signature to the type the world \
+         declares.",
+        tt.type_name(user_type)
     ))
 }
 
@@ -1085,51 +1133,6 @@ fn sync_wasi_export_strategy(
     // (`.async_(false)`), so an async task-return lowering produces an
     // invalid core module.
     ExportReturnStrategy::SyncReturn
-}
-
-/// Record the flattened task-return params on the `Package` for `optimize_dce`
-/// to type the shared `task_return` NIR import — the builtin takes one i32, but
-/// a Result-returning export passes its full flattened result. Lib worlds are
-/// skipped, bar the kiln generator. The import is one shared symbol, so a
-/// disagreement between returning exports cannot be represented and is an ICE.
-fn record_task_return_flat_params(project: &mut Package) {
-    let Some(world_info) = project.active_world_info().cloned() else {
-        return;
-    };
-    if project.is_lib_world()
-        && !project
-            .world_registry
-            .is_generator_world(&project.target_world)
-    {
-        return;
-    }
-    let entry_type_table = entry_type_table(project);
-    let tt = entry_type_table.borrow();
-    let mut recorded: Option<(&str, Vec<CmValType>)> = None;
-    for export in &world_info.exports {
-        let Some(return_type) = &export.return_type else {
-            continue;
-        };
-        let flat_types = compute_export_flat_return_types(return_type, &project.tir_modules, &tt);
-        match &recorded {
-            None => recorded = Some((&export.name, flat_types)),
-            Some((first_name, first_flat)) => assert!(
-                *first_flat == flat_types,
-                "exports `{first_name}` and `{}` flatten to different task-return \
-                 signatures ({first_flat:?} vs {flat_types:?}); the shared \
-                 `task_return` import cannot represent both",
-                export.name
-            ),
-        }
-    }
-    if let Some((_, flat_types)) = recorded {
-        project.task_return_flat_params = Some(
-            flat_types
-                .iter()
-                .map(|&vt| cm_val_type_to_type_id(vt))
-                .collect(),
-        );
-    }
 }
 
 /// Synthesize export bindings for test functions (`__test_*`). Only when

@@ -190,7 +190,6 @@ impl TypeSystem {
                 ResolvedType::MutRef(target) => self.arg_matches(inner, target),
                 _ => false,
             },
-            Type::Tuple(elems) if elems.is_empty() => matches!(resolved, ResolvedType::Unit),
             Type::Tuple(elems) => {
                 let tt = self.type_table.borrow();
                 let is_tuple = matches!(

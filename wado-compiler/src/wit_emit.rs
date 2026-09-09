@@ -709,7 +709,7 @@ impl<'a> Emitter<'a> {
         };
         match inner {
             None => Ok(None),
-            Some(t) if is_ast_unit(t) => Ok(None),
+            Some(t) if t.is_unit() => Ok(None),
             Some(t) => Ok(Some(self.map_ast_type(t, fq, uses)?)),
         }
     }
@@ -1088,11 +1088,7 @@ fn classify_ast(ty: &crate::ast::Type) -> CmShape<crate::ast::Type> {
 
 /// A `Result` arm in AST form: a unit arm is absent (`_`).
 fn non_unit_ast(ty: &crate::ast::Type) -> Option<crate::ast::Type> {
-    if is_ast_unit(ty) {
-        None
-    } else {
-        Some(ty.clone())
-    }
+    if ty.is_unit() { None } else { Some(ty.clone()) }
 }
 
 fn map_primitive(p: PrimitiveType) -> Result<Type, WitEmitError> {
@@ -1229,15 +1225,6 @@ fn primitive_by_name(name: &str) -> Option<Type> {
         _ => return None,
     };
     Some(ty)
-}
-
-/// Whether an AST type is the unit type `()`.
-fn is_ast_unit(ty: &crate::ast::Type) -> bool {
-    match ty {
-        crate::ast::Type::Tuple(elems) => elems.is_empty(),
-        crate::ast::Type::Named(named) => named.name == "()",
-        _ => false,
-    }
 }
 
 /// Collect the source-interface FQs of every CM-defined named type referenced

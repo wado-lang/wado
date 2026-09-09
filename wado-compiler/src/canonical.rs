@@ -219,8 +219,8 @@ pub enum CanonicalIntrinsic {
     ErrorContextNew,
     ErrorContextDebugMessage,
     ErrorContextDrop,
-    /// Keyed by the export's name: a `--lib` world may carry several with
-    /// distinct result types, which one shared canon could not type.
+    /// Keyed by the export whose result it delivers; one canon carries one
+    /// result type. The empty key is the shared canon of the `result<>` ones.
     TaskReturn(String),
     /// By the resource's CM name.
     ResourceDrop(String),

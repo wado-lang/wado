@@ -6,6 +6,7 @@
 
 use crate::ast::{NamedType, Type};
 use crate::cm_abi;
+use crate::component_model::EMPTY_TUPLE_AT_BOUNDARY;
 use crate::module_source::ModuleSource;
 use crate::name::LocalMethodName;
 use crate::tir::{
@@ -21,7 +22,7 @@ use crate::synthesis::common::{
 
 use super::types::{
     LowerContext, binary_add, cm_type_to_type_id, cm_val_type_from_type_id, coerce_flat_lower,
-    field_access, flatten_param_type, is_unit_type, kebab_to_pascal, variant_tag, variant_test,
+    field_access, flatten_param_type, kebab_to_pascal, variant_tag, variant_test,
 };
 
 /// Join two CM flat slot types via the single Canonical ABI join
@@ -89,6 +90,8 @@ pub fn synthesize_lower(
             stmts
         }
         Type::Named(named) => match named.name.as_str() {
+            // Unit occupies no memory, so there is nothing to store.
+            TypeTable::UNIT_TYPE_NAME => vec![],
             "i32" | "u32" => vec![expr_stmt(builtin_call(
                 "i32_store",
                 vec![addr, value],
@@ -155,7 +158,7 @@ pub fn synthesize_lower(
              which handles aggregate layout; synthesize_lower covers primitives only",
             g.name
         ),
-        Type::Tuple(elems) if elems.is_empty() => vec![],
+        Type::Tuple(elems) if elems.is_empty() => unreachable!("{EMPTY_TUPLE_AT_BOUNDARY}"),
         Type::Tuple(_) => panic!(
             "tuples must lower via synthesize_lower_tuple, \
              which computes element offsets; synthesize_lower covers primitives only"
@@ -597,7 +600,7 @@ pub(super) fn synthesize_lower_result_to_memory(
     };
 
     let arm = |name: String, ty: &Type, tid: TypeId| -> CmMemCase {
-        if is_unit_type(ty) {
+        if ty.is_unit() {
             (name, None)
         } else {
             (name, Some((ty.clone(), tid)))
