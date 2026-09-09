@@ -1,10 +1,9 @@
-// A unit return is wrapped as the `Ok(())` its world declares, which only a
-// world whose `Ok` payload is unit has to give. `wasi:http/service` declares
-// `Result<Response, ErrorCode>`, so the wrap has no `Response` to put in the
-// payload it fills — a handle the host would read as a resource that was
-// never created.
+// Unit stands in for the `Ok(())` its world declares, which only a world whose
+// `Ok` payload is unit has to give. `wasi:http/service` declares
+// `Result<Response, ErrorCode>`, and the wrap has no `Response` for the payload
+// it fills.
 
-use { Request, Response, ErrorCode, Fields, Headers, Trailers } from "wasi:http";
+use { Request } from "wasi:http";
 
 export async fn handle(request: Request) {
     task return ();

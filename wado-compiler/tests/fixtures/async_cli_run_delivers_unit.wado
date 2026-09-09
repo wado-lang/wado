@@ -1,7 +1,6 @@
-// The CLI world declares `run` returning `Result<(), ()>`, and a unit return
-// is wrapped as `Ok(())` — the rule the mismatch diagnostic states. The sync
-// binding has always applied it; the async delivery flattened the unit operand
-// against the world's result and asserted on the slot it was missing.
+// The CLI world declares `run` returning `Result<(), ()>`, so a unit return
+// delivers the `Ok(())` it stands in for: the discriminant and its empty
+// payload, every slot zero. Both bindings apply that wrap, sync and async.
 
 use { println, Stdout } from "core:cli";
 

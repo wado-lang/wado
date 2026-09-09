@@ -43,10 +43,10 @@ use task_return::{expand_task_returns_in_func, reduce_task_returns_in_func, spli
 use type_fixup::{
     collect_effect_calls_in_block, collect_local_type_updates, rewrite_calls_in_block,
 };
-use types::compute_export_flat_return_types;
 pub use types::{
     LiftContext, cm_enum_byte_size, cm_flags_byte_size, cm_type_to_type_id, flatten_param_type,
 };
+use types::{compute_export_flat_return_types, is_unit_type};
 
 /// Build a `(module_source, name)` set for every effect/resource declared in
 /// the loaded TIR modules. The CM binding synthesizer uses this to attach the
@@ -1020,18 +1020,10 @@ fn validate_boundary_representable(
     Ok(())
 }
 
-/// Validate return-type compatibility with the world. What the boundary
-/// carries is what the world declares, so an export of a world returning
-/// `Result<_, _>` (`wasi:cli/command`'s `run`, `wasi:http/service`'s `handle`)
-/// must return one too. Unit stands in only where the world's `Ok` payload is
-/// itself unit, which is the whole of what the `Ok(())` wrap can fill.
-///
-/// Any other type has nowhere to go: the sync lift would emit a flat value
-/// beyond what `task.return` declares, and the async delivery — flattening the
-/// operand against its own type — would land it on the world's discriminant,
-/// reaching the host as an error it never named. Unit against a payload-
-/// carrying `Ok` is that defect from the other side: the wrap zeroes every
-/// slot, handing the host a resource handle nothing created.
+/// The boundary carries what the world declares. An export of a `Result<_, _>`
+/// world returns one too; unit stands in only for a `Result<(), _>`, which is
+/// all the `Ok(())` wrap fills. Every other pairing lowers against a shape the
+/// world does not have, and reaches the host as a value nothing named.
 fn validate_world_return_compatibility(
     user_func: &TirFunction,
     export: &WorldExportInfo,
@@ -1046,7 +1038,7 @@ fn validate_world_return_compatibility(
         return Ok(());
     }
     let user_is_unit = matches!(tt.get(user_func.return_type), ResolvedType::Unit);
-    if user_is_unit && world_ok.is_some_and(Type::is_unit) {
+    if user_is_unit && world_ok.is_some_and(|ok| is_unit_type(ok)) {
         return Ok(());
     }
     let user_return_name = tt.type_name(user_func.return_type);

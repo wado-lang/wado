@@ -1,7 +1,7 @@
 // The CLI world declares `run` returning `Result<(), ()>`, and the boundary
-// carries what the world declares. An async export was exempt from the check
-// the sync one takes, so this `i32` was delivered into the world's result —
-// its value landing on the discriminant, `1` reaching the host as an error.
+// carries what the world declares. An `i32` has nowhere to go in it: the
+// delivery flattens the operand against its own type, landing the `1` on the
+// world's discriminant, where the host reads it as an error.
 
 export async fn run() -> i32 {
     task return 1;

@@ -32,7 +32,7 @@ use super::lower::{
 };
 use super::types::{
     CmStdlibNames, LiftContext, LowerContext, binary_add, cm_param_store_plan, cm_type_to_type_id,
-    cm_val_type_to_type_id, flatten_param_type, needs_flat_result_lifting,
+    cm_val_type_to_type_id, flatten_param_type, is_unit_type, needs_flat_result_lifting,
 };
 
 /// Build the binding function name for a WASI import.
@@ -76,10 +76,8 @@ fn synthesize_lift_flat_result(
         let ok_ty = &g.args[0];
         let err_ty = &g.args[1];
 
-        let ok_is_unit = matches!(ok_ty, Type::Named(n) if n.name == "()")
-            || matches!(ok_ty, Type::Tuple(elems) if elems.is_empty());
-        let err_is_unit = matches!(err_ty, Type::Named(n) if n.name == "()")
-            || matches!(err_ty, Type::Tuple(elems) if elems.is_empty());
+        let ok_is_unit = is_unit_type(ok_ty);
+        let err_is_unit = is_unit_type(err_ty);
 
         let (ok_name, ok_index, err_name, err_index) = {
             let tt = ctx.type_table.borrow();
