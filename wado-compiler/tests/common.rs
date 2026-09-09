@@ -1069,13 +1069,13 @@ pub fn compile_source(source: &str) -> Result<wado_compiler::CompileResult, Comp
 }
 
 /// Compile a file using filesystem host
-pub fn compile_file(path: &std::path::Path) -> Result<wado_compiler::CompileResult, CompileError> {
+pub fn compile_file(path: &Path) -> Result<wado_compiler::CompileResult, CompileError> {
     compile_file_with_opts(path, OptLevel::default())
 }
 
 /// Compile a file with specific optimization level
 pub fn compile_file_with_opts(
-    path: &std::path::Path,
+    path: &Path,
     opt_level: OptLevel,
 ) -> Result<wado_compiler::CompileResult, CompileError> {
     let source = std::fs::read_to_string(path).map_err(|e| CompileError::Io {
@@ -1088,14 +1088,11 @@ pub fn compile_file_with_opts(
 
 /// Compile source code with a file path for module resolution
 pub fn compile_source_with_opts(
-    path: &std::path::Path,
+    path: &Path,
     source: &str,
     opt_level: OptLevel,
 ) -> Result<wado_compiler::CompileResult, CompileError> {
-    let base_path = path
-        .parent()
-        .map(std::path::Path::to_path_buf)
-        .unwrap_or_default();
+    let base_path = path.parent().map(Path::to_path_buf).unwrap_or_default();
     let host = FilesystemHost::new(base_path);
     let filename = path.to_string_lossy();
 
@@ -1110,7 +1107,7 @@ pub fn compile_source_with_opts(
 }
 
 /// Compile `source` and unparse the WIR it retained.
-pub fn wir_text(path: &std::path::Path, source: &str, opt_level: OptLevel) -> String {
+pub fn wir_text(path: &Path, source: &str, opt_level: OptLevel) -> String {
     let options = CompilerOptions {
         opt_level,
         retain_wir: true,
@@ -1124,7 +1121,7 @@ pub fn wir_text(path: &std::path::Path, source: &str, opt_level: OptLevel) -> St
 /// [`wir_text`], cut to the one function whose header starts with `fn_header`
 /// and ending at the next top-level `fn`.
 pub fn wir_function_body(
-    path: &std::path::Path,
+    path: &Path,
     source: &str,
     opt_level: OptLevel,
     fn_header: &str,
@@ -1163,7 +1160,7 @@ pub fn assert_pushes_by_move(body: &str, dst: &str) {
 
 /// Compile source code with full compiler options (including WIR backend flag)
 pub fn compile_source_with_compiler_options(
-    path: &std::path::Path,
+    path: &Path,
     source: &str,
     options: CompilerOptions,
 ) -> Result<wado_compiler::CompileResult, CompileError> {
@@ -1176,7 +1173,7 @@ pub fn compile_source_with_compiler_options(
 /// (for `#file` and assertion messages) instead of `path`. The `path` is still used for
 /// module resolution (its parent directory becomes the filesystem host's base path).
 pub fn compile_source_with_compiler_options_and_filename(
-    path: &std::path::Path,
+    path: &Path,
     source: &str,
     options: CompilerOptions,
     display_filename: Option<&str>,
@@ -1204,7 +1201,7 @@ pub struct CapturedCompile {
 /// received, on both success and failure — what `warnings_contains` /
 /// `warnings_not_contains` / `compile_errors_contains` assert against.
 pub fn compile_capturing_diagnostics(
-    path: &std::path::Path,
+    path: &Path,
     source: &str,
     options: CompilerOptions,
     display_filename: Option<&str>,
@@ -1212,10 +1209,7 @@ pub fn compile_capturing_diagnostics(
     dependencies: indexmap::IndexMap<String, String>,
 ) -> CapturedCompile {
     use wado_compiler::Severity;
-    let base_path = path
-        .parent()
-        .map(std::path::Path::to_path_buf)
-        .unwrap_or_default();
+    let base_path = path.parent().map(Path::to_path_buf).unwrap_or_default();
     let host = FilesystemHost::new(base_path)
         .with_env(env)
         .with_dependencies(dependencies);
@@ -1251,7 +1245,7 @@ pub fn compile_capturing_diagnostics(
 
 /// Compile a file asynchronously (for use within async context)
 pub async fn compile_file_async(
-    path: &std::path::Path,
+    path: &Path,
     opt_level: OptLevel,
 ) -> Result<wado_compiler::CompileResult, CompileError> {
     let source = std::fs::read_to_string(path).map_err(|e| CompileError::Io {
@@ -1259,10 +1253,7 @@ pub async fn compile_file_async(
         message: e.to_string(),
     })?;
 
-    let base_path = path
-        .parent()
-        .map(std::path::Path::to_path_buf)
-        .unwrap_or_default();
+    let base_path = path.parent().map(Path::to_path_buf).unwrap_or_default();
     let host = FilesystemHost::new(base_path);
     let filename = path.to_string_lossy();
 

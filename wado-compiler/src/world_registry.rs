@@ -415,12 +415,7 @@ mod tests {
                 is_async: true,
                 params: vec![],
                 params_span: make_span(),
-                return_type: Some(Type::Generic(crate::ast::GenericType {
-                    id: crate::ast::AstId::fresh(),
-                    name: "Result".to_string(),
-                    args: vec![Type::Tuple(vec![]), Type::Tuple(vec![])],
-                    span: make_span(),
-                })),
+                return_type: Some(result_return("()", "()")),
                 span: make_span(),
             })],
             span: make_span(),
@@ -617,22 +612,12 @@ mod tests {
             name: "run".to_string(),
             is_async: true,
             params: vec![],
-            return_type: Some(result_return_unit()),
+            return_type: Some(result_return("()", "()")),
             from_interface_fq: Some("wasi:http/run@1.0.0".to_string()),
             reexport_origin: None,
         });
         assert!(!unit_export.exports[0].is_handler_instance_export());
         assert!(!unit_export.has_http_handler_export());
-    }
-
-    /// `Result<(), ()>` built from empty tuples.
-    fn result_return_unit() -> Type {
-        Type::Generic(crate::ast::GenericType {
-            id: crate::ast::AstId::fresh(),
-            name: "Result".to_string(),
-            args: vec![Type::Tuple(vec![]), Type::Tuple(vec![])],
-            span: make_span(),
-        })
     }
 
     #[test]

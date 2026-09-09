@@ -627,12 +627,10 @@ fn generate_inline_task_return(
     } else {
         let value_is_unit = matches!(tt.get(value_type_id), ResolvedType::Unit);
         drop(tt);
-        // Non-Result task return. Nothing to lower where the operand fills no
-        // slot: an export declaring no result has none, and a unit operand
-        // against a `Result<(), _>` world means the `Ok` whose discriminant and
-        // empty payload are zeros — the only other pairing
-        // `validate_world_return_compatibility` admits. The operand is still
-        // evaluated, for its effects.
+        // Non-Result task return. Two operands fill no slot: an export
+        // declaring no result has none, and a unit against a `Result<(), _>`
+        // world is the `Ok` whose discriminant and payload are both zero. Both
+        // still evaluate the operand, for its effects.
         if flat_return_types.is_empty() || value_is_unit {
             stmts.push(expr_stmt(value));
             stmts.push(expr_stmt(cm_canonical_call(

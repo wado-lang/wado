@@ -849,11 +849,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// Wasm module. The async one is the opposite — presence, not definite
     /// delivery — because a `task return` under a branch is legitimate, and a
     /// path that misses it is the runtime's to trap on.
-    pub(super) fn validate_missing_return_ast(
-        &self,
-        return_type: TypeId,
-        func: &crate::ast::Function,
-    ) {
+    pub(super) fn validate_missing_return_ast(&self, return_type: TypeId, func: &ast::Function) {
         let Some(body) = func.body.as_ref() else {
             return;
         };
