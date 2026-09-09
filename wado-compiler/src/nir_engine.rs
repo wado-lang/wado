@@ -1046,19 +1046,25 @@ impl<'a> Engine<'a> {
         })
     }
 
-    /// Record an operand this edit writes into the skeleton, dropping the
-    /// memoized census if it can no longer be trusted.
+    /// Record an operand this edit writes into the skeleton.
+    ///
+    /// A local-naming operand is *added* to the memoized census rather than
+    /// dropping it. Nothing reports the operand that left, so the count is an
+    /// upper bound from then on — and an upper bound is the safe direction: it
+    /// keeps a binding alive, costing an elision and never correctness. Dropping
+    /// instead is exact and costs a whole-body walk at the next query, per edit,
+    /// which is what made the census 14 % of self CPU the moment local-naming
+    /// operands became common.
     fn census_note_operand(&mut self, op: Operand) {
         if self.promoted_reads.get().is_none() {
             return;
         }
-        if matches!(op, Operand::Value(v) if self.body.values.names_a_local(v)) {
-            self.promoted_reads.take();
-            return;
+        match op {
+            Operand::Value(v) => self.census_add_value(v),
+            // An `Operand::Expr` attaches a subtree whose own operands may name
+            // locals; the walk is over the subtree, not the body.
+            Operand::Expr(e) => self.census_add_subtree(NodeRef::Expr(e)),
         }
-        // An `Operand::Expr` attaches a whole subtree, so ruling out this slot
-        // does not rule out the edit.
-        self.census_note_structure();
     }
 
     /// [`Engine::census_note_operand`] over every operand slot of `node` — for
@@ -1067,30 +1073,38 @@ impl<'a> Engine<'a> {
         if self.promoted_reads.get().is_none() {
             return;
         }
-        let mut writes_local = false;
-        self.body.for_each_operand(node, |op| {
-            if let Operand::Value(v) = op {
-                writes_local |= self.body.values.names_a_local(v);
-            }
-        });
-        if writes_local {
-            self.promoted_reads.take();
-            return;
-        }
-        self.census_note_structure();
+        self.census_add_subtree(node);
     }
 
-    /// Drop the memoized census unless this edit provably cannot have moved it.
-    /// An interned value is immutable, so only a change in which operands are
-    /// reachable moves the answer. An empty census survives a removal — nothing
-    /// conjures a read — and survives an attach unless something local-naming is
-    /// pending. A non-empty one can shrink as well as grow, so any edit drops it.
-    fn census_note_structure(&mut self) {
-        if self.pending_local_naming.get()
-            || self.promoted_reads.get().is_some_and(|c| !c.is_empty())
-        {
-            self.promoted_reads.take();
+    /// Add every local named by a value under `node` to the census.
+    fn census_add_subtree(&mut self, node: NodeRef) {
+        let mut values = Vec::new();
+        self.body.for_each_node_under(node, |n| {
+            self.body.for_each_operand(n, |op| {
+                if let Some(v) = op.as_value() {
+                    values.push(v);
+                }
+            });
+        });
+        for v in values {
+            self.census_add_value(v);
         }
+    }
+
+    /// Add the locals `v` names to the memoized census.
+    fn census_add_value(&mut self, v: ValueId) {
+        if !self.body.values.names_a_local(v) {
+            return;
+        }
+        let mut leaves = IndexSet::default();
+        self.body.values.collect_opaque_locals(v, &mut leaves);
+        let Some(counts) = self.promoted_reads.get_mut() else {
+            return;
+        };
+        for idx in leaves {
+            *counts.entry(idx).or_default() += 1;
+        }
+        self.pending_local_naming.set(true);
     }
 
     /// Whether `mention` is the target slot (LHS place) of an `Assign`. Shared by
@@ -1273,8 +1287,20 @@ impl<'a> Engine<'a> {
     /// tree). Use index entries for any `Let` in a dropped statement are left
     /// in place — they name a now-dead def and are simply never consulted.
     pub fn set_block_stmts(&mut self, block: BlockId, stmts: Vec<StmtId>) {
-        self.census_note_structure();
+        // Only a statement the block did not already hold can reach an operand
+        // the census has not counted; the ones it keeps were counted when they
+        // arrived. Adding just those keeps the walk proportional to the edit
+        // rather than to the body, which is what dropping the memo costs.
+        let held: IndexSet<StmtId> = self.body.blocks[block].stmts.iter().copied().collect();
+        let arrived: Vec<StmtId> = stmts
+            .iter()
+            .copied()
+            .filter(|s| !held.contains(s))
+            .collect();
         self.body.blocks[block].stmts = stmts;
+        for s in arrived {
+            self.census_add_subtree(NodeRef::Stmt(s));
+        }
         let kids = self.body.blocks[block].stmts.clone();
         for s in &kids {
             self.set_parent(NodeRef::Stmt(*s), Some(NodeRef::Block(block)));
@@ -1297,8 +1323,9 @@ impl<'a> Engine<'a> {
             type_id,
             span,
         });
+        // A fresh node is detached, so its operands are not reachable and the
+        // census does not count them. The attach that reaches it does.
         self.buf.note_alloc(NodeRef::Expr(id));
-        self.census_note_node_operands(NodeRef::Expr(id));
         let mut children = Vec::new();
         self.body
             .for_each_child(NodeRef::Expr(id), |c| children.push(c));
@@ -1325,7 +1352,6 @@ impl<'a> Engine<'a> {
     pub fn alloc_stmt(&mut self, kind: StmtKind, span: Span) -> StmtId {
         let id = self.body.stmts.push(StmtNode { kind, span });
         self.buf.note_alloc(NodeRef::Stmt(id));
-        self.census_note_node_operands(NodeRef::Stmt(id));
         let mut children = Vec::new();
         self.body
             .for_each_child(NodeRef::Stmt(id), |c| children.push(c));
@@ -1346,7 +1372,10 @@ impl<'a> Engine<'a> {
     pub fn alloc_block(&mut self, stmts: Vec<StmtId>, span: Span) -> BlockId {
         let id = self.body.blocks.push(BlockNode { stmts, span });
         self.buf.note_alloc(NodeRef::Block(id));
-        self.census_note_structure();
+        // The block is unreachable until something names it, but its statements
+        // may already carry counted operands; adding here is the upper bound the
+        // census keeps, and the attach that reaches this block adds nothing new.
+        self.census_add_subtree(NodeRef::Block(id));
         let kids: Vec<StmtId> = self.body.blocks[id].stmts.clone();
         for s in kids {
             self.set_parent(NodeRef::Stmt(s), Some(NodeRef::Block(id)));
@@ -1359,7 +1388,6 @@ impl<'a> Engine<'a> {
     pub fn alloc_pat(&mut self, kind: PatKind, span: Span) -> PatId {
         let id = self.body.pats.push(PatNode { kind, span });
         self.buf.note_alloc(NodeRef::Pat(id));
-        self.census_note_node_operands(NodeRef::Pat(id));
         let mut children = Vec::new();
         self.body
             .for_each_child(NodeRef::Pat(id), |c| children.push(c));
@@ -1735,12 +1763,19 @@ impl<'a> Engine<'a> {
                  `elide_local`, `labeled_block_fusion` and `copy_prop`."
             );
         }
+        // The census is an upper bound, not an equality: an operand that leaves
+        // the body is never subtracted (see `census_note_operand`). Under-count
+        // is the direction that miscompiles — `elide_local` would delete a
+        // binding the value pool still reads — so that is what this checks.
         debug_assert!(
-            self.promoted_reads
-                .get()
-                .is_none_or(|memo| *memo == self.body.promoted_read_counts()),
-            "[NIR engine] the promoted-read census disagrees with a fresh walk, so \
-             an edit changed which operands are reachable without reporting it. \
+            self.promoted_reads.get().is_none_or(|memo| {
+                self.body
+                    .promoted_read_counts()
+                    .iter()
+                    .all(|(idx, fresh)| memo.get(idx).copied().unwrap_or(0) >= *fresh)
+            }),
+            "[NIR engine] the promoted-read census counts fewer reads of a local \
+             than a fresh walk finds, so an edit added one without reporting it. \
              Every mutating edit calls `census_note_*`, and a rule writes operands \
              through `Engine`, never `engine.body`. Unreported, `elide_local` \
              deletes a binding the value pool still reads."

@@ -400,17 +400,19 @@ reduces the real failure, and it is a dropped binding, not a merged value.
 What is unpaid is cost, measured by removing the refusal and keeping everything
 else. Three things.
 
-- The compile takes 80 % longer, the promoted-read census re-walking at 14 % of
-  self CPU. That census is a whole-body walk memoized on the memo staying
-  _empty_, and it stayed empty only because nothing inside the loop named a
-  local — which is what this refusal guaranteed. It wants a maintained per-local
-  index, not a walk.
+- ~~The compile took 80 % longer, the promoted-read census re-walking at 14 % of
+  self CPU.~~ Paid. The census adds to its memo rather than dropping it, so it
+  is an upper bound maintained per edit instead of an equality re-derived per
+  query. Over-counting keeps a binding alive, which costs an elision and never
+  correctness; the session-end audit checks the bound, not equality. With the
+  refusal removed the compile is back to its baseline.
 - The parser's code grows 5.8 %, from re-materialising a non-constant at each
   use. That is the extraction cost model, still open.
 - The fixed-point loop stops converging inside its cap, with `copy_prop` and
   `licm` still changing at 15 iterations.
 
-Each is a separate piece of work, and the refusal stands until they are done.
+The two open ones are separate pieces of work, and the refusal stands until they
+are done.
 
 There is no in-loop freeze. One was
 built under the rule and promoted nothing on either benchmark, at 11.3 % of the
