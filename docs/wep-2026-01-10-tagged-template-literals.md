@@ -515,9 +515,11 @@ list `reify` already drains.
 
 ### Fixtures
 
-- `tagged_template_sql.wado`: typed holes through a `ToSqlParam` pack bound,
-  and `wir_expect:O2` holding the body to constant appends with no `$hole_get`
-  call surviving.
+- `tagged_template_sql.wado`: typed holes through a `ToParam` pack bound, and
+  `wir_expect:O2` holding the residue to its segments as constant byte arrays
+  and one `Param` construction per hole off a direct field read, with
+  `wir_not_expect:O2` denying `$hole_get`, `$hole_fmt`, `members`, `to_param`
+  and any surviving `push_str` call.
 - `tagged_template_html.wado`: state carried across holes.
 - `tagged_template_members.wado`: every `Hole` accessor and the tails, with
   and without holes.
