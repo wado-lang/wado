@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1788965332785,
+  "lastUpdate": 1789003940534,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -54485,6 +54485,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/8be68177ccc011babbd848a17c5c07c1e0f9bbc7"
         },
         "date": 1788965332298,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 2013,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6560,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18971,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 288933,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "a5e274885bb4f5314880d822ff9c1c4be031048c",
+          "message": "Merge pull request #2013 from wado-lang/nir-live-walk-sweep\n\nfix(nir): a census that walks the body sees the value pool's extraction sources",
+          "timestamp": "2026-09-10T10:16:17+09:00",
+          "tree_id": "84524e4f4c5a98c7863bb8267db477bbb79c36df",
+          "url": "https://github.com/wado-lang/wado/commit/a5e274885bb4f5314880d822ff9c1c4be031048c"
+        },
+        "date": 1789003939714,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
