@@ -836,9 +836,15 @@ fn scanned_to_f64(n: &ScannedNumber) -> f64 {
 
 /// True when `b` is one of JSON's four whitespace bytes.
 fn is_json_ws(b: i32) -> bool {
-    let ws_set = 1 as u64 << b' ' as u64 | 1 as u64 << b'\t' as u64 | 1 as u64 << b'\n' as u64 | 1 as u64 << b'\r' as u64;
     // `b < 64` is load-bearing: Wasm masks a shift count mod 64.
-    return b < 64 && ws_set >> b as u64 & 1 != 0;
+    return b < 64 && is_json_ws_low(b);
+}
+
+/// `is_json_ws` for a byte already known to be at most `' '` — the widest of
+/// the four — so the caller has discharged the shift's range guard.
+fn is_json_ws_low(b: i32) -> bool {
+    let ws_set = 1 as u64 << b' ' as u64 | 1 as u64 << b'\t' as u64 | 1 as u64 << b'\n' as u64 | 1 as u64 << b'\r' as u64;
+    return ws_set >> b as u64 & 1 != 0;
 }
 
 /// The decimal value of `b`, or a value above 9 when `b` is not a digit —
@@ -974,9 +980,9 @@ impl JsonDeserializer {
             return -1;
         }
         let b = self.input.get_unchecked(pos) as i32;
-        // Every JSON whitespace byte is below `' '`, so one compare settles
-        // the common case: the run has ended on a structural byte.
-        if b > ' ' as i32 || !is_json_ws(b) {
+        // No JSON whitespace byte is above `' '`, so one compare settles the
+        // common case: the run has ended on a structural byte.
+        if b > ' ' as i32 || !is_json_ws_low(b) {
             return b;
         }
         return self.whitespace_end(pos + 1);
@@ -984,12 +990,40 @@ impl JsonDeserializer {
 
     /// Scans from `from` to the first non-whitespace byte, leaving `pos`
     /// there and returning that byte (-1 at end of input).
+    ///
+    /// Four bytes are read per bounds check because wasmtime re-derives an
+    /// array's base, length and null check for a lone `array.get` and shares
+    /// that work only across gets sitting in one block — a byte-at-a-time
+    /// loop pays the whole preamble on every byte.
     fn whitespace_end(&mut self, from: i32) -> i32 {
         let len = self.input.len();
         let mut pos = from;
+        while pos + 4 <= len {
+            let b0 = self.input.get_unchecked(pos) as i32;
+            let b1 = self.input.get_unchecked(pos + 1) as i32;
+            let b2 = self.input.get_unchecked(pos + 2) as i32;
+            let b3 = self.input.get_unchecked(pos + 3) as i32;
+            if b0 > ' ' as i32 || !is_json_ws_low(b0) {
+                self.pos = pos;
+                return b0;
+            }
+            if b1 > ' ' as i32 || !is_json_ws_low(b1) {
+                self.pos = pos + 1;
+                return b1;
+            }
+            if b2 > ' ' as i32 || !is_json_ws_low(b2) {
+                self.pos = pos + 2;
+                return b2;
+            }
+            if b3 > ' ' as i32 || !is_json_ws_low(b3) {
+                self.pos = pos + 3;
+                return b3;
+            }
+            pos += 4;
+        }
         while pos < len {
             let b = self.input.get_unchecked(pos) as i32;
-            if b > ' ' as i32 || !is_json_ws(b) {
+            if b > ' ' as i32 || !is_json_ws_low(b) {
                 self.pos = pos;
                 return b;
             }
