@@ -491,7 +491,7 @@ struct GlobalStoreCollector<'a> {
 
 impl GlobalStoreCollector<'_> {
     fn visit_body(&mut self, body: &Body) {
-        body.for_each_node_under(NodeRef::Block(body.root), |node| match node {
+        body.for_each_reachable_node(|node| match node {
             NodeRef::Expr(e) => self.visit_expr(body, e),
             NodeRef::Stmt(s) => self.visit_stmt(body, s),
             NodeRef::Block(_) | NodeRef::Pat(_) => {}
@@ -972,7 +972,7 @@ impl ConstFoldVisitor<'_> {
             // drop the stale entry for every local the pattern binds; otherwise a
             // reused index keeps the earlier `let`'s constant.
             StmtKind::LetDestructure { pattern, .. } => {
-                body.for_each_node_under(NodeRef::Pat(*pattern), |node| {
+                body.for_each_live_node_under(NodeRef::Pat(*pattern), |node| {
                     if let NodeRef::Pat(p) = node
                         && let PatKind::Binding { local_index, .. } = &body.pats[p].kind
                     {

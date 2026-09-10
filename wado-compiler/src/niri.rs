@@ -400,7 +400,7 @@ pub fn region_queries(
         shapes: None,
     };
     let mut out = Vec::new();
-    body.for_each_node_under(NodeRef::Block(body.root), |node| {
+    body.for_each_reachable_node(|node| {
         if let NodeRef::Expr(e) = node
             && let Some((block, _)) = region::region_shape(body, e, type_table)
         {

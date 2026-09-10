@@ -523,7 +523,7 @@ fn operand_reads_local(engine: &Engine, op: Operand, var: u32) -> bool {
 fn subtree_redefines(engine: &Engine, block: BlockId, locals: &[u32]) -> bool {
     engine
         .body
-        .find_in_nodes_under(NodeRef::Block(block), |n| {
+        .find_in_live_node_under(NodeRef::Block(block), |n| {
             let NodeRef::Stmt(s) = n else { return None };
             match &engine.body.stmts[s].kind {
                 StmtKind::Let { local_index, .. } => locals.contains(local_index).then_some(()),

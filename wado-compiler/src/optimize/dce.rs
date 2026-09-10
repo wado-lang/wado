@@ -440,7 +440,7 @@ fn has_short_push_str_candidate(project: &NirPackage, push_str_id: crate::nir::F
 const SHORT_PUSH_STR_MAX_LEN: usize = 8;
 
 fn body_has_short_push_str(body: &Body, push_str_id: crate::nir::FuncId) -> bool {
-    body.find_in_nodes_under(NodeRef::Block(body.root), |node| {
+    body.find_in_live_node_under(NodeRef::Block(body.root), |node| {
         if let NodeRef::Expr(e) = node
             && let Some((_, func_id, args)) = body.exprs[e].kind.as_method_call()
             && func_id == push_str_id
@@ -478,7 +478,7 @@ fn collect_array_clone_element_types(
     descriptors: &[FunctionRef],
     out: &mut IndexSet<crate::tir::TypeId>,
 ) {
-    body.for_each_node_under(NodeRef::Block(body.root), |node| {
+    body.for_each_reachable_node(|node| {
         if let NodeRef::Expr(e) = node
             && let ExprKind::Call {
                 func_id, type_args, ..
@@ -932,7 +932,7 @@ fn scan_inspect_signatures_block(
     inspect_name: &str,
     sigs: &mut InspectableSignatures,
 ) {
-    body.for_each_node_under(NodeRef::Block(body.root), |node| {
+    body.for_each_reachable_node(|node| {
         if let NodeRef::Expr(e) = node
             && let Some((receiver, func_id, _)) = body.exprs[e].kind.as_method_call()
             && let Some(info) = &callee_descriptor(descriptors, func_id).method_info
@@ -2041,7 +2041,7 @@ pub(super) fn deletable_value(
     let Some(root) = value.as_expr() else {
         return false;
     };
-    body.find_in_nodes_under(NodeRef::Expr(root), |node| match node {
+    body.find_in_live_node_under(NodeRef::Expr(root), |node| match node {
         NodeRef::Expr(id) => match &body.exprs[id].kind {
             ExprKind::Call { func_id, .. } => {
                 let effect = effects

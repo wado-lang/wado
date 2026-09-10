@@ -227,7 +227,7 @@ fn is_forwardable_value(body: &Body, root: ExprId) -> bool {
     if !is_pure_expr(body, root) {
         return false;
     }
-    body.find_in_nodes_under(NodeRef::Expr(root), |node| {
+    body.find_in_live_node_under(NodeRef::Expr(root), |node| {
         let NodeRef::Expr(id) = node else { return None };
         match &body.exprs[id].kind {
             ExprKind::Index { .. } | ExprKind::GlobalVarGet { .. } => Some(()),

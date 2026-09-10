@@ -116,7 +116,7 @@ fn root_local(body: &Body, expr: ExprId) -> Option<u32> {
 
 /// Accumulate whole-function usage for every local.
 fn collect_usage(body: &Body, usage: &mut IndexMap<u32, Usage>) {
-    body.for_each_node_under(NodeRef::Block(body.root), |node| {
+    body.for_each_reachable_node(|node| {
         if let NodeRef::Expr(id) = node {
             match &body.exprs[id].kind {
                 ExprKind::Local { index, .. } => {
@@ -183,7 +183,7 @@ fn stmt_disturbs_place(
     let mut disturbs = false;
     // A node the walk stops at disturbs the place on its own; `disturbs`
     // accumulates the rest.
-    let stopped = body.find_in_nodes_under(NodeRef::Stmt(stmt), |node| {
+    let stopped = body.find_in_live_node_under(NodeRef::Stmt(stmt), |node| {
         if let NodeRef::Expr(id) = node {
             match &body.exprs[id].kind {
                 ExprKind::GlobalVarSet { .. } => return Some(()),
@@ -258,7 +258,7 @@ fn mut_arg_hits_root(
 /// Locals whose address is taken by a `&mut` borrow anywhere in the function:
 /// a write through such a reference can reach the local without naming it.
 fn collect_address_taken(body: &Body, out: &mut IndexSet<u32>) {
-    body.for_each_node_under(NodeRef::Block(body.root), |node| {
+    body.for_each_reachable_node(|node| {
         if let NodeRef::Expr(id) = node
             && let ExprKind::Unary {
                 op: NirUnaryOp::MutRef,
@@ -282,7 +282,7 @@ fn find_clone_referent_use(
     index: u32,
     descriptors: &[FunctionRef],
 ) -> Option<ExprId> {
-    body.find_in_nodes_under(NodeRef::Stmt(stmt), |node| {
+    body.find_in_live_node_under(NodeRef::Stmt(stmt), |node| {
         if let NodeRef::Expr(id) = node
             && let ExprKind::Call { func_id, args, .. } = &body.exprs[id].kind
             && is_consuming_clone(*func_id, descriptors)

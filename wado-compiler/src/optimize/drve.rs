@@ -128,7 +128,7 @@ fn has_only_pure_returns_with_explicit_tail(body: &Body, type_table: &TypeTable)
     // Every return reachable in the body must carry a pure value — a
     // `Return { value: None }` would mean a void exit path, structurally
     // inconsistent for a non-void signature.
-    body.find_in_nodes_under(NodeRef::Block(root), |node| {
+    body.find_in_live_node_under(NodeRef::Block(root), |node| {
         let NodeRef::Stmt(s) = node else { return None };
         match &body.stmts[s].kind {
             StmtKind::Return { value: None } => Some(()),
@@ -289,7 +289,7 @@ fn apply_drve(project: &mut NirPackage, confirmed: &IndexSet<FnKey>) -> Vec<usiz
 /// Rewrite every reachable `Return { value: Some(_) }` to `Return { value: None }`.
 fn void_returns(body: &mut Body) {
     let mut returns = Vec::new();
-    body.for_each_node_under(NodeRef::Block(body.root), |node| {
+    body.for_each_reachable_node(|node| {
         if let NodeRef::Stmt(s) = node
             && matches!(&body.stmts[s].kind, StmtKind::Return { value: Some(_) })
         {
@@ -304,7 +304,7 @@ fn void_returns(body: &mut Body) {
 /// Set `type_id` to `Unit` at every call of a confirmed function in the body.
 fn retype_calls(body: &mut Body, confirmed: &IndexSet<FnKey>) -> bool {
     let mut targets = Vec::new();
-    body.for_each_node_under(NodeRef::Block(body.root), |node| {
+    body.for_each_reachable_node(|node| {
         if let NodeRef::Expr(id) = node
             && let ExprKind::Call { func_id, .. } = &body.exprs[id].kind
             && confirmed.contains(func_id)

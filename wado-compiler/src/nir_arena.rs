@@ -1092,12 +1092,11 @@ impl Body {
 
 /// Structural navigation used by the rewrite engine (parent map + worklist).
 impl Body {
-    /// Collect every local with a live `&local` / `&mut local` in the body.
-    /// The canonical `address_taken_locals` / `stores_aliased_locals` sets
-    /// go stale after `inline` / `ref_elim` copy reference nodes, so
-    /// alias-sensitive consumers union this scan in.
+    /// Every local with a live `&local` / `&mut local`. The canonical
+    /// `address_taken_locals` / `stores_aliased_locals` go stale once `inline` /
+    /// `ref_elim` copy reference nodes, so alias-sensitive consumers union this in.
     pub fn collect_address_taken_locals(&self, out: &mut crate::hashmap::IndexSet<u32>) {
-        self.for_each_node_under(NodeRef::Block(self.root), |node| {
+        self.for_each_reachable_node(|node| {
             if let NodeRef::Expr(id) = node
                 && let ExprKind::Unary {
                     op: crate::nir::NirUnaryOp::Ref | crate::nir::NirUnaryOp::MutRef,
@@ -1112,7 +1111,19 @@ impl Body {
     }
 
     /// Invoke `f` on `root` and every node beneath it, parents before children.
-    pub fn for_each_node_under(&self, root: NodeRef, mut f: impl FnMut(NodeRef)) {
+    /// A subtree walk: the whole body is [`Body::for_each_reachable_node`].
+    pub fn for_each_node_under(&self, root: NodeRef, f: impl FnMut(NodeRef)) {
+        debug_assert!(
+            self.blocks.is_empty() || root != NodeRef::Block(self.root),
+            "[NIR] a whole-body walk is `for_each_reachable_node`, which also covers what a \
+             promoted operand names as its extraction source"
+        );
+        self.for_each_skeleton_node(root, f);
+    }
+
+    /// [`Body::for_each_node_under`] without its whole-body check, for the walks
+    /// [`Body::for_each_live_node_under`] is itself made of.
+    fn for_each_skeleton_node(&self, root: NodeRef, mut f: impl FnMut(NodeRef)) {
         self.walk_nodes_under::<()>(root, |node| {
             f(node);
             ControlFlow::Continue(true)
@@ -1120,27 +1131,22 @@ impl Body {
     }
 
     /// [`Body::for_each_node_under`] plus the nodes a promoted operand names as
-    /// its extraction source. Those produce the operand's code, so a walk that
-    /// took only skeleton children would call them orphans — and a rewrite that
-    /// trusted the walk would pass them by.
+    /// its extraction source. Those produce the operand's code, so a walk
+    /// without them calls a live node an orphan.
     pub fn for_each_live_node_under(&self, root: NodeRef, mut f: impl FnMut(NodeRef)) {
+        if !self.values.has_expr_source() {
+            self.for_each_skeleton_node(root, f);
+            return;
+        }
         let mut pool_seen: IndexSet<ValueId> = IndexSet::default();
         let mut sourced: Vec<ExprId> = Vec::new();
-        self.for_each_node_under(root, |node| {
-            f(node);
-            self.for_each_operand(node, |op| {
-                if let Some(v) = op.as_value() {
-                    self.values
-                        .for_each_opaque_expr(v, &mut pool_seen, |e| sourced.push(e));
-                }
-            });
-        });
-        // Built only once a source exists, so a body with none pays nothing.
-        #[cfg(debug_assertions)]
+        self.walk_sourcing(root, &mut f, &mut pool_seen, &mut sourced, None);
+        // Only the assertion reads this, and only a body that named a source can
+        // fail it, so nothing else pays the scan or the per-node insert.
         let mut covered: IndexSet<ExprId> = IndexSet::default();
-        #[cfg(debug_assertions)]
-        if !sourced.is_empty() {
-            self.for_each_node_under(root, |node| {
+        let checking = cfg!(debug_assertions) && !sourced.is_empty();
+        if checking {
+            self.for_each_skeleton_node(root, |node| {
                 if let NodeRef::Expr(e) = node {
                     covered.insert(e);
                 }
@@ -1154,20 +1160,40 @@ impl Body {
                 "[NIR] {e:?} is an extraction source this walk already covered, so \
                  `reachable_operand_values` counts its slots twice"
             );
-            self.for_each_node_under(NodeRef::Expr(e), |node| {
-                f(node);
-                #[cfg(debug_assertions)]
-                if let NodeRef::Expr(inner) = node {
-                    covered.insert(inner);
-                }
-                self.for_each_operand(node, |op| {
-                    if let Some(v) = op.as_value() {
-                        self.values
-                            .for_each_opaque_expr(v, &mut pool_seen, |e| sourced.push(e));
-                    }
-                });
-            });
+            self.walk_sourcing(
+                NodeRef::Expr(e),
+                &mut f,
+                &mut pool_seen,
+                &mut sourced,
+                checking.then_some(&mut covered),
+            );
         }
+    }
+
+    /// Walk `root`'s skeleton subtree into `f`, pushing the extraction sources
+    /// its operands name onto `sourced`. `covered` records what `f` was handed.
+    fn walk_sourcing(
+        &self,
+        root: NodeRef,
+        f: &mut impl FnMut(NodeRef),
+        pool_seen: &mut IndexSet<ValueId>,
+        sourced: &mut Vec<ExprId>,
+        mut covered: Option<&mut IndexSet<ExprId>>,
+    ) {
+        self.for_each_skeleton_node(root, |node| {
+            f(node);
+            if let Some(covered) = covered.as_deref_mut()
+                && let NodeRef::Expr(e) = node
+            {
+                covered.insert(e);
+            }
+            self.for_each_operand(node, |op| {
+                if let Some(v) = op.as_value() {
+                    self.values
+                        .for_each_opaque_expr(v, pool_seen, |e| sourced.push(e));
+                }
+            });
+        });
     }
 
     /// The first value `f` gives for `root` or a node beneath it, parents before
@@ -1181,6 +1207,22 @@ impl Body {
             Some(found) => ControlFlow::Break(found),
             None => ControlFlow::Continue(true),
         })
+    }
+
+    /// The first value `f` gives for `root` or a live node beneath it.
+    /// [`Body::find_in_nodes_under`] stops at the first hit; this one walks on.
+    pub fn find_in_live_node_under<T>(
+        &self,
+        root: NodeRef,
+        mut f: impl FnMut(NodeRef) -> Option<T>,
+    ) -> Option<T> {
+        let mut found = None;
+        self.for_each_live_node_under(root, |node| {
+            if found.is_none() {
+                found = f(node);
+            }
+        });
+        found
     }
 
     /// Walk `root` and the nodes beneath it, parents before children. `f`
