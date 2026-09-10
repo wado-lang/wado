@@ -324,14 +324,20 @@ hides: a release build embeds the stdlib where a dev build reads it from disk.
 unset, so swapping an arm's `.wado` files into the tree invalidates
 `wado-compiler` and rebuilds it under `lto=thin` / `codegen-units=1`. That is
 two full rebuilds per alternating round, and they are the wall clock rather than
-the benchmark. Build one binary per arm first, then alternate the binaries:
+the benchmark.
+
+Build one binary per arm first, replacing the whole of `lib/` for each. Copying
+only the files that differ leaves behind any file the other arm deletes or
+renames, and the binary then embeds a stdlib belonging to neither.
 
 ```sh
 for arm in base head; do
-  cp /tmp/ab/$arm/*.wado wado-compiler/lib/core/
+  rm -rf wado-compiler/lib
+  git checkout $arm -- wado-compiler/lib
   cargo build --release --bin wado --quiet
   cp target/release/wado /tmp/ab/wado-$arm
 done
+git checkout HEAD -- wado-compiler/lib
 for r in 1 2 3; do
   for arm in base head; do
     WADO_BIN=/tmp/ab/wado-$arm mise run benchmark-json-catalog

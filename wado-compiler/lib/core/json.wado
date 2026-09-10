@@ -1067,6 +1067,16 @@ impl JsonDeserializer {
         return Result::Ok(true);
     }
 
+    /// The error an object key's opening quote reports for `b`, the byte the
+    /// scan stopped on. A truncated input stops on nothing, so it is `eof` and
+    /// not a complaint about the token that is missing.
+    fn key_quote_error(&self, b: i32) -> DeserializeError {
+        if b < 0 {
+            return DeserializeError::eof(self.pos as i64);
+        }
+        return DeserializeError::unexpected_type("expected string key", self.pos as i64);
+    }
+
     /// The error `entry_head` reports for a byte that is neither a separator
     /// nor the container's closing byte.
     fn entry_separator_error(&self, close: i32) -> DeserializeError {
@@ -1776,12 +1786,10 @@ impl JsonDeserializer {
             return Result::Ok(());
         }
         loop {
-            if self.peek_after_whitespace() != b'"' {
+            let key_lead = self.peek_after_whitespace();
+            if key_lead != b'"' {
                 builtin::cold_path();
-                return Result::Err(DeserializeError::malformed(
-                    "expected string key",
-                    self.pos as i64,
-                ));
+                return Result::Err(self.key_quote_error(key_lead));
             }
             self.skip_string()?;
             self.expect_char(b':')?;
@@ -1956,10 +1964,7 @@ impl DeserializeStruct for JsonStructAccess {
         // directly to S::lookup, avoiding String allocation entirely.
         if b != b'"' {
             builtin::cold_path();
-            return Result::Err(DeserializeError::unexpected_type(
-                "expected string key",
-                self.de.pos as i64,
-            ));
+            return Result::Err(self.de.key_quote_error(b));
         }
         self.de.pos += 1;
         let key_start = self.de.pos;

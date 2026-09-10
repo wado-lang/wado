@@ -22,7 +22,10 @@ use crate::tir::{
     TypeTable,
 };
 
-use super::coercion::{is_numeric_literal_expr, numeric_literal_pair_order, range_endpoint_order};
+use super::coercion::{
+    NumericLiteralKind, classify_numeric_literal, is_numeric_literal_expr,
+    numeric_literal_pair_order, range_endpoint_order,
+};
 use super::sem::ModuleSemantics;
 use super::types::{FunctionContext, TypeLookup};
 use super::tysys::TypeSystem;
@@ -9452,21 +9455,15 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             _ => return None,
         };
 
-        // Plain literal, or the negated `-NUM` shape whose coercion is
-        // keyed on the enclosing `Unary` node.
-        let (repr, negated) = match expr {
-            ast::Expr::Literal(ast::LiteralExpr {
-                value: ast::Literal::Number(repr),
-                ..
-            }) => (repr.clone(), false),
-            ast::Expr::Unary(unary) if unary.op == ast::UnaryOp::Neg => match &unary.expr {
-                ast::Expr::Literal(ast::LiteralExpr {
-                    value: ast::Literal::Number(repr),
-                    ..
-                }) => (repr.clone(), true),
-                _ => return None,
-            },
-            _ => return None,
+        // Every shape the coercion admits, the negated `-NUM` among them, whose
+        // coercion is keyed on the enclosing `Unary` node. Reading the one
+        // classifier is what keeps a shape from arriving here as a bare
+        // `IntLiteral` typed as the `i128` struct.
+        let literal = classify_numeric_literal(expr)?;
+        let negated = literal.neg.is_some();
+        let repr = match literal.kind {
+            NumericLiteralKind::Number(repr) => repr.to_string(),
+            NumericLiteralKind::Byte(raw) => util::unescape_byte(raw).ok()?.to_string(),
         };
 
         let parse_result = if name.decl_name() == "u128" {

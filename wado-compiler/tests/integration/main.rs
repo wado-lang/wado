@@ -35,6 +35,7 @@ mod empty_tuple_boundary;
 mod extern_handle_resource;
 mod fn_dispatch_stubs;
 mod guest_effect_import;
+mod int128_literal_coercion;
 mod kiln_generator_world;
 mod kiln_loader_redirect;
 mod kiln_options;
