@@ -1,7 +1,6 @@
 //! A variant whose case is a compile-time fact decides its own dispatch: the
 //! arm that case takes becomes the payload binding it is, and a `VariantTest` /
-//! `VariantTag` over it folds to a constant. A value copy of a variant and an
-//! `if let` over a fresh construct are the shapes it takes.
+//! `VariantTag` over it folds to a constant.
 
 use crate::const_eval::Value;
 use crate::nir_arena::{
@@ -67,11 +66,11 @@ fn rewrite_match(engine: &mut Engine, id: ExprId, scrutinee: Operand) -> bool {
     else {
         return false;
     };
-    let certain = certain_arm(engine.body, &arms[head], &case_name).filter(|&(bound, payload)| {
+    let certain = certain_arm(engine.body, &arms[head], &case_name).filter(|(bound, payload)| {
         match bound {
             // A binding declared at another type is one match ergonomics
             // wrapped: the payload read would not fit it.
-            Some(local) => engine.locals()[local as usize].type_id == payload,
+            Some(binding) => engine.locals()[binding.local_index as usize].type_id == *payload,
             // With nothing to bind, the collapse drops the scrutinee.
             None => droppable(engine, scrutinee),
         }
@@ -106,10 +105,18 @@ fn rewrite_match(engine: &mut Engine, id: ExprId, scrutinee: Operand) -> bool {
     true
 }
 
+/// The local a pattern binds the payload to. The name is the pattern's, not
+/// the local's: `lift_mut` renames the binding and leaves the local declaration
+/// alone, so the local's own name is one nothing in the arm reads.
+struct PayloadBinding {
+    local_index: u32,
+    name: String,
+}
+
 /// The payload binding an arm makes (`None` for one that binds nothing) and the
 /// payload's type, for an arm the case takes whatever the payload holds. A
 /// guard or a pattern that reads into the payload leaves the arm uncertain.
-fn certain_arm(body: &Body, arm: &ArmData, case: &str) -> Option<(Option<u32>, TypeId)> {
+fn certain_arm(body: &Body, arm: &ArmData, case: &str) -> Option<(Option<PayloadBinding>, TypeId)> {
     if arm.guard.is_some() {
         return None;
     }
@@ -125,7 +132,20 @@ fn certain_arm(body: &Body, arm: &ArmData, case: &str) -> Option<(Option<u32>, T
     if variant_name != case {
         return None;
     }
-    Some((single_payload_binding(body, bindings)?, *payload_type))
+    let bound = match (single_payload_binding(body, bindings)?, bindings.as_slice()) {
+        (None, _) => None,
+        (Some(local_index), [pat]) => {
+            let PatKind::Binding { name, .. } = &body.pats[*pat].kind else {
+                panic!("a bound payload is a binding pattern")
+            };
+            Some(PayloadBinding {
+                local_index,
+                name: name.clone(),
+            })
+        }
+        (Some(_), _) => panic!("only a single-binding pattern binds a payload"),
+    };
+    Some((bound, *payload_type))
 }
 
 /// Rewrite the match as a block that binds the payload and runs the body.
@@ -135,13 +155,13 @@ fn collapse_to_binding(
     scrutinee: Operand,
     case_index: u32,
     payload_type: TypeId,
-    bound: Option<u32>,
+    bound: Option<PayloadBinding>,
     arm_body: Operand,
 ) -> bool {
     let span = engine.body.exprs[id].span;
     let result_type = engine.body.exprs[id].type_id;
     let mut stmts = Vec::with_capacity(2);
-    if let Some(local_index) = bound {
+    if let Some(binding) = bound {
         let payload = engine.alloc_expr(
             ExprKind::VariantPayload {
                 expr: scrutinee,
@@ -151,11 +171,10 @@ fn collapse_to_binding(
             payload_type,
             span,
         );
-        let name = engine.locals()[local_index as usize].name.clone();
         stmts.push(engine.alloc_stmt(
             StmtKind::Let {
-                name,
-                local_index,
+                name: binding.name,
+                local_index: binding.local_index,
                 is_mut: false,
                 is_reactive: false,
                 type_id: payload_type,

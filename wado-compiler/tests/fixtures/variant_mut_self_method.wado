@@ -1,0 +1,65 @@
+// A `&mut self` method may replace the whole variant, and `*self = P::B(..)`
+// changes the case — a write no payload the caller shares can carry. So a
+// variant receiver needs the same address-taken marking as an enum one, on the
+// declared type and on a generic instance alike; without it `p.flip()` mutated
+// a copy. Mutation through the payload lands either way.
+
+use { println, Stdout } from "core:cli";
+
+struct Cell {
+    v: i32,
+}
+
+variant P {
+    A(Cell),
+    B(i32),
+}
+
+impl P {
+    fn flip(&mut self) {
+        *self = P::B(42);
+    }
+
+    fn touch(&mut self) {
+        match self {
+            P::A(c) => {
+                c.v = 9;
+            }
+            P::B(_) => {}
+        }
+    }
+}
+
+variant G<T> {
+    One(T),
+    Two,
+}
+
+impl G<i32> {
+    fn clear(&mut self) {
+        *self = G::<i32>::Two;
+    }
+}
+
+struct Holder {
+    p: P,
+}
+
+export fn run() with Stdout {
+    let mut p = P::A(Cell { v: builtin::black_box(1) });
+    p.touch();
+    println(`${p:?}`);
+    p.flip();
+    println(`${p:?}`);
+
+    let mut g: G<i32> = G::One(builtin::black_box(1));
+    g.clear();
+    println(`${g:?}`);
+
+    let mut h = Holder { p: P::A(Cell { v: builtin::black_box(1) }) };
+    h.p.flip();
+    println(`${h.p:?}`);
+}
+
+__DATA__
+{"stdout": "P::A(Cell { v: 9 })\nP::B(42)\nG::Two\nP::B(42)\n"}

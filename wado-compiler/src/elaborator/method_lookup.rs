@@ -134,6 +134,18 @@ pub(super) fn impl_target_head_args(impl_ty: &Type) -> Option<&[Type]> {
 }
 
 impl TypeSystem {
+    /// Whether an implicit `&mut self` borrow of a local receiver has to box
+    /// it: a receiver whose reference is a box cell is handed a copy, and the
+    /// callee's write reaches the local only through the box the address-taken
+    /// mark promotes it to.
+    pub(crate) fn mut_self_receiver_needs_box(&self, type_id: TypeId) -> bool {
+        let table = self.type_table.borrow();
+        !matches!(
+            table.get(type_id),
+            ResolvedType::Ref(_) | ResolvedType::MutRef(_)
+        ) && table.is_boxed_reference_target(table.representation_head(type_id))
+    }
+
     /// For an inherent `impl` on a possibly-generic type, check that any
     /// concrete type arguments written in the impl header (e.g. the `u8` in
     /// `impl List<u8>`) match the receiver's actual type arguments. Type
