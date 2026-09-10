@@ -18,6 +18,30 @@ wado dump -O2 benchmark/json_catalog/json_catalog.wado    # before/after: diff t
 for i in 1 2 3; do mise run json-catalog; done           # before and after
 ```
 
+## Batching `array.get` where the runs are short (2026-09-10)
+
+Reading four bytes per bounds check is worth 12.6% on json-catalog's
+whitespace scan (`whitespace_end`), whose runs average 16 bytes. The same
+rewrite loses on two neighbouring scans, and the reason is the run length:
+
+- **`scan_string_run`**, four plain-ASCII bytes per block: json-catalog de
+  **-2%** on the pretty input and **-4.5%** on the minified one, three
+  alternating rounds. citm's string tokens are 6-16 bytes, so the block that
+  straddles the closing `"` is wasted on nearly every string; a 6-byte key
+  goes from 7 reads to 11. A refinement that walks the four bytes already
+  read instead of re-reading them recovered half the loss and was still
+  behind.
+- **`scan_number_into`**, four digits per block: json-canada de **-9.6%**
+  with both digit runs batched, **-5%** with only the fraction run (15
+  digits on this input) batched. The integer run is 1-2 digits on every JSON
+  corpus there is, so its block is pure waste — and even a 15-digit fraction
+  did not pay for growing the function.
+
+Generalizes: the batching in the skill's §3 is priced by the run it covers
+against the one partial block it always wastes. Below roughly 16 bytes per
+run it is a loss, and the run length is a property of the _input_, so count
+the runs over the corpus before rewriting the loop.
+
 ## Where json-canada's time actually is (2026-09-04)
 
 Not a dead end — the map the entries below were measured against, since every

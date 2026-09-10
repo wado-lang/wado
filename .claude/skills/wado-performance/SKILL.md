@@ -148,6 +148,19 @@ paid on a benchmark `fts` never touched.
   reasonable pre-size. Size it about right, or grow.
 - **GC-array access is bounds-checked, no unchecked variant.** A lookup table in
   a GC array adds a checked load per access — it lost to plain arithmetic.
+- **A lone `array.get` costs ~20 machine instructions; gets sharing a block cost
+  ~8.** wasmtime re-derives the object's null check, its length load and the
+  overflow-checked element address per get, and neither hoists them out of a
+  loop nor shares them across blocks — only across gets in one block. Read the
+  actual sequence with `wasmtime explore -W gc,function-references f.wat`; a
+  byte-at-a-time loop is 22 instructions and 6 branches per byte, four gets in
+  one block are 18 + 4×8. So a scan reads several bytes per bounds check and
+  then tests them: `whitespace_end` in `core:json` is that shape, worth 12.6%
+  on json-catalog deserialize. It pays in proportion to the run it covers,
+  against the one partial block it always wastes — under ~16 bytes per run it
+  is a loss (`dead-ends.md`). **`array.set` shares nothing**: a store may write
+  the header as far as Cranelift knows, so four adjacent sets reload the length
+  four times. Only `array.copy` / `array.fill` amortise a write.
 - **SROA is priced by the aggregate's width, not by the allocation it removes.**
   Splitting a 40-slot tuple into locals deletes one `struct.new` per struct and
   costs 6.5% on cbor-twitter: past the register file, forty `ref` locals live
