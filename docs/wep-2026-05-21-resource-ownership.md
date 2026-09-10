@@ -404,11 +404,15 @@ reached through either writes the whole of what its root was lent. Keying it by
 the element's field alone leaves a caller holding the container nothing to match,
 and it shares storage the call goes on to write.
 
-A reference-typed field ends the chain at storage its root only borrows, and
-neither comparison reaches it: a write through whoever lent that storage is
-rooted elsewhere, so the root-keyed scan never meets it, and two reference
-fields of one root may name one storage, so splitting the read and the write at
-them is no disjointness. Such a binding copies.
+A binding read through a reference-typed field copies. The field ends the chain
+at storage its root only borrows, and neither comparison reaches that storage: a
+write through whoever lent it is rooted elsewhere, so the root-keyed scan never
+meets it, and two reference fields of one root may name one storage, so
+splitting the read and the write at them proves nothing.
+
+A reference bound out of such a field names no referent this walk can follow:
+the field holds the reference, and the reference points elsewhere again. The
+immutable-root rule abstains over one rather than answering about the holder.
 
 Handing the source root to a new owner costs the binding its share on the same
 terms. That owner may write what the binding aliases, so the read matters where

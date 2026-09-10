@@ -285,8 +285,11 @@ impl RefTargets {
 pub fn compute_ref_targets(func: &TirFunction, resolver: &Resolver<'_>) -> RefTargets {
     let mut roots = IndexMap::default();
     for local in 0..func.local_count {
+        // A chain through a reference field ends at the slot holding the
+        // reference, not at what it points at, so it names no referent.
         if let Some(Names::Place(place)) = resolver.binding(local)
             && place.root != local
+            && !place.through_borrow
         {
             roots.insert(local, place.root);
         }
@@ -378,12 +381,11 @@ impl Analyzer<'_> {
                 if path.root == local {
                     return None;
                 }
-                // A path that reads a reference *stored in* its root lands on
-                // storage the root only borrows, and neither test below holds
-                // over one: a write through whoever lent the storage is rooted
-                // elsewhere, so the root-keyed scan never meets it, and two
-                // reference fields of one root may name the same storage, so
-                // splitting at them is no disjointness. Copy (wado-lang/wado#1998).
+                // A path through a reference field ends at storage its root
+                // only borrows, which neither test below reaches: a write
+                // through whoever lent it is rooted elsewhere, and two
+                // reference fields of one root may name one storage, so a
+                // split at them is no disjointness.
                 if path.through_borrow {
                     return None;
                 }

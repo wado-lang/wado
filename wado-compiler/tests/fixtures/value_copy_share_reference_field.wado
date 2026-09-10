@@ -1,18 +1,28 @@
-// Read-only-share soundness: a binding read through a reference-typed field
-// names storage its holder only borrows, so the holder's root answers for none
-// of the writes that reach it. Sharing the referent would make a later write
-// through it visible in the binding (wado-lang/wado#1998). The same read behind
-// a callee resolves to the same borrowed path and must copy alike.
+// Value-copy soundness around a reference-typed field: a binding read through
+// one takes storage its holder only borrows. Every write reaching that storage is
+// rooted at whoever lent it, so the holder's root meets none of them and the
+// binding must copy (wado-lang/wado#1998). A read behind a callee resolves to
+// the same borrowed path and copies alike.
 
 struct Cell {
     r: &mut List<i32>,
 }
 
-// Two reference fields may name one storage, so splitting the read and the
-// write at them is no proof they miss each other either.
+// Two reference fields may name one storage, so a read and a write split at
+// them are not disjoint.
 struct Pair {
     p: &mut List<i32>,
     q: &mut List<i32>,
+}
+
+struct Inner {
+    f: List<i32>,
+}
+
+// A reference bound out of a reference field names storage two steps away: the
+// field holds the reference, and the reference points elsewhere again.
+struct Held {
+    r: &mut Inner,
 }
 
 fn peel(c: &Cell) -> List<i32> {
@@ -20,8 +30,7 @@ fn peel(c: &Cell) -> List<i32> {
 }
 
 test "a read through a reference field does not share the referent" {
-    let b: List<i32> = [1, 2];
-    let mut xs = builtin::black_box(b);
+    let mut xs = builtin::black_box([1, 2] as List<i32>);
     let c = Cell { r: &mut xs };
     let v = *c.r;
     xs.push(999);
@@ -30,8 +39,7 @@ test "a read through a reference field does not share the referent" {
 }
 
 test "a read through a callee's reference field does not share the referent" {
-    let b: List<i32> = [1, 2];
-    let mut xs = builtin::black_box(b);
+    let mut xs = builtin::black_box([1, 2] as List<i32>);
     let c = Cell { r: &mut xs };
     let v = peel(&c);
     xs.push(999);
@@ -40,13 +48,22 @@ test "a read through a callee's reference field does not share the referent" {
 }
 
 test "a read through one reference field does not share a sibling's referent" {
-    let b: List<i32> = [1, 2];
-    let mut xs = builtin::black_box(b);
+    let mut xs = builtin::black_box([1, 2] as List<i32>);
     let c = Pair { p: &mut xs, q: &mut xs };
     let v = *c.p;
     c.q.push(999);
     assert v == [1, 2];
     assert xs == [1, 2, 999];
+}
+
+test "a read off a reference bound out of a reference field does not share" {
+    let mut inner = builtin::black_box(Inner { f: [1, 2] });
+    let h = Held { r: &mut inner };
+    let d = h.r;
+    let v = d.f;
+    inner.f.push(999);
+    assert v == [1, 2];
+    assert inner.f == [1, 2, 999];
 }
 
 __DATA__
