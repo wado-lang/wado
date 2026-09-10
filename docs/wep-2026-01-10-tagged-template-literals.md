@@ -515,24 +515,31 @@ list `reify` already drains.
 
 ### Fixtures
 
-- `tagged_template_sql.wado`: typed holes through a `ToParam` pack bound, and
-  `wir_expect:O2` holding the residue to its segments as constant byte arrays
-  and one `Param` construction per hole off a direct field read, with
-  `wir_not_expect:O2` denying `$hole_get`, `$hole_fmt`, `members`, `to_param`
-  and any surviving `push_str` call.
+- `tagged_template_sql.wado`: typed holes through a `ToParam` pack bound.
+  `wir_expect:O2` holds the residue to a constant byte array per segment and
+  one `Param` construction per hole off a direct field read;
+  `wir_not_expect:O2` denies `$hole_get`, `$hole_fmt`, `members`, `to_param`
+  and any `push_str` call.
 - `tagged_template_html.wado`: state carried across holes.
 - `tagged_template_members.wado`: every `Hole` accessor and the tails, with
   and without holes.
 - `tagged_template_holes.wado`: hole evaluation order and count, a scalar
   hole's copy, a handle hole's sharing, two sites of one shape.
+- `tagged_template_hole_order.wado`: a hole a later hole mutates carries the
+  value it had at its own position.
+- `tagged_template_qualified_tag.wado`: a static-method path on an imported
+  type as the tag.
+- `tagged_template_tag_default_arg.wado`: a tag whose trailing parameter has a
+  default, filled at the site.
 - `tagged_template_format_equiv.wado`: `format` against the untagged form over
   the specifier matrix.
 - `tagged_template_string_raw.wado`: `String::raw` keeps escapes verbatim.
 - `anon_struct_newtype_field.wado`, `reflect_pack_bound_free_fn_error.wado`:
   the two pre-existing defects the work surfaced, pinned.
-- Errors: a non-path tag, whitespace before the backtick, a tag of the wrong
-  arity, an unsatisfied `..V` bound naming the hole type, a hole whose type
-  mentions a type parameter.
+- Errors: a non-path tag, a path that is neither a function nor a static
+  method, whitespace before the backtick, a tag of the wrong arity, an
+  unsatisfied `..V` bound naming the hole type, a hole whose type mentions a
+  type parameter, a tag call whose effect the caller leaves undeclared.
 
 ### Order
 
