@@ -34,8 +34,8 @@ same rewrite loses on two neighbouring scans, and the reason is the run length:
 - **`scan_number_into`**, four digits per block: json-canada de **-9.6%**
   with both digit runs batched, **-5%** with only the fraction run (15
   digits on this input) batched. The integer run is 1-2 digits on every JSON
-  corpus there is, so its block is pure waste — and even a 15-digit fraction
-  did not pay for growing the function.
+  corpus there is, so its block is pure waste. Even a 15-digit fraction did
+  not pay for growing the function.
 
 Generalizes: the batching in the skill's §3 is priced by the run it covers
 against the one partial block it always wastes. Below roughly 16 bytes per

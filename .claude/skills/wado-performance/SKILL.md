@@ -198,8 +198,9 @@ paid on a benchmark `fts` never touched.
   the precondition as `assert b < 64` measures flat on json-catalog deserialize;
   writing it as `b < 64 &&` in the returned expression costs 6%, and dropping
   the bitset for four compares costs 19%. So a hot leaf whose precondition the
-  callers establish keeps both the assert and the fast body — don't reach for
-  prose, and don't assume an assert is what the profile is showing you.
+  callers establish keeps both the assert and the fast body. An earlier round
+  measured the two together and blamed the assert for what the guard cost, so
+  separate them before writing the invariant off as unaffordable.
 
 ## 4. Inlining is usually not the lever
 

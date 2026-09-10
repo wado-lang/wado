@@ -22,7 +22,7 @@ use crate::tir::{
     TypeTable,
 };
 
-use super::coercion::{LiteralPairOrder, is_numeric_literal_expr, numeric_literal_pair_order};
+use super::coercion::{is_numeric_literal_expr, numeric_literal_pair_order, range_endpoint_order};
 use super::sem::ModuleSemantics;
 use super::types::{FunctionContext, TypeLookup};
 use super::tysys::TypeSystem;
@@ -5047,23 +5047,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 &binary.right,
                 context,
             );
-            match order {
-                LiteralPairOrder::Together(hint) => {
-                    let left = self.reify_expr(&binary.left, ctx, hint);
-                    let right = self.reify_expr(&binary.right, ctx, hint);
-                    (left, right)
-                }
-                LiteralPairOrder::LeftAnchors => {
-                    let left = self.reify_expr(&binary.left, ctx, None);
-                    let right = self.reify_expr(&binary.right, ctx, Some(left.type_id));
-                    (left, right)
-                }
-                LiteralPairOrder::RightAnchors => {
-                    let right = self.reify_expr(&binary.right, ctx, None);
-                    let left = self.reify_expr(&binary.left, ctx, Some(right.type_id));
-                    (left, right)
-                }
-            }
+            order.resolve(
+                &binary.left,
+                &binary.right,
+                |expr, hint| self.reify_expr(expr, ctx, hint),
+                |expr| expr.type_id,
+            )
         } else if matches!(
             binary.op,
             ast::BinaryOp::Eq
@@ -5452,12 +5441,15 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         use crate::ast::RangeKind;
         use crate::tir::{TirExprKind, TirStructField, TypeTable};
 
-        // Resolve both operands first; the element type comes from
-        // `start` (annotate has unified start/end to the same type, so
-        // either operand's type works).
-        let start = self.reify_expr(&range.start, ctx, None);
-        let end_expected = Some(start.type_id);
-        let end = self.reify_expr(&range.end, ctx, end_expected);
+        // Annotate has unified the endpoints, so either type is the element
+        // type — but only in the order the elaborator resolved them in.
+        let order = range_endpoint_order(&self.tysys.type_table.borrow(), &range.start, &range.end);
+        let (start, end) = order.resolve(
+            &range.start,
+            &range.end,
+            |expr, hint| self.reify_expr(expr, ctx, hint),
+            |expr| expr.type_id,
+        );
         let element_type = start.type_id;
 
         // The recorded `expression_types[range.id]` carries the

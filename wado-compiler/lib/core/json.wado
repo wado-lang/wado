@@ -971,9 +971,8 @@ impl JsonDeserializer {
     }
 
     /// Advances `pos` past any run of JSON whitespace and returns the byte it
-    /// stops on, or -1 at end of input. The scan holds that byte already, so a
-    /// caller reading it back out of the input pays a second bounds check and
-    /// array load for nothing.
+    /// stops on, or -1 at end of input. Use that byte: reading it back out of
+    /// the input costs another bounds check and load.
     pub fn peek_after_whitespace(&mut self) -> i32 {
         let pos = self.pos;
         if pos >= self.input.len() {
@@ -991,9 +990,8 @@ impl JsonDeserializer {
     /// at and returning it (-1 at end of input).
     ///
     /// Four bytes are read per bounds check because wasmtime re-derives an
-    /// array's base, length and null check for a lone `array.get` and shares
-    /// that work only across gets sitting in one block — a byte-at-a-time
-    /// loop pays the whole preamble on every byte.
+    /// array's base, length and null check for a lone `array.get`, and shares
+    /// that work only across gets sitting in one block.
     fn peek_after_whitespace_run(&mut self, from: i32) -> i32 {
         let len = self.input.len();
         let mut pos = from;

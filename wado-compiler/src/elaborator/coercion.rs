@@ -39,16 +39,11 @@ pub(super) struct NumericLiteral<'a> {
 
 /// Classify `expr` as a numeric literal, or `None` when it is not one.
 ///
-/// The single enumeration of these shapes. Everything that asks "does this
-/// operand take its type from the other one?" — operand ordering in
-/// `resolve_binary_operands_with_coercion` and in `reify_binary`, range
-/// endpoints, block-tail retargeting, type-arg inference — and every arm of
-/// [`Elaborator::try_coerce_numeric_literal_inner`] reads it, so a shape
-/// cannot be coercible to one walk and already-typed to another. It was three
-/// enumerations, and they drifted: `b'0'` retargeted but did not count as a
-/// literal for ordering or inference, so `48 <= b` type-checked and
-/// `b'0' <= b` did not, and `pick(x, 65)` inferred where `pick(x, b'A')` did
-/// not.
+/// The single enumeration of these shapes: every walk that asks whether an
+/// operand takes its type from the other one reads it, so a shape cannot be
+/// coercible to one walk and already-typed to another. It was three
+/// enumerations, and they drifted — `b'0' <= b` failed to type-check where
+/// `48 <= b` passed.
 ///
 /// The non-numeric arms are enumerated rather than caught by `_`, so a new
 /// [`Expr`] variant forces a decision here.
@@ -115,6 +110,12 @@ pub(super) fn is_numeric_literal_expr(expr: &Expr) -> bool {
     classify_numeric_literal(expr).is_some()
 }
 
+/// Whether a call argument is a numeric literal, so type-arg inference defers
+/// it to a second phase and lets the other arguments bind the parameter first.
+pub(super) fn is_numeric_literal_arg(arg: Option<&Expr>) -> bool {
+    arg.is_some_and(is_numeric_literal_expr)
+}
+
 /// Whether `expr` is a byte literal. Among numeric literals it is the one that
 /// arrives with a type of its own, so it settles a pair that has no other
 /// anchor.
@@ -139,7 +140,7 @@ pub(super) fn is_numeric_literal_target(tt: &TypeTable, target: TypeId) -> bool 
             if matches!(tt.struct_head_name(*def).as_str(), "i128" | "u128"))
 }
 
-/// How a pair of operands, both numeric literals, orders its resolution.
+/// Which of two operands resolves first, so the other can take its type.
 pub(super) enum LiteralPairOrder {
     /// Nothing distinguishes the two: resolve both against the carried hint,
     /// which is `None` when the surrounding type says nothing to a literal.
@@ -150,17 +151,43 @@ pub(super) enum LiteralPairOrder {
     RightAnchors,
 }
 
-/// Order the resolution of two numeric literals — the one case where neither
-/// operand can take its type from the other by default.
+impl LiteralPairOrder {
+    /// Resolve `left` and `right` in this order. `resolve_one` is the walk's own
+    /// — `resolve_expr` in the elaborator, `reify_expr` in reify — so the two
+    /// cannot type a pair differently.
+    pub(super) fn resolve<T>(
+        self,
+        left: &Expr,
+        right: &Expr,
+        mut resolve_one: impl FnMut(&Expr, Option<TypeId>) -> T,
+        type_of: impl Fn(&T) -> TypeId,
+    ) -> (T, T) {
+        match self {
+            Self::Together(hint) => {
+                let left = resolve_one(left, hint);
+                let right = resolve_one(right, hint);
+                (left, right)
+            }
+            Self::LeftAnchors => {
+                let left = resolve_one(left, None);
+                let right = resolve_one(right, Some(type_of(&left)));
+                (left, right)
+            }
+            Self::RightAnchors => {
+                let right = resolve_one(right, None);
+                let left = resolve_one(left, Some(type_of(&right)));
+                (left, right)
+            }
+        }
+    }
+}
+
+/// Order two numeric literals — the one pair where neither operand can take its
+/// type from the other by default.
 ///
 /// A type from outside the operation wins when a literal can be it. Failing
 /// that, a byte literal anchors the pair: `b'A'` is `u8`-valued where a decimal
 /// literal carries no type of its own, so `b'\n' == 10` compares two `u8`s.
-///
-/// Every walk that types one operand from the other reads this — binary
-/// operands in `resolve_binary_operands_with_coercion` and in `reify_binary`,
-/// range endpoints — so a pair cannot anchor one way on one walk and another
-/// way on the next.
 pub(super) fn numeric_literal_pair_order(
     tt: &TypeTable,
     left: &Expr,
@@ -175,6 +202,17 @@ pub(super) fn numeric_literal_pair_order(
         (true, false) => LiteralPairOrder::LeftAnchors,
         (false, true) => LiteralPairOrder::RightAnchors,
         _ => LiteralPairOrder::Together(None),
+    }
+}
+
+/// Order the endpoints of `start..end`. A literal endpoint takes its type from
+/// the other one, and a range carries no expected type, so two literals leave a
+/// byte endpoint as the only thing that can settle `0..=b'z'`.
+pub(super) fn range_endpoint_order(tt: &TypeTable, start: &Expr, end: &Expr) -> LiteralPairOrder {
+    match (is_numeric_literal_expr(start), is_numeric_literal_expr(end)) {
+        (true, true) => numeric_literal_pair_order(tt, start, end, None),
+        (true, false) => LiteralPairOrder::RightAnchors,
+        _ => LiteralPairOrder::LeftAnchors,
     }
 }
 
@@ -353,7 +391,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let Some(&expected) = expected_param_types.get(i) else {
                 continue;
             };
-            if !Self::is_literal_number_arg(Some(raw)) {
+            if !is_numeric_literal_arg(Some(raw)) {
                 continue;
             }
             if *arg == expected {

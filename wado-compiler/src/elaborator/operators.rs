@@ -8,7 +8,7 @@ use crate::tir::{FunctionRef, PrimitiveType, ResolvedType, TypeId, TypeTable};
 use crate::token::Span;
 
 use super::Elaborator;
-use super::coercion::{LiteralPairOrder, is_numeric_literal_expr, numeric_literal_pair_order};
+use super::coercion::{is_numeric_literal_expr, numeric_literal_pair_order};
 use super::method_lookup::REPLACE_ON_ASSIGN_PLACE;
 use super::types::{FunctionContext, ResolvedTraitMethod, TypeError};
 use super::tysys::TypeSystem;
@@ -129,23 +129,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 right_ast,
                 expected_type,
             );
-            match order {
-                LiteralPairOrder::Together(hint) => {
-                    let left = self.resolve_expr(left_ast, ctx, hint);
-                    let right = self.resolve_expr(right_ast, ctx, hint);
-                    (left, right)
-                }
-                LiteralPairOrder::LeftAnchors => {
-                    let left = self.resolve_expr(left_ast, ctx, None);
-                    let right = self.resolve_expr(right_ast, ctx, Some(left));
-                    (left, right)
-                }
-                LiteralPairOrder::RightAnchors => {
-                    let right = self.resolve_expr(right_ast, ctx, None);
-                    let left = self.resolve_expr(left_ast, ctx, Some(right));
-                    (left, right)
-                }
-            }
+            order.resolve(
+                left_ast,
+                right_ast,
+                |expr, hint| self.resolve_expr(expr, ctx, hint),
+                |&ty| ty,
+            )
         } else if self.tysys.is_null_literal(right_ast) && !self.tysys.is_null_literal(left_ast) {
             // `expr == null`: resolve the non-null side first and feed its
             // type to the bare `null` so it resolves to a concrete

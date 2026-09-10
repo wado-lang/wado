@@ -16,7 +16,7 @@ use crate::token::Span;
 
 use super::Elaborator;
 use super::call::turbofish_holes;
-use super::coercion::{LiteralPairOrder, is_numeric_literal_expr, numeric_literal_pair_order};
+use super::coercion::{is_numeric_literal_expr, range_endpoint_order};
 use super::infer::InferCtx;
 use super::instantiate::Instantiation;
 use super::typecheck::{TypeCheckResult, check_assignable};
@@ -5340,33 +5340,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> TypeId {
         use crate::ast::RangeKind;
 
-        // Bidirectional coercion: resolve non-literal first to infer the element type
-        let start_is_literal = is_numeric_literal_expr(&range.start);
-        let end_is_literal = is_numeric_literal_expr(&range.end);
-
-        let end_anchors = if start_is_literal && end_is_literal {
-            // A range carries no expected type, so only a byte endpoint can
-            // settle `0..=b'z'`.
-            let order = numeric_literal_pair_order(
-                &self.tysys.type_table.borrow(),
-                &range.start,
-                &range.end,
-                None,
-            );
-            matches!(order, LiteralPairOrder::RightAnchors)
-        } else {
-            start_is_literal
-        };
-
-        let (start, end) = if end_anchors {
-            let end = self.resolve_expr(&range.end, ctx, None);
-            let start = self.resolve_expr(&range.start, ctx, Some(end));
-            (start, end)
-        } else {
-            let start = self.resolve_expr(&range.start, ctx, None);
-            let end = self.resolve_expr(&range.end, ctx, Some(start));
-            (start, end)
-        };
+        let order = range_endpoint_order(&self.tysys.type_table.borrow(), &range.start, &range.end);
+        let (start, end) = order.resolve(
+            &range.start,
+            &range.end,
+            |expr, hint| self.resolve_expr(expr, ctx, hint),
+            |&ty| ty,
+        );
 
         // Check type mismatch between start and end
         if start != end && start != TypeTable::ERROR && end != TypeTable::ERROR {

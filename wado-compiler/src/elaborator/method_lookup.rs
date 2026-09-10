@@ -17,6 +17,7 @@ use crate::tir::{FunctionRef, ResolvedType, TypeId, TypeTable};
 use crate::token::Span;
 
 use super::Elaborator;
+use super::coercion::is_numeric_literal_arg;
 use super::infer::InferCtx;
 use super::instantiate::Instantiation;
 use super::sig::{InstantiatedImplSig, MethodSig, Param};
@@ -1298,7 +1299,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         let mut infer = InferCtx::new(&self.tysys.type_table, inst.vars.clone());
         for (i, (&param_type, arg)) in param_types.iter().zip(args.iter()).enumerate() {
-            if Self::is_literal_number_arg(raw_args.get(i)) {
+            if is_numeric_literal_arg(raw_args.get(i)) {
                 infer.add_deferred(param_type, *arg);
             } else {
                 infer.add(param_type, *arg);

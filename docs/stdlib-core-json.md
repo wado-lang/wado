@@ -201,9 +201,8 @@ level before descending, so it never needs unwinding.
 #### `pub fn peek_after_whitespace(&mut self) -> i32`
 
 Advances `pos` past any run of JSON whitespace and returns the byte it
-stops on, or -1 at end of input. The scan holds that byte already, so a
-caller reading it back out of the input pays a second bounds check and
-array load for nothing.
+stops on, or -1 at end of input. Use that byte: reading it back out of
+the input costs another bounds check and load.
 
 #### `pub fn expect_char(&mut self, c: i32) -> Result<(), DeserializeError>`
 
