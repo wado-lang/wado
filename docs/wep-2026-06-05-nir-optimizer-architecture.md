@@ -110,6 +110,13 @@ to answer a query, and it dies with the query. An unpromoted skeleton leaf
 therefore resolves to no value. That is sound because "no value" is the finest
 partition: a consumer skips the expression rather than over-merging.
 
+A rule about a pure value is written against `Operand`, once. A promoted operand
+is the same computation as the skeleton node it replaced, so it has to answer to
+the same rules — and the two tiers spell that computation differently, so a rule
+written once per tier drifts. The interpreter's arithmetic folding takes this
+shape: one set of rules over a view that resolves the tier at the leaves. A rule
+that reaches for `ExprKind` and `ValueKind` in two places is the shape to avoid.
+
 Promotion is staged, and the staging is the design. A freeze is sound only where
 nothing later re-contextualizes the operand it plants. Arithmetic freezes before
 the loop, on a clean graph. Field reads freeze once the structural passes have
@@ -191,8 +198,7 @@ interprocedural over-approximation.
   instead, to a version-free value standing for that local. Version-free is the
   hazard: it is one value for every assignment of the local, so it is sound only
   under a proof that the local has exactly one. Without the proof the query
-  answers with no value, never with a guess. The anchor rule below is the same
-  obligation seen from the freeze side.
+  answers with no value, never with a guess.
 - Pointwise maintenance. A structural edit keeps the graph coherent at the point
   of the edit. Pruning a branch repoints the surviving operands past the dead
   merge arm. Splicing an inlined body or an SROA split interns value nodes for
@@ -219,14 +225,21 @@ These are settled by measurement and re-derived at a cost.
   local is unused, or rewrites every read of one, must count the pool's reads as
   well. The count is scoped to the operands the skeleton still carries, since the
   pool is append-only and also holds reads that folded away.
+- A whole-body walk is `for_each_reachable_node`, which covers the skeleton and
+  what a promoted operand names as its extraction source. `for_each_node_under`
+  walks a subtree, and asserts it is not handed the root block: every bridge
+  miscompile came from a census reaching for the skeleton walk because its name
+  is the obvious one. The pool records whether an extraction source exists at
+  all, so a body with none takes the plain skeleton walk and the coverage costs
+  nothing.
 - That census is session-scoped, never per-application. It walks the whole
   body, so recomputing it per rule application is quadratic. It is memoized, and
-  the memo is held across edits while it is empty. That is the case that decides
-  the cost, since inside the loop nothing reachable names a local. Only a
-  local-naming operand becoming reachable drops it, and the edit API is what
-  reports that. A rule therefore never writes such an operand into the body
-  behind the API's back. A debug-only audit at session end is a backstop, not a
-  proof.
+  the memo is maintained across edits rather than dropped: an operand becoming
+  reachable adds its locals, and one leaving is never subtracted, so the memo is
+  an upper bound. Over-counting keeps a binding alive, costing an elision and
+  never correctness. The edit API is what reports an arrival, so a rule never
+  writes an operand into the body behind its back. A debug-only audit at session
+  end checks the bound, not equality — a backstop, not a proof.
 - No whole-body walk per rule application, in an assertion either. A rewrite
   that deletes a binding records the local, and the session audits the batch
   once. Checking at each rewrite cost more than half the loop. The audit reads
@@ -292,27 +305,80 @@ because it is derived. See Measured dead ends.
 Compile speed here means the debug build, the compiler-developer inner loop, so
 every timing in this WEP includes `debug_assert!`s.
 
-The graph build is about 6 % of the phase; it was 21 % before build-once. What
-is left to cut is the passes and their assertions. At `-O2` the loop costs about
-6 s on each benchmark, spread over `peephole` at 23 % and `copy_prop`,
-`const_fold`, and `licm` at 13 % each, with no dominant iteration.
+`optimize` is 71 % of a warm `-O2` compile of the Gale-generated SQLite parser
+and 78 % of `json_twitter`. The fixed-point loop is about a third of that, spread
+over `peephole` at 21 %, `const_fold` at 16 %, and `inline`, `copy_prop` and
+`licm` at about 12 % each, with no dominant iteration.
 
-- [ ] Fold the graph build into `lower`. This buys one body walk per function,
-      not earlier availability: the early freeze already walks every body
-      before the loop, so the lazy first-query path is eager in practice.
+Self CPU says something the per-pass spans do not, and it is what the items below
+are sized against. The generic arena walks — `for_each_child`,
+`for_each_reachable_node`, `for_each_operand` — are 14 % of the whole compile, and
+allocation another 15 %. `Engine::new`'s index derivation is 4.7 %. The graph
+build is about 6 % of the phase, down from 21 % before build-once, while the whole
+`nir_value_graph` module is 1.2 % of self CPU: what the build costs is the walk it
+shares with every other pass, not its own arithmetic.
+`WADO_TRACE=arena_census` reports the node-mix and bloat numbers these items
+quote.
+
+Two things price a walk. One is how many nodes it covers: every step runs the
+inlined slot match, and 61 to 77 % of the nodes are pure kinds carrying no
+children. The other is the allocator, and it was the larger of the two: the
+walks allocated a buffer per node, and retiring those cut the parser's compile
+6.9 % and `json_twitter`'s 4.2 %.
+
+A buffer exists to break `for_each_child`'s borrow, which a walk cannot hold
+while it mutates. Three cases, and only the last needs one.
+
+- The walk only reads. It recurses inside the callback and needs no buffer. This
+  covers `walk_nodes_under`, so the arena's own traversal has no explicit stack:
+  the arena is a tree and the call stack is the traversal stack.
+- The walk mutates something other than the body. `Engine`'s parent map and
+  worklist are fields beside `Body`, not inside it, so splitting the borrow lets
+  the callback write them.
+- The walk mutates the body as it recurses. It threads one `Vec` down: each
+  level appends its children at the tail, indexes them out by value, and
+  truncates back, so the peak is the deepest path and the cost is one
+  allocation for the walk.
+
+No walk buffer is thread-local. A pooled one was tried and measured the same as
+recursion, which leaves nothing to pay for the hidden state.
+
+Siblings are visited in source order, matching `for_each_child`. The stack walk
+this replaced visited them in reverse, which nothing documented. The order does
+reach the output: it permutes `TypeId` and const-object numbering, and the order
+two specializations of one function are emitted in. Code size is unchanged on
+both benchmarks.
+
+- [ ] Fold the graph build into `lower`. The build's inputs do not exist during
+      lowering. `builder::build` takes the alias sets and the per-call purity
+      verdicts, and both are derived over the whole lowered package. An empty
+      alias set is the _optimistic_ direction, not a conservative one, so
+      building without them is unsound rather than imprecise. A call's verdict is
+      keyed by `FuncId` besides, and `translate` finalizes callee ids only at its
+      end. Keeping the facts therefore means building once every body exists,
+      which is the separate walk this item wanted to remove. What it buys is that
+      one body walk per function, not earlier availability: the early freeze
+      already walks every body before the loop, so the lazy first-query path is
+      eager in practice.
 
 - [ ] Retire the pure node kinds still left in the skeleton, so every pure
       position is an operand. This is a compile-speed item as much as a
-      saturation prerequisite. When last measured, pure kinds were 52 % of the
-      arena and the local reads the use index is made of were 34 %, so retiring
-      them roughly halves what every session walk covers. The other
+      saturation prerequisite. Pure kinds are 61 % of the reachable expressions
+      after lower and 77 % at end-of-optimize on the SQLite parser, 61 % and 70 %
+      on `json_twitter`. The local reads the use index is made of are 31–39 % of
+      them. Retiring them therefore cuts what every session walk covers by about
+      two thirds rather than half. The share climbs across the loop because the
+      freeze reaches so little: only 17 % of the reachable operand slots carry a
+      value, so a pure kind stays in the skeleton for want of a freeze. The other
       compile-speed items are sized against a skeleton this shrinks. Almost none
       of it is reachable on its own. A value query recurses through operands, so
       arithmetic left in the skeleton bottoms out on a field load or a call
       result and yields no value at all. It waits on a consumer; see Precision.
 
 - [ ] Arena compaction. In-place rewrites orphan nodes that are never freed
-      mid-run. Measured at 1.66× bloat at end-of-optimize on `package-gale`.
+      mid-run. At end-of-optimize the arena holds 1.9× the reachable expressions
+      and 2.4× the reachable statements on the SQLite parser, and 2.5× / 3.5× on
+      `json_twitter`. `lower` alone arrives at 1.1×, so the growth is the loop's.
 
 - [ ] Price the switch lowering on something other than table width. The
       threshold is a count of the values the table covers, set where the
@@ -347,28 +413,91 @@ was designed on the way and is priced out by the same fact. Each removed
 conservatism stands on the principle that an unjustified conservatism is dropped
 for being unjustified. None is a performance change.
 
-### The anchor rule
+### Naming a local, before and after
 
-A frozen operand may name a local only when that local's defining statement
-travels with the operand.
+The early freeze plants no value naming a local. That refusal was a soundness
+rule. It is now a cost decision, and the two reasons are worth keeping apart.
 
-A source local fails that. A parameter is defined by the function entry, which
-is not a statement that can travel. Inlining splices the operand into a caller
-where the same slot is assigned once per call, and since a query-time local
-value is version-free, two reads that now denote different values share an id.
-That is the over-merge behind `String::substr_bytes` under Measured dead ends.
-The guard is the single-version predicate itself plus a dominance check at the
-placement. "Every leaf is a parameter" was an earlier proxy for it, and
-parameter-ness does not survive inlining.
+It was covering five miscompiles, each one a place where the skeleton had an
+ability the pool did not. `scalar_forward` forwarded a scalar temp and dropped
+its binding while counting only the skeleton's reads, so a read living in the
+value pool was left naming a slot that no longer existed and the extractor
+emitted a `local.get` of it. `copy_prop` forwarded a promoted binding that was
+not constant. `dae` read "promoted" as "safe to delete", but purity is not the
+question it asks: `100 / zero` is pure and still traps. `niri` stopped at the
+pool instead of evaluating the operand behind it. The pool folded no
+short-circuit identity, so `x || false` survived in a promoted operand that the
+skeleton would have collapsed.
 
-A freeze-minted temp satisfies the rule by construction. It is a fresh immutable
-binding in the same body, assigned once, so any pass that copies the operand
-copies the definition with it, and one value per binding holds in every context
-it lands in. So a value naming a source local is never frozen. It is
-materialised into such a temp, and the temp is named. That is the only way a
-local may be named.
+Counting pooled reads is each pass's own obligation, and `optimize::run_pass`
+audits the invariant — every local a promoted operand reads still has a
+definition — at end-of-optimize, or at every pass boundary under
+`WADO_TRACE=promoted_reads`, which is what named `scalar_forward`. All five are
+fixed: with the refusal removed the corpus is correct, 4 977 of 4 982 e2e
+fixtures passing and every one of the five failures a `wir_expect` shape
+assertion rather than a miscompile.
 
-The rule is necessary and not sufficient. There is no in-loop freeze. One was
+The rule's own account of itself was wrong, and the mistake is worth recording.
+It read the failure as an over-merge, one version-free id standing for two
+runtime values. The reductions that account predicts do not reproduce.
+Arithmetic over a parameter, inlined into a loop, is correct. Identity per read
+rather than per local changes nothing. `e2e/opt_early_freeze_names_a_local`
+reduces the real failure, and it is a dropped binding, not a merged value.
+
+What stays unpaid is cost. Removing the refusal and keeping everything else
+measures three things.
+
+- ~~The compile took 80 % longer, the promoted-read census re-walking at 14 % of
+  self CPU.~~ Paid. The census adds to its memo rather than dropping it, so it
+  is an upper bound maintained per edit instead of an equality re-derived per
+  query. Over-counting keeps a binding alive, which costs an elision and never
+  correctness; the session-end audit checks the bound, not equality. With the
+  refusal removed the compile is back to its baseline.
+- The parser's code grows 6.4 %. Two thirds of that is the extraction cost
+  model, one third is `scalar_forward` going blind; see below.
+- The fixed-point loop stops converging inside its cap, with `copy_prop` and
+  `licm` still changing at 15 iterations.
+
+The refusal stands until those two are closed, and they are not next in line.
+Removing it buys no compile time on its own, since the census fix already paid
+that back. What it buys is a prerequisite for retiring the pure node kinds, and
+that item is held up by something larger anyway: a value query has no flow, so a
+read of a multi-version local resolves to nothing whether the refusal is there
+or not. Taking the walk buffers off the allocator was worth comparable compile
+time for mechanical work and byte-identical output, so it went first. Coming
+back here is a matter of when, not whether.
+
+Skipping `scalar_forward` separates the two, on `sqlite_parse` at `-O2`:
+
+| bytes            | `scalar_forward` on | skipped |
+| ---------------- | ------------------: | ------: |
+| refusal in place |             393 702 | 412 659 |
+| refusal removed  |             418 914 | 429 640 |
+
+The pass is worth 19.0 KB with the refusal in place and 10.7 KB without it, so
+8.2 KB of the 25.2 KB growth is forwarding it can no longer do. The other
+17.0 KB is re-materialisation, and it is there whether the pass runs or not.
+
+What blinds the pass is the shape `let c = <expr>; if !c { … }`. The `!c` read
+is pure, so it is promoted, and the skeleton is then left with zero reads of
+`c` — `sole_value_use` finds nothing to forward into. `cond_impl_post_promote`
+then never prunes the bounds check the forward would have exposed, which is
+where `wir_optimize_branchless_increment` and
+`wir_optimize_copy_prop_destructure` fail; `array_bounds_elim_version_fill_wir`
+and `match_switch_large_range_body_cost` read the same unpruned shape.
+`tuple_literal_projection_wir` is not yet reduced.
+
+Substituting into the pool does not reach it. Forwarding means replacing
+`Opaque(Local c)` with the value of `i < len`, and that does not intern: `i` is
+a loop counter, so `local_has_one_version` fails and the tree has no `ValueId`.
+The operand has to go back to the skeleton instead — a NIR-level twin of
+`wir_build`'s `extract_value`, rebuilding expressions from a value tree. The
+same primitive is what the extraction cost model needs, to bind a
+multiply-used local-naming value once rather than re-materialise it per use, so
+one mechanism closes both open items. That is the shape of the work whenever it
+is picked up.
+
+There is no in-loop freeze. One was
 built under the rule and promoted nothing on either benchmark, at 11.3 % of the
 loop, so it was removed with its phase. Reviving it means adding the phase back
 under the rule, not flipping a flag. Two things have to hold and neither did.
@@ -393,8 +522,8 @@ invariant.
 - [ ] Reach the in-loop consumers. Every freeze that may plant a local-naming
       value runs after the fixed-point loop, so the passes inside it still see
       none: LICM's value hoist collected zero loop-entry locals in 10 900
-      queries. An in-loop freeze cannot simply be added; see The anchor rule. The early freeze is separately bound by the
-      context-free rule under Measured dead ends. Moving the build to lowering
+      queries. An in-loop freeze cannot simply be added; see Naming a local,
+      before and after. Moving the build to lowering
       does not lift that bound: the extraction is point-dependent, not the
       build. This and resolving every single-version local share the anchor
       rule as prerequisite. It also gates nearly all of retiring the pure node
@@ -459,15 +588,14 @@ Each was built, verified, and reverted. Do not retry as-is.
   resolver keyed one `ValueId` per local, where the builder mints one per
   assignment, so the id spanned every version of the local, and an induction
   variable has one per iteration. Traps `closure_capture`.
-- Freezing a local-naming value before the structural passes. The early freeze
-  is sound because a frozen value survives inlining and SROA copying the operand
-  around. That is true of a constant, which means the same thing wherever it
-  lands. It is false of a value naming a local, because those passes renumber
-  locals and splice a callee body into a caller, re-contextualizing the slot
-  underneath the value. `String::substr_bytes`'s parameters, frozen early and
-  inlined into `trim_start`'s loop, read back as an iteration's worth of values
-  and trap with "allocation size too large". The invariant is explicit at the
-  freeze decision: early plants only context-free values.
+- Freezing a local-naming value before the structural passes, as a _soundness_
+  bar. It was read as a re-contextualization: those passes renumber locals and
+  splice a callee into a caller, so a value naming a slot was thought to survive
+  into a frame where the slot means something else. Both halves of that are
+  maintained — `dae` remaps the pool's recipes beside the skeleton's, `inline`
+  mints a fresh caller opaque per splice — and the reductions the account
+  predicts do not reproduce. The real failure was a dropped binding; see Naming
+  a local, before and after. The refusal stands on cost now, not on this.
 - A query-time materialiser for a field read at function entry. Miscompiled
   about 165 fixtures. Reference and aggregate fields change copy and alias
   semantics.
@@ -475,8 +603,13 @@ Each was built, verified, and reverted. Do not retry as-is.
   reads of a mutable reference parameter.
 - Dropping the promoted-read census memo on every edit. The obvious invalidation
   rule, and measurably worse than no memo: a whole-body walk per rewrite, where
-  the per-block recomputation it replaced at least amortised over a block. Only
-  holding an empty memo across edits pays.
+  the per-block recomputation it replaced at least amortised over a block.
+  Maintaining the memo as an upper bound is what pays.
+- One `dyn FnMut` slot walk in place of the monomorphized ones. The slot match is
+  inlined into every instantiation of `for_each_child`, and a dev build folds 125
+  of them onto one address, so a single indirect call promised that code size
+  back. It measured 6.5 % slower: the per-slot indirect call costs more than the
+  instruction cache it buys.
 
 A value's identity is sound only when an operand the edits maintain carries it,
 or when the query itself proves the leaf has a single version. It is never

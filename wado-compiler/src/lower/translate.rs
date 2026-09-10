@@ -32,6 +32,7 @@ use crate::nir_arena::{
     StmtId, StmtKind, StmtNode,
 };
 use crate::nir_package::NirPackage;
+use crate::nir_value_graph::{ValueId, ValueKind, ValuePool};
 use crate::tir;
 use crate::tir::{
     CallArg, ClosureFunctor, FunctionRef, GlobalInit, MonomorphInfo, TirBlock, TirCapture, TirEnum,
@@ -1251,8 +1252,102 @@ impl FunctionTranslator<'_, '_> {
                     .alloc_unshared(vk, expr.type_id);
                 Operand::Value(vid)
             }
-            None => Operand::Expr(self.convert_expr(expr)),
+            None => self
+                .intern_constant_arith(expr)
+                .unwrap_or_else(|| Operand::Expr(self.convert_expr(expr))),
         }
+    }
+
+    /// Intern all-literal arithmetic as one pool value rather than building
+    /// skeleton nodes for it. Sound this early because such a value names
+    /// nothing outside the pool, so no later pass can re-contextualize it. A
+    /// value naming a local can be, which is why the early freeze refuses one.
+    fn intern_constant_arith(&self, expr: &TirExpr) -> Option<Operand> {
+        // Only a compound: a bare literal took the caller's path above.
+        if !matches!(
+            expr.kind,
+            TirExprKind::Binary { .. } | TirExprKind::Unary { .. } | TirExprKind::Cast { .. }
+        ) || !self.is_constant_arith(expr)
+        {
+            return None;
+        }
+        let type_table = self.base.type_table.borrow();
+        let mut arena = self.arena.borrow_mut();
+        let v = self.constant_arith_in(expr, &mut arena.values, &type_table)?;
+        // Only a tree that folded all the way to a constant is taken. One that
+        // did not is a computation, and a computation belongs in the skeleton
+        // until a pass with the position in hand decides otherwise: `1 / 0`
+        // traps, and an unread `let` holding it has to keep its node so the
+        // elider can see the trap it would erase.
+        arena
+            .values
+            .kind(v)
+            .is_operand_constant()
+            .then_some(Operand::Value(v))
+    }
+
+    /// Whether every leaf of `expr` is a literal this lowering can pool, so the
+    /// tree denotes one value at every point.
+    fn is_constant_arith(&self, expr: &TirExpr) -> bool {
+        match &expr.kind {
+            // A wide int lowers to a struct constructor, not a pool scalar.
+            TirExprKind::IntLiteral { .. } => self.wide_int_of(expr.type_id).is_none(),
+            TirExprKind::FloatLiteral { .. }
+            | TirExprKind::BoolLiteral(_)
+            | TirExprKind::CharLiteral(_) => true,
+            TirExprKind::Binary { left, right, .. } => {
+                self.is_constant_arith(left) && self.is_constant_arith(right)
+            }
+            TirExprKind::Unary { op, expr } => {
+                matches!(op, TirUnaryOp::Neg | TirUnaryOp::Not | TirUnaryOp::BitNot)
+                    && self.is_constant_arith(expr)
+            }
+            TirExprKind::Cast { expr, .. } => self.is_constant_arith(expr),
+            _ => false,
+        }
+    }
+
+    /// The pool value for a tree [`Self::is_constant_arith`] admits, folded
+    /// through the same helpers the optimizer uses.
+    fn constant_arith_in(
+        &self,
+        expr: &TirExpr,
+        pool: &mut ValuePool,
+        type_table: &TypeTable,
+    ) -> Option<ValueId> {
+        let tt = Some(type_table);
+        let v = match &expr.kind {
+            TirExprKind::IntLiteral { value, .. } => {
+                pool.alloc_unshared(ValueKind::Int(*value, expr.type_id), expr.type_id)
+            }
+            TirExprKind::FloatLiteral { value, .. } => pool.alloc_unshared(
+                ValueKind::Float(value.to_bits(), expr.type_id),
+                expr.type_id,
+            ),
+            TirExprKind::BoolLiteral(b) => pool.alloc_unshared(ValueKind::Bool(*b), expr.type_id),
+            TirExprKind::CharLiteral(c) => pool.alloc_unshared(ValueKind::Char(*c), expr.type_id),
+            TirExprKind::Binary { left, op, right } => {
+                let lhs = self.constant_arith_in(left, pool, type_table)?;
+                let rhs = self.constant_arith_in(right, pool, type_table)?;
+                pool.binary_folded(convert_binary_op(*op), lhs, rhs, expr.type_id, tt)
+            }
+            TirExprKind::Unary { op, expr: inner } => {
+                let operand = self.constant_arith_in(inner, pool, type_table)?;
+                pool.unary_folded(convert_unary_op(*op), operand, expr.type_id, tt)
+            }
+            TirExprKind::Cast {
+                expr: inner,
+                target_type,
+            } => {
+                let operand = self.constant_arith_in(inner, pool, type_table)?;
+                pool.cast_folded(operand, *target_type, tt)
+            }
+            _ => return None,
+        };
+        // A folded `Bool` / `Char` carries no width in its kind, so interning
+        // records no type and extraction would have none to read.
+        pool.set_type(v, expr.type_id);
+        Some(v)
     }
 
     /// Which wide-integer struct `type_id` is; `None` for every other type.

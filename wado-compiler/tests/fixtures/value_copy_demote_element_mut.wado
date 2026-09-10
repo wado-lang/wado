@@ -9,6 +9,10 @@
 // `wir_expect:O2 ["array_clone_deep"]` asserts the copy stays deep
 // (demotion correctly refused); the stdout assertion catches the
 // corruption directly: `words[0]` must remain "hi", not "hi!".
+//
+// `black_box` keeps the list off the constant path. A fully constant one
+// folds to its result at compile time, leaving no array to copy and no
+// demotion to refuse — the assertion would then hold vacuously.
 
 use { println, Stdout } from "core:cli";
 
@@ -19,7 +23,8 @@ fn shout_first(words: &List<String>) -> String {
 }
 
 export fn run() with Stdout {
-    let words: List<String> = ["hi", "yo"];
+    let literal: List<String> = ["hi", "yo"];
+    let words: List<String> = builtin::black_box(literal);
     let s = shout_first(&words);
     println(`${s} ${words[0]}`);
 }

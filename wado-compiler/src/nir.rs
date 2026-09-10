@@ -214,6 +214,14 @@ pub enum NirUnaryOp {
     Deref,
 }
 
+impl NirUnaryOp {
+    /// Whether the value pool has a `ValueKind` for this op. A borrow or a
+    /// dereference names a place, and no kind carries one.
+    pub fn is_pooled(self) -> bool {
+        !matches!(self, Self::Ref | Self::MutRef | Self::Deref)
+    }
+}
+
 #[derive(Debug, Clone)]
 pub enum NirLiteralPattern {
     /// Signed integer literal (covers i8, i16, i32, i64, i128)

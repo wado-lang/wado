@@ -4,6 +4,8 @@
 //! per-iteration transitivity from the guard's `i <= H`. A fast arm that is
 //! exactly `a[i] = CONST; i += 1` then collapses to one [`try_fill_idiom`].
 
+use std::ops::ControlFlow;
+
 use crate::nir::{FunctionRef, NirBinaryOp, NirFunction, NirUnaryOp};
 use crate::nir_arena::{ArenaCallArg, BlockId, ExprKind, NodeRef, Operand, StmtId, StmtKind};
 use crate::nir_engine::{Engine, EngineBuffers, Rule};
@@ -12,9 +14,10 @@ use crate::nir_value_graph::ValueKind;
 use crate::tir::TypeTable;
 use crate::token::Span;
 
+use super::arena_query::block_contains_loop;
 use super::condition_implication::{
-    Binds, BoundKey, build_copy_bindings, eliminate_condition, ge_check_operands, is_panic_block,
-    node_modifies, opaque_local, parse_break_guard_head, parse_cmp, parse_var_offset, resolve,
+    Binds, BoundKey, build_copy_bindings, eliminate_condition, ge_check_operands, node_modifies,
+    opaque_local, panic_guard_check, parse_break_guard_head, parse_cmp, parse_var_offset, resolve,
     resolve_panic_ids, stmt_modifies,
 };
 use super::const_branch_prune::{BranchPruneRule, PruneMode};
@@ -159,29 +162,14 @@ fn collect_loops(
         }
         // Recurse into every nested block (loop bodies, if arms, expression
         // blocks) via the generic child walk.
-        let mut stack = vec![NodeRef::Stmt(s)];
-        while let Some(n) = stack.pop() {
+        body.walk_nodes_under::<()>(NodeRef::Stmt(s), |n| {
             if let NodeRef::Block(b) = n {
                 collect_loops(body, b, out);
-                continue;
+                return ControlFlow::Continue(false);
             }
-            body.for_each_child(n, |c| stack.push(c));
-        }
+            ControlFlow::Continue(true)
+        });
     }
-}
-
-/// Whether the subtree under `block` contains a `Loop` statement.
-fn subtree_contains_loop(body: &crate::nir_arena::Body, block: BlockId) -> bool {
-    let mut stack = vec![NodeRef::Block(block)];
-    while let Some(n) = stack.pop() {
-        if let NodeRef::Stmt(s) = n
-            && matches!(body.stmts[s].kind, StmtKind::Loop { .. })
-        {
-            return true;
-        }
-        body.for_each_child(n, |c| stack.push(c));
-    }
-    false
 }
 
 /// Parse the loop-head guard `if !(var CMP bound) { break }` (skipping
@@ -256,29 +244,8 @@ fn collect_checks_in_node(
     var: u32,
     out: &mut Vec<(NodeRef, Operand, u32)>,
 ) {
-    let mut stack = vec![node];
-    while let Some(n) = stack.pop() {
-        let cand = match n {
-            NodeRef::Stmt(s) => match &engine.body.stmts[s].kind {
-                StmtKind::If {
-                    condition,
-                    then_block,
-                    else_block: None,
-                } => Some((*condition, *then_block)),
-                _ => None,
-            },
-            NodeRef::Expr(e) => match &engine.body.exprs[e].kind {
-                ExprKind::If {
-                    condition,
-                    then_branch,
-                    else_branch: None,
-                } => Some((*condition, *then_branch)),
-                _ => None,
-            },
-            NodeRef::Block(_) | NodeRef::Pat(_) => None,
-        };
-        if let Some((cond, then_b)) = cand
-            && is_panic_block(engine, then_b)
+    engine.body.for_each_node_under(node, |n| {
+        if let Some(cond) = panic_guard_check(engine, n)
             && let Some((left, right)) = ge_check_operands(engine, binds, cond)
             && let Some((cvar, cj)) = parse_var_offset(engine, binds, left)
             && cvar == var
@@ -287,8 +254,7 @@ fn collect_checks_in_node(
         {
             out.push((n, cond, b));
         }
-        engine.body.for_each_child(n, |c| stack.push(c));
-    }
+    });
 }
 
 /// Parse an operand as a direct local read, without resolving through copy
@@ -319,7 +285,7 @@ fn analyze_loop(
 ) -> Option<Plan> {
     // Leaf loops only: versioning a loop that contains another loop would
     // clone the inner loop as well, compounding code size.
-    if subtree_contains_loop(engine.body, loop_body) {
+    if block_contains_loop(engine.body, loop_body) {
         return None;
     }
     let (guard_idx, var, h, guard_le) = parse_loop_guard(engine, binds, loop_body)?;
@@ -555,28 +521,23 @@ fn operand_reads_local(engine: &Engine, op: Operand, var: u32) -> bool {
 /// re-definitions need this separate scan. (Fresh NIR mints a new local per
 /// shadowing `let`, so this is a defensive guard against synthesized IR.)
 fn subtree_redefines(engine: &Engine, block: BlockId, locals: &[u32]) -> bool {
-    let mut stack = vec![NodeRef::Block(block)];
-    while let Some(n) = stack.pop() {
-        if let NodeRef::Stmt(s) = n {
+    engine
+        .body
+        .find_in_live_node_under(NodeRef::Block(block), |n| {
+            let NodeRef::Stmt(s) = n else { return None };
             match &engine.body.stmts[s].kind {
-                StmtKind::Let { local_index, .. } => {
-                    if locals.contains(local_index) {
-                        return true;
-                    }
-                }
-                StmtKind::LetDestructure { .. } => return true,
+                StmtKind::Let { local_index, .. } => locals.contains(local_index).then_some(()),
+                StmtKind::LetDestructure { .. } => Some(()),
                 StmtKind::Expr(_)
                 | StmtKind::Return { .. }
                 | StmtKind::If { .. }
                 | StmtKind::Loop { .. }
                 | StmtKind::Break { .. }
                 | StmtKind::Continue
-                | StmtKind::LabeledBlock { .. } => {}
+                | StmtKind::LabeledBlock { .. } => None,
             }
-        }
-        engine.body.for_each_child(n, |c| stack.push(c));
-    }
-    false
+        })
+        .is_some()
 }
 
 /// Collapse a cleaned fast arm — `loop { if !(i CMP H) break; [pure lets];

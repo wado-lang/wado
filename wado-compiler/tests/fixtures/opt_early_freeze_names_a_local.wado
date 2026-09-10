@@ -1,0 +1,40 @@
+// Soundness regression for the early operand freeze (WEP 2026-06-05, "Naming a
+// local, before and after"): before the structural passes, a frozen operand may
+// not name a local.
+//
+// `List::push_within_capacity` is the shape that breaks, and this is the
+// smallest program that reaches it:
+//
+//     let used = self.used;      // one skeleton read, one pooled read
+//     self.repr[used] = value;
+//     self.used = used + 1;      // freeze candidate, names `used`
+//
+// The early freeze plants `used + 1` as a pool value naming `used`. That read
+// has no skeleton node, so a pass counting only skeleton reads sees `used` read
+// once, forwards its binding into that one use, and drops the binding — leaving
+// the pooled operand naming a slot with no definition.
+//
+// The failure is a dropped binding, not a merged value. This fixture is what
+// showed that: the WEP's earlier account read it as one `ValueId` standing for
+// four runtime values, and the reductions that account predicts do not
+// reproduce.
+//
+// Symptom: `used + 1` is computed once, `self.used` stays at 1, and the third
+// push asserts `index out of bounds: index 1, self.used 1`.
+//
+// `black_box` keeps the loop bound off the constant path; with a constant one
+// the loop folds at compile time and there is nothing left to inline.
+
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let n = builtin::black_box(4);
+    let mut xs: List<i32> = List::with_capacity(8);
+    for let mut i = 0; i < n; i += 1 {
+        xs.push_within_capacity(i * 10);
+    }
+    println(`${xs.len()} ${xs[0]} ${xs[1]} ${xs[2]} ${xs[3]}`);
+}
+
+__DATA__
+{ "stdout": "4 0 10 20 30\n" }

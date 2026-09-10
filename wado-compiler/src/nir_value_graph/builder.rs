@@ -1059,20 +1059,18 @@ impl<'a> Builder<'a> {
                 Some(self.pool.binary(op, lhs, rhs, result_type))
             }
             ExprKind::Unary { op, expr: inner } => {
-                // `Ref` / `MutRef` / `Deref` are address-taking / heap-bearing
-                // operations — not pure values. Walk the child (so pure
-                // subtrees still land in `value_of`) but do not assign an id
-                // to this expr.
-                if matches!(op, NirUnaryOp::Ref | NirUnaryOp::MutRef | NirUnaryOp::Deref) {
-                    self.walk_operand(inner);
-                    None
-                } else {
+                if op.is_pooled() {
                     let operand = self.walk_operand(inner)?;
                     let result_type = self.body.exprs[expr].type_id;
                     if let Some(folded) = self.fold_unary_const(op, operand, inner, result_type) {
                         return Some(folded);
                     }
                     Some(self.pool.unary(op, operand, result_type))
+                } else {
+                    // Still walk the child, so pure subtrees under a borrow land
+                    // in `value_of`; only this expr goes unnamed.
+                    self.walk_operand(inner);
+                    None
                 }
             }
             ExprKind::Cast {
@@ -2188,11 +2186,7 @@ fn collect_loop_heap_node(
     if let NodeRef::Expr(e) = node {
         record_loop_heap_write(body, facts, e, eff);
     }
-    let mut kids = Vec::new();
-    body.for_each_child(node, |c| kids.push(c));
-    for c in kids {
-        collect_loop_heap_node(body, facts, c, eff);
-    }
+    body.for_each_child(node, |c| collect_loop_heap_node(body, facts, c, eff));
 }
 
 fn record_loop_heap_write(
@@ -2318,16 +2312,12 @@ fn collect_writes_in_stmt(
             collect_writes_in_operand(body, *value, out, cache);
         }
         _ => {
-            let mut kids = Vec::new();
-            body.for_each_child(NodeRef::Stmt(stmt), |c| kids.push(c));
-            for c in kids {
-                match c {
-                    NodeRef::Expr(e) => collect_writes_in_expr(body, e, out, cache),
-                    NodeRef::Stmt(s) => collect_writes_in_stmt(body, s, out, cache),
-                    NodeRef::Block(b) => collect_writes_in_block(body, b, out, cache),
-                    NodeRef::Pat(p) => collect_writes_in_pattern(body, p, out, cache),
-                }
-            }
+            body.for_each_child(NodeRef::Stmt(stmt), |c| match c {
+                NodeRef::Expr(e) => collect_writes_in_expr(body, e, out, cache),
+                NodeRef::Stmt(s) => collect_writes_in_stmt(body, s, out, cache),
+                NodeRef::Block(b) => collect_writes_in_block(body, b, out, cache),
+                NodeRef::Pat(p) => collect_writes_in_pattern(body, p, out, cache),
+            });
         }
     }
 }

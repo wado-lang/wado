@@ -17,18 +17,14 @@ use crate::nir_engine::Engine;
 use crate::nir_value_graph::{OpaqueSource, ValueId, ValueKind};
 use crate::tir::TypeTable;
 
-/// Every block reachable from the body root, in DFS pop order (a block precedes
-/// the blocks nested under it). The NIR block graph is a tree, so no visited set
-/// is needed.
+/// Every reachable block, each before the blocks nested under it.
 pub(super) fn reachable_blocks(body: &Body) -> Vec<BlockId> {
     let mut out = Vec::new();
-    let mut stack = vec![NodeRef::Block(body.root)];
-    while let Some(node) = stack.pop() {
+    body.for_each_reachable_node(|node| {
         if let NodeRef::Block(b) = node {
             out.push(b);
         }
-        body.for_each_child(node, |c| stack.push(c));
-    }
+    });
     out
 }
 
@@ -354,16 +350,11 @@ fn node_mentions_local(body: &Body, node: NodeRef, idx: u32) -> bool {
 /// nesting. Shared by the inliner (cold-cost) and labeled-block fusion
 /// (unlabeled-break capture guard).
 pub(super) fn block_contains_loop(body: &Body, block: BlockId) -> bool {
-    let mut stack = vec![NodeRef::Block(block)];
-    while let Some(n) = stack.pop() {
-        if let NodeRef::Stmt(s) = n
-            && matches!(body.stmts[s].kind, StmtKind::Loop { .. })
-        {
-            return true;
-        }
-        body.for_each_child(n, |c| stack.push(c));
-    }
-    false
+    body.find_in_live_node_under(NodeRef::Block(block), |n| {
+        matches!(n, NodeRef::Stmt(s) if matches!(body.stmts[s].kind, StmtKind::Loop { .. }))
+            .then_some(())
+    })
+    .is_some()
 }
 
 /// [`is_pure_expr`] for an operand: a promoted constant is pure.
@@ -753,11 +744,7 @@ impl MutRefAliases {
             },
             NodeRef::Block(_) | NodeRef::Pat(_) => {}
         }
-        let mut kids = Vec::new();
-        body.for_each_child(node, |c| kids.push(c));
-        for c in kids {
-            self.build_walk(body, c, borrowed_refs);
-        }
+        body.for_each_child(node, |c| self.build_walk(body, c, borrowed_refs));
     }
 
     /// Record the storage a `&mut place` (or `mut`-flagged argument) may

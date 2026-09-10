@@ -967,15 +967,11 @@ fn walk_expr_for_uses(
         _ => {
             // Pure value-producing expressions: walk every child so nested
             // `Local(tracked)` references are observed by the bare-Local arm.
-            let mut kids = Vec::new();
             body.for_each_child(NodeRef::Expr(expr), |c| {
                 if let NodeRef::Expr(e) = c {
-                    kids.push(e);
+                    walk_expr_for_uses(body, e, cx, invalid, tracked);
                 }
             });
-            for e in kids {
-                walk_expr_for_uses(body, e, cx, invalid, tracked);
-            }
         }
     }
 }

@@ -227,22 +227,19 @@ fn is_forwardable_value(body: &Body, root: ExprId) -> bool {
     if !is_pure_expr(body, root) {
         return false;
     }
-    let mut stack = vec![NodeRef::Expr(root)];
-    while let Some(node) = stack.pop() {
-        if let NodeRef::Expr(id) = node {
-            match &body.exprs[id].kind {
-                ExprKind::Index { .. } | ExprKind::GlobalVarGet { .. } => return false,
-                ExprKind::Binary {
-                    op: NirBinaryOp::Div | NirBinaryOp::Mod,
-                    right,
-                    ..
-                } if !is_safe_const_divisor(body, *right) => return false,
-                _ => {}
-            }
+    body.find_in_live_node_under(NodeRef::Expr(root), |node| {
+        let NodeRef::Expr(id) = node else { return None };
+        match &body.exprs[id].kind {
+            ExprKind::Index { .. } | ExprKind::GlobalVarGet { .. } => Some(()),
+            ExprKind::Binary {
+                op: NirBinaryOp::Div | NirBinaryOp::Mod,
+                right,
+                ..
+            } if !is_safe_const_divisor(body, *right) => Some(()),
+            _ => None,
         }
-        body.for_each_child(node, |c| stack.push(c));
-    }
-    true
+    })
+    .is_none()
 }
 
 /// Whether `divisor` is a constant that makes integer `/` / `%` non-trapping: a
@@ -266,7 +263,12 @@ fn is_safe_const_divisor(body: &Body, divisor: crate::nir_arena::Operand) -> boo
 /// The one value-position read of `local`, or `None` unless it is read exactly
 /// once, never reassigned, and never address-taken (`&x` / `&mut x` cannot
 /// receive a substituted value expression).
-fn sole_value_use(engine: &Engine, local: u32) -> Option<ExprId> {
+fn sole_value_use(engine: &mut Engine, local: u32) -> Option<ExprId> {
+    // A read living in the value pool is invisible to the skeleton mentions
+    // below, and forwarding past it would drop the binding out from under it.
+    if engine.reads_promoted_local(local) {
+        return None;
+    }
     let mut use_id = None;
     for &mention in engine.local_reads(local) {
         if engine.is_assign_target(mention) || is_addressed(engine, mention) || use_id.is_some() {

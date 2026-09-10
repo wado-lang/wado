@@ -5,6 +5,9 @@
 //! [`Rule`] whose `apply_block` fires once and covers every loop in the body.
 
 use std::cell::Cell;
+use std::ops::ControlFlow;
+
+use crate::compiler_trace;
 
 use crate::hashmap::IndexMap;
 use crate::hashmap::IndexSet;
@@ -193,6 +196,7 @@ pub fn apply_licm(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
             params,
             address_taken_locals,
             stores_aliased_locals,
+            name,
             ..
         } = &mut *func;
         let body = body.as_mut().expect("checked above");
@@ -219,6 +223,12 @@ pub fn apply_licm(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
         // document order as the standalone passes — so it still sees the hoisted
         // body.
         let cond_changed = super::condition_implication::eliminate_at_root(&mut engine);
+        if licm_changed || cond_changed {
+            compiler_trace!(
+                "opt_loop",
+                "licm changed {name} (licm={licm_changed} cond={cond_changed})"
+            );
+        }
         licm_changed || cond_changed
     })
 }
@@ -2619,16 +2629,15 @@ fn hoist_invariant_value_operands(
 fn collect_loop_subtree(body: &Body, loop_body: BlockId) -> (Vec<ExprId>, Vec<StmtId>) {
     let mut expr_ids = Vec::new();
     let mut stmt_ids = Vec::new();
-    let mut work = vec![NodeRef::Block(loop_body)];
-    while let Some(node) = work.pop() {
+    body.walk_nodes_under::<()>(NodeRef::Block(loop_body), |node| {
         match node {
             NodeRef::Expr(e) => expr_ids.push(e),
             NodeRef::Stmt(s) => stmt_ids.push(s),
             NodeRef::Block(_) => {}
-            NodeRef::Pat(_) => continue,
+            NodeRef::Pat(_) => return ControlFlow::Continue(false),
         }
-        body.for_each_child(node, |c| work.push(c));
-    }
+        ControlFlow::Continue(true)
+    });
     (expr_ids, stmt_ids)
 }
 

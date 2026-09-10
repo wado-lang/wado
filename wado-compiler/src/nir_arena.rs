@@ -4,6 +4,8 @@
 //! representation, traversal, and cloning; the parent map, use index and edit
 //! API sit on [`crate::nir_engine::Engine`]. See WEP 2026-06-05.
 
+use std::ops::ControlFlow;
+
 use cranelift_entity::{EntityRef, PrimaryMap, entity_impl};
 
 use crate::canonical::CmCallTarget;
@@ -1090,13 +1092,11 @@ impl Body {
 
 /// Structural navigation used by the rewrite engine (parent map + worklist).
 impl Body {
-    /// Collect every local with a live `&local` / `&mut local` in the body.
-    /// The canonical `address_taken_locals` / `stores_aliased_locals` sets
-    /// go stale after `inline` / `ref_elim` copy reference nodes, so
-    /// alias-sensitive consumers union this scan in.
+    /// Every local with a live `&local` / `&mut local`. The canonical
+    /// `address_taken_locals` / `stores_aliased_locals` go stale once `inline` /
+    /// `ref_elim` copy reference nodes, so alias-sensitive consumers union this in.
     pub fn collect_address_taken_locals(&self, out: &mut crate::hashmap::IndexSet<u32>) {
-        let mut stack: Vec<NodeRef> = vec![NodeRef::Block(self.root)];
-        while let Some(node) = stack.pop() {
+        self.for_each_reachable_node(|node| {
             if let NodeRef::Expr(id) = node
                 && let ExprKind::Unary {
                     op: crate::nir::NirUnaryOp::Ref | crate::nir::NirUnaryOp::MutRef,
@@ -1107,7 +1107,169 @@ impl Body {
             {
                 out.insert(*index);
             }
-            self.for_each_child(node, |c| stack.push(c));
+        });
+    }
+
+    /// Invoke `f` on `root` and every node beneath it, parents before children.
+    /// A subtree walk: the whole body is [`Body::for_each_reachable_node`].
+    pub fn for_each_node_under(&self, root: NodeRef, f: impl FnMut(NodeRef)) {
+        debug_assert!(
+            self.blocks.is_empty() || root != NodeRef::Block(self.root),
+            "[NIR] a whole-body walk is `for_each_reachable_node`, which also covers what a \
+             promoted operand names as its extraction source"
+        );
+        self.for_each_skeleton_node(root, f);
+    }
+
+    /// [`Body::for_each_node_under`] without its whole-body check, for the walks
+    /// [`Body::for_each_live_node_under`] is itself made of.
+    fn for_each_skeleton_node(&self, root: NodeRef, mut f: impl FnMut(NodeRef)) {
+        self.walk_nodes_under::<()>(root, |node| {
+            f(node);
+            ControlFlow::Continue(true)
+        });
+    }
+
+    /// [`Body::for_each_node_under`] plus the nodes a promoted operand names as
+    /// its extraction source. Those produce the operand's code, so a walk
+    /// without them calls a live node an orphan.
+    pub fn for_each_live_node_under(&self, root: NodeRef, mut f: impl FnMut(NodeRef)) {
+        if !self.values.has_expr_source() {
+            self.for_each_skeleton_node(root, f);
+            return;
+        }
+        let mut pool_seen: IndexSet<ValueId> = IndexSet::default();
+        let mut sourced: Vec<ExprId> = Vec::new();
+        self.walk_sourcing(root, &mut f, &mut pool_seen, &mut sourced, None);
+        // Only the assertion reads this, and only a body that named a source can
+        // fail it, so nothing else pays the scan or the per-node insert.
+        let mut covered: IndexSet<ExprId> = IndexSet::default();
+        let checking = cfg!(debug_assertions) && !sourced.is_empty();
+        if checking {
+            self.for_each_skeleton_node(root, |node| {
+                if let NodeRef::Expr(e) = node {
+                    covered.insert(e);
+                }
+            });
+        }
+        // A sourced node's own subtree is live too, and may name further
+        // sources; the pool-side visited set bounds the second walk.
+        while let Some(e) = sourced.pop() {
+            debug_assert!(
+                !covered.contains(&e),
+                "[NIR] {e:?} is an extraction source this walk already covered, so \
+                 `reachable_operand_values` counts its slots twice"
+            );
+            self.walk_sourcing(
+                NodeRef::Expr(e),
+                &mut f,
+                &mut pool_seen,
+                &mut sourced,
+                checking.then_some(&mut covered),
+            );
+        }
+    }
+
+    /// Walk `root`'s skeleton subtree into `f`, pushing the extraction sources
+    /// its operands name onto `sourced`. `covered` records what `f` was handed.
+    fn walk_sourcing(
+        &self,
+        root: NodeRef,
+        f: &mut impl FnMut(NodeRef),
+        pool_seen: &mut IndexSet<ValueId>,
+        sourced: &mut Vec<ExprId>,
+        mut covered: Option<&mut IndexSet<ExprId>>,
+    ) {
+        self.for_each_skeleton_node(root, |node| {
+            f(node);
+            if let Some(covered) = covered.as_deref_mut()
+                && let NodeRef::Expr(e) = node
+            {
+                covered.insert(e);
+            }
+            self.for_each_operand(node, |op| {
+                if let Some(v) = op.as_value() {
+                    self.values
+                        .for_each_opaque_expr(v, pool_seen, |e| sourced.push(e));
+                }
+            });
+        });
+    }
+
+    /// The first value `f` gives for `root` or a node beneath it, parents before
+    /// children. `None` when it gives one for none of them.
+    pub fn find_in_nodes_under<T>(
+        &self,
+        root: NodeRef,
+        mut f: impl FnMut(NodeRef) -> Option<T>,
+    ) -> Option<T> {
+        self.walk_nodes_under(root, |node| match f(node) {
+            Some(found) => ControlFlow::Break(found),
+            None => ControlFlow::Continue(true),
+        })
+    }
+
+    /// The first value `f` gives for `root` or a live node beneath it.
+    /// [`Body::find_in_nodes_under`] stops at the first hit; this one walks on.
+    pub fn find_in_live_node_under<T>(
+        &self,
+        root: NodeRef,
+        mut f: impl FnMut(NodeRef) -> Option<T>,
+    ) -> Option<T> {
+        let mut found = None;
+        self.for_each_live_node_under(root, |node| {
+            if found.is_none() {
+                found = f(node);
+            }
+        });
+        found
+    }
+
+    /// Walk `root` and the nodes beneath it, parents before children. `f`
+    /// answers `Continue(true)` to descend into a node's children,
+    /// `Continue(false)` to skip them, or `Break(value)` to stop the walk.
+    ///
+    /// Siblings come in source order. A walk that edits the body as it goes, or
+    /// that descends into some children of a node and not others, keeps its own
+    /// loop: `f` holds `&Body` and cannot mutate through it, and `Continue`
+    /// chooses for all of a node's children at once.
+    ///
+    /// Recursion depth is the body's nesting depth, which every other walk in
+    /// this module already recurses to.
+    pub fn walk_nodes_under<T>(
+        &self,
+        root: NodeRef,
+        mut f: impl FnMut(NodeRef) -> ControlFlow<T, bool>,
+    ) -> Option<T> {
+        match self.walk_node(root, &mut f) {
+            ControlFlow::Break(found) => Some(found),
+            ControlFlow::Continue(()) => None,
+        }
+    }
+
+    fn walk_node<T>(
+        &self,
+        node: NodeRef,
+        f: &mut impl FnMut(NodeRef) -> ControlFlow<T, bool>,
+    ) -> ControlFlow<T, ()> {
+        match f(node) {
+            ControlFlow::Break(found) => return ControlFlow::Break(found),
+            ControlFlow::Continue(false) => return ControlFlow::Continue(()),
+            ControlFlow::Continue(true) => {}
+        }
+        // `for_each_child` cannot stop early, so a break is carried out in a
+        // flag; the siblings after it cost one check each and no descent.
+        let mut broke = None;
+        self.for_each_child(node, |c| {
+            if broke.is_none()
+                && let ControlFlow::Break(found) = self.walk_node(c, f)
+            {
+                broke = Some(found);
+            }
+        });
+        match broke {
+            Some(found) => ControlFlow::Break(found),
+            None => ControlFlow::Continue(()),
         }
     }
 
@@ -1130,11 +1292,7 @@ impl Body {
             }
             return;
         }
-        let mut stack = vec![NodeRef::Block(self.root)];
-        while let Some(node) = stack.pop() {
-            f(node);
-            self.for_each_child(node, |c| stack.push(c));
-        }
+        self.for_each_live_node_under(NodeRef::Block(self.root), f);
     }
 
     /// The distinct promoted values the reachable skeleton carries, and how many
@@ -1154,32 +1312,6 @@ impl Body {
             });
         });
         slots
-    }
-
-    /// Whether *any* operand slot in the arena holds a value naming a local,
-    /// reachable or not — what the reachability-scoped censuses below cannot
-    /// see of a node allocated but not yet spliced in
-    /// (`Engine::census_note_structure`).
-    ///
-    /// Counts orphans too, which nothing can re-attach. Its only wrong answer
-    /// is "recompute the census", never a wrong census.
-    pub fn any_operand_names_a_local(&self) -> bool {
-        let mut found = false;
-        for node in (0..self.exprs.len())
-            .map(|i| NodeRef::Expr(ExprId::new(i)))
-            .chain((0..self.stmts.len()).map(|i| NodeRef::Stmt(StmtId::new(i))))
-            .chain((0..self.pats.len()).map(|i| NodeRef::Pat(PatId::new(i))))
-        {
-            if found {
-                break;
-            }
-            self.for_each_operand(node, |op| {
-                if let Some(v) = op.as_value() {
-                    found |= self.values.names_a_local(v);
-                }
-            });
-        }
-        found
     }
 
     /// Every local a reachable promoted operand reads, unioned into `out`.
@@ -1225,11 +1357,7 @@ impl Body {
                 _ => {}
             }
         }
-        let mut kids = Vec::new();
-        self.for_each_child(node, |c| kids.push(c));
-        for c in kids {
-            self.collect_local_reads_node(c, out);
-        }
+        self.for_each_child(node, |c| self.collect_local_reads_node(c, out));
     }
 
     /// The first of `locals` that still has a reachable read, in the skeleton or

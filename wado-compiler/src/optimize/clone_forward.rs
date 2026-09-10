@@ -116,8 +116,7 @@ fn root_local(body: &Body, expr: ExprId) -> Option<u32> {
 
 /// Accumulate whole-function usage for every local.
 fn collect_usage(body: &Body, usage: &mut IndexMap<u32, Usage>) {
-    let mut stack = vec![NodeRef::Block(body.root)];
-    while let Some(node) = stack.pop() {
+    body.for_each_reachable_node(|node| {
         if let NodeRef::Expr(id) = node {
             match &body.exprs[id].kind {
                 ExprKind::Local { index, .. } => {
@@ -150,8 +149,7 @@ fn collect_usage(body: &Body, usage: &mut IndexMap<u32, Usage>) {
                 _ => {}
             }
         }
-        body.for_each_child(node, |c| stack.push(c));
-    }
+    });
 }
 
 /// Whether a call in the interval can reach the place's root through a channel
@@ -183,11 +181,12 @@ fn stmt_disturbs_place(
     type_table: &TypeTable,
 ) -> bool {
     let mut disturbs = false;
-    let mut stack = vec![NodeRef::Stmt(stmt)];
-    while let Some(node) = stack.pop() {
+    // A node the walk stops at disturbs the place on its own; `disturbs`
+    // accumulates the rest.
+    let stopped = body.find_in_live_node_under(NodeRef::Stmt(stmt), |node| {
         if let NodeRef::Expr(id) = node {
             match &body.exprs[id].kind {
-                ExprKind::GlobalVarSet { .. } => return true,
+                ExprKind::GlobalVarSet { .. } => return Some(()),
                 ExprKind::Assign { target, .. } => {
                     if let PlaceRoot::Local(r) = root {
                         // A direct write to the root, or — once the root is
@@ -216,7 +215,7 @@ fn stmt_disturbs_place(
                     ..
                 } => {
                     if call_disturbs_root(root, address_taken) {
-                        return true;
+                        return Some(());
                     }
                     if let PlaceRoot::Local(r) = root
                         && let Some(receiver) = has_receiver.then(|| args.first()).flatten()
@@ -230,15 +229,15 @@ fn stmt_disturbs_place(
                 }
                 ExprKind::IndirectCall { .. } | ExprKind::CmRawCall { .. } => {
                     if call_disturbs_root(root, address_taken) {
-                        return true;
+                        return Some(());
                     }
                 }
                 _ => {}
             }
         }
-        body.for_each_child(node, |c| stack.push(c));
-    }
-    disturbs
+        None
+    });
+    disturbs || stopped.is_some()
 }
 
 /// Whether a `mut` call argument roots at the local place root.
@@ -259,8 +258,7 @@ fn mut_arg_hits_root(
 /// Locals whose address is taken by a `&mut` borrow anywhere in the function:
 /// a write through such a reference can reach the local without naming it.
 fn collect_address_taken(body: &Body, out: &mut IndexSet<u32>) {
-    let mut stack = vec![NodeRef::Block(body.root)];
-    while let Some(node) = stack.pop() {
+    body.for_each_reachable_node(|node| {
         if let NodeRef::Expr(id) = node
             && let ExprKind::Unary {
                 op: NirUnaryOp::MutRef,
@@ -270,8 +268,7 @@ fn collect_address_taken(body: &Body, out: &mut IndexSet<u32>) {
         {
             out.insert(l);
         }
-        body.for_each_child(node, |c| stack.push(c));
-    }
+    });
 }
 
 /// The `Local { index }` node sitting as the referent of an
@@ -285,8 +282,7 @@ fn find_clone_referent_use(
     index: u32,
     descriptors: &[FunctionRef],
 ) -> Option<ExprId> {
-    let mut stack = vec![NodeRef::Stmt(stmt)];
-    while let Some(node) = stack.pop() {
+    body.find_in_live_node_under(NodeRef::Stmt(stmt), |node| {
         if let NodeRef::Expr(id) = node
             && let ExprKind::Call { func_id, args, .. } = &body.exprs[id].kind
             && is_consuming_clone(*func_id, descriptors)
@@ -302,9 +298,8 @@ fn find_clone_referent_use(
         {
             return Some(ie);
         }
-        body.for_each_child(node, |c| stack.push(c));
-    }
-    None
+        None
+    })
 }
 
 struct Candidate {

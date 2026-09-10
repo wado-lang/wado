@@ -6,8 +6,11 @@
 
 pub mod builder;
 
+use std::ops::ControlFlow;
+
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::nir::{NirBinaryOp, NirUnaryOp};
+use crate::nir_arena::ExprId;
 use crate::tir::{PrimitiveType, TypeId, TypeTable};
 
 /// The constant a [`ValueKind`] denotes, as niri's
@@ -512,6 +515,9 @@ pub struct ValuePool {
     /// scheduled skeleton expression (a call result kept in the skeleton).
     /// Empty for opaques minted without a recorded source.
     opaque_sources: IndexMap<OpaqueId, OpaqueSource>,
+    /// Whether any [`OpaqueSource::Expr`] has ever been recorded. Sticky: an
+    /// over-estimate costs a walk, a stale `false` would skip a live node.
+    expr_sources: bool,
     /// One stable `Opaque(Local idx)` per local, memoized so repeated requests
     /// (e.g. a loop-stability re-seed of a local's reads after maintenance
     /// dropped them) share a single identity — the precondition for matching the
@@ -647,8 +653,16 @@ impl ValuePool {
     pub fn fresh_opaque_with_source(&mut self, source: OpaqueSource) -> ValueId {
         let opaque = OpaqueId(self.next_opaque);
         self.next_opaque += 1;
+        self.expr_sources |= matches!(source, OpaqueSource::Expr(_));
         self.opaque_sources.insert(opaque, source);
         self.intern(ValueKind::Opaque(opaque))
+    }
+
+    /// Whether any operand can name a skeleton-external extraction source. False
+    /// lets a reachability walk stay on the skeleton.
+    #[inline]
+    pub fn has_expr_source(&self) -> bool {
+        self.expr_sources
     }
 
     /// The recorded extraction source of an `Opaque`, if any.
@@ -682,21 +696,11 @@ impl ValuePool {
         if self.child_count(v) == 0 {
             return self.is_local_opaque(v);
         }
-        let mut seen = IndexSet::default();
-        let mut stack = vec![v];
-        while let Some(v) = stack.pop() {
-            if !seen.insert(v) {
-                continue;
-            }
-            if matches!(self.kind(v), ValueKind::Opaque(_)) {
-                if self.is_local_opaque(v) {
-                    return true;
-                }
-                continue;
-            }
-            self.push_value_children(v, &mut stack);
-        }
-        false
+        self.walk_opaques(v, &mut IndexSet::default(), |src, _| match src {
+            Some(OpaqueSource::Local(_)) => ControlFlow::Break(()),
+            _ => ControlFlow::Continue(()),
+        })
+        .is_some()
     }
 
     /// Whether `v` is itself an `Opaque` sourced from a local.
@@ -731,8 +735,37 @@ impl ValuePool {
         }
     }
 
-    /// Push the pure-value children of `v` — the edges both leaf walks follow.
-    /// An `Opaque` is a leaf: it stands for what the graph cannot reconstruct.
+    /// Walk the values reachable from `root`, invoking `f` at each `Opaque`
+    /// leaf with its source. `Break` stops the walk and is its result.
+    ///
+    /// Worklist with a visited set, not recursion: an induction `LoopPhi` is
+    /// self-referential (`body_iter` = `binary(phi, step)`), so a recursive walk
+    /// would not terminate. The visited set bounds it at each canonical id.
+    fn walk_opaques<T>(
+        &self,
+        root: ValueId,
+        seen: &mut IndexSet<ValueId>,
+        mut f: impl FnMut(Option<OpaqueSource>, ValueId) -> ControlFlow<T>,
+    ) -> Option<T> {
+        let mut stack = vec![root];
+        while let Some(v) = stack.pop() {
+            if !seen.insert(v) {
+                continue;
+            }
+            if let ValueKind::Opaque(oid) = self.kind(v) {
+                if let ControlFlow::Break(found) = f(self.opaque_source(*oid), v) {
+                    return Some(found);
+                }
+                continue;
+            }
+            self.push_value_children(v, &mut stack);
+        }
+        None
+    }
+
+    /// Push the pure-value children of `v`, the edges [`Self::walk_opaques`]
+    /// follows. An `Opaque` is a leaf: it stands for what the graph cannot
+    /// reconstruct.
     fn push_value_children(&self, v: ValueId, stack: &mut Vec<ValueId>) {
         match self.kind(v) {
             ValueKind::Binary { lhs, rhs, .. } => {
@@ -772,21 +805,14 @@ impl ValuePool {
             return matches!(self.kind(v), ValueKind::Opaque(oid)
                 if self.opaque_source(*oid) == Some(OpaqueSource::Local(idx)));
         }
-        let mut stack = vec![v];
-        let mut seen: IndexSet<ValueId> = IndexSet::default();
-        while let Some(v) = stack.pop() {
-            if !seen.insert(v) {
-                continue;
+        self.walk_opaques(v, &mut IndexSet::default(), |src, _| {
+            if src == Some(OpaqueSource::Local(idx)) {
+                ControlFlow::Break(())
+            } else {
+                ControlFlow::Continue(())
             }
-            if let ValueKind::Opaque(oid) = self.kind(v) {
-                if self.opaque_source(*oid) == Some(OpaqueSource::Local(idx)) {
-                    return true;
-                }
-                continue;
-            }
-            self.push_value_children(v, &mut stack);
-        }
-        false
+        })
+        .is_some()
     }
 
     /// [`ValuePool::collect_opaque_locals`] carrying its visited set across
@@ -804,6 +830,24 @@ impl ValuePool {
         });
     }
 
+    /// Every expression the value tree at `v` names as an extraction source.
+    /// Those nodes produce this value's code and hang outside the skeleton, so
+    /// a reachability walk that skipped them would call them orphans and let a
+    /// rewrite pass by.
+    pub fn for_each_opaque_expr(
+        &self,
+        v: ValueId,
+        seen: &mut IndexSet<ValueId>,
+        mut f: impl FnMut(ExprId),
+    ) {
+        self.walk_opaques::<()>(v, seen, |src, _| {
+            if let Some(OpaqueSource::Expr(e)) = src {
+                f(e);
+            }
+            ControlFlow::Continue(())
+        });
+    }
+
     /// Every `Opaque(Local)` leaf under `v`, with the leaf's own id — the one
     /// [`Self::type_of`] answers for.
     pub fn for_each_opaque_local(
@@ -812,23 +856,12 @@ impl ValuePool {
         seen: &mut IndexSet<ValueId>,
         mut f: impl FnMut(u32, ValueId),
     ) {
-        // Worklist with a visited set, not recursion: an induction `LoopPhi` is
-        // self-referential (`body_iter` = `binary(phi, step)`), so a recursive walk
-        // would not terminate. The visited set bounds the traversal at each value's
-        // canonical id.
-        let mut stack = vec![v];
-        while let Some(v) = stack.pop() {
-            if !seen.insert(v) {
-                continue;
+        self.walk_opaques::<()>(v, seen, |src, id| {
+            if let Some(OpaqueSource::Local(idx)) = src {
+                f(idx, id);
             }
-            if let ValueKind::Opaque(oid) = self.kind(v) {
-                if let Some(OpaqueSource::Local(idx)) = self.opaque_source(*oid) {
-                    f(idx, v);
-                }
-                continue;
-            }
-            self.push_value_children(v, &mut stack);
-        }
+            ControlFlow::Continue(())
+        });
     }
 
     /// Remap every `OpaqueSource::Local` index through `remap` (old → new), which
@@ -1022,6 +1055,20 @@ impl ValuePool {
         ty: TypeId,
         type_table: Option<&TypeTable>,
     ) -> ValueId {
+        // `false || x` and `true && x` are `x`, either way round: the constant
+        // side decides nothing and the other side is kept, so no evaluation is
+        // dropped. `ValuePool::select` carries the same identity for the form a
+        // short-circuit takes there; without it here, a promoted `false || x`
+        // is a node no skeleton rule can reach and no folding removes.
+        if matches!(op, NirBinaryOp::Or | NirBinaryOp::And) {
+            let neutral = op == NirBinaryOp::And;
+            if self.kind(lhs).as_bool() == Some(neutral) {
+                return rhs;
+            }
+            if self.kind(rhs).as_bool() == Some(neutral) {
+                return lhs;
+            }
+        }
         let folded = type_table.and_then(|tt| {
             let l = self.const_of(lhs, tt)?;
             let r = self.const_of(rhs, tt)?;

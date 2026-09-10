@@ -128,6 +128,15 @@ node .claude/skills/profiling-wado-compiler/scripts/analyze_native_profile.ts \
 - **Kernel syscall names from `atos` are wrong** (shared-cache base
   offset). Read syscall cost via the script's "nearest Rust caller"
   attribution, not the syscall name.
+- **A generic hot spot may be dozens of call sites wearing one name.**
+  Identical monomorphizations are folded to a single address, and the
+  symbolicator reports whichever name sorts first. One pass then appears
+  to own cost that belongs to the whole compiler. A dev build folds 125
+  `Body::for_each_child::<closure>` instantiations onto one address, and
+  it reads as `optimize::drve` at ~10 % self CPU while the `nir/drve`
+  span measures 0.8 %. A span that contradicts the profile is the tell.
+  Before crediting a pass, run `nm target/debug/wado | grep <symbol>`
+  and count how many names share the address.
 - **`addr2line` outermost-frame only.** `-i` (inlined frames) is
   intentionally omitted because addr2line does not emit a per-input
   separator with `-i`, so the output cannot be reliably split back to

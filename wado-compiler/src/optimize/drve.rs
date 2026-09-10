@@ -128,25 +128,21 @@ fn has_only_pure_returns_with_explicit_tail(body: &Body, type_table: &TypeTable)
     // Every return reachable in the body must carry a pure value — a
     // `Return { value: None }` would mean a void exit path, structurally
     // inconsistent for a non-void signature.
-    let mut stack = vec![NodeRef::Block(root)];
-    while let Some(node) = stack.pop() {
-        if let NodeRef::Stmt(s) = node {
-            match &body.stmts[s].kind {
-                StmtKind::Return { value: None } => return false,
-                StmtKind::Return { value: Some(v) } => {
-                    // Voiding the function discards the return value's
-                    // evaluation, so a trapping value must keep the function
-                    // value-returning (the trap is observable).
-                    if !arena_query::is_pure_nontrapping_operand_typed(body, *v, Some(type_table)) {
-                        return false;
-                    }
-                }
-                _ => {}
+    body.find_in_live_node_under(NodeRef::Block(root), |node| {
+        let NodeRef::Stmt(s) = node else { return None };
+        match &body.stmts[s].kind {
+            StmtKind::Return { value: None } => Some(()),
+            // Voiding the function discards the return value's evaluation, so a
+            // trapping value must keep the function value-returning (the trap is
+            // observable).
+            StmtKind::Return { value: Some(v) } => {
+                (!arena_query::is_pure_nontrapping_operand_typed(body, *v, Some(type_table)))
+                    .then_some(())
             }
+            _ => None,
         }
-        body.for_each_child(node, |c| stack.push(c));
-    }
-    true
+    })
+    .is_none()
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -226,15 +222,11 @@ impl ValidateCtx<'_> {
         }
         // Non-Expr stmt: blocks re-enter the drop-position logic; expr / pattern
         // children are use-scanned.
-        let mut kids = Vec::new();
-        body.for_each_child(NodeRef::Stmt(stmt), |c| kids.push(c));
-        for c in kids {
-            match c {
-                NodeRef::Block(b) => self.block(body, b),
-                NodeRef::Expr(_) | NodeRef::Pat(_) => self.scan_node(body, c),
-                NodeRef::Stmt(_) => {}
-            }
-        }
+        body.for_each_child(NodeRef::Stmt(stmt), |c| match c {
+            NodeRef::Block(b) => self.block(body, b),
+            NodeRef::Expr(_) | NodeRef::Pat(_) => self.scan_node(body, c),
+            NodeRef::Stmt(_) => {}
+        });
     }
 
     /// Reject every candidate that appears as a call anywhere in the subtree
@@ -246,11 +238,7 @@ impl ValidateCtx<'_> {
         {
             self.rejected.insert(*func_id);
         }
-        let mut kids = Vec::new();
-        body.for_each_child(node, |c| kids.push(c));
-        for c in kids {
-            self.scan_node(body, c);
-        }
+        body.for_each_child(node, |c| self.scan_node(body, c));
     }
 }
 
@@ -301,15 +289,13 @@ fn apply_drve(project: &mut NirPackage, confirmed: &IndexSet<FnKey>) -> Vec<usiz
 /// Rewrite every reachable `Return { value: Some(_) }` to `Return { value: None }`.
 fn void_returns(body: &mut Body) {
     let mut returns = Vec::new();
-    let mut stack = vec![NodeRef::Block(body.root)];
-    while let Some(node) = stack.pop() {
+    body.for_each_reachable_node(|node| {
         if let NodeRef::Stmt(s) = node
             && matches!(&body.stmts[s].kind, StmtKind::Return { value: Some(_) })
         {
             returns.push(s);
         }
-        body.for_each_child(node, |c| stack.push(c));
-    }
+    });
     for s in returns {
         body.stmts[s].kind = StmtKind::Return { value: None };
     }
@@ -318,16 +304,14 @@ fn void_returns(body: &mut Body) {
 /// Set `type_id` to `Unit` at every call of a confirmed function in the body.
 fn retype_calls(body: &mut Body, confirmed: &IndexSet<FnKey>) -> bool {
     let mut targets = Vec::new();
-    let mut stack = vec![NodeRef::Block(body.root)];
-    while let Some(node) = stack.pop() {
+    body.for_each_reachable_node(|node| {
         if let NodeRef::Expr(id) = node
             && let ExprKind::Call { func_id, .. } = &body.exprs[id].kind
             && confirmed.contains(func_id)
         {
             targets.push(id);
         }
-        body.for_each_child(node, |c| stack.push(c));
-    }
+    });
     let changed = !targets.is_empty();
     for id in targets {
         body.exprs[id].type_id = TypeTable::UNIT;
