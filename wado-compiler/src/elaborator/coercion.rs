@@ -6,7 +6,7 @@ use super::util;
 use crate::ast::{self, Expr, Literal, UnaryOp};
 use crate::compiler_host::CompilerHost;
 use crate::hashmap::IndexSet;
-use crate::tir::{ResolvedType, TypeId};
+use crate::tir::{ResolvedType, TypeId, TypeTable};
 
 /// Whether `expr` is a literal — the only position implicit conversion reaches
 /// (WEP 2026-08-24). A template string, a variable, and a call are not.
@@ -33,8 +33,7 @@ pub(super) enum NumericLiteralKind<'a> {
 pub(super) struct NumericLiteral<'a> {
     pub(super) kind: NumericLiteralKind<'a>,
     pub(super) lit: &'a ast::LiteralExpr,
-    /// The `-` wrapper of a negated literal. Only a [`NumericLiteralKind::Number`]
-    /// has one — there is no negated byte literal.
+    /// The `-` wrapper of a negated literal.
     pub(super) neg: Option<&'a ast::UnaryExpr>,
 }
 
@@ -43,11 +42,13 @@ pub(super) struct NumericLiteral<'a> {
 /// The single enumeration of these shapes. Everything that asks "does this
 /// operand take its type from the other one?" — operand ordering in
 /// `resolve_binary_operands_with_coercion` and in `reify_binary`, range
-/// endpoints, block-tail retargeting — and every arm of
+/// endpoints, block-tail retargeting, type-arg inference — and every arm of
 /// [`Elaborator::try_coerce_numeric_literal_inner`] reads it, so a shape
-/// cannot be coercible to one walk and already-typed to another. It was two
+/// cannot be coercible to one walk and already-typed to another. It was three
 /// enumerations, and they drifted: `b'0'` retargeted but did not count as a
-/// literal for ordering, so `48 <= b` type-checked and `b'0' <= b` did not.
+/// literal for ordering or inference, so `48 <= b` type-checked and
+/// `b'0' <= b` did not, and `pick(x, 65)` inferred where `pick(x, b'A')` did
+/// not.
 ///
 /// The non-numeric arms are enumerated rather than caught by `_`, so a new
 /// [`Expr`] variant forces a decision here.
@@ -117,7 +118,7 @@ pub(super) fn is_numeric_literal_expr(expr: &Expr) -> bool {
 /// Whether `expr` is a byte literal. Among numeric literals it is the one that
 /// arrives with a type of its own, so it settles a pair that has no other
 /// anchor.
-pub(super) fn is_byte_literal_expr(expr: &Expr) -> bool {
+fn is_byte_literal_expr(expr: &Expr) -> bool {
     matches!(
         classify_numeric_literal(expr),
         Some(NumericLiteral {
@@ -125,6 +126,56 @@ pub(super) fn is_byte_literal_expr(expr: &Expr) -> bool {
             ..
         })
     )
+}
+
+/// Whether a numeric literal can be `target`, i.e. whether handing it down as
+/// an expected type says anything. The type surrounding an operation is not
+/// the type of its operands: a comparison's is `bool`, which types neither
+/// side of `b'\n' == 10`.
+pub(super) fn is_numeric_literal_target(tt: &TypeTable, target: TypeId) -> bool {
+    // `i128` / `u128` are structs, so `is_numeric` does not see them.
+    tt.is_numeric(target)
+        || matches!(tt.get(target), ResolvedType::Struct { def, .. }
+            if matches!(tt.struct_head_name(*def).as_str(), "i128" | "u128"))
+}
+
+/// How a pair of operands, both numeric literals, orders its resolution.
+pub(super) enum LiteralPairOrder {
+    /// Nothing distinguishes the two: resolve both against the carried hint,
+    /// which is `None` when the surrounding type says nothing to a literal.
+    Together(Option<TypeId>),
+    /// Resolve the left first and type the right from it.
+    LeftAnchors,
+    /// Resolve the right first and type the left from it.
+    RightAnchors,
+}
+
+/// Order the resolution of two numeric literals — the one case where neither
+/// operand can take its type from the other by default.
+///
+/// A type from outside the operation wins when a literal can be it. Failing
+/// that, a byte literal anchors the pair: `b'A'` is `u8`-valued where a decimal
+/// literal carries no type of its own, so `b'\n' == 10` compares two `u8`s.
+///
+/// Every walk that types one operand from the other reads this — binary
+/// operands in `resolve_binary_operands_with_coercion` and in `reify_binary`,
+/// range endpoints — so a pair cannot anchor one way on one walk and another
+/// way on the next.
+pub(super) fn numeric_literal_pair_order(
+    tt: &TypeTable,
+    left: &Expr,
+    right: &Expr,
+    context: Option<TypeId>,
+) -> LiteralPairOrder {
+    let hint = context.filter(|&t| is_numeric_literal_target(tt, t));
+    if hint.is_some() {
+        return LiteralPairOrder::Together(hint);
+    }
+    match (is_byte_literal_expr(left), is_byte_literal_expr(right)) {
+        (true, false) => LiteralPairOrder::LeftAnchors,
+        (false, true) => LiteralPairOrder::RightAnchors,
+        _ => LiteralPairOrder::Together(None),
+    }
 }
 
 impl<H: CompilerHost> Elaborator<'_, H> {
@@ -166,39 +217,35 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         target_type: TypeId,
     ) -> Option<TypeId> {
         let NumericLiteral { kind, lit, neg } = classify_numeric_literal(expr)?;
+        // The same set of targets the three dispatches below cover, named once
+        // so the ordering walks can ask the question without running this.
+        if !is_numeric_literal_target(&self.tysys.type_table.borrow(), target_type) {
+            return None;
+        }
         // A range or parse complaint about a negated literal points at the `-`
         // too; only the raw parse failure stays on the literal alone.
         let whole_span = neg.map_or(lit.span, |unary| unary.span);
         let sign = if neg.is_some() { "-" } else { "" };
 
+        // A byte literal reaches every target an integer literal does, by its
+        // decimal spelling: `b'A'` is `65` in `u8`, `f64` and `i128` alike.
+        let byte_repr;
         let repr = match kind {
             NumericLiteralKind::Byte(raw) => {
-                if !self.tysys.type_table.borrow().is_integer(target_type) {
-                    return None;
-                }
-                return Some(match util::unescape_byte(raw) {
+                assert!(neg.is_none(), "there is no negated byte literal");
+                match util::unescape_byte(raw) {
                     Ok(byte) => {
-                        if let Some(err_msg) = util::check_int_range_positive(
-                            u128::from(byte),
-                            target_type,
-                            &self.tysys.type_table.borrow(),
-                            &byte.to_string(),
-                        ) {
-                            let _ = self.emit(TypeError::InvalidLiteral {
-                                message: err_msg,
-                                span: lit.span,
-                            });
-                        }
-                        target_type
+                        byte_repr = byte.to_string();
+                        byte_repr.as_str()
                     }
                     Err(message) => {
                         let _ = self.emit(TypeError::InvalidLiteral {
                             message,
                             span: lit.span,
                         });
-                        target_type
+                        return Some(target_type);
                     }
-                });
+                }
             }
             NumericLiteralKind::Number(repr) => repr,
         };
@@ -253,7 +300,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             });
         }
 
-        // `i128` / `u128` are structs, so they reach neither test above.
+        // What is left is `i128` / `u128`: structs, so they reach neither test
+        // above, and the gate admits no other struct.
         if !util::is_float_only_literal(repr) {
             let struct_name = match self.tysys.type_table.borrow().get(target_type) {
                 ResolvedType::Struct { def, .. } => {
@@ -283,6 +331,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
 
+        // A float-only literal at a wide integer, or a negated one at `u128`.
         None
     }
 

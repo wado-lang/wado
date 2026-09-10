@@ -8,7 +8,7 @@ use crate::tir::{FunctionRef, PrimitiveType, ResolvedType, TypeId, TypeTable};
 use crate::token::Span;
 
 use super::Elaborator;
-use super::coercion::{is_byte_literal_expr, is_numeric_literal_expr};
+use super::coercion::{LiteralPairOrder, is_numeric_literal_expr, numeric_literal_pair_order};
 use super::method_lookup::REPLACE_ON_ASSIGN_PLACE;
 use super::types::{FunctionContext, ResolvedTraitMethod, TypeError};
 use super::tysys::TypeSystem;
@@ -123,24 +123,28 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let right = self.resolve_expr(right_ast, ctx, coerce_type);
             (left, right)
         } else if left_is_numeric_literal && right_is_numeric_literal {
-            // Both literals: the expected type from context (an assignment
-            // target) types both. Failing that, a byte literal types the other
-            // side — `b'A'` is `u8`-valued where a decimal literal carries no
-            // type of its own — so `b'\n' == 10` compares two `u8`s.
-            let left_is_byte = is_byte_literal_expr(left_ast);
-            let right_is_byte = is_byte_literal_expr(right_ast);
-            if expected_type.is_some() || left_is_byte == right_is_byte {
-                let left = self.resolve_expr(left_ast, ctx, expected_type);
-                let right = self.resolve_expr(right_ast, ctx, expected_type);
-                (left, right)
-            } else if left_is_byte {
-                let left = self.resolve_expr(left_ast, ctx, None);
-                let right = self.resolve_expr(right_ast, ctx, Some(left));
-                (left, right)
-            } else {
-                let right = self.resolve_expr(right_ast, ctx, None);
-                let left = self.resolve_expr(left_ast, ctx, Some(right));
-                (left, right)
+            let order = numeric_literal_pair_order(
+                &self.tysys.type_table.borrow(),
+                left_ast,
+                right_ast,
+                expected_type,
+            );
+            match order {
+                LiteralPairOrder::Together(hint) => {
+                    let left = self.resolve_expr(left_ast, ctx, hint);
+                    let right = self.resolve_expr(right_ast, ctx, hint);
+                    (left, right)
+                }
+                LiteralPairOrder::LeftAnchors => {
+                    let left = self.resolve_expr(left_ast, ctx, None);
+                    let right = self.resolve_expr(right_ast, ctx, Some(left));
+                    (left, right)
+                }
+                LiteralPairOrder::RightAnchors => {
+                    let right = self.resolve_expr(right_ast, ctx, None);
+                    let left = self.resolve_expr(left_ast, ctx, Some(right));
+                    (left, right)
+                }
             }
         } else if self.tysys.is_null_literal(right_ast) && !self.tysys.is_null_literal(left_ast) {
             // `expr == null`: resolve the non-null side first and feed its

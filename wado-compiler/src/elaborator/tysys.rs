@@ -241,7 +241,6 @@ impl TypeSystem {
     pub(crate) fn is_null_literal(&self, expr: &Expr) -> bool {
         matches!(expr, Expr::Literal(lit) if matches!(lit.value, Literal::Null))
     }
-
 }
 
 /// The trait `op` dispatches through and the method it calls, or `None` for

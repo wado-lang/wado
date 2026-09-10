@@ -16,7 +16,7 @@ use crate::token::Span;
 
 use super::Elaborator;
 use super::call::turbofish_holes;
-use super::coercion::is_numeric_literal_expr;
+use super::coercion::{LiteralPairOrder, is_numeric_literal_expr, numeric_literal_pair_order};
 use super::infer::InferCtx;
 use super::instantiate::Instantiation;
 use super::typecheck::{TypeCheckResult, check_assignable};
@@ -5344,7 +5344,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let start_is_literal = is_numeric_literal_expr(&range.start);
         let end_is_literal = is_numeric_literal_expr(&range.end);
 
-        let (start, end) = if start_is_literal && !end_is_literal {
+        let end_anchors = if start_is_literal && end_is_literal {
+            // A range carries no expected type, so only a byte endpoint can
+            // settle `0..=b'z'`.
+            let order = numeric_literal_pair_order(
+                &self.tysys.type_table.borrow(),
+                &range.start,
+                &range.end,
+                None,
+            );
+            matches!(order, LiteralPairOrder::RightAnchors)
+        } else {
+            start_is_literal
+        };
+
+        let (start, end) = if end_anchors {
             let end = self.resolve_expr(&range.end, ctx, None);
             let start = self.resolve_expr(&range.start, ctx, Some(end));
             (start, end)
