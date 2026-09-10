@@ -17210,6 +17210,10 @@ fn "$value_copy$core:prelude/slice.wado/Slice<u8>"(v: Slice<u8>) -> Slice<u8> {
     return Slice<u8> { repr: v.repr, start: v.start, end: v.end };
 }
 
+fn "$value_copy$core:prelude/slice.wado/SliceValueIter<u8>"(v: SliceValueIter<u8>) -> SliceValueIter<u8> {
+    return SliceValueIter<u8> { repr: v.repr, index: v.index, end: v.end };
+}
+
 fn "$value_copy$[core:prelude/traits.wado/VariantCase<core:prelude/types.wado/Result<core:prelude/string.wado/String,core:prelude/string.wado/String>,core:prelude/string.wado/String>,core:prelude/traits.wado/VariantCase<core:prelude/types.wado/Result<core:prelude/string.wado/String,core:prelude/string.wado/String>,core:prelude/string.wado/String>]"(v: [VariantCase<core:prelude/types.wado/Result<core:prelude/string.wado/String,core:prelude/string.wado/String>,core:prelude/string.wado/String>, VariantCase<core:prelude/types.wado/Result<core:prelude/string.wado/String,core:prelude/string.wado/String>,core:prelude/string.wado/String>]) -> [VariantCase<core:prelude/types.wado/Result<core:prelude/string.wado/String,core:prelude/string.wado/String>,core:prelude/string.wado/String>, VariantCase<core:prelude/types.wado/Result<core:prelude/string.wado/String,core:prelude/string.wado/String>,core:prelude/string.wado/String>] {
     return [core:prelude/traits.wado/VariantCase<core:prelude/types.wado/Result<core:prelude/string.wado/String,core:prelude/string.wado/String>,core:prelude/string.wado/String>,core:prelude/traits.wado/VariantCase<core:prelude/types.wado/Result<core:prelude/string.wado/String,core:prelude/string.wado/String>,core:prelude/string.wado/String>] { 0: "mess_dirty.wado::$value_copy$core:prelude/traits.wado/VariantCase<core:prelude/types.wado/Result<core:prelude/string.wado/String,core:prelude/string.wado/String>,core:prelude/string.wado/String>"(v.0), 1: "mess_dirty.wado::$value_copy$core:prelude/traits.wado/VariantCase<core:prelude/types.wado/Result<core:prelude/string.wado/String,core:prelude/string.wado/String>,core:prelude/string.wado/String>"(v.1) };
 }
@@ -17220,10 +17224,6 @@ fn "$value_copy$core:prelude/traits.wado/VariantCase<core:prelude/types.wado/Res
 
 fn "$value_copy$Array<u64>"(v: Array<u64>) -> Array<u64> {
     return core::builtin::array_clone::<u64>(&v);
-}
-
-fn "$value_copy$core:prelude/list.wado/List<core:prelude/string.wado/String>"(v: List<String>) -> List<String> {
-    return List<core:prelude/string.wado/String> { repr: core::builtin::array_clone_prefix::<String>(&v.repr, v.used), used: v.used };
 }
 
 fn "$value_copy$[f64,f64]"(v: [f64, f64]) -> [f64, f64] {
@@ -17408,6 +17408,10 @@ fn "$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"
         Some(__vc_payload_0) => Option<String>::Some("mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(__vc_payload_0)),
         None => v,
     };
+}
+
+fn "$value_copy$core:prelude/list.wado/List<core:prelude/string.wado/String>"(v: List<String>) -> List<String> {
+    return List<core:prelude/string.wado/String> { repr: core::builtin::array_clone_prefix::<String>(&v.repr, v.used), used: v.used };
 }
 
 fn "$value_copy$core:prelude/slice.wado/SliceValueIter<core:prelude/string.wado/String>"(v: SliceValueIter<core:prelude/string.wado/String>) -> SliceValueIter<core:prelude/string.wado/String> {

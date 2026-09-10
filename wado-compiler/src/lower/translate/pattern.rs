@@ -263,23 +263,6 @@ struct PatternLowerer<'a> {
     owned_temps: IndexSet<u32>,
 }
 
-/// `PatternLowerer::place_is_writable` must read the same grammar: a shape only
-/// this one admits is a place nobody asks about.
-fn is_place(expr: &TirExpr) -> bool {
-    match &expr.kind {
-        TirExprKind::Local { .. } => true,
-        TirExprKind::FieldAccess { expr: inner, .. }
-        | TirExprKind::VariantPayload { expr: inner, .. }
-        | TirExprKind::Index { expr: inner, .. }
-        | TirExprKind::Cast { expr: inner, .. }
-        | TirExprKind::Unary {
-            op: TirUnaryOp::Ref | TirUnaryOp::MutRef | TirUnaryOp::Deref,
-            expr: inner,
-        } => is_place(inner),
-        _ => false,
-    }
-}
-
 /// Such a binding aliases the place it reads, so it must read one nothing can
 /// write.
 fn binds_by_value(pattern: &TirPattern, type_table: &TypeTable) -> bool {
@@ -1612,7 +1595,7 @@ impl<'a> PatternLowerer<'a> {
                     arms,
                     ..
                 } = &mut expr.kind
-                    && (!is_place(scrutinee)
+                    && (!place::is_place(scrutinee)
                         || self.needs_owned_scrutinee(scrutinee, arms, type_table))
                 {
                     let temp_let = self.bind_scrutinee_to_temp(scrutinee, type_table, stmt.span);
@@ -1739,17 +1722,6 @@ impl<'a> PatternLowerer<'a> {
                 .locals
                 .get(*index as usize)
                 .is_none_or(|local| local.is_mut),
-            TirExprKind::FieldAccess { expr: inner, .. }
-            | TirExprKind::VariantPayload { expr: inner, .. }
-            | TirExprKind::Index { expr: inner, .. }
-            | TirExprKind::Cast { expr: inner, .. }
-            | TirExprKind::Unary {
-                op: TirUnaryOp::Ref | TirUnaryOp::MutRef | TirUnaryOp::Deref,
-                expr: inner,
-            } => {
-                place::is_reference(inner.type_id, type_table)
-                    || self.place_is_writable(inner, type_table)
-            }
             // `xs[0]` is `xs.index_value(0)` by now, and such an accessor hands
             // back a piece of its receiver.
             TirExprKind::Call { func, args, .. }
@@ -1760,7 +1732,10 @@ impl<'a> PatternLowerer<'a> {
                 args.first()
                     .is_some_and(|a| self.place_is_writable(&a.expr, type_table))
             }
-            _ => false,
+            _ => place::projection_base(expr).is_some_and(|inner| {
+                place::is_reference(inner.type_id, type_table)
+                    || self.place_is_writable(inner, type_table)
+            }),
         }
     }
 

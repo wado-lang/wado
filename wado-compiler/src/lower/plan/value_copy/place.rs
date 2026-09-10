@@ -5,10 +5,12 @@
 use super::funcset::{FuncKeyMap, FuncKeySet};
 use super::needs_value_copy;
 use super::ownership::BuiltinDeclarations;
+use crate::compiler_item::{CompilerItem, CompilerItems};
 use crate::hashmap::IndexMap;
+use crate::name::FqTraitName;
 use crate::tir::{
-    ResolvedType, TirExpr, TirExprKind, TirFunction, TirParam, TirPattern, TirStmt, TirStmtKind,
-    TirUnaryOp, TypeId, TypeTable,
+    FunctionRef, ResolvedType, TirExpr, TirExprKind, TirFunction, TirParam, TirPattern, TirStmt,
+    TirStmtKind, TirUnaryOp, TypeId, TypeTable, matches_builtin,
 };
 use crate::tir_visitor::TirRefVisitor;
 
@@ -425,21 +427,102 @@ impl<'a> Resolver<'a> {
     }
 }
 
+/// The expression a place projection is taken over, or `None` for anything
+/// else. Names the node set every place walk here shares.
+#[must_use]
+pub fn projection_base(expr: &TirExpr) -> Option<&TirExpr> {
+    match &expr.kind {
+        TirExprKind::FieldAccess { expr: inner, .. }
+        | TirExprKind::VariantPayload { expr: inner, .. }
+        | TirExprKind::Index { expr: inner, .. }
+        | TirExprKind::Cast { expr: inner, .. }
+        | TirExprKind::Unary {
+            op: TirUnaryOp::Ref | TirUnaryOp::MutRef | TirUnaryOp::Deref,
+            expr: inner,
+        } => Some(inner),
+        _ => None,
+    }
+}
+
+/// Whether this is a local or a projection over one — the shapes the TIR itself
+/// spells as a place. Every other is something built.
+#[must_use]
+pub fn is_place(expr: &TirExpr) -> bool {
+    place_walk(expr, None)
+}
+
+/// [`is_place`] over the source's wider place grammar — a global reads as
+/// `GlobalVarGet`, `a[i]` as a call to the indexing accessor. What a `&mut self`
+/// receiver is asked, since only a place may write through to the caller.
+#[must_use]
+pub fn is_source_place(expr: &TirExpr, items: &CompilerItems) -> bool {
+    place_walk(expr, Some(items))
+}
+
+fn place_walk(expr: &TirExpr, source_forms: Option<&CompilerItems>) -> bool {
+    match &expr.kind {
+        TirExprKind::Local { .. } => true,
+        TirExprKind::GlobalVarGet { .. } => source_forms.is_some(),
+        TirExprKind::Call { func, args, .. } => source_forms.is_some_and(|items| {
+            is_index_accessor(func, items)
+                && args
+                    .first()
+                    .is_some_and(|a| place_walk(&a.expr, source_forms))
+        }),
+        _ => projection_base(expr).is_some_and(|inner| place_walk(inner, source_forms)),
+    }
+}
+
+/// Whether this callee is what `a[i]` dispatches to: the `Index*` trait method,
+/// or the `array_get_*` builtin under it. Both take the container as `args[0]`.
+fn is_index_accessor(func: &FunctionRef, items: &CompilerItems) -> bool {
+    if func.module_source.is_core_builtin() {
+        return [
+            "array_get_value",
+            "array_get_value_u8",
+            "array_get_ref",
+            "array_get_ref_mut",
+        ]
+        .iter()
+        .any(|b| matches_builtin(&func.name, func.monomorph_info.as_ref(), b));
+    }
+    // By `DefId`: the method's trait carries this impl's type arguments
+    // (`IndexValue<i32>`), which the item's own name does not.
+    let Some(declared) = func
+        .method_info
+        .as_ref()
+        .and_then(|m| m.trait_name.as_ref())
+        .and_then(FqTraitName::canonical)
+    else {
+        return false;
+    };
+    [
+        CompilerItem::IndexValue,
+        CompilerItem::IndexRef,
+        CompilerItem::IndexRefMut,
+    ]
+    .iter()
+    .any(|item| {
+        items
+            .trait_fq_opt(*item)
+            .and_then(|fq| fq.canonical())
+            .is_some_and(|item_def| item_def == declared)
+    })
+}
+
 /// The root local a place expression is taken over. Needs no types, so a
 /// consumer wanting only the root needs no resolver.
 #[must_use]
 pub fn place_root(expr: &TirExpr) -> Option<u32> {
     match &expr.kind {
         TirExprKind::Local { index, .. } => Some(*index),
-        TirExprKind::FieldAccess { expr: inner, .. }
-        | TirExprKind::VariantPayload { expr: inner, .. }
-        | TirExprKind::Index { expr: inner, .. }
-        | TirExprKind::Cast { expr: inner, .. }
-        | TirExprKind::Unary {
-            op: TirUnaryOp::Ref | TirUnaryOp::MutRef,
-            expr: inner,
-        } => place_root(inner),
-        _ => None,
+        // A deref leaves the root's own storage for whatever it points at, which
+        // is no local of this body.
+        TirExprKind::Unary {
+            op: TirUnaryOp::Deref,
+            ..
+        } => None,
+        _ => place_root(projection_base(expr)?),
     }
 }
 

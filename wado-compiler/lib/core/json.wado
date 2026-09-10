@@ -1457,7 +1457,7 @@ impl JsonDeserializer {
                 ));
             }
             let v = n.digits as i64;
-            return Result::Ok(if n.neg { -v } else { v } as i32);
+            return Result::Ok((if n.neg { -v } else { v }) as i32);
         }
         // Decimal point or exponent — reconstruct via f64 (e.g. 1e2 → 100).
         let v = checked_int_f64(

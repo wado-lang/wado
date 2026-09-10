@@ -16,6 +16,7 @@ use std::rc::Rc;
 
 use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
+use crate::lower::plan::value_copy::place;
 use crate::lower::plan::{LowerPlan, closure, value_copy};
 use crate::name::{FqTypeName, LocalMethodName, MethodName};
 use cranelift_entity::EntityRef;
@@ -39,7 +40,7 @@ use crate::tir::{
     TirEnumCase, TirExpr, TirExprKind, TirField, TirFlags, TirFlagsMember, TirFunction, TirGlobal,
     TirImport, TirLiteralPattern, TirLocal, TirMatchArm, TirParam, TirPattern, TirStmt,
     TirStmtKind, TirStruct, TirStructField, TirStructPatternField, TirTest, TirTypeParam,
-    TirUnaryOp, TirVariantCase, TirVariantDecl, TypeTable,
+    TirUnaryOp, TirVariantCase, TirVariantDecl, TypeTable, receiver_value,
 };
 use crate::token::Span;
 
@@ -396,7 +397,7 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
         // expression names: the ownership walk and the reference-root table.
         let (ownership, ref_targets) = if needs_copy_analysis {
             let type_table = base.type_table.borrow();
-            let resolver = value_copy::place::Resolver::new(
+            let resolver = place::Resolver::new(
                 func,
                 &type_table,
                 &base.value_copy.return_paths,
@@ -2375,17 +2376,51 @@ impl FunctionTranslator<'_, '_> {
     }
 
     /// Convert a method call's receiver. It occupies `args[0]` like any other
-    /// argument but is a *place*: wrapping it in `$value_copy$T` would hand the
-    /// callee a throwaway copy and discard the mutation the call exists to
-    /// perform (a `String` builder's `push_str` would append to the copy). Nor
-    /// may it be re-wrapped as a canonical closure the way a specialized
-    /// fn-param argument is — the method resolved against the receiver's own
-    /// type, not `fn(...)`.
+    /// argument, but a place receiver takes no `$value_copy$T`: the copy would
+    /// hand the callee a throwaway and discard the mutation the call exists to
+    /// perform (a `String` builder's `push_str` would append to the copy). One
+    /// that is not a place names no storage the caller can reach again, so a
+    /// `&mut self` call must not write through it to whatever it was read out
+    /// of — there it takes the copy every by-value argument takes.
+    ///
+    /// Either way it is never re-wrapped as a canonical closure the way a
+    /// specialized fn-param argument is: the method resolved against the
+    /// receiver's own type, not `fn(...)`.
     fn convert_receiver_arg(&self, receiver: &TirExpr, is_mut: bool) -> ArenaCallArg {
-        ArenaCallArg {
-            expr: self.convert_operand(receiver),
-            is_mut,
+        let value = receiver_value(receiver);
+        let names_a_place =
+            place::is_source_place(value, self.base.type_table.borrow().compiler_items());
+        if !is_mut || names_a_place || !self.should_wrap_value_copy(value) {
+            return ArenaCallArg {
+                expr: self.convert_operand(receiver),
+                is_mut,
+            };
         }
+        let copied = self.wrap_value_copy_operand(self.convert_operand(value), value.type_id);
+        let expr = match &receiver.kind {
+            // Re-take the elaborator's auto-reference over the copy, in the two
+            // shapes `try_boxing_ref` builds: a `Box<T>` wrapper for a boxed
+            // referent, a plain reference otherwise. Its `&local` collapse
+            // cannot apply, a local being a place.
+            TirExprKind::Unary {
+                op: op @ (TirUnaryOp::Ref | TirUnaryOp::MutRef),
+                ..
+            } => match self.base.box_plan.box_struct_types.get(&value.type_id) {
+                Some(&box_type) => self.wrap_in_box(copied, box_type, value.span).into(),
+                None => self
+                    .alloc_expr(
+                        ExprKind::Unary {
+                            op: convert_unary_op(*op),
+                            expr: copied,
+                        },
+                        receiver.type_id,
+                        receiver.span,
+                    )
+                    .into(),
+            },
+            _ => copied,
+        };
+        ArenaCallArg { expr, is_mut }
     }
 
     /// Convert one call argument, wrapping it in `$value_copy$T` unless

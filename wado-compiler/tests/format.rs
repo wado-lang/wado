@@ -1151,6 +1151,29 @@ fn test_format_matches_scrutinee_keeps_parens() {
     assert_format_preserves_ast("fn run() -> bool {\n    return !x matches { Some(_) };\n}\n");
 }
 
+/// A block form under a postfix operator keeps its parens. Dropping them re-reads
+/// the `match` / `if` / `{` / `LABEL:` as the statement itself, leaving the postfix
+/// nothing to attach to — a parse error, not a different expression.
+#[test]
+fn test_format_block_form_postfix_base_keeps_parens() {
+    for source in [
+        "fn run() {\n    (match c { true => a, false => b }).bump();\n}\n",
+        "fn run() {\n    (if c { a } else { b }).bump();\n}\n",
+        "fn run() {\n    (pick: {\n        break pick: a;\n    }).bump();\n}\n",
+        "fn run() {\n    (match c { true => a, false => b }).field = 1;\n}\n",
+        "fn run() {\n    (if c { a } else { b })[0].bump();\n}\n",
+    ] {
+        assert_format_preserves_ast(source);
+        let formatted = wado_compiler::format(source).expect("format failed");
+        assert!(
+            formatted.contains("(match")
+                || formatted.contains("(if")
+                || formatted.contains("(pick"),
+            "a block form under a postfix operator lost its parens:\n{formatted}"
+        );
+    }
+}
+
 /// A trailing comment after a generic-typed (`Foo<...>`) variant case or
 /// struct field used to be dropped (the generic span stopped at the name,
 /// so an inner type-arg stole comment ownership). Regression guard.
