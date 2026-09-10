@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1789037951501,
+  "lastUpdate": 1789074306480,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -54617,6 +54617,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/4e1f2c9f0b55b2a0a6ef8f470705cf318b1ee062"
         },
         "date": 1789037951179,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 2013,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6560,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18971,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 288933,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "6925ce33b74c6463113150c65125146c1e7c0fcf",
+          "message": "Merge pull request #2016 from wado-lang/perf-json-skip-whitespace-byte\n\nperf(json): 13% faster json-catalog deserialize, and byte literals that type-check like integers",
+          "timestamp": "2026-09-11T05:48:44+09:00",
+          "tree_id": "c83a329d7ff98315c7e2714c935786b06191562f",
+          "url": "https://github.com/wado-lang/wado/commit/6925ce33b74c6463113150c65125146c1e7c0fcf"
+        },
+        "date": 1789074306171,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
