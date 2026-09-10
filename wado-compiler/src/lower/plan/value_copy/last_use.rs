@@ -235,11 +235,11 @@ struct Mutation {
     live: IndexSet<u32>,
 }
 
-/// Whether the write `m` can never change the value read at `read`.
+/// Whether `m` can never change the value read at `read`. Establishes the
+/// common root [`disjoint`] assumes.
 fn write_cannot_reach(m: &Mutation, read: &AccessPath) -> bool {
-    // A write through a reference field lands in storage its root only borrows,
-    // so neither its root nor its selectors place it: it may be the very
-    // storage `read` names, reached under another name.
+    // A borrowed path ends in storage its root only lends, so `m` may be
+    // `read`'s own storage under another name.
     if m.path.through_borrow {
         return false;
     }
@@ -295,8 +295,8 @@ impl RefTargets {
 pub fn compute_ref_targets(func: &TirFunction, resolver: &Resolver<'_>) -> RefTargets {
     let mut roots = IndexMap::default();
     for local in 0..func.local_count {
-        // A chain through a reference field ends at the slot holding the
-        // reference, not at what it points at, so it names no referent.
+        // A borrowed path names the slot holding the reference, not what it
+        // points at, so it yields no referent.
         if let Some(Names::Place(place)) = resolver.binding(local)
             && place.root != local
             && !place.through_borrow
@@ -391,11 +391,8 @@ impl Analyzer<'_> {
                 if path.root == local {
                     return None;
                 }
-                // A path through a reference field ends at storage its root
-                // only borrows, which neither test below reaches: a write
-                // through whoever lent it is rooted elsewhere, and two
-                // reference fields of one root may name one storage, so a
-                // split at them is no disjointness.
+                // A borrowed source is written through whoever lent it, at a
+                // root the scan below never looks at.
                 if path.through_borrow {
                     return None;
                 }
