@@ -235,7 +235,17 @@ struct Mutation {
     live: IndexSet<u32>,
 }
 
+/// Whether `m` can never change the value read at `read`. Establishes the
+/// common root [`disjoint`] assumes.
 fn write_cannot_reach(m: &Mutation, read: &AccessPath) -> bool {
+    // A borrowed path ends in storage its root only lends, so `m` may be
+    // `read`'s own storage under another name.
+    if m.path.through_borrow {
+        return false;
+    }
+    if m.path.root != read.root {
+        return true;
+    }
     if m.rebinds_place {
         return !writes_inside(&m.path, read);
     }
@@ -285,8 +295,11 @@ impl RefTargets {
 pub fn compute_ref_targets(func: &TirFunction, resolver: &Resolver<'_>) -> RefTargets {
     let mut roots = IndexMap::default();
     for local in 0..func.local_count {
+        // A borrowed path names the slot holding the reference, not what it
+        // points at, so it yields no referent.
         if let Some(Names::Place(place)) = resolver.binding(local)
             && place.root != local
+            && !place.through_borrow
         {
             roots.insert(local, place.root);
         }
@@ -378,6 +391,11 @@ impl Analyzer<'_> {
                 if path.root == local {
                     return None;
                 }
+                // A borrowed source is written through whoever lent it, at a
+                // root the scan below never looks at.
+                if path.through_borrow {
+                    return None;
+                }
                 // A `List` / `String` copy right-sizes its backing storage to
                 // the current length (WEP 2026-05-21, capacity is not part of
                 // the value but is still observable): sharing skips that only
@@ -389,8 +407,8 @@ impl Analyzer<'_> {
                 // `let r = p; p = x;` leaves `r` holding what `p` gave up: a
                 // rebind repoints `p`'s slot rather than writing the old
                 // storage in place, so it is never itself a conflict — only
-                // every OTHER mutation of `path`'s root, live where `local`
-                // could read it, must be unreachable from `local`'s path.
+                // every OTHER mutation, live where `local` could read it, must
+                // be unreachable from `local`'s path.
                 let mut released = false;
                 let mut share_safe = true;
                 for (m, r) in self.mutations.iter().zip(&at_write) {
@@ -398,11 +416,7 @@ impl Analyzer<'_> {
                     if is_release && r.contains(&local) {
                         released = true;
                     }
-                    if !is_release
-                        && m.path.root == path.root
-                        && r.contains(&local)
-                        && !write_cannot_reach(m, path)
-                    {
+                    if !is_release && r.contains(&local) && !write_cannot_reach(m, path) {
                         share_safe = false;
                     }
                 }

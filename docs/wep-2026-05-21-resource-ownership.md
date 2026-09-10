@@ -404,6 +404,18 @@ reached through either writes the whole of what its root was lent. Keying it by
 the element's field alone leaves a caller holding the container nothing to match,
 and it shares storage the call goes on to write.
 
+A path through a reference-typed field places nothing: it ends at storage its
+root only borrows, so the root names the holder rather than the storage. A read
+taken through one copies: the write that reaches its storage is rooted
+elsewhere, where the root-keyed scan never looks. Two reference fields of one
+root may name one storage as well, so splitting a read and a write at them
+proves nothing. A write made through one is placed no better, and conflicts
+with every binding live at it.
+
+A reference bound out of such a field names no referent this walk can follow:
+the field holds the reference, and the reference points elsewhere again. The
+immutable-root rule abstains over one rather than answering about the holder.
+
 Handing the source root to a new owner costs the binding its share on the same
 terms. That owner may write what the binding aliases, so the read matters where
 the binding's storage is still read afterwards, and nowhere else.

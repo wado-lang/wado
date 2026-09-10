@@ -1,0 +1,81 @@
+// Value-copy soundness around a reference-typed field, which ends a path at
+// storage its holder only borrows (wado-lang/wado#1998). The share rule keys a
+// write to a read by their root, and the holder's root is not the referent's.
+// A borrow on either side therefore defeats that comparison: a read taken
+// through one copies, and a write made through one is seen by every binding
+// live at it. Behind a callee the read resolves to the same borrowed path and
+// copies alike.
+
+struct Cell {
+    r: &mut List<i32>,
+}
+
+// Two reference fields may name one storage, so a read and a write split at
+// them are not disjoint.
+struct Pair {
+    p: &mut List<i32>,
+    q: &mut List<i32>,
+}
+
+struct Inner {
+    f: List<i32>,
+}
+
+// A reference bound out of a reference field names storage two steps away: the
+// field holds the reference, and the reference points elsewhere again.
+struct Held {
+    r: &mut Inner,
+}
+
+fn peel(c: &Cell) -> List<i32> {
+    return *c.r;
+}
+
+test "a read through a reference field does not share the referent" {
+    let mut xs = builtin::black_box([1, 2] as List<i32>);
+    let c = Cell { r: &mut xs };
+    let v = *c.r;
+    xs.push(999);
+    assert v == [1, 2];
+    assert xs == [1, 2, 999];
+}
+
+test "a read through a callee's reference field does not share the referent" {
+    let mut xs = builtin::black_box([1, 2] as List<i32>);
+    let c = Cell { r: &mut xs };
+    let v = peel(&c);
+    xs.push(999);
+    assert v == [1, 2];
+    assert xs == [1, 2, 999];
+}
+
+test "a read through one reference field does not share a sibling's referent" {
+    let mut xs = builtin::black_box([1, 2] as List<i32>);
+    let c = Pair { p: &mut xs, q: &mut xs };
+    let v = *c.p;
+    c.q.push(999);
+    assert v == [1, 2];
+    assert xs == [1, 2, 999];
+}
+
+test "a write through a reference field is seen by a binding at the referent" {
+    let mut xs = builtin::black_box([1, 2] as List<i32>);
+    let c = Cell { r: &mut xs };
+    let v = xs;
+    c.r.push(999);
+    assert v == [1, 2];
+    assert xs == [1, 2, 999];
+}
+
+test "a read off a reference bound out of a reference field does not share" {
+    let mut inner = builtin::black_box(Inner { f: [1, 2] });
+    let h = Held { r: &mut inner };
+    let d = h.r;
+    let v = d.f;
+    inner.f.push(999);
+    assert v == [1, 2];
+    assert inner.f == [1, 2, 999];
+}
+
+__DATA__
+{"test": {}}
