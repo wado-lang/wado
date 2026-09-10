@@ -41,6 +41,7 @@ pub mod package;
 pub mod param_resolution;
 pub mod parser;
 pub mod path;
+mod prelower_reach;
 pub mod remarks;
 pub mod resolve;
 pub mod resource_move_check;
@@ -1578,6 +1579,10 @@ fn compile_after_load<H: CompilerHost>(
         return Err(Bail);
     }
 
+    // What the program reaches before `lower` and `optimize` mint calls of
+    // their own, for the audit after them. See `prelower_reach`.
+    let prelower_reached = prelower_reach::enabled().then(|| prelower_reach::reachable(&flat));
+
     // === Phase 10: Lower (FlatPackage → NirPackage) ===
     let nir = {
         let _span = logger.span("lower");
@@ -1589,6 +1594,10 @@ fn compile_after_load<H: CompilerHost>(
         let _span = logger.span("optimize");
         optimize(nir, options.opt_level, options.opt, logger)
     };
+
+    if let Some(reached) = &prelower_reached {
+        prelower_reach::audit(reached, &nir);
+    }
 
     // Emit optimizer remarks for residual value-semantic copies that survived
     // the NIR pipeline. NIR is the last IR with per-expression spans; see
