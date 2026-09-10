@@ -263,23 +263,6 @@ struct PatternLowerer<'a> {
     owned_temps: IndexSet<u32>,
 }
 
-/// `PatternLowerer::place_is_writable` must read the same grammar: a shape only
-/// this one admits is a place nobody asks about.
-fn is_place(expr: &TirExpr) -> bool {
-    match &expr.kind {
-        TirExprKind::Local { .. } => true,
-        TirExprKind::FieldAccess { expr: inner, .. }
-        | TirExprKind::VariantPayload { expr: inner, .. }
-        | TirExprKind::Index { expr: inner, .. }
-        | TirExprKind::Cast { expr: inner, .. }
-        | TirExprKind::Unary {
-            op: TirUnaryOp::Ref | TirUnaryOp::MutRef | TirUnaryOp::Deref,
-            expr: inner,
-        } => is_place(inner),
-        _ => false,
-    }
-}
-
 /// Such a binding aliases the place it reads, so it must read one nothing can
 /// write.
 fn binds_by_value(pattern: &TirPattern, type_table: &TypeTable) -> bool {
@@ -1612,7 +1595,7 @@ impl<'a> PatternLowerer<'a> {
                     arms,
                     ..
                 } = &mut expr.kind
-                    && (!is_place(scrutinee)
+                    && (!place::is_place(scrutinee)
                         || self.needs_owned_scrutinee(scrutinee, arms, type_table))
                 {
                     let temp_let = self.bind_scrutinee_to_temp(scrutinee, type_table, stmt.span);

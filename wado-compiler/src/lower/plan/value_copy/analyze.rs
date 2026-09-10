@@ -9,6 +9,7 @@
 use super::funcset::{FuncKeyMap, FuncKeySet};
 use super::needs_value_copy;
 use super::ownership::{BuiltinDeclarations, OwnedCalls};
+use super::place::{is_place, receiver_value};
 use crate::flat_package::FlatPackage;
 use crate::hashmap::IndexSet;
 use crate::tir::{
@@ -126,7 +127,9 @@ impl TirRefVisitor for SeedWalker<'_> {
             TirExprKind::Match {
                 expr: scrutinee, ..
             } => self.record_if_wrap(scrutinee),
-            TirExprKind::Call { args, .. } => {
+            TirExprKind::Call {
+                args, has_receiver, ..
+            } => {
                 // A `copy_value::<T>` the source wrote needs the same helper
                 // the fold's markers do, and no wrap site seeds it.
                 if is_copy_value_call(expr) {
@@ -138,6 +141,18 @@ impl TirRefVisitor for SeedWalker<'_> {
                 // non-copy types, so a `&mut` arg is not copied.
                 for arg in args {
                     self.record_if_wrap(&arg.expr);
+                }
+                // A `&mut self` call copies the value under the receiver's
+                // auto-reference, which the loop above sees only as a `&mut T`.
+                // Which receivers are `&mut` needs the return conventions this
+                // walk runs ahead of, so seed every non-place one.
+                if *has_receiver
+                    && let Some(arg) = args.first()
+                {
+                    let value = receiver_value(&arg.expr);
+                    if !is_place(value) {
+                        self.record_if_wrap(value);
+                    }
                 }
             }
             TirExprKind::IndirectCall { args, .. } => {

@@ -1,0 +1,86 @@
+// A `&mut self` call on a receiver that is not a place mutates a value the
+// caller cannot name again, so it must not write through to whatever the
+// receiver was read out of. Each shape below hands a projection of `h` to
+// `bump`; only a place receiver may write through.
+//
+// `Wrap` covers the receiver whose auto-`&mut` is a `Box<T>` by lowering time
+// (`boxing::prepare_types` boxes every `&variant`), which is where the copy has
+// to land under the box rather than beside it.
+use { println, Stdout } from "core:cli";
+
+struct Holder {
+    xs: List<i32>,
+    w: Wrap,
+}
+
+variant Wrap {
+    Some(List<i32>),
+    None,
+}
+
+trait Bump {
+    fn bump(&mut self);
+}
+
+impl Bump for List<i32> {
+    fn bump(&mut self) {
+        self.push(999);
+    }
+}
+
+impl Bump for Wrap {
+    fn bump(&mut self) {
+        match self {
+            Wrap::Some(xs) => xs.push(999),
+            Wrap::None => {},
+        }
+    }
+}
+
+fn get_field(h: &Holder) -> List<i32> {
+    return h.xs;
+}
+
+fn get_wrap(h: &Holder) -> Wrap {
+    return h.w;
+}
+
+fn via_reflect<T: ReflectStruct<FieldTypes = [..F]>, ..F: Bump>(t: &T) {
+    for let f of ReflectStruct::<T>::members() {
+        f.get(t).bump();
+    }
+}
+
+export fn run() with Stdout {
+    let a: List<i32> = [1, 2];
+    let b: List<i32> = [3, 4];
+    let mut h = Holder {
+        xs: builtin::black_box(a),
+        w: builtin::black_box(Wrap::Some(b)),
+    };
+
+    get_field(&h).bump();
+    println(`call ${h.xs:?}`);
+
+    (pick: { break pick: h.xs; }).bump();
+    println(`block ${h.xs:?}`);
+
+    (match builtin::black_box(true) { true => h.xs, false => h.xs }).bump();
+    println(`match ${h.xs:?}`);
+
+    (if builtin::black_box(true) { h.xs } else { h.xs }).bump();
+    println(`if ${h.xs:?}`);
+
+    get_wrap(&h).bump();
+    println(`boxed ${h.w:?}`);
+
+    via_reflect(&h);
+    println(`reflect ${h.xs:?} ${h.w:?}`);
+
+    h.xs.bump();
+    h.w.bump();
+    println(`place ${h.xs:?} ${h.w:?}`);
+}
+
+__DATA__
+{"stdout": "call [1, 2]\nblock [1, 2]\nmatch [1, 2]\nif [1, 2]\nboxed Wrap::Some([3, 4])\nreflect [1, 2] Wrap::Some([3, 4])\nplace [1, 2, 999] Wrap::Some([3, 4, 999])\n"}

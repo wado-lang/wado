@@ -425,6 +425,48 @@ impl<'a> Resolver<'a> {
     }
 }
 
+/// Whether the source named this expression rather than built it: a local and
+/// the projections over one. Every other shape is a temporary the source cannot
+/// name a second time, so a write into it reaches nobody — and must not be let
+/// through to whatever it was read out of.
+///
+/// The grammar `PatternLowerer::place_is_writable` reads, and the one
+/// [`place_root`] roots: a shape only one of them admits is a place nobody asks
+/// about.
+#[must_use]
+pub fn is_place(expr: &TirExpr) -> bool {
+    match &expr.kind {
+        TirExprKind::Local { .. } => true,
+        TirExprKind::FieldAccess { expr: inner, .. }
+        | TirExprKind::VariantPayload { expr: inner, .. }
+        | TirExprKind::Index { expr: inner, .. }
+        | TirExprKind::Cast { expr: inner, .. }
+        | TirExprKind::Unary {
+            op: TirUnaryOp::Ref | TirUnaryOp::MutRef | TirUnaryOp::Deref,
+            expr: inner,
+        } => is_place(inner),
+        _ => false,
+    }
+}
+
+/// The value a method call's receiver argument delivers, past the auto-`&` /
+/// `&mut` the elaborator takes of it. Every question about the receiver is
+/// about this value: the reference is only how the callee reaches it.
+///
+/// Its two readers must agree, or the receiver copies a type no helper was
+/// synthesized for: [`super::analyze::collect_seed_types`] seeds the helper and
+/// `translate::FunctionTranslator::convert_receiver_arg` emits the wrap.
+#[must_use]
+pub fn receiver_value(receiver: &TirExpr) -> &TirExpr {
+    match &receiver.kind {
+        TirExprKind::Unary {
+            op: TirUnaryOp::Ref | TirUnaryOp::MutRef,
+            expr: value,
+        } => value,
+        _ => receiver,
+    }
+}
+
 /// The root local a place expression is taken over. Needs no types, so a
 /// consumer wanting only the root needs no resolver.
 #[must_use]
