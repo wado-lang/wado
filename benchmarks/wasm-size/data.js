@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1789012704341,
+  "lastUpdate": 1789037951501,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -54573,6 +54573,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/733387340443895a3e0fd512e939a225dbbca9c5"
         },
         "date": 1789012703631,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 2013,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6560,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18971,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 288933,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "4e1f2c9f0b55b2a0a6ef8f470705cf318b1ee062",
+          "message": "Merge pull request #2015 from wado-lang/claude/loving-shannon-kybjhi\n\nfix(lower): a `&mut self` call writes through only a receiver the caller can name",
+          "timestamp": "2026-09-10T19:42:47+09:00",
+          "tree_id": "5a333e6ff49fd3e60533edf14a162feee1350ab6",
+          "url": "https://github.com/wado-lang/wado/commit/4e1f2c9f0b55b2a0a6ef8f470705cf318b1ee062"
+        },
+        "date": 1789037951179,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
