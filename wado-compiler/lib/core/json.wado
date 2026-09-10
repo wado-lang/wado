@@ -834,14 +834,16 @@ fn scanned_to_f64(n: &ScannedNumber) -> f64 {
     return if n.neg { -v } else { v };
 }
 
-/// True when `b` is one of JSON's four whitespace bytes. Every call site
-/// reads `b > b' ' || !is_json_ws(b)`: `' '` is the widest of the four,
-/// so that leading compare both settles the common case — a structural byte,
-/// the run is over — and keeps the shift count under 64, which Wasm masks.
-/// Folding it into this function measures 1-2% slower on json-catalog
-/// deserialize, in either spelling.
+/// True when `b` is one of JSON's four whitespace bytes.
+///
+/// Every call site reads `b > b' ' || !is_json_ws(b)`: `' '` is the widest of
+/// the four, so that leading compare settles the common case — a structural
+/// byte, the run is over — without the shift, and it is what keeps `b` under
+/// 64. Making the function stand alone instead costs json-catalog deserialize
+/// 6% as `b < 64 &&` and 19% as four compares; the assert costs nothing.
 fn is_json_ws(b: i32) -> bool {
-    let ws_set = 1 as u64 << b' ' as u64 | 1 as u64 << b'\t' as u64 | 1 as u64 << b'\n' as u64 | 1 as u64 << b'\r' as u64;
+    assert b < 64;
+    let ws_set = 1 as u64 << b' ' | 1 as u64 << b'\t' | 1 as u64 << b'\n' | 1 as u64 << b'\r';
     return ws_set >> b as u64 & 1 != 0;
 }
 
@@ -1337,10 +1339,14 @@ impl JsonDeserializer {
         }
     }
 
-    /// Scans the JSON number token at `pos` (whitespace already skipped) into
-    /// the caller-provided `out`. Only the first `FPFMT_DIGITS_MAX` significant
-    /// digits are accumulated; dropped fraction digits merely truncate
-    /// precision, while dropped integer digits shift the scale via `int_digits`.
+    /// Scans the JSON number token at `pos` into the caller-provided `out`.
+    /// `lead` is the byte at `pos` as `peek_after_whitespace` returned it, so
+    /// whitespace is already skipped and -1 means end of input; every
+    /// `parse_*_with_lead` below takes it on the same terms.
+    ///
+    /// Only the first `FPFMT_DIGITS_MAX` significant digits are accumulated;
+    /// dropped fraction digits merely truncate precision, while dropped
+    /// integer digits shift the scale via `int_digits`.
     /// Writing into a scratch struct keeps a `Result<ScannedNumber>` aggregate
     /// off the hot decode path.
     fn scan_number_into(&mut self, lead: i32, out: &mut ScannedNumber) -> Result<(), DeserializeError> {
@@ -1492,8 +1498,6 @@ impl JsonDeserializer {
         return self.parse_i32_with_lead(self.peek_after_whitespace());
     }
 
-    /// `parse_i32_direct` for a caller that has already skipped whitespace and
-    /// so holds the token's first byte (-1 at end of input).
     fn parse_i32_with_lead(&mut self, lead: i32) -> Result<i32, DeserializeError> {
         let start = self.pos as i64;
         let mut n = ScannedNumber::empty();
@@ -1529,8 +1533,6 @@ impl JsonDeserializer {
         return self.parse_i64_with_lead(self.peek_after_whitespace());
     }
 
-    /// `parse_i64_direct` for a caller that has already skipped whitespace and
-    /// so holds the token's first byte (-1 at end of input).
     fn parse_i64_with_lead(&mut self, lead: i32) -> Result<i64, DeserializeError> {
         let start = self.pos as i64;
         let mut n = ScannedNumber::empty();
@@ -1572,8 +1574,6 @@ impl JsonDeserializer {
         return self.parse_u64_with_lead(self.peek_after_whitespace());
     }
 
-    /// `parse_u64_direct` for a caller that has already skipped whitespace and
-    /// so holds the token's first byte (-1 at end of input).
     fn parse_u64_with_lead(&mut self, lead: i32) -> Result<u64, DeserializeError> {
         let start = self.pos as i64;
         if lead == b'-' {
@@ -1624,8 +1624,6 @@ impl JsonDeserializer {
         return self.parse_f64_with_lead(self.peek_after_whitespace());
     }
 
-    /// `parse_f64_direct` for a caller that has already skipped whitespace and
-    /// so holds the token's first byte (-1 at end of input).
     fn parse_f64_with_lead(&mut self, lead: i32) -> Result<f64, DeserializeError> {
         let mut n = ScannedNumber::empty();
         self.scan_number_into(lead, &mut n)?;
@@ -2091,11 +2089,7 @@ impl Deserializer for JsonDeserializer {
         let start = self.pos as i64;
         // Accept both bare numbers and string-encoded values (i128 is always
         // serialized as a string). from_str validates digits and overflow.
-        let raw = if lead == b'"' {
-            self.read_json_string()?;
-        } else {
-            self.read_number_raw()?;
-        };
+        let raw = if lead == b'"' { self.read_json_string()? } else { self.read_number_raw()? };
         return match i128::from_str(&raw) {
             Ok(v) => Result::Ok(v),
             Err(e) => {
@@ -2108,11 +2102,7 @@ impl Deserializer for JsonDeserializer {
     fn deserialize_u128(&mut self) -> Result<u128, DeserializeError> {
         let lead = self.peek_after_whitespace();
         let start = self.pos as i64;
-        let raw = if lead == b'"' {
-            self.read_json_string()?;
-        } else {
-            self.read_number_raw()?;
-        };
+        let raw = if lead == b'"' { self.read_json_string()? } else { self.read_number_raw()? };
         if raw.len() > 0 && raw.get_byte_unchecked(0) as i32 == b'-' {
             builtin::cold_path();
             return Result::Err(DeserializeError::overflow("negative value for u128", start));

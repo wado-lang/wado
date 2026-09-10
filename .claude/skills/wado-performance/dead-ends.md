@@ -21,8 +21,8 @@ for i in 1 2 3; do mise run json-catalog; done           # before and after
 ## Batching `array.get` where the runs are short (2026-09-10)
 
 Reading four bytes per bounds check is worth 12.6% on json-catalog's
-whitespace scan (`whitespace_end`), whose runs average 16 bytes. The same
-rewrite loses on two neighbouring scans, and the reason is the run length:
+whitespace scan (`peek_after_whitespace_run`), whose runs average 16 bytes. The
+same rewrite loses on two neighbouring scans, and the reason is the run length:
 
 - **`scan_string_run`**, four plain-ASCII bytes per block: json-catalog de
   **-2%** on the pretty input and **-4.5%** on the minified one, three

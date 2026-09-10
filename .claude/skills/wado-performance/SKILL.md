@@ -155,12 +155,12 @@ paid on a benchmark `fts` never touched.
   actual sequence with `wasmtime explore -W gc,function-references f.wat`; a
   byte-at-a-time loop is 22 instructions and 6 branches per byte, four gets in
   one block are 18 + 4×8. So a scan reads several bytes per bounds check and
-  then tests them: `whitespace_end` in `core:json` is that shape, worth 12.6%
-  on json-catalog deserialize. It pays in proportion to the run it covers,
-  against the one partial block it always wastes — under ~16 bytes per run it
-  is a loss (`dead-ends.md`). **`array.set` shares nothing**: a store may write
-  the header as far as Cranelift knows, so four adjacent sets reload the length
-  four times. Only `array.copy` / `array.fill` amortise a write.
+  then tests them: `peek_after_whitespace_run` in `core:json` is that shape,
+  worth 12.6% on json-catalog deserialize. It pays in proportion to the run it
+  covers, against the one partial block it always wastes — under ~16 bytes per
+  run it is a loss (`dead-ends.md`). **`array.set` shares nothing**: a store may
+  write the header as far as Cranelift knows, so four adjacent sets reload the
+  length four times. Only `array.copy` / `array.fill` amortise a write.
 - **SROA is priced by the aggregate's width, not by the allocation it removes.**
   Splitting a 40-slot tuple into locals deletes one `struct.new` per struct and
   costs 6.5% on cbor-twitter: past the register file, forty `ref` locals live
@@ -192,6 +192,14 @@ paid on a benchmark `fts` never touched.
   check by `nir/string_push`, so write the appends plainly and let it batch them.
 - **`internal_raw_data()` / returning `Array<T>` by value is a copy API** — for a
   single read use `get_unchecked` / `set_byte_unchecked`.
+- **An `assert` of a caller-guaranteed precondition is free; the same test as a
+  guard is not.** `is_json_ws` in `core:json` needs `b < 64` (Wasm masks a shift
+  count mod 64) and every call site short-circuits on `b > b' '` first. Writing
+  the precondition as `assert b < 64` measures flat on json-catalog deserialize;
+  writing it as `b < 64 &&` in the returned expression costs 6%, and dropping
+  the bitset for four compares costs 19%. So a hot leaf whose precondition the
+  callers establish keeps both the assert and the fast body — don't reach for
+  prose, and don't assume an assert is what the profile is showing you.
 
 ## 4. Inlining is usually not the lever
 
