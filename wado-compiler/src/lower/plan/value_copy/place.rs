@@ -427,42 +427,11 @@ impl<'a> Resolver<'a> {
     }
 }
 
-/// Whether this expression is a local or a projection over one — the shapes the
-/// TIR itself spells as a place. Every other is something built, which the
-/// source cannot name a second time.
-///
-/// The grammar `PatternLowerer::place_is_writable` reads, and the one
-/// [`place_root`] roots: a shape only one of them admits is a place nobody asks
-/// about.
+/// The expression a place projection is taken over, or `None` for anything
+/// else. Names the node set every place walk here shares.
 #[must_use]
-pub fn is_place(expr: &TirExpr) -> bool {
-    place_walk(expr, None)
-}
-
-/// [`is_place`] over the whole of the source's place grammar: also the two
-/// forms the elaborator lowers a source place *into*, which the TIR spells as
-/// something built.
-///
-/// A global is storage the source names, spelled here as a read of it. And
-/// `a[i]` reaches lowering as a call to the indexing accessor — the `Index*`
-/// method for a `List`, the `array_get_*` builtin under it for a bare `Array` —
-/// which is why a call belongs in a place grammar at all. Every other call
-/// delivers a value, whatever storage it read that value out of.
-///
-/// Asked of a `&mut self` receiver, where the answer decides whether the write
-/// reaches the caller (`arr[i].field.push(x)`) or a copy the caller cannot name
-/// (`get_field(&h).bump()`).
-#[must_use]
-pub fn is_source_place(expr: &TirExpr, items: &CompilerItems) -> bool {
-    place_walk(expr, Some(items))
-}
-
-/// The place grammar both strengths walk. `source_forms` present admits the two
-/// shapes the source spells as a place and the TIR does not.
-fn place_walk(expr: &TirExpr, source_forms: Option<&CompilerItems>) -> bool {
+pub fn projection_base(expr: &TirExpr) -> Option<&TirExpr> {
     match &expr.kind {
-        TirExprKind::Local { .. } => true,
-        TirExprKind::GlobalVarGet { .. } => source_forms.is_some(),
         TirExprKind::FieldAccess { expr: inner, .. }
         | TirExprKind::VariantPayload { expr: inner, .. }
         | TirExprKind::Index { expr: inner, .. }
@@ -470,20 +439,42 @@ fn place_walk(expr: &TirExpr, source_forms: Option<&CompilerItems>) -> bool {
         | TirExprKind::Unary {
             op: TirUnaryOp::Ref | TirUnaryOp::MutRef | TirUnaryOp::Deref,
             expr: inner,
-        } => place_walk(inner, source_forms),
+        } => Some(inner),
+        _ => None,
+    }
+}
+
+/// Whether this is a local or a projection over one — the shapes the TIR itself
+/// spells as a place. Every other is something built.
+#[must_use]
+pub fn is_place(expr: &TirExpr) -> bool {
+    place_walk(expr, None)
+}
+
+/// [`is_place`] over the source's wider place grammar — a global reads as
+/// `GlobalVarGet`, `a[i]` as a call to the indexing accessor. What a `&mut self`
+/// receiver is asked, since only a place may write through to the caller.
+#[must_use]
+pub fn is_source_place(expr: &TirExpr, items: &CompilerItems) -> bool {
+    place_walk(expr, Some(items))
+}
+
+fn place_walk(expr: &TirExpr, source_forms: Option<&CompilerItems>) -> bool {
+    match &expr.kind {
+        TirExprKind::Local { .. } => true,
+        TirExprKind::GlobalVarGet { .. } => source_forms.is_some(),
         TirExprKind::Call { func, args, .. } => source_forms.is_some_and(|items| {
             is_index_accessor(func, items)
                 && args
                     .first()
                     .is_some_and(|a| place_walk(&a.expr, source_forms))
         }),
-        _ => false,
+        _ => projection_base(expr).is_some_and(|inner| place_walk(inner, source_forms)),
     }
 }
 
-/// Whether this callee is the accessor `a[i]` dispatches to: the `Index*` trait
-/// method the elaborator resolves it to, or the `array_get_*` builtin a `List`'s
-/// own accessor bottoms out in. Both take the indexed container as `args[0]`.
+/// Whether this callee is what `a[i]` dispatches to: the `Index*` trait method,
+/// or the `array_get_*` builtin under it. Both take the container as `args[0]`.
 fn is_index_accessor(func: &FunctionRef, items: &CompilerItems) -> bool {
     if func.module_source.is_core_builtin() {
         return [
@@ -519,39 +510,19 @@ fn is_index_accessor(func: &FunctionRef, items: &CompilerItems) -> bool {
     })
 }
 
-/// The value a method call's receiver argument delivers, past the auto-`&` /
-/// `&mut` the elaborator takes of it. Every question about the receiver is
-/// about this value: the reference is only how the callee reaches it.
-///
-/// Its two readers must agree, or the receiver copies a type no helper was
-/// synthesized for: [`super::analyze::collect_seed_types`] seeds the helper and
-/// `translate::FunctionTranslator::convert_receiver_arg` emits the wrap.
-#[must_use]
-pub fn receiver_value(receiver: &TirExpr) -> &TirExpr {
-    match &receiver.kind {
-        TirExprKind::Unary {
-            op: TirUnaryOp::Ref | TirUnaryOp::MutRef,
-            expr: value,
-        } => value,
-        _ => receiver,
-    }
-}
-
 /// The root local a place expression is taken over. Needs no types, so a
 /// consumer wanting only the root needs no resolver.
 #[must_use]
 pub fn place_root(expr: &TirExpr) -> Option<u32> {
     match &expr.kind {
         TirExprKind::Local { index, .. } => Some(*index),
-        TirExprKind::FieldAccess { expr: inner, .. }
-        | TirExprKind::VariantPayload { expr: inner, .. }
-        | TirExprKind::Index { expr: inner, .. }
-        | TirExprKind::Cast { expr: inner, .. }
-        | TirExprKind::Unary {
-            op: TirUnaryOp::Ref | TirUnaryOp::MutRef,
-            expr: inner,
-        } => place_root(inner),
-        _ => None,
+        // A deref leaves the root's own storage for whatever it points at, which
+        // is no local of this body.
+        TirExprKind::Unary {
+            op: TirUnaryOp::Deref,
+            ..
+        } => None,
+        _ => place_root(projection_base(expr)?),
     }
 }
 

@@ -1,11 +1,11 @@
-// A `&mut self` call on a receiver that is not a place mutates a value the
-// caller cannot name again, so it must not write through to whatever the
-// receiver was read out of. Each shape below hands a projection of `h` to
-// `bump`; only a place receiver may write through.
+// A `&mut self` call on a receiver that is not a place mutates a value the caller
+// cannot name again, so it must not write through to whatever the receiver was
+// read out of. Each shape below hands `bump` a projection of `h`; only the place
+// receiver may write through.
 //
-// `Wrap` covers the receiver whose auto-`&mut` is a `Box<T>` by lowering time
-// (`boxing::prepare_types` boxes every `&variant`), which is where the copy has
-// to land under the box rather than beside it.
+// `Wrap` is the receiver whose auto-`&mut` is a `Box<T>` by lowering time
+// (`boxing::prepare_types` boxes every `&variant`), so the copy has to land under
+// the box rather than beside it.
 use { println, Stdout } from "core:cli";
 
 struct Holder {

@@ -40,7 +40,7 @@ use crate::tir::{
     TirEnumCase, TirExpr, TirExprKind, TirField, TirFlags, TirFlagsMember, TirFunction, TirGlobal,
     TirImport, TirLiteralPattern, TirLocal, TirMatchArm, TirParam, TirPattern, TirStmt,
     TirStmtKind, TirStruct, TirStructField, TirStructPatternField, TirTest, TirTypeParam,
-    TirUnaryOp, TirVariantCase, TirVariantDecl, TypeTable,
+    TirUnaryOp, TirVariantCase, TirVariantDecl, TypeTable, receiver_value,
 };
 use crate::token::Span;
 
@@ -2376,19 +2376,18 @@ impl FunctionTranslator<'_, '_> {
     }
 
     /// Convert a method call's receiver. It occupies `args[0]` like any other
-    /// argument, and where it is a place it takes no `$value_copy$T`: the copy
-    /// would hand the callee a throwaway and discard the mutation the call
-    /// exists to perform (a `String` builder's `push_str` would append to the
-    /// copy). A receiver that is not a place names no storage the caller can
-    /// reach again, so a `&mut self` call must not write through it to whatever
-    /// it was read out of — there it takes the copy every other by-value
-    /// argument takes.
+    /// argument, but a place receiver takes no `$value_copy$T`: the copy would
+    /// hand the callee a throwaway and discard the mutation the call exists to
+    /// perform (a `String` builder's `push_str` would append to the copy). One
+    /// that is not a place names no storage the caller can reach again, so a
+    /// `&mut self` call must not write through it to whatever it was read out
+    /// of — there it takes the copy every by-value argument takes.
     ///
-    /// Either way it may not be re-wrapped as a canonical closure the way a
-    /// specialized fn-param argument is — the method resolved against the
+    /// Either way it is never re-wrapped as a canonical closure the way a
+    /// specialized fn-param argument is: the method resolved against the
     /// receiver's own type, not `fn(...)`.
     fn convert_receiver_arg(&self, receiver: &TirExpr, is_mut: bool) -> ArenaCallArg {
-        let value = place::receiver_value(receiver);
+        let value = receiver_value(receiver);
         let names_a_place =
             place::is_source_place(value, self.base.type_table.borrow().compiler_items());
         if !is_mut || names_a_place || !self.should_wrap_value_copy(value) {
@@ -2399,11 +2398,10 @@ impl FunctionTranslator<'_, '_> {
         }
         let copied = self.wrap_value_copy_operand(self.convert_operand(value), value.type_id);
         let expr = match &receiver.kind {
-            // The copy goes under the elaborator's auto-reference, so re-take
-            // it over the copy — as the two shapes `try_boxing_ref` builds: a
-            // `Box<T>` wrapper where the referent is boxed, a plain reference
-            // where it is not. Its `&local` collapse cannot apply, a local
-            // being a place.
+            // Re-take the elaborator's auto-reference over the copy, in the two
+            // shapes `try_boxing_ref` builds: a `Box<T>` wrapper for a boxed
+            // referent, a plain reference otherwise. Its `&local` collapse
+            // cannot apply, a local being a place.
             TirExprKind::Unary {
                 op: op @ (TirUnaryOp::Ref | TirUnaryOp::MutRef),
                 ..

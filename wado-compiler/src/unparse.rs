@@ -3380,12 +3380,11 @@ fn binds_tighter_than(expr: &Expr, slot: OperandSlot) -> bool {
             | Expr::TupleComprehension(_)
             | Expr::Error(_)
     );
-    // A block form — `{…}`, `LABEL: {…}`, `if`, `match` — is left off that
-    // list by its *opening*, not its closing `}`: at the start of a statement
-    // the parser takes the keyword or brace for the statement itself and the
-    // postfix behind it has nothing to attach to. Where the parens are not
-    // needed they still read as the source wrote them, so one rule serves both
-    // positions rather than a second one deciding which position this is.
+    // A block form — `{…}`, `LABEL: {…}`, `if`, `match` — is off that list by
+    // its *opening*, not its closing `}`: starting a statement, the keyword or
+    // brace reads as the statement itself and the postfix behind it has nothing
+    // to attach to. Elsewhere the parens are redundant but harmless, so one rule
+    // serves both positions.
     match slot {
         OperandSlot::Callee => postfix && !matches!(expr, Expr::FieldAccess(_)),
         OperandSlot::Postfix => postfix,
@@ -4484,7 +4483,7 @@ use crate::name::LocalMethodName;
 use crate::tir::{
     TirBinaryOp, TirBlock, TirEnum, TirExpr, TirExprKind, TirFlags, TirFunction, TirGlobal,
     TirLiteralPattern, TirModule, TirParam, TirPattern, TirStmt, TirStmtKind, TirStruct,
-    TirUnaryOp, TypeId, TypeTable,
+    TirUnaryOp, TypeId, TypeTable, receiver_value,
 };
 
 /// Unparses TIR back to pseudo-Wado source code.
@@ -5155,17 +5154,7 @@ impl<'a> TirUnparser<'a> {
                 // A method still renders `recv.method(rest)` — this text is read
                 // back by `Inspect` on a closure, so it stays source-shaped.
                 let rest = if *has_receiver && let Some((receiver, rest)) = args.split_first() {
-                    // The elaborator wraps `self` receivers in `&`/`&mut`
-                    // automatically; strip that wrapper so the rendering
-                    // reflects the source value.
-                    let actual_receiver = match &receiver.expr.kind {
-                        TirExprKind::Unary {
-                            op: TirUnaryOp::Ref | TirUnaryOp::MutRef,
-                            expr: inner,
-                        } => inner.as_ref(),
-                        _ => &receiver.expr,
-                    };
-                    self.unparse_expr(actual_receiver);
+                    self.unparse_expr(receiver_value(&receiver.expr));
                     self.output.push('.');
                     // Name the resolved method (e.g. `Type::method`) so the
                     // output captures which impl was selected, spelled as

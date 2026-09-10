@@ -370,7 +370,7 @@ fn fits_i32(digits: &List<char>, first: i32, negative: bool) -> bool {
     while start + 1 < digits.len() && digits[start] == '0' {
         start += 1;
     }
-    let limit: List<char> = if negative { "2147483648" } else { "2147483647" }.chars().collect();
+    let limit: List<char> = (if negative { "2147483648" } else { "2147483647" }).chars().collect();
     if digits.len() - start != limit.len() {
         return digits.len() - start < limit.len();
     }

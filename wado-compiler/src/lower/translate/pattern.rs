@@ -1722,17 +1722,6 @@ impl<'a> PatternLowerer<'a> {
                 .locals
                 .get(*index as usize)
                 .is_none_or(|local| local.is_mut),
-            TirExprKind::FieldAccess { expr: inner, .. }
-            | TirExprKind::VariantPayload { expr: inner, .. }
-            | TirExprKind::Index { expr: inner, .. }
-            | TirExprKind::Cast { expr: inner, .. }
-            | TirExprKind::Unary {
-                op: TirUnaryOp::Ref | TirUnaryOp::MutRef | TirUnaryOp::Deref,
-                expr: inner,
-            } => {
-                place::is_reference(inner.type_id, type_table)
-                    || self.place_is_writable(inner, type_table)
-            }
             // `xs[0]` is `xs.index_value(0)` by now, and such an accessor hands
             // back a piece of its receiver.
             TirExprKind::Call { func, args, .. }
@@ -1743,7 +1732,10 @@ impl<'a> PatternLowerer<'a> {
                 args.first()
                     .is_some_and(|a| self.place_is_writable(&a.expr, type_table))
             }
-            _ => false,
+            _ => place::projection_base(expr).is_some_and(|inner| {
+                place::is_reference(inner.type_id, type_table)
+                    || self.place_is_writable(inner, type_table)
+            }),
         }
     }
 

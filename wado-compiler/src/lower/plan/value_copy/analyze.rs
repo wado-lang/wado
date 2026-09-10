@@ -9,12 +9,12 @@
 use super::funcset::{FuncKeyMap, FuncKeySet};
 use super::needs_value_copy;
 use super::ownership::{BuiltinDeclarations, OwnedCalls};
-use super::place::{is_source_place, receiver_value};
+use super::place::is_source_place;
 use crate::flat_package::FlatPackage;
 use crate::hashmap::IndexSet;
 use crate::tir::{
     ResolvedType, TirBlock, TirExpr, TirExprKind, TirMatchArm, TirPattern, TirStmt, TirStmtKind,
-    TirUnaryOp, TypeId, TypeTable,
+    TirUnaryOp, TypeId, TypeTable, receiver_value,
 };
 use crate::tir_visitor::TirRefVisitor;
 
@@ -144,11 +144,9 @@ impl TirRefVisitor for SeedWalker<'_> {
                 }
                 // A `&mut self` call copies the value under the receiver's
                 // auto-reference, which the loop above sees only as a `&mut T`.
-                // Which receivers are `&mut` needs the return conventions this
-                // walk runs ahead of, so seed every non-place one.
-                if *has_receiver
-                    && let Some(arg) = args.first()
-                {
+                // Telling `&mut` receivers apart needs the return conventions
+                // this walk runs ahead of, so seed every non-place one.
+                if *has_receiver && let Some(arg) = args.first() {
                     let value = receiver_value(&arg.expr);
                     if !is_source_place(value, self.type_table.compiler_items()) {
                         self.record_if_wrap(value);

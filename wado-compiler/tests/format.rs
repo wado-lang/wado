@@ -1151,10 +1151,9 @@ fn test_format_matches_scrutinee_keeps_parens() {
     assert_format_preserves_ast("fn run() -> bool {\n    return !x matches { Some(_) };\n}\n");
 }
 
-/// A block form under a postfix operator keeps its parens. Dropping them
-/// re-reads the `match` / `if` / `{` / `LABEL:` as the statement itself, which
-/// leaves the postfix behind it nothing to attach to — a parse error, not a
-/// different expression.
+/// A block form under a postfix operator keeps its parens. Dropping them re-reads
+/// the `match` / `if` / `{` / `LABEL:` as the statement itself, leaving the postfix
+/// nothing to attach to — a parse error, not a different expression.
 #[test]
 fn test_format_block_form_postfix_base_keeps_parens() {
     for source in [
@@ -1167,7 +1166,9 @@ fn test_format_block_form_postfix_base_keeps_parens() {
         assert_format_preserves_ast(source);
         let formatted = wado_compiler::format(source).expect("format failed");
         assert!(
-            formatted.contains("(match") || formatted.contains("(if") || formatted.contains("(pick"),
+            formatted.contains("(match")
+                || formatted.contains("(if")
+                || formatted.contains("(pick"),
             "a block form under a postfix operator lost its parens:\n{formatted}"
         );
     }

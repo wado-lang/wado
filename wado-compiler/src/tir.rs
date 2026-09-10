@@ -5573,6 +5573,20 @@ pub fn matches_builtin(name: &str, monomorph_info: Option<&MonomorphInfo>, built
     name == builtin || monomorph_info.is_some_and(|m| m.generic_name == builtin)
 }
 
+/// The value a method call's receiver argument delivers, past the auto-`&` /
+/// `&mut` the elaborator takes of it. Every question about the receiver is about
+/// this value; the reference is only how the callee reaches it.
+#[must_use]
+pub fn receiver_value(receiver: &TirExpr) -> &TirExpr {
+    match &receiver.kind {
+        TirExprKind::Unary {
+            op: TirUnaryOp::Ref | TirUnaryOp::MutRef,
+            expr: value,
+        } => value,
+        _ => receiver,
+    }
+}
+
 /// A `#[param]` compile-time parameter declared on a `global`.
 ///
 /// Carried from reify (which validates the attribute shape) to the
