@@ -1092,10 +1092,9 @@ impl Body {
 
 /// Structural navigation used by the rewrite engine (parent map + worklist).
 impl Body {
-    /// Collect every local with a live `&local` / `&mut local` in the body.
-    /// The canonical `address_taken_locals` / `stores_aliased_locals` sets
-    /// go stale after `inline` / `ref_elim` copy reference nodes, so
-    /// alias-sensitive consumers union this scan in.
+    /// Every local with a live `&local` / `&mut local`. The canonical
+    /// `address_taken_locals` / `stores_aliased_locals` go stale once `inline` /
+    /// `ref_elim` copy reference nodes, so alias-sensitive consumers union this in.
     pub fn collect_address_taken_locals(&self, out: &mut crate::hashmap::IndexSet<u32>) {
         self.for_each_reachable_node(|node| {
             if let NodeRef::Expr(id) = node
@@ -1210,6 +1209,22 @@ impl Body {
         })
     }
 
+    /// The first value `f` gives for `root` or a live node beneath it.
+    /// [`Body::find_in_nodes_under`] stops at the first hit; this one walks on.
+    pub fn find_in_live_node_under<T>(
+        &self,
+        root: NodeRef,
+        mut f: impl FnMut(NodeRef) -> Option<T>,
+    ) -> Option<T> {
+        let mut found = None;
+        self.for_each_live_node_under(root, |node| {
+            if found.is_none() {
+                found = f(node);
+            }
+        });
+        found
+    }
+
     /// Walk `root` and the nodes beneath it, parents before children. `f`
     /// answers `Continue(true)` to descend into a node's children,
     /// `Continue(false)` to skip them, or `Break(value)` to stop the walk.
@@ -1278,23 +1293,6 @@ impl Body {
             return;
         }
         self.for_each_live_node_under(NodeRef::Block(self.root), f);
-    }
-
-    /// The first value `f` gives for `root` or a live node beneath it.
-    /// [`Body::find_in_nodes_under`] is the skeleton form and stops at the first
-    /// hit; this one walks on.
-    pub fn find_in_live_node_under<T>(
-        &self,
-        root: NodeRef,
-        mut f: impl FnMut(NodeRef) -> Option<T>,
-    ) -> Option<T> {
-        let mut found = None;
-        self.for_each_live_node_under(root, |node| {
-            if found.is_none() {
-                found = f(node);
-            }
-        });
-        found
     }
 
     /// The distinct promoted values the reachable skeleton carries, and how many
