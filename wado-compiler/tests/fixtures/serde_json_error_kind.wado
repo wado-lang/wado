@@ -17,3 +17,23 @@ test "enum field compared directly" {
         assert e.kind == DeserializeErrorKind::UnexpectedType;
     }
 }
+
+struct Pair {
+    a: i32,
+    b: i32,
+}
+
+impl Deserialize for Pair;
+
+// An input that stops after a member comma has no key to complain about, so
+// the truncation is what the error names — on the deserializing walk and on
+// the one that skips an unknown field's object value alike.
+test "input truncated after an object member comma is Eof" {
+    let r: Result<Pair, DeserializeError> = from_string::<Pair>(`{"a":1, `);
+    assert r matches { Err(e) && e.kind == DeserializeErrorKind::Eof };
+}
+
+test "input truncated inside a skipped object value is Eof" {
+    let r: Result<Pair, DeserializeError> = from_string::<Pair>(`{"a":1,"z":{"k":1, `);
+    assert r matches { Err(e) && e.kind == DeserializeErrorKind::Eof };
+}

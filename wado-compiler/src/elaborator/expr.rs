@@ -16,6 +16,7 @@ use crate::token::Span;
 
 use super::Elaborator;
 use super::call::turbofish_holes;
+use super::coercion::{is_numeric_literal_expr, range_endpoint_order};
 use super::infer::InferCtx;
 use super::instantiate::Instantiation;
 use super::typecheck::{TypeCheckResult, check_assignable};
@@ -2471,7 +2472,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             ast::Expr::Match(match_expr) => {
                 self.collect_match_numeric_literal_tails(match_expr, target, out)
             }
-            _ if super::coercion::is_numeric_literal_expr(expr) => {
+            _ if is_numeric_literal_expr(expr) => {
                 out.literals.push(expr);
                 true
             }
@@ -5339,19 +5340,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> TypeId {
         use crate::ast::RangeKind;
 
-        // Bidirectional coercion: resolve non-literal first to infer the element type
-        let start_is_literal = self.tysys.is_numeric_literal(&range.start);
-        let end_is_literal = self.tysys.is_numeric_literal(&range.end);
-
-        let (start, end) = if start_is_literal && !end_is_literal {
-            let end = self.resolve_expr(&range.end, ctx, None);
-            let start = self.resolve_expr(&range.start, ctx, Some(end));
-            (start, end)
-        } else {
-            let start = self.resolve_expr(&range.start, ctx, None);
-            let end = self.resolve_expr(&range.end, ctx, Some(start));
-            (start, end)
-        };
+        let order = range_endpoint_order(&self.tysys.type_table.borrow(), &range.start, &range.end);
+        let (start, end) = order.resolve(
+            &range.start,
+            &range.end,
+            |expr, hint| self.resolve_expr(expr, ctx, hint),
+            |&ty| ty,
+        );
 
         // Check type mismatch between start and end
         if start != end && start != TypeTable::ERROR && end != TypeTable::ERROR {

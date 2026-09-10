@@ -22,9 +22,15 @@ use crate::tir::{
     TypeTable,
 };
 
+use super::coercion::{
+    NumericLiteralKind, classify_numeric_literal, is_numeric_literal_expr,
+    numeric_literal_pair_order, range_endpoint_order,
+};
 use super::sem::ModuleSemantics;
 use super::types::{FunctionContext, TypeLookup};
 use super::tysys::TypeSystem;
+use super::util;
+use crate::token::Span;
 
 /// Generate the `ann_*` annotation accessors on [`Reify`], one per
 /// [`super::sem::types::BodyFacts`] map from the list `with_body_facts!`
@@ -2822,7 +2828,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 // must be `f32`, not the default `f64`). Other unary operands
                 // are typed on their own.
                 let inner_expected = if unary.op == ast::UnaryOp::Neg
-                    && self.tysys.is_numeric_literal(&unary.expr)
+                    && is_numeric_literal_expr(&unary.expr)
                     && recorded_type != crate::tir::TypeTable::UNKNOWN
                 {
                     Some(recorded_type)
@@ -5013,8 +5019,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // `f32::INFINITY = 1.0 / 0.0`, whose literals carry no recorded type
         // of their own — without the hint they default to `f64` and the
         // surrounding arithmetic lowers to the wrong width / an integer op.
-        let left_is_lit = self.tysys.is_numeric_literal(&binary.left);
-        let right_is_lit = self.tysys.is_numeric_literal(&binary.right);
+        let left_is_lit = is_numeric_literal_expr(&binary.left);
+        let right_is_lit = is_numeric_literal_expr(&binary.right);
         let (left, right) = if left_is_lit && !right_is_lit {
             let right = self.reify_expr(&binary.right, ctx, None);
             let coerce = if self.tysys.type_table.borrow().is_numeric(right.type_id) {
@@ -5034,16 +5040,22 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             let right = self.reify_expr(&binary.right, ctx, coerce);
             (left, right)
         } else if left_is_lit && right_is_lit {
-            // Both literals: use the expression's recorded type as the hint
-            // (e.g. the `const_ty` flowing in from a reified const body).
-            let hint = if recorded_type == TypeTable::UNKNOWN {
-                None
-            } else {
-                Some(recorded_type)
-            };
-            let left = self.reify_expr(&binary.left, ctx, hint);
-            let right = self.reify_expr(&binary.right, ctx, hint);
-            (left, right)
+            // Both literals: the expression's recorded type is the hint (e.g.
+            // the `const_ty` flowing in from a reified const body), on the same
+            // terms the elaborator applied it.
+            let context = (recorded_type != TypeTable::UNKNOWN).then_some(recorded_type);
+            let order = numeric_literal_pair_order(
+                &self.tysys.type_table.borrow(),
+                &binary.left,
+                &binary.right,
+                context,
+            );
+            order.resolve(
+                &binary.left,
+                &binary.right,
+                |expr, hint| self.reify_expr(expr, ctx, hint),
+                |expr| expr.type_id,
+            )
         } else if matches!(
             binary.op,
             ast::BinaryOp::Eq
@@ -5432,12 +5444,15 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         use crate::ast::RangeKind;
         use crate::tir::{TirExprKind, TirStructField, TypeTable};
 
-        // Resolve both operands first; the element type comes from
-        // `start` (annotate has unified start/end to the same type, so
-        // either operand's type works).
-        let start = self.reify_expr(&range.start, ctx, None);
-        let end_expected = Some(start.type_id);
-        let end = self.reify_expr(&range.end, ctx, end_expected);
+        // Annotate has unified the endpoints, so either type is the element
+        // type — but only in the order the elaborator resolved them in.
+        let order = range_endpoint_order(&self.tysys.type_table.borrow(), &range.start, &range.end);
+        let (start, end) = order.resolve(
+            &range.start,
+            &range.end,
+            |expr, hint| self.reify_expr(expr, ctx, hint),
+            |expr| expr.type_id,
+        );
         let element_type = start.type_id;
 
         // The recorded `expression_types[range.id]` carries the
@@ -9440,21 +9455,15 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             _ => return None,
         };
 
-        // Plain literal, or the negated `-NUM` shape whose coercion is
-        // keyed on the enclosing `Unary` node.
-        let (repr, negated) = match expr {
-            ast::Expr::Literal(ast::LiteralExpr {
-                value: ast::Literal::Number(repr),
-                ..
-            }) => (repr.clone(), false),
-            ast::Expr::Unary(unary) if unary.op == ast::UnaryOp::Neg => match &unary.expr {
-                ast::Expr::Literal(ast::LiteralExpr {
-                    value: ast::Literal::Number(repr),
-                    ..
-                }) => (repr.clone(), true),
-                _ => return None,
-            },
-            _ => return None,
+        // Every shape the coercion admits, the negated `-NUM` among them, whose
+        // coercion is keyed on the enclosing `Unary` node. Reading the one
+        // classifier is what keeps a shape from arriving here as a bare
+        // `IntLiteral` typed as the `i128` struct.
+        let literal = classify_numeric_literal(expr)?;
+        let negated = literal.neg.is_some();
+        let repr = match literal.kind {
+            NumericLiteralKind::Number(repr) => repr.to_string(),
+            NumericLiteralKind::Byte(raw) => util::unescape_byte(raw).ok()?.to_string(),
         };
 
         let parse_result = if name.decl_name() == "u128" {
@@ -9799,64 +9808,20 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         use crate::tir::{TirExprKind, TypeTable};
         let kind = match &lit.value {
             ast::Literal::Number(repr) => {
-                // The *recorded type* decides Int vs Float TIR literal; the
-                // literal's *syntactic form* (`is_float_only_literal`) decides
-                // how to read its value, so `let x: f64 = 0xFF` reads as an
-                // integer then converts. Peel newtypes first, or a float literal
-                // bound to a float-newtype target takes the integer path.
-                let base_target = self
-                    .tysys
-                    .type_table
-                    .borrow()
-                    .representation_head(recorded_type);
-                // A float-only literal (`1.0`, `0.0`, `1e2`) is a float
-                // regardless of the recorded type: when the recorded type is
-                // missing/UNKNOWN (e.g. a stdlib const body whose
-                // `expression_types` entry is absent from the cached
-                // snapshot) the syntactic form is authoritative, matching
-                // production's `resolve_numeric_literal`. An
-                // integer literal still defers to the recorded type so
-                // `let x: f64 = 1` takes the float path via `is_float_target`.
-                let is_float_target = base_target == TypeTable::F32
-                    || base_target == TypeTable::F64
-                    || (recorded_type == TypeTable::UNKNOWN
-                        && super::util::is_float_only_literal(repr));
-                if is_float_target {
-                    let value: f64 = if super::util::is_float_only_literal(repr) {
-                        super::util::parse_float_literal(repr).unwrap_or(0.0)
-                    } else {
-                        super::util::parse_u128_literal(repr)
-                            .map(|v| v as f64)
-                            .unwrap_or(0.0)
-                    };
-                    // The literal's *type* must be a concrete float, not the
-                    // (possibly UNKNOWN) recorded type: a float-only literal
-                    // with no recorded type defaults to `f64` (matching
-                    // production's `resolve_numeric_literal`). Leaving it
-                    // UNKNOWN makes lowering pick an integer op for the
-                    // surrounding arithmetic (`f64.div` -> `i32.div_s`).
-                    // f32 target keeps f32; otherwise (f64 target, or no
-                    // recorded type) an untyped float literal defaults to f64.
-                    let float_type = if base_target == TypeTable::F32 {
-                        TypeTable::F32
-                    } else {
-                        TypeTable::F64
-                    };
-                    return TirExpr::new(
-                        TirExprKind::FloatLiteral {
-                            value,
-                            repr: repr.clone(),
-                        },
-                        float_type,
-                        lit.span,
-                    );
+                return self.reify_numeric_literal(repr, recorded_type, lit.span);
+            }
+            // A byte literal is an integer literal spelled as a character, so
+            // it takes the same route by its decimal spelling — `let x: f64 =
+            // b'A'` and `let x: i128 = b'A'` reach the float and wide-integer
+            // readings a decimal literal does. `u8` is its type on its own.
+            ast::Literal::Byte(raw) => {
+                let byte = util::unescape_byte(raw).unwrap_or(0);
+                let byte_type = if recorded_type == TypeTable::UNKNOWN {
+                    TypeTable::U8
                 } else {
-                    let value = super::util::parse_u128_literal(repr).unwrap_or(0) as u64;
-                    TirExprKind::IntLiteral {
-                        value,
-                        repr: repr.clone(),
-                    }
-                }
+                    recorded_type
+                };
+                return self.reify_numeric_literal(&byte.to_string(), byte_type, lit.span);
             }
             ast::Literal::String(s) => {
                 // Decode escape sequences (`\"`, `\n`, `\\`, …) the same
@@ -9887,22 +9852,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 // correctly.
                 let ch = super::util::unescape_char(s).unwrap_or('\0');
                 TirExprKind::CharLiteral(ch)
-            }
-            ast::Literal::Byte(s) => {
-                let byte = super::util::unescape_byte(s).unwrap_or(0);
-                let byte_type = if recorded_type == crate::tir::TypeTable::UNKNOWN {
-                    crate::tir::TypeTable::U8
-                } else {
-                    recorded_type
-                };
-                return TirExpr::new(
-                    TirExprKind::IntLiteral {
-                        value: u64::from(byte),
-                        repr: s.clone(),
-                    },
-                    byte_type,
-                    lit.span,
-                );
             }
             ast::Literal::Bool(b) => TirExprKind::BoolLiteral(*b),
             ast::Literal::Null => TirExprKind::Null,
@@ -9993,6 +9942,70 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             }
         };
         TirExpr::new(kind, recorded_type, lit.span)
+    }
+
+    /// A numeric literal as TIR, from the decimal / hex / float spelling every
+    /// such literal reduces to. `repr` rides along because later readers parse
+    /// the value back out of it — `i128` / `u128` lowering is one.
+    fn reify_numeric_literal(&mut self, repr: &str, recorded_type: TypeId, span: Span) -> TirExpr {
+        // The *recorded type* decides Int vs Float TIR literal; the literal's
+        // *syntactic form* (`is_float_only_literal`) decides how to read its
+        // value, so `let x: f64 = 0xFF` reads as an integer then converts. Peel
+        // newtypes first, or a float literal bound to a float-newtype target
+        // takes the integer path.
+        let base_target = self
+            .tysys
+            .type_table
+            .borrow()
+            .representation_head(recorded_type);
+        // A float-only literal (`1.0`, `0.0`, `1e2`) is a float regardless of
+        // the recorded type: when the recorded type is missing/UNKNOWN (e.g. a
+        // stdlib const body whose `expression_types` entry is absent from the
+        // cached snapshot) the syntactic form is authoritative, matching
+        // production's `resolve_numeric_literal`. An integer literal still
+        // defers to the recorded type so `let x: f64 = 1` takes the float path
+        // via `is_float_target`.
+        let is_float_target = base_target == TypeTable::F32
+            || base_target == TypeTable::F64
+            || (recorded_type == TypeTable::UNKNOWN && util::is_float_only_literal(repr));
+        if is_float_target {
+            let value: f64 = if util::is_float_only_literal(repr) {
+                util::parse_float_literal(repr).unwrap_or(0.0)
+            } else {
+                util::parse_u128_literal(repr)
+                    .map(|v| v as f64)
+                    .unwrap_or(0.0)
+            };
+            // The literal's *type* must be a concrete float, not the (possibly
+            // UNKNOWN) recorded type: a float-only literal with no recorded
+            // type defaults to `f64` (matching production's
+            // `resolve_numeric_literal`). Leaving it UNKNOWN makes lowering
+            // pick an integer op for the surrounding arithmetic (`f64.div` ->
+            // `i32.div_s`). f32 target keeps f32; otherwise (f64 target, or no
+            // recorded type) an untyped float literal defaults to f64.
+            let float_type = if base_target == TypeTable::F32 {
+                TypeTable::F32
+            } else {
+                TypeTable::F64
+            };
+            return TirExpr::new(
+                TirExprKind::FloatLiteral {
+                    value,
+                    repr: repr.to_string(),
+                },
+                float_type,
+                span,
+            );
+        }
+        let value = util::parse_u128_literal(repr).unwrap_or(0) as u64;
+        TirExpr::new(
+            TirExprKind::IntLiteral {
+                value,
+                repr: repr.to_string(),
+            },
+            recorded_type,
+            span,
+        )
     }
 
     /// Resolve a nullary qualified pattern (`TokenKind::FOO`, `i32::MAX`) to its
