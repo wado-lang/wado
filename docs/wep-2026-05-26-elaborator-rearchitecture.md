@@ -684,6 +684,32 @@ once the compile has an entry program, whose world exports are the only roots
 the emitted component keeps. `Item::Impl` leaves the same question open, rooting
 no method however visible.
 
+### What the compiler names after liveness is not in one list
+
+`pub` seeds both closures, so a `pub` stdlib function is emitted whether or not
+this program reaches it. Only the production closure needs it: `pub` is the
+package's external surface, which decides whether an item is reported dead, and
+`optimize/dce.rs` already drops a `pub` item the entry does not reach. Seeding
+the reify gate as well is what hides every entity the compiler reaches for by
+name after this pass, because the blanket keeps them all emitted.
+
+Demoting `pub` to `seed_export` shows what the blanket covers. Compiling
+`export fn run() {}` then panics on `core:rt::unreachable`, called by a body
+that synthesis mints. Rooting that reaches the allocator, whose block the
+compiler picks by `#[allocator]` at Phase 7. Past that, `core:builtin`'s
+bodyless declarations are gone from the package, and every call to one mints an
+extern stub instead. `CompilerItem` records some of these and nothing records
+the rest.
+
+Closing it takes that list, one entry per entity named after `liveness` runs,
+with the pass that names it stating its trigger. Two measurements bound the
+work. The reward today is 6 of the 196 bodies `export fn run() {}` lowers. The
+rest of the closure is held by real edges from the format and parse impls that
+`CompilerItem::dispatched_by_synthesis` roots, so the list pays only once those
+roots narrow. And `Interner::resolve`'s shadowing assertion compares bare names
+across modules, calling `core:builtin`'s `unreachable` a shadow of `core:rt`'s.
+It reports the audit's own progress as a defect until it compares identities.
+
 ### A call to an operation with nothing to reach panics at WIR
 
 A `resource` operation has no body, so the `#[cm("...")]` import is the only
