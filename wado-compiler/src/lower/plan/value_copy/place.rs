@@ -5,10 +5,12 @@
 use super::funcset::{FuncKeyMap, FuncKeySet};
 use super::needs_value_copy;
 use super::ownership::BuiltinDeclarations;
+use crate::compiler_item::{CompilerItem, CompilerItems};
 use crate::hashmap::IndexMap;
+use crate::name::FqTraitName;
 use crate::tir::{
-    ResolvedType, TirExpr, TirExprKind, TirFunction, TirParam, TirPattern, TirStmt, TirStmtKind,
-    TirUnaryOp, TypeId, TypeTable,
+    FunctionRef, ResolvedType, TirExpr, TirExprKind, TirFunction, TirParam, TirPattern, TirStmt,
+    TirStmtKind, TirUnaryOp, TypeId, TypeTable, matches_builtin,
 };
 use crate::tir_visitor::TirRefVisitor;
 
@@ -425,10 +427,9 @@ impl<'a> Resolver<'a> {
     }
 }
 
-/// Whether the source named this expression rather than built it: a local and
-/// the projections over one. Every other shape is a temporary the source cannot
-/// name a second time, so a write into it reaches nobody — and must not be let
-/// through to whatever it was read out of.
+/// Whether this expression is a local or a projection over one — the shapes the
+/// TIR itself spells as a place. Every other is something built, which the
+/// source cannot name a second time.
 ///
 /// The grammar `PatternLowerer::place_is_writable` reads, and the one
 /// [`place_root`] roots: a shape only one of them admits is a place nobody asks
@@ -447,6 +448,76 @@ pub fn is_place(expr: &TirExpr) -> bool {
         } => is_place(inner),
         _ => false,
     }
+}
+
+/// [`is_place`] over the whole of the source's place grammar: also the two
+/// forms the elaborator lowers a source place *into*, which the TIR spells as
+/// something built.
+///
+/// A global is storage the source names, spelled here as a read of it. And
+/// `a[i]` reaches lowering as a call to the indexing accessor — the `Index*`
+/// method for a `List`, the `array_get_*` builtin under it for a bare `Array` —
+/// which is why a call belongs in a place grammar at all. Every other call
+/// delivers a value, whatever storage it read that value out of.
+///
+/// Asked of a `&mut self` receiver, where the answer decides whether the write
+/// reaches the caller (`arr[i].field.push(x)`) or a copy the caller cannot name
+/// (`get_field(&h).bump()`).
+#[must_use]
+pub fn is_source_place(expr: &TirExpr, items: &CompilerItems) -> bool {
+    match &expr.kind {
+        TirExprKind::Local { .. } | TirExprKind::GlobalVarGet { .. } => true,
+        TirExprKind::FieldAccess { expr: inner, .. }
+        | TirExprKind::VariantPayload { expr: inner, .. }
+        | TirExprKind::Index { expr: inner, .. }
+        | TirExprKind::Cast { expr: inner, .. }
+        | TirExprKind::Unary {
+            op: TirUnaryOp::Ref | TirUnaryOp::MutRef | TirUnaryOp::Deref,
+            expr: inner,
+        } => is_source_place(inner, items),
+        TirExprKind::Call { func, args, .. } if is_index_accessor(func, items) => args
+            .first()
+            .is_some_and(|a| is_source_place(&a.expr, items)),
+        _ => false,
+    }
+}
+
+/// Whether this callee is the accessor `a[i]` dispatches to: the `Index*` trait
+/// method the elaborator resolves it to, or the `array_get_*` builtin a `List`'s
+/// own accessor bottoms out in. Both take the indexed container as `args[0]`.
+fn is_index_accessor(func: &FunctionRef, items: &CompilerItems) -> bool {
+    if func.module_source.is_core_builtin() {
+        return [
+            "array_get_value",
+            "array_get_value_u8",
+            "array_get_ref",
+            "array_get_ref_mut",
+        ]
+        .iter()
+        .any(|b| matches_builtin(&func.name, func.monomorph_info.as_ref(), b));
+    }
+    // By `DefId`: the method's trait carries this impl's type arguments
+    // (`IndexValue<i32>`), which the item's own name does not.
+    let Some(declared) = func
+        .method_info
+        .as_ref()
+        .and_then(|m| m.trait_name.as_ref())
+        .and_then(FqTraitName::canonical)
+    else {
+        return false;
+    };
+    [
+        CompilerItem::IndexValue,
+        CompilerItem::IndexRef,
+        CompilerItem::IndexRefMut,
+    ]
+    .iter()
+    .any(|item| {
+        items
+            .trait_fq_opt(*item)
+            .and_then(|fq| fq.canonical())
+            .is_some_and(|item_def| item_def == declared)
+    })
 }
 
 /// The value a method call's receiver argument delivers, past the auto-`&` /

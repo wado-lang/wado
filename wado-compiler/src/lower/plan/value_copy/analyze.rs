@@ -9,7 +9,7 @@
 use super::funcset::{FuncKeyMap, FuncKeySet};
 use super::needs_value_copy;
 use super::ownership::{BuiltinDeclarations, OwnedCalls};
-use super::place::{is_place, receiver_value};
+use super::place::{is_source_place, receiver_value};
 use crate::flat_package::FlatPackage;
 use crate::hashmap::IndexSet;
 use crate::tir::{
@@ -150,7 +150,7 @@ impl TirRefVisitor for SeedWalker<'_> {
                     && let Some(arg) = args.first()
                 {
                     let value = receiver_value(&arg.expr);
-                    if !is_place(value) {
+                    if !is_source_place(value, self.type_table.compiler_items()) {
                         self.record_if_wrap(value);
                     }
                 }

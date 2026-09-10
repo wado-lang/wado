@@ -2389,7 +2389,9 @@ impl FunctionTranslator<'_, '_> {
     /// receiver's own type, not `fn(...)`.
     fn convert_receiver_arg(&self, receiver: &TirExpr, is_mut: bool) -> ArenaCallArg {
         let value = place::receiver_value(receiver);
-        if !is_mut || place::is_place(value) || !self.should_wrap_value_copy(value) {
+        let names_a_place =
+            place::is_source_place(value, self.base.type_table.borrow().compiler_items());
+        if !is_mut || names_a_place || !self.should_wrap_value_copy(value) {
             return ArenaCallArg {
                 expr: self.convert_operand(receiver),
                 is_mut,
