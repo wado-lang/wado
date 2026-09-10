@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1789003940534,
+  "lastUpdate": 1789012704341,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -54529,6 +54529,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/a5e274885bb4f5314880d822ff9c1c4be031048c"
         },
         "date": 1789003939714,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 2013,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6560,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18971,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 288933,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "733387340443895a3e0fd512e939a225dbbca9c5",
+          "message": "Merge pull request #2014 from wado-lang/claude/reference-field-binding-sharing-ievkdt\n\nfix(ownership): a binding read through a reference field keeps its own copy",
+          "timestamp": "2026-09-10T12:42:06+09:00",
+          "tree_id": "25445cbec6cbf447d1a2b492cdec30762c8a06ed",
+          "url": "https://github.com/wado-lang/wado/commit/733387340443895a3e0fd512e939a225dbbca9c5"
+        },
+        "date": 1789012703631,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
