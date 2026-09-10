@@ -336,15 +336,8 @@ struct NsdVariantAccess {
 
 impl DeserializeSeq for NsdSeqAccess {
     fn next_element<T: Deserialize>(&mut self) -> Result<Option<T>, DeserializeError> {
-        let b = self.de.peek_after_whitespace();
-        if b < 0 {
-            return Result::Err(DeserializeError::eof(self.de.pos as i64));
-        }
-        if b == b']' {
+        if !self.de.entry_head(b']', self.first)? {
             return Result::Ok(null);
-        }
-        if !self.first {
-            self.de.expect_char(b',')?;
         }
         self.first = false;
         self.de.depth = self.depth;
@@ -359,15 +352,8 @@ impl DeserializeSeq for NsdSeqAccess {
 
 impl DeserializeMap for NsdMapAccess {
     fn next_key_string(&mut self) -> Result<Option<String>, DeserializeError> {
-        let b = self.de.peek_after_whitespace();
-        if b < 0 {
-            return Result::Err(DeserializeError::eof(self.de.pos as i64));
-        }
-        if b == b'}' {
+        if !self.de.entry_head(b'}', self.first)? {
             return Result::Ok(null);
-        }
-        if !self.first {
-            self.de.expect_char(b',')?;
         }
         self.first = false;
         let key = self.de.read_json_string()?;
@@ -390,15 +376,8 @@ impl DeserializeStruct for NsdStructAccess {
     // the signature to satisfy the `DeserializeStruct` trait; the same generated
     // `next_field::<StructType>()` call site drives both SD and NSD formats.
     fn next_field<S: FieldSchema>(&mut self) -> Result<Option<i32>, DeserializeError> {
-        let b = self.de.peek_after_whitespace();
-        if b < 0 {
-            return Result::Err(DeserializeError::eof(self.de.pos as i64));
-        }
-        if b == b']' {
+        if !self.de.entry_head(b']', self.first)? {
             return Result::Ok(null);
-        }
-        if !self.first {
-            self.de.expect_char(b',')?;
         }
         self.first = false;
         // NSD: return sequential field index

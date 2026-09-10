@@ -316,6 +316,33 @@ for i in 1 2 3 4 5; do
 done
 ```
 
+### A/B-ing a stdlib change
+
+A change to `lib/core/*.wado` needs two compilers as well, which the source tree
+hides: a release build embeds the stdlib where a dev build reads it from disk.
+`benchmark/wado.sh` falls back to `cargo run --release` whenever `WADO_BIN` is
+unset, so swapping an arm's `.wado` files into the tree invalidates
+`wado-compiler` and rebuilds it under `lto=thin` / `codegen-units=1`. That is
+two full rebuilds per alternating round, and they are the wall clock rather than
+the benchmark. Build one binary per arm first, then alternate the binaries:
+
+```sh
+for arm in base head; do
+  cp /tmp/ab/$arm/*.wado wado-compiler/lib/core/
+  cargo build --release --bin wado --quiet
+  cp target/release/wado /tmp/ab/wado-$arm
+done
+for r in 1 2 3; do
+  for arm in base head; do
+    WADO_BIN=/tmp/ab/wado-$arm mise run benchmark-json-catalog
+  done
+done
+```
+
+The tree's sources stop mattering once the binaries exist, so a round costs what
+the benchmark costs. Rounds are cheap enough then to run six or ten of them,
+which is what it takes to resolve a delta near 1% out of this row's spread.
+
 `WADO_SKIP_PASS=<pass>` is a third arm off the same binary, which is how a
 regression is attributed to one pass without a third build. `WADO_BENCH_FLAGS`
 sweeps a knob the same way, but the harness spends it on `wado run`, so a knob

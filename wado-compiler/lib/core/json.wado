@@ -1039,6 +1039,43 @@ impl JsonDeserializer {
         return Result::Err(self.expect_char_error(c));
     }
 
+    /// The head every container entry starts with: `close` ends the container,
+    /// and every entry but the first is preceded by a comma this consumes.
+    /// Leaves `pos` on the entry's first byte; false means the container ended.
+    ///
+    /// It throws away the byte it stopped on, which is why `next_field` does
+    /// not call it: that caller needs the byte, and returning it here means
+    /// re-reading it after the comma for every seq element and map key, which
+    /// costs json-catalog deserialize 2% against a flat reading for this shape.
+    internal fn entry_head(&mut self, close: i32, first: bool) -> Result<bool, DeserializeError> {
+        let b = self.peek_after_whitespace();
+        if b < 0 {
+            builtin::cold_path();
+            return Result::Err(DeserializeError::eof(self.pos as i64));
+        }
+        if b == close {
+            return Result::Ok(false);
+        }
+        if !first {
+            // Whitespace is already skipped, so the separator is this byte.
+            if b != b',' {
+                builtin::cold_path();
+                return Result::Err(self.entry_separator_error(close));
+            }
+            self.pos += 1;
+        }
+        return Result::Ok(true);
+    }
+
+    /// The error `entry_head` reports for a byte that is neither a separator
+    /// nor the container's closing byte.
+    fn entry_separator_error(&self, close: i32) -> DeserializeError {
+        return DeserializeError::malformed(
+            `expected ',' or '${close as u8 as char}'`,
+            self.pos as i64,
+        );
+    }
+
     /// The error `expect_char` reports for the byte at the current position.
     fn expect_char_error(&self, c: i32) -> DeserializeError {
         if self.pos >= self.input.len() {
@@ -1857,24 +1894,8 @@ struct JsonVariantAccess {
 
 impl DeserializeSeq for JsonSeqAccess {
     fn next_element<T: Deserialize>(&mut self) -> Result<Option<T>, DeserializeError> {
-        let b = self.de.peek_after_whitespace();
-        if b < 0 {
-            builtin::cold_path();
-            return Result::Err(DeserializeError::eof(self.de.pos as i64));
-        }
-        if b == b']' {
+        if !self.de.entry_head(b']', self.first)? {
             return Result::Ok(null);
-        }
-        if !self.first {
-            // Whitespace is already skipped, so the separator is this byte.
-            if b != b',' {
-                builtin::cold_path();
-                return Result::Err(DeserializeError::malformed(
-                    "expected ',' or ']'",
-                    self.de.pos as i64,
-                ));
-            }
-            self.de.pos += 1;
         }
         self.first = false;
         self.de.depth = self.depth;
@@ -1889,24 +1910,8 @@ impl DeserializeSeq for JsonSeqAccess {
 
 impl DeserializeMap for JsonMapAccess {
     fn next_key_string(&mut self) -> Result<Option<String>, DeserializeError> {
-        let b = self.de.peek_after_whitespace();
-        if b < 0 {
-            builtin::cold_path();
-            return Result::Err(DeserializeError::eof(self.de.pos as i64));
-        }
-        if b == b'}' {
+        if !self.de.entry_head(b'}', self.first)? {
             return Result::Ok(null);
-        }
-        if !self.first {
-            // Whitespace is already skipped, so the separator is this byte.
-            if b != b',' {
-                builtin::cold_path();
-                return Result::Err(DeserializeError::malformed(
-                    "expected ',' or '}'",
-                    self.de.pos as i64,
-                ));
-            }
-            self.de.pos += 1;
         }
         self.first = false;
         let key = self.de.read_json_string()?;
@@ -1926,6 +1931,8 @@ impl DeserializeMap for JsonMapAccess {
 
 impl DeserializeStruct for JsonStructAccess {
     fn next_field<S: FieldSchema>(&mut self) -> Result<Option<i32>, DeserializeError> {
+        // `entry_head`'s shape, kept here because the key check below reads the
+        // byte the scan stopped on — see that function for what sharing costs.
         let mut b = self.de.peek_after_whitespace();
         if b < 0 {
             builtin::cold_path();
@@ -1937,10 +1944,7 @@ impl DeserializeStruct for JsonStructAccess {
         if !self.first {
             if b != b',' {
                 builtin::cold_path();
-                return Result::Err(DeserializeError::malformed(
-                    "expected ',' or '}'",
-                    self.de.pos as i64,
-                ));
+                return Result::Err(self.de.entry_separator_error(b'}'));
             }
             self.de.pos += 1;
             b = self.de.peek_after_whitespace();
