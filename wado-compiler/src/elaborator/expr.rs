@@ -16,6 +16,7 @@ use crate::token::Span;
 
 use super::Elaborator;
 use super::call::turbofish_holes;
+use super::coercion::is_numeric_literal_expr;
 use super::infer::InferCtx;
 use super::instantiate::Instantiation;
 use super::typecheck::{TypeCheckResult, check_assignable};
@@ -2471,7 +2472,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             ast::Expr::Match(match_expr) => {
                 self.collect_match_numeric_literal_tails(match_expr, target, out)
             }
-            _ if super::coercion::is_numeric_literal_expr(expr) => {
+            _ if is_numeric_literal_expr(expr) => {
                 out.literals.push(expr);
                 true
             }
@@ -5340,8 +5341,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         use crate::ast::RangeKind;
 
         // Bidirectional coercion: resolve non-literal first to infer the element type
-        let start_is_literal = self.tysys.is_numeric_literal(&range.start);
-        let end_is_literal = self.tysys.is_numeric_literal(&range.end);
+        let start_is_literal = is_numeric_literal_expr(&range.start);
+        let end_is_literal = is_numeric_literal_expr(&range.end);
 
         let (start, end) = if start_is_literal && !end_is_literal {
             let end = self.resolve_expr(&range.end, ctx, None);

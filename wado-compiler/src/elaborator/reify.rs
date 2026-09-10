@@ -22,6 +22,7 @@ use crate::tir::{
     TypeTable,
 };
 
+use super::coercion::is_numeric_literal_expr;
 use super::sem::ModuleSemantics;
 use super::types::{FunctionContext, TypeLookup};
 use super::tysys::TypeSystem;
@@ -2822,7 +2823,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 // must be `f32`, not the default `f64`). Other unary operands
                 // are typed on their own.
                 let inner_expected = if unary.op == ast::UnaryOp::Neg
-                    && self.tysys.is_numeric_literal(&unary.expr)
+                    && is_numeric_literal_expr(&unary.expr)
                     && recorded_type != crate::tir::TypeTable::UNKNOWN
                 {
                     Some(recorded_type)
@@ -5013,8 +5014,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // `f32::INFINITY = 1.0 / 0.0`, whose literals carry no recorded type
         // of their own — without the hint they default to `f64` and the
         // surrounding arithmetic lowers to the wrong width / an integer op.
-        let left_is_lit = self.tysys.is_numeric_literal(&binary.left);
-        let right_is_lit = self.tysys.is_numeric_literal(&binary.right);
+        let left_is_lit = is_numeric_literal_expr(&binary.left);
+        let right_is_lit = is_numeric_literal_expr(&binary.right);
         let (left, right) = if left_is_lit && !right_is_lit {
             let right = self.reify_expr(&binary.right, ctx, None);
             let coerce = if self.tysys.type_table.borrow().is_numeric(right.type_id) {

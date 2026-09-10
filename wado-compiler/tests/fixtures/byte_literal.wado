@@ -32,6 +32,22 @@ fn id<T>(x: T) -> T {
     return x;
 }
 
+// The other operand fixes the literal's type whichever side the literal is on,
+// and with nothing outside the operation to say what that type is: the cast
+// below takes its operand's type from the subtraction, not the other way
+// round, and a comparison chain leads with the literal.
+fn digit_value(b: i32) -> u32 {
+    return (b - b'0') as u32;
+}
+
+fn is_digit(b: i32) -> bool {
+    return b'0' <= b <= b'9';
+}
+
+fn at_least_zero(b: i32) -> bool {
+    return b'0' <= b;
+}
+
 export fn run() {
     let a = b'A';
     assert a == 65;
@@ -67,6 +83,13 @@ export fn run() {
     assert matches_unsigned_wide(65 as u128);
 
     assert takes_u8(id(b'A')) == 65;
+
+    assert digit_value(55) == 7;
+    assert digit_value(47) > 9;
+    assert is_digit(55);
+    assert !is_digit(97);
+    assert at_least_zero(70);
+    assert !at_least_zero(32);
 }
 
 __DATA__

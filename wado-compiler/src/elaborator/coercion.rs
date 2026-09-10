@@ -19,17 +19,112 @@ fn is_literal_expr(expr: &Expr) -> bool {
     }
 }
 
-/// Whether `expr` is one of the numeric-literal shapes
-/// [`Elaborator::try_coerce_numeric_literal`] retargets.
-pub(super) fn is_numeric_literal_expr(expr: &Expr) -> bool {
+/// A numeric literal's spelling: what [`Elaborator::try_coerce_numeric_literal`]
+/// needs to re-read it against a target type.
+pub(super) enum NumericLiteralKind<'a> {
+    /// `42`, `0x2a`, `3.14`.
+    Number(&'a str),
+    /// `b'0'`, a `u8`-valued integer literal.
+    Byte(&'a str),
+}
+
+/// One of the numeric-literal shapes implicit conversion retargets (WEP
+/// 2026-08-24), with the nodes whose spans its diagnostics point at.
+pub(super) struct NumericLiteral<'a> {
+    pub(super) kind: NumericLiteralKind<'a>,
+    pub(super) lit: &'a ast::LiteralExpr,
+    /// The `-` wrapper of a negated literal. Only a [`NumericLiteralKind::Number`]
+    /// has one — there is no negated byte literal.
+    pub(super) neg: Option<&'a ast::UnaryExpr>,
+}
+
+/// Classify `expr` as a numeric literal, or `None` when it is not one.
+///
+/// The single enumeration of these shapes. Everything that asks "does this
+/// operand take its type from the other one?" — operand ordering in
+/// `resolve_binary_operands_with_coercion` and in `reify_binary`, range
+/// endpoints, block-tail retargeting — and every arm of
+/// [`Elaborator::try_coerce_numeric_literal_inner`] reads it, so a shape
+/// cannot be coercible to one walk and already-typed to another. It was two
+/// enumerations, and they drifted: `b'0'` retargeted but did not count as a
+/// literal for ordering, so `48 <= b` type-checked and `b'0' <= b` did not.
+///
+/// The non-numeric arms are enumerated rather than caught by `_`, so a new
+/// [`Expr`] variant forces a decision here.
+pub(super) fn classify_numeric_literal(expr: &Expr) -> Option<NumericLiteral<'_>> {
     match expr {
-        Expr::Literal(lit) => matches!(lit.value, Literal::Number(_) | Literal::Byte(_)),
-        Expr::Unary(unary) => {
-            unary.op == UnaryOp::Neg
-                && matches!(&unary.expr, Expr::Literal(lit) if matches!(lit.value, Literal::Number(_)))
-        }
-        _ => false,
+        Expr::Literal(lit) => match &lit.value {
+            Literal::Number(repr) => Some(NumericLiteral {
+                kind: NumericLiteralKind::Number(repr),
+                lit,
+                neg: None,
+            }),
+            Literal::Byte(raw) => Some(NumericLiteral {
+                kind: NumericLiteralKind::Byte(raw),
+                lit,
+                neg: None,
+            }),
+            _ => None,
+        },
+        Expr::Unary(unary) if unary.op == UnaryOp::Neg => match &unary.expr {
+            Expr::Literal(lit) => match &lit.value {
+                Literal::Number(repr) => Some(NumericLiteral {
+                    kind: NumericLiteralKind::Number(repr),
+                    lit,
+                    neg: Some(unary),
+                }),
+                _ => None,
+            },
+            _ => None,
+        },
+        Expr::Unary(_)
+        | Expr::Ident(_)
+        | Expr::Binary(_)
+        | Expr::Assign(_)
+        | Expr::CompoundAssign(_)
+        | Expr::ComparisonChain(_)
+        | Expr::Call(_)
+        | Expr::MethodCall(_)
+        | Expr::StaticMethodCall(_)
+        | Expr::FieldAccess(_)
+        | Expr::Index(_)
+        | Expr::Block(_)
+        | Expr::If(_)
+        | Expr::Match(_)
+        | Expr::Matches(_)
+        | Expr::Closure(_)
+        | Expr::TemplateString(_)
+        | Expr::TaggedTemplate(_)
+        | Expr::Cast(_)
+        | Expr::StructLiteral(_)
+        | Expr::TupleLiteral(_)
+        | Expr::TupleComprehension(_)
+        | Expr::LabeledBlock(_)
+        | Expr::TryOp(_)
+        | Expr::Spread(..)
+        | Expr::Range(_)
+        | Expr::WithHandler(_)
+        | Expr::Resume(_)
+        | Expr::Error(_) => None,
     }
+}
+
+/// Whether `expr` is one of the shapes [`classify_numeric_literal`] names.
+pub(super) fn is_numeric_literal_expr(expr: &Expr) -> bool {
+    classify_numeric_literal(expr).is_some()
+}
+
+/// Whether `expr` is a byte literal. Among numeric literals it is the one that
+/// arrives with a type of its own, so it settles a pair that has no other
+/// anchor.
+pub(super) fn is_byte_literal_expr(expr: &Expr) -> bool {
+    matches!(
+        classify_numeric_literal(expr),
+        Some(NumericLiteral {
+            kind: NumericLiteralKind::Byte(_),
+            ..
+        })
+    )
 }
 
 impl<H: CompilerHost> Elaborator<'_, H> {
@@ -70,31 +165,67 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         expr: &Expr,
         target_type: TypeId,
     ) -> Option<TypeId> {
-        // Number literal coercion to integer
-        if let Expr::Literal(lit) = expr
-            && let Literal::Number(repr) = &lit.value
-            && self.tysys.type_table.borrow().is_integer(target_type)
-        {
+        let NumericLiteral { kind, lit, neg } = classify_numeric_literal(expr)?;
+        // A range or parse complaint about a negated literal points at the `-`
+        // too; only the raw parse failure stays on the literal alone.
+        let whole_span = neg.map_or(lit.span, |unary| unary.span);
+        let sign = if neg.is_some() { "-" } else { "" };
+
+        let repr = match kind {
+            NumericLiteralKind::Byte(raw) => {
+                if !self.tysys.type_table.borrow().is_integer(target_type) {
+                    return None;
+                }
+                return Some(match util::unescape_byte(raw) {
+                    Ok(byte) => {
+                        if let Some(err_msg) = util::check_int_range_positive(
+                            u128::from(byte),
+                            target_type,
+                            &self.tysys.type_table.borrow(),
+                            &byte.to_string(),
+                        ) {
+                            let _ = self.emit(TypeError::InvalidLiteral {
+                                message: err_msg,
+                                span: lit.span,
+                            });
+                        }
+                        target_type
+                    }
+                    Err(message) => {
+                        let _ = self.emit(TypeError::InvalidLiteral {
+                            message,
+                            span: lit.span,
+                        });
+                        target_type
+                    }
+                });
+            }
+            NumericLiteralKind::Number(repr) => repr,
+        };
+
+        if self.tysys.type_table.borrow().is_integer(target_type) {
             if util::is_float_only_literal(repr) {
                 let _ = self.emit(TypeError::InvalidLiteral {
                     message: format!(
-                        "cannot use float literal '{repr}' as integer (has decimal point or negative exponent)"
+                        "cannot use float literal '{sign}{repr}' as integer (has decimal point or negative exponent)"
                     ),
-                    span: lit.span,
+                    span: whole_span,
                 });
                 return Some(target_type);
             }
             return Some(match util::parse_u128_literal(repr) {
                 Ok(value) => {
-                    if let Some(err_msg) = util::check_int_range_positive(
-                        value,
-                        target_type,
-                        &self.tysys.type_table.borrow(),
-                        repr,
-                    ) {
+                    let tt = self.tysys.type_table.borrow();
+                    let err_msg = if neg.is_some() {
+                        util::check_int_range_negative(value, target_type, &tt, repr)
+                    } else {
+                        util::check_int_range_positive(value, target_type, &tt, repr)
+                    };
+                    drop(tt);
+                    if let Some(err_msg) = err_msg {
                         let _ = self.emit(TypeError::InvalidLiteral {
                             message: err_msg,
-                            span: lit.span,
+                            span: whole_span,
                         });
                     }
                     target_type
@@ -109,81 +240,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             });
         }
 
-        if let Expr::Literal(lit) = expr
-            && let Literal::Byte(raw) = &lit.value
-            && self.tysys.type_table.borrow().is_integer(target_type)
-        {
-            return Some(match util::unescape_byte(raw) {
-                Ok(byte) => {
-                    if let Some(err_msg) = util::check_int_range_positive(
-                        u128::from(byte),
-                        target_type,
-                        &self.tysys.type_table.borrow(),
-                        &byte.to_string(),
-                    ) {
-                        let _ = self.emit(TypeError::InvalidLiteral {
-                            message: err_msg,
-                            span: lit.span,
-                        });
-                    }
-                    target_type
-                }
-                Err(message) => {
-                    let _ = self.emit(TypeError::InvalidLiteral {
-                        message,
-                        span: lit.span,
-                    });
-                    target_type
-                }
-            });
-        }
-
-        // Negated number literal coercion to integer: -42 as i64
-        if let Expr::Unary(unary) = expr
-            && unary.op == UnaryOp::Neg
-            && let Expr::Literal(lit) = &unary.expr
-            && let Literal::Number(repr) = &lit.value
-            && self.tysys.type_table.borrow().is_integer(target_type)
-        {
-            if util::is_float_only_literal(repr) {
-                let _ = self.emit(TypeError::InvalidLiteral {
-                    message: format!(
-                        "cannot use float literal '-{repr}' as integer (has decimal point or negative exponent)"
-                    ),
-                    span: unary.span,
-                });
-                return Some(target_type);
-            }
-            return Some(match util::parse_u128_literal(repr) {
-                Ok(value) => {
-                    if let Some(err_msg) = util::check_int_range_negative(
-                        value,
-                        target_type,
-                        &self.tysys.type_table.borrow(),
-                        repr,
-                    ) {
-                        let _ = self.emit(TypeError::InvalidLiteral {
-                            message: err_msg,
-                            span: unary.span,
-                        });
-                    }
-                    target_type
-                }
-                Err(message) => {
-                    let _ = self.emit(TypeError::InvalidLiteral {
-                        message,
-                        span: lit.span,
-                    });
-                    target_type
-                }
-            });
-        }
-
-        // Number literal coercion to float
-        if let Expr::Literal(lit) = expr
-            && let Literal::Number(repr) = &lit.value
-            && self.tysys.type_table.borrow().is_float(target_type)
-        {
+        if self.tysys.type_table.borrow().is_float(target_type) {
             return Some(match util::parse_float_literal(repr) {
                 Ok(_) => target_type,
                 Err(message) => {
@@ -196,84 +253,32 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             });
         }
 
-        // Negated number literal coercion to float: -3.14 as f32
-        if let Expr::Unary(unary) = expr
-            && unary.op == UnaryOp::Neg
-            && let Expr::Literal(lit) = &unary.expr
-            && let Literal::Number(repr) = &lit.value
-            && self.tysys.type_table.borrow().is_float(target_type)
-        {
-            return Some(match util::parse_float_literal(repr) {
-                Ok(_) => target_type,
-                Err(message) => {
-                    let _ = self.emit(TypeError::InvalidLiteral {
-                        message,
-                        span: lit.span,
-                    });
-                    target_type
-                }
-            });
-        }
-
-        // i128/u128 literal coercion
-        if let Expr::Literal(lit) = expr
-            && let Literal::Number(repr) = &lit.value
-            && !util::is_float_only_literal(repr)
-        {
+        // `i128` / `u128` are structs, so they reach neither test above.
+        if !util::is_float_only_literal(repr) {
             let struct_name = match self.tysys.type_table.borrow().get(target_type) {
                 ResolvedType::Struct { def, .. } => {
                     Some(self.tysys.type_table.borrow().struct_head_name(*def))
                 }
                 _ => None,
             };
-
+            // A negated literal only ever lands on `i128`; `u128` has no
+            // negative values to land on.
             if let Some(name) = struct_name
-                && (name == "u128" || name == "i128")
+                && (name == "i128" || (name == "u128" && neg.is_none()))
             {
-                let parse_result = if name == "u128" {
-                    util::parse_u128_literal(repr).map(|v| v as i128)
+                let parsed = if neg.is_some() {
+                    util::parse_i128_literal(&format!("-{repr}")).is_ok()
+                } else if name == "u128" {
+                    util::parse_u128_literal(repr).is_ok()
                 } else {
-                    util::parse_i128_literal(repr)
+                    util::parse_i128_literal(repr).is_ok()
                 };
-
-                match parse_result {
-                    Ok(_) => {
-                        return Some(target_type);
-                    }
-                    Err(_) => {
-                        let _ = self.emit(TypeError::InvalidLiteral {
-                            message: format!("invalid {name} literal: {repr}"),
-                            span: lit.span,
-                        });
-                    }
-                }
-            }
-        }
-
-        // Negated i128 literal: -100 as i128
-        if let Expr::Unary(unary) = expr
-            && unary.op == ast::UnaryOp::Neg
-            && let Expr::Literal(lit) = &unary.expr
-            && let Literal::Number(repr) = &lit.value
-            && !util::is_float_only_literal(repr)
-        {
-            let struct_name = match self.tysys.type_table.borrow().get(target_type) {
-                ResolvedType::Struct { def, .. } => {
-                    Some(self.tysys.type_table.borrow().struct_head_name(*def))
-                }
-                _ => None,
-            };
-
-            if let Some(name) = struct_name
-                && name == "i128"
-            {
-                let negated_repr = format!("-{repr}");
-                if util::parse_i128_literal(&negated_repr).is_ok() {
+                if parsed {
                     return Some(target_type);
                 }
                 let _ = self.emit(TypeError::InvalidLiteral {
-                    message: format!("invalid i128 literal: -{repr}"),
-                    span: unary.span,
+                    message: format!("invalid {name} literal: {sign}{repr}"),
+                    span: whole_span,
                 });
             }
         }
