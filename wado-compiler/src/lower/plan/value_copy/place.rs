@@ -436,18 +436,7 @@ impl<'a> Resolver<'a> {
 /// about.
 #[must_use]
 pub fn is_place(expr: &TirExpr) -> bool {
-    match &expr.kind {
-        TirExprKind::Local { .. } => true,
-        TirExprKind::FieldAccess { expr: inner, .. }
-        | TirExprKind::VariantPayload { expr: inner, .. }
-        | TirExprKind::Index { expr: inner, .. }
-        | TirExprKind::Cast { expr: inner, .. }
-        | TirExprKind::Unary {
-            op: TirUnaryOp::Ref | TirUnaryOp::MutRef | TirUnaryOp::Deref,
-            expr: inner,
-        } => is_place(inner),
-        _ => false,
-    }
+    place_walk(expr, None)
 }
 
 /// [`is_place`] over the whole of the source's place grammar: also the two
@@ -465,8 +454,15 @@ pub fn is_place(expr: &TirExpr) -> bool {
 /// (`get_field(&h).bump()`).
 #[must_use]
 pub fn is_source_place(expr: &TirExpr, items: &CompilerItems) -> bool {
+    place_walk(expr, Some(items))
+}
+
+/// The place grammar both strengths walk. `source_forms` present admits the two
+/// shapes the source spells as a place and the TIR does not.
+fn place_walk(expr: &TirExpr, source_forms: Option<&CompilerItems>) -> bool {
     match &expr.kind {
-        TirExprKind::Local { .. } | TirExprKind::GlobalVarGet { .. } => true,
+        TirExprKind::Local { .. } => true,
+        TirExprKind::GlobalVarGet { .. } => source_forms.is_some(),
         TirExprKind::FieldAccess { expr: inner, .. }
         | TirExprKind::VariantPayload { expr: inner, .. }
         | TirExprKind::Index { expr: inner, .. }
@@ -474,10 +470,13 @@ pub fn is_source_place(expr: &TirExpr, items: &CompilerItems) -> bool {
         | TirExprKind::Unary {
             op: TirUnaryOp::Ref | TirUnaryOp::MutRef | TirUnaryOp::Deref,
             expr: inner,
-        } => is_source_place(inner, items),
-        TirExprKind::Call { func, args, .. } if is_index_accessor(func, items) => args
-            .first()
-            .is_some_and(|a| is_source_place(&a.expr, items)),
+        } => place_walk(inner, source_forms),
+        TirExprKind::Call { func, args, .. } => source_forms.is_some_and(|items| {
+            is_index_accessor(func, items)
+                && args
+                    .first()
+                    .is_some_and(|a| place_walk(&a.expr, source_forms))
+        }),
         _ => false,
     }
 }

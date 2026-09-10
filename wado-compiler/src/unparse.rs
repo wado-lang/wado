@@ -3378,15 +3378,14 @@ fn binds_tighter_than(expr: &Expr, slot: OperandSlot) -> bool {
             | Expr::StructLiteral(_)
             | Expr::TupleLiteral(_)
             | Expr::TupleComprehension(_)
-            // Closes with `}`, which ends the expression as cleanly as a
-            // `)` would. `Matches` closes the same way and still needs parens:
-            // its scrutinee sits to the left of the brace.
-            | Expr::Block(_)
-            | Expr::LabeledBlock(_)
-            | Expr::If(_)
-            | Expr::Match(_)
             | Expr::Error(_)
     );
+    // A block form — `{…}`, `LABEL: {…}`, `if`, `match` — is left off that
+    // list by its *opening*, not its closing `}`: at the start of a statement
+    // the parser takes the keyword or brace for the statement itself and the
+    // postfix behind it has nothing to attach to. Where the parens are not
+    // needed they still read as the source wrote them, so one rule serves both
+    // positions rather than a second one deciding which position this is.
     match slot {
         OperandSlot::Callee => postfix && !matches!(expr, Expr::FieldAccess(_)),
         OperandSlot::Postfix => postfix,
