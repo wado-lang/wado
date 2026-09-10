@@ -63,7 +63,7 @@ Reads SQL from stdin and writes syntax-highlighted HTML to stdout.
 
 | Language | Size (bytes) | Notes                                       |
 | -------- | -----------: | ------------------------------------------- |
-| wado     |      276,991 | Gale-generated highlighter from `SQLite.g4` |
+| wado     |      288,933 | Gale-generated highlighter from `SQLite.g4` |
 | rust     |    3,484,487 | tree-sitter + tree-sitter-sequel            |
 
 ## Usage
