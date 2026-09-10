@@ -17,9 +17,7 @@ use crate::nir_engine::Engine;
 use crate::nir_value_graph::{OpaqueSource, ValueId, ValueKind};
 use crate::tir::TypeTable;
 
-/// Every block reachable from the body root, in DFS pop order (a block precedes
-/// the blocks nested under it). The NIR block graph is a tree, so no visited set
-/// is needed.
+/// Every reachable block, each before the blocks nested under it.
 pub(super) fn reachable_blocks(body: &Body) -> Vec<BlockId> {
     let mut out = Vec::new();
     body.for_each_reachable_node(|node| {

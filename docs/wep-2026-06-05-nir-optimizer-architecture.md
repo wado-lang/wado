@@ -227,11 +227,11 @@ These are settled by measurement and re-derived at a cost.
   pool is append-only and also holds reads that folded away.
 - A whole-body walk is `for_each_reachable_node`, which covers the skeleton and
   what a promoted operand names as its extraction source. `for_each_node_under`
-  walks a subtree and asserts it is not handed the root block. Reaching for the
-  skeleton walk over a whole body is the shape every bridge miscompile took, and
-  the name is what invites it. The pool records whether an extraction source
-  exists at all, so a body with none takes the plain skeleton walk and the
-  coverage costs nothing.
+  walks a subtree, and asserts it is not handed the root block: every bridge
+  miscompile came from a census reaching for the skeleton walk because its name
+  is the obvious one. The pool records whether an extraction source exists at
+  all, so a body with none takes the plain skeleton walk and the coverage costs
+  nothing.
 - That census is session-scoped, never per-application. It walks the whole
   body, so recomputing it per rule application is quadratic. It is memoized, and
   the memo is maintained across edits rather than dropped: an operand becoming

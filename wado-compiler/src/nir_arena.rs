@@ -1122,8 +1122,8 @@ impl Body {
         self.for_each_skeleton_node(root, f);
     }
 
-    /// [`Body::for_each_node_under`] without its whole-body check, for the two
-    /// walks [`Body::for_each_live_node_under`] is itself made of.
+    /// [`Body::for_each_node_under`] without its whole-body check, for the walks
+    /// [`Body::for_each_live_node_under`] is itself made of.
     fn for_each_skeleton_node(&self, root: NodeRef, mut f: impl FnMut(NodeRef)) {
         self.walk_nodes_under::<()>(root, |node| {
             f(node);
@@ -1132,9 +1132,8 @@ impl Body {
     }
 
     /// [`Body::for_each_node_under`] plus the nodes a promoted operand names as
-    /// its extraction source. Those produce the operand's code, so a walk that
-    /// took only skeleton children would call them orphans — and a rewrite that
-    /// trusted the walk would pass them by.
+    /// its extraction source. Those produce the operand's code, so a walk
+    /// without them calls a live node an orphan.
     pub fn for_each_live_node_under(&self, root: NodeRef, mut f: impl FnMut(NodeRef)) {
         if !self.values.has_expr_source() {
             self.for_each_skeleton_node(root, f);
@@ -1151,7 +1150,8 @@ impl Body {
                 }
             });
         });
-        // Built only once a source exists, so a body with none pays nothing.
+        // Not collected during the first walk: an insert per node costs more
+        // than this second one, which a body with no source never reaches.
         #[cfg(debug_assertions)]
         let mut covered: IndexSet<ExprId> = IndexSet::default();
         #[cfg(debug_assertions)]

@@ -515,8 +515,8 @@ pub struct ValuePool {
     /// scheduled skeleton expression (a call result kept in the skeleton).
     /// Empty for opaques minted without a recorded source.
     opaque_sources: IndexMap<OpaqueId, OpaqueSource>,
-    /// Whether any [`OpaqueSource::Expr`] has ever been recorded. Sticky, so it
-    /// over-estimates rather than reporting a source the walks would then skip.
+    /// Whether any [`OpaqueSource::Expr`] has ever been recorded. Sticky: an
+    /// over-estimate costs a walk, a stale `false` would skip a live node.
     expr_sources: bool,
     /// One stable `Opaque(Local idx)` per local, memoized so repeated requests
     /// (e.g. a loop-stability re-seed of a local's reads after maintenance
