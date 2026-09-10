@@ -235,7 +235,17 @@ struct Mutation {
     live: IndexSet<u32>,
 }
 
+/// Whether the write `m` can never change the value read at `read`.
 fn write_cannot_reach(m: &Mutation, read: &AccessPath) -> bool {
+    // A write through a reference field lands in storage its root only borrows,
+    // so neither its root nor its selectors place it: it may be the very
+    // storage `read` names, reached under another name.
+    if m.path.through_borrow {
+        return false;
+    }
+    if m.path.root != read.root {
+        return true;
+    }
     if m.rebinds_place {
         return !writes_inside(&m.path, read);
     }
@@ -400,8 +410,8 @@ impl Analyzer<'_> {
                 // `let r = p; p = x;` leaves `r` holding what `p` gave up: a
                 // rebind repoints `p`'s slot rather than writing the old
                 // storage in place, so it is never itself a conflict — only
-                // every OTHER mutation of `path`'s root, live where `local`
-                // could read it, must be unreachable from `local`'s path.
+                // every OTHER mutation, live where `local` could read it, must
+                // be unreachable from `local`'s path.
                 let mut released = false;
                 let mut share_safe = true;
                 for (m, r) in self.mutations.iter().zip(&at_write) {
@@ -409,11 +419,7 @@ impl Analyzer<'_> {
                     if is_release && r.contains(&local) {
                         released = true;
                     }
-                    if !is_release
-                        && m.path.root == path.root
-                        && r.contains(&local)
-                        && !write_cannot_reach(m, path)
-                    {
+                    if !is_release && r.contains(&local) && !write_cannot_reach(m, path) {
                         share_safe = false;
                     }
                 }

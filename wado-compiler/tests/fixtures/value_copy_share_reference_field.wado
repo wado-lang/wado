@@ -56,6 +56,15 @@ test "a read through one reference field does not share a sibling's referent" {
     assert xs == [1, 2, 999];
 }
 
+test "a write through a reference field is seen by a binding at the referent" {
+    let mut xs = builtin::black_box([1, 2] as List<i32>);
+    let c = Cell { r: &mut xs };
+    let v = xs;
+    c.r.push(999);
+    assert v == [1, 2];
+    assert xs == [1, 2, 999];
+}
+
 test "a read off a reference bound out of a reference field does not share" {
     let mut inner = builtin::black_box(Inner { f: [1, 2] });
     let h = Held { r: &mut inner };
