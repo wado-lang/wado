@@ -1025,7 +1025,7 @@ fn detach_stmts(body: &mut Body, stmts: &[StmtId]) {
 /// The `GlobalVarSet` a hoist just planted, which every sibling rewrite folds
 /// its moved definitions into.
 fn find_global_var_set(body: &Body, module_source: &ModuleSource, name: &str) -> ExprId {
-    if let Some(e) = body.find_in_reachable_node(|node| {
+    if let Some(e) = body.find_in_live_node_under(NodeRef::Block(body.root), |node| {
         if let NodeRef::Expr(e) = node
             && let ExprKind::GlobalVarSet {
                 name: n,
@@ -1820,7 +1820,7 @@ fn written_through(body: &Body, idx: u32, gate: &Gate<'_>) -> bool {
 fn param_storage_escapes(body: &Body, idx: u32, gate: &Gate<'_>) -> bool {
     let roots = projection_alias_roots(body, idx, gate, AliasRoots::WithReassigned);
     let escapes = |op: Operand| delivers_projection_operand(body, op, &roots, gate);
-    body.find_in_reachable_node(|node| {
+    body.find_in_live_node_under(NodeRef::Block(body.root), |node| {
         match node {
             NodeRef::Stmt(s) => match &body.stmts[s].kind {
                 StmtKind::Return { value } | StmtKind::Break { value, .. } => {

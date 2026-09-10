@@ -440,7 +440,7 @@ fn has_short_push_str_candidate(project: &NirPackage, push_str_id: crate::nir::F
 const SHORT_PUSH_STR_MAX_LEN: usize = 8;
 
 fn body_has_short_push_str(body: &Body, push_str_id: crate::nir::FuncId) -> bool {
-    body.find_in_reachable_node(|node| {
+    body.find_in_live_node_under(NodeRef::Block(body.root), |node| {
         if let NodeRef::Expr(e) = node
             && let Some((_, func_id, args)) = body.exprs[e].kind.as_method_call()
             && func_id == push_str_id

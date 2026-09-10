@@ -1141,21 +1141,12 @@ impl Body {
         }
         let mut pool_seen: IndexSet<ValueId> = IndexSet::default();
         let mut sourced: Vec<ExprId> = Vec::new();
-        self.for_each_skeleton_node(root, |node| {
-            f(node);
-            self.for_each_operand(node, |op| {
-                if let Some(v) = op.as_value() {
-                    self.values
-                        .for_each_opaque_expr(v, &mut pool_seen, |e| sourced.push(e));
-                }
-            });
-        });
-        // Not collected during the first walk: an insert per node costs more
-        // than this second one, which a body with no source never reaches.
-        #[cfg(debug_assertions)]
+        self.walk_sourcing(root, &mut f, &mut pool_seen, &mut sourced, None);
+        // Only the assertion reads this, and only a body that named a source can
+        // fail it, so nothing else pays the scan or the per-node insert.
         let mut covered: IndexSet<ExprId> = IndexSet::default();
-        #[cfg(debug_assertions)]
-        if !sourced.is_empty() {
+        let checking = cfg!(debug_assertions) && !sourced.is_empty();
+        if checking {
             self.for_each_skeleton_node(root, |node| {
                 if let NodeRef::Expr(e) = node {
                     covered.insert(e);
@@ -1170,20 +1161,40 @@ impl Body {
                 "[NIR] {e:?} is an extraction source this walk already covered, so \
                  `reachable_operand_values` counts its slots twice"
             );
-            self.for_each_skeleton_node(NodeRef::Expr(e), |node| {
-                f(node);
-                #[cfg(debug_assertions)]
-                if let NodeRef::Expr(inner) = node {
-                    covered.insert(inner);
-                }
-                self.for_each_operand(node, |op| {
-                    if let Some(v) = op.as_value() {
-                        self.values
-                            .for_each_opaque_expr(v, &mut pool_seen, |e| sourced.push(e));
-                    }
-                });
-            });
+            self.walk_sourcing(
+                NodeRef::Expr(e),
+                &mut f,
+                &mut pool_seen,
+                &mut sourced,
+                checking.then_some(&mut covered),
+            );
         }
+    }
+
+    /// Walk `root`'s skeleton subtree into `f`, pushing the extraction sources
+    /// its operands name onto `sourced`. `covered` records what `f` was handed.
+    fn walk_sourcing(
+        &self,
+        root: NodeRef,
+        f: &mut impl FnMut(NodeRef),
+        pool_seen: &mut IndexSet<ValueId>,
+        sourced: &mut Vec<ExprId>,
+        mut covered: Option<&mut IndexSet<ExprId>>,
+    ) {
+        self.for_each_skeleton_node(root, |node| {
+            f(node);
+            if let Some(covered) = covered.as_deref_mut()
+                && let NodeRef::Expr(e) = node
+            {
+                covered.insert(e);
+            }
+            self.for_each_operand(node, |op| {
+                if let Some(v) = op.as_value() {
+                    self.values
+                        .for_each_opaque_expr(v, pool_seen, |e| sourced.push(e));
+                }
+            });
+        });
     }
 
     /// The first value `f` gives for `root` or a node beneath it, parents before
@@ -1269,19 +1280,9 @@ impl Body {
         self.for_each_live_node_under(NodeRef::Block(self.root), f);
     }
 
-    /// The first value `f` gives for a reachable node. [`Body::find_in_nodes_under`]
-    /// is the skeleton form, and stops at the first hit; this one walks on.
-    pub fn find_in_reachable_node<T>(&self, mut f: impl FnMut(NodeRef) -> Option<T>) -> Option<T> {
-        let mut found = None;
-        self.for_each_reachable_node(|node| {
-            if found.is_none() {
-                found = f(node);
-            }
-        });
-        found
-    }
-
-    /// [`Body::find_in_reachable_node`] over one subtree.
+    /// The first value `f` gives for `root` or a live node beneath it.
+    /// [`Body::find_in_nodes_under`] is the skeleton form and stops at the first
+    /// hit; this one walks on.
     pub fn find_in_live_node_under<T>(
         &self,
         root: NodeRef,
