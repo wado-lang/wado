@@ -4,9 +4,7 @@
 //! `WADO_TRACE=prelower_reach` prints the difference: every function that
 //! survives `optimize` although the walk below never reached it. Each one is a
 //! call a later phase mints, and a prune before `lower` needs all of them
-//! declared. Keyed by `FunctionRef::full_name`, which the TIR and NIR forms
-//! spell alike; that key merges a generic's instances, so a callee minted for
-//! one instance of a reached generic does not show up.
+//! declared.
 
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -14,9 +12,9 @@ use std::rc::Rc;
 use crate::compiler_trace;
 use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::nir;
+use crate::module_source::ModuleSource;
 use crate::nir_package::NirPackage;
-use crate::tir::{FunctionRef, TirExpr, TirExprKind, TirFunction};
+use crate::tir::{TirExpr, TirExprKind, TirFunction};
 use crate::tir_visitor::TirRefVisitor;
 use crate::trace;
 
@@ -26,8 +24,16 @@ pub(crate) fn enabled() -> bool {
     trace::filter().enabled(TRACE_TARGET)
 }
 
+/// The identity `nir::FunctionRef::function_id` keys on, rendered so a trace
+/// line reads. Module and name alone: a mangled instance carries its type
+/// arguments in `name`, and neither `method_info` nor `monomorph_info` takes
+/// part.
+fn key(module_source: &ModuleSource, name: &str) -> String {
+    format!("{module_source}::{name}")
+}
+
 fn function_key(func: &TirFunction) -> String {
-    FunctionRef::from_resolved(func, func.module_source.clone()).full_name()
+    key(&func.module_source, &func.name)
 }
 
 /// The exports the emitted component keeps, matching `optimize::dce`'s entries.
@@ -42,6 +48,10 @@ fn is_root(func: &TirFunction, flat: &FlatPackage) -> bool {
 pub(crate) struct Reached {
     pub(crate) present: IndexSet<String>,
     pub(crate) reached: IndexSet<String>,
+    /// Every callee any TIR body names, reached or not. A survivor outside it
+    /// is one a later phase mints; a survivor inside it is only unreached
+    /// because its caller is, so the gap to close is the caller's.
+    pub(crate) named: IndexSet<String>,
     /// How many of `present` carry a body, which is what `lower` translates.
     pub(crate) bodied: usize,
 }
@@ -80,6 +90,16 @@ pub(crate) fn reachable(flat: &FlatPackage) -> Reached {
             work.extend(collector.keys);
         }
     }
+    let mut named: IndexSet<String> = IndexSet::default();
+    for func_rc in &flat.functions {
+        let func = func_rc.borrow();
+        if let Some(body) = &func.body {
+            let mut collector = Callees::default();
+            collector.walk_block(body);
+            named.extend(collector.keys);
+        }
+    }
+
     Reached {
         bodied: flat
             .functions
@@ -88,6 +108,7 @@ pub(crate) fn reachable(flat: &FlatPackage) -> Reached {
             .count(),
         present: bodies.into_keys().collect(),
         reached,
+        named,
     }
 }
 
@@ -100,9 +121,7 @@ pub(crate) fn audit(found: &Reached, package: &NirPackage) {
         .iter()
         .filter_map(|func_rc| {
             let func = func_rc.borrow();
-            (!func.is_dead)
-                .then(|| nir::FunctionRef::from_resolved(&func, func.module_source.clone()))
-                .map(|r| r.full_name())
+            (!func.is_dead).then(|| key(&func.module_source, &func.name))
         })
         .collect();
     let mut minted: Vec<String> = live
@@ -112,24 +131,30 @@ pub(crate) fn audit(found: &Reached, package: &NirPackage) {
         .collect();
     minted.sort_unstable();
     minted.dedup();
+    let (chained, unnamed): (Vec<&String>, Vec<&String>) =
+        minted.iter().partition(|name| found.named.contains(*name));
     compiler_trace!(
         TRACE_TARGET,
-        "reached {} of {} names ({} bodied) at TIR; \
-         {} of {} survivors were at TIR and unreached",
+        "reached {} of {} names ({} bodied) at TIR; of {} survivors, \
+         {} are minted later and {} follow an unreached caller",
         found.reached.len(),
         found.present.len(),
         found.bodied,
-        minted.len(),
-        live.len()
+        live.len(),
+        unnamed.len(),
+        chained.len()
     );
-    for name in &minted {
-        compiler_trace!(TRACE_TARGET, "  {name}");
+    for name in &unnamed {
+        compiler_trace!(TRACE_TARGET, "  minted  {name}");
+    }
+    for name in &chained {
+        compiler_trace!(TRACE_TARGET, "  chained {name}");
     }
 }
 
 fn callees(expr: &TirExpr) -> Vec<String> {
     let mut collector = Callees::default();
-    collector.walk_expr(expr);
+    collector.visit_expr(expr);
     collector.keys
 }
 
@@ -140,8 +165,16 @@ struct Callees {
 
 impl TirRefVisitor for Callees {
     fn visit_expr(&mut self, expr: &TirExpr) {
-        if let TirExprKind::Call { func, .. } = &expr.kind {
-            self.keys.push(func.full_name());
+        match &expr.kind {
+            TirExprKind::Call { func, .. } => self.keys.push(key(&func.module_source, &func.name)),
+            // A function used as a value: `IndirectCall` names the value, never
+            // the function, so this is the only edge to what it may reach.
+            TirExprKind::FuncRef {
+                module_source,
+                name,
+                ..
+            } => self.keys.push(key(module_source, name)),
+            _ => {}
         }
         self.walk_expr(expr);
     }
