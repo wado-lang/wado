@@ -53,7 +53,7 @@ The design, its soundness invariants, the standing "do not reintroduce" rules, a
 position-flexible rules share, each on the same worklist instead of a walk of
 its own. It hosts `aggregate_forward`, `const_branch_prune`, the env-free half
 of `const_folding`, `drop_value`, `elide_box_local`, `elide_local`,
-`if_chain_to_match`, `labeled_block_fusion`, `match_to_bitset`,
+`if_chain_to_match`, `known_case`, `labeled_block_fusion`, `match_to_bitset`,
 `match_to_switch`, `ref_elim`, `slot_temp_sroa`, `string_push`, and
 `tuple_projection`. It runs twice per fixed-point iteration, before and after
 `inline`, so each rule sees the instruction window the other exposes.
@@ -83,6 +83,7 @@ Variant and reference:
 - `slot_temp_sroa` — decompose the aggregate temp an inlined helper leaves where fusion cannot relocate the consumer into the block, as in the value-producing `let x = f()?` or a two-armed `get_pow10`. Each projected slot gets a local declared ahead of the block, so its definition dominates every read, and the exits assign it instead of building the aggregate. Takes the `[tag, slots…]` tuple `sroa_variant_return` leaves, a struct literal whose reads cover every field, and an exit handing over the aggregate rather than its fields, which it binds and projects.
 - `ref_elim` — drop reference bindings read only via field access, rewriting each read to the source; a shared borrow of a pure aggregate substitutes the aggregate so its projections fold.
 - `aggregate_forward` — deliver a freshly built aggregate to its consumer directly, so the binding `sroa` sees is the literal. `?` leaves two hops in the way. `sroa_variant_return` puts a `Result`-returning call into slots, so an always-succeeding inlined callee builds the `Ok` only for the caller to open it again and re-bind the payload. Neither hop is elidable alone: `elide_local` wants a local nobody reads, and `copy_prop` will not propagate into one later written.
+- `known_case` — a variant whose case is a compile-time fact decides its own dispatch: the first arm the case can take becomes the payload binding it is, so lowering emits no case test at all, and the arms around it go. A `VariantTest` / `VariantTag` over such a value folds to a constant. A value copy of a variant and an `if let` over a fresh construct are the shapes it takes. It declines match ergonomics, where the binding is declared at the reference type rather than the payload type the read produces, and only prunes the arms there.
 - `tuple_projection` — `[a, b, c].1` → `b`. A tuple literal has no identity, so a field read of one built in place is that element; the unselected elements are dropped, so each must be deletable.
 
 Scalar and dataflow:

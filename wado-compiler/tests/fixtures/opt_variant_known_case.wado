@@ -1,0 +1,61 @@
+// A local whose only definition is a variant construction has a statically
+// known case: the arms that case cannot take go away, what is left of the match
+// is the payload binding it is, and no case test survives lowering.
+use { println, Stdout } from "core:cli";
+
+variant Param {
+    Int(i32),
+    Text(String),
+}
+
+variant Wrap {
+    One(i32),
+}
+
+struct User {
+    name: String,
+}
+
+fn to_param(s: &String) -> Param {
+    return Param::Text(*s);
+}
+
+export fn run() with Stdout {
+    let p = Param::Int(builtin::black_box(7));
+    match p {
+        Param::Int(v) => println(`int ${v}`),
+        Param::Text(s) => println(`text ${s}`),
+    }
+    // A refused arm is not what decides it: here the other arm is a wildcard,
+    // which refuses nothing, and the case still picks the arm.
+    let q = Param::Int(builtin::black_box(8));
+    if let Param::Int(v) = q {
+        println(`if let ${v}`)
+    }
+    // One case, so no arm refuses and none is dropped — the binding is still
+    // all the match is.
+    let w = Wrap::One(builtin::black_box(9));
+    match w {
+        Wrap::One(v) => println(`wrap ${v}`),
+    }
+    let user = User { name: builtin::black_box("Alice") };
+    let mut params: List<Param> = [];
+    params.push(to_param(&user.name));
+    println(`${params:?} ${user.name}`);
+}
+
+__DATA__
+{
+    "stdout": "int 7\nif let 8\nwrap 9\n[Param::Text(\"Alice\")] Alice\n",
+    "wir_expect:O2": [
+        "i32::fmt_decimal$scalar$spec0$scalar\"(7, ",
+        "i32::fmt_decimal$scalar$spec0$scalar\"(8, ",
+        "i32::fmt_decimal$scalar$spec0$scalar\"(9, ",
+        "struct.new \"opt_variant_known_case.wado//Param::Text\" { discriminant: 1, payload_0: struct.new \"core:prelude/string.wado//String\""
+    ],
+    "wir_not_expect:O2": [
+        "ref.test",
+        "struct.new \"opt_variant_known_case.wado//Param::Int\"",
+        "struct.new \"opt_variant_known_case.wado//Wrap::One\""
+    ]
+}
