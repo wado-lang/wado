@@ -1,0 +1,46 @@
+// A trait's default body rides the dispatch edge at the call site that lands on
+// it, so a helper only an unreached default body calls is dead while one a
+// reached default body calls is live.
+use { println, Stdout } from "core:cli";
+
+fn unreached_helper() -> i32 {
+    return 1;
+}
+
+fn reached_helper() -> i32 {
+    return 2;
+}
+
+struct Silent {}
+
+struct Loud {}
+
+trait Whisper {
+    fn whisper(&self) -> i32 {
+        return unreached_helper();
+    }
+}
+
+trait Shout {
+    fn shout(&self) -> i32 {
+        return reached_helper();
+    }
+}
+
+// Without an impl a default body is never walked, so both helpers would be dead
+// either way and the fixture would stop discriminating.
+impl Whisper for Silent {}
+
+impl Shout for Loud {}
+
+export fn run() with Stdout {
+    let loud = Loud {};
+    println(`${loud.shout()}`);
+}
+
+__DATA__
+{
+    "stdout": "2\n",
+    "warnings_contains": ["function `unreached_helper` is never used"],
+    "warnings_not_contains": ["function `reached_helper` is never used"]
+}

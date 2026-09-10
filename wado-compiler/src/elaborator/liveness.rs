@@ -175,13 +175,13 @@ pub(crate) fn compute(
                     }
                 }
                 Item::Trait(trait_decl) => {
-                    seed_operations(&mut graph, &trait_decl.methods, references);
+                    seed_operations(&mut graph, &trait_decl.methods, references, false);
                 }
                 Item::Interface(interface_decl) => {
-                    seed_operations(&mut graph, &interface_decl.methods, references);
+                    seed_operations(&mut graph, &interface_decl.methods, references, true);
                 }
                 Item::Resource(resource_decl) => {
-                    seed_operations(&mut graph, &resource_decl.methods, references);
+                    seed_operations(&mut graph, &resource_decl.methods, references, true);
                 }
                 Item::Test(test) => {
                     // Test blocks are roots of the `T` (test-reachable) closure
@@ -208,21 +208,28 @@ pub(crate) fn compute(
     liveness
 }
 
-/// Seed each declared method of a `trait` / `interface` / `resource` that
-/// reaches code nothing in the AST names.
-///
-/// Dispatch mints the only call to a default body, and reify materializes a
-/// parameter default at every call that omits the argument. Neither call is in
-/// the AST, so without a seed here the method is dead, everything only it
-/// reaches goes with it, and the minted call names a callee reify dropped.
-fn seed_operations(graph: &mut Graph, methods: &[Function], references: &References<'_>) {
+/// Add the edges of every declared method that carries a body or a parameter
+/// default, and root the two whose only call no fact names: an
+/// `effect_operation`, whose dispatch wrapper `synthesis::effect_dispatch`
+/// mints after this pass, and one with a parameter default, which reify
+/// materializes at the call that omits it. A trait's default body rides its
+/// call site's dispatch fact instead.
+fn seed_operations(
+    graph: &mut Graph,
+    methods: &[Function],
+    references: &References<'_>,
+    effect_operation: bool,
+) {
     for method in methods {
-        if method.body.is_none() && !method.params.iter().any(|p| p.default.is_some()) {
+        let has_param_default = method.params.iter().any(|p| p.default.is_some());
+        if method.body.is_none() && !has_param_default {
             continue;
         }
         let key = method.id;
         graph.add_function_edges(method, references, &key);
-        graph.seed_world(key);
+        if effect_operation || has_param_default {
+            graph.seed_world(key);
+        }
     }
 }
 

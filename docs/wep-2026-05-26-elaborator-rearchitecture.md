@@ -484,6 +484,18 @@ silently miscompiled output — and the fix is the missing edge kind. The dual
 failure, an item that is unused but not reported, is what this design
 optimises against.
 
+A declared method carrying a default body is a node like any other, not a root.
+The call that lands on it records a dispatch fact, so the body rides that edge.
+A program reaching neither the method nor an impl of its trait therefore needs
+none of what the body calls. That is what keeps `core:prelude`'s parse and
+format closures out of a program that parses and formats nothing. Two kinds of
+declared method have no fact to ride, and each is a root:
+
+- an operation of an `interface` or a `resource`, whose dispatch wrapper
+  `synthesis::effect_dispatch` mints after this pass;
+- a method with a parameter default, which reify materializes at every call
+  that omits the argument.
+
 Three paths are undecidable at the source level, and each gets a stated rule
 rather than a blanket over every trait impl.
 
@@ -654,6 +666,23 @@ takes. Three rules order them.
   the partial ones are deleted rather than wrapped.
 - One home. A fact is recorded where it is decided and read where it is
   recorded; a phase recomputing a fact it could have read is re-deciding.
+
+### A trait's default body answers to no package boundary
+
+Two rules meet here. A `pub` free function is a root, being the package's
+external surface. An impl method rides on the call that reaches it, whatever its
+visibility. A declared method with a default body follows the second, so a
+private helper that only a `pub trait`'s unreached default body calls is
+reported dead. That is right for a program and a false positive for a library,
+whose consumer would reach the method. No package in the tree hits it:
+`wado check` over the `lib` entry of `package-gale`, `package-jade`,
+`package-marl` and `package-cm-catalog` reports no such warning.
+
+Closing it takes a decision on which rule a declared method follows. The
+question behind it is whether liveness roots a package's external surface at all
+once the compile has an entry program, whose world exports are the only roots
+the emitted component keeps. `Item::Impl` leaves the same question open, rooting
+no method however visible.
 
 ### A call to an operation with nothing to reach panics at WIR
 

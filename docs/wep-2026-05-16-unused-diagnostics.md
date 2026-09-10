@@ -111,7 +111,8 @@ The pass runs two independent reachability closures over the same call graph:
 | Items satisfying world-export contracts   | Functions whose name and signature satisfy a world export (`command` / `service` / `lib`); identified during `annotate` |
 | `#[export]`-attributed items              | Raw Wasm exports                                                                                                        |
 | Items in `wasm_module_sources` re-exports | Bridged Wasm module exports                                                                                             |
-| impl / trait methods                      | Seeded live as call-graph intermediaries (method-level dead detection deferred)                                         |
+| impl methods                              | Seeded live as call-graph intermediaries (method-level dead detection deferred)                                         |
+| Declared methods no dispatch fact names   | An `interface` / `resource` operation, or a method carrying a parameter default; see below                              |
 
 Each user-authored free function / global is classified by membership:
 
@@ -147,6 +148,12 @@ metadata) is deferred.
 `internal` (`Visibility::Internal`) is never a root: it is package-internal
 visibility only, so an unreferenced `internal fn` is dead code regardless of
 entry-point kind.
+
+A declared method carrying a default body is an edge rather than a root, so a
+free function that only an unreached default body calls is dead.
+[Elaborator Architecture](./wep-2026-05-26-elaborator-rearchitecture.md)
+§Liveness says which dispatch fact it rides, why the two kinds above have none,
+and what the rule leaves open for a library's `pub trait`.
 
 ### Stdlib exclusion
 
