@@ -14,6 +14,7 @@ use crate::token::Span;
 use super::Elaborator;
 use super::call::SigChoice;
 use super::callee::StaticMethodRef;
+use super::expr::IndexAccess;
 use super::infer::InferCtx;
 use super::method_lookup::MethodInferenceInput;
 use super::reflect::ReflectDispatch;
@@ -165,7 +166,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             Vec::new()
         };
 
-        self.resolve_method_call_with(
+        let outcome = self.resolve_method_call_with(
             MethodCallInput {
                 receiver,
                 receiver_ast: Some(&method_call.receiver),
@@ -180,8 +181,24 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 required_trait: None,
             },
             ctx,
-        )
-        .type_id
+        );
+
+        // A `&mut self` method mutates the element `xs[i]` names, so the
+        // receiver has to be that element. The desugar above owns every element
+        // a `&mut` writes through; for the rest the by-value copy took the
+        // mutation and was thrown away. Record the aliasing subscript instead,
+        // which is the borrow `&mut xs[i]` takes, and leave the write-back pass
+        // to write it back or refuse it.
+        if let ast::Expr::Index(index_expr) = &method_call.receiver
+            && outcome.dispatch.as_ref().is_some_and(|dispatch| {
+                dispatch.self_kind == ast::SelfKind::MutRef && !dispatch.is_ref_impl
+            })
+            && self.index_element_denies_ref_mut(index_expr, ctx)
+        {
+            self.resolve_index_access(index_expr, ctx, IndexAccess::Mutable);
+        }
+
+        outcome.type_id
     }
 
     /// Dispatch a method call from an already-resolved receiver TIR. See

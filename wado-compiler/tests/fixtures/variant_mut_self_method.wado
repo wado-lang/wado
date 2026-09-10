@@ -59,7 +59,14 @@ export fn run() with Stdout {
     let mut h = Holder { p: P::A(Cell { v: builtin::black_box(1) }) };
     h.p.flip();
     println(`${h.p:?}`);
+
+    // The element receiver aliases the element rather than copying it, so the
+    // payload write lands. A replacing method on one is refused —
+    // variant_element_mut_self_receiver_rejected.
+    let mut xs: List<P> = [P::A(Cell { v: builtin::black_box(1) })];
+    xs[0].touch();
+    println(`${xs[0]:?}`);
 }
 
 __DATA__
-{"stdout": "P::A(Cell { v: 9 })\nP::B(42)\nG::Two\nP::B(42)\n"}
+{"stdout": "P::A(Cell { v: 9 })\nP::B(42)\nG::Two\nP::B(42)\nP::A(Cell { v: 9 })\n"}

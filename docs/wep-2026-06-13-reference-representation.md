@@ -195,7 +195,7 @@ fix to conform; none should be preserved.
   | `variant` field / `&mut *p`, call argument                        | written back          |
   | `variant`, call argument at a `stores` position                   | refused               |
   | `variant` element / whole capture / branch, at a written position | refused               |
-  | `variant` element as a `&mut self` receiver (`xs[i].m()`)         | dropped               |
+  | `variant` element as a `&mut self` receiver (`xs[i].m()`)         | refused               |
 
   The same operations on a value-type _local_ all work, wherever the borrow
   goes; nothing else is the storage itself, since `&mut` of any other place
@@ -225,12 +225,9 @@ fix to conform; none should be preserved.
     desugaring at elaboration time; hence the carve-out lists index-element and
     struct-field separately. Refusing outright is not open, since
     `normalize_element(&mut alt.elements[ei])` lands.
-  - A `variant` element as a `&mut self` receiver, whatever the callee does.
-    The receiver resolves through `IndexValue`, so the callee replaces a copy
-    and no borrow reaches the refusal. It is the one shape that drops where the
-    callee replaces. Closing it takes the same elaboration-time desugaring as
-    the element write-back above: the receiver resolving through `IndexRefMut`,
-    which is what puts a borrow in front of the pass.
+    A `&mut self` receiver takes the same borrow, so it waits on the same
+    write-back: `xs[i].m()` is refused where `m` replaces the element, and the
+    call the carve-out unblocks is spelled either way.
   - A call argument that _yields_ a borrow (`f(if c { &mut b.l } else
     { &mut b.r })`), for the mirrored reason: which place it borrowed is not
     known until it runs. Both want the write-back to follow the borrow to

@@ -1,0 +1,45 @@
+// A `&mut self` receiver names the element itself, not a copy of it — the
+// method call aliases `xs[i]` the way `&mut xs[i]` does. The element is a
+// variant, whose borrow is a detached box, so a method that replaces the whole
+// value has nowhere to write it back to and is refused. Handed a copy instead,
+// as it was before, the replacement compiled and was silently dropped.
+//
+// variant_mut_self_method guards the other side: a payload write through the
+// same receiver lands.
+//
+// The refusal reads the call's dispatch, so an inherent method and a trait one
+// reach it alike. Only the first refusal is reported, so this fixture pins the
+// message.
+
+variant Payload {
+    Text(String),
+    Empty,
+}
+
+impl Payload {
+    fn replace(&mut self) {
+        *self = Payload::Text(`xyz`);
+    }
+}
+
+trait Clear {
+    fn clear(&mut self);
+}
+
+impl Clear for Payload {
+    fn clear(&mut self) {
+        *self = Payload::Empty;
+    }
+}
+
+test "a replacing method on a list element" {
+    let mut xs: List<Payload> = [Payload::Empty];
+    xs[0].replace();
+    xs[0].clear();
+}
+
+__DATA__
+{
+    "test": {},
+    "compile_error": "is a detached copy, so a whole-value write through it would be lost"
+}
