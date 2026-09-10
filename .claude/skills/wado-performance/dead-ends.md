@@ -18,6 +18,24 @@ wado dump -O2 benchmark/json_catalog/json_catalog.wado    # before/after: diff t
 for i in 1 2 3; do mise run json-catalog; done           # before and after
 ```
 
+## A shared helper that hands back a value most callers discard (2026-09-10)
+
+`core:json`'s three container accesses open an entry the same way, and
+`entry_head` covers five of the six call sites at no cost: the helper call, its
+`Result`, the `?` at the consumer and a `cold_path` arm inside it all fold away.
+The optimizer is not what prices this shape.
+
+What prices it is the sixth site. `next_field` reads the byte the whitespace
+scan stopped on, so covering it too means returning that byte, and then every
+seq element and map key re-reads one after the comma to produce a byte neither
+wants. That costs 2.0% on json-catalog deserialize over six alternating rounds,
+losing every one with no range overlap, where covering five measures flat.
+
+Generalizes: before widening a helper's return type to serve one caller, count
+what the other callers then compute and drop. A duplicated preamble at the one
+site that consumes more than the others is cheaper than a return value the rest
+pay for.
+
 ## Batching `array.get` where the runs are short (2026-09-10)
 
 Reading four bytes per bounds check is worth 12.6% on json-catalog's
