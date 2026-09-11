@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1789097344102,
+  "lastUpdate": 1789108395761,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -54749,6 +54749,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/a20b94f10c72e6df174555148746e68e034dd3d3"
         },
         "date": 1789097343444,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 2013,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6560,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18971,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 288933,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "4a948be42c6d84347863c40b6cecc27e63ae2f62",
+          "message": "Merge pull request #2020 from wado-lang/claude/wir-expect-fixture-tag-ex3ulj\n\nfix(variant): three wrong-code defects in variant mutation, and a dispatch fold worth 5% of the fixture corpus' WIR",
+          "timestamp": "2026-09-11T15:17:02+09:00",
+          "tree_id": "b9cc9fbdb577c838a974ec1e83acc07c63534981",
+          "url": "https://github.com/wado-lang/wado/commit/4a948be42c6d84347863c40b6cecc27e63ae2f62"
+        },
+        "date": 1789108395274,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
