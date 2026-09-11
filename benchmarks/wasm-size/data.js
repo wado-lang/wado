@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1789133093260,
+  "lastUpdate": 1789141153606,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -54925,6 +54925,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/6061a935b9700f1b9f7ced616ecda41f0499250f"
         },
         "date": 1789133093113,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1867,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6492,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18919,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 285903,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "79a8ec86711067c019dd19135c4b215f87ca7fad",
+          "message": "Merge pull request #2025 from wado-lang/gfx/check-to-core\n\nci: fold the static gates into Test (Core)",
+          "timestamp": "2026-09-12T00:24:08+09:00",
+          "tree_id": "1a8806163d85e0feb2ee1cac32fc5c329262a657",
+          "url": "https://github.com/wado-lang/wado/commit/79a8ec86711067c019dd19135c4b215f87ca7fad"
+        },
+        "date": 1789141152817,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
