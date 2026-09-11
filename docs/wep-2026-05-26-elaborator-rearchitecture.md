@@ -702,7 +702,9 @@ extern stub instead. `CompilerItem` records some of these and nothing records
 the rest.
 
 Closing it takes that list, one entry per entity named after `liveness` runs,
-with the pass that names it stating its trigger.
+with the pass that names it stating its trigger. Note before starting that the
+gap below tried exactly that on the `lower` side and found the list is not a
+fix for the class: it is complete only until the next minting site is added.
 
 Two things bound the work. The rest of the closure is held by real edges from
 the format and parse impls that `CompilerItem::dispatched_by_synthesis` roots,
@@ -749,6 +751,17 @@ Compiling the corpus both ways is what found them: 1765 fixtures byte-identical,
 1 differing, 43 failing. The audit does not find them, because it reports only
 functions that survive `optimize`, and a prune that drops a minter's target
 panics in `wir_build` long before. A clean audit is not a clean bill.
+
+So two checks answer two different questions, and resuming this needs both:
+
+- `WADO_TRACE=prelower_reach` reports, per compile, how much of the TIR the
+  walk reached and which survivors it did not. Use it to size a root set.
+- Compiling every fixture in `wado-compiler/tests/fixtures/` with and without
+  `WADO_PRELOWER_PRUNE` and comparing the output bytes is the correctness
+  check. A fixture that fails only with the flag names a minting site; one
+  whose bytes differ names a subtler one. Around 680 fixtures fail to compile
+  under `--world test` either way, so compare the two arms rather than
+  counting failures.
 
 Enumerating the four is not a fix for the class, since the next minter added
 breaks it again. Every one of them lands in `Interner::resolve`, which mints
