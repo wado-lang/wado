@@ -2893,10 +2893,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .is_some()
     }
 
-    /// Try to resolve a method call on an index expression using `IndexMut`.
-    /// Answers the call's result type when the method needs `&mut self` and the
-    /// type implements `IndexMut`.
-    /// Returns None if we should fall back to normal resolution (using Index).
+    /// The result type of a `&mut self` method call on `xs[i]`, resolved
+    /// through `IndexMut`. `None` leaves the caller to resolve through `Index`.
     pub(super) fn try_resolve_index_mut_method_call(
         &mut self,
         index_expr: &ast::IndexExpr,
