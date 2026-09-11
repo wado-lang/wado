@@ -1582,6 +1582,9 @@ fn compile_after_load<H: CompilerHost>(
     // What the program reaches before `lower` and `optimize` mint calls of
     // their own, for the audit after them. See `prelower_reach`.
     let prelower_reached = prelower_reach::enabled().then(|| prelower_reach::reachable(&flat));
+    if std::env::var_os("WADO_PRELOWER_PRUNE").is_some() {
+        prelower_reach::prune(&mut flat);
+    }
 
     // === Phase 10: Lower (FlatPackage → NirPackage) ===
     let nir = {

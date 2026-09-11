@@ -5,6 +5,11 @@
 //! survives `optimize` although the walk below never reached it. Each one is a
 //! call a later phase mints, and a prune before `lower` needs all of them
 //! declared.
+//!
+//! It sees only survivors, so a clean report is not a clean bill: a minter
+//! whose target [`prune`] already dropped never reaches `optimize` — it panics
+//! in `wir_build` instead. Compiling the corpus with and without the prune and
+//! comparing the bytes is what covers that.
 
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -36,10 +41,18 @@ fn function_key(func: &TirFunction) -> String {
     key(&func.module_source, &func.name)
 }
 
-/// The exports the emitted component keeps, matching `optimize::dce`'s entries.
+/// The exports the emitted component keeps, matching `optimize::dce`'s entries,
+/// plus what a later phase may call without any TIR body naming it.
+///
+/// A compiler item is a name the compiler itself resolves, so a rewrite in
+/// `lower` or `optimize` can mint the call. A `$`-prefixed name is a synthesized
+/// bridge, which lowering names from a `builtin::` marker call's type arguments
+/// rather than from the helper.
 fn is_root(func: &TirFunction, flat: &FlatPackage) -> bool {
     func.is_cm_export
         || (func.is_export && flat.wasm_module_sources.contains_key(&func.module_source))
+        || func.compiler_item.is_some()
+        || func.name.starts_with('$')
 }
 
 /// What [`reachable`] found, against the population it walked. A survivor
@@ -56,9 +69,12 @@ pub(crate) struct Reached {
     pub(crate) bodied: usize,
 }
 
-/// Every function the program reaches from its exports, plus what a global
+/// Every function the program reaches from its roots, plus what a global
 /// initializer calls — reify emits every global, so its calls are live.
-pub(crate) fn reachable(flat: &FlatPackage) -> Reached {
+///
+/// Walks only the bodies it reaches, which is the point: the unreached ones are
+/// the work [`prune`] saves, and touching them here would spend it.
+fn reach(flat: &FlatPackage) -> IndexSet<String> {
     let mut bodies: IndexMap<String, &Rc<RefCell<TirFunction>>> = IndexMap::default();
     for func_rc in &flat.functions {
         bodies.insert(function_key(&func_rc.borrow()), func_rc);
@@ -90,25 +106,29 @@ pub(crate) fn reachable(flat: &FlatPackage) -> Reached {
             work.extend(collector.keys);
         }
     }
+    reached
+}
+
+/// [`reach`], against the population it walked, for [`audit`] to report.
+pub(crate) fn reachable(flat: &FlatPackage) -> Reached {
+    let mut present: IndexSet<String> = IndexSet::default();
     let mut named: IndexSet<String> = IndexSet::default();
+    let mut bodied = 0;
     for func_rc in &flat.functions {
         let func = func_rc.borrow();
+        present.insert(function_key(&func));
         if let Some(body) = &func.body {
+            bodied += 1;
             let mut collector = Callees::default();
             collector.walk_block(body);
             named.extend(collector.keys);
         }
     }
-
     Reached {
-        bodied: flat
-            .functions
-            .iter()
-            .filter(|func_rc| func_rc.borrow().body.is_some())
-            .count(),
-        present: bodies.into_keys().collect(),
-        reached,
+        reached: reach(flat),
+        present,
         named,
+        bodied,
     }
 }
 
@@ -150,6 +170,21 @@ pub(crate) fn audit(found: &Reached, package: &NirPackage) {
     for name in &chained {
         compiler_trace!(TRACE_TARGET, "  chained {name}");
     }
+}
+
+/// Drop what no root reaches, so `lower` never translates it. The audit above
+/// is the completeness check: a survivor it calls minted is one this dropped a
+/// caller of, and `is_root` is missing its trigger.
+pub(crate) fn prune(flat: &mut FlatPackage) {
+    let reached = reach(flat);
+    let before = flat.functions.len();
+    flat.functions
+        .retain(|func_rc| reached.contains(&function_key(&func_rc.borrow())));
+    compiler_trace!(
+        TRACE_TARGET,
+        "pruned {} of {before} functions",
+        before - flat.functions.len()
+    );
 }
 
 fn callees(expr: &TirExpr) -> Vec<String> {
