@@ -1,6 +1,6 @@
 use crate::ast::{
     self, AssignExpr, AstId, Block, Condition, ConditionElement, Expr, Function, IdentExpr, Item,
-    Pattern, Stmt,
+    Pattern, Stmt, for_each_pattern_binding,
 };
 use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
@@ -375,21 +375,10 @@ impl BorrowChecker<'_> {
     }
 }
 
-/// Collect the def `AstId`s a pattern binds, matching what `referenced_symbol`
-/// resolves a later use to.
+/// The def `AstId`s a pattern binds, matching what `referenced_symbol` resolves
+/// a later use to.
 fn collect_pattern_bindings(pattern: &Pattern, out: &mut Vec<AstId>) {
-    match pattern {
-        Pattern::Ident { id, .. } | Pattern::MutIdent { id, .. } => out.push(*id),
-        Pattern::Tuple(subs, _) => subs.iter().for_each(|s| collect_pattern_bindings(s, out)),
-        Pattern::Variant { bindings, .. } => bindings
-            .iter()
-            .for_each(|s| collect_pattern_bindings(s, out)),
-        Pattern::Struct { fields, .. } => fields
-            .iter()
-            .for_each(|f| collect_pattern_bindings(&f.pattern, out)),
-        Pattern::Or(alts) => alts.iter().for_each(|a| collect_pattern_bindings(a, out)),
-        _ => {}
-    }
+    for_each_pattern_binding(pattern, &mut |id| out.push(id));
 }
 
 fn check_block(

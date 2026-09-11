@@ -1,0 +1,32 @@
+// A `&mut self` receiver names the element itself, not a copy of it. The method
+// call aliases `xs[i]` the way `&mut xs[i]` does. The element is a variant,
+// whose borrow is a detached box, so a method that replaces the whole value has
+// nowhere to write it back to and is refused. Handed a copy instead, the
+// replacement would compile and be silently dropped.
+//
+// variant_mut_self_method guards the other side: a payload write through the
+// same receiver lands. variant_element_mut_self_receiver_trait is the same
+// refusal reached through a trait method, which needs a file of its own because
+// only the first refusal is reported.
+
+variant Payload {
+    Text(String),
+    Empty,
+}
+
+impl Payload {
+    fn replace(&mut self) {
+        *self = Payload::Text(`xyz`);
+    }
+}
+
+test "a replacing method on a list element" {
+    let mut xs: List<Payload> = [Payload::Empty];
+    xs[0].replace();
+}
+
+__DATA__
+{
+    "test": {},
+    "compile_error": "variant_element_mut_self_receiver_rejected.wado/Payload::replace' replaces it"
+}

@@ -8772,23 +8772,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // (Unary{Ref}/Unary{MutRef}/Deref wrapping) lands.
         let raw_receiver = self.reify_expr(&method_call.receiver, ctx, None);
 
-        // Track implicit `&mut self` borrowing for primitive / enum local
-        // receivers, mirroring `Elaborator::resolve_method_call_with`
-        // a scalar-backed value is copied by default,
-        // so `x.bump()` must mark `x` address-taken or the boxing pass won't
-        // write the mutation back. Enums are plain discriminants — the same
-        // scalar shape as primitives.
-        let needs_implicit_mut_borrow =
-            !dispatch.is_ref_impl && matches!(dispatch.self_kind, ast::SelfKind::MutRef) && {
-                let tt = self.tysys.type_table.borrow();
-                !matches!(
-                    tt.get(raw_receiver.type_id),
-                    crate::tir::ResolvedType::Ref(_) | crate::tir::ResolvedType::MutRef(_)
-                ) && matches!(
-                    tt.get(tt.representation_head(raw_receiver.type_id)),
-                    crate::tir::ResolvedType::Primitive(_) | crate::tir::ResolvedType::Enum { .. }
-                )
-            };
+        // A receiver the callee can replace rather than write into must be
+        // boxed, or the boxing pass has no slot to write the mutation back to
+        // and `x.bump()` mutates a copy.
+        let needs_implicit_mut_borrow = !dispatch.is_ref_impl
+            && matches!(dispatch.self_kind, ast::SelfKind::MutRef)
+            && self.tysys.mut_self_receiver_needs_box(raw_receiver.type_id);
         if needs_implicit_mut_borrow && let TirExprKind::Local { index, .. } = &raw_receiver.kind {
             ctx.address_taken_locals.insert(*index);
         }

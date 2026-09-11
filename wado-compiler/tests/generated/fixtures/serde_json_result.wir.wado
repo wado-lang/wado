@@ -4035,9 +4035,7 @@ fn "core:json/core:json/JsonDeserializer::append_scanned_run$scalar"(self, dst, 
 
 fn "core:serde/core:prelude/types.wado/Result<i32,core:prelude/string.wado/String>^core:serde/Serialize::serialize<core:json/JsonSerializer>$scalar"(self, s) {
     let v_2: i32;
-    let __qm_e_7: ref "core:serde//SerializeError";
     let v_8: ref "core:prelude/string.wado//String";
-    let __qm_e_13: ref "core:serde//SerializeError";
     let variant_name_20: ref "core:prelude/string.wado//String";
     let new_used_27: i32;
     let start_28: i32;
@@ -4075,12 +4073,6 @@ fn "core:serde/core:prelude/types.wado/Result<i32,core:prelude/string.wado/Strin
         s.used = new_used_41;
         builtin::array_set_u8(s.repr, start_42, 58);
         "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(v_2, s);
-        if @likely(ref.is_null(ref.null none)) {
-        } else {
-            __qm_e_7 = ref.as_non_null(ref.null none);
-            cold_path;
-            return __qm_e_7;
-        }
         return new_used_64 = s.used + 1, if @unlikely(new_used_64 > builtin::array_len(s.repr)) {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(s, new_used_64);
@@ -4106,12 +4098,6 @@ fn "core:serde/core:prelude/types.wado/Result<i32,core:prelude/string.wado/Strin
         s.used = new_used_96;
         builtin::array_set_u8(s.repr, start_97, 58);
         "core:json/write_escaped_string"(s, v_8);
-        if @likely(ref.is_null(ref.null none)) {
-        } else {
-            __qm_e_13 = ref.as_non_null(ref.null none);
-            cold_path;
-            return __qm_e_13;
-        }
         return new_used_119 = s.used + 1, if @unlikely(new_used_119 > builtin::array_len(s.repr)) {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(s, new_used_119);
@@ -4205,12 +4191,12 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(self, f) {
         }
         n = 0;
         t_9 = abs_val;
-        b475: block {
-            l476: loop {
-                break_if b475 t_9 <=u 0_i64;
+        b473: block {
+            l474: loop {
+                break_if b473 t_9 <=u 0_i64;
                 n = n + 1;
                 t_9 = t_9 /u 10_i64;
-                continue l476;
+                continue l474;
             };
         };
         break $inline_count_digits_u64_1: n;
@@ -4220,14 +4206,14 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(self, f) {
     pos = offset_5 + digit_count_4;
     t_15 = abs_val;
     i = 0;
-    b477: block {
-        l478: loop {
-            break_if b477 i >= digit_count_4;
+    b475: block {
+        l476: loop {
+            break_if b475 i >= digit_count_4;
             pos = pos - 1;
             builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(t_15 %u 10_i64)) & 255);
             t_15 = t_15 /u 10_i64;
             i = i + 1;
-            continue l478;
+            continue l476;
         };
     };
 }

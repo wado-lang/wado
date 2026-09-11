@@ -4574,26 +4574,15 @@ fn "core:serde/serde_json_default.wado/Config^core:serde/Deserialize::deserializ
         __local_74 = ref.as_non_null(__match_scrut_19);
         __local_74;
     } else {
-        let __match_scrut_20: ref null "core:prelude//List<core:prelude/string.wado/String>";
-        __match_scrut_20 = ref.as_non_null(elements_186 = array.new_fixed<ref "core:prelude/string.wado//String">(); struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: elements_186, used: 0 });
-        if ref.is_null(__match_scrut_20) == 0 -> ref "core:prelude//List<core:prelude/string.wado/String>" {
-            __local_75 = ref.as_non_null(__match_scrut_20);
-            __local_75;
-        } else {
-            return 1, ref.null none, struct.new "core:serde//DeserializeError" { kind: 1, message: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("missing field: tags"), used: 19 }, offset: -1_i64 };
-        }
-    }); let __match_scrut_21: ref "core:prelude/types.wado//Option<core:prelude/types.wado/Option<core:prelude/string.wado/String>>"; __match_scrut_21 = __sroa_slots_4; __sroa_fields_4 = (if ref.test "core:prelude/types.wado//Option<core:prelude/types.wado/Option<core:prelude/string.wado/String>>::Some"(__match_scrut_21) -> ref null "core:prelude/string.wado//String" {
-        __local_79 = ref.cast "core:prelude/types.wado//Option<core:prelude/types.wado/Option<core:prelude/string.wado/String>>::Some"(__match_scrut_21).payload_0;
+        elements_186 = array.new_fixed<ref "core:prelude/string.wado//String">();
+        __local_75 = struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: elements_186, used: 0 };
+        __local_75;
+    }); let __match_scrut_20: ref "core:prelude/types.wado//Option<core:prelude/types.wado/Option<core:prelude/string.wado/String>>"; __match_scrut_20 = __sroa_slots_4; __sroa_fields_4 = (if ref.test "core:prelude/types.wado//Option<core:prelude/types.wado/Option<core:prelude/string.wado/String>>::Some"(__match_scrut_20) -> ref null "core:prelude/string.wado//String" {
+        __local_79 = ref.cast "core:prelude/types.wado//Option<core:prelude/types.wado/Option<core:prelude/string.wado/String>>::Some"(__match_scrut_20).payload_0;
         __local_79;
     } else {
-        let __match_scrut_22: ref "core:prelude/types.wado//Option<core:prelude/types.wado/Option<core:prelude/string.wado/String>>";
-        __match_scrut_22 = struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/Option<core:prelude/string.wado/String>>::Some" { discriminant: 0, payload_0: ref.null none };
-        if ref.test "core:prelude/types.wado//Option<core:prelude/types.wado/Option<core:prelude/string.wado/String>>::Some"(__match_scrut_22) -> ref null "core:prelude/string.wado//String" {
-            __local_80 = ref.cast "core:prelude/types.wado//Option<core:prelude/types.wado/Option<core:prelude/string.wado/String>>::Some"(__match_scrut_22).payload_0;
-            __local_80;
-        } else {
-            return 1, ref.null none, struct.new "core:serde//DeserializeError" { kind: 1, message: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("missing field: description"), used: 26 }, offset: -1_i64 };
-        }
+        __local_80 = struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/Option<core:prelude/string.wado/String>>::Some" { discriminant: 0, payload_0: ref.null none }.payload_0;
+        __local_80;
     }); struct.new "serde_json_default.wado//Config" { host: __sroa_fields_0, port: __sroa_fields_1, verbose: __sroa_fields_2, tags: __sroa_fields_3, description: __sroa_fields_4 }, ref.null none;
 }
 
@@ -4774,7 +4763,7 @@ fn "core:serde/core:prelude/list.wado/List<core:prelude/string.wado/String>^core
         builtin::array_set<ref "core:prelude/string.wado//String">(items.repr, 0, first_elem);
         items.used = 1;
         block {
-            l586: loop {
+            l584: loop {
                 let __vr_21_mv_0: i32;
                 let __vr_21_mv_1: ref null "core:prelude/string.wado//String";
                 let __vr_21_mv_2: ref null "core:serde//DeserializeError";
@@ -4815,7 +4804,7 @@ fn "core:serde/core:prelude/list.wado/List<core:prelude/string.wado/String>^core
                     }
                     return 0, items, ref.null none;
                 }
-                continue l586;
+                continue l584;
             };
         };
     } else {
@@ -4973,12 +4962,12 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar"(self, f) {
         }
         n = 0;
         t_9 = abs_val;
-        b608: block {
-            l609: loop {
-                break_if b608 t_9 <=u 0_i64;
+        b606: block {
+            l607: loop {
+                break_if b606 t_9 <=u 0_i64;
                 n = n + 1;
                 t_9 = t_9 /u 10_i64;
-                continue l609;
+                continue l607;
             };
         };
         break $inline_count_digits_u64_1: n;
@@ -4988,14 +4977,14 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar"(self, f) {
     pos = offset_5 + digit_count_4;
     t_15 = abs_val;
     i = 0;
-    b610: block {
-        l611: loop {
-            break_if b610 i >= digit_count_4;
+    b608: block {
+        l609: loop {
+            break_if b608 i >= digit_count_4;
             pos = pos - 1;
             builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(t_15 %u 10_i64)) & 255);
             t_15 = t_15 /u 10_i64;
             i = i + 1;
-            continue l611;
+            continue l609;
         };
     };
 }
@@ -5085,24 +5074,24 @@ fn "core:json/core:json/JsonDeserializer::scan_string_run$scalar"(self, from) {
     valid = 1;
     _licm_repr_14 = self.repr;
     _licm_start_15 = self.start;
-    b618: block {
-        l619: loop {
-            break_if b618 pos >= len;
+    b616: block {
+        l617: loop {
+            break_if b616 pos >= len;
             b = builtin::array_get_value<u8>(_licm_repr_14, _licm_start_15 + pos);
             if b < 128 {
-                break_if b618 select i32(b == 34, 1, b == 92);
+                break_if b616 select i32(b == 34, 1, b == 92);
                 pos = pos + 1;
-                continue l619;
+                continue l617;
             }
             advance = "core:prelude/string.wado/core:prelude/string.wado/String::utf8_sequence_len"(self, pos, len);
             if @unlikely(advance == 0) {
                 cold_path;
                 valid = 0;
                 pos = pos + 1;
-                continue l619;
+                continue l617;
             }
             pos = pos + advance;
-            continue l619;
+            continue l617;
         };
     };
     at_escape = (if pos < len -> i32 {

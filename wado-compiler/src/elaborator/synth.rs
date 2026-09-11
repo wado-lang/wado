@@ -15,6 +15,7 @@ use crate::tir::{PrimitiveType, ResolvedType, TypeId, TypeTable};
 use super::Elaborator;
 use super::callee::CalleeRef;
 use super::infer::unify;
+use super::stmt::collect_ast_pattern_binding_ids;
 use super::types::{FunctionContext, MethodOwner};
 use super::util::is_float_only_literal;
 
@@ -150,8 +151,8 @@ impl<'a> ArgProbe<'a> {
 /// The names a pattern binds. Shares the walk with the or-pattern handler so
 /// one pattern shape cannot be a binder there and invisible here.
 fn pattern_binding_names(pattern: &ast::Pattern) -> Vec<String> {
-    let mut bindings = crate::hashmap::IndexMap::default();
-    super::stmt::collect_ast_pattern_binding_ids(pattern, &mut bindings);
+    let mut bindings = IndexMap::default();
+    collect_ast_pattern_binding_ids(pattern, &mut bindings);
     bindings.into_keys().collect()
 }
 

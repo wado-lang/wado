@@ -19,6 +19,7 @@ use super::elide_box_local::build_elide_box_local;
 use super::elide_local::ElideRule;
 use super::gate::{FunctionGate, GatedPass};
 use super::if_chain_to_match::IfChainToMatchRule;
+use super::known_case::KnownCaseRule;
 use super::labeled_block_fusion::{build_labeled_block_fusion, build_slot_temp_sroa};
 use super::match_to_bitset::MatchToBitsetRule;
 use super::match_to_switch::MatchToSwitchRule;
@@ -64,6 +65,7 @@ pub(super) fn run_peephole(
     let match_rule = MatchToSwitchRule::new(&type_table, cold_path_id, unreachable_id);
     let if_chain_rule = IfChainToMatchRule::new(&type_table);
     let tuple_projection_rule = TupleProjectionRule;
+    let known_case_rule = KnownCaseRule;
 
     let len = project.functions.len();
     let mut buffers = EngineBuffers::default();
@@ -158,7 +160,10 @@ pub(super) fn run_peephole(
             rules.push(&DropValueRule);
         }
         rules.extend([
-            &aggregate_forward_rule as &dyn Rule,
+            // Ahead of the folding rules: the arms it drops are what leaves a
+            // constant condition and a dead branch for them to reclaim.
+            &known_case_rule as &dyn Rule,
+            &aggregate_forward_rule,
             &elide_rule,
             &const_fold_rule,
             &branch_prune_rule,

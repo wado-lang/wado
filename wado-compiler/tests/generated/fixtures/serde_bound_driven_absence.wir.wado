@@ -936,7 +936,6 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar"(self, f) {
 }
 
 fn "core:serde/serde_bound_driven_absence.wado/UsedForSerialize^core:serde/Serialize::serialize<core:json/JsonSerializer>$scalar$spec0"(s) {
-    let __qm_e_10: ref "core:serde//SerializeError";
     let new_used_23: i32;
     let start_24: i32;
     let new_used_47: i32;
@@ -951,12 +950,6 @@ fn "core:serde/serde_bound_driven_absence.wado/UsedForSerialize^core:serde/Seria
     builtin::array_set_u8(s.repr, start_24, 123);
     "core:json/write_plain_key$spec0"(s, global:core:serde::__const_obj_18, 0);
     "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(1, s);
-    if @likely(ref.is_null(ref.null none)) {
-    } else {
-        __qm_e_10 = ref.as_non_null(ref.null none);
-        cold_path;
-        return __qm_e_10;
-    }
     return new_used_47 = s.used + 1, if @unlikely(new_used_47 > builtin::array_len(s.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(s, new_used_47);
@@ -984,12 +977,12 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(self, f) {
         }
         n = 0;
         t_9 = abs_val;
-        b97: block {
-            l98: loop {
-                break_if b97 t_9 <=u 0_i64;
+        b96: block {
+            l97: loop {
+                break_if b96 t_9 <=u 0_i64;
                 n = n + 1;
                 t_9 = t_9 /u 10_i64;
-                continue l98;
+                continue l97;
             };
         };
         break $inline_count_digits_u64_1: n;
@@ -999,14 +992,14 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(self, f) {
     pos = offset_5 + digit_count_4;
     t_15 = abs_val;
     i = 0;
-    b99: block {
-        l100: loop {
-            break_if b99 i >= digit_count_4;
+    b98: block {
+        l99: loop {
+            break_if b98 i >= digit_count_4;
             pos = pos - 1;
             builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(t_15 %u 10_i64)) & 255);
             t_15 = t_15 /u 10_i64;
             i = i + 1;
-            continue l100;
+            continue l99;
         };
     };
 }

@@ -7177,7 +7177,6 @@ fn "core:prelude/traits.wado/serde_bound_driven.wado/Color^core:prelude/traits.w
 
 fn "core:serde/serde_bound_driven.wado/Outer^core:serde/Serialize::serialize<core:json/JsonSerializer>$scalar"(self, s) {
     let __qm_e_11: ref "core:serde//SerializeError";
-    let __local_18: ref "core:serde//SerializeError";
     let new_used_30: i32;
     let start_31: i32;
     let v_47: ref "serde_bound_driven.wado//Inner";
@@ -7211,12 +7210,6 @@ fn "core:serde/serde_bound_driven.wado/Outer^core:serde/Serialize::serialize<cor
     v_58 = self.label;
     "core:json/write_plain_key$spec1"(s, global:core:serde::__const_obj_201, 1);
     "core:json/write_escaped_string"(s, v_58);
-    if @likely(ref.is_null(ref.null none)) {
-    } else {
-        __local_18 = ref.as_non_null(ref.null none);
-        cold_path;
-        return __local_18;
-    }
     return new_used_67 = s.used + 1, if @unlikely(new_used_67 > builtin::array_len(s.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(s, new_used_67);
@@ -7224,7 +7217,6 @@ fn "core:serde/serde_bound_driven.wado/Outer^core:serde/Serialize::serialize<cor
 }
 
 fn "core:serde/serde_bound_driven.wado/Inner^core:serde/Serialize::serialize<core:json/JsonSerializer>$scalar"(self, s) {
-    let __qm_e_11: ref "core:serde//SerializeError";
     let new_used_24: i32;
     let start_25: i32;
     let v_41: i32;
@@ -7244,12 +7236,6 @@ fn "core:serde/serde_bound_driven.wado/Inner^core:serde/Serialize::serialize<cor
     v_41 = self.value;
     "core:json/write_plain_key$spec1"(s, global:core:serde::__const_obj_203, 0);
     "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(v_41, s);
-    if @likely(ref.is_null(ref.null none)) {
-    } else {
-        __qm_e_11 = ref.as_non_null(ref.null none);
-        cold_path;
-        return __qm_e_11;
-    }
     return new_used_48 = s.used + 1, if @unlikely(new_used_48 > builtin::array_len(s.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(s, new_used_48);
@@ -7445,24 +7431,24 @@ fn "core:json/core:json/JsonDeserializer::scan_string_run$scalar"(self, from) {
     valid = 1;
     _licm_repr_14 = self.repr;
     _licm_start_15 = self.start;
-    b845: block {
-        l846: loop {
-            break_if b845 pos >= len;
+    b843: block {
+        l844: loop {
+            break_if b843 pos >= len;
             b = builtin::array_get_value<u8>(_licm_repr_14, _licm_start_15 + pos);
             if b < 128 {
-                break_if b845 select i32(b == 34, 1, b == 92);
+                break_if b843 select i32(b == 34, 1, b == 92);
                 pos = pos + 1;
-                continue l846;
+                continue l844;
             }
             advance = "core:prelude/string.wado/core:prelude/string.wado/String::utf8_sequence_len"(self, pos, len);
             if @unlikely(advance == 0) {
                 cold_path;
                 valid = 0;
                 pos = pos + 1;
-                continue l846;
+                continue l844;
             }
             pos = pos + advance;
-            continue l846;
+            continue l844;
         };
     };
     at_escape = (if pos < len -> i32 {
@@ -7547,8 +7533,6 @@ fn "core:json/core:json/JsonDeserializer::take_scanned_run$scalar"(self, start, 
 }
 
 fn "core:serde/serde_bound_driven.wado/Point^core:serde/Serialize::serialize<core:json/JsonSerializer>$scalar$spec0"(s) {
-    let __qm_e_10: ref "core:serde//SerializeError";
-    let __local_18: ref "core:serde//SerializeError";
     let new_used_29: i32;
     let start_30: i32;
     let new_used_64: i32;
@@ -7563,20 +7547,8 @@ fn "core:serde/serde_bound_driven.wado/Point^core:serde/Serialize::serialize<cor
     builtin::array_set_u8(s.repr, start_30, 123);
     "core:json/write_plain_key$spec0"(s, global:core:serde::__const_obj_219, 0);
     "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(1, s);
-    if @likely(ref.is_null(ref.null none)) {
-    } else {
-        __qm_e_10 = ref.as_non_null(ref.null none);
-        cold_path;
-        return __qm_e_10;
-    }
     "core:json/write_plain_key$spec0"(s, global:core:serde::__const_obj_218, 1);
     "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(2, s);
-    if @likely(ref.is_null(ref.null none)) {
-    } else {
-        __local_18 = ref.as_non_null(ref.null none);
-        cold_path;
-        return __local_18;
-    }
     return new_used_64 = s.used + 1, if @unlikely(new_used_64 > builtin::array_len(s.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(s, new_used_64);
@@ -7584,8 +7556,6 @@ fn "core:serde/serde_bound_driven.wado/Point^core:serde/Serialize::serialize<cor
 }
 
 fn "core:serde/serde_bound_driven.wado/__anon_{x:i32,y:i32}^core:serde/Serialize::serialize<core:json/JsonSerializer>$scalar$spec0"(s) {
-    let __qm_e_10: ref "core:serde//SerializeError";
-    let __local_18: ref "core:serde//SerializeError";
     let new_used_29: i32;
     let start_30: i32;
     let new_used_64: i32;
@@ -7600,20 +7570,8 @@ fn "core:serde/serde_bound_driven.wado/__anon_{x:i32,y:i32}^core:serde/Serialize
     builtin::array_set_u8(s.repr, start_30, 123);
     "core:json/write_plain_key$spec0"(s, global:core:serde::__const_obj_219, 0);
     "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(5, s);
-    if @likely(ref.is_null(ref.null none)) {
-    } else {
-        __qm_e_10 = ref.as_non_null(ref.null none);
-        cold_path;
-        return __qm_e_10;
-    }
     "core:json/write_plain_key$spec0"(s, global:core:serde::__const_obj_218, 1);
     "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(6, s);
-    if @likely(ref.is_null(ref.null none)) {
-    } else {
-        __local_18 = ref.as_non_null(ref.null none);
-        cold_path;
-        return __local_18;
-    }
     return new_used_64 = s.used + 1, if @unlikely(new_used_64 > builtin::array_len(s.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(s, new_used_64);
@@ -7727,12 +7685,12 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(self, f) {
         }
         n = 0;
         t_9 = abs_val;
-        b876: block {
-            l877: loop {
-                break_if b876 t_9 <=u 0_i64;
+        b870: block {
+            l871: loop {
+                break_if b870 t_9 <=u 0_i64;
                 n = n + 1;
                 t_9 = t_9 /u 10_i64;
-                continue l877;
+                continue l871;
             };
         };
         break $inline_count_digits_u64_1: n;
@@ -7742,14 +7700,14 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(self, f) {
     pos = offset_5 + digit_count_4;
     t_15 = abs_val;
     i = 0;
-    b878: block {
-        l879: loop {
-            break_if b878 i >= digit_count_4;
+    b872: block {
+        l873: loop {
+            break_if b872 i >= digit_count_4;
             pos = pos - 1;
             builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(t_15 %u 10_i64)) & 255);
             t_15 = t_15 /u 10_i64;
             i = i + 1;
-            continue l879;
+            continue l873;
         };
     };
 }

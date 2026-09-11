@@ -61,5 +61,19 @@ export fn run() with Stdout {
 __DATA__
 {
     "stdout": "SELECT * FROM users WHERE id = ? AND name = ?\n[Param::Int(42), Param::Text(\"Alice\")]\nstill Alice 42\nSELECT 1 0\n",
-    "wir_not_expect:O2": ["$hole_get", "$hole_fmt", "members"]
+    "wir_expect:O2": [
+        "= array.new_fixed<u8>(83, 69, 76, 69, 67, 84, 32, 42, 32, 70, 82, 79, 77, 32, 117, 115, 101, 114, 115, 32, 87, 72, 69, 82, 69, 32, 105, 100, 32, 61, 32);",
+        "= array.new_fixed<u8>(32, 65, 78, 68, 32, 110, 97, 109, 101, 32, 61, 32);",
+        "= array.new_fixed<u8>(83, 69, 76, 69, 67, 84, 32, 49);",
+        "struct.new \"tagged_template_sql.wado//Param::Int\" { discriminant: 0, payload_0: t.h0 }",
+        "struct.new \"tagged_template_sql.wado//Param::Text\" { discriminant: 1, payload_0: struct.new \"core:prelude/string.wado//String\"",
+        "= t.h1;"
+    ],
+    "wir_not_expect:O2": [
+        "$hole_get",
+        "$hole_fmt",
+        "members",
+        "to_param",
+        "String::push_str\"("
+    ]
 }

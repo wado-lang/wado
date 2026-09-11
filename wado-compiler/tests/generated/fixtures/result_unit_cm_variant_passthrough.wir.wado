@@ -284,7 +284,7 @@ fn "result_unit_cm_variant_passthrough.wado/write_helper"(dir, path, content) {
     });
     if ref.test "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>::Err"(opened) {
         e = ref.cast "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>::Err"(opened).payload_0;
-        return e;
+        return ref.as_non_null("result_unit_cm_variant_passthrough.wado/$value_copy$wasi:filesystem/types.wado/ErrorCode"(e));
     } else {
         file = ref.cast "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>::Ok"(opened).payload_0;
         self_15 = struct.new "core:prelude/string.wado//StrUtf8ByteIter" { repr: content.repr, used: content.used, index: 0 };
