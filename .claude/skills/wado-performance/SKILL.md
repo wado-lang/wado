@@ -268,6 +268,22 @@ mise run benchmark-all > h1.log 2>&1  # …and so on, 3 each
 node benchmark/ab.ts --base b1.log b2.log b3.log --head h1.log h2.log h3.log
 ```
 
+**Time the Wado rows alone, with `mise run all-wado`.** The reference arms (C,
+Rust, JavaScript, the Java ones) run the same binary whatever the compiler does,
+so re-timing them buys nothing — and it is not free. They stretch a round from
+seconds to minutes, which is the gap the host drifts across: a three-arm
+`benchmark-all` comparison came back with `ANTLR4 (Java)` at -2.2%,
+`count-prime / JavaScript` at +1.4% and a prime sieve 4.3% "faster" from a
+string-append change, all of it unreadable. The same arms over `all-wado`, six
+rounds seconds apart, put the control row back in the noise and settled every
+row. Keep one reference-free compute row (`sieve`) in the selection as the
+in-band control, and run `benchmark-all` once at the end for the record.
+
+```sh
+mise run all-wado                                # every Wado row
+mise run all-wado json_catalog sieve             # those, by name
+```
+
 **Hash the wasm before you time anything.** Compile every benchmark under both
 compilers and compare. A row whose bytes are identical cannot have moved, so
 whatever the suite says about it is the host. That is a stronger check than

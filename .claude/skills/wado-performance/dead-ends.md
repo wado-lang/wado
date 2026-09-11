@@ -54,11 +54,11 @@ json-catalog serialize, three alternating rounds against 0.822 ms/iter:
   trades the two `array.set`s for one copy: 0.888, 0.978, 0.999, 1.002.
 
 The second is the interesting one, because a two-byte `array.copy` does beat two
-`array.set`s elsewhere. Lowering `string_push`'s `MAX_SHORT_PUSH_STR_LEN` so a
-constant key's `":` stays one copy measured 4% on this row's serialize, at a
-cost to two other benchmarks. The copy loses here all the same, and the
-difference is the index: a copy from a constant offset in a global is a
-different thing from a copy whose source offset is a value just computed.
+`array.set`s elsewhere: retiring `string_push`'s per-byte expansion, so a
+constant key's `":` stays one copy, is worth 3-4% on this row's serialize. The
+copy loses here all the same, and the difference is the index: a copy from a
+constant offset in a global is a different thing from a copy whose source offset
+is a value just computed.
 
 Generalizes: the digit loop is store-bound, and no digit-generation scheme has
 yet removed a store from it. Three attempts now, two functions, two corpora.

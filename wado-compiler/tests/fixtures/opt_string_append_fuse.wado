@@ -10,12 +10,14 @@
 // therefore opens a new group at each run-time length, and only the pieces
 // after it share that group's reservation.
 //
-// `framed` covers the literal too long for the per-byte expansion to reach: its
-// length is a constant, so it shares the leading `<`'s reservation, and the
-// packed array it leaves behind is what `const_object_globalization` hoists —
-// the loop copies out of a module global instead of rebuilding the literal.
-// `framed` is small enough to be spliced into `run`, so that run is checked on
-// `run`'s own locals (`buf_0`, `start_9`); `constant` and `dynamic` stay calls.
+// `framed` covers a long literal: its length is a constant, so it shares the
+// leading `<`'s reservation, and the packed array it leaves behind is what
+// `const_object_globalization` hoists — the loop copies out of a module global
+// instead of rebuilding the literal. All four helpers splice into `run`, so
+// every run is checked on `run`'s own locals (`buf_0`, `s_2`). `dynamic`'s
+// group split survives that splicing: the fusion runs before `inline`, so
+// `name` was still a parameter when it opened the second group, and the two
+// reservations (6 bytes, then 7 and 12) are what record it.
 
 use { println, Stdout } from "core:cli";
 
@@ -60,18 +62,20 @@ export fn run() with Stdout {
 __DATA__
 {
     "stdout": "[true]\"key\":<a literal too long for the per-byte expansion to reach><a literal too long for the per-byte expansion to reach>\nab<ab<>\n",
+    "wir_scope": "opt_string_append_fuse.wado/run",
     "wir_expect:O2": [
-        "new_used = buf.used + 6;",
-        "builtin::array_set_u8(buf.repr, start + 5, 93);",
-        "self_18 = name.used;",
-        "new_used_21 = buf.used + (2 + self_18);",
-        ", start_22, name.repr, 0, self_18);",
-        ", start_9 + 1, global:opt_string_append_fuse.wado::__const_obj_",
-        ", 0, 54);",
-        "builtin::array_set_u8(buf_0.repr, start_9 + 55, 62);"
+        "buf_0.used = 6;",
+        "builtin::array_set_u8(buf_0.repr, 0 + 5, 93);",
+        "buf_0.used = 7;",
+        "buf_0.used = 12;",
+        "new_used_{} = buf_0.used + 56;",
+        "builtin::array_copy<u8>(buf_0.repr, start_{} + 1, global:opt_string_append_fuse.wado::__const_obj_{}, 0, 54);",
+        "builtin::array_set_u8(buf_0.repr, start_{} + 55, 62);",
+        "builtin::array_copy<u8>(s_2.repr, start_{}, s_2.repr, 0, 3);"
     ],
     "wir_not_expect:O2": [
-        "String::push_str\"(buf,",
-        "String::push\"(buf,"
+        "String::push_str\"(",
+        "String::push\"(",
+        "encode_char"
     ]
 }

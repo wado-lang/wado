@@ -309,6 +309,38 @@ impl TestSpec {
     }
 }
 
+/// Whether `wir` contains `pattern`, where `{}` stands for a run of digits.
+/// A generated local's number is an allocation counter, so a golden spelling
+/// one out breaks on changes that have nothing to do with what it asserts.
+fn wir_contains(wir: &str, pattern: &str) -> bool {
+    let parts: Vec<&str> = pattern.split("{}").collect();
+    if parts.len() == 1 {
+        return wir.contains(pattern);
+    }
+    let mut from = 0;
+    while let Some(hit) = wir[from..].find(parts[0]) {
+        let mut pos = from + hit + parts[0].len();
+        let mut matched = true;
+        for part in &parts[1..] {
+            let rest = &wir[pos..];
+            let digits = rest.len() - rest.trim_start_matches(|c: char| c.is_ascii_digit()).len();
+            if digits == 0 || !wir[pos + digits..].starts_with(part) {
+                matched = false;
+                break;
+            }
+            pos += digits + part.len();
+        }
+        if matched {
+            return true;
+        }
+        from += hit + 1;
+        while from < wir.len() && !wir.is_char_boundary(from) {
+            from += 1;
+        }
+    }
+    false
+}
+
 /// The body of the first function in `wir` whose name contains `scope`, from
 /// its `fn` line to the `}` closing it, or `None` when no name matches.
 fn scope_to_function<'a>(wir: &'a str, scope: &str) -> Option<&'a str> {
@@ -918,7 +950,7 @@ fn run_normal_test(
 
         for pattern in expect {
             assert!(
-                wir_text.contains(pattern),
+                wir_contains(wir_text, pattern),
                 "[{test_id}] wir_expect:{opt_name} failed: pattern not found in WIR\n\
                  pattern: {pattern}\n\
                  WIR output:\n{wir_text}"
@@ -927,7 +959,7 @@ fn run_normal_test(
 
         for pattern in not_expect {
             assert!(
-                !wir_text.contains(pattern),
+                !wir_contains(wir_text, pattern),
                 "[{test_id}] wir_not_expect:{opt_name} failed: pattern unexpectedly found in WIR\n\
                  pattern: {pattern}\n\
                  WIR output:\n{wir_text}"
