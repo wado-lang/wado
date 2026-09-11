@@ -67,7 +67,7 @@ mise run report-wasm-size  # measures the size of the generated Wasm files and r
 
 For the detailed specification, read `docs/spec.md`.
 
-@docs/cheetsheet.md is the quick reference.
+@docs/cheatsheet.md is the quick reference.
 
 ## Repository Map
 
@@ -84,7 +84,7 @@ For the detailed specification, read `docs/spec.md`.
 - `benchmark/`, `wasm-size/` — performance and code-size measurement.
 - `cloudflare-worker/` — serves a `wasi:http/service` component from a Cloudflare
   Worker, via jco.
-- `package-gale/` — A parser generator compatible with ANTR4 (`.g4`) in Wado.
+- `package-gale/` — A parser generator compatible with ANTLR4 (`.g4`) in Wado.
 - `package-gale-highlight-wado` - A complete `Wado.g4` and a syntax highlighter for Wado source code, built with `package-gale`.
 - `package-jade` - A JSON Schema 2020-12 validator in Wado.
 - `package-marl` - A CommonMark subset in Wado.
