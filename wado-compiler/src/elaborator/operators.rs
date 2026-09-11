@@ -8,12 +8,8 @@ use crate::tir::{FunctionRef, PrimitiveType, ResolvedType, TypeId, TypeTable};
 use crate::token::Span;
 
 use super::Elaborator;
-<<<<<<< HEAD
-use super::expr::{IndexAccess, int_literal_repr, negated_literal};
-||||||| 4e1f2c9f0
-=======
 use super::coercion::{is_numeric_literal_expr, numeric_literal_pair_order};
->>>>>>> origin/main
+use super::expr::{IndexAccess, int_literal_repr, negated_literal};
 use super::method_lookup::REPLACE_ON_ASSIGN_PLACE;
 use super::types::{FunctionContext, ResolvedTraitMethod, TypeError};
 use super::tysys::TypeSystem;

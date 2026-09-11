@@ -14,12 +14,8 @@ use crate::token::Span;
 use super::Elaborator;
 use super::call::SigChoice;
 use super::callee::StaticMethodRef;
-<<<<<<< HEAD
-use super::expr::IndexAccess;
-||||||| 4e1f2c9f0
-=======
 use super::coercion::is_numeric_literal_arg;
->>>>>>> origin/main
+use super::expr::IndexAccess;
 use super::infer::InferCtx;
 use super::method_lookup::MethodInferenceInput;
 use super::reflect::ReflectDispatch;
