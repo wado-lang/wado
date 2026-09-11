@@ -346,10 +346,9 @@ fn max_concurrency_bounds_in_flight_requests() {
 }
 
 /// A request that waits for a worker slot is still waiting for its first
-/// byte, so `--timeout` has to cover that wait too. A handler parked in a
-/// host call outlives the 504 its own client gets and keeps its in-flight
-/// slot, so with a one-deep worker every later request queues behind it —
-/// and must get a 504 of its own rather than hang with no response at all.
+/// byte, so `--timeout` has to cover that wait too. With a one-deep worker
+/// held by a handler parked in a host call, the requests behind it queue —
+/// and must each get a 504 rather than hang with no response at all.
 #[test]
 fn queued_request_times_out_instead_of_hanging() {
     let (_guard, port, stderr) = start_serve(
@@ -357,24 +356,55 @@ fn queued_request_times_out_instead_of_hanging() {
         &["--workers", "1", "--max-concurrency", "1", "--timeout", "2"],
     );
 
-    // The first fills the worker's only in-flight slot and never gives it
-    // back; the second sits in the queue; the third cannot even be queued.
-    for nth in 1..=3 {
-        let start = Instant::now();
-        let (status, body) = http_get(port, "/", Duration::from_mins(1));
-        let elapsed = start.elapsed();
+    // The first takes the worker's only in-flight slot; the second sits in
+    // the queue; the third cannot even be queued.
+    let start = Instant::now();
+    let sent: Vec<TcpStream> = (1..=3)
+        .map(|_| send_get(port, "/park", Duration::from_mins(1)))
+        .collect();
+    for (nth, mut stream) in sent.into_iter().enumerate() {
+        let mut raw = String::new();
+        stream.read_to_string(&mut raw).unwrap();
+        let (status, body) = parse_response(&raw);
         assert_eq!(
             status,
             504,
             "request {nth} must time out, not hang; body: {body:?}, stderr:\n{}",
             stderr.lock().unwrap(),
         );
-        assert!(
-            elapsed < Duration::from_secs(30),
-            "request {nth} took {elapsed:?} — the wait for a worker slot is \
-             escaping --timeout",
-        );
     }
+    assert!(
+        start.elapsed() < Duration::from_secs(30),
+        "the wait for a worker slot is escaping --timeout",
+    );
+}
+
+/// A 504 must also hand the worker its in-flight slot back. Once the timeout
+/// has fired nobody is waiting for that handler, so a guest still parked in a
+/// host call is work with no consumer: keeping it costs the worker a slot for
+/// good, and `--max-concurrency` of them would wedge it for the life of the
+/// process — the epoch deadline cannot reclaim a guest that runs no wasm.
+#[test]
+fn a_timed_out_handler_releases_its_worker_slot() {
+    let (_guard, port, stderr) = start_serve(
+        "serve_parked_handler.wado",
+        &["--workers", "1", "--max-concurrency", "1", "--timeout", "2"],
+    );
+
+    let (status, body) = http_get(port, "/park", Duration::from_mins(1));
+    assert_eq!(status, 504, "expected the park to time out; body: {body:?}");
+
+    let (status, body) = http_get(port, "/", Duration::from_mins(1));
+    assert_eq!(
+        status,
+        200,
+        "the worker never got its only slot back; body: {body:?}, stderr:\n{}",
+        stderr.lock().unwrap(),
+    );
+    assert!(
+        body.contains("awake"),
+        "expected the handler's body; got: {body:?}",
+    );
 }
 
 /// The host hands hyper the first body frame together with the head when

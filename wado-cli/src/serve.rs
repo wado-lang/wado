@@ -399,7 +399,26 @@ impl AccessorTask<WasiState> for HandlerTask {
         // `resp_tx` — are dropped before `resp_tx` is inspected below.
         let drive_result = {
             let handler = pin!(async {
-                let res = match service.handle(accessor, wasi_req).await? {
+                // The caller drops `resp_rx` the moment it stops waiting for a
+                // head — the first-byte 504, or a client that disconnected. A
+                // guest running past that point holds an in-flight slot for a
+                // response nobody will read, and the epoch deadline cannot
+                // reclaim it: parked in a host call, it runs no wasm. So the
+                // head's consumer bounds the handler.
+                let called = {
+                    let abandoned = pin!(async {
+                        resp_tx
+                            .as_mut()
+                            .expect("resp_tx is taken only after the head is sent")
+                            .closed()
+                            .await;
+                    });
+                    match select(pin!(service.handle(accessor, wasi_req)), abandoned).await {
+                        Either::Left((called, _abandoned)) => called?,
+                        Either::Right(((), _call)) => return anyhow::Ok(()),
+                    }
+                };
+                let res = match called {
                     Ok(res) => res,
                     Err(err) => {
                         if let Some(tx) = resp_tx.take() {
@@ -631,6 +650,9 @@ async fn await_first_byte(
 /// coarse tick (see `await_first_byte`), so a guest that never produces a
 /// response head, or a worker that never frees a slot, yields a 504 without
 /// each request arming its own timer.
+///
+/// Leaving here drops `resp_rx`, which is what ends the handler still waiting
+/// to produce that head and returns its in-flight slot (`HandlerTask::run`).
 async fn dispatch_request(
     dispatch: &Dispatch,
     timeout: Duration,
