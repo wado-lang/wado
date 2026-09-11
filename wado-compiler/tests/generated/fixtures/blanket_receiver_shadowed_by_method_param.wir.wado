@@ -8,37 +8,18 @@ type "functype//blanket_receiver_shadowed_by_method_param.wado/__cm_export____te
 
 type "functype//blanket_receiver_shadowed_by_method_param.wado/__cm_export____test_1_the_receiver_still_selects_the_impl" = fn();  // TypeId(2)
 
-type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(3)
-
-type "functype//wasi/task-return" = fn(i32);  // TypeId(4)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(3)
 
 import fn mem/realloc from "mem/realloc";
 import memory (1) from "mem/memory";
 import fn wasi/task-return from "wasi/task-return";
 
-global mut global:blanket_receiver_shadowed_by_method_param.wado::__modules_initialized: bool = 0;
-
 fn "blanket_receiver_shadowed_by_method_param.wado/__cm_export____test_0_the_method_s_own_binder_wins_over_the_impl_s"() {
-    $inline___initialize_modules_0: block {
-        break_if $inline___initialize_modules_0 @likely(global:blanket_receiver_shadowed_by_method_param.wado::__modules_initialized);
-        cold_path;
-        "core:prelude/fpfmt.wado/__initialize_module"();
-        global:blanket_receiver_shadowed_by_method_param.wado::__modules_initialized = 1;
-    };
     "wasi/task-return"(0);
 }
 
 fn "blanket_receiver_shadowed_by_method_param.wado/__cm_export____test_1_the_receiver_still_selects_the_impl"() {
-    $inline___initialize_modules_0: block {
-        break_if $inline___initialize_modules_0 @likely(global:blanket_receiver_shadowed_by_method_param.wado::__modules_initialized);
-        cold_path;
-        "core:prelude/fpfmt.wado/__initialize_module"();
-        global:blanket_receiver_shadowed_by_method_param.wado::__modules_initialized = 1;
-    };
     "wasi/task-return"(0);
-}
-
-fn "core:prelude/fpfmt.wado/__initialize_module"() {
 }
 
 export fn "blanket_receiver_shadowed_by_method_param.wado/__cm_export____test_0_the_method_s_own_binder_wins_over_the_impl_s" as "__test_0_the_method_s_own_binder_wins_over_the_impl_s"

@@ -45,15 +45,13 @@ type "functype//opt_ctor_forward_slice.wado/__cm_export__run" = fn();  // TypeId
 
 type "functype//opt_ctor_forward_slice.wado/__cm_future_read_core:prelude/types.wado/Result<(),wasi:cli/types.wado/ErrorCode>" = fn(i32) -> ref null "core:prelude/types.wado//Result<(),wasi:cli/types.wado/ErrorCode>";  // TypeId(16)
 
-type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(17)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(17)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(18)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(18)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(19)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(19)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(20)
-
-type "functype//wasi/future-read:transmission-cli" = fn(i32, i32) -> i32;  // TypeId(21)
+type "functype//wasi/future-read:transmission-cli" = fn(i32, i32) -> i32;  // TypeId(20)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -68,7 +66,6 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/future-read:transmission-cli from "wasi/future-read:transmission-cli";
 
-global mut global:opt_ctor_forward_slice.wado::__modules_initialized: bool = 0;
 global global:opt_ctor_forward_slice.wado::__const_obj_0: ref null Array<u8> = array.new_fixed<u8>(72, 101, 108, 108, 111);
 
 fn "opt_ctor_forward_slice.wado/run"() with Stderr {
@@ -86,12 +83,6 @@ fn "opt_ctor_forward_slice.wado/run"() with Stderr {
     let evt_ptr: i32;
     let status_40: i32;
     let __sroa_data_repr: ref Array<u8>;
-    $inline___initialize_modules_0: block {
-        break_if $inline___initialize_modules_0 @likely(global:opt_ctor_forward_slice.wado::__modules_initialized);
-        cold_path;
-        "core:prelude/fpfmt.wado/__initialize_module"();
-        global:opt_ctor_forward_slice.wado::__modules_initialized = 1;
-    };
     rx_6 = builtin::i32_wrap_i64(local.tee packed_5("wasi/stream-new"()));
     tx_7 = builtin::i32_wrap_i64(packed_5 >> 32_i64);
     subtask = "opt_ctor_forward_slice.wado/__cm_binding__Stderr_write_via_stream"(rx_6);
@@ -138,12 +129,6 @@ fn "opt_ctor_forward_slice.wado/__cm_binding__Stderr_write_via_stream"(data) wit
 }
 
 fn "opt_ctor_forward_slice.wado/__cm_export__run"() {
-    $inline___initialize_modules_0: block {
-        break_if $inline___initialize_modules_0 @likely(global:opt_ctor_forward_slice.wado::__modules_initialized);
-        cold_path;
-        "core:prelude/fpfmt.wado/__initialize_module"();
-        global:opt_ctor_forward_slice.wado::__modules_initialized = 1;
-    };
     "opt_ctor_forward_slice.wado/run"();
     "wasi/task-return"(0);
 }
@@ -194,9 +179,6 @@ fn "opt_ctor_forward_slice.wado/__cm_future_read_core:prelude/types.wado/Result<
     }
     drop("mem/realloc"(ptr, 2, 1, 0));
     return result;
-}
-
-fn "core:prelude/fpfmt.wado/__initialize_module"() {
 }
 
 export fn "opt_ctor_forward_slice.wado/__cm_export__run" as "run"

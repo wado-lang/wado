@@ -202,26 +202,16 @@ type "functype//http_error_code_variants.wado/__cm_export__handle" = fn(i32);  /
 
 type "functype//http_error_code_variants.wado/__cm_task_entry__handle" = fn(i32);  // TypeId(34)
 
-type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(35)
+type "functype//wasi/task-return:handle" = fn(i32, i32, i32, i64, i32, i32, i32, i32);  // TypeId(35)
 
-type "functype//wasi/task-return:handle" = fn(i32, i32, i32, i64, i32, i32, i32, i32);  // TypeId(36)
-
-type "functype//wasi/resource-drop:request" = fn(i32);  // TypeId(37)
+type "functype//wasi/resource-drop:request" = fn(i32);  // TypeId(36)
 
 import fn mem/realloc from "mem/realloc";
 import memory (1) from "mem/memory";
 import fn wasi/task-return:handle from "wasi/task-return:handle";
 import fn wasi/resource-drop:request from "wasi/resource-drop:request";
 
-global mut global:http_error_code_variants.wado::__modules_initialized: bool = 0;
-
 fn "http_error_code_variants.wado/__cm_export__handle"(request) {
-    $inline___initialize_modules_0: block {
-        break_if $inline___initialize_modules_0 @likely(global:http_error_code_variants.wado::__modules_initialized);
-        cold_path;
-        "core:prelude/fpfmt.wado/__initialize_module"();
-        global:http_error_code_variants.wado::__modules_initialized = 1;
-    };
     "http_error_code_variants.wado/__cm_task_entry__handle"(request);
 }
 
@@ -815,9 +805,6 @@ fn "http_error_code_variants.wado/__cm_task_entry__handle"(request) {
     } else {
     }
     "wasi/resource-drop:request"(request);
-}
-
-fn "core:prelude/fpfmt.wado/__initialize_module"() {
 }
 
 export fn "http_error_code_variants.wado/__cm_export__handle" as "handle"

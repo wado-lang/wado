@@ -8,37 +8,18 @@ type "functype//trait_default_assert_self_call.wado/__cm_export____test_0_assert
 
 type "functype//trait_default_assert_self_call.wado/__cm_export____test_1_and_the_same_via_a_direct_concrete_call" = fn();  // TypeId(2)
 
-type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(3)
-
-type "functype//wasi/task-return" = fn(i32);  // TypeId(4)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(3)
 
 import fn mem/realloc from "mem/realloc";
 import memory (1) from "mem/memory";
 import fn wasi/task-return from "wasi/task-return";
 
-global mut global:trait_default_assert_self_call.wado::__modules_initialized: bool = 0;
-
 fn "trait_default_assert_self_call.wado/__cm_export____test_0_assert_with_self__method_arg_does_not_duplicate_capture_lets"() {
-    $inline___initialize_modules_0: block {
-        break_if $inline___initialize_modules_0 @likely(global:trait_default_assert_self_call.wado::__modules_initialized);
-        cold_path;
-        "core:prelude/fpfmt.wado/__initialize_module"();
-        global:trait_default_assert_self_call.wado::__modules_initialized = 1;
-    };
     "wasi/task-return"(0);
 }
 
 fn "trait_default_assert_self_call.wado/__cm_export____test_1_and_the_same_via_a_direct_concrete_call"() {
-    $inline___initialize_modules_0: block {
-        break_if $inline___initialize_modules_0 @likely(global:trait_default_assert_self_call.wado::__modules_initialized);
-        cold_path;
-        "core:prelude/fpfmt.wado/__initialize_module"();
-        global:trait_default_assert_self_call.wado::__modules_initialized = 1;
-    };
     "wasi/task-return"(0);
-}
-
-fn "core:prelude/fpfmt.wado/__initialize_module"() {
 }
 
 export fn "trait_default_assert_self_call.wado/__cm_export____test_0_assert_with_self__method_arg_does_not_duplicate_capture_lets" as "__test_0_assert_with_self__method_arg_does_not_duplicate_capture_lets"

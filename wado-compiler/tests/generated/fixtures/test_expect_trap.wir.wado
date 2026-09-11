@@ -4,63 +4,56 @@
 
 enum core:prelude/types.wado//enum:CopyResult { Completed = 0, Dropped = 1, Cancelled = 2 };  // TypeId(0)
 
-struct core:prelude/types.wado//StreamWrite {  // TypeId(1)
-    mut count: i32,
-    mut result: "core:prelude/types.wado//enum:CopyResult",
-}
+array Array<u8> (mut u8);  // TypeId(1)
 
-array Array<u8> (mut u8);  // TypeId(2)
-
-struct core:prelude/string.wado//String {  // TypeId(3)
+struct core:prelude/string.wado//String {  // TypeId(2)
     mut repr: ref Array<u8>,
     mut used: i32,
 }
 
-struct core:prelude/slice.wado//Slice<u8> {  // TypeId(4)
+struct core:prelude/slice.wado//Slice<u8> {  // TypeId(3)
     mut repr: ref Array<u8>,
     mut start: i32,
     mut end: i32,
 }
 
-type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(5)
+type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(4)
 
-type "functype//wasi/stream-write" = fn(i32, i32, i32) -> i32;  // TypeId(6)
+type "functype//wasi/stream-write" = fn(i32, i32, i32) -> i32;  // TypeId(5)
 
-type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(7)
+type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(6)
 
-type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(8)
+type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(7)
 
-type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(9)
+type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(8)
 
-type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(10)
+type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(9)
 
-type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(11)
+type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(10)
 
-type "functype//test_expect_trap.wado/__cm_export____test_trap_0_panics_with_message" = fn();  // TypeId(12)
+type "functype//test_expect_trap.wado/__cm_export____test_trap_0_panics_with_message" = fn();  // TypeId(11)
 
-type "functype//test_expect_trap.wado/__cm_export____test_trap_1_unreachable" = fn();  // TypeId(13)
+type "functype//test_expect_trap.wado/__cm_export____test_trap_1_unreachable" = fn();  // TypeId(12)
 
-type "functype//test_expect_trap.wado/__cm_export____test_trap_2_assert_failure" = fn();  // TypeId(14)
+type "functype//test_expect_trap.wado/__cm_export____test_trap_2_assert_failure" = fn();  // TypeId(13)
 
-type "functype//test_expect_trap.wado/__cm_export____test_trap_3" = fn();  // TypeId(15)
+type "functype//test_expect_trap.wado/__cm_export____test_trap_3" = fn();  // TypeId(14)
 
-type "functype//test_expect_trap.wado/__test_trap_2_assert_failure$cold0" = fn();  // TypeId(16)
+type "functype//test_expect_trap.wado/__test_trap_2_assert_failure$cold0" = fn();  // TypeId(15)
 
-type "functype//core:rt/panic" = fn(ref "core:prelude/string.wado//String");  // TypeId(17)
+type "functype//core:rt/panic" = fn(ref "core:prelude/string.wado//String");  // TypeId(16)
 
-type "functype//core:rt/unreachable" = fn();  // TypeId(18)
+type "functype//core:rt/unreachable" = fn();  // TypeId(17)
 
-type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(19)
+type "functype//core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_raw_all" = fn(i32, ref "core:prelude/slice.wado//Slice<u8>");  // TypeId(18)
 
-type "functype//core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_raw_all" = fn(i32, ref "core:prelude/slice.wado//Slice<u8>") -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(20)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(19)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(21)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(20)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(22)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(21)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(23)
-
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(24)
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(22)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -75,16 +68,9 @@ import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
-global mut global:test_expect_trap.wado::__modules_initialized: bool = 0;
 global mut global:test_expect_trap.wado::__const_obj_3: ref null "core:prelude/string.wado//String" = ref.null none;
 
 fn "test_expect_trap.wado/__cm_export____test_trap_0_panics_with_message"() {
-    $inline___initialize_modules_0: block {
-        break_if $inline___initialize_modules_0 @likely(global:test_expect_trap.wado::__modules_initialized);
-        cold_path;
-        "core:prelude/fpfmt.wado/__initialize_module"();
-        global:test_expect_trap.wado::__modules_initialized = 1;
-    };
     cold_path;
     "core:rt/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("intentional panic"), used: 17 });
     unreachable;
@@ -92,12 +78,6 @@ fn "test_expect_trap.wado/__cm_export____test_trap_0_panics_with_message"() {
 }
 
 fn "test_expect_trap.wado/__cm_export____test_trap_1_unreachable"() {
-    $inline___initialize_modules_0: block {
-        break_if $inline___initialize_modules_0 @likely(global:test_expect_trap.wado::__modules_initialized);
-        cold_path;
-        "core:prelude/fpfmt.wado/__initialize_module"();
-        global:test_expect_trap.wado::__modules_initialized = 1;
-    };
     cold_path;
     "core:rt/unreachable"();
     unreachable;
@@ -105,12 +85,6 @@ fn "test_expect_trap.wado/__cm_export____test_trap_1_unreachable"() {
 }
 
 fn "test_expect_trap.wado/__cm_export____test_trap_2_assert_failure"() {
-    $inline___initialize_modules_0: block {
-        break_if $inline___initialize_modules_0 @likely(global:test_expect_trap.wado::__modules_initialized);
-        cold_path;
-        "core:prelude/fpfmt.wado/__initialize_module"();
-        global:test_expect_trap.wado::__modules_initialized = 1;
-    };
     cold_path;
     "test_expect_trap.wado/__test_trap_2_assert_failure$cold0"();
     unreachable;
@@ -118,12 +92,6 @@ fn "test_expect_trap.wado/__cm_export____test_trap_2_assert_failure"() {
 }
 
 fn "test_expect_trap.wado/__cm_export____test_trap_3"() {
-    $inline___initialize_modules_0: block {
-        break_if $inline___initialize_modules_0 @likely(global:test_expect_trap.wado::__modules_initialized);
-        cold_path;
-        "core:prelude/fpfmt.wado/__initialize_module"();
-        global:test_expect_trap.wado::__modules_initialized = 1;
-    };
     cold_path;
     "core:rt/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("unnamed trap test"), used: 17 });
     unreachable;
@@ -152,7 +120,7 @@ fn "core:rt/panic"(message) {
     new_repr = builtin::array_new<u8>(local.tee self_14(message.used) + 1);
     builtin::array_copy<u8>(new_repr, 0, message.repr, 0, self_14);
     builtin::array_set_u8(new_repr, self_14, 10);
-    drop("core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_raw_all"(tx_8, struct.new "core:prelude/slice.wado//Slice<u8>" { repr: new_repr, start: 0, end: self_14 + 1 }));
+    "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_raw_all"(tx_8, struct.new "core:prelude/slice.wado//Slice<u8>" { repr: new_repr, start: 0, end: self_14 + 1 });
     "wasi/stream-drop-writable"(tx_8);
     "wasi/future-drop-readable:transmission-cli"(future_handle);
     cold_path;
@@ -164,9 +132,6 @@ fn "core:rt/unreachable"() {
     unreachable;
 }
 
-fn "core:prelude/fpfmt.wado/__initialize_module"() {
-}
-
 fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_raw_all"(self, data) {
     let repr_2: ref Array<u8>;
     let end_3: i32;
@@ -174,7 +139,6 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
     let packed_13: i64;
     let ptr_14: i32;
     let raw_len: i32;
-    let written_16: ref "core:prelude/types.wado//StreamWrite";
     let len_23: i32;
     let ptr_24: i32;
     let i: i32;
@@ -183,15 +147,17 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
     let evt_ptr: i32;
     let status_41: i32;
     let __sroa_data_start: i32;
-    let _av_50: i32;
-    let _av_51: i32;
-    _av_50 = data.start;
-    _av_51 = data.end;
-    if (_av_51 - _av_50) == 0 {
-        return 0;
+    let __sroa_written_count: i32;
+    let __sroa_written_result: "core:prelude/types.wado//enum:CopyResult";
+    let _av_52: i32;
+    let _av_53: i32;
+    _av_52 = data.start;
+    _av_53 = data.end;
+    if (_av_53 - _av_52) == 0 {
+        return;
     }
     repr_2 = data.repr;
-    end_3 = _av_50 + (_av_51 - _av_50);
+    end_3 = _av_52 + (_av_53 - _av_52);
     offset = data.start;
     block {
         l3: loop {
@@ -217,7 +183,8 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
                 "wasi/waitable-set-drop"(ws);
                 result = status_41;
             }
-            written_16 = struct.new "core:prelude/types.wado//StreamWrite" { count: result >> 4, result: $inline_cm_copy_result_14: block -> "core:prelude/types.wado//enum:CopyResult" {
+            __sroa_written_count = result >> 4;
+            __sroa_written_result = $inline_cm_copy_result_14: block -> "core:prelude/types.wado//enum:CopyResult" {
                 let __match_scrut_0: i32;
                 __match_scrut_0 = result & 15;
                 if __match_scrut_0 == 0 {
@@ -227,11 +194,11 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
                 } else {
                 }
                 break $inline_cm_copy_result_14: 2;
-            } };
+            };
             drop("mem/realloc"(ptr_14, raw_len, 1, 0));
-            offset = offset + written_16.count;
-            if select i32(select i32(written_16.result != 0, 1, written_16.count <= 0), 1, offset >= end_3) {
-                return written_16.result;
+            offset = offset + __sroa_written_count;
+            if select i32(select i32(__sroa_written_result != 0, 1, __sroa_written_count <= 0), 1, offset >= end_3) {
+                return;
             }
             continue l3;
         };

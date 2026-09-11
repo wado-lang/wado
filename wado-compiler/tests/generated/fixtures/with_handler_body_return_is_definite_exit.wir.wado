@@ -23,15 +23,13 @@ type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // Ty
 
 type "functype//with_handler_body_return_is_definite_exit.wado/__cm_export__run" = fn();  // TypeId(8)
 
-type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(9)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(9)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(10)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(10)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(11)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(11)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(12)
-
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(13)
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(12)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -46,25 +44,8 @@ import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
-global mut global:with_handler_body_return_is_definite_exit.wado::__modules_initialized: bool = 0;
-
 fn "with_handler_body_return_is_definite_exit.wado/__cm_export__run"() {
-    $inline___initialize_modules_0: block {
-        break_if $inline___initialize_modules_0 @likely(global:with_handler_body_return_is_definite_exit.wado::__modules_initialized);
-        cold_path;
-        "core:prelude/fpfmt.wado/__initialize_module"();
-        global:with_handler_body_return_is_definite_exit.wado::__modules_initialized = 1;
-    };
-    $inline___initialize_modules_2: block {
-        break_if $inline___initialize_modules_2 @likely(global:with_handler_body_return_is_definite_exit.wado::__modules_initialized);
-        cold_path;
-        "core:prelude/fpfmt.wado/__initialize_module"();
-        global:with_handler_body_return_is_definite_exit.wado::__modules_initialized = 1;
-    };
     "wasi/task-return"(0);
-}
-
-fn "core:prelude/fpfmt.wado/__initialize_module"() {
 }
 
 export fn "with_handler_body_return_is_definite_exit.wado/__cm_export__run" as "run"
