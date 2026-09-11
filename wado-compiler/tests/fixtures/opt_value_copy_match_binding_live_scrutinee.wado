@@ -1,0 +1,87 @@
+// A match binding names the scrutinee's payload, not a copy of it, so handing
+// its storage to a new owner is a move out of the scrutinee. The binding's own
+// last use does not license that — only the scrutinee being dead too does, and
+// a receiver's field is never dead.
+//
+// The source-level pass answers last use and knows nothing of ownership, so the
+// move decision belongs to the value-copy planner alone.
+
+use { println, Stdout } from "core:cli";
+
+variant P {
+    A(List<i32>),
+    B(i32),
+}
+
+struct H {
+    p: P,
+}
+
+impl H {
+    fn tamper(&self) {
+        match self.p {
+            P::A(xs) => {
+                let mut ys = xs;
+                ys.push(9);
+            }
+            P::B(_) => {}
+        }
+    }
+}
+
+fn tamper_arg(h: &H) {
+    match h.p {
+        P::A(xs) => {
+            let mut ys = xs;
+            ys.push(9);
+        }
+        P::B(_) => {}
+    }
+}
+
+// The scrutinee is this function's own by-value parameter, dead after the
+// match, so the payload may still move.
+fn consume(p: P) -> i32 {
+    match p {
+        P::A(xs) => {
+            let mut ys = xs;
+            ys.push(9);
+            return ys.len();
+        }
+        P::B(n) => {
+            return n;
+        }
+    }
+}
+
+export fn run() with Stdout {
+    let a = P::A([builtin::black_box(7)]);
+    match a {
+        P::A(xs) => {
+            let mut ys = xs;
+            ys.push(9);
+        }
+        P::B(_) => {}
+    }
+    println(`a ${a:?}`);
+
+    let b = P::A([builtin::black_box(7)]);
+    if let P::A(xs) = b {
+        let mut ys = xs;
+        ys.push(9);
+    }
+    println(`b ${b:?}`);
+
+    let h = H { p: P::A([builtin::black_box(7)]) };
+    h.tamper();
+    tamper_arg(&h);
+    println(`h ${h.p:?}`);
+
+    println(`c ${consume(P::A([builtin::black_box(7)]))}`);
+}
+
+__DATA__
+{
+    "stdout": "a P::A([7])\nb P::A([7])\nh P::A([7])\nc 2\n",
+    "wir_expect:O0": ["$value_copy$core:prelude/list.wado/List<i32>"]
+}
