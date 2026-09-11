@@ -142,9 +142,9 @@ fn start_serve(fixture: &str, extra_args: &[&str]) -> (ServerGuard, u16, Arc<Mut
     }
 }
 
-/// Send a minimal HTTP/1.1 GET and return the full raw response text
-/// (status line, headers, blank line, body — chunk framing intact).
-fn http_get_raw(port: u16, path: &str, timeout: Duration) -> String {
+/// Send a minimal HTTP/1.1 GET and hand back the connection with the
+/// response unread, for a caller that drives the read itself.
+fn send_get(port: u16, path: &str, timeout: Duration) -> TcpStream {
     let addr = format!("127.0.0.1:{port}");
     let mut stream = TcpStream::connect(&addr).expect("connect");
     stream.set_read_timeout(Some(timeout)).unwrap();
@@ -152,10 +152,20 @@ fn http_get_raw(port: u16, path: &str, timeout: Duration) -> String {
 
     let req = format!("GET {path} HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n");
     stream.write_all(req.as_bytes()).unwrap();
+    stream
+}
 
+/// Read a response off `stream` to EOF, raw (status line, headers, blank
+/// line, body — chunk framing intact).
+fn read_response(mut stream: TcpStream) -> String {
     let mut response = String::new();
     stream.read_to_string(&mut response).unwrap();
     response
+}
+
+/// Send a minimal HTTP/1.1 GET and return the full raw response text.
+fn http_get_raw(port: u16, path: &str, timeout: Duration) -> String {
+    read_response(send_get(port, path, timeout))
 }
 
 /// Parse `(status_code, raw_body)` from a raw HTTP/1.1 response. The body
@@ -274,15 +284,9 @@ fn responds_with_streamed_chunked_body() {
 fn non_draining_client_does_not_pin_worker_stack() {
     let (_guard, port, stderr) = start_serve("serve_big_body.wado", &["--timeout", "2"]);
 
-    // Open the connection, send the request, read just the head plus a
-    // little body, then stall: stop reading while holding the socket open.
-    let addr = format!("127.0.0.1:{port}");
-    let mut stream = TcpStream::connect(&addr).expect("connect");
-    stream
-        .set_read_timeout(Some(Duration::from_secs(5)))
-        .unwrap();
-    let req = "GET / HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n";
-    stream.write_all(req.as_bytes()).unwrap();
+    // Read just the head plus a little body, then stall: stop reading
+    // while holding the socket open.
+    let mut stream = send_get(port, "/", Duration::from_secs(5));
 
     // Drain a small fixed amount so the response head has definitely been
     // produced, then never read again.
@@ -311,6 +315,133 @@ fn non_draining_client_does_not_pin_worker_stack() {
     // Hold the connection until the abort is observed so it is attributed
     // to the stall, not to a client disconnect (which is a separate path).
     drop(stream);
+}
+
+/// `--max-concurrency` sizes the fiber-stack pool, so it has to *bound*
+/// in-flight requests too: a worker that spawned every arriving request
+/// would ask the pooling allocator for more stacks than it reserved and
+/// fail the excess requests. Eight clients against a two-deep server must
+/// all be served — the surplus waits its turn instead of erroring.
+#[test]
+fn max_concurrency_bounds_in_flight_requests() {
+    let (_guard, port, stderr) = start_serve(
+        "serve_waiting_handler.wado",
+        &["--workers", "1", "--max-concurrency", "2"],
+    );
+
+    let clients: Vec<_> = (0..8)
+        .map(|_| std::thread::spawn(move || http_get(port, "/slow", Duration::from_mins(1))))
+        .collect();
+
+    for client in clients {
+        let (status, body) = client.join().expect("client thread panicked");
+        assert_eq!(
+            status,
+            200,
+            "every request must be served once the surplus waits for a slot; \
+             body: {body:?}, stderr:\n{}",
+            stderr.lock().unwrap(),
+        );
+        assert!(
+            body.contains("served"),
+            "expected the handler's body; got: {body:?}",
+        );
+    }
+}
+
+/// A request that waits for a worker slot is still waiting for its first
+/// byte, so `--timeout` has to cover that wait too. With a one-deep worker
+/// held by a handler parked in a host call, the requests behind it queue —
+/// and must each get a 504 rather than hang with no response at all.
+#[test]
+fn queued_request_times_out_instead_of_hanging() {
+    let (_guard, port, stderr) = start_serve(
+        "serve_waiting_handler.wado",
+        &["--workers", "1", "--max-concurrency", "1", "--timeout", "2"],
+    );
+
+    // The first takes the worker's only in-flight slot; the second sits in
+    // the queue; the third cannot even be queued.
+    let start = Instant::now();
+    let sent: Vec<TcpStream> = (1..=3)
+        .map(|_| send_get(port, "/park", Duration::from_mins(1)))
+        .collect();
+    for (nth, stream) in (1..).zip(sent) {
+        let (status, body) = parse_response(&read_response(stream));
+        assert_eq!(
+            status,
+            504,
+            "request {nth} must time out, not hang; body: {body:?}, stderr:\n{}",
+            stderr.lock().unwrap(),
+        );
+    }
+    assert!(
+        start.elapsed() < Duration::from_secs(30),
+        "the wait for a worker slot is escaping --timeout",
+    );
+}
+
+/// A 504 must also hand the worker its in-flight slot back. Once the timeout
+/// has fired nobody is waiting for that handler, so a guest still parked in a
+/// host call is work with no consumer: keeping it costs the worker a slot for
+/// good, and `--max-concurrency` of them would wedge it for the life of the
+/// process — the epoch deadline cannot reclaim a guest that runs no wasm.
+#[test]
+fn a_timed_out_handler_releases_its_worker_slot() {
+    let (_guard, port, stderr) = start_serve(
+        "serve_waiting_handler.wado",
+        &["--workers", "1", "--max-concurrency", "1", "--timeout", "2"],
+    );
+
+    let (status, body) = http_get(port, "/park", Duration::from_mins(1));
+    assert_eq!(status, 504, "expected the park to time out; body: {body:?}");
+
+    let (status, body) = http_get(port, "/", Duration::from_mins(1));
+    assert_eq!(
+        status,
+        200,
+        "the worker never got its only slot back; body: {body:?}, stderr:\n{}",
+        stderr.lock().unwrap(),
+    );
+    assert!(
+        body.contains("served"),
+        "expected the handler's body; got: {body:?}",
+    );
+}
+
+/// The host hands hyper the first body frame together with the head when
+/// the guest has already produced one. A guest that returns its head and
+/// writes its body much later must still see the head go out at once.
+#[test]
+fn response_head_is_not_held_for_a_slow_body() {
+    let (_guard, port, _stderr) = start_serve("serve_delayed_body.wado", &[]);
+
+    let start = Instant::now();
+    let mut stream = send_get(port, "/", Duration::from_mins(1));
+
+    // The fixture delays its first body byte by 3s. Reading anything at all
+    // therefore proves the head was not held for it.
+    let mut head = [0u8; 1024];
+    let n = stream.read(&mut head).expect("read response head");
+    let head_elapsed = start.elapsed();
+    let head = String::from_utf8_lossy(&head[..n]).to_string();
+
+    assert!(
+        head.starts_with("HTTP/1.1 200"),
+        "expected the status line in the first read; got: {head:?}",
+    );
+    assert!(
+        head_elapsed < Duration::from_secs(2),
+        "the head arrived in {head_elapsed:?}, i.e. behind the fixture's 3s body \
+         delay — the head is being held for the first body frame",
+    );
+
+    let mut rest = String::new();
+    stream.read_to_string(&mut rest).expect("read body");
+    assert!(
+        rest.contains("late"),
+        "expected the delayed body to follow the head; got: {rest:?}",
+    );
 }
 
 /// SIGTERM should trigger the shutdown path: the accept loop stops, the

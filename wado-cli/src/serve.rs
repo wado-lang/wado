@@ -10,6 +10,7 @@ use std::time::{Duration, Instant};
 
 use anyhow::Result;
 use bytes::Bytes;
+use futures::Stream;
 use futures::StreamExt as _;
 use futures::future::{Either, poll_fn, select};
 use futures::stream::FuturesUnordered;
@@ -52,9 +53,12 @@ const EPOCH_TICK_MS: u64 = 1000;
 /// raise it for one that pays to build them. `0` disables.
 const DEFAULT_RECYCLE_REQUESTS: u64 = 200;
 
-/// Each in-flight request needs an async fiber stack from the pooling
-/// allocator, so this also sizes the engine's stack pool.
-const DEFAULT_MAX_CONCURRENCY: usize = 1024;
+/// In-flight requests one worker runs at once, when `--max-concurrency`
+/// does not say. Each pins a fiber stack the GC walks on every collection,
+/// so throughput peaks over a 16–32 plateau and a worker left to run the
+/// whole backlog loses a third of it by 200. The surplus waits in the
+/// worker's queue.
+const DEFAULT_MAX_CONCURRENCY_PER_WORKER: usize = 32;
 
 pub struct ServeOptions {
     pub input: String,
@@ -69,7 +73,9 @@ pub struct ServeOptions {
     pub workers: Option<usize>,
     /// Recycle a worker after this many requests; `0` disables.
     pub recycle_requests: u64,
-    pub max_concurrency: usize,
+    /// Server-wide in-flight bound; `None` ⇒
+    /// `DEFAULT_MAX_CONCURRENCY_PER_WORKER` per worker.
+    pub max_concurrency: Option<usize>,
     pub profile: ProfileMode,
 }
 
@@ -111,7 +117,7 @@ const MAX_CONCURRENCY_SPEC: args::OptSpec = args::OptSpec {
     long: Some("max-concurrency"),
     short: None,
     value: Some("<n>"),
-    desc: "Max concurrently in-flight requests (default: 1024)",
+    desc: "Max concurrently in-flight requests server-wide; the surplus waits\nin the worker queues (default: 32 per worker)",
 };
 
 const PROFILE_SPEC: args::OptSpec = args::OptSpec {
@@ -235,7 +241,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<ServeOptions, CliExit> {
     let mut timeout_secs: u64 = DEFAULT_TIMEOUT_SECS;
     let mut workers: Option<usize> = None;
     let mut recycle_requests: u64 = DEFAULT_RECYCLE_REQUESTS;
-    let mut max_concurrency: usize = DEFAULT_MAX_CONCURRENCY;
+    let mut max_concurrency: Option<usize> = None;
     let mut profile = ProfileMode::None;
     let mut knobs = CompileKnobs::default();
 
@@ -260,7 +266,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<ServeOptions, CliExit> {
                     recycle_requests = parse_count_arg("--recycle-requests", &mut parser, true)?;
                 }
                 Opt::MaxConcurrency => {
-                    max_concurrency = parse_u32_count_arg("--max-concurrency", &mut parser)?;
+                    max_concurrency = Some(parse_u32_count_arg("--max-concurrency", &mut parser)?);
                 }
                 Opt::Profile => {
                     let spec = args::require_string(&mut parser)?;
@@ -281,10 +287,12 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<ServeOptions, CliExit> {
         }
     }
 
-    // An explicit `--workers` above `--max-concurrency` would leave the
-    // pooling allocator under-sized for the number of worker stores. The
-    // auto-derived default is clamped instead (see `run`).
+    // An explicit `--workers` above an explicit `--max-concurrency` would
+    // leave a worker without even one in-flight slot. The auto-derived
+    // worker count is clamped instead (see `run`); the derived bound scales
+    // with the workers, so it can never be the smaller of the two.
     if let Some(w) = workers
+        && let Some(max_concurrency) = max_concurrency
         && w > max_concurrency
     {
         return Err(CliExit::error(format!(
@@ -392,7 +400,26 @@ impl AccessorTask<WasiState> for HandlerTask {
         // `resp_tx` — are dropped before `resp_tx` is inspected below.
         let drive_result = {
             let handler = pin!(async {
-                let res = match service.handle(accessor, wasi_req).await? {
+                // The caller drops `resp_rx` the moment it stops waiting for a
+                // head — the first-byte 504, or a client that disconnected. A
+                // guest running past that point holds an in-flight slot for a
+                // response nobody will read, and the epoch deadline cannot
+                // reclaim it: parked in a host call, it runs no wasm. So the
+                // head's consumer bounds the handler.
+                let called = {
+                    let abandoned = pin!(async {
+                        resp_tx
+                            .as_mut()
+                            .expect("resp_tx is taken only after the head is sent")
+                            .closed()
+                            .await;
+                    });
+                    match select(pin!(service.handle(accessor, wasi_req)), abandoned).await {
+                        Either::Left((called, _abandoned)) => called?,
+                        Either::Right(((), _call)) => return anyhow::Ok(()),
+                    }
+                };
+                let res = match called {
                     Ok(res) => res,
                     Err(err) => {
                         if let Some(tx) = resp_tx.take() {
@@ -403,6 +430,39 @@ impl AccessorTask<WasiState> for HandlerTask {
                 };
                 let res = accessor.with(|store| res.into_http(store, async { Ok(()) }))?;
                 let (parts, body) = res.into_parts();
+                let mut body = pin!(body);
+
+                // Hold the head back for one turn of the store's event loop:
+                // a body the guest has already finished then rides out with
+                // it in one `writev` instead of following in a second. One
+                // turn is the whole wait, so a body streamed later is not
+                // delayed.
+                let mut first_frame = None;
+                let mut body_done = false;
+                for turn in 0..2 {
+                    if turn > 0 {
+                        tokio::task::yield_now().await;
+                    }
+                    match poll_fn(|cx| Poll::Ready(body.as_mut().poll_frame(cx))).await {
+                        Poll::Ready(Some(Ok(frame))) => {
+                            first_frame = Some(frame);
+                            break;
+                        }
+                        Poll::Ready(Some(Err(_)) | None) => {
+                            body_done = true;
+                            break;
+                        }
+                        Poll::Pending => {}
+                    }
+                }
+                if let Some(frame) = first_frame {
+                    // Queued before the head, which is what hands hyper the
+                    // receiver: after it, hyper races us to the first poll.
+                    assert!(
+                        frame_tx.try_send(frame).is_ok(),
+                        "the frame channel is empty and its receiver held until the head is sent"
+                    );
+                }
 
                 // Hand the response head plus the receiver to `dispatch_request`
                 // so hyper can start writing the response while we keep
@@ -430,8 +490,9 @@ impl AccessorTask<WasiState> for HandlerTask {
                 // pin this task's fiber stack (#1138). The idle timeout
                 // bounds that wait; it is re-armed per blocking send, so a
                 // slow-but-progressing client is unaffected.
-                let mut body = pin!(body);
-                while let Some(Ok(frame)) = poll_fn(|cx| body.as_mut().poll_frame(cx)).await {
+                while !body_done
+                    && let Some(Ok(frame)) = poll_fn(|cx| body.as_mut().poll_frame(cx)).await
+                {
                     match frame_tx.try_send(frame) {
                         Ok(()) => {}
                         // hyper dropped the body — client disconnected.
@@ -492,77 +553,76 @@ struct Dispatch {
     next: AtomicUsize,
     /// Coarse server-wide clock for the first-byte timeout. Each in-flight
     /// request clones this and checks its own deadline on every tick (see
-    /// `await_first_byte`), so no request arms its own timer.
+    /// `before_deadline`), so no request arms its own timer.
     tick_rx: watch::Receiver<()>,
 }
 
-/// The chosen worker's engine task has stopped, i.e. the server is shutting
-/// down. Carries nothing: `SendError` would hand back the whole `RequestJob`.
-struct WorkerGone;
+/// Why a job never reached a worker. Carries nothing: `SendError` would hand
+/// back the whole `RequestJob`.
+enum SubmitError {
+    /// The chosen worker's engine task has stopped, i.e. the server is
+    /// shutting down.
+    WorkerGone,
+    /// The worker's queue stayed full past the request's deadline.
+    Timeout,
+}
 
 impl Dispatch {
-    /// Hand `job` to the next worker in rotation.
-    async fn submit(&self, job: RequestJob) -> Result<(), WorkerGone> {
+    /// Hand `job` to the next worker in rotation, giving up at `deadline`.
+    ///
+    /// A worker at its in-flight bound leaves its queue full, so this wait is
+    /// part of the client's time to first byte and has to answer to the same
+    /// deadline — otherwise a queued request outlives `--timeout` with no
+    /// response at all.
+    async fn submit(&self, job: RequestJob, deadline: Instant) -> Result<(), SubmitError> {
         let idx = self.next.fetch_add(1, Ordering::Relaxed) % self.txs.len();
-        self.txs[idx].send(job).await.map_err(|_| WorkerGone)
+        let mut tick_rx = self.tick_rx.clone();
+        match before_deadline(pin!(self.txs[idx].send(job)), deadline, &mut tick_rx).await {
+            Some(sent) => sent.map_err(|_| SubmitError::WorkerGone),
+            None => Err(SubmitError::Timeout),
+        }
     }
 }
 
-/// Wait for the response head, bounding the wait by `timeout` without arming
-/// a per-request timer.
+/// Drive `fut` to completion, giving up once `deadline` has passed.
 ///
-/// `tick_rx` is a server-wide coarse clock (see the ticker in
-/// `run_http_server`); every tick wakes in-flight waiters to re-check their
-/// own deadline. The 504 therefore fires within one tick *after* `timeout`,
-/// never before it — fine for a backstop that only guards against a guest
-/// that never produces a head, and the worker's epoch deadline
-/// (`timeout + 5s`) still trails it comfortably.
-async fn await_first_byte(
-    resp_rx: oneshot::Receiver<HandlerOutcome>,
-    timeout: Duration,
-    mut tick_rx: watch::Receiver<()>,
-) -> HandlerOutcome {
-    let aborted =
-        || HandlerOutcome::Trapped("Handler aborted without producing a response".to_string());
-    let deadline = Instant::now() + timeout;
-    let mut resp_rx = pin!(resp_rx);
+/// No waiter arms a timer of its own: `tick_rx` is a server-wide coarse clock
+/// (see the ticker in `run_http_server`) and every tick wakes the waiters to
+/// re-check their deadlines. So the answer lands within one tick *after* the
+/// deadline, never before it, and a tie goes to the deadline — a result that
+/// arrives past it is still too late.
+async fn before_deadline<F: Future>(
+    mut fut: Pin<&mut F>,
+    deadline: Instant,
+    tick_rx: &mut watch::Receiver<()>,
+) -> Option<F::Output> {
     loop {
-        match select(resp_rx.as_mut(), pin!(tick_rx.changed())).await {
-            // The deadline is authoritative regardless of which branch wins:
-            // a head that lands past it (after the deadline but before the
-            // next tick) is still a timeout, matching the old sleep-vs-recv
-            // race rather than letting a late head slip through.
-            Either::Left((Ok(outcome), _)) => {
-                return if Instant::now() >= deadline {
-                    HandlerOutcome::Timeout
-                } else {
-                    outcome
-                };
-            }
-            Either::Left((Err(_recv), _)) => return aborted(),
-            Either::Right((Ok(()), _)) => {
+        match select(fut.as_mut(), pin!(tick_rx.changed())).await {
+            Either::Left((out, _tick)) => return (Instant::now() < deadline).then_some(out),
+            Either::Right((Ok(()), _fut)) => {
                 if Instant::now() >= deadline {
-                    return HandlerOutcome::Timeout;
+                    return None;
                 }
             }
-            // Ticker gone (server shutting down). Break out so the borrow of
-            // `resp_rx` from `select` ends, then await the head directly:
-            // deliver it if it still lands; shutdown drains in-flight anyway.
-            Either::Right((Err(_closed), _)) => break,
+            // Ticker gone: the server is shutting down, and shutdown drains
+            // what is in flight, so stop checking and let `fut` finish.
+            Either::Right((Err(_closed), _fut)) => break,
         }
     }
-    match resp_rx.await {
-        Ok(outcome) => outcome,
-        Err(_recv) => aborted(),
-    }
+    Some(fut.await)
 }
 
 /// Convert a hyper request into a job, submit it to a worker instance, and
 /// render the outcome as a hyper response.
 ///
-/// The first-byte timeout is enforced against a shared coarse tick (see
-/// `await_first_byte`), so a guest that never produces a response head
-/// yields a 504 without each request arming its own timer.
+/// One deadline covers the whole path to the head — the wait for a worker
+/// slot as much as the handler itself — and is enforced against a shared
+/// coarse tick (see `before_deadline`), so a guest that never produces a
+/// response head, or a worker that never frees a slot, yields a 504 without
+/// each request arming its own timer.
+///
+/// Leaving here drops `resp_rx`, which is what ends the handler still waiting
+/// to produce that head and returns its in-flight slot (`HandlerTask::run`).
 async fn dispatch_request(
     dispatch: &Dispatch,
     timeout: Duration,
@@ -580,13 +640,30 @@ async fn dispatch_request(
         resp_tx,
     };
 
-    if dispatch.submit(job).await.is_err() {
-        return Ok(error_response(503, "Server is shutting down".to_string()));
+    let deadline = Instant::now() + timeout;
+    let timed_out = || {
+        let secs = timeout.as_secs();
+        eprintln!("Handler timed out after {secs}s");
+        error_response(504, format!("Handler timed out after {secs}s"))
+    };
+    match dispatch.submit(job, deadline).await {
+        Ok(()) => {}
+        Err(SubmitError::WorkerGone) => {
+            return Ok(error_response(503, "Server is shutting down".to_string()));
+        }
+        Err(SubmitError::Timeout) => return Ok(timed_out()),
     }
 
     // First-byte timeout. After the head arrives, the body stream is bounded
     // by the bounded frame channel rather than by this deadline.
-    let outcome = await_first_byte(resp_rx, timeout, dispatch.tick_rx.clone()).await;
+    let mut tick_rx = dispatch.tick_rx.clone();
+    let outcome = match before_deadline(pin!(resp_rx), deadline, &mut tick_rx).await {
+        Some(Ok(outcome)) => outcome,
+        Some(Err(_recv)) => {
+            HandlerOutcome::Trapped("Handler aborted without producing a response".to_string())
+        }
+        None => HandlerOutcome::Timeout,
+    };
 
     Ok(match outcome {
         HandlerOutcome::Streaming(parts, frame_rx) => {
@@ -598,11 +675,7 @@ async fn dispatch_request(
             eprintln!("{msg}");
             error_response(500, msg)
         }
-        HandlerOutcome::Timeout => {
-            let secs = timeout.as_secs();
-            eprintln!("Handler timed out after {secs}s");
-            error_response(504, format!("Handler timed out after {secs}s"))
-        }
+        HandlerOutcome::Timeout => timed_out(),
     })
 }
 
@@ -660,8 +733,28 @@ enum Step {
     /// A job slot was produced into the loop's `job` local: `Some` is a
     /// request to dispatch, `None` means the request channel closed.
     Job,
-    /// An in-flight request finished.
-    Drained,
+    /// Nothing to dispatch: an in-flight request finished, or the wait hit
+    /// the server tick. Either way the loop turned.
+    Turn,
+}
+
+/// Wait for an in-flight request to finish or for the next server tick,
+/// whichever comes first.
+///
+/// Every wait a worker makes while something is in flight goes through here,
+/// so its loop turns — and so refreshes its store's epoch deadline — at least
+/// once per tick. Without the tick arm, a worker sitting at its in-flight
+/// bound or holding one long-lived streaming response never turns and trips
+/// the runaway-guest trap. A guest that really monopolises the store blocks
+/// this wait too, so the trap still catches the case it exists for.
+async fn drain_or_tick<S: Stream + Unpin>(inflight: &mut S, tick_rx: &mut watch::Receiver<()>) {
+    // Once the ticker is gone (shutdown) only the drain arm can resolve.
+    let tick = pin!(async {
+        if tick_rx.changed().await.is_err() {
+            std::future::pending::<()>().await;
+        }
+    });
+    let _ = select(pin!(inflight.next()), tick).await;
 }
 
 /// Drives one worker: a long-lived component instance that handles
@@ -676,12 +769,18 @@ enum Step {
 /// On recycle or shutdown the loop stops accepting new requests but keeps
 /// draining the in-flight ones, so a recycle never drops a live request.
 ///
+/// `max_inflight` is this worker's share of `--max-concurrency`: it runs
+/// that many requests at once and leaves the rest in `job_rx`, so it never
+/// asks the pooling allocator for a fiber stack the pool was not sized for.
+///
 /// A runaway guest (one that monopolises the store's single thread in
 /// pure wasm) is bounded by the epoch deadline: the dispatch loop
-/// refreshes the deadline every turn, so only a guest that prevents the
-/// loop from turning trips it. The resulting trap surfaces as a
-/// `run_concurrent` error, after which the worker rebuilds its instance
-/// and resumes — self-healing rather than dying.
+/// refreshes the deadline every turn, and every wait it makes while
+/// something is in flight goes through `drain_or_tick`, so the loop turns
+/// on its own and only a guest that prevents it from turning trips the
+/// deadline. The resulting trap surfaces as a `run_concurrent` error,
+/// after which the worker rebuilds its instance and resumes — self-healing
+/// rather than dying.
 ///
 /// The epoch deadline is `timeout_secs` plus a grace margin: the
 /// client-facing first-byte timeout (`dispatch_request`) fires within a
@@ -693,6 +792,8 @@ async fn worker_loop(
     service_pre: Arc<ServicePre<WasiState>>,
     preopens: Arc<Preopens>,
     mut job_rx: mpsc::Receiver<RequestJob>,
+    max_inflight: usize,
+    mut tick_rx: watch::Receiver<()>,
     recycle_requests: u64,
     timeout_secs: u64,
     fatal: Arc<Notify>,
@@ -764,24 +865,29 @@ async fn worker_loop(
                     }
 
                     let mut job: Option<RequestJob> = None;
-                    let step = if stopping.is_some() {
-                        // Draining only — `inflight` is non-empty here.
-                        let _ = inflight.next().await;
-                        Step::Drained
+                    let step = if inflight.len() >= max_inflight || stopping.is_some() {
+                        // At the bound, or draining towards a stop: take
+                        // nothing new. Queued requests stay in `job_rx`, so
+                        // the connections carrying them back-pressure rather
+                        // than piling more fiber stacks onto this store.
+                        assert!(!inflight.is_empty());
+                        drain_or_tick(&mut inflight, &mut tick_rx).await;
+                        Step::Turn
                     } else if inflight.is_empty() {
-                        // Idle — only a new job can wake us.
+                        // Idle — only a new job can wake us. No guest code is
+                        // running, so the epoch deadline cannot trip.
                         job = job_rx.recv().await;
                         Step::Job
                     } else {
                         // Accept new jobs and drain in-flight concurrently.
                         let recv = pin!(job_rx.recv());
-                        let drain = pin!(inflight.next());
+                        let drain = pin!(drain_or_tick(&mut inflight, &mut tick_rx));
                         match select(recv, drain).await {
                             Either::Left((j, _drain)) => {
                                 job = j;
                                 Step::Job
                             }
-                            Either::Right((_done, _recv)) => Step::Drained,
+                            Either::Right(((), _recv)) => Step::Turn,
                         }
                     };
 
@@ -792,7 +898,7 @@ async fn worker_loop(
                     });
 
                     match step {
-                        Step::Drained => {}
+                        Step::Turn => {}
                         Step::Job => match job {
                             Some(job) => {
                                 // The `JoinHandle` is kept in `inflight` so a
@@ -848,16 +954,19 @@ async fn run_http_server(
     profile: ProfileMode,
     collector: wasmtime::Collector,
 ) -> Result<()> {
-    // `workers` and `max_concurrency` are bounded to `u32` range in
-    // `parse_args`, so these conversions never fail.
+    // `workers` is bounded to `u32` range in `parse_args` and
+    // `max_concurrency` in `run`, so these conversions never fail.
     let workers_u32 = u32::try_from(workers).expect("workers bounded to u32 in parse_args");
     let max_concurrency_u32 =
-        u32::try_from(max_concurrency).expect("max_concurrency bounded to u32 in parse_args");
+        u32::try_from(max_concurrency).expect("max_concurrency bounded to u32 in run");
     // Pool head-room: at most `workers` instances are live at once (a
     // recycle drops the old instance before building the new), plus slack.
     let max_instances = workers_u32.saturating_add(8);
-    let engine =
-        runtime::create_serve_engine(cranelift_opt, max_instances, max_concurrency_u32, collector)?;
+    // One stack per in-flight request, plus the fibers a store runs on its
+    // own account: the worker fiber `run_concurrent` caches between guest
+    // calls is not a request, so `--max-concurrency` does not count it.
+    let stack_pool = max_concurrency_u32.saturating_add(workers_u32.saturating_mul(2));
+    let engine = runtime::create_serve_engine(cranelift_opt, max_instances, stack_pool, collector)?;
     let component = Component::new(&engine, &wasm)?;
     let linker = runtime::create_linker(&engine)?;
     // Open preopens once at startup; they are attached to every worker
@@ -892,38 +1001,23 @@ async fn run_http_server(
     // engine task. Workers run guest code on independent stores, so
     // request handling fans out across cores; each worker recycles its
     // instance every `recycle_requests` requests.
-    // Per-worker request queue. `workers <= max_concurrency` (enforced in
-    // `parse_args` / clamped in `run`), so the quotient is at least 1 and
-    // the queues sum to at most `max_concurrency` — never more in-flight
-    // work than the pooling allocator's stack pool was sized for.
-    let chan_cap = max_concurrency / workers;
-    // Notified by a worker that fails to instantiate; the accept loop
-    // treats it as a fatal shutdown (see `worker_loop`).
-    let fatal = Arc::new(Notify::new());
-    let mut txs = Vec::with_capacity(workers);
-    let mut engine_tasks = Vec::with_capacity(workers);
-    for _ in 0..workers {
-        let (tx, rx) = mpsc::channel::<RequestJob>(chan_cap);
-        txs.push(tx);
-        engine_tasks.push(tokio::spawn(worker_loop(
-            engine.clone(),
-            Arc::clone(&service_pre),
-            Arc::clone(&preopens),
-            rx,
-            recycle_requests,
-            timeout.as_secs().max(1),
-            Arc::clone(&fatal),
-            profiler_handle.clone(),
-        )));
-    }
-    // Coarse server-wide clock for the first-byte timeout. One ticker
-    // replaces a per-request timer: each in-flight request races the
-    // response head against these ticks and checks its own deadline (see
-    // `await_first_byte`). The tick interval bounds how late the 504 fires,
-    // so keep it small relative to `timeout` but coarse enough to be cheap.
-    // Unlike the epoch ticker this need not run on an OS thread: it backs a
-    // client-facing 504, not the runaway-guest backstop, so it shares the
-    // same scheduling assumptions as the request tasks it wakes.
+    // Each worker's queue holds the same number again: a burst waits there
+    // while the connections carrying it back-pressure.
+    let per_worker_inflight = max_concurrency / workers;
+    assert!(
+        per_worker_inflight >= 1,
+        "--workers is held at or below --max-concurrency, in `parse_args` when \
+         both are explicit and in `run` when the worker count is derived",
+    );
+    // Coarse server-wide clock. One ticker replaces a per-request and a
+    // per-worker timer: a request checks its own deadline against these ticks
+    // (`before_deadline`), and a worker turns its dispatch loop on them often
+    // enough to refresh the store's epoch deadline (`drain_or_tick`). The
+    // interval bounds how late the 504 fires, so keep it small relative to
+    // `timeout` but coarse enough to be cheap. Unlike the epoch ticker it need
+    // not run on an OS thread: it backs a client-facing 504, not the
+    // runaway-guest backstop, so it shares the scheduling assumptions of the
+    // request tasks it wakes.
     let (tick_tx, tick_rx) = watch::channel(());
     let first_byte_tick = (timeout / 8).clamp(Duration::from_millis(100), Duration::from_secs(1));
     tokio::spawn(async move {
@@ -931,12 +1025,34 @@ async fn run_http_server(
         interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
         loop {
             interval.tick().await;
-            // Stops once every receiver (held via `Dispatch`) is gone.
+            // Stops once every receiver (held via `Dispatch` and the workers)
+            // is gone.
             if tick_tx.send(()).is_err() {
                 break;
             }
         }
     });
+    // Notified by a worker that fails to instantiate; the accept loop
+    // treats it as a fatal shutdown (see `worker_loop`).
+    let fatal = Arc::new(Notify::new());
+    let mut txs = Vec::with_capacity(workers);
+    let mut engine_tasks = Vec::with_capacity(workers);
+    for _ in 0..workers {
+        let (tx, rx) = mpsc::channel::<RequestJob>(per_worker_inflight);
+        txs.push(tx);
+        engine_tasks.push(tokio::spawn(worker_loop(
+            engine.clone(),
+            Arc::clone(&service_pre),
+            Arc::clone(&preopens),
+            rx,
+            per_worker_inflight,
+            tick_rx.clone(),
+            recycle_requests,
+            timeout.as_secs().max(1),
+            Arc::clone(&fatal),
+            profiler_handle.clone(),
+        )));
+    }
     let dispatch = Arc::new(Dispatch {
         txs,
         next: AtomicUsize::new(0),
@@ -992,7 +1108,9 @@ async fn run_http_server(
         format!("every {recycle_requests} req")
     };
     eprintln!("HTTP server listening on http://{bound_addr}/");
-    eprintln!("Instance reuse: ON — {workers} worker(s), recycle {recycle_desc}");
+    eprintln!(
+        "Instance reuse: ON — {workers} worker(s), {per_worker_inflight} in flight each, recycle {recycle_desc}"
+    );
     eprintln!("Per-request timeout: {}s", timeout.as_secs());
     #[cfg(unix)]
     eprintln!("Send SIGINT or SIGTERM to shut down");
@@ -1147,23 +1265,32 @@ pub async fn run(opts: ServeOptions) -> Result<(), CliExit> {
     let wasm = crate::build::build_for_driver(&opts.input, "wasi:http/service", &flags).await?;
 
     let timeout = Duration::from_secs(opts.timeout_secs);
-    // An explicit `--workers` is already validated against `--max-concurrency`
-    // in `parse_args`; the auto-derived default is clamped so it never sizes
-    // more workers than the stack pool can back.
-    let mut workers = opts
-        .workers
-        .unwrap_or_else(|| {
-            std::thread::available_parallelism()
-                .map(std::num::NonZero::get)
-                .unwrap_or(1)
-        })
-        .min(opts.max_concurrency);
+    // An explicit `--workers` is already validated against an explicit
+    // `--max-concurrency` in `parse_args`; the auto-derived default is
+    // clamped so it never sizes more workers than the bound can back.
+    let mut workers = opts.workers.unwrap_or_else(|| {
+        std::thread::available_parallelism()
+            .map(std::num::NonZero::get)
+            .unwrap_or(1)
+    });
+    if let Some(max_concurrency) = opts.max_concurrency {
+        workers = workers.min(max_concurrency);
+    }
     // Guest profiling samples one worker store; more than one worker would
     // conflate independent stores into a single profile.
     if matches!(opts.profile, ProfileMode::Guest { .. }) && workers != 1 {
         eprintln!("Profiling: forcing --workers 1");
         workers = 1;
     }
+    // Derived after the worker count is final, so each worker gets the
+    // per-worker default whatever the host's CPU count turned out to be.
+    // Held to the `u32` an explicit `--max-concurrency` is held to: it sizes
+    // the pooling allocator's stack pool, which counts in `u32`.
+    let max_concurrency = opts.max_concurrency.unwrap_or_else(|| {
+        workers
+            .saturating_mul(DEFAULT_MAX_CONCURRENCY_PER_WORKER)
+            .min(u32::MAX as usize)
+    });
     run_http_server(
         wasm,
         &opts.addr,
@@ -1172,7 +1299,7 @@ pub async fn run(opts: ServeOptions) -> Result<(), CliExit> {
         timeout,
         workers,
         opts.recycle_requests,
-        opts.max_concurrency,
+        max_concurrency,
         opts.profile,
         opts.collector,
     )
