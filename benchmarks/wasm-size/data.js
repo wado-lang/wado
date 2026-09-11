@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1789081887590,
+  "lastUpdate": 1789097344102,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -54705,6 +54705,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/17785d232e01724f4129895599ae21a6b835c43c"
         },
         "date": 1789081886736,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 2013,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6560,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18971,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 288933,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "a20b94f10c72e6df174555148746e68e034dd3d3",
+          "message": "Merge pull request #2017 from wado-lang/perf-liveness-trait-default-body\n\nperf(liveness): a trait's default body is an edge, not a root (e2e −8.7%)",
+          "timestamp": "2026-09-11T12:12:56+09:00",
+          "tree_id": "cf622a7962a772bac3a41ac4ede8368587e2bdb5",
+          "url": "https://github.com/wado-lang/wado/commit/a20b94f10c72e6df174555148746e68e034dd3d3"
+        },
+        "date": 1789097343444,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
