@@ -12,15 +12,13 @@ env:
   CARGO_INCREMENTAL: 0
 
 jobs:
-  # Detects whether the change touches anything other than Markdown. A
-  # docs-only (*.md) change skips every heavy test job below, and the
-  # aggregator `test` short-circuits to success so the required "Test"
-  # check goes green immediately.
+  # A docs-only (*.md) change skips every test job below, and the aggregator
+  # `test` reports success on their behalf.
   #
-  # The skip is done with a job-level `if`, NOT a workflow-level
-  # `paths-ignore`: a path-ignored workflow never creates the "Test" check
-  # run, so a required check would stay stuck "Expected" and block the PR.
-  # A job-level-skipped required check, by contrast, is treated as passing.
+  # The skip is a job-level `if`, not a workflow-level `paths-ignore`: a
+  # path-ignored workflow never creates the "Test" check run, so the required
+  # check would stay stuck "Expected" and block the PR. A job-level skip counts
+  # as passing.
   changes:
     name: Detect changes
     runs-on: ubuntu-latest
@@ -40,7 +38,6 @@ jobs:
         run: |
           set -euo pipefail
           base="${BASE_SHA:-$BEFORE_SHA}"
-          # Fall back to the full suite if the base ref is missing or unknown.
           if [ -z "$base" ] || ! git cat-file -e "${base}^{commit}" 2>/dev/null; then
             echo "No usable base ref; running full CI."
             echo "code=true" >> "$GITHUB_OUTPUT"
@@ -49,21 +46,24 @@ jobs:
           files="$(git diff --name-only "${base}...HEAD")"
           echo "Changed files:"
           echo "$files"
-          if [ -z "$files" ]; then
-            # No detectable diff — be safe and run everything.
-            echo "code=true" >> "$GITHUB_OUTPUT"
-          elif grep -qvE '\.md$' <<< "$files"; then
-            # At least one non-Markdown file changed. Feed grep via a
-            # here-string, not `printf | grep -q`: under `pipefail`, `grep -q`
-            # exits on the first match and the producer dies with SIGPIPE,
-            # which pipefail then reports as a pipeline failure — so a large
-            # diff would be misclassified as docs-only and skip every test job.
+          # Feed grep a here-string, not `printf | grep -q`: under `pipefail`
+          # `grep -q` exits at the first match, the producer dies of SIGPIPE, and
+          # pipefail reports the pipeline as failed — misclassifying a large diff
+          # as docs-only and skipping every test job.
+          if [ -z "$files" ] || grep -qvE '\.md$' <<< "$files"; then
             echo "code=true" >> "$GITHUB_OUTPUT"
           else
             echo "Docs-only (*.md) change: skipping test jobs."
             echo "code=false" >> "$GITHUB_OUTPUT"
           fi
 
+  # The Rust tests, preceded by the static gates: each gate is sub-minute, so a
+  # Cargo.lock drift, a hook break, an inline-path regression or a wasm32 break
+  # fails long before `cargo test` finishes.
+  #
+  # wado-compiler, wado-lsp, and wado-manifest must compile for wasm32 so the
+  # compiler and the LSP engine can run in the browser (the playground), with
+  # every I/O call delegated to the wado-cli host.
   test-core:
     name: Test (Core)
     needs: changes
@@ -74,17 +74,23 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v7
-      - uses: Swatinem/rust-cache@v2
+      - uses: ./.github/actions/setup
         with:
-          shared-key: ci
-          save-if: false
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - run: mise run check-deps
+      - run: mise run test-hooks
+      - run: mise run check-rust-paths
+      - run: cargo check --locked -p wado-compiler --target wasm32-unknown-unknown
+      - run: cargo check --locked -p wado-lsp --target wasm32-unknown-unknown
+      - run: cargo check --locked -p wado-manifest --target wasm32-unknown-unknown
+
       - run: cargo test --locked --all -- --skip fixture_test_
 
-  # One job per optimization level runs the compiler's full test at that level:
-  # the e2e fixtures, then the stdlib. Before this the stdlib ran at -O2 only,
-  # so an optimizer bug reachable from `core:*` at another level had nothing to
-  # catch it. `fail-fast: false` keeps the other levels running, because which
-  # levels break says where the bug is.
+  # One job per optimization level: the e2e fixtures, then the stdlib, both
+  # compiled at that level. An optimizer bug reachable from `core:*` shows at
+  # some levels and not others, so `fail-fast: false` lets every level finish —
+  # which ones break says where the bug is.
   test-level:
     name: Test (E2E+stdlib ${{ matrix.level }})
     needs: changes
@@ -101,16 +107,9 @@ jobs:
       LEVEL: ${{ matrix.level }}
     steps:
       - uses: actions/checkout@v7
-      - uses: Swatinem/rust-cache@v2
+      - uses: ./.github/actions/setup
         with:
-          shared-key: ci
-          save-if: false
-      - uses: jdx/mise-action@v4.3.0
-        with:
-          cache: true
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-        env:
-          MISE_VERBOSE: ${{ runner.debug }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       # The e2e test names are lower case.
       - run: cargo test --locked -p wado-compiler --test e2e -- "fixture_test_${LEVEL,,}"
@@ -126,32 +125,17 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v7
-      - uses: Swatinem/rust-cache@v2
+      - uses: ./.github/actions/setup
         with:
-          shared-key: ci
-          save-if: false
-      - uses: jdx/mise-action@v4.3.0
-        with:
-          cache: true
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-        env:
-          MISE_VERBOSE: ${{ runner.debug }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - run: mise run test-wado
 
-      # Reuses the same `wado` build: parses the stdlib + fixture corpus with
-      # both the compiler's parser and `Wado.g4`, failing if the grammar
-      # rejects anything the compiler parses, or accepts anything the compiler
-      # rejects outside a fixture that declares a `compile_error`.
+      # The steps below reuse the `wado` binary built above. `--dry-run` builds
+      # every publishable world without pushing, so it needs neither wkg nor
+      # credentials.
       - run: mise run check-grammar
-
-      # Same corpus and the same two parsers, comparing what each side colours
-      # rather than whether it parses.
       - run: mise run check-highlight
-
-      # Reuses the `wado` build from the step above; `--dry-run` builds every
-      # publishable world (catching a package that no longer compiles into a
-      # component) without pushing, so no wkg or credentials are needed.
       - run: cargo run --locked -p wado-cli -- publish --dry-run
 
   test-gale-o2:
@@ -164,91 +148,40 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v7
-      - uses: Swatinem/rust-cache@v2
+      - uses: ./.github/actions/setup
         with:
-          shared-key: ci
-          save-if: false
-      - uses: jdx/mise-action@v4.3.0
-        with:
-          cache: true
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-        env:
-          MISE_VERBOSE: ${{ runner.debug }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - run: mise run test-gale-o2
-
-  # Build-light static gates folded into one sub-minute job. Neither needs the
-  # shared `ci` build cache: `check-deps` is a pure `cargo tree -d` resolution,
-  # and the wasm32 type-checks use a different target dir than the host cache.
-  # Keeping them together (rather than on a long test job) preserves fast
-  # feedback — a Cargo.lock drift or a wasm32 break fails here in under a minute
-  # — while removing a runner slot.
-  check:
-    name: Check (deps + wasm32 + hooks)
-    needs: changes
-    if: needs.changes.outputs.code == 'true'
-    runs-on: ubuntu-latest
-    timeout-minutes: 60
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@v7
-
-      - uses: jdx/mise-action@v4.3.0
-        with:
-          cache: true
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-        env:
-          MISE_VERBOSE: ${{ runner.debug }}
-
-      - run: mise run check-deps
-      - run: mise run test-hooks
-      - run: mise run check-rust-paths
-      # wado-compiler, wado-lsp, and wado-manifest must all compile for wasm32
-      # (see CLAUDE.md / wado-manifest). This is deliberate: the compiler and
-      # LSP engine stay OS-independent so they can run in the browser (the
-      # playground), with all I/O delegated to the wado-cli host. Check them
-      # directly with the locked lockfile.
-      - run: cargo check --locked -p wado-compiler --target wasm32-unknown-unknown
-      - run: cargo check --locked -p wado-lsp --target wasm32-unknown-unknown
-      - run: cargo check --locked -p wado-manifest --target wasm32-unknown-unknown
 
   test:
     name: Test
     if: always()
-    needs:
-      [
-        changes,
-        test-core,
-        test-wado,
-        test-gale-o2,
-        test-level,
-        check,
-      ]
+    needs: [changes, test-core, test-wado, test-gale-o2, test-level]
     runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions: {}
     steps:
+      # Every job named in `needs` must have succeeded, `changes` included, so
+      # adding one there is the only edit needed. `test-level` counts as one
+      # job, successful only if every level was.
       - name: Check all jobs passed
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+          CHANGES_RESULT: ${{ needs.changes.result }}
+          CODE: ${{ needs.changes.outputs.code }}
         run: |
-          # Fail closed if the change detector itself did not succeed.
-          if [ "${{ needs.changes.result }}" != "success" ]; then
-            echo "Change detector did not succeed (${{ needs.changes.result }})."
-            exit 1
-          fi
-          # Docs-only (*.md) change: the heavy jobs were skipped on purpose, so
+          set -euo pipefail
+          # Docs-only (*.md) change: the test jobs were skipped on purpose, so
           # report success and let the required "Test" check go green at once.
-          if [ "${{ needs.changes.outputs.code }}" != "true" ]; then
+          if [ "$CHANGES_RESULT" = "success" ] && [ "$CODE" != "true" ]; then
             echo "Docs-only change: test jobs skipped, reporting success."
             exit 0
           fi
-          # `test-level` is one matrix job. Its result is success only if
-          # every level succeeded.
-          results="${{ needs.test-core.result }} ${{ needs.test-wado.result }} ${{ needs.test-gale-o2.result }} ${{ needs.test-level.result }} ${{ needs.check.result }}"
-          for result in $results; do
-            if [ "$result" != "success" ]; then
-              echo "One or more jobs failed"
-              exit 1
-            fi
-          done
+          failed="$(jq -r 'to_entries[] | select(.value.result != "success") | "\(.key) (\(.value.result))"' <<< "$NEEDS")"
+          if [ -n "$failed" ]; then
+            echo "Did not succeed:"
+            echo "$failed"
+            exit 1
+          fi
           echo "All CI checks passed"

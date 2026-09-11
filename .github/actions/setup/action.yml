@@ -1,0 +1,23 @@
+name: Set up the CI toolchain
+description: Restore (never save) the shared Rust build cache and install the mise-managed tools.
+
+# Secrets are not visible inside a composite action, so the caller passes the
+# token mise uses to download tools without hitting the GitHub API rate limit.
+inputs:
+  github-token:
+    description: Token for mise tool downloads.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - uses: Swatinem/rust-cache@v2
+      with:
+        shared-key: ci
+        save-if: false
+    - uses: jdx/mise-action@v4.3.0
+      with:
+        cache: true
+        github_token: ${{ inputs.github-token }}
+      env:
+        MISE_VERBOSE: ${{ runner.debug }}
