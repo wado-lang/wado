@@ -1010,15 +1010,14 @@ async fn run_http_server(
          both are explicit and in `run` when the worker count is derived",
     );
     // Coarse server-wide clock. One ticker replaces a per-request and a
-    // per-worker timer: a request racing its head against these ticks checks
-    // its own deadline (`before_deadline`), and a worker racing its waits
-    // against them turns its dispatch loop often enough to refresh the
-    // store's epoch deadline (`drain_or_tick`). The tick interval
-    // bounds how late the 504 fires, so keep it small relative to `timeout`
-    // but coarse enough to be cheap.
-    // Unlike the epoch ticker this need not run on an OS thread: it backs a
-    // client-facing 504, not the runaway-guest backstop, so it shares the
-    // same scheduling assumptions as the request tasks it wakes.
+    // per-worker timer: a request checks its own deadline against these ticks
+    // (`before_deadline`), and a worker turns its dispatch loop on them often
+    // enough to refresh the store's epoch deadline (`drain_or_tick`). The
+    // interval bounds how late the 504 fires, so keep it small relative to
+    // `timeout` but coarse enough to be cheap. Unlike the epoch ticker it need
+    // not run on an OS thread: it backs a client-facing 504, not the
+    // runaway-guest backstop, so it shares the scheduling assumptions of the
+    // request tasks it wakes.
     let (tick_tx, tick_rx) = watch::channel(());
     let first_byte_tick = (timeout / 8).clamp(Duration::from_millis(100), Duration::from_secs(1));
     tokio::spawn(async move {
