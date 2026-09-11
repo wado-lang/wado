@@ -345,6 +345,38 @@ fn max_concurrency_bounds_in_flight_requests() {
     }
 }
 
+/// A request that waits for a worker slot is still waiting for its first
+/// byte, so `--timeout` has to cover that wait too. A handler parked in a
+/// host call outlives the 504 its own client gets and keeps its in-flight
+/// slot, so with a one-deep worker every later request queues behind it —
+/// and must get a 504 of its own rather than hang with no response at all.
+#[test]
+fn queued_request_times_out_instead_of_hanging() {
+    let (_guard, port, stderr) = start_serve(
+        "serve_parked_handler.wado",
+        &["--workers", "1", "--max-concurrency", "1", "--timeout", "2"],
+    );
+
+    // The first fills the worker's only in-flight slot and never gives it
+    // back; the second sits in the queue; the third cannot even be queued.
+    for nth in 1..=3 {
+        let start = Instant::now();
+        let (status, body) = http_get(port, "/", Duration::from_mins(1));
+        let elapsed = start.elapsed();
+        assert_eq!(
+            status,
+            504,
+            "request {nth} must time out, not hang; body: {body:?}, stderr:\n{}",
+            stderr.lock().unwrap(),
+        );
+        assert!(
+            elapsed < Duration::from_secs(30),
+            "request {nth} took {elapsed:?} — the wait for a worker slot is \
+             escaping --timeout",
+        );
+    }
+}
+
 /// The host hands hyper the first body frame together with the head when
 /// the guest has already produced one. A guest that returns its head and
 /// writes its body much later must still see the head go out at once.

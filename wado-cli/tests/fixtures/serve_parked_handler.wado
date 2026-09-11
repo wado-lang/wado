@@ -1,0 +1,22 @@
+use { Request, Response, ErrorCode, Headers, Trailers } from "wasi:http";
+use { MonotonicClock } from "wasi:clocks";
+
+// Used by the `wado serve` queue-timeout test: the handler parks in a host
+// call far past any test timeout, so it outlives the 504 its client gets and
+// keeps holding its in-flight slot. The epoch deadline cannot reclaim it —
+// no wasm runs while it is parked — so the worker stays at its bound and the
+// next request has to wait in the queue.
+export async fn handle(_request: Request) -> Result<Response, ErrorCode> with MonotonicClock {
+    MonotonicClock::wait_for(600_000_000_000).wait();
+
+    let [trailers_future, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
+    let [body_rx, body_tx] = Stream::<u8>::new();
+    let headers = Headers::new();
+    let [response, _tx_future] = Response::new(headers, Option::<Stream<u8>>::Some(body_rx), trailers_future);
+    response.set_status_code(200);
+    task return Result::<Response, ErrorCode>::Ok(response);
+
+    body_tx.write_all("never\n".bytes().collect());
+    body_tx.drop();
+    trailers_tx.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));
+}
