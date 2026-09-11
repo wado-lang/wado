@@ -4,15 +4,14 @@
 //! freshly dead expressions to the rest of the loop — after `inline` collapses a
 //! `Result<(), Error>` helper nobody reads, DCE takes its `Ok(())` too.
 //!
-//! Conservative: it skips DAE's pinned set, needs the body to end in an explicit
-//! `Return` with every other `Return` carrying a pure value, and needs at least
-//! one call site, each a top-level statement.
+//! Requires pure, nontrapping return operands and at least one call site, with
+//! every call discarding the result. Returns inside loops qualify too.
 
 use crate::hashmap::IndexSet;
 use crate::nir::{FunctionKind, NirFunction};
 use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, NodeRef, Operand, StmtId, StmtKind};
 use crate::nir_package::NirPackage;
-use crate::tir::{ResolvedType, TypeTable};
+use crate::tir::TypeTable;
 
 use cranelift_entity::EntityRef;
 
@@ -29,11 +28,11 @@ pub fn eliminate_dead_return_values(project: &mut NirPackage, gate: &mut Functio
     let mut candidates: IndexSet<FnKey> = IndexSet::default();
     for fid in gate.dirty_funcs(GatedPass::Drve, project.functions.len()) {
         let func = project.functions[fid.index()].borrow();
-        if !is_eligible(&func, &type_table) {
+        if !is_eligible(&func) || project.sroa_param_clones.contains(&fid) {
             continue;
         }
         if let Some(body) = &func.body
-            && has_only_pure_returns_with_explicit_tail(body, &type_table)
+            && has_only_pure_returns(body, &type_table)
             && let Some(id) = func.id
         {
             candidates.insert(id);
@@ -59,7 +58,7 @@ pub fn eliminate_dead_return_values(project: &mut NirPackage, gate: &mut Functio
     true
 }
 
-fn is_eligible(func: &NirFunction, type_table: &TypeTable) -> bool {
+fn is_eligible(func: &NirFunction) -> bool {
     if func.body.is_none() {
         return false;
     }
@@ -69,6 +68,7 @@ fn is_eligible(func: &NirFunction, type_table: &TypeTable) -> bool {
         || func.is_dispatch_wrapper
         || func.is_ambient
         || func.is_async
+        || func.compiler_item.is_some()
     {
         return false;
     }
@@ -81,21 +81,13 @@ fn is_eligible(func: &NirFunction, type_table: &TypeTable) -> bool {
     if func.return_type == TypeTable::UNIT || func.return_type == TypeTable::NEVER {
         return false;
     }
-    // Match the WIR-level DRVE scope: only convert returns that allocate
-    // a heap-typed value (struct / variant / array). Primitive-returning
-    // helpers like `fn f() -> i32 { return c.threshold + c.scale; }` save
-    // nothing from being voided and can break test fixtures that assert
-    // post-optimizer body shape.
-    if !is_heap_alloc_return(func.return_type, type_table) {
-        return false;
-    }
     // A concrete trait-impl method is a plain function after monomorphization:
     // Wado has no dynamic dispatch, every call site carries the resolved
     // `func_id`, and `apply_drve` retypes all of them — so voiding a
     // uniformly-dropped return is sound, exactly as `sroa_param` relaxed the
     // same pin. Only closure `__call` functors stay pinned (their function-table
     // wrapper snapshots the return type); closure `^Inspect`
-    // impls return unit and are already excluded by the heap-return check above.
+    // impls return unit and are already excluded by the return-type check above.
     if func.is_closure_call() {
         return false;
     }
@@ -105,26 +97,9 @@ fn is_eligible(func: &NirFunction, type_table: &TypeTable) -> bool {
     true
 }
 
-fn is_heap_alloc_return(type_id: crate::tir::TypeId, type_table: &TypeTable) -> bool {
-    matches!(
-        type_table.get(type_id),
-        ResolvedType::Struct { .. }
-            | ResolvedType::Variant { .. }
-            | ResolvedType::BuiltinArray(_)
-            | ResolvedType::GenericInstance { .. }
-    )
-}
-
-/// True when the body ends with an explicit `Return { value: Some(_) }` and
-/// every `Return` in the body (including the tail) carries a pure value.
-fn has_only_pure_returns_with_explicit_tail(body: &Body, type_table: &TypeTable) -> bool {
+/// Every return operand can be discarded without losing an effect or trap.
+fn has_only_pure_returns(body: &Body, type_table: &TypeTable) -> bool {
     let root = body.root;
-    let Some(&last) = body.blocks[root].stmts.last() else {
-        return false;
-    };
-    if !matches!(&body.stmts[last].kind, StmtKind::Return { value: Some(_) }) {
-        return false;
-    }
     // Every return reachable in the body must carry a pure value — a
     // `Return { value: None }` would mean a void exit path, structurally
     // inconsistent for a non-void signature.

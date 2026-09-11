@@ -1,0 +1,25 @@
+global mut initialized: bool = false;
+global mut calls: i32 = 0;
+
+#[inline(never)]
+fn initialize() {
+    calls += 1;
+}
+
+#[inline(always)]
+fn ensure_initialized() {
+    if initialized {
+        return;
+    }
+    initialize();
+    initialized = true;
+}
+
+export fn run() {
+    ensure_initialized();
+    ensure_initialized();
+    assert calls == 1;
+}
+
+__DATA__
+{}

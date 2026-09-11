@@ -1,8 +1,8 @@
 //! Flatten block-tailed `let` bindings — the value-block normal form. An inlined
 //! helper computing intermediates leaves its binding wrapped in a block, which
 //! `sroa` and every other matcher keyed on a direct `let x = <value>` then miss;
-//! hoisting the leading straight-line statements out restores the shape. Only
-//! `Let` / `Expr` / `LetDestructure` move, so execution order is unchanged.
+//! hoisting the leading statements out restores the shape. The wrapper has no
+//! incoming breaks, so moving its contents preserves control flow and order.
 
 use cranelift_entity::EntityRef;
 
@@ -82,7 +82,7 @@ impl Rule for LetBlockFlattenRule {
     }
 }
 
-/// If `sid` is `let x = { … }` whose value is a straight-line block with
+/// If `sid` is `let x = { … }` whose value is an unbroken block with
 /// leading statements and a tail-value `Expr` statement, return the block
 /// wrapper expression and the block.
 fn flattenable_inner_block(body: &Body, sid: StmtId) -> Option<(ExprId, BlockId)> {
@@ -96,20 +96,30 @@ fn flattenable_inner_block(body: &Body, sid: StmtId) -> Option<(ExprId, BlockId)
     if leading.is_empty() {
         return None;
     }
-    if !matches!(body.stmts[tail].kind, StmtKind::Expr(_)) {
+    let StmtKind::Expr(tail_value) = body.stmts[tail].kind else {
         return None;
-    }
+    };
     let straight_line = leading.iter().all(|s| {
         matches!(
             body.stmts[*s].kind,
             StmtKind::Let { .. } | StmtKind::Expr(_) | StmtKind::LetDestructure { .. }
         )
     });
-    if !straight_line {
+    // Keep control-flow regions available to CTFE unless their tail exposes a
+    // literal for SROA. Flattening a list-building loop strands its evaluation
+    // outside the value region (`ctfe_list_result`).
+    if !straight_line
+        && !tail_value.as_expr().is_some_and(|e| {
+            matches!(
+                body.exprs[e].kind,
+                ExprKind::StructLiteral { .. } | ExprKind::TupleLiteral { .. }
+            )
+        })
+    {
         return None;
     }
     // Defer while a leading statement is a shadow a session dissolver owns: a
-    // bare local copy (`let a = b`, the inliner's param binding, copy_prop's) or
+    // immutable local copy (`let a = b`, the inliner's param binding, copy_prop's) or
     // a reference to a *place* (`let r = &x`, ref_elim's). Hoisting one hands the
     // same binding to several rules at once (observed: a hoisted `let self =
     // get_x` stranded a `get_x.__capture_0` read after the functor was elided);
@@ -118,11 +128,11 @@ fn flattenable_inner_block(body: &Body, sid: StmtId) -> Option<(ExprId, BlockId)
     // would strand it block-wrapped forever — so the reference case gates on
     // place referents only.
     let no_shadow_copy = leading.iter().all(|s| {
-        let StmtKind::Let { value, .. } = &body.stmts[*s].kind else {
+        let StmtKind::Let { value, is_mut, .. } = &body.stmts[*s].kind else {
             return true;
         };
         !value.as_expr().is_some_and(|e| match &body.exprs[e].kind {
-            ExprKind::Local { .. } => true,
+            ExprKind::Local { .. } => !is_mut,
             ExprKind::Unary {
                 op: crate::nir::NirUnaryOp::Ref | crate::nir::NirUnaryOp::MutRef,
                 expr: referent,

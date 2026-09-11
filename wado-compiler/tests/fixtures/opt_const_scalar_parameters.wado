@@ -1,0 +1,33 @@
+global mut result: i32 = 0;
+
+#[inline(never)]
+fn record(n: i32, enabled: bool) {
+    if enabled {
+        result += n;
+    } else {
+        result += 100;
+    }
+}
+
+#[inline(never)]
+fn varying(n: i32, enabled: bool) {
+    if enabled {
+        result += n;
+    } else {
+        result -= n;
+    }
+}
+
+export fn run() {
+    record(builtin::black_box(3), true);
+    record(builtin::black_box(5), true);
+    varying(builtin::black_box(2), true);
+    varying(builtin::black_box(1), false);
+    assert result == 9;
+}
+
+__DATA__
+{
+    "wir_expect:O2": ["/record\" = fn(i32);", "/varying\" = fn(i32, bool);"],
+    "wir_not_expect:O2": ["+ 100"]
+}

@@ -48,7 +48,7 @@ fn caller(c: &mut Counter, x: i32) -> Result<i32, String> {
 
 export fn run() {
     let mut c = Counter { n: 0 };
-    let r = caller(&mut c, 5);
+    let r = caller(&mut c, builtin::black_box(5));
     let v = match r { Ok(v) => v, Err(_) => -1 };
     assert v == 12;
     assert c.n == 111;

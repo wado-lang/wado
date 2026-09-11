@@ -179,21 +179,33 @@ fn discover_wado_files(
     excludes: &ExcludeSet,
     includes: &IncludeSet,
 ) -> Result<DiscoveryResult, WalkError> {
-    let submodules = read_submodule_paths(root)?
+    let walk_root = fs::canonicalize(root).map_err(|source| WalkError::Io {
+        path: root.to_path_buf(),
+        source,
+    })?;
+    let submodules = read_submodule_paths(&walk_root)?
         .into_iter()
-        .map(|rel| root.join(rel))
+        .map(|rel| walk_root.join(rel))
         .collect::<IndexSet<_>>();
 
     let mut visited: IndexSet<PathBuf> = IndexSet::default();
-    if let Ok(canon) = fs::canonicalize(root) {
-        visited.insert(canon);
-    }
+    visited.insert(walk_root.clone());
 
     let mut result = DiscoveryResult::default();
     let mut rules: Vec<GitignoreRule> = Vec::new();
+    let mut ancestors = Vec::new();
+    let mut dir = walk_root.as_path();
+    while !dir.join(".git").exists() {
+        let Some(parent) = dir.parent() else { break };
+        ancestors.push(parent);
+        dir = parent;
+    }
+    for ancestor in ancestors.into_iter().rev() {
+        load_gitignore(ancestor, &mut rules)?;
+    }
     walk_dir(
-        root,
-        root,
+        &walk_root,
+        &walk_root,
         excludes,
         includes,
         &submodules,
@@ -202,6 +214,12 @@ fn discover_wado_files(
         &mut result,
     )?;
 
+    for path in result.files.iter_mut().chain(&mut result.subpackages) {
+        *path = root.join(
+            path.strip_prefix(&walk_root)
+                .expect("walk stays under its root"),
+        );
+    }
     result.files.sort();
     result.subpackages.sort();
     Ok(result)
@@ -1036,6 +1054,48 @@ pathology = should-not-match\n\
     }
 
     // ---- directory expansion ----
+
+    #[test]
+    fn subpackage_inherits_ancestor_gitignore_rules() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        let sub = root.join("sub");
+        touch(&root.join(".git/HEAD"));
+        fs::create_dir_all(&sub).unwrap();
+        write_manifest(root, "[test]\n");
+        write_manifest(&sub, "[test]\n");
+        fs::write(root.join(".gitignore"), "build/\n*.generated.wado\n").unwrap();
+        fs::write(sub.join(".gitignore"), "!keep.generated.wado\n").unwrap();
+        touch(&sub.join("build/stale.wado"));
+        touch(&sub.join("drop.generated.wado"));
+        touch(&sub.join("keep.generated.wado"));
+        touch(&sub.join("source.wado"));
+
+        for start in [root, sub.as_path()] {
+            let packages = discover_tree(start, &no_filters).unwrap();
+            let files: Vec<_> = packages.into_iter().flat_map(|p| p.files).collect();
+            assert_eq!(
+                names_of(root, &files),
+                ["sub/keep.generated.wado", "sub/source.wado"]
+                    .into_iter()
+                    .map(str::to_string)
+                    .collect()
+            );
+        }
+    }
+
+    #[test]
+    fn ancestor_gitignore_stops_at_repository_boundary() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        let sub = root.join("sub");
+        fs::write(root.join(".gitignore"), "*.wado\n").unwrap();
+        touch(&sub.join(".git/HEAD"));
+        touch(&sub.join("source.wado"));
+
+        let files = files_in_dir(&sub, &no_filters).unwrap();
+        assert_eq!(names_of(&sub, &files), one("source.wado"));
+    }
 
     // Which section a subcommand names is its own business; the driver is the
     // same either way, so these tests pick one.

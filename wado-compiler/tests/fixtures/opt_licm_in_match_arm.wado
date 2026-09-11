@@ -24,7 +24,7 @@ fn accumulate(mode: i32, n: i32, t: i32) -> i32 {
     match mode {
         0 => {
             for let mut i = 0; i < n; i += 1 {
-                let _ = probe(cref);
+                builtin::black_box(probe(cref));
                 sum += cref.threshold * i;
             }
         },
@@ -36,10 +36,12 @@ fn accumulate(mode: i32, n: i32, t: i32) -> i32 {
 }
 
 export fn run() with Stdout {
-    println(`${accumulate(0, 5, 100)}`);
-    println(`${accumulate(1, 5, 100)}`);
-    println(`${accumulate(2, 5, 100)}`);
-    println(`${accumulate(9, 5, 100)}`);
+    let n = builtin::black_box(5);
+    let t = builtin::black_box(100);
+    println(`${accumulate(0, n, t)}`);
+    println(`${accumulate(1, n, t)}`);
+    println(`${accumulate(2, n, t)}`);
+    println(`${accumulate(9, n, t)}`);
 }
 
 __DATA__

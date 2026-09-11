@@ -1,0 +1,28 @@
+global mut count: i32 = 0;
+
+enum Status { Done, Stopped }
+
+#[inline(never)]
+fn advance(n: i32) -> Status {
+    loop {
+        count += 1;
+        if count >= n {
+            return Status::Done;
+        }
+        if count == 4 {
+            return Status::Stopped;
+        }
+    }
+}
+
+export fn run() {
+    advance(builtin::black_box(3));
+    assert count == 3;
+    advance(builtin::black_box(8));
+    assert count == 4;
+}
+
+__DATA__
+{
+    "wir_expect:O2": ["/advance\" = fn(i32);"]
+}

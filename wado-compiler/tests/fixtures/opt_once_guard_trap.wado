@@ -1,0 +1,22 @@
+global mut initialized: bool = false;
+
+#[inline(never)]
+fn initialize(n: i32) {
+    let unused = 1 / n;
+}
+
+#[inline(always)]
+fn ensure_initialized(n: i32) {
+    if initialized {
+        return;
+    }
+    initialize(n);
+    initialized = true;
+}
+
+export fn run() {
+    ensure_initialized(builtin::black_box(0));
+}
+
+__DATA__
+{"trapped": true}
