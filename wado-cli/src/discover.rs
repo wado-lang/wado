@@ -190,8 +190,10 @@ fn discover_wado_files(
         ancestors.push(parent);
         dir = parent;
     }
-    for ancestor in ancestors.into_iter().rev() {
-        load_gitignore(ancestor, &mut rules)?;
+    if dir.join(".git").exists() {
+        for ancestor in ancestors.into_iter().rev() {
+            load_gitignore(ancestor, &mut rules)?;
+        }
     }
     walk_dir(
         &walk_root,
@@ -1084,6 +1086,29 @@ pathology = should-not-match\n\
         touch(&sub.join("source.wado"));
 
         let files = files_in_dir(&sub, &no_filters).unwrap();
+        assert_eq!(names_of(&sub, &files), one("source.wado"));
+    }
+
+    #[test]
+    fn unversioned_package_ignores_unrelated_ancestor_rules() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        let sub = root.join("sub");
+        assert!(root.ancestors().all(|dir| !dir.join(".git").exists()));
+        fs::create_dir_all(&sub).unwrap();
+        write_manifest(&sub, "[test]\n");
+        fs::write(root.join(".gitignore"), "*.wado\n").unwrap();
+        fs::write(sub.join(".gitignore"), "ignored.wado\n").unwrap();
+        touch(&sub.join("source.wado"));
+        touch(&sub.join("ignored.wado"));
+
+        let files = files_in_dir(&sub, &no_filters).unwrap();
+        assert_eq!(names_of(&sub, &files), one("source.wado"));
+        let files: Vec<_> = discover_tree(&sub, &no_filters)
+            .unwrap()
+            .into_iter()
+            .flat_map(|package| package.files)
+            .collect();
         assert_eq!(names_of(&sub, &files), one("source.wado"));
     }
 
