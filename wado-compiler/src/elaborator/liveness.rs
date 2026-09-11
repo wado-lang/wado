@@ -8,7 +8,9 @@
 //! counts as used so a function only it calls is not reported dead, but is
 //! emitted only when a call reaches it.
 
-use crate::ast::{self, AstId, AstVisitor, Block, Expr, Function, Item, Module};
+use crate::ast::{
+    self, AstId, AstVisitor, Block, Expr, Function, Item, Module, for_each_pattern_binding,
+};
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::token::Span;
@@ -35,8 +37,8 @@ pub(crate) struct Liveness {
     /// path, of a move-eligible local binding. The canonical `AstId`-keyed
     /// output — reusable by the LSP and the future affine-resource client.
     /// Sound by construction: a use is recorded only when the analysis proves
-    /// the local dead afterward, so an unrecorded use always falls back to a
-    /// copy.
+    /// the local dead afterward *and* the binding owns what it names, so an
+    /// unrecorded use always falls back to a copy.
     pub(crate) last_uses: IndexSet<AstId>,
     /// The same last-use facts projected to source spans, the form the
     /// value-copy planner consumes in the `lower` phase — TIR carries a `Span`
@@ -356,9 +358,10 @@ fn analyze_body(
 
 /// Forward pass over a body collecting move-eligibility facts: every local
 /// binding site, and the locals that must be excluded from move eligibility
-/// because their address is taken (`&x` / `&mut x`, at any projection root) or
-/// they are captured by a closure. Over-exclusion only costs an extra copy, so
-/// the pass errs toward marking a local ineligible whenever unsure.
+/// because their address is taken (`&x` / `&mut x`, at any projection root),
+/// they are captured by a closure, or they name storage the scrutinee owns.
+/// Over-exclusion only costs an extra copy, so the pass errs toward marking a
+/// local ineligible whenever unsure.
 struct EligibilityPass<'a> {
     references: &'a IndexMap<AstId, AstId>,
     bindings: IndexSet<AstId>,
@@ -366,15 +369,43 @@ struct EligibilityPass<'a> {
     closure_depth: u32,
 }
 
+impl EligibilityPass<'_> {
+    /// A match arm, `if let`, or `while let` binds a name to storage the
+    /// scrutinee still owns, so handing it to a new owner is a move out of the
+    /// scrutinee, which its own last use does not license. Whether the scrutinee
+    /// is dead there is an ownership question, answered by the value-copy
+    /// planner and out of reach of a pass that sees only names.
+    fn exclude_destructured(&mut self, pat: &ast::Pattern) {
+        for_each_pattern_binding(pat, &mut |id| {
+            self.excluded.insert(id);
+        });
+    }
+}
+
 impl AstVisitor for EligibilityPass<'_> {
     fn visit_pattern(&mut self, pat: &ast::Pattern) {
-        match pat {
-            ast::Pattern::Ident { id, .. } | ast::Pattern::MutIdent { id, .. } => {
-                self.bindings.insert(*id);
-            }
-            _ => {}
+        if let ast::Pattern::Ident { id, .. } | ast::Pattern::MutIdent { id, .. } = pat {
+            self.bindings.insert(*id);
         }
         ast::walk_pattern(self, pat);
+    }
+
+    fn visit_match_expr(&mut self, m: &ast::MatchExpr) {
+        for arm in &m.arms {
+            self.exclude_destructured(&arm.pattern);
+        }
+        ast::walk_match_expr(self, m);
+    }
+
+    fn visit_condition(&mut self, cond: &ast::Condition) {
+        if let ast::Condition::LetChain { elements, .. } = cond {
+            for element in elements {
+                if let ast::ConditionElement::Let { pattern, .. } = element {
+                    self.exclude_destructured(pattern);
+                }
+            }
+        }
+        ast::walk_condition(self, cond);
     }
 
     fn visit_expr(&mut self, expr: &Expr) {
@@ -395,6 +426,9 @@ impl AstVisitor for EligibilityPass<'_> {
                     self.excluded.insert(*def);
                 }
             }
+            // `matches { P(v) if f(v) }` hands `v` to the guard, out of storage
+            // the scrutinee keeps.
+            Expr::Matches(m) => self.exclude_destructured(&m.pattern),
             _ => {}
         }
         ast::walk_expr(self, expr);
@@ -454,32 +488,9 @@ impl LastUseAnalyzer<'_> {
     }
 
     fn kill_pattern(&mut self, pat: &ast::Pattern, live: &mut IndexSet<AstId>) {
-        match pat {
-            ast::Pattern::Ident { id, .. } | ast::Pattern::MutIdent { id, .. } => {
-                live.swap_remove(id);
-            }
-            ast::Pattern::Tuple(subs, _) => {
-                for sub in subs {
-                    self.kill_pattern(sub, live);
-                }
-            }
-            ast::Pattern::Variant { bindings, .. } => {
-                for sub in bindings {
-                    self.kill_pattern(sub, live);
-                }
-            }
-            ast::Pattern::Struct { fields, .. } => {
-                for field in fields {
-                    self.kill_pattern(&field.pattern, live);
-                }
-            }
-            ast::Pattern::Or(alts) => {
-                for alt in alts {
-                    self.kill_pattern(alt, live);
-                }
-            }
-            _ => {}
-        }
+        for_each_pattern_binding(pat, &mut |id| {
+            live.swap_remove(&id);
+        });
     }
 
     fn walk_block(&mut self, block: &Block, live: &mut IndexSet<AstId>, record: bool) {
@@ -1204,6 +1215,21 @@ mod last_use_tests {
     }
 
     #[test]
+    fn a_match_binding_is_not_move_eligible() {
+        let src = "variant P { A(List<i32>), B } \
+                   export fn f(p: P) -> i32 { \
+                     match p { \
+                       P::A(xs) => { let ys = xs; return ys.len(); } \
+                       P::B => { return 0; } \
+                     } \
+                   }";
+        // `xs` names the payload `p` still holds; the scrutinee itself is a
+        // by-value parameter read for the last time here.
+        assert_eq!(count(src, "xs"), 0);
+        assert_eq!(count(src, "p"), 1);
+    }
+
+    #[test]
     fn accumulator_element_is_moved_across_the_loop() {
         let src = "export fn f(n: i32) -> List<i32> { \
                    let mut items: List<i32> = []; \
@@ -1215,10 +1241,13 @@ mod last_use_tests {
     }
 
     #[test]
-    fn serde_list_deserialize_item_is_moved() {
+    fn a_destructured_binding_is_left_to_the_planner() {
         // Mirrors `impl Deserialize for List<T>` in lib/core/serde.wado: the
         // accumulator loop pushes each `item` bound from `if let Some(item) =
         // next_opt`, with the only loop exit a `return` in the else branch.
+        // `item` names storage `next_opt` owns, so whether the push may take it
+        // is an ownership question; the accumulator owns its own and is still
+        // answered here.
         let src = "\
             fn src(x: i32) -> Option<List<i32>> { if x > 0 { return Option::Some([x]); } return Option::None; } \
             export fn f() -> List<List<i32>> { \
@@ -1234,11 +1263,12 @@ mod last_use_tests {
                 i = i + 1; \
               } \
             }";
-        assert_eq!(count(src, "item"), 1);
+        assert_eq!(count(src, "item"), 0);
+        assert_eq!(count(src, "items"), 1);
     }
 
     #[test]
-    fn iflet_binding_in_loop_is_moved() {
+    fn an_iflet_scrutinee_in_a_loop_is_moved() {
         let src = "export fn f(n: i32) -> List<List<i32>> { \
                    let mut items: List<List<i32>> = []; \
                    let mut i = 0; \
@@ -1248,7 +1278,9 @@ mod last_use_tests {
                      i = i + 1; \
                    } \
                    return items; }";
-        assert_eq!(count(src, "item"), 1);
+        // The scrutinee is read once per iteration and dead afterward, so the
+        // loop fixpoint still reaches its final use.
+        assert_eq!(count(src, "next_opt"), 1);
     }
 
     #[test]

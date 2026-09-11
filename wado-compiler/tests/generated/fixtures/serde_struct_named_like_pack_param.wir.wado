@@ -6852,9 +6852,7 @@ fn "core:prelude/traits.wado/core:serde/DeserializeErrorKind^core:prelude/traits
 }
 
 fn "core:serde/[i32,core:prelude/string.wado/String,bool]^core:serde/Serialize::serialize<core:json/JsonSerializer>$scalar"(self, s) {
-    let __qm_e_7: ref "core:serde//SerializeError";
     let v_10: ref "core:prelude/string.wado//String";
-    let __local_12: ref "core:serde//SerializeError";
     let __local_15: ref "core:serde//SerializeError";
     let new_used_27: i32;
     let start_28: i32;
@@ -6875,12 +6873,6 @@ fn "core:serde/[i32,core:prelude/string.wado/String,bool]^core:serde/Serialize::
     s.used = new_used_27;
     builtin::array_set_u8(s.repr, start_28, 91);
     "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(self.0, s);
-    if @likely(ref.is_null(ref.null none)) {
-    } else {
-        __qm_e_7 = ref.as_non_null(ref.null none);
-        cold_path;
-        return __qm_e_7;
-    }
     v_10 = self.1;
     new_used_66 = s.used + 1;
     if @unlikely(new_used_66 > builtin::array_len(s.repr)) {
@@ -6891,12 +6883,6 @@ fn "core:serde/[i32,core:prelude/string.wado/String,bool]^core:serde/Serialize::
     s.used = new_used_66;
     builtin::array_set_u8(s.repr, start_67, 44);
     "core:json/write_escaped_string"(s, v_10);
-    if @likely(ref.is_null(ref.null none)) {
-    } else {
-        __local_12 = ref.as_non_null(ref.null none);
-        cold_path;
-        return __local_12;
-    }
     __sroa_v_value_140 = self.2;
     new_used_88 = s.used + 1;
     if @unlikely(new_used_88 > builtin::array_len(s.repr)) {
@@ -6933,24 +6919,24 @@ fn "core:json/core:json/JsonDeserializer::scan_string_run$scalar"(self, from) {
     valid = 1;
     _licm_repr_14 = self.repr;
     _licm_start_15 = self.start;
-    b771: block {
-        l772: loop {
-            break_if b771 pos >= len;
+    b769: block {
+        l770: loop {
+            break_if b769 pos >= len;
             b = builtin::array_get_value<u8>(_licm_repr_14, _licm_start_15 + pos);
             if b < 128 {
-                break_if b771 select i32(b == 34, 1, b == 92);
+                break_if b769 select i32(b == 34, 1, b == 92);
                 pos = pos + 1;
-                continue l772;
+                continue l770;
             }
             advance = "core:prelude/string.wado/core:prelude/string.wado/String::utf8_sequence_len"(self, pos, len);
             if @unlikely(advance == 0) {
                 cold_path;
                 valid = 0;
                 pos = pos + 1;
-                continue l772;
+                continue l770;
             }
             pos = pos + advance;
-            continue l772;
+            continue l770;
         };
     };
     at_escape = (if pos < len -> i32 {
@@ -7077,12 +7063,12 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(self, f) {
         }
         n = 0;
         t_9 = abs_val;
-        b787: block {
-            l788: loop {
-                break_if b787 t_9 <=u 0_i64;
+        b785: block {
+            l786: loop {
+                break_if b785 t_9 <=u 0_i64;
                 n = n + 1;
                 t_9 = t_9 /u 10_i64;
-                continue l788;
+                continue l786;
             };
         };
         break $inline_count_digits_u64_1: n;
@@ -7092,14 +7078,14 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(self, f) {
     pos = offset_5 + digit_count_4;
     t_15 = abs_val;
     i = 0;
-    b789: block {
-        l790: loop {
-            break_if b789 i >= digit_count_4;
+    b787: block {
+        l788: loop {
+            break_if b787 i >= digit_count_4;
             pos = pos - 1;
             builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(t_15 %u 10_i64)) & 255);
             t_15 = t_15 /u 10_i64;
             i = i + 1;
-            continue l790;
+            continue l788;
         };
     };
 }

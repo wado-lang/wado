@@ -1,0 +1,29 @@
+// The receiver alias is decided by the route `[]` takes, and a newtype
+// container takes it through its base. So a `&mut self` method that replaces
+// the element is refused here exactly as it is on the base container.
+// variant_element_mut_self_receiver_rejected is the same refusal on a `List`.
+
+variant Payload {
+    Text(String),
+    Empty,
+}
+
+impl Payload {
+    fn replace(&mut self) {
+        *self = Payload::Text(`xyz`);
+    }
+}
+
+type Row = List<Payload>;
+
+test "a replacing method on a newtype container's element" {
+    let items: List<Payload> = [Payload::Empty];
+    let mut row = items as Row;
+    row[0].replace();
+}
+
+__DATA__
+{
+    "test": {},
+    "compile_error": "is a detached copy, so a whole-value write through it would be lost"
+}

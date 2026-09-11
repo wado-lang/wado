@@ -4986,9 +4986,6 @@ fn "core:prelude/primitive.wado/i64::fmt_decimal$scalar"(self, f) {
 }
 
 fn "core:serde/anon_struct.wado/__anon_{user_id:i32,ip:core:prelude/string.wado/String,request_id:i32}^core:serde/Serialize::serialize<core:json/JsonSerializer>$scalar$spec0"(self, s) {
-    let __qm_e_11: ref "core:serde//SerializeError";
-    let __local_18: ref "core:serde//SerializeError";
-    let __local_23: ref "core:serde//SerializeError";
     let new_used_36: i32;
     let start_37: i32;
     let v_62: ref "core:prelude/string.wado//String";
@@ -5007,32 +5004,14 @@ fn "core:serde/anon_struct.wado/__anon_{user_id:i32,ip:core:prelude/string.wado/
     }
     "core:json/write_plain_key$spec0"(s, global:core:serde::__const_obj_311, 0);
     "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(7, s);
-    if @likely(ref.is_null(ref.null none)) {
-    } else {
-        __qm_e_11 = ref.as_non_null(ref.null none);
-        cold_path;
-        return __qm_e_11;
-    }
     v_62 = self.ip;
     "core:json/write_plain_key$spec1"(s, global:core:serde::__const_obj_310, 1);
     "core:json/write_escaped_string"(s, v_62);
-    if @likely(ref.is_null(ref.null none)) {
-    } else {
-        __local_18 = ref.as_non_null(ref.null none);
-        cold_path;
-        return __local_18;
-    }
     if ref.is_null(global:core:serde::__const_obj_309) {
         global:core:serde::__const_obj_309 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("request_id"), used: 10 };
     }
     "core:json/write_plain_key"(s, global:core:serde::__const_obj_309, 2);
     "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(42, s);
-    if @likely(ref.is_null(ref.null none)) {
-    } else {
-        __local_23 = ref.as_non_null(ref.null none);
-        cold_path;
-        return __local_23;
-    }
     return new_used_82 = s.used + 1, if @unlikely(new_used_82 > builtin::array_len(s.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(s, new_used_82);
@@ -5111,9 +5090,9 @@ fn "core:prelude/format.wado/core:prelude/string.wado/String^core:prelude/traits
     __sroa___iter_5_used = self_15.used;
     __sroa___iter_5_byte_index = 0;
     _licm_buf_129 = f;
-    b479: block {
-        l480: loop {
-            break_if b479 __sroa___iter_5_byte_index >= __sroa___iter_5_used;
+    b476: block {
+        l477: loop {
+            break_if b476 __sroa___iter_5_byte_index >= __sroa___iter_5_used;
             __sroa_slot_122 = 0;
             __sroa_slot_123 = 0;
             $inline_decode_char_at_6: block {
@@ -5147,7 +5126,7 @@ fn "core:prelude/format.wado/core:prelude/string.wado/String^core:prelude/traits
             __fused_slot_124 = __sroa_slot_122;
             if count >= 256 {
                 truncated = 1;
-                break b479;
+                break b476;
             }
             if __fused_slot_124 == 34 {
                 new_used_149 = _licm_buf_129.used + 1;
@@ -5274,7 +5253,7 @@ fn "core:prelude/format.wado/core:prelude/string.wado/String^core:prelude/traits
                 "core:prelude/string.wado/core:prelude/string.wado/String::push"(_licm_buf_129, __fused_slot_124);
             }
             count = count + 1;
-            continue l480;
+            continue l477;
         };
     };
     new_used_303 = f.used + 1;
@@ -5469,12 +5448,12 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(self, f) {
         }
         n = 0;
         t_9 = abs_val;
-        b529: block {
-            l530: loop {
-                break_if b529 t_9 <=u 0_i64;
+        b526: block {
+            l527: loop {
+                break_if b526 t_9 <=u 0_i64;
                 n = n + 1;
                 t_9 = t_9 /u 10_i64;
-                continue l530;
+                continue l527;
             };
         };
         break $inline_count_digits_u64_1: n;
@@ -5484,14 +5463,14 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(self, f) {
     pos = offset_5 + digit_count_4;
     t_15 = abs_val;
     i = 0;
-    b531: block {
-        l532: loop {
-            break_if b531 i >= digit_count_4;
+    b528: block {
+        l529: loop {
+            break_if b528 i >= digit_count_4;
             pos = pos - 1;
             builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(t_15 %u 10_i64)) & 255);
             t_15 = t_15 /u 10_i64;
             i = i + 1;
-            continue l532;
+            continue l529;
         };
     };
 }

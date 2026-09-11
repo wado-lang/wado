@@ -195,6 +195,7 @@ fix to conform; none should be preserved.
   | `variant` field / `&mut *p`, call argument                        | written back          |
   | `variant`, call argument at a `stores` position                   | refused               |
   | `variant` element / whole capture / branch, at a written position | refused               |
+  | `variant` element as a `&mut self` receiver (`xs[i].m()`)         | refused               |
 
   The same operations on a value-type _local_ all work, wherever the borrow
   goes; nothing else is the storage itself, since `&mut` of any other place
@@ -224,6 +225,9 @@ fix to conform; none should be preserved.
     desugaring at elaboration time; hence the carve-out lists index-element and
     struct-field separately. Refusing outright is not open, since
     `normalize_element(&mut alt.elements[ei])` lands.
+    A `&mut self` receiver takes the same borrow, so it waits on the same
+    write-back: `xs[i].m()` is refused where `m` replaces the element, and the
+    call the carve-out unblocks is spelled either way.
   - A call argument that _yields_ a borrow (`f(if c { &mut b.l } else
     { &mut b.r })`), for the mirrored reason: which place it borrowed is not
     known until it runs. Both want the write-back to follow the borrow to
@@ -233,8 +237,8 @@ fix to conform; none should be preserved.
     capture mode is its decision, not this pass's. A projection _through_ a
     capture is fine — it lands on the object the capture copied.
 
-  Where the callee does replace or store, all four are refused rather than
-  dropped: that code was already losing the write.
+  Where the callee does replace or store, all but the `&mut self` receiver are
+  refused rather than dropped: that code was already losing the write.
 
   Two sinks are refused wider than the rule asks, neither gateable on a
   whole-value write the way a `let` is. Rebinding (`r = &mut b.item`) is refused
@@ -258,10 +262,10 @@ fix to conform; none should be preserved.
     reported. Raising them where the LSP sees them takes the callee's declared
     `stores` at the call site, which `effect_check.rs` already computes.
 
-- [ ] D2 — no shared predicate. The boxed set is inlined in
-      `lower/plan/boxing.rs::create_needed_box_types` as
-      `is_prim || is_enum(non-variant-case) || is_variant || is_fn`. Extract it so
-      forbid / carve-out cannot drift from boxing.
+- [ ] D2 — the boxed set is `TypeTable::is_boxed_reference_target`, which boxing
+      and the implicit `&mut self` receiver borrow both read. The forbid rule
+      still carries its own list, since it excludes `variant`; stating it as
+      that predicate minus `variant` is what keeps the two from drifting.
 - [ ] D3 — `fn` coverage. The implementation boxes `fn` / `fn mut`, but issue
       #1333's type list omits them; any forbid written from that list would miss
       `&mut fns[i]`. The predicate (D2) is the source of truth.

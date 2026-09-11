@@ -135,6 +135,18 @@ pub(super) fn impl_target_head_args(impl_ty: &Type) -> Option<&[Type]> {
 }
 
 impl TypeSystem {
+    /// Whether an implicit `&mut self` borrow of a local receiver has to box
+    /// it: a receiver whose reference is a box cell is handed a copy, and the
+    /// callee's write reaches the local only through the box the address-taken
+    /// mark promotes it to.
+    pub(crate) fn mut_self_receiver_needs_box(&self, type_id: TypeId) -> bool {
+        let table = self.type_table.borrow();
+        !matches!(
+            table.get(type_id),
+            ResolvedType::Ref(_) | ResolvedType::MutRef(_)
+        ) && table.is_boxed_reference_target(table.representation_head(type_id))
+    }
+
     /// For an inherent `impl` on a possibly-generic type, check that any
     /// concrete type arguments written in the impl header (e.g. the `u8` in
     /// `impl List<u8>`) match the receiver's actual type arguments. Type
@@ -2813,33 +2825,84 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         )
     }
 
-    /// Try to resolve a method call on an index expression using `IndexMut`.
-    /// Answers the call's result type when the method needs `&mut self` and the
-    /// type implements `IndexMut`.
-    /// Returns None if we should fall back to normal resolution (using Index).
+    /// The container's nominal head in `xs[i]`, for the receiver paths that ask
+    /// what `[]` dispatches on. The types are the ones `resolve_index` looks an
+    /// impl up for, so both ask about the route it takes; `None` for the rest,
+    /// which have no subscript impl to find.
+    fn index_container_head(
+        &mut self,
+        index_expr: &ast::IndexExpr,
+        ctx: &mut FunctionContext,
+    ) -> Option<(String, TypeId)> {
+        let container_type = self.resolve_expr(&index_expr.expr, ctx, None);
+        let base_type_id = match self.tysys.type_table.borrow().get(container_type) {
+            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => *inner,
+            _ => container_type,
+        };
+        let head = match self.tysys.type_table.borrow().get(base_type_id).clone() {
+            ResolvedType::Struct { .. }
+            | ResolvedType::GenericInstance { .. }
+            | ResolvedType::Newtype { .. }
+            | ResolvedType::Flags { .. } => self
+                .tysys
+                .type_table
+                .borrow()
+                .nominal_head(base_type_id)
+                .map(|(n, _)| n)?,
+            _ => return None,
+        };
+        Some((head, base_type_id))
+    }
+
+    /// Whether `xs[i]` hands its element over as a copy because `IndexRefMut`
+    /// declines it — a `variant`, whose reference is a detached box (WEP
+    /// 2026-01-20's `RefMut` marker) — while `IndexRef` still aliases it. A
+    /// `&mut self` receiver has to be the alias: the copy takes the mutation
+    /// and is thrown away.
+    ///
+    /// Asked only where [`Self::try_resolve_index_mut_method_call`] declines,
+    /// which owns every element a `&mut` does write through.
+    pub(super) fn index_element_denies_ref_mut(
+        &mut self,
+        index_expr: &ast::IndexExpr,
+        ctx: &mut FunctionContext,
+    ) -> bool {
+        let Some((struct_name, base_type_id)) = self.index_container_head(index_expr, ctx) else {
+            return false;
+        };
+        let index_type = self.resolve_expr(&index_expr.index, ctx, None);
+        // The same two lookups `resolve_index` makes for a `&mut` subscript,
+        // newtype base included, so the answer is the route it will take.
+        let (lookup_name, lookup_type_id) =
+            self.tysys.newtype_base_lookup(&struct_name, base_type_id);
+        let ref_mut = self.index_lookup_or_newtype_base(
+            &struct_name,
+            base_type_id,
+            &lookup_name,
+            lookup_type_id,
+            |s, n, t| s.find_index_mut_trait_impl_as_ref(n, t, Some(index_type)),
+        );
+        ref_mut.is_none()
+            && self
+                .index_lookup_or_newtype_base(
+                    &struct_name,
+                    base_type_id,
+                    &lookup_name,
+                    lookup_type_id,
+                    |s, n, t| s.find_index_trait_impl(n, t, Some(index_type)),
+                )
+                .is_some()
+    }
+
+    /// The result type of a `&mut self` method call on `xs[i]`, resolved
+    /// through `IndexMut`. `None` leaves the caller to resolve through `Index`.
     pub(super) fn try_resolve_index_mut_method_call(
         &mut self,
         index_expr: &ast::IndexExpr,
         method_call: &ast::MethodCallExpr,
         ctx: &mut FunctionContext,
     ) -> Option<TypeId> {
-        // First, resolve the indexed container to get its type
-        let container_type = self.resolve_expr(&index_expr.expr, ctx, None);
-
-        let base_type_id = match self.tysys.type_table.borrow().get(container_type) {
-            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => *inner,
-            _ => container_type,
-        };
-
-        let struct_name = match self.tysys.type_table.borrow().get(base_type_id).clone() {
-            ResolvedType::Struct { .. } | ResolvedType::GenericInstance { .. } => self
-                .tysys
-                .type_table
-                .borrow()
-                .nominal_head(base_type_id)
-                .map(|(n, _)| n)?,
-            _ => return None, // Not a struct type
-        };
+        let (struct_name, base_type_id) = self.index_container_head(index_expr, ctx)?;
 
         let index_type = self.resolve_expr(&index_expr.index, ctx, None);
 
