@@ -1,11 +1,9 @@
 ---
 name: vendor-submodules
-description: Locate and sync the vendored reference specs and runtimes under vendor/ (Wasm, WASI P3, and Component Model specs; wasm-tools, wasmtime sources). Use when you need to read a Wasm/WASI/CM spec or wasmtime/wasm-tools source, when vendor/ submodules are missing and need initializing, or when building and profiling against a locally patched wasmtime.
+description: Locate and sync the vendored reference specs and runtimes under vendor/ (Wasm, WASI P3, and Component Model specs; wasm-tools, wasmtime sources). Use when you need to read a Wasm/WASI/CM spec or wasmtime/wasm-tools source, when vendor/ submodules are missing and need initializing, or when building against a locally patched wasmtime.
 ---
 
-## The Wasm and WASI (p3) specifications
-
-There are external references in the module for convenience:
+## What is under `vendor/`
 
 - `vendor/wasm/` - WebAssembly/spec
 - `vendor/wasi/` - WebAssembly/WASI
@@ -14,19 +12,18 @@ There are external references in the module for convenience:
   - Concurrency (async, streams, futures): `vendor/component-model/design/mvp/Concurrency.md`
   - Explainer: `vendor/component-model/design/mvp/Explainer.md`
 - `vendor/wasmtime/` - a Wasm runtime with WASI P3 support
-- `vendor/wasm-tools/` - a Wasm toolchain, where the Wado compiler relies on
+- `vendor/wasm-tools/` - the Wasm toolchain the Wado compiler builds on
 
-Use `git submodule update --init` to have the vendor modules.
+`git submodule update --init --recommend-shallow` fetches them.
 
-### Syncing Vendor Submodules
-
-Run the following to sync all vendor submodules:
+## Syncing
 
 ```sh
 mise run sync-vendor
 ```
 
-This syncs `vendor/wasmtime` to the exact version in `Cargo.lock` (required for WASI P3 compatibility), and updates other vendor submodules (`vendor/wasm`, `vendor/wasi`, `vendor/wasm-tools`, `vendor/component-model`) to their latest remote HEAD.
+`vendor/wasmtime` goes to the exact version in `Cargo.lock`, which WASI P3
+compatibility requires. The other submodules go to their remote HEAD.
 
 ## Building against a patched wasmtime
 
@@ -41,21 +38,15 @@ wasmtime-wasi-http = { path = "vendor/wasmtime/crates/wasi-http" }
 wasmtime-wasi-tls = { path = "vendor/wasmtime/crates/wasi-tls" }
 ```
 
-Those four names redirect 31 crates, reaching the whole `cranelift-*`,
-`pulley-*`, `wasmtime-internal-*` and `wiggle*` set through the dependency
-graph. `sync-vendor` already holds the submodule at the `Cargo.lock` version, so
-the sources match what the workspace expects and nothing needs porting.
+Those four names redirect 31 crates. The `cranelift-*`, `pulley-*`,
+`wasmtime-internal-*` and `wiggle*` crates follow through the dependency graph.
+`sync-vendor` already holds the submodule at the `Cargo.lock` version, so the
+sources match what the workspace expects and nothing needs porting.
 
 Keep the stanza on a throwaway branch. CI checks out without submodules
 (`submodules: false`, also `actions/checkout`'s default), so on `main` every job
-would fail parsing the manifest, before building anything. Landing it means
-turning submodule checkout on across every workflow.
-
-Profile with the `profiling` cargo profile, not `release`: `release` sets
-`strip = "symbols"`, which leaves a sampling profile unsymbolicatable. samply
-resolves symbols against the path it recorded, so profile each arm from a path
-that still holds that binary — overwrite `target/profiling/wado` and an earlier
-profile silently symbolicates against the new build.
+dies while parsing the manifest. Landing it means turning submodule checkout on
+across every workflow.
 
 `reference/` holds patches written this way, each with its measurement:
 
