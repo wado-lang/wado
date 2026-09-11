@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1789120746991,
+  "lastUpdate": 1789123258826,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -54837,6 +54837,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/f86797d8312ccec7ecfd5f42c8b71e631c48c68c"
         },
         "date": 1789120746006,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1867,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6492,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18919,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 285903,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "ce532910c1804c3d18f48daffdcf12b4085cb908",
+          "message": "Merge pull request #2022 from wado-lang/perf-serve-inflight-cap-and-write-coalescing\n\nperf(serve): +45% throughput per worker, and no wait that outlives --timeout",
+          "timestamp": "2026-09-11T19:26:51+09:00",
+          "tree_id": "743d908496ec9bce0cf828c149d4fcdd0628c345",
+          "url": "https://github.com/wado-lang/wado/commit/ce532910c1804c3d18f48daffdcf12b4085cb908"
+        },
+        "date": 1789123258378,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
