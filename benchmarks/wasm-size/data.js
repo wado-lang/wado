@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1789123258826,
+  "lastUpdate": 1789133093260,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -54881,6 +54881,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/ce532910c1804c3d18f48daffdcf12b4085cb908"
         },
         "date": 1789123258378,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1867,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6492,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18919,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 285903,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "6061a935b9700f1b9f7ced616ecda41f0499250f",
+          "message": "Merge pull request #2023 from wado-lang/fix-serve-fiber-stack-pool\n\nfix(serve): stop a burst of client disconnects from trapping a worker",
+          "timestamp": "2026-09-11T22:10:12+09:00",
+          "tree_id": "1705d083fed02cb357b37d6297f36191c9249a85",
+          "url": "https://github.com/wado-lang/wado/commit/6061a935b9700f1b9f7ced616ecda41f0499250f"
+        },
+        "date": 1789133093113,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
