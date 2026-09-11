@@ -702,13 +702,66 @@ extern stub instead. `CompilerItem` records some of these and nothing records
 the rest.
 
 Closing it takes that list, one entry per entity named after `liveness` runs,
-with the pass that names it stating its trigger. Two measurements bound the
-work. The reward today is 6 of the 196 bodies `export fn run() {}` lowers. The
-rest of the closure is held by real edges from the format and parse impls that
-`CompilerItem::dispatched_by_synthesis` roots, so the list pays only once those
-roots narrow. And `Interner::resolve`'s shadowing assertion compares bare names
-across modules, calling `core:builtin`'s `unreachable` a shadow of `core:rt`'s.
-It reports the audit's own progress as a defect until it compares identities.
+with the pass that names it stating its trigger.
+
+Two things bound the work. The rest of the closure is held by real edges from
+the format and parse impls that `CompilerItem::dispatched_by_synthesis` roots,
+so the list pays only once those roots narrow. And `Interner::resolve`'s
+shadowing assertion compares bare names across modules, calling `core:builtin`'s
+`unreachable` a shadow of `core:rt`'s. It reports the audit's own progress as a
+defect until it compares identities.
+
+The scale is much larger than a first pass suggested. `export fn run() {}`
+carries 1973 functions, 1213 of them bodied, and reaches 23 from its exports and
+global initializers. Counting instead with `grep '^fn '` over `wado dump` reads
+196, because the dump writes `pub fn` for most of them.
+
+### A prune before `lower` is guessing
+
+Those 1213 bodies are what `lower` translates and `optimize` then walks, so
+dropping the unreachable ones before `lower` is worth having. Measured over 450
+fixtures, with the arms interleaved and each taken at its best of two:
+
+| Measurement     | Base    | Pruned  | Change |
+| --------------- | ------- | ------- | ------ |
+| 450 fixtures    | 175.94s | 155.14s | −11.8% |
+| `lower` span    | 0.070s  | 0.039s  | −44%   |
+| `optimize` span | 0.694s  | 0.612s  | −12%   |
+
+Precision in the root set is not where that time is. Rooting strictly rather
+than over-approximating prunes 1950 of the 1973 instead of 1251, and gains
+0.02s.
+
+`prelower_reach` implements the prune behind `WADO_PRELOWER_PRUNE`, off by
+default because it is unsound. `lower` names callees from nodes that are not
+calls, and a reachability walk over TIR expressions cannot see them:
+
+- a match pattern mints `T^Eq::eq` (`lower/translate/pattern.rs`)
+- a wide-int literal mints `Eq::eq` and the `I128From*` constructors
+  (`lower/wide_int_literal.rs`)
+- a `builtin::variant_tag` marker mints `V^ReflectVariant::discriminant`
+  (`lower/translate.rs`), a method on the user's own type, so it carries neither
+  a compiler-item tag nor a `$` prefix
+- a synthesized closure-functor body mints `Formatter::write_str`
+  (`lower/plan/closure.rs`), inside `LowerPlan` and so before translation
+
+Compiling the corpus both ways is what found them: 1765 fixtures byte-identical,
+1 differing, 43 failing. The audit does not find them, because it reports only
+functions that survive `optimize`, and a prune that drops a minter's target
+panics in `wir_build` long before. A clean audit is not a clean bill.
+
+Enumerating the four is not a fix for the class, since the next minter added
+breaks it again. Every one of them lands in `Interner::resolve`, which mints
+each call's id whatever node produced it, so that is where a sound prune has to
+be answered. Two ways to answer it there:
+
+- Lower on demand: pruned functions go to a side table, `resolve` revives on a
+  miss, and a worklist runs to fixpoint. No minter list exists, so none can be
+  incomplete. `LowerPlan` is the obstacle. It is computed whole-program before
+  translation, so a revived function has no plan data.
+- Complete the roots, and have `resolve` assert in debug builds that it never
+  stubs a name the prune dropped. The roots stay enumerated, but a new minter
+  then fails in CI on the first fixture that exercises it.
 
 ### A call to an operation with nothing to reach panics at WIR
 

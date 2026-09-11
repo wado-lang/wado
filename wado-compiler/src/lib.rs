@@ -1579,8 +1579,6 @@ fn compile_after_load<H: CompilerHost>(
         return Err(Bail);
     }
 
-    // What the program reaches before `lower` and `optimize` mint calls of
-    // their own, for the audit after them. See `prelower_reach`.
     let prelower_reached = prelower_reach::before_lower(&mut flat);
 
     // === Phase 10: Lower (FlatPackage → NirPackage) ===
@@ -1595,9 +1593,7 @@ fn compile_after_load<H: CompilerHost>(
         optimize(nir, options.opt_level, options.opt, logger)
     };
 
-    if let Some(reached) = &prelower_reached {
-        prelower_reach::audit(reached, &nir);
-    }
+    prelower_reach::audit(prelower_reached.as_ref(), &nir);
 
     // Emit optimizer remarks for residual value-semantic copies that survived
     // the NIR pipeline. NIR is the last IR with per-expression spans; see
@@ -2012,9 +2008,8 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
                 let _span = logger.span("optimize");
                 optimize(nir, opt_level, opt, &logger)
             };
-            if let Some(reached) = &prelower_reached {
-                prelower_reach::audit(reached, &nir);
-            }
+
+            prelower_reach::audit(prelower_reached.as_ref(), &nir);
 
             // WIR: Translate optimized NirPackage to WirPackage for inspection.
             let wir_package = Some({

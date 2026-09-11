@@ -208,12 +208,10 @@ pub(crate) fn compute(
     liveness
 }
 
-/// Add the edges of every declared method that carries a body or a parameter
-/// default, and root the two whose only call no fact names: an
-/// `effect_operation`, whose dispatch wrapper `synthesis::effect_dispatch`
-/// mints after this pass, and one with a parameter default, which reify
-/// materializes at the call that omits it. A trait's default body rides its
-/// call site's dispatch fact instead.
+/// Add the edges of every declared method carrying a body or a parameter
+/// default, and root the two kinds whose only call no fact names: an
+/// `effect_operation`, and one with a parameter default. A trait's default body
+/// is neither — it rides its call site's dispatch fact.
 fn seed_operations(
     graph: &mut Graph,
     methods: &[Function],

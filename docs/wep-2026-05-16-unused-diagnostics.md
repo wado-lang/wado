@@ -112,7 +112,7 @@ The pass runs two independent reachability closures over the same call graph:
 | `#[export]`-attributed items              | Raw Wasm exports                                                                                                        |
 | Items in `wasm_module_sources` re-exports | Bridged Wasm module exports                                                                                             |
 | impl methods                              | Seeded live as call-graph intermediaries (method-level dead detection deferred)                                         |
-| Declared methods no dispatch fact names   | An `interface` / `resource` operation, or a method carrying a parameter default; see below                              |
+| Declared methods no dispatch fact names   | An `interface` / `resource` operation, or a method carrying a parameter default. See below                              |
 
 Each user-authored free function / global is classified by membership:
 
