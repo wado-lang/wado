@@ -702,9 +702,8 @@ extern stub instead. `CompilerItem` records some of these and nothing records
 the rest.
 
 Closing it takes that list, one entry per entity named after `liveness` runs,
-with the pass that names it stating its trigger. Note before starting that the
-gap below tried exactly that on the `lower` side and found the list is not a
-fix for the class: it is complete only until the next minting site is added.
+with the pass that names it stating its trigger. Read the gap below first: it
+tried that on the `lower` side, and says what the list does not settle.
 
 Two things bound the work. The rest of the closure is held by real edges from
 the format and parse impls that `CompilerItem::dispatched_by_synthesis` roots,
@@ -713,16 +712,17 @@ shadowing assertion compares bare names across modules, calling `core:builtin`'s
 `unreachable` a shadow of `core:rt`'s. It reports the audit's own progress as a
 defect until it compares identities.
 
-The scale is much larger than a first pass suggested. `export fn run() {}`
-carries 1973 functions, 1213 of them bodied, and reaches 23 from its exports and
-global initializers. Counting instead with `grep '^fn '` over `wado dump` reads
-196, because the dump writes `pub fn` for most of them.
+`export fn run() {}` carries 1973 functions, 1213 of them bodied, and reaches 23
+from its exports and global initializers. Count them with `grep '^fn '` over
+`wado dump` and it reads 196 instead, because the dump writes `pub fn` for most
+of them.
 
 ### A prune before `lower` is guessing
 
-Those 1213 bodies are what `lower` translates and `optimize` then walks, so
-dropping the unreachable ones before `lower` is worth having. Measured over 450
-fixtures, with the arms interleaved and each taken at its best of two:
+A program's bodies are what `lower` translates and `optimize` then walks. A
+trivial program carries 1213 of them to reach 23, so dropping the unreachable
+ones before `lower` is worth having. Measured over 450 fixtures, with the arms
+interleaved and each taken at its best of two:
 
 | Measurement     | Base    | Pruned  | Change |
 | --------------- | ------- | ------- | ------ |
@@ -747,21 +747,11 @@ calls, and a reachability walk over TIR expressions cannot see them:
 - a synthesized closure-functor body mints `Formatter::write_str`
   (`lower/plan/closure.rs`), inside `LowerPlan` and so before translation
 
-Compiling the corpus both ways is what found them: 1765 fixtures byte-identical,
-1 differing, 43 failing. The audit does not find them, because it reports only
-functions that survive `optimize`, and a prune that drops a minter's target
-panics in `wir_build` long before. A clean audit is not a clean bill.
-
-So two checks answer two different questions, and resuming this needs both:
-
-- `WADO_TRACE=prelower_reach` reports, per compile, how much of the TIR the
-  walk reached and which survivors it did not. Use it to size a root set.
-- Compiling every fixture in `wado-compiler/tests/fixtures/` with and without
-  `WADO_PRELOWER_PRUNE` and comparing the output bytes is the correctness
-  check. A fixture that fails only with the flag names a minting site; one
-  whose bytes differ names a subtler one. Around 680 fixtures fail to compile
-  under `--world test` either way, so compare the two arms rather than
-  counting failures.
+Compiling every fixture with and without the flag and comparing the output bytes
+found all four: 1765 fixtures are byte-identical, 1 differs, and 43 fail. The
+audit finds none of them, because it reports only functions that survive
+`optimize`, and a prune that drops a minter's target panics in `wir_build` long
+before. A clean audit is not a clean bill.
 
 Enumerating the four is not a fix for the class, since the next minter added
 breaks it again. Every one of them lands in `Interner::resolve`, which mints
@@ -775,6 +765,14 @@ be answered. Two ways to answer it there:
 - Complete the roots, and have `resolve` assert in debug builds that it never
   stubs a name the prune dropped. The roots stay enumerated, but a new minter
   then fails in CI on the first fixture that exercises it.
+
+Either way, two checks answer different questions and both are needed.
+`WADO_TRACE=prelower_reach` reports per compile how much of the TIR the walk
+reached, and which survivors it did not, which is how to size a root set. The
+corpus comparison above is the correctness check: a fixture that fails only
+under `WADO_PRELOWER_PRUNE` names a minting site, and one whose bytes differ
+names a subtler one. Around 680 fixtures fail to compile under `--world test`
+either way, so compare the arms rather than count failures.
 
 ### A call to an operation with nothing to reach panics at WIR
 

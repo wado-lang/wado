@@ -175,13 +175,23 @@ pub(crate) fn compute(
                     }
                 }
                 Item::Trait(trait_decl) => {
-                    seed_operations(&mut graph, &trait_decl.methods, references, false);
+                    seed_operations(&mut graph, &trait_decl.methods, references, Dispatch::Fact);
                 }
                 Item::Interface(interface_decl) => {
-                    seed_operations(&mut graph, &interface_decl.methods, references, true);
+                    seed_operations(
+                        &mut graph,
+                        &interface_decl.methods,
+                        references,
+                        Dispatch::MintedLater,
+                    );
                 }
                 Item::Resource(resource_decl) => {
-                    seed_operations(&mut graph, &resource_decl.methods, references, true);
+                    seed_operations(
+                        &mut graph,
+                        &resource_decl.methods,
+                        references,
+                        Dispatch::MintedLater,
+                    );
                 }
                 Item::Test(test) => {
                     // Test blocks are roots of the `T` (test-reachable) closure
@@ -208,15 +218,24 @@ pub(crate) fn compute(
     liveness
 }
 
+/// Where a declared method's only call comes from.
+#[derive(PartialEq)]
+enum Dispatch {
+    /// A trait method: the call site records the fact that reaches the body.
+    Fact,
+    /// An `interface` or `resource` operation, whose wrapper
+    /// `synthesis::effect_dispatch` mints after this pass.
+    MintedLater,
+}
+
 /// Add the edges of every declared method carrying a body or a parameter
-/// default, and root the two kinds whose only call no fact names: an
-/// `effect_operation`, and one with a parameter default. A trait's default body
-/// is neither — it rides its call site's dispatch fact.
+/// default, and root the two kinds no dispatch fact names: an operation, and
+/// one with a parameter default that reify materializes at the call.
 fn seed_operations(
     graph: &mut Graph,
     methods: &[Function],
     references: &References<'_>,
-    effect_operation: bool,
+    dispatch: Dispatch,
 ) {
     for method in methods {
         let has_param_default = method.params.iter().any(|p| p.default.is_some());
@@ -225,7 +244,7 @@ fn seed_operations(
         }
         let key = method.id;
         graph.add_function_edges(method, references, &key);
-        if effect_operation || has_param_default {
+        if dispatch == Dispatch::MintedLater || has_param_default {
             graph.seed_world(key);
         }
     }

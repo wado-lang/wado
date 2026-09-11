@@ -10,8 +10,7 @@ use std::rc::Rc;
 use crate::compiler_trace;
 use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::module_source::ModuleSource;
-use crate::name::{FreeFunctionName, FunctionId};
+use crate::name::FunctionId;
 use crate::nir_package::NirPackage;
 use crate::tir::{TirBlock, TirExpr, TirExprKind, TirFunction};
 use crate::tir_visitor::TirRefVisitor;
@@ -25,12 +24,8 @@ fn enabled() -> bool {
 
 /// The identity `nir::FunctionRef::function_id` keys on. A mangled instance
 /// carries its type arguments in `name`, so module and name alone settle it.
-fn key(module_source: &ModuleSource, name: &str) -> FunctionId {
-    FunctionId::Free(FreeFunctionName::from_module_source(module_source, name))
-}
-
 fn function_key(func: &TirFunction) -> FunctionId {
-    key(&func.module_source, &func.name)
+    FunctionId::free(&func.module_source, &func.name)
 }
 
 /// The exports the emitted component keeps, matching `optimize::dce`'s entries,
@@ -119,7 +114,7 @@ pub(crate) fn audit(found: Option<&Reached>, package: &NirPackage) {
         .iter()
         .filter_map(|func_rc| {
             let func = func_rc.borrow();
-            (!func.is_dead).then(|| key(&func.module_source, &func.name))
+            (!func.is_dead).then(|| FunctionId::free(&func.module_source, &func.name))
         })
         .collect();
     let mut unreached: Vec<FunctionId> = live
@@ -127,8 +122,7 @@ pub(crate) fn audit(found: Option<&Reached>, package: &NirPackage) {
         .filter(|name| found.present.contains(*name) && !found.reached.contains(*name))
         .cloned()
         .collect();
-    unreached.sort_unstable_by_key(ToString::to_string);
-    unreached.dedup();
+    unreached.sort_by_cached_key(ToString::to_string);
     let (chained, minted): (Vec<&FunctionId>, Vec<&FunctionId>) = unreached
         .iter()
         .partition(|name| found.named.contains(*name));
@@ -197,14 +191,16 @@ impl Callees {
 impl TirRefVisitor for Callees {
     fn visit_expr(&mut self, expr: &TirExpr) {
         match &expr.kind {
-            TirExprKind::Call { func, .. } => self.keys.push(key(&func.module_source, &func.name)),
+            TirExprKind::Call { func, .. } => self
+                .keys
+                .push(FunctionId::free(&func.module_source, &func.name)),
             // A function used as a value: `IndirectCall` names the value, never
             // the function, so this is the only edge to what it may reach.
             TirExprKind::FuncRef {
                 module_source,
                 name,
                 ..
-            } => self.keys.push(key(module_source, name)),
+            } => self.keys.push(FunctionId::free(module_source, name)),
             _ => {}
         }
         self.walk_expr(expr);
