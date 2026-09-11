@@ -172,11 +172,8 @@ impl FunctionRef {
     /// `Method`/`Free` split and made the same callee key two different ways).
     /// Used to mint and stamp `FuncId`s in `lower`.
     pub fn function_id(&self) -> crate::name::FunctionId {
-        use crate::name::{FreeFunctionName, FunctionId};
-        FunctionId::Free(FreeFunctionName::from_module_source(
-            &self.module_source,
-            &self.name,
-        ))
+        use crate::name::FunctionId;
+        FunctionId::free(&self.module_source, &self.name)
     }
 }
 

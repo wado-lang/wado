@@ -2771,7 +2771,6 @@ fn "core:serde/cbor_skip_depth_limit.wado/Small^core:serde/Deserialize::deserial
     let __qm_e_16: ref "core:serde//DeserializeError";
     let value_17: i32;
     let __qm_e_19: ref "core:serde//DeserializeError";
-    let __qm_e_21: ref "core:serde//DeserializeError";
     let value_25: i32;
     let __local_35: ref null "core:serde//DeserializeError";
     let d_48: ref "core:cbor//CborDeserializer";
@@ -2849,16 +2848,10 @@ fn "core:serde/cbor_skip_depth_limit.wado/Small^core:serde/Deserialize::deserial
             continue l326;
         };
     };
-    if @likely(ref.is_null(ref.null none)) {
+    return 0, struct.new "cbor_skip_depth_limit.wado//Small" { a: local.tee __sroa_fields_0(let __match_scrut_6: ref "core:prelude/types.wado//Option<i32>"; __match_scrut_6 = __sroa_slots_0; (if ref.test "core:prelude/types.wado//Option<i32>::Some"(__match_scrut_6) -> i32 {
+        local.tee value_25(ref.cast "core:prelude/types.wado//Option<i32>::Some"(__match_scrut_6).payload_0);
     } else {
-        __qm_e_21 = ref.as_non_null(ref.null none);
-        cold_path;
-        return 1, ref.null none, "cbor_skip_depth_limit.wado/$value_copy$core:serde/DeserializeError"(__qm_e_21);
-    }
-    return 0, struct.new "cbor_skip_depth_limit.wado//Small" { a: local.tee __sroa_fields_0(let __match_scrut_7: ref "core:prelude/types.wado//Option<i32>"; __match_scrut_7 = __sroa_slots_0; (if ref.test "core:prelude/types.wado//Option<i32>::Some"(__match_scrut_7) -> i32 {
-        local.tee value_25(ref.cast "core:prelude/types.wado//Option<i32>::Some"(__match_scrut_7).payload_0);
-    } else {
-        0;
+        struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: 0 }.payload_0;
     })) }, ref.null none;
 }
 
@@ -3059,12 +3052,12 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar"(self, f) {
         }
         n = 0;
         t_9 = abs_val;
-        b360: block {
-            l361: loop {
-                break_if b360 t_9 <=u 0_i64;
+        b359: block {
+            l360: loop {
+                break_if b359 t_9 <=u 0_i64;
                 n = n + 1;
                 t_9 = t_9 /u 10_i64;
-                continue l361;
+                continue l360;
             };
         };
         break $inline_count_digits_u64_1: n;
@@ -3074,14 +3067,14 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar"(self, f) {
     pos = offset_5 + digit_count_4;
     t_15 = abs_val;
     i = 0;
-    b362: block {
-        l363: loop {
-            break_if b362 i >= digit_count_4;
+    b361: block {
+        l362: loop {
+            break_if b361 i >= digit_count_4;
             pos = pos - 1;
             builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(t_15 %u 10_i64)) & 255);
             t_15 = t_15 /u 10_i64;
             i = i + 1;
-            continue l363;
+            continue l362;
         };
     };
 }

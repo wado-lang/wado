@@ -484,6 +484,18 @@ silently miscompiled output — and the fix is the missing edge kind. The dual
 failure, an item that is unused but not reported, is what this design
 optimises against.
 
+A declared method carrying a default body is a node like any other, not a root.
+The call that lands on it records a dispatch fact, so the body rides that edge.
+A program reaching neither the method nor an impl of its trait therefore needs
+none of what the body calls. That is what keeps `core:prelude`'s parse and
+format closures out of a program that parses and formats nothing. Two kinds of
+declared method have no fact to ride, and each is a root:
+
+- an operation of an `interface` or a `resource`, whose dispatch wrapper
+  `synthesis::effect_dispatch` mints after this pass;
+- a method with a parameter default, which reify materializes at every call
+  that omits the argument.
+
 Three paths are undecidable at the source level, and each gets a stated rule
 rather than a blanket over every trait impl.
 
@@ -654,6 +666,113 @@ takes. Three rules order them.
   the partial ones are deleted rather than wrapped.
 - One home. A fact is recorded where it is decided and read where it is
   recorded; a phase recomputing a fact it could have read is re-deciding.
+
+### A trait's default body answers to no package boundary
+
+Two rules meet here. A `pub` free function is a root, being the package's
+external surface. An impl method rides on the call that reaches it, whatever its
+visibility. A declared method with a default body follows the second, so a
+private helper that only a `pub trait`'s unreached default body calls is
+reported dead. That is right for a program and a false positive for a library,
+whose consumer would reach the method. No package in the tree hits it:
+`wado check` over the `lib` entry of `package-gale`, `package-jade`,
+`package-marl` and `package-cm-catalog` reports no such warning.
+
+Closing it takes a decision on which rule a declared method follows. The
+question behind it is whether liveness roots a package's external surface at all
+once the compile has an entry program, whose world exports are the only roots
+the emitted component keeps. `Item::Impl` leaves the same question open, rooting
+no method however visible.
+
+### What the compiler names after liveness is not in one list
+
+`pub` seeds both closures, so a `pub` stdlib function is emitted whether or not
+this program reaches it. Only the production closure needs it: `pub` is the
+package's external surface, which decides whether an item is reported dead, and
+`optimize/dce.rs` already drops a `pub` item the entry does not reach. Seeding
+the reify gate as well is what hides every entity the compiler reaches for by
+name after this pass, because the blanket keeps them all emitted.
+
+Demoting `pub` to `seed_export` shows what the blanket covers. Compiling
+`export fn run() {}` then panics on `core:rt::unreachable`, called by a body
+that synthesis mints. Rooting that reaches the allocator, whose block the
+compiler picks by `#[allocator]` at Phase 7. Past that, `core:builtin`'s
+bodyless declarations are gone from the package, and every call to one mints an
+extern stub instead. `CompilerItem` records some of these and nothing records
+the rest.
+
+Closing it takes that list, one entry per entity named after `liveness` runs,
+with the pass that names it stating its trigger. Read the gap below first: it
+tried that on the `lower` side, and says what the list does not settle.
+
+Two things bound the work. The rest of the closure is held by real edges from
+the format and parse impls that `CompilerItem::dispatched_by_synthesis` roots,
+so the list pays only once those roots narrow. And `Interner::resolve`'s
+shadowing assertion compares bare names across modules, calling `core:builtin`'s
+`unreachable` a shadow of `core:rt`'s. It reports the audit's own progress as a
+defect until it compares identities.
+
+`export fn run() {}` carries 1973 functions, 1213 of them bodied, and reaches 23
+from its exports and global initializers. Count them with `grep '^fn '` over
+`wado dump` and it reads 196 instead, because the dump writes `pub fn` for most
+of them.
+
+### A prune before `lower` is guessing
+
+A program's bodies are what `lower` translates and `optimize` then walks. A
+trivial program carries 1213 of them to reach 23, so dropping the unreachable
+ones before `lower` is worth having. Measured over 450 fixtures, with the arms
+interleaved and each taken at its best of two:
+
+| Measurement     | Base    | Pruned  | Change |
+| --------------- | ------- | ------- | ------ |
+| 450 fixtures    | 175.94s | 155.14s | −11.8% |
+| `lower` span    | 0.070s  | 0.039s  | −44%   |
+| `optimize` span | 0.694s  | 0.612s  | −12%   |
+
+Precision in the root set is not where that time is. Rooting strictly rather
+than over-approximating prunes 1950 of the 1973 instead of 1251, and gains
+0.02s.
+
+`prelower_reach` implements the prune behind `WADO_PRELOWER_PRUNE`, off by
+default because it is unsound. `lower` names callees from nodes that are not
+calls, and a reachability walk over TIR expressions cannot see them:
+
+- a match pattern mints `T^Eq::eq` (`lower/translate/pattern.rs`)
+- a wide-int literal mints `Eq::eq` and the `I128From*` constructors
+  (`lower/wide_int_literal.rs`)
+- a `builtin::variant_tag` marker mints `V^ReflectVariant::discriminant`
+  (`lower/translate.rs`), a method on the user's own type, so it carries neither
+  a compiler-item tag nor a `$` prefix
+- a synthesized closure-functor body mints `Formatter::write_str`
+  (`lower/plan/closure.rs`), inside `LowerPlan` and so before translation
+
+Compiling every fixture with and without the flag and comparing the output bytes
+found all four: 1765 fixtures are byte-identical, 1 differs, and 43 fail. The
+audit finds none of them, because it reports only functions that survive
+`optimize`, and a prune that drops a minter's target panics in `wir_build` long
+before. A clean audit is not a clean bill.
+
+Enumerating the four is not a fix for the class, since the next minter added
+breaks it again. Every one of them lands in `Interner::resolve`, which mints
+each call's id whatever node produced it, so that is where a sound prune has to
+be answered. Two ways to answer it there:
+
+- Lower on demand: pruned functions go to a side table, `resolve` revives on a
+  miss, and a worklist runs to fixpoint. No minter list exists, so none can be
+  incomplete. `LowerPlan` is the obstacle. It is computed whole-program before
+  translation, so a revived function has no plan data.
+- Complete the roots, and have `resolve` assert in debug builds that it never
+  stubs a name the prune dropped. The roots stay enumerated, but a new minter
+  then fails in CI on the first fixture that exercises it.
+
+Either way, two checks answer different questions and both are needed.
+`WADO_TRACE=prelower_reach` reports per compile how much of the TIR the walk
+reached, and which survivors it did not, which is how to size a root set. The
+corpus comparison above is the correctness check: a fixture that fails only
+under `WADO_PRELOWER_PRUNE` names a minting site, and one whose bytes differ
+names a subtler one. Around 680 fixtures fail to compile under `--world test`
+either way, so compare the arms rather than count failures.
 
 ### A call to an operation with nothing to reach panics at WIR
 

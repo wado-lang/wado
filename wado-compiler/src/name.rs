@@ -1105,6 +1105,14 @@ pub enum FunctionId {
     Method(MethodName),
 }
 
+impl FunctionId {
+    /// The identity a call to a free function resolves by.
+    #[must_use]
+    pub fn free(module_source: &ModuleSource, name: &str) -> Self {
+        Self::Free(FreeFunctionName::from_module_source(module_source, name))
+    }
+}
+
 impl fmt::Display for FunctionId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {

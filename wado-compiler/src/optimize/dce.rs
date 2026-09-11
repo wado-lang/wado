@@ -548,10 +548,7 @@ fn compute_reachable_from_entries(
                     .contains_key(&func.module_source));
 
         if is_root {
-            let func_id = FunctionId::Free(FreeFunctionName::from_module_source(
-                &func.module_source,
-                &func.name,
-            ));
+            let func_id = FunctionId::free(&func.module_source, &func.name);
             reachable.extend(compute_reachable(call_graph, &func_id));
         }
     }
@@ -938,10 +935,7 @@ fn function_id_for(func: &NirFunction) -> FunctionId {
             ))
         }
     } else {
-        FunctionId::Free(FreeFunctionName::from_module_source(
-            module_source,
-            &func.name,
-        ))
+        FunctionId::free(module_source, &func.name)
     }
 }
 
@@ -1080,10 +1074,7 @@ impl<'a> DceWalker<'a> {
             // carries `::` for an associated-type projection
             // (`$value_copy$S::MapSerializer`).
             let callee_module = original_callee_module.clone();
-            let callee_id = FunctionId::Free(FreeFunctionName::from_module_source(
-                &callee_module,
-                &func_name,
-            ));
+            let callee_id = FunctionId::free(&callee_module, &func_name);
             self.analysis.callees.insert(callee_id);
 
             if let Some(interface_name) = original_callee_module.interface_name() {

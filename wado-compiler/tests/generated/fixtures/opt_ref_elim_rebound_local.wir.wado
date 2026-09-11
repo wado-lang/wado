@@ -142,7 +142,6 @@ fn "opt_ref_elim_rebound_local.wado/run"() with Stdout {
     let tx_72: i32;
     let __sroa_e2_value: ref "opt_ref_elim_rebound_local.wado//Element";
     let g_86: ref "opt_ref_elim_rebound_local.wado//GroupElement";
-    let g_91: ref "opt_ref_elim_rebound_local.wado//GroupElement";
     let rep_92: ref "opt_ref_elim_rebound_local.wado//RepeatElement";
     let g_93: ref "opt_ref_elim_rebound_local.wado//GroupElement";
     $inline___initialize_modules_0: block {
@@ -180,11 +179,6 @@ fn "opt_ref_elim_rebound_local.wado/run"() with Stdout {
     __local_5 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(local.tee self_47($inline_process_scalar_19: block -> i32 {
         alts_45 = $inline_extract_scalar_2: block -> ref null "core:prelude//List<i32>" {
-            if ref.test "opt_ref_elim_rebound_local.wado//Element::Group"(__sroa_e2_value) {
-                g_91 = ref.cast "opt_ref_elim_rebound_local.wado//Element::Group"(__sroa_e2_value).payload_0;
-                break $inline_extract_scalar_2: g_91.alternatives;
-            } else {
-            }
             if ref.test "opt_ref_elim_rebound_local.wado//Element::Repeat"(__sroa_e2_value) {
                 rep_92 = ref.cast "opt_ref_elim_rebound_local.wado//Element::Repeat"(__sroa_e2_value).payload_0;
                 let __match_scrut_4: ref "opt_ref_elim_rebound_local.wado//Element";
@@ -304,14 +298,14 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
     end_3 = _av_50 + (_av_51 - _av_50);
     offset = data.start;
     block {
-        l11: loop {
+        l10: loop {
             __sroa_data_start = offset;
-            ptr_14 = builtin::i32_wrap_i64(local.tee packed_13(len_23 = end_3 - __sroa_data_start; ptr_24 = "mem/realloc"(0, 0, 1, len_23); i = 0; b12: block {
-                l13: loop {
-                    break_if b12 i >= len_23;
+            ptr_14 = builtin::i32_wrap_i64(local.tee packed_13(len_23 = end_3 - __sroa_data_start; ptr_24 = "mem/realloc"(0, 0, 1, len_23); i = 0; b11: block {
+                l12: loop {
+                    break_if b11 i >= len_23;
                     builtin::store_u8(ptr_24 + i, builtin::array_get_value_u8(repr_2, __sroa_data_start + i));
                     i = i + 1;
-                    continue l13;
+                    continue l12;
                 };
             }; builtin::i64_extend_i32_s(ptr_24) | (builtin::i64_extend_i32_s(len_23) << 32_i64)));
             raw_len = builtin::i32_wrap_i64(packed_13 >> 32_i64);
@@ -343,7 +337,7 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
             if select i32(select i32(written_16.result != 0, 1, written_16.count <= 0), 1, offset >= end_3) {
                 return written_16.result;
             }
-            continue l11;
+            continue l10;
         };
     };
 }
@@ -391,12 +385,12 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(self, f) {
         }
         n = 0;
         t_9 = abs_val;
-        b22: block {
-            l23: loop {
-                break_if b22 t_9 <=u 0_i64;
+        b21: block {
+            l22: loop {
+                break_if b21 t_9 <=u 0_i64;
                 n = n + 1;
                 t_9 = t_9 /u 10_i64;
-                continue l23;
+                continue l22;
             };
         };
         break $inline_count_digits_u64_1: n;
@@ -406,14 +400,14 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(self, f) {
     pos = offset_5 + digit_count_4;
     t_15 = abs_val;
     i = 0;
-    b24: block {
-        l25: loop {
-            break_if b24 i >= digit_count_4;
+    b23: block {
+        l24: loop {
+            break_if b23 i >= digit_count_4;
             pos = pos - 1;
             builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(t_15 %u 10_i64)) & 255);
             t_15 = t_15 /u 10_i64;
             i = i + 1;
-            continue l25;
+            continue l24;
         };
     };
 }

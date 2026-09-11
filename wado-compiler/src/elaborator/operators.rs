@@ -9,14 +9,15 @@ use crate::token::Span;
 
 use super::Elaborator;
 use super::coercion::{is_numeric_literal_expr, numeric_literal_pair_order};
+use super::expr::{IndexAccess, int_literal_repr, negated_literal};
 use super::method_lookup::REPLACE_ON_ASSIGN_PLACE;
 use super::types::{FunctionContext, ResolvedTraitMethod, TypeError};
 use super::tysys::TypeSystem;
 
 /// `-<integer literal>`, with the source text its range is judged against.
 fn negated_int_literal(unary: &ast::UnaryExpr) -> Option<(&ast::LiteralExpr, &str)> {
-    let lit = super::expr::negated_literal(unary)?;
-    super::expr::int_literal_repr(lit).map(|repr| (lit, repr))
+    let lit = negated_literal(unary)?;
+    int_literal_repr(lit).map(|repr| (lit, repr))
 }
 
 /// The right-hand side of an assignment passed to
@@ -1074,10 +1075,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // the accessor's signature rather than upgrading a shared borrow.
         let expr_type = match (&unary.op, &unary.expr) {
             (UnaryOp::MutRef, ast::Expr::Index(index)) => {
-                self.resolve_index_access(index, ctx, super::expr::IndexAccess::Mutable)
+                self.resolve_index_access(index, ctx, IndexAccess::Mutable)
             }
             (UnaryOp::Ref, ast::Expr::Index(index)) => {
-                self.resolve_index_access(index, ctx, super::expr::IndexAccess::Shared)
+                self.resolve_index_access(index, ctx, IndexAccess::Shared)
             }
             _ => match negated_int_literal(unary) {
                 // Not resolved on its own: reading `NUM` alone would judge it
