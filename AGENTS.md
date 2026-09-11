@@ -1,4 +1,4 @@
-# Wado Project
+# The Wado Programming Language
 
 This document describes how to develop the Wado compiler toolchain.
 
@@ -8,8 +8,7 @@ Note: `CLAUDE.md` is a symlink to `AGENTS.md`.
 
 - Succinctly — say and write the least that fully conveys the point.
 - Fix-forward — fix the cause of a defect and move forward; never backtrack.
-- Fix the class — a defect is one instance; fix what admits the class. Fixes
-  that keep drawing findings name the design, not the code.
+- Fix the class — a defect is one instance; fix what admits the class.
 
 ## Development
 
@@ -44,91 +43,53 @@ mise run report-wasm-size  # measures the size of the generated Wasm files and r
 
 ## Tooling
 
-- Make every edit with the editing tools. They refuse a match that is not unique and a file the session has not read, and the harness tracks what they wrote, so each edit is checkable. Scripts — Node.js included — measure, extract, and generate data to read.
-- Run a long job (`mise run test`, `test-wado`, `update-golden-fixtures`) in the background, one per invocation: the harness announces the end of a job it owns. Chaining one behind a slow step puts both under a single timeout.
+- Make every edit with the editing tools. They refuse a match that is not unique and a file the session has not read, and the harness tracks what they wrote, so each edit is checkable.
+- Run a long job (`mise run test`, `test-wado`, `update-golden-fixtures`) in the background, one per invocation: the harness announces the end of a job it owns.
 - `test`, `test-wado`, `test-stdlib` and `test-gale-o2` refuse to start while another of the same is running, naming the holder's pid — where `flock` exists; `scripts/exclusive.sh` says so on stderr and runs unlocked where it does not. Abandoning a job does not stop it, so restarting after an edit means killing that pid first.
 - Redirect a job's output to a file and read the file, so what you did not anticipate is still there.
 - Have the job record its own completion — `cmd > run.log 2>&1 && s=0 || s=$?; echo "exit=$s" >> run.log` — and wait for it with `until grep -q "^exit=" run.log; do sleep 30; done`. The `&&`/`||` is what writes the marker on a failure too, which `set -e` would otherwise exit before.
-- Let a `wado test` run finish before editing sources: it pins each Kiln generator at its first resolve, and its verdict then describes neither tree.
 
 ## General Rules
 
-- Write all documentation and comments in English, and keep them concise — cut filler and low-information words.
-  - Comments: keep them to a minimum, and write none where none is needed. Make intent obvious through clear structure, naming, and function decomposition.
+- Write all documentation and comments in clear, simple English.
   - Invariants: state them as assertions, not comments. An assert is checked; a comment goes stale.
-  - Docs: keep them concise. Don't document implementation details.
-- Avoid ad-hoc workarounds. Write proper code based on a sound design.
-- Name an item, don't spell out its path: a `crate::` or `super::` path belongs in a `use` item at the top of the module, never inline where the item is read. `mise run check-rust-paths` gates this in CI against `scripts/rust-inline-paths.json`, which holds what each file has left to migrate. Clippy is not the gate: `absolute_paths` sees only the `crate::` half of the rule, and it also flags paths into other crates unless every dependency is named in an allow-list nothing maintains.
+  - Don't document implementation details, which go stale.
+- Name an item, don't spell out its path: a `crate::` or `super::` path belongs in a `use` item at the top of the module, never inline where the item is read. `mise run check-rust-paths` gates this in CI against `scripts/rust-inline-paths.json`, which holds what each file has left to migrate.
 - Perform red/green TDD.
-- A compiler bug is always P0 — no exceptions. The instant you suspect one, stop all other work, and as the top priority write a minimal reproducible e2e fixture and fix it. A workaround that lets the current task proceed is never a reason to skip or defer any of these.
-- A pre-existing issue — whether you find it or a reviewer points it out — must be fixed, with TDD when practical.
-- Use plain `cargo build` / `cargo run` / `cargo test` (the `dev` profile) for iteration. `Cargo.toml` raises `opt-level` on `wado-compiler`, `wado-dev-tools`, and deps so dev-build runtime is close to release for the parts that matter. `--release` is only for distributing binaries, not for the inner dev loop.
+- A compiler bug is always P0 — no exceptions. The instant you suspect one, stop all other work, and as the top priority write a minimal reproducible e2e fixture and fix it.
+- A pre-existing issue must be fixed, with TDD when practical.
+- Use plain `cargo build` / `cargo run` / `cargo test` (the `dev` profile) for iteration. `Cargo.toml` raises `opt-level` on `wado-compiler`, `wado-dev-tools`, and deps so dev-build runtime is close to release for the parts that matter. `--release` is only for distributing binaries.
 - A failure that shows only in CI is usually not the environment: a pull request's test jobs run on the branch merged with `main`, not on the branch head. Sync first with the `git-upstream-sync` skill and reproduce on the merged tree before suspecting anything else. `tidy` is the exception, checking out the head ref.
 - Add a new integration test to `tests/integration/` and declare it in that directory's `main.rs`. A file dropped directly in `tests/` becomes its own target, and each one statically links the compiler and wasmtime for another ~150 MB.
-- Use the `rust` skill when writing Rust.
-- Use the `wado` skill when writing Wado code or designing Wado language features.
-- Use the `code-review-response` skill when answering review comments, and when answering the findings of a `/code-review` run.
+- Use the `code-review-response` skill when answering review findings.
 
 ## The Wado Language
 
 For the detailed specification, read `docs/spec.md`.
 
-### Quick tour of the Wado language
-
-Wado is a statically-typed programming language targeting Wasm/WASI, strongly affected by Rust and TypeScript.
-
-Like Rust:
-
-- Full types, generics and traits.
-  - String, List (Rust's Vec), TreeMap (Rust's IndexMap), and primitives types.
-  - traits: Display, Inspect (Rust's Debug), Eq (no PartialEq), Ord.
-  - No dynamic dispatch (yet)
-- Full pattern matching:
-  - `match` statements and expressions.
-  - `if let` and `while let`.
-
-Unlike Rust:
-
-- No lifetimes. No borrow checker. Just GC.
-  - Partial ownership is only implemented for Wasm CM resources.
-- Value semantics: every value is deeply copied when assigned or passed to a function, except for references.
-  - And thus no Copy or Clone traits.
-- Wado splits Rust's `enum` into `variant` for sum types with payloads and `enum` for plain discriminants (no payload). Bitmask types use `flags`.
-- No macros.
-- No user-defined attributes.
-- No `unsafe` and no raw pointers.
-- Semicolons are just separators. Functions that return values must use `return`.
-
-Like TypeScript & JavaScript:
-
-- ES modules like module system: `use { to_string} from "core:json"`.
-- Template string literals with backtick + `${expr}` interpolation, but with Rust-like formatting specifiers: `${expr:specifier}`.
-
-Wado-specific features:
-
-- Effect system: effect signatures and handlers.
-- Wasm CM builtins and direct WASI P3 bindings.
-- `scrutinee matches { PATTERN }` operator, similar to Rust's `matches!` macro.
-- `task return` for Wasm async functions.
-- `assert` statements with power-assert-like diagnostics. Assertions cannot be disabled, so they are always reliable.
-- Literal spread `..base`: JS-leaning (anonymous composition, key-value merge, last-wins); a named struct allows only a single leading `..base`.
+@docs/cheatsheet.md is the quick reference.
 
 ## Repository Map
 
 - `wado-compiler/` — the compiler: frontend, IR pipeline, optimizer, codegen. The Wado standard library (`core:*`, `wasi:*`) lives in `wado-compiler/lib/`. Internals: `docs/compiler.md`, `docs/optimizer.md`.
-- `wado-cli/` — the `wado` binary (see below).
+- `wado-cli/` — the `wado` binary.
 - `wado-lsp/` — the language service engine, also compiled to Wasm for the browser.
 - `wado-vscode/` — the VS Code extension.
-- `wado-from-idl/` — generates the `wasi:*` and `core:kiln` stdlib modules from WIT.
-- `wado-manifest/` — `wado.toml` / `wado.lock` parsing, validation, and dependency resolution. Pure: no I/O; the disk reads live in `wado-lsp/src/host/discovery.rs`.
+- `wado-from-idl/` — generates the `wasi:*`. `core:kiln`, and `web:*` stdlib modules from WIT.
+- `wado-manifest/` — `wado.toml` / `wado.lock` parsing, validation, and dependency resolution.
 - `wado-wasm-embed/` — prepares a core wasm asset for embedding in a component: memory definition to import, then a prune to the used exports.
-- `wado-bundled-libm/` — deterministic math, bundled into the compiler as a Wasm module. (`wado-bundled-icu/` is a not-yet-wired spike.)
-- `docs/` — the language spec (`docs/spec.md`), the compiler and formatter guides (`docs/compiler.md`, `docs/optimizer.md`, `docs/formatter.md`), stdlib docs, and the Wado Evolution Proposals (`docs/wep-*.md`) recording significant language and architecture decisions.
+- `wado-bundled-libm/` — deterministic math, bundled into the compiler as a Wasm module.
+- `wado-bundled-icu/` - ICU binding for Wado (under development; not bundled yet)
+- `docs/` — the language spec (`docs/spec.md`), the compiler and formatter guides (`docs/compiler.md`, `docs/optimizer.md`, `docs/formatter.md`), stdlib docs, and the Wado Evolution Proposals (`docs/wep-*.md`).
 - `benchmark/`, `wasm-size/` — performance and code-size measurement.
 - `cloudflare-worker/` — serves a `wasi:http/service` component from a Cloudflare
   Worker, via jco.
-- `package-*/` — packages written in Wado; `package-gale/` is the ANTLR4 port.
-- `vendor/` — reference specs and runtimes, as git submodules (see References).
+- `package-gale/` — A parser generator compatible with ANTLR4 (`.g4`) in Wado.
+- `package-gale-highlight-wado` - A complete `Wado.g4` and a syntax highlighter for Wado source code, built with `package-gale`.
+- `package-jade` - A JSON Schema 2020-12 validator in Wado.
+- `package-marl` - A CommonMark subset in Wado.
+- `package-cm-catalog/` - A catalog of Wasm Component Model modules for demo and testing purposes.
+- `vendor/` — reference specs and runtimes, as git submodules.
 
 ## The CLI
 
@@ -147,7 +108,7 @@ The ones you reach for while developing the toolchain:
 
 The rest (`init`, `update`, `fetch`, `build`, `publish`, `doc`, `wit`, `syntax`, `lsp`, `clean`) serve packaging, registry, and editor integration.
 
-Behaviour that no `--help` will remind you of:
+Behavior that no `--help` will remind you of:
 
 - A program targets a Wasm _world_: `wasi:cli/command` (default), `wasi:http/service`, or the synthetic `test` world. `--world test` exports the entry module's `test` blocks and drops everything else; `serve` and `test` pick their world automatically.
 - The world selects the allocator: `bump` for CLI (never frees), `freelist` for HTTP (long-running), `debug` for the test world (never reuses freed memory, poisons it with `0xFF`). E2E tests rely on the test world picking `debug`.
