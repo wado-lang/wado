@@ -52,9 +52,13 @@ const EPOCH_TICK_MS: u64 = 1000;
 /// raise it for one that pays to build them. `0` disables.
 const DEFAULT_RECYCLE_REQUESTS: u64 = 200;
 
-/// Each in-flight request needs an async fiber stack from the pooling
-/// allocator, so this also sizes the engine's stack pool.
-const DEFAULT_MAX_CONCURRENCY: usize = 1024;
+/// In-flight requests one worker runs at once, when `--max-concurrency`
+/// does not say. Each of them pins a fiber stack the GC walks on every
+/// collection, so a worker that ran the whole backlog at once would pay
+/// for it on every allocation: measured on the routing benchmark, one
+/// worker peaks over a 16–32 plateau and loses a third of its throughput
+/// by 200. Surplus requests wait in the worker's queue.
+const DEFAULT_MAX_CONCURRENCY_PER_WORKER: usize = 32;
 
 pub struct ServeOptions {
     pub input: String,
@@ -69,7 +73,9 @@ pub struct ServeOptions {
     pub workers: Option<usize>,
     /// Recycle a worker after this many requests; `0` disables.
     pub recycle_requests: u64,
-    pub max_concurrency: usize,
+    /// Server-wide in-flight bound; `None` ⇒
+    /// `DEFAULT_MAX_CONCURRENCY_PER_WORKER` per worker.
+    pub max_concurrency: Option<usize>,
     pub profile: ProfileMode,
 }
 
@@ -111,7 +117,7 @@ const MAX_CONCURRENCY_SPEC: args::OptSpec = args::OptSpec {
     long: Some("max-concurrency"),
     short: None,
     value: Some("<n>"),
-    desc: "Max concurrently in-flight requests (default: 1024)",
+    desc: "Max concurrently in-flight requests server-wide; the surplus waits\nin the worker queues (default: 32 per worker)",
 };
 
 const PROFILE_SPEC: args::OptSpec = args::OptSpec {
@@ -235,7 +241,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<ServeOptions, CliExit> {
     let mut timeout_secs: u64 = DEFAULT_TIMEOUT_SECS;
     let mut workers: Option<usize> = None;
     let mut recycle_requests: u64 = DEFAULT_RECYCLE_REQUESTS;
-    let mut max_concurrency: usize = DEFAULT_MAX_CONCURRENCY;
+    let mut max_concurrency: Option<usize> = None;
     let mut profile = ProfileMode::None;
     let mut knobs = CompileKnobs::default();
 
@@ -260,7 +266,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<ServeOptions, CliExit> {
                     recycle_requests = parse_count_arg("--recycle-requests", &mut parser, true)?;
                 }
                 Opt::MaxConcurrency => {
-                    max_concurrency = parse_u32_count_arg("--max-concurrency", &mut parser)?;
+                    max_concurrency = Some(parse_u32_count_arg("--max-concurrency", &mut parser)?);
                 }
                 Opt::Profile => {
                     let spec = args::require_string(&mut parser)?;
@@ -281,10 +287,12 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<ServeOptions, CliExit> {
         }
     }
 
-    // An explicit `--workers` above `--max-concurrency` would leave the
-    // pooling allocator under-sized for the number of worker stores. The
-    // auto-derived default is clamped instead (see `run`).
+    // An explicit `--workers` above an explicit `--max-concurrency` would
+    // leave a worker without even one in-flight slot. The auto-derived
+    // worker count is clamped instead (see `run`); the derived bound scales
+    // with the workers, so it can never be the smaller of the two.
     if let Some(w) = workers
+        && let Some(max_concurrency) = max_concurrency
         && w > max_concurrency
     {
         return Err(CliExit::error(format!(
@@ -403,6 +411,36 @@ impl AccessorTask<WasiState> for HandlerTask {
                 };
                 let res = accessor.with(|store| res.into_http(store, async { Ok(()) }))?;
                 let (parts, body) = res.into_parts();
+                let mut body = pin!(body);
+
+                // Hold the head back for one turn of the store's event loop
+                // so a body the guest has already finished rides out with
+                // it: hyper writes a head plus a ready first frame in one
+                // `writev`, and two when the frame arrives after the head.
+                // One turn is the whole wait, so a guest that returns its
+                // head early and streams its body later is not delayed.
+                let mut first_frame = None;
+                let mut body_done = false;
+                for attempt in 0..2 {
+                    match poll_fn(|cx| Poll::Ready(body.as_mut().poll_frame(cx))).await {
+                        Poll::Ready(Some(Ok(frame))) => {
+                            first_frame = Some(frame);
+                            break;
+                        }
+                        Poll::Ready(Some(Err(_)) | None) => {
+                            body_done = true;
+                            break;
+                        }
+                        Poll::Pending if attempt == 0 => tokio::task::yield_now().await,
+                        Poll::Pending => {}
+                    }
+                }
+                if let Some(frame) = first_frame {
+                    // The channel is empty and holds 8, so the only way this
+                    // fails is hyper having dropped the body already — which
+                    // the pump below sees on its own next send.
+                    let _ = frame_tx.try_send(frame);
+                }
 
                 // Hand the response head plus the receiver to `dispatch_request`
                 // so hyper can start writing the response while we keep
@@ -430,8 +468,9 @@ impl AccessorTask<WasiState> for HandlerTask {
                 // pin this task's fiber stack (#1138). The idle timeout
                 // bounds that wait; it is re-armed per blocking send, so a
                 // slow-but-progressing client is unaffected.
-                let mut body = pin!(body);
-                while let Some(Ok(frame)) = poll_fn(|cx| body.as_mut().poll_frame(cx)).await {
+                while !body_done
+                    && let Some(Ok(frame)) = poll_fn(|cx| body.as_mut().poll_frame(cx)).await
+                {
                     match frame_tx.try_send(frame) {
                         Ok(()) => {}
                         // hyper dropped the body — client disconnected.
@@ -676,6 +715,10 @@ enum Step {
 /// On recycle or shutdown the loop stops accepting new requests but keeps
 /// draining the in-flight ones, so a recycle never drops a live request.
 ///
+/// `max_inflight` is this worker's share of `--max-concurrency`: it runs
+/// that many requests at once and leaves the rest in `job_rx`, so it never
+/// asks the pooling allocator for a fiber stack the pool was not sized for.
+///
 /// A runaway guest (one that monopolises the store's single thread in
 /// pure wasm) is bounded by the epoch deadline: the dispatch loop
 /// refreshes the deadline every turn, so only a guest that prevents the
@@ -693,6 +736,7 @@ async fn worker_loop(
     service_pre: Arc<ServicePre<WasiState>>,
     preopens: Arc<Preopens>,
     mut job_rx: mpsc::Receiver<RequestJob>,
+    max_inflight: usize,
     recycle_requests: u64,
     timeout_secs: u64,
     fatal: Arc<Notify>,
@@ -764,7 +808,14 @@ async fn worker_loop(
                     }
 
                     let mut job: Option<RequestJob> = None;
-                    let step = if stopping.is_some() {
+                    let step = if inflight.len() >= max_inflight {
+                        // At the bound: take nothing new until a slot frees.
+                        // The queued requests stay in `job_rx`, so the
+                        // connections carrying them back-pressure rather
+                        // than piling more fiber stacks onto this store.
+                        let _ = inflight.next().await;
+                        Step::Drained
+                    } else if stopping.is_some() {
                         // Draining only — `inflight` is non-empty here.
                         let _ = inflight.next().await;
                         Step::Drained
@@ -856,8 +907,12 @@ async fn run_http_server(
     // Pool head-room: at most `workers` instances are live at once (a
     // recycle drops the old instance before building the new), plus slack.
     let max_instances = workers_u32.saturating_add(8);
-    let engine =
-        runtime::create_serve_engine(cranelift_opt, max_instances, max_concurrency_u32, collector)?;
+    // One fiber stack per in-flight request, plus the fibers a store runs
+    // on its own account — the cached worker fiber `run_concurrent` keeps
+    // between guest calls is not a request, so `--max-concurrency` does not
+    // count it.
+    let stack_pool = max_concurrency_u32.saturating_add(workers_u32.saturating_mul(2));
+    let engine = runtime::create_serve_engine(cranelift_opt, max_instances, stack_pool, collector)?;
     let component = Component::new(&engine, &wasm)?;
     let linker = runtime::create_linker(&engine)?;
     // Open preopens once at startup; they are attached to every worker
@@ -892,24 +947,28 @@ async fn run_http_server(
     // engine task. Workers run guest code on independent stores, so
     // request handling fans out across cores; each worker recycles its
     // instance every `recycle_requests` requests.
-    // Per-worker request queue. `workers <= max_concurrency` (enforced in
-    // `parse_args` / clamped in `run`), so the quotient is at least 1 and
-    // the queues sum to at most `max_concurrency` — never more in-flight
-    // work than the pooling allocator's stack pool was sized for.
-    let chan_cap = max_concurrency / workers;
+    // `workers <= max_concurrency` (enforced in `parse_args` / clamped in
+    // `run`), so every worker gets at least one slot and the slots sum to
+    // at most `max_concurrency` — never more in-flight work than the
+    // pooling allocator's stack pool was sized for. Each worker's queue
+    // holds the same number again, so a burst waits instead of being
+    // refused while the connection that carries it back-pressures.
+    let per_worker_inflight = max_concurrency / workers;
+    assert!(per_worker_inflight >= 1);
     // Notified by a worker that fails to instantiate; the accept loop
     // treats it as a fatal shutdown (see `worker_loop`).
     let fatal = Arc::new(Notify::new());
     let mut txs = Vec::with_capacity(workers);
     let mut engine_tasks = Vec::with_capacity(workers);
     for _ in 0..workers {
-        let (tx, rx) = mpsc::channel::<RequestJob>(chan_cap);
+        let (tx, rx) = mpsc::channel::<RequestJob>(per_worker_inflight);
         txs.push(tx);
         engine_tasks.push(tokio::spawn(worker_loop(
             engine.clone(),
             Arc::clone(&service_pre),
             Arc::clone(&preopens),
             rx,
+            per_worker_inflight,
             recycle_requests,
             timeout.as_secs().max(1),
             Arc::clone(&fatal),
@@ -992,7 +1051,9 @@ async fn run_http_server(
         format!("every {recycle_requests} req")
     };
     eprintln!("HTTP server listening on http://{bound_addr}/");
-    eprintln!("Instance reuse: ON — {workers} worker(s), recycle {recycle_desc}");
+    eprintln!(
+        "Instance reuse: ON — {workers} worker(s), {per_worker_inflight} in flight each, recycle {recycle_desc}"
+    );
     eprintln!("Per-request timeout: {}s", timeout.as_secs());
     #[cfg(unix)]
     eprintln!("Send SIGINT or SIGTERM to shut down");
@@ -1147,23 +1208,28 @@ pub async fn run(opts: ServeOptions) -> Result<(), CliExit> {
     let wasm = crate::build::build_for_driver(&opts.input, "wasi:http/service", &flags).await?;
 
     let timeout = Duration::from_secs(opts.timeout_secs);
-    // An explicit `--workers` is already validated against `--max-concurrency`
-    // in `parse_args`; the auto-derived default is clamped so it never sizes
-    // more workers than the stack pool can back.
-    let mut workers = opts
-        .workers
-        .unwrap_or_else(|| {
-            std::thread::available_parallelism()
-                .map(std::num::NonZero::get)
-                .unwrap_or(1)
-        })
-        .min(opts.max_concurrency);
+    // An explicit `--workers` is already validated against an explicit
+    // `--max-concurrency` in `parse_args`; the auto-derived default is
+    // clamped so it never sizes more workers than the bound can back.
+    let mut workers = opts.workers.unwrap_or_else(|| {
+        std::thread::available_parallelism()
+            .map(std::num::NonZero::get)
+            .unwrap_or(1)
+    });
+    if let Some(max_concurrency) = opts.max_concurrency {
+        workers = workers.min(max_concurrency);
+    }
     // Guest profiling samples one worker store; more than one worker would
     // conflate independent stores into a single profile.
     if matches!(opts.profile, ProfileMode::Guest { .. }) && workers != 1 {
         eprintln!("Profiling: forcing --workers 1");
         workers = 1;
     }
+    // Derived after the worker count is final, so each worker gets the
+    // per-worker default whatever the host's CPU count turned out to be.
+    let max_concurrency = opts
+        .max_concurrency
+        .unwrap_or(workers * DEFAULT_MAX_CONCURRENCY_PER_WORKER);
     run_http_server(
         wasm,
         &opts.addr,
@@ -1172,7 +1238,7 @@ pub async fn run(opts: ServeOptions) -> Result<(), CliExit> {
         timeout,
         workers,
         opts.recycle_requests,
-        opts.max_concurrency,
+        max_concurrency,
         opts.profile,
         opts.collector,
     )

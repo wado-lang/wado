@@ -1,0 +1,20 @@
+use { Request, Response, ErrorCode, Fields, Headers, Trailers } from "wasi:http";
+use { MonotonicClock } from "wasi:clocks";
+
+// Used by the `wado serve` streaming test: the handler returns its response
+// head immediately and only produces the first body byte much later, so a
+// host that waited for a body frame before handing the head to hyper would
+// hold the head for the whole delay.
+export async fn handle(_request: Request) -> Result<Response, ErrorCode> with MonotonicClock {
+    let [trailers_future, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
+    let [body_rx, body_tx] = Stream::<u8>::new();
+    let headers = Headers::new();
+    let [response, _tx_future] = Response::new(headers, Option::<Stream<u8>>::Some(body_rx), trailers_future);
+    response.set_status_code(200);
+    task return Result::<Response, ErrorCode>::Ok(response);
+
+    MonotonicClock::wait_for(3_000_000_000).wait();
+    body_tx.write_all("late\n".bytes().collect());
+    body_tx.drop();
+    trailers_tx.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));
+}

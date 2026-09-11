@@ -1,0 +1,21 @@
+use { Request, Response, ErrorCode, Fields, Headers, Trailers } from "wasi:http";
+use { MonotonicClock } from "wasi:clocks";
+
+// Used by the `--max-concurrency` `wado serve` test: the handler stays in
+// flight long enough that concurrent clients overlap, so a worker that
+// spawned every arriving request would hold more fiber stacks at once than
+// the pooling allocator was sized for.
+export async fn handle(_request: Request) -> Result<Response, ErrorCode> with MonotonicClock {
+    MonotonicClock::wait_for(200_000_000).wait();
+
+    let [trailers_future, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
+    let [body_rx, body_tx] = Stream::<u8>::new();
+    let headers = Headers::new();
+    let [response, _tx_future] = Response::new(headers, Option::<Stream<u8>>::Some(body_rx), trailers_future);
+    response.set_status_code(200);
+    task return Result::<Response, ErrorCode>::Ok(response);
+
+    body_tx.write_all("slow\n".bytes().collect());
+    body_tx.drop();
+    trailers_tx.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));
+}

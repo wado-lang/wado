@@ -313,6 +313,80 @@ fn non_draining_client_does_not_pin_worker_stack() {
     drop(stream);
 }
 
+/// `--max-concurrency` sizes the fiber-stack pool, so it has to *bound*
+/// in-flight requests too: a worker that spawned every arriving request
+/// would ask the pooling allocator for more stacks than it reserved and
+/// fail the excess requests. Eight clients against a two-deep server must
+/// all be served — the surplus waits its turn instead of erroring.
+#[test]
+fn max_concurrency_bounds_in_flight_requests() {
+    let (_guard, port, stderr) = start_serve(
+        "serve_slow_handler.wado",
+        &["--workers", "1", "--max-concurrency", "2"],
+    );
+
+    let clients: Vec<_> = (0..8)
+        .map(|_| std::thread::spawn(move || http_get(port, "/", Duration::from_mins(1))))
+        .collect();
+
+    for client in clients {
+        let (status, body) = client.join().expect("client thread panicked");
+        assert_eq!(
+            status,
+            200,
+            "every request must be served once the surplus waits for a slot; \
+             body: {body:?}, stderr:\n{}",
+            stderr.lock().unwrap(),
+        );
+        assert!(
+            body.contains("slow"),
+            "expected the handler's body; got: {body:?}",
+        );
+    }
+}
+
+/// The response head must not wait on the body. The host hands hyper the
+/// first body frame together with the head when the guest already produced
+/// one — but a guest that returns its head and only writes the body much
+/// later must still see the head go out immediately.
+#[test]
+fn response_head_is_not_held_for_a_slow_body() {
+    let (_guard, port, _stderr) = start_serve("serve_delayed_body.wado", &[]);
+
+    let addr = format!("127.0.0.1:{port}");
+    let mut stream = TcpStream::connect(&addr).expect("connect");
+    stream
+        .set_read_timeout(Some(Duration::from_mins(1)))
+        .unwrap();
+    let start = Instant::now();
+    let req = "GET / HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n";
+    stream.write_all(req.as_bytes()).unwrap();
+
+    // The fixture delays its first body byte by 3s. Reading anything at all
+    // therefore proves the head was not held for it.
+    let mut head = [0u8; 1024];
+    let n = stream.read(&mut head).expect("read response head");
+    let head_elapsed = start.elapsed();
+    let head = String::from_utf8_lossy(&head[..n]).to_string();
+
+    assert!(
+        head.starts_with("HTTP/1.1 200"),
+        "expected the status line in the first read; got: {head:?}",
+    );
+    assert!(
+        head_elapsed < Duration::from_secs(2),
+        "the head arrived in {head_elapsed:?}, i.e. behind the fixture's 3s body \
+         delay — the head is being held for the first body frame",
+    );
+
+    let mut rest = String::new();
+    stream.read_to_string(&mut rest).expect("read body");
+    assert!(
+        rest.contains("late"),
+        "expected the delayed body to follow the head; got: {rest:?}",
+    );
+}
+
 /// SIGTERM should trigger the shutdown path: the accept loop stops, the
 /// drain phase runs, and the process exits with status 0. Verifies both
 /// the exit status and the operator-facing log line so a regression that
