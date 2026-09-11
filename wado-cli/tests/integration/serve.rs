@@ -155,13 +155,17 @@ fn send_get(port: u16, path: &str, timeout: Duration) -> TcpStream {
     stream
 }
 
-/// Send a minimal HTTP/1.1 GET and return the full raw response text
-/// (status line, headers, blank line, body — chunk framing intact).
-fn http_get_raw(port: u16, path: &str, timeout: Duration) -> String {
-    let mut stream = send_get(port, path, timeout);
+/// Read a response off `stream` to EOF, raw (status line, headers, blank
+/// line, body — chunk framing intact).
+fn read_response(mut stream: TcpStream) -> String {
     let mut response = String::new();
     stream.read_to_string(&mut response).unwrap();
     response
+}
+
+/// Send a minimal HTTP/1.1 GET and return the full raw response text.
+fn http_get_raw(port: u16, path: &str, timeout: Duration) -> String {
+    read_response(send_get(port, path, timeout))
 }
 
 /// Parse `(status_code, raw_body)` from a raw HTTP/1.1 response. The body
@@ -321,12 +325,12 @@ fn non_draining_client_does_not_pin_worker_stack() {
 #[test]
 fn max_concurrency_bounds_in_flight_requests() {
     let (_guard, port, stderr) = start_serve(
-        "serve_slow_handler.wado",
+        "serve_waiting_handler.wado",
         &["--workers", "1", "--max-concurrency", "2"],
     );
 
     let clients: Vec<_> = (0..8)
-        .map(|_| std::thread::spawn(move || http_get(port, "/", Duration::from_mins(1))))
+        .map(|_| std::thread::spawn(move || http_get(port, "/slow", Duration::from_mins(1))))
         .collect();
 
     for client in clients {
@@ -339,7 +343,7 @@ fn max_concurrency_bounds_in_flight_requests() {
             stderr.lock().unwrap(),
         );
         assert!(
-            body.contains("slow"),
+            body.contains("served"),
             "expected the handler's body; got: {body:?}",
         );
     }
@@ -352,7 +356,7 @@ fn max_concurrency_bounds_in_flight_requests() {
 #[test]
 fn queued_request_times_out_instead_of_hanging() {
     let (_guard, port, stderr) = start_serve(
-        "serve_parked_handler.wado",
+        "serve_waiting_handler.wado",
         &["--workers", "1", "--max-concurrency", "1", "--timeout", "2"],
     );
 
@@ -362,10 +366,8 @@ fn queued_request_times_out_instead_of_hanging() {
     let sent: Vec<TcpStream> = (1..=3)
         .map(|_| send_get(port, "/park", Duration::from_mins(1)))
         .collect();
-    for (nth, mut stream) in sent.into_iter().enumerate() {
-        let mut raw = String::new();
-        stream.read_to_string(&mut raw).unwrap();
-        let (status, body) = parse_response(&raw);
+    for (nth, stream) in (1..).zip(sent) {
+        let (status, body) = parse_response(&read_response(stream));
         assert_eq!(
             status,
             504,
@@ -387,7 +389,7 @@ fn queued_request_times_out_instead_of_hanging() {
 #[test]
 fn a_timed_out_handler_releases_its_worker_slot() {
     let (_guard, port, stderr) = start_serve(
-        "serve_parked_handler.wado",
+        "serve_waiting_handler.wado",
         &["--workers", "1", "--max-concurrency", "1", "--timeout", "2"],
     );
 
@@ -402,7 +404,7 @@ fn a_timed_out_handler_releases_its_worker_slot() {
         stderr.lock().unwrap(),
     );
     assert!(
-        body.contains("awake"),
+        body.contains("served"),
         "expected the handler's body; got: {body:?}",
     );
 }

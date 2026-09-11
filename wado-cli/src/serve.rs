@@ -10,6 +10,7 @@ use std::time::{Duration, Instant};
 
 use anyhow::Result;
 use bytes::Bytes;
+use futures::Stream;
 use futures::StreamExt as _;
 use futures::future::{Either, poll_fn, select};
 use futures::stream::FuturesUnordered;
@@ -438,7 +439,10 @@ impl AccessorTask<WasiState> for HandlerTask {
                 // delayed.
                 let mut first_frame = None;
                 let mut body_done = false;
-                for attempt in 0..2 {
+                for turn in 0..2 {
+                    if turn > 0 {
+                        tokio::task::yield_now().await;
+                    }
                     match poll_fn(|cx| Poll::Ready(body.as_mut().poll_frame(cx))).await {
                         Poll::Ready(Some(Ok(frame))) => {
                             first_frame = Some(frame);
@@ -448,7 +452,6 @@ impl AccessorTask<WasiState> for HandlerTask {
                             body_done = true;
                             break;
                         }
-                        Poll::Pending if attempt == 0 => tokio::task::yield_now().await,
                         Poll::Pending => {}
                     }
                 }
@@ -550,7 +553,7 @@ struct Dispatch {
     next: AtomicUsize,
     /// Coarse server-wide clock for the first-byte timeout. Each in-flight
     /// request clones this and checks its own deadline on every tick (see
-    /// `await_first_byte`), so no request arms its own timer.
+    /// `before_deadline`), so no request arms its own timer.
     tick_rx: watch::Receiver<()>,
 }
 
@@ -570,76 +573,43 @@ impl Dispatch {
     /// A worker at its in-flight bound leaves its queue full, so this wait is
     /// part of the client's time to first byte and has to answer to the same
     /// deadline — otherwise a queued request outlives `--timeout` with no
-    /// response at all. Bounded against the shared coarse tick, like
-    /// `await_first_byte`, so no request arms its own timer.
+    /// response at all.
     async fn submit(&self, job: RequestJob, deadline: Instant) -> Result<(), SubmitError> {
         let idx = self.next.fetch_add(1, Ordering::Relaxed) % self.txs.len();
         let mut tick_rx = self.tick_rx.clone();
-        let mut send = pin!(self.txs[idx].send(job));
-        loop {
-            match select(send.as_mut(), pin!(tick_rx.changed())).await {
-                Either::Left((res, _)) => return res.map_err(|_| SubmitError::WorkerGone),
-                Either::Right((Ok(()), _)) => {
-                    if Instant::now() >= deadline {
-                        return Err(SubmitError::Timeout);
-                    }
-                }
-                // Ticker gone (server shutting down). Break out so the borrow
-                // of `send` from `select` ends, then let the send finish or
-                // fail on its own; shutdown drains in-flight anyway.
-                Either::Right((Err(_closed), _)) => break,
-            }
+        match before_deadline(pin!(self.txs[idx].send(job)), deadline, &mut tick_rx).await {
+            Some(sent) => sent.map_err(|_| SubmitError::WorkerGone),
+            None => Err(SubmitError::Timeout),
         }
-        send.await.map_err(|_| SubmitError::WorkerGone)
     }
 }
 
-/// Wait for the response head until `deadline`, without arming a per-request
-/// timer.
+/// Drive `fut` to completion, giving up once `deadline` has passed.
 ///
-/// `tick_rx` is a server-wide coarse clock (see the ticker in
-/// `run_http_server`); every tick wakes in-flight waiters to re-check their
-/// own deadline. The 504 therefore fires within one tick *after* the
-/// deadline, never before it — fine for a backstop that only guards against a
-/// guest that never produces a head, and the worker's epoch deadline
-/// (`timeout + 5s`) still trails it comfortably.
-async fn await_first_byte(
-    resp_rx: oneshot::Receiver<HandlerOutcome>,
+/// No waiter arms a timer of its own: `tick_rx` is a server-wide coarse clock
+/// (see the ticker in `run_http_server`) and every tick wakes the waiters to
+/// re-check their deadlines. So the answer lands within one tick *after* the
+/// deadline, never before it, and a tie goes to the deadline — a result that
+/// arrives past it is still too late.
+async fn before_deadline<F: Future>(
+    mut fut: Pin<&mut F>,
     deadline: Instant,
-    mut tick_rx: watch::Receiver<()>,
-) -> HandlerOutcome {
-    let aborted =
-        || HandlerOutcome::Trapped("Handler aborted without producing a response".to_string());
-    let mut resp_rx = pin!(resp_rx);
+    tick_rx: &mut watch::Receiver<()>,
+) -> Option<F::Output> {
     loop {
-        match select(resp_rx.as_mut(), pin!(tick_rx.changed())).await {
-            // The deadline is authoritative regardless of which branch wins:
-            // a head that lands past it (after the deadline but before the
-            // next tick) is still a timeout, matching the old sleep-vs-recv
-            // race rather than letting a late head slip through.
-            Either::Left((Ok(outcome), _)) => {
-                return if Instant::now() >= deadline {
-                    HandlerOutcome::Timeout
-                } else {
-                    outcome
-                };
-            }
-            Either::Left((Err(_recv), _)) => return aborted(),
-            Either::Right((Ok(()), _)) => {
+        match select(fut.as_mut(), pin!(tick_rx.changed())).await {
+            Either::Left((out, _tick)) => return (Instant::now() < deadline).then_some(out),
+            Either::Right((Ok(()), _fut)) => {
                 if Instant::now() >= deadline {
-                    return HandlerOutcome::Timeout;
+                    return None;
                 }
             }
-            // Ticker gone (server shutting down). Break out so the borrow of
-            // `resp_rx` from `select` ends, then await the head directly:
-            // deliver it if it still lands; shutdown drains in-flight anyway.
-            Either::Right((Err(_closed), _)) => break,
+            // Ticker gone: the server is shutting down, and shutdown drains
+            // what is in flight, so stop checking and let `fut` finish.
+            Either::Right((Err(_closed), _fut)) => break,
         }
     }
-    match resp_rx.await {
-        Ok(outcome) => outcome,
-        Err(_recv) => aborted(),
-    }
+    Some(fut.await)
 }
 
 /// Convert a hyper request into a job, submit it to a worker instance, and
@@ -647,7 +617,7 @@ async fn await_first_byte(
 ///
 /// One deadline covers the whole path to the head — the wait for a worker
 /// slot as much as the handler itself — and is enforced against a shared
-/// coarse tick (see `await_first_byte`), so a guest that never produces a
+/// coarse tick (see `before_deadline`), so a guest that never produces a
 /// response head, or a worker that never frees a slot, yields a 504 without
 /// each request arming its own timer.
 ///
@@ -686,7 +656,14 @@ async fn dispatch_request(
 
     // First-byte timeout. After the head arrives, the body stream is bounded
     // by the bounded frame channel rather than by this deadline.
-    let outcome = await_first_byte(resp_rx, deadline, dispatch.tick_rx.clone()).await;
+    let mut tick_rx = dispatch.tick_rx.clone();
+    let outcome = match before_deadline(pin!(resp_rx), deadline, &mut tick_rx).await {
+        Some(Ok(outcome)) => outcome,
+        Some(Err(_recv)) => {
+            HandlerOutcome::Trapped("Handler aborted without producing a response".to_string())
+        }
+        None => HandlerOutcome::Timeout,
+    };
 
     Ok(match outcome {
         HandlerOutcome::Streaming(parts, frame_rx) => {
@@ -761,19 +738,23 @@ enum Step {
     Turn,
 }
 
-/// Resolve at the next server tick, or stay pending once the ticker is gone
-/// (shutdown), so a caller racing it falls back to its other arm.
+/// Wait for an in-flight request to finish or for the next server tick,
+/// whichever comes first.
 ///
-/// A worker races its waits against this so the loop turns — and so refreshes
-/// its store's epoch deadline — at least once per tick while anything is in
-/// flight. Without it a worker sitting at its in-flight bound, or holding one
-/// long-lived streaming response, never turns and trips the runaway-guest
-/// trap. A guest that really monopolises the store blocks this wait too, so
-/// the trap still catches the case it exists for.
-async fn next_tick(tick_rx: &mut watch::Receiver<()>) {
-    if tick_rx.changed().await.is_err() {
-        std::future::pending::<()>().await;
-    }
+/// Every wait a worker makes while something is in flight goes through here,
+/// so its loop turns — and so refreshes its store's epoch deadline — at least
+/// once per tick. Without the tick arm, a worker sitting at its in-flight
+/// bound or holding one long-lived streaming response never turns and trips
+/// the runaway-guest trap. A guest that really monopolises the store blocks
+/// this wait too, so the trap still catches the case it exists for.
+async fn drain_or_tick<S: Stream + Unpin>(inflight: &mut S, tick_rx: &mut watch::Receiver<()>) {
+    // Once the ticker is gone (shutdown) only the drain arm can resolve.
+    let tick = pin!(async {
+        if tick_rx.changed().await.is_err() {
+            std::future::pending::<()>().await;
+        }
+    });
+    let _ = select(pin!(inflight.next()), tick).await;
 }
 
 /// Drives one worker: a long-lived component instance that handles
@@ -795,7 +776,7 @@ async fn next_tick(tick_rx: &mut watch::Receiver<()>) {
 /// A runaway guest (one that monopolises the store's single thread in
 /// pure wasm) is bounded by the epoch deadline: the dispatch loop
 /// refreshes the deadline every turn, and every wait it makes while
-/// something is in flight is raced against `next_tick`, so the loop turns
+/// something is in flight goes through `drain_or_tick`, so the loop turns
 /// on its own and only a guest that prevents it from turning trips the
 /// deadline. The resulting trap surfaces as a `run_concurrent` error,
 /// after which the worker rebuilds its instance and resumes — self-healing
@@ -890,7 +871,7 @@ async fn worker_loop(
                         // the connections carrying them back-pressure rather
                         // than piling more fiber stacks onto this store.
                         assert!(!inflight.is_empty());
-                        let _ = select(pin!(inflight.next()), pin!(next_tick(&mut tick_rx))).await;
+                        drain_or_tick(&mut inflight, &mut tick_rx).await;
                         Step::Turn
                     } else if inflight.is_empty() {
                         // Idle — only a new job can wake us. No guest code is
@@ -900,10 +881,7 @@ async fn worker_loop(
                     } else {
                         // Accept new jobs and drain in-flight concurrently.
                         let recv = pin!(job_rx.recv());
-                        let drain = pin!(async {
-                            let _ =
-                                select(pin!(inflight.next()), pin!(next_tick(&mut tick_rx))).await;
-                        });
+                        let drain = pin!(drain_or_tick(&mut inflight, &mut tick_rx));
                         match select(recv, drain).await {
                             Either::Left((j, _drain)) => {
                                 job = j;
@@ -1023,17 +1001,19 @@ async fn run_http_server(
     // engine task. Workers run guest code on independent stores, so
     // request handling fans out across cores; each worker recycles its
     // instance every `recycle_requests` requests.
-    // `workers <= max_concurrency` (enforced in `parse_args`, clamped in
-    // `run`), so every worker gets a slot and the slots sum to at most the
-    // bound. Each worker's queue holds the same number again: a burst waits
-    // there while the connections carrying it back-pressure.
+    // Each worker's queue holds the same number again: a burst waits there
+    // while the connections carrying it back-pressure.
     let per_worker_inflight = max_concurrency / workers;
-    assert!(per_worker_inflight >= 1);
+    assert!(
+        per_worker_inflight >= 1,
+        "--workers is held at or below --max-concurrency, in `parse_args` when \
+         both are explicit and in `run` when the worker count is derived",
+    );
     // Coarse server-wide clock. One ticker replaces a per-request and a
     // per-worker timer: a request racing its head against these ticks checks
-    // its own deadline (`await_first_byte`, `Dispatch::submit`), and a worker
-    // racing its waits against them turns its dispatch loop often enough to
-    // refresh the store's epoch deadline (`next_tick`). The tick interval
+    // its own deadline (`before_deadline`), and a worker racing its waits
+    // against them turns its dispatch loop often enough to refresh the
+    // store's epoch deadline (`drain_or_tick`). The tick interval
     // bounds how late the 504 fires, so keep it small relative to `timeout`
     // but coarse enough to be cheap.
     // Unlike the epoch ticker this need not run on an OS thread: it backs a

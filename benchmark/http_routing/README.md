@@ -55,9 +55,9 @@ Axum at four workers, `oha` peaks at four cores (392k req/s) and falls from five
 sides pay syscalls they used to amortize. Five cores also clears the 90% check,
 so tuning until the warning goes away records the lower number. `wrk` saturates
 both servers (98-99% busy) but reports 286k for Axum and 101k for `wado serve`,
-its arrival pattern batching worse still. The ratio between the two holds either
-way, 2.8 against oha's 3.1, so the floor costs Axum about the 15% of its cores
-it leaves idle without changing what the rows say.
+its arrival pattern batching worse still. The ratio between the two servers
+holds either way: 2.8 under `wrk`, 3.1 under `oha`. The floor costs Axum about
+the 15% of its cores it leaves idle, and it does not change what the rows say.
 
 `HEADROOM_CHECK=1` also re-runs each server at twice the connections, for a
 generator short of those rather than of CPU. Off, since it passes here.
