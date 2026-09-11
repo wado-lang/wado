@@ -962,10 +962,26 @@ async fn run_http_server(
     // Pool head-room: at most `workers` instances are live at once (a
     // recycle drops the old instance before building the new), plus slack.
     let max_instances = workers_u32.saturating_add(8);
-    // One stack per in-flight request, plus the fibers a store runs on its
-    // own account: the worker fiber `run_concurrent` caches between guest
-    // calls is not a request, so `--max-concurrency` does not count it.
-    let stack_pool = max_concurrency_u32.saturating_add(workers_u32.saturating_mul(2));
+    // Two stacks per in-flight request, plus head-room per worker.
+    //
+    // A handler cancelled with its client (`HandlerTask::run`) gives its
+    // in-flight slot back as soon as it drops the guest call, while the guest
+    // thread it dropped is still unwinding on its own fiber. A peer closing
+    // many connections at once cancels up to the whole bound in one go and
+    // the worker refills every slot behind them, so the worst case really is
+    // a full set unwinding beside a full set running. The per-worker head-room
+    // covers the fibers a store runs on its own account: the worker fiber
+    // `run_concurrent` caches between guest calls, and the instantiate of the
+    // next generation while the old store winds down.
+    //
+    // `--max-concurrency` is the bound that should bind, because reaching it
+    // queues and the connections feel that as back-pressure. Reaching the
+    // pool's limit instead traps the store and loses every request on it, so
+    // the pool must never be the first to bind. A stack is an address-space
+    // reservation, so this margin costs no memory.
+    let stack_pool = max_concurrency_u32
+        .saturating_mul(2)
+        .saturating_add(workers_u32.saturating_mul(8));
     let engine = runtime::create_serve_engine(cranelift_opt, max_instances, stack_pool, collector)?;
     let component = Component::new(&engine, &wasm)?;
     let linker = runtime::create_linker(&engine)?;
