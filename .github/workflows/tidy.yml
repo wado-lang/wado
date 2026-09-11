@@ -159,13 +159,16 @@ jobs:
         env:
           GH_TOKEN: "${{ steps.app-token.outputs.token }}"
           APP_SLUG: "${{ steps.app-token.outputs.app-slug }}"
+          # Via the environment, never inline: a branch name is attacker-chosen
+          # text and may hold `$(...)`, backticks, or a quote.
+          HEAD_REF: "${{ github.head_ref }}"
         run: |
           user_id=$(gh api "/users/${APP_SLUG}[bot]" --jq .id)
           git config user.name "${APP_SLUG}[bot]"
           git config user.email "${user_id}+${APP_SLUG}[bot]@users.noreply.github.com"
           git commit -m "chore: tidy"
           git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git"
-          git push origin "HEAD:${{ github.head_ref }}"
+          git push origin "HEAD:${HEAD_REF}"
 
       # Fork PR: can't push, so emit guidance and stay red until tidy is satisfied.
       - name: Report tidy result
