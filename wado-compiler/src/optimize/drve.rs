@@ -1,11 +1,4 @@
-//! Dead Return Value Elimination: a function whose return value is dropped at
-//! every call site turns void, each `Return`'s verified-pure value going away
-//! while the call sites stay structurally identical. Running at NIR exposes the
-//! freshly dead expressions to the rest of the loop — after `inline` collapses a
-//! `Result<(), Error>` helper nobody reads, DCE takes its `Ok(())` too.
-//!
-//! Requires pure, nontrapping return operands and at least one call site, with
-//! every call discarding the result. Returns inside loops qualify too.
+//! Eliminate pure, nontrapping return values discarded by every caller.
 
 use crate::hashmap::IndexSet;
 use crate::nir::{FunctionKind, NirFunction};

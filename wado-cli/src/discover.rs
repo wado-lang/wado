@@ -1,15 +1,5 @@
-//! Source file discovery, shared by `wado test`, `wado format` and `wado query`.
-//!
-//! A subcommand's path arguments enter at [`files_in_dir`] or
-//! [`discover_tree`], which pick the root to walk from and recurse into
-//! sub-packages; the walker below them honours:
-//!
-//! - `.gitignore` files at any depth (parsed in-process; no `git` binary required)
-//! - submodule directories listed in the root `.gitmodules`
-//! - dot-prefixed files and directories
-//! - subtrees rooted at a nested `wado.toml` (separate package boundaries)
-//! - the caller's exclude / include globs, from the manifest or the CLI
-//! - symbolic links (followed once each, with cycle detection on canonical paths)
+//! Source discovery for `wado test`, `wado format` and `wado query`, respecting
+//! package boundaries, ignore rules and caller filters.
 
 use std::fs;
 use std::io;

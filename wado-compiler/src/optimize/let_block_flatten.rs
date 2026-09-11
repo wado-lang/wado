@@ -1,8 +1,4 @@
-//! Flatten block-tailed `let` bindings — the value-block normal form. An inlined
-//! helper computing intermediates leaves its binding wrapped in a block, which
-//! `sroa` and every other matcher keyed on a direct `let x = <value>` then miss;
-//! hoisting the leading statements out restores the shape. The wrapper has no
-//! incoming breaks, so moving its contents preserves control flow and order.
+//! Flatten block-tailed `let` bindings to expose their values to later passes.
 
 use cranelift_entity::EntityRef;
 

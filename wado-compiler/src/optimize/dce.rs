@@ -1,8 +1,4 @@
-//! Dead-code elimination for the NIR package. [`analyze_dce`] computes every
-//! reachability set up front — functions, globals, types, plus the name-keyed
-//! views the type-retain predicate needs — so the downstream `remove_*` and
-//! filter passes are pure mutators over those sets, with no re-analysis. See
-//! `crate::optimize::run_dce`: analyze once, then mutate in dependency order.
+//! Reachability analysis and dead-code elimination for the NIR package.
 
 use std::ops::ControlFlow;
 
