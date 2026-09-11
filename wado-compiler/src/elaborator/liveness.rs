@@ -175,13 +175,23 @@ pub(crate) fn compute(
                     }
                 }
                 Item::Trait(trait_decl) => {
-                    seed_operations(&mut graph, &trait_decl.methods, references);
+                    seed_operations(&mut graph, &trait_decl.methods, references, Dispatch::Fact);
                 }
                 Item::Interface(interface_decl) => {
-                    seed_operations(&mut graph, &interface_decl.methods, references);
+                    seed_operations(
+                        &mut graph,
+                        &interface_decl.methods,
+                        references,
+                        Dispatch::MintedLater,
+                    );
                 }
                 Item::Resource(resource_decl) => {
-                    seed_operations(&mut graph, &resource_decl.methods, references);
+                    seed_operations(
+                        &mut graph,
+                        &resource_decl.methods,
+                        references,
+                        Dispatch::MintedLater,
+                    );
                 }
                 Item::Test(test) => {
                     // Test blocks are roots of the `T` (test-reachable) closure
@@ -208,21 +218,35 @@ pub(crate) fn compute(
     liveness
 }
 
-/// Seed each declared method of a `trait` / `interface` / `resource` that
-/// reaches code nothing in the AST names.
-///
-/// Dispatch mints the only call to a default body, and reify materializes a
-/// parameter default at every call that omits the argument. Neither call is in
-/// the AST, so without a seed here the method is dead, everything only it
-/// reaches goes with it, and the minted call names a callee reify dropped.
-fn seed_operations(graph: &mut Graph, methods: &[Function], references: &References<'_>) {
+/// Where a declared method's only call comes from.
+#[derive(PartialEq)]
+enum Dispatch {
+    /// A trait method: the call site records the fact that reaches the body.
+    Fact,
+    /// An `interface` or `resource` operation, whose wrapper
+    /// `synthesis::effect_dispatch` mints after this pass.
+    MintedLater,
+}
+
+/// Add the edges of every declared method carrying a body or a parameter
+/// default, and root the two kinds no dispatch fact names: an operation, and
+/// one with a parameter default that reify materializes at the call.
+fn seed_operations(
+    graph: &mut Graph,
+    methods: &[Function],
+    references: &References<'_>,
+    dispatch: Dispatch,
+) {
     for method in methods {
-        if method.body.is_none() && !method.params.iter().any(|p| p.default.is_some()) {
+        let has_param_default = method.params.iter().any(|p| p.default.is_some());
+        if method.body.is_none() && !has_param_default {
             continue;
         }
         let key = method.id;
         graph.add_function_edges(method, references, &key);
-        graph.seed_world(key);
+        if dispatch == Dispatch::MintedLater || has_param_default {
+            graph.seed_world(key);
+        }
     }
 }
 
