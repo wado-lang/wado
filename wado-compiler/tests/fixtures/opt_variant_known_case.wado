@@ -1,6 +1,6 @@
 // A local whose only definition is a variant construction has a statically
 // known case: the arms that case cannot take go away, what is left of the match
-// is the payload binding it is, and no case test survives lowering.
+// is the payload binding it makes, and no case test survives lowering.
 use { println, Stdout } from "core:cli";
 
 variant Param {
@@ -32,8 +32,8 @@ export fn run() with Stdout {
     if let Param::Int(v) = q {
         println(`if let ${v}`)
     }
-    // One case, so no arm refuses and none is dropped — the binding is still
-    // all the match is.
+    // One case, so no arm refuses and none is dropped. The match still
+    // collapses to its binding.
     let w = Wrap::One(builtin::black_box(9));
     match w {
         Wrap::One(v) => println(`wrap ${v}`),

@@ -934,6 +934,22 @@ pub fn walk_pattern<V: AstVisitor>(v: &mut V, pat: &Pattern) {
     }
 }
 
+/// Every name a pattern binds, however deeply nested, in source order.
+pub fn for_each_pattern_binding(pat: &Pattern, f: &mut impl FnMut(AstId)) {
+    struct Bindings<'a, F>(&'a mut F);
+
+    impl<F: FnMut(AstId)> AstVisitor for Bindings<'_, F> {
+        fn visit_pattern(&mut self, pat: &Pattern) {
+            if let Pattern::Ident { id, .. } | Pattern::MutIdent { id, .. } = pat {
+                (self.0)(*id);
+            }
+            walk_pattern(self, pat);
+        }
+    }
+
+    Bindings(f).visit_pattern(pat);
+}
+
 /// Walk a declaration's type parameters: each binder's own id, then the
 /// reference sites inside its bounds. A bound names a trait and its associated
 /// types, so it is a reference site like any other and must be reachable by an

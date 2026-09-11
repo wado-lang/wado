@@ -1,5 +1,5 @@
 // A `&mut self` method may replace the whole variant, and `*self = P::B(..)`
-// changes the case — a write no payload the caller shares can carry. So a
+// changes the case. No payload the caller shares can carry that write, so a
 // variant receiver needs the same address-taken marking as an enum one, on the
 // declared type and on a generic instance alike; without it `p.flip()` mutated
 // a copy. Mutation through the payload lands either way.

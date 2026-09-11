@@ -1,6 +1,5 @@
-//! A variant whose case is a compile-time fact decides its own dispatch: the
-//! arm that case takes becomes the payload binding it is, and a `VariantTest` /
-//! `VariantTag` over it folds to a constant.
+//! Fold the dispatch of a variant whose case is a compile-time fact: the arm it
+//! takes collapses to its payload binding, its tests and tags to constants.
 
 use crate::const_eval::Value;
 use crate::nir_arena::{

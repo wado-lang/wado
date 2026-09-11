@@ -8,7 +8,9 @@
 //! counts as used so a function only it calls is not reported dead, but is
 //! emitted only when a call reaches it.
 
-use crate::ast::{self, AstId, AstVisitor, Block, Expr, Function, Item, Module};
+use crate::ast::{
+    self, AstId, AstVisitor, Block, Expr, Function, Item, Module, for_each_pattern_binding,
+};
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::token::Span;
@@ -35,8 +37,8 @@ pub(crate) struct Liveness {
     /// path, of a move-eligible local binding. The canonical `AstId`-keyed
     /// output — reusable by the LSP and the future affine-resource client.
     /// Sound by construction: a use is recorded only when the analysis proves
-    /// the local dead afterward, so an unrecorded use always falls back to a
-    /// copy.
+    /// the local dead afterward *and* the binding owns what it names, so an
+    /// unrecorded use always falls back to a copy.
     pub(crate) last_uses: IndexSet<AstId>,
     /// The same last-use facts projected to source spans, the form the
     /// value-copy planner consumes in the `lower` phase — TIR carries a `Span`
@@ -346,21 +348,20 @@ struct EligibilityPass<'a> {
 impl EligibilityPass<'_> {
     /// A match arm, `if let`, or `while let` binds a name to storage the
     /// scrutinee still owns, so handing it to a new owner is a move out of the
-    /// scrutinee — which its own last use does not license. Whether the
-    /// scrutinee is dead there is an ownership question, answered by the
-    /// value-copy planner and out of reach of a pass that sees only names.
+    /// scrutinee, which its own last use does not license. Whether the scrutinee
+    /// is dead there is an ownership question, answered by the value-copy
+    /// planner and out of reach of a pass that sees only names.
     fn exclude_destructured(&mut self, pat: &ast::Pattern) {
-        pattern_binding_ids(pat, &mut self.excluded);
+        for_each_pattern_binding(pat, &mut |id| {
+            self.excluded.insert(id);
+        });
     }
 }
 
 impl AstVisitor for EligibilityPass<'_> {
     fn visit_pattern(&mut self, pat: &ast::Pattern) {
-        match pat {
-            ast::Pattern::Ident { id, .. } | ast::Pattern::MutIdent { id, .. } => {
-                self.bindings.insert(*id);
-            }
-            _ => {}
+        if let ast::Pattern::Ident { id, .. } | ast::Pattern::MutIdent { id, .. } = pat {
+            self.bindings.insert(*id);
         }
         ast::walk_pattern(self, pat);
     }
@@ -407,34 +408,6 @@ impl AstVisitor for EligibilityPass<'_> {
             _ => {}
         }
         ast::walk_expr(self, expr);
-    }
-}
-
-/// Every name a pattern binds, however deeply nested.
-fn pattern_binding_ids(pat: &ast::Pattern, out: &mut IndexSet<AstId>) {
-    match pat {
-        ast::Pattern::Ident { id, .. } | ast::Pattern::MutIdent { id, .. } => {
-            out.insert(*id);
-        }
-        ast::Pattern::Tuple(subs, _) | ast::Pattern::Variant { bindings: subs, .. } => {
-            for sub in subs {
-                pattern_binding_ids(sub, out);
-            }
-        }
-        ast::Pattern::Struct { fields, .. } => {
-            for field in fields {
-                pattern_binding_ids(&field.pattern, out);
-            }
-        }
-        ast::Pattern::Or(alts) => {
-            for alt in alts {
-                pattern_binding_ids(alt, out);
-            }
-        }
-        ast::Pattern::Literal(_)
-        | ast::Pattern::Wildcard
-        | ast::Pattern::Range { .. }
-        | ast::Pattern::Error(_) => {}
     }
 }
 
@@ -491,11 +464,9 @@ impl LastUseAnalyzer<'_> {
     }
 
     fn kill_pattern(&mut self, pat: &ast::Pattern, live: &mut IndexSet<AstId>) {
-        let mut bound = IndexSet::default();
-        pattern_binding_ids(pat, &mut bound);
-        for id in &bound {
-            live.swap_remove(id);
-        }
+        for_each_pattern_binding(pat, &mut |id| {
+            live.swap_remove(&id);
+        });
     }
 
     fn walk_block(&mut self, block: &Block, live: &mut IndexSet<AstId>, record: bool) {
