@@ -1,0 +1,40 @@
+diff --git a/crates/wasmtime/src/runtime/component/concurrent.rs b/crates/wasmtime/src/runtime/component/concurrent.rs
+index f6b921b671..9eabef53a3 100644
+--- a/crates/wasmtime/src/runtime/component/concurrent.rs
++++ b/crates/wasmtime/src/runtime/component/concurrent.rs
+@@ -1601,6 +1601,12 @@ impl<T> StoreContextMut<'_, T> {
+ impl StoreOpaque {
+     /// Returns the currently-running thread, promoting any deferred lazy thread
+     /// into a fully-materialized `CurrentThread`.
++    ///
++    /// Every resource handle crossing the canonical ABI asks for this (see
++    /// `ResourceTables::resource_lower_borrow` and friends), so the two checks
++    /// that answer it stay here and the promotion lives in a cold callee that
++    /// does not stop this from inlining.
++    #[inline]
+     pub(crate) fn current_thread(&mut self) -> Result<CurrentThread> {
+         // Without concurrency support there is nothing to force.
+         if !self.concurrency_support() {
+@@ -1619,6 +1625,14 @@ impl StoreOpaque {
+                 .unforced_current_thread);
+         }
+ 
++        self.force_deferred_current_thread()
++    }
++
++    /// Materialize the deferred frames a fused adapter pushed inline, and
++    /// return the thread they resolve to. The slow half of `current_thread`.
++    #[cold]
++    #[inline(never)]
++    fn force_deferred_current_thread(&mut self) -> Result<CurrentThread> {
+         // The component instance whose adapters pushed the deferred frames; all
+         // frames in a guest-to-guest, sync-to-sync call chain of fused adapters
+         // live within a single `wasmtime::component::Instance` (because
+@@ -2343,6 +2357,7 @@ impl StoreOpaque {
+ 
+     /// Used by `ResourceTables` to record the scope of a borrow to get undone
+     /// in the future.
++    #[inline]
+     pub(crate) fn current_scope_id(&mut self) -> Result<Option<u32>> {
+         if !self.concurrency_support() {
+             return self.current_scope_id_not_concurrent();
