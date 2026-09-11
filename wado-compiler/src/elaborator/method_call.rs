@@ -186,8 +186,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // A `&mut self` method mutates the element `xs[i]` names, so the
         // receiver has to be that element. The desugar above owns every element
-        // a `&mut` writes through; for the rest the by-value copy took the
-        // mutation and was thrown away. Record the aliasing subscript instead,
+        // a `&mut` writes through; for the rest a by-value copy would take the
+        // mutation and be thrown away. Record the aliasing subscript instead,
         // which is the borrow `&mut xs[i]` takes, and leave the write-back pass
         // to write it back or refuse it.
         if let ast::Expr::Index(index_expr) = &method_call.receiver
