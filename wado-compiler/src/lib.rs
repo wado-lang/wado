@@ -41,6 +41,7 @@ pub mod package;
 pub mod param_resolution;
 pub mod parser;
 pub mod path;
+mod prelower_reach;
 pub mod remarks;
 pub mod resolve;
 pub mod resource_move_check;
@@ -1578,6 +1579,8 @@ fn compile_after_load<H: CompilerHost>(
         return Err(Bail);
     }
 
+    let prelower_reached = prelower_reach::before_lower(&mut flat);
+
     // === Phase 10: Lower (FlatPackage → NirPackage) ===
     let nir = {
         let _span = logger.span("lower");
@@ -1589,6 +1592,8 @@ fn compile_after_load<H: CompilerHost>(
         let _span = logger.span("optimize");
         optimize(nir, options.opt_level, options.opt, logger)
     };
+
+    prelower_reach::audit(prelower_reached.as_ref(), &nir);
 
     // Emit optimizer remarks for residual value-semantic copies that survived
     // the NIR pipeline. NIR is the last IR with per-expression spans; see
@@ -1988,6 +1993,8 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
             // Snapshot monomorphized state (only unparse; Debug format is deferred)
             let mono_text = Some(unparse::unparse_flat_package(&flat));
 
+            let prelower_reached = prelower_reach::before_lower(&mut flat);
+
             // Lower (FlatPackage → NirPackage)
             let nir = {
                 let _span = logger.span("lower");
@@ -2001,6 +2008,8 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
                 let _span = logger.span("optimize");
                 optimize(nir, opt_level, opt, &logger)
             };
+
+            prelower_reach::audit(prelower_reached.as_ref(), &nir);
 
             // WIR: Translate optimized NirPackage to WirPackage for inspection.
             let wir_package = Some({

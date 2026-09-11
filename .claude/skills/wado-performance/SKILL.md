@@ -148,6 +148,19 @@ paid on a benchmark `fts` never touched.
   reasonable pre-size. Size it about right, or grow.
 - **GC-array access is bounds-checked, no unchecked variant.** A lookup table in
   a GC array adds a checked load per access — it lost to plain arithmetic.
+- **A lone `array.get` costs ~20 machine instructions; gets sharing a block cost
+  ~8.** wasmtime re-derives the object's null check, its length load and the
+  overflow-checked element address per get, and neither hoists them out of a
+  loop nor shares them across blocks — only across gets in one block. Read the
+  actual sequence with `wasmtime explore -W gc,function-references f.wat`; a
+  byte-at-a-time loop is 22 instructions and 6 branches per byte, four gets in
+  one block are 18 + 4×8. So a scan reads several bytes per bounds check and
+  then tests them: `peek_after_whitespace_run` in `core:json` is that shape,
+  worth 12.6% on json-catalog deserialize. It pays in proportion to the run it
+  covers, against the one partial block it always wastes — under ~16 bytes per
+  run it is a loss (`dead-ends.md`). **`array.set` shares nothing**: a store may
+  write the header as far as Cranelift knows, so four adjacent sets reload the
+  length four times. Only `array.copy` / `array.fill` amortise a write.
 - **SROA is priced by the aggregate's width, not by the allocation it removes.**
   Splitting a 40-slot tuple into locals deletes one `struct.new` per struct and
   costs 6.5% on cbor-twitter: past the register file, forty `ref` locals live
@@ -179,6 +192,15 @@ paid on a benchmark `fts` never touched.
   check by `nir/string_push`, so write the appends plainly and let it batch them.
 - **`internal_raw_data()` / returning `Array<T>` by value is a copy API** — for a
   single read use `get_unchecked` / `set_byte_unchecked`.
+- **An `assert` of a caller-guaranteed precondition is free; the same test as a
+  guard is not.** `is_json_ws` in `core:json` needs `b < 64` (Wasm masks a shift
+  count mod 64) and every call site short-circuits on `b > b' '` first. Writing
+  the precondition as `assert b < 64` measures flat on json-catalog deserialize;
+  writing it as `b < 64 &&` in the returned expression costs 6%, and dropping
+  the bitset for four compares costs 19%. So a hot leaf whose precondition the
+  callers establish keeps both the assert and the fast body. Measure the assert
+  and the guard as separate arms: folded into one they read as a single cost,
+  and the assert takes the blame for what the guard spent.
 
 ## 4. Inlining is usually not the lever
 
@@ -293,6 +315,39 @@ for i in 1 2 3 4 5; do
   target/release/wado run -O2 benchmark/sieve/sieve.wado
 done
 ```
+
+### A/B-ing a stdlib change
+
+A change to `lib/core/*.wado` needs two compilers as well, which the source tree
+hides: a release build embeds the stdlib where a dev build reads it from disk.
+`benchmark/wado.sh` falls back to `cargo run --release` whenever `WADO_BIN` is
+unset, so swapping an arm's `.wado` files into the tree invalidates
+`wado-compiler` and rebuilds it under `lto=thin` / `codegen-units=1`. That is
+two full rebuilds per alternating round, and they are the wall clock rather than
+the benchmark.
+
+Build one binary per arm first, replacing the whole of `lib/` for each. Copying
+only the files that differ leaves behind any file the other arm deletes or
+renames, and the binary then embeds a stdlib belonging to neither.
+
+```sh
+for arm in base head; do
+  rm -rf wado-compiler/lib
+  git checkout $arm -- wado-compiler/lib
+  cargo build --release --bin wado --quiet
+  cp target/release/wado /tmp/ab/wado-$arm
+done
+git checkout HEAD -- wado-compiler/lib
+for r in 1 2 3; do
+  for arm in base head; do
+    WADO_BIN=/tmp/ab/wado-$arm mise run benchmark-json-catalog
+  done
+done
+```
+
+The tree's sources stop mattering once the binaries exist, so a round costs what
+the benchmark costs. Rounds are cheap enough then to run six or ten of them,
+which is what it takes to resolve a delta near 1% out of this row's spread.
 
 `WADO_SKIP_PASS=<pass>` is a third arm off the same binary, which is how a
 regression is attributed to one pass without a third build. `WADO_BENCH_FLAGS`

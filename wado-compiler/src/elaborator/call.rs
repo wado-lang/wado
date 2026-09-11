@@ -10,6 +10,7 @@ use crate::tir::{FunctionRef, MonomorphInfo, ResolvedType, TypeId, TypeTable};
 
 use super::Elaborator;
 use super::callee::{CalleeRef, StaticMethodRef};
+use super::coercion::is_numeric_literal_arg;
 use super::expr::BareCase;
 use super::infer::InferCtx;
 use super::instantiate::Instantiation;
@@ -2299,7 +2300,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
             let mut infer = InferCtx::new(&self.tysys.type_table, inst.vars.clone());
             for (i, (param_type, arg)) in resolved_param_types.iter().zip(args.iter()).enumerate() {
-                if Self::is_literal_number_arg(raw_args.get(i)) {
+                if is_numeric_literal_arg(raw_args.get(i)) {
                     infer.add_deferred(*param_type, *arg);
                 } else {
                     infer.add(*param_type, *arg);
@@ -2377,7 +2378,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         let mut infer = InferCtx::new(&self.tysys.type_table, inst.vars.clone());
         for (i, (param_type, arg)) in resolved_param_types.iter().zip(args.iter()).enumerate() {
-            if Self::is_literal_number_arg(raw_args.get(i)) {
+            if is_numeric_literal_arg(raw_args.get(i)) {
                 infer.add_deferred(*param_type, *arg);
             } else {
                 infer.add(*param_type, *arg);
@@ -2854,20 +2855,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ))
     }
 
-    /// Returns true if `arg` is a numeric literal expression (`123`, `3.14`, `-5`)
-    /// with no explicit type annotation. These args participate in literal coercion
-    /// and should be deferred during type-arg inference's first phase.
-    pub(super) fn is_literal_number_arg(arg: Option<&Expr>) -> bool {
-        match arg {
-            Some(Expr::Literal(lit)) => matches!(lit.value, ast::Literal::Number(_)),
-            Some(Expr::Unary(unary)) if unary.op == ast::UnaryOp::Neg => matches!(
-                &unary.expr,
-                Expr::Literal(inner) if matches!(inner.value, ast::Literal::Number(_))
-            ),
-            _ => false,
-        }
-    }
-
     /// Infer the type args of a `Type::method(...)` static call whose
     /// method-level turbofish is omitted or carries `_`. Probes `suffix` as a
     /// local free function first — covering builtin-registry entries keyed by
@@ -2931,7 +2918,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // one position left and solve each slot from the wrong argument.
         let mut infer = InferCtx::new(&self.tysys.type_table, all_param_ids.clone());
         for (i, (param_type, arg)) in sig.decl.param_types.iter().zip(args.iter()).enumerate() {
-            if Self::is_literal_number_arg(raw_args.get(i)) {
+            if is_numeric_literal_arg(raw_args.get(i)) {
                 infer.add_deferred(*param_type, *arg);
             } else {
                 infer.add(*param_type, *arg);
@@ -3333,7 +3320,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .zip(args.iter())
                     .enumerate()
                 {
-                    if Self::is_literal_number_arg(call.args.get(i)) {
+                    if is_numeric_literal_arg(call.args.get(i)) {
                         infer.add_deferred(*param_type, *arg);
                     } else {
                         infer.add(*param_type, *arg);

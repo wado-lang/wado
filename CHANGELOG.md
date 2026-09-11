@@ -1,5 +1,38 @@
 # Changelog
 
+## [v0.0.27](https://github.com/wado-lang/wado/compare/v0.0.26...v0.0.27) - 2026-09-10
+
+- feat(wado-from-idl): generate web:dom from a WebIDL snapshot (Tide M5) by @gfx in https://github.com/wado-lang/wado/pull/1971
+- docs(wep): Total Reflection — `TypeInfo` and `match type` by @gfx in https://github.com/wado-lang/wado/pull/1973
+- refactor(elaborator): resolve a qualified call from one declaration index by @gfx in https://github.com/wado-lang/wado/pull/1974
+- feat(niri): fold constant string templates, and report the regions that stay by @gfx in https://github.com/wado-lang/wado/pull/1969
+- feat(elaborator): let an operation declare parameter defaults by @gfx in https://github.com/wado-lang/wado/pull/1972
+- perf(optimizer): lower set-membership matches to a mask test, and release settled inline holds by @gfx in https://github.com/wado-lang/wado/pull/1975
+- chore(hooks): drive the review-response and distill steps from hooks by @gfx in https://github.com/wado-lang/wado/pull/1979
+- feat(compiler): tagged template literals over ReflectTemplate by @gfx in https://github.com/wado-lang/wado/pull/1978
+- fix(compiler): lower every `i128` / `u128` pattern, on one type-table spelling by @gfx in https://github.com/wado-lang/wado/pull/1980
+- feat(gale): compose `import S;` against the supplied inputs by @gfx in https://github.com/wado-lang/wado/pull/1982
+- fix(format): keep a comment in any token gap, by construction by @gfx in https://github.com/wado-lang/wado/pull/1983
+- fix(kiln): harvest clauses from every module, one redirect per declaring site by @gfx in https://github.com/wado-lang/wado/pull/1986
+- feat(nir): write a constant aggregate back as a literal, and give every block a label by @gfx in https://github.com/wado-lang/wado/pull/1985
+- feat: gate inline `crate::` / `super::` paths, and widen Gale's static prediction by @gfx in https://github.com/wado-lang/wado/pull/1984
+- fix(value-copy): a member read hands out the storage of the argument it names by @gfx in https://github.com/wado-lang/wado/pull/1999
+- fix(cli): one implementation of directory expansion, shared by test, format and query by @gfx in https://github.com/wado-lang/wado/pull/2001
+- feat(value-copy): a builtin declares what it keeps and where its result comes from by @gfx in https://github.com/wado-lang/wado/pull/2002
+- feat(compiler): one resolution behind every `Type::method()` spelling by @gfx in https://github.com/wado-lang/wado/pull/2003
+- fix(cm-binding): a Wado call of an `export async fn` gets what `task return` delivered by @gfx in https://github.com/wado-lang/wado/pull/2005
+- feat(gale): every `.rs` in the repository parses by @gfx in https://github.com/wado-lang/wado/pull/2004
+- chore(ci): test the stdlib at every optimization level by @gfx in https://github.com/wado-lang/wado/pull/2007
+- fix(cm-binding): every `export async fn` delivers the result its world declares by @gfx in https://github.com/wado-lang/wado/pull/2008
+- chore: upgrade package-lock.json by @gfx in https://github.com/wado-lang/wado/pull/2009
+- fix: the empty tuple is not unit, on either side of the compiler by @gfx in https://github.com/wado-lang/wado/pull/2010
+- docs(skill): a PR title and opening paragraph carry the value, not the edit list by @gfx in https://github.com/wado-lang/wado/pull/2012
+- perf(nir): 7 % off the parser's debug compile, and six miscompiles out of the operand bridge by @gfx in https://github.com/wado-lang/wado/pull/2011
+- fix(nir): a census that walks the body sees the value pool's extraction sources by @gfx in https://github.com/wado-lang/wado/pull/2013
+- fix(ownership): a binding read through a reference field keeps its own copy by @gfx in https://github.com/wado-lang/wado/pull/2014
+- fix(lower): a `&mut self` call writes through only a receiver the caller can name by @gfx in https://github.com/wado-lang/wado/pull/2015
+- perf(json): 13% faster json-catalog deserialize, and byte literals that type-check like integers by @gfx in https://github.com/wado-lang/wado/pull/2016
+
 ## [v0.0.26](https://github.com/wado-lang/wado/compare/v0.0.25...v0.0.26) - 2026-09-05
 
 - chore: require npm 12, and update deps by @gfx in https://github.com/wado-lang/wado/pull/1904

@@ -32,12 +32,51 @@ fn id<T>(x: T) -> T {
     return x;
 }
 
+// Type-arg inference defers a numeric-literal argument so the other one binds
+// `T` first, which a byte literal takes part in like any other.
+fn pick<T>(a: T, b: T) -> T {
+    return a;
+}
+
+// A literal takes its type from the other operand whichever side it sits on,
+// with nothing outside the operation to say what that type is: the cast below
+// takes its operand's type from the subtraction, not the other way round, and
+// a comparison chain leads with the literal.
+fn digit_value(b: i32) -> u32 {
+    return (b - b'0') as u32;
+}
+
+fn is_digit(b: i32) -> bool {
+    return b'0' <= b <= b'9';
+}
+
+fn at_least_zero(b: i32) -> bool {
+    return b'0' <= b;
+}
+
+// The type surrounding an operation is not the type of its operands: a
+// comparison's is `bool`, which types neither side, so the byte still anchors.
+fn eq_in_bool_position() -> bool {
+    return b'\n' == 10;
+}
+
+fn takes_bool(b: bool) -> bool {
+    return b;
+}
+
+struct Holder {
+    ok: bool,
+}
+
 export fn run() {
     let a = b'A';
     assert a == 65;
     assert takes_u8(b'B') == 66;
 
+    // Two literals and no expected type: the byte literal types the pair,
+    // from either side.
     assert b'\n' == 10;
+    assert 10 == b'\n';
     assert b'\t' == 9;
     assert b'\r' == 13;
     assert b'\\' == 92;
@@ -53,6 +92,14 @@ export fn run() {
     assert n == 65;
     let w: u32 = b'\xff';
     assert w == 255;
+    // `i128` / `u128` are structs, so they take the same route as a decimal
+    // literal through the coercion's wide-integer arm.
+    let s: i128 = b'A';
+    assert s == 65 as i128;
+    let u: u128 = b'A';
+    assert u == 65 as u128;
+    let f: f64 = b'A';
+    assert f == 65.0;
 
     assert b'A' + 1 == b'B';
 
@@ -67,6 +114,28 @@ export fn run() {
     assert matches_unsigned_wide(65 as u128);
 
     assert takes_u8(id(b'A')) == 65;
+
+    assert digit_value(55) == 7;
+    assert digit_value(47) > 9;
+    assert is_digit(55);
+    assert !is_digit(97);
+    assert at_least_zero(70);
+    assert !at_least_zero(32);
+
+    let wide: u32 = 7;
+    assert pick(wide, b'A') == 7;
+
+    assert eq_in_bool_position();
+    let cmp: bool = b'\n' == 10;
+    assert cmp;
+    assert takes_bool(b'A' == 65);
+    assert Holder { ok: b'A' < 66 }.ok;
+
+    // A range carries no expected type, so a byte endpoint types the other one
+    // whichever end it sits at.
+    let lo: u8 = 0;
+    assert (0..=b'z').contains(&lo);
+    assert (b'a'..=122).contains(&b'q');
 }
 
 __DATA__

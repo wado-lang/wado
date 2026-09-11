@@ -8,7 +8,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::Arc;
 
-use crate::ast::{BinaryOp, Expr, Literal, UnaryOp};
+use crate::ast::{BinaryOp, Expr, Literal};
 use crate::builtin_registry::BuiltinRegistry;
 use crate::compiler_item::CompilerItem;
 use crate::component_model::CmInterfaceRegistry;
@@ -240,47 +240,6 @@ impl TypeSystem {
     /// through.
     pub(crate) fn is_null_literal(&self, expr: &Expr) -> bool {
         matches!(expr, Expr::Literal(lit) if matches!(lit.value, Literal::Null))
-    }
-
-    /// Whether `expr` is a numeric literal, possibly negated. The non-numeric
-    /// arms are enumerated rather than caught by `_`, so a new [`Expr`] variant
-    /// forces a decision about numeric-literal coercion here.
-    pub(crate) fn is_numeric_literal(&self, expr: &Expr) -> bool {
-        match expr {
-            Expr::Literal(lit) => matches!(lit.value, Literal::Number(_)),
-            Expr::Unary(unary) if unary.op == UnaryOp::Neg => {
-                matches!(&unary.expr, Expr::Literal(lit) if matches!(lit.value, Literal::Number(_)))
-            }
-            Expr::Unary(_)
-            | Expr::Ident(_)
-            | Expr::Binary(_)
-            | Expr::Assign(_)
-            | Expr::CompoundAssign(_)
-            | Expr::ComparisonChain(_)
-            | Expr::Call(_)
-            | Expr::MethodCall(_)
-            | Expr::StaticMethodCall(_)
-            | Expr::FieldAccess(_)
-            | Expr::Index(_)
-            | Expr::Block(_)
-            | Expr::If(_)
-            | Expr::Match(_)
-            | Expr::Matches(_)
-            | Expr::Closure(_)
-            | Expr::TemplateString(_)
-            | Expr::TaggedTemplate(_)
-            | Expr::Cast(_)
-            | Expr::StructLiteral(_)
-            | Expr::TupleLiteral(_)
-            | Expr::TupleComprehension(_)
-            | Expr::LabeledBlock(_)
-            | Expr::TryOp(_)
-            | Expr::Spread(..)
-            | Expr::Range(_)
-            | Expr::WithHandler(_)
-            | Expr::Resume(_)
-            | Expr::Error(_) => false,
-        }
     }
 }
 

@@ -336,15 +336,8 @@ struct NsdVariantAccess {
 
 impl DeserializeSeq for NsdSeqAccess {
     fn next_element<T: Deserialize>(&mut self) -> Result<Option<T>, DeserializeError> {
-        self.de.skip_whitespace();
-        if self.de.pos >= self.de.input.len() {
-            return Result::Err(DeserializeError::eof(self.de.pos as i64));
-        }
-        if self.de.input.get_unchecked(self.de.pos) as i32 == ']' as i32 {
+        if !self.de.entry_head(b']', self.first)? {
             return Result::Ok(null);
-        }
-        if !self.first {
-            self.de.expect_char(',' as i32)?;
         }
         self.first = false;
         self.de.depth = self.depth;
@@ -353,25 +346,18 @@ impl DeserializeSeq for NsdSeqAccess {
     }
 
     fn end(&mut self) -> Result<(), DeserializeError> {
-        return self.de.expect_char(']' as i32);
+        return self.de.expect_char(b']');
     }
 }
 
 impl DeserializeMap for NsdMapAccess {
     fn next_key_string(&mut self) -> Result<Option<String>, DeserializeError> {
-        self.de.skip_whitespace();
-        if self.de.pos >= self.de.input.len() {
-            return Result::Err(DeserializeError::eof(self.de.pos as i64));
-        }
-        if self.de.input.get_unchecked(self.de.pos) as i32 == '}' as i32 {
+        if !self.de.entry_head(b'}', self.first)? {
             return Result::Ok(null);
-        }
-        if !self.first {
-            self.de.expect_char(',' as i32)?;
         }
         self.first = false;
         let key = self.de.read_json_string()?;
-        self.de.expect_char(':' as i32)?;
+        self.de.expect_char(b':')?;
         return Result::Ok(Option::Some(key));
     }
 
@@ -381,7 +367,7 @@ impl DeserializeMap for NsdMapAccess {
     }
 
     fn end(&mut self) -> Result<(), DeserializeError> {
-        return self.de.expect_char('}' as i32);
+        return self.de.expect_char(b'}');
     }
 }
 
@@ -390,15 +376,8 @@ impl DeserializeStruct for NsdStructAccess {
     // the signature to satisfy the `DeserializeStruct` trait; the same generated
     // `next_field::<StructType>()` call site drives both SD and NSD formats.
     fn next_field<S: FieldSchema>(&mut self) -> Result<Option<i32>, DeserializeError> {
-        self.de.skip_whitespace();
-        if self.de.pos >= self.de.input.len() {
-            return Result::Err(DeserializeError::eof(self.de.pos as i64));
-        }
-        if self.de.input.get_unchecked(self.de.pos) as i32 == ']' as i32 {
+        if !self.de.entry_head(b']', self.first)? {
             return Result::Ok(null);
-        }
-        if !self.first {
-            self.de.expect_char(',' as i32)?;
         }
         self.first = false;
         // NSD: return sequential field index
@@ -417,7 +396,7 @@ impl DeserializeStruct for NsdStructAccess {
     }
 
     fn end(&mut self) -> Result<(), DeserializeError> {
-        return self.de.expect_char(']' as i32);
+        return self.de.expect_char(b']');
     }
 }
 
@@ -445,7 +424,7 @@ impl DeserializeVariant for NsdVariantAccess {
 
     fn end(&mut self) -> Result<(), DeserializeError> {
         if !self.is_unit {
-            return self.de.expect_char(']' as i32);
+            return self.de.expect_char(b']');
         }
         return Result::Ok(());
     }
@@ -510,7 +489,7 @@ impl Deserializer for NsdDeserializer {
     }
 
     fn begin_seq(&mut self) -> Result<NsdSeqAccess, DeserializeError> with stores[self] {
-        self.de.expect_char('[' as i32)?;
+        self.de.expect_char(b'[')?;
         let depth = self.de.inner_depth()?;
         return Result::Ok(NsdSeqAccess {
             de: self.de,
@@ -520,7 +499,7 @@ impl Deserializer for NsdDeserializer {
     }
 
     fn begin_map(&mut self) -> Result<NsdMapAccess, DeserializeError> with stores[self] {
-        self.de.expect_char('{' as i32)?;
+        self.de.expect_char(b'{')?;
         let depth = self.de.inner_depth()?;
         return Result::Ok(NsdMapAccess {
             de: self.de,
@@ -535,7 +514,7 @@ impl Deserializer for NsdDeserializer {
         num_fields: i32,
     ) -> Result<NsdStructAccess, DeserializeError> with stores[self] {
         // NSD: struct encoded as array
-        self.de.expect_char('[' as i32)?;
+        self.de.expect_char(b'[')?;
         let depth = self.de.inner_depth()?;
         return Result::Ok(NsdStructAccess {
             de: self.de,
@@ -551,17 +530,16 @@ impl Deserializer for NsdDeserializer {
         type_name: &String,
         num_cases: i32,
     ) -> Result<NsdVariantAccess, DeserializeError> with stores[self] {
-        self.de.skip_whitespace();
-        if self.de.pos >= self.de.input.len() {
+        let b = self.de.peek_after_whitespace();
+        if b < 0 {
             return Result::Err(DeserializeError::eof(self.de.pos as i64));
         }
-        let b = self.de.input.get_unchecked(self.de.pos) as i32;
-        if b == '[' as i32 {
+        if b == b'[' {
             // Payload variant: [disc, payload]
             self.de.pos += 1;
             let depth = self.de.inner_depth()?;
             let disc = self.de.parse_i32_direct()?;
-            self.de.expect_char(',' as i32)?;
+            self.de.expect_char(b',')?;
             return Result::Ok(NsdVariantAccess {
                 de: self.de,
                 depth,
@@ -631,8 +609,7 @@ pub fn from_bytes<T: Deserialize, S: AsByteSlice>(
     };
     let mut nsd = NsdDeserializer { de: &mut de };
     let v = T::deserialize(&mut nsd)?;
-    de.skip_whitespace();
-    if de.pos < de.input.len() {
+    if de.peek_after_whitespace() >= 0 {
         return Result::Err(DeserializeError::trailing(de.pos as i64));
     }
     return Result::Ok(v);

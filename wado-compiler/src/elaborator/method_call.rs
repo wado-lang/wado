@@ -14,7 +14,12 @@ use crate::token::Span;
 use super::Elaborator;
 use super::call::SigChoice;
 use super::callee::StaticMethodRef;
+<<<<<<< HEAD
 use super::expr::IndexAccess;
+||||||| 4e1f2c9f0
+=======
+use super::coercion::is_numeric_literal_arg;
+>>>>>>> origin/main
 use super::infer::InferCtx;
 use super::method_lookup::MethodInferenceInput;
 use super::reflect::ReflectDispatch;
@@ -1736,7 +1741,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let own_ids = sig.own_type_param_ids();
             let mut infer = InferCtx::new(&self.tysys.type_table, own_ids.clone());
             for (i, (&param_type, &arg)) in param_types.iter().zip(args.iter()).enumerate() {
-                if Self::is_literal_number_arg(static_call.args.get(i)) {
+                if is_numeric_literal_arg(static_call.args.get(i)) {
                     infer.add_deferred(param_type, arg);
                 } else {
                     infer.add(param_type, arg);

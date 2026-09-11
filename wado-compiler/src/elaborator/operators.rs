@@ -8,7 +8,12 @@ use crate::tir::{FunctionRef, PrimitiveType, ResolvedType, TypeId, TypeTable};
 use crate::token::Span;
 
 use super::Elaborator;
+<<<<<<< HEAD
 use super::expr::{IndexAccess, int_literal_repr, negated_literal};
+||||||| 4e1f2c9f0
+=======
+use super::coercion::{is_numeric_literal_expr, numeric_literal_pair_order};
+>>>>>>> origin/main
 use super::method_lookup::REPLACE_ON_ASSIGN_PLACE;
 use super::types::{FunctionContext, ResolvedTraitMethod, TypeError};
 use super::tysys::TypeSystem;
@@ -93,8 +98,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ctx: &mut FunctionContext,
         expected_type: Option<TypeId>,
     ) -> (TypeId, TypeId) {
-        let left_is_numeric_literal = self.tysys.is_numeric_literal(left_ast);
-        let right_is_numeric_literal = self.tysys.is_numeric_literal(right_ast);
+        let left_is_numeric_literal = is_numeric_literal_expr(left_ast);
+        let right_is_numeric_literal = is_numeric_literal_expr(right_ast);
 
         if left_is_numeric_literal && !right_is_numeric_literal {
             // Resolve right first, then coerce left
@@ -123,10 +128,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let right = self.resolve_expr(right_ast, ctx, coerce_type);
             (left, right)
         } else if left_is_numeric_literal && right_is_numeric_literal {
-            // Both literals - use expected type from context (e.g., assignment target)
-            let left = self.resolve_expr(left_ast, ctx, expected_type);
-            let right = self.resolve_expr(right_ast, ctx, expected_type);
-            (left, right)
+            let order = numeric_literal_pair_order(
+                &self.tysys.type_table.borrow(),
+                left_ast,
+                right_ast,
+                expected_type,
+            );
+            order.resolve(
+                left_ast,
+                right_ast,
+                |expr, hint| self.resolve_expr(expr, ctx, hint),
+                |&ty| ty,
+            )
         } else if self.tysys.is_null_literal(right_ast) && !self.tysys.is_null_literal(left_ast) {
             // `expr == null`: resolve the non-null side first and feed its
             // type to the bare `null` so it resolves to a concrete
