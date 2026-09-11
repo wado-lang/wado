@@ -6,27 +6,14 @@ type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(0)
 
 type "functype//blanket_impl_reflect_bound.wado/__cm_export____test_0_blanket_impl_over_a_reflectstruct_bound_is_selected_for_a_struct" = fn();  // TypeId(1)
 
-type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(2)
-
-type "functype//wasi/task-return" = fn(i32);  // TypeId(3)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(2)
 
 import fn mem/realloc from "mem/realloc";
 import memory (1) from "mem/memory";
 import fn wasi/task-return from "wasi/task-return";
 
-global mut global:blanket_impl_reflect_bound.wado::__modules_initialized: bool = 0;
-
 fn "blanket_impl_reflect_bound.wado/__cm_export____test_0_blanket_impl_over_a_reflectstruct_bound_is_selected_for_a_struct"() {
-    $inline___initialize_modules_0: block {
-        break_if $inline___initialize_modules_0 @likely(global:blanket_impl_reflect_bound.wado::__modules_initialized);
-        cold_path;
-        "core:prelude/fpfmt.wado/__initialize_module"();
-        global:blanket_impl_reflect_bound.wado::__modules_initialized = 1;
-    };
     "wasi/task-return"(0);
-}
-
-fn "core:prelude/fpfmt.wado/__initialize_module"() {
 }
 
 export fn "blanket_impl_reflect_bound.wado/__cm_export____test_0_blanket_impl_over_a_reflectstruct_bound_is_selected_for_a_struct" as "__test_0_blanket_impl_over_a_reflectstruct_bound_is_selected_for_a_struct"

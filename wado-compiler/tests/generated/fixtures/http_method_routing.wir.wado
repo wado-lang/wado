@@ -291,15 +291,13 @@ type "functype//http_method_routing.wado/__cm_task_entry__handle" = fn(i32);  //
 
 type "functype//http_method_routing.wado/__cm_future_write_core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Trailers>,wasi:http/types.wado/ErrorCode>" = fn(i32, ref "core:prelude/types.wado//Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>");  // TypeId(58)
 
-type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(59)
+type "functype//wasi/future-new" = fn() -> i64;  // TypeId(59)
 
-type "functype//wasi/future-new" = fn() -> i64;  // TypeId(60)
+type "functype//wasi/task-return:handle" = fn(i32, i32, i32, i64, i32, i32, i32, i32);  // TypeId(60)
 
-type "functype//wasi/task-return:handle" = fn(i32, i32, i32, i64, i32, i32, i32, i32);  // TypeId(61)
+type "functype//wasi/resource-drop:request" = fn(i32);  // TypeId(61)
 
-type "functype//wasi/resource-drop:request" = fn(i32);  // TypeId(62)
-
-type "functype//wasi/future-write" = fn(i32, i32) -> i32;  // TypeId(63)
+type "functype//wasi/future-write" = fn(i32, i32) -> i32;  // TypeId(62)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/waitable-join from "wasi/waitable-join";
@@ -315,8 +313,6 @@ import fn wasi/future-new from "wasi/future-new";
 import fn wasi/task-return:handle from "wasi/task-return:handle";
 import fn wasi/resource-drop:request from "wasi/resource-drop:request";
 import fn wasi/future-write from "wasi/future-write";
-
-global mut global:http_method_routing.wado::__modules_initialized: bool = 0;
 
 fn "http_method_routing.wado/__cm_binding__Request_get_method"(self) with Request {
     let __outptr: i32;
@@ -401,12 +397,6 @@ fn "http_method_routing.wado/__cm_binding__Response_set_status_code"(self, statu
 }
 
 fn "http_method_routing.wado/__cm_export__handle"(request) {
-    $inline___initialize_modules_0: block {
-        break_if $inline___initialize_modules_0 @likely(global:http_method_routing.wado::__modules_initialized);
-        cold_path;
-        "core:prelude/fpfmt.wado/__initialize_module"();
-        global:http_method_routing.wado::__modules_initialized = 1;
-    };
     "http_method_routing.wado/__cm_task_entry__handle"(request);
 }
 
@@ -901,9 +891,6 @@ fn "http_method_routing.wado/__cm_future_write_core:prelude/types.wado/Result<co
         __written = status;
     }
     drop("mem/realloc"(ptr_2, 40, 8, 0));
-}
-
-fn "core:prelude/fpfmt.wado/__initialize_module"() {
 }
 
 export fn "http_method_routing.wado/__cm_export__handle" as "handle"

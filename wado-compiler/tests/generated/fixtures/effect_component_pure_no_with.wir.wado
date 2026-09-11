@@ -10,39 +10,20 @@ type "functype//effect_component_pure_no_with.wado/__cm_binding__CmCatalog_id_u3
 
 type "functype//effect_component_pure_no_with.wado/__cm_export__run" = fn();  // TypeId(3)
 
-type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(4)
-
-type "functype//wasi/task-return" = fn(i32);  // TypeId(5)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(4)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/wado-lang:cm-catalog/CmCatalog::id_u32 from "wasi/wado-lang:cm-catalog/CmCatalog::id_u32";
 import memory (1) from "mem/memory";
 import fn wasi/task-return from "wasi/task-return";
 
-global mut global:effect_component_pure_no_with.wado::__modules_initialized: bool = 0;
-
 fn "effect_component_pure_no_with.wado/__cm_binding__CmCatalog_id_u32"(v) with CmCatalog {
     return "wasi/wado-lang:cm-catalog/CmCatalog::id_u32"(v);
 }
 
 fn "effect_component_pure_no_with.wado/__cm_export__run"() {
-    $inline___initialize_modules_0: block {
-        break_if $inline___initialize_modules_0 @likely(global:effect_component_pure_no_with.wado::__modules_initialized);
-        cold_path;
-        "core:prelude/fpfmt.wado/__initialize_module"();
-        global:effect_component_pure_no_with.wado::__modules_initialized = 1;
-    };
-    $inline___initialize_modules_2: block {
-        break_if $inline___initialize_modules_2 @likely(global:effect_component_pure_no_with.wado::__modules_initialized);
-        cold_path;
-        "core:prelude/fpfmt.wado/__initialize_module"();
-        global:effect_component_pure_no_with.wado::__modules_initialized = 1;
-    };
     drop("effect_component_pure_no_with.wado/__cm_binding__CmCatalog_id_u32"(42));
     "wasi/task-return"(0);
-}
-
-fn "core:prelude/fpfmt.wado/__initialize_module"() {
 }
 
 export fn "effect_component_pure_no_with.wado/__cm_export__run" as "run"

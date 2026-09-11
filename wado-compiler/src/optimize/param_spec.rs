@@ -1,9 +1,5 @@
-//! Constant-field specialization: for `g(…, x, …)` where `x`'s struct fields are
-//! compile-time constants, clone `g`, substitute those reads, and retarget the
-//! call — `const_fold` folds the clone next iteration. Legality: no callee writes
-//! the field ([`summarize_params`]), every caller write stores the same constant
-//! ([`collect_roots`]). Not gate-aware: a summary taken before a callee gained a
-//! write would license an unsound substitution. TODO: demand a decidable branch.
+//! Constant-argument propagation and constant-field specialization.
+//! Compiler items and cached clones retain their contracts for synthesized calls.
 
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -18,6 +14,9 @@ use crate::nir_package::NirPackage;
 use crate::nir_value_graph::ValueKind;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
 
+use super::dae::is_dae_sroa_eligible;
+use super::dce::reachable_function_positions;
+use super::extract::is_place_read;
 use super::gate::FunctionGate;
 
 /// Cap on the number of distinct clones minted for one original callee. A
@@ -33,7 +32,7 @@ const MAX_TOTAL_SPECIALIZATIONS: usize = 128;
 /// costs more in duplicated code than its folded branches can return.
 const MAX_CLONE_EXPRS: usize = 2000;
 
-/// A scalar constant known for one struct field. Portable across functions,
+/// A scalar constant known for a parameter or field. Portable across functions,
 /// unlike a pool-local `ValueId`, and hashable so it can key the clone cache.
 /// `Int` / `Float` carry their `TypeId` so a width mismatch is rejected.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -748,21 +747,22 @@ pub(super) fn specialize_const_params(
     state: &mut ParamSpecState,
     gate: &mut FunctionGate,
 ) -> bool {
+    let propagated = propagate_scalar_constants(project, state, gate);
     let signatures = {
         let types = project.type_table.borrow();
         Signatures::build(project, &types)
     };
     let facts = summarize_params(project, &signatures);
     if facts.is_empty() {
-        return false;
+        return propagated;
     }
     let per_caller = collect_sites(project, state, &signatures, &facts);
     if per_caller.is_empty() {
-        return false;
+        return propagated;
     }
     let (retarget, minted) = mint_clones(project, state, &per_caller);
     if retarget.is_empty() {
-        return false;
+        return propagated;
     }
     retarget_calls(project, &retarget);
     project.functions.extend(minted);
@@ -770,6 +770,123 @@ pub(super) fn specialize_const_params(
         gate.mark_changed(FuncId::new(caller));
     }
     true
+}
+
+/// A scalar agreed on by every caller needs no clone. DAE removes the parameter
+/// after its reads have folded. Borrowed and mutable parameters keep their slots.
+fn propagate_scalar_constants(
+    project: &mut NirPackage,
+    state: &ParamSpecState,
+    gate: &mut FunctionGate,
+) -> bool {
+    let cached: Vec<_> = state
+        .clones
+        .values()
+        .chain(project.sroa_param_clones.iter())
+        .copied()
+        .collect();
+    let reachable = reachable_function_positions(project, cached);
+    let mut constants: IndexMap<FuncId, Vec<Option<FieldConst>>> = IndexMap::default();
+    let mut collect = |body: &Body| {
+        body.for_each_reachable_node(|node| {
+            let NodeRef::Expr(e) = node else { return };
+            let ExprKind::Call { func_id, args, .. } = &body.exprs[e].kind else {
+                return;
+            };
+            let here: Vec<_> = args
+                .iter()
+                .map(|arg| {
+                    (!arg.is_mut)
+                        .then(|| FieldConst::of_operand(body, arg.expr))
+                        .flatten()
+                })
+                .collect();
+            if let Some(previous) = constants.get_mut(func_id) {
+                assert_eq!(previous.len(), here.len());
+                for (old, new) in previous.iter_mut().zip(here) {
+                    if *old != new {
+                        *old = None;
+                    }
+                }
+            } else {
+                constants.insert(*func_id, here);
+            }
+        });
+    };
+    for pos in reachable {
+        let func = &project.functions[pos];
+        let func = func.borrow();
+        if !func.is_dead
+            && let Some(body) = &func.body
+        {
+            collect(body);
+        }
+    }
+    for global in &project.globals {
+        collect(global.init.slot_expr().body());
+    }
+
+    let mut changed = false;
+    let mut buffers = EngineBuffers::default();
+    for (id, values) in constants {
+        let mut func = project.functions[id.index()].borrow_mut();
+        // Cached clones and compiler items can gain callers in a later round;
+        // their current call sites are not their whole contract.
+        if !is_dae_sroa_eligible(&func, false)
+            || func.compiler_item.is_some()
+            || state.is_clone(id)
+            || project.sroa_param_clones.contains(&id)
+        {
+            continue;
+        }
+        let bindings: IndexMap<_, _> = func
+            .params
+            .iter()
+            .zip(values)
+            .filter_map(|(p, value)| {
+                if p.is_mut
+                    || p.is_mut_ref
+                    || func.address_taken_locals.contains(&p.local_index)
+                    || func.stores_aliased_locals.contains(&p.local_index)
+                {
+                    return None;
+                }
+                value.map(|v| (p.local_index, v))
+            })
+            .collect();
+        if bindings.is_empty() {
+            continue;
+        }
+        let NirFunction { body, locals, .. } = &mut *func;
+        let body = body.as_mut().expect("eligible function has a body");
+        let mut engine = Engine::new(body, &mut buffers, locals);
+        let mut reads = Vec::new();
+        engine.body.for_each_reachable_node(|node| {
+            if let NodeRef::Expr(e) = node
+                && let ExprKind::Local { index, .. } = &engine.body.exprs[e].kind
+                && let Some(value) = bindings.get(index)
+            {
+                reads.push((e, *value));
+            }
+        });
+        let mut rewritten = false;
+        for (read, value) in reads {
+            if is_place_read(&engine, read) {
+                continue;
+            }
+            let ty = engine.body.exprs[read].type_id;
+            if let Some(kind) = value.value_kind_at(ty) {
+                let value = engine.body.values.alloc_unshared(kind, ty);
+                engine.redirect_expr(read, Operand::Value(value));
+                rewritten = true;
+            }
+        }
+        if rewritten {
+            gate.mark_changed(id);
+            changed = true;
+        }
+    }
+    changed
 }
 
 /// The specializable call sites of every live function, as

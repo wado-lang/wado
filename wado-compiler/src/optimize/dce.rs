@@ -1,10 +1,9 @@
-//! Dead-code elimination for the NIR package. [`analyze_dce`] computes every
-//! reachability set up front — functions, globals, types, plus the name-keyed
-//! views the type-retain predicate needs — so the downstream `remove_*` and
-//! filter passes are pure mutators over those sets, with no re-analysis. See
-//! `crate::optimize::run_dce`: analyze once, then mutate in dependency order.
+//! Reachability analysis and dead-code elimination for the NIR package.
 
 use std::ops::ControlFlow;
+
+use super::arena_query::is_pure_nontrapping_operand_typed;
+use super::mod_ref::FnEffect;
 
 use crate::canonical::CmCallTarget;
 use crate::hashmap::IndexSet;
@@ -148,6 +147,24 @@ pub fn analyze_dce(project: &mut NirPackage) -> DceAnalysis {
     analysis
 }
 
+/// Callers relevant to interprocedural facts, including cached rewrite targets.
+pub(super) fn reachable_function_positions(
+    project: &mut NirPackage,
+    cached: impl IntoIterator<Item = FuncId>,
+) -> IndexSet<usize> {
+    use cranelift_entity::EntityRef;
+
+    let descriptors = build_callee_descriptors(project);
+    let mut graph = build_analysis_graph(project, &descriptors);
+    let mut reachable = compute_function_reachability(project, &descriptors, &mut graph);
+    for id in cached {
+        let function = function_id_for(&project.functions[id.index()].borrow());
+        let callees = compute_reachable(&graph.call_graph, &function);
+        reachable.extend(compute_reachable_positions(&callees, &graph.func_positions));
+    }
+    reachable
+}
+
 /// The table of [`build_callee_descriptors`], appended to across the fixed-point
 /// loop's rounds rather than rebuilt.
 #[derive(Default)]
@@ -217,8 +234,7 @@ pub(super) fn callee_descriptor(descriptors: &[FunctionRef], func_id: FuncId) ->
     &descriptors[func_id.index()]
 }
 
-/// Function reachability via call-graph BFS. Implementation detail of
-/// [`analyze_dce`]; not called directly anywhere else.
+/// Function reachability via call-graph BFS, shared by DCE and argument analysis.
 ///
 /// Consumes the call graph (and its pending inspect edges) built in the single
 /// AST walk of [`build_analysis_graph`]; mutates the graph by adding the gated
@@ -2119,6 +2135,120 @@ fn lazy_guard_global(
     ))
 }
 
+struct GlobalGuards<'a> {
+    descriptors: &'a [FunctionRef],
+    types: &'a TypeTable,
+    effects: &'a [FnEffect],
+    inert_functions: IndexSet<FuncId>,
+}
+
+impl GlobalGuards<'_> {
+    fn inert_value(&self, body: &Body, value: Operand) -> bool {
+        if is_pure_nontrapping_operand_typed(body, value, Some(self.types)) {
+            return true;
+        }
+        let Some(expr) = value.as_expr() else {
+            return false;
+        };
+        let ExprKind::Call { func_id, args, .. } = &body.exprs[expr].kind else {
+            return false;
+        };
+        (self.inert_functions.contains(func_id)
+            || callee_descriptor(self.descriptors, *func_id)
+                .builtin_name()
+                .as_deref()
+                == Some("builtin::cold_path"))
+            && args
+                .iter()
+                .all(|arg| is_pure_nontrapping_operand_typed(body, arg.expr, Some(self.types)))
+    }
+
+    fn inert_body(&self, body: &Body) -> bool {
+        body.blocks[body.root]
+            .stmts
+            .iter()
+            .all(|s| match body.stmts[*s].kind {
+                StmtKind::Expr(value) | StmtKind::Let { value, .. } => {
+                    self.inert_value(body, value)
+                }
+                StmtKind::Return { value: None } => true,
+                StmtKind::Return { value: Some(value) } => self.inert_value(body, value),
+                _ => false,
+            })
+    }
+
+    fn find(&self, body: &Body, stmt: StmtId) -> Option<(ExprId, (String, String), Operand)> {
+        lazy_guard_global(body, stmt, self.descriptors, self.types, self.effects)
+            .or_else(|| self.once_guard(body, stmt))
+    }
+
+    /// `L: { if flag { break L; } inert_work(); flag = value; }` observes
+    /// nothing when no other read observes the flag. Calls must terminate too.
+    fn once_guard(&self, body: &Body, stmt: StmtId) -> Option<(ExprId, (String, String), Operand)> {
+        let (label, block) = match &body.stmts[stmt].kind {
+            StmtKind::LabeledBlock { label, block, .. } => (label, *block),
+            StmtKind::Expr(Operand::Expr(e)) if body.exprs[*e].type_id == TypeTable::UNIT => {
+                let ExprKind::LabeledBlock { label, block, .. } = &body.exprs[*e].kind else {
+                    return None;
+                };
+                (label, *block)
+            }
+            _ => return None,
+        };
+        let (first, rest) = body.blocks[block].stmts.split_first()?;
+        let StmtKind::If {
+            condition,
+            then_block,
+            else_block: None,
+        } = body.stmts[*first].kind
+        else {
+            return None;
+        };
+        let read = condition.as_expr()?;
+        let ExprKind::GlobalVarGet {
+            module_source,
+            name,
+        } = &body.exprs[read].kind
+        else {
+            return None;
+        };
+        let [exit] = body.blocks[then_block].stmts.as_slice() else {
+            return None;
+        };
+        if !matches!(&body.stmts[*exit].kind,
+            StmtKind::Break { label: Some(target), value: None } if target == label)
+        {
+            return None;
+        }
+        let (last, work) = rest.split_last()?;
+        let StmtKind::Expr(Operand::Expr(set)) = body.stmts[*last].kind else {
+            return None;
+        };
+        let ExprKind::GlobalVarSet {
+            module_source: set_module,
+            name: set_name,
+            value,
+        } = &body.exprs[set].kind
+        else {
+            return None;
+        };
+        if set_module != module_source || set_name != name || !self.inert_value(body, *value) {
+            return None;
+        }
+        if !work.iter().all(|s| match body.stmts[*s].kind {
+            StmtKind::Expr(value) | StmtKind::Let { value, .. } => self.inert_value(body, value),
+            _ => false,
+        }) {
+            return None;
+        }
+        Some((
+            read,
+            (module_source.to_path().join("::"), name.clone()),
+            *value,
+        ))
+    }
+}
+
 /// Whether `stmt` binds a local nothing mentions to a value the pass may
 /// delete — a binding that computes something and drops it. A trap is an
 /// observable effect, so a trapping value keeps the binding alive even though
@@ -2152,6 +2282,27 @@ pub fn unhoist_unobserved_globals(project: &mut NirPackage) {
     let effects = super::mod_ref::compute_fn_effects(&project.functions, &project.builtin_registry);
     let type_table = project.type_table.clone();
     let types = type_table.borrow();
+    let mut guards = GlobalGuards {
+        descriptors: &descriptors,
+        types: &types,
+        effects: &effects,
+        inert_functions: IndexSet::default(),
+    };
+    loop {
+        let before = guards.inert_functions.len();
+        for func in &project.functions {
+            let func = func.borrow();
+            if let (Some(id), Some(body)) = (func.id, &func.body)
+                && !guards.inert_functions.contains(&id)
+                && guards.inert_body(body)
+            {
+                guards.inert_functions.insert(id);
+            }
+        }
+        if guards.inert_functions.len() == before {
+            break;
+        }
+    }
     let mut guarded: IndexSet<(String, String)> = IndexSet::default();
     let mut observed: IndexSet<(String, String)> = IndexSet::default();
     for func_rc in &project.functions {
@@ -2162,9 +2313,7 @@ pub fn unhoist_unobserved_globals(project: &mut NirPackage) {
         let mentioned = mentioned_locals(body);
         let mut unobserving: IndexSet<ExprId> = IndexSet::default();
         for stmt in reachable_stmt_ids(body) {
-            if let Some((read, key, _)) =
-                lazy_guard_global(body, stmt, &descriptors, &types, &effects)
-            {
+            if let Some((read, key, _)) = guards.find(body, stmt) {
                 guarded.insert(key);
                 unobserving.insert(read);
             }
@@ -2192,15 +2341,7 @@ pub fn unhoist_unobserved_globals(project: &mut NirPackage) {
         if let Some(body) = func.body.as_mut() {
             let mentioned = mentioned_locals(body);
             for block in reachable_block_ids(body) {
-                drop_unobserved_stmts(
-                    body,
-                    block,
-                    &unobserved,
-                    &mentioned,
-                    &descriptors,
-                    &types,
-                    &effects,
-                );
+                drop_unobserved_stmts(body, block, &unobserved, &mentioned, &guards);
             }
             debug_assert!(
                 !reads_any_global(body, &unobserved),
@@ -2253,20 +2394,20 @@ fn drop_unobserved_stmts(
     block: BlockId,
     unobserved: &IndexSet<(String, String)>,
     mentioned: &IndexSet<u32>,
-    descriptors: &[FunctionRef],
-    types: &TypeTable,
-    effects: &[super::mod_ref::FnEffect],
+    guards: &GlobalGuards,
 ) {
     let old = std::mem::take(&mut body.blocks[block].stmts);
     let mut kept: Vec<StmtId> = Vec::with_capacity(old.len());
     for s in old {
-        let is_guard = lazy_guard_global(body, s, descriptors, types, effects)
+        let is_guard = guards
+            .find(body, s)
             .is_some_and(|(_, key, _)| unobserved.contains(&key));
-        let is_dead_read = dead_pure_binding(body, s, mentioned, types).is_some_and(|value| {
-            global_reads_in(body, value)
-                .iter()
-                .any(|(_, key)| unobserved.contains(key))
-        });
+        let is_dead_read =
+            dead_pure_binding(body, s, mentioned, guards.types).is_some_and(|value| {
+                global_reads_in(body, value)
+                    .iter()
+                    .any(|(_, key)| unobserved.contains(key))
+            });
         if !is_guard && !is_dead_read {
             kept.push(s);
         }

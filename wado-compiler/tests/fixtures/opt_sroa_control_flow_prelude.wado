@@ -1,0 +1,26 @@
+struct Pair { count: i32, status: i32 }
+
+#[inline(always)]
+fn produce(n: i32) -> Pair {
+    let mut count = n;
+    if count < 0 {
+        count = 3;
+    }
+    return Pair { count, status: if count > 5 { 1 } else { 0 } };
+}
+
+#[inline(never)]
+fn consume(n: i32) -> i32 {
+    let pair = produce(n);
+    return pair.count + pair.status;
+}
+
+export fn run() {
+    assert consume(builtin::black_box(-1)) == 3;
+    assert consume(builtin::black_box(8)) == 9;
+}
+
+__DATA__
+{
+    "wir_not_expect:O2": ["struct.new \"opt_sroa_control_flow_prelude.wado//Pair\""]
+}

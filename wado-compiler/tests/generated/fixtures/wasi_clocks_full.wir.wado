@@ -11,19 +11,14 @@ struct wasi:clocks/system_clock.wado//Instant {  // TypeId(2)
     mut nanoseconds: u32,
 }
 
-struct core:prelude/types.wado//StreamWrite {  // TypeId(3)
-    mut count: i32,
-    mut result: "core:prelude/types.wado//enum:CopyResult",
-}
+array Array<u8> (mut u8);  // TypeId(3)
 
-array Array<u8> (mut u8);  // TypeId(4)
-
-struct core:prelude/string.wado//String {  // TypeId(5)
+struct core:prelude/string.wado//String {  // TypeId(4)
     mut repr: ref Array<u8>,
     mut used: i32,
 }
 
-struct core:prelude/format.wado//Formatter {  // TypeId(6)
+struct core:prelude/format.wado//Formatter {  // TypeId(5)
     mut fill: char,
     mut align: "core:prelude/format.wado//enum:Alignment",
     mut sign_plus: bool,
@@ -35,11 +30,11 @@ struct core:prelude/format.wado//Formatter {  // TypeId(6)
     mut buf: ref "core:prelude/string.wado//String",
 }
 
-struct wasi_clocks_full.wado//__Closure_1 {  // TypeId(7)}
+struct wasi_clocks_full.wado//__Closure_1 {  // TypeId(6)}
 
-struct wasi_clocks_full.wado//__Closure_0 {  // TypeId(8)}
+struct wasi_clocks_full.wado//__Closure_0 {  // TypeId(7)}
 
-struct core:prelude/types.wado//AsyncCall<()> {  // TypeId(9)
+struct core:prelude/types.wado//AsyncCall<()> {  // TypeId(8)
     mut __cm_packed: i32,
     mut __cm_outptr: i32,
     mut __cm_size: i32,
@@ -47,138 +42,136 @@ struct core:prelude/types.wado//AsyncCall<()> {  // TypeId(9)
     mut __cm_lift: ref struct,
 }
 
-struct core:prelude/slice.wado//Slice<u8> {  // TypeId(10)
+struct core:prelude/slice.wado//Slice<u8> {  // TypeId(9)
     mut repr: ref Array<u8>,
     mut start: i32,
     mut end: i32,
 }
 
-type "functype/$canonical_closure_fn_0" = fn(ref null struct, i32);  // TypeId(11)
+type "functype/$canonical_closure_fn_0" = fn(ref null struct, i32);  // TypeId(10)
 
-struct canonical//CanonicalClosure_0 {  // TypeId(12)
+struct canonical//CanonicalClosure_0 {  // TypeId(11)
     env: ref null struct,
     func: ref "functype/$canonical_closure_fn_0",
 }
 
-type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(13)
+type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(12)
 
-type "functype//wasi/stream-write" = fn(i32, i32, i32) -> i32;  // TypeId(14)
+type "functype//wasi/stream-write" = fn(i32, i32, i32) -> i32;  // TypeId(13)
 
-type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(15)
+type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(14)
 
-type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(16)
+type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(15)
 
-type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(17)
+type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(16)
 
-type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(18)
+type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(17)
 
-type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(19)
+type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(18)
 
-type "functype//wasi/wasi:clocks/MonotonicClock::now" = fn() -> i64;  // TypeId(20)
+type "functype//wasi/wasi:clocks/MonotonicClock::now" = fn() -> i64;  // TypeId(19)
 
-type "functype//wasi/wasi:clocks/MonotonicClock::get_resolution" = fn() -> i64;  // TypeId(21)
+type "functype//wasi/wasi:clocks/MonotonicClock::get_resolution" = fn() -> i64;  // TypeId(20)
 
-type "functype//wasi/wasi:clocks/MonotonicClock::wait_until" = fn(i64) -> i32;  // TypeId(22)
+type "functype//wasi/wasi:clocks/MonotonicClock::wait_until" = fn(i64) -> i32;  // TypeId(21)
 
-type "functype//wasi/wasi:clocks/MonotonicClock::wait_for" = fn(i64) -> i32;  // TypeId(23)
+type "functype//wasi/wasi:clocks/MonotonicClock::wait_for" = fn(i64) -> i32;  // TypeId(22)
 
-type "functype//wasi/wasi:clocks/SystemClock::now" = fn(i32);  // TypeId(24)
+type "functype//wasi/wasi:clocks/SystemClock::now" = fn(i32);  // TypeId(23)
 
-type "functype//wasi/wasi:clocks/SystemClock::get_resolution" = fn() -> i64;  // TypeId(25)
+type "functype//wasi/wasi:clocks/SystemClock::get_resolution" = fn() -> i64;  // TypeId(24)
 
-type "functype//wasi_clocks_full.wado/__test_8_system_clock__two_reads_are_consistent" = fn();  // TypeId(26)
+type "functype//wasi_clocks_full.wado/__test_8_system_clock__two_reads_are_consistent" = fn();  // TypeId(25)
 
-type "functype//wasi_clocks_full.wado/__cm_binding__MonotonicClock_now" = fn() -> u64;  // TypeId(27)
+type "functype//wasi_clocks_full.wado/__cm_binding__MonotonicClock_now" = fn() -> u64;  // TypeId(26)
 
-type "functype//wasi_clocks_full.wado/__cm_binding__MonotonicClock_get_resolution" = fn() -> u64;  // TypeId(28)
+type "functype//wasi_clocks_full.wado/__cm_binding__MonotonicClock_get_resolution" = fn() -> u64;  // TypeId(27)
 
-type "functype//wasi_clocks_full.wado/__cm_binding__MonotonicClock_wait_for" = fn(i64) -> ref "core:prelude/types.wado//AsyncCall<()>";  // TypeId(29)
+type "functype//wasi_clocks_full.wado/__cm_binding__MonotonicClock_wait_for" = fn(i64) -> ref "core:prelude/types.wado//AsyncCall<()>";  // TypeId(28)
 
-type "functype//wasi_clocks_full.wado/__cm_binding__MonotonicClock_wait_until" = fn(i64) -> ref "core:prelude/types.wado//AsyncCall<()>";  // TypeId(30)
+type "functype//wasi_clocks_full.wado/__cm_binding__MonotonicClock_wait_until" = fn(i64) -> ref "core:prelude/types.wado//AsyncCall<()>";  // TypeId(29)
 
-type "functype//wasi_clocks_full.wado/__cm_binding__SystemClock_now" = fn() -> ref "wasi:clocks/system_clock.wado//Instant";  // TypeId(31)
+type "functype//wasi_clocks_full.wado/__cm_binding__SystemClock_now" = fn() -> ref "wasi:clocks/system_clock.wado//Instant";  // TypeId(30)
 
-type "functype//wasi_clocks_full.wado/__cm_binding__SystemClock_get_resolution" = fn() -> u64;  // TypeId(32)
+type "functype//wasi_clocks_full.wado/__cm_binding__SystemClock_get_resolution" = fn() -> u64;  // TypeId(31)
 
-type "functype//wasi_clocks_full.wado/__cm_lift__MonotonicClock_wait_for" = fn(i32);  // TypeId(33)
+type "functype//wasi_clocks_full.wado/__cm_lift__MonotonicClock_wait_for" = fn(i32);  // TypeId(32)
 
-type "functype//wasi_clocks_full.wado/__cm_lift__MonotonicClock_wait_until" = fn(i32);  // TypeId(34)
+type "functype//wasi_clocks_full.wado/__cm_lift__MonotonicClock_wait_until" = fn(i32);  // TypeId(33)
 
-type "functype//wasi_clocks_full.wado/__cm_export____test_0_monotonic__now_is_non_decreasing" = fn();  // TypeId(35)
+type "functype//wasi_clocks_full.wado/__cm_export____test_0_monotonic__now_is_non_decreasing" = fn();  // TypeId(34)
 
-type "functype//wasi_clocks_full.wado/__cm_export____test_1_monotonic__resolution_is_positive" = fn();  // TypeId(36)
+type "functype//wasi_clocks_full.wado/__cm_export____test_1_monotonic__resolution_is_positive" = fn();  // TypeId(35)
 
-type "functype//wasi_clocks_full.wado/__cm_export____test_2_monotonic__wait_for_elapses_at_least_the_requested_duration" = fn();  // TypeId(37)
+type "functype//wasi_clocks_full.wado/__cm_export____test_2_monotonic__wait_for_elapses_at_least_the_requested_duration" = fn();  // TypeId(36)
 
-type "functype//wasi_clocks_full.wado/__cm_export____test_3_monotonic__wait_until_reaches_target" = fn();  // TypeId(38)
+type "functype//wasi_clocks_full.wado/__cm_export____test_3_monotonic__wait_until_reaches_target" = fn();  // TypeId(37)
 
-type "functype//wasi_clocks_full.wado/__cm_export____test_4_monotonic__wait_for_zero_returns_immediately" = fn();  // TypeId(39)
+type "functype//wasi_clocks_full.wado/__cm_export____test_4_monotonic__wait_for_zero_returns_immediately" = fn();  // TypeId(38)
 
-type "functype//wasi_clocks_full.wado/__cm_export____test_5_monotonic__wait_until_past_returns_immediately" = fn();  // TypeId(40)
+type "functype//wasi_clocks_full.wado/__cm_export____test_5_monotonic__wait_until_past_returns_immediately" = fn();  // TypeId(39)
 
-type "functype//wasi_clocks_full.wado/__cm_export____test_6_system_clock__now_returns_valid_instant" = fn();  // TypeId(41)
+type "functype//wasi_clocks_full.wado/__cm_export____test_6_system_clock__now_returns_valid_instant" = fn();  // TypeId(40)
 
-type "functype//wasi_clocks_full.wado/__cm_export____test_7_system_clock__resolution_is_positive" = fn();  // TypeId(42)
+type "functype//wasi_clocks_full.wado/__cm_export____test_7_system_clock__resolution_is_positive" = fn();  // TypeId(41)
 
-type "functype//wasi_clocks_full.wado/__cm_export____test_8_system_clock__two_reads_are_consistent" = fn();  // TypeId(43)
+type "functype//wasi_clocks_full.wado/__cm_export____test_8_system_clock__two_reads_are_consistent" = fn();  // TypeId(42)
 
-type "functype//wasi_clocks_full.wado/__test_0_monotonic__now_is_non_decreasing$cold0" = fn(u64, u64);  // TypeId(44)
+type "functype//wasi_clocks_full.wado/__test_0_monotonic__now_is_non_decreasing$cold0" = fn(u64, u64);  // TypeId(43)
 
-type "functype//wasi_clocks_full.wado/__test_1_monotonic__resolution_is_positive$cold0" = fn(u64);  // TypeId(45)
+type "functype//wasi_clocks_full.wado/__test_1_monotonic__resolution_is_positive$cold0" = fn(u64);  // TypeId(44)
 
-type "functype//wasi_clocks_full.wado/__test_2_monotonic__wait_for_elapses_at_least_the_requested_duration$cold0" = fn(u64);  // TypeId(46)
+type "functype//wasi_clocks_full.wado/__test_2_monotonic__wait_for_elapses_at_least_the_requested_duration$cold0" = fn(u64);  // TypeId(45)
 
-type "functype//wasi_clocks_full.wado/__test_3_monotonic__wait_until_reaches_target$cold0" = fn(u64, u64);  // TypeId(47)
+type "functype//wasi_clocks_full.wado/__test_3_monotonic__wait_until_reaches_target$cold0" = fn(u64, u64);  // TypeId(46)
 
-type "functype//wasi_clocks_full.wado/__test_4_monotonic__wait_for_zero_returns_immediately$cold0" = fn(u64, u64);  // TypeId(48)
+type "functype//wasi_clocks_full.wado/__test_4_monotonic__wait_for_zero_returns_immediately$cold0" = fn(u64, u64);  // TypeId(47)
 
-type "functype//wasi_clocks_full.wado/__test_5_monotonic__wait_until_past_returns_immediately$cold0" = fn(u64);  // TypeId(49)
+type "functype//wasi_clocks_full.wado/__test_5_monotonic__wait_until_past_returns_immediately$cold0" = fn(u64);  // TypeId(48)
 
-type "functype//wasi_clocks_full.wado/__test_6_system_clock__now_returns_valid_instant$cold0" = fn(u32);  // TypeId(50)
+type "functype//wasi_clocks_full.wado/__test_6_system_clock__now_returns_valid_instant$cold0" = fn(u32);  // TypeId(49)
 
-type "functype//wasi_clocks_full.wado/__test_6_system_clock__now_returns_valid_instant$cold1" = fn(i64);  // TypeId(51)
+type "functype//wasi_clocks_full.wado/__test_6_system_clock__now_returns_valid_instant$cold1" = fn(i64);  // TypeId(50)
 
-type "functype//wasi_clocks_full.wado/__test_7_system_clock__resolution_is_positive$cold0" = fn(u64);  // TypeId(52)
+type "functype//wasi_clocks_full.wado/__test_7_system_clock__resolution_is_positive$cold0" = fn(u64);  // TypeId(51)
 
-type "functype//wasi_clocks_full.wado/__test_8_system_clock__two_reads_are_consistent$cold0" = fn(u32, u32);  // TypeId(53)
+type "functype//wasi_clocks_full.wado/__test_8_system_clock__two_reads_are_consistent$cold0" = fn(u32, u32);  // TypeId(52)
 
-type "functype//core:rt/panic" = fn(ref "core:prelude/string.wado//String");  // TypeId(54)
+type "functype//core:rt/panic" = fn(ref "core:prelude/string.wado//String");  // TypeId(53)
 
-type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(55)
+type "functype//core:prelude/types.wado/cm_subtask_settled$cold0" = fn(i32);  // TypeId(54)
 
-type "functype//core:prelude/types.wado/cm_subtask_settled$cold0" = fn(i32);  // TypeId(56)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(55)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(57)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(56)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(58)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(57)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(59)
+type "functype//core:prelude/types.wado/core:prelude/types.wado/AsyncCall<()>::wait" = fn(ref "core:prelude/types.wado//AsyncCall<()>");  // TypeId(58)
 
-type "functype//core:prelude/types.wado/core:prelude/types.wado/AsyncCall<()>::wait" = fn(ref "core:prelude/types.wado//AsyncCall<()>");  // TypeId(60)
+type "functype//core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_raw_all" = fn(i32, ref "core:prelude/slice.wado//Slice<u8>");  // TypeId(59)
 
-type "functype//core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_raw_all" = fn(i32, ref "core:prelude/slice.wado//Slice<u8>") -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(61)
+type "functype//wasi_clocks_full.wado/wasi_clocks_full.wado/__Closure_0::__call" = fn(i32);  // TypeId(60)
 
-type "functype//wasi_clocks_full.wado/wasi_clocks_full.wado/__Closure_0::__call" = fn(i32);  // TypeId(62)
+type "functype//wasi_clocks_full.wado/wasi_clocks_full.wado/__Closure_1::__call" = fn(i32);  // TypeId(61)
 
-type "functype//wasi_clocks_full.wado/wasi_clocks_full.wado/__Closure_1::__call" = fn(i32);  // TypeId(63)
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal$scalar" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(62)
 
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal$scalar" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(64)
+type "functype//core:prelude/primitive.wado/u32::fmt_decimal$scalar" = fn(u32, ref "core:prelude/format.wado//Formatter");  // TypeId(63)
 
-type "functype//core:prelude/primitive.wado/u32::fmt_decimal$scalar" = fn(u32, ref "core:prelude/format.wado//Formatter");  // TypeId(65)
+type "functype//core:prelude/primitive.wado/i64::fmt_decimal$scalar" = fn(i64, ref "core:prelude/format.wado//Formatter");  // TypeId(64)
 
-type "functype//core:prelude/primitive.wado/i64::fmt_decimal$scalar" = fn(i64, ref "core:prelude/format.wado//Formatter");  // TypeId(66)
+type "functype//core:prelude/primitive.wado/u64::fmt_decimal$scalar" = fn(u64, ref "core:prelude/format.wado//Formatter");  // TypeId(65)
 
-type "functype//core:prelude/primitive.wado/u64::fmt_decimal$scalar" = fn(u64, ref "core:prelude/format.wado//Formatter");  // TypeId(67)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(66)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(68)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(67)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(69)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(68)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(70)
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(69)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(71)
-
-type "functype//wasi/subtask-drop" = fn(i32);  // TypeId(72)
+type "functype//wasi/subtask-drop" = fn(i32);  // TypeId(70)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -200,7 +193,6 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 import fn wasi/subtask-drop from "wasi/subtask-drop";
 
-global mut global:wasi_clocks_full.wado::__modules_initialized: bool = 0;
 global global:core:prelude/types.wado::__const_obj_8: ref null Array<u8> = array.new_fixed<u8>(67, 77, 95, 69, 86, 69, 78, 84, 95, 83, 85, 66, 84, 65, 83, 75, 58, 32);
 global global:core:prelude/types.wado::__const_obj_9: ref null Array<u8> = array.new_fixed<u8>(101, 118, 101, 110, 116, 46, 99, 111, 100, 101, 58, 32);
 global global:core:prelude/types.wado::__const_obj_10: ref null Array<u8> = array.new_fixed<u8>(10, 99, 111, 110, 100, 105, 116, 105, 111, 110, 58, 32, 101, 118, 101, 110, 116, 46, 99, 111, 100, 101, 32, 61, 61, 32, 67, 77, 95, 69, 86, 69, 78, 84, 95, 83, 85, 66, 84, 65, 83, 75, 10);
@@ -305,12 +297,6 @@ fn "wasi_clocks_full.wado/__cm_lift__MonotonicClock_wait_until"(__outptr) {
 fn "wasi_clocks_full.wado/__cm_export____test_0_monotonic__now_is_non_decreasing"() {
     let t1: u64;
     let t2: u64;
-    $inline___initialize_modules_0: block {
-        break_if $inline___initialize_modules_0 @likely(global:wasi_clocks_full.wado::__modules_initialized);
-        cold_path;
-        "core:prelude/fpfmt.wado/__initialize_module"();
-        global:wasi_clocks_full.wado::__modules_initialized = 1;
-    };
     t1 = "wasi_clocks_full.wado/__cm_binding__MonotonicClock_now"();
     t2 = "wasi_clocks_full.wado/__cm_binding__MonotonicClock_now"();
     if @unlikely(t2 <u t1) {
@@ -323,12 +309,6 @@ fn "wasi_clocks_full.wado/__cm_export____test_0_monotonic__now_is_non_decreasing
 
 fn "wasi_clocks_full.wado/__cm_export____test_1_monotonic__resolution_is_positive"() {
     let res: u64;
-    $inline___initialize_modules_0: block {
-        break_if $inline___initialize_modules_0 @likely(global:wasi_clocks_full.wado::__modules_initialized);
-        cold_path;
-        "core:prelude/fpfmt.wado/__initialize_module"();
-        global:wasi_clocks_full.wado::__modules_initialized = 1;
-    };
     res = "wasi_clocks_full.wado/__cm_binding__MonotonicClock_get_resolution"();
     if @unlikely(res <=u 0_i64) {
         cold_path;
@@ -341,12 +321,6 @@ fn "wasi_clocks_full.wado/__cm_export____test_1_monotonic__resolution_is_positiv
 fn "wasi_clocks_full.wado/__cm_export____test_2_monotonic__wait_for_elapses_at_least_the_requested_duration"() {
     let before: u64;
     let elapsed: u64;
-    $inline___initialize_modules_0: block {
-        break_if $inline___initialize_modules_0 @likely(global:wasi_clocks_full.wado::__modules_initialized);
-        cold_path;
-        "core:prelude/fpfmt.wado/__initialize_module"();
-        global:wasi_clocks_full.wado::__modules_initialized = 1;
-    };
     before = "wasi_clocks_full.wado/__cm_binding__MonotonicClock_now"();
     "core:prelude/types.wado/core:prelude/types.wado/AsyncCall<()>::wait"("wasi_clocks_full.wado/__cm_binding__MonotonicClock_wait_for"(1000000_i64));
     elapsed = "wasi_clocks_full.wado/__cm_binding__MonotonicClock_now"() - before;
@@ -362,12 +336,6 @@ fn "wasi_clocks_full.wado/__cm_export____test_3_monotonic__wait_until_reaches_ta
     let now: u64;
     let target: u64;
     let after: u64;
-    $inline___initialize_modules_0: block {
-        break_if $inline___initialize_modules_0 @likely(global:wasi_clocks_full.wado::__modules_initialized);
-        cold_path;
-        "core:prelude/fpfmt.wado/__initialize_module"();
-        global:wasi_clocks_full.wado::__modules_initialized = 1;
-    };
     "core:prelude/types.wado/core:prelude/types.wado/AsyncCall<()>::wait"("wasi_clocks_full.wado/__cm_binding__MonotonicClock_wait_until"(local.tee target(local.tee now("wasi_clocks_full.wado/__cm_binding__MonotonicClock_now"()) + 1000000_i64)));
     after = "wasi_clocks_full.wado/__cm_binding__MonotonicClock_now"();
     if @unlikely(after <u target) {
@@ -381,12 +349,6 @@ fn "wasi_clocks_full.wado/__cm_export____test_3_monotonic__wait_until_reaches_ta
 fn "wasi_clocks_full.wado/__cm_export____test_4_monotonic__wait_for_zero_returns_immediately"() {
     let before: u64;
     let after: u64;
-    $inline___initialize_modules_0: block {
-        break_if $inline___initialize_modules_0 @likely(global:wasi_clocks_full.wado::__modules_initialized);
-        cold_path;
-        "core:prelude/fpfmt.wado/__initialize_module"();
-        global:wasi_clocks_full.wado::__modules_initialized = 1;
-    };
     before = "wasi_clocks_full.wado/__cm_binding__MonotonicClock_now"();
     "core:prelude/types.wado/core:prelude/types.wado/AsyncCall<()>::wait"("wasi_clocks_full.wado/__cm_binding__MonotonicClock_wait_for"(0_i64));
     after = "wasi_clocks_full.wado/__cm_binding__MonotonicClock_now"();
@@ -400,12 +362,6 @@ fn "wasi_clocks_full.wado/__cm_export____test_4_monotonic__wait_for_zero_returns
 
 fn "wasi_clocks_full.wado/__cm_export____test_5_monotonic__wait_until_past_returns_immediately"() {
     let after: u64;
-    $inline___initialize_modules_0: block {
-        break_if $inline___initialize_modules_0 @likely(global:wasi_clocks_full.wado::__modules_initialized);
-        cold_path;
-        "core:prelude/fpfmt.wado/__initialize_module"();
-        global:wasi_clocks_full.wado::__modules_initialized = 1;
-    };
     "core:prelude/types.wado/core:prelude/types.wado/AsyncCall<()>::wait"("wasi_clocks_full.wado/__cm_binding__MonotonicClock_wait_until"(0_i64));
     after = "wasi_clocks_full.wado/__cm_binding__MonotonicClock_now"();
     if @unlikely(after <=u 0_i64) {
@@ -420,12 +376,6 @@ fn "wasi_clocks_full.wado/__cm_export____test_6_system_clock__now_returns_valid_
     let instant: ref "wasi:clocks/system_clock.wado//Instant";
     let __v0_1: i64;
     let __v0_3: u32;
-    $inline___initialize_modules_0: block {
-        break_if $inline___initialize_modules_0 @likely(global:wasi_clocks_full.wado::__modules_initialized);
-        cold_path;
-        "core:prelude/fpfmt.wado/__initialize_module"();
-        global:wasi_clocks_full.wado::__modules_initialized = 1;
-    };
     instant = "wasi_clocks_full.wado/__cm_binding__SystemClock_now"();
     __v0_1 = instant.seconds;
     if @unlikely(__v0_1 <= 0_i64) {
@@ -444,12 +394,6 @@ fn "wasi_clocks_full.wado/__cm_export____test_6_system_clock__now_returns_valid_
 
 fn "wasi_clocks_full.wado/__cm_export____test_7_system_clock__resolution_is_positive"() {
     let res: u64;
-    $inline___initialize_modules_0: block {
-        break_if $inline___initialize_modules_0 @likely(global:wasi_clocks_full.wado::__modules_initialized);
-        cold_path;
-        "core:prelude/fpfmt.wado/__initialize_module"();
-        global:wasi_clocks_full.wado::__modules_initialized = 1;
-    };
     res = "wasi_clocks_full.wado/__cm_binding__SystemClock_get_resolution"();
     if @unlikely(res <=u 0_i64) {
         cold_path;
@@ -460,12 +404,6 @@ fn "wasi_clocks_full.wado/__cm_export____test_7_system_clock__resolution_is_posi
 }
 
 fn "wasi_clocks_full.wado/__cm_export____test_8_system_clock__two_reads_are_consistent"() {
-    $inline___initialize_modules_0: block {
-        break_if $inline___initialize_modules_0 @likely(global:wasi_clocks_full.wado::__modules_initialized);
-        cold_path;
-        "core:prelude/fpfmt.wado/__initialize_module"();
-        global:wasi_clocks_full.wado::__modules_initialized = 1;
-    };
     "wasi_clocks_full.wado/__test_8_system_clock__two_reads_are_consistent"();
     "wasi/task-return"(0);
 }
@@ -864,14 +802,11 @@ fn "core:rt/panic"(message) {
     new_repr = builtin::array_new<u8>(local.tee self_14(message.used) + 1);
     builtin::array_copy<u8>(new_repr, 0, message.repr, 0, self_14);
     builtin::array_set_u8(new_repr, self_14, 10);
-    drop("core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_raw_all"(tx_8, struct.new "core:prelude/slice.wado//Slice<u8>" { repr: new_repr, start: 0, end: self_14 + 1 }));
+    "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_raw_all"(tx_8, struct.new "core:prelude/slice.wado//Slice<u8>" { repr: new_repr, start: 0, end: self_14 + 1 });
     "wasi/stream-drop-writable"(tx_8);
     "wasi/future-drop-readable:transmission-cli"(future_handle);
     cold_path;
     unreachable;
-}
-
-fn "core:prelude/fpfmt.wado/__initialize_module"() {
 }
 
 fn "core:prelude/types.wado/cm_subtask_settled$cold0"(__v0) {
@@ -1399,7 +1334,6 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
     let packed_13: i64;
     let ptr_14: i32;
     let raw_len: i32;
-    let written_16: ref "core:prelude/types.wado//StreamWrite";
     let len_23: i32;
     let ptr_24: i32;
     let i: i32;
@@ -1408,15 +1342,17 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
     let evt_ptr: i32;
     let status_41: i32;
     let __sroa_data_start: i32;
-    let _av_50: i32;
-    let _av_51: i32;
-    _av_50 = data.start;
-    _av_51 = data.end;
-    if (_av_51 - _av_50) == 0 {
-        return 0;
+    let __sroa_written_count: i32;
+    let __sroa_written_result: "core:prelude/types.wado//enum:CopyResult";
+    let _av_52: i32;
+    let _av_53: i32;
+    _av_52 = data.start;
+    _av_53 = data.end;
+    if (_av_53 - _av_52) == 0 {
+        return;
     }
     repr_2 = data.repr;
-    end_3 = _av_50 + (_av_51 - _av_50);
+    end_3 = _av_52 + (_av_53 - _av_52);
     offset = data.start;
     block {
         l124: loop {
@@ -1442,7 +1378,8 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
                 "wasi/waitable-set-drop"(ws);
                 result = status_41;
             }
-            written_16 = struct.new "core:prelude/types.wado//StreamWrite" { count: result >> 4, result: $inline_cm_copy_result_14: block -> "core:prelude/types.wado//enum:CopyResult" {
+            __sroa_written_count = result >> 4;
+            __sroa_written_result = $inline_cm_copy_result_14: block -> "core:prelude/types.wado//enum:CopyResult" {
                 let __match_scrut_0: i32;
                 __match_scrut_0 = result & 15;
                 if __match_scrut_0 == 0 {
@@ -1452,11 +1389,11 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
                 } else {
                 }
                 break $inline_cm_copy_result_14: 2;
-            } };
+            };
             drop("mem/realloc"(ptr_14, raw_len, 1, 0));
-            offset = offset + written_16.count;
-            if select i32(select i32(written_16.result != 0, 1, written_16.count <= 0), 1, offset >= end_3) {
-                return written_16.result;
+            offset = offset + __sroa_written_count;
+            if select i32(select i32(__sroa_written_result != 0, 1, __sroa_written_count <= 0), 1, offset >= end_3) {
+                return;
             }
             continue l124;
         };

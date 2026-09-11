@@ -13,32 +13,16 @@ type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(2)
 
 type "functype//inline_cross_module_method.wado/__cm_export__run" = fn();  // TypeId(3)
 
-type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(4)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow" = fn(ref "core:prelude//List<i32>");  // TypeId(4)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow" = fn(ref "core:prelude//List<i32>");  // TypeId(5)
-
-type "functype//wasi/task-return" = fn(i32);  // TypeId(6)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(5)
 
 import fn mem/realloc from "mem/realloc";
 import memory (1) from "mem/memory";
 import fn wasi/task-return from "wasi/task-return";
 
-global mut global:inline_cross_module_method.wado::__modules_initialized: bool = 0;
-
 fn "inline_cross_module_method.wado/__cm_export__run"() {
     let arr: ref "core:prelude//List<i32>";
-    $inline___initialize_modules_0: block {
-        break_if $inline___initialize_modules_0 @likely(global:inline_cross_module_method.wado::__modules_initialized);
-        cold_path;
-        "core:prelude/fpfmt.wado/__initialize_module"();
-        global:inline_cross_module_method.wado::__modules_initialized = 1;
-    };
-    $inline___initialize_modules_2: block {
-        break_if $inline___initialize_modules_2 @likely(global:inline_cross_module_method.wado::__modules_initialized);
-        cold_path;
-        "core:prelude/fpfmt.wado/__initialize_module"();
-        global:inline_cross_module_method.wado::__modules_initialized = 1;
-    };
     arr = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(10, 20, 30), used: 3 };
     if @unlikely(3 >= builtin::array_len(arr.repr)) {
         cold_path;
@@ -47,9 +31,6 @@ fn "inline_cross_module_method.wado/__cm_export__run"() {
     builtin::array_set<i32>(arr.repr, 3, 40);
     arr.used = 4;
     "wasi/task-return"(0);
-}
-
-fn "core:prelude/fpfmt.wado/__initialize_module"() {
 }
 
 fn "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(self) {

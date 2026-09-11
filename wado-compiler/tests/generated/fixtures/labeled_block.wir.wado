@@ -12,25 +12,20 @@ struct core:prelude/types.wado//Box<i32> {  // TypeId(3)
     mut value: i32,
 }
 
-struct core:prelude/types.wado//StreamWrite {  // TypeId(4)
-    mut count: i32,
-    mut result: "core:prelude/types.wado//enum:CopyResult",
-}
-
-struct core:prelude/string.wado//StrCharIter {  // TypeId(5)
+struct core:prelude/string.wado//StrCharIter {  // TypeId(4)
     mut repr: ref Array<u8>,
     mut used: i32,
     mut byte_index: i32,
 }
 
-array Array<u8> (mut u8);  // TypeId(6)
+array Array<u8> (mut u8);  // TypeId(5)
 
-struct core:prelude/string.wado//String {  // TypeId(7)
+struct core:prelude/string.wado//String {  // TypeId(6)
     mut repr: ref Array<u8>,
     mut used: i32,
 }
 
-struct core:prelude/format.wado//Formatter {  // TypeId(8)
+struct core:prelude/format.wado//Formatter {  // TypeId(7)
     mut fill: char,
     mut align: "core:prelude/format.wado//enum:Alignment",
     mut sign_plus: bool,
@@ -42,237 +37,235 @@ struct core:prelude/format.wado//Formatter {  // TypeId(8)
     mut buf: ref "core:prelude/string.wado//String",
 }
 
-struct tuple//[i32, i32] {  // TypeId(9)
+struct tuple//[i32, i32] {  // TypeId(8)
     mut 0: i32,
     mut 1: i32,
 }
 
-array Array<i32> (mut i32);  // TypeId(10)
+array Array<i32> (mut i32);  // TypeId(9)
 
-array Array<core:prelude/list.wado/List<i32>> (mut ref "core:prelude//List<i32>");  // TypeId(11)
+array Array<core:prelude/list.wado/List<i32>> (mut ref "core:prelude//List<i32>");  // TypeId(10)
 
-struct core:prelude/range.wado//RangeExclusive<i32> {  // TypeId(12)
+struct core:prelude/range.wado//RangeExclusive<i32> {  // TypeId(11)
     mut start: i32,
     mut end: i32,
 }
 
-struct core:prelude/slice.wado//Slice<u8> {  // TypeId(13)
+struct core:prelude/slice.wado//Slice<u8> {  // TypeId(12)
     mut repr: ref Array<u8>,
     mut start: i32,
     mut end: i32,
 }
 
-variant core:prelude/types.wado//Option<i32> {  // TypeId(14)
+variant core:prelude/types.wado//Option<i32> {  // TypeId(13)
     Some(i32),
     None,
 }
 
-struct core:prelude/types.wado//Option<i32>::Some {  // TypeId(15)
+struct core:prelude/types.wado//Option<i32>::Some {  // TypeId(14)
     discriminant: i32,
     payload_0: i32,
 }
 
-struct core:prelude//List<i32> {  // TypeId(16)
+struct core:prelude//List<i32> {  // TypeId(15)
     mut repr: ref Array<i32>,
     mut used: i32,
 }
 
-struct core:prelude//List<core:prelude/list.wado/List<i32>> {  // TypeId(17)
+struct core:prelude//List<core:prelude/list.wado/List<i32>> {  // TypeId(16)
     mut repr: ref "Array<core:prelude/list.wado/List<i32>>",
     mut used: i32,
 }
 
-type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(18)
+type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(17)
 
-type "functype//wasi/stream-write" = fn(i32, i32, i32) -> i32;  // TypeId(19)
+type "functype//wasi/stream-write" = fn(i32, i32, i32) -> i32;  // TypeId(18)
 
-type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(20)
+type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(19)
 
-type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(21)
+type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(20)
 
-type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(22)
+type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(21)
 
-type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(23)
+type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(22)
 
-type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(24)
+type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(23)
 
-type "functype//labeled_block.wado/opaque_bool" = fn(i32) -> bool;  // TypeId(25)
+type "functype//labeled_block.wado/opaque_bool" = fn(i32) -> bool;  // TypeId(24)
 
-type "functype//labeled_block.wado/find" = fn(ref "core:prelude//List<core:prelude/list.wado/List<i32>>", i32) -> ref "tuple//[i32, i32]";  // TypeId(26)
+type "functype//labeled_block.wado/find" = fn(ref "core:prelude//List<core:prelude/list.wado/List<i32>>", i32) -> ref "tuple//[i32, i32]";  // TypeId(25)
 
-type "functype//labeled_block.wado/__test_10_a_null_tail_resolves_against_the_block_s_unified_type" = fn();  // TypeId(27)
+type "functype//labeled_block.wado/__test_10_a_null_tail_resolves_against_the_block_s_unified_type" = fn();  // TypeId(26)
 
-type "functype//labeled_block.wado/__test_14_a_contextual_keyword_is_a_label" = fn();  // TypeId(28)
+type "functype//labeled_block.wado/__test_14_a_contextual_keyword_is_a_label" = fn();  // TypeId(27)
 
-type "functype//labeled_block.wado/__test_15_a_labeled_break_leaves_every_enclosing_loop" = fn();  // TypeId(29)
+type "functype//labeled_block.wado/__test_15_a_labeled_break_leaves_every_enclosing_loop" = fn();  // TypeId(28)
 
-type "functype//labeled_block.wado/__test_21_a_block_whose_tail_is_not_a_value_yields_unit" = fn();  // TypeId(30)
+type "functype//labeled_block.wado/__test_21_a_block_whose_tail_is_not_a_value_yields_unit" = fn();  // TypeId(29)
 
-type "functype//labeled_block.wado/__test_22_a_valueless_break_and_a_unit_break_agree" = fn();  // TypeId(31)
+type "functype//labeled_block.wado/__test_22_a_valueless_break_and_a_unit_break_agree" = fn();  // TypeId(30)
 
-type "functype//labeled_block.wado/__test_26_a_terminating_loop_leaves_a_unit_tail" = fn();  // TypeId(32)
+type "functype//labeled_block.wado/__test_26_a_terminating_loop_leaves_a_unit_tail" = fn();  // TypeId(31)
 
-type "functype//labeled_block.wado/__test_27_a_self_breaking_block_s_field_writes_survive_the_fall_through_join" = fn();  // TypeId(33)
+type "functype//labeled_block.wado/__test_27_a_self_breaking_block_s_field_writes_survive_the_fall_through_join" = fn();  // TypeId(32)
 
-type "functype//labeled_block.wado/__cm_export____test_0_a_labeled_block_opens_a_scope" = fn();  // TypeId(34)
+type "functype//labeled_block.wado/__cm_export____test_0_a_labeled_block_opens_a_scope" = fn();  // TypeId(33)
 
-type "functype//labeled_block.wado/__cm_export____test_1_labeled_blocks_nest" = fn();  // TypeId(35)
+type "functype//labeled_block.wado/__cm_export____test_1_labeled_blocks_nest" = fn();  // TypeId(34)
 
-type "functype//labeled_block.wado/__cm_export____test_2_break_leaves_the_block" = fn();  // TypeId(36)
+type "functype//labeled_block.wado/__cm_export____test_2_break_leaves_the_block" = fn();  // TypeId(35)
 
-type "functype//labeled_block.wado/__cm_export____test_3_break_leaves_every_enclosing_labeled_block_at_once" = fn();  // TypeId(37)
+type "functype//labeled_block.wado/__cm_export____test_3_break_leaves_every_enclosing_labeled_block_at_once" = fn();  // TypeId(36)
 
-type "functype//labeled_block.wado/__cm_export____test_4_a_block_in_expression_position_carries_a_value" = fn();  // TypeId(38)
+type "functype//labeled_block.wado/__cm_export____test_4_a_block_in_expression_position_carries_a_value" = fn();  // TypeId(37)
 
-type "functype//labeled_block.wado/__cm_export____test_5_nested_value_blocks" = fn();  // TypeId(39)
+type "functype//labeled_block.wado/__cm_export____test_5_nested_value_blocks" = fn();  // TypeId(38)
 
-type "functype//labeled_block.wado/__cm_export____test_6_a_value_break_out_of_a_loop__with_a_fallback_break" = fn();  // TypeId(40)
+type "functype//labeled_block.wado/__cm_export____test_6_a_value_break_out_of_a_loop__with_a_fallback_break" = fn();  // TypeId(39)
 
-type "functype//labeled_block.wado/__cm_export____test_7_a_labeled_block_inside_a_loop_skips_the_rest_of_one_iteration" = fn();  // TypeId(41)
+type "functype//labeled_block.wado/__cm_export____test_7_a_labeled_block_inside_a_loop_skips_the_rest_of_one_iteration" = fn();  // TypeId(40)
 
-type "functype//labeled_block.wado/__cm_export____test_8_break_values_coerce_to_the_use_site_s_expected_type" = fn();  // TypeId(42)
+type "functype//labeled_block.wado/__cm_export____test_8_break_values_coerce_to_the_use_site_s_expected_type" = fn();  // TypeId(41)
 
-type "functype//labeled_block.wado/__cm_export____test_9_a_null_break_takes_its_option_inner_type_from_a_sibling_break" = fn();  // TypeId(43)
+type "functype//labeled_block.wado/__cm_export____test_9_a_null_break_takes_its_option_inner_type_from_a_sibling_break" = fn();  // TypeId(42)
 
-type "functype//labeled_block.wado/__cm_export____test_10_a_null_tail_resolves_against_the_block_s_unified_type" = fn();  // TypeId(44)
+type "functype//labeled_block.wado/__cm_export____test_10_a_null_tail_resolves_against_the_block_s_unified_type" = fn();  // TypeId(43)
 
-type "functype//labeled_block.wado/__cm_export____test_11_a_reused_label_binds_to_the_innermost_block_carrying_it" = fn();  // TypeId(45)
+type "functype//labeled_block.wado/__cm_export____test_11_a_reused_label_binds_to_the_innermost_block_carrying_it" = fn();  // TypeId(44)
 
-type "functype//labeled_block.wado/__cm_export____test_12_an_inner_statement_block_of_the_same_name_catches_its_own_break" = fn();  // TypeId(46)
+type "functype//labeled_block.wado/__cm_export____test_12_an_inner_statement_block_of_the_same_name_catches_its_own_break" = fn();  // TypeId(45)
 
-type "functype//labeled_block.wado/__cm_export____test_13_the_inner_block_runs_on_to_its_end_when_no_break_is_taken" = fn();  // TypeId(47)
+type "functype//labeled_block.wado/__cm_export____test_13_the_inner_block_runs_on_to_its_end_when_no_break_is_taken" = fn();  // TypeId(46)
 
-type "functype//labeled_block.wado/__cm_export____test_14_a_contextual_keyword_is_a_label" = fn();  // TypeId(48)
+type "functype//labeled_block.wado/__cm_export____test_14_a_contextual_keyword_is_a_label" = fn();  // TypeId(47)
 
-type "functype//labeled_block.wado/__cm_export____test_15_a_labeled_break_leaves_every_enclosing_loop" = fn();  // TypeId(49)
+type "functype//labeled_block.wado/__cm_export____test_15_a_labeled_break_leaves_every_enclosing_loop" = fn();  // TypeId(48)
 
-type "functype//labeled_block.wado/__cm_export____test_16_the_tail_runs_only_when_no_break_was_taken" = fn();  // TypeId(50)
+type "functype//labeled_block.wado/__cm_export____test_16_the_tail_runs_only_when_no_break_was_taken" = fn();  // TypeId(49)
 
-type "functype//labeled_block.wado/__cm_export____test_17_a_value_carrying_break_leaves_the_loop_nest_too" = fn();  // TypeId(51)
+type "functype//labeled_block.wado/__cm_export____test_17_a_value_carrying_break_leaves_the_loop_nest_too" = fn();  // TypeId(50)
 
-type "functype//labeled_block.wado/__cm_export____test_18_the_tail_types_a_labeled_block_with_no_break" = fn();  // TypeId(52)
+type "functype//labeled_block.wado/__cm_export____test_18_the_tail_types_a_labeled_block_with_no_break" = fn();  // TypeId(51)
 
-type "functype//labeled_block.wado/__cm_export____test_19_the_tail_is_the_value_when_no_break_is_taken" = fn();  // TypeId(53)
+type "functype//labeled_block.wado/__cm_export____test_19_the_tail_is_the_value_when_no_break_is_taken" = fn();  // TypeId(52)
 
-type "functype//labeled_block.wado/__cm_export____test_20_a_break_wins_over_the_tail_on_the_path_that_takes_it" = fn();  // TypeId(54)
+type "functype//labeled_block.wado/__cm_export____test_20_a_break_wins_over_the_tail_on_the_path_that_takes_it" = fn();  // TypeId(53)
 
-type "functype//labeled_block.wado/__cm_export____test_21_a_block_whose_tail_is_not_a_value_yields_unit" = fn();  // TypeId(55)
+type "functype//labeled_block.wado/__cm_export____test_21_a_block_whose_tail_is_not_a_value_yields_unit" = fn();  // TypeId(54)
 
-type "functype//labeled_block.wado/__cm_export____test_22_a_valueless_break_and_a_unit_break_agree" = fn();  // TypeId(56)
+type "functype//labeled_block.wado/__cm_export____test_22_a_valueless_break_and_a_unit_break_agree" = fn();  // TypeId(55)
 
-type "functype//labeled_block.wado/__cm_export____test_23_an_unlabeled_break_may_spell_its_unit" = fn();  // TypeId(57)
+type "functype//labeled_block.wado/__cm_export____test_23_an_unlabeled_break_may_spell_its_unit" = fn();  // TypeId(56)
 
-type "functype//labeled_block.wado/__cm_export____test_24_a_value_comes_out_of_a_trailing__loop_" = fn();  // TypeId(58)
+type "functype//labeled_block.wado/__cm_export____test_24_a_value_comes_out_of_a_trailing__loop_" = fn();  // TypeId(57)
 
-type "functype//labeled_block.wado/__cm_export____test_25_a_trailing__while_true__is_a_loop_too" = fn();  // TypeId(59)
+type "functype//labeled_block.wado/__cm_export____test_25_a_trailing__while_true__is_a_loop_too" = fn();  // TypeId(58)
 
-type "functype//labeled_block.wado/__cm_export____test_26_a_terminating_loop_leaves_a_unit_tail" = fn();  // TypeId(60)
+type "functype//labeled_block.wado/__cm_export____test_26_a_terminating_loop_leaves_a_unit_tail" = fn();  // TypeId(59)
 
-type "functype//labeled_block.wado/__cm_export____test_27_a_self_breaking_block_s_field_writes_survive_the_fall_through_join" = fn();  // TypeId(61)
+type "functype//labeled_block.wado/__cm_export____test_27_a_self_breaking_block_s_field_writes_survive_the_fall_through_join" = fn();  // TypeId(60)
 
-type "functype//labeled_block.wado/__cm_export____test_28_a_loop_leaving_only_via_an_inner_labeled_break_still_diverges" = fn();  // TypeId(62)
+type "functype//labeled_block.wado/__cm_export____test_28_a_loop_leaving_only_via_an_inner_labeled_break_still_diverges" = fn();  // TypeId(61)
 
-type "functype//labeled_block.wado/find$cold0" = fn(i32);  // TypeId(63)
+type "functype//labeled_block.wado/find$cold0" = fn(i32);  // TypeId(62)
 
-type "functype//labeled_block.wado/__test_7_a_labeled_block_inside_a_loop_skips_the_rest_of_one_iteration$cold0" = fn(i32);  // TypeId(64)
+type "functype//labeled_block.wado/__test_7_a_labeled_block_inside_a_loop_skips_the_rest_of_one_iteration$cold0" = fn(i32);  // TypeId(63)
 
-type "functype//labeled_block.wado/__test_9_a_null_break_takes_its_option_inner_type_from_a_sibling_break$cold0" = fn();  // TypeId(65)
+type "functype//labeled_block.wado/__test_9_a_null_break_takes_its_option_inner_type_from_a_sibling_break$cold0" = fn();  // TypeId(64)
 
-type "functype//labeled_block.wado/__test_10_a_null_tail_resolves_against_the_block_s_unified_type$cold0" = fn();  // TypeId(66)
+type "functype//labeled_block.wado/__test_10_a_null_tail_resolves_against_the_block_s_unified_type$cold0" = fn();  // TypeId(65)
 
-type "functype//labeled_block.wado/__test_10_a_null_tail_resolves_against_the_block_s_unified_type$cold1" = fn();  // TypeId(67)
+type "functype//labeled_block.wado/__test_10_a_null_tail_resolves_against_the_block_s_unified_type$cold1" = fn();  // TypeId(66)
 
-type "functype//labeled_block.wado/__test_12_an_inner_statement_block_of_the_same_name_catches_its_own_break$cold0" = fn(i32);  // TypeId(68)
+type "functype//labeled_block.wado/__test_12_an_inner_statement_block_of_the_same_name_catches_its_own_break$cold0" = fn(i32);  // TypeId(67)
 
-type "functype//labeled_block.wado/__test_12_an_inner_statement_block_of_the_same_name_catches_its_own_break$cold1" = fn(i32);  // TypeId(69)
+type "functype//labeled_block.wado/__test_12_an_inner_statement_block_of_the_same_name_catches_its_own_break$cold1" = fn(i32);  // TypeId(68)
 
-type "functype//labeled_block.wado/__test_13_the_inner_block_runs_on_to_its_end_when_no_break_is_taken$cold0" = fn(i32);  // TypeId(70)
+type "functype//labeled_block.wado/__test_13_the_inner_block_runs_on_to_its_end_when_no_break_is_taken$cold0" = fn(i32);  // TypeId(69)
 
-type "functype//labeled_block.wado/__test_13_the_inner_block_runs_on_to_its_end_when_no_break_is_taken$cold1" = fn(i32);  // TypeId(71)
+type "functype//labeled_block.wado/__test_13_the_inner_block_runs_on_to_its_end_when_no_break_is_taken$cold1" = fn(i32);  // TypeId(70)
 
-type "functype//labeled_block.wado/__test_14_a_contextual_keyword_is_a_label$cold0" = fn(i32);  // TypeId(72)
+type "functype//labeled_block.wado/__test_14_a_contextual_keyword_is_a_label$cold0" = fn(i32);  // TypeId(71)
 
-type "functype//labeled_block.wado/__test_14_a_contextual_keyword_is_a_label$cold1" = fn(i32);  // TypeId(73)
+type "functype//labeled_block.wado/__test_14_a_contextual_keyword_is_a_label$cold1" = fn(i32);  // TypeId(72)
 
-type "functype//labeled_block.wado/__test_15_a_labeled_break_leaves_every_enclosing_loop$cold0" = fn(i32);  // TypeId(74)
+type "functype//labeled_block.wado/__test_15_a_labeled_break_leaves_every_enclosing_loop$cold0" = fn(i32);  // TypeId(73)
 
-type "functype//labeled_block.wado/__test_15_a_labeled_break_leaves_every_enclosing_loop$cold1" = fn(i32);  // TypeId(75)
+type "functype//labeled_block.wado/__test_15_a_labeled_break_leaves_every_enclosing_loop$cold1" = fn(i32);  // TypeId(74)
 
-type "functype//labeled_block.wado/__test_16_the_tail_runs_only_when_no_break_was_taken$cold0" = fn(i32);  // TypeId(76)
+type "functype//labeled_block.wado/__test_16_the_tail_runs_only_when_no_break_was_taken$cold0" = fn(i32);  // TypeId(75)
 
-type "functype//labeled_block.wado/__test_16_the_tail_runs_only_when_no_break_was_taken$cold1" = fn(i32);  // TypeId(77)
+type "functype//labeled_block.wado/__test_16_the_tail_runs_only_when_no_break_was_taken$cold1" = fn(i32);  // TypeId(76)
 
-type "functype//labeled_block.wado/__test_21_a_block_whose_tail_is_not_a_value_yields_unit$cold0" = fn();  // TypeId(78)
+type "functype//labeled_block.wado/__test_21_a_block_whose_tail_is_not_a_value_yields_unit$cold0" = fn();  // TypeId(77)
 
-type "functype//labeled_block.wado/__test_23_an_unlabeled_break_may_spell_its_unit$cold0" = fn(i32);  // TypeId(79)
+type "functype//labeled_block.wado/__test_23_an_unlabeled_break_may_spell_its_unit$cold0" = fn(i32);  // TypeId(78)
 
-type "functype//labeled_block.wado/__test_24_a_value_comes_out_of_a_trailing__loop_$cold0" = fn(i32);  // TypeId(80)
+type "functype//labeled_block.wado/__test_24_a_value_comes_out_of_a_trailing__loop_$cold0" = fn(i32);  // TypeId(79)
 
-type "functype//labeled_block.wado/__test_25_a_trailing__while_true__is_a_loop_too$cold0" = fn(i64);  // TypeId(81)
+type "functype//labeled_block.wado/__test_25_a_trailing__while_true__is_a_loop_too$cold0" = fn(i64);  // TypeId(80)
 
-type "functype//labeled_block.wado/__test_26_a_terminating_loop_leaves_a_unit_tail$cold0" = fn(i32);  // TypeId(82)
+type "functype//labeled_block.wado/__test_26_a_terminating_loop_leaves_a_unit_tail$cold0" = fn(i32);  // TypeId(81)
 
-type "functype//labeled_block.wado/__test_27_a_self_breaking_block_s_field_writes_survive_the_fall_through_join$cold0" = fn(bool, bool, i32);  // TypeId(83)
+type "functype//labeled_block.wado/__test_27_a_self_breaking_block_s_field_writes_survive_the_fall_through_join$cold0" = fn(bool, bool, i32);  // TypeId(82)
 
-type "functype//labeled_block.wado/__test_27_a_self_breaking_block_s_field_writes_survive_the_fall_through_join$cold1" = fn(bool, i32);  // TypeId(84)
+type "functype//labeled_block.wado/__test_27_a_self_breaking_block_s_field_writes_survive_the_fall_through_join$cold1" = fn(bool, i32);  // TypeId(83)
 
-type "functype//labeled_block.wado/__test_27_a_self_breaking_block_s_field_writes_survive_the_fall_through_join$cold2" = fn(bool, bool, i32);  // TypeId(85)
+type "functype//labeled_block.wado/__test_27_a_self_breaking_block_s_field_writes_survive_the_fall_through_join$cold2" = fn(bool, bool, i32);  // TypeId(84)
 
-type "functype//labeled_block.wado/__test_27_a_self_breaking_block_s_field_writes_survive_the_fall_through_join$cold3" = fn(bool, bool, i32);  // TypeId(86)
+type "functype//labeled_block.wado/__test_27_a_self_breaking_block_s_field_writes_survive_the_fall_through_join$cold3" = fn(bool, bool, i32);  // TypeId(85)
 
-type "functype//labeled_block.wado/__test_27_a_self_breaking_block_s_field_writes_survive_the_fall_through_join$cold4" = fn(bool, i32);  // TypeId(87)
+type "functype//labeled_block.wado/__test_27_a_self_breaking_block_s_field_writes_survive_the_fall_through_join$cold4" = fn(bool, i32);  // TypeId(86)
 
-type "functype//core:prelude/primitive.wado/count_digits_u64_base" = fn(i64, i32) -> i32;  // TypeId(88)
+type "functype//core:prelude/primitive.wado/count_digits_u64_base" = fn(i64, i32) -> i32;  // TypeId(87)
 
-type "functype//core:prelude/primitive.wado/write_u64_base_digits" = fn(ref Array<u8>, i32, i64, i32, i32, i32, bool);  // TypeId(89)
+type "functype//core:prelude/primitive.wado/write_u64_base_digits" = fn(ref Array<u8>, i32, i64, i32, i32, i32, bool);  // TypeId(88)
 
-type "functype//core:rt/panic" = fn(ref "core:prelude/string.wado//String");  // TypeId(90)
+type "functype//core:rt/panic" = fn(ref "core:prelude/string.wado//String");  // TypeId(89)
 
-type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(91)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0" = fn(i32, i32);  // TypeId(90)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0" = fn(i32, i32);  // TypeId(92)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/list.wado/List<i32>>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0" = fn(i32, i32);  // TypeId(91)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/list.wado/List<i32>>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0" = fn(i32, i32);  // TypeId(93)
+type "functype//core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt" = fn(ref "core:prelude/types.wado//Box<i32>", ref "core:prelude/format.wado//Formatter");  // TypeId(92)
 
-type "functype//core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt" = fn(ref "core:prelude/types.wado//Box<i32>", ref "core:prelude/format.wado//Formatter");  // TypeId(94)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::with_capacity" = fn(i32) -> ref "core:prelude/string.wado//String";  // TypeId(93)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::with_capacity" = fn(i32) -> ref "core:prelude/string.wado//String";  // TypeId(95)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(94)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(96)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit" = fn(ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(95)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit" = fn(ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(97)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(96)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(98)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked" = fn(ref "core:prelude/string.wado//String", u8);  // TypeId(97)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked" = fn(ref "core:prelude/string.wado//String", u8);  // TypeId(99)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::new" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/format.wado//Formatter";  // TypeId(98)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::new" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/format.wado//Formatter";  // TypeId(100)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pad" = fn(ref "core:prelude/format.wado//Formatter", ref "core:prelude/string.wado//String");  // TypeId(99)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pad" = fn(ref "core:prelude/format.wado//Formatter", ref "core:prelude/string.wado//String");  // TypeId(101)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(100)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(102)
+type "functype//core:prelude/format.wado/core:prelude/string.wado/String^core:prelude/traits.wado/Inspect::inspect" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/format.wado//Formatter");  // TypeId(101)
 
-type "functype//core:prelude/format.wado/core:prelude/string.wado/String^core:prelude/traits.wado/Inspect::inspect" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/format.wado//Formatter");  // TypeId(103)
+type "functype//core:prelude/range.wado/core:prelude/range.wado/RangeExclusive<i32>^core:prelude/traits.wado/Iterator::next" = fn(ref "core:prelude/range.wado//RangeExclusive<i32>") -> [i32, i32];  // TypeId(102)
 
-type "functype//core:prelude/range.wado/core:prelude/range.wado/RangeExclusive<i32>^core:prelude/traits.wado/Iterator::next" = fn(ref "core:prelude/range.wado//RangeExclusive<i32>") -> [i32, i32];  // TypeId(104)
+type "functype//core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_raw_all" = fn(i32, ref "core:prelude/slice.wado//Slice<u8>");  // TypeId(103)
 
-type "functype//core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_raw_all" = fn(i32, ref "core:prelude/slice.wado//Slice<u8>") -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(105)
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal$scalar" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(104)
 
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal$scalar" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(106)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar" = fn(ref Array<u8>, i32, ref "core:prelude/string.wado//String", i32);  // TypeId(105)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar" = fn(ref Array<u8>, i32, ref "core:prelude/string.wado//String", i32);  // TypeId(107)
+type "functype//core:prelude/primitive.wado/i64::fmt_decimal$scalar" = fn(i64, ref "core:prelude/format.wado//Formatter");  // TypeId(106)
 
-type "functype//core:prelude/primitive.wado/i64::fmt_decimal$scalar" = fn(i64, ref "core:prelude/format.wado//Formatter");  // TypeId(108)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked$scalar" = fn(ref Array<u8>, i32, u8);  // TypeId(107)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked$scalar" = fn(ref Array<u8>, i32, u8);  // TypeId(109)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(108)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(110)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(109)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(111)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(110)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(112)
-
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(113)
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(111)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -288,7 +281,6 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
 global mut global:labeled_block.wado::CALLS: i32 = 0;
-global mut global:labeled_block.wado::__modules_initialized: bool = 0;
 global global:labeled_block.wado::__const_obj_4: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(40, 41), used: 2 };
 global global:labeled_block.wado::__const_obj_5: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10, 99, 111, 110, 100, 105, 116, 105, 111, 110, 58, 32, 96, 36, 123, 118, 125, 96, 32, 61, 61, 32, 34, 40, 41, 34, 10), used: 27 };
 global global:labeled_block.wado::__const_obj_6: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(108, 97, 98, 101, 108, 101, 100, 95, 98, 108, 111, 99, 107, 46, 119, 97, 100, 111), used: 18 };
@@ -780,84 +772,36 @@ fn "labeled_block.wado/__test_27_a_self_breaking_block_s_field_writes_survive_th
 }
 
 fn "labeled_block.wado/__cm_export____test_0_a_labeled_block_opens_a_scope"() {
-    $inline___initialize_modules_0: block {
-        break_if $inline___initialize_modules_0 @likely(global:labeled_block.wado::__modules_initialized);
-        cold_path;
-        "core:prelude/fpfmt.wado/__initialize_module"();
-        global:labeled_block.wado::__modules_initialized = 1;
-    };
     "wasi/task-return"(0);
 }
 
 fn "labeled_block.wado/__cm_export____test_1_labeled_blocks_nest"() {
-    $inline___initialize_modules_0: block {
-        break_if $inline___initialize_modules_0 @likely(global:labeled_block.wado::__modules_initialized);
-        cold_path;
-        "core:prelude/fpfmt.wado/__initialize_module"();
-        global:labeled_block.wado::__modules_initialized = 1;
-    };
     "wasi/task-return"(0);
 }
 
 fn "labeled_block.wado/__cm_export____test_2_break_leaves_the_block"() {
-    $inline___initialize_modules_0: block {
-        break_if $inline___initialize_modules_0 @likely(global:labeled_block.wado::__modules_initialized);
-        cold_path;
-        "core:prelude/fpfmt.wado/__initialize_module"();
-        global:labeled_block.wado::__modules_initialized = 1;
-    };
     "wasi/task-return"(0);
 }
 
 fn "labeled_block.wado/__cm_export____test_3_break_leaves_every_enclosing_labeled_block_at_once"() {
-    $inline___initialize_modules_0: block {
-        break_if $inline___initialize_modules_0 @likely(global:labeled_block.wado::__modules_initialized);
-        cold_path;
-        "core:prelude/fpfmt.wado/__initialize_module"();
-        global:labeled_block.wado::__modules_initialized = 1;
-    };
     "wasi/task-return"(0);
 }
 
 fn "labeled_block.wado/__cm_export____test_4_a_block_in_expression_position_carries_a_value"() {
-    $inline___initialize_modules_0: block {
-        break_if $inline___initialize_modules_0 @likely(global:labeled_block.wado::__modules_initialized);
-        cold_path;
-        "core:prelude/fpfmt.wado/__initialize_module"();
-        global:labeled_block.wado::__modules_initialized = 1;
-    };
     "wasi/task-return"(0);
 }
 
 fn "labeled_block.wado/__cm_export____test_5_nested_value_blocks"() {
-    $inline___initialize_modules_0: block {
-        break_if $inline___initialize_modules_0 @likely(global:labeled_block.wado::__modules_initialized);
-        cold_path;
-        "core:prelude/fpfmt.wado/__initialize_module"();
-        global:labeled_block.wado::__modules_initialized = 1;
-    };
     "wasi/task-return"(0);
 }
 
 fn "labeled_block.wado/__cm_export____test_6_a_value_break_out_of_a_loop__with_a_fallback_break"() {
-    $inline___initialize_modules_0: block {
-        break_if $inline___initialize_modules_0 @likely(global:labeled_block.wado::__modules_initialized);
-        cold_path;
-        "core:prelude/fpfmt.wado/__initialize_module"();
-        global:labeled_block.wado::__modules_initialized = 1;
-    };
     "wasi/task-return"(0);
 }
 
 fn "labeled_block.wado/__cm_export____test_7_a_labeled_block_inside_a_loop_skips_the_rest_of_one_iteration"() {
     let sum: i32;
     let i: i32;
-    $inline___initialize_modules_0: block {
-        break_if $inline___initialize_modules_0 @likely(global:labeled_block.wado::__modules_initialized);
-        cold_path;
-        "core:prelude/fpfmt.wado/__initialize_module"();
-        global:labeled_block.wado::__modules_initialized = 1;
-    };
     sum = 0;
     i = 0;
     b59: block {
@@ -881,22 +825,10 @@ fn "labeled_block.wado/__cm_export____test_7_a_labeled_block_inside_a_loop_skips
 }
 
 fn "labeled_block.wado/__cm_export____test_8_break_values_coerce_to_the_use_site_s_expected_type"() {
-    $inline___initialize_modules_0: block {
-        break_if $inline___initialize_modules_0 @likely(global:labeled_block.wado::__modules_initialized);
-        cold_path;
-        "core:prelude/fpfmt.wado/__initialize_module"();
-        global:labeled_block.wado::__modules_initialized = 1;
-    };
     "wasi/task-return"(0);
 }
 
 fn "labeled_block.wado/__cm_export____test_9_a_null_break_takes_its_option_inner_type_from_a_sibling_break"() {
-    $inline___initialize_modules_0: block {
-        break_if $inline___initialize_modules_0 @likely(global:labeled_block.wado::__modules_initialized);
-        cold_path;
-        "core:prelude/fpfmt.wado/__initialize_module"();
-        global:labeled_block.wado::__modules_initialized = 1;
-    };
     if @unlikely(1 == 0) {
         cold_path;
         "labeled_block.wado/__test_9_a_null_break_takes_its_option_inner_type_from_a_sibling_break$cold0"();
@@ -906,34 +838,16 @@ fn "labeled_block.wado/__cm_export____test_9_a_null_break_takes_its_option_inner
 }
 
 fn "labeled_block.wado/__cm_export____test_10_a_null_tail_resolves_against_the_block_s_unified_type"() {
-    $inline___initialize_modules_0: block {
-        break_if $inline___initialize_modules_0 @likely(global:labeled_block.wado::__modules_initialized);
-        cold_path;
-        "core:prelude/fpfmt.wado/__initialize_module"();
-        global:labeled_block.wado::__modules_initialized = 1;
-    };
     "labeled_block.wado/__test_10_a_null_tail_resolves_against_the_block_s_unified_type"();
     "wasi/task-return"(0);
 }
 
 fn "labeled_block.wado/__cm_export____test_11_a_reused_label_binds_to_the_innermost_block_carrying_it"() {
-    $inline___initialize_modules_0: block {
-        break_if $inline___initialize_modules_0 @likely(global:labeled_block.wado::__modules_initialized);
-        cold_path;
-        "core:prelude/fpfmt.wado/__initialize_module"();
-        global:labeled_block.wado::__modules_initialized = 1;
-    };
     "wasi/task-return"(0);
 }
 
 fn "labeled_block.wado/__cm_export____test_12_an_inner_statement_block_of_the_same_name_catches_its_own_break"() {
     let inner_ran: i32;
-    $inline___initialize_modules_0: block {
-        break_if $inline___initialize_modules_0 @likely(global:labeled_block.wado::__modules_initialized);
-        cold_path;
-        "core:prelude/fpfmt.wado/__initialize_module"();
-        global:labeled_block.wado::__modules_initialized = 1;
-    };
     inner_ran = 0;
     $inline___test_12_an_inner_statement_block_of_the_same_name_catches_its_own_break_1__blk: block {
         block {
@@ -956,12 +870,6 @@ fn "labeled_block.wado/__cm_export____test_12_an_inner_statement_block_of_the_sa
 
 fn "labeled_block.wado/__cm_export____test_13_the_inner_block_runs_on_to_its_end_when_no_break_is_taken"() {
     let inner_ran: i32;
-    $inline___initialize_modules_0: block {
-        break_if $inline___initialize_modules_0 @likely(global:labeled_block.wado::__modules_initialized);
-        cold_path;
-        "core:prelude/fpfmt.wado/__initialize_module"();
-        global:labeled_block.wado::__modules_initialized = 1;
-    };
     inner_ran = 0;
     block {
         block {
@@ -982,23 +890,11 @@ fn "labeled_block.wado/__cm_export____test_13_the_inner_block_runs_on_to_its_end
 }
 
 fn "labeled_block.wado/__cm_export____test_14_a_contextual_keyword_is_a_label"() {
-    $inline___initialize_modules_0: block {
-        break_if $inline___initialize_modules_0 @likely(global:labeled_block.wado::__modules_initialized);
-        cold_path;
-        "core:prelude/fpfmt.wado/__initialize_module"();
-        global:labeled_block.wado::__modules_initialized = 1;
-    };
     "labeled_block.wado/__test_14_a_contextual_keyword_is_a_label"();
     "wasi/task-return"(0);
 }
 
 fn "labeled_block.wado/__cm_export____test_15_a_labeled_break_leaves_every_enclosing_loop"() {
-    $inline___initialize_modules_0: block {
-        break_if $inline___initialize_modules_0 @likely(global:labeled_block.wado::__modules_initialized);
-        cold_path;
-        "core:prelude/fpfmt.wado/__initialize_module"();
-        global:labeled_block.wado::__modules_initialized = 1;
-    };
     "labeled_block.wado/__test_15_a_labeled_break_leaves_every_enclosing_loop"();
     "wasi/task-return"(0);
 }
@@ -1007,12 +903,6 @@ fn "labeled_block.wado/__cm_export____test_16_the_tail_runs_only_when_no_break_w
     let r: i32;
     let c: i32;
     let __pattern_temp_0: ref "tuple//[i32, i32]";
-    $inline___initialize_modules_0: block {
-        break_if $inline___initialize_modules_0 @likely(global:labeled_block.wado::__modules_initialized);
-        cold_path;
-        "core:prelude/fpfmt.wado/__initialize_module"();
-        global:labeled_block.wado::__modules_initialized = 1;
-    };
     __pattern_temp_0 = "labeled_block.wado/find"(struct.new "core:prelude//List<core:prelude/list.wado/List<i32>>" { repr: array.new_fixed<ref "core:prelude//List<i32>">(struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1, 2), used: 2 }, struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(3, 4), used: 2 }), used: 2 }, 9);
     r = __pattern_temp_0.0;
     c = __pattern_temp_0.1;
@@ -1030,75 +920,33 @@ fn "labeled_block.wado/__cm_export____test_16_the_tail_runs_only_when_no_break_w
 }
 
 fn "labeled_block.wado/__cm_export____test_17_a_value_carrying_break_leaves_the_loop_nest_too"() {
-    $inline___initialize_modules_0: block {
-        break_if $inline___initialize_modules_0 @likely(global:labeled_block.wado::__modules_initialized);
-        cold_path;
-        "core:prelude/fpfmt.wado/__initialize_module"();
-        global:labeled_block.wado::__modules_initialized = 1;
-    };
     "wasi/task-return"(0);
 }
 
 fn "labeled_block.wado/__cm_export____test_18_the_tail_types_a_labeled_block_with_no_break"() {
-    $inline___initialize_modules_0: block {
-        break_if $inline___initialize_modules_0 @likely(global:labeled_block.wado::__modules_initialized);
-        cold_path;
-        "core:prelude/fpfmt.wado/__initialize_module"();
-        global:labeled_block.wado::__modules_initialized = 1;
-    };
     "wasi/task-return"(0);
 }
 
 fn "labeled_block.wado/__cm_export____test_19_the_tail_is_the_value_when_no_break_is_taken"() {
-    $inline___initialize_modules_0: block {
-        break_if $inline___initialize_modules_0 @likely(global:labeled_block.wado::__modules_initialized);
-        cold_path;
-        "core:prelude/fpfmt.wado/__initialize_module"();
-        global:labeled_block.wado::__modules_initialized = 1;
-    };
     "wasi/task-return"(0);
 }
 
 fn "labeled_block.wado/__cm_export____test_20_a_break_wins_over_the_tail_on_the_path_that_takes_it"() {
-    $inline___initialize_modules_0: block {
-        break_if $inline___initialize_modules_0 @likely(global:labeled_block.wado::__modules_initialized);
-        cold_path;
-        "core:prelude/fpfmt.wado/__initialize_module"();
-        global:labeled_block.wado::__modules_initialized = 1;
-    };
     "wasi/task-return"(0);
 }
 
 fn "labeled_block.wado/__cm_export____test_21_a_block_whose_tail_is_not_a_value_yields_unit"() {
-    $inline___initialize_modules_0: block {
-        break_if $inline___initialize_modules_0 @likely(global:labeled_block.wado::__modules_initialized);
-        cold_path;
-        "core:prelude/fpfmt.wado/__initialize_module"();
-        global:labeled_block.wado::__modules_initialized = 1;
-    };
     "labeled_block.wado/__test_21_a_block_whose_tail_is_not_a_value_yields_unit"();
     "wasi/task-return"(0);
 }
 
 fn "labeled_block.wado/__cm_export____test_22_a_valueless_break_and_a_unit_break_agree"() {
-    $inline___initialize_modules_0: block {
-        break_if $inline___initialize_modules_0 @likely(global:labeled_block.wado::__modules_initialized);
-        cold_path;
-        "core:prelude/fpfmt.wado/__initialize_module"();
-        global:labeled_block.wado::__modules_initialized = 1;
-    };
     "labeled_block.wado/__test_22_a_valueless_break_and_a_unit_break_agree"();
     "wasi/task-return"(0);
 }
 
 fn "labeled_block.wado/__cm_export____test_23_an_unlabeled_break_may_spell_its_unit"() {
     let n: i32;
-    $inline___initialize_modules_0: block {
-        break_if $inline___initialize_modules_0 @likely(global:labeled_block.wado::__modules_initialized);
-        cold_path;
-        "core:prelude/fpfmt.wado/__initialize_module"();
-        global:labeled_block.wado::__modules_initialized = 1;
-    };
     n = 0;
     b71: block {
         l72: loop {
@@ -1118,12 +966,6 @@ fn "labeled_block.wado/__cm_export____test_23_an_unlabeled_break_may_spell_its_u
 fn "labeled_block.wado/__cm_export____test_24_a_value_comes_out_of_a_trailing__loop_"() {
     let i: i32;
     let v: i32;
-    $inline___initialize_modules_0: block {
-        break_if $inline___initialize_modules_0 @likely(global:labeled_block.wado::__modules_initialized);
-        cold_path;
-        "core:prelude/fpfmt.wado/__initialize_module"();
-        global:labeled_block.wado::__modules_initialized = 1;
-    };
     i = 0;
     v = $inline___test_24_a_value_comes_out_of_a_trailing__loop__1__blk: block -> i32 {
         block {
@@ -1148,12 +990,6 @@ fn "labeled_block.wado/__cm_export____test_24_a_value_comes_out_of_a_trailing__l
 fn "labeled_block.wado/__cm_export____test_25_a_trailing__while_true__is_a_loop_too"() {
     let i: i32;
     let v: i64;
-    $inline___initialize_modules_0: block {
-        break_if $inline___initialize_modules_0 @likely(global:labeled_block.wado::__modules_initialized);
-        cold_path;
-        "core:prelude/fpfmt.wado/__initialize_module"();
-        global:labeled_block.wado::__modules_initialized = 1;
-    };
     i = 0;
     v = $inline___test_25_a_trailing__while_true__is_a_loop_too_1__blk: block -> i64 {
         block {
@@ -1176,34 +1012,16 @@ fn "labeled_block.wado/__cm_export____test_25_a_trailing__while_true__is_a_loop_
 }
 
 fn "labeled_block.wado/__cm_export____test_26_a_terminating_loop_leaves_a_unit_tail"() {
-    $inline___initialize_modules_0: block {
-        break_if $inline___initialize_modules_0 @likely(global:labeled_block.wado::__modules_initialized);
-        cold_path;
-        "core:prelude/fpfmt.wado/__initialize_module"();
-        global:labeled_block.wado::__modules_initialized = 1;
-    };
     "labeled_block.wado/__test_26_a_terminating_loop_leaves_a_unit_tail"();
     "wasi/task-return"(0);
 }
 
 fn "labeled_block.wado/__cm_export____test_27_a_self_breaking_block_s_field_writes_survive_the_fall_through_join"() {
-    $inline___initialize_modules_0: block {
-        break_if $inline___initialize_modules_0 @likely(global:labeled_block.wado::__modules_initialized);
-        cold_path;
-        "core:prelude/fpfmt.wado/__initialize_module"();
-        global:labeled_block.wado::__modules_initialized = 1;
-    };
     "labeled_block.wado/__test_27_a_self_breaking_block_s_field_writes_survive_the_fall_through_join"();
     "wasi/task-return"(0);
 }
 
 fn "labeled_block.wado/__cm_export____test_28_a_loop_leaving_only_via_an_inner_labeled_break_still_diverges"() {
-    $inline___initialize_modules_0: block {
-        break_if $inline___initialize_modules_0 @likely(global:labeled_block.wado::__modules_initialized);
-        cold_path;
-        "core:prelude/fpfmt.wado/__initialize_module"();
-        global:labeled_block.wado::__modules_initialized = 1;
-    };
     "wasi/task-return"(0);
 }
 
@@ -1928,14 +1746,11 @@ fn "core:rt/panic"(message) {
     new_repr = builtin::array_new<u8>(local.tee self_14(message.used) + 1);
     builtin::array_copy<u8>(new_repr, 0, message.repr, 0, self_14);
     builtin::array_set_u8(new_repr, self_14, 10);
-    drop("core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_raw_all"(tx_8, struct.new "core:prelude/slice.wado//Slice<u8>" { repr: new_repr, start: 0, end: self_14 + 1 }));
+    "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_raw_all"(tx_8, struct.new "core:prelude/slice.wado//Slice<u8>" { repr: new_repr, start: 0, end: self_14 + 1 });
     "wasi/stream-drop-writable"(tx_8);
     "wasi/future-drop-readable:transmission-cli"(future_handle);
     cold_path;
     unreachable;
-}
-
-fn "core:prelude/fpfmt.wado/__initialize_module"() {
 }
 
 fn "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"(index, __v1) {
@@ -3116,7 +2931,6 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
     let packed_13: i64;
     let ptr_14: i32;
     let raw_len: i32;
-    let written_16: ref "core:prelude/types.wado//StreamWrite";
     let len_23: i32;
     let ptr_24: i32;
     let i: i32;
@@ -3125,15 +2939,17 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
     let evt_ptr: i32;
     let status_41: i32;
     let __sroa_data_start: i32;
-    let _av_50: i32;
-    let _av_51: i32;
-    _av_50 = data.start;
-    _av_51 = data.end;
-    if (_av_51 - _av_50) == 0 {
-        return 0;
+    let __sroa_written_count: i32;
+    let __sroa_written_result: "core:prelude/types.wado//enum:CopyResult";
+    let _av_52: i32;
+    let _av_53: i32;
+    _av_52 = data.start;
+    _av_53 = data.end;
+    if (_av_53 - _av_52) == 0 {
+        return;
     }
     repr_2 = data.repr;
-    end_3 = _av_50 + (_av_51 - _av_50);
+    end_3 = _av_52 + (_av_53 - _av_52);
     offset = data.start;
     block {
         l305: loop {
@@ -3159,7 +2975,8 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
                 "wasi/waitable-set-drop"(ws);
                 result = status_41;
             }
-            written_16 = struct.new "core:prelude/types.wado//StreamWrite" { count: result >> 4, result: $inline_cm_copy_result_14: block -> "core:prelude/types.wado//enum:CopyResult" {
+            __sroa_written_count = result >> 4;
+            __sroa_written_result = $inline_cm_copy_result_14: block -> "core:prelude/types.wado//enum:CopyResult" {
                 let __match_scrut_0: i32;
                 __match_scrut_0 = result & 15;
                 if __match_scrut_0 == 0 {
@@ -3169,11 +2986,11 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
                 } else {
                 }
                 break $inline_cm_copy_result_14: 2;
-            } };
+            };
             drop("mem/realloc"(ptr_14, raw_len, 1, 0));
-            offset = offset + written_16.count;
-            if select i32(select i32(written_16.result != 0, 1, written_16.count <= 0), 1, offset >= end_3) {
-                return written_16.result;
+            offset = offset + __sroa_written_count;
+            if select i32(select i32(__sroa_written_result != 0, 1, __sroa_written_count <= 0), 1, offset >= end_3) {
+                return;
             }
             continue l305;
         };

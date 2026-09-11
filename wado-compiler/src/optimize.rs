@@ -306,19 +306,28 @@ pub fn optimize(
 
 fn run_dce(project: &mut NirPackage, profiler: &dyn SpanEmitter) {
     profiler.span_start("nir/dce");
-    // Compute every reachability set up front, then apply mutations
-    // in order. `remove_unreachable_globals` rewrites function bodies
-    // (it drops `GlobalVarSet` for dead globals), which can orphan
-    // calls inside dropped initializers; the *final* `run_dce` after
-    // the optimization loop cleans those up — the savings of an extra
-    // mid-loop call-graph rebuild aren't worth its cost.
-    // Before the census: a global whose value nothing observes still counts as
-    // read — by its own guard, and by the bindings folding left behind — so it
-    // has to lose those first to fall out below.
-    unhoist_unobserved_globals(project);
-    let analysis = analyze_dce(project);
-    remove_unreachable_functions(project, &analysis.functions);
-    remove_unreachable_globals(project, &analysis.globals);
+    // Removing callers exposes unobserved globals; removing their stores can
+    // empty an initializer and make its once guard unobserved in turn.
+    let analysis = loop {
+        let functions_before = project
+            .functions
+            .iter()
+            .filter(|f| f.borrow().body.is_some())
+            .count();
+        let globals_before = project.globals.len();
+        unhoist_unobserved_globals(project);
+        let analysis = analyze_dce(project);
+        remove_unreachable_functions(project, &analysis.functions);
+        remove_unreachable_globals(project, &analysis.globals);
+        let functions_after = project
+            .functions
+            .iter()
+            .filter(|f| f.borrow().body.is_some())
+            .count();
+        if functions_before == functions_after && globals_before == project.globals.len() {
+            break analysis;
+        }
+    };
     filter_string_literals(project);
     remove_unreachable_types(project, &analysis);
     filter_bytes_literals(project);

@@ -12,34 +12,18 @@ type "functype//assoc_type_same_name_two_traits.wado/__cm_export____test_1_the_s
 
 type "functype//assoc_type_same_name_two_traits.wado/__cm_export____test_2_an_inherited_associated_type_is_qualified_by_its_declaring_supertrait" = fn();  // TypeId(4)
 
-type "functype//core:prelude/fpfmt.wado/__initialize_module" = fn();  // TypeId(5)
-
-type "functype//wasi/task-return" = fn(i32);  // TypeId(6)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(5)
 
 import fn mem/realloc from "mem/realloc";
 import memory (1) from "mem/memory";
 import fn wasi/task-return from "wasi/task-return";
 
-global mut global:assoc_type_same_name_two_traits.wado::__modules_initialized: bool = 0;
-
 fn "assoc_type_same_name_two_traits.wado/__cm_export____test_0_each_trait_s_default_body_sees_its_own_associated_type"() {
-    $inline___initialize_modules_0: block {
-        break_if $inline___initialize_modules_0 @likely(global:assoc_type_same_name_two_traits.wado::__modules_initialized);
-        cold_path;
-        "core:prelude/fpfmt.wado/__initialize_module"();
-        global:assoc_type_same_name_two_traits.wado::__modules_initialized = 1;
-    };
     "wasi/task-return"(0);
 }
 
 fn "assoc_type_same_name_two_traits.wado/__cm_export____test_1_the_same_holds_for_a_different_element_type"() {
     let __sroa_v_repr: ref Array<u8>;
-    $inline___initialize_modules_0: block {
-        break_if $inline___initialize_modules_0 @likely(global:assoc_type_same_name_two_traits.wado::__modules_initialized);
-        cold_path;
-        "core:prelude/fpfmt.wado/__initialize_module"();
-        global:assoc_type_same_name_two_traits.wado::__modules_initialized = 1;
-    };
     __sroa_v_repr = array.new_fixed<u8>(119, 97, 100, 111);
     let __array_clone_dst_2: ref Array<u8>;
     __array_clone_dst_2 = builtin::array_new<u8>(4);
@@ -49,16 +33,7 @@ fn "assoc_type_same_name_two_traits.wado/__cm_export____test_1_the_same_holds_fo
 }
 
 fn "assoc_type_same_name_two_traits.wado/__cm_export____test_2_an_inherited_associated_type_is_qualified_by_its_declaring_supertrait"() {
-    $inline___initialize_modules_0: block {
-        break_if $inline___initialize_modules_0 @likely(global:assoc_type_same_name_two_traits.wado::__modules_initialized);
-        cold_path;
-        "core:prelude/fpfmt.wado/__initialize_module"();
-        global:assoc_type_same_name_two_traits.wado::__modules_initialized = 1;
-    };
     "wasi/task-return"(0);
-}
-
-fn "core:prelude/fpfmt.wado/__initialize_module"() {
 }
 
 export fn "assoc_type_same_name_two_traits.wado/__cm_export____test_0_each_trait_s_default_body_sees_its_own_associated_type" as "__test_0_each_trait_s_default_body_sees_its_own_associated_type"
