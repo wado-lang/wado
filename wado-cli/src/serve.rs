@@ -53,11 +53,9 @@ const EPOCH_TICK_MS: u64 = 1000;
 /// raise it for one that pays to build them. `0` disables.
 const DEFAULT_RECYCLE_REQUESTS: u64 = 200;
 
-/// In-flight requests one worker runs at once, when `--max-concurrency`
-/// does not say. Each pins a fiber stack the GC walks on every collection,
-/// so throughput peaks over a 16–32 plateau and a worker left to run the
-/// whole backlog loses a third of it by 200. The surplus waits in the
-/// worker's queue.
+/// In-flight requests one worker runs at once. Each pins a fiber stack the
+/// GC walks on every collection, so throughput peaks over a 16–32 plateau
+/// and a worker left to run the whole backlog loses a third of it by 200.
 const DEFAULT_MAX_CONCURRENCY_PER_WORKER: usize = 32;
 
 pub struct ServeOptions {
@@ -159,11 +157,8 @@ impl Opt {
                 value: Some("<addr>"),
                 desc: "Address to listen on (default: 0.0.0.0:8080)",
             },
-            // `serve` exposes `--dir` but not `--no-dir`: the default for
-            // a service is "no preopens" (services rarely need filesystem
-            // access), so `--no-dir` would have nothing to disable. We
-            // intentionally diverge from `run`/`test` here rather than
-            // accept a misleading no-op flag.
+            // No `--no-dir`, unlike `run`/`test`: a service preopens nothing
+            // by default, so it would have nothing to disable.
             Self::Dir => args::DIR_SPEC,
             Self::Collector => args::COLLECTOR_SPEC,
             Self::Timeout => TIMEOUT_SPEC,
@@ -287,10 +282,9 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<ServeOptions, CliExit> {
         }
     }
 
-    // An explicit `--workers` above an explicit `--max-concurrency` would
-    // leave a worker without even one in-flight slot. The auto-derived
-    // worker count is clamped instead (see `run`); the derived bound scales
-    // with the workers, so it can never be the smaller of the two.
+    // More workers than the bound would leave one without a slot. Only both
+    // explicit can collide: a derived worker count is clamped in `run`, and a
+    // derived bound scales with the workers.
     if let Some(w) = workers
         && let Some(max_concurrency) = max_concurrency
         && w > max_concurrency
@@ -362,14 +356,8 @@ struct RequestJob {
     resp_tx: oneshot::Sender<HandlerOutcome>,
 }
 
-/// One HTTP request, spawned (via `Accessor::spawn`) onto the long-lived
-/// component instance — so guest state persists across requests, exactly
-/// like a conventional HTTP server daemon.
-///
-/// As soon as the response head is ready the task hands it — plus a
-/// body-frame channel — back to `dispatch_request` over a oneshot. Hyper
-/// then drains body frames directly from the bounded (cap 8) channel,
-/// back-pressuring a slow consumer onto the guest.
+/// One HTTP request, spawned onto the long-lived component instance, so
+/// guest state persists across requests like a conventional server daemon.
 struct HandlerTask {
     service: Arc<Service>,
     job: RequestJob,
@@ -400,12 +388,10 @@ impl AccessorTask<WasiState> for HandlerTask {
         // `resp_tx` — are dropped before `resp_tx` is inspected below.
         let drive_result = {
             let handler = pin!(async {
-                // The caller drops `resp_rx` the moment it stops waiting for a
-                // head — the first-byte 504, or a client that disconnected. A
-                // guest running past that point holds an in-flight slot for a
-                // response nobody will read, and the epoch deadline cannot
-                // reclaim it: parked in a host call, it runs no wasm. So the
-                // head's consumer bounds the handler.
+                // The head's consumer bounds the handler. Past a 504 or a
+                // disconnect nobody will read the response, and the epoch
+                // deadline cannot reclaim a guest parked in a host call,
+                // because it runs no wasm.
                 let called = {
                     let abandoned = pin!(async {
                         resp_tx
@@ -432,11 +418,9 @@ impl AccessorTask<WasiState> for HandlerTask {
                 let (parts, body) = res.into_parts();
                 let mut body = pin!(body);
 
-                // Hold the head back for one turn of the store's event loop:
-                // a body the guest has already finished then rides out with
-                // it in one `writev` instead of following in a second. One
-                // turn is the whole wait, so a body streamed later is not
-                // delayed.
+                // Hold the head for one turn of the store's event loop, so a
+                // body the guest has already finished rides out with it in one
+                // `writev`. One turn is the whole wait.
                 let mut first_frame = None;
                 let mut body_done = false;
                 for turn in 0..2 {
@@ -464,9 +448,7 @@ impl AccessorTask<WasiState> for HandlerTask {
                     );
                 }
 
-                // Hand the response head plus the receiver to `dispatch_request`
-                // so hyper can start writing the response while we keep
-                // producing body frames here.
+                // Hand the head over; hyper writes it while we pump the body.
                 if let Some(tx) = resp_tx.take() {
                     let rx = frame_rx_holder
                         .take()
@@ -478,18 +460,9 @@ impl AccessorTask<WasiState> for HandlerTask {
                     }
                 }
 
-                // Pump frames until EOF, body error, hyper drops the body,
-                // or the consumer stalls past the idle timeout.
-                //
-                // When the bounded channel has room the send completes
-                // synchronously (`try_send`), so the common case arms no
-                // timer. Only a full channel needs to wait — a slow consumer
-                // back-pressures into the guest, and a client that stops
-                // draining entirely but keeps the connection open never drops
-                // `frame_rx`, so the send would otherwise block forever and
-                // pin this task's fiber stack (#1138). The idle timeout
-                // bounds that wait; it is re-armed per blocking send, so a
-                // slow-but-progressing client is unaffected.
+                // Pump frames until EOF, a body error, or hyper dropping the
+                // body. Room in the channel means `try_send` completes without
+                // arming a timer; a full one back-pressures into the guest.
                 while !body_done
                     && let Some(Ok(frame)) = poll_fn(|cx| body.as_mut().poll_frame(cx)).await
                 {
@@ -569,11 +542,8 @@ enum SubmitError {
 
 impl Dispatch {
     /// Hand `job` to the next worker in rotation, giving up at `deadline`.
-    ///
-    /// A worker at its in-flight bound leaves its queue full, so this wait is
-    /// part of the client's time to first byte and has to answer to the same
-    /// deadline — otherwise a queued request outlives `--timeout` with no
-    /// response at all.
+    /// Waiting for a full queue is part of the client's time to first byte,
+    /// so it answers to the same deadline as the handler.
     async fn submit(&self, job: RequestJob, deadline: Instant) -> Result<(), SubmitError> {
         let idx = self.next.fetch_add(1, Ordering::Relaxed) % self.txs.len();
         let mut tick_rx = self.tick_rx.clone();
@@ -584,13 +554,9 @@ impl Dispatch {
     }
 }
 
-/// Drive `fut` to completion, giving up once `deadline` has passed.
-///
-/// No waiter arms a timer of its own: `tick_rx` is a server-wide coarse clock
-/// (see the ticker in `run_http_server`) and every tick wakes the waiters to
-/// re-check their deadlines. So the answer lands within one tick *after* the
-/// deadline, never before it, and a tie goes to the deadline — a result that
-/// arrives past it is still too late.
+/// Drive `fut` to completion, giving up once `deadline` has passed. Waiters
+/// share the server tick rather than arming a timer each, so the answer lands
+/// within a tick after the deadline, never before it.
 async fn before_deadline<F: Future>(
     mut fut: Pin<&mut F>,
     deadline: Instant,
@@ -612,17 +578,9 @@ async fn before_deadline<F: Future>(
     Some(fut.await)
 }
 
-/// Convert a hyper request into a job, submit it to a worker instance, and
-/// render the outcome as a hyper response.
-///
-/// One deadline covers the whole path to the head — the wait for a worker
-/// slot as much as the handler itself — and is enforced against a shared
-/// coarse tick (see `before_deadline`), so a guest that never produces a
-/// response head, or a worker that never frees a slot, yields a 504 without
-/// each request arming its own timer.
-///
-/// Leaving here drops `resp_rx`, which is what ends the handler still waiting
-/// to produce that head and returns its in-flight slot (`HandlerTask::run`).
+/// Convert a hyper request into a job, run it on a worker, and render the
+/// outcome. One deadline covers the whole path to the response head, and
+/// leaving here drops `resp_rx`, which ends a handler still producing it.
 async fn dispatch_request(
     dispatch: &Dispatch,
     timeout: Duration,
@@ -716,12 +674,8 @@ enum WorkerStop {
     Shutdown,
 }
 
-/// Shared guest-profiler handle for `--profile guest`.
-///
-/// The profiler is component-scoped, so it outlives worker recycling: each
-/// fresh worker store generation re-registers the epoch-deadline sampling
-/// callback against the same profiler. The profile is written once on
-/// shutdown.
+/// Shared guest-profiler handle for `--profile guest`. Component-scoped, so
+/// it outlives recycling and each new store re-registers against it.
 #[derive(Clone)]
 struct GuestProfilerHandle {
     profiler: Arc<Mutex<Option<GuestProfiler>>>,
@@ -739,14 +693,8 @@ enum Step {
 }
 
 /// Wait for an in-flight request to finish or for the next server tick,
-/// whichever comes first.
-///
-/// Every wait a worker makes while something is in flight goes through here,
-/// so its loop turns — and so refreshes its store's epoch deadline — at least
-/// once per tick. Without the tick arm, a worker sitting at its in-flight
-/// bound or holding one long-lived streaming response never turns and trips
-/// the runaway-guest trap. A guest that really monopolises the store blocks
-/// this wait too, so the trap still catches the case it exists for.
+/// whichever comes first. Every wait a busy worker makes goes through here,
+/// so its loop keeps turning even when nothing finishes.
 async fn drain_or_tick<S: Stream + Unpin>(inflight: &mut S, tick_rx: &mut watch::Receiver<()>) {
     // Once the ticker is gone (shutdown) only the drain arm can resolve.
     let tick = pin!(async {
@@ -757,36 +705,9 @@ async fn drain_or_tick<S: Stream + Unpin>(inflight: &mut S, tick_rx: &mut watch:
     let _ = select(pin!(inflight.next()), tick).await;
 }
 
-/// Drives one worker: a long-lived component instance that handles
-/// requests off `job_rx`.
-///
-/// After `recycle_requests` requests the instance is torn down and
-/// replaced with a fresh one. Recycling bounds the per-request garbage
-/// that piles up in a worker's long-lived Wasm GC heap; the pooling
-/// allocator makes the rebuild cheap by reusing the OS memory slots.
-/// `recycle_requests == 0` disables recycling (reuse forever).
-///
-/// On recycle or shutdown the loop stops accepting new requests but keeps
-/// draining the in-flight ones, so a recycle never drops a live request.
-///
-/// `max_inflight` is this worker's share of `--max-concurrency`: it runs
-/// that many requests at once and leaves the rest in `job_rx`, so it never
-/// asks the pooling allocator for a fiber stack the pool was not sized for.
-///
-/// A runaway guest (one that monopolises the store's single thread in
-/// pure wasm) is bounded by the epoch deadline: the dispatch loop
-/// refreshes the deadline every turn, and every wait it makes while
-/// something is in flight goes through `drain_or_tick`, so the loop turns
-/// on its own and only a guest that prevents it from turning trips the
-/// deadline. The resulting trap surfaces as a `run_concurrent` error,
-/// after which the worker rebuilds its instance and resumes — self-healing
-/// rather than dying.
-///
-/// The epoch deadline is `timeout_secs` plus a grace margin: the
-/// client-facing first-byte timeout (`dispatch_request`) fires within a
-/// coarse tick after `timeout_secs` and returns 504, so the epoch trap is
-/// only a later backstop that reclaims the runaway and the worker — the
-/// client has already had a clean 504 by then.
+/// Drives one worker: a long-lived component instance serving `job_rx`,
+/// rebuilt every `recycle_requests` requests and after a trap. It runs
+/// `max_inflight` requests at once and leaves the rest queued.
 async fn worker_loop(
     engine: Engine,
     service_pre: Arc<ServicePre<WasiState>>,
@@ -799,14 +720,10 @@ async fn worker_loop(
     fatal: Arc<Notify>,
     profiler: Option<GuestProfilerHandle>,
 ) {
-    // Grace over the client-facing timeout; also clears the 1s epoch-tick
-    // granularity so the first-byte 504 reliably precedes the epoch trap.
-    //
-    // When guest profiling is active the epoch ticker runs at the sampling
-    // interval and every tick must reach the deadline callback, so the
-    // deadline is armed at 1 tick. The runaway-guest epoch trap is thereby
-    // disabled for the profiling session; the client-facing first-byte 504
-    // still bounds a stuck request.
+    // Grace over the client-facing timeout and the 1s tick granularity, so
+    // the first-byte 504 precedes the epoch trap. Under `--profile guest`
+    // every tick must reach the sampling callback, which turns the trap off
+    // for the session.
     let epoch_ticks = if profiler.is_some() {
         1
     } else {
@@ -840,12 +757,10 @@ async fn worker_loop(
         let service = match service_pre.instantiate_async(&mut store).await {
             Ok(service) => Arc::new(service),
             Err(e) => {
-                // Instantiation here happens after `Component::new` and
-                // `linker.instantiate_pre` have already succeeded at
-                // startup, so a failure is a deterministic fault that
-                // would hit every worker identically — the server cannot
-                // serve. Signal a fatal shutdown rather than silently
-                // leaving a dead worker whose channel still accepts jobs.
+                // `Component::new` and `instantiate_pre` already succeeded at
+                // startup, so this fault would hit every worker identically:
+                // the server cannot serve. Shut down rather than leave a dead
+                // worker whose channel still accepts jobs.
                 eprintln!("Worker instantiation failed: {e:?}");
                 fatal.notify_one();
                 return;
@@ -867,9 +782,8 @@ async fn worker_loop(
                     let mut job: Option<RequestJob> = None;
                     let step = if inflight.len() >= max_inflight || stopping.is_some() {
                         // At the bound, or draining towards a stop: take
-                        // nothing new. Queued requests stay in `job_rx`, so
-                        // the connections carrying them back-pressure rather
-                        // than piling more fiber stacks onto this store.
+                        // nothing new, so the connections holding the queued
+                        // requests back-pressure.
                         assert!(!inflight.is_empty());
                         drain_or_tick(&mut inflight, &mut tick_rx).await;
                         Step::Turn
@@ -928,13 +842,9 @@ async fn worker_loop(
             Ok(WorkerStop::Recycle) => {}
             Ok(WorkerStop::Shutdown) => return,
             Err(e) => {
-                // The store trapped — typically a guest that ran past the
-                // epoch deadline. Rebuild the instance so the worker
-                // self-heals. In-flight requests on the trapped store are
-                // lost; requests still queued in the channel survive and
-                // are picked up by the fresh instance. The short sleep
-                // bounds a pathological rebuild loop (e.g. a guest that
-                // traps on every request).
+                // Rebuild so the worker self-heals. Requests in flight on the
+                // trapped store are lost; queued ones survive. The sleep
+                // bounds a guest that traps on every request.
                 eprintln!("Worker instance trapped; rebuilding: {e:?}");
                 tokio::time::sleep(Duration::from_millis(100)).await;
             }
@@ -962,10 +872,14 @@ async fn run_http_server(
     // Pool head-room: at most `workers` instances are live at once (a
     // recycle drops the old instance before building the new), plus slack.
     let max_instances = workers_u32.saturating_add(8);
-    // One stack per in-flight request, plus the fibers a store runs on its
-    // own account: the worker fiber `run_concurrent` caches between guest
-    // calls is not a request, so `--max-concurrency` does not count it.
-    let stack_pool = max_concurrency_u32.saturating_add(workers_u32.saturating_mul(2));
+    // Two stacks per in-flight request: a cancelled handler returns its slot
+    // while the thread it dropped is still unwinding, and a peer closing many
+    // connections at once cancels up to the whole bound. Keep the margin
+    // loose. Hitting `--max-concurrency` queues; hitting the pool's limit
+    // traps the store and loses every request on it.
+    let stack_pool = max_concurrency_u32
+        .saturating_mul(2)
+        .saturating_add(workers_u32.saturating_mul(8));
     let engine = runtime::create_serve_engine(cranelift_opt, max_instances, stack_pool, collector)?;
     let component = Component::new(&engine, &wasm)?;
     let linker = runtime::create_linker(&engine)?;
@@ -997,27 +911,18 @@ async fn run_http_server(
     };
     drop(component);
 
-    // One worker = one long-lived component instance on its own store and
-    // engine task. Workers run guest code on independent stores, so
-    // request handling fans out across cores; each worker recycles its
-    // instance every `recycle_requests` requests.
-    // Each worker's queue holds the same number again: a burst waits there
-    // while the connections carrying it back-pressure.
+    // One worker = one instance on its own store, so guest execution fans out
+    // across cores. Its queue holds its share again, where a burst waits.
     let per_worker_inflight = max_concurrency / workers;
     assert!(
         per_worker_inflight >= 1,
         "--workers is held at or below --max-concurrency, in `parse_args` when \
          both are explicit and in `run` when the worker count is derived",
     );
-    // Coarse server-wide clock. One ticker replaces a per-request and a
-    // per-worker timer: a request checks its own deadline against these ticks
-    // (`before_deadline`), and a worker turns its dispatch loop on them often
-    // enough to refresh the store's epoch deadline (`drain_or_tick`). The
-    // interval bounds how late the 504 fires, so keep it small relative to
-    // `timeout` but coarse enough to be cheap. Unlike the epoch ticker it need
-    // not run on an OS thread: it backs a client-facing 504, not the
-    // runaway-guest backstop, so it shares the scheduling assumptions of the
-    // request tasks it wakes.
+    // Coarse server-wide clock, replacing a timer per request and per worker.
+    // The interval bounds how late the 504 fires, so keep it small relative to
+    // `timeout` but coarse enough to be cheap. A tokio task will do: it backs
+    // the 504, not the runaway-guest trap, so it may share their scheduling.
     let (tick_tx, tick_rx) = watch::channel(());
     let first_byte_tick = (timeout / 8).clamp(Duration::from_millis(100), Duration::from_secs(1));
     tokio::spawn(async move {
@@ -1059,19 +964,10 @@ async fn run_http_server(
         tick_rx,
     });
 
-    // Background ticker that advances the engine epoch. Each worker store
-    // arms an epoch deadline counted in these ticks; without the ticker
-    // the deadline would never be reached and runaway guests never trap.
-    //
-    // It runs on a dedicated OS thread, never a tokio task: a guest that
-    // runs away in pure wasm blocks the tokio worker thread polling it,
-    // and on a single-core host that is the only worker thread. A
-    // tokio-task ticker would then be starved by the very guest it exists
-    // to trap — the epoch would never advance and the server would
-    // deadlock. A kernel-scheduled OS thread keeps ticking regardless.
-    // Under `--profile guest` the ticker runs at the sampling interval so
-    // the deadline callback samples at that cadence; otherwise it ticks at
-    // the coarse runaway-guest granularity.
+    // Advances the engine epoch the worker deadlines count in. It needs an OS
+    // thread: a guest running away in pure wasm blocks the tokio worker
+    // polling it, which on a single-core host is the only one, so a tokio
+    // ticker would be starved by the guest it exists to trap.
     let epoch_tick = match &profile {
         ProfileMode::Guest { interval_ms, .. } => Duration::from_millis(*interval_ms),
         _ => Duration::from_millis(EPOCH_TICK_MS),
@@ -1284,8 +1180,8 @@ pub async fn run(opts: ServeOptions) -> Result<(), CliExit> {
     }
     // Derived after the worker count is final, so each worker gets the
     // per-worker default whatever the host's CPU count turned out to be.
-    // Held to the `u32` an explicit `--max-concurrency` is held to: it sizes
-    // the pooling allocator's stack pool, which counts in `u32`.
+    // Held to the same `u32` as an explicit `--max-concurrency`, which is
+    // what `run_http_server` converts it back to.
     let max_concurrency = opts.max_concurrency.unwrap_or_else(|| {
         workers
             .saturating_mul(DEFAULT_MAX_CONCURRENCY_PER_WORKER)
