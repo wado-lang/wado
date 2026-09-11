@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1789108395761,
+  "lastUpdate": 1789120746991,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -54813,6 +54813,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 288933,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "f86797d8312ccec7ecfd5f42c8b71e631c48c68c",
+          "message": "Merge pull request #2021 from wado-lang/gfx/hello-world-size-cleanup\n\nperf(compiler): shrink Hello World Wasm by 7.3%",
+          "timestamp": "2026-09-11T18:41:57+09:00",
+          "tree_id": "24c716e3727a6ad8b89a3468a5db90f78c72694c",
+          "url": "https://github.com/wado-lang/wado/commit/f86797d8312ccec7ecfd5f42c8b71e631c48c68c"
+        },
+        "date": 1789120746006,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1867,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6492,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18919,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 285903,
             "unit": "bytes"
           }
         ]
