@@ -300,4 +300,5 @@ and put down, not only which were picked up.
 ## Surveys
 
 - [Almide](./research-language-survey-almide.md)
+- [Hike](./research-language-survey-hike.md)
 - [vibe](./research-language-survey-vibe.md)
