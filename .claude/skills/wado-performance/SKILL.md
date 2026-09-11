@@ -158,8 +158,8 @@ paid on a benchmark `fts` never touched.
   then tests them: `peek_after_whitespace_run` in `core:json` is that shape,
   worth 12.6% on json-catalog deserialize. It pays in proportion to the run it
   covers, against the one partial block it always wastes — under ~16 bytes per
-  run it is a loss, and **four is where the sharing stops**, so a wider block
-  only adds lone gets and measures monotonically worse (`dead-ends.md`).
+  run it is a loss. **Four is where the sharing stops**, so a wider block only
+  adds lone gets, and it measures worse the wider it gets (`dead-ends.md`).
   **`array.set` shares nothing**: a store may
   write the header as far as Cranelift knows, so four adjacent sets reload the
   length four times. Only `array.copy` / `array.fill` amortise a write.

@@ -328,11 +328,8 @@ impl SerializeMap for JsonMapSerializer {
     }
 }
 
-/// Writes `"name":`, preceded by `,` when the struct already has a field.
-///
-/// The tail is written out under both arms rather than shared after the `if`,
-/// so each arm is one run of adjacent appends: the append fusion collapses a
-/// run into a single capacity check, and a branch in the middle of one ends it.
+/// Writes `"name":`, preceded by `,` when the struct already has a field. Each
+/// arm repeats the tail so it stays one append run, which fuses to one check.
 fn write_plain_key(buf: &mut String, name: &String, count: i32) {
     if count > 0 {
         buf.push_str(&",\"");
@@ -841,23 +838,16 @@ fn scanned_to_f64(n: &ScannedNumber) -> f64 {
     return if n.neg { -v } else { v };
 }
 
-/// True when `b` is one of JSON's four whitespace bytes.
-///
-/// Every call site reads `b > b' ' || !is_json_ws(b)`: `' '` is the widest of
-/// the four, so that leading compare settles the common case — a structural
-/// byte, the run is over — without the shift, and it is what keeps `b` under
-/// 64. Making the function stand alone instead costs json-catalog deserialize
-/// 6% as `b < 64 &&` and 19% as four compares; the assert costs nothing.
+/// True when `b` is one of JSON's four whitespace bytes. `json_ws_end` is the
+/// only caller, and the `b > b' '` it tests first is what bounds `b` here.
 fn is_json_ws(b: i32) -> bool {
     assert b < 64;
     let ws_set = 1 as u64 << b' ' | 1 as u64 << b'\t' | 1 as u64 << b'\n' | 1 as u64 << b'\r';
     return ws_set >> b as u64 & 1 != 0;
 }
 
-/// Whether a whitespace scan stops on `b`. Indentation is what pretty JSON is
-/// mostly made of — 96% of citm_catalog's whitespace bytes are `' '` — so the
-/// equality settles a skipped byte in one compare, and `b > b' '` still settles
-/// a structural byte in one more without reaching the shift.
+/// Whether a whitespace scan stops on `b`. Almost every skipped byte is a
+/// space and almost every stopping byte is above one, so neither shifts.
 fn json_ws_end(b: i32) -> bool {
     return b != b' ' && (b > b' ' || !is_json_ws(b));
 }
@@ -866,6 +856,26 @@ fn json_ws_end(b: i32) -> bool {
 /// subtracting `'0'` wraps a non-digit into the upper half of the u32 range.
 fn digit_value(b: i32) -> u32 {
     return (b - b'0') as u32;
+}
+
+/// The most decimal digits that fit an i64 whatever they are, so a fold over
+/// that many needs no overflow check.
+global I64_SAFE_DIGITS: i32 = 18;
+
+/// Folds the digits in `[pos, cap)` into `acc`, stopping at the first byte
+/// that is not one. Returns the accumulator and the position it stopped at.
+fn fold_digits(input: &ByteSlice, pos: i32, cap: i32, acc: u64) -> [u64, i32] {
+    let mut v = acc;
+    let mut p = pos;
+    while p < cap {
+        let d = digit_value(input.get_unchecked(p) as i32);
+        if d > 9 {
+            break;
+        }
+        v = v * 10 + d as u64;
+        p += 1;
+    }
+    return [v, p];
 }
 
 /// True when a raw number token has a '.' or an exponent marker, i.e. it
@@ -1002,8 +1012,8 @@ impl JsonDeserializer {
             self.pos = len;
             return -1;
         }
-        // A lone space is what separates a key from its value, 26k of
-        // citm_catalog's 77k whitespace runs: settling it here spares the call.
+        // A lone space separates a key from its value, so on pretty input it is
+        // a large share of the runs. Settling it here spares the call.
         let next = self.input.get_unchecked(pos + 1) as i32;
         if json_ws_end(next) {
             self.pos = pos + 1;
@@ -1452,7 +1462,6 @@ impl JsonDeserializer {
         // Integer part, in three runs so the accumulating loop carries neither
         // a significance test nor a budget test per digit: leading zeros, the
         // digits that fit the mantissa budget, then the ones past it.
-        let mut digits: u64 = 0;
         let zeros_start = pos;
         if first == b'0' {
             while pos < len && input.get_unchecked(pos) as i32 == b'0' {
@@ -1465,14 +1474,8 @@ impl JsonDeserializer {
         if cap > len {
             cap = len;
         }
-        while pos < cap {
-            let d = digit_value(input.get_unchecked(pos) as i32);
-            if d > 9 {
-                break;
-            }
-            digits = digits * 10 + d as u64;
-            pos += 1;
-        }
+        let mut [digits, end] = fold_digits(&input, pos, cap, 0);
+        pos = end;
         let mut acc_digits = pos - sig_start;
         if pos == cap {
             while pos < len && digit_value(input.get_unchecked(pos) as i32) <= 9 {
@@ -1499,14 +1502,9 @@ impl JsonDeserializer {
                 frac_cap = len;
             }
             let frac_start = pos;
-            while pos < frac_cap {
-                let d = digit_value(input.get_unchecked(pos) as i32);
-                if d > 9 {
-                    break;
-                }
-                digits = digits * 10 + d as u64;
-                pos += 1;
-            }
+            let [with_frac, frac_end] = fold_digits(&input, pos, frac_cap, digits);
+            digits = with_frac;
+            pos = frac_end;
             frac_digits = pos - frac_start;
             acc_digits += frac_digits;
             if pos == frac_cap {
@@ -1607,11 +1605,9 @@ impl JsonDeserializer {
 
     fn parse_i64_with_lead(&mut self, lead: i32) -> Result<i64, DeserializeError> {
         fast: {
-            // A plain integer of at most 18 digits, ending on a byte no JSON
-            // number can continue with: the shape every integer on the wire
-            // takes. One pass, no scratch, and none of the scale bookkeeping a
-            // fraction or an exponent needs. Anything else leaves for the
-            // general scanner below, which has not moved `pos`.
+            // A plain integer that cannot overflow: one pass, no scratch, none
+            // of the scale bookkeeping a fraction or an exponent needs. Any
+            // other shape breaks to the scanner below, which `pos` still suits.
             let neg = lead == b'-';
             let input = self.input;
             let len = input.len();
@@ -1620,19 +1616,12 @@ impl JsonDeserializer {
                 pos += 1;
             }
             let digits_start = pos;
-            let mut cap = pos + 18;
+            let mut cap = pos + I64_SAFE_DIGITS;
             if cap > len {
                 cap = len;
             }
-            let mut v: u64 = 0;
-            while pos < cap {
-                let d = digit_value(input.get_unchecked(pos) as i32);
-                if d > 9 {
-                    break;
-                }
-                v = v * 10 + d as u64;
-                pos += 1;
-            }
+            let [v, end] = fold_digits(&input, pos, cap, 0);
+            pos = end;
             if pos == digits_start {
                 break fast;
             }
@@ -1648,7 +1637,7 @@ impl JsonDeserializer {
             }
             self.pos = pos;
             if neg {
-                return Result::Ok(0 - (v as i64));
+                return Result::Ok(0 - v as i64);
             }
             return Result::Ok(v as i64);
         }

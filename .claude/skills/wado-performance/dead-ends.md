@@ -21,23 +21,23 @@ for i in 1 2 3; do mise run json-catalog; done           # before and after
 ## Reading more than four bytes per bounds check (2026-09-12)
 
 citm_catalog is 71% whitespace, in runs averaging 24 bytes past the one its
-caller already read — well over the 16-byte floor the entry below sets for
-batching. Widening `peek_after_whitespace_run`'s block from four bytes should
-therefore pay, and it does not. json-catalog deserialize, three alternating
-rounds against the four-wide arm at 4.21 ms/iter:
+caller already read. That is well over the 16-byte floor the entry below sets
+for batching, so widening `peek_after_whitespace_run`'s block from four bytes
+should pay. It does not. json-catalog deserialize, three alternating rounds
+against the four-wide arm at 4.21 ms/iter:
 
-| block                  | ms/iter          |
-| ---------------------- | ---------------- |
-| 4 (today)              | **4.21**         |
-| 6                      | 4.31, 4.36, 4.31 |
-| 8                      | 4.40, 4.52, 4.50 |
-| 8, then 4, then 1      | 4.89, 4.60, 4.62 |
-| 16, then 8, 4, then 1  | 4.88, 4.86, 4.89 |
+| block                 | ms/iter          |
+| --------------------- | ---------------- |
+| 4 (today)             | **4.21**         |
+| 6                     | 4.31, 4.36, 4.31 |
+| 8                     | 4.40, 4.52, 4.50 |
+| 8, then 4, then 1     | 4.89, 4.60, 4.62 |
+| 16, then 8, 4, then 1 | 4.88, 4.86, 4.89 |
 
 Monotonic in the width, on the input whose runs are longest. So wasmtime shares
-the base, length and null check across about four gets and no further, and past
-that each extra get in the block is a lone one that the block also always issues
-— a run ending at byte 0 still reads all sixteen.
+the base, length and null check across about four gets and no further. Each
+extra get past that is a lone one, and the block issues it whether the run needs
+it or not: a run ending at byte 0 still reads all sixteen.
 
 Generalizes: four is the number, not a starting point. The run length decides
 whether to batch at all (the entry below); it does not buy a wider block.
@@ -54,10 +54,11 @@ json-catalog serialize, three alternating rounds against 0.822 ms/iter:
   trades the two `array.set`s for one copy: 0.888, 0.978, 0.999, 1.002.
 
 The second is the interesting one, because a two-byte `array.copy` does beat two
-`array.set`s elsewhere — lowering `string_push`'s `MAX_SHORT_PUSH_STR_LEN` so a
-constant key's `":` stays one copy is worth 4% on this row's serialize. It loses
-here, and the difference is the index: a copy from a constant offset in a global
-is a different thing from a copy whose source offset is a value just computed.
+`array.set`s elsewhere. Lowering `string_push`'s `MAX_SHORT_PUSH_STR_LEN` so a
+constant key's `":` stays one copy measured 4% on this row's serialize, at a
+cost to two other benchmarks. The copy loses here all the same, and the
+difference is the index: a copy from a constant offset in a global is a
+different thing from a copy whose source offset is a value just computed.
 
 Generalizes: the digit loop is store-bound, and no digit-generation scheme has
 yet removed a store from it. Three attempts now, two functions, two corpora.
@@ -69,9 +70,9 @@ removing, both flat:
 
 - **`Formatter::prepare_int_write`.** The unpadded case is a sign and a
   reservation; the rest is five alignments and `write_char_n`. Holding the
-  padded half in its own function makes the fast half about ten instructions —
-  and json-catalog serialize measured 0.823 against 0.817 over four alternating
-  rounds, its best round behind the baseline's.
+  padded half in its own function makes the fast half about ten instructions.
+  json-catalog serialize still measured 0.823 against 0.817 over four
+  alternating rounds, its best round behind the baseline's.
 - **`JsonDeserializer::peek_after_whitespace`.** Reduced to a length check, one
   `array.get` and `b > b' '`, with everything else behind
   `peek_after_whitespace_cold`. `wado dump -O2` shows the split worked and the
@@ -80,9 +81,9 @@ removing, both flat:
   inliner from folding it straight back in and changed nothing; `#[inline]` on
   the fast half measured 4.26–4.44 against 4.26.
 
-Generalizes: shrinking a leaf is not the same as getting it inlined, and the
-dump is what tells the two apart — check it before spending a measurement. The
-entry on `HighlightVisitor::classify` says the same thing from the other end.
+Generalizes: shrinking a leaf is not the same as getting it inlined. The dump
+tells the two apart, so read it before spending a measurement. The entry on
+`HighlightVisitor::classify` says the same thing from the other end.
 
 ## A shared helper that hands back a value most callers discard (2026-09-10)
 
