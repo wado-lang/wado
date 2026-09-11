@@ -5,11 +5,9 @@
 // as it was before, the replacement compiled and was silently dropped.
 //
 // variant_mut_self_method guards the other side: a payload write through the
-// same receiver lands.
-//
-// The refusal reads the call's dispatch, so an inherent method and a trait one
-// reach it alike. Only the first refusal is reported, so this fixture pins the
-// message.
+// same receiver lands. variant_element_mut_self_receiver_trait is the same
+// refusal reached through a trait method, which needs a file of its own because
+// only the first refusal is reported.
 
 variant Payload {
     Text(String),
@@ -22,24 +20,13 @@ impl Payload {
     }
 }
 
-trait Clear {
-    fn clear(&mut self);
-}
-
-impl Clear for Payload {
-    fn clear(&mut self) {
-        *self = Payload::Empty;
-    }
-}
-
 test "a replacing method on a list element" {
     let mut xs: List<Payload> = [Payload::Empty];
     xs[0].replace();
-    xs[0].clear();
 }
 
 __DATA__
 {
     "test": {},
-    "compile_error": "is a detached copy, so a whole-value write through it would be lost"
+    "compile_error": "variant_element_mut_self_receiver_rejected.wado/Payload::replace' replaces it"
 }

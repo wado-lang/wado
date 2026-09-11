@@ -1,0 +1,32 @@
+// The refusal reads the call's dispatch, so a trait method reaches it the same
+// way an inherent one does. Only the first refusal in a file is reported, so
+// this case needs a fixture to itself — beside an inherent call it would be
+// unreported whether or not it is refused.
+//
+// variant_element_mut_self_receiver_rejected is the inherent half.
+
+variant Payload {
+    Text(String),
+    Empty,
+}
+
+trait Clear {
+    fn clear(&mut self);
+}
+
+impl Clear for Payload {
+    fn clear(&mut self) {
+        *self = Payload::Empty;
+    }
+}
+
+test "a replacing trait method on a list element" {
+    let mut xs: List<Payload> = [Payload::Empty];
+    xs[0].clear();
+}
+
+__DATA__
+{
+    "test": {},
+    "compile_error": "Payload^variant_element_mut_self_receiver_trait.wado/Clear::clear' replaces it"
+}

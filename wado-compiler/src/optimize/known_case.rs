@@ -264,3 +264,134 @@ fn refuses(body: &Body, pattern: PatId, case: &str) -> bool {
         | PatKind::Range { .. } => false,
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::nir::NirLocal;
+    use crate::nir_arena::{BlockNode, ExprNode, StmtId, StmtNode};
+    use crate::nir_engine::EngineBuffers;
+    use crate::nir_value_graph::ValueKind;
+    use crate::tir::TypeTable;
+    use crate::token::Span;
+
+    fn sp() -> Span {
+        Span::new(0, 0, 0, 0)
+    }
+
+    fn expr(body: &mut Body, kind: ExprKind) -> ExprId {
+        body.exprs.push(ExprNode {
+            kind,
+            type_id: TypeTable::I32,
+            span: sp(),
+        })
+    }
+
+    /// `let p = P::B; <probe over p>`, the probe the body's tail. Answers that
+    /// tail, since a fold replaces the probe in its parent rather than in place.
+    fn body_probing_known_case(probe: impl FnOnce(&mut Body, Operand) -> ExprId) -> (Body, StmtId) {
+        let mut body = Body::empty();
+        let root = body.blocks.push(BlockNode {
+            stmts: vec![],
+            span: sp(),
+        });
+        assert_eq!(root, body.root);
+        let construct = expr(
+            &mut body,
+            ExprKind::VariantConstruct {
+                variant_type: TypeTable::I32,
+                case_index: 1,
+                case_name: "B".into(),
+                payload: None,
+            },
+        );
+        let read = expr(
+            &mut body,
+            ExprKind::Local {
+                index: 0,
+                name: "p".into(),
+            },
+        );
+        let probe_id = probe(&mut body, Operand::Expr(read));
+        let let_p = body.stmts.push(StmtNode {
+            kind: StmtKind::Let {
+                name: "p".into(),
+                local_index: 0,
+                is_mut: false,
+                is_reactive: false,
+                type_id: TypeTable::I32,
+                value: Operand::Expr(construct),
+                skip_value_copy: false,
+            },
+            span: sp(),
+        });
+        let tail = body.stmts.push(StmtNode {
+            kind: StmtKind::Expr(Operand::Expr(probe_id)),
+            span: sp(),
+        });
+        body.blocks[root].stmts = vec![let_p, tail];
+        (body, tail)
+    }
+
+    /// The constant the rule left in the tail.
+    fn folded_value(body: &Body, tail: StmtId) -> ValueKind {
+        let StmtKind::Expr(Operand::Value(id)) = &body.stmts[tail].kind else {
+            panic!(
+                "expected a folded constant, found {:?}",
+                body.stmts[tail].kind
+            )
+        };
+        body.values.kind(*id).clone()
+    }
+
+    fn run_known_case(body: &mut Body) {
+        let mut locals = vec![NirLocal {
+            name: "p".into(),
+            type_id: TypeTable::I32,
+            is_mut: false,
+        }];
+        let mut buffers = EngineBuffers::default();
+        let rule = KnownCaseRule;
+        let mut engine = Engine::new(body, &mut buffers, &mut locals);
+        engine.run(&[&rule]);
+    }
+
+    /// The tag of a single-assignment local bound to a construction is that
+    /// case's index, so no heap read survives.
+    #[test]
+    fn a_known_case_tag_folds_to_its_index() {
+        let (mut body, tail) =
+            body_probing_known_case(|b, operand| expr(b, ExprKind::VariantTag { expr: operand }));
+
+        run_known_case(&mut body);
+
+        let ValueKind::Int(value, _) = folded_value(&body, tail) else {
+            panic!("expected an integer tag")
+        };
+        assert_eq!(value, 1);
+    }
+
+    /// A test against the case it holds is true, against any other false.
+    #[test]
+    fn a_known_case_test_folds_to_its_answer() {
+        for (tested, expected) in [(1_u32, true), (0, false)] {
+            let (mut body, tail) = body_probing_known_case(|b, operand| {
+                expr(
+                    b,
+                    ExprKind::VariantTest {
+                        expr: operand,
+                        case_index: tested,
+                        case_name: "B".into(),
+                    },
+                )
+            });
+
+            run_known_case(&mut body);
+
+            let ValueKind::Bool(answer) = folded_value(&body, tail) else {
+                panic!("expected a boolean answer")
+            };
+            assert_eq!(answer, expected, "testing case {tested}");
+        }
+    }
+}
