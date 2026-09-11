@@ -455,9 +455,8 @@ pub fn create_test_engine(opt_level: OptLevel, profile: &ProfileMode) -> Result<
 ///
 /// `max_instances` bounds how many component instances may be live at
 /// once (workers plus recycle head-room); `max_stacks` bounds the async
-/// fiber stacks, one per in-flight request plus the fibers each store
-/// runs on its own account. Both translate into a fixed up-front virtual
-/// address-space reservation.
+/// fiber stacks live at once. Both translate into a fixed up-front
+/// virtual address-space reservation.
 ///
 /// Epoch interruption is enabled so `wado serve` can push the per-store
 /// deadline out of reach on its long-lived stores.

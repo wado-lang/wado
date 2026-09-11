@@ -770,8 +770,9 @@ async fn drain_or_tick<S: Stream + Unpin>(inflight: &mut S, tick_rx: &mut watch:
 /// draining the in-flight ones, so a recycle never drops a live request.
 ///
 /// `max_inflight` is this worker's share of `--max-concurrency`: it runs
-/// that many requests at once and leaves the rest in `job_rx`, so it never
-/// asks the pooling allocator for a fiber stack the pool was not sized for.
+/// that many requests at once and leaves the rest in `job_rx`, so a burst
+/// back-pressures the connections carrying it instead of piling more fiber
+/// stacks onto this store.
 ///
 /// A runaway guest (one that monopolises the store's single thread in
 /// pure wasm) is bounded by the epoch deadline: the dispatch loop
@@ -962,23 +963,19 @@ async fn run_http_server(
     // Pool head-room: at most `workers` instances are live at once (a
     // recycle drops the old instance before building the new), plus slack.
     let max_instances = workers_u32.saturating_add(8);
-    // Two stacks per in-flight request, plus head-room per worker.
+    // Two stacks per in-flight request. A handler cancelled with its client
+    // (`HandlerTask::run`) returns its slot as soon as it drops the guest
+    // call, while the thread it dropped is still unwinding on its own fiber,
+    // and a peer closing many connections at once cancels up to the whole
+    // bound. The per-worker head-room covers the fibers a store runs on its
+    // own account: the worker fiber `run_concurrent` caches, and the next
+    // generation's instantiate.
     //
-    // A handler cancelled with its client (`HandlerTask::run`) gives its
-    // in-flight slot back as soon as it drops the guest call, while the guest
-    // thread it dropped is still unwinding on its own fiber. A peer closing
-    // many connections at once cancels up to the whole bound in one go and
-    // the worker refills every slot behind them, so the worst case really is
-    // a full set unwinding beside a full set running. The per-worker head-room
-    // covers the fibers a store runs on its own account: the worker fiber
-    // `run_concurrent` caches between guest calls, and the instantiate of the
-    // next generation while the old store winds down.
-    //
-    // `--max-concurrency` is the bound that should bind, because reaching it
-    // queues and the connections feel that as back-pressure. Reaching the
-    // pool's limit instead traps the store and loses every request on it, so
-    // the pool must never be the first to bind. A stack is an address-space
-    // reservation, so this margin costs no memory.
+    // The margin is deliberate. Reaching `--max-concurrency` only queues, and
+    // the connections carrying the surplus back-pressure. Reaching the pool's
+    // limit traps the store and loses every request on it, so the pool must
+    // never be the first to bind, and a stack is only an address-space
+    // reservation.
     let stack_pool = max_concurrency_u32
         .saturating_mul(2)
         .saturating_add(workers_u32.saturating_mul(8));
