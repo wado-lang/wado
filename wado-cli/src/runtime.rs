@@ -454,9 +454,9 @@ pub fn create_test_engine(opt_level: OptLevel, profile: &ProfileMode) -> Result<
 /// recycle costs no `mmap`/`munmap` round-trip.
 ///
 /// `max_instances` bounds how many component instances may be live at
-/// once (workers plus recycle head-room); `max_stacks` bounds the async
-/// fiber stacks live at once. Both translate into a fixed up-front
-/// virtual address-space reservation.
+/// once (workers plus recycle head-room), `max_stacks` how many async
+/// fiber stacks. Both translate into a fixed up-front virtual
+/// address-space reservation.
 ///
 /// Epoch interruption is enabled so `wado serve` can push the per-store
 /// deadline out of reach on its long-lived stores.

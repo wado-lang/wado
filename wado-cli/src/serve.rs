@@ -770,9 +770,7 @@ async fn drain_or_tick<S: Stream + Unpin>(inflight: &mut S, tick_rx: &mut watch:
 /// draining the in-flight ones, so a recycle never drops a live request.
 ///
 /// `max_inflight` is this worker's share of `--max-concurrency`: it runs
-/// that many requests at once and leaves the rest in `job_rx`, so a burst
-/// back-pressures the connections carrying it instead of piling more fiber
-/// stacks onto this store.
+/// that many requests at once and leaves the rest in `job_rx`.
 ///
 /// A runaway guest (one that monopolises the store's single thread in
 /// pure wasm) is bounded by the epoch deadline: the dispatch loop
@@ -965,17 +963,14 @@ async fn run_http_server(
     let max_instances = workers_u32.saturating_add(8);
     // Two stacks per in-flight request. A handler cancelled with its client
     // (`HandlerTask::run`) returns its slot as soon as it drops the guest
-    // call, while the thread it dropped is still unwinding on its own fiber,
-    // and a peer closing many connections at once cancels up to the whole
-    // bound. The per-worker head-room covers the fibers a store runs on its
-    // own account: the worker fiber `run_concurrent` caches, and the next
-    // generation's instantiate.
+    // call, while the thread it dropped unwinds on its own fiber, and a peer
+    // closing many connections at once cancels up to the whole bound. The
+    // per-worker head-room covers the fibers a store runs itself: the worker
+    // fiber `run_concurrent` caches, and the next generation's instantiate.
     //
-    // The margin is deliberate. Reaching `--max-concurrency` only queues, and
-    // the connections carrying the surplus back-pressure. Reaching the pool's
-    // limit traps the store and loses every request on it, so the pool must
-    // never be the first to bind, and a stack is only an address-space
-    // reservation.
+    // Keep the margin loose. Hitting `--max-concurrency` queues; hitting the
+    // pool's limit traps the store and loses every request on it. A stack is
+    // an address-space reservation, so the margin costs no memory.
     let stack_pool = max_concurrency_u32
         .saturating_mul(2)
         .saturating_add(workers_u32.saturating_mul(8));
@@ -1014,8 +1009,7 @@ async fn run_http_server(
     // engine task. Workers run guest code on independent stores, so
     // request handling fans out across cores; each worker recycles its
     // instance every `recycle_requests` requests.
-    // Each worker's queue holds the same number again: a burst waits there
-    // while the connections carrying it back-pressure.
+    // Each worker's queue holds the same number again, so a burst waits there.
     let per_worker_inflight = max_concurrency / workers;
     assert!(
         per_worker_inflight >= 1,
@@ -1297,8 +1291,8 @@ pub async fn run(opts: ServeOptions) -> Result<(), CliExit> {
     }
     // Derived after the worker count is final, so each worker gets the
     // per-worker default whatever the host's CPU count turned out to be.
-    // Held to the `u32` an explicit `--max-concurrency` is held to: it sizes
-    // the pooling allocator's stack pool, which counts in `u32`.
+    // Held to the same `u32` as an explicit `--max-concurrency`, which is
+    // what `run_http_server` converts it back to.
     let max_concurrency = opts.max_concurrency.unwrap_or_else(|| {
         workers
             .saturating_mul(DEFAULT_MAX_CONCURRENCY_PER_WORKER)
