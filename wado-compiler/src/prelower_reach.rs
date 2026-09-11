@@ -18,6 +18,7 @@ use crate::compiler_trace;
 use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
+use crate::name::{FreeFunctionName, FunctionId};
 use crate::nir_package::NirPackage;
 use crate::tir::{TirExpr, TirExprKind, TirFunction};
 use crate::tir_visitor::TirRefVisitor;
@@ -29,15 +30,18 @@ pub(crate) fn enabled() -> bool {
     trace::filter().enabled(TRACE_TARGET)
 }
 
-/// The identity `nir::FunctionRef::function_id` keys on, rendered so a trace
-/// line reads. Module and name alone: a mangled instance carries its type
-/// arguments in `name`, and neither `method_info` nor `monomorph_info` takes
-/// part.
-fn key(module_source: &ModuleSource, name: &str) -> String {
-    format!("{module_source}::{name}")
+/// The identity `nir::FunctionRef::function_id` keys on. Module and name alone:
+/// a mangled instance carries its type arguments in `name`, and neither
+/// `method_info` nor `monomorph_info` takes part.
+///
+/// The `ModuleSource` goes in whole rather than rendered, because `Display`
+/// drops the variant: a `Local` and a `Wasm` module spelling the same path
+/// would share a key, and the body one of them reaches would go unwalked.
+fn key(module_source: &ModuleSource, name: &str) -> FunctionId {
+    FunctionId::Free(FreeFunctionName::from_module_source(module_source, name))
 }
 
-fn function_key(func: &TirFunction) -> String {
+fn function_key(func: &TirFunction) -> FunctionId {
     key(&func.module_source, &func.name)
 }
 
@@ -59,12 +63,12 @@ fn is_root(func: &TirFunction, flat: &FlatPackage) -> bool {
 /// outside `present` is a function a later phase created — a specialization,
 /// a functor, a helper — which no prune before `lower` could have dropped.
 pub(crate) struct Reached {
-    pub(crate) present: IndexSet<String>,
-    pub(crate) reached: IndexSet<String>,
+    pub(crate) present: IndexSet<FunctionId>,
+    pub(crate) reached: IndexSet<FunctionId>,
     /// Every callee any TIR body names, reached or not. A survivor outside it
     /// is one a later phase mints; a survivor inside it is only unreached
     /// because its caller is, so the gap to close is the caller's.
-    pub(crate) named: IndexSet<String>,
+    pub(crate) named: IndexSet<FunctionId>,
     /// How many of `present` carry a body, which is what `lower` translates.
     pub(crate) bodied: usize,
 }
@@ -74,13 +78,13 @@ pub(crate) struct Reached {
 ///
 /// Walks only the bodies it reaches, which is the point: the unreached ones are
 /// the work [`prune`] saves, and touching them here would spend it.
-fn reach(flat: &FlatPackage) -> IndexSet<String> {
-    let mut bodies: IndexMap<String, &Rc<RefCell<TirFunction>>> = IndexMap::default();
+fn reach(flat: &FlatPackage) -> IndexSet<FunctionId> {
+    let mut bodies: IndexMap<FunctionId, &Rc<RefCell<TirFunction>>> = IndexMap::default();
     for func_rc in &flat.functions {
         bodies.insert(function_key(&func_rc.borrow()), func_rc);
     }
 
-    let mut work: Vec<String> = Vec::new();
+    let mut work: Vec<FunctionId> = Vec::new();
     for func_rc in &flat.functions {
         let func = func_rc.borrow();
         if is_root(&func, flat) {
@@ -91,7 +95,7 @@ fn reach(flat: &FlatPackage) -> IndexSet<String> {
         work.extend(callees(global.init.slot_expr()));
     }
 
-    let mut reached: IndexSet<String> = IndexSet::default();
+    let mut reached: IndexSet<FunctionId> = IndexSet::default();
     while let Some(key) = work.pop() {
         if !reached.insert(key.clone()) {
             continue;
@@ -111,8 +115,8 @@ fn reach(flat: &FlatPackage) -> IndexSet<String> {
 
 /// [`reach`], against the population it walked, for [`audit`] to report.
 pub(crate) fn reachable(flat: &FlatPackage) -> Reached {
-    let mut present: IndexSet<String> = IndexSet::default();
-    let mut named: IndexSet<String> = IndexSet::default();
+    let mut present: IndexSet<FunctionId> = IndexSet::default();
+    let mut named: IndexSet<FunctionId> = IndexSet::default();
     let mut bodied = 0;
     for func_rc in &flat.functions {
         let func = func_rc.borrow();
@@ -136,7 +140,7 @@ pub(crate) fn reachable(flat: &FlatPackage) -> Reached {
 /// [`reachable`] never reached — the calls `lower` and `optimize` mint.
 pub(crate) fn audit(found: &Reached, package: &NirPackage) {
     // `dce` marks rather than removes, so the live set is what it left bodied.
-    let live: Vec<String> = package
+    let live: Vec<FunctionId> = package
         .functions
         .iter()
         .filter_map(|func_rc| {
@@ -144,14 +148,14 @@ pub(crate) fn audit(found: &Reached, package: &NirPackage) {
             (!func.is_dead).then(|| key(&func.module_source, &func.name))
         })
         .collect();
-    let mut minted: Vec<String> = live
+    let mut minted: Vec<FunctionId> = live
         .iter()
         .filter(|name| found.present.contains(*name) && !found.reached.contains(*name))
         .cloned()
         .collect();
-    minted.sort_unstable();
+    minted.sort_unstable_by_key(ToString::to_string);
     minted.dedup();
-    let (chained, unnamed): (Vec<&String>, Vec<&String>) =
+    let (chained, unnamed): (Vec<&FunctionId>, Vec<&FunctionId>) =
         minted.iter().partition(|name| found.named.contains(*name));
     compiler_trace!(
         TRACE_TARGET,
@@ -172,10 +176,28 @@ pub(crate) fn audit(found: &Reached, package: &NirPackage) {
     }
 }
 
-/// Drop what no root reaches, so `lower` never translates it. The audit above
-/// is the completeness check: a survivor it calls minted is one this dropped a
-/// caller of, and `is_root` is missing its trigger.
-pub(crate) fn prune(flat: &mut FlatPackage) {
+/// What every pipeline does with `flat` on its way into `lower`: snapshot what
+/// the program reaches for [`audit`], and prune to it when asked. One entry
+/// point because `compile` and `dump` lower separately, and a policy spelled at
+/// each of them is one they can disagree on.
+pub(crate) fn before_lower(flat: &mut FlatPackage) -> Option<Reached> {
+    let found = enabled().then(|| reachable(flat));
+    if std::env::var_os("WADO_PRELOWER_PRUNE").is_some() {
+        prune(flat);
+    }
+    found
+}
+
+/// Drop what no root reaches, so `lower` never translates it.
+///
+/// Unsound as it stands, which is why it is off by default: [`is_root`] cannot
+/// see a callee `lower` names from a node that is not a call — a match pattern
+/// (`lower/translate/pattern.rs`), a wide-int literal
+/// (`lower/wide_int_literal.rs`), a `builtin::variant_tag` marker
+/// (`lower/translate.rs`), or a synthesized closure-functor body
+/// (`lower/plan/closure.rs`). All four land in `Interner::resolve`, so that is
+/// where a sound prune has to be answered.
+fn prune(flat: &mut FlatPackage) {
     let reached = reach(flat);
     let before = flat.functions.len();
     flat.functions
@@ -187,7 +209,7 @@ pub(crate) fn prune(flat: &mut FlatPackage) {
     );
 }
 
-fn callees(expr: &TirExpr) -> Vec<String> {
+fn callees(expr: &TirExpr) -> Vec<FunctionId> {
     let mut collector = Callees::default();
     collector.visit_expr(expr);
     collector.keys
@@ -195,7 +217,7 @@ fn callees(expr: &TirExpr) -> Vec<String> {
 
 #[derive(Default)]
 struct Callees {
-    keys: Vec<String>,
+    keys: Vec<FunctionId>,
 }
 
 impl TirRefVisitor for Callees {

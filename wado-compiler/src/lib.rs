@@ -1581,10 +1581,7 @@ fn compile_after_load<H: CompilerHost>(
 
     // What the program reaches before `lower` and `optimize` mint calls of
     // their own, for the audit after them. See `prelower_reach`.
-    let prelower_reached = prelower_reach::enabled().then(|| prelower_reach::reachable(&flat));
-    if std::env::var_os("WADO_PRELOWER_PRUNE").is_some() {
-        prelower_reach::prune(&mut flat);
-    }
+    let prelower_reached = prelower_reach::before_lower(&mut flat);
 
     // === Phase 10: Lower (FlatPackage → NirPackage) ===
     let nir = {
@@ -2000,6 +1997,8 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
             // Snapshot monomorphized state (only unparse; Debug format is deferred)
             let mono_text = Some(unparse::unparse_flat_package(&flat));
 
+            let prelower_reached = prelower_reach::before_lower(&mut flat);
+
             // Lower (FlatPackage → NirPackage)
             let nir = {
                 let _span = logger.span("lower");
@@ -2013,6 +2012,9 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
                 let _span = logger.span("optimize");
                 optimize(nir, opt_level, opt, &logger)
             };
+            if let Some(reached) = &prelower_reached {
+                prelower_reach::audit(reached, &nir);
+            }
 
             // WIR: Translate optimized NirPackage to WirPackage for inspection.
             let wir_package = Some({
