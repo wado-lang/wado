@@ -329,9 +329,16 @@ impl SerializeMap for JsonMapSerializer {
 }
 
 /// Writes `"name":`, preceded by `,` when the struct already has a field.
+///
+/// The tail is written out under both arms rather than shared after the `if`,
+/// so each arm is one run of adjacent appends: the append fusion collapses a
+/// run into a single capacity check, and a branch in the middle of one ends it.
 fn write_plain_key(buf: &mut String, name: &String, count: i32) {
     if count > 0 {
-        buf.push(',');
+        buf.push_str(&",\"");
+        buf.push_str(name);
+        buf.push_str(&"\":");
+        return;
     }
     buf.push('"');
     buf.push_str(name);
@@ -847,6 +854,14 @@ fn is_json_ws(b: i32) -> bool {
     return ws_set >> b as u64 & 1 != 0;
 }
 
+/// Whether a whitespace scan stops on `b`. Indentation is what pretty JSON is
+/// mostly made of — 96% of citm_catalog's whitespace bytes are `' '` — so the
+/// equality settles a skipped byte in one compare, and `b > b' '` still settles
+/// a structural byte in one more without reaching the shift.
+fn json_ws_end(b: i32) -> bool {
+    return b != b' ' && (b > b' ' || !is_json_ws(b));
+}
+
 /// The decimal value of `b`, or a value above 9 when `b` is not a digit —
 /// subtracting `'0'` wraps a non-digit into the upper half of the u32 range.
 fn digit_value(b: i32) -> u32 {
@@ -975,14 +990,26 @@ impl JsonDeserializer {
     /// the input costs another bounds check and load.
     pub fn peek_after_whitespace(&mut self) -> i32 {
         let pos = self.pos;
-        if pos >= self.input.len() {
+        let len = self.input.len();
+        if pos >= len {
             return -1;
         }
         let b = self.input.get_unchecked(pos) as i32;
-        if b > b' ' || !is_json_ws(b) {
+        if json_ws_end(b) {
             return b;
         }
-        return self.peek_after_whitespace_run(pos + 1);
+        if pos + 1 >= len {
+            self.pos = len;
+            return -1;
+        }
+        // A lone space is what separates a key from its value, 26k of
+        // citm_catalog's 77k whitespace runs: settling it here spares the call.
+        let next = self.input.get_unchecked(pos + 1) as i32;
+        if json_ws_end(next) {
+            self.pos = pos + 1;
+            return next;
+        }
+        return self.peek_after_whitespace_run(pos + 2);
     }
 
     /// `peek_after_whitespace` once the byte under `pos` is known to be
@@ -1000,19 +1027,19 @@ impl JsonDeserializer {
             let b1 = self.input.get_unchecked(pos + 1) as i32;
             let b2 = self.input.get_unchecked(pos + 2) as i32;
             let b3 = self.input.get_unchecked(pos + 3) as i32;
-            if b0 > b' ' || !is_json_ws(b0) {
+            if json_ws_end(b0) {
                 self.pos = pos;
                 return b0;
             }
-            if b1 > b' ' || !is_json_ws(b1) {
+            if json_ws_end(b1) {
                 self.pos = pos + 1;
                 return b1;
             }
-            if b2 > b' ' || !is_json_ws(b2) {
+            if json_ws_end(b2) {
                 self.pos = pos + 2;
                 return b2;
             }
-            if b3 > b' ' || !is_json_ws(b3) {
+            if json_ws_end(b3) {
                 self.pos = pos + 3;
                 return b3;
             }
@@ -1020,7 +1047,7 @@ impl JsonDeserializer {
         }
         while pos < len {
             let b = self.input.get_unchecked(pos) as i32;
-            if b > b' ' || !is_json_ws(b) {
+            if json_ws_end(b) {
                 self.pos = pos;
                 return b;
             }
@@ -1579,6 +1606,53 @@ impl JsonDeserializer {
     }
 
     fn parse_i64_with_lead(&mut self, lead: i32) -> Result<i64, DeserializeError> {
+        fast: {
+            // A plain integer of at most 18 digits, ending on a byte no JSON
+            // number can continue with: the shape every integer on the wire
+            // takes. One pass, no scratch, and none of the scale bookkeeping a
+            // fraction or an exponent needs. Anything else leaves for the
+            // general scanner below, which has not moved `pos`.
+            let neg = lead == b'-';
+            let input = self.input;
+            let len = input.len();
+            let mut pos = self.pos;
+            if neg {
+                pos += 1;
+            }
+            let digits_start = pos;
+            let mut cap = pos + 18;
+            if cap > len {
+                cap = len;
+            }
+            let mut v: u64 = 0;
+            while pos < cap {
+                let d = digit_value(input.get_unchecked(pos) as i32);
+                if d > 9 {
+                    break;
+                }
+                v = v * 10 + d as u64;
+                pos += 1;
+            }
+            if pos == digits_start {
+                break fast;
+            }
+            // A leading zero stands only for the whole integer part.
+            if pos - digits_start > 1 && input.get_unchecked(digits_start) as i32 == b'0' {
+                break fast;
+            }
+            if pos < len {
+                let tail = input.get_unchecked(pos) as i32;
+                if tail == b'.' || tail == b'e' || tail == b'E' || digit_value(tail) <= 9 {
+                    break fast;
+                }
+            }
+            self.pos = pos;
+            if neg {
+                return Result::Ok(0 - (v as i64));
+            }
+            return Result::Ok(v as i64);
+        }
+        builtin::cold_path();
         let start = self.pos as i64;
         let mut n = ScannedNumber::empty();
         self.scan_number_into(lead, &mut n)?;

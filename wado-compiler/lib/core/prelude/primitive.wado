@@ -152,16 +152,69 @@ internal fn write_decimal_digits(arr: &mut Array<u8>, offset: i32, val: u64, dig
     }
 }
 
-/// Count decimal digits of a u64 value.
+/// Count decimal digits of a u64 value, by a binary search over the powers of
+/// ten. Dividing by ten per digit is a serial chain of multiply-highs as long
+/// as the number, where the search is at most five compares over one register
+/// and none of them waits on another.
 internal fn count_digits_u64(val: u64) -> i32 {
-    if val == 0 {
-        return 1;
+    if val < 100000 {
+        if val < 100 {
+            if val < 10 {
+                return 1;
+            }
+            return 2;
+        }
+        if val < 1000 {
+            return 3;
+        }
+        if val < 10000 {
+            return 4;
+        }
+        return 5;
     }
-    let mut n: i32 = 0;
-    for let mut t = val; t > 0; t = t / 10 {
-        n += 1;
+    if val < 10000000000 {
+        if val < 10000000 {
+            if val < 1000000 {
+                return 6;
+            }
+            return 7;
+        }
+        if val < 100000000 {
+            return 8;
+        }
+        if val < 1000000000 {
+            return 9;
+        }
+        return 10;
     }
-    return n;
+    if val < 1000000000000000 {
+        if val < 1000000000000 {
+            if val < 100000000000 {
+                return 11;
+            }
+            return 12;
+        }
+        if val < 10000000000000 {
+            return 13;
+        }
+        if val < 100000000000000 {
+            return 14;
+        }
+        return 15;
+    }
+    if val < 100000000000000000 {
+        if val < 10000000000000000 {
+            return 16;
+        }
+        return 17;
+    }
+    if val < 1000000000000000000 {
+        return 18;
+    }
+    if val < 10000000000000000000 {
+        return 19;
+    }
+    return 20;
 }
 
 /// Drop the last `drop` decimal digits of `val`, rounding half to even — the
