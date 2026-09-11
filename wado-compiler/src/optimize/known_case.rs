@@ -275,25 +275,21 @@ mod tests {
     use crate::tir::TypeTable;
     use crate::token::Span;
 
-    fn sp() -> Span {
-        Span::new(0, 0, 0, 0)
-    }
-
     fn expr(body: &mut Body, kind: ExprKind) -> ExprId {
         body.exprs.push(ExprNode {
             kind,
             type_id: TypeTable::I32,
-            span: sp(),
+            span: Span::default(),
         })
     }
 
-    /// `let p = P::B; <probe over p>`, the probe the body's tail. Answers that
-    /// tail, since a fold replaces the probe in its parent rather than in place.
+    /// `let p = P::B; <probe over p>`. Answers the tail statement, since a fold
+    /// replaces the probe in its parent rather than in place.
     fn body_probing_known_case(probe: impl FnOnce(&mut Body, Operand) -> ExprId) -> (Body, StmtId) {
         let mut body = Body::empty();
         let root = body.blocks.push(BlockNode {
             stmts: vec![],
-            span: sp(),
+            span: Span::default(),
         });
         assert_eq!(root, body.root);
         let construct = expr(
@@ -323,11 +319,11 @@ mod tests {
                 value: Operand::Expr(construct),
                 skip_value_copy: false,
             },
-            span: sp(),
+            span: Span::default(),
         });
         let tail = body.stmts.push(StmtNode {
             kind: StmtKind::Expr(Operand::Expr(probe_id)),
-            span: sp(),
+            span: Span::default(),
         });
         body.blocks[root].stmts = vec![let_p, tail];
         (body, tail)

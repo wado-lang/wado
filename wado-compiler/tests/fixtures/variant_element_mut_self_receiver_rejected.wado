@@ -1,8 +1,8 @@
-// A `&mut self` receiver names the element itself, not a copy of it — the
-// method call aliases `xs[i]` the way `&mut xs[i]` does. The element is a
-// variant, whose borrow is a detached box, so a method that replaces the whole
-// value has nowhere to write it back to and is refused. Handed a copy instead,
-// as it was before, the replacement compiled and was silently dropped.
+// A `&mut self` receiver names the element itself, not a copy of it. The method
+// call aliases `xs[i]` the way `&mut xs[i]` does. The element is a variant,
+// whose borrow is a detached box, so a method that replaces the whole value has
+// nowhere to write it back to and is refused. Handed a copy instead, the
+// replacement would compile and be silently dropped.
 //
 // variant_mut_self_method guards the other side: a payload write through the
 // same receiver lands. variant_element_mut_self_receiver_trait is the same
