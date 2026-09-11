@@ -281,6 +281,12 @@ struct TestSpec {
     /// Patterns that must NOT appear in WIR output at -Os
     #[serde(rename = "wir_not_expect:Os", default)]
     wir_not_expect_os: Vec<String>,
+
+    /// Narrows every WIR pattern to one function, named by any substring of it.
+    /// A short pattern is otherwise answerable by any function the whole-program
+    /// dump carries, including a stdlib one the fixture never mentions.
+    #[serde(rename = "wir_scope", default)]
+    wir_scope: Option<String>,
 }
 
 impl TestSpec {
@@ -301,6 +307,23 @@ impl TestSpec {
         let (expect, not_expect) = self.wir_expectations(opt_level);
         !expect.is_empty() || !not_expect.is_empty()
     }
+}
+
+/// The body of the first function in `wir` whose name contains `scope`, from
+/// its `fn` line to the `}` closing it, or `None` when no name matches.
+fn scope_to_function<'a>(wir: &'a str, scope: &str) -> Option<&'a str> {
+    let mut start = None;
+    let mut offset = 0;
+    for line in wir.split_inclusive('\n') {
+        if start.is_some() && line.starts_with('}') {
+            return Some(&wir[start.unwrap()..offset + line.len()]);
+        }
+        if start.is_none() && line.starts_with("fn \"") && line.contains(scope) {
+            start = Some(offset);
+        }
+        offset += line.len();
+    }
+    start.map(|s| &wir[s..])
 }
 
 // ---------------------------------------------------------------------------
@@ -882,6 +905,16 @@ fn run_normal_test(
     if let Some(wir_text) = wir_text {
         let (expect, not_expect) = spec.wir_expectations(opt_level);
         let opt_name = common::opt_level_name(opt_level);
+        let wir_text = match spec.wir_scope.as_deref() {
+            None => wir_text.as_str(),
+            Some(scope) => scope_to_function(&wir_text, scope).unwrap_or_else(|| {
+                panic!(
+                    "[{test_id}] wir_scope names no function in the WIR\n\
+                     scope: {scope}\n\
+                     WIR output:\n{wir_text}"
+                )
+            }),
+        };
 
         for pattern in expect {
             assert!(
