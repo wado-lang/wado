@@ -36,6 +36,10 @@ Node scales out with `node:cluster` (`SCHED_NONE`), Bun with one `SO_REUSEPORT`
 process per worker, `wado serve` with `--workers`, Axum with
 `TOKIO_WORKER_THREADS`.
 
+A `wado serve` worker runs its share of `--max-concurrency` at once, 32 requests
+by default, and leaves the rest in its queue. The connections offered to it
+back-pressure rather than piling into one store.
+
 ### Keeping the load generator off the critical path
 
 A saturated `oha` caps the fastest servers and compresses every ratio. It takes

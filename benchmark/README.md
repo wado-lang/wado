@@ -293,23 +293,24 @@ One worker — a 1-core container scaled out horizontally:
 
 | Request                         | Rust (Axum) | JavaScript (Hono on Bun) | **Wado** (wado serve) | JavaScript (Hono on Node) |
 | ------------------------------- | ----------: | -----------------------: | --------------------: | ------------------------: |
-| `GET /user`                     |      46,279 |                   39,041 |                17,313 |                    17,868 |
-| `GET /user/lookup/username/hey` |      44,551 |                   43,580 |                16,681 |                    17,340 |
-| `POST /event/abcd1234/comment`  |      45,465 |                   50,767 |                16,814 |                    15,897 |
-| `GET /static/index.html`        |      44,234 |                   44,309 |                16,698 |                    17,144 |
+| `GET /user`                     |      44,832 |                   46,515 |                24,820 |                    17,853 |
+| `GET /user/lookup/username/hey` |      43,519 |                   34,787 |                24,926 |                    17,070 |
+| `POST /event/abcd1234/comment`  |      43,437 |                   39,243 |                24,782 |                    15,860 |
+| `GET /static/index.html`        |      43,295 |                   45,886 |                24,615 |                    17,080 |
 
 Four workers — a small VM running one instance:
 
 | Request                         | Rust (Axum) | JavaScript (Hono on Bun) | **Wado** (wado serve) | JavaScript (Hono on Node) |
 | ------------------------------- | ----------: | -----------------------: | --------------------: | ------------------------: |
-| `GET /user`                     |     408,243 |                  273,382 |               112,779 |                    83,498 |
-| `GET /user/lookup/username/hey` |     403,749 |                  240,666 |               108,432 |                    82,099 |
-| `POST /event/abcd1234/comment`  |     393,402 |                  244,439 |               131,717 |                    69,108 |
-| `GET /static/index.html`        |     393,561 |                  245,102 |               127,864 |                    80,607 |
+| `GET /user`                     |     394,919 |                  269,124 |               121,932 |                    83,610 |
+| `GET /user/lookup/username/hey` |     400,348 |                  221,685 |               117,014 |                    78,097 |
+| `POST /event/abcd1234/comment`  |     409,076 |                  231,646 |               116,147 |                    68,374 |
+| `GET /static/index.html`        |     405,229 |                  232,922 |               116,161 |                    79,577 |
 
-`wado serve` places third: level with Hono on Node at one worker, clear of it at
-four. The allocation behind its `content-length` header value costs it a few
-percent of every request.
+`wado serve` places third at both shapes, about half again Hono on Node. What
+separates it from Axum is the component-model boundary, not the compiled code.
+Lifting the arguments of a `wasi:http` call and lowering its result costs
+several times the guest code that call wraps.
 
 `SHAPES` names worker counts, not cores. Scaling past them is a question this
 harness cannot answer: the generator-to-server thread ratio moves the result
