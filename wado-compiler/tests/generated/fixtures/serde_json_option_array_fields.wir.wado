@@ -5511,7 +5511,6 @@ fn "core:serde/core:prelude/list.wado/List<i32>^core:serde/Serialize::serialize<
 }
 
 fn "core:serde/serde_json_option_array_fields.wado/User^core:serde/Serialize::serialize<core:json/JsonSerializer>$scalar"(self, s) {
-    let __qm_e_11: ref "core:serde//SerializeError";
     let __local_18: ref "core:serde//SerializeError";
     let __local_23: ref "core:serde//SerializeError";
     let new_used_36: i32;
@@ -5536,12 +5535,6 @@ fn "core:serde/serde_json_option_array_fields.wado/User^core:serde/Serialize::se
     v_53 = self.name;
     "core:json/write_plain_key$spec0"(s, global:core:serde::__const_obj_118, 0);
     "core:json/write_escaped_string"(s, v_53);
-    if @likely(ref.is_null(ref.null none)) {
-    } else {
-        __qm_e_11 = ref.as_non_null(ref.null none);
-        cold_path;
-        return __qm_e_11;
-    }
     if ref.is_null(global:core:serde::__const_obj_117) {
         global:core:serde::__const_obj_117 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("email"), used: 5 };
     }
@@ -5646,12 +5639,12 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(self, f) {
         }
         n = 0;
         t_9 = abs_val;
-        b661: block {
-            l662: loop {
-                break_if b661 t_9 <=u 0_i64;
+        b660: block {
+            l661: loop {
+                break_if b660 t_9 <=u 0_i64;
                 n = n + 1;
                 t_9 = t_9 /u 10_i64;
-                continue l662;
+                continue l661;
             };
         };
         break $inline_count_digits_u64_1: n;
@@ -5661,14 +5654,14 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(self, f) {
     pos = offset_5 + digit_count_4;
     t_15 = abs_val;
     i = 0;
-    b663: block {
-        l664: loop {
-            break_if b663 i >= digit_count_4;
+    b662: block {
+        l663: loop {
+            break_if b662 i >= digit_count_4;
             pos = pos - 1;
             builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(t_15 %u 10_i64)) & 255);
             t_15 = t_15 /u 10_i64;
             i = i + 1;
-            continue l664;
+            continue l663;
         };
     };
 }

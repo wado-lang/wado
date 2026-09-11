@@ -107,9 +107,11 @@ fn "variant_inherent_method.wado/run"() with Stdout {
         global:variant_inherent_method.wado::__modules_initialized = 1;
     };
     __local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(local.tee self_17(let __match_scrut_0: ref "variant_inherent_method.wado//Plain"; __match_scrut_0 = struct.new "variant_inherent_method.wado//Plain::B" { discriminant: 1, payload_0: 2 }; block -> i32 {
+    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(local.tee self_17(let __match_scrut_0: ref "variant_inherent_method.wado//Plain"; __match_scrut_0 = struct.new "variant_inherent_method.wado//Plain::B" { discriminant: 1, payload_0: 2 }; (if @likely(ref.test "variant_inherent_method.wado//Plain::B"(__match_scrut_0)) -> i32 {
         ref.cast "variant_inherent_method.wado//Plain::B"(__match_scrut_0).payload_0;
-    }), __local_2);
+    } else {
+        unreachable;
+    })), __local_2);
     rx_20 = builtin::i32_wrap_i64(local.tee packed_19("wasi/stream-new"()));
     tx_21 = builtin::i32_wrap_i64(packed_19 >> 32_i64);
     handle_9 = "variant_inherent_method.wado/__cm_binding__Stdout_write_via_stream"(rx_20);
