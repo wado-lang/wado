@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1789141153606,
+  "lastUpdate": 1789142715194,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -54969,6 +54969,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/79a8ec86711067c019dd19135c4b215f87ca7fad"
         },
         "date": 1789141152817,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1867,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6492,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18919,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 285903,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "310641b795fe51f2ecaac52fc9b04991c090f5d5",
+          "message": "Merge pull request #2026 from wado-lang/docs-vendor-wasmtime-patching\n\ndocs(skill): how to build against a locally patched wasmtime",
+          "timestamp": "2026-09-12T00:46:23+09:00",
+          "tree_id": "5e3df4a263c1afe1138cf42fe60bf5557e0ee0e9",
+          "url": "https://github.com/wado-lang/wado/commit/310641b795fe51f2ecaac52fc9b04991c090f5d5"
+        },
+        "date": 1789142714538,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
