@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1789142715194,
+  "lastUpdate": 1789145742984,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -55013,6 +55013,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/310641b795fe51f2ecaac52fc9b04991c090f5d5"
         },
         "date": 1789142714538,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1867,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6492,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18919,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 285903,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "feda9d26bc9fa7623ab755b17650482494b40428",
+          "message": "Merge pull request #2028 from wado-lang/dependabot/cargo/cargo-ebb3c383b3\n\nchore(deps): bump the cargo group with 4 updates",
+          "timestamp": "2026-09-12T01:36:15+09:00",
+          "tree_id": "23c1b9d04661dec392248ab0b0dd7d2e87cb689c",
+          "url": "https://github.com/wado-lang/wado/commit/feda9d26bc9fa7623ab755b17650482494b40428"
+        },
+        "date": 1789145742029,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
