@@ -454,9 +454,9 @@ pub fn create_test_engine(opt_level: OptLevel, profile: &ProfileMode) -> Result<
 /// recycle costs no `mmap`/`munmap` round-trip.
 ///
 /// `max_instances` bounds how many component instances may be live at
-/// once (workers plus recycle head-room); `max_concurrency` bounds the
-/// number of in-flight requests, each of which needs an async fiber
-/// stack from the pool. Both translate into a fixed up-front virtual
+/// once (workers plus recycle head-room); `max_stacks` bounds the async
+/// fiber stacks, one per in-flight request plus the fibers each store
+/// runs on its own account. Both translate into a fixed up-front virtual
 /// address-space reservation.
 ///
 /// Epoch interruption is enabled so `wado serve` can push the per-store
@@ -469,7 +469,7 @@ pub fn create_test_engine(opt_level: OptLevel, profile: &ProfileMode) -> Result<
 pub fn create_serve_engine(
     opt_level: OptLevel,
     max_instances: u32,
-    max_concurrency: u32,
+    max_stacks: u32,
     collector: Collector,
 ) -> Result<Engine> {
     let mut config = create_config(opt_level, &ProfileMode::None, collector);
@@ -485,7 +485,7 @@ pub fn create_serve_engine(
     pool.total_memories(max_instances.saturating_mul(4));
     pool.total_tables(max_instances.saturating_mul(8));
     pool.total_gc_heaps(max_instances.saturating_mul(4));
-    pool.total_stacks(max_concurrency.max(1));
+    pool.total_stacks(max_stacks.max(1));
     config.allocation_strategy(InstanceAllocationStrategy::Pooling(pool));
 
     Ok(Engine::new(&config)?)

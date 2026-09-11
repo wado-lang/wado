@@ -1,4 +1,4 @@
-use { Request, Response, ErrorCode, Fields, Headers, Trailers, StatusCode } from "wasi:http";
+use { Request, Response, ErrorCode, Headers, Trailers } from "wasi:http";
 
 export async fn handle(_request: Request) -> Result<Response, ErrorCode> {
     let [trailers_future, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();

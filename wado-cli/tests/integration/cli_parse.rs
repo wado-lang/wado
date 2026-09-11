@@ -432,18 +432,18 @@ fn serve_workers_and_max_concurrency() {
 }
 
 #[test]
-fn serve_max_concurrency_defaults_to_per_worker() {
+fn serve_max_concurrency_default_is_deferred_to_run() {
+    // The per-worker default needs the worker count, which `run` settles
+    // against the host's CPU count.
     let parser = Parser::from_args(&["input.wado"]);
     let opts = wado_cli::serve::parse_args(parser).unwrap();
-    // Left unresolved here: the per-worker default needs the worker count,
-    // which `run` only settles against the host's CPU count.
     assert_eq!(opts.max_concurrency, None);
 }
 
 #[test]
 fn serve_accepts_workers_above_the_derived_max_concurrency() {
-    // The derived bound scales with the workers, so a worker count over
-    // the old fixed default is not a conflict.
+    // The derived bound scales with the worker count, so no worker count
+    // conflicts with it.
     let parser = Parser::from_args(&["--workers", "2048", "input.wado"]);
     let opts = wado_cli::serve::parse_args(parser).unwrap();
     assert_eq!(opts.workers, Some(2048));

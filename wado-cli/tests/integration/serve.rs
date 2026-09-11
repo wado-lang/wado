@@ -142,9 +142,9 @@ fn start_serve(fixture: &str, extra_args: &[&str]) -> (ServerGuard, u16, Arc<Mut
     }
 }
 
-/// Send a minimal HTTP/1.1 GET and return the full raw response text
-/// (status line, headers, blank line, body — chunk framing intact).
-fn http_get_raw(port: u16, path: &str, timeout: Duration) -> String {
+/// Send a minimal HTTP/1.1 GET and hand back the connection with the
+/// response unread, for a caller that drives the read itself.
+fn send_get(port: u16, path: &str, timeout: Duration) -> TcpStream {
     let addr = format!("127.0.0.1:{port}");
     let mut stream = TcpStream::connect(&addr).expect("connect");
     stream.set_read_timeout(Some(timeout)).unwrap();
@@ -152,7 +152,13 @@ fn http_get_raw(port: u16, path: &str, timeout: Duration) -> String {
 
     let req = format!("GET {path} HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n");
     stream.write_all(req.as_bytes()).unwrap();
+    stream
+}
 
+/// Send a minimal HTTP/1.1 GET and return the full raw response text
+/// (status line, headers, blank line, body — chunk framing intact).
+fn http_get_raw(port: u16, path: &str, timeout: Duration) -> String {
+    let mut stream = send_get(port, path, timeout);
     let mut response = String::new();
     stream.read_to_string(&mut response).unwrap();
     response
@@ -274,15 +280,9 @@ fn responds_with_streamed_chunked_body() {
 fn non_draining_client_does_not_pin_worker_stack() {
     let (_guard, port, stderr) = start_serve("serve_big_body.wado", &["--timeout", "2"]);
 
-    // Open the connection, send the request, read just the head plus a
-    // little body, then stall: stop reading while holding the socket open.
-    let addr = format!("127.0.0.1:{port}");
-    let mut stream = TcpStream::connect(&addr).expect("connect");
-    stream
-        .set_read_timeout(Some(Duration::from_secs(5)))
-        .unwrap();
-    let req = "GET / HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n";
-    stream.write_all(req.as_bytes()).unwrap();
+    // Read just the head plus a little body, then stall: stop reading
+    // while holding the socket open.
+    let mut stream = send_get(port, "/", Duration::from_secs(5));
 
     // Drain a small fixed amount so the response head has definitely been
     // produced, then never read again.
@@ -345,22 +345,15 @@ fn max_concurrency_bounds_in_flight_requests() {
     }
 }
 
-/// The response head must not wait on the body. The host hands hyper the
-/// first body frame together with the head when the guest already produced
-/// one — but a guest that returns its head and only writes the body much
-/// later must still see the head go out immediately.
+/// The host hands hyper the first body frame together with the head when
+/// the guest has already produced one. A guest that returns its head and
+/// writes its body much later must still see the head go out at once.
 #[test]
 fn response_head_is_not_held_for_a_slow_body() {
     let (_guard, port, _stderr) = start_serve("serve_delayed_body.wado", &[]);
 
-    let addr = format!("127.0.0.1:{port}");
-    let mut stream = TcpStream::connect(&addr).expect("connect");
-    stream
-        .set_read_timeout(Some(Duration::from_mins(1)))
-        .unwrap();
     let start = Instant::now();
-    let req = "GET / HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n";
-    stream.write_all(req.as_bytes()).unwrap();
+    let mut stream = send_get(port, "/", Duration::from_mins(1));
 
     // The fixture delays its first body byte by 3s. Reading anything at all
     // therefore proves the head was not held for it.

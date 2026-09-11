@@ -53,11 +53,10 @@ const EPOCH_TICK_MS: u64 = 1000;
 const DEFAULT_RECYCLE_REQUESTS: u64 = 200;
 
 /// In-flight requests one worker runs at once, when `--max-concurrency`
-/// does not say. Each of them pins a fiber stack the GC walks on every
-/// collection, so a worker that ran the whole backlog at once would pay
-/// for it on every allocation: measured on the routing benchmark, one
-/// worker peaks over a 16–32 plateau and loses a third of its throughput
-/// by 200. Surplus requests wait in the worker's queue.
+/// does not say. Each pins a fiber stack the GC walks on every collection,
+/// so throughput peaks over a 16–32 plateau and a worker left to run the
+/// whole backlog loses a third of it by 200. The surplus waits in the
+/// worker's queue.
 const DEFAULT_MAX_CONCURRENCY_PER_WORKER: usize = 32;
 
 pub struct ServeOptions {
@@ -413,12 +412,11 @@ impl AccessorTask<WasiState> for HandlerTask {
                 let (parts, body) = res.into_parts();
                 let mut body = pin!(body);
 
-                // Hold the head back for one turn of the store's event loop
-                // so a body the guest has already finished rides out with
-                // it: hyper writes a head plus a ready first frame in one
-                // `writev`, and two when the frame arrives after the head.
-                // One turn is the whole wait, so a guest that returns its
-                // head early and streams its body later is not delayed.
+                // Hold the head back for one turn of the store's event loop:
+                // a body the guest has already finished then rides out with
+                // it in one `writev` instead of following in a second. One
+                // turn is the whole wait, so a body streamed later is not
+                // delayed.
                 let mut first_frame = None;
                 let mut body_done = false;
                 for attempt in 0..2 {
@@ -436,9 +434,8 @@ impl AccessorTask<WasiState> for HandlerTask {
                     }
                 }
                 if let Some(frame) = first_frame {
-                    // The channel is empty and holds 8, so the only way this
-                    // fails is hyper having dropped the body already — which
-                    // the pump below sees on its own next send.
+                    // Queued before the head, which is what hands hyper the
+                    // receiver: after it, hyper races us to the first poll.
                     let _ = frame_tx.try_send(frame);
                 }
 
@@ -808,15 +805,12 @@ async fn worker_loop(
                     }
 
                     let mut job: Option<RequestJob> = None;
-                    let step = if inflight.len() >= max_inflight {
-                        // At the bound: take nothing new until a slot frees.
-                        // The queued requests stay in `job_rx`, so the
-                        // connections carrying them back-pressure rather
+                    let step = if inflight.len() >= max_inflight || stopping.is_some() {
+                        // At the bound, or draining towards a stop: take
+                        // nothing new. Queued requests stay in `job_rx`, so
+                        // the connections carrying them back-pressure rather
                         // than piling more fiber stacks onto this store.
-                        let _ = inflight.next().await;
-                        Step::Drained
-                    } else if stopping.is_some() {
-                        // Draining only — `inflight` is non-empty here.
+                        assert!(!inflight.is_empty());
                         let _ = inflight.next().await;
                         Step::Drained
                     } else if inflight.is_empty() {
@@ -907,10 +901,9 @@ async fn run_http_server(
     // Pool head-room: at most `workers` instances are live at once (a
     // recycle drops the old instance before building the new), plus slack.
     let max_instances = workers_u32.saturating_add(8);
-    // One fiber stack per in-flight request, plus the fibers a store runs
-    // on its own account — the cached worker fiber `run_concurrent` keeps
-    // between guest calls is not a request, so `--max-concurrency` does not
-    // count it.
+    // One stack per in-flight request, plus the fibers a store runs on its
+    // own account: the worker fiber `run_concurrent` caches between guest
+    // calls is not a request, so `--max-concurrency` does not count it.
     let stack_pool = max_concurrency_u32.saturating_add(workers_u32.saturating_mul(2));
     let engine = runtime::create_serve_engine(cranelift_opt, max_instances, stack_pool, collector)?;
     let component = Component::new(&engine, &wasm)?;
@@ -947,12 +940,10 @@ async fn run_http_server(
     // engine task. Workers run guest code on independent stores, so
     // request handling fans out across cores; each worker recycles its
     // instance every `recycle_requests` requests.
-    // `workers <= max_concurrency` (enforced in `parse_args` / clamped in
-    // `run`), so every worker gets at least one slot and the slots sum to
-    // at most `max_concurrency` — never more in-flight work than the
-    // pooling allocator's stack pool was sized for. Each worker's queue
-    // holds the same number again, so a burst waits instead of being
-    // refused while the connection that carries it back-pressures.
+    // `workers <= max_concurrency` (enforced in `parse_args`, clamped in
+    // `run`), so every worker gets a slot and the slots sum to the bound.
+    // Each worker's queue holds the same number again: a burst waits there
+    // while the connections carrying it back-pressure.
     let per_worker_inflight = max_concurrency / workers;
     assert!(per_worker_inflight >= 1);
     // Notified by a worker that fails to instantiate; the accept loop
