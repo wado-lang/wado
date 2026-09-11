@@ -49,6 +49,16 @@ each one's batch and the server pays for the extra wakeups.
 Every row is checked for which side ran out of CPU. Against a fast enough
 server the generator runs out first, and that row is a floor.
 
+Neither more generator cores nor a leaner generator lifts that floor. Against
+Axum at four workers, `oha` peaks at four cores (392k req/s) and falls from five
+(330k): the same connections spread over more threads batch worse, and both
+sides pay syscalls they used to amortize. Five cores also clears the 90% check,
+so tuning until the warning goes away records the lower number. `wrk` saturates
+both servers (98-99% busy) but reports 286k for Axum and 101k for `wado serve`,
+its arrival pattern batching worse still. The ratio between the two holds either
+way, 2.8 against oha's 3.1, so the floor costs Axum about the 15% of its cores
+it leaves idle without changing what the rows say.
+
 `HEADROOM_CHECK=1` also re-runs each server at twice the connections, for a
 generator short of those rather than of CPU. Off, since it passes here.
 
