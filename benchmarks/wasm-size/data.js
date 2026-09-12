@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1789211823462,
+  "lastUpdate": 1789213132890,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -55277,6 +55277,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/a9e00393c76d4350322ce1b7ce018f13fb6200df"
         },
         "date": 1789211823160,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1867,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6456,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18901,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 285330,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "0d63264d00ac61ec36b54d041f485617167ee994",
+          "message": "Merge pull request #2032 from wado-lang/claude/tide-wep-downcast-review-9nbcum\n\nrefactor(cm): declare a resource's linearity, and specify narrowing as a pattern",
+          "timestamp": "2026-09-12T20:20:00+09:00",
+          "tree_id": "8670ebb9af741c82ddbe86e5fdf21dfc214171e4",
+          "url": "https://github.com/wado-lang/wado/commit/0d63264d00ac61ec36b54d041f485617167ee994"
+        },
+        "date": 1789213132420,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
