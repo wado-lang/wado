@@ -22,10 +22,9 @@ use {
     FnSpec,
     GlobalSpec,
     Vis,
-    char_lit,
     char_range_pat,
     lit_name,
-    str_lit,
+    wado,
 } from "./wadopoet.wado";
 use {
     SuperOp,
@@ -3867,18 +3866,18 @@ fn gen_char_guard(access: &String, c: char, ci: bool) -> String {
     let lower = c.to_ascii_lowercase();
     let upper = c.to_ascii_uppercase();
     if ci && lower != upper {
-        return `${access}.eq_ignore_ascii_case(&${char_lit(lower)})`;
+        return wado`${access}.eq_ignore_ascii_case(&'${lower}')`;
     }
-    return `${access} == ${char_lit(c)}`;
+    return wado`${access} == '${c}'`;
 }
 
 fn gen_char_mismatch(access: &String, c: char, ci: bool) -> String {
     let lower = c.to_ascii_lowercase();
     let upper = c.to_ascii_uppercase();
     if ci && lower != upper {
-        return `!${access}.eq_ignore_ascii_case(&${char_lit(lower)})`;
+        return wado`!${access}.eq_ignore_ascii_case(&'${lower}')`;
     }
-    return `${access} != ${char_lit(c)}`;
+    return wado`${access} != '${c}'`;
 }
 
 /// The caller's `chars[start]` dispatch guard is always case-insensitive, so
@@ -3897,9 +3896,9 @@ fn gen_keyword_check(w: &mut CodeWriter, kw: &KeywordInfo, first_char_dispatched
         }
         let lower = kw_chars[kc];
         if kw.char_ci[kc] {
-            w.write(&`chars[start + ${kc}].eq_ignore_ascii_case(&${char_lit(lower)})`);
+            w.write(&wado`chars[start + ${kc}].eq_ignore_ascii_case(&'${lower}')`);
         } else {
-            w.write(&`chars[start + ${kc}] == ${char_lit(lower)}`);
+            w.write(&wado`chars[start + ${kc}] == '${lower}'`);
         }
     }
     w.write(&` \{ return TK_${kw.rule_name}; \}\n`);
@@ -4474,11 +4473,11 @@ fn build_dispatch_groups(calls: &List<TryCall>) -> List<DispatchGroup> {
         }
         // Check if this group already exists
         if let Some(gi) = group_by_calls.get(matching) {
-            groups[gi].pattern.push_str(&` | ${char_lit(*c)}`);
+            groups[gi].pattern.push_str(&wado` | '${*c}'`);
         } else {
             group_by_calls[matching] = groups.len();
             groups.push(DispatchGroup {
-                pattern: `${char_lit(*c)}`,
+                pattern: wado`'${*c}'`,
                 calls: matching,
             });
         }
@@ -4514,7 +4513,7 @@ fn build_dispatch_groups(calls: &List<TryCall>) -> List<DispatchGroup> {
             cs.push(*ci);
         }
         groups.push(DispatchGroup {
-            pattern: `${char_lit(r[0])}..=${char_lit(r[1])}`,
+            pattern: wado`'${r[0]}'..='${r[1]}'`,
             calls: cs,
         });
     }
@@ -5077,7 +5076,7 @@ fn gen_token_kind_name_fn(w: &mut CodeWriter, lexer_rules: &List<LexerRule>, lit
     // Gale interned it under. This is the one vocabulary every user-facing
     // name is read from: `expected` sets and `<missing X>` alike.
     for let lit of lit_tokens {
-        w.line(&`${lit.const_name} => ${str_lit(`${lit_name(lit.text)}`)},`);
+        w.line(&wado`${lit.const_name} => "${lit_name(lit.text)}",`);
     }
     w.line(&"_ => \"Unknown\",");
     w.dedent();

@@ -9,8 +9,7 @@ use {
     GlobalSpec,
     ImplSpec,
     Vis,
-    str_lit,
-    char_lit,
+    wado,
     lit_name,
     char_range_pat,
 } from "./wadopoet.wado";
@@ -400,15 +399,23 @@ test "chaining builder methods" {
 }
 
 
-test "str_lit wraps and quotes" {
-    assert `${str_lit("foo")}` == "\"foo\"";
+test "wado writes a code hole verbatim" {
+    let name = "expr_list";
+    let index = 3;
+    assert wado`pos = ${name}(tokens, pos, ${index});` == "pos = expr_list(tokens, pos, 3);";
 }
 
-test "str_lit empty" {
-    assert `${str_lit("")}` == "\"\"";
+test "wado quotes a hole inside a string literal" {
+    let text = "foo";
+    assert wado`let s = "${text}";` == "let s = \"foo\";";
 }
 
-test "str_lit escapes quote and backslash" {
+test "wado quotes an empty hole" {
+    let text = "";
+    assert wado`let s = "${text}";` == "let s = \"\";";
+}
+
+test "wado escapes quote and backslash inside a string literal" {
     // input: a " \ b
     let mut input = String::new();
     input.push('a');
@@ -425,15 +432,17 @@ test "str_lit escapes quote and backslash" {
     expected.push('\\');
     expected.push('b');
     expected.push('"');
-    assert `${str_lit(input)}` == expected, `got: ${str_lit(input)}`;
+    let got = wado`"${input}"`;
+    assert got == expected, `got: ${got}`;
 }
 
-test "str_lit keeps printable non-ASCII verbatim" {
+test "wado keeps printable non-ASCII verbatim" {
     // The key contract: Japanese text is NOT \u-escaped.
-    assert `${str_lit("あ")}` == "\"あ\"";
+    let text = "あ";
+    assert wado`"${text}"` == "\"あ\"";
 }
 
-test "str_lit escapes control chars" {
+test "wado escapes control chars" {
     // input: newline, then U+0001 (no named escape)
     let mut input = String::new();
     input.push('\n');
@@ -449,35 +458,67 @@ test "str_lit escapes control chars" {
     expected.push('1');
     expected.push('}');
     expected.push('"');
-    assert `${str_lit(input)}` == expected, `got: ${str_lit(input)}`;
+    let got = wado`"${input}"`;
+    assert got == expected, `got: ${got}`;
 }
 
-test "char_lit basic" {
-    assert `${char_lit('a')}` == "'a'";
+test "wado escapes a hole inside a char literal" {
+    let c = 'a';
+    assert wado`if ch == '${c}' { return; }` == "if ch == 'a' { return; }";
 }
 
-test "char_lit escapes single quote" {
+test "wado escapes a single quote inside a char literal" {
     // expected literal text: '\''
     let mut expected = String::new();
     expected.push('\'');
     expected.push('\\');
     expected.push('\'');
     expected.push('\'');
-    assert `${char_lit('\'')}` == expected, `got: ${char_lit('\'')}`;
+    let c = '\'';
+    let got = wado`'${c}'`;
+    assert got == expected, `got: ${got}`;
 }
 
-test "char_lit named control" {
+test "wado escapes a named control char inside a char literal" {
     // expected literal text: '\n'
     let mut expected = String::new();
     expected.push('\'');
     expected.push('\\');
     expected.push('n');
     expected.push('\'');
-    assert `${char_lit('\n')}` == expected, `got: ${char_lit('\n')}`;
+    let c = '\n';
+    let got = wado`'${c}'`;
+    assert got == expected, `got: ${got}`;
 }
 
-test "char_lit keeps printable non-ASCII verbatim" {
-    assert `${char_lit('あ')}` == "'あ'";
+test "wado keeps a printable non-ASCII char verbatim" {
+    let c = 'あ';
+    assert wado`'${c}'` == "'あ'";
+}
+
+test "wado carries the context across an empty segment" {
+    let a = "a\"";
+    let b = "b";
+    assert wado`let s = "${a}${b}";` == "let s = \"a\\\"b\";";
+}
+
+test "wado reads a quote in a line comment as text" {
+    let comment = "don't";
+    let text = "x\"y";
+    let got = wado`// ${comment}
+let s = "${text}";`;
+    assert got == "// don't\nlet s = \"x\\\"y\";", `got: ${got}`;
+}
+
+test "wado applies a format specifier" {
+    let bits = 255;
+    assert wado`let mask = 0x${bits:x};` == "let mask = 0xff;";
+}
+
+test "wado nests generated code" {
+    let text = "a\"b";
+    let inner = wado`f("${text}")`;
+    assert wado`let x = ${inner};` == "let x = f(\"a\\\"b\");";
 }
 
 test "char_range_pat renders an inclusive range" {
@@ -551,7 +592,7 @@ test "struct + impl trait composition" {
 test "lit_name renders a grammar literal the way ANTLR4's vocabulary does" {
     assert `${lit_name("+")}` == "'+'";
     assert `${lit_name("and")}` == "'and'";
-    // Printable non-ASCII stays verbatim, same as `str_lit`.
+    // Printable non-ASCII stays verbatim, as in any Wado literal Gale emits.
     assert `${lit_name("あ")}` == "'あ'";
     // `LitToken.text` has its escapes resolved, so a real newline goes back to
     // `\n` — a readable rendering, not a round-trip.

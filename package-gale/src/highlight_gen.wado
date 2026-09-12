@@ -1,6 +1,6 @@
 use { Grammar, LexerRule, ParserRule, lexer_alias_text } from "./ir.wado";
 use { LitToken, TokenSlot, token_slot_order } from "./lexer_gen.wado";
-use { CodeWriter, FnSpec, Vis, str_lit } from "./wadopoet.wado";
+use { CodeWriter, FnSpec, Vis, wado } from "./wadopoet.wado";
 use { HighlightRule, TokenSelector } from "./highlight_query.wado";
 use { GenContext } from "./gen_context.wado";
 use { DiagnosticKind, DiagnosticOwner } from "./gir.wado";
@@ -320,7 +320,7 @@ fn gen_highlight_mapping(
             Some(c) => c,
             None => "",
         };
-        w.line(&`${str_lit(capture)},  // ${slot_comment(&slots[i], lexer_rules, lit_tokens)}`);
+        w.line(&wado`"${capture}",  // ${slot_comment(&slots[i], lexer_rules, lit_tokens)}`);
     }
     w.dedent();
     w.line(&"];");
@@ -331,7 +331,7 @@ fn gen_highlight_mapping(
     w.line(&"let rule_names: List<String> = [");
     w.indent();
     for let rule of parser_rules {
-        w.line(&`${str_lit(rule.name)},`);
+        w.line(&wado`"${rule.name}",`);
     }
     w.dedent();
     w.line(&"];");
@@ -343,9 +343,7 @@ fn gen_highlight_mapping(
         w.indent();
         for let ov of &overrides {
             w.line(
-                &`HighlightOverride \{ rule_name: ${str_lit(ov.rule_name)}, token_kind: ${ov.token_kind}, capture: ${str_lit(
-                    ov.capture,
-                )} \},`,
+                &wado`HighlightOverride { rule_name: "${ov.rule_name}", token_kind: ${ov.token_kind}, capture: "${ov.capture}" },`,
             );
         }
         w.dedent();
@@ -385,7 +383,7 @@ fn gen_capture_vocabulary(
         w.line(&"return [");
         w.indent();
         for let capture of &vocabulary {
-            w.line(&`${str_lit(*capture)},`);
+            w.line(&wado`"${*capture}",`);
         }
         w.dedent();
         w.line(&"];");

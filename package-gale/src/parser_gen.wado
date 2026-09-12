@@ -49,7 +49,7 @@ use {
     follow_yields_call_of,
 } from "./gen_util.wado";
 use { GenContext, is_nullable, sets_overlap, union_kind_arrays } from "./gen_context.wado";
-use { CodeWriter, FnSpec, ParamSpec, str_lit } from "./wadopoet.wado";
+use { CodeWriter, FnSpec, ParamSpec, wado } from "./wadopoet.wado";
 use { TreeSet } from "core:collections";
 use {
     PredictionNode,
@@ -2689,7 +2689,7 @@ fn gen_rule_entry_wrapper(
     add_arg_params(&mut f, rule, ctx);
     f.set_return_type(result_type);
     f.emit_begin(w);
-    let lit = str_lit(*rule_display);
+    let lit = wado`"${*rule_display}"`;
     // Already unwinding from a deeper failure: no-op so the descent collapses
     // to the entry without opening spurious nodes (the infallible analogue of a
     // `?` that would have skipped this call entirely).
@@ -3248,7 +3248,7 @@ fn gen_multi_alt_body(
         // `pick literal_value alt#0` pure noise). Tournament / speculative
         // picks, and picks among alts that consume sub-structure, stay.
         if ctx.is_trace() && !all_alts_are_single_token(&rule.alternatives) {
-            w.line(&`trace_pick(p, &${str_lit(rule.name)}, ${alt_index});`);
+            w.line(&wado`trace_pick(p, &"${rule.name}", ${alt_index});`);
         }
         let after = rule_after_for(rule, lowered_rule, ctx);
         gen_alt_body(
@@ -7858,7 +7858,7 @@ fn emit_index_pick_dispatch(
     ctx: &GenContext,
 ) {
     if ctx.is_trace() {
-        w.line(&`trace_pick(p, &${str_lit(*rule_display)}, ${*var});`);
+        w.line(&wado`trace_pick(p, &"${*rule_display}", ${*var});`);
     }
     // The last index needs no test: the tail below is the same call.
     for let mut i = 0; i < sorted_indices.len() - 1; i += 1 {
@@ -7939,7 +7939,7 @@ fn emit_scan_tournament(
         }
     }
     if ctx.is_trace() {
-        let rlit = str_lit(*rule_display);
+        let rlit = wado`"${*rule_display}"`;
         for let mut i = 0; i < sorted_indices.len(); i += 1 {
             let idx = sorted_indices[i];
             w.line(&`trace_scan_alt(p, &${rlit}, ${idx}, _sd_p_${idx});`);
@@ -8311,7 +8311,7 @@ fn gen_multi_alt_body_alt(
             // all-single-token rules (the chosen alt is obvious from the
             // lookahead token on the `enter` line).
             if ctx.is_trace() && !all_alts_are_single_token(&rule.alternatives) {
-                w.line(&`trace_pick(p, &${str_lit(rule.name)}, ${alt_index});`);
+                w.line(&wado`trace_pick(p, &"${rule.name}", ${alt_index});`);
             }
             let after = rule_after_for(rule, lowered_rule, ctx);
             gen_alt_body(
@@ -8355,7 +8355,7 @@ fn gen_error_fallback(w: &mut CodeWriter, rule: &ParserRule, type_name: &String,
         let first = ctx.first_of_alt(&alt, &mut visiting);
         dedup_append_arr(&mut expected, &first);
     }
-    let msg = str_lit(`no alternative of ${rule.name} matches`);
+    let msg = wado`"no alternative of ${rule.name} matches"`;
     // Kind ids, not names: `fail` resolves names only for the error it keeps.
     let expected_ref = sync_set_ref(ctx, &expected);
     w.line(&`p.no_viable(`);
