@@ -2,11 +2,10 @@
 // This module must be synchronized with syntax.rs (canonical syntax definition).
 
 use crate::ast::{
-<<<<<<< HEAD
     AssertStmt, AssignExpr, AssocTypeBound, AssociatedConst, AssociatedTypeBinding,
     AssociatedTypeDecl, AstId, AstIdSpace, AttrArg, AttrEntry, AttrObject, AttrValue, Attribute,
     BinaryExpr, BinaryOp, Block, BreakStmt, BuiltinTypeDecl, CallExpr, CastExpr, ChainedComparison,
-    ClosureExpr, ClosureParam, CmBoundary, CmImport, CmResourceBacking, ComparisonChainExpr,
+    ClosureExpr, ClosureParam, CmBoundary, CmImport, CmResourceLinearity, ComparisonChainExpr,
     CompoundAssignExpr, CompoundAssignOp, Condition, ConditionElement, ContinueStmt,
     EffectHandlerBinding, EnumCase, EnumDecl, ErrorExpr, ErrorItem, ErrorStmt, Expr, ExprStmt,
     FieldAccessExpr, FlagsDecl, FlagsVariant, ForOfStmt, ForStmt, FormatSpec, Function,
@@ -21,41 +20,6 @@ use crate::ast::{
     TupleComprehensionExpr, TupleLiteralExpr, TupleTypeDecl, Type, UnaryExpr, UnaryOp, UseDecl,
     UseItem, UseItemSimple, VariantCase, VariantDecl, Visibility, WhileStmt, WithHandlerExpr,
     WorldDecl, WorldExport, WorldExportFn, WorldExportInterface, WorldImport,
-||||||| a9e00393c
-    AssertStmt, AssignExpr, AssociatedConst, AssociatedTypeBinding, AssociatedTypeDecl, AstId,
-    AttrArg, AttrEntry, Attribute, BinaryExpr, BinaryOp, Block, BreakStmt, BuiltinTypeDecl,
-    CallExpr, CastExpr, ChainedComparison, ClosureExpr, ClosureParam, CmBoundary, CmImport,
-    CmResourceBacking, ComparisonChainExpr, CompoundAssignExpr, CompoundAssignOp, Condition,
-    ConditionElement, ContinueStmt, EnumCase, EnumDecl, Expr, ExprStmt, FieldAccessExpr, FlagsDecl,
-    FlagsVariant, ForOfStmt, ForStmt, FormatSpec, Function, FunctionType, GenericType, GlobalDecl,
-    IdentExpr, IfExpr, IfStmt, ImplBlock, ImportAttributes, IndexExpr, InnerAttribute,
-    InterfaceDecl, Item, LabeledBlockStmt, LetStmt, Literal, LiteralExpr, LoopStmt, MatchArm,
-    MatchExpr, MatchesExpr, MethodCallExpr, Module, NamedType, NamespacedGenericType, Newtype,
-    Param, PathSegment, Pattern, RangeExpr, RangeKind, ResourceDecl, RestClause, RestClauseDecl,
-    ReturnStmt, SelfKind, StaticMethodCallExpr, Stmt, StoresEntry, StructDecl, StructField,
-    StructLiteralExpr, StructLiteralField, StructLiteralSpread, StructPatternField,
-    TaggedTemplateExpr, TaskReturnStmt, TemplatePart, TemplateStringExpr, TestDecl, TraitDecl,
-    TryOpExpr, TupleLiteralExpr, TupleTypeDecl, Type, UnaryExpr, UnaryOp, UseDecl, UseItem,
-    UseItemSimple, VariantCase, VariantDecl, Visibility, WhileStmt, WorldDecl, WorldExport,
-    WorldExportFn, WorldExportInterface, WorldImport,
-=======
-    AssertStmt, AssignExpr, AssociatedConst, AssociatedTypeBinding, AssociatedTypeDecl, AstId,
-    AttrArg, AttrEntry, Attribute, BinaryExpr, BinaryOp, Block, BreakStmt, BuiltinTypeDecl,
-    CallExpr, CastExpr, ChainedComparison, ClosureExpr, ClosureParam, CmBoundary, CmImport,
-    CmResourceLinearity, ComparisonChainExpr, CompoundAssignExpr, CompoundAssignOp, Condition,
-    ConditionElement, ContinueStmt, EnumCase, EnumDecl, Expr, ExprStmt, FieldAccessExpr, FlagsDecl,
-    FlagsVariant, ForOfStmt, ForStmt, FormatSpec, Function, FunctionType, GenericType, GlobalDecl,
-    IdentExpr, IfExpr, IfStmt, ImplBlock, ImportAttributes, IndexExpr, InnerAttribute,
-    InterfaceDecl, Item, LabeledBlockStmt, LetStmt, Literal, LiteralExpr, LoopStmt, MatchArm,
-    MatchExpr, MatchesExpr, MethodCallExpr, Module, NamedType, NamespacedGenericType, Newtype,
-    Param, PathSegment, Pattern, RangeExpr, RangeKind, ResourceDecl, RestClause, RestClauseDecl,
-    ReturnStmt, SelfKind, StaticMethodCallExpr, Stmt, StoresEntry, StructDecl, StructField,
-    StructLiteralExpr, StructLiteralField, StructLiteralSpread, StructPatternField,
-    TaggedTemplateExpr, TaskReturnStmt, TemplatePart, TemplateStringExpr, TestDecl, TraitDecl,
-    TryOpExpr, TupleLiteralExpr, TupleTypeDecl, Type, UnaryExpr, UnaryOp, UseDecl, UseItem,
-    UseItemSimple, VariantCase, VariantDecl, Visibility, WhileStmt, WorldDecl, WorldExport,
-    WorldExportFn, WorldExportInterface, WorldImport,
->>>>>>> origin/main
 };
 use crate::comment::{Comment, TriviaMap};
 use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};

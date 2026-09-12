@@ -10,24 +10,16 @@ use crate::hashmap::{IndexMap, IndexSet};
 
 use wasm_encoder::ValType;
 
-<<<<<<< HEAD
 use crate::ast;
 use crate::ast::{
-    AstId, Attribute, CmBoundary, CmImport, CmResourceBacking, FunctionType, GenericType,
-    InterfaceDecl, Item, NamedType, NamespacedGenericType, Type,
+    AstId, Attribute, CmBoundary, CmImport, FunctionType, GenericType, InterfaceDecl, Item,
+    NamedType, NamespacedGenericType, Type, declares_unrestricted,
 };
 use crate::canonical::{CmFuturePayload, CmPayloadType, CmScalarType, CmStreamPayload};
 use crate::cm_abi::{
     CmValType, align_to, cm_align, cm_enum_byte_size, cm_flags_byte_align, cm_flags_byte_size,
     cm_size, layout_record_with_registry_scoped, layout_tuple_with_registry_scoped,
 };
-||||||| a9e00393c
-use crate::ast::{Attribute, CmImport, GenericType, Type};
-use crate::canonical::{CmFuturePayload, CmPayloadType, CmScalarType};
-=======
-use crate::ast::{Attribute, CmImport, GenericType, Type, declares_unrestricted};
-use crate::canonical::{CmFuturePayload, CmPayloadType, CmScalarType};
->>>>>>> origin/main
 use crate::module_source::{CmNamespace, ModuleSource};
 use crate::name::{DeclName, DeclPath, to_kebab};
 use crate::tir::{PrimitiveType, ResolvedType, TypeId, TypeTable};
@@ -544,44 +536,10 @@ fn cm_attr_cm_name(attrs: &[Attribute], wado_name: &str) -> String {
         .unwrap_or_else(|| panic!("missing #[cm] attribute for CM name: {wado_name}"))
 }
 
-<<<<<<< HEAD
-/// Whether a resource declares `#[cm(..., type = "extern-handle")]`.
-fn extern_handle_backed(attrs: &[Attribute]) -> bool {
-    attrs
-        .iter()
-        .any(|a| a.cm_resource_backing() == Some(CmResourceBacking::ExternHandle))
-}
-
-/// The CM type an extern-handle crosses the boundary as. No CM value type is a
-/// reference, so a copyable handle is an integer — the WEP records why.
-fn extern_handle_type(span: Span) -> Type {
-    Type::Named(NamedType::new(AstId::fresh(), "u32".to_string(), span))
-||||||| a9e00393c
-/// Whether a resource declares `#[cm(..., type = "extern-handle")]`.
-fn extern_handle_backed(attrs: &[crate::ast::Attribute]) -> bool {
-    attrs
-        .iter()
-        .any(|a| a.cm_resource_backing() == Some(crate::ast::CmResourceBacking::ExternHandle))
-}
-
-/// The CM type an extern-handle crosses the boundary as. No CM value type is a
-/// reference, so a copyable handle is an integer — the WEP records why.
-fn extern_handle_type(span: crate::token::Span) -> Type {
-    Type::Named(crate::ast::NamedType::new(
-        crate::ast::AstId::fresh(),
-        "u32".to_string(),
-        span,
-    ))
-=======
 /// The CM type an unrestricted resource crosses the boundary as. No CM value
 /// type is a reference, so a copyable handle is an integer.
-fn extern_handle_type(span: crate::token::Span) -> Type {
-    Type::Named(crate::ast::NamedType::new(
-        crate::ast::AstId::fresh(),
-        "u32".to_string(),
-        span,
-    ))
->>>>>>> origin/main
+fn extern_handle_type(span: Span) -> Type {
+    Type::Named(NamedType::new(AstId::fresh(), "u32".to_string(), span))
 }
 
 /// Extract CM parameter names from a `#[cm_params("param-a", "param-b")]` attribute.

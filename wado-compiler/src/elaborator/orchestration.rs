@@ -27,7 +27,7 @@ use super::types::{
     ResourceInfo, StructFieldInfo, TypeError, TypeLookup, VariantCaseData, VariantInfo,
 };
 use super::tysys::TypeSystem;
-use crate::ast::{CmImport, CmResourceBacking, GenericType, NamedType, UseItem};
+use crate::ast::{CmImport, GenericType, NamedType, UseItem};
 use crate::compiler_item::Resolved;
 use crate::component_model::SourceInterfaceBatch;
 use crate::defs::{DefId, DefKind, DefTable};
@@ -561,21 +561,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                                     defined_at: resource_decl.id,
                                 },
                             );
-<<<<<<< HEAD
-                            if resource_decl.attrs.iter().any(|a| {
-                                a.cm_resource_backing() == Some(CmResourceBacking::ExternHandle)
-                            }) {
-                                type_table.borrow_mut().mark_extern_handle_resource(def);
-||||||| a9e00393c
-                            if resource_decl.attrs.iter().any(|a| {
-                                a.cm_resource_backing()
-                                    == Some(crate::ast::CmResourceBacking::ExternHandle)
-                            }) {
-                                type_table.borrow_mut().mark_extern_handle_resource(def);
-=======
                             if declares_unrestricted(&resource_decl.attrs) {
                                 type_table.borrow_mut().mark_unrestricted_resource(def);
->>>>>>> origin/main
                             }
                             let is_generic = resource_decl.type_params.iter().any(|p| !p.is_effect);
                             if is_generic {

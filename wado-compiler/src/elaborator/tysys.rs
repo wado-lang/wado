@@ -25,9 +25,9 @@ use crate::ast::{AstId, GenericParam};
 use crate::defs::DefId;
 use crate::elaborator::sig;
 use crate::elaborator::solver_bridge::SolverBridge;
+use crate::hashmap;
 use crate::name::FqTypeName;
 use crate::resolve::Resolutions;
-use crate::{hashmap, tir};
 
 /// Pipeline-wide type knowledge — the type arena, the cross-module decl
 /// indices, the registries, and the read-only caches built once at
@@ -124,16 +124,7 @@ impl TypeSystem {
     /// itself rather than a spelling of it, which is what every caller holds:
     /// each reached one by destructuring a `ResolvedType`. Used by the resource
     /// move check to decide whether an aggregate transitively owns a resource.
-<<<<<<< HEAD
-    pub(crate) fn struct_field_type_ids_of(&self, type_id: TypeId) -> Option<Vec<tir::TypeId>> {
-||||||| a9e00393c
-    pub(crate) fn struct_field_type_ids_of(
-        &self,
-        type_id: TypeId,
-    ) -> Option<Vec<crate::tir::TypeId>> {
-=======
     pub(crate) fn struct_field_type_ids_of(&self, type_id: TypeId) -> Option<Vec<TypeId>> {
->>>>>>> origin/main
         let info = self.all_struct_fields.get(&self.type_def(type_id)?)?;
         Some(info.fields.iter().map(|(_, tid, _)| *tid).collect())
     }
