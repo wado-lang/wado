@@ -566,9 +566,9 @@ test "deserialize variant object with extra pair errors" {
     // External tagging is a single-pair object; the access's end() reports the
     // unbalanced '}' and the synthesized impl must propagate that error
     // (its Result used to be discarded).
-    let ok: Result<PrettyShape, DeserializeError> = from_string(`\{"Circle":1.5\}`);
+    let ok: Result<PrettyShape, DeserializeError> = from_string(`{"Circle":1.5}`);
     assert ok matches { Ok(v) && v == PrettyShape::Circle(1.5) };
-    let extra: Result<PrettyShape, DeserializeError> = from_string(`\{"Circle":1.5,"Point":null\}`);
+    let extra: Result<PrettyShape, DeserializeError> = from_string(`{"Circle":1.5,"Point":null}`);
     assert extra matches { Err(e) && e.kind == DeserializeErrorKind::MalformedInput };
 }
 
@@ -750,7 +750,7 @@ struct Ack {
 test "a unit payload round-trips through the null it wrote" {
     let value: Result<(), DeserializeErrorKind> = Result::Ok(());
     let text = to_string(&value).unwrap();
-    assert text == `\{"Ok":null\}`;
+    assert text == `{"Ok":null}`;
     let back: Result<Result<(), DeserializeErrorKind>, DeserializeError> = from_string(text);
     assert back matches { Ok(Ok(_)) };
 }
@@ -758,7 +758,7 @@ test "a unit payload round-trips through the null it wrote" {
 test "a unit struct field round-trips" {
     let a = Ack { id: 7, ok: () };
     let text = to_string(&a).unwrap();
-    assert text == `\{"id":7,"ok":null\}`;
+    assert text == `{"id":7,"ok":null}`;
     let back: Result<Ack, DeserializeError> = from_string(text);
     assert back matches { Ok(_) };
     if let Ok(v) = back {
@@ -803,7 +803,7 @@ test "nesting past the default depth limit is an error, not a trap" {
 test "an object nests as deeply as an array" {
     let mut deep = String::new();
     for let mut i = 0; i < DEFAULT_MAX_DEPTH + 1; i += 1 {
-        deep.push_str(&`\{"a":`);
+        deep.push_str(&`{"a":`);
     }
     deep.push('1');
     for let mut i = 0; i < DEFAULT_MAX_DEPTH + 1; i += 1 {
@@ -815,9 +815,9 @@ test "an object nests as deeply as an array" {
 
 test "a skipped unknown member is depth-limited too" {
     let mut text = String::new();
-    text.push_str(&`\{"unknown":`);
+    text.push_str(&`{"unknown":`);
     text.push_str(&nested(DEFAULT_MAX_DEPTH + 1, '[', ']'));
-    text.push_str(&`,"a":"x"\}`);
+    text.push_str(&`,"a":"x"}`);
     let r: Result<Utf8Rec, DeserializeError> = from_string(text);
     assert r matches { Err(e) && e.kind == DeserializeErrorKind::DepthLimitExceeded };
 }
@@ -850,32 +850,32 @@ struct Dup {
 impl Deserialize for Dup;
 
 test "a repeated field is rejected by default" {
-    let r: Result<Dup, DeserializeError> = from_string(`\{"a":1,"b":2,"a":3\}`);
+    let r: Result<Dup, DeserializeError> = from_string(`{"a":1,"b":2,"a":3}`);
     assert r matches { Err(e) && e.kind == DeserializeErrorKind::DuplicateField };
 }
 
 test "a field repeated onto its declared default is still a duplicate" {
-    let r: Result<Dup, DeserializeError> = from_string(`\{"a":1,"b":2,"b":3\}`);
+    let r: Result<Dup, DeserializeError> = from_string(`{"a":1,"b":2,"b":3}`);
     assert r matches { Err(e) && e.kind == DeserializeErrorKind::DuplicateField };
 }
 
 test "distinct fields are not duplicates" {
-    let r: Result<Dup, DeserializeError> = from_string(`\{"a":1,"b":2\}`);
+    let r: Result<Dup, DeserializeError> = from_string(`{"a":1,"b":2}`);
     assert r matches { Ok(d) && d.a == 1 && d.b == 2 };
 }
 
 test "an omitted field keeps its declared default" {
-    let r: Result<Dup, DeserializeError> = from_string(`\{"a":1\}`);
+    let r: Result<Dup, DeserializeError> = from_string(`{"a":1}`);
     assert r matches { Ok(d) && d.b == 9 };
 }
 
 test "a repeated unknown member is not a duplicate" {
-    let r: Result<Dup, DeserializeError> = from_string(`\{"a":1,"z":1,"z":2\}`);
+    let r: Result<Dup, DeserializeError> = from_string(`{"a":1,"z":1,"z":2}`);
     assert r matches { Ok(d) && d.a == 1 };
 }
 
 test "the duplicate error names the wire field" {
-    let r: Result<Dup, DeserializeError> = from_string(`\{"a":1,"a":2\}`);
+    let r: Result<Dup, DeserializeError> = from_string(`{"a":1,"a":2}`);
     if let Err(e) = r {
         assert e.message == "duplicate field: a";
     } else {
@@ -884,26 +884,26 @@ test "the duplicate error names the wire field" {
 }
 
 test "a repeated map key is rejected by default" {
-    let r: Result<TreeMap<String, i32>, DeserializeError> = from_string(`\{"a":1,"a":2\}`);
+    let r: Result<TreeMap<String, i32>, DeserializeError> = from_string(`{"a":1,"a":2}`);
     assert r matches { Err(e) && e.kind == DeserializeErrorKind::DuplicateField };
 }
 
 test "a repeated Value key is rejected by default" {
-    let r: Result<Value, DeserializeError> = from_string(`\{"role":"user","role":"admin"\}`);
+    let r: Result<Value, DeserializeError> = from_string(`{"role":"user","role":"admin"}`);
     assert r matches { Err(e) && e.kind == DeserializeErrorKind::DuplicateField };
 }
 
 test "a repeated key nested inside a Value is rejected" {
-    let r: Result<Value, DeserializeError> = from_string(`\{"outer":\{"a":1,"a":2\}\}`);
+    let r: Result<Value, DeserializeError> = from_string(`{"outer":{"a":1,"a":2}}`);
     assert r matches { Err(e) && e.kind == DeserializeErrorKind::DuplicateField };
 }
 
 test "distinct map keys still parse" {
-    let r: Result<TreeMap<String, i32>, DeserializeError> = from_string(`\{"a":1,"b":2\}`);
+    let r: Result<TreeMap<String, i32>, DeserializeError> = from_string(`{"a":1,"b":2}`);
     assert r matches { Ok(m) && m.len() == 2 };
 }
 
 test "a repeated key in a nested map is rejected" {
-    let r: Result<TreeMap<String, Value>, DeserializeError> = from_string(`\{"a":\{"b":1,"b":2\}\}`);
+    let r: Result<TreeMap<String, Value>, DeserializeError> = from_string(`{"a":{"b":1,"b":2}}`);
     assert r matches { Err(e) && e.kind == DeserializeErrorKind::DuplicateField };
 }
