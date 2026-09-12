@@ -165,7 +165,7 @@ JSON deserialize:
 
 The PoC row (`json_catalog_v2.wado`) is a hand-written parser for this one
 schema, not a general decoder. It was the mark `core:json` had to reach, and the
-two now measure within half a percent of each other.
+two rows have converged.
 
 CBOR serialize:
 
