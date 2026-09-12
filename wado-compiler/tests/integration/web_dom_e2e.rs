@@ -95,7 +95,7 @@ impl DomObjects {
 
 /// A host binding over the object table, so each body below is only its own
 /// work. `Params` starts with the handle as a plain `u32` — the shape the
-/// extern-handle lowering produces, with no CM resource anywhere in it.
+/// universal-handle lowering produces, with no CM resource anywhere in it.
 fn over_dom<Params, Return>(
     dom: &Arc<Mutex<DomObjects>>,
     body: impl Fn(&mut DomObjects, Params) -> Return + Send + Sync + 'static,

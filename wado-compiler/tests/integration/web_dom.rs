@@ -1,5 +1,5 @@
-//! `web:` is a bundled namespace and `web:dom` the extern-handle slice Tide's
-//! generator emits from the vendored `WebIDL` snapshot. See
+//! `web:` is a bundled namespace and `web:dom` the unrestricted-resource slice
+//! Tide's generator emits from the vendored `WebIDL` snapshot. See
 //! `docs/wep-2026-04-01-tide.md`.
 
 use crate::common::{check_diagnostics, compile_source};
@@ -23,10 +23,10 @@ const INHERITED: &str = "el.set_text_content(Option::Some(\"Hello, Wado!\"));";
 const UPCAST: &str =
     "let parent: Node = el;\nparent.set_text_content(Option::Some(\"Hello, Wado!\"));";
 
-/// An extern-handle-backed resource is an opaque `u32` at the CM boundary, not
-/// a CM `resource`, so the component's imports carry no handle type.
+/// An unrestricted resource is an opaque `u32` at the CM boundary, not a CM
+/// `resource`, so the component's imports carry no handle type.
 #[test]
-fn an_extern_handle_crosses_as_a_bare_u32() {
+fn an_unrestricted_resource_crosses_as_a_bare_u32() {
     let wat = compile_to_wat(&on_an_element("el.set_id(\"app\");"));
     assert!(
         wat.contains("web:dom/element"),
@@ -34,7 +34,7 @@ fn an_extern_handle_crosses_as_a_bare_u32() {
     );
     assert!(
         !wat.contains("(resource"),
-        "an extern-handle resource declares no CM resource type: {wat}"
+        "an unrestricted resource declares no CM resource type: {wat}"
     );
 }
 

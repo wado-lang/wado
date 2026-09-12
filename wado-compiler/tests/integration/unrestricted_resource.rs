@@ -5,9 +5,20 @@ use crate::common::{InMemoryHost, check_diagnostics as diagnostics, runtime};
 use wado_compiler::check_resource_moves_semantic;
 use wado_compiler::semantics::semantics;
 
+/// The move errors in `source`, which must compile otherwise: a source rejected
+/// before the move check runs says nothing about what the move check decides.
 fn move_errors(source: &str) -> Vec<String> {
     let host = InMemoryHost::new();
     let sem = runtime().block_on(semantics(source, &host, Some("entry.wado")));
+    let rejected: Vec<String> = host
+        .diagnostics()
+        .into_iter()
+        .map(|d| format!("{:?}: {}", d.code, d.message))
+        .collect();
+    assert!(
+        rejected.is_empty(),
+        "the source must reach the move check, got {rejected:?}"
+    );
     check_resource_moves_semantic(&sem)
         .into_iter()
         .map(|e| e.to_string())
@@ -56,8 +67,10 @@ fn an_affine_resource_stays_move_only() {
     );
     let errors = move_errors(&source);
     assert!(
-        !errors.is_empty(),
-        "an affine handle keeps the move-only discipline"
+        errors
+            .iter()
+            .any(|e| e.contains("resource `h` used after it was moved")),
+        "an affine handle keeps the move-only discipline, got {errors:?}"
     );
 }
 
