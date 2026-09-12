@@ -48,6 +48,7 @@ use {
     write_exp,
     write_decimal_prec,
     write_exp_prec,
+    u64_bit_len,
 } from "core:prelude/fpfmt.wado";
 
 // Deterministic math functions imported directly from the bundled
@@ -288,32 +289,7 @@ fn count_digits_u64_base(val_i64: i64, bits_per_digit: i32) -> i32 {
     if val_i64 == 0 {
         return 1;
     }
-    // Count leading zeros manually: find highest set bit
-    let mut highest_bit: i32 = 0;
-    // Check high 32 bits
-    let high32: i64 = val_i64 >> 32 & 0xFFFFFFFF;
-    if high32 != 0 {
-        // Bit is somewhere in bits 32..=63
-        let mut b: i32 = 63;
-        while b >= 32 {
-            if val_i64 >> b as i64 & 1 != 0 {
-                highest_bit = b;
-                break;
-            }
-            b -= 1;
-        }
-    } else {
-        // Bit is somewhere in bits 0..=31
-        let mut b: i32 = 31;
-        while b >= 0 {
-            if val_i64 >> b as i64 & 1 != 0 {
-                highest_bit = b;
-                break;
-            }
-            b -= 1;
-        }
-    }
-    return highest_bit / bits_per_digit + 1;
+    return (u64_bit_len(val_i64 as u64) - 1) / bits_per_digit + 1;
 }
 
 /// Write digits of a u64 value (as raw i64 bits) in a power-of-2 base.
