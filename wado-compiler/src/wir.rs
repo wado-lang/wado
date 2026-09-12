@@ -1503,6 +1503,8 @@ pub enum WirInstr {
     ColdPath,
     /// Optimization barrier for `builtin::black_box(value)`: every WIR pass
     /// reads it as an unknown value, and codegen emits the operand in its place.
+    /// Opaque to what the operand *is*, transparent to what it *emits* — see
+    /// [`WirInstr::emitted`].
     BlackBox(Box<WirInstr>),
     /// Drop a value.
     Drop(Box<WirInstr>),
@@ -1637,7 +1639,7 @@ impl WirInstr {
     /// Returns true if this instruction always diverges (all execution paths
     /// end with `return` or `unreachable` before producing a value).
     pub fn always_diverges(&self) -> bool {
-        match self {
+        match self.emitted() {
             Self::Return { .. } | Self::Unreachable | Self::Br { .. } | Self::BrTable { .. } => {
                 true
             }
@@ -1659,6 +1661,29 @@ impl WirInstr {
 
     fn seq_always_diverges(instrs: &[Self]) -> bool {
         instrs.iter().any(Self::always_diverges)
+    }
+
+    /// The instruction codegen actually writes, with every transparent wrapper
+    /// peeled off. [`BlackBox`] and [`BranchHint`] emit their operand and
+    /// nothing besides, so a predicate describing the emitted Wasm —
+    /// [`always_diverges`], [`produces_stack_value`], [`ends_with_terminator`] —
+    /// answers for the operand. Answering for the wrapper describes a node no
+    /// binary holds.
+    ///
+    /// Not [`peel_hint`], which peels one hint so a pass can match a
+    /// condition's shape. This peels the whole chain.
+    ///
+    /// [`BlackBox`]: WirInstr::BlackBox
+    /// [`BranchHint`]: WirInstr::BranchHint
+    /// [`always_diverges`]: WirInstr::always_diverges
+    /// [`produces_stack_value`]: WirInstr::produces_stack_value
+    /// [`ends_with_terminator`]: WirInstr::ends_with_terminator
+    /// [`peel_hint`]: WirInstr::peel_hint
+    pub fn emitted(&self) -> &WirInstr {
+        match self {
+            Self::BlackBox(inner) | Self::BranchHint { expr: inner, .. } => inner.emitted(),
+            other => other,
+        }
     }
 
     /// The instruction with any `BranchHint` wrapper peeled off.
@@ -1709,7 +1734,7 @@ impl WirInstr {
     /// NOT consider `If` blocks where both branches diverge — those still need
     /// an explicit `Unreachable` after them for Wasm stack validation.
     pub fn ends_with_terminator(&self) -> bool {
-        match self {
+        match self.emitted() {
             Self::Return { .. } | Self::Unreachable | Self::Br { .. } | Self::BrTable { .. } => {
                 true
             }
@@ -1721,7 +1746,7 @@ impl WirInstr {
     /// Returns true if this instruction leaves a value on the Wasm stack.
     /// Used to guard `Drop` emission — a `Block{result: None}` produces no value.
     pub fn produces_stack_value(&self) -> bool {
-        match self {
+        match self.emitted() {
             Self::Block { result, .. } | Self::If { result, .. } => result.is_some(),
             Self::Loop { .. } => false,
             Self::Seq(body) => body.last().is_some_and(WirInstr::produces_stack_value),
@@ -3135,4 +3160,73 @@ pub struct WirMemoryConfig {
     pub has_memory: bool,
     /// Minimum memory pages.
     pub min_pages: u32,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{WirInstr, WirType};
+
+    /// Every wrapper `emitted` peels, as a constructor over one operand.
+    fn transparent_wrappers() -> Vec<(&'static str, fn(WirInstr) -> WirInstr)> {
+        vec![
+            ("BlackBox", |inner| WirInstr::BlackBox(Box::new(inner))),
+            ("BranchHint", |inner| WirInstr::BranchHint {
+                likely: true,
+                expr: Box::new(inner),
+            }),
+        ]
+    }
+
+    /// Operands that answer the shape predicates differently, so a wrapper
+    /// that fails to delegate reports the wrong one for at least one of them.
+    fn operands() -> Vec<WirInstr> {
+        vec![
+            WirInstr::I32Const(0),
+            WirInstr::Nop,
+            WirInstr::Unreachable,
+            WirInstr::Seq(vec![WirInstr::I32Const(0), WirInstr::Unreachable]),
+            WirInstr::Block {
+                label: None,
+                result: None,
+                body: vec![],
+            },
+            WirInstr::Block {
+                label: None,
+                result: Some(WirType::I32),
+                body: vec![WirInstr::I32Const(0)],
+            },
+        ]
+    }
+
+    /// Codegen writes the operand and nothing besides, so a predicate about
+    /// the emitted Wasm must answer for the operand at any nesting depth.
+    #[test]
+    fn shape_predicates_see_through_transparent_wrappers() {
+        for operand in operands() {
+            for (name, wrap) in transparent_wrappers() {
+                for depth in 1..=2 {
+                    let mut wrapped = operand.clone();
+                    for _ in 0..depth {
+                        wrapped = wrap(wrapped);
+                    }
+                    let at = format!("{name} x{depth} over {operand:?}");
+                    assert_eq!(
+                        wrapped.always_diverges(),
+                        operand.always_diverges(),
+                        "always_diverges: {at}"
+                    );
+                    assert_eq!(
+                        wrapped.produces_stack_value(),
+                        operand.produces_stack_value(),
+                        "produces_stack_value: {at}"
+                    );
+                    assert_eq!(
+                        wrapped.ends_with_terminator(),
+                        operand.ends_with_terminator(),
+                        "ends_with_terminator: {at}"
+                    );
+                }
+            }
+        }
+    }
 }
