@@ -87,10 +87,10 @@ way.
 
 The type is one of the reflected kinds, under the same seal as the five
 declaration kinds: compiler-synthesized, a user `impl` a compile error,
-callable only where `T` is concrete. It is `pub` because every tag names it in
-its own bound, and tags are written in ordinary packages. The seal is what makes
-that safe: naming the bound is all a caller gains, since only the compiler can
-satisfy it. `Reflect` itself stays `internal`.
+callable only where `T` is concrete. It is `pub` like the rest of the family: a
+tag names it in its own bound, and tags are written in ordinary packages. The
+seal is what makes that safe — naming the bound is all a caller gains, since
+only the compiler can satisfy it.
 
 ```wado
 #[compiler_item("reflect_template")]

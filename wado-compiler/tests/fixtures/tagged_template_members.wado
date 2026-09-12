@@ -5,9 +5,12 @@
 //
 // `ReflectTemplate` and `Hole` are `pub`, so a module that spells the import
 // out — as one under `#![no_prelude]` must — names the same trait the
-// auto-import gives.
+// auto-import gives. The handle is not in the prelude's own re-export: names
+// like `Hole` and `VariantCase` are ones a package wants for itself, and a tag
+// gets its handles from `members()` without naming the type.
 use { println, Stdout } from "core:cli";
-use { ReflectTemplate, Hole } from "core:prelude";
+use { ReflectTemplate } from "core:prelude";
+use { Hole } from "core:prelude/traits.wado";
 
 fn show<T, V>(h: &Hole<T, V>, t: &T, out: &mut String) {
     out.push_str(&`[${h.index()} lit=${h.lit():?} raw=${h.raw():?} src=${h.source()} spec=${h.has_spec()} value=`);

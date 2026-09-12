@@ -61,7 +61,7 @@ internal trait Default {
 /// A type's identity: the root every reflected kind sits under. Sealed and
 /// compiler-synthesized like the kinds. See WEP 2026-06-13.
 #[compiler_item("reflect")]
-internal trait Reflect {
+pub trait Reflect {
     /// Returns the declaration's name.
     #[compiler_item("reflect_type_name")]
     fn type_name() -> String;
@@ -78,7 +78,7 @@ internal trait Reflect {
 /// monomorphized contexts (`T` a concrete struct).
 /// See WEP 2026-06-13.
 #[compiler_item("reflect_struct")]
-internal trait ReflectStruct: Reflect {
+pub trait ReflectStruct: Reflect {
     /// The field types as a tuple `[F_0, F_1, ...]`.
     type FieldTypes;
 
@@ -125,7 +125,7 @@ pub enum CaseStyle {
 /// The attr-reading face of a reflected member. Sealed and
 /// compiler-synthesized; user impls are rejected. See WEP 2026-06-13.
 #[compiler_item("member")]
-internal trait Member {
+pub trait Member {
     /// The source field name.
     #[compiler_item("member_name")]
     fn name(&self) -> String;
@@ -140,7 +140,7 @@ internal trait Member {
 /// in monomorphized contexts (`T` a concrete variant).
 /// See WEP 2026-06-13 §3.
 #[compiler_item("reflect_variant")]
-internal trait ReflectVariant: Reflect {
+pub trait ReflectVariant: Reflect {
     /// The per-case payload tuple `[P_0, P_1, ...]`; unit cases are `()`.
     type CasePayloads;
 
@@ -161,7 +161,7 @@ internal trait ReflectVariant: Reflect {
 /// in monomorphized contexts (`T` a concrete enum).
 /// See WEP 2026-06-13 §3b.
 #[compiler_item("reflect_enum")]
-internal trait ReflectEnum: Reflect {
+pub trait ReflectEnum: Reflect {
     /// The per-case member tuple `[EnumCase<Self>, ...]`.
     type Members;
 
@@ -183,7 +183,7 @@ internal trait ReflectEnum: Reflect {
 /// only in monomorphized contexts (`T` a concrete flags type).
 /// See WEP 2026-06-13 §3c.
 #[compiler_item("reflect_flags")]
-internal trait ReflectFlags: Reflect {
+pub trait ReflectFlags: Reflect {
     /// The per-bit member tuple `[FlagsBit<Self>, ...]`.
     type Members;
 
@@ -211,7 +211,7 @@ internal trait ReflectFlags: Reflect {
 /// struct walks the struct's fields — so only the base is stated here.
 /// See WEP 2026-06-13.
 #[compiler_item("reflect_newtype")]
-internal trait ReflectNewtype: Reflect {
+pub trait ReflectNewtype: Reflect {
     /// The type this newtype wraps: `type UserName = String` → `String`.
     type Base;
 }

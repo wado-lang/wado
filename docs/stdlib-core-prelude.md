@@ -73,6 +73,146 @@ Types implementing this trait can be compared with `<`, `<=`, `>`, `>=` operator
 
 Compares self with other and returns an Ordering.
 
+### `pub trait Reflect`
+
+A type's identity: the root every reflected kind sits under. Sealed and
+compiler-synthesized like the kinds. See WEP 2026-06-13.
+
+#### `fn type_name() -> String`
+
+Returns the declaration's name.
+
+#### `fn wire_name_policy() -> CaseStyle`
+
+The declaration's `#[wire(name_policy)]` (`Identity` if none). Every
+kind carries the attribute, and it says the same thing on each: the
+root answers so a caller need not know which kind it holds.
+
+### `pub trait ReflectStruct: Reflect`
+
+Compile-time struct introspection. The compiler synthesizes an impl for
+every struct; it cannot be implemented in user code and is callable only in
+monomorphized contexts (`T` a concrete struct).
+See WEP 2026-06-13.
+
+#### `fn members() -> Self::Members`
+
+Returns the per-field members.
+
+#### `fn from_fields(fields: Self::FieldTypes) -> Self`
+
+Assembles the struct from its field values.
+
+#### `fn defaults() -> Self::FieldSlots`
+
+The declared field defaults (`f: T = expr`), `None` where a field
+declares none. Read per field, so only a slot the wire left empty
+evaluates its default.
+
+#### `fn empty_slots() -> Self::FieldSlots`
+
+All slots empty. Starting here is what makes a filled slot mean "the
+wire wrote this", so a repeat is visible without a second record.
+
+### `pub trait Member`
+
+The attr-reading face of a reflected member. Sealed and
+compiler-synthesized; user impls are rejected. See WEP 2026-06-13.
+
+#### `fn name(&self) -> String`
+
+The source field name.
+
+#### `fn wire_name_override(&self) -> Option<String>`
+
+The raw `#[wire(name)]` value (casing not applied), or `None`.
+
+### `pub trait ReflectVariant: Reflect`
+
+Compile-time variant introspection. The compiler synthesizes an impl for
+every variant; it cannot be implemented in user code and is callable only
+in monomorphized contexts (`T` a concrete variant).
+See WEP 2026-06-13 §3.
+
+#### `fn discriminant(&self) -> i32`
+
+Returns the live case's tag.
+
+#### `fn members() -> Self::Members`
+
+Returns the per-case members.
+
+### `pub trait ReflectEnum: Reflect`
+
+Compile-time enum introspection. The compiler synthesizes an impl for
+every enum; it cannot be implemented in user code and is callable only
+in monomorphized contexts (`T` a concrete enum).
+See WEP 2026-06-13 §3b.
+
+#### `fn discriminant(&self) -> i32`
+
+Returns the value's tag.
+
+#### `fn from_discriminant(disc: i32) -> Option<Self>`
+
+Returns the case with the given tag; `None` for an unknown tag.
+
+#### `fn members() -> Self::Members`
+
+Returns the per-case members.
+
+### `pub trait ReflectFlags: Reflect`
+
+Compile-time flags introspection. The compiler synthesizes an impl for
+every flags type; it cannot be implemented in user code and is callable
+only in monomorphized contexts (`T` a concrete flags type).
+See WEP 2026-06-13 §3c.
+
+#### `fn bits(&self) -> u64`
+
+Returns the value's bits, u64-normalized.
+
+#### `fn from_bits(raw: u64) -> Option<Self>`
+
+Returns the value with the given bits; `None` when unknown bits
+are set.
+
+#### `fn members() -> Self::Members`
+
+Returns the per-bit members.
+
+### `pub trait ReflectNewtype: Reflect`
+
+Compile-time newtype introspection. The compiler synthesizes an impl for
+every newtype; it cannot be implemented in user code and is callable only
+in monomorphized contexts (`T` a concrete newtype).
+
+The one kind with no members: a newtype has a base, and the value bridges
+both ways are the `From` the compiler already generates for it. Structure
+it inherits from that base — `ReflectStruct::<T>` on a newtype over a
+struct walks the struct's fields — so only the base is stated here.
+See WEP 2026-06-13.
+
+### `pub trait ReflectTemplate: Reflect`
+
+Compile-time introspection of a tagged template literal's shape. The
+compiler synthesizes an impl per shape; it cannot be implemented in user
+code and is callable only in monomorphized contexts (`T` the anonymous
+type a template literal denotes). See WEP 2026-01-10.
+
+#### `fn members() -> Self::Members`
+
+Returns the per-hole members.
+
+#### `fn tail() -> String`
+
+The literal text after the last hole — the whole template when it has
+none — with escapes processed.
+
+#### `fn raw_tail() -> String`
+
+`tail()` with escapes preserved.
+
 ### `pub trait IndexRef<IndexType>`
 
 Immutable reference indexing: `&container[i]` reads through this.
