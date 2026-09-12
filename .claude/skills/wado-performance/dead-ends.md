@@ -32,7 +32,7 @@ alternating rounds, with the rest of the branch held constant:
 | space-first (today)                   | **+19.3%** | -2.8%     |
 
 So the ordering is worth 7.2 points on the pretty corpus and 1.8 on the
-minified one. Three attempts to keep both failed:
+minified one. Four attempts to keep both failed:
 
 - **Reorder to `b > b' ' || (b != b' ' && !is_json_ws(b))`.** Equivalent, and
   costs what it recovers: catalog de 3.9 → 4.2 ms.
@@ -42,6 +42,23 @@ minified one. Three attempts to keep both failed:
 - **Inline the body at all six sites**, in case the call was the cost. Also
   neutral, which is what rules the call out: the same ordering inlined measures
   the same as the call.
+- **Branchless**, so neither corpus pays for the other's byte frequencies:
+  `((b' ' - b) >> 31 | (ws_set >> b & 1) ^ 1) != 0`. Correct for all 256 bytes,
+  and the sign term rescues the shift aliasing that `assert b < 64` guards, so
+  `is_json_ws` disappears. Ten canada rounds put it at main −4.0% against head's
+  −4.2%, beating head in 6 of 10 — a coin flip. The branch it removes is
+  well-predicted on both corpora (canada is always structural, citm is long runs
+  of spaces), so eight unconditional ops lose to two behind a taken guess.
+
+No single compare can decide this either: a compare against a constant splits
+the byte range in two intervals, and `{0x09, 0x0A, 0x0D, 0x20}` is neither an
+interval nor the complement of one. SIMD does not apply — `v128_load` needs a
+linear-memory address and a Wado `String` is a GC `Array<u8>`, so sixteen bytes
+cost sixteen `array.get`s.
+
+The four arms all sit within about two points of each other, and main's own
+canada median moved 9.376 → 9.056 between two clean sessions. Effects this size
+need a better rig, not more variants.
 
 Generalizes: a byte-frequency assumption is a property of the corpus, not of
 the format. Check a scan predicate on a minified corpus and an indented one
