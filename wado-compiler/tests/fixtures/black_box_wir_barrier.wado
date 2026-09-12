@@ -20,7 +20,7 @@ export fn run() {
     // The spec's own example: the redundant mask must still be emitted.
     assert ((builtin::black_box(300) << 24) >> 24) == 44;
 
-    // The EMI guard shape: a payload no run reaches and every pass compiles.
+    // The EMI guard shape: no run reaches the payload, every pass compiles it.
     // `tests/emi.rs` injects exactly this, so it must survive the WIR too, or a
     // campaign covers only the NIR pipeline.
     let mut emi = 0;
