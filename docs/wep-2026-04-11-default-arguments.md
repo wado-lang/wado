@@ -540,7 +540,7 @@ let resp = Fetch::fetch(url, init).read();
 
 A value default cannot name the callee's own type parameter. `fn info<T: Default>(msg: String, fields: T = T::default())` is rejected with "unknown function `T::default`". A value default is re-resolved at each call site, and the callee's generic parameters are not in scope there. A _type_ parameter's default (`<T, U = T>`) does see them, so the two kinds differ here.
 
-Closing the gap means resolving a value default once per monomorphization instead of once per call site, which is what binds `T` to the concrete argument. Registering the callee's parameters at the call site is not enough on its own: the default would then resolve against `T` as a binder, but nothing downstream puts the call site's concrete type in its place, so the value would be wrong rather than rejected. Whether to do the per-monomorphization work is undecided.
+Closing the gap means resolving a value default once per monomorphization instead of once per call site, which is what binds `T` to the concrete argument. Registering the callee's parameters at the call site is not enough on its own: the default would then resolve against `T` as a binder, but nothing downstream puts the call site's concrete type in its place, so the value would be wrong rather than rejected. The per-monomorphization work is not scheduled. The gap stands, and the call site gets a clear error meanwhile.
 
 The interaction table says defaults are "monomorphized per call site". That describes the defaults the language accepts today, which are the ones naming no type parameter.
 
