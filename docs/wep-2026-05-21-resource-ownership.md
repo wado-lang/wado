@@ -518,6 +518,21 @@ the routings that are real: measured, it promotes `List::as_slice` and every
 follow a reference through the adapter chain first, then let an unconfirmed
 declaration mean "anywhere".
 
+### Known gap: a generic resource a user module declares
+
+The move check reads the type a binding resolves to, and a generic resource a
+user module declares resolves to no resource type at all. `Stream<u8>` and
+`Future<T>` resolve to `GenericResource` and are checked; a program's own
+`resource Handle<T>` does not, so `consume(h); consume(h);` on a `Handle<i32>`
+compiles with no diagnostic while the same code on a non-generic `Handle` is
+rejected.
+
+Nothing can be built through the gap today: a `#[cm]` resource a user module
+declares has no import binding, so no program can obtain such a handle. Closing
+it means resolving `Name<args>` against the resource declarations in the
+elaborator's main type resolution, as `resolve_type_static_with_params` already
+does for the struct-field pre-pass.
+
 ## Amendments to earlier WEPs
 
 - WEP 2026-04-28 (Resource Inheritance): its "value semantics, no borrow

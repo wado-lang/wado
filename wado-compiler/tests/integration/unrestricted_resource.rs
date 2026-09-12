@@ -70,6 +70,23 @@ fn an_affine_resource_stays_move_only() {
     );
 }
 
+/// `Stream<u8>` is the generic-resource arm's affine side. For the side a
+/// program cannot reach, see "Known gap: a generic resource a user module
+/// declares" in `docs/wep-2026-05-21-resource-ownership.md`.
+#[test]
+fn a_generic_resource_stays_move_only() {
+    let source = "fn consume(s: Stream<u8>) {}\n\
+         fn use_twice(s: Stream<u8>) { consume(s); consume(s); }\n\
+         export fn run() {}\n";
+    let errors = move_errors(source);
+    assert!(
+        errors
+            .iter()
+            .any(|e| e.contains("resource `s` used after it was moved")),
+        "a generic resource declaring no linearity is affine, got {errors:?}"
+    );
+}
+
 const UNRESTRICTED: &str = "#[cm(\"web:dom/event-target\", linearity = \"unrestricted\")]";
 
 #[test]

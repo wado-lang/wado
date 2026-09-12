@@ -14,6 +14,7 @@ use crate::compiler_item::CompilerItem;
 use crate::component_model::CmInterfaceRegistry;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
+use crate::resource_move_check::carries_affine_resource;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
 
 use super::trait_env::TraitEnv;
@@ -116,47 +117,20 @@ impl TypeSystem {
     /// itself rather than a spelling of it, which is what every caller holds:
     /// each reached one by destructuring a `ResolvedType`. Used by the resource
     /// move check to decide whether an aggregate transitively owns a resource.
-    pub(crate) fn struct_field_type_ids_of(
-        &self,
-        type_id: TypeId,
-    ) -> Option<Vec<crate::tir::TypeId>> {
+    pub(crate) fn struct_field_type_ids_of(&self, type_id: TypeId) -> Option<Vec<TypeId>> {
         let info = self.all_struct_fields.get(&self.type_def(type_id)?)?;
         Some(info.fields.iter().map(|(_, tid, _)| *tid).collect())
     }
 
-    /// Whether `type_id` is, or transitively carries, an affine resource
-    /// (`Resource` / `GenericResource`, or a struct / tuple / `Result` holding
-    /// one). Mirrors `resource_move_check::type_carries_resource`; used to
-    /// permit a by-value `self` receiver on an aggregate that owns a resource.
-    /// A reference stops the walk — a borrowed place owns nothing.
+    /// Whether `type_id` is, or transitively carries, an affine resource.
+    /// Permits a by-value `self` receiver on an aggregate that owns a resource.
     pub(crate) fn carries_resource(&self, type_id: TypeId) -> bool {
-        self.carries_resource_rec(type_id, &mut Vec::new())
-    }
-
-    fn carries_resource_rec(&self, type_id: TypeId, visited: &mut Vec<TypeId>) -> bool {
-        use crate::tir::ResolvedType;
-        let base = self.type_table.borrow().representation_head(type_id);
-        if visited.contains(&base) {
-            return false;
-        }
-        visited.push(base);
-        let children: Vec<TypeId> = match self.type_table.borrow().get(base).clone() {
-            ResolvedType::Resource { def } => {
-                return !self.type_table.borrow().is_unrestricted_resource(def);
-            }
-            ResolvedType::GenericResource { .. } => return true,
-            ResolvedType::Ref(_) | ResolvedType::MutRef(_) => return false,
-            ResolvedType::Struct { .. } => self.struct_field_type_ids_of(base).unwrap_or_default(),
-            ResolvedType::GenericInstance { type_args, .. }
-                if self.type_table.borrow().is_result(base) =>
-            {
-                type_args
-            }
-            _ => self.type_table.borrow().as_tuple(base).unwrap_or_default(),
-        };
-        children
-            .into_iter()
-            .any(|t| self.carries_resource_rec(t, visited))
+        carries_affine_resource(
+            &self.type_table.borrow(),
+            &|id| self.struct_field_type_ids_of(id),
+            type_id,
+            &mut Vec::new(),
+        )
     }
 
     /// Whether `name` resolves to a declared type *from `module`'s perspective*
