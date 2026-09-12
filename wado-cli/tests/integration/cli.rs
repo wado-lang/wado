@@ -491,9 +491,7 @@ fn test_run_hello() {
         .stdout(predicate::str::contains("Hello, world!"));
 }
 
-/// `run` is a driver: it builds on the way to executing, and the artifact
-/// announcement belongs to the commands that exist to produce a file. The
-/// program's own output is the only thing a run writes.
+/// A run writes the program's output and nothing else.
 #[test]
 fn test_run_announces_nothing() {
     wado()

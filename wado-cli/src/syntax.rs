@@ -14,6 +14,7 @@ use serde_json::json;
 use wado_compiler::syntax::SyntaxDefinition;
 
 use crate::args::{self, CliExit};
+use crate::compile::announce_artifact;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum SyntaxFormat {
@@ -138,7 +139,7 @@ pub fn run(opts: SyntaxOptions) -> Result<(), CliExit> {
     if let Some(path) = opts.output {
         fs::write(&path, &output_str)
             .map_err(|e| CliExit::error(format!("failed to write to {path}: {e}")))?;
-        eprintln!("Generated: {path}");
+        announce_artifact(&path);
     } else {
         io::stdout()
             .write_all(output_str.as_bytes())

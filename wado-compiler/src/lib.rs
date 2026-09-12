@@ -1,15 +1,8 @@
-//! The Wado compiler.
-//!
-//! Nothing here writes to a stream. A user-facing message goes through
-//! [`logger::Logger`] and reaches the [`compiler_host::CompilerHost`]; a
-//! developer trace goes through [`trace`] to the sink the host installed; and
-//! what cannot happen — a broken stdlib — is an `assert!`, not a message. A
-//! hosted compiler (LSP, browser, Kiln generator) has no stderr to print to,
-//! and a `run` / `serve` driver has a user's program to keep quiet for.
-//!
-//! The ban lives here rather than in `Cargo.toml`: cargo refuses a `[lints]`
-//! table that both inherits the workspace's and adds to it, and the workspace
-//! list is shared with the crates that do own a terminal.
+// A hosted compiler (LSP, browser, Kiln generator) has no stream to write to,
+// and a `run` / `serve` driver has a user's program to keep quiet for. See
+// `AGENTS.md` for where each kind of message goes instead. Not in `Cargo.toml`:
+// cargo refuses a `[lints]` table that both inherits the workspace's and adds
+// to it.
 #![deny(clippy::print_stdout, clippy::print_stderr, clippy::dbg_macro)]
 
 pub mod analyze;

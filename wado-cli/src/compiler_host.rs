@@ -12,6 +12,7 @@ use wado_compiler::{
     LogLevel, Severity, SourceError,
 };
 
+use crate::args::DEFAULT_LOG_LEVEL;
 use crate::kiln_runtime::{self, KilnRunPolicy};
 use crate::run_cache::RunCache;
 use crate::runtime::create_kiln_engine;
@@ -112,9 +113,8 @@ pub struct FilesystemCompilerHost {
     dep_index: Option<wado_compiler::DependencyIndex>,
 }
 
-/// Developer traces (`WADO_TRACE`, `WADO_DUMP_PASS_*`) go to stderr, beside
-/// the diagnostics. The compiler writes to no stream of its own, so nothing is
-/// traced until a host installs this.
+/// Developer traces (`WADO_TRACE`, `WADO_DUMP_PASS_*`) go to stderr, beside the
+/// diagnostics. Nothing is traced until a host installs this.
 struct StderrTraceSink;
 
 impl wado_compiler::TraceSink for StderrTraceSink {
@@ -126,7 +126,8 @@ impl wado_compiler::TraceSink for StderrTraceSink {
 static STDERR_TRACE_SINK: StderrTraceSink = StderrTraceSink;
 
 impl FilesystemCompilerHost {
-    fn with_diagnostics(base_path: PathBuf, print_diagnostics: bool, log_level: LogLevel) -> Self {
+    /// The one constructor; the three below name the combinations callers want.
+    fn configured(base_path: PathBuf, print_diagnostics: bool, log_level: LogLevel) -> Self {
         wado_compiler::set_trace_sink(&STDERR_TRACE_SINK);
         Self {
             inner: Arc::new(wado_lsp::FilesystemCompilerHost::new(base_path)),
@@ -140,17 +141,17 @@ impl FilesystemCompilerHost {
 
     #[must_use]
     pub fn new(base_path: PathBuf) -> Self {
-        Self::with_diagnostics(base_path, true, crate::args::DEFAULT_LOG_LEVEL)
+        Self::configured(base_path, true, DEFAULT_LOG_LEVEL)
     }
 
     #[must_use]
     pub fn silent(base_path: PathBuf) -> Self {
-        Self::with_diagnostics(base_path, false, LogLevel::Off)
+        Self::configured(base_path, false, LogLevel::Off)
     }
 
     #[must_use]
     pub fn with_log_level(base_path: PathBuf, log_level: LogLevel) -> Self {
-        Self::with_diagnostics(base_path, true, log_level)
+        Self::configured(base_path, true, log_level)
     }
 
     /// Supply a precomputed `[dependencies]` index so the inner host does not

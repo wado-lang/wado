@@ -195,9 +195,7 @@ fn http_get(port: u16, path: &str, timeout: Duration) -> (u16, String) {
     parse_response(&http_get_raw(port, path, timeout))
 }
 
-/// `serve` is a driver: it builds on the way to serving, and the artifact
-/// announcement belongs to the commands that exist to produce a file. The
-/// startup banner is the first thing the server says.
+/// The startup banner is the first thing the server says.
 #[test]
 fn startup_announces_no_build_artifact() {
     let (_guard, _port, stderr) = start_serve("serve_hello.wado", &[]);

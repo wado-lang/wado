@@ -84,7 +84,8 @@ the working vs. broken configuration before concluding.
 
 ### Trace pass-internal decisions
 
-For developer-only `eprintln`-style messages from inside a pass:
+For developer-only messages from inside a pass (the crate denies `eprintln!`;
+`compiler_trace!` reaches the sink the host installed):
 
 ```sh
 WADO_TRACE=sroa_return cargo run --bin wado --quiet -- compile -O1 file.wado -o /tmp/out.wasm 2>&1 | grep '\[sroa_return\]'

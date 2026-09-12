@@ -245,8 +245,8 @@ pub async fn run(opts: BuildOptions) -> Result<(), CliExit> {
 
 /// The single project-build path: compile one world with `[package]` metadata
 /// embedded, write it to `output`, and return its bytes. Shared by `wado build`
-/// and the run/serve drivers so a run artifact matches a built one. Silent —
-/// announcing the artifact is `wado build`'s, not a driver's.
+/// and the run/serve drivers so a run artifact matches a built one. Silent:
+/// announcing the artifact belongs to `wado build`, not to a driver.
 pub async fn build_world_component(
     target: &BuildTarget,
     output: &Path,

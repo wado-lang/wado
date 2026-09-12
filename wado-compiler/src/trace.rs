@@ -1,12 +1,8 @@
-//! Compiler-internal tracing for development debugging, selected by the
-//! `WADO_TRACE` env var — a comma-separated target list, or `*` — and rendered
-//! under a `[target]` prefix. `compiler_trace!` is for *developer* diagnostics
-//! only; user-facing ones still flow through `Logger`. On
-//! `wasm32-unknown-unknown` the filter is always empty.
-//!
-//! Where a trace lands is the host's business, not the compiler's: a host
-//! installs a [`TraceSink`] and, without one, every trace is dropped. The
-//! compiler writes to no stream of its own — an LSP or browser host has none.
+//! Developer tracing, selected by the `WADO_TRACE` env var — a comma-separated
+//! target list, or `*` — and rendered under a `[target]` prefix. Where a trace
+//! lands is the host's business: it installs a [`TraceSink`], and without one
+//! every trace is dropped. User-facing diagnostics go through `Logger` instead.
+//! On `wasm32-unknown-unknown` the filter is always empty.
 
 use std::fmt::Arguments;
 use std::sync::OnceLock;
@@ -18,7 +14,7 @@ pub struct TraceFilter {
 }
 
 impl TraceFilter {
-    /// Returns `true` when traces tagged with `target` should be printed.
+    /// Returns `true` when traces tagged with `target` are wanted.
     pub fn enabled(&self, target: &str) -> bool {
         self.all || self.targets.iter().any(|t| t == target)
     }
